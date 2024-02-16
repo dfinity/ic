@@ -468,7 +468,7 @@ fn list_proposals() {
 /// Internal method for calling list_proposals.
 #[candid_method(query, rename = "list_proposals")]
 fn list_proposals_(list_proposals: ListProposals) -> ListProposalsResponse {
-    governance().list_proposals(&list_proposals)
+    governance().list_proposals(&list_proposals, &caller())
 }
 
 /// Returns the current list of available NervousSystemFunctions.

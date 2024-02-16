@@ -56,6 +56,10 @@ pub const MAX_NUMBER_OF_GENERIC_NERVOUS_SYSTEM_FUNCTIONS: usize = 200_000;
 /// or ManageDappCanisterSettings).
 pub const MAX_NUMBER_OF_DAPPS_TO_MANAGE_PER_PROPOSAL: usize = 1_000;
 
+// The maximum number of ballots for a proposal that can be returned as part of list_proposals
+// response.
+pub const MAX_NUMBER_OF_BALLOTS_IN_LIST_PROPOSALS_RESPONSE: usize = 100;
+
 /// What the name says: how long to hang onto TreasurySnsTreasuryTransfer proposals that were
 /// successfully executed. (This is used by can_be_purged, and is generally used when calling
 /// total_treasury_transfer_amount_e8s to construct the min_executed_timestamp_seconds argument).
@@ -1506,6 +1510,40 @@ impl ProposalData {
             ..self.clone()
         }
     }
+
+    /// Creates a limited version of the proposal data, suitable for listing proposals.
+    ///
+    /// Specifically, remove the ballots in the proposal data and possibly the proposal's payload.
+    /// The payload is removed if the proposal is an ExecuteNervousSystemFunction or if it's
+    /// a UpgradeSnsControlledCanister. The text rendering should include displayable information about
+    /// the payload contents already.
+    pub fn limited_for_list_proposals(&self, caller_neurons_set: &HashSet<String>) -> Self {
+        let mut limited_proposal_data = self.clone();
+        if let Some(proposal) = limited_proposal_data.proposal.as_mut() {
+            // We can't understand the payloads of nervous system functions, as well as the wasm
+            // for upgrades, so just omit them when listing proposals.
+            match &mut proposal.action {
+                Some(Action::ExecuteGenericNervousSystemFunction(action)) => {
+                    action.payload.clear();
+                }
+                Some(Action::UpgradeSnsControlledCanister(action)) => {
+                    action.new_canister_wasm.clear();
+                }
+                _ => (),
+            }
+        }
+
+        let mut ballots = std::mem::take(&mut limited_proposal_data.ballots);
+        ballots.retain(|neuron_id, _| caller_neurons_set.contains(neuron_id));
+
+        // Truncate the number of ballots to avoid returning too much data.
+        limited_proposal_data.ballots = ballots
+            .into_iter()
+            .take(MAX_NUMBER_OF_BALLOTS_IN_LIST_PROPOSALS_RESPONSE)
+            .collect();
+
+        limited_proposal_data
+    }
 }
 
 impl ProposalDecisionStatus {
@@ -1608,8 +1646,8 @@ mod tests {
     use crate::{
         pb::v1::{
             governance::{self, Version},
-            Empty, Governance as GovernanceProto, NeuronId, Proposal, ProposalId, Subaccount,
-            WaitForQuietState,
+            Ballot, Empty, Governance as GovernanceProto, NeuronId, Proposal, ProposalId,
+            Subaccount, WaitForQuietState,
         },
         sns_upgrade::{
             CanisterSummary, GetNextSnsVersionRequest, GetNextSnsVersionResponse,
@@ -3497,6 +3535,139 @@ Version {
              # Set freezing threshold to: 1000 seconds\n\
              # Set reserved cycles limit to: 1000000000000 \n\
              # Set log visibility to: Public \n"
+        );
+    }
+
+    #[test]
+    fn limited_proposal_data_for_list_proposals_retain_ballots_by_caller() {
+        let original_proposal_data = ProposalData {
+            proposal: Some(Proposal {
+                action: Some(Action::Motion(Motion {
+                    motion_text: "Some motion text".to_string(),
+                })),
+                ..Default::default()
+            }),
+            ballots: btreemap! {
+                "1".to_string() => Ballot {
+                    vote: Vote::Yes as i32,
+                    ..Default::default()
+                },
+                "2".to_string() => Ballot {
+                    vote: Vote::No as i32,
+                    ..Default::default()
+                },
+                "3".to_string() => Ballot {
+                    vote: Vote::Unspecified as i32,
+                    ..Default::default()
+                },
+            },
+            ..Default::default()
+        };
+        let caller_neurons = hashset! { "1".to_string(), "2".to_string() };
+
+        let limited_proposal_data =
+            original_proposal_data.limited_for_list_proposals(&caller_neurons);
+
+        assert_eq!(
+            limited_proposal_data,
+            ProposalData {
+                ballots: btreemap! {
+                    "1".to_string() => Ballot {
+                        vote: Vote::Yes as i32,
+                        ..Default::default()
+                    },
+                    "2".to_string() => Ballot {
+                        vote: Vote::No as i32,
+                        ..Default::default()
+                    },
+                },
+                ..original_proposal_data
+            }
+        );
+    }
+
+    #[test]
+    fn limited_proposal_data_for_list_proposals_truncate_ballots() {
+        let ballots = (100..300)
+            .map(|i| {
+                (
+                    i.to_string(),
+                    Ballot {
+                        vote: Vote::Yes as i32,
+                        ..Default::default()
+                    },
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
+        let original_proposal_data = ProposalData {
+            proposal: Some(Proposal {
+                action: Some(Action::Motion(Motion {
+                    motion_text: "Some motion text".to_string(),
+                })),
+                ..Default::default()
+            }),
+            ballots,
+            ..Default::default()
+        };
+        let caller_neurons = (0..1000).map(|i| i.to_string()).collect::<HashSet<_>>();
+
+        let limited_proposal_data =
+            original_proposal_data.limited_for_list_proposals(&caller_neurons);
+
+        let expected_ballots = (100..100 + MAX_NUMBER_OF_BALLOTS_IN_LIST_PROPOSALS_RESPONSE)
+            .map(|i| {
+                (
+                    i.to_string(),
+                    Ballot {
+                        vote: Vote::Yes as i32,
+                        ..Default::default()
+                    },
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
+        assert_eq!(
+            limited_proposal_data,
+            ProposalData {
+                ballots: expected_ballots,
+                ..original_proposal_data
+            }
+        );
+    }
+
+    #[test]
+    fn limited_proposal_data_for_list_proposals_limited_action() {
+        let original_proposal_data = ProposalData {
+            proposal: Some(Proposal {
+                action: Some(Action::ExecuteGenericNervousSystemFunction(
+                    ExecuteGenericNervousSystemFunction {
+                        function_id: 1,
+                        payload: vec![0, 1, 2, 3],
+                    },
+                )),
+                ..Default::default()
+            }),
+            ballots: BTreeMap::new(),
+            ..Default::default()
+        };
+
+        let limited_proposal_data =
+            original_proposal_data.limited_for_list_proposals(&HashSet::new());
+
+        assert_eq!(
+            limited_proposal_data,
+            ProposalData {
+                proposal: Some(Proposal {
+                    action: Some(Action::ExecuteGenericNervousSystemFunction(
+                        ExecuteGenericNervousSystemFunction {
+                            function_id: 1,
+                            payload: vec![],
+                        },
+                    )),
+                    ..Default::default()
+                }),
+                ballots: BTreeMap::new(),
+                ..Default::default()
+            }
         );
     }
 }
