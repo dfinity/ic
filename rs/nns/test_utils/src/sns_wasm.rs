@@ -363,7 +363,7 @@ pub fn add_modified_wasms_to_sns_wasms(
     let archive_wasm = create_modified_wasm(&build_archive_sns_wasm(), Some(modifier));
     add_wasm_via_proposal(machine, archive_wasm.clone());
 
-    let index_wasm = create_modified_wasm(&build_index_sns_wasm(), Some(modifier));
+    let index_wasm = create_modified_wasm(&build_index_ng_sns_wasm(), Some(modifier));
     add_wasm_via_proposal(machine, index_wasm.clone());
 
     btreemap! {
@@ -414,9 +414,9 @@ pub fn add_real_wasms_to_sns_wasms_and_return_immediately(
     let archive_proposal_id =
         add_wasm_via_proposal_and_return_immediately(machine, archive_wasm.clone());
 
-    let index_wasm = build_index_sns_wasm();
+    let index_ng_wasm = build_index_ng_sns_wasm();
     let index_proposal_id =
-        add_wasm_via_proposal_and_return_immediately(machine, index_wasm.clone());
+        add_wasm_via_proposal_and_return_immediately(machine, index_ng_wasm.clone());
 
     hashmap! {
         SnsCanisterType::Root => (root_proposal_id, root_wasm),
@@ -424,7 +424,7 @@ pub fn add_real_wasms_to_sns_wasms_and_return_immediately(
         SnsCanisterType::Ledger => (ledger_proposal_id, ledger_wasm),
         SnsCanisterType::Swap => (swap_proposal_id, swap_wasm),
         SnsCanisterType::Archive => (archive_proposal_id, archive_wasm),
-        SnsCanisterType::Index => (index_proposal_id, index_wasm),
+        SnsCanisterType::Index => (index_proposal_id, index_ng_wasm),
     }
 }
 
@@ -455,6 +455,15 @@ pub fn build_ledger_sns_wasm() -> SnsWasm {
     }
 }
 
+/// Builds the mainnet SnsWasm for the ledger canister.
+pub fn build_mainnet_ledger_sns_wasm() -> SnsWasm {
+    let ledger_wasm = Project::cargo_bin_maybe_from_env("mainnet-ic-icrc1-ledger", &[]);
+    SnsWasm {
+        wasm: ledger_wasm.bytes(),
+        canister_type: SnsCanisterType::Ledger.into(),
+    }
+}
+
 /// Builds the SnsWasm for the Swap Canister
 pub fn build_swap_sns_wasm() -> SnsWasm {
     let swap_wasm = Project::cargo_bin_maybe_from_env("sns-swap-canister", &[]);
@@ -473,9 +482,36 @@ pub fn build_archive_sns_wasm() -> SnsWasm {
     }
 }
 
+/// Builds the mainnet SnsWasm for the Ledger Archive Canister
+pub fn build_mainnet_archive_sns_wasm() -> SnsWasm {
+    let archive_wasm = Project::cargo_bin_maybe_from_env("mainnet-ic-icrc1-archive", &[]);
+    SnsWasm {
+        wasm: archive_wasm.bytes(),
+        canister_type: SnsCanisterType::Archive.into(),
+    }
+}
+
 /// Builds the SnsWasm for the index canister.
 pub fn build_index_sns_wasm() -> SnsWasm {
     let index_wasm = Project::cargo_bin_maybe_from_env("ic-icrc1-index", &[]);
+    SnsWasm {
+        wasm: index_wasm.bytes(),
+        canister_type: SnsCanisterType::Index.into(),
+    }
+}
+
+/// Builds the mainnet SnsWasm for the index canister.
+pub fn build_mainnet_index_sns_wasm() -> SnsWasm {
+    let index_wasm = Project::cargo_bin_maybe_from_env("mainnet-ic-icrc1-index", &[]);
+    SnsWasm {
+        wasm: index_wasm.bytes(),
+        canister_type: SnsCanisterType::Index.into(),
+    }
+}
+
+/// Builds the SnsWasm for the index-ng canister.
+pub fn build_index_ng_sns_wasm() -> SnsWasm {
+    let index_wasm = Project::cargo_bin_maybe_from_env("ic-icrc1-index-ng", &[]);
     SnsWasm {
         wasm: index_wasm.bytes(),
         canister_type: SnsCanisterType::Index.into(),

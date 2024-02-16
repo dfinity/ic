@@ -5,7 +5,8 @@ use dfn_candid::{candid_one, CandidOne};
 use ic_canister_client_sender::Sender;
 use ic_config::Config;
 use ic_crypto_sha2::Sha256;
-use ic_icrc1_index::InitArgs as IndexInitArgs;
+use ic_icrc1_index::InitArgs as LegacyIndexArg;
+use ic_icrc1_index_ng::{IndexArg, InitArg};
 use ic_icrc1_ledger::{
     InitArgs as LedgerInitArgs, InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument,
 };
@@ -114,7 +115,10 @@ pub struct SnsTestsInitPayloadBuilder {
     pub governance: GovernanceCanisterInitPayloadBuilder,
     pub ledger: LedgerInitArgs,
     pub root: SnsRootCanister,
-    pub index: IndexInitArgs,
+    pub swap: SwapInit,
+    pub index_ng: Option<IndexArg>,
+    // TODO[NNS1-2856]: Remove this field.
+    pub index: LegacyIndexArg,
 }
 
 /// Caveat emptor: Even though sns-wasm creates SNS governance in
@@ -142,9 +146,19 @@ impl SnsTestsInitPayloadBuilder {
             .with_transfer_fee(DEFAULT_TRANSFER_FEE)
             .build();
 
-        let index = IndexInitArgs {
+        let swap = SwapInit {
+            fallback_controller_principal_ids: vec![PrincipalId::new_user_test_id(6360).to_string()],
+            should_auto_finalize: Some(true),
+            ..Default::default()
+        };
+
+        let index = LegacyIndexArg {
             ledger_id: CanisterId::from_u64(0),
         };
+
+        let index_ng = Some(IndexArg::Init(InitArg {
+            ledger_id: CanisterId::from_u64(0).into(),
+        }));
 
         let mut governance = GovernanceCanisterInitPayloadBuilder::new();
         // Existing tests expect this.
@@ -153,8 +167,10 @@ impl SnsTestsInitPayloadBuilder {
         SnsTestsInitPayloadBuilder {
             root: SnsRootCanister::default(),
             governance,
+            swap,
             ledger,
             index,
+            index_ng,
         }
     }
 
@@ -259,14 +275,17 @@ impl SnsTestsInitPayloadBuilder {
         };
 
         let root = self.root.clone();
+
         let index = self.index.clone();
+        let index_ng = self.index_ng.clone();
 
         SnsCanisterInitPayloads {
             governance,
             ledger,
             root,
             swap,
-            index,
+            index_ng,
+            index: Some(index),
         }
     }
 }
@@ -433,7 +452,7 @@ impl SnsCanisters<'_> {
             install_ledger_canister(&mut ledger, init_payloads.ledger),
             install_root_canister(&mut root, init_payloads.root),
             install_swap_canister(&mut swap, init_payloads.swap),
-            install_index_canister(&mut index, init_payloads.index),
+            install_index_ng_canister(&mut index, init_payloads.index_ng),
         );
 
         eprintln!("SNS canisters installed after {:.1} s", since_start_secs());
@@ -1384,14 +1403,30 @@ pub async fn set_up_ledger_canister(runtime: &'_ Runtime, args: LedgerInitArgs) 
     canister
 }
 
-/// Compiles the ledger index canister, builds it's initial payload and installs it
+/// Compiles the ledger index canister, builds it's initial payload and installs it.
+/// TODO[NNS1-2856]: Remove this function.
 pub async fn install_index_canister<'runtime, 'a>(
     canister: &mut Canister<'runtime>,
-    args: IndexInitArgs,
+    args: LegacyIndexArg,
 ) {
     install_rust_canister_with_memory_allocation(
         canister,
         "ic-icrc1-index",
+        &[],
+        Some(CandidOne(args).into_bytes().unwrap()),
+        SNS_MAX_CANISTER_MEMORY_ALLOCATION_IN_BYTES,
+    )
+    .await
+}
+
+/// Compiles the ledger index canister, builds it's initial payload and installs it
+pub async fn install_index_ng_canister<'runtime, 'a>(
+    canister: &mut Canister<'runtime>,
+    args: Option<IndexArg>,
+) {
+    install_rust_canister_with_memory_allocation(
+        canister,
+        "ic-icrc1-index-ng",
         &[],
         Some(CandidOne(args).into_bytes().unwrap()),
         SNS_MAX_CANISTER_MEMORY_ALLOCATION_IN_BYTES,

@@ -12,7 +12,7 @@ use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     sns_wasm,
     sns_wasm::{
-        build_archive_sns_wasm, build_governance_sns_wasm, build_index_sns_wasm,
+        build_archive_sns_wasm, build_governance_sns_wasm, build_index_ng_sns_wasm,
         build_ledger_sns_wasm, build_root_sns_wasm, build_swap_sns_wasm, create_modified_wasm,
     },
     state_test_helpers,
@@ -477,7 +477,6 @@ fn upgrade_swap(
 #[test]
 fn upgrade_archive_sns_canister_via_sns_wasms() {
     let canister_type = SnsCanisterType::Archive;
-    state_test_helpers::reduce_state_machine_logging_unless_env_set();
     let machine = StateMachineBuilder::new().with_current_time().build();
 
     let nns_init_payload = NnsInitPayloadsBuilder::new()
@@ -610,7 +609,7 @@ fn upgrade_archive_sns_canister_via_sns_wasms() {
     install_code(
         index,
         wasm_for_type(&SnsCanisterType::Index),
-        Encode!(&init_payloads.index).unwrap(),
+        Encode!(&init_payloads.index_ng.unwrap()).unwrap(),
     );
 
     machine.tick();
@@ -752,7 +751,7 @@ fn test_out_of_sync_version_still_allows_upgrade_to_succeed() {
     let archive_wasm = sns_wasm::create_modified_wasm(&build_archive_sns_wasm(), None);
     sns_wasm::add_wasm_via_proposal(&machine, archive_wasm.clone());
 
-    let index_wasm = build_index_sns_wasm();
+    let index_wasm = build_index_ng_sns_wasm();
     sns_wasm::add_wasm_via_proposal(&machine, index_wasm.clone());
 
     let wasm_map = btreemap! {
@@ -886,7 +885,7 @@ fn test_out_of_sync_version_still_allows_upgrade_to_succeed() {
     install_code(
         index,
         wasm_for_type(&SnsCanisterType::Index),
-        Encode!(&init_payloads.index).unwrap(),
+        Encode!(&init_payloads.index_ng.unwrap()).unwrap(),
     );
 
     machine.tick();

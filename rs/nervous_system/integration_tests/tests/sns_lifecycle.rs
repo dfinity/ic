@@ -31,7 +31,7 @@ use ic_nns_test_utils::{
     },
     ids::TEST_NEURON_1_ID,
     sns_wasm::{
-        build_archive_sns_wasm, build_governance_sns_wasm, build_index_sns_wasm,
+        build_archive_sns_wasm, build_governance_sns_wasm, build_index_ng_sns_wasm,
         build_ledger_sns_wasm, build_root_sns_wasm, build_swap_sns_wasm,
     },
 };
@@ -1004,7 +1004,8 @@ fn add_real_wasms_to_sns_wasm(
     let archive_wasm = build_archive_sns_wasm();
     let archive_proposal_info = add_wasm(pocket_ic, archive_wasm.clone())?;
 
-    let index_wasm = build_index_sns_wasm();
+    // let index_wasm = build_index_sns_wasm();
+    let index_wasm = build_index_ng_sns_wasm();
     let index_proposal_info = add_wasm(pocket_ic, index_wasm.clone())?;
 
     Ok(btreemap! {

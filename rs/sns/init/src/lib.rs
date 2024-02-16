@@ -4,7 +4,8 @@ use crate::pb::v1::{
     SwapDistribution,
 };
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_icrc1_index::InitArgs as IndexInitArgs;
+use ic_icrc1_index::InitArgs as LegacyIndexArg;
+use ic_icrc1_index_ng::{IndexArg, InitArg};
 use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::Tokens;
@@ -386,13 +387,15 @@ pub struct SnsCanisterIds {
 }
 
 /// The Init payloads for all SNS Canisters
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct SnsCanisterInitPayloads {
     pub governance: Governance,
     pub ledger: LedgerArgument,
     pub root: SnsRootCanister,
     pub swap: SwapInit,
-    pub index: IndexInitArgs,
+    pub index_ng: Option<IndexArg>,
+    // TODO[NNS1-2856]: Remove this field.
+    pub index: Option<LegacyIndexArg>,
 }
 
 impl SnsInitPayload {
@@ -549,12 +552,38 @@ impl SnsInitPayload {
         testflight: bool,
     ) -> Result<SnsCanisterInitPayloads, String> {
         self.validate_post_execution()?;
+
+        let mut index_ng = self.index_ng_init_args(sns_canister_ids);
+        let mut index = None;
+
+        if let Some(ref deployed_version) = deployed_version {
+            use std::fmt::Write;
+
+            // TODO[NNS1-2856]: Remove this branch (needed for upgrade testing Index -> Index-Ng).
+            // The constant is taken from https://dashboard.internetcomputer.org/proposal/127686
+            let current_mainnet_index_version =
+                "234f489698681ec6b6f4b996c19d693d9cbb418fd52294348c1e704d0d8f98c6";
+            let human_readable_index_version: String = deployed_version
+                .index_wasm_hash
+                .iter()
+                .fold(String::new(), |mut output, x| {
+                    let _ = write!(output, "{:02x}", x);
+                    output
+                });
+            if human_readable_index_version == current_mainnet_index_version {
+                // Use the old init arg format.
+                index = Some(self.index_init_args(sns_canister_ids));
+                index_ng = None;
+            }
+        }
+
         Ok(SnsCanisterInitPayloads {
             governance: self.governance_init_args(sns_canister_ids, deployed_version)?,
             ledger: self.ledger_init_args(sns_canister_ids)?,
             root: self.root_init_args(sns_canister_ids, testflight),
             swap: self.swap_init_args(sns_canister_ids)?,
-            index: self.index_init_args(sns_canister_ids),
+            index_ng,
+            index,
         })
     }
 
@@ -657,11 +686,19 @@ impl SnsInitPayload {
         Ok(LedgerArgument::Init(payload_builder.build()))
     }
 
-    /// Construct the params used to initialize a SNS Index canister.
-    fn index_init_args(&self, sns_canister_ids: &SnsCanisterIds) -> IndexInitArgs {
-        IndexInitArgs {
+    /// Construct the params used to initialize an SNS Index canister.
+    /// TODO[NNS1-2856]: Remove this function.
+    fn index_init_args(&self, sns_canister_ids: &SnsCanisterIds) -> LegacyIndexArg {
+        LegacyIndexArg {
             ledger_id: CanisterId::unchecked_from_principal(sns_canister_ids.ledger),
         }
+    }
+
+    /// Construct the params used to initialize an SNS Index-Ng canister.
+    fn index_ng_init_args(&self, sns_canister_ids: &SnsCanisterIds) -> Option<IndexArg> {
+        Some(IndexArg::Init(InitArg {
+            ledger_id: sns_canister_ids.ledger.into(),
+        }))
     }
 
     /// Construct the params used to initialize a SNS Root canister.

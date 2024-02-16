@@ -117,6 +117,7 @@ pub fn setup_sns_canisters(
         root,
         swap,
         index,
+        index_ng: _,
     } = payloads;
 
     let (root_sns_wasm, governance_sns_wasm, ledger_sns_wasm, swap_sns_wasm, index_sns_wasm) = (
@@ -161,7 +162,7 @@ pub fn setup_sns_canisters(
     install_canister(
         index_canister_id,
         index_sns_wasm.wasm,
-        Encode!(&index).unwrap(),
+        Encode!(&index.expect("Index payload was None")).unwrap(),
     );
 
     SnsTestCanisterIds {

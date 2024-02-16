@@ -13,8 +13,8 @@ use ic_nns_constants::{
     SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET,
 };
 use ic_nns_test_utils::{
-    sns_wasm,
-    state_test_helpers::{self, set_controllers, set_up_universal_canister, update_with_sender},
+    sns_wasm, state_test_helpers,
+    state_test_helpers::{set_controllers, set_up_universal_canister, update_with_sender},
 };
 use ic_sns_init::pb::v1::{DappCanisters, SnsInitPayload};
 use ic_sns_root::{CanisterSummary, GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
