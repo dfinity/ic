@@ -171,6 +171,11 @@ enum StorageLocation {
     Stable,
 }
 
+pub type NeuronStoreState = (
+    BTreeMap<u64, Neuron>,
+    HeapNeuronFollowingIndex<NeuronId, Topic>,
+);
+
 /// This struct stores and provides access to all neurons within NNS Governance, which can live
 /// in either heap memory or stable memory.
 #[cfg_attr(test, derive(Clone, Debug))]
@@ -234,6 +239,16 @@ impl PartialEq for NeuronStore {
     }
 }
 
+impl Default for NeuronStore {
+    fn default() -> Self {
+        Self {
+            heap_neurons: BTreeMap::new(),
+            topic_followee_index: HeapNeuronFollowingIndex::new(BTreeMap::new()),
+            clock: Box::new(IcClock::new()),
+        }
+    }
+}
+
 impl NeuronStore {
     // Initializes NeuronStore for the first time assuming no persisted data has been prepared (e.g.
     // data in stable storage and those persisted through serialization/deserialization like
@@ -263,11 +278,9 @@ impl NeuronStore {
     // Restores NeuronStore after an upgrade, assuming data are already in the stable storage (e.g.
     // neuron indexes and inactive neurons) and persisted data are already calculated (e.g.
     // topic_followee_index).
-    pub fn new_restored(
-        heap_neurons: BTreeMap<u64, Neuron>,
-        topic_followee_index: HeapNeuronFollowingIndex<NeuronId, Topic>,
-    ) -> Self {
+    pub fn new_restored(state: NeuronStoreState) -> Self {
         let clock = Box::new(IcClock::new());
+        let (heap_neurons, topic_followee_index) = state;
         Self {
             heap_neurons,
             topic_followee_index,
@@ -275,16 +288,9 @@ impl NeuronStore {
         }
     }
 
-    /// Takes the heap neurons for serialization. The `self.heap_neurons` will become empty, so
-    /// it should only be called once at pre_upgrade.
-    pub fn take_heap_neurons(&mut self) -> BTreeMap<u64, Neuron> {
-        std::mem::take(&mut self.heap_neurons)
-    }
-
-    /// Takes the HeapNeuronFollowingIndex.  The `self.topic_followee_index` will become empty, so
-    /// it should only be called once at pre_upgrade.
-    pub fn take_heap_topic_followee_index(&mut self) -> HeapNeuronFollowingIndex<NeuronId, Topic> {
-        std::mem::take(&mut self.topic_followee_index)
+    /// Takes the neuron store state which should be persisted through upgrades.
+    pub fn take(self) -> NeuronStoreState {
+        (self.heap_neurons, self.topic_followee_index)
     }
 
     /// If there is a bug (related to lock acquisition), this could return u64::MAX.
