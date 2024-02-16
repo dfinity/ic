@@ -1,12 +1,11 @@
 use crate::{
     pb::v1::{
-        add_wasm_response, get_deployed_sns_by_proposal_id_response,
-        update_allowed_principals_response, AddWasmResponse, DeployedSns,
+        add_wasm_response, get_deployed_sns_by_proposal_id_response, AddWasmResponse, DeployedSns,
         GetDeployedSnsByProposalIdResponse, GetNextSnsVersionResponse,
         InsertUpgradePathEntriesResponse, ListUpgradeStep, PrettySnsVersion, SnsCanisterIds,
         SnsCanisterType, SnsSpecificSnsUpgrade, SnsUpgrade, SnsVersion, SnsWasm, SnsWasmError,
-        SnsWasmStableIndex, StableCanisterState, UpdateAllowedPrincipalsResponse,
-        UpdateSnsSubnetListResponse, UpgradePath as StableUpgradePath,
+        SnsWasmStableIndex, StableCanisterState, UpdateSnsSubnetListResponse,
+        UpgradePath as StableUpgradePath,
     },
     sns_wasm::{vec_to_hash, SnsWasmCanister, UpgradePath},
     stable_memory::SnsWasmStableMemory,
@@ -46,18 +45,6 @@ impl InsertUpgradePathEntriesResponse {
     pub fn error(message: String) -> Self {
         Self {
             error: Some(SnsWasmError { message }),
-        }
-    }
-}
-
-impl UpdateAllowedPrincipalsResponse {
-    pub fn error(message: String) -> Self {
-        Self {
-            update_allowed_principals_result: Some(
-                update_allowed_principals_response::UpdateAllowedPrincipalsResult::Error(
-                    SnsWasmError { message },
-                ),
-            ),
         }
     }
 }
