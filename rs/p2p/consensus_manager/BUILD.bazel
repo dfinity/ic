@@ -22,6 +22,7 @@ DEPENDENCIES = [
     "@crate_index//:rand",
     "@crate_index//:slog",
     "@crate_index//:tokio",
+    "@crate_index//:tokio-util",
 ]
 
 DEV_DEPENDENCIES = [
@@ -29,7 +30,6 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities/logger",
     "//rs/types/types_test_utils",
     "@crate_index//:mockall",
-    "@crate_index//:tokio-util",
     "@crate_index//:turmoil",
 ]
 
