@@ -310,14 +310,10 @@ impl QueryHandler for InternalHttpQueryHandler {
             } else {
                 None
             },
+            Arc::clone(&self.cycles_account_manager),
         );
 
-        let result = context.run(
-            query,
-            &self.metrics,
-            Arc::clone(&self.cycles_account_manager),
-            &measurement_scope,
-        );
+        let result = context.run(query, &self.metrics, &measurement_scope);
         context.observe_metrics(&self.metrics);
 
         // Add the query execution result to the query cache (if the query caching is enabled).

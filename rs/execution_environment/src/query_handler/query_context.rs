@@ -115,6 +115,7 @@ pub(super) struct QueryContext<'a> {
     evaluated_canister_ids: BTreeSet<CanisterId>,
     /// The number of nested composite query execution errors.
     nested_execution_errors: usize,
+    cycles_account_manager: Arc<CyclesAccountManager>,
 }
 
 impl<'a> QueryContext<'a> {
@@ -136,6 +137,7 @@ impl<'a> QueryContext<'a> {
         canister_id: CanisterId,
         query_critical_error: &'a IntCounter,
         local_query_execution_stats: Option<&'a QueryStatsCollector>,
+        cycles_account_manager: Arc<CyclesAccountManager>,
     ) -> Self {
         let network_topology = Arc::new(state.get_ref().metadata.network_topology.clone());
         let round_limits = RoundLimits {
@@ -168,6 +170,7 @@ impl<'a> QueryContext<'a> {
             // the original canister ID should always be tracked for changes.
             evaluated_canister_ids: BTreeSet::from([canister_id]),
             nested_execution_errors: 0,
+            cycles_account_manager,
         }
     }
 
@@ -185,32 +188,10 @@ impl<'a> QueryContext<'a> {
         &mut self,
         query: UserQuery,
         metrics: &'b QueryHandlerMetrics,
-        cycles_account_manager: Arc<CyclesAccountManager>,
         measurement_scope: &MeasurementScope<'b>,
     ) -> Result<WasmResult, UserError> {
         let canister_id = query.receiver;
         let old_canister = self.state.get_ref().get_active_canister(&canister_id)?;
-
-        let subnet_size = self
-            .network_topology
-            .get_subnet_size(&cycles_account_manager.get_subnet_id())
-            .unwrap_or(SMALL_APP_SUBNET_MAX_SIZE);
-        if cycles_account_manager.freeze_threshold_cycles(
-            old_canister.system_state.freeze_threshold,
-            old_canister.system_state.memory_allocation,
-            old_canister.memory_usage(),
-            old_canister.message_memory_usage(),
-            old_canister.scheduler_state.compute_allocation,
-            subnet_size,
-            old_canister.system_state.reserved_balance(),
-        ) > old_canister.system_state.balance()
-        {
-            return Err(UserError::new(
-                ErrorCode::CanisterOutOfCycles,
-                format!("Canister {} is unable to process query calls because it's frozen. Please top up the canister with cycles and try again.", canister_id))
-            );
-        }
-
         let call_origin = CallOrigin::Query(query.source);
 
         let method = match wasm_query_method(old_canister, query.method_name.clone()) {
@@ -399,6 +380,28 @@ impl<'a> QueryContext<'a> {
                 );
             }
         }
+
+        let subnet_size = self
+            .network_topology
+            .get_subnet_size(&self.cycles_account_manager.get_subnet_id())
+            .unwrap_or(SMALL_APP_SUBNET_MAX_SIZE);
+        if self.cycles_account_manager.freeze_threshold_cycles(
+            canister.system_state.freeze_threshold,
+            canister.system_state.memory_allocation,
+            canister.memory_usage(),
+            canister.message_memory_usage(),
+            canister.scheduler_state.compute_allocation,
+            subnet_size,
+            canister.system_state.reserved_balance(),
+        ) > canister.system_state.balance()
+        {
+            let canister_id = canister.canister_id();
+            return (canister, Err(UserError::new(
+                ErrorCode::CanisterOutOfCycles,
+                format!("Canister {} is unable to process query calls because it's frozen. Please top up the canister with cycles and try again.", canister_id))
+            ));
+        }
+
         let instruction_limit = self.max_instructions_per_query.min(NumInstructions::new(
             self.round_limits.instructions.get().max(0) as u64,
         ));
