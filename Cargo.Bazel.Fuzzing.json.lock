@@ -1,5 +1,5 @@
 {
-  "checksum": "36e4570cd154c808323dae7971ee7ef2aac27914a305880ce20a2a911615cbcb",
+  "checksum": "8baf3cbc469f8bf7d84165355a396b98e9f49edce7678d68160c6a957143175d",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -16367,7 +16367,7 @@
               "target": "zeroize"
             },
             {
-              "id": "zstd 0.12.4",
+              "id": "zstd 0.13.0",
               "target": "zstd"
             }
           ],
@@ -65125,6 +65125,15 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [
+            "arrays",
+            "default",
+            "legacy",
+            "zdict_builder"
+          ],
+          "selects": {}
+        },
         "deps": {
           "common": [
             {
@@ -65254,7 +65263,10 @@
         ],
         "crate_features": {
           "common": [
-            "std"
+            "arrays",
+            "legacy",
+            "std",
+            "zdict_builder"
           ],
           "selects": {}
         },

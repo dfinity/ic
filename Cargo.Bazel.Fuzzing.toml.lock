@@ -3298,7 +3298,7 @@ dependencies = [
  "x509-parser",
  "yansi",
  "zeroize",
- "zstd 0.12.4",
+ "zstd 0.13.0",
 ]
 
 [[package]]
