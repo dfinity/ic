@@ -921,8 +921,36 @@ fn query_cache_metrics_evaluated_canisters_work() {
     let m = &query_handler(&test).metrics;
 
     // Two canisters reported once.
-    assert_eq!(1, m.query_evaluated_canisters.get_sample_count());
-    assert_eq!(2.0, m.query_evaluated_canisters.get_sample_sum());
+    assert_eq!(1, m.evaluated_canisters.get_sample_count());
+    assert_eq!(2.0, m.evaluated_canisters.get_sample_sum());
+}
+
+#[test]
+fn query_cache_metrics_nested_execution_errors_work() {
+    let mut test = builder_with_query_caching().build();
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+
+    let a = wasm()
+        .composite_query(
+            b_id,
+            call_args().other_side(wasm().trap()).on_reject(
+                wasm().composite_query(
+                    b_id,
+                    call_args()
+                        .other_side(wasm().trap())
+                        .on_reject(wasm().reply_data(&[42])),
+                ),
+            ),
+        )
+        .build();
+    test.non_replicated_query(a_id, "composite_query", a)
+        .unwrap();
+
+    let m = &query_handler(&test).metrics;
+
+    // Two traps in the nested queries.
+    assert_eq!(2, m.nested_execution_errors.get());
 }
 
 #[test]
