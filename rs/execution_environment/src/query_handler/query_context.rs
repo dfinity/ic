@@ -40,7 +40,7 @@ use ic_types::{
     methods::{FuncRef, WasmClosure},
     NumSlices,
 };
-use prometheus::{Histogram, IntCounter, IntCounterVec};
+use prometheus::IntCounter;
 use std::{
     collections::{BTreeSet, VecDeque},
     sync::Arc,
@@ -113,6 +113,8 @@ pub(super) struct QueryContext<'a> {
     /// A set of canister IDs evaluated and executed at least once in this query context.
     /// The information is used by the query cache for composite queries.
     evaluated_canister_ids: BTreeSet<CanisterId>,
+    /// The number of nested composite query execution errors.
+    nested_execution_errors: usize,
 }
 
 impl<'a> QueryContext<'a> {
@@ -163,6 +165,7 @@ impl<'a> QueryContext<'a> {
             local_query_execution_stats,
             system_api_call_counters: SystemApiCallCounters::default(),
             evaluated_canister_ids: BTreeSet::default(),
+            nested_execution_errors: 0,
         }
     }
 
@@ -460,15 +463,28 @@ impl<'a> QueryContext<'a> {
         (canister, result)
     }
 
-    /// Add up System API call counters.
+    /// Adds up System API call counters.
     fn add_system_api_call_counters(&mut self, system_api_call_counters: SystemApiCallCounters) {
         self.system_api_call_counters
             .saturating_add(system_api_call_counters);
     }
 
-    /// Add a canister ID into a set of actually executed canisters.
+    /// Adds a canister ID into a set of actually executed canisters.
     fn insert_evaluated_canister_id(&mut self, canister_id: CanisterId) {
         self.evaluated_canister_ids.insert(canister_id);
+    }
+
+    /// Adds nested composite query execution errors.
+    ///
+    /// In the future we might distinguish between the transient and
+    /// permanent errors, but for now we just avoid caching any errors.
+    pub fn add_nested_execution_errors(&mut self, response: &Response) {
+        match response.response_payload {
+            Payload::Data(_) => {}
+            Payload::Reject(_) => {
+                self.nested_execution_errors += 1;
+            }
+        }
     }
 
     fn finish(
@@ -488,8 +504,10 @@ impl<'a> QueryContext<'a> {
             .0
     }
 
-    /// Observe System API call counters in the corresponding metrics.
-    pub(super) fn observe_system_api_calls(&mut self, query_system_api_calls: &IntCounterVec) {
+    // Observes query metrics.
+    pub(super) fn observe_metrics(&mut self, metrics: &QueryHandlerMetrics) {
+        // Observe System API call counters in the corresponding metrics.
+        let query_system_api_calls = &metrics.query_system_api_calls;
         query_system_api_calls
             .with_label_values(&[SYSTEM_API_DATA_CERTIFICATE_COPY])
             .inc_by(self.system_api_call_counters.data_certificate_copy as u64);
@@ -505,11 +523,16 @@ impl<'a> QueryContext<'a> {
         query_system_api_calls
             .with_label_values(&[SYSTEM_API_TIME])
             .inc_by(self.system_api_call_counters.time as u64);
-    }
 
-    /// Observe the number evaluated canisters in the corresponding metrics.
-    pub(super) fn observe_evaluated_canisters(&mut self, query_evaluated_canisters: &Histogram) {
-        query_evaluated_canisters.observe(self.evaluated_canister_ids.len() as f64)
+        // Observe the number evaluated canisters in the corresponding metrics.
+        metrics
+            .evaluated_canisters
+            .observe(self.evaluated_canister_ids.len() as f64);
+
+        // Observe nested composite query execution errors.
+        metrics
+            .nested_execution_errors
+            .inc_by(self.nested_execution_errors as u64);
     }
 
     fn execute_callback(
@@ -1044,13 +1067,18 @@ impl<'a> QueryContext<'a> {
         }
     }
 
-    /// Return how many times each tracked System API call was invoked.
+    /// Returns how many times each tracked System API call was invoked.
     pub fn system_api_call_counters(&self) -> &SystemApiCallCounters {
         &self.system_api_call_counters
     }
 
-    /// Return a list of actually executed canister IDs.
+    /// Returns a list of actually executed canister IDs.
     pub fn evaluated_canister_ids(&self) -> &BTreeSet<CanisterId> {
         &self.evaluated_canister_ids
+    }
+
+    /// Returns a number of nested composite query execution errors.
+    pub fn nested_execution_errors(&self) -> usize {
+        self.nested_execution_errors
     }
 }

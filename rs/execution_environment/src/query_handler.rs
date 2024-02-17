@@ -317,14 +317,14 @@ impl QueryHandler for InternalHttpQueryHandler {
             Arc::clone(&self.cycles_account_manager),
             &measurement_scope,
         );
-        context.observe_system_api_calls(&self.metrics.query_system_api_calls);
-        context.observe_evaluated_canisters(&self.metrics.query_evaluated_canisters);
+        context.observe_metrics(&self.metrics);
 
         // Add the query execution result to the query cache (if the query caching is enabled).
         if self.config.query_caching == FlagStatus::Enabled {
             if let (Some(key), Some(env)) = (cache_entry_key, cache_entry_env) {
                 let call_counters = context.system_api_call_counters();
                 let _evaluated_ids = context.evaluated_canister_ids();
+                let _errors = context.nested_execution_errors();
                 self.query_cache.push(key, env, &result, call_counters);
             }
         }
