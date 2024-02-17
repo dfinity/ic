@@ -1,5 +1,5 @@
 {
-  "checksum": "1c196e64dd1cc48aa75768ca8251e501529892cc6e2baa2c70be6def52879bf2",
+  "checksum": "f17e96724e8e7c54c711e575e117bd89d5fc29d5b4d284af697ac39716ae638b",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -16243,7 +16243,7 @@
               "target": "zeroize"
             },
             {
-              "id": "zstd 0.12.4",
+              "id": "zstd 0.13.0",
               "target": "zstd"
             }
           ],
@@ -65068,6 +65068,54 @@
       },
       "license": "MIT"
     },
+    "zstd 0.13.0": {
+      "name": "zstd",
+      "version": "0.13.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/zstd/0.13.0/download",
+          "sha256": "bffb3309596d527cfcba7dfc6ed6052f1d39dfbd7c867aa2e865e4a449c10110"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "zstd",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "zstd",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "arrays",
+            "default",
+            "legacy",
+            "zdict_builder"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "zstd-safe 7.0.0",
+              "target": "zstd_safe"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.13.0"
+      },
+      "license": "MIT"
+    },
     "zstd-safe 6.0.5+zstd.1.5.4": {
       "name": "zstd-safe",
       "version": "6.0.5+zstd.1.5.4",
@@ -65130,6 +65178,81 @@
         },
         "edition": "2018",
         "version": "6.0.5+zstd.1.5.4"
+      },
+      "build_script_attrs": {
+        "data_glob": [
+          "**"
+        ],
+        "link_deps": {
+          "common": [
+            {
+              "id": "zstd-sys 2.0.8+zstd.1.5.5",
+              "target": "zstd_sys"
+            }
+          ],
+          "selects": {}
+        }
+      },
+      "license": "MIT/Apache-2.0"
+    },
+    "zstd-safe 7.0.0": {
+      "name": "zstd-safe",
+      "version": "7.0.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/zstd-safe/7.0.0/download",
+          "sha256": "43747c7422e2924c11144d5229878b98180ef8b06cca4ab5af37afc8a8d8ea3e"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "zstd_safe",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "zstd_safe",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "arrays",
+            "legacy",
+            "std",
+            "zdict_builder"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "zstd-safe 7.0.0",
+              "target": "build_script_build"
+            },
+            {
+              "id": "zstd-sys 2.0.8+zstd.1.5.5",
+              "target": "zstd_sys"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "7.0.0"
       },
       "build_script_attrs": {
         "data_glob": [

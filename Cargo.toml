@@ -420,7 +420,7 @@ arrayvec = "0.7.4"
 askama = { version = "0.12.1", features = ["serde-json"] }
 async-recursion = "1.0.5"
 async-scoped = { version = "0.8", features = ["use-tokio"] }
-axum = "0.6.20"
+axum = "0.7.4"
 backoff = "0.4"
 base64 = { version = "0.13.1" }
 # build-info and build-info-build MUST be kept in sync!
@@ -487,6 +487,7 @@ pretty_assertions = "1.4.0"
 prometheus = { version = "0.13.3", features = ["process"] }
 prost = "0.12.3"
 prost-build = "0.12.3"
+rand = "0.8.5"
 rcgen = { version = "0.11.1", features = ["zeroize"] }
 reqwest = { version = "0.11.22", default-features = false, features = [
   "blocking",
@@ -516,6 +517,7 @@ strum_macros = "0.25.3"
 syn = { version = "1.0.109", features = ["fold", "full"] }
 time = { version = "0.3.20", features = ["formatting"] }
 tokio = { version = "1.36.0", features = ["full"] }
+tokio-metrics = "0.3.0"
 tokio-rustls = { version = "0.24.1", features = ["dangerous_configuration"] }
 tokio-util = { version = "0.7.10", features = ["full"] }
 tonic = "0.11.0"

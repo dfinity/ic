@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 async-trait = "0.1.36"
-axum = "0.7.0"
+axum = { workspace = true }
 bytes = { workspace = true }
 either = "1.6.0"
 futures = { workspace = true }
