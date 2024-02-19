@@ -49,8 +49,7 @@ system_test(
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
-        "system_test_hourly",
-        "system_test_nightly",
+        "manual",  # TODO(BOUN-1039): remove "manual" and add back "system_test_hourly" and "system_test_nightly" when the test is not flaky anymore
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "long",
