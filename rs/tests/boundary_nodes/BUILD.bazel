@@ -60,7 +60,6 @@ system_test(
 
 system_test(
     name = "certificate_orchestrator_test",
-    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
