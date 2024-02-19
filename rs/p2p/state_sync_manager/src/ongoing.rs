@@ -29,7 +29,7 @@ use rand::{
     rngs::SmallRng,
     SeedableRng,
 };
-use strum_macros::Display;
+use thiserror::Error;
 use tokio::{
     runtime::Handle,
     select,
@@ -353,21 +353,25 @@ impl<T: 'static + Send> OngoingStateSync<T> {
     }
 }
 
-#[derive(Debug, Clone, Display)]
-#[strum(serialize_all = "snake_case")]
+#[derive(Debug, Clone, Error)]
 pub(crate) enum DownloadChunkError {
     /// Request was processed but requested content was not available.
     /// This error is permanent.
+    #[error("no_content")]
     NoContent,
     /// Download was cancelled.
+    #[error("cancelled")]
     Cancelled,
     /// Request was not processed because peer endpoint is overloaded.
     /// This error is transient.
+    #[error("overloaded")]
     Overloaded,
     /// Request was not processed because of a timeout either on the client side or on the server side.
+    #[error("timeout")]
     Timeout,
     /// An unexpected error occurred during the request. Requests to well-behaving peers
     /// do not return a RequestError.
+    #[error("request_error")]
     RequestError { chunk_id: ChunkId, err: String },
 }
 

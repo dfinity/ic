@@ -19,7 +19,7 @@ prometheus = { workspace = true }
 prost = { workspace = true }
 rand = { workspace = true }
 slog = { workspace = true }
-strum_macros = { workspace = true }
+thiserror = "1.0.57"
 tokio = { workspace = true }
 tokio-metrics = { workspace = true }
 tokio-util = { workspace = true }
