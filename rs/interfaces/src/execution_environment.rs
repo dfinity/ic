@@ -202,6 +202,7 @@ pub struct SystemApiCallCounters {
     /// Counter for `ic0.data_certificate_copy()`
     pub data_certificate_copy: usize,
     /// Counter for `ic0.call_perform()`
+    // TODO: RUN-918: Remove tracking, as we support the composite queries now.
     pub call_perform: usize,
     /// Counter for `ic0.canister_cycle_balance()`
     pub canister_cycle_balance: usize,

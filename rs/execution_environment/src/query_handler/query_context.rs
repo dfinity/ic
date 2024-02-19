@@ -164,7 +164,9 @@ impl<'a> QueryContext<'a> {
             query_critical_error,
             local_query_execution_stats,
             system_api_call_counters: SystemApiCallCounters::default(),
-            evaluated_canister_ids: BTreeSet::default(),
+            // If the `context.run()` returns an error and hence the empty evaluated IDs set,
+            // the original canister ID should always be tracked for changes.
+            evaluated_canister_ids: BTreeSet::from([canister_id]),
             nested_execution_errors: 0,
         }
     }
@@ -420,7 +422,6 @@ impl<'a> QueryContext<'a> {
                 self.query_critical_error,
             );
         self.add_system_api_call_counters(system_api_call_counters);
-        self.insert_evaluated_canister_id(canister.canister_id());
         let instructions_executed = instruction_limit - instructions_left;
 
         let ingress_payload_size = method_payload.len();
@@ -642,7 +643,6 @@ impl<'a> QueryContext<'a> {
         );
 
         self.add_system_api_call_counters(output.system_api_call_counters);
-        // There is no need to update evaluated canister ids, as it's a callback.
         let canister_current_memory_usage = canister.memory_usage();
         let canister_current_message_memory_usage = canister.message_memory_usage();
         canister.execution_state = Some(output_execution_state);
@@ -744,7 +744,6 @@ impl<'a> QueryContext<'a> {
             );
 
         self.add_system_api_call_counters(cleanup_output.system_api_call_counters);
-        // There is no need to update evaluated canister ids, as it's a cleanup.
         canister.execution_state = Some(output_execution_state);
         match cleanup_output.wasm_result {
             Ok(_) => {
@@ -791,6 +790,8 @@ impl<'a> QueryContext<'a> {
         };
 
         let canister_id = request.receiver;
+        // Add the canister to the set of evaluated canisters early, i.e. before any errors.
+        self.insert_evaluated_canister_id(canister_id);
 
         let canister = match self.state.get_ref().get_active_canister(&canister_id) {
             Ok(canister) => canister,

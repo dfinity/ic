@@ -270,17 +270,15 @@ impl QueryHandler for InternalHttpQueryHandler {
         // Check the query cache first (if the query caching is enabled).
         // If a valid cache entry found, the result will be immediately returned.
         // Otherwise, the key and the env will be kept for the `push` below.
-        let (cache_entry_key, cache_entry_env) = if self.config.query_caching == FlagStatus::Enabled
-        {
+        let cache_entry_key = if self.config.query_caching == FlagStatus::Enabled {
             let key = query_cache::EntryKey::from(&query);
-            let env = query_cache::EntryEnv::try_from((&key, state.get_ref().as_ref()))?;
-
-            if let Some(result) = self.query_cache.get_valid_result(&key, &env) {
+            let state = state.get_ref().as_ref();
+            if let Some(result) = self.query_cache.get_valid_result(&key, state) {
                 return result;
             }
-            (Some(key), Some(env))
+            Some(key)
         } else {
-            (None, None)
+            None
         };
 
         // Letting the canister grow arbitrarily when executing the
@@ -292,7 +290,10 @@ impl QueryHandler for InternalHttpQueryHandler {
             &self.log,
             self.hypervisor.as_ref(),
             self.own_subnet_type,
-            state,
+            // For composite queries, the set of evaluated canisters is not known in advance,
+            // so the whole state is needed to capture later the state of the call graph.
+            // The clone should not be expensive, as the state is `Labeled<Arc<ReplicatedState>>`.
+            state.clone(),
             data_certificate,
             subnet_available_memory,
             max_canister_memory_size,
@@ -320,13 +321,14 @@ impl QueryHandler for InternalHttpQueryHandler {
         context.observe_metrics(&self.metrics);
 
         // Add the query execution result to the query cache (if the query caching is enabled).
-        if self.config.query_caching == FlagStatus::Enabled {
-            if let (Some(key), Some(env)) = (cache_entry_key, cache_entry_env) {
-                let call_counters = context.system_api_call_counters();
-                let _evaluated_ids = context.evaluated_canister_ids();
-                let _errors = context.nested_execution_errors();
-                self.query_cache.push(key, env, &result, call_counters);
-            }
+        // Query caching is disabled if the key is set to `None`.
+        if let Some(key) = cache_entry_key {
+            let state = state.get_ref().as_ref();
+            let counters = context.system_api_call_counters();
+            let ids = context.evaluated_canister_ids();
+            let errors = context.nested_execution_errors();
+            self.query_cache
+                .push(key, &result, state, counters, ids, errors);
         }
         result
     }
