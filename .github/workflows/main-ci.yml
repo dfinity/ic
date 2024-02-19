@@ -34,7 +34,7 @@ jobs:
       labels: bazel-runner-large
     timeout-minutes: 90
     container:
-      image: dfinity/ic-build:e52dca0c4a9aa4f7b3ade309815b9f19995c78b4042d3578d2f824e10a0fdff1
+      image: dfinity/ic-build:b4c69bc09c7128dc2b1ba13e9dc20e2839a31c9957580ff36f41a6b89f5e6af5
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
       - name: Checkout
@@ -68,7 +68,7 @@ jobs:
     runs-on:
       labels: bazel-runner-small
     container:
-      image: dfinity/ic-build:e52dca0c4a9aa4f7b3ade309815b9f19995c78b4042d3578d2f824e10a0fdff1
+      image: dfinity/ic-build:b4c69bc09c7128dc2b1ba13e9dc20e2839a31c9957580ff36f41a6b89f5e6af5
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
       - name: Checkout
@@ -88,7 +88,7 @@ jobs:
     runs-on:
       labels: bazel-runner-small
     container:
-      image: dfinity/ic-build:e52dca0c4a9aa4f7b3ade309815b9f19995c78b4042d3578d2f824e10a0fdff1
+      image: dfinity/ic-build:b4c69bc09c7128dc2b1ba13e9dc20e2839a31c9957580ff36f41a6b89f5e6af5
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
       - name: Checkout
@@ -108,7 +108,7 @@ jobs:
     runs-on:
       labels: bazel-runner-small
     container:
-      image: dfinity/ic-build:e52dca0c4a9aa4f7b3ade309815b9f19995c78b4042d3578d2f824e10a0fdff1
+      image: dfinity/ic-build:b4c69bc09c7128dc2b1ba13e9dc20e2839a31c9957580ff36f41a6b89f5e6af5
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
       - name: Checkout
