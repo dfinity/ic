@@ -690,9 +690,6 @@ pub trait SystemApi {
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
 
-    /// Logs the specified bytes on the heap as a string.
-    fn save_log_message(&self, src: u32, size: u32, heap: &[u8]);
-
     /// Outputs the specified bytes on the heap as a string on STDOUT.
     fn ic0_debug_print(&self, src: u32, size: u32, heap: &[u8]) -> HypervisorResult<()>;
 

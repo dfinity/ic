@@ -2347,7 +2347,7 @@ impl FetchCanisterLogsRequest {
 ///     content: blob;
 /// }
 /// ```
-#[derive(Default, Clone, CandidType, Deserialize, Debug, PartialEq, Eq)]
+#[derive(Default, Clone, CandidType, Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct CanisterLogRecord {
     pub idx: u64,
     pub timestamp_nanos: u64,

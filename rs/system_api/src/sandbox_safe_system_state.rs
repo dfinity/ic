@@ -10,8 +10,9 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 use ic_logger::{info, ReplicaLogger};
 use ic_management_canister_types::{
-    CreateCanisterArgs, InstallChunkedCodeArgs, InstallCodeArgsV2, Method as Ic00Method, Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, UninstallCodeArgs, UpdateSettingsArgs, IC_00,
+    CanisterLogRecord, CreateCanisterArgs, InstallChunkedCodeArgs, InstallCodeArgsV2,
+    Method as Ic00Method, Payload, ProvisionalCreateCanisterWithCyclesArgs, UninstallCodeArgs,
+    UpdateSettingsArgs, IC_00,
 };
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
@@ -69,6 +70,7 @@ pub struct SystemStateChanges {
     request_slots_used: BTreeMap<CanisterId, usize>,
     requests: Vec<Request>,
     pub(super) new_global_timer: Option<CanisterTimer>,
+    canister_log_records: Vec<CanisterLogRecord>,
 }
 
 impl Default for SystemStateChanges {
@@ -83,6 +85,7 @@ impl Default for SystemStateChanges {
             request_slots_used: BTreeMap::new(),
             requests: vec![],
             new_global_timer: None,
+            canister_log_records: vec![],
         }
     }
 }
@@ -1184,6 +1187,22 @@ impl SandboxSafeSystemState {
                 false
             }
         }
+    }
+
+    /// Appends a log record to the system state changes.
+    pub fn append_canister_log(&mut self, time: &Time, text: String) {
+        self.system_state_changes
+            .canister_log_records
+            .push(CanisterLogRecord {
+                idx: 27, // TODO(IC-272): populate idx value.
+                timestamp_nanos: time.as_nanos_since_unix_epoch(),
+                content: text.into_bytes(),
+            });
+    }
+
+    /// Returns collected canister log records.
+    pub fn canister_log_records(&self) -> &Vec<CanisterLogRecord> {
+        &self.system_state_changes.canister_log_records
     }
 }
 
