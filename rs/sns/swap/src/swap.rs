@@ -8,7 +8,6 @@ use crate::{
         get_open_ticket_response, new_sale_ticket_response, restore_dapp_controllers_response,
         set_dapp_controllers_call_result, set_mode_call_result,
         set_mode_call_result::SetModeResult,
-        settle_community_fund_participation, settle_community_fund_participation_result,
         settle_neurons_fund_participation_request, settle_neurons_fund_participation_response,
         sns_neuron_recipe::{ClaimedStatus, Investor, NeuronAttributes},
         BuyerState, CanisterCallError, CfInvestment, CfNeuron, CfParticipant, DerivedState,
@@ -17,15 +16,14 @@ use crate::{
         GetBuyerStateResponse, GetBuyersTotalResponse, GetDerivedStateResponse, GetInitRequest,
         GetInitResponse, GetLifecycleRequest, GetLifecycleResponse, GetOpenTicketRequest,
         GetOpenTicketResponse, GetSaleParametersRequest, GetSaleParametersResponse,
-        GetStateResponse, GovernanceError, Icrc1Account, Init, Lifecycle,
-        ListCommunityFundParticipantsRequest, ListCommunityFundParticipantsResponse,
-        ListDirectParticipantsRequest, ListDirectParticipantsResponse, ListSnsNeuronRecipesRequest,
-        ListSnsNeuronRecipesResponse, NeuronBasketConstructionParameters, NeuronId as SaleNeuronId,
-        NewSaleTicketRequest, NewSaleTicketResponse, NotifyPaymentFailureResponse, OpenRequest,
-        OpenResponse, Participant, RefreshBuyerTokensResponse, RestoreDappControllersResponse,
+        GetStateResponse, Icrc1Account, Init, Lifecycle, ListCommunityFundParticipantsRequest,
+        ListCommunityFundParticipantsResponse, ListDirectParticipantsRequest,
+        ListDirectParticipantsResponse, ListSnsNeuronRecipesRequest, ListSnsNeuronRecipesResponse,
+        NeuronBasketConstructionParameters, NeuronId as SaleNeuronId, NewSaleTicketRequest,
+        NewSaleTicketResponse, NotifyPaymentFailureResponse, OpenRequest, OpenResponse,
+        Participant, RefreshBuyerTokensResponse, RestoreDappControllersResponse,
         SetDappControllersCallResult, SetDappControllersRequest, SetDappControllersResponse,
-        SetModeCallResult, SettleCommunityFundParticipation,
-        SettleCommunityFundParticipationResult, SettleNeuronsFundParticipationRequest,
+        SetModeCallResult, SettleNeuronsFundParticipationRequest,
         SettleNeuronsFundParticipationResponse, SettleNeuronsFundParticipationResult,
         SnsNeuronRecipe, Swap, SweepResult, Ticket, TransferableAmount,
     },
@@ -71,11 +69,11 @@ use std::{
 /// The maximum count of participants that can be returned by ListDirectParticipants
 pub const MAX_LIST_DIRECT_PARTICIPANTS_LIMIT: u32 = 20_000;
 
-/// The default count of community fund participants that can be returned
+/// The default count of Neurons' Fund participants that can be returned
 /// by ListCommunityFundParticipants
 const DEFAULT_LIST_COMMUNITY_FUND_PARTICIPANTS_LIMIT: u32 = 10_000;
 
-/// The maximum count of community fund participants that can be returned
+/// The maximum count of Neurons' Fund participants that can be returned
 /// by ListCommunityFundParticipants
 const LIST_COMMUNITY_FUND_PARTICIPANTS_LIMIT_CAP: u32 = 10_000;
 
@@ -142,29 +140,6 @@ impl From<Result<SetDappControllersResponse, CanisterCallError>>
         });
 
         Self { possibility }
-    }
-}
-
-impl From<Result<Result<(), GovernanceError>, CanisterCallError>>
-    for SettleCommunityFundParticipationResult
-{
-    fn from(original: Result<Result<(), GovernanceError>, CanisterCallError>) -> Self {
-        use settle_community_fund_participation_result::{Possibility, Response};
-
-        match original {
-            Ok(inner) => Self {
-                possibility: Some(Possibility::Ok(Response {
-                    governance_error: match inner {
-                        Ok(()) => None,
-                        Err(governance_error) => Some(governance_error),
-                    },
-                })),
-            },
-
-            Err(err) => Self {
-                possibility: Some(Possibility::Err(err)),
-            },
-        }
     }
 }
 
@@ -520,7 +495,7 @@ impl Swap {
     }
 
     /// The total amount of ICP e8s contributed by direct investors and the
-    /// community fund.
+    /// Neurons' Fund.
     pub fn current_total_participation_e8s(&self) -> u64 {
         let current_direct_participation_e8s = self.current_direct_participation_e8s();
         let current_neurons_fund_participation_e8s = self.current_neurons_fund_participation_e8s();
@@ -1564,11 +1539,10 @@ impl Swap {
         }
 
         // Settle the Neurons' Fund participation in the token swap.
-        self.settle_fund_participation(
-            environment.nns_governance_mut(),
-            &mut finalize_swap_response,
-        )
-        .await;
+        finalize_swap_response.set_settle_neurons_fund_participation_result(
+            self.settle_neurons_fund_participation(environment.nns_governance_mut())
+                .await,
+        );
         if finalize_swap_response.has_error_message() {
             return finalize_swap_response;
         }
@@ -2412,74 +2386,6 @@ impl Swap {
         }
 
         sweep_result
-    }
-
-    pub async fn settle_fund_participation(
-        &mut self,
-        nns_governance_client: &mut impl NnsGovernanceClient,
-        finalize_swap_response: &mut FinalizeSwapResponse,
-    ) {
-        if let Some(init) = self.init.as_ref() {
-            if init.neurons_fund_participation.is_none() {
-                // Settle the CommunityFund's participation in the Swap (if any).
-                finalize_swap_response.set_settle_community_fund_participation_result(
-                    self.settle_community_fund_participation(nns_governance_client)
-                        .await,
-                );
-            } else {
-                // Settle the Neurons' Fund participation in the Swap (if any).
-                finalize_swap_response.set_settle_neurons_fund_participation_result(
-                    self.settle_neurons_fund_participation(nns_governance_client)
-                        .await,
-                )
-            }
-        }
-    }
-
-    /// Requests the NNS Governance canister to settle the CommunityFund
-    /// participation in the Sale. If the Swap is committed, ICP will be
-    /// minted. If the Swap is aborted, maturity will be refunded to
-    /// CF Neurons.
-    pub async fn settle_community_fund_participation(
-        &self,
-        nns_governance_client: &mut impl NnsGovernanceClient,
-    ) -> SettleCommunityFundParticipationResult {
-        use settle_community_fund_participation::{Aborted, Committed, Result};
-
-        let init = match self.init_and_validate() {
-            Ok(init) => init,
-            Err(error_message) => {
-                log!(
-                    ERROR,
-                    "Halting settle_community_fund_participation(). State is missing or corrupted: {:?}",
-                    error_message
-                );
-                return SettleCommunityFundParticipationResult { possibility: None };
-            }
-        };
-
-        // The following methods are safe to call since we validated Init in the above block
-        let sns_governance = init.sns_governance_or_panic();
-
-        let result = if self.lifecycle() == Lifecycle::Committed {
-            Result::Committed(Committed {
-                sns_governance_canister_id: Some(sns_governance.get()),
-                total_direct_contribution_icp_e8s: Some(self.current_direct_participation_e8s()),
-                total_neurons_fund_contribution_icp_e8s: Some(
-                    self.current_neurons_fund_participation_e8s(),
-                ),
-            })
-        } else {
-            Result::Aborted(Aborted {})
-        };
-
-        nns_governance_client
-            .settle_community_fund_participation(SettleCommunityFundParticipation {
-                open_sns_token_swap_proposal_id: self.open_sns_token_swap_proposal_id,
-                result: Some(result),
-            })
-            .await
-            .into()
     }
 
     /// Requests the NNS Governance canister to settle the Neurons' Fund
@@ -3512,7 +3418,7 @@ fn create_sns_neuron_basket_for_direct_participant(
     Ok(recipes)
 }
 
-/// Create the basket of SNS Neuron Recipes for a single community fund participant.
+/// Create the basket of SNS Neuron Recipes for a single Neurons' Fund participant.
 fn create_sns_neuron_basket_for_cf_participant(
     hotkey_principal: &PrincipalId,
     nns_neuron_id: u64,
@@ -3535,9 +3441,9 @@ fn create_sns_neuron_basket_for_cf_participant(
             memo_of_longest_dissolve_delay,
         ));
 
-    // Create the neuron basket for the community fund investors. The unique
+    // Create the neuron basket for the Neurons' Fund investors. The unique
     // identifier for an SNS Neuron is the SNS Ledger Subaccount, which
-    // is a hash of PrincipalId and some unique memo. Since community
+    // is a hash of PrincipalId and some unique memo. Since Neurons' Fund
     // investors in the swap use the NNS Governance principal, there can be
     // neuron id collisions. Avoiding such collisions is handled by starting the range
     // of memos in the basket at memo_offset.
