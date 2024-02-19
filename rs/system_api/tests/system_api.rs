@@ -1862,3 +1862,98 @@ fn test_ic0_cycles_burn() {
     // There are no more cycles that can be burned.
     assert_eq!(Cycles::new(0), Cycles::from(&heap));
 }
+
+#[test]
+fn test_save_log_message_adds_canister_log_records() {
+    let message = "Hello, world!";
+    // Create system api and remember the initial number of log records.
+    let mut api = get_system_api(
+        ApiTypeBuilder::build_update_api(),
+        &SystemStateBuilder::default().build(),
+        CyclesAccountManagerBuilder::new().build(),
+    );
+    let initial_number_of_records = api.canister_log_records().len();
+    // Save a log message.
+    let bytes = message.as_bytes();
+    api.save_log_message(0, bytes.len() as u32, bytes);
+    // Expect the number of log records to have increased by 1
+    // and the last record to contain the message.
+    let records = api.canister_log_records();
+    assert_eq!(records.len(), initial_number_of_records + 1);
+    assert_eq!(
+        String::from_utf8(records.last().unwrap().content.clone()).unwrap(),
+        format!("[Canister xbgkv-fyaaa-aaaaa-aaava-cai] {message}")
+    );
+}
+
+#[test]
+fn test_save_log_message_invalid_message_size() {
+    let message = "Hello, world!";
+    let bytes = message.as_bytes();
+    let invalid_size = (bytes.len() + 1) as u32;
+    // Create system api and remember the initial number of log records.
+    let mut api = get_system_api(
+        ApiTypeBuilder::build_update_api(),
+        &SystemStateBuilder::default().build(),
+        CyclesAccountManagerBuilder::new().build(),
+    );
+    let initial_number_of_records = api.canister_log_records().len();
+    // Save a log message.
+    api.save_log_message(0, invalid_size, bytes);
+    // Expect the number of log records to have increased by 1
+    // and the last record to contain the message.
+    let records = api.canister_log_records();
+    assert_eq!(records.len(), initial_number_of_records + 1);
+    assert_eq!(
+        String::from_utf8(records.last().unwrap().content.clone()).unwrap(),
+        "[Canister xbgkv-fyaaa-aaaaa-aaava-cai] (save log message out of memory bounds)"
+    );
+}
+
+#[test]
+fn test_save_log_message_invalid_message_offset() {
+    let message = "Hello, world!";
+    let invalid_src = 1;
+    // Create system api and remember the initial number of log records.
+    let mut api = get_system_api(
+        ApiTypeBuilder::build_update_api(),
+        &SystemStateBuilder::default().build(),
+        CyclesAccountManagerBuilder::new().build(),
+    );
+    let initial_number_of_records = api.canister_log_records().len();
+    // Save a log message.
+    let bytes = message.as_bytes();
+    api.save_log_message(invalid_src, bytes.len() as u32, bytes);
+    // Expect the number of log records to have increased by 1
+    // and the last record to contain the message.
+    let records = api.canister_log_records();
+    assert_eq!(records.len(), initial_number_of_records + 1);
+    assert_eq!(
+        String::from_utf8(records.last().unwrap().content.clone()).unwrap(),
+        "[Canister xbgkv-fyaaa-aaaaa-aaava-cai] (save log message out of memory bounds)"
+    );
+}
+
+#[test]
+fn test_save_log_message_trims_long_message() {
+    let long_message_size = 32 * 1024;
+    let max_allowed_message_size = 4 * 1024;
+    // Prefix size should cover canister id, the exact value is not important.
+    let prefix_size = 256;
+    assert!(prefix_size + max_allowed_message_size < long_message_size);
+    // Create system api and remember the initial number of log records.
+    let mut api = get_system_api(
+        ApiTypeBuilder::build_update_api(),
+        &SystemStateBuilder::default().build(),
+        CyclesAccountManagerBuilder::new().build(),
+    );
+    let initial_number_of_records = api.canister_log_records().len();
+    // Save a log message.
+    let bytes = vec![b'x'; long_message_size];
+    api.save_log_message(0, bytes.len() as u32, &bytes);
+    // Expect the number of log records to have increased by 1
+    // and the last record to contain trimmed message.
+    let records = api.canister_log_records();
+    assert_eq!(records.len(), initial_number_of_records + 1);
+    assert!(records.last().unwrap().content.len() < prefix_size + max_allowed_message_size);
+}

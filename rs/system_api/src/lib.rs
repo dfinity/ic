@@ -16,6 +16,7 @@ use ic_interfaces::execution_environment::{
     TrapCode::{self, CyclesAmountTooBigFor64Bit},
 };
 use ic_logger::{error, ReplicaLogger};
+use ic_management_canister_types::CanisterLogRecord;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::WASM_PAGE_SIZE_IN_BYTES, memory_required_to_push_request, Memory, NumWasmPages,
@@ -1333,6 +1334,44 @@ impl SystemApiImpl {
     /// Return tracked System API call counters.
     pub fn call_counters(&self) -> SystemApiCallCounters {
         self.call_counters.clone()
+    }
+
+    /// Appends the specified bytes on the heap as a string to the canister's logs.
+    pub fn save_log_message(&mut self, src: u32, size: u32, heap: &[u8]) {
+        const MAX_LOG_MESSAGE_SIZE: u32 = 4 * 1024;
+        let size = size.min(MAX_LOG_MESSAGE_SIZE);
+        let msg = match valid_subslice("save_log_message", src, size, heap) {
+            Ok(bytes) => String::from_utf8_lossy(bytes).to_string(),
+            // Do not trap here!
+            // If the specified memory range is invalid, ignore it and log the error message.
+            Err(_) => "(save log message out of memory bounds)".to_string(),
+        };
+        match &self.api_type {
+            ApiType::Start { time }
+            | ApiType::Init { time, .. }
+            | ApiType::SystemTask { time, .. }
+            | ApiType::Update { time, .. }
+            | ApiType::Cleanup { time, .. }
+            | ApiType::NonReplicatedQuery { time, .. }
+            | ApiType::ReplicatedQuery { time, .. }
+            | ApiType::PreUpgrade { time, .. }
+            | ApiType::ReplyCallback { time, .. }
+            | ApiType::RejectCallback { time, .. }
+            | ApiType::InspectMessage { time, .. } => {
+                self.sandbox_safe_system_state.append_canister_log(
+                    time,
+                    format!(
+                        "[Canister {}] {}",
+                        self.sandbox_safe_system_state.canister_id, msg
+                    ),
+                )
+            }
+        }
+    }
+
+    /// Returns collected canister log records.
+    pub fn canister_log_records(&self) -> &Vec<CanisterLogRecord> {
+        self.sandbox_safe_system_state.canister_log_records()
     }
 }
 
@@ -2826,21 +2865,14 @@ impl SystemApi for SystemApiImpl {
         result
     }
 
-    fn save_log_message(&self, _src: u32, _size: u32, _heap: &[u8]) {
-        // TODO(IC-272): implement storing log message.
-    }
-
     fn ic0_debug_print(&self, src: u32, size: u32, heap: &[u8]) -> HypervisorResult<()> {
         const MAX_DEBUG_MESSAGE_SIZE: u32 = 32 * 1024;
         let size = size.min(MAX_DEBUG_MESSAGE_SIZE);
         let msg = match valid_subslice("ic0.debug_print", src, size, heap) {
             Ok(bytes) => String::from_utf8_lossy(bytes).to_string(),
-            Err(_) => {
-                // Do not trap here!
-                // debug.print should never fail, so if the specified memory range
-                // is invalid, we ignore it and print the error message
-                "(debug message out of memory bounds)".to_string()
-            }
+            // Do not trap here! `ic0_debug_print` should never fail!
+            // If the specified memory range is invalid, ignore it and print the error message.
+            Err(_) => "(debug message out of memory bounds)".to_string(),
         };
         match &self.api_type {
             ApiType::Start { time }

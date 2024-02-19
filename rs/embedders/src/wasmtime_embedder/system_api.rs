@@ -577,10 +577,14 @@ pub(crate) fn syscalls(
     linker
         .func_wrap("ic0", "debug_print", {
             move |mut caller: Caller<'_, StoreData>, offset: u32, length: u32| {
+                let num_bytes = (match feature_flags.canister_logging {
+                    FlagStatus::Enabled => INSTRUCTIONS_PER_BYTE_CONVERSION_FACTOR,
+                    FlagStatus::Disabled => 1,
+                } * length) as u64;
                 charge_for_cpu_and_mem(
                     &mut caller,
                     overhead!(DEBUG_PRINT, metering_type),
-                    length as u64,
+                    num_bytes,
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     if feature_flags.canister_logging == FlagStatus::Enabled {
