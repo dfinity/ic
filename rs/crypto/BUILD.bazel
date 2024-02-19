@@ -170,6 +170,7 @@ rust_bench(
     testonly = True,
     srcs = ["benches/basic_sig.rs"],
     aliases = ALIASES,
+    pin_cpu = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
@@ -188,6 +189,7 @@ rust_bench(
     testonly = True,
     srcs = ["benches/threshold_sig.rs"],
     aliases = ALIASES,
+    pin_cpu = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [":crypto"],
 )
@@ -197,6 +199,7 @@ rust_bench(
     testonly = True,
     srcs = ["benches/ni_dkg.rs"],
     aliases = ALIASES,
+    pin_cpu = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
@@ -206,6 +209,7 @@ rust_bench(
     testonly = True,
     srcs = ["benches/idkg.rs"],
     aliases = ALIASES,
+    pin_cpu = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
@@ -215,6 +219,7 @@ rust_bench(
     testonly = True,
     srcs = ["benches/tecdsa.rs"],
     aliases = ALIASES,
+    pin_cpu = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
@@ -224,6 +229,7 @@ rust_bench(
     testonly = True,
     srcs = ["benches/multi_sig.rs"],
     aliases = ALIASES,
+    pin_cpu = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
@@ -233,6 +239,7 @@ rust_bench(
     testonly = True,
     srcs = ["benches/canister_sig.rs"],
     aliases = ALIASES,
+    pin_cpu = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
