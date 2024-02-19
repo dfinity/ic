@@ -129,16 +129,6 @@ impl TranscriptRef {
     pub fn update(&mut self, height: Height) {
         self.height = height;
     }
-
-    /// Updates the height if specified, and returns the value before
-    /// the update.
-    pub fn get_and_update(&mut self, height: Option<Height>) -> Self {
-        let ret = *self;
-        if let Some(h) = height {
-            self.height = h;
-        }
-        ret
-    }
 }
 
 impl From<&TranscriptRef> for pb::TranscriptRef {
@@ -845,47 +835,6 @@ impl QuadrupleInCreation {
             r.as_mut().update(height);
         }
     }
-
-    /// Returns the refs held and updates the height if specified
-    pub fn get_refs_and_update(&mut self, height: Option<Height>) -> Vec<TranscriptRef> {
-        let mut ret = Vec::new();
-        if let Some(config) = &mut self.kappa_masked_config {
-            ret.append(&mut config.as_mut().get_refs_and_update(height));
-        }
-        if let Some(r) = &mut self.kappa_masked {
-            ret.push(r.as_mut().get_and_update(height));
-        }
-
-        ret.append(&mut self.lambda_config.as_mut().get_refs_and_update(height));
-        if let Some(r) = &mut self.lambda_masked {
-            ret.push(r.as_mut().get_and_update(height));
-        }
-
-        if let Some(config) = &mut self.unmask_kappa_config {
-            ret.append(&mut config.as_mut().get_refs_and_update(height));
-        } else if let Some(config) = &mut self.kappa_unmasked_config {
-            ret.append(&mut config.as_mut().get_refs_and_update(height));
-        }
-        if let Some(r) = &mut self.kappa_unmasked {
-            ret.push(r.as_mut().get_and_update(height));
-        }
-
-        if let Some(config) = &mut self.key_times_lambda_config {
-            ret.append(&mut config.as_mut().get_refs_and_update(height));
-        }
-        if let Some(r) = &mut self.key_times_lambda {
-            ret.push(r.as_mut().get_and_update(height));
-        }
-
-        if let Some(config) = &mut self.kappa_times_lambda_config {
-            ret.append(&mut config.as_mut().get_refs_and_update(height));
-        }
-        if let Some(r) = &mut self.kappa_times_lambda {
-            ret.push(r.as_mut().get_and_update(height));
-        }
-
-        ret
-    }
 }
 
 impl From<&QuadrupleInCreation> for pb::QuadrupleInCreation {
@@ -1152,22 +1101,6 @@ impl IDkgTranscriptOperationRef {
         }
     }
 
-    /// Returns the refs held and updates the height if specified
-    pub fn get_refs_and_update(&mut self, height: Option<Height>) -> Vec<TranscriptRef> {
-        match self {
-            Self::Random => vec![],
-            Self::RandomUnmasked => vec![],
-            Self::ReshareOfMasked(r) => vec![r.as_mut().get_and_update(height)],
-            Self::ReshareOfUnmasked(r) => vec![r.as_mut().get_and_update(height)],
-            Self::UnmaskedTimesMasked(r1, r2) => {
-                vec![
-                    r1.as_mut().get_and_update(height),
-                    r2.as_mut().get_and_update(height),
-                ]
-            }
-        }
-    }
-
     pub fn as_str(&self) -> String {
         match self {
             Self::Random => "Random".to_string(),
@@ -1374,11 +1307,6 @@ impl IDkgTranscriptParamsRef {
     pub fn update(&mut self, height: Height) {
         self.operation_type_ref.update(height);
     }
-
-    /// Returns the refs held and updates the height if specified
-    pub fn get_refs_and_update(&mut self, height: Option<Height>) -> Vec<TranscriptRef> {
-        self.operation_type_ref.get_refs_and_update(height)
-    }
 }
 
 /// Counterpart of PreSignatureQuadruple that holds transcript references,
@@ -1465,17 +1393,6 @@ impl PreSignatureQuadrupleRef {
         self.kappa_times_lambda_ref.as_mut().update(height);
         self.key_times_lambda_ref.as_mut().update(height);
         // TODO(CON-1193): update key_unmasked_ref
-    }
-
-    /// Returns the refs held and updates the height if specified
-    pub fn get_refs_and_update(&mut self, height: Option<Height>) -> Vec<TranscriptRef> {
-        vec![
-            self.kappa_unmasked_ref.as_mut().get_and_update(height),
-            self.lambda_masked_ref.as_mut().get_and_update(height),
-            self.kappa_times_lambda_ref.as_mut().get_and_update(height),
-            self.key_times_lambda_ref.as_mut().get_and_update(height),
-            // TODO(CON-1193): get and update key_unmasked_ref
-        ]
     }
 }
 
@@ -1615,13 +1532,6 @@ impl ThresholdEcdsaSigInputsRef {
     pub fn update(&mut self, height: Height) {
         self.presig_quadruple_ref.update(height);
         self.key_transcript_ref.as_mut().update(height);
-    }
-
-    /// Returns the refs held and updates the height if specified
-    pub fn get_refs_and_update(&mut self, height: Option<Height>) -> Vec<TranscriptRef> {
-        let mut ret = self.presig_quadruple_ref.get_refs_and_update(height);
-        ret.push(self.key_transcript_ref.as_mut().get_and_update(height));
-        ret
     }
 }
 
