@@ -19,13 +19,11 @@ use ic_sns_swap::{
     pb::v1::{
         error_refund_icp_response,
         set_mode_call_result::SetModeResult,
-        settle_community_fund_participation_result,
         sns_neuron_recipe::{ClaimedStatus, Investor, Investor::Direct, NeuronAttributes},
         CanisterCallError, CfNeuron, CfParticipant, DirectInvestment, ErrorRefundIcpRequest,
         ErrorRefundIcpResponse, ListDirectParticipantsRequest, Participant,
         RestoreDappControllersResponse, SetDappControllersCallResult, SetDappControllersResponse,
-        SetModeCallResult, SettleCommunityFundParticipationResult, SnsNeuronRecipe, Swap,
-        SweepResult, TransferableAmount,
+        SetModeCallResult, SnsNeuronRecipe, Swap, SweepResult, TransferableAmount,
     },
     swap::{
         principal_to_subaccount, CLAIM_SWAP_NEURONS_BATCH_SIZE, NEURON_BASKET_MEMO_RANGE_START,
@@ -161,20 +159,6 @@ pub fn extract_set_dapp_controller_response(
             restore_dapp_controller_response.possibility,
         ),
         Some(Possibility::Ok(response)) => response,
-    }
-}
-
-/// Helper method for constructing a successful response in tests
-pub fn successful_settle_community_fund_participation_result(
-) -> SettleCommunityFundParticipationResult {
-    use ic_sns_swap::pb::v1::settle_community_fund_participation_result::Possibility;
-
-    SettleCommunityFundParticipationResult {
-        possibility: Some(Possibility::Ok(
-            settle_community_fund_participation_result::Response {
-                governance_error: None,
-            },
-        )),
     }
 }
 

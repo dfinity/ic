@@ -2505,9 +2505,9 @@ impl Governance {
     /// - Source neuron's kyc_verified field must match target
     /// - Source neuron's not_for_profit field must match target
     /// - Source neuron and target neuron have the same ManageNeuron following
-    /// - Cannot merge neurons that have been dedicated to the community fund
-    /// - Source neuron cannot be dedicated to the community fund
-    /// - Target neuron cannot be dedicated to the community fund
+    /// - Cannot merge neurons that have been dedicated to the Neurons' Fund
+    /// - Source neuron cannot be dedicated to the Neurons' Fund
+    /// - Target neuron cannot be dedicated to the Neurons' Fund
     /// - Source neuron cannot be in spawning state
     /// - Target neuron cannot be in spawning state
     /// - Subaccount of source neuron to be merged must be present
@@ -2712,8 +2712,8 @@ impl Governance {
             auto_stake_maturity: None,
             not_for_profit: false,
             // We allow spawning of maturity from a neuron that has
-            // joined the community fund: the spawned neuron is not
-            // considered part of the community fund.
+            // joined the Neurons' Fund: the spawned neuron is not
+            // considered part of the Neurons' Fund.
             joined_community_fund_timestamp_seconds: None,
             known_neuron_data: None,
             neuron_type: None,

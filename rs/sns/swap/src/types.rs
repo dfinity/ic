@@ -5,13 +5,12 @@ use crate::{
     pb::v1::{
         error_refund_icp_response, set_dapp_controllers_call_result, set_mode_call_result,
         set_mode_call_result::SetModeResult,
-        settle_community_fund_participation_result, settle_neurons_fund_participation_result,
+        settle_neurons_fund_participation_result,
         sns_neuron_recipe::{ClaimedStatus, Investor},
         BuyerState, CfInvestment, CfNeuron, CfParticipant, DirectInvestment,
         ErrorRefundIcpResponse, FinalizeSwapResponse, Init, Lifecycle, NeuronId as SaleNeuronId,
         OpenRequest, Params, SetDappControllersCallResult, SetModeCallResult,
-        SettleCommunityFundParticipationResult, SettleNeuronsFundParticipationResult,
-        SnsNeuronRecipe, SweepResult, TransferableAmount,
+        SettleNeuronsFundParticipationResult, SnsNeuronRecipe, SweepResult, TransferableAmount,
     },
     swap::is_valid_principal,
 };
@@ -885,17 +884,6 @@ impl FinalizeSwapResponse {
         self.sweep_icp_result = Some(sweep_icp_result);
     }
 
-    pub fn set_settle_community_fund_participation_result(
-        &mut self,
-        result: SettleCommunityFundParticipationResult,
-    ) {
-        if !result.is_successful_settlement() {
-            self.set_error_message(
-                "Settling the CommunityFund participation did not succeed. Halting swap finalization".to_string());
-        }
-        self.settle_community_fund_participation_result = Some(result);
-    }
-
     pub fn set_set_dapp_controllers_result(&mut self, result: SetDappControllersCallResult) {
         if !result.is_successful_set_dapp_controllers() {
             self.set_error_message(
@@ -993,20 +981,6 @@ impl SweepResult {
         self.success += success;
         self.skipped += skipped;
         self.global_failures += global_failures;
-    }
-}
-
-impl SettleCommunityFundParticipationResult {
-    fn is_successful_settlement(&self) -> bool {
-        use settle_community_fund_participation_result::Response;
-        matches!(
-            &self.possibility,
-            Some(settle_community_fund_participation_result::Possibility::Ok(
-                Response {
-                    governance_error: None,
-                }
-            ))
-        )
     }
 }
 
@@ -1205,7 +1179,6 @@ mod tests {
         assert_is_err, assert_is_ok, E8, SECONDS_PER_DAY, START_OF_2022_TIMESTAMP_SECONDS,
     };
     use lazy_static::lazy_static;
-    use prost::Message;
     use std::mem;
 
     const OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID: u64 = 489102;
@@ -1363,48 +1336,6 @@ mod tests {
         };
         let total = participant.participant_total_icp_e8s();
         assert_eq!(total, u64::MAX);
-    }
-
-    #[test]
-    fn large_community_fund_does_not_result_in_over_sized_open_request() {
-        const MAX_SIZE_BYTES: usize = 1 << 21; // 2 Mi
-
-        let neurons_per_principal = 3;
-
-        let cf_participant = CfParticipant {
-            hotkey_principal: PrincipalId::new_user_test_id(789362).to_string(),
-            cf_neurons: (0..neurons_per_principal)
-                .map(|_| CfNeuron::try_new(592523, 1_000 * E8).unwrap())
-                .collect(),
-        };
-
-        let mut open_request = OpenRequest {
-            cf_participants: vec![cf_participant],
-            ..Default::default()
-        };
-
-        // Crescendo
-        loop {
-            let mut buffer: Vec<u8> = vec![];
-            open_request.encode(&mut buffer).unwrap();
-            if buffer.len() > MAX_SIZE_BYTES {
-                break;
-            }
-
-            // Double size of cf_participants.
-            open_request
-                .cf_participants
-                .append(&mut open_request.cf_participants.clone());
-        }
-
-        // TODO: Get more precise using our favorite algo: binary search!
-        let safe_len = open_request.cf_participants.len() / 2;
-        assert!(safe_len > 10_000);
-        println!(
-            "Looks like we can support at least {} Community Fund neurons (among {} principals).",
-            safe_len * neurons_per_principal,
-            safe_len,
-        );
     }
 
     /// Test that the configured MAX_LIST_DIRECT_PARTICIPANTS_LIMIT will efficiently pack

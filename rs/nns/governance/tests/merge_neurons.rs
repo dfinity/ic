@@ -336,7 +336,7 @@ fn test_merge_neurons_fails() {
         if code == PreconditionFailed as i32 &&
            msg == "Source neuron's not_for_profit field does not match target");
 
-    // 10. Cannot merge neurons that have been dedicated to the community fund
+    // 10. Cannot merge neurons that have been dedicated to the Neurons' Fund
     assert_matches!(
         nns.merge_neurons(
             &NeuronId { id: 1 },
@@ -345,7 +345,7 @@ fn test_merge_neurons_fails() {
         ),
         Err(GovernanceError{error_type: code, error_message: msg})
         if code == PreconditionFailed as i32 &&
-           msg == "Cannot merge neurons that have been dedicated to the community fund");
+           msg == "Cannot merge neurons that have been dedicated to the Neurons' Fund");
 
     // 10b. Switch source and destination to ensure condition still holds
     assert_matches!(
@@ -356,7 +356,7 @@ fn test_merge_neurons_fails() {
         ),
         Err(GovernanceError{error_type: code, error_message: msg})
         if code == PreconditionFailed as i32 &&
-           msg == "Cannot merge neurons that have been dedicated to the community fund");
+           msg == "Cannot merge neurons that have been dedicated to the Neurons' Fund");
 
     // 11. Subaccount of source neuron to be merged must be present
     assert_matches!(

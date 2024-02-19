@@ -343,8 +343,8 @@ impl Neuron {
         }
     }
 
-    /// Join the Internet Computer's community fund. If this neuron is
-    /// already a member of the community fund, an error is returned.
+    /// Join the Internet Computer's Neurons' Fund. If this neuron is
+    /// already a member of the Neurons' Fund, an error is returned.
     fn join_community_fund(&mut self, now_seconds: u64) -> Result<(), GovernanceError> {
         if self.joined_community_fund_timestamp_seconds.unwrap_or(0) == 0 {
             self.joined_community_fund_timestamp_seconds = Some(now_seconds);
@@ -355,8 +355,8 @@ impl Neuron {
         }
     }
 
-    /// Leave the Internet Computer's community fund. If this neuron is not a
-    /// member of the community fund, an error will be returned.
+    /// Leave the Internet Computer's Neurons' Fund. If this neuron is not a
+    /// member of the Neurons' Fund, an error will be returned.
     fn leave_community_fund(&mut self) -> Result<(), GovernanceError> {
         if self.joined_community_fund_timestamp_seconds.unwrap_or(0) != 0 {
             self.joined_community_fund_timestamp_seconds = None;
