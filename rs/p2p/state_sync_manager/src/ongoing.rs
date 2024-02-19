@@ -59,7 +59,6 @@ struct OngoingStateSync<T: Send> {
     chunks_to_download: Box<dyn Iterator<Item = ChunkId> + Send>,
     // Event tasks
     downloading_chunks: JoinMap<ChunkId, DownloadResult<T>>,
-    download_cancel_token: CancellationToken,
     // State sync
     state_sync: Arc<dyn StateSyncClient<Message = T>>,
     tracker: Arc<Mutex<Box<dyn Chunkable<T> + Send>>>,
@@ -101,7 +100,6 @@ pub(crate) fn start_ongoing_state_sync<T: Send + 'static>(
         allowed_downloads: 0,
         chunks_to_download: Box::new(std::iter::empty()),
         downloading_chunks: JoinMap::new(),
-        download_cancel_token: CancellationToken::new(),
         state_sync,
         tracker,
         state_sync_finished: false,
@@ -183,7 +181,6 @@ impl<T: 'static + Send> OngoingStateSync<T> {
             }
         }
 
-        self.download_cancel_token.cancel();
         while let Some(Ok((finished, _))) = self.downloading_chunks.join_next().await {
             self.handle_downloaded_chunk_result(finished).await;
         }
@@ -266,7 +263,7 @@ impl<T: 'static + Send> OngoingStateSync<T> {
                                 self.tracker.clone(),
                                 self.artifact_id.clone(),
                                 chunk,
-                                self.download_cancel_token.child_token(),
+                                self.cancellation.child_token(),
                                 self.metrics.clone(),
                             )),
                         &self.rt,
