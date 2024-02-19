@@ -438,7 +438,7 @@ impl Swap {
     /// Requires that `init` is valid; otherwise it panics.
     pub fn new(init: Init) -> Self {
         if let Err(e) = init.validate() {
-            panic!("Invalid init arg: {:#?}\nReason: {}", init, e);
+            panic!("Invalid init arg, reason: {e}\nArg: {init:#?}\n");
         }
         let mut res = Self {
             lifecycle: Lifecycle::Pending as i32,

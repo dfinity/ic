@@ -581,7 +581,7 @@ wait_for_proposal_to_execute() {
         FAILED=$(echo ${INFO} | jq -r '.[0].failed_timestamp_seconds')
         if [[ "${FAILED}" != 0 ]]; then
             print_red "NNS proposal ${PROPOSAL_ID} failed to execute"
-            print_red "Proposal info: $(echo $gamINFO | jq -r $(.[].failure_reason[].error_message))"
+            print_red "Failure reason: $(echo $INFO | jq -r '.[].failure_reason[].error_message')"
             return 1
         fi
         sleep 10
@@ -615,7 +615,7 @@ wait_for_sns_governance_to_be_in_normal_mode() {
 }
 
 set_testnet_env_variables() {
-    TEST_TMPDIR=${TEST_TMPDIR:-"-/ic/test_tmpdir/_tmp"}
+    TEST_TMPDIR=${TEST_TMPDIR:-"/ic/test_tmpdir/_tmp"}
 
     # Check if the target directory exists
     if [ ! -d "${TEST_TMPDIR}" ]; then
