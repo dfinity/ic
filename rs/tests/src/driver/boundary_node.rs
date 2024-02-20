@@ -524,9 +524,13 @@ fn create_config_disk_image(
         .arg("--ipv6_monitoring_ips")
         .arg("::/0")
         .arg("--canary-proxy-port")
-        .arg("8888")
-        .arg("--elasticsearch_url")
-        .arg("https://elasticsearch.testnet.dfinity.systems");
+        .arg("8888");
+
+    let elasticsearch_hosts: Vec<String> = env.get_elasticsearch_hosts().unwrap();
+    if let Some(elasticsearch_host) = elasticsearch_hosts.first() {
+        cmd.arg("--elasticsearch_url")
+            .arg(format!("https://{}", elasticsearch_host));
+    }
 
     // add custom nameservers
     cmd.arg("--ipv6_name_servers");
