@@ -893,7 +893,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.0.0",
             ),
             "test-strategy": crate.spec(
-                version = "^0.2",
+                version = "^0.3.1",
             ),
             "prometheus-parse": crate.spec(
                 version = "^0.2.4",

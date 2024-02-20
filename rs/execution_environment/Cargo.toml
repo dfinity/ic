@@ -77,7 +77,7 @@ libflate = "1.1.2"
 maplit = "1.0.2"
 proptest = "1.0"
 tempfile = "3.1.0"
-test-strategy = "0.2"
+test-strategy = "0.3.1"
 wat = "1.0.52"
 wasmparser = "0.116.1"
 
