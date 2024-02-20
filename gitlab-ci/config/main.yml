@@ -457,7 +457,7 @@ python-ci-tests:
 cargo-clippy-linux:
   needs: [] # don't wait on other jobs
   extends:
-    - .rules-master-pipeline-and-merge-request
+    - .rules-master-pipeline-and-merge-request-rust-changed
   variables:
     CARGO_BUILD_TARGET: "x86_64-unknown-linux-gnu"
   script:
@@ -469,7 +469,7 @@ cargo-clippy-linux:
 cargo-build-release-linux:
   needs: [] # don't wait on other jobs
   extends:
-    - .rules-master-pipeline-and-merge-request
+    - .rules-master-pipeline-and-merge-request-rust-changed
   script:
     - |
       set -eExuo pipefail
