@@ -817,13 +817,15 @@ mod tests {
         kappa_times_lambda.transcript_id = fake_transcript_id(id + 2);
         let mut key_times_lambda = lambda_masked.clone();
         key_times_lambda.transcript_id = fake_transcript_id(id + 3);
+        let mut key_unmasked = kappa_unmasked.clone();
+        key_unmasked.transcript_id = fake_transcript_id(id + 4);
         let h = Height::from(0);
         PreSignatureQuadrupleRef {
             kappa_unmasked_ref: UnmaskedTranscript::try_from((h, &kappa_unmasked)).unwrap(),
             lambda_masked_ref: MaskedTranscript::try_from((h, &lambda_masked)).unwrap(),
             kappa_times_lambda_ref: MaskedTranscript::try_from((h, &kappa_times_lambda)).unwrap(),
             key_times_lambda_ref: MaskedTranscript::try_from((h, &key_times_lambda)).unwrap(),
-            key_unmasked_ref: None,
+            key_unmasked_ref: UnmaskedTranscript::try_from((h, &key_unmasked)).unwrap(),
         }
     }
 
@@ -864,7 +866,7 @@ mod tests {
         ]
         .into_iter()
         .cycle();
-        for i in (0..40).step_by(4) {
+        for i in (0..50).step_by(5) {
             let quadruple = fake_quadruple(i as u64);
             let rv = rvs.next().unwrap();
             for r in quadruple.get_refs() {

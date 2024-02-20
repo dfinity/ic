@@ -1349,7 +1349,7 @@ mod test {
                     lambda_masked_ref: masked_transcript_1,
                     kappa_times_lambda_ref: masked_transcript_1,
                     key_times_lambda_ref: masked_transcript_1,
-                    key_unmasked_ref: Some(transcript_ref_0),
+                    key_unmasked_ref: transcript_ref_0,
                 },
             );
         }
