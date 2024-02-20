@@ -2227,6 +2227,7 @@ fn test_finalize_swap_rejects_concurrent_calls() {
     // to the finalize method will block on ledger calls, and continue only when messages are
     // drained from the channel. We can use this technique to guarantee ordering of API calls
     // across message blocks.
+    #[allow(clippy::disallowed_methods)]
     let (sender_channel, mut receiver_channel) = mpsc::unbounded::<LedgerControlMessage>();
 
     let mut clients = CanisterClients {

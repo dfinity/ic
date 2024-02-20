@@ -49,6 +49,7 @@ where
     {
         let log = self.log;
         let futures_count = (self.rps * self.duration.as_secs_f64()).floor() as usize;
+        #[allow(clippy::disallowed_methods)]
         let (fut_snd, mut fut_rcv) = tokio::sync::mpsc::unbounded_channel();
         info!(
             log,

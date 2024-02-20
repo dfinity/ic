@@ -1,3 +1,5 @@
+#![allow(clippy::disallowed_methods)]
+
 use std::{
     collections::{hash_map::Entry, HashMap, HashSet},
     sync::{Arc, RwLock},

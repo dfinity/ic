@@ -43,6 +43,7 @@ fn test_cant_increase_dissolve_delay_while_disbursing() {
 
     // We use channels to control how the disbursing and delay increase are
     // interleaved
+    #[allow(clippy::disallowed_methods)]
     let (tx, mut rx) = mpsc::unbounded::<LedgerControlMessage>();
     // Once we're done with disbursing, we will need to manually close the above
     // channel to terminate the test.
@@ -164,6 +165,7 @@ fn test_cant_interleave_calls_to_settle_neurons_fund() {
         PolynomialMatchingFunction::new(total_nf_maturity_equivalent_icp_e8s).unwrap();
 
     // We use channels to control how the cals are interleaved
+    #[allow(clippy::disallowed_methods)]
     let (tx, mut rx) = mpsc::unbounded::<LedgerControlMessage>();
     // Once we're done with the successful settle, we will need to manually close the above
     // channel to terminate the test.

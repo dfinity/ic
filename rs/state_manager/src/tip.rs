@@ -188,6 +188,7 @@ pub(crate) fn spawn_tip_thread(
     metrics: StateManagerMetrics,
     malicious_flags: MaliciousFlags,
 ) -> (JoinOnDrop<()>, Sender<TipRequest>) {
+    #[allow(clippy::disallowed_methods)]
     let (tip_sender, tip_receiver) = unbounded();
     let mut thread_pool = scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS);
     let mut tip_state = TipState::ReadyForPageDeltas(Height::from(0));

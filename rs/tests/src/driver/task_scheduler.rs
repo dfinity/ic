@@ -39,6 +39,7 @@ pub struct TaskScheduler {
 impl TaskScheduler {
     #[allow(clippy::map_entry)]
     pub fn execute(&mut self, dbg_keepalive: bool) {
+        #[allow(clippy::disallowed_methods)]
         let (event_tx, event_rx) = crossbeam_channel::unbounded();
         let log = &self.log;
         self.action_graph.start();

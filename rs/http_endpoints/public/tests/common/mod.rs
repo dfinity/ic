@@ -475,6 +475,7 @@ impl HttpEndpointBuilder {
         let sig_verifier = Arc::new(temp_crypto_component_with_fake_registry(node_test_id(0)));
         let crypto = Arc::new(CryptoReturningOk::default());
 
+        #[allow(clippy::disallowed_methods)]
         let (ingress_tx, ingress_rx) = tokio::sync::mpsc::unbounded_channel();
         let mut ingress_pool_throtller = MockIngressPoolThrottler::new();
         ingress_pool_throtller

@@ -300,6 +300,7 @@ impl ConnectionManager {
         if self.connections.contains_key(&address) {
             return Err(ConnectionManagerError::AlreadyConnected(address));
         }
+        #[allow(clippy::disallowed_methods)]
         let (writer, network_message_receiver) = unbounded_channel();
         let stream_event_sender = self.stream_event_sender.clone();
         let network_message_sender = self.network_message_sender.clone();
@@ -944,6 +945,7 @@ mod test {
             RouterMetrics::new(&MetricsRegistry::default()),
         );
         let timestamp = SystemTime::now() - Duration::from_secs(60);
+        #[allow(clippy::disallowed_methods)]
         let (writer, _) = unbounded_channel();
         runtime.block_on(async {
             let conn = Connection::new_with_state(
@@ -989,6 +991,7 @@ mod test {
         );
         let timestamp1 = SystemTime::now() - Duration::from_secs(SEED_ADDR_RETRIEVED_TIMEOUT_SECS);
         let timestamp2 = SystemTime::now() + Duration::from_secs(SEED_ADDR_RETRIEVED_TIMEOUT_SECS);
+        #[allow(clippy::disallowed_methods)]
         let (writer, _) = unbounded_channel();
         runtime.block_on(async {
             let conn = Connection::new_with_state(
@@ -1058,6 +1061,7 @@ mod test {
         );
         let timestamp1 = SystemTime::now() - Duration::from_secs(SEED_ADDR_RETRIEVED_TIMEOUT_SECS);
         let timestamp2 = SystemTime::now() + Duration::from_secs(SEED_ADDR_RETRIEVED_TIMEOUT_SECS);
+        #[allow(clippy::disallowed_methods)]
         let (writer, _) = unbounded_channel();
         runtime.block_on(async {
             let conn = Connection::new_with_state(
@@ -1118,6 +1122,7 @@ mod test {
             network_message_sender,
             RouterMetrics::new(&MetricsRegistry::default()),
         );
+        #[allow(clippy::disallowed_methods)]
         let (writer, _) = unbounded_channel();
         let conn = Connection::new_with_state(
             ConnectionConfig {
@@ -1164,6 +1169,7 @@ mod test {
             network_message_sender,
             RouterMetrics::new(&MetricsRegistry::default()),
         );
+        #[allow(clippy::disallowed_methods)]
         let (writer, _) = unbounded_channel();
         let conn = Connection::new_with_state(
             ConnectionConfig {

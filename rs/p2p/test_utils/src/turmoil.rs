@@ -217,6 +217,7 @@ pub fn add_peer_manager_to_sim(
     RegistryConsensusHandle,
 ) {
     let (peer_manager_sender, mut peer_manager_receiver) = oneshot::channel();
+    #[allow(clippy::disallowed_methods)]
     let (peer_manager_cmd_sender, mut peer_manager_cmd_receiver) = mpsc::unbounded_channel();
     sim.client("peer-manager", async move {
         let rt = tokio::runtime::Handle::current();
