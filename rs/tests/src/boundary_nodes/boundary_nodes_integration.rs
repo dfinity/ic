@@ -1815,8 +1815,8 @@ pub fn http_endpoint_test(env: TestEnv) {
         }
     }));
 
-    // making sure the BN serves the uninstall script for any service worker
-    // request on the root path. This is necessary as clients that haven't visited
+    // making sure the BN serves the uninstall script for service worker requests
+    // on the root path (/sw.js). This is necessary as clients that haven't visited
     // a dapp for a long time, still have a service worker installed.
     let host = host_orig.clone();
     let logger = logger_orig.clone();
@@ -1829,7 +1829,7 @@ pub fn http_endpoint_test(env: TestEnv) {
         async move {
             let res = client
                 .get(format!(
-                    "https://{}.{host}/anything.js",
+                    "https://{}.{host}/sw.js",
                     asset_canister.canister_id
                 ))
                 .header("Service-Worker", "script")
@@ -1858,6 +1858,72 @@ pub fn http_endpoint_test(env: TestEnv) {
 
             if !body.contains("unregister()") {
                 bail!("{name} failed: expected uninstall script but got {body}")
+            }
+
+            Ok(())
+        }
+    }));
+
+    // Make sure, we don't serve our uninstall script for any other request than
+    // the one for /sw.js.
+    let host = host_orig.clone();
+    let logger = logger_orig.clone();
+    let asset_canister = asset_canister_orig.clone();
+    futs.push(rt.spawn({
+        let client = client.clone();
+        let name = "do not get uninstall script on nested JS";
+        info!(&logger, "Starting subtest {}", name);
+
+        async move {
+            let hello_world_js = vec![
+                99, 111, 110, 115, 111, 108, 101, 46, 108, 111, 103, 40, 34, 72, 101, 108, 108,
+                111, 32, 87, 111, 114, 108, 100, 33, 34, 41,
+            ];
+            info!(&logger, "Uploading hello world JS response...");
+            asset_canister
+                .upload_asset(&UploadAssetRequest {
+                    key: "/anything.js".to_string(),
+                    content: hello_world_js.clone(),
+                    content_type: "application/javascript".to_string(),
+                    content_encoding: "identity".to_string(),
+                    sha_override: None,
+                })
+                .await?;
+
+            let res = client
+                .get(format!(
+                    "https://{}.{host}/anything.js",
+                    asset_canister.canister_id
+                ))
+                .header("Service-Worker", "script")
+                .send()
+                .await?;
+
+            if res.status() != reqwest::StatusCode::OK {
+                let status = res.status();
+                let body = res.bytes().await?.to_vec();
+                let body = String::from_utf8_lossy(&body);
+                bail!("{name} failed: {} with body: {}", status, body)
+            }
+
+            if !res
+                .headers()
+                .get("Content-Type")
+                .unwrap()
+                .as_bytes()
+                .eq(b"application/javascript")
+            {
+                let status = res.status();
+                let body = res.bytes().await?.to_vec();
+                let body = String::from_utf8_lossy(&body);
+                bail!("{name} failed: {} with body: {}", status, body)
+            }
+
+            let body = res.bytes().await?.to_vec();
+            let body = String::from_utf8_lossy(&body);
+
+            if !body.contains(r#"console.log("Hello World!")"#) {
+                bail!("{name} failed: expected canister javascript file but got {body}")
             }
 
             Ok(())
