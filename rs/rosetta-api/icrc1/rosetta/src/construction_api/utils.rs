@@ -1,18 +1,20 @@
 use super::types::{CanisterMethodName, EnvelopePair, SignedTransaction, UnsignedTransaction};
 use crate::common::storage::types::RosettaToken;
+use crate::common::types::OperationType;
+use crate::common::utils::utils::rosetta_core_operation_to_icrc1_operation;
 use anyhow::anyhow;
 use anyhow::{bail, Context};
-use candid::{Decode, Nat, Principal};
+use candid::{Decode, Encode, Nat, Principal};
 use ic_agent::agent::{Envelope, EnvelopeContent};
 use ic_ledger_canister_core::ledger::LedgerTransaction;
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::account::Account;
-use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
+use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
 use icrc_ledger_types::icrc2::approve::ApproveArgs;
 use icrc_ledger_types::icrc2::transfer_from::TransferFromArgs;
-use rosetta_core::objects::Signature;
-use rosetta_core::response_types::ConstructionCombineResponse;
+use rosetta_core::objects::{Operation, PublicKey, Signature, SigningPayload};
 use rosetta_core::response_types::ConstructionHashResponse;
+use rosetta_core::response_types::{ConstructionCombineResponse, ConstructionPayloadsResponse};
 use rosetta_core::{
     identifiers::TransactionIdentifier, response_types::ConstructionSubmitResponse,
 };
@@ -30,7 +32,7 @@ fn build_serialized_bytes<T: serde::Serialize + std::fmt::Debug>(
 }
 
 // The Request id is linked to the EnvelopeContent and is the actual content of the request to the IC that needs to be signed to authenticate the caller
-fn build_signable_request_id_from_envelope_content(envelope_content: &EnvelopeContent) -> String {
+fn build_signable_payload(envelope_content: &EnvelopeContent) -> String {
     hex::encode(envelope_content.to_request_id().signable())
 }
 
@@ -232,6 +234,82 @@ pub fn build_transaction_hash_from_envelope_content(
     Ok(icrc1_transaction.hash().to_string())
 }
 
+pub fn build_icrc1_ledger_canister_method_args(
+    operation: ic_icrc1::Operation<RosettaToken>,
+    memo: Option<Memo>,
+    created_at_time: u64,
+) -> anyhow::Result<Vec<u8>> {
+    match operation {
+        ic_icrc1::Operation::Burn { .. } => bail!("Burn Operation not supported"),
+        ic_icrc1::Operation::Mint { .. } => bail!("Mint Operation not supported"),
+        ic_icrc1::Operation::Approve {
+            from,
+            spender,
+            amount,
+            expected_allowance,
+            expires_at,
+            fee,
+        } => Encode!(&ApproveArgs {
+            from_subaccount: from.subaccount,
+            spender,
+            amount: amount.into(),
+            expected_allowance: expected_allowance.map(|ea| ea.into()),
+            expires_at,
+            fee: fee.map(|f| f.into()),
+            memo: memo.clone(),
+            created_at_time: Some(created_at_time),
+        }),
+        ic_icrc1::Operation::Transfer {
+            from,
+            to,
+            amount,
+            fee,
+            spender,
+        } => {
+            if let Some(spender) = spender {
+                Encode!(&TransferFromArgs {
+                    spender_subaccount: spender.subaccount,
+                    from,
+                    to,
+                    fee: fee.map(|f| f.into()),
+                    created_at_time: Some(created_at_time),
+                    memo,
+                    amount: amount.into(),
+                })
+            } else {
+                Encode!(&TransferArg {
+                    from_subaccount: from.subaccount,
+                    to,
+                    fee: fee.map(|f| f.into()),
+                    created_at_time: Some(created_at_time),
+                    memo,
+                    amount: amount.into(),
+                })
+            }
+        }
+    }
+    .context("Unable to encode canister method args")
+}
+
+pub fn extract_caller_principal_from_rosetta_core_operation(
+    operation: rosetta_core::objects::Operation,
+) -> anyhow::Result<Principal> {
+    let icrc1_operation = rosetta_core_operation_to_icrc1_operation(operation)?;
+    extract_caller_principal_from_icrc1_ledger_operation(&icrc1_operation)
+}
+
+/// This function takes in an icrc1 ledger operation and returns the principal that needs to call the icrc1 ledger for the given operation to be successful
+fn extract_caller_principal_from_icrc1_ledger_operation(
+    operation: &ic_icrc1::Operation<RosettaToken>,
+) -> anyhow::Result<Principal> {
+    Ok(match operation {
+        ic_icrc1::Operation::Burn { .. } => bail!("Burn Operation not supported"),
+        ic_icrc1::Operation::Mint { .. } => bail!("Mint Operation not supported"),
+        ic_icrc1::Operation::Approve { from, .. } => from.owner,
+        ic_icrc1::Operation::Transfer { from, spender, .. } => spender.unwrap_or(*from).owner,
+    })
+}
+
 pub fn handle_construction_hash(
     signed_transaction: SignedTransaction,
 ) -> anyhow::Result<ConstructionHashResponse> {
@@ -287,15 +365,13 @@ pub fn handle_construction_combine(
 
     // TODO: support arbitrary order of signatures
     let envelope_call_signature = &signatures[0];
-    if envelope_call_signature.signing_payload.hex_bytes
-        != build_signable_request_id_from_envelope_content(envelope_call)
-    {
+    if envelope_call_signature.signing_payload.hex_bytes != build_signable_payload(envelope_call) {
         bail!("First entry should be signature of call envelope");
     }
 
     let envelope_read_state_signature = &signatures[1];
     if envelope_read_state_signature.signing_payload.hex_bytes
-        != build_signable_request_id_from_envelope_content(envelope_read_state)
+        != build_signable_payload(envelope_read_state)
     {
         bail!("Second entry should be signature of read state envelope");
     }
@@ -313,5 +389,116 @@ pub fn handle_construction_combine(
 
     Ok(ConstructionCombineResponse {
         signed_transaction: hex::encode(serde_cbor::to_vec(&SignedTransaction { envelope_pairs })?),
+    })
+}
+
+fn build_read_state_envelope_content(
+    sender: &Principal,
+    ingress_expiry: u64,
+    request_id: ic_agent::RequestId,
+) -> anyhow::Result<EnvelopeContent> {
+    // This code snipped was taken from ic_agent::agent::Agent::read_state_raw
+    // The ReadState envelope content is derived from the original EnvelopeContent that contained the Canister Call
+    let paths: Vec<Vec<ic_certification::Label>> =
+        vec![vec!["request_status".into(), request_id.to_vec().into()]];
+    Ok(EnvelopeContent::ReadState {
+        sender: *sender,
+        paths,
+        ingress_expiry,
+    })
+}
+
+fn build_payloads_from_call_envelope_content(
+    call_envelope_content: EnvelopeContent,
+    sender_public_key: &PublicKey,
+) -> anyhow::Result<(Vec<SigningPayload>, Vec<EnvelopeContent>)> {
+    let mut envelope_contents = Vec::new();
+    let mut signing_payloads = Vec::new();
+    if !matches!(call_envelope_content, EnvelopeContent::Call { .. }) {
+        bail!(
+            "Wrong EnvelopeContent type, expected EnvelopeContent::Call, got {:?}",
+            call_envelope_content
+        );
+    };
+
+    // This is the payload that needs to be signed for the update call to the Canister on the IC
+    let signer_account = Account::from(*call_envelope_content.sender());
+
+    // We also need to sign the read state of the update call to the Canister on the IC
+    // When one makes a request to the IC with an EnvelopeContent one first receives an ID for the request back from the IC
+    // This ID can be used to continously ask the IC whether there has been any progress to their request that corresponds to that ID
+    // If that is the case the IC will respond back with the actual content of the response from the Canister endpoint
+    // The ReadState envelope content is derived from the original EnvelopeContent that contained the Canister Call
+    let read_state_envelope_content = build_read_state_envelope_content(
+        call_envelope_content.sender(),
+        call_envelope_content.ingress_expiry(),
+        call_envelope_content.to_request_id(),
+    )?;
+
+    let call_payload = SigningPayload {
+        address: None,
+        account_identifier: Some(signer_account.into()),
+        hex_bytes: build_signable_payload(&call_envelope_content),
+        signature_type: Some(sender_public_key.curve_type.into()),
+    };
+
+    let read_state_payload = SigningPayload {
+        address: None,
+        account_identifier: Some(Account::from(*read_state_envelope_content.sender()).into()),
+        hex_bytes: build_signable_payload(&read_state_envelope_content),
+        signature_type: Some(sender_public_key.curve_type.into()),
+    };
+
+    // For every Canister Call there need to exist two EnvelopContents, one for the acutal content of the Canister Call and the other to read the response of the Canister
+    signing_payloads.push(call_payload);
+    envelope_contents.push(call_envelope_content);
+
+    signing_payloads.push(read_state_payload);
+    envelope_contents.push(read_state_envelope_content);
+
+    Ok((signing_payloads, envelope_contents))
+}
+
+pub fn handle_construction_payloads(
+    rosetta_core_operation: Operation,
+    created_at_time: u64,
+    memo: Option<Memo>,
+    ingress_expiry: u64,
+    canister_id: Principal,
+    sender_public_key: PublicKey,
+) -> anyhow::Result<ConstructionPayloadsResponse> {
+    // Try to parse the operation type
+    let operation_type = rosetta_core_operation.type_.parse::<OperationType>()?;
+
+    // Parse the canister method name from the operation type
+    let canister_method_name = CanisterMethodName::new_from_operation_type(&operation_type)?;
+
+    // First we need to convert the generic operations into icrc1 operations
+    let icrc1_operation = rosetta_core_operation_to_icrc1_operation(rosetta_core_operation)?;
+
+    let caller = extract_caller_principal_from_icrc1_ledger_operation(&icrc1_operation)?;
+
+    // We can now build the canister method args used to call the icrc1 ledger
+    let canister_method_args =
+        build_icrc1_ledger_canister_method_args(icrc1_operation, memo, created_at_time)?;
+
+    // Rosetta will send an envelope containing the update information to a replica
+    let envelope_content = EnvelopeContent::Call {
+        canister_id,
+        method_name: canister_method_name.to_string(),
+        arg: canister_method_args,
+        nonce: None,
+        sender: caller,
+        ingress_expiry,
+    };
+
+    // For every operation we create a call envelope and a read state envelope
+    // For every envelope we create a signing payload
+    let (signing_payloads, envelope_contents) =
+        build_payloads_from_call_envelope_content(envelope_content, &sender_public_key)?;
+
+    Ok(ConstructionPayloadsResponse {
+        unsigned_transaction: UnsignedTransaction { envelope_contents }.to_string(),
+        payloads: signing_payloads,
     })
 }

@@ -21,9 +21,11 @@ tempfile = "3.1.0"
 candid = { workspace = true }
 serde_bytes = { workspace = true }
 serde = { workspace = true }
+ic-constants = { path = "../../../constants" }
 serde_json = { workspace = true }
 serde_cbor = { workspace = true }
 serde_with = { workspace = true }
+ic-certification = { workspace = true }
 num-traits = "0.2.12"
 ciborium = { workspace = true }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }

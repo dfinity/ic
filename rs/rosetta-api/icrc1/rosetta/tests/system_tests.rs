@@ -1,11 +1,9 @@
 use crate::common::local_replica;
 use crate::common::local_replica::test_identity;
 use crate::common::utils::{get_rosetta_blocks_from_icrc1_ledger, wait_for_rosetta_block};
-use candid::Encode;
 use candid::Nat;
 use candid::Principal;
 use common::local_replica::get_custom_agent;
-use ic_agent::agent::EnvelopeContent;
 use ic_agent::identity::BasicIdentity;
 use ic_agent::Identity;
 use ic_base_types::CanisterId;
@@ -17,10 +15,10 @@ use ic_icrc1_test_utils::{
     DEFAULT_TRANSFER_FEE,
 };
 use ic_icrc_rosetta::common::types::Error;
+use ic_icrc_rosetta::common::types::TransferMetadata;
 use ic_icrc_rosetta::common::utils::utils::icrc1_rosetta_block_to_rosetta_core_block;
 use ic_icrc_rosetta::common::utils::utils::icrc1_rosetta_block_to_rosetta_core_transaction;
 use ic_icrc_rosetta::construction_api::types::ConstructionMetadataRequestOptions;
-use ic_icrc_rosetta::construction_api::types::UnsignedTransaction;
 use ic_icrc_rosetta_client::RosettaClient;
 use ic_icrc_rosetta_runner::{
     start_rosetta, RosettaContext, RosettaOptions, DEFAULT_DECIMAL_PLACES,
@@ -30,7 +28,6 @@ use ic_starter_tests::ReplicaContext;
 use icrc_ledger_agent::CallMode;
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::account::Account;
-use icrc_ledger_types::icrc1::transfer::Memo;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
 use icrc_ledger_types::icrc2::approve::ApproveArgs;
 use lazy_static::lazy_static;
@@ -761,101 +758,97 @@ async fn test_continuous_block_sync() {
 
 #[tokio::test]
 async fn test_construction_submit() {
-    let keypair = EdKeypair::generate_from_u64(0);
+    let sender_keypair = EdKeypair::generate_from_u64(0);
+    let receiver_keypair = EdKeypair::generate_from_u64(1);
 
     let env = RosettaTestingEnvironmentBuilder::new()
         .with_init_args_builder(
             local_replica::icrc_ledger_default_args_builder()
                 .with_minting_account((*MINTING_IDENTITY).clone().sender().unwrap())
                 .with_initial_balance(
-                    keypair.generate_principal_id().unwrap().0,
+                    sender_keypair.generate_principal_id().unwrap().0,
                     1_000_000_000_000u64,
                 ),
         )
         .build()
         .await;
 
-    let transfer_arg = TransferArg {
-        to: (*MINTING_IDENTITY).clone().sender().unwrap().into(),
-        // Transfer Fee is the minimum burn amount
-        amount: Nat::from(DEFAULT_TRANSFER_FEE),
-        memo: Some(Memo::default()),
-        from_subaccount: None,
-        fee: None,
-        created_at_time: None,
-    };
-
-    let ingress_expiry = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap()
-        .saturating_add(Duration::from_secs(4 * 60))
-        .as_nanos()
-        .to_u64()
-        .unwrap();
-
-    let sender = keypair.generate_principal_id().unwrap().0;
-
-    let call_envelope_content = EnvelopeContent::Call {
-        nonce: None,
-        ingress_expiry,
-        sender,
-        canister_id: env.icrc1_ledger_id,
-        method_name: "icrc1_transfer".to_owned(),
-        arg: Encode!(&transfer_arg).unwrap(),
-    };
-    let call_envelope_request_id = call_envelope_content.to_request_id();
-    let call_envelope_signable_bytes = call_envelope_request_id.signable();
-    let call_envelope_signature = Signature {
-        signing_payload: SigningPayload {
-            address: None,
-            hex_bytes: hex::encode(call_envelope_signable_bytes.clone()),
-            signature_type: Some(SignatureType::Ed25519),
-            account_identifier: Some(
-                Account::from(keypair.generate_principal_id().unwrap().0).into(),
-            ),
+    let operation = rosetta_core::objects::Operation {
+        operation_identifier: OperationIdentifier {
+            index: 0,
+            network_index: None,
         },
-        public_key: (&keypair).into(),
-        signature_type: SignatureType::Ed25519,
-        hex_bytes: hex::encode(keypair.sign(&call_envelope_signable_bytes)),
+        related_operations: None,
+        type_: "TRANSFER".to_owned(),
+        status: None,
+        account: Some(AccountIdentifier {
+            address: receiver_keypair
+                .generate_principal_id()
+                .unwrap()
+                .0
+                .to_string(),
+            sub_account: None,
+            metadata: None,
+        }),
+        amount: Some(rosetta_core::objects::Amount {
+            value: "0".to_owned(),
+            currency: Currency {
+                symbol: env.icrc1_ledger_init_args.token_symbol.clone(),
+                decimals: env
+                    .icrc1_ledger_init_args
+                    .decimals
+                    .unwrap_or(DEFAULT_DECIMAL_PLACES) as u32,
+                metadata: None,
+            },
+            metadata: None,
+        }),
+        coin_change: None,
+        metadata: Some(
+            TransferMetadata {
+                from_account: Account::from(sender_keypair.generate_principal_id().unwrap().0)
+                    .into(),
+                fee_set_by_user: None,
+                spender_account: None,
+            }
+            .try_into()
+            .unwrap(),
+        ),
     };
 
-    let read_state_envelope_content = EnvelopeContent::ReadState {
-        ingress_expiry,
-        sender,
-        paths: vec![vec![
-            "request_status".into(),
-            call_envelope_request_id.to_vec().into(),
-        ]],
-    };
-    let read_state_envelope_signable_bytes = read_state_envelope_content.to_request_id().signable();
-    let read_state_envelope_signature = Signature {
-        signing_payload: SigningPayload {
-            address: None,
-            hex_bytes: hex::encode(read_state_envelope_signable_bytes.clone()),
-            signature_type: Some(SignatureType::Ed25519),
-            account_identifier: Some(
-                Account::from(keypair.generate_principal_id().unwrap().0).into(),
-            ),
-        },
-        public_key: (&keypair).into(),
-        signature_type: SignatureType::Ed25519,
-        hex_bytes: hex::encode(keypair.sign(&read_state_envelope_signable_bytes)),
-    };
+    let construction_preprocess_response = env
+        .rosetta_client
+        .construction_preprocess(vec![operation.clone()], env.network_identifier.clone())
+        .await
+        .expect("Unable to call /construction/preprocess");
 
-    let unsinged_transaction = UnsignedTransaction {
-        envelope_contents: vec![
-            call_envelope_content.clone(),
-            read_state_envelope_content.clone(),
-        ],
-    };
+    let public_keys = vec![(&sender_keypair).into()];
+    assert_eq!(
+        construction_preprocess_response.required_public_keys,
+        Some(vec![Account::from(
+            sender_keypair.generate_principal_id().unwrap().0
+        )
+        .into()])
+    );
 
-    let signatures = vec![call_envelope_signature, read_state_envelope_signature];
+    let construction_payloads_response = env
+        .rosetta_client
+        .construction_payloads(
+            env.network_identifier.clone(),
+            vec![operation.clone()],
+            Some(public_keys),
+        )
+        .await
+        .expect("Unable to call /construction/payloads");
+
+    let signatures =
+        RosettaClient::sign_transaction(&sender_keypair, construction_payloads_response.clone())
+            .unwrap();
 
     let construction_combine_response = env
         .rosetta_client
         .construction_combine(
             env.network_identifier.clone(),
-            unsinged_transaction.to_string(),
+            construction_payloads_response.unsigned_transaction,
             signatures,
         )
         .await
@@ -866,7 +859,7 @@ async fn test_construction_submit() {
     let balance_before_transfer = env
         .icrc1_agent
         .balance_of(
-            keypair.generate_principal_id().unwrap().0.into(),
+            sender_keypair.generate_principal_id().unwrap().0.into(),
             CallMode::Query,
         )
         .await
@@ -895,7 +888,7 @@ async fn test_construction_submit() {
     let current_balance = env
         .icrc1_agent
         .balance_of(
-            keypair.generate_principal_id().unwrap().0.into(),
+            sender_keypair.generate_principal_id().unwrap().0.into(),
             CallMode::Query,
         )
         .await

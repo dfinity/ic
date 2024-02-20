@@ -106,7 +106,7 @@ pub struct Operation {
     /// This can be very useful to downstream consumers that parse all block
     /// data.
     #[serde(rename = "type")]
-    pub _type: String,
+    pub type_: String,
 
     /// The network-specific status of the operation. Status is not defined on
     /// the transaction object because blockchains with smart contracts may have
@@ -143,7 +143,7 @@ impl Operation {
         Operation {
             operation_identifier: OperationIdentifier::new(op_id),
             related_operations,
-            _type,
+            type_: _type,
             status: None,
             account,
             amount,
@@ -562,7 +562,7 @@ impl ::std::fmt::Display for CurveType {
 }
 
 impl ::std::str::FromStr for CurveType {
-    type Err = ();
+    type Err = anyhow::Error;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "secp256k1" => Ok(CurveType::Secp256K1),
@@ -570,7 +570,7 @@ impl ::std::str::FromStr for CurveType {
             "edwards25519" => Ok(CurveType::Edwards25519),
             "tweedle" => Ok(CurveType::Tweedle),
             "pallas" => Ok(CurveType::Pallas),
-            _ => Err(()),
+            _ => bail!("Invalid curve type: {}", s),
         }
     }
 }
@@ -630,6 +630,18 @@ pub enum SignatureType {
     Schnorr1,
     #[serde(rename = "schnorr_poseidon")]
     SchnorrPoseidon,
+}
+
+impl From<CurveType> for SignatureType {
+    fn from(curve_type: CurveType) -> Self {
+        match curve_type {
+            CurveType::Secp256K1 => SignatureType::Ecdsa,
+            CurveType::Secp256R1 => SignatureType::Ecdsa,
+            CurveType::Edwards25519 => SignatureType::Ed25519,
+            CurveType::Tweedle => SignatureType::Schnorr1,
+            CurveType::Pallas => SignatureType::SchnorrPoseidon,
+        }
+    }
 }
 
 impl ::std::fmt::Display for SignatureType {

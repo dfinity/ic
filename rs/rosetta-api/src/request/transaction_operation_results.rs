@@ -91,9 +91,9 @@ impl TransactionOperationResults {
                         ..
                     },
                     [withdraw, deposit, fee, ..],
-                ) if withdraw._type.parse::<OperationType>()? == OperationType::Transaction
-                    && deposit._type.parse::<OperationType>()? == OperationType::Transaction
-                    && fee._type.parse::<OperationType>()? == OperationType::Fee =>
+                ) if withdraw.type_.parse::<OperationType>()? == OperationType::Transaction
+                    && deposit.type_.parse::<OperationType>()? == OperationType::Transaction
+                    && fee.type_.parse::<OperationType>()? == OperationType::Fee =>
                 {
                     merge_metadata(withdraw, rr)?;
                     merge_metadata(deposit, rr)?;
