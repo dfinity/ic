@@ -250,6 +250,15 @@
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
     - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/
+".rules-master-pipeline-and-merge-request-rust-changed":
+  rules:
+    - changes:
+        - "**/*.rs"
+        - "**/*.toml"
+        - "**/*.lock"
+      if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/
 ".rules-master-pipeline-no-merge-train":
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"
@@ -2202,10 +2211,14 @@ build-setupos-base-dev:
     REF_FILE: ic-os/setupos/rootfs/docker-base.dev
 cargo-build-release-linux:
   extends:
-    - ".rules-master-pipeline-and-merge-request"
+    - ".rules-master-pipeline-and-merge-request-rust-changed"
   needs: []
   rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - changes:
+        - "**/*.rs"
+        - "**/*.toml"
+        - "**/*.lock"
+      if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
     - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/
   script:
@@ -2214,10 +2227,14 @@ cargo-build-release-linux:
       buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- cargo build --release
 cargo-clippy-linux:
   extends:
-    - ".rules-master-pipeline-and-merge-request"
+    - ".rules-master-pipeline-and-merge-request-rust-changed"
   needs: []
   rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - changes:
+        - "**/*.rs"
+        - "**/*.toml"
+        - "**/*.lock"
+      if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
     - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/
   script:
