@@ -27,6 +27,7 @@ use crate::{
 
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use anyhow::{anyhow, bail, Error};
 use candid::{Decode, Encode, Principal};
 use certificate_orchestrator_interface::{
     BoundedString, CreateRegistrationError, CreateRegistrationResponse, DispenseTaskError,
@@ -60,6 +61,9 @@ pub fn config(env: TestEnv) {
 
 const CERTIFICATE_ORCHESTRATOR_WASM: &str =
     "rs/boundary_node/certificate_issuance/certificate_orchestrator/certificate_orchestrator.wasm";
+
+const CHECK_TIMEOUT: Duration = Duration::from_secs(60);
+const CHECK_SLEEP: Duration = Duration::from_secs(1);
 
 // Goal: Verify that the access controls of the certificate orchestrator work
 //
@@ -274,10 +278,10 @@ pub fn registration_test(env: TestEnv) {
         };
 
         // Check the state of the registration
-        check_registration(agent.clone(), ident_a.clone(), cid, registration_a_id.clone(), domain_a.clone(), canister_a, State::PendingOrder, false).await;
+        check_registration(agent.clone(), ident_a.clone(), cid, registration_a_id.clone(), domain_a.clone(), canister_a, State::PendingOrder, false).await.expect("failed to check the registration state");
 
         // Check the state of an inexistent registration
-        check_registration(agent.clone(), ident_a.clone(), cid, inexistent_registration_id.clone(), domain_a.clone(), canister_a, State::PendingOrder, true).await;
+        check_registration(agent.clone(), ident_a.clone(), cid, inexistent_registration_id.clone(), domain_a.clone(), canister_a, State::PendingOrder, true).await.expect("failed to check the registration state");
 
         // Submit a duplicate registration
         match create_registration(agent.clone(), ident_a.clone(), cid, domain_a.clone(), canister_a).await {
@@ -294,7 +298,7 @@ pub fn registration_test(env: TestEnv) {
         };
 
         // Check the state of the registration
-        check_registration(agent.clone(), ident_a.clone(), cid, registration_b_id.clone(), domain_b.clone(), canister_b, State::PendingOrder, false).await;
+        check_registration(agent.clone(), ident_a.clone(), cid, registration_b_id.clone(), domain_b.clone(), canister_b, State::PendingOrder, false).await.expect("failed to check the registration state");
 
         // Update registrations by going through all registration states
         match update_registration(agent.clone(), ident_a.clone(), cid, registration_a_id.clone(), UpdateType::State(State::PendingChallengeResponse)).await
@@ -302,28 +306,28 @@ pub fn registration_test(env: TestEnv) {
             UpdateRegistrationResponse::Ok(()) => {},
             v => panic!("updateRegistration failed: {v:?}, expected ok"),
         };
-        check_registration(agent.clone(), ident_a.clone(), cid, registration_a_id.clone(), domain_a.clone(), canister_a, State::PendingChallengeResponse, false).await;
+        check_registration(agent.clone(), ident_a.clone(), cid, registration_a_id.clone(), domain_a.clone(), canister_a, State::PendingChallengeResponse, false).await.expect("failed to check the registration state");
 
         match update_registration(agent.clone(), ident_a.clone(), cid, registration_a_id.clone(), UpdateType::State(State::PendingAcmeApproval)).await
         {
             UpdateRegistrationResponse::Ok(()) => {},
             v => panic!("updateRegistration failed: {v:?}, expected ok"),
         };
-        check_registration(agent.clone(), ident_a.clone(), cid, registration_a_id.clone(), domain_a.clone(), canister_a, State::PendingAcmeApproval, false).await;
+        check_registration(agent.clone(), ident_a.clone(), cid, registration_a_id.clone(), domain_a.clone(), canister_a, State::PendingAcmeApproval, false).await.expect("failed to check the registration state");
 
         match update_registration(agent.clone(), ident_a.clone(), cid, registration_a_id.clone(), UpdateType::State(State::Available)).await
         {
             UpdateRegistrationResponse::Ok(()) => {},
             v => panic!("updateRegistration failed: {v:?}, expected ok"),
         };
-        check_registration(agent.clone(), ident_a.clone(), cid, registration_a_id.clone(), domain_a.clone(), canister_a, State::Available, false).await;
+        check_registration(agent.clone(), ident_a.clone(), cid, registration_a_id.clone(), domain_a.clone(), canister_a, State::Available, false).await.expect("failed to check the registration state");
 
         match update_registration(agent.clone(), ident_a.clone(), cid, registration_a_id.clone(), UpdateType::Canister(canister_b)).await
         {
             UpdateRegistrationResponse::Ok(()) => {},
             v => panic!("updateRegistration failed: {v:?}, expected ok"),
         };
-        check_registration(agent.clone(), ident_a.clone(), cid, registration_a_id.clone(), domain_a.clone(), canister_b, State::Available, false).await;
+        check_registration(agent.clone(), ident_a.clone(), cid, registration_a_id.clone(), domain_a.clone(), canister_b, State::Available, false).await.expect("failed to check the registration state");
 
         // Update inexistent registration
         match update_registration(agent.clone(), ident_a.clone(), cid, inexistent_registration_id.clone(), UpdateType::State(State::Available)).await
@@ -345,7 +349,7 @@ pub fn registration_test(env: TestEnv) {
             UpdateRegistrationResponse::Ok(()) => {},
             v => panic!("updateRegistration failed: {v:?}, expected ok"),
         };
-        check_registration(agent.clone(), ident_a.clone(), cid, registration_b_id.clone(), domain_b.clone(), canister_b, State::Failed(BoundedString::<127>::from("Test")), false).await;
+        check_registration(agent.clone(), ident_a.clone(), cid, registration_b_id.clone(), domain_b.clone(), canister_b, State::Failed(BoundedString::<127>::from("Test")), false).await.expect("failed to check the registration state");
 
         // Remove failed registration
         if let RemoveRegistrationResponse::Err(err) = remove_registration(agent.clone(), ident_a.clone(), cid, registration_b_id.clone()).await {
@@ -458,7 +462,8 @@ pub fn expiration_test(env: TestEnv) {
             State::PendingOrder,
             false,
         )
-        .await;
+        .await
+        .expect("failed to check the registration state");
 
         // Create a registration for another domain
         let registration_b_id = match create_registration(
@@ -485,7 +490,8 @@ pub fn expiration_test(env: TestEnv) {
             State::PendingOrder,
             false,
         )
-        .await;
+        .await
+        .expect("failed to check the registration state");
 
         // Set registration to available
         match update_registration(
@@ -511,23 +517,32 @@ pub fn expiration_test(env: TestEnv) {
             State::Available,
             false,
         )
-        .await;
-
-        // Wait for expirer to do its work
-        tokio::time::sleep(Duration::from_secs(2 * registration_expiration_ttl)).await;
+        .await
+        .expect("failed to check the registration state");
 
         // Check that the "in-progress" registration request has been expired
-        check_registration(
-            agent.clone(),
-            ident_a.clone(),
-            cid,
-            registration_a_id.clone(),
-            domain_a.clone(),
-            canister_a,
-            State::PendingOrder,
-            true,
-        )
-        .await;
+        retry_async(&logger, CHECK_TIMEOUT, CHECK_SLEEP, || async {
+            match check_registration(
+                agent.clone(),
+                ident_a.clone(),
+                cid,
+                registration_a_id.clone(),
+                domain_a.clone(),
+                canister_a,
+                State::PendingOrder,
+                true,
+            )
+            .await
+            {
+                Ok(_) => Ok(()),
+                Err(v) => bail!(
+                    "'in-progress' registration request has not been expired (removed): {:?}",
+                    v
+                ),
+            }
+        })
+        .await
+        .expect("failed to check the registration state");
 
         // Check that the successful registration request is still available
         check_registration(
@@ -540,7 +555,8 @@ pub fn expiration_test(env: TestEnv) {
             State::Available,
             false,
         )
-        .await;
+        .await
+        .expect("failed to check the registration state");
     });
 }
 
@@ -632,7 +648,8 @@ pub fn renewal_expiration_test(env: TestEnv) {
             State::PendingOrder,
             false,
         )
-        .await;
+        .await
+        .expect("failed to check the registration state");
 
         // Set registration to available
         match update_registration(
@@ -658,7 +675,8 @@ pub fn renewal_expiration_test(env: TestEnv) {
             State::Available,
             false,
         )
-        .await;
+        .await
+        .expect("failed to check the registration state");
 
         // Set registration to back to pending order
         match update_registration(
@@ -684,23 +702,29 @@ pub fn renewal_expiration_test(env: TestEnv) {
             State::PendingOrder,
             false,
         )
-        .await;
-
-        // Wait for expirer to do its work
-        tokio::time::sleep(Duration::from_secs(2 * registration_expiration_ttl)).await;
+        .await
+        .expect("failed to check the registration state");
 
         // Check that renewal registration has been expired
-        check_registration(
-            agent.clone(),
-            ident_a.clone(),
-            cid,
-            registration_a_id.clone(),
-            domain_a.clone(),
-            canister_a,
-            State::PendingOrder,
-            true,
-        )
-        .await;
+        retry_async(&logger, CHECK_TIMEOUT, CHECK_SLEEP, || async {
+            match check_registration(
+                agent.clone(),
+                ident_a.clone(),
+                cid,
+                registration_a_id.clone(),
+                domain_a.clone(),
+                canister_a,
+                State::PendingOrder,
+                true,
+            )
+            .await
+            {
+                Ok(_) => Ok(()),
+                Err(v) => bail!("registration has not been expired (removed): {:?}", v),
+            }
+        })
+        .await
+        .expect("failed to check the registration state");
     });
 }
 
@@ -1057,7 +1081,8 @@ pub fn retry_test(env: TestEnv) {
             State::PendingOrder,
             false,
         )
-        .await;
+        .await
+        .expect("failed to check the registration state");
 
         // queue task with immediate deadline
         let current_time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
@@ -1086,18 +1111,20 @@ pub fn retry_test(env: TestEnv) {
             v => panic!("dispenseTask failed: {v:?}, expected ok with a registration id"),
         };
 
-        // Wait for expirer to do its work
-        tokio::time::sleep(Duration::from_secs(2 * in_progress_ttl)).await;
-
-        // check if task has been rescheduled
-        match peek_task(agent.clone(), ident_a.clone(), cid).await {
-            PeekTaskResponse::Ok(id) => {
-                if id != registration_a_id {
-                    panic!("peekTask failed: expected {registration_a_id:?}, but got {id:?}")
+        // Check that the task gets rescheduled after some time
+        retry_async(&logger, CHECK_TIMEOUT, CHECK_SLEEP, || async {
+            match peek_task(agent.clone(), ident_a.clone(), cid).await {
+                PeekTaskResponse::Ok(id) => {
+                    if id != registration_a_id {
+                        bail!("peekTask failed: expected {registration_a_id:?}, but got {id:?}")
+                    }
+                    Ok(())
                 }
+                v => bail!("peekTask failed: {v:?}, expected ok with a registration id"),
             }
-            v => panic!("peekTask failed: {v:?}, expected ok with a registration id"),
-        };
+        })
+        .await
+        .expect("retry failed");
     });
 }
 
@@ -1388,7 +1415,7 @@ async fn check_registration(
     principal: Principal,
     state: State,
     inexistent_registration: bool,
-) {
+) -> Result<(), Error> {
     match get_registration(
         agent.clone(),
         ident,
@@ -1399,39 +1426,48 @@ async fn check_registration(
     {
         GetRegistrationResponse::Ok(v) => {
             if inexistent_registration {
-                panic!(
+                return Err(anyhow!(
                     "getRegistration failed: registration should not exist {:?} ({:?}): {:?}",
-                    v.name, v.canister, v.state
-                )
+                    v.name,
+                    v.canister,
+                    v.state
+                ));
             }
             if String::from(v.name.clone()) != name {
-                panic!(
+                return Err(anyhow!(
                     "getRegistration failed: registration has name {:?}, expected {:?}",
-                    v.name, name
-                )
+                    v.name,
+                    name
+                ));
             }
             if v.canister != principal {
-                panic!(
+                return Err(anyhow!(
                     "getRegistration failed: registration has canister {:?}, expected {:?}",
-                    v.canister, principal
-                )
+                    v.canister,
+                    principal
+                ));
             }
             if v.state != state {
-                panic!(
+                return Err(anyhow!(
                     "getRegistration failed: registration has state {:?}, expected {:?}",
-                    v.state, state
-                )
+                    v.state,
+                    state
+                ));
             }
+            Ok(())
         }
         GetRegistrationResponse::Err(GetRegistrationError::NotFound) => {
             if !inexistent_registration {
-                panic!(
+                return Err(anyhow!(
                     "getRegistration failed: registration does not exist {:?} ({:?}): {:?}",
-                    name, principal, state
-                )
+                    name,
+                    principal,
+                    state
+                ));
             }
+            Ok(())
         }
-        v => panic!("getRegistration failed: {v:?}"),
+        v => Err(anyhow!("getRegistration failed: {v:?}")),
     }
 }
 
