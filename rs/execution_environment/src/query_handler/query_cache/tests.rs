@@ -1261,158 +1261,62 @@ fn query_cache_returns_different_results_on_canister_delete() {
 
 #[test]
 fn query_cache_returns_different_results_on_canister_going_below_freezing_threshold() {
-    let mut test = builder_with_query_caching().build();
-    let a_id = test.universal_canister().unwrap();
-    let q = wasm().reply_data(&[42]).build();
+    let q = wasm().reply_data(&[42]);
+    for_query_and_composite_query(q, |mut test, a_id, b_id, method, q| {
+        // Run the query for the first time.
+        let res_1 = test.non_replicated_query(a_id, method, q.clone());
+        // Assert it's a miss.
+        let m = query_cache_metrics(&test);
+        assert_eq!(1, m.misses.get());
+        assert_eq!(0, m.invalidated_entries_by_error.get());
+        assert_eq!(res_1, Ok(WasmResult::Reply(vec![42])));
 
-    // Run the query for the first time.
-    let res_1 = test.non_replicated_query(a_id, "query", q.clone());
-    // Assert it's a miss.
-    let m = query_cache_metrics(&test);
-    assert_eq!(1, m.misses.get());
-    assert_eq!(0, m.invalidated_entries_by_error.get());
-    assert_eq!(res_1, Ok(WasmResult::Reply(vec![42])));
+        // Increase the freezing threshold.
+        // The update setting message, so it invalidates the cache entry.
+        test.update_freezing_threshold(b_id, u64::MAX.into())
+            .expect("The settings update must succeed.");
 
-    // Increase the freezing threshold.
-    // The update setting message, so it invalidates the cache entry.
-    test.update_freezing_threshold(a_id, u64::MAX.into())
-        .expect("The settings update must succeed.");
-
-    // Run the same query for the second time.
-    // The query returns a user error, while the composite query returns result with a reject.
-    let _res_2 = test.non_replicated_query(a_id, "query", q);
-    // Assert it's a miss with an error.
-    let m = query_cache_metrics(&test);
-    assert_eq!(0, m.hits.get());
-    assert_eq!(2, m.misses.get());
-    assert_eq!(1, m.invalidated_entries_by_error.get());
-}
-
-#[test]
-/// According to the spec, the composite query should fail if any of
-/// the canisters in the call graph goes below the freezing threshold.
-/// De-facto we check for the balance just at the beginning, i.e. just
-/// for the root canister.
-///
-/// Because of this, this test can't be merged with the previous one,
-/// but it'll be fixed in a follow-up MR.
-///
-/// See: https://internetcomputer.org/docs/current/references/ic-interface-spec#query-call
-fn composite_query_cache_returns_different_results_on_canister_going_below_freezing_threshold() {
-    let mut test = builder_with_query_caching().build();
-    let a_id = test.universal_canister().unwrap();
-    let b_id = test.universal_canister().unwrap();
-    let b = wasm().reply_data(&[42]).build();
-    let a = wasm()
-        // By default the on reply and on reject handlers propagate the other side response.
-        .composite_query(b_id, call_args().other_side(b))
-        .build();
-
-    // Run the query for the first time.
-    let res_1 = test.non_replicated_query(a_id, "composite_query", a.clone());
-    // Assert it's a miss.
-    let m = query_cache_metrics(&test);
-    assert_eq!(1, m.misses.get());
-    assert_eq!(0, m.invalidated_entries_by_error.get());
-    assert_eq!(res_1, Ok(WasmResult::Reply(vec![42])));
-
-    // Increase the freezing threshold.
-    // The update setting message, so it invalidates the cache entry.
-    test.update_freezing_threshold(b_id, u64::MAX.into())
-        .expect("The settings update must succeed.");
-
-    // Run the same query for the second time.
-    // The query returns a user error, while the composite query returns result with a reject.
-    let _res_2 = test.non_replicated_query(a_id, "composite_query", a);
-    // Assert it's a miss with an error.
-    let m = query_cache_metrics(&test);
-    assert_eq!(0, m.hits.get());
-    assert_eq!(2, m.misses.get());
-    // According to the spec, for composite queries it's not an error if
-    // the nested query goes below the freezing threshold.
-    assert_eq!(0, m.invalidated_entries_by_error.get());
+        // Run the same query for the second time.
+        // The query returns a user error, while the composite query returns result with a reject.
+        let _res_2 = test.non_replicated_query(a_id, method, q);
+        // Assert it's a miss with an error.
+        let m = query_cache_metrics(&test);
+        assert_eq!(0, m.hits.get());
+        assert_eq!(2, m.misses.get());
+        assert_eq!(1, m.invalidated_entries_by_error.get());
+    });
 }
 
 #[test]
 fn query_cache_returns_different_results_on_canister_going_above_freezing_threshold() {
-    let mut test = builder_with_query_caching().build();
-    let a_id = test.universal_canister().unwrap();
-    let q = wasm().reply_data(&[42]).build();
+    let q = wasm().reply_data(&[42]);
+    for_query_and_composite_query(q, |mut test, a_id, b_id, method, q| {
+        // Increase the freezing threshold initially.
+        test.update_freezing_threshold(b_id, u64::MAX.into())
+            .expect("The settings update must succeed.");
 
-    // Increase the freezing threshold initially.
-    test.update_freezing_threshold(a_id, u64::MAX.into())
-        .expect("The settings update must succeed.");
+        // Run the query for the first time.
+        // The query returns a user error, while the composite query returns result with a reject.
+        let _res_1 = test.non_replicated_query(a_id, method, q.clone());
+        // Assert it's a miss with an error.
+        let m = query_cache_metrics(&test);
+        assert_eq!(1, m.misses.get());
+        assert_eq!(1, m.invalidated_entries_by_error.get());
 
-    // Run the query for the first time.
-    // The query returns a user error, while the composite query returns result with a reject.
-    let _res_1 = test.non_replicated_query(a_id, "query", q.clone());
-    // Assert it's a miss with an error.
-    let m = query_cache_metrics(&test);
-    assert_eq!(1, m.misses.get());
-    assert_eq!(1, m.invalidated_entries_by_error.get());
+        // Remove the freezing threshold.
+        // The update setting message, so it invalidates the cache entry.
+        test.update_freezing_threshold(b_id, 0.into())
+            .expect("The settings update must succeed.");
 
-    // Remove the freezing threshold.
-    // The update setting message, so it invalidates the cache entry.
-    test.update_freezing_threshold(a_id, 0.into())
-        .expect("The settings update must succeed.");
-
-    // Run the same query for the second time.
-    let res_2 = test.non_replicated_query(a_id, "query", q);
-    // Assert it's just a miss, no new errors.
-    let m = query_cache_metrics(&test);
-    assert_eq!(0, m.hits.get());
-    assert_eq!(2, m.misses.get());
-    assert_eq!(1, m.invalidated_entries_by_error.get());
-    assert_eq!(res_2, Ok(WasmResult::Reply(vec![42])));
-}
-
-#[test]
-/// According to the spec, the composite query should fail if any of
-/// the canisters in the call graph goes below the freezing threshold.
-/// De-facto we check for the balance just at the beginning, i.e. just
-/// for the root canister.
-///
-/// Because of this, this test can't be merged with the previous one,
-/// but it'll be fixed in a follow-up MR.
-///
-/// See: https://internetcomputer.org/docs/current/references/ic-interface-spec#query-call
-fn composite_query_cache_returns_different_results_on_canister_going_above_freezing_threshold() {
-    let mut test = builder_with_query_caching().build();
-    let a_id = test.universal_canister().unwrap();
-    let b_id = test.universal_canister().unwrap();
-    let b = wasm().reply_data(&[42]).build();
-    let a = wasm()
-        // By default the on reply and on reject handlers propagate the other side response.
-        .composite_query(b_id, call_args().other_side(b))
-        .build();
-
-    // Increase the freezing threshold initially.
-    test.update_freezing_threshold(b_id, u64::MAX.into())
-        .expect("The settings update must succeed.");
-
-    // Run the query for the first time.
-    // The query returns a user error, while the composite query returns result with a reject.
-    let _res_1 = test.non_replicated_query(a_id, "composite_query", a.clone());
-    // Assert it's a miss.
-    let m = query_cache_metrics(&test);
-    assert_eq!(1, m.misses.get());
-    // According to the spec, for composite queries it's not an error if
-    // the nested query goes below the freezing threshold.
-    assert_eq!(0, m.invalidated_entries_by_error.get());
-
-    // Remove the freezing threshold.
-    // The update setting message, so it invalidates the cache entry.
-    test.update_freezing_threshold(b_id, 0.into())
-        .expect("The settings update must succeed.");
-
-    // Run the same query for the second time.
-    let res_2 = test.non_replicated_query(a_id, "composite_query", a);
-    // Assert it's just a miss, no new errors.
-    let m = query_cache_metrics(&test);
-    assert_eq!(0, m.hits.get());
-    assert_eq!(2, m.misses.get());
-    assert_eq!(0, m.invalidated_entries_by_error.get());
-    assert_eq!(res_2, Ok(WasmResult::Reply(vec![42])));
+        // Run the same query for the second time.
+        let res_2 = test.non_replicated_query(a_id, method, q);
+        // Assert it's just a miss, no new errors.
+        let m = query_cache_metrics(&test);
+        assert_eq!(0, m.hits.get());
+        assert_eq!(2, m.misses.get());
+        assert_eq!(1, m.invalidated_entries_by_error.get());
+        assert_eq!(res_2, Ok(WasmResult::Reply(vec![42])));
+    });
 }
 
 #[test]
