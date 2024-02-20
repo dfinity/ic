@@ -38,7 +38,7 @@ pub const RESERVED_SYMBOLS: [&str; 6] = [
 ];
 
 const WASM_FUNCTION_COMPLEXITY_LIMIT: Complexity = Complexity(1_000_000);
-const WASM_FUNCTION_SIZE_LIMIT: usize = 1_000_000;
+pub const WASM_FUNCTION_SIZE_LIMIT: usize = 1_000_000;
 pub const MAX_CODE_SECTION_SIZE_IN_BYTES: u32 = 10 * 1024 * 1024;
 
 // Represents the expected function signature for any System APIs the Internet

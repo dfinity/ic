@@ -3280,7 +3280,6 @@ dependencies = [
  "warp",
  "wasm-bindgen",
  "wasm-encoder 0.36.2",
- "wasm-encoder 0.38.1",
  "wasm-smith",
  "wasmparser 0.116.1",
  "wasmprinter",
@@ -11748,32 +11747,25 @@ dependencies = [
 
 [[package]]
 name = "wasm-encoder"
-version = "0.38.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ad2b51884de9c7f4fe2fd1043fccb8dcad4b1e29558146ee57a144d15779f3f"
+version = "0.200.0"
+source = "git+https://github.com/bytecodealliance/wasm-tools?rev=4eaf9fbbc4527ecf9e7b6005b360fb82ba84cc4e#4eaf9fbbc4527ecf9e7b6005b360fb82ba84cc4e"
 dependencies = [
  "leb128",
-]
-
-[[package]]
-name = "wasm-encoder"
-version = "0.38.1"
-source = "git+https://github.com/dfinity/wasm-tools?rev=50c1a9a155745214c7f09d713ed56ff99188725a#50c1a9a155745214c7f09d713ed56ff99188725a"
-dependencies = [
- "leb128",
+ "wasmparser 0.200.0",
 ]
 
 [[package]]
 name = "wasm-smith"
-version = "0.13.1"
-source = "git+https://github.com/dfinity/wasm-tools?rev=50c1a9a155745214c7f09d713ed56ff99188725a#50c1a9a155745214c7f09d713ed56ff99188725a"
+version = "0.200.0"
+source = "git+https://github.com/bytecodealliance/wasm-tools?rev=4eaf9fbbc4527ecf9e7b6005b360fb82ba84cc4e#4eaf9fbbc4527ecf9e7b6005b360fb82ba84cc4e"
 dependencies = [
+ "anyhow",
  "arbitrary",
  "flagset",
  "indexmap 2.1.0",
  "leb128",
- "wasm-encoder 0.38.1",
- "wasmparser 0.118.1",
+ "wasm-encoder 0.200.0",
+ "wasmparser 0.200.0",
 ]
 
 [[package]]
@@ -11823,9 +11815,10 @@ dependencies = [
 
 [[package]]
 name = "wasmparser"
-version = "0.118.1"
-source = "git+https://github.com/dfinity/wasm-tools?rev=50c1a9a155745214c7f09d713ed56ff99188725a#50c1a9a155745214c7f09d713ed56ff99188725a"
+version = "0.200.0"
+source = "git+https://github.com/bytecodealliance/wasm-tools?rev=4eaf9fbbc4527ecf9e7b6005b360fb82ba84cc4e#4eaf9fbbc4527ecf9e7b6005b360fb82ba84cc4e"
 dependencies = [
+ "bitflags 2.4.1",
  "indexmap 2.1.0",
  "semver",
 ]
