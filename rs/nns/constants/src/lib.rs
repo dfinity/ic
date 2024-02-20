@@ -102,10 +102,6 @@ pub fn memory_allocation_of(canister_id: CanisterId) -> u64 {
     }
 }
 
-/// Returns whether the Matched Funding feature is enabled.
-/// TODO[NNS1-2610]: Enabled Matched Funding on mainnet
-pub const IS_MATCHED_FUNDING_ENABLED: bool = true;
-
 /// Returns whether the UpdateAllowedPrincipals NnsFunction is enabled. Currently, the
 /// proposals should be disabled in non-test builds.
 pub const IS_UPDATE_ALLOWED_PRINCIPALS_ENABLED: bool = cfg! { any(test, feature = "test") };

@@ -6,7 +6,7 @@ use ic_nervous_system_proto::pb::v1::{
     Canister, Duration, GlobalTimeOfDay, Image, Percentage, Tokens,
 };
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
-use ic_nns_constants::{IS_MATCHED_FUNDING_ENABLED, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID};
+use ic_nns_constants::{ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID};
 use ic_nns_governance::pb::v1::{
     create_service_nervous_system::{
         governance_parameters::VotingRewardParameters,
@@ -102,8 +102,6 @@ lazy_static! {
             }),
             swap_parameters: Some(SwapParameters {
                 minimum_participants: Some(5),
-                minimum_icp: if IS_MATCHED_FUNDING_ENABLED {None} else {Some(Tokens::from_tokens(500_000))},
-                maximum_icp: if IS_MATCHED_FUNDING_ENABLED {None} else {Some(Tokens::from_tokens(750_000))},
                 minimum_direct_participation_icp: Some(Tokens::from_tokens(499_900)),
                 maximum_direct_participation_icp: Some(Tokens::from_tokens(749_900)),
                 minimum_participant_icp: Some(Tokens::from_tokens(1)),
@@ -116,8 +114,12 @@ lazy_static! {
                 restricted_countries: None,
                 start_time: GlobalTimeOfDay::from_hh_mm(12, 0).ok(),
                 duration: Some(Duration::from_secs(60 * 60 * 24 * 7)),
-                neurons_fund_investment_icp: if IS_MATCHED_FUNDING_ENABLED { None } else { Some(Tokens::from_tokens(100)) },
-                neurons_fund_participation: if IS_MATCHED_FUNDING_ENABLED { Some(true) } else { None },
+                neurons_fund_participation: Some(true),
+
+                // Deprecated fields must not be set.
+                neurons_fund_investment_icp: None,
+                minimum_icp: None,
+                maximum_icp: None,
             }),
             governance_parameters: Some(GovernanceParameters {
                 proposal_rejection_fee: Some(Tokens::from_e8s(1_000_000_000)),
