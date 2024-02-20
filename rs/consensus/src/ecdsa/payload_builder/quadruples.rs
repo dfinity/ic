@@ -226,7 +226,7 @@ pub(super) fn update_quadruples_in_creation(
                     lambda_masked,
                     kappa_times_lambda,
                     key_times_lambda,
-                    Some(key_transcript.unmasked_transcript()),
+                    key_transcript.unmasked_transcript(),
                 ),
             );
         }
@@ -254,10 +254,7 @@ pub(super) fn purge_old_key_quadruples(
 
     ecdsa_payload.available_quadruples.retain(|id, quadruple| {
         matched_quadruples.contains(id)
-            || match quadruple.key_unmasked_ref.as_ref() {
-                Some(transcript) => transcript.as_ref().transcript_id == current_key_transcript_id,
-                None => true,
-            }
+            || quadruple.key_unmasked_ref.as_ref().transcript_id == current_key_transcript_id
     });
 }
 
@@ -425,7 +422,9 @@ pub(super) mod test_utils {
         let sig_inputs = create_sig_inputs(caller);
         let quadruple_id = ecdsa_payload.uid_generator.next_quadruple_id(key_id);
         let mut quadruple_ref = sig_inputs.sig_inputs_ref.presig_quadruple_ref.clone();
-        quadruple_ref.key_unmasked_ref = key_transcript;
+        if let Some(transcript) = key_transcript {
+            quadruple_ref.key_unmasked_ref = transcript;
+        }
         ecdsa_payload
             .available_quadruples
             .insert(quadruple_id.clone(), quadruple_ref);
@@ -1020,30 +1019,6 @@ pub(super) mod tests {
                 key_id.clone(),
                 Some(key_transcript),
             );
-        }
-
-        // None of them are matched to a context
-        let contexts = BTreeMap::from_iter([fake_sign_with_ecdsa_context_with_quadruple(
-            1,
-            key_id.clone(),
-            None,
-        )]);
-
-        // None of them should be purged
-        assert_eq!(payload.available_quadruples.len(), 3);
-        purge_old_key_quadruples(&mut payload, &contexts);
-        assert_eq!(payload.available_quadruples.len(), 3);
-    }
-
-    #[test]
-    fn test_unmatched_quadruples_without_key_are_not_purged() {
-        let mut rng = reproducible_rng();
-        let (mut payload, _, _) = set_up(&mut rng, subnet_test_id(1), Height::from(100));
-        let key_id = payload.key_transcript.key_id.clone();
-
-        // Create three quadruples without key transcript
-        for i in 0..3 {
-            create_available_quadruple_with_key_transcript(&mut payload, i, key_id.clone(), None);
         }
 
         // None of them are matched to a context

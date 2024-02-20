@@ -245,7 +245,7 @@ pub(super) fn build_signature_inputs(
     let quadruple = block_reader
         .available_quadruple(&request_id.quadruple_id)?
         .clone();
-    let key_transcript_ref = quadruple.key_unmasked_ref?;
+    let key_transcript_ref = quadruple.key_unmasked_ref;
     let inputs = ThresholdEcdsaSigInputsRef::new(
         extended_derivation_path,
         context.message_hash,
@@ -419,11 +419,7 @@ pub(crate) fn get_quadruple_ids_to_deliver(
     quadruple_ids.insert(ecdsa.key_transcript.key_id.clone(), BTreeSet::new());
 
     for (quadruple_id, quadruple) in &ecdsa.available_quadruples {
-        let Some(quadruple_key_transcript) = quadruple.key_unmasked_ref.as_ref() else {
-            continue;
-        };
-
-        if current_key_transcript_id != quadruple_key_transcript.as_ref().transcript_id {
+        if current_key_transcript_id != quadruple.key_unmasked_ref.as_ref().transcript_id {
             continue;
         }
 
@@ -770,7 +766,7 @@ mod tests {
             quadruple_id.1 = Some(key_id.clone());
             quadruple_ids.push(quadruple_id.clone());
             let mut quadruple_ref = sig_inputs.sig_inputs_ref.presig_quadruple_ref.clone();
-            quadruple_ref.key_unmasked_ref = Some(key_transcript);
+            quadruple_ref.key_unmasked_ref = key_transcript;
             ecdsa_payload
                 .available_quadruples
                 .insert(quadruple_id, quadruple_ref.clone());
