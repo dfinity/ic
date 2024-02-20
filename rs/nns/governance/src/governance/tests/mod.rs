@@ -473,7 +473,6 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
                 create_service_nervous_system: CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING
                     .clone(),
                 proposal_id,
-                neurons_fund_participants: vec![],
                 random_swap_start_time: GlobalTimeOfDay {
                     seconds_after_utc_midnight: Some(0),
                 },

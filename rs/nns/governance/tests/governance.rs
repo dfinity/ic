@@ -12115,24 +12115,6 @@ lazy_static! {
         fallback_controller_principal_ids: vec![*DEVELOPER_PRINCIPAL_ID],
     };
 
-    static ref EXPECTED_SWAP_OPEN_CALL: ExpectedCallCanisterMethodCallArguments<'static> = ExpectedCallCanisterMethodCallArguments {
-        target: CanisterId::try_from(*TARGET_SWAP_CANISTER_ID).unwrap(),
-        method_name: "open",
-        request: Encode!(&sns_swap_pb::OpenRequest {
-            params: Some(SWAP_PARAMS.clone()),
-            cf_participants: CF_PARTICIPANTS.clone(),
-            open_sns_token_swap_proposal_id: Some(1),
-        })
-        .unwrap(),
-    };
-
-    static ref LEGACY_CREATE_SERVICE_NERVOUS_SYSTEM_PROPOSAL: Proposal = Proposal {
-        title: Some("Create a Service Nervous System".to_string()),
-        summary: "".to_string(),
-        action: Some(proposal::Action::CreateServiceNervousSystem(CREATE_SERVICE_NERVOUS_SYSTEM.clone())),
-        ..Default::default()
-    };
-
     static ref CREATE_SERVICE_NERVOUS_SYSTEM_PROPOSAL: Proposal = Proposal {
         title: Some("Create a Service Nervous System".to_string()),
         summary: "".to_string(),
@@ -12140,41 +12122,15 @@ lazy_static! {
         ..Default::default()
     };
 
-    static ref LEGACY_SNS_INIT_PAYLOAD: SnsInitPayload = SnsInitPayload::try_from(ExecutedCreateServiceNervousSystemProposal {
-        current_timestamp_seconds: DEFAULT_TEST_START_TIMESTAMP_SECONDS,
-         create_service_nervous_system: CREATE_SERVICE_NERVOUS_SYSTEM.clone(),
-         proposal_id: 1,
-         neurons_fund_participants: CF_PARTICIPANTS.clone(),
-         random_swap_start_time: GlobalTimeOfDay {
-             seconds_after_utc_midnight: Some(RANDOM_U64)
-         },
-         neurons_fund_participation_constraints: None,
-    }).unwrap();
-
     static ref SNS_INIT_PAYLOAD: SnsInitPayload = SnsInitPayload::try_from(ExecutedCreateServiceNervousSystemProposal {
         current_timestamp_seconds: DEFAULT_TEST_START_TIMESTAMP_SECONDS,
         create_service_nervous_system: CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING.clone(),
         proposal_id: 1,
-        neurons_fund_participants: vec![],
         random_swap_start_time: GlobalTimeOfDay {
             seconds_after_utc_midnight: Some(RANDOM_U64)
         },
         neurons_fund_participation_constraints: NEURONS_FUND_PARTICIPATION_CONSTRAINTS.clone(),
     }).unwrap();
-
-    static ref LEGACY_EXPECTED_DEPLOY_NEW_SNS_CALL: (ExpectedCallCanisterMethodCallArguments<'static>, CanisterCallResult) = (
-        ExpectedCallCanisterMethodCallArguments {
-            target: SNS_WASM_CANISTER_ID,
-            method_name: "deploy_new_sns",
-            request: Encode!(&DeployNewSnsRequest {
-                sns_init_payload: Some(LEGACY_SNS_INIT_PAYLOAD.clone())
-            }).unwrap(),
-        },
-        Ok(Encode!(&DeployNewSnsResponse {
-            error: None,
-            ..Default::default()
-        }).unwrap())
-    );
 
     static ref EXPECTED_DEPLOY_NEW_SNS_CALL: (ExpectedCallCanisterMethodCallArguments<'static>, CanisterCallResult) = (
         ExpectedCallCanisterMethodCallArguments {

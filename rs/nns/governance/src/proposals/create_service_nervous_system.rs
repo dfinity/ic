@@ -7,16 +7,13 @@ use ic_nervous_system_common::SECONDS_PER_DAY;
 use ic_nervous_system_proto::pb::v1::{Duration, GlobalTimeOfDay};
 use ic_nns_constants::IS_MATCHED_FUNDING_ENABLED;
 use ic_sns_init::pb::v1::{self as sns_init_pb, sns_init_payload, SnsInitPayload};
-use ic_sns_swap::pb::v1::{
-    self as sns_swap_pb, CfParticipant, NeuronsFundParticipationConstraints,
-};
+use ic_sns_swap::pb::v1::{self as sns_swap_pb, NeuronsFundParticipationConstraints};
 
 #[derive(Clone, Debug)]
 pub struct ExecutedCreateServiceNervousSystemProposal {
     pub current_timestamp_seconds: u64,
     pub create_service_nervous_system: CreateServiceNervousSystem,
     pub proposal_id: u64,
-    pub neurons_fund_participants: Vec<CfParticipant>,
     pub random_swap_start_time: GlobalTimeOfDay,
     /// Information about the Neurons' Fund participation needed by the Swap canister.
     pub neurons_fund_participation_constraints: Option<NeuronsFundParticipationConstraints>,
@@ -64,9 +61,6 @@ impl TryFrom<ExecutedCreateServiceNervousSystemProposal> for SnsInitPayload {
         result.swap_start_timestamp_seconds = swap_start_timestamp_seconds;
         result.swap_due_timestamp_seconds = swap_due_timestamp_seconds;
         result.neurons_fund_participation_constraints = neurons_fund_participation_constraints;
-
-        // This field should be set only by Swap itself.
-        result.neurons_fund_participants = None;
 
         result.validate_post_execution()?;
 
