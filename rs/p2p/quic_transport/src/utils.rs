@@ -58,11 +58,8 @@ pub(crate) async fn read_request(mut recv_stream: RecvStream) -> Result<Request<
     let raw_msg = recv_stream
         .read_to_end(MAX_MESSAGE_SIZE_BYTES)
         .await
-        .map_err(|_| RecvError::RecvRequestFailed {
-            reason: format!(
-                "Recv stream for request contains more than {} bytes",
-                MAX_MESSAGE_SIZE_BYTES
-            ),
+        .map_err(|err| RecvError::RecvRequestFailed {
+            reason: format!("Reading until end of stream failed with: {}", err),
         })?;
     let msg: WireRequest =
         bincode_config()
