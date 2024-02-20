@@ -5,7 +5,9 @@ use ic_ledger_core::Tokens;
 use ic_management_canister_types::CanisterInstallMode;
 use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
-    pocket_ic_helpers::{add_wasm_via_nns_proposal, install_canister, install_nns_canisters, nns},
+    pocket_ic_helpers::{
+        add_wasm_via_nns_proposal, install_canister, install_nns_canisters, nns, sns,
+    },
 };
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_constants::{self, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID};
@@ -35,8 +37,6 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     time::{Duration, SystemTime},
 };
-
-use ic_nervous_system_integration_tests::pocket_ic_helpers::sns;
 
 #[derive(Clone, Copy, Debug)]
 pub struct DirectParticipantConfig {

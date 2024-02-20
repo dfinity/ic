@@ -1459,7 +1459,7 @@ pub mod sns {
                 .unwrap();
             let result = match result {
                 WasmResult::Reply(result) => result,
-                WasmResult::Reject(s) => panic!("Call to get_derived_state failed: {:#?}", s),
+                WasmResult::Reject(s) => panic!("Call to finalize_swap failed: {:#?}", s),
             };
             Decode!(&result, FinalizeSwapResponse).unwrap()
         }
