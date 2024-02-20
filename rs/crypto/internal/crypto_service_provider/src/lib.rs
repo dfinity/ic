@@ -22,7 +22,7 @@ pub mod vault;
 pub use crate::vault::api::TlsHandshakeCspVault;
 pub use crate::vault::local_csp_vault::LocalCspVault;
 pub use crate::vault::remote_csp_vault::run_csp_vault_server;
-use crate::vault::remote_csp_vault::RemoteCspVault;
+pub use crate::vault::remote_csp_vault::RemoteCspVault;
 
 use crate::api::{
     CspIDkgProtocol, CspKeyGenerator, CspPublicAndSecretKeyStoreChecker, CspPublicKeyStore,
@@ -34,15 +34,13 @@ use crate::types::{CspPublicKey, ExternalPublicKeys};
 use crate::vault::api::{
     CspPublicKeyStoreError, CspVault, PksAndSksContainsErrors, ValidatePksAndSksError,
 };
-use ic_adapter_metrics::AdapterMetrics;
-use ic_config::crypto::{CryptoConfig, CspVaultType};
+use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
-use ic_logger::{info, new_logger, replica_logger::no_op_logger, ReplicaLogger};
+use ic_logger::{new_logger, replica_logger::no_op_logger, ReplicaLogger};
 use ic_types::crypto::CurrentNodePublicKeys;
 use key_id::KeyId;
 use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
-use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -164,73 +162,14 @@ impl Csp {
         logger: Option<ReplicaLogger>,
         metrics: Arc<CryptoMetrics>,
     ) -> Self {
-        match &config.csp_vault_type {
-            CspVaultType::InReplica => Self::new_with_in_replica_vault(config, logger, metrics),
-            CspVaultType::UnixSocket {
-                logic: logic_socket_path,
-                metrics: metrics_socket_path,
-            } => Self::new_with_unix_socket_vault(
-                logic_socket_path,
-                metrics_socket_path.clone(),
-                tokio_runtime_handle.expect("missing tokio runtime handle"),
-                config,
-                logger,
-                metrics,
-            ),
-        }
-    }
-
-    fn new_with_in_replica_vault(
-        config: &CryptoConfig,
-        logger: Option<ReplicaLogger>,
-        metrics: Arc<CryptoMetrics>,
-    ) -> Self {
         let logger = logger.unwrap_or_else(no_op_logger);
-        info!(
-            logger,
-            "Proceeding with an in-replica csp_vault, CryptoConfig: {:?}", config
-        );
-        let csp_vault =
-            LocalCspVault::new_in_dir(&config.crypto_root, metrics.clone(), new_logger!(&logger));
-        Csp::builder(csp_vault, logger, metrics).build()
-    }
-
-    fn new_with_unix_socket_vault(
-        socket_path: &Path,
-        metrics_socket_path: Option<PathBuf>,
-        rt_handle: tokio::runtime::Handle,
-        config: &CryptoConfig,
-        logger: Option<ReplicaLogger>,
-        metrics: Arc<CryptoMetrics>,
-    ) -> Self {
-        let logger = logger.unwrap_or_else(no_op_logger);
-        info!(
-            logger,
-            "Proceeding with a remote csp_vault, CryptoConfig: {:?}", config
-        );
-        if let (Some(metrics_uds_path), Some(global_metrics)) =
-            (metrics_socket_path, metrics.metrics_registry())
-        {
-            global_metrics.register_adapter(AdapterMetrics::new(
-                "cryptocsp",
-                metrics_uds_path,
-                rt_handle.clone(),
-            ));
-        }
-
-        let csp_vault = RemoteCspVault::new(
-            socket_path,
-            rt_handle,
+        let vault = vault::vault_from_config(
+            config,
+            tokio_runtime_handle,
             new_logger!(&logger),
-            metrics.clone(),
-        )
-        .unwrap_or_else(|e| {
-            panic!(
-                "Could not connect to CspVault at socket {:?}: {:?}",
-                socket_path, e
-            )
-        });
-        Csp::builder(csp_vault, logger, metrics).build()
+            Arc::clone(&metrics),
+        );
+        Csp::builder(vault, logger, metrics).build()
     }
 }
 
