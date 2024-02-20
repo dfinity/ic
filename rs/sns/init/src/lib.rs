@@ -3,6 +3,7 @@ use crate::pb::v1::{
     FractionalDeveloperVotingPower as FractionalDVP, NeuronsFundParticipants, SnsInitPayload,
     SwapDistribution,
 };
+use candid::Principal;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_index::InitArgs as LegacyIndexArg;
 use ic_icrc1_index_ng::{IndexArg, InitArg};
@@ -556,12 +557,13 @@ impl SnsInitPayload {
         let mut index_ng = self.index_ng_init_args(sns_canister_ids);
         let mut index = None;
 
+        // If Index-Ng has not yet been published, set index to Some(...) and `index_ng` to None.
         if let Some(ref deployed_version) = deployed_version {
             use std::fmt::Write;
 
             // TODO[NNS1-2856]: Remove this branch (needed for upgrade testing Index -> Index-Ng).
             // The constant is taken from https://dashboard.internetcomputer.org/proposal/127686
-            let current_mainnet_index_version =
+            const FINAL_NON_NG_INDEX_WASM_HASH: &str =
                 "234f489698681ec6b6f4b996c19d693d9cbb418fd52294348c1e704d0d8f98c6";
             let human_readable_index_version: String = deployed_version
                 .index_wasm_hash
@@ -570,7 +572,7 @@ impl SnsInitPayload {
                     let _ = write!(output, "{:02x}", x);
                     output
                 });
-            if human_readable_index_version == current_mainnet_index_version {
+            if human_readable_index_version == FINAL_NON_NG_INDEX_WASM_HASH {
                 // Use the old init arg format.
                 index = Some(self.index_init_args(sns_canister_ids));
                 index_ng = None;
@@ -697,7 +699,7 @@ impl SnsInitPayload {
     /// Construct the params used to initialize an SNS Index-Ng canister.
     fn index_ng_init_args(&self, sns_canister_ids: &SnsCanisterIds) -> Option<IndexArg> {
         Some(IndexArg::Init(InitArg {
-            ledger_id: sns_canister_ids.ledger.into(),
+            ledger_id: Principal::from(sns_canister_ids.ledger),
         }))
     }
 

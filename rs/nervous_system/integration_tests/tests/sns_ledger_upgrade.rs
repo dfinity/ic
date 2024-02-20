@@ -46,28 +46,30 @@ pub struct DirectParticipantConfig {
 fn test_sns_ledger_upgrade_with_params(
     create_service_nervous_system_proposal: CreateServiceNervousSystem,
     direct_participant_principal_ids: BTreeMap<PrincipalId, DirectParticipantConfig>,
-    expect_sns_ledger_to_spawn_archives: bool,
-    upgrade_sns_wasm: bool,
 ) {
     let swap_parameters = create_service_nervous_system_proposal
         .swap_parameters
         .clone()
         .unwrap();
+
     let min_participant_icp_e8s = swap_parameters
         .minimum_participant_icp
         .unwrap()
         .e8s
         .unwrap();
+
     let max_direct_participation_icp_e8s = swap_parameters
         .maximum_direct_participation_icp
         .unwrap()
         .e8s
         .unwrap();
+
     let dapp_canister_ids: Vec<_> = create_service_nervous_system_proposal
         .dapp_canisters
         .iter()
         .map(|canister| CanisterId::unchecked_from_principal(canister.id.unwrap()))
         .collect();
+
     let transaction_fee_sns_e8s = create_service_nervous_system_proposal
         .ledger_parameters
         .as_ref()
@@ -118,8 +120,7 @@ fn test_sns_ledger_upgrade_with_params(
             .map(|(account_identifier, balance_icp, _)| (*account_identifier, *balance_icp))
             .collect();
 
-        // Start with the mainnet SNS-W wasm if and only if `upgrade_sns_wasm`.
-        let with_mainnet_sns_wasm_wasm = upgrade_sns_wasm;
+        let with_mainnet_sns_wasm_wasm = true;
         let with_mainnet_ledger_wasms = true;
         let (nns_neuron_controller_principal_ids, sns_wasms) = install_nns_canisters(
             &pocket_ic,
@@ -156,12 +157,12 @@ fn test_sns_ledger_upgrade_with_params(
     // in `SnsInitPayload` validation.
     //
     // Normally, the order should be (Index, Ledger, Archive, SNS-W) to avoid breaking changes in
-    // one th einit args of one of the (Index, Ledger, Archive) canisters to prevent SNS deployment.
+    // one the init args of one of the (Index, Ledger, Archive) canisters to prevent SNS deployment.
     //
     // The special order (SNS-W, Index, Ledger, Archive) works so long as we have the
     // 234f489698681ec6b6f4b996c19d693d9cbb418fd52294348c1e704d0d8f98c6 version of Index, for which
     // there is a special code path in `SnsInitPayload.build_canister_payloads`.
-    if upgrade_sns_wasm {
+    {
         let pre_upgrade_module_hash = pocket_ic
             .canister_status(SNS_WASM_CANISTER_ID.into(), Some(ROOT_CANISTER_ID.get().0))
             .unwrap()
@@ -188,18 +189,18 @@ fn test_sns_ledger_upgrade_with_params(
         )
         .unwrap();
 
-        // Check W1: The upgrade proposal did not fail.
+        // SNS-W check 1: The upgrade proposal did not fail.
         assert_eq!(proposal_info.failure_reason, None);
 
-        // Check W2: The upgrade proposal succeeded.
+        // SNS-W check 2: The upgrade proposal succeeded.
         assert!(proposal_info.executed_timestamp_seconds > 0);
 
-        pocket_ic.advance_time(Duration::from_millis(1000));
+        pocket_ic.advance_time(Duration::from_secs(1));
         for _ in 0..10 {
             pocket_ic.tick();
         }
 
-        // Check W3: WASM module hash must change.
+        // SNS-W check 3: WASM module hash must change.
         let post_upgrade_module_hash = pocket_ic
             .canister_status(SNS_WASM_CANISTER_ID.into(), Some(ROOT_CANISTER_ID.get().0))
             .unwrap()
@@ -259,40 +260,40 @@ fn test_sns_ledger_upgrade_with_params(
     let num_transactions_needed_to_spawn_first_archive = 2000_u64;
 
     // Testing the Archive canister requires that it can be spawned quickly enough.
-    let archive_canister_id = if expect_sns_ledger_to_spawn_archives {
-        (0..num_transactions_needed_to_spawn_first_archive).find_map(|i| {
-            let mut archives = sns::ledger::archives(&pocket_ic, sns_ledger_canister_id);
-            if let Some(archive) = archives.pop() {
-                return Some(PrincipalId::from(archive.canister_id));
-            }
+    let archive_canister_id = {
+        // Generate a bunch of SNS token transactions.
+        (0..num_transactions_needed_to_spawn_first_archive)
+            .find_map(|i| {
+                let mut archives = sns::ledger::archives(&pocket_ic, sns_ledger_canister_id);
+                if let Some(archive) = archives.pop() {
+                    return Some(PrincipalId::from(archive.canister_id));
+                }
 
-            let user_principal_id = PrincipalId::new_user_test_id(i);
-            let direct_participant_swap_subaccount =
-                Some(principal_to_subaccount(&user_principal_id));
-            let direct_participant_swap_account = Account {
-                owner: swap_canister_id.0,
-                subaccount: direct_participant_swap_subaccount,
-            };
-            let _block_height = sns::ledger::icrc1_transfer(
-                &pocket_ic,
-                sns_ledger_canister_id,
-                sns_governance_canister_id,
-                TransferArg {
-                    from_subaccount: None,
-                    to: direct_participant_swap_account,
-                    fee: None,
-                    created_at_time: None,
-                    memo: None,
-                    amount: Nat::from(100_000_u64), // mint an arbitrary amount of SNS tokens
-                },
-            )
-            .unwrap();
-            None
-        })
-    } else {
-        None
+                let user_principal_id = PrincipalId::new_user_test_id(i);
+                let direct_participant_swap_subaccount =
+                    Some(principal_to_subaccount(&user_principal_id));
+                let direct_participant_swap_account = Account {
+                    owner: swap_canister_id.0,
+                    subaccount: direct_participant_swap_subaccount,
+                };
+                let _block_height = sns::ledger::icrc1_transfer(
+                    &pocket_ic,
+                    sns_ledger_canister_id,
+                    sns_governance_canister_id,
+                    TransferArg {
+                        from_subaccount: None,
+                        to: direct_participant_swap_account,
+                        fee: None,
+                        created_at_time: None,
+                        memo: None,
+                        amount: Nat::from(100_000_u64), // mint an arbitrary amount of SNS tokens
+                    },
+                )
+                .unwrap();
+                None
+            })
+            .unwrap()
     };
-
     // A local helper function that checks whether archived and non-archived blocks add up.
     let check_blocks = |label: &str| {
         let all_blocks: BTreeSet<_> =
@@ -318,14 +319,12 @@ fn test_sns_ledger_upgrade_with_params(
             all_blocks,
             non_archived_blocks
         );
-        if expect_sns_ledger_to_spawn_archives {
-            assert!(
-                non_archived_blocks.len() < all_blocks.len(),
-                "Some blocks should be archived.\nall_blocks = {:?}\nnon_archived_blocks = {:?}",
-                all_blocks,
-                non_archived_blocks
-            );
-        }
+        assert!(
+            non_archived_blocks.len() < all_blocks.len(),
+            "Some blocks should be archived.\nall_blocks = {:?}\nnon_archived_blocks = {:?}",
+            all_blocks,
+            non_archived_blocks
+        );
         println!("{} check passed!", label);
     };
 
@@ -351,7 +350,7 @@ fn test_sns_ledger_upgrade_with_params(
     }
 
     // Upgrade; one canister at a time.
-    let trigger_actual_upgrade = || {
+    let upgrade_sns_to_next_version = || {
         let proposal_result = sns::governance::propose_and_wait(
             &pocket_ic,
             sns_governance_canister_id,
@@ -369,7 +368,7 @@ fn test_sns_ledger_upgrade_with_params(
         .unwrap();
         assert_eq!(proposal_result.failure_reason, None);
 
-        pocket_ic.advance_time(Duration::from_millis(1000));
+        pocket_ic.advance_time(Duration::from_secs(1));
         pocket_ic.tick();
     };
 
@@ -383,9 +382,9 @@ fn test_sns_ledger_upgrade_with_params(
             .unwrap()
             .module_hash;
 
-        trigger_actual_upgrade();
+        upgrade_sns_to_next_version();
 
-        // Check I1: WASM module hash must change.
+        // Index-Ng check 1: WASM module hash must change.
         let post_upgrade_module_hash = pocket_ic
             .canister_status(
                 index_canister_id.into(),
@@ -399,20 +398,20 @@ fn test_sns_ledger_upgrade_with_params(
             pre_upgrade_module_hash
         );
 
-        // Check I2: The Index canister still recognised our Ledger canitser.
+        // Index-Ng check 2: The Index canister still recognised our Ledger canitser.
         assert_eq!(
             sns::index_ng::ledger_id(&pocket_ic, index_canister_id),
             sns_ledger_canister_id
         );
 
-        // Check I3: Index and Ledger sync.
+        // Index-Ng check 3: Index and Ledger sync.
         sns::wait_until_ledger_and_index_sync_is_completed(
             &pocket_ic,
             sns_ledger_canister_id,
             index_canister_id,
         );
 
-        // Check I4: The same blocks can be observed via Index and Ledger.
+        // Index-Ng check 4: The same blocks can be observed via Index and Ledger.
         sns::assert_ledger_index_parity(&pocket_ic, sns_ledger_canister_id, index_canister_id);
     }
 
@@ -437,9 +436,9 @@ fn test_sns_ledger_upgrade_with_params(
 
         check_blocks("SNS Ledger pre_upgrade");
 
-        trigger_actual_upgrade();
+        upgrade_sns_to_next_version();
 
-        // Check L1: WASM module hash must change.
+        // Ledger check 1: WASM module hash must change.
         let post_upgrade_module_hash = pocket_ic
             .canister_status(
                 sns_ledger_canister_id.into(),
@@ -453,15 +452,16 @@ fn test_sns_ledger_upgrade_with_params(
             pre_upgrade_module_hash
         );
 
-        // Check L2: We get the expected state in the archive(s).
+        // Ledger check 2: We get the expected state in the archive(s).
         check_blocks("SNS Ledger post_upgrade");
 
-        // Check L3: We get the expected number of blocks.
+        // Ledger check 3: We get the same number of blocks that we had before the upgrade (because
+        // no transactions have happened after the upgrade).
         let post_upgrade_chain_length =
             sns::ledger::get_blocks(&pocket_ic, sns_ledger_canister_id, 0_u64, 1_u64).chain_length;
         assert_eq!(post_upgrade_chain_length, pre_upgrade_chain_length);
 
-        // Check L4: Total supply remains unchanged.
+        // Ledger check 4: Total supply remains unchanged.
         let total_supply_sns_e8s =
             sns::ledger::icrc1_total_supply(&pocket_ic, sns_ledger_canister_id)
                 .0
@@ -469,10 +469,12 @@ fn test_sns_ledger_upgrade_with_params(
                 .unwrap();
         assert_eq!(total_supply_sns_e8s, original_total_supply_sns_e8s);
 
-        // Check L5: ICRC-2 endpoints
-        let (wealthy_user_principal_id, wealthy_user) = {
+        // Ledger check 5: ICRC-2 endpoints. First we "create" a wealthy user by minting tokens into
+        // their account. Second, we use the wealthy user's credentials to test a pre-approved
+        // (ICRC-2) transaction.
+        let (wealthy_user_principal_id, wealthy_user_account) = {
             let wealthy_user_principal_id = PrincipalId::new_user_test_id(1_000_001);
-            let wealthy_user = Account {
+            let wealthy_user_account = Account {
                 owner: wealthy_user_principal_id.0,
                 subaccount: None,
             };
@@ -483,7 +485,7 @@ fn test_sns_ledger_upgrade_with_params(
                 sns_governance_canister_id,
                 TransferArg {
                     from_subaccount: None,
-                    to: wealthy_user,
+                    to: wealthy_user_account,
                     fee: None,
                     created_at_time: None,
                     memo: None,
@@ -491,7 +493,7 @@ fn test_sns_ledger_upgrade_with_params(
                 },
             )
             .unwrap();
-            (wealthy_user_principal_id, wealthy_user)
+            (wealthy_user_principal_id, wealthy_user_account)
         };
         let current_ic_unix_time_nanos = pocket_ic
             .get_time()
@@ -508,7 +510,7 @@ fn test_sns_ledger_upgrade_with_params(
             sns_ledger_canister_id,
             wealthy_user_principal_id,
             ApproveArgs {
-                from_subaccount: wealthy_user.subaccount,
+                from_subaccount: wealthy_user_account.subaccount,
                 amount: Nat::from(100_000_u64),
                 expected_allowance: Some(Nat::from(0u8)),
                 expires_at: Some(current_ic_unix_time_nanos + 100_000_000_000),
@@ -524,7 +526,7 @@ fn test_sns_ledger_upgrade_with_params(
             sns_ledger_canister_id,
             PrincipalId::new_anonymous(),
             AllowanceArgs {
-                account: wealthy_user,
+                account: wealthy_user_account,
                 spender,
             },
         );
@@ -535,7 +537,7 @@ fn test_sns_ledger_upgrade_with_params(
             spender_principal_id,
             TransferFromArgs {
                 spender_subaccount: None,
-                from: wealthy_user,
+                from: wealthy_user_account,
                 to: spender,
                 amount: Nat::from(100_000_u64 - transaction_fee_sns_e8s),
                 fee: Some(Nat::from(transaction_fee_sns_e8s)),
@@ -547,9 +549,7 @@ fn test_sns_ledger_upgrade_with_params(
     }
 
     // Upgrade SNS Archive
-    if expect_sns_ledger_to_spawn_archives {
-        let archive_canister_id = archive_canister_id.unwrap();
-
+    {
         let pre_upgrade_module_hash = pocket_ic
             .canister_status(
                 archive_canister_id.into(),
@@ -560,9 +560,9 @@ fn test_sns_ledger_upgrade_with_params(
 
         check_blocks("SNS Archive pre_upgrade");
 
-        trigger_actual_upgrade();
+        upgrade_sns_to_next_version();
 
-        // Check L1: WASM module hash must change.
+        // Archive check 1: WASM module hash must change.
         let post_upgrade_module_hash = pocket_ic
             .canister_status(
                 archive_canister_id.into(),
@@ -576,13 +576,13 @@ fn test_sns_ledger_upgrade_with_params(
             pre_upgrade_module_hash
         );
 
-        // Check L2: We get the expected state in the archive(s).
+        // Archive check 2: We get the expected state in the archive(s).
         check_blocks("SNS Archive post_upgrade");
     }
 }
 
 #[test]
-fn test_sns_ledger_upgrade_wo_archives_followed_by_sns_w_upgrade() {
+fn test_sns_ledger_upgrade() {
     let create_service_nervous_system = CreateServiceNervousSystemBuilder::default()
         .with_governance_parameters_neuron_minimum_dissolve_delay_to_vote(ONE_MONTH_SECONDS * 6)
         .with_one_developer_neuron(
@@ -592,19 +592,5 @@ fn test_sns_ledger_upgrade_wo_archives_followed_by_sns_w_upgrade() {
             0,
         )
         .build();
-    test_sns_ledger_upgrade_with_params(create_service_nervous_system, btreemap! {}, false, true)
-}
-
-#[test]
-fn test_sns_ledger_upgrade_with_archive() {
-    let create_service_nervous_system = CreateServiceNervousSystemBuilder::default()
-        .with_governance_parameters_neuron_minimum_dissolve_delay_to_vote(ONE_MONTH_SECONDS * 6)
-        .with_one_developer_neuron(
-            PrincipalId::new_user_test_id(830947),
-            ONE_MONTH_SECONDS * 6,
-            756575,
-            0,
-        )
-        .build();
-    test_sns_ledger_upgrade_with_params(create_service_nervous_system, btreemap! {}, true, false)
+    test_sns_ledger_upgrade_with_params(create_service_nervous_system, btreemap! {})
 }
