@@ -412,8 +412,9 @@ pub mod internal {
                 fake_registry_client as Arc<dyn RegistryClient>
             });
 
-            let crypto_component = CryptoComponent::new_with_csp_and_fake_node_id(
+            let crypto_component = CryptoComponent::new_for_test(
                 csp,
+                local_vault,
                 logger,
                 registry_client,
                 node_id,

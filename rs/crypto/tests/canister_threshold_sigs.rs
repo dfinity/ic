@@ -18,6 +18,7 @@ use ic_crypto_test_utils_canister_threshold_sigs::{
     CanisterThresholdSigTestEnvironment, IntoBuilder,
 };
 use ic_crypto_test_utils_canister_threshold_sigs::{setup_masked_random_params, IDkgParticipants};
+use ic_crypto_test_utils_local_csp_vault::MockLocalCspVault;
 use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
 use ic_interfaces::crypto::{IDkgProtocol, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner};
 use ic_types::crypto::canister_threshold_sig::error::{
@@ -3474,8 +3475,9 @@ mod verify_dealing_private {
             let metrics = MetricsRegistry::new();
             let crypto_metrics = Arc::new(CryptoMetrics::new(Some(&metrics)));
             let time_source = None;
-            let crypto = CryptoComponentImpl::new_with_csp_and_fake_node_id(
+            let crypto = CryptoComponentImpl::new_for_test(
                 csp,
+                Arc::new(MockLocalCspVault::new()),
                 logger,
                 registry_client,
                 node_id,
