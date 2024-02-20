@@ -4302,7 +4302,6 @@ impl Governance {
                 current_timestamp_seconds,
                 create_service_nervous_system: create_service_nervous_system.clone(),
                 proposal_id: proposal_id.id,
-                neurons_fund_participants: vec![], // deprecated field
                 random_swap_start_time: self.randomly_pick_swap_start(),
                 neurons_fund_participation_constraints,
             };

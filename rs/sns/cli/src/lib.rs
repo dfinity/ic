@@ -284,7 +284,6 @@ impl DeployTestflightArgs {
                             .unwrap()
                             .as_secs(),
                         create_service_nervous_system,
-                        neurons_fund_participants: vec![],
                         random_swap_start_time: GlobalTimeOfDay {
                             seconds_after_utc_midnight: Some(0),
                         },

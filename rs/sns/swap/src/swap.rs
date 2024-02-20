@@ -3734,7 +3734,6 @@ mod tests {
         NeuronsFundParticipants, Params,
     };
     use crate::swap_builder::SwapBuilder;
-    use candid::Principal;
     use ic_nervous_system_common::{E8, SECONDS_PER_DAY};
     use pretty_assertions::assert_eq;
     use proptest::prelude::proptest;
@@ -4382,71 +4381,20 @@ mod tests {
     proptest! {
         #[test]
         fn test_ticket_ids_unique(pids in proptest::collection::vec(0..u64::MAX, 0..1000)) {
-            let mut swap = Swap {
-                lifecycle: Lifecycle::Open as i32,
-                init: Some(Init {
-                    nns_governance_canister_id: Principal::anonymous().to_string(),
-                    sns_governance_canister_id: Principal::anonymous().to_string(),
-                    sns_ledger_canister_id: Principal::anonymous().to_string(),
-                    icp_ledger_canister_id: Principal::anonymous().to_string(),
-                    sns_root_canister_id: Principal::anonymous().to_string(),
-                    fallback_controller_principal_ids: vec![Principal::anonymous().to_string()],
-                    transaction_fee_e8s: Some(10_000),
-                    neuron_minimum_stake_e8s: Some(10_010_000),
-                    confirmation_text: None,
-                    restricted_countries: None,
-                    min_participants: None, // TODO[NNS1-2339]
-                    min_icp_e8s: None, // TODO[NNS1-2339]
-                    max_icp_e8s: None, // TODO[NNS1-2339]
-                    min_direct_participation_icp_e8s: None, // TODO[NNS1-2339]
-                    max_direct_participation_icp_e8s: None, // TODO[NNS1-2339]
-                    min_participant_icp_e8s: None, // TODO[NNS1-2339]
-                    max_participant_icp_e8s: None, // TODO[NNS1-2339]
-                    swap_start_timestamp_seconds: None, // TODO[NNS1-2339]
-                    swap_due_timestamp_seconds: None, // TODO[NNS1-2339]
-                    sns_token_e8s: None, // TODO[NNS1-2339]
-                    neuron_basket_construction_parameters: None, // TODO[NNS1-2339]
-                    nns_proposal_id: None, // TODO[NNS1-2339]
-                    neurons_fund_participants: None, // TODO[NNS1-2339]
-                    should_auto_finalize: Some(true),
-                    neurons_fund_participation_constraints: None,
-                    neurons_fund_participation: None,
-                }),
-                params: Some(Params {
-                    min_participants: 1,
-                    min_icp_e8s: 10_010_000,
-                    max_icp_e8s: 20_000_000,
-                    min_direct_participation_icp_e8s: Some(10_010_000),
-                    max_direct_participation_icp_e8s: Some(20_000_000),
-                    min_participant_icp_e8s: 10_000,
-                    max_participant_icp_e8s: 1_000_000,
-                    swap_due_timestamp_seconds: 0,
-                    sns_token_e8s: 20_000_000,
-                    neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
-                        count: 1,
-                        dissolve_delay_interval_seconds: 10,
-                    }),
-                    sale_delay_seconds: Some(10),
-                }),
-                cf_participants: vec![],
-                buyers: BTreeMap::new(),
-                neuron_recipes: vec![],
-                open_sns_token_swap_proposal_id: Some(0),
-                finalize_swap_in_progress: Some(false),
-                decentralization_sale_open_timestamp_seconds: Some(1),
-                decentralization_swap_termination_timestamp_seconds: None,
-                next_ticket_id: Some(0),
-                purge_old_tickets_last_completion_timestamp_nanoseconds: Some(0),
-                purge_old_tickets_next_principal: Some(FIRST_PRINCIPAL_BYTES.to_vec()),
-                already_tried_to_auto_finalize: Some(false),
-                auto_finalize_swap_response: None,
-                direct_participation_icp_e8s: None,
-                neurons_fund_participation_icp_e8s: None,
-            };
+            let mut swap = SwapBuilder::new()
+                .with_lifecycle(Lifecycle::Open)
+                .with_min_max_participant_icp(10_000, 1_000_000)
+                .with_min_max_direct_participation(10_010_000, 20_000_000)
+                .build();
+
             let mut ticket_ids = HashSet::new();
             for pid in pids {
                 let principal = PrincipalId::new_user_test_id(pid);
-                let ticket = match swap.new_sale_ticket(&NewSaleTicketRequest { amount_icp_e8s: 10_000, subaccount: None}, principal, 0).result.unwrap() {
+                let request = NewSaleTicketRequest {
+                    amount_icp_e8s: 10_000,
+                    subaccount: None,
+                };
+                let ticket = match swap.new_sale_ticket(&request, principal, 0).result.unwrap() {
                     new_sale_ticket_response::Result::Ok(Ok { ticket }) => ticket.unwrap(),
                     new_sale_ticket_response::Result::Err(e) => panic!("{:?}", e),
                 };
@@ -4647,67 +4595,13 @@ mod tests {
         const MAX_NUMBER_TO_INSPECT: u64 = 2;
 
         let min_participant_icp_e8s = 1;
-        let mut swap = Swap {
-            lifecycle: Lifecycle::Open as i32,
-            init: Some(Init {
-                nns_governance_canister_id: PrincipalId::new_anonymous().to_string(),
-                sns_governance_canister_id: PrincipalId::new_anonymous().to_string(),
-                sns_ledger_canister_id: PrincipalId::new_anonymous().to_string(),
-                icp_ledger_canister_id: PrincipalId::new_anonymous().to_string(),
-                sns_root_canister_id: PrincipalId::new_anonymous().to_string(),
-                fallback_controller_principal_ids: vec![PrincipalId::new_anonymous().to_string()],
-                transaction_fee_e8s: Some(DEFAULT_TRANSFER_FEE.get_e8s()),
-                neuron_minimum_stake_e8s: Some(0),
-                confirmation_text: None,
-                restricted_countries: None,
-                min_participants: None,
-                min_icp_e8s: None,                           // TODO[NNS1-2339]
-                max_icp_e8s: None,                           // TODO[NNS1-2339]
-                min_direct_participation_icp_e8s: None,      // TODO[NNS1-2339]
-                max_direct_participation_icp_e8s: None,      // TODO[NNS1-2339]
-                min_participant_icp_e8s: None,               // TODO[NNS1-2339]
-                max_participant_icp_e8s: None,               // TODO[NNS1-2339]
-                swap_start_timestamp_seconds: None,          // TODO[NNS1-2339]
-                swap_due_timestamp_seconds: None,            // TODO[NNS1-2339]
-                sns_token_e8s: None,                         // TODO[NNS1-2339]
-                neuron_basket_construction_parameters: None, // TODO[NNS1-2339]
-                nns_proposal_id: None,                       // TODO[NNS1-2339]
-                neurons_fund_participants: None,             // TODO[NNS1-2339]
-                should_auto_finalize: Some(true),
-                neurons_fund_participation_constraints: None,
-                neurons_fund_participation: None,
-            }),
-            params: Some(Params {
-                min_participants: 0,
-                min_icp_e8s: 1,
-                max_icp_e8s: 10,
-                min_direct_participation_icp_e8s: Some(1),
-                max_direct_participation_icp_e8s: Some(10),
-                min_participant_icp_e8s,
-                max_participant_icp_e8s: 1,
-                swap_due_timestamp_seconds: 10_000_000,
-                sns_token_e8s: 10_000_000,
-                neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
-                    count: 1,
-                    dissolve_delay_interval_seconds: 1,
-                }),
-                sale_delay_seconds: Some(0),
-            }),
-            cf_participants: vec![],
-            buyers: BTreeMap::new(),
-            neuron_recipes: vec![],
-            open_sns_token_swap_proposal_id: Some(0),
-            finalize_swap_in_progress: Some(false),
-            decentralization_sale_open_timestamp_seconds: Some(10),
-            decentralization_swap_termination_timestamp_seconds: None,
-            next_ticket_id: Some(0),
-            purge_old_tickets_last_completion_timestamp_nanoseconds: Some(0),
-            purge_old_tickets_next_principal: Some(FIRST_PRINCIPAL_BYTES.to_vec()),
-            already_tried_to_auto_finalize: Some(false),
-            auto_finalize_swap_response: None,
-            direct_participation_icp_e8s: None,
-            neurons_fund_participation_icp_e8s: None,
-        };
+
+        let mut swap = SwapBuilder::new()
+            .with_lifecycle(Lifecycle::Open)
+            .with_min_max_participant_icp(min_participant_icp_e8s, 1)
+            .with_min_max_direct_participation(1, 10)
+            .with_swap_start_due(None, Some(10_000_000))
+            .build();
 
         let try_purge_old_tickets = |sale: &mut Swap, time: u64| loop {
             match sale.try_purge_old_tickets(
