@@ -20,10 +20,10 @@ use ic_test_utilities::{
     state::SystemStateBuilder,
     types::ids::{call_context_test_id, canister_test_id, subnet_test_id, user_test_id},
 };
-use ic_test_utilities_time::mock_time;
 use ic_types::{
     messages::{CallContextId, CallbackId, RejectContext, RequestMetadata},
     methods::SystemMethod,
+    time::UNIX_EPOCH,
     ComputeAllocation, Cycles, MemoryAllocation, NumInstructions, PrincipalId, Time,
 };
 use maplit::btreemap;
@@ -79,7 +79,7 @@ pub struct ApiTypeBuilder;
 impl ApiTypeBuilder {
     pub fn build_update_api() -> ApiType {
         ApiType::update(
-            mock_time(),
+            UNIX_EPOCH,
             vec![],
             Cycles::zero(),
             user_test_id(1).get(),
@@ -91,14 +91,14 @@ impl ApiTypeBuilder {
         ApiType::system_task(
             IC_00.get(),
             SystemMethod::CanisterHeartbeat,
-            mock_time(),
+            UNIX_EPOCH,
             CallContextId::from(1),
         )
     }
 
     pub fn build_reply_api(incoming_cycles: Cycles) -> ApiType {
         ApiType::reply_callback(
-            mock_time(),
+            UNIX_EPOCH,
             PrincipalId::new_anonymous(),
             vec![],
             incoming_cycles,
@@ -111,7 +111,7 @@ impl ApiTypeBuilder {
 
     pub fn build_reject_api(reject_context: RejectContext) -> ApiType {
         ApiType::reject_callback(
-            mock_time(),
+            UNIX_EPOCH,
             PrincipalId::new_anonymous(),
             reject_context,
             Cycles::zero(),
@@ -134,7 +134,7 @@ pub fn get_system_api(
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         execution_parameters().compute_allocation,
-        RequestMetadata::new(0, mock_time()),
+        RequestMetadata::new(0, UNIX_EPOCH),
     );
     SystemApiImpl::new(
         api_type,
@@ -166,7 +166,7 @@ pub fn get_system_state() -> SystemState {
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5)),
             Cycles::new(50),
             Time::from_nanos_since_unix_epoch(0),
-            RequestMetadata::new(0, mock_time()),
+            RequestMetadata::new(0, UNIX_EPOCH),
         );
     system_state
 }

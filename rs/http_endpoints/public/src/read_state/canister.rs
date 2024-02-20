@@ -437,8 +437,7 @@ mod test {
         state::insert_dummy_canister,
         types::ids::{canister_test_id, subnet_test_id, user_test_id},
     };
-    use ic_test_utilities_time::mock_time;
-    use ic_types::batch::RawQueryStats;
+    use ic_types::{batch::RawQueryStats, time::UNIX_EPOCH};
     use ic_validator::CanisterIdSet;
     use std::collections::BTreeMap;
 
@@ -554,7 +553,7 @@ mod test {
     fn test_verify_path() {
         let subnet_id = subnet_test_id(1);
         let mut metadata = SystemMetadata::new(subnet_id, SubnetType::Application);
-        metadata.batch_time = mock_time();
+        metadata.batch_time = UNIX_EPOCH;
         let state = ReplicatedState::new_from_checkpoint(
             BTreeMap::new(),
             metadata,

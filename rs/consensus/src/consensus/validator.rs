@@ -2046,42 +2046,42 @@ pub mod test {
         assert!(!ValidationContext {
             registry_version: RegistryVersion::from(10),
             certified_height: Height::from(5),
-            time: ic_test_utilities_time::mock_time(),
+            time: ic_types::time::UNIX_EPOCH,
         }
         .greater_or_equal(&ValidationContext {
             registry_version: RegistryVersion::from(11),
             certified_height: Height::from(4),
-            time: ic_test_utilities_time::mock_time(),
+            time: ic_types::time::UNIX_EPOCH,
         }),);
         assert!(ValidationContext {
             registry_version: RegistryVersion::from(10),
             certified_height: Height::from(5),
-            time: ic_test_utilities_time::mock_time(),
+            time: ic_types::time::UNIX_EPOCH,
         }
         .greater_or_equal(&ValidationContext {
             registry_version: RegistryVersion::from(10),
             certified_height: Height::from(5),
-            time: ic_test_utilities_time::mock_time(),
+            time: ic_types::time::UNIX_EPOCH,
         }),);
         assert!(ValidationContext {
             registry_version: RegistryVersion::from(11),
             certified_height: Height::from(5),
-            time: ic_test_utilities_time::mock_time(),
+            time: ic_types::time::UNIX_EPOCH,
         }
         .greater_or_equal(&ValidationContext {
             registry_version: RegistryVersion::from(11),
             certified_height: Height::from(4),
-            time: ic_test_utilities_time::mock_time(),
+            time: ic_types::time::UNIX_EPOCH,
         }),);
         assert!(!ValidationContext {
             registry_version: RegistryVersion::from(10),
             certified_height: Height::from(5),
-            time: ic_test_utilities_time::mock_time(),
+            time: ic_types::time::UNIX_EPOCH,
         }
         .greater_or_equal(&ValidationContext {
             registry_version: RegistryVersion::from(11),
             certified_height: Height::from(6),
-            time: ic_test_utilities_time::mock_time(),
+            time: ic_types::time::UNIX_EPOCH,
         }),);
     }
 

@@ -38,7 +38,6 @@ use ic_test_utilities_metrics::{
     fetch_counter, fetch_gauge, fetch_gauge_vec, fetch_histogram_stats, fetch_int_gauge,
     fetch_int_gauge_vec, metric_vec, HistogramStats,
 };
-use ic_test_utilities_time::mock_time;
 use ic_types::methods::SystemMethod;
 use ic_types::time::expiry_time_from_now;
 use ic_types::{
@@ -513,20 +512,20 @@ fn induct_messages_on_same_subnet_respects_memory_limits() {
             .receiver(source)
             .build();
         source_canister
-            .push_output_request(self_request.clone().into(), mock_time())
+            .push_output_request(self_request.clone().into(), UNIX_EPOCH)
             .unwrap();
         source_canister
-            .push_output_request(self_request.into(), mock_time())
+            .push_output_request(self_request.into(), UNIX_EPOCH)
             .unwrap();
         let other_request = RequestBuilder::default()
             .sender(source)
             .receiver(dest)
             .build();
         source_canister
-            .push_output_request(other_request.clone().into(), mock_time())
+            .push_output_request(other_request.clone().into(), UNIX_EPOCH)
             .unwrap();
         source_canister
-            .push_output_request(other_request.into(), mock_time())
+            .push_output_request(other_request.into(), UNIX_EPOCH)
             .unwrap();
         test.induct_messages_on_same_subnet();
 
@@ -1865,7 +1864,7 @@ fn scheduler_executes_postponed_raw_rand_requests() {
         .push_raw_rand_request(
             RequestBuilder::new().sender(canister_id).build(),
             last_round,
-            mock_time(),
+            UNIX_EPOCH,
         );
     assert_eq!(
         test.state()
@@ -5065,7 +5064,7 @@ fn clean_in_progress_raw_rand_request_from_subnet_call_context_manager() {
         .push_raw_rand_request(
             RequestBuilder::new().sender(canister_id).build(),
             last_round,
-            mock_time(),
+            UNIX_EPOCH,
         );
     // `SubnetCallContextManager` contains one `RawRandContext`.
     assert_eq!(

@@ -61,7 +61,7 @@ mod tests {
     use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_test_utilities_time::mock_time;
+    use ic_types::time::UNIX_EPOCH;
 
     #[test]
     fn test_artifact_pool_config() {
@@ -78,7 +78,7 @@ mod tests {
                     ingress_pool.insert(UnvalidatedArtifact {
                         message: ingress_msg,
                         peer_id: node_test_id(0),
-                        timestamp: mock_time(),
+                        timestamp: UNIX_EPOCH,
                     })
                 }
                 assert_eq!(ingress_pool.unvalidated().size(), 1023);

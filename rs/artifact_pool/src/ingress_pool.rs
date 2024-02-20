@@ -477,8 +477,8 @@ mod tests {
     use ic_interfaces::time_source::TimeSource;
     use ic_test_utilities::{types::ids::node_test_id, types::messages::SignedIngressBuilder};
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_test_utilities_time::mock_time;
     use ic_test_utilities_time::FastForwardTimeSource;
+    use ic_types::time::UNIX_EPOCH;
     use rand::Rng;
     use std::time::Duration;
 
@@ -494,7 +494,7 @@ mod tests {
                 UnvalidatedIngressArtifact {
                     message: IngressPoolObject::from(ingress_msg),
                     peer_id: node_test_id(0),
-                    timestamp: mock_time(),
+                    timestamp: UNIX_EPOCH,
                 },
             );
             assert_eq!(ingress_pool.size(), 1);
@@ -522,7 +522,7 @@ mod tests {
                     message_id.clone(),
                     ValidatedIngressArtifact {
                         msg: IngressPoolObject::from(ingress_msg),
-                        timestamp: mock_time(),
+                        timestamp: UNIX_EPOCH,
                     },
                 );
                 assert!(ingress_pool.contains(&message_id));
@@ -551,7 +551,7 @@ mod tests {
                     message_id,
                     ValidatedIngressArtifact {
                         msg: IngressPoolObject::from(ingress_msg),
-                        timestamp: mock_time(),
+                        timestamp: UNIX_EPOCH,
                     },
                 );
 
@@ -616,7 +616,7 @@ mod tests {
                         message_id.clone(),
                         ValidatedIngressArtifact {
                             msg: IngressPoolObject::from(ingress_msg),
-                            timestamp: mock_time(),
+                            timestamp: UNIX_EPOCH,
                         },
                     );
                 }
@@ -847,7 +847,7 @@ mod tests {
         insert_validated_artifact_with_timestamps(
             ingress_pool,
             nonce,
-            mock_time(),
+            UNIX_EPOCH,
             ic_types::time::expiry_time_from_now(),
         );
     }

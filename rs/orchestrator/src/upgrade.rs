@@ -773,7 +773,6 @@ mod tests {
         types::ids::subnet_test_id,
     };
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_test_utilities_time::mock_time;
     use ic_types::{
         batch::ValidationContext,
         consensus::{
@@ -785,6 +784,7 @@ mod tests {
             canister_threshold_sig::idkg::IDkgTranscript, AlgorithmId, CryptoHash, CryptoHashOf,
         },
         signature::ThresholdSignature,
+        time::UNIX_EPOCH,
     };
     use tempfile::{tempdir, TempDir};
 
@@ -837,7 +837,7 @@ mod tests {
             ValidationContext {
                 registry_version: RegistryVersion::from(101),
                 certified_height: Height::from(42),
-                time: mock_time(),
+                time: UNIX_EPOCH,
             },
         );
 

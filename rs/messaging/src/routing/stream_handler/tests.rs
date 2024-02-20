@@ -28,9 +28,9 @@ use ic_test_utilities_metrics::{
     fetch_histogram_stats, fetch_histogram_vec_count, fetch_int_counter, fetch_int_counter_vec,
     fetch_int_gauge_vec, metric_vec, nonzero_values, HistogramStats, MetricVec,
 };
-use ic_test_utilities_time::mock_time;
 use ic_types::{
     messages::{CallbackId, Payload, Request, MAX_RESPONSE_COUNT_BYTES},
+    time::UNIX_EPOCH,
     xnet::{testing::StreamSliceTesting, StreamIndex, StreamIndexedQueue},
     CanisterId, CountBytes, Cycles,
 };
@@ -3067,7 +3067,7 @@ fn make_input_queue_reservations(canister: &mut CanisterState, count: usize, rem
             msg.sender_reply_callback,
         );
         canister
-            .push_output_request(msg.into(), mock_time())
+            .push_output_request(msg.into(), UNIX_EPOCH)
             .unwrap();
     }
     canister.output_into_iter().count();

@@ -6,9 +6,9 @@ use ic_test_utilities::{
     types::ids::canister_test_id,
     types::messages::{RequestBuilder, ResponseBuilder},
 };
-use ic_test_utilities_time::mock_time;
 use ic_types::{
     messages::{CallbackId, Request, RequestOrResponse},
+    time::UNIX_EPOCH,
     xnet::QueueId,
 };
 use std::sync::Arc;
@@ -97,7 +97,7 @@ impl CanisterFixture {
 
     fn push_output_request(&mut self, request: Request) -> Result<(), (StateError, Arc<Request>)> {
         self.canister_state
-            .push_output_request(request.into(), mock_time())
+            .push_output_request(request.into(), UNIX_EPOCH)
     }
 
     fn pop_output(&mut self) -> Option<(QueueId, RequestOrResponse)> {

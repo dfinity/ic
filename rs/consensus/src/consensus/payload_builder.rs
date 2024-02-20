@@ -252,13 +252,13 @@ pub(crate) mod test {
         xnet_payload_builder::FakeXNetPayloadBuilder,
     };
     use ic_test_utilities_registry::SubnetRecordBuilder;
-    use ic_test_utilities_time::mock_time;
     use ic_types::{
         canister_http::CanisterHttpResponseWithConsensus,
         consensus::certification::{Certification, CertificationContent},
         crypto::{CryptoHash, Signed},
         messages::SignedIngress,
         signature::ThresholdSignature,
+        time::UNIX_EPOCH,
         xnet::CertifiedStreamSlice,
         CryptoHashOfPartialState, RegistryVersion,
     };
@@ -355,7 +355,7 @@ pub(crate) mod test {
             let context = ValidationContext {
                 certified_height: Height::from(0),
                 registry_version: RegistryVersion::from(1),
-                time: mock_time(),
+                time: UNIX_EPOCH,
             };
             let subnet_record = SubnetRecordBuilder::from(&[node_test_id(0)]).build();
             let subnet_records = SubnetRecords {

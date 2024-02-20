@@ -26,10 +26,10 @@ use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder, state::SystemStateBuilder,
     types::ids::user_test_id,
 };
-use ic_test_utilities_time::mock_time;
 use ic_types::{
     messages::RequestMetadata,
     methods::{FuncRef, WasmMethod},
+    time::UNIX_EPOCH,
     ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions,
 };
 use ic_wasm_types::CanisterModule;
@@ -101,7 +101,7 @@ fuzz_target!(|module: ConfiguredModule<ICWasmConfig>| {
 fn setup_wasm_execution_input(func_ref: FuncRef) -> WasmExecutionInput {
     const DEFAULT_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(5_000_000_000);
 
-    let time = mock_time();
+    let time = UNIX_EPOCH;
     let api_type = ApiType::init(time, vec![], user_test_id(24).get());
 
     let system_state = SystemStateBuilder::default().build();
@@ -115,7 +115,7 @@ fn setup_wasm_execution_input(func_ref: FuncRef) -> WasmExecutionInput {
         &network_topology,
         dirty_page_overhead,
         ComputeAllocation::default(),
-        RequestMetadata::new(0, mock_time()),
+        RequestMetadata::new(0, UNIX_EPOCH),
     );
 
     let canister_current_memory_usage = NumBytes::new(0);

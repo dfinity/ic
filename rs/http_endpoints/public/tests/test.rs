@@ -44,7 +44,6 @@ use ic_test_utilities::{
     state::ReplicatedStateBuilder,
     types::ids::{canister_test_id, subnet_test_id, user_test_id},
 };
-use ic_test_utilities_time::mock_time;
 use ic_types::{
     batch::{BatchPayload, ValidationContext},
     consensus::{
@@ -61,7 +60,7 @@ use ic_types::{
     },
     messages::{Blob, CertificateDelegation, HttpQueryResponse, HttpQueryResponseReply},
     signature::ThresholdSignature,
-    time::current_time,
+    time::{current_time, UNIX_EPOCH},
     CryptoHashOfPartialState, Height, PrincipalId, RegistryVersion,
 };
 use prost::Message;
@@ -119,7 +118,7 @@ fn test_healthy_behind() {
                 ValidationContext {
                     registry_version: RegistryVersion::from(99),
                     certified_height,
-                    time: mock_time(),
+                    time: UNIX_EPOCH,
                 },
             )
         });

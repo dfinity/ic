@@ -16,7 +16,6 @@ use ic_test_utilities::{
     consensus::{fake::*, make_genesis},
     types::ids::node_test_id,
 };
-use ic_test_utilities_time::mock_time;
 use ic_types::{
     artifact::ConsensusMessageId,
     consensus::{
@@ -27,6 +26,7 @@ use ic_types::{
     },
     crypto::{ThresholdSigShare, ThresholdSigShareOf},
     signature::*,
+    time::UNIX_EPOCH,
     Height,
 };
 use std::{
@@ -68,7 +68,7 @@ where
             let mut ops = PoolSectionOps::new();
             ops.insert(ValidatedConsensusArtifact {
                 msg,
-                timestamp: mock_time(),
+                timestamp: UNIX_EPOCH,
             });
             pool.mutate(ops);
         }
@@ -437,7 +437,7 @@ where
     T: PoolTestHelper,
 {
     T::run_persistent_pool_test("test_purge_survives_reboot", |config, log| {
-        let time_0 = mock_time() + Duration::from_secs(1234);
+        let time_0 = UNIX_EPOCH + Duration::from_secs(1234);
         // create a pool and insert an artifact
         {
             let mut pool = T::new_consensus_pool(config.clone(), log.clone());
@@ -479,7 +479,7 @@ pub(crate) fn random_beacon_ops(
         let msg = ConsensusMessage::RandomBeacon(random_beacon);
         ops.insert(ValidatedConsensusArtifact {
             msg,
-            timestamp: mock_time(),
+            timestamp: UNIX_EPOCH,
         });
     }
     ops
@@ -494,7 +494,7 @@ pub(crate) fn block_proposal_ops(
         let msg = ConsensusMessage::BlockProposal(block_proposal);
         ops.insert(ValidatedConsensusArtifact {
             msg,
-            timestamp: mock_time(),
+            timestamp: UNIX_EPOCH,
         });
     }
     ops
@@ -511,7 +511,7 @@ fn finalization_ops() -> PoolSectionOps<ValidatedConsensusArtifact> {
         let msg = ConsensusMessage::Finalization(Finalization { content, signature });
         ops.insert(ValidatedConsensusArtifact {
             msg,
-            timestamp: mock_time(),
+            timestamp: UNIX_EPOCH,
         });
     }
     ops
@@ -528,7 +528,7 @@ fn notarization_ops() -> PoolSectionOps<ValidatedConsensusArtifact> {
         let msg = ConsensusMessage::Notarization(Notarization { content, signature });
         ops.insert(ValidatedConsensusArtifact {
             msg,
-            timestamp: mock_time(),
+            timestamp: UNIX_EPOCH,
         });
     }
     ops
@@ -548,7 +548,7 @@ fn random_beacon_share_ops() -> PoolSectionOps<ValidatedConsensusArtifact> {
             let msg = ConsensusMessage::RandomBeaconShare(RandomBeaconShare { content, signature });
             ops.insert(ValidatedConsensusArtifact {
                 msg,
-                timestamp: mock_time(),
+                timestamp: UNIX_EPOCH,
             });
         }
     }
@@ -567,7 +567,7 @@ pub(crate) fn notarization_share_ops() -> PoolSectionOps<ValidatedConsensusArtif
             let msg = ConsensusMessage::NotarizationShare(NotarizationShare { content, signature });
             ops.insert(ValidatedConsensusArtifact {
                 msg,
-                timestamp: mock_time(),
+                timestamp: UNIX_EPOCH,
             });
         }
     }
@@ -586,7 +586,7 @@ pub(crate) fn finalization_share_ops() -> PoolSectionOps<ValidatedConsensusArtif
             let msg = ConsensusMessage::FinalizationShare(FinalizationShare { content, signature });
             ops.insert(ValidatedConsensusArtifact {
                 msg,
-                timestamp: mock_time(),
+                timestamp: UNIX_EPOCH,
             });
         }
     }
@@ -600,7 +600,7 @@ fn random_tape_ops() -> PoolSectionOps<ValidatedConsensusArtifact> {
         let msg = ConsensusMessage::RandomTape(random_tape);
         ops.insert(ValidatedConsensusArtifact {
             msg,
-            timestamp: mock_time(),
+            timestamp: UNIX_EPOCH,
         });
     }
     ops
@@ -618,7 +618,7 @@ fn random_tape_share_ops() -> PoolSectionOps<ValidatedConsensusArtifact> {
             let msg = ConsensusMessage::RandomTapeShare(RandomTapeShare { content, signature });
             ops.insert(ValidatedConsensusArtifact {
                 msg,
-                timestamp: mock_time(),
+                timestamp: UNIX_EPOCH,
             });
         }
     }
@@ -716,7 +716,7 @@ fn make_random_beacon_at_height(i: u64) -> ValidatedConsensusArtifact {
     let random_beacon = fake_random_beacon(Height::from(i));
     ValidatedConsensusArtifact {
         msg: ConsensusMessage::RandomBeacon(random_beacon),
-        timestamp: mock_time(),
+        timestamp: UNIX_EPOCH,
     }
 }
 

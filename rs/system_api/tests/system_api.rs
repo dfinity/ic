@@ -25,13 +25,14 @@ use ic_test_utilities::{
         messages::RequestBuilder,
     },
 };
-use ic_test_utilities_time::mock_time;
 use ic_types::{
     messages::{
         CallContextId, CallbackId, RejectContext, RequestMetadata, MAX_RESPONSE_COUNT_BYTES,
     },
     methods::{Callback, WasmClosure},
-    time, CanisterTimer, CountBytes, Cycles, NumInstructions, PrincipalId, Time,
+    time,
+    time::UNIX_EPOCH,
+    CanisterTimer, CountBytes, Cycles, NumInstructions, PrincipalId, Time,
 };
 use std::{
     collections::BTreeSet,
@@ -133,7 +134,7 @@ fn check_stable_apis_support(mut api: SystemApiImpl) {
 fn test_canister_init_support() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let mut api = get_system_api(
-        ApiType::init(mock_time(), vec![], user_test_id(1).get()),
+        ApiType::init(UNIX_EPOCH, vec![], user_test_id(1).get()),
         &get_system_state(),
         cycles_account_manager,
     );
@@ -249,7 +250,7 @@ fn test_canister_update_support() {
 fn test_canister_replicated_query_support() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let mut api = get_system_api(
-        ApiType::replicated_query(mock_time(), vec![], user_test_id(1).get(), None),
+        ApiType::replicated_query(UNIX_EPOCH, vec![], user_test_id(1).get(), None),
         &get_system_state(),
         cycles_account_manager,
     );
@@ -307,7 +308,7 @@ fn test_canister_replicated_query_support() {
 fn test_canister_pure_query_support() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let mut api = get_system_api(
-        ApiType::replicated_query(mock_time(), vec![], user_test_id(1).get(), None),
+        ApiType::replicated_query(UNIX_EPOCH, vec![], user_test_id(1).get(), None),
         &get_system_state(),
         cycles_account_manager,
     );
@@ -366,7 +367,7 @@ fn test_canister_stateful_query_support() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let mut api = get_system_api(
         ApiType::non_replicated_query(
-            mock_time(),
+            UNIX_EPOCH,
             user_test_id(1).get(),
             subnet_test_id(1),
             vec![],
@@ -667,7 +668,7 @@ fn test_reject_api_support_non_nns() {
 fn test_pre_upgrade_support() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let mut api = get_system_api(
-        ApiType::pre_upgrade(mock_time(), user_test_id(1).get()),
+        ApiType::pre_upgrade(UNIX_EPOCH, user_test_id(1).get()),
         &get_system_state(),
         cycles_account_manager,
     );
@@ -725,7 +726,7 @@ fn test_pre_upgrade_support() {
 fn test_start_support() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let mut api = get_system_api(
-        ApiType::start(mock_time()),
+        ApiType::start(UNIX_EPOCH),
         &get_system_state(),
         cycles_account_manager,
     );
@@ -785,7 +786,7 @@ fn test_cleanup_support() {
     let mut api = get_system_api(
         ApiType::Cleanup {
             caller: PrincipalId::new_anonymous(),
-            time: mock_time(),
+            time: UNIX_EPOCH,
             call_context_instructions_executed: 0.into(),
         },
         &get_system_state(),
@@ -849,7 +850,7 @@ fn test_inspect_message_support() {
             user_test_id(1).get(),
             "hello".to_string(),
             vec![],
-            mock_time(),
+            UNIX_EPOCH,
         ),
         &get_system_state(),
         cycles_account_manager,
@@ -1169,7 +1170,7 @@ fn test_canister_balance() {
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5)),
             Cycles::new(50),
             Time::from_nanos_since_unix_epoch(0),
-            RequestMetadata::new(0, mock_time()),
+            RequestMetadata::new(0, UNIX_EPOCH),
         );
 
     let mut api = get_system_api(
@@ -1198,7 +1199,7 @@ fn test_canister_cycle_balance() {
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5)),
             Cycles::new(50),
             Time::from_nanos_since_unix_epoch(0),
-            RequestMetadata::new(0, mock_time()),
+            RequestMetadata::new(0, UNIX_EPOCH),
         );
 
     let mut api = get_system_api(
@@ -1233,7 +1234,7 @@ fn test_msg_cycles_available_traps() {
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5)),
             available_cycles,
             Time::from_nanos_since_unix_epoch(0),
-            RequestMetadata::new(0, mock_time()),
+            RequestMetadata::new(0, UNIX_EPOCH),
         );
 
     let api = get_system_api(
@@ -1301,7 +1302,7 @@ fn certified_data_set() {
     let system_state_changes = api.into_system_state_changes();
     system_state_changes
         .apply_changes(
-            mock_time(),
+            UNIX_EPOCH,
             &mut system_state,
             &default_network_topology(),
             subnet_test_id(1),
@@ -1317,7 +1318,7 @@ fn data_certificate_copy() {
     let system_state = SystemStateBuilder::default().build();
     let mut api = get_system_api(
         ApiType::replicated_query(
-            mock_time(),
+            UNIX_EPOCH,
             vec![],
             user_test_id(1).get(),
             Some(vec![1, 2, 3, 4, 5, 6]),
@@ -1395,7 +1396,7 @@ fn msg_cycles_accept_all_cycles_in_call_context() {
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5)),
             Cycles::from(amount),
             Time::from_nanos_since_unix_epoch(0),
-            RequestMetadata::new(0, mock_time()),
+            RequestMetadata::new(0, UNIX_EPOCH),
         );
     let mut api = get_system_api(
         ApiTypeBuilder::build_update_api(),
@@ -1419,7 +1420,7 @@ fn msg_cycles_accept_all_cycles_in_call_context_when_more_asked() {
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5)),
             Cycles::new(40),
             Time::from_nanos_since_unix_epoch(0),
-            RequestMetadata::new(0, mock_time()),
+            RequestMetadata::new(0, UNIX_EPOCH),
         );
     let mut api = get_system_api(
         ApiTypeBuilder::build_update_api(),
@@ -1452,7 +1453,7 @@ fn call_perform_not_enough_cycles_does_not_trap() {
             CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5)),
             Cycles::new(40),
             Time::from_nanos_since_unix_epoch(0),
-            RequestMetadata::new(0, mock_time()),
+            RequestMetadata::new(0, UNIX_EPOCH),
         );
     let mut api = get_system_api(
         ApiTypeBuilder::build_update_api(),
@@ -1475,7 +1476,7 @@ fn call_perform_not_enough_cycles_does_not_trap() {
     let system_state_changes = api.into_system_state_changes();
     system_state_changes
         .apply_changes(
-            mock_time(),
+            UNIX_EPOCH,
             &mut system_state,
             &default_network_topology(),
             subnet_test_id(1),
@@ -1503,7 +1504,7 @@ fn update_available_memory_updates_subnet_available_memory() {
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         execution_parameters().compute_allocation,
-        RequestMetadata::new(0, mock_time()),
+        RequestMetadata::new(0, UNIX_EPOCH),
     );
     let mut api = SystemApiImpl::new(
         ApiTypeBuilder::build_update_api(),
@@ -1558,7 +1559,7 @@ fn push_output_request_respects_memory_limits() {
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         execution_parameters().compute_allocation,
-        RequestMetadata::new(0, mock_time()),
+        RequestMetadata::new(0, UNIX_EPOCH),
     );
     let own_canister_id = system_state.canister_id;
     let callback_id = sandbox_safe_system_state
@@ -1636,7 +1637,7 @@ fn push_output_request_respects_memory_limits() {
     let system_state_changes = api.into_system_state_changes();
     system_state_changes
         .apply_changes(
-            mock_time(),
+            UNIX_EPOCH,
             &mut system_state,
             &default_network_topology(),
             subnet_test_id(1),
@@ -1664,7 +1665,7 @@ fn push_output_request_oversized_request_memory_limits() {
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         execution_parameters().compute_allocation,
-        RequestMetadata::new(0, mock_time()),
+        RequestMetadata::new(0, UNIX_EPOCH),
     );
     let own_canister_id = system_state.canister_id;
     let callback_id = sandbox_safe_system_state
@@ -1744,7 +1745,7 @@ fn push_output_request_oversized_request_memory_limits() {
     let system_state_changes = api.into_system_state_changes();
     system_state_changes
         .apply_changes(
-            mock_time(),
+            UNIX_EPOCH,
             &mut system_state,
             &default_network_topology(),
             subnet_test_id(1),
@@ -1780,7 +1781,7 @@ fn ic0_global_timer_set_is_propagated_from_sandbox() {
     let system_state_changes = api.into_system_state_changes();
     system_state_changes
         .apply_changes(
-            mock_time(),
+            UNIX_EPOCH,
             &mut system_state,
             &default_network_topology(),
             subnet_test_id(1),

@@ -8,9 +8,9 @@ use ic_embedders::{
 use ic_interfaces::execution_environment::HypervisorError;
 use ic_logger::replica_logger::no_op_logger;
 use ic_test_utilities::wasmtime_instance::WasmtimeInstanceBuilder;
-use ic_test_utilities_time::mock_time;
 use ic_types::{
     methods::{FuncRef, WasmMethod},
+    time::UNIX_EPOCH,
     Cycles, PrincipalId,
 };
 use ic_wasm_transform::Module;
@@ -166,7 +166,7 @@ fn run_go_export(wat: &str) -> Result<(), HypervisorError> {
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_wat(wat)
         .with_api_type(ic_system_api::ApiType::update(
-            mock_time(),
+            UNIX_EPOCH,
             vec![],
             Cycles::from(0_u128),
             PrincipalId::new_user_test_id(0),

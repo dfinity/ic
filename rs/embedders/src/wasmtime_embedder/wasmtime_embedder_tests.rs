@@ -18,9 +18,9 @@ use ic_system_api::{
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder, types::ids::canister_test_id,
 };
-use ic_test_utilities_time::mock_time;
 use ic_types::{
-    messages::RequestMetadata, ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions,
+    messages::RequestMetadata, time::UNIX_EPOCH, ComputeAllocation, MemoryAllocation, NumBytes,
+    NumInstructions,
 };
 use ic_wasm_types::BinaryEncodedWasm;
 
@@ -53,13 +53,13 @@ fn test_wasmtime_system_api() {
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
-        RequestMetadata::new(0, mock_time()),
+        RequestMetadata::new(0, UNIX_EPOCH),
     );
     let canister_memory_limit = NumBytes::from(4 << 30);
     let canister_current_memory_usage = NumBytes::from(0);
     let canister_current_message_memory_usage = NumBytes::from(0);
     let system_api = SystemApiImpl::new(
-        ApiType::start(mock_time()),
+        ApiType::start(UNIX_EPOCH),
         sandbox_safe_system_state,
         canister_current_memory_usage,
         canister_current_message_memory_usage,

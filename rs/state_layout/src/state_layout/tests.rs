@@ -12,9 +12,9 @@ use ic_test_utilities::types::{
     messages::{IngressBuilder, RequestBuilder, ResponseBuilder},
 };
 use ic_test_utilities_logger::with_test_replica_logger;
-use ic_test_utilities_time::mock_time;
 use ic_test_utilities_tmpdir::tmpdir;
 use ic_types::messages::{CanisterCall, CanisterMessage, CanisterMessageOrTask};
+use ic_types::time::UNIX_EPOCH;
 use itertools::Itertools;
 use proptest::prelude::*;
 use std::fs::File;
@@ -44,7 +44,7 @@ fn default_canister_state_bits() -> CanisterStateBits {
         stable_memory_size: NumWasmPages::from(0),
         heap_delta_debit: NumBytes::from(0),
         install_code_debit: NumInstructions::from(0),
-        time_of_last_allocation_charge_nanos: mock_time().as_nanos_since_unix_epoch(),
+        time_of_last_allocation_charge_nanos: 0,
         task_queue: vec![],
         global_timer_nanos: None,
         canister_version: 0,
@@ -199,7 +199,7 @@ fn test_canister_snapshots_decode() {
     let canister_snapshot_bits = CanisterSnapshotBits {
         snapshot_id: SnapshotId::new(5),
         canister_id: canister_test_id(7),
-        taken_at_timestamp: mock_time(),
+        taken_at_timestamp: UNIX_EPOCH,
         canister_version: 3,
         binary_hash: Some(WasmHash::from(&CanisterModule::new(vec![2, 3, 4]))),
         certified_data: vec![3, 4, 7],

@@ -20,12 +20,12 @@ use ic_test_utilities_metrics::{
     fetch_histogram_stats, fetch_int_counter_vec, fetch_int_gauge_vec, metric_vec, nonzero_values,
     MetricVec,
 };
-use ic_test_utilities_time::mock_time;
 use ic_types::{
     messages::{
         CallbackId, Payload, RejectContext, Request, RequestOrResponse, Response,
         MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64,
     },
+    time::UNIX_EPOCH,
     xnet::{StreamIndex, StreamIndexedQueue},
     CanisterId, Cycles, SubnetId, Time,
 };
@@ -83,7 +83,7 @@ fn reject_local_request() {
         );
 
         canister_state
-            .push_output_request(msg.clone().into(), mock_time())
+            .push_output_request(msg.clone().into(), UNIX_EPOCH)
             .unwrap();
         canister_state
             .system_state
@@ -154,7 +154,7 @@ fn reject_local_request_for_subnet() {
 
         state
             .subnet_queues_mut()
-            .push_output_request(msg.clone().into(), mock_time())
+            .push_output_request(msg.clone().into(), UNIX_EPOCH)
             .unwrap();
         state
             .subnet_queues_mut()
@@ -1023,9 +1023,7 @@ fn canister_states_with_outputs<M: Into<RequestOrResponse>>(
                     req.sender_reply_callback,
                 );
 
-                canister_state
-                    .push_output_request(req, mock_time())
-                    .unwrap();
+                canister_state.push_output_request(req, UNIX_EPOCH).unwrap();
             }
 
             RequestOrResponse::Response(rep) => {

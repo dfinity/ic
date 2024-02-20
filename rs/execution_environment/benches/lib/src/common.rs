@@ -30,10 +30,10 @@ use ic_test_utilities::{
     types::messages::IngressBuilder,
 };
 use ic_test_utilities_execution_environment::generate_network_topology;
-use ic_test_utilities_time::mock_time;
 use ic_types::{
     messages::{CallbackId, CanisterMessage, Payload, RejectContext, RequestMetadata},
     methods::{Callback, WasmClosure},
+    time::UNIX_EPOCH,
     Cycles, MemoryAllocation, NumBytes, NumInstructions, Time,
 };
 use ic_wasm_types::CanisterModule;
@@ -116,8 +116,8 @@ where
         .new_call_context(
             call_origin.clone(),
             Cycles::new(10),
-            mock_time(),
-            RequestMetadata::new(0, mock_time()),
+            UNIX_EPOCH,
+            RequestMetadata::new(0, UNIX_EPOCH),
         );
     let callback = Callback::new(
         call_context_id,
@@ -172,7 +172,7 @@ where
         canister_state,
         ingress,
         reject,
-        time: mock_time(),
+        time: UNIX_EPOCH,
         network_topology,
         execution_parameters,
         subnet_available_memory: *MAX_SUBNET_AVAILABLE_MEMORY,

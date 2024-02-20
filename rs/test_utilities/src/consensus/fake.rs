@@ -287,7 +287,7 @@ fn test_fake_block_is_binary_compatible() {
         ValidationContext {
             registry_version: RegistryVersion::from(99),
             certified_height: Height::from(42),
-            time: ic_test_utilities_time::mock_time(),
+            time: ic_types::time::UNIX_EPOCH,
         },
     );
     let bytes1 = bincode::serialize(&block).unwrap();
@@ -314,7 +314,7 @@ fn test_fake_block() {
         ValidationContext {
             registry_version: RegistryVersion::from(99),
             certified_height: Height::from(42),
-            time: ic_test_utilities_time::mock_time(),
+            time: ic_types::time::UNIX_EPOCH,
         },
     );
 

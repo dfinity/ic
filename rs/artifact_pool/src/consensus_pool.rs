@@ -911,11 +911,12 @@ mod tests {
         types::ids::{node_test_id, subnet_test_id},
     };
     use ic_test_utilities_registry::{setup_registry, SubnetRecordBuilder};
-    use ic_test_utilities_time::{mock_time, FastForwardTimeSource};
+    use ic_test_utilities_time::FastForwardTimeSource;
     use ic_types::{
         batch::ValidationContext,
         consensus::{BlockProposal, RandomBeacon},
         crypto::{crypto_hash, CryptoHash, CryptoHashOf},
+        time::UNIX_EPOCH,
         RegistryVersion, ReplicaVersion,
     };
     use prost::Message;
@@ -1202,7 +1203,7 @@ mod tests {
                     ValidationContext {
                         registry_version: RegistryVersion::from(99),
                         certified_height: Height::from(42),
-                        time: mock_time(),
+                        time: UNIX_EPOCH,
                     },
                 )
             };
@@ -1382,7 +1383,7 @@ mod tests {
                     ValidationContext {
                         registry_version: RegistryVersion::from(99),
                         certified_height: Height::from(42),
-                        time: mock_time(),
+                        time: UNIX_EPOCH,
                     },
                 )
             };
@@ -1557,7 +1558,7 @@ mod tests {
                 ValidationContext {
                     registry_version: RegistryVersion::from(98),
                     certified_height: Height::from(41),
-                    time: mock_time(),
+                    time: UNIX_EPOCH,
                 },
             );
             let proposal3 = BlockProposal::fake(block, node_test_id(333));
@@ -1574,7 +1575,7 @@ mod tests {
                 ValidationContext {
                     registry_version: RegistryVersion::from(101),
                     certified_height: Height::from(42),
-                    time: mock_time(),
+                    time: UNIX_EPOCH,
                 },
             );
             let proposal3_final = BlockProposal::fake(block.clone(), node_test_id(333));
@@ -1594,7 +1595,7 @@ mod tests {
                 ValidationContext {
                     registry_version: RegistryVersion::from(99),
                     certified_height: Height::from(42),
-                    time: mock_time(),
+                    time: UNIX_EPOCH,
                 },
             );
             let finalization_at_4 = Finalization::fake(FinalizationContent::new(
@@ -1615,7 +1616,7 @@ mod tests {
                 ValidationContext {
                     registry_version: RegistryVersion::from(98),
                     certified_height: Height::from(41),
-                    time: mock_time(),
+                    time: UNIX_EPOCH,
                 },
             );
             let proposal_non_final = BlockProposal::fake(block, node_test_id(333));
@@ -1921,7 +1922,7 @@ mod tests {
                 ValidationContext {
                     registry_version: RegistryVersion::from(99),
                     certified_height: Height::from(42),
-                    time: mock_time(),
+                    time: UNIX_EPOCH,
                 },
             );
             let finalization = Finalization::fake(FinalizationContent::new(

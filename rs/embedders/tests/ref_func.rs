@@ -2,9 +2,9 @@
 //! after instrumentation.
 
 use ic_test_utilities::wasmtime_instance::WasmtimeInstanceBuilder;
-use ic_test_utilities_time::mock_time;
 use ic_types::{
     methods::{FuncRef, WasmMethod},
+    time::UNIX_EPOCH,
     Cycles, PrincipalId,
 };
 
@@ -14,7 +14,7 @@ fn run_go_export(wat: &str) {
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_wat(wat)
         .with_api_type(ic_system_api::ApiType::update(
-            mock_time(),
+            UNIX_EPOCH,
             vec![],
             Cycles::from(0_u128),
             PrincipalId::new_user_test_id(0),

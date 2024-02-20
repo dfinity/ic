@@ -889,7 +889,6 @@ mod tests {
     };
     use ic_test_utilities::types::messages::RequestBuilder;
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_test_utilities_time::mock_time;
     use ic_types::consensus::ecdsa::*;
     use ic_types::crypto::{canister_threshold_sig::ExtendedDerivationPath, AlgorithmId};
     use ic_types::time::UNIX_EPOCH;
@@ -1820,7 +1819,7 @@ mod tests {
                     pseudo_random_id: req_id.pseudo_random_id,
                     message_hash: [0; 32],
                     derivation_path: vec![],
-                    batch_time: mock_time(),
+                    batch_time: UNIX_EPOCH,
                     matched_quadruple: Some((quadruple_id, req_id.height)),
                     nonce: Some([2; 32]),
                 };

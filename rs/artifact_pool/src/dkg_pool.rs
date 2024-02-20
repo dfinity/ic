@@ -196,10 +196,10 @@ mod test {
         consensus::fake::FakeSigner,
         types::ids::{node_test_id, subnet_test_id},
     };
-    use ic_test_utilities_time::mock_time;
     use ic_types::{
         crypto::threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetSubnet},
         signature::BasicSignature,
+        time::UNIX_EPOCH,
         NodeId,
     };
 
@@ -226,7 +226,7 @@ mod test {
         pool.insert(UnvalidatedArtifact {
             message,
             peer_id: node_test_id(1),
-            timestamp: mock_time(),
+            timestamp: UNIX_EPOCH,
         });
         assert!(pool.contains(&id));
 
@@ -256,12 +256,12 @@ mod test {
         pool.insert(UnvalidatedArtifact {
             message: make_message(current_dkg_id_start_height, node_test_id(1)),
             peer_id: node_test_id(1),
-            timestamp: mock_time(),
+            timestamp: UNIX_EPOCH,
         });
         pool.insert(UnvalidatedArtifact {
             message: make_message(last_dkg_id_start_height, node_test_id(1)),
             peer_id: node_test_id(1),
-            timestamp: mock_time(),
+            timestamp: UNIX_EPOCH,
         });
         // ensure we have 2 validated and 2 unvalidated artifacts
         assert_eq!(result.adverts.len(), 2);

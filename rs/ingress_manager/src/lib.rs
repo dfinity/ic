@@ -261,7 +261,7 @@ pub(crate) mod tests {
     };
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::test_subnet_record;
-    use ic_test_utilities_time::{mock_time, FastForwardTimeSource};
+    use ic_test_utilities_time::FastForwardTimeSource;
     use ic_types::{ingress::IngressStatus, Height, RegistryVersion, SubnetId};
     use std::{ops::DerefMut, sync::Arc};
 
@@ -334,7 +334,7 @@ pub(crate) mod tests {
                     log.clone(),
                 )));
                 let time_source = FastForwardTimeSource::new();
-                time_source.set_time(mock_time()).unwrap();
+                time_source.set_time(UNIX_EPOCH).unwrap();
                 run(
                     IngressManager::new(
                         time_source,

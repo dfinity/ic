@@ -29,7 +29,6 @@ use ic_test_utilities_execution_environment::{
     ExecutionTestBuilder,
 };
 use ic_test_utilities_metrics::{fetch_histogram_vec_count, fetch_int_counter, metric_vec};
-use ic_test_utilities_time::mock_time;
 use ic_types::canister_http::Transform;
 use ic_types::{
     canister_http::CanisterHttpMethod,
@@ -37,6 +36,7 @@ use ic_types::{
     messages::{
         CallbackId, Payload, RejectContext, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES,
     },
+    time::UNIX_EPOCH,
     CanisterId, Cycles, PrincipalId, RegistryVersion,
 };
 use ic_types_test_utils::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id};
@@ -190,7 +190,7 @@ fn ingress_can_reply_and_produce_output_request() {
         IngressStatus::Known {
             receiver: canister_id.get(),
             user_id: test.user_id(),
-            time: mock_time(),
+            time: UNIX_EPOCH,
             state: IngressState::Completed(WasmResult::Reply(b"MONOLORD".to_vec())),
         }
     );
@@ -211,7 +211,7 @@ fn ingress_can_reject() {
         IngressStatus::Known {
             receiver: canister_id.get(),
             user_id: test.user_id(),
-            time: mock_time(),
+            time: UNIX_EPOCH,
             state: IngressState::Completed(WasmResult::Reject("MONOLORD".to_string())),
         }
     );

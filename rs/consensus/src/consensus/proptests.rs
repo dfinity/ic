@@ -9,7 +9,6 @@ use ic_test_utilities::{
     },
 };
 use ic_test_utilities_registry::SubnetRecordBuilder;
-use ic_test_utilities_time::mock_time;
 use ic_types::{
     batch::{BatchPayload, ValidationContext},
     consensus::{
@@ -21,6 +20,7 @@ use ic_types::{
     crypto::{CryptoHash, Signed},
     messages::SignedIngress,
     signature::ThresholdSignature,
+    time::UNIX_EPOCH,
     xnet::CertifiedStreamSlice,
     CryptoHashOfPartialState, Height, RegistryVersion, SubnetId,
 };
@@ -72,7 +72,7 @@ fn proptest_round(
         let validation_context = ValidationContext {
             certified_height: Height::from(height),
             registry_version: RegistryVersion::from(1),
-            time: mock_time(),
+            time: UNIX_EPOCH,
         };
         let proposal_context = ProposalContext {
             proposer: node_test_id(0),

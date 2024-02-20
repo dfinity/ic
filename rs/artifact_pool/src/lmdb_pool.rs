@@ -2113,7 +2113,7 @@ mod tests {
     fn validated_block_proposal(height: Height, rank: Rank) -> ValidatedConsensusArtifact {
         ValidatedConsensusArtifact {
             msg: ConsensusMessage::BlockProposal(fake_block_proposal_with_rank(height, rank)),
-            timestamp: ic_test_utilities_time::mock_time(),
+            timestamp: ic_types::time::UNIX_EPOCH,
         }
     }
 

@@ -15,7 +15,6 @@ use ic_test_utilities::types::{
     messages::{RequestBuilder, ResponseBuilder},
     xnet::{StreamHeaderBuilder, StreamSliceBuilder},
 };
-use ic_test_utilities_time::mock_time;
 use ic_types::{
     batch::BlockmakerMetrics,
     canister_http::{CanisterHttpMethod, CanisterHttpRequestContext},
@@ -56,13 +55,13 @@ fn can_prune_old_ingress_history_entries() {
     let message_id2 = MessageId::from([2_u8; 32]);
     let message_id3 = MessageId::from([3_u8; 32]);
 
-    let time = mock_time();
+    let time = UNIX_EPOCH;
     ingress_history.insert(
         message_id1.clone(),
         IngressStatus::Known {
             receiver: canister_test_id(1).get(),
             user_id: user_test_id(1),
-            time: mock_time(),
+            time: UNIX_EPOCH,
             state: IngressState::Completed(WasmResult::Reply(vec![])),
         },
         time,
@@ -73,7 +72,7 @@ fn can_prune_old_ingress_history_entries() {
         IngressStatus::Known {
             receiver: canister_test_id(2).get(),
             user_id: user_test_id(2),
-            time: mock_time(),
+            time: UNIX_EPOCH,
             state: IngressState::Completed(WasmResult::Reply(vec![])),
         },
         time,
@@ -84,7 +83,7 @@ fn can_prune_old_ingress_history_entries() {
         IngressStatus::Known {
             receiver: canister_test_id(1).get(),
             user_id: user_test_id(1),
-            time: mock_time(),
+            time: UNIX_EPOCH,
             state: IngressState::Completed(WasmResult::Reply(vec![])),
         },
         time + MAX_INGRESS_TTL / 2,
@@ -103,7 +102,7 @@ fn can_prune_old_ingress_history_entries() {
 #[test]
 fn entries_sorted_lexicographically() {
     let mut ingress_history = IngressHistoryState::new();
-    let time = mock_time();
+    let time = UNIX_EPOCH;
 
     for i in (0..10u64).rev() {
         ingress_history.insert(
@@ -531,7 +530,7 @@ fn system_metadata_split() {
     // Ingress history with 4 Received messages, addressed to canisters 1 and 2;
     // `IC_00`; and respectively `SUBNET_A`.
     let mut ingress_history = IngressHistoryState::new();
-    let time = mock_time();
+    let time = UNIX_EPOCH;
     let receivers = [
         CANISTER_1.get(),
         CANISTER_2.get(),
@@ -701,7 +700,7 @@ fn subnet_call_contexts_deserialization() {
         body: None,
         http_method: CanisterHttpMethod::GET,
         transform: Some(transform.clone()),
-        time: mock_time(),
+        time: UNIX_EPOCH,
     };
     subnet_call_context_manager.push_context(SubnetCallContext::CanisterHttpRequest(
         canister_http_request,
@@ -715,7 +714,7 @@ fn subnet_call_contexts_deserialization() {
     let install_code_call = InstallCodeCall {
         call: CanisterCall::Request(Arc::new(request)),
         effective_canister_id: canister_test_id(3),
-        time: mock_time(),
+        time: UNIX_EPOCH,
     };
     let call_id = subnet_call_context_manager.push_install_code_call(install_code_call.clone());
 
@@ -727,7 +726,7 @@ fn subnet_call_contexts_deserialization() {
     let stop_canister_call = StopCanisterCall {
         call: CanisterCall::Request(Arc::new(request)),
         effective_canister_id: canister_test_id(3),
-        time: mock_time(),
+        time: UNIX_EPOCH,
     };
     let stop_canister_call_id =
         subnet_call_context_manager.push_stop_canister_call(stop_canister_call.clone());
@@ -740,13 +739,13 @@ fn subnet_call_contexts_deserialization() {
     subnet_call_context_manager.push_raw_rand_request(
         raw_rand_request.clone(),
         ExecutionRound::new(5),
-        mock_time(),
+        UNIX_EPOCH,
     );
 
     // Encode and decode.
     let subnet_call_context_manager_proto: ic_protobuf::state::system_metadata::v1::SubnetCallContextManager = (&subnet_call_context_manager).into();
     let mut deserialized_subnet_call_context_manager: SubnetCallContextManager =
-        SubnetCallContextManager::try_from((mock_time(), subnet_call_context_manager_proto))
+        SubnetCallContextManager::try_from((UNIX_EPOCH, subnet_call_context_manager_proto))
             .unwrap();
 
     // Check HTTP request deserialization.
@@ -794,7 +793,7 @@ fn subnet_call_contexts_deserialization() {
         vec![RawRandContext {
             request: raw_rand_request,
             execution_round_id: ExecutionRound::new(5),
-            time: mock_time(),
+            time: UNIX_EPOCH,
         }]
     )
 }
