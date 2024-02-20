@@ -239,6 +239,7 @@ where
     // will result on slow consuption of chunks. Slow consumption of chunks will in turn
     // result in slower consumptions of adverts. Ideally adverts are consumed at rate
     // independent of consensus.
+    #[allow(clippy::disallowed_methods)]
     let (sender, receiver) = unbounded_channel();
     let shutdown = Arc::new(AtomicBool::new(false));
 

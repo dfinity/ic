@@ -237,6 +237,7 @@ mod tests {
     fn can_send_and_receive_messages() {
         let rt = Runtime::new().expect("failed to create tokio runtime");
         let sock_path = get_unique_sock_path();
+        #[allow(clippy::disallowed_methods)]
         let (log_send, log_rcvr_chan) = unbounded();
         let parent_drain = ParentDrain(log_send);
         let parent_logger = Logger::root(parent_drain, o!());
@@ -281,6 +282,7 @@ mod tests {
         let rt = Runtime::new().expect("failed to create tokio runtime");
         let sock_path = get_unique_sock_path();
 
+        #[allow(clippy::disallowed_methods)]
         let (log_send, _log_rcvr_chan) = unbounded();
         let parent_drain = ParentDrain(log_send);
         let parent_logger = Logger::root(parent_drain, o!());

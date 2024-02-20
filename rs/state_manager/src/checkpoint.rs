@@ -83,6 +83,7 @@ pub(crate) fn make_checkpoint(
             .make_checkpoint_step_duration
             .with_label_values(&["tip_to_checkpoint"])
             .start_timer();
+        #[allow(clippy::disallowed_methods)]
         let (send, recv) = unbounded();
         tip_channel
             .send(TipRequest::TipToCheckpoint {
@@ -109,6 +110,7 @@ pub(crate) fn make_checkpoint(
             .make_checkpoint_step_duration
             .with_label_values(&["wait_for_reflinking"])
             .start_timer();
+        #[allow(clippy::disallowed_methods)]
         let (send, recv) = unbounded();
         tip_channel.send(TipRequest::Wait { sender: send }).unwrap();
         recv.recv().unwrap();

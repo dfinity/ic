@@ -1332,6 +1332,7 @@ struct CreateCheckpointResult {
 
 impl StateManagerImpl {
     pub fn flush_tip_channel(&self) {
+        #[allow(clippy::disallowed_methods)]
         let (sender, recv) = unbounded();
         self.tip_channel
             .send(TipRequest::Wait { sender })
@@ -1560,6 +1561,7 @@ impl StateManagerImpl {
 
         let persist_metadata_guard = Arc::new(Mutex::new(()));
 
+        #[allow(clippy::disallowed_methods)]
         let (deallocation_sender, deallocation_receiver) = unbounded();
         let _deallocation_handle = JoinOnDrop::new(
             std::thread::Builder::new()

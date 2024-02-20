@@ -355,6 +355,7 @@ fn merge_overhead() {
     assert!(last_checkpoint_size(&env) / state_in_memory(&env) <= 2.5);
 }
 
+#[allow(clippy::disallowed_methods)]
 #[test]
 fn skipping_flushing_is_invisible_for_state() {
     fn skips(env: &StateMachine) -> f64 {

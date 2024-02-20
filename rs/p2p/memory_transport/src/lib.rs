@@ -93,6 +93,7 @@ pub struct TransportRouter {
 }
 
 impl TransportRouter {
+    #[allow(clippy::disallowed_methods)]
     pub fn new() -> Self {
         let (router_req_tx, mut router_req_rx) =
             unbounded_channel::<(Request<Bytes>, NodeId, oneshot::Sender<Response<Bytes>>)>();
@@ -133,6 +134,7 @@ impl TransportRouter {
     ) -> PeerTransport {
         // It is fine to use unbounded channel since ingestion rate is limited by
         // capacity and processing rate >> ingestion rate.
+        #[allow(clippy::disallowed_methods)]
         let (rpc_tx, mut rpc_rx) =
             unbounded_channel::<(Request<Bytes>, oneshot::Sender<Response<Bytes>>)>();
         self.peers

@@ -125,7 +125,7 @@ where
         let instances = RwLock::new(instances);
 
         let sync_wait_time = self.sync_wait_time.unwrap_or(DEFAULT_SYNC_WAIT_DURATION);
-
+        #[allow(clippy::disallowed_methods)]
         let (drop_sender, mut rx) = mpsc::unbounded_channel::<T>();
         let drop_handle = ThreadBuilder::new()
             .name("PocketIC GC Thread".into())
