@@ -47,7 +47,6 @@ use ic_test_utilities::{
 };
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{fetch_int_counter_vec, fetch_int_gauge, Labels};
-use ic_test_utilities_time::mock_time;
 use ic_test_utilities_tmpdir::tmpdir;
 use ic_types::batch::{
     CanisterQueryStats, QueryStats, QueryStatsPayload, RawQueryStats, TotalQueryStats,
@@ -56,7 +55,7 @@ use ic_types::{
     crypto::CryptoHash,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::CallbackId,
-    time::Time,
+    time::{Time, UNIX_EPOCH},
     xnet::{StreamIndex, StreamIndexedQueue},
     CanisterId, CryptoHashOfPartialState, CryptoHashOfState, Height, NodeId, NumBytes, PrincipalId,
 };
@@ -3431,7 +3430,7 @@ fn certified_read_can_certify_ingress_history_entry() {
             IngressStatus::Known {
                 receiver: canister_test_id(1).get(),
                 user_id: user_test_id(1),
-                time: mock_time(),
+                time: UNIX_EPOCH,
                 state: IngressState::Completed(WasmResult::Reply(b"done".to_vec())),
             },
             NumBytes::from(u64::MAX),
@@ -3770,7 +3769,7 @@ fn certified_read_returns_absence_proof_for_non_existing_entries() {
             IngressStatus::Known {
                 receiver: canister_test_id(1).get(),
                 user_id: user_test_id(1),
-                time: mock_time(),
+                time: UNIX_EPOCH,
                 state: IngressState::Completed(WasmResult::Reply(b"done".to_vec())),
             },
             NumBytes::from(u64::MAX),
@@ -3849,7 +3848,7 @@ fn certified_read_can_fetch_multiple_entries_in_one_go() {
             IngressStatus::Known {
                 receiver: canister_test_id(1).get(),
                 user_id: user_test_id(1),
-                time: mock_time(),
+                time: UNIX_EPOCH,
                 state: IngressState::Completed(WasmResult::Reply(b"done".to_vec())),
             },
             NumBytes::from(u64::MAX),
@@ -3859,7 +3858,7 @@ fn certified_read_can_fetch_multiple_entries_in_one_go() {
             IngressStatus::Known {
                 receiver: canister_test_id(1).get(),
                 user_id: user_test_id(1),
-                time: mock_time(),
+                time: UNIX_EPOCH,
                 state: IngressState::Processing,
             },
             NumBytes::from(u64::MAX),
@@ -3914,7 +3913,7 @@ fn certified_read_can_produce_proof_of_absence() {
             IngressStatus::Known {
                 receiver: canister_test_id(1).get(),
                 user_id: user_test_id(1),
-                time: mock_time(),
+                time: UNIX_EPOCH,
                 state: IngressState::Completed(WasmResult::Reply(b"done".to_vec())),
             },
             NumBytes::from(u64::MAX),
@@ -3924,7 +3923,7 @@ fn certified_read_can_produce_proof_of_absence() {
             IngressStatus::Known {
                 receiver: canister_test_id(1).get(),
                 user_id: user_test_id(1),
-                time: mock_time(),
+                time: UNIX_EPOCH,
                 state: IngressState::Processing,
             },
             NumBytes::from(u64::MAX),

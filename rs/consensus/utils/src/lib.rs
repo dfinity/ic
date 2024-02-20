@@ -589,7 +589,6 @@ mod tests {
         },
     };
     use ic_test_utilities_registry::SubnetRecordBuilder;
-    use ic_test_utilities_time::mock_time;
     use ic_types::{
         consensus::ecdsa::{
             EcdsaKeyTranscript, EcdsaUIDGenerator, KeyTranscriptCreation, MaskedTranscript,
@@ -604,6 +603,7 @@ mod tests {
         },
         messages::CallbackId,
         signature::ThresholdSignatureShare,
+        time::UNIX_EPOCH,
     };
 
     /// Test that two shares with the same content are grouped together, and
@@ -836,7 +836,7 @@ mod tests {
             pseudo_random_id: [0; 32],
             matched_quadruple: quadruple_id.map(|qid| (qid, Height::from(0))),
             nonce: None,
-            batch_time: mock_time(),
+            batch_time: UNIX_EPOCH,
         }
     }
 

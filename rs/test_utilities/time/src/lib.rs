@@ -3,10 +3,6 @@ use ic_types::time::{Time, UNIX_EPOCH};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
-pub fn mock_time() -> Time {
-    UNIX_EPOCH
-}
-
 /// A pure implementation of [TimeSource] that requires manual
 /// fast forward to advance time.
 pub struct FastForwardTimeSource(RwLock<TickTimeData>);

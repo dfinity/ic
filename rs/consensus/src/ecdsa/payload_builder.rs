@@ -1134,7 +1134,6 @@ mod tests {
     use ic_test_utilities::types::ids::user_test_id;
     use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
-    use ic_test_utilities_time::mock_time;
     use ic_types::batch::BatchPayload;
     use ic_types::consensus::dkg::{Dealings, Summary};
     use ic_types::consensus::ecdsa::EcdsaPayload;
@@ -1149,6 +1148,7 @@ mod tests {
     use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
     use ic_types::crypto::canister_threshold_sig::ThresholdEcdsaCombinedSignature;
     use ic_types::crypto::{CryptoHash, CryptoHashOf};
+    use ic_types::time::UNIX_EPOCH;
     use ic_types::Randomness;
     use ic_types::{messages::CallbackId, Height, RegistryVersion};
     use std::collections::BTreeSet;
@@ -1290,7 +1290,7 @@ mod tests {
             set_up_ecdsa_payload_and_sign_with_ecdsa_contexts(vec![(
                 key_id.clone(),
                 0,
-                mock_time(),
+                UNIX_EPOCH,
             )]);
 
         let subnet_nodes: Vec<_> = env.nodes.ids();
@@ -1427,27 +1427,27 @@ mod tests {
 
         let contexts = set_up_sign_with_ecdsa_contexts(vec![
             // Two request contexts without quadruple
-            (valid_key_id.clone(), 0, mock_time(), None),
-            (disabled_key_id.clone(), 1, mock_time(), None),
+            (valid_key_id.clone(), 0, UNIX_EPOCH, None),
+            (disabled_key_id.clone(), 1, UNIX_EPOCH, None),
             // One valid context with matched quadruple
             (
                 valid_key_id.clone(),
                 2,
-                mock_time(),
+                UNIX_EPOCH,
                 Some(quadruple_for_valid_key),
             ),
             // One invalid context with matched quadruple
             (
                 disabled_key_id.clone(),
                 3,
-                mock_time(),
+                UNIX_EPOCH,
                 Some(quadruple_for_disabled_key),
             ),
             // One valid context matched to non-existant quadruple
             (
                 valid_key_id.clone(),
                 4,
-                mock_time(),
+                UNIX_EPOCH,
                 Some(non_existant_quadruple_for_valid_key),
             ),
         ]);
@@ -1464,7 +1464,7 @@ mod tests {
         create_data_payload_helper_2(
             &mut ecdsa_payload,
             Height::from(5),
-            mock_time(),
+            UNIX_EPOCH,
             &ecdsa_config,
             &valid_keys,
             RegistryVersion::from(9),
@@ -1510,9 +1510,9 @@ mod tests {
     #[test]
     fn test_ecdsa_signing_request_timeout() {
         let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
-        let expired_time = mock_time() + Duration::from_secs(10);
-        let expiry_time = mock_time() + Duration::from_secs(11);
-        let non_expired_time = mock_time() + Duration::from_secs(12);
+        let expired_time = UNIX_EPOCH + Duration::from_secs(10);
+        let expiry_time = UNIX_EPOCH + Duration::from_secs(11);
+        let non_expired_time = UNIX_EPOCH + Duration::from_secs(12);
         let (mut ecdsa_payload, _env, contexts) =
             set_up_ecdsa_payload_and_sign_with_ecdsa_contexts(vec![
                 (key_id.clone(), 0, expired_time),
@@ -1542,9 +1542,9 @@ mod tests {
     #[test]
     fn test_ecdsa_signing_request_timeout_improved_latency() {
         let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
-        let expired_time = mock_time() + Duration::from_secs(10);
-        let expiry_time = mock_time() + Duration::from_secs(11);
-        let non_expired_time = mock_time() + Duration::from_secs(12);
+        let expired_time = UNIX_EPOCH + Duration::from_secs(10);
+        let expiry_time = UNIX_EPOCH + Duration::from_secs(11);
+        let non_expired_time = UNIX_EPOCH + Duration::from_secs(12);
 
         let (mut ecdsa_payload, _env) = set_up_ecdsa_payload_with_key();
         // Add quadruples
@@ -1611,7 +1611,7 @@ mod tests {
         let valid_key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
         let invalid_key_id = EcdsaKeyId::from_str("Secp256k1:some_invalid_key").unwrap();
         let (mut ecdsa_payload, _env, contexts) = set_up_ecdsa_payload_and_sign_with_ecdsa_contexts(
-            vec![(invalid_key_id, 0, mock_time())],
+            vec![(invalid_key_id, 0, UNIX_EPOCH)],
         );
         let valid_keys = BTreeSet::from([valid_key_id.clone()]);
         let height = Height::from(1);
@@ -1667,16 +1667,16 @@ mod tests {
 
         let contexts = set_up_sign_with_ecdsa_contexts(vec![
             // One matched context with valid key
-            (valid_key_id.clone(), 1, mock_time(), Some(quadruple_id1)),
+            (valid_key_id.clone(), 1, UNIX_EPOCH, Some(quadruple_id1)),
             // One matched context with invalid key
             (
                 invalid_key_id.clone(),
                 2,
-                mock_time(),
+                UNIX_EPOCH,
                 Some(quadruple_id2.clone()),
             ),
             // One unmatched context with invalid key
-            (invalid_key_id.clone(), 3, mock_time(), None),
+            (invalid_key_id.clone(), 3, UNIX_EPOCH, None),
         ]);
 
         assert_eq!(ecdsa_payload.signature_agreements.len(), 0);
@@ -2162,7 +2162,7 @@ mod tests {
         create_data_payload_helper_2(
             &mut ecdsa_payload,
             Height::from(5),
-            mock_time(),
+            UNIX_EPOCH,
             &EcdsaConfig::default(),
             &valid_keys,
             RegistryVersion::from(9),
@@ -2186,7 +2186,7 @@ mod tests {
         create_data_payload_helper_2(
             &mut ecdsa_payload,
             Height::from(5),
-            mock_time(),
+            UNIX_EPOCH,
             &EcdsaConfig::default(),
             &valid_keys,
             RegistryVersion::from(9),
@@ -2765,7 +2765,7 @@ mod tests {
                 ValidationContext {
                     registry_version: RegistryVersion::from(99),
                     certified_height: Height::from(42),
-                    time: mock_time(),
+                    time: UNIX_EPOCH,
                 },
             );
             assert_proposal_conversion(b);
@@ -3240,7 +3240,7 @@ mod tests {
             create_data_payload_helper_2(
                 &mut payload_5,
                 Height::from(3),
-                mock_time(),
+                UNIX_EPOCH,
                 &ecdsa_config,
                 &valid_keys,
                 next_key_transcript.registry_version(),
@@ -3269,7 +3269,7 @@ mod tests {
             create_data_payload_helper_2(
                 &mut payload_6,
                 Height::from(4),
-                mock_time(),
+                UNIX_EPOCH,
                 &ecdsa_config,
                 &valid_keys,
                 next_key_transcript.registry_version(),
@@ -3347,7 +3347,7 @@ mod tests {
             let result = create_data_payload_helper_2(
                 &mut payload_2,
                 Height::from(2),
-                mock_time(),
+                UNIX_EPOCH,
                 &ecdsa_config,
                 &valid_keys,
                 registry_version,
@@ -3513,7 +3513,7 @@ mod tests {
             let result = create_data_payload_helper_2(
                 &mut payload_2,
                 Height::from(2),
-                mock_time(),
+                UNIX_EPOCH,
                 &ecdsa_config,
                 &valid_keys,
                 registry_version,
@@ -3542,7 +3542,7 @@ mod tests {
             let result = create_data_payload_helper_2(
                 &mut payload_3,
                 Height::from(3),
-                mock_time(),
+                UNIX_EPOCH,
                 &ecdsa_config,
                 &valid_keys,
                 registry_version,
@@ -3569,7 +3569,7 @@ mod tests {
             let result = create_data_payload_helper_2(
                 &mut payload_4,
                 Height::from(3),
-                mock_time(),
+                UNIX_EPOCH,
                 &ecdsa_config,
                 &valid_keys,
                 registry_version,

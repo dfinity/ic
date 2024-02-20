@@ -44,12 +44,13 @@ use ic_test_utilities::{
     types::messages::SignedIngressBuilder,
 };
 use ic_test_utilities_registry::test_subnet_record;
-use ic_test_utilities_time::{mock_time, FastForwardTimeSource};
+use ic_test_utilities_time::FastForwardTimeSource;
 use ic_types::{
     batch::RawQueryStats,
     ingress::{IngressState, IngressStatus},
     malicious_flags::MaliciousFlags,
     messages::{MessageId, SignedIngress},
+    time::UNIX_EPOCH,
     Height, RegistryVersion, SubnetId, Time,
 };
 use rand::{seq::SliceRandom, Rng};
@@ -91,7 +92,7 @@ impl SimulatedIngressHistory {
                         IngressStatus::Known {
                             receiver: canister_test_id(0).get(),
                             user_id: user_test_id(0),
-                            time: mock_time(),
+                            time: UNIX_EPOCH,
                             state: IngressState::Completed(ic_types::ingress::WasmResult::Reply(
                                 vec![],
                             )),

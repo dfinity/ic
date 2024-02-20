@@ -24,7 +24,6 @@ use ic_test_utilities::types::{
     ids::user_test_id,
     messages::{RequestBuilder, ResponseBuilder},
 };
-use ic_test_utilities_time::mock_time;
 use ic_types::{
     messages::{
         CallContextId, CallbackId, CanisterCall, RequestMetadata, StopCanisterCallId,
@@ -101,7 +100,7 @@ impl CanisterStateFixture {
                 CallOrigin::CanisterUpdate(CANISTER_ID, CallbackId::from(1)),
                 Cycles::zero(),
                 Time::from_nanos_since_unix_epoch(0),
-                RequestMetadata::new(0, mock_time()),
+                RequestMetadata::new(0, UNIX_EPOCH),
             );
         self.canister_state
             .system_state
@@ -141,7 +140,7 @@ impl CanisterStateFixture {
 
     fn with_input_reservation(&mut self) {
         self.canister_state
-            .push_output_request(default_output_request(), mock_time())
+            .push_output_request(default_output_request(), UNIX_EPOCH)
             .unwrap();
         self.pop_output().unwrap();
     }
@@ -424,7 +423,7 @@ fn canister_state_push_output_request_mismatched_sender() {
         .canister_state
         .push_output_request(
             Arc::new(RequestBuilder::default().sender(OTHER_CANISTER_ID).build()),
-            mock_time(),
+            UNIX_EPOCH,
         )
         .unwrap();
 }
@@ -863,7 +862,7 @@ fn reverts_stopping_status_after_split() {
         CallOrigin::Ingress(user_test_id(1), message_test_id(2)),
         Cycles::from(0u128),
         Time::from_nanos_since_unix_epoch(0),
-        RequestMetadata::new(0, mock_time()),
+        RequestMetadata::new(0, UNIX_EPOCH),
     );
     canister_state.system_state.status = CanisterStatus::Stopping {
         call_context_manager: call_context_manager.clone(),

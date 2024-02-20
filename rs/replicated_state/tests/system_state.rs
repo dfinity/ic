@@ -9,9 +9,9 @@ use ic_test_utilities::types::{
     ids::{canister_test_id, user_test_id},
     messages::{RequestBuilder, ResponseBuilder},
 };
-use ic_test_utilities_time::mock_time;
 use ic_types::{
     messages::{CanisterMessage, Request, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES},
+    time::UNIX_EPOCH,
     CanisterId, Cycles,
 };
 use std::sync::Arc;
@@ -128,7 +128,7 @@ impl SystemStateFixture {
         &mut self,
         request: Arc<Request>,
     ) -> Result<(), (StateError, Arc<Request>)> {
-        self.system_state.push_output_request(request, mock_time())
+        self.system_state.push_output_request(request, UNIX_EPOCH)
     }
 
     fn pop_output(&mut self) -> Option<RequestOrResponse> {

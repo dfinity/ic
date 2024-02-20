@@ -21,10 +21,10 @@ use ic_test_utilities::{
         messages::{RequestBuilder, ResponseBuilder},
     },
 };
-use ic_test_utilities_time::mock_time;
 use ic_types::nominal_cycles::NominalCycles;
 use ic_types::{
     messages::{CanisterMessage, RequestMetadata, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
+    time::UNIX_EPOCH,
     ComputeAllocation, Cycles, NumInstructions,
 };
 use prometheus::IntCounter;
@@ -66,7 +66,7 @@ fn push_output_request_fails_not_enough_cycles_for_request() {
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
-        RequestMetadata::new(0, mock_time()),
+        RequestMetadata::new(0, UNIX_EPOCH),
     );
 
     assert_eq!(
@@ -118,7 +118,7 @@ fn push_output_request_fails_not_enough_cycles_for_response() {
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
-        RequestMetadata::new(0, mock_time()),
+        RequestMetadata::new(0, UNIX_EPOCH),
     );
 
     assert_eq!(
@@ -152,7 +152,7 @@ fn push_output_request_succeeds_with_enough_cycles() {
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
-        RequestMetadata::new(0, mock_time()),
+        RequestMetadata::new(0, UNIX_EPOCH),
     );
 
     let prepayment_for_response_execution =
@@ -196,7 +196,7 @@ fn correct_charging_source_canister_for_a_request() {
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
-        RequestMetadata::new(0, mock_time()),
+        RequestMetadata::new(0, UNIX_EPOCH),
     );
 
     let request = RequestBuilder::default()
@@ -240,7 +240,7 @@ fn correct_charging_source_canister_for_a_request() {
     sandbox_safe_system_state
         .system_state_changes
         .apply_changes(
-            mock_time(),
+            UNIX_EPOCH,
             &mut system_state,
             &default_network_topology(),
             subnet_test_id(1),
@@ -345,7 +345,7 @@ fn is_controller_test() {
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
-        RequestMetadata::new(0, mock_time()),
+        RequestMetadata::new(0, UNIX_EPOCH),
     );
 
     // Users IDs 1 and 2 are controllers, hence is_controller should return true,
@@ -374,7 +374,7 @@ fn call_increases_cycles_consumed_metric() {
     let system_state_changes = api.into_system_state_changes();
     system_state_changes
         .apply_changes(
-            mock_time(),
+            UNIX_EPOCH,
             &mut system_state,
             &default_network_topology(),
             subnet_test_id(1),
@@ -430,7 +430,7 @@ fn test_inter_canister_call(
         topo,
         SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
-        RequestMetadata::new(0, mock_time()),
+        RequestMetadata::new(0, UNIX_EPOCH),
     );
 
     let request = RequestBuilder::default()
@@ -459,7 +459,7 @@ fn test_inter_canister_call(
     sandbox_safe_system_state
         .system_state_changes
         .apply_changes(
-            mock_time(),
+            UNIX_EPOCH,
             &mut system_state,
             topo,
             subnet_id,

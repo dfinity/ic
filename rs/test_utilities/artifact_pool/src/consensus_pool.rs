@@ -19,12 +19,12 @@ use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
 use ic_test_utilities::{consensus::fake::*, crypto::CryptoReturningOk};
-use ic_test_utilities_time::mock_time;
 use ic_types::signature::*;
 use ic_types::{artifact::ConsensusMessageId, batch::ValidationContext};
 use ic_types::{
     artifact_kind::ConsensusArtifact,
     crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
+    time::UNIX_EPOCH,
 };
 use ic_types::{consensus::*, crypto::*, *};
 use std::sync::Arc;
@@ -694,7 +694,7 @@ impl TestConsensusPool {
         self.insert(UnvalidatedConsensusArtifact {
             message: value.into_message(),
             peer_id: node_test_id(0),
-            timestamp: mock_time(),
+            timestamp: UNIX_EPOCH,
         });
     }
 

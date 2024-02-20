@@ -42,7 +42,6 @@ use ic_test_utilities::{
     state::ReplicatedStateBuilder,
     types::ids::{node_test_id, subnet_test_id},
 };
-use ic_test_utilities_time::mock_time;
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
     artifact_kind::IngressArtifact,
@@ -62,6 +61,7 @@ use ic_types::{
     malicious_flags::MaliciousFlags,
     messages::{CertificateDelegation, SignedIngressContent, UserQuery},
     signature::ThresholdSignature,
+    time::UNIX_EPOCH,
     CryptoHashOfPartialState, Height, RegistryVersion,
 };
 use mockall::{mock, predicate::*};
@@ -207,7 +207,7 @@ pub fn default_get_latest_state() -> Labeled<Arc<ReplicatedState>> {
     };
 
     metadata.network_topology = network_topology;
-    metadata.batch_time = mock_time();
+    metadata.batch_time = UNIX_EPOCH;
 
     Labeled::new(
         Height::from(1),
@@ -273,7 +273,7 @@ fn basic_consensus_pool_cache() -> MockConsensusPoolCache {
                 ValidationContext {
                     registry_version: RegistryVersion::from(1),
                     certified_height: Height::from(1),
-                    time: mock_time(),
+                    time: UNIX_EPOCH,
                 },
             )
         });

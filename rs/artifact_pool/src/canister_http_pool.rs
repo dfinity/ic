@@ -187,12 +187,12 @@ impl HasLabel for CanisterHttpResponse {
 mod tests {
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::{consensus::fake::FakeSigner, types::ids::node_test_id};
-    use ic_test_utilities_time::mock_time;
     use ic_types::{
         canister_http::{CanisterHttpResponseContent, CanisterHttpResponseMetadata},
         crypto::{CryptoHash, Signed},
         messages::CallbackId,
         signature::BasicSignature,
+        time::UNIX_EPOCH,
         CanisterId, RegistryVersion,
     };
 
@@ -204,7 +204,7 @@ mod tests {
         UnvalidatedArtifact::<CanisterHttpResponseShare> {
             message,
             peer_id: node_test_id(0),
-            timestamp: mock_time(),
+            timestamp: UNIX_EPOCH,
         }
     }
 
@@ -212,7 +212,7 @@ mod tests {
         Signed {
             content: CanisterHttpResponseMetadata {
                 id: CallbackId::from(id),
-                timeout: mock_time(),
+                timeout: UNIX_EPOCH,
                 content_hash: CryptoHashOf::from(CryptoHash(vec![1, 2, 3])),
                 registry_version: RegistryVersion::from(id),
             },
@@ -223,7 +223,7 @@ mod tests {
     fn fake_response(id: u64) -> CanisterHttpResponse {
         CanisterHttpResponse {
             id: CallbackId::from(id),
-            timeout: mock_time(),
+            timeout: UNIX_EPOCH,
             canister_id: CanisterId::from_u64(id),
             content: CanisterHttpResponseContent::Success(Vec::new()),
         }

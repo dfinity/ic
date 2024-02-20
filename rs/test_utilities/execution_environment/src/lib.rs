@@ -1,10 +1,5 @@
-use ic_test_utilities::{
-    crypto::mock_random_number_generator,
-    types::messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder},
-};
-use ic_test_utilities_time::mock_time;
-
 use ic_base_types::{NumBytes, NumSeconds, PrincipalId, SubnetId};
+use ic_config::embedders::MeteringType;
 use ic_config::{
     embedders::Config as EmbeddersConfig, execution_environment::Config, flag_status::FlagStatus,
     subnet_config::SchedulerConfig, subnet_config::SubnetConfig,
@@ -47,6 +42,10 @@ use ic_replicated_state::{
 };
 use ic_replicated_state::{page_map::TestPageAllocatorFileDescriptorImpl, PageMap};
 use ic_system_api::InstructionLimits;
+use ic_test_utilities::{
+    crypto::mock_random_number_generator,
+    types::messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder},
+};
 use ic_types::{
     batch::QueryStats,
     crypto::{canister_threshold_sig::MasterEcdsaPublicKey, AlgorithmId},
@@ -55,13 +54,12 @@ use ic_types::{
         AnonymousQuery, CallbackId, CanisterCall, CanisterMessage, CanisterTask, MessageId,
         RequestOrResponse, Response, UserQuery, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
     },
+    time::UNIX_EPOCH,
     CanisterId, Cycles, Height, NumInstructions, NumPages, QueryStatsEpoch, Time, UserId,
 };
 use ic_types_test_utils::ids::{node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::UNIVERSAL_CANISTER_WASM;
 use ic_wasm_types::BinaryEncodedWasm;
-
-use ic_config::embedders::MeteringType;
 use maplit::{btreemap, btreeset};
 use std::convert::TryFrom;
 use std::sync::Arc;
@@ -1074,7 +1072,7 @@ impl ExecutionTest {
             canister,
             Arc::new(response),
             self.instruction_limits.clone(),
-            mock_time(),
+            UNIX_EPOCH,
             network_topology,
             &mut round_limits,
             self.subnet_size(),
@@ -1630,7 +1628,7 @@ impl Default for ExecutionTestBuilder {
             manual_execution: false,
             subnet_features: String::default(),
             bitcoin_get_successors_follow_up_responses: BTreeMap::default(),
-            time: mock_time(),
+            time: UNIX_EPOCH,
             resource_saturation_scaling: 1,
             heap_delta_rate_limit: scheduler_config.heap_delta_rate_limit,
             upload_wasm_chunk_instructions: scheduler_config.upload_wasm_chunk_instructions,

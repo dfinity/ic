@@ -26,7 +26,6 @@ use ic_test_utilities::consensus::fake::*;
 use ic_test_utilities::state::ReplicatedStateBuilder;
 use ic_test_utilities::types::ids::{node_test_id, NODE_1, NODE_2};
 use ic_test_utilities::types::messages::RequestBuilder;
-use ic_test_utilities_time::mock_time;
 use ic_types::artifact::EcdsaMessageId;
 use ic_types::consensus::certification::Certification;
 use ic_types::consensus::ecdsa::{
@@ -50,7 +49,9 @@ use ic_types::crypto::canister_threshold_sig::{
 use ic_types::crypto::AlgorithmId;
 use ic_types::messages::CallbackId;
 use ic_types::{signature::*, Time};
-use ic_types::{Height, NodeId, PrincipalId, Randomness, RegistryVersion, SubnetId};
+use ic_types::{
+    time::UNIX_EPOCH, Height, NodeId, PrincipalId, Randomness, RegistryVersion, SubnetId,
+};
 use rand::{CryptoRng, Rng};
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
@@ -76,7 +77,7 @@ pub fn fake_sign_with_ecdsa_context(
     key_id: EcdsaKeyId,
     pseudo_random_id: [u8; 32],
 ) -> SignWithEcdsaContext {
-    fake_sign_with_ecdsa_context_with_batch_time(key_id, pseudo_random_id, mock_time())
+    fake_sign_with_ecdsa_context_with_batch_time(key_id, pseudo_random_id, UNIX_EPOCH)
 }
 
 pub fn fake_sign_with_ecdsa_context_with_batch_time(
@@ -105,7 +106,7 @@ pub fn fake_sign_with_ecdsa_context_with_quadruple(
         request: RequestBuilder::new().build(),
         message_hash: [0; 32],
         derivation_path: vec![],
-        batch_time: mock_time(),
+        batch_time: UNIX_EPOCH,
         key_id,
         pseudo_random_id: [id; 32],
         matched_quadruple: quadruple.map(|qid| (qid, Height::from(1))),
@@ -135,7 +136,7 @@ pub fn fake_sign_with_ecdsa_context_from_request_id(
         request: RequestBuilder::new().build(),
         message_hash: [0; 32],
         derivation_path: vec![],
-        batch_time: mock_time(),
+        batch_time: UNIX_EPOCH,
         key_id: quadruple_id.key_id().unwrap().clone(),
         pseudo_random_id: request_id.pseudo_random_id,
         matched_quadruple: Some((quadruple_id, height)),

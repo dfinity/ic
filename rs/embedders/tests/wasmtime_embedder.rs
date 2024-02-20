@@ -8,9 +8,9 @@ use ic_test_utilities::{
     types::ids::user_test_id,
     wasmtime_instance::{WasmtimeInstanceBuilder, DEFAULT_NUM_INSTRUCTIONS},
 };
-use ic_test_utilities_time::mock_time;
 use ic_types::{
     methods::{FuncRef, WasmClosure, WasmMethod},
+    time::UNIX_EPOCH,
     NumBytes,
 };
 
@@ -74,7 +74,7 @@ fn correctly_count_instructions() {
             .as_str(),
         )
         .with_api_type(ic_system_api::ApiType::init(
-            mock_time(),
+            UNIX_EPOCH,
             vec![0; 1024],
             user_test_id(24).get(),
         ))
@@ -123,7 +123,7 @@ fn instruction_limit_traps() {
             .as_str(),
         )
         .with_api_type(ic_system_api::ApiType::init(
-            mock_time(),
+            UNIX_EPOCH,
             vec![0; 1024],
             user_test_id(24).get(),
         ))
@@ -224,7 +224,7 @@ fn correctly_report_performance_counter() {
             .as_str(),
         )
         .with_api_type(ic_system_api::ApiType::init(
-            mock_time(),
+            UNIX_EPOCH,
             vec![0; 1024],
             user_test_id(24).get(),
         ))
@@ -568,7 +568,7 @@ fn read_before_write_stats() {
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_wat(direct_wat)
         .with_api_type(ic_system_api::ApiType::update(
-            mock_time(),
+            UNIX_EPOCH,
             vec![],
             Cycles::zero(),
             PrincipalId::new_user_test_id(0),
@@ -596,7 +596,7 @@ fn read_before_write_stats() {
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_wat(read_then_write_wat)
         .with_api_type(ic_system_api::ApiType::update(
-            mock_time(),
+            UNIX_EPOCH,
             vec![],
             Cycles::zero(),
             PrincipalId::new_user_test_id(0),

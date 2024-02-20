@@ -26,7 +26,6 @@ use ic_replicated_state::{
     CallContext, CallOrigin, CanisterState, CanisterStatus, ExecutionState, ExportedFunctions,
     InputQueueType, Memory, NumWasmPages, ReplicatedState, SchedulerState, SystemState,
 };
-use ic_test_utilities_time::mock_time;
 use ic_types::methods::{Callback, WasmClosure};
 use ic_types::time::UNIX_EPOCH;
 use ic_types::{batch::RawQueryStats, messages::CallbackId};
@@ -132,7 +131,7 @@ impl ReplicatedStateBuilder {
                         SubnetCallContext::BitcoinGetSuccessors(BitcoinGetSuccessorsContext {
                             request: RequestBuilder::default().build(),
                             payload,
-                            time: mock_time(),
+                            time: UNIX_EPOCH,
                         }),
                     );
                 }
@@ -142,7 +141,7 @@ impl ReplicatedStateBuilder {
                             BitcoinSendTransactionInternalContext {
                                 request: RequestBuilder::default().build(),
                                 payload,
-                                time: mock_time(),
+                                time: UNIX_EPOCH,
                             },
                         ),
                     );
@@ -160,7 +159,7 @@ impl Default for ReplicatedStateBuilder {
             canisters: Vec::new(),
             subnet_type: SubnetType::Application,
             subnet_id: subnet_test_id(1),
-            batch_time: mock_time(),
+            batch_time: UNIX_EPOCH,
             subnet_features: SubnetFeatures::default(),
             bitcoin_adapter_requests: Vec::new(),
             query_stats: RawQueryStats::default(),
@@ -474,7 +473,7 @@ impl CallContextBuilder {
             false,
             Cycles::zero(),
             self.time,
-            RequestMetadata::new(0, mock_time()),
+            RequestMetadata::new(0, UNIX_EPOCH),
         )
     }
 }
@@ -748,7 +747,7 @@ pub fn register_callback(
         CallOrigin::CanisterUpdate(originator, callback_id),
         Cycles::zero(),
         Time::from_nanos_since_unix_epoch(0),
-        RequestMetadata::new(0, mock_time()),
+        RequestMetadata::new(0, UNIX_EPOCH),
     );
 
     call_context_manager.register_callback(Callback::new(

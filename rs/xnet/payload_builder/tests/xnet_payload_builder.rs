@@ -26,9 +26,9 @@ use ic_test_utilities_metrics::{
     fetch_histogram_stats, fetch_histogram_vec_count, metric_vec, HistogramStats, MetricVec,
 };
 use ic_test_utilities_registry::SubnetRecordBuilder;
-use ic_test_utilities_time::mock_time;
 use ic_types::{
     batch::ValidationContext,
+    time::UNIX_EPOCH,
     xnet::{CertifiedStreamSlice, StreamIndex, StreamIndexedQueue, StreamSlice},
     CountBytes, Height, NodeId, RegistryVersion, SubnetId,
 };
@@ -99,7 +99,7 @@ impl XNetPayloadBuilderFixture {
     /// Calls `get_xnet_payload()` on the wrapped `XNetPayloadBuilder` and
     /// decodes all slices in the payload.
     fn get_xnet_payload(&self, byte_limit: usize) -> (BTreeMap<SubnetId, StreamSlice>, NumBytes) {
-        let time = mock_time();
+        let time = UNIX_EPOCH;
         let validation_context = ValidationContext {
             registry_version: REGISTRY_VERSION,
             certified_height: self.certified_height,
@@ -611,7 +611,7 @@ proptest! {
             slice_bytes_sum += fixture.pool_slice(SUBNET_1, &stream1, from1, msg_count1, &log);
             slice_bytes_sum += fixture.pool_slice(SUBNET_2, &stream2, from2, msg_count2, &log);
 
-            let time = mock_time();
+            let time = UNIX_EPOCH;
             let validation_context = ValidationContext {
                 registry_version: REGISTRY_VERSION,
                 certified_height: fixture.certified_height,

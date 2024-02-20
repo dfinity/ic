@@ -62,11 +62,11 @@ use ic_test_utilities_execution_environment::{
     assert_delta, get_reply, get_routing_table_with_specified_ids_allocation_range,
     wasm_compilation_cost, wat_compilation_cost, ExecutionTest, ExecutionTestBuilder,
 };
-use ic_test_utilities_time::mock_time;
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{CallbackId, CanisterCall, StopCanisterCallId, StopCanisterContext},
     nominal_cycles::NominalCycles,
+    time::UNIX_EPOCH,
     CanisterId, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
     NumInstructions, SubnetId, Time, UserId,
 };
@@ -2977,7 +2977,7 @@ fn uninstall_canister_doesnt_respond_to_responded_call_contexts() {
             &mut CanisterStateBuilder::new()
                 .with_call_context(CallContextBuilder::new().with_responded(true).build())
                 .build(),
-            mock_time(),
+            UNIX_EPOCH,
             AddCanisterChangeToHistory::No,
             Arc::new(TestPageAllocatorFileDescriptorImpl),
         ),
@@ -3002,7 +3002,7 @@ fn uninstall_canister_responds_to_unresponded_call_contexts() {
                         .build()
                 )
                 .build(),
-            mock_time(),
+            UNIX_EPOCH,
             AddCanisterChangeToHistory::No,
             Arc::new(TestPageAllocatorFileDescriptorImpl),
         )[0],
@@ -3011,7 +3011,7 @@ fn uninstall_canister_responds_to_unresponded_call_contexts() {
             status: IngressStatus::Known {
                 receiver: canister_test_id(789).get(),
                 user_id: user_test_id(123),
-                time: mock_time(),
+                time: UNIX_EPOCH,
                 state: IngressState::Failed(UserError::new(
                     ErrorCode::CanisterRejectedMessage,
                     "Canister has been uninstalled.",

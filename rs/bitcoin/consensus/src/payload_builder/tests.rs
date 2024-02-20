@@ -23,10 +23,10 @@ use ic_test_utilities::{
     types::ids::{node_test_id, subnet_test_id},
 };
 use ic_test_utilities_logger::with_test_replica_logger;
-use ic_test_utilities_time::mock_time;
 use ic_types::{
     batch::ValidationContext,
     crypto::{CryptoHash, CryptoHashOf},
+    time::UNIX_EPOCH,
     Height, NumBytes, RegistryVersion, SubnetId,
 };
 use mockall::mock;
@@ -102,7 +102,7 @@ fn bitcoin_payload_builder_test(
     run_test: impl FnOnce(ProposalContext, BitcoinPayloadBuilder),
 ) {
     with_test_replica_logger(|log| {
-        let time = mock_time();
+        let time = UNIX_EPOCH;
 
         let validation_context = ValidationContext {
             registry_version: REGISTRY_VERSION,
@@ -347,7 +347,7 @@ fn includes_only_responses_for_callback_ids_not_seen_in_past_payloads() {
             );
             let past_payloads = vec![PastPayload {
                 height: Height::from(0),
-                time: mock_time(),
+                time: UNIX_EPOCH,
                 block_hash: CryptoHashOf::from(CryptoHash(vec![])),
                 payload: &past_payload,
             }];

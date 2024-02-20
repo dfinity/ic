@@ -25,10 +25,10 @@ use ic_test_utilities_metrics::{
     fetch_histogram_stats, fetch_int_counter_vec, metric_vec, nonzero_values, HistogramStats,
     MetricVec,
 };
-use ic_test_utilities_time::mock_time;
 use ic_types::{
     ingress::{IngressState, IngressStatus},
     messages::{MessageId, SignedIngressContent},
+    time::UNIX_EPOCH,
     CanisterId,
 };
 use mockall::predicate::{always, eq};
@@ -115,7 +115,7 @@ fn induct_message_with_successful_history_update() {
                     IngressStatus::Known {
                         receiver: canister_id.get(),
                         user_id: user_test_id(0),
-                        time: mock_time(),
+                        time: UNIX_EPOCH,
                         state: IngressState::Received,
                     },
                     NumBytes::from(u64::MAX),
@@ -176,7 +176,7 @@ fn induct_message_fails_for_stopping_canister() {
                 eq(IngressStatus::Known {
                     receiver: canister_id.get(),
                     user_id: user_test_id(2),
-                    time: mock_time(),
+                    time: UNIX_EPOCH,
                     state: IngressState::Failed(UserError::new(
                         ErrorCode::CanisterStopping,
                         format!("Canister {} is stopping", canister_id),
@@ -232,7 +232,7 @@ fn induct_message_fails_for_stopped_canister() {
                 eq(IngressStatus::Known {
                     receiver: canister_id.get(),
                     user_id: user_test_id(2),
-                    time: mock_time(),
+                    time: UNIX_EPOCH,
                     state: IngressState::Failed(UserError::new(
                         ErrorCode::CanisterStopped,
                         format!("Canister {} is stopped", canister_id),
@@ -302,7 +302,7 @@ fn try_to_induct_a_message_marked_as_already_inducted() {
         let status = IngressStatus::Known {
             receiver: canister_id.get(),
             user_id: user_test_id(0),
-            time: mock_time(),
+            time: UNIX_EPOCH,
             state: IngressState::Received,
         };
         state.set_ingress_status(msg.id(), status, NumBytes::from(u64::MAX));
@@ -325,7 +325,7 @@ fn update_history_if_induction_failed() {
         let status = IngressStatus::Known {
             receiver: canister_id.get(),
             user_id: user_test_id(0),
-            time: mock_time(),
+            time: UNIX_EPOCH,
             state: IngressState::Failed(UserError::new(
                 ErrorCode::CanisterNotFound,
                 format!("Canister {} not found", canister_id),
@@ -404,7 +404,7 @@ fn dont_induct_duplicate_messages() {
                     IngressStatus::Known {
                         receiver: canister_test_id(0).get(),
                         user_id: user_test_id(0),
-                        time: mock_time(),
+                        time: UNIX_EPOCH,
                         state: IngressState::Received,
                     },
                     NumBytes::from(u64::MAX),
@@ -426,7 +426,7 @@ fn dont_induct_duplicate_messages() {
             IngressStatus::Known {
                 receiver: canister_id1.get(),
                 user_id: user_test_id(0),
-                time: mock_time(),
+                time: UNIX_EPOCH,
                 state: IngressState::Received,
             },
             NumBytes::from(u64::MAX),
@@ -436,7 +436,7 @@ fn dont_induct_duplicate_messages() {
             IngressStatus::Known {
                 receiver: canister_id1.get(),
                 user_id: user_test_id(0),
-                time: mock_time(),
+                time: UNIX_EPOCH,
                 state: IngressState::Received,
             },
             NumBytes::from(u64::MAX),

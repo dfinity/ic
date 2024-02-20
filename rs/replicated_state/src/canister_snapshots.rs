@@ -171,13 +171,13 @@ mod tests {
     use super::*;
     use super::{CanisterSnapshot, CanisterSnapshots, PageMap};
     use ic_test_utilities::types::ids::canister_test_id;
-    use ic_test_utilities_time::mock_time;
+    use ic_types::time::UNIX_EPOCH;
     use ic_types::NumBytes;
     #[test]
     fn test_push_and_remove_snapshot() {
         let snapshot = CanisterSnapshot::new(
             canister_test_id(0),
-            mock_time(),
+            UNIX_EPOCH,
             0,
             vec![],
             Some(PageMap::new_for_testing()),

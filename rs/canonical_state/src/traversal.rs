@@ -67,7 +67,6 @@ mod tests {
         state::new_canister_state,
         types::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id},
     };
-    use ic_test_utilities_time::mock_time;
     use ic_types::{xnet::StreamHeader, CanisterId, Cycles, ExecutionRound};
     use ic_wasm_types::CanisterModule;
     use maplit::{btreemap, btreeset};
@@ -425,10 +424,11 @@ mod tests {
         use ic_error_types::{ErrorCode, UserError};
         use ic_test_utilities::types::ids::{message_test_id, subnet_test_id, user_test_id};
         use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
+        use ic_types::time::UNIX_EPOCH;
 
         let user_id = user_test_id(1);
         let canister_id = canister_test_id(1);
-        let time = mock_time();
+        let time = UNIX_EPOCH;
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
         state.set_ingress_status(
             message_test_id(1),

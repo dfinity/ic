@@ -17,11 +17,11 @@ use ic_test_utilities::{
     types::ids::{call_context_test_id, user_test_id},
 };
 use ic_test_utilities_logger::with_test_replica_logger;
-use ic_test_utilities_time::mock_time;
 use ic_types::MemoryAllocation;
 use ic_types::{
     messages::RequestMetadata,
     methods::{FuncRef, WasmMethod},
+    time::UNIX_EPOCH,
     ComputeAllocation, Cycles, NumBytes, NumInstructions, PrincipalId,
 };
 use ic_wasm_types::BinaryEncodedWasm;
@@ -70,7 +70,7 @@ fn test_api_for_update(
         }
         .dirty_page_overhead,
         ComputeAllocation::default(),
-        RequestMetadata::new(0, mock_time()),
+        RequestMetadata::new(0, UNIX_EPOCH),
     );
     let canister_memory_limit = NumBytes::from(4 << 30);
     let canister_current_memory_usage = NumBytes::from(0);
@@ -78,7 +78,7 @@ fn test_api_for_update(
 
     SystemApiImpl::new(
         ApiType::update(
-            mock_time(),
+            UNIX_EPOCH,
             payload,
             Cycles::zero(),
             caller,

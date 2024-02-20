@@ -101,7 +101,7 @@ mod tests {
     use super::*;
     use crate::scheduler::tests::make_key_id;
     use ic_test_utilities::types::messages::RequestBuilder;
-    use ic_test_utilities_time::mock_time;
+    use ic_types::time::UNIX_EPOCH;
 
     fn fake_context(
         id: u64,
@@ -116,7 +116,7 @@ mod tests {
                 pseudo_random_id: [id as u8; 32],
                 message_hash: [0; 32],
                 derivation_path: vec![],
-                batch_time: mock_time(),
+                batch_time: UNIX_EPOCH,
                 matched_quadruple: matched_quadruple
                     .map(|(id, h)| (QuadrupleId(id, Some(key_id)), h)),
                 nonce: None,

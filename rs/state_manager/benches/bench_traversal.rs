@@ -22,9 +22,9 @@ use ic_test_utilities::{
         messages::{RequestBuilder, ResponseBuilder},
     },
 };
-use ic_test_utilities_time::mock_time;
 use ic_types::{
     messages::{CallbackId, Payload},
+    time::UNIX_EPOCH,
     xnet::StreamIndex,
     Cycles,
 };
@@ -79,7 +79,7 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
     }
 
     let user_id = user_test_id(1);
-    let time = mock_time();
+    let time = UNIX_EPOCH;
 
     for i in 1..NUM_STATUSES {
         use ic_error_types::{ErrorCode, UserError};

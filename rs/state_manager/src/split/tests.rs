@@ -29,13 +29,13 @@ use ic_test_utilities::{
     },
 };
 use ic_test_utilities_logger::with_test_replica_logger;
-use ic_test_utilities_time::mock_time;
 use ic_test_utilities_tmpdir::tmpdir;
 use ic_types::state_sync::CURRENT_STATE_SYNC_VERSION;
 use ic_types::{
     ingress::{IngressState, IngressStatus},
     malicious_flags::MaliciousFlags,
     messages::MessageId,
+    time::UNIX_EPOCH,
     Cycles, Height,
 };
 use std::{path::Path, sync::Arc, time::Duration};
@@ -396,13 +396,13 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
         IngressStatus::Known {
             receiver: CANISTER_1.get(),
             user_id: user_test_id(123),
-            time: mock_time(),
+            time: UNIX_EPOCH,
             state: IngressState::Failed(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 "Canister rejected the message",
             )),
         },
-        mock_time(),
+        UNIX_EPOCH,
         (1u64 << 30).into(),
     );
     state.metadata.batch_time = Time::from_secs_since_unix_epoch(1234567890).unwrap();

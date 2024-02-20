@@ -396,10 +396,10 @@ mod tests {
     use ic_interfaces_state_manager_mocks::MockStateManager;
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::state::ReplicatedStateBuilder;
-    use ic_test_utilities_time::mock_time;
     use ic_types::{
         batch::{CanisterQueryStats, QueryStats, RawQueryStats},
         crypto::{CryptoHash, CryptoHashOf},
+        time::UNIX_EPOCH,
         RegistryVersion,
     };
     use ic_types_test_utils::ids::{canister_test_id, node_test_id};
@@ -725,7 +725,7 @@ mod tests {
         ValidationContext {
             registry_version: RegistryVersion::new(0),
             certified_height: Height::new(0),
-            time: mock_time(),
+            time: UNIX_EPOCH,
         }
     }
 
@@ -846,7 +846,7 @@ mod tests {
     fn as_past_payload(payload: &[u8], height: u64) -> PastPayload {
         PastPayload {
             height: Height::from(height),
-            time: mock_time() + Duration::from_nanos(10 * height),
+            time: UNIX_EPOCH + Duration::from_nanos(10 * height),
             block_hash: CryptoHashOf::from(CryptoHash(vec![])),
             payload,
         }

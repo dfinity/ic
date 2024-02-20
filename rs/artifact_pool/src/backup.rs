@@ -628,7 +628,6 @@ impl BackupArtifact {
 mod tests {
     use super::*;
     use ic_test_utilities::{consensus::fake::*, types::ids::node_test_id};
-    use ic_test_utilities_time::mock_time;
     use ic_types::{
         batch::*,
         consensus::*,
@@ -690,7 +689,7 @@ mod tests {
                 ValidationContext {
                     registry_version: RegistryVersion::from(99),
                     certified_height: Height::from(42),
-                    time: mock_time(),
+                    time: UNIX_EPOCH,
                 },
             ),
             node_test_id(333),
