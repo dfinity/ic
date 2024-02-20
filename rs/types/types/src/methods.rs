@@ -319,28 +319,19 @@ impl TryFrom<pb::Callback> for Callback {
         let cycles_sent: PbCycles =
             try_from_option_field(value.cycles_sent, "Callback::cycles_sent")?;
 
-        let prepayment_for_response_execution = value
-            .prepayment_for_response_execution
-            .map(Into::into)
-            .unwrap_or_default();
-
-        let prepayment_for_response_transmission = value
-            .prepayment_for_response_transmission
-            .map(Into::into)
-            .unwrap_or_default();
+        let prepayment_for_response_execution = try_from_option_field(
+            value.prepayment_for_response_execution,
+            "Callback::prepayment_for_response_execution",
+        )?;
+        let prepayment_for_response_transmission = try_from_option_field(
+            value.prepayment_for_response_transmission,
+            "Callback::prepayment_for_response_transmission",
+        )?;
 
         Ok(Self {
             call_context_id: CallContextId::from(value.call_context_id),
-            originator: value
-                .originator
-                .map(TryInto::try_into)
-                .transpose()?
-                .unwrap_or(UNKNOWN_CANISTER_ID),
-            respondent: value
-                .respondent
-                .map(TryInto::try_into)
-                .transpose()?
-                .unwrap_or(UNKNOWN_CANISTER_ID),
+            originator: try_from_option_field(value.originator, "Callback::originator")?,
+            respondent: try_from_option_field(value.respondent, "Callback::respondent")?,
             cycles_sent: Cycles::from(cycles_sent),
             prepayment_for_response_execution,
             prepayment_for_response_transmission,
