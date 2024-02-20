@@ -256,6 +256,10 @@ const TEST_CANISTER: &str = r#"
         (call $write (i32.const 0) (i32.const 65536) (i32.const 4096))
 	(call $msg_reply)
     )
+    (func (export "canister_update write_heap_60k")
+        (call $write (i32.const 4096) (i32.const 61440) (i32.const 4096))
+	(call $msg_reply)
+    )
     (memory $memory 1)
     (export "memory" (memory $memory))
     (export "canister_update inc" (func $inc))
@@ -5766,6 +5770,7 @@ fn arbitrary_test_canister_op() -> impl Strategy<Value = TestCanisterOp> {
         Just(TestCanisterOp::UpdateCall("persist")),
         Just(TestCanisterOp::UpdateCall("load")),
         Just(TestCanisterOp::UpdateCall("write_heap_64k")),
+        Just(TestCanisterOp::UpdateCall("write_heap_60k")),
         Just(TestCanisterOp::TriggerMerge),
         Just(TestCanisterOp::CanisterUpgrade),
         Just(TestCanisterOp::CanisterReinstall),

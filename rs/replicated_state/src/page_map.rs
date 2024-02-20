@@ -16,8 +16,8 @@ pub use page_allocator::{
     PageDeltaSerialization, PageSerialization,
 };
 pub use storage::{
-    MergeCandidate, OverlayFileSerialization, StorageLayout, StorageSerialization,
-    MAX_NUMBER_OF_FILES,
+    BaseFileSerialization, MergeCandidate, OverlayFileSerialization, StorageLayout,
+    StorageSerialization, MAX_NUMBER_OF_FILES,
 };
 use storage::{OverlayFile, OverlayVersion, Storage};
 
