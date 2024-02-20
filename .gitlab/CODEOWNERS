@@ -305,12 +305,6 @@ go_deps.bzl               @dfinity-lab/teams/idx
 # [Scalability]
 /scalability/                                                       @dfinity-lab/teams/runtime-owners
 
-# [Nix]
-*.nix                     @dfinity-lab/teams/idx
-/nix/                     @dfinity-lab/teams/idx
-/experimental/nix/        @dfinity-lab/teams/idx
-/nix/overlays/haskell.nix @dfinity-lab/teams/ic-testing-verification
-
 # [No-Approvals]
 # Ghost is a group with no direct members. GitLab will bypass codeowners for files that match ghost ownership.
 *.lock                    @dfinity-lab/teams/ghost
