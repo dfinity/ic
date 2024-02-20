@@ -411,7 +411,7 @@ pub(crate) fn spawn_tip_thread(
                                 ),
                                 FlagStatus::Disabled => {
                                     if downgrade_state == DowngradeState::Unknown {
-                                        if full_merge(
+                                        if merge_to_base(
                                             &mut tip_handler,
                                             &pagemaptypes_with_num_pages,
                                             height,
@@ -742,7 +742,7 @@ fn merge(
 
 /// Merge all the overlays (if any) into bases.
 /// Return true if any merge was done.
-fn full_merge(
+fn merge_to_base(
     tip_handler: &mut TipHandler,
     pagemaptypes_with_num_pages: &[(PageMapType, usize)],
     height: Height,
@@ -767,7 +767,7 @@ fn full_merge(
                 }
             }),
         |pm_layout| {
-            let merge_candidate = MergeCandidate::full_merge(pm_layout)
+            let merge_candidate = MergeCandidate::merge_to_base(pm_layout)
                 .unwrap_or_else(|err| fatal!(log, "Failed to merge page map: {}", err));
             if let Some(m) = merge_candidate.as_ref() {
                 m.apply(&metrics.storage_metrics).unwrap_or_else(|err| {

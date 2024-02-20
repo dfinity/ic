@@ -1,9 +1,8 @@
 use super::{
-    checkpoint::{Checkpoint, MappingSerialization},
-    page_allocator::PageAllocatorSerialization,
-    Buffer, FileDescriptor, MemoryInstructions, MemoryMapOrData, PageAllocatorRegistry, PageIndex,
-    PageMap, PageMapSerialization, PersistDestination, StorageMetrics,
-    TestPageAllocatorFileDescriptorImpl, WRITE_BUCKET_PAGES,
+    checkpoint::Checkpoint, page_allocator::PageAllocatorSerialization,
+    storage::BaseFileSerialization, Buffer, FileDescriptor, MemoryInstructions, MemoryMapOrData,
+    PageAllocatorRegistry, PageIndex, PageMap, PageMapSerialization, PersistDestination,
+    StorageMetrics, TestPageAllocatorFileDescriptorImpl, WRITE_BUCKET_PAGES,
 };
 use ic_metrics::MetricsRegistry;
 use ic_sys::PAGE_SIZE;
@@ -27,18 +26,26 @@ fn assert_equal_page_maps(page_map1: &PageMap, page_map2: &PageMap) {
 fn duplicate_file_descriptors(
     mut serialized_page_map: PageMapSerialization,
 ) -> PageMapSerialization {
-    // TODO(IC-1306): Duplicate overlay fds
-    serialized_page_map.storage.base.mapping =
-        serialized_page_map
-            .storage
-            .base
-            .mapping
-            .map(|mapping| MappingSerialization {
-                file_descriptor: FileDescriptor {
+    match serialized_page_map.storage.base {
+        BaseFileSerialization::Base(ref mut base) => {
+            for mapping in base.mapping.iter_mut() {
+                mapping.file_descriptor = FileDescriptor {
                     fd: dup(mapping.file_descriptor.fd).unwrap(),
-                },
-                ..mapping
-            });
+                };
+            }
+        }
+        BaseFileSerialization::Overlay(ref mut overlay) => {
+            overlay.mapping.file_descriptor = FileDescriptor {
+                fd: dup(overlay.mapping.file_descriptor.fd).unwrap(),
+            }
+        }
+    }
+    for overlay in serialized_page_map.storage.overlays.iter_mut() {
+        overlay.mapping.file_descriptor = FileDescriptor {
+            fd: dup(overlay.mapping.file_descriptor.fd).unwrap(),
+        };
+    }
+
     serialized_page_map.page_allocator = PageAllocatorSerialization {
         id: serialized_page_map.page_allocator.id,
         fd: FileDescriptor {
