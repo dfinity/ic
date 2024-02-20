@@ -23,7 +23,7 @@ use ic_types::{
         dkg::Summary, Block, BlockPayload, BlockProposal, ConsensusMessage,
         ConsensusMessageHashable, Finalization, FinalizationContent, FinalizationShare,
         Notarization, NotarizationContent, NotarizationShare, RandomBeacon, RandomBeaconContent,
-        RandomBeaconShare, RandomTape, RandomTapeContent, RandomTapeShare,
+        RandomBeaconShare, RandomTape, RandomTapeContent, RandomTapeShare, Rank,
     },
     crypto::{ThresholdSigShare, ThresholdSigShareOf},
     signature::*,
@@ -104,9 +104,15 @@ pub(crate) fn make_summary(genesis_height: Height) -> Summary {
     summary
 }
 
-pub(crate) fn fake_block_proposal(h: Height) -> BlockProposal {
-    let parent = make_genesis(make_summary(h.decrement())).content.block;
-    BlockProposal::fake(Block::from_parent(parent.as_ref()), node_test_id(0))
+pub(crate) fn fake_block_proposal(height: Height) -> BlockProposal {
+    fake_block_proposal_with_rank(height, Rank(0))
+}
+
+pub(crate) fn fake_block_proposal_with_rank(height: Height, rank: Rank) -> BlockProposal {
+    let parent = make_genesis(make_summary(height.decrement())).content.block;
+    let mut block = Block::from_parent(parent.as_ref());
+    block.rank = rank;
+    BlockProposal::fake(block, node_test_id(0))
 }
 
 pub(crate) fn fake_random_beacon(h: Height) -> RandomBeacon {
