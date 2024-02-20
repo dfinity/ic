@@ -1,3 +1,4 @@
+use crate::common::types::OperationType;
 use anyhow::anyhow;
 use anyhow::bail;
 use ic_agent::agent::Envelope;
@@ -82,6 +83,25 @@ impl CanisterMethodName {
             ),
         }
     }
+
+    pub fn new_from_operation_type(operation_type: &OperationType) -> anyhow::Result<Self> {
+        match operation_type {
+            OperationType::Burn => bail!("Burn Operation not supported"),
+            OperationType::Mint => bail!("Mint Operation not supported"),
+            OperationType::Transfer => Ok(Self::Icrc1Transfer),
+            OperationType::Approve => Ok(Self::Icrc2Approve),
+        }
+    }
+}
+
+impl ToString for CanisterMethodName {
+    fn to_string(&self) -> String {
+        match self {
+            Self::Icrc2Approve => "icrc2_approve".to_string(),
+            Self::Icrc2TransferFrom => "icrc2_transfer_from".to_string(),
+            Self::Icrc1Transfer => "icrc1_transfer".to_string(),
+        }
+    }
 }
 
 impl FromStr for CanisterMethodName {
@@ -111,5 +131,55 @@ impl FromStr for UnsignedTransaction {
     type Err = anyhow::Error;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         serde_cbor::from_slice(hex::decode(s)?.as_slice()).map_err(|err| anyhow!("{:?}", err))
+    }
+}
+
+/// Typed metadata of ConstructionPayloadsRequest.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConstructionPayloadsRequestMetadata {
+    /// The memo to use for a ledger transfer.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub memo: Option<Vec<u8>>,
+
+    /// The earliest acceptable expiry date for a ledger transfer.
+    /// Must be within 24 hours from created_at_time.
+    /// Represents number of nanoseconds since UNIX epoch.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ingress_start: Option<u64>,
+
+    /// The latest acceptable expiry date for a ledger transfer.
+    /// Must be within 24 hours from created_at_time.
+    /// Represents number of nanoseconds since UNIX epoch.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ingress_end: Option<u64>,
+
+    /// If present, overrides ledger transaction creation time.
+    /// Represents number of nanoseconds since UNIX epoch.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_at_time: Option<u64>,
+}
+
+impl From<ConstructionPayloadsRequestMetadata> for ObjectMap {
+    fn from(p: ConstructionPayloadsRequestMetadata) -> Self {
+        match serde_json::to_value(p) {
+            Ok(serde_json::Value::Object(o)) => o,
+            _ => unreachable!(),
+        }
+    }
+}
+
+impl TryFrom<ObjectMap> for ConstructionPayloadsRequestMetadata {
+    type Error = crate::common::types::Error;
+    fn try_from(o: ObjectMap) -> Result<Self, crate::common::types::Error> {
+        serde_json::from_value(serde_json::Value::Object(o))
+            .map_err(|e| crate::common::types::Error::invalid_metadata(&e))
+    }
+}
+
+impl TryFrom<Option<ObjectMap>> for ConstructionPayloadsRequestMetadata {
+    type Error = String;
+    fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
+        serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default()))
+            .map_err(|e| format!("Could not parse MetadataOptions from JSON object: {}", e))
     }
 }

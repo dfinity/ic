@@ -1,4 +1,4 @@
-use super::services;
+use super::{services, types::ConstructionPayloadsRequestMetadata};
 use crate::{
     common::{types::Error, utils::utils::verify_network_id},
     AppState,
@@ -24,7 +24,7 @@ pub async fn construction_preprocess(
 ) -> Result<Json<ConstructionPreprocessResponse>> {
     verify_network_id(&request.network_identifier, &state)
         .map_err(|err| Error::invalid_network_id(&err))?;
-    Ok(Json(services::construction_preprocess()?))
+    Ok(Json(services::construction_preprocess(request.operations)?))
 }
 
 pub async fn construction_metadata(
@@ -83,5 +83,23 @@ pub async fn construction_combine(
     Ok(Json(services::construction_combine(
         request.unsigned_transaction,
         request.signatures,
+    )?))
+}
+
+pub async fn construction_payloads(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<ConstructionPayloadsRequest>,
+) -> Result<Json<ConstructionPayloadsResponse>> {
+    verify_network_id(&request.network_identifier, &state)
+        .map_err(|err| Error::invalid_network_id(&err))?;
+    Ok(Json(services::construction_payloads(
+        request.operations,
+        request
+            .metadata
+            .as_ref()
+            .map(|m| ConstructionPayloadsRequestMetadata::try_from(m.clone()))
+            .transpose()?,
+        &state.icrc1_agent.ledger_canister_id,
+        request.public_keys.unwrap_or_else(Vec::new),
     )?))
 }

@@ -25,9 +25,10 @@ const ERROR_CODE_MEMPOOL_TRANSACTION_MISSING: u32 = 6;
 const ERROR_CODE_PARSING_ERROR: u32 = 7;
 const ERROR_CODE_UNSUPPORTED_OPERATION: u32 = 8;
 const ERROR_CODE_LEDGER_COMMUNICATION: u32 = 9;
-const ERROR_CODE_ACCOUNT_BALANCE_NOT_FOUND: u32 = 10;
-const ERROR_CODE_REQUEST_PROCESSING_ERROR: u32 = 11;
-const ERROR_CODE_PROCESSING_CONSTRUCTION_FAILED: u32 = 12;
+const ERROR_CODE_REQUEST_PROCESSING_ERROR: u32 = 10;
+const ERROR_CODE_PROCESSING_CONSTRUCTION_FAILED: u32 = 11;
+const ERROR_CODE_INVALID_METADATA: u32 = 12;
+const ERROR_CODE_ACCOUNT_BALANCE_NOT_FOUND: u32 = 13;
 
 impl IntoResponse for Error {
     fn into_response(self) -> axum::response::Response {
@@ -175,6 +176,16 @@ impl Error {
         Self(rosetta_core::miscellaneous::Error {
             code: ERROR_CODE_PROCESSING_CONSTRUCTION_FAILED,
             message: "Processing of the construction request failed.".to_owned(),
+            description: Some(format!("{:?}", description)),
+            retriable: false,
+            details: None,
+        })
+    }
+
+    pub fn invalid_metadata<T: std::fmt::Debug>(description: &T) -> Self {
+        Self(rosetta_core::miscellaneous::Error {
+            code: ERROR_CODE_INVALID_METADATA,
+            message: "Invalid metadata provided.".to_owned(),
             description: Some(format!("{:?}", description)),
             retriable: false,
             details: None,

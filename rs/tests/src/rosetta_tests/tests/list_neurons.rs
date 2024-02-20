@@ -92,7 +92,7 @@ async fn test_list_neurons(
                 .first()
                 .expect("Expected one list neuron operation."),
             ic_rosetta_api::models::Operation {
-                _type: _expected_type,
+                type_: _expected_type,
                 ..
             }
         ));

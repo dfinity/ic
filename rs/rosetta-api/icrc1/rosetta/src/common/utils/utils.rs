@@ -350,7 +350,7 @@ pub fn icrc1_rosetta_block_to_rosetta_core_operation(
 pub fn rosetta_core_operation_to_icrc1_operation(
     operation: rosetta_core::objects::Operation,
 ) -> anyhow::Result<ic_icrc1::Operation<RosettaToken>> {
-    Ok(match operation._type.parse::<OperationType>()? {
+    Ok(match operation.type_.parse::<OperationType>()? {
         OperationType::Mint => ic_icrc1::Operation::Mint {
             to: operation
                 .account

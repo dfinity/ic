@@ -946,7 +946,7 @@ impl TransactionBuilder {
             let operation_identifier = self.allocate_op_id();
             self.ops.push(Operation {
                 operation_identifier,
-                _type: _type.to_string(),
+                type_: _type.to_string(),
                 status: None,
                 account,
                 amount,
@@ -1042,7 +1042,7 @@ impl TransactionBuilder {
         let operation_identifier = self.allocate_op_id();
         self.ops.push(Operation {
             operation_identifier,
-            _type: OperationType::Stake.to_string(),
+            type_: OperationType::Stake.to_string(),
             status: None,
             account: Some(to_model_account_identifier(account)),
             amount: None,
@@ -1070,7 +1070,7 @@ impl TransactionBuilder {
         let operation_identifier = self.allocate_op_id();
         self.ops.push(Operation {
             operation_identifier,
-            _type: OperationType::SetDissolveTimestamp.to_string(),
+            type_: OperationType::SetDissolveTimestamp.to_string(),
             status: None,
             account: Some(to_model_account_identifier(account)),
             amount: None,
@@ -1099,7 +1099,7 @@ impl TransactionBuilder {
         let operation_identifier = self.allocate_op_id();
         self.ops.push(Operation {
             operation_identifier,
-            _type: OperationType::ChangeAutoStakeMaturity.to_string(),
+            type_: OperationType::ChangeAutoStakeMaturity.to_string(),
             status: None,
             account: Some(to_model_account_identifier(account)),
             amount: None,
@@ -1125,7 +1125,7 @@ impl TransactionBuilder {
         let operation_identifier = self.allocate_op_id();
         self.ops.push(Operation {
             operation_identifier,
-            _type: OperationType::StartDissolving.to_string(),
+            type_: OperationType::StartDissolving.to_string(),
             status: None,
             account: Some(to_model_account_identifier(account)),
             amount: None,
@@ -1149,7 +1149,7 @@ impl TransactionBuilder {
         let operation_identifier = self.allocate_op_id();
         self.ops.push(Operation {
             operation_identifier,
-            _type: OperationType::StopDissolving.to_string(),
+            type_: OperationType::StopDissolving.to_string(),
             status: None,
             account: Some(to_model_account_identifier(account)),
             amount: None,
@@ -1175,7 +1175,7 @@ impl TransactionBuilder {
         let operation_identifier = self.allocate_op_id();
         self.ops.push(Operation {
             operation_identifier,
-            _type: OperationType::Disburse.to_string(),
+            type_: OperationType::Disburse.to_string(),
             status: None,
             account: Some(to_model_account_identifier(account)),
             amount: amount
@@ -1201,7 +1201,7 @@ impl TransactionBuilder {
         let operation_identifier = self.allocate_op_id();
         self.ops.push(Operation {
             operation_identifier,
-            _type: OperationType::AddHotkey.to_string(),
+            type_: OperationType::AddHotkey.to_string(),
             status: None,
             account: Some(to_model_account_identifier(account)),
             amount: None,
@@ -1226,7 +1226,7 @@ impl TransactionBuilder {
         let operation_identifier = self.allocate_op_id();
         self.ops.push(Operation {
             operation_identifier,
-            _type: OperationType::RemoveHotkey.to_string(),
+            type_: OperationType::RemoveHotkey.to_string(),
             status: None,
             account: Some(to_model_account_identifier(account)),
             amount: None,
@@ -1253,7 +1253,7 @@ impl TransactionBuilder {
         let operation_identifier = self.allocate_op_id();
         self.ops.push(Operation {
             operation_identifier,
-            _type: OperationType::Spawn.to_string(),
+            type_: OperationType::Spawn.to_string(),
             status: None,
             account: Some(to_model_account_identifier(account)),
             amount: None,
@@ -1282,7 +1282,7 @@ impl TransactionBuilder {
         let operation_identifier = self.allocate_op_id();
         self.ops.push(Operation {
             operation_identifier,
-            _type: OperationType::RegisterVote.to_string(),
+            type_: OperationType::RegisterVote.to_string(),
             status: None,
             account: Some(to_model_account_identifier(account)),
             amount: None,
@@ -1309,7 +1309,7 @@ impl TransactionBuilder {
         let operation_identifier = self.allocate_op_id();
         self.ops.push(Operation {
             operation_identifier,
-            _type: OperationType::MergeMaturity.to_string(),
+            type_: OperationType::MergeMaturity.to_string(),
             status: None,
             account: Some(to_model_account_identifier(account)),
             amount: None,
@@ -1335,7 +1335,7 @@ impl TransactionBuilder {
         let operation_identifier = self.allocate_op_id();
         self.ops.push(Operation {
             operation_identifier,
-            _type: OperationType::StakeMaturity.to_string(),
+            type_: OperationType::StakeMaturity.to_string(),
             status: None,
             account: Some(to_model_account_identifier(account)),
             amount: None,
@@ -1361,7 +1361,7 @@ impl TransactionBuilder {
         let operation_identifier = self.allocate_op_id();
         self.ops.push(Operation {
             operation_identifier,
-            _type: OperationType::NeuronInfo.to_string(),
+            type_: OperationType::NeuronInfo.to_string(),
             status: None,
             account: Some(to_model_account_identifier(account)),
             amount: None,
@@ -1383,7 +1383,7 @@ impl TransactionBuilder {
         let operation_identifier = self.allocate_op_id();
         self.ops.push(Operation {
             operation_identifier,
-            _type: OperationType::ListNeurons.to_string(),
+            type_: OperationType::ListNeurons.to_string(),
             status: None,
             account: Some(to_model_account_identifier(account)),
             amount: None,
@@ -1405,7 +1405,7 @@ impl TransactionBuilder {
         let operation_identifier = self.allocate_op_id();
         self.ops.push(Operation {
             operation_identifier,
-            _type: OperationType::Follow.to_string(),
+            type_: OperationType::Follow.to_string(),
             status: None,
             account: Some(to_model_account_identifier(account)),
             amount: None,

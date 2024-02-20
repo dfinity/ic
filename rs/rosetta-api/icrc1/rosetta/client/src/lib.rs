@@ -1,14 +1,17 @@
+use anyhow::bail;
+use anyhow::Context;
 use ic_icrc_rosetta::common::types::Error;
 use ic_icrc_rosetta::construction_api::types::ConstructionMetadataRequestOptions;
 use reqwest::{Client, Url};
 use rosetta_core::identifiers::*;
+use rosetta_core::models::RosettaSupportedKeyPair;
 use rosetta_core::objects::Operation;
+use rosetta_core::objects::PublicKey;
 use rosetta_core::objects::Signature;
 use rosetta_core::request_types::*;
 use rosetta_core::response_types::*;
 use serde::{Deserialize, Serialize};
 use url::ParseError;
-
 pub struct RosettaClient {
     pub url: Url,
     pub http_client: Client,
@@ -31,6 +34,56 @@ impl RosettaClient {
         self.url
             .join(path)
             .unwrap_or_else(|e| panic!("Failed to join {} with path {}: {}", self.url, path, e))
+    }
+
+    pub fn sign_transaction<T>(
+        signer_keypair: &T,
+        payloads: ConstructionPayloadsResponse,
+    ) -> anyhow::Result<Vec<Signature>>
+    where
+        T: RosettaSupportedKeyPair,
+    {
+        let mut signatures: Vec<Signature> = vec![];
+        for payload in payloads.payloads.into_iter() {
+            let signable_bytes = hex::decode(&payload.hex_bytes).with_context(|| {
+                format!("Bytes not in hex representation: {:?}", payload.hex_bytes)
+            })?;
+
+            let signed_bytes = signer_keypair.sign(&signable_bytes);
+            let hex_bytes = hex::encode(signed_bytes.clone());
+
+            let signature = Signature {
+                signing_payload: payload,
+                public_key: signer_keypair.into(),
+                signature_type: signer_keypair.get_curve_type().into(),
+                hex_bytes,
+            };
+
+            // Verify that the signature is correct
+            let verification_key = ed25519_consensus::VerificationKey::try_from(
+                signer_keypair.get_pb_key().as_slice(),
+            )
+            .with_context(|| {
+                format!(
+                    "Failed to convert public key to verification key: {:?}",
+                    signer_keypair.get_pb_key()
+                )
+            })?;
+
+            if verification_key
+                .verify(
+                    &ed25519_consensus::Signature::try_from(signed_bytes.as_slice())?,
+                    &signable_bytes,
+                )
+                .is_err()
+            {
+                bail!("Signature verification failed")
+            };
+            signatures.push(signature);
+        }
+
+        // TODO: Shuffle up order of signed transactions
+        Ok(signatures)
     }
 
     pub async fn health(&self) -> reqwest::Result<()> {
@@ -242,6 +295,24 @@ impl RosettaClient {
                 network_identifier,
                 unsigned_transaction,
                 signatures,
+            },
+        )
+        .await
+    }
+
+    pub async fn construction_payloads(
+        &self,
+        network_identifier: NetworkIdentifier,
+        operations: Vec<Operation>,
+        public_keys: Option<Vec<PublicKey>>,
+    ) -> Result<ConstructionPayloadsResponse, Error> {
+        self.call_endpoint(
+            "/construction/payloads",
+            &ConstructionPayloadsRequest {
+                network_identifier,
+                operations,
+                metadata: None,
+                public_keys,
             },
         )
         .await

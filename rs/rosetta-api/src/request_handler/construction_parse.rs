@@ -661,7 +661,7 @@ mod tests {
                     network_index: None,
                 },
                 related_operations: None,
-                _type: OperationType::Transaction.to_string(),
+                type_: OperationType::Transaction.to_string(),
                 status: None,
                 account: account.clone(),
                 amount: Some(Amount {
@@ -678,7 +678,7 @@ mod tests {
                     network_index: None,
                 },
                 related_operations: None,
-                _type: OperationType::Transaction.to_string(),
+                type_: OperationType::Transaction.to_string(),
                 status: None,
                 account: account.clone(),
                 amount: Some(Amount {
@@ -695,7 +695,7 @@ mod tests {
                     network_index: None,
                 },
                 related_operations: None,
-                _type: OperationType::Fee.to_string(),
+                type_: OperationType::Fee.to_string(),
                 status: None,
                 account,
                 amount: Some(Amount {

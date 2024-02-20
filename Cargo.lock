@@ -7842,6 +7842,8 @@ dependencies = [
  "ic-agent",
  "ic-base-types",
  "ic-canister-client-sender",
+ "ic-certification 2.3.0",
+ "ic-constants",
  "ic-crypto-tree-hash",
  "ic-icrc-rosetta-client",
  "ic-icrc-rosetta-runner",
@@ -7893,6 +7895,8 @@ name = "ic-icrc-rosetta-client"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "ed25519-consensus",
+ "hex",
  "ic-icrc-rosetta",
  "ic-rosetta-api",
  "reqwest",

@@ -90,7 +90,7 @@ where
         // first ask for the fee
         let mut fee_found = false;
         for o in Request::requests_to_operations(&[request.request.clone()], token_name).unwrap() {
-            if o._type.parse::<OperationType>().unwrap() == OperationType::Fee {
+            if o.type_.parse::<OperationType>().unwrap() == OperationType::Fee {
                 fee_found = true;
             } else {
                 dry_run_ops.push(o.clone());
@@ -179,7 +179,7 @@ where
 
     if accept_suggested_fee {
         for o in &mut all_ops {
-            if o._type.parse::<OperationType>().unwrap() == OperationType::Fee {
+            if o.type_.parse::<OperationType>().unwrap() == OperationType::Fee {
                 o.amount = Some(signed_amount(-(fee_icpts.get_e8s() as i128), token_name));
             }
         }
