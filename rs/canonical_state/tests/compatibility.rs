@@ -191,19 +191,13 @@ pub(crate) fn arb_valid_versioned_message(
 ) -> impl Strategy<Value = (RequestOrResponse, RangeInclusive<CertificationVersion>)> {
     prop_oneof![
         (
-            arbitrary::valid_request_or_response_for_certification_version(
-                // Version 14 introduces a new field `metadata` for `Request`. For version 13 and
-                // below, this field is always `None`, which guarantees compatibility for all
-                // certification versions.
-                CertificationVersion::V13
-            ),
+            // No `Request::metadata` populated for versions 13 and below.
+            arbitrary::request_or_response_with_config(false),
             Just(CertificationVersion::V0..=MAX_SUPPORTED_CERTIFICATION_VERSION)
         ),
         (
-            arbitrary::valid_request_or_response_for_certification_version(
-                // From version 14 and on, pairwise comparisons must support the case of `metadata.is_some()`.
-                MAX_SUPPORTED_CERTIFICATION_VERSION
-            ),
+            // Optionally populate `Request::metadata` from version 14 on.
+            arbitrary::request_or_response_with_config(true),
             Just(CertificationVersion::V14..=MAX_SUPPORTED_CERTIFICATION_VERSION)
         ),
     ]

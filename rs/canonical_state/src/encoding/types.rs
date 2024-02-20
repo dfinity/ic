@@ -269,6 +269,15 @@ impl From<&ic_types::messages::RequestMetadata> for RequestMetadata {
     }
 }
 
+impl From<RequestMetadata> for ic_types::messages::RequestMetadata {
+    fn from(metadata: RequestMetadata) -> Self {
+        ic_types::messages::RequestMetadata::new(
+            metadata.call_tree_depth.unwrap_or(0),
+            Time::from_nanos_since_unix_epoch(metadata.call_tree_start_time_u64.unwrap_or(0)),
+        )
+    }
+}
+
 impl From<(&ic_types::messages::Request, CertificationVersion)> for Request {
     fn from(
         (request, certification_version): (&ic_types::messages::Request, CertificationVersion),
@@ -290,15 +299,6 @@ impl From<(&ic_types::messages::Request, CertificationVersion)> for Request {
                 (certification_version >= CertificationVersion::V14).then_some(metadata.into())
             }),
         }
-    }
-}
-
-impl From<RequestMetadata> for ic_types::messages::RequestMetadata {
-    fn from(metadata: RequestMetadata) -> Self {
-        ic_types::messages::RequestMetadata::new(
-            metadata.call_tree_depth.unwrap_or(0),
-            Time::from_nanos_since_unix_epoch(metadata.call_tree_start_time_u64.unwrap_or(0)),
-        )
     }
 }
 
