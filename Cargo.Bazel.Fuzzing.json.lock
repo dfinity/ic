@@ -1,5 +1,5 @@
 {
-  "checksum": "8baf3cbc469f8bf7d84165355a396b98e9f49edce7678d68160c6a957143175d",
+  "checksum": "06540a7683db2578025cb31ce9807a9fee69bdb151049238e855e2874f08012b",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -16445,7 +16445,7 @@
               "target": "strum_macros"
             },
             {
-              "id": "test-strategy 0.2.1",
+              "id": "test-strategy 0.3.1",
               "target": "test_strategy"
             }
           ],
@@ -52741,13 +52741,13 @@
       },
       "license": "MIT"
     },
-    "structmeta 0.1.6": {
+    "structmeta 0.2.0": {
       "name": "structmeta",
-      "version": "0.1.6",
+      "version": "0.2.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/structmeta/0.1.6/download",
-          "sha256": "104842d6278bf64aa9d2f182ba4bde31e8aec7a131d29b7f444bb9b344a09e2a"
+          "url": "https://crates.io/api/v1/crates/structmeta/0.2.0/download",
+          "sha256": "78ad9e09554f0456d67a69c1584c9798ba733a5b50349a6c0d0948710523922d"
         }
       },
       "targets": [
@@ -52777,7 +52777,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.109",
+              "id": "syn 2.0.48",
               "target": "syn"
             }
           ],
@@ -52787,23 +52787,23 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "structmeta-derive 0.1.6",
+              "id": "structmeta-derive 0.2.0",
               "target": "structmeta_derive"
             }
           ],
           "selects": {}
         },
-        "version": "0.1.6"
+        "version": "0.2.0"
       },
       "license": "MIT OR Apache-2.0"
     },
-    "structmeta-derive 0.1.6": {
+    "structmeta-derive 0.2.0": {
       "name": "structmeta-derive",
-      "version": "0.1.6",
+      "version": "0.2.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/structmeta-derive/0.1.6/download",
-          "sha256": "24420be405b590e2d746d83b01f09af673270cf80e9b003a5fa7b651c58c7d93"
+          "url": "https://crates.io/api/v1/crates/structmeta-derive/0.2.0/download",
+          "sha256": "a60bcaff7397072dca0017d1db428e30d5002e00b6847703e2e42005c95fbe00"
         }
       },
       "targets": [
@@ -52833,14 +52833,14 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.109",
+              "id": "syn 2.0.48",
               "target": "syn"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.1.6"
+        "version": "0.2.0"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -54526,13 +54526,13 @@
       },
       "license": "MIT"
     },
-    "test-strategy 0.2.1": {
+    "test-strategy 0.3.1": {
       "name": "test-strategy",
-      "version": "0.2.1",
+      "version": "0.3.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/test-strategy/0.2.1/download",
-          "sha256": "62d6408d1406657be2f9d1701fbae379331d30d2f6e92050710edb0d34eeb480"
+          "url": "https://crates.io/api/v1/crates/test-strategy/0.3.1/download",
+          "sha256": "b8361c808554228ad09bfed70f5c823caf8a3450b6881cc3a38eb57e8c08c1d9"
         }
       },
       "targets": [
@@ -54562,18 +54562,18 @@
               "target": "quote"
             },
             {
-              "id": "structmeta 0.1.6",
+              "id": "structmeta 0.2.0",
               "target": "structmeta"
             },
             {
-              "id": "syn 1.0.109",
+              "id": "syn 2.0.48",
               "target": "syn"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.2.1"
+        "version": "0.3.1"
       },
       "license": "MIT OR Apache-2.0"
     },
