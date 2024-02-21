@@ -177,10 +177,10 @@ fn parse_message(s: &str, nonce: u64) -> Result<Message, String> {
         })),
         ["create"] => parse_create(nonce),
         ["install", canister_id, wasm_file, payload] => {
-            parse_install(nonce, canister_id, payload, wasm_file,  "install")
+            parse_install(nonce, canister_id, payload, wasm_file, "install")
         }
         ["reinstall", canister_id, wasm_file, payload] => {
-            parse_install(nonce, canister_id, payload, wasm_file,  "reinstall")
+            parse_install(nonce, canister_id, payload, wasm_file, "reinstall")
         }
         ["upgrade", canister_id, wasm_file, payload] => {
             parse_install(nonce, canister_id, payload, wasm_file, "upgrade")
@@ -224,12 +224,12 @@ fn contains_custom_section(wasm_binary: &[u8], name: &str) -> Result<bool, Strin
         match payload.map_err(|e| format!("Wasm parsing error: {}", e))? {
             CustomSection(reader) => {
                 if reader.name() == name {
-                    return Ok(true)
+                    return Ok(true);
                 }
             }
             _ => {}
         }
-    };
+    }
     Ok(false)
 }
 
@@ -258,7 +258,10 @@ fn parse_install(
         "install" => CanisterInstallModeV2::Install,
         "reinstall" => CanisterInstallModeV2::Reinstall,
         "upgrade" => {
-            let keep_main_memory = if contains_custom_section(wasm_data.as_ref(), ORTHOGONAL_PERSISTENCE_CUSTOM_SECTION)? {
+            let keep_main_memory = if contains_custom_section(
+                wasm_data.as_ref(),
+                ORTHOGONAL_PERSISTENCE_CUSTOM_SECTION,
+            )? {
                 Some(true)
             } else {
                 None
@@ -267,7 +270,7 @@ fn parse_install(
                 skip_pre_upgrade: None,
                 keep_main_memory,
             }))
-        },
+        }
         _ => {
             return Err(String::from("Unsupported install mode: {mode}"));
         }
