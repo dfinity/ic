@@ -282,23 +282,23 @@ pub mod internal {
             });
 
             let csp = if let Some(env) = &opt_remote_vault_environment {
-                Csp::builder(
-                    env.new_vault_client_builder()
-                        .with_logger(new_logger!(logger))
-                        .with_metrics(Arc::clone(&metrics))
-                        .build()
-                        .expect("Failed to build a vault client"),
+                let vault_client = env
+                    .new_vault_client_builder()
+                    .with_logger(new_logger!(logger))
+                    .with_metrics(Arc::clone(&metrics))
+                    .build()
+                    .expect("Failed to build a vault client");
+                Csp::new_from_vault(
+                    Arc::new(vault_client),
                     new_logger!(logger),
                     Arc::clone(&metrics),
                 )
-                .build()
             } else {
-                Csp::builder(
-                    Arc::clone(&local_vault),
+                Csp::new_from_vault(
+                    Arc::clone(&local_vault) as _,
                     new_logger!(logger),
                     Arc::clone(&metrics),
                 )
-                .build()
             };
 
             let node_keys_to_generate = self

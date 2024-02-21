@@ -409,7 +409,7 @@ fn ecdsa_secp256k1_signature_and_public_key<R: Rng + CryptoRng>(
 fn crypto_component(config: &CryptoConfig) -> CryptoComponent {
     let dummy_registry = FakeRegistryClient::new(Arc::new(ProtoRegistryDataProvider::new()));
 
-    let csp = Csp::new(config, None, None, Arc::new(CryptoMetrics::none()));
+    let csp = Csp::new_from_config(config, None, None, Arc::new(CryptoMetrics::none()));
     ic_crypto_node_key_generation::generate_node_signing_keys(&csp);
 
     CryptoComponent::new(config, None, Arc::new(dummy_registry), no_op_logger(), None)

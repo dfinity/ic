@@ -197,12 +197,11 @@ impl CryptoComponentImpl<Csp> {
             new_logger!(&logger),
             Arc::clone(&metrics),
         );
-        let csp = Csp::builder(
+        let csp = Csp::new_from_vault(
             Arc::clone(&vault),
             new_logger!(&logger),
             Arc::clone(&metrics),
-        )
-        .build();
+        );
         let node_pks = csp
             .current_node_public_keys()
             .expect("Failed to retrieve node public keys");
