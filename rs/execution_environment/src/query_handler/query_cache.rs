@@ -2,11 +2,14 @@ use ic_base_types::{CanisterId, NumBytes};
 use ic_error_types::UserError;
 use ic_interfaces::execution_environment::SystemApiCallCounters;
 use ic_metrics::MetricsRegistry;
+use ic_query_stats::QueryStatsCollector;
 use ic_replicated_state::ReplicatedState;
-use ic_types::{ingress::WasmResult, messages::UserQuery, CountBytes, Cycles, Time, UserId};
+use ic_types::{
+    batch::QueryStats, ingress::WasmResult, messages::UserQuery, CountBytes, Cycles, Time, UserId,
+};
 use ic_utils_lru_cache::LruCache;
 use prometheus::{Histogram, IntCounter, IntGauge};
-use std::{collections::BTreeSet, mem::size_of_val, sync::Mutex, time::Duration};
+use std::{collections::BTreeMap, mem::size_of_val, sync::Mutex, time::Duration};
 
 use crate::metrics::duration_histogram;
 
@@ -160,28 +163,29 @@ impl From<&UserQuery> for EntryKey {
 pub(crate) struct EntryEnv {
     /// The consensus-determined time when the query is executed.
     pub batch_time: Time,
-    /// A vector of evaluated canister IDs with their versions and balances.
-    pub canisters_versions_balances: Vec<(CanisterId, u64, Cycles)>,
+    /// A vector of evaluated canister IDs with their versions, balances and stats.
+    pub canisters_versions_balances_stats: Vec<(CanisterId, u64, Cycles, QueryStats)>,
 }
 
 impl EntryEnv {
     // Capture a state (canister version and balance) of the evaluated canisters.
     fn try_new(
         state: &ReplicatedState,
-        evaluated_ids: &BTreeSet<CanisterId>,
+        evaluated_stats: &BTreeMap<CanisterId, QueryStats>,
     ) -> Result<Self, UserError> {
-        let mut canisters_versions_balances = Vec::with_capacity(evaluated_ids.len());
-        for id in evaluated_ids.iter() {
+        let mut canisters_versions_balances_stats = Vec::with_capacity(evaluated_stats.len());
+        for (id, stats) in evaluated_stats.iter() {
             let canister = state.get_active_canister(id)?;
-            canisters_versions_balances.push((
+            canisters_versions_balances_stats.push((
                 *id,
                 canister.system_state.canister_version,
                 canister.system_state.balance(),
+                stats.clone(),
             ));
         }
         Ok(EntryEnv {
             batch_time: state.metadata.batch_time,
-            canisters_versions_balances,
+            canisters_versions_balances_stats,
         })
     }
 }
@@ -231,19 +235,23 @@ impl EntryValue {
 
     fn is_valid(
         &self,
-        metrics: &QueryCacheMetrics,
         state: &ReplicatedState,
+        query_stats_collector: Option<&QueryStatsCollector>,
+        metrics: &QueryCacheMetrics,
         max_expiry_time: Duration,
         data_certificate_expiry_time: Duration,
     ) -> bool {
         // Iterate over the captured data and validate it against the current state.
         let mut all_canister_versions_are_valid = true;
         let mut all_canister_balances_are_valid = true;
-        for (id, version, balance) in &self.env.canisters_versions_balances {
+        let mut canisters_stats =
+            Vec::with_capacity(self.env.canisters_versions_balances_stats.len());
+        for (id, version, balance, stats) in &self.env.canisters_versions_balances_stats {
             let Ok(canister) = state.get_active_canister(id) else {
                 metrics.validation_errors.inc();
                 return false;
             };
+            canisters_stats.push((id, stats));
 
             if &canister.system_state.canister_version != version {
                 all_canister_versions_are_valid = false;
@@ -268,6 +276,13 @@ impl EntryValue {
         {
             // The value is still valid.
             metrics.hits.inc();
+            // Apply query stats.
+            for (id, stats) in canisters_stats {
+                // Add query statistics to the query aggregator.
+                if let Some(query_stats_collector) = query_stats_collector {
+                    query_stats_collector.register_query_statistics(*id, stats);
+                }
+            }
             // Several factors might cause ignoring behavior simultaneously.
             // To ensure correctness, we need a fallthrough logic here.
             if self.env.batch_time != now && self.ignore_batch_time {
@@ -378,18 +393,20 @@ impl QueryCache {
         }
     }
 
-    /// Return the cached `Result` if it's still valid, updating the metrics.
+    /// Return the cached `Result` if it's still valid, updating the metrics and stats.
     pub(crate) fn get_valid_result(
         &self,
         key: &EntryKey,
         state: &ReplicatedState,
+        query_stats_collector: Option<&QueryStatsCollector>,
     ) -> Option<Result<WasmResult, UserError>> {
         let mut cache = self.cache.lock().unwrap();
 
         if let Some(value) = cache.get(key) {
             if value.is_valid(
-                &self.metrics,
                 state,
+                query_stats_collector,
+                &self.metrics,
                 self.max_expiry_time,
                 self.data_certificate_expiry_time,
             ) {
@@ -412,7 +429,7 @@ impl QueryCache {
         result: &Result<WasmResult, UserError>,
         state: &ReplicatedState,
         system_api_counters: &SystemApiCallCounters,
-        evaluated_ids: &BTreeSet<CanisterId>,
+        evaluated_stats: &BTreeMap<CanisterId, QueryStats>,
         nested_errors: usize,
     ) {
         let now = state.metadata.batch_time;
@@ -431,7 +448,7 @@ impl QueryCache {
         }
         // This can fail only if there is no active canister ID,
         // which should not happen, as we just evaluated those canisters.
-        let Ok(env) = EntryEnv::try_new(state, evaluated_ids) else {
+        let Ok(env) = EntryEnv::try_new(state, evaluated_stats) else {
             self.metrics.push_errors.inc();
             return;
         };

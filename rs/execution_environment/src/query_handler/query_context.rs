@@ -28,6 +28,7 @@ use ic_replicated_state::{
 };
 use ic_system_api::{ApiType, ExecutionParameters, InstructionLimits};
 use ic_types::{
+    batch::QueryStats,
     ingress::WasmResult,
     messages::{
         CallContextId, CallbackId, Payload, RejectContext, Request, RequestOrResponse, Response,
@@ -42,10 +43,9 @@ use ic_types::{
 };
 use prometheus::IntCounter;
 use std::{
-    collections::{BTreeSet, VecDeque},
+    collections::{BTreeMap, VecDeque},
     sync::Arc,
-    time::Duration,
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 /// The response of a query. If the query originated from a user, then it
@@ -110,9 +110,9 @@ pub(super) struct QueryContext<'a> {
     local_query_execution_stats: Option<&'a QueryStatsCollector>,
     /// How many times each tracked System API call was invoked during the query execution.
     system_api_call_counters: SystemApiCallCounters,
-    /// A set of canister IDs evaluated and executed at least once in this query context.
-    /// The information is used by the query cache for composite queries.
-    evaluated_canister_ids: BTreeSet<CanisterId>,
+    /// A map of canister IDs evaluated and executed at least once in this query context
+    /// with their stats. The information is used by the query cache for composite queries.
+    evaluated_canister_stats: BTreeMap<CanisterId, QueryStats>,
     /// The number of nested composite query execution errors.
     nested_execution_errors: usize,
     cycles_account_manager: Arc<CyclesAccountManager>,
@@ -168,7 +168,7 @@ impl<'a> QueryContext<'a> {
             system_api_call_counters: SystemApiCallCounters::default(),
             // If the `context.run()` returns an error and hence the empty evaluated IDs set,
             // the original canister ID should always be tracked for changes.
-            evaluated_canister_ids: BTreeSet::from([canister_id]),
+            evaluated_canister_stats: BTreeMap::from([(canister_id, QueryStats::default())]),
             nested_execution_errors: 0,
             cycles_account_manager,
         }
@@ -438,15 +438,16 @@ impl<'a> QueryContext<'a> {
         };
 
         // Add query statistics to the query aggregator.
+        let stats = QueryStats {
+            num_calls: 1,
+            num_instructions: instructions_executed.get(),
+            ingress_payload_size: ingress_payload_size as u64,
+            egress_payload_size: egress_payload_size as u64,
+        };
+        self.add_evaluated_canister_stats(canister.canister_id(), &stats);
         if let Some(query_stats) = self.local_query_execution_stats {
             query_stats.set_epoch_from_height(self.state.height());
-
-            query_stats.register_query_statistics(
-                canister.canister_id(),
-                instructions_executed,
-                ingress_payload_size as u64,
-                egress_payload_size as u64,
-            );
+            query_stats.register_query_statistics(canister.canister_id(), &stats);
         }
 
         measurement_scope.add(
@@ -474,8 +475,11 @@ impl<'a> QueryContext<'a> {
     }
 
     /// Adds a canister ID into a set of actually executed canisters.
-    fn insert_evaluated_canister_id(&mut self, canister_id: CanisterId) {
-        self.evaluated_canister_ids.insert(canister_id);
+    fn add_evaluated_canister_stats(&mut self, canister_id: CanisterId, stats: &QueryStats) {
+        self.evaluated_canister_stats
+            .entry(canister_id)
+            .and_modify(|s| s.saturating_accumulate(stats))
+            .or_insert(stats.clone());
     }
 
     /// Adds nested composite query execution errors.
@@ -528,7 +532,7 @@ impl<'a> QueryContext<'a> {
         // Observe the number evaluated canisters in the corresponding metrics.
         metrics
             .evaluated_canisters
-            .observe(self.evaluated_canister_ids.len() as f64);
+            .observe(self.evaluated_canister_stats.len() as f64);
 
         // Observe nested composite query execution errors.
         metrics
@@ -791,7 +795,7 @@ impl<'a> QueryContext<'a> {
 
         let canister_id = request.receiver;
         // Add the canister to the set of evaluated canisters early, i.e. before any errors.
-        self.insert_evaluated_canister_id(canister_id);
+        self.add_evaluated_canister_stats(canister_id, &QueryStats::default());
 
         let canister = match self.state.get_ref().get_active_canister(&canister_id) {
             Ok(canister) => canister,
@@ -1073,9 +1077,9 @@ impl<'a> QueryContext<'a> {
         &self.system_api_call_counters
     }
 
-    /// Returns a list of actually executed canister IDs.
-    pub fn evaluated_canister_ids(&self) -> &BTreeSet<CanisterId> {
-        &self.evaluated_canister_ids
+    /// Returns a list of actually executed canisters with their stats.
+    pub fn evaluated_canister_stats(&self) -> &BTreeMap<CanisterId, QueryStats> {
+        &self.evaluated_canister_stats
     }
 
     /// Returns a number of nested composite query execution errors.

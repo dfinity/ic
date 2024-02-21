@@ -41,6 +41,20 @@ pub struct QueryStats {
     pub ingress_payload_size: u64,
     pub egress_payload_size: u64,
 }
+
+impl QueryStats {
+    pub fn saturating_accumulate(&mut self, rhs: &Self) {
+        self.num_calls = self.num_calls.saturating_add(rhs.num_calls);
+        self.num_instructions = self.num_instructions.saturating_add(rhs.num_instructions);
+        self.ingress_payload_size = self
+            .ingress_payload_size
+            .saturating_add(rhs.ingress_payload_size);
+        self.egress_payload_size = self
+            .egress_payload_size
+            .saturating_add(rhs.egress_payload_size);
+    }
+}
+
 /// Total number of query stats collected since creation of the canister.
 ///
 /// This is a separate struct since values contained in here are accumulated
