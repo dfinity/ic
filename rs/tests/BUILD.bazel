@@ -95,10 +95,6 @@ exports_files([
     "create-universal-vm-config-image.sh",
 ])
 
-exports_files([
-    "src/default_firewall_whitelist.conf",
-])
-
 filegroup(
     name = "grafana_dashboards",
     srcs = glob(["dashboards/**/*"]),
