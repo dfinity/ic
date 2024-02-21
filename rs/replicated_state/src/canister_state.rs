@@ -8,7 +8,7 @@ use crate::canister_state::queues::CanisterOutputQueuesIterator;
 use crate::canister_state::system_state::{CanisterStatus, ExecutionTask, SystemState};
 use crate::{InputQueueType, StateError};
 pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions, Global};
-use ic_management_canister_types::{CanisterStatusType, LogVisibility};
+use ic_management_canister_types::{CanisterLogRecord, CanisterStatusType, LogVisibility};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::batch::TotalQueryStats;
 use ic_types::methods::SystemMethod;
@@ -548,6 +548,13 @@ impl CanisterState {
                 }
             }
         }
+    }
+
+    pub fn append_log_records(&mut self, records: &[CanisterLogRecord]) {
+        // TODO(IC-272): update `next_canister_log_record_idx` based on received records.
+        self.system_state
+            .canister_log_records
+            .extend_from_slice(records);
     }
 }
 

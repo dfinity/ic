@@ -1883,7 +1883,7 @@ fn test_save_log_message_adds_canister_log_records() {
     assert_eq!(records.len(), initial_number_of_records + 1);
     assert_eq!(
         String::from_utf8(records.last().unwrap().content.clone()).unwrap(),
-        format!("[Canister xbgkv-fyaaa-aaaaa-aaava-cai] {message}")
+        message
     );
 }
 
@@ -1907,7 +1907,7 @@ fn test_save_log_message_invalid_message_size() {
     assert_eq!(records.len(), initial_number_of_records + 1);
     assert_eq!(
         String::from_utf8(records.last().unwrap().content.clone()).unwrap(),
-        "[Canister xbgkv-fyaaa-aaaaa-aaava-cai] (save log message out of memory bounds)"
+        "(save log message out of memory bounds)"
     );
 }
 
@@ -1931,7 +1931,7 @@ fn test_save_log_message_invalid_message_offset() {
     assert_eq!(records.len(), initial_number_of_records + 1);
     assert_eq!(
         String::from_utf8(records.last().unwrap().content.clone()).unwrap(),
-        "[Canister xbgkv-fyaaa-aaaaa-aaava-cai] (save log message out of memory bounds)"
+        "(save log message out of memory bounds)"
     );
 }
 

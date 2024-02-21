@@ -5,7 +5,7 @@ pub use errors::{CanisterOutOfCyclesError, HypervisorError, TrapCode};
 use ic_base_types::NumBytes;
 use ic_error_types::UserError;
 use ic_interfaces_state_manager::Labeled;
-use ic_management_canister_types::EcdsaKeyId;
+use ic_management_canister_types::{CanisterLogRecord, EcdsaKeyId};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_sys::{PageBytes, PageIndex};
@@ -1204,6 +1204,7 @@ pub struct WasmExecutionOutput {
     pub instance_stats: InstanceStats,
     /// How many times each tracked System API call was invoked.
     pub system_api_call_counters: SystemApiCallCounters,
+    pub canister_log_records: Vec<CanisterLogRecord>,
 }
 
 impl fmt::Display for WasmExecutionOutput {

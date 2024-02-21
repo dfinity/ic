@@ -368,6 +368,8 @@ impl UpdateHelper {
         call_tree_metrics: &dyn CallTreeMetrics,
     ) -> ExecuteMessageResult {
         self.canister
+            .append_log_records(&output.canister_log_records);
+        self.canister
             .system_state
             .apply_ingress_induction_cycles_debit(
                 self.canister.canister_id(),

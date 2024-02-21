@@ -1357,15 +1357,9 @@ impl SystemApiImpl {
             | ApiType::PreUpgrade { time, .. }
             | ApiType::ReplyCallback { time, .. }
             | ApiType::RejectCallback { time, .. }
-            | ApiType::InspectMessage { time, .. } => {
-                self.sandbox_safe_system_state.append_canister_log(
-                    time,
-                    format!(
-                        "[Canister {}] {}",
-                        self.sandbox_safe_system_state.canister_id, msg
-                    ),
-                )
-            }
+            | ApiType::InspectMessage { time, .. } => self
+                .sandbox_safe_system_state
+                .append_canister_log(time, msg.to_string()),
         }
     }
 
