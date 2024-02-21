@@ -432,10 +432,10 @@ impl XNetPayloadBuilderImpl {
                     return ExpectedIndices {
                         message_index: messages.end(),
                         signal_index: most_recent_signal_index
-                            .unwrap_or_else(|| slice.header().signals_end),
+                            .unwrap_or_else(|| slice.header().signals_end()),
                     };
                 }
-                most_recent_signal_index.get_or_insert_with(|| slice.header().signals_end);
+                most_recent_signal_index.get_or_insert_with(|| slice.header().signals_end());
             }
         }
 
@@ -619,13 +619,13 @@ impl XNetPayloadBuilderImpl {
         };
 
         // Valid stream message bounds.
-        if slice.header().begin > slice.header().end {
+        if slice.header().begin() > slice.header().end() {
             warn!(
                 self.log,
                 "Stream from {}: begin index ({}) after end index ({})",
                 subnet_id,
-                slice.header().begin,
-                slice.header().end
+                slice.header().begin(),
+                slice.header().end()
             );
             return SliceValidationResult::Invalid(format!(
                 "Invalid stream bounds in stream from {}",
@@ -635,16 +635,16 @@ impl XNetPayloadBuilderImpl {
 
         // Expected message index within stream message bounds (always present in the
         // header, even for empty slices).
-        if expected.message_index < slice.header().begin
-            || slice.header().end < expected.message_index
+        if expected.message_index < slice.header().begin()
+            || slice.header().end() < expected.message_index
         {
             warn!(
                 self.log,
                 "Stream from {}: expecting message {}, outside of stream bounds [{}, {})",
                 subnet_id,
                 expected.message_index,
-                slice.header().begin,
-                slice.header().end
+                slice.header().begin(),
+                slice.header().end()
             );
             return SliceValidationResult::Invalid(format!(
                 "Unexpected messages in stream from {}",
@@ -652,7 +652,7 @@ impl XNetPayloadBuilderImpl {
             ));
         }
 
-        if slice.messages().is_none() && slice.header().signals_end == expected.signal_index {
+        if slice.messages().is_none() && slice.header().signals_end() == expected.signal_index {
             // Empty slice: no messages and no additional signals (in addition to what we
             // have in state and any intervening payloads). Not actually invalid, but
             // we don't want it in a payload.
@@ -661,15 +661,15 @@ impl XNetPayloadBuilderImpl {
 
         if let Some(messages) = slice.messages() {
             // Messages in slice within stream message bounds.
-            if messages.begin() < slice.header().begin || messages.end() > slice.header().end {
+            if messages.begin() < slice.header().begin() || messages.end() > slice.header().end() {
                 warn!(
                     self.log,
                     "Stream from {}: slice bounds [{}, {}) outside of stream bounds [{}, {})",
                     subnet_id,
                     messages.begin(),
                     messages.end(),
-                    slice.header().begin,
-                    slice.header().end
+                    slice.header().begin(),
+                    slice.header().end()
                 );
                 return SliceValidationResult::Invalid(format!(
                     "Invalid slice bounds in stream from {}",
@@ -733,8 +733,8 @@ impl XNetPayloadBuilderImpl {
         // message).
         match self.validate_signals(
             subnet_id,
-            slice.header().signals_end,
-            &slice.header().reject_signals,
+            slice.header().signals_end(),
+            slice.header().reject_signals(),
             expected.signal_index,
             state,
         ) {
@@ -751,7 +751,7 @@ impl XNetPayloadBuilderImpl {
                         .messages()
                         .map(|messages| messages.end())
                         .unwrap_or(expected.message_index),
-                    signals_end: slice.header().signals_end,
+                    signals_end: slice.header().signals_end(),
                     byte_size,
                 }
             }

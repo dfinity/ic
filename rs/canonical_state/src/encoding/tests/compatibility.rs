@@ -21,6 +21,7 @@ use ic_replicated_state::{
 use ic_test_utilities::types::{
     ids::{canister_test_id, subnet_test_id},
     messages::{RequestBuilder, ResponseBuilder},
+    xnet::StreamHeaderBuilder,
 };
 use ic_types::{
     crypto::CryptoHash,
@@ -28,11 +29,10 @@ use ic_types::{
         CallbackId, Payload, RejectContext, Request, RequestMetadata, RequestOrResponse, Response,
     },
     nominal_cycles::NominalCycles,
-    xnet::StreamHeader,
     CryptoHashOfPartialState, Cycles, Funds, NumBytes, Time,
 };
 use serde_cbor::value::Value;
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::BTreeMap;
 
 //
 // Tests for exact binary encoding
@@ -64,12 +64,11 @@ use std::collections::{BTreeMap, VecDeque};
 #[test]
 fn canonical_encoding_stream_header() {
     for certification_version in all_supported_versions() {
-        let header = StreamHeader {
-            begin: 23.into(),
-            end: 25.into(),
-            signals_end: 256.into(),
-            reject_signals: VecDeque::new(),
-        };
+        let header = StreamHeaderBuilder::new()
+            .begin(23.into())
+            .end(25.into())
+            .signals_end(256.into())
+            .build();
 
         assert_eq!(
             "A3 00 17 01 18 19 02 19 01 00",
@@ -110,12 +109,12 @@ fn canonical_encoding_stream_header() {
 fn canonical_encoding_stream_header_v8_plus() {
     for certification_version in all_supported_versions().filter(|v| v >= &CertificationVersion::V8)
     {
-        let header = StreamHeader {
-            begin: 23.into(),
-            end: 25.into(),
-            signals_end: 256.into(),
-            reject_signals: vec![249.into(), 250.into(), 252.into()].into(),
-        };
+        let header = StreamHeaderBuilder::new()
+            .begin(23.into())
+            .end(25.into())
+            .signals_end(256.into())
+            .reject_signals(vec![249.into(), 250.into(), 252.into()].into())
+            .build();
 
         assert_eq!(
             "A4 00 17 01 18 19 02 19 01 00 03 83 01 02 04",

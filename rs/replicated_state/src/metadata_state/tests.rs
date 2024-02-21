@@ -1368,15 +1368,16 @@ struct MessageConfig {
 }
 
 fn generate_stream(msg_config: MessageConfig, signal_config: SignalConfig) -> Stream {
-    let stream_header_builder = StreamHeaderBuilder::new()
+    let stream_header = StreamHeaderBuilder::new()
         .begin(StreamIndex::from(msg_config.begin))
         .end(StreamIndex::from(msg_config.begin + msg_config.count))
-        .signals_end(StreamIndex::from(signal_config.end));
+        .signals_end(StreamIndex::from(signal_config.end))
+        .build();
 
     let msg_begin = StreamIndex::from(msg_config.begin);
 
     let slice = StreamSliceBuilder::new()
-        .header(stream_header_builder.build())
+        .header(stream_header)
         .generate_messages(
             msg_begin,
             msg_config.count,
@@ -1390,7 +1391,7 @@ fn generate_stream(msg_config: MessageConfig, signal_config: SignalConfig) -> St
             .messages()
             .cloned()
             .unwrap_or_else(|| StreamIndexedQueue::with_begin(msg_begin)),
-        slice.header().signals_end,
+        slice.header().signals_end(),
     )
 }
 

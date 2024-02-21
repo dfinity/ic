@@ -159,7 +159,7 @@ pub fn encode_decode_stream_test<
             decoded_slice.unwrap_or_else(|e| panic!("Failed to decode slice with error {:?}", e));
 
         assert_eq!(
-            stream.slice(stream.header().begin, size_limit),
+            stream.slice(stream.header().begin(), size_limit),
             decoded_slice
         );
     });

@@ -1296,12 +1296,12 @@ impl Stream {
 
     /// Creates a header for this stream.
     pub fn header(&self) -> StreamHeader {
-        StreamHeader {
-            begin: self.messages.begin(),
-            end: self.messages.end(),
-            signals_end: self.signals_end,
-            reject_signals: self.reject_signals.clone(),
-        }
+        StreamHeader::new(
+            self.messages.begin(),
+            self.messages.end(),
+            self.signals_end,
+            self.reject_signals.clone(),
+        )
     }
 
     /// Returns a reference to the message queue.
@@ -1430,15 +1430,7 @@ impl CountBytes for Stream {
 
 impl From<Stream> for StreamSlice {
     fn from(val: Stream) -> Self {
-        StreamSlice::new(
-            StreamHeader {
-                begin: val.messages.begin(),
-                end: val.messages.end(),
-                signals_end: val.signals_end,
-                reject_signals: val.reject_signals,
-            },
-            val.messages,
-        )
+        StreamSlice::new(val.header(), val.messages)
     }
 }
 

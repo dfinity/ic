@@ -31,7 +31,10 @@ use ic_test_utilities_metrics::{
 use ic_types::{
     messages::{CallbackId, Payload, Request, MAX_RESPONSE_COUNT_BYTES},
     time::UNIX_EPOCH,
-    xnet::{testing::StreamSliceTesting, StreamIndex, StreamIndexedQueue},
+    xnet::{
+        testing::{StreamHeaderTesting, StreamSliceTesting},
+        StreamIndex, StreamIndexedQueue,
+    },
     CanisterId, CountBytes, Cycles,
 };
 use lazy_static::lazy_static;
@@ -3088,15 +3091,16 @@ struct MessageConfig {
 }
 
 fn generate_stream(msg_config: MessageConfig, signal_config: SignalConfig) -> Stream {
-    let stream_header_builder = StreamHeaderBuilder::new()
-        .begin(StreamIndex::from(msg_config.begin))
-        .end(StreamIndex::from(msg_config.begin + msg_config.count))
-        .signals_end(StreamIndex::from(signal_config.end));
+    let stream_header = StreamHeaderBuilder::new()
+        .begin(msg_config.begin.into())
+        .end((msg_config.begin + msg_config.count).into())
+        .signals_end(signal_config.end.into())
+        .build();
 
     let msg_begin = StreamIndex::from(msg_config.begin);
 
     let slice = StreamSliceBuilder::new()
-        .header(stream_header_builder.build())
+        .header(stream_header)
         .generate_messages(
             msg_begin,
             msg_config.count,
@@ -3115,9 +3119,9 @@ fn generate_stream(msg_config: MessageConfig, signal_config: SignalConfig) -> St
             .iter()
             .map(|x| StreamIndex::from(*x))
             .collect();
-        Stream::with_signals(messages, slice.header().signals_end, reject_signals)
+        Stream::with_signals(messages, slice.header().signals_end(), reject_signals)
     } else {
-        Stream::new(messages, slice.header().signals_end)
+        Stream::new(messages, slice.header().signals_end())
     }
 }
 
@@ -3183,9 +3187,9 @@ fn generate_stream_slice(config: StreamSliceConfig) -> StreamSlice {
         },
     );
     let mut slice: StreamSlice = stream.into();
-    slice.header_mut().begin = StreamIndex::from(config.header_begin);
+    slice.header_mut().set_begin(config.header_begin.into());
     if let Some(end) = config.header_end {
-        slice.header_mut().end = StreamIndex::from(end);
+        slice.header_mut().set_end(end.into());
     }
     slice
 }

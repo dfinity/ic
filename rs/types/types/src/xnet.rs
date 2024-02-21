@@ -160,14 +160,46 @@ impl<T> Default for StreamIndexedQueue<T> {
 /// signal) and a collection of `reject_signals`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct StreamHeader {
-    pub begin: StreamIndex,
-    pub end: StreamIndex,
+    begin: StreamIndex,
+    end: StreamIndex,
 
     /// Index of the next expected message.
-    pub signals_end: StreamIndex,
+    signals_end: StreamIndex,
 
     /// Stream indices of rejected messages, in ascending order.
-    pub reject_signals: VecDeque<StreamIndex>,
+    reject_signals: VecDeque<StreamIndex>,
+}
+
+impl StreamHeader {
+    pub fn new(
+        begin: StreamIndex,
+        end: StreamIndex,
+        signals_end: StreamIndex,
+        reject_signals: VecDeque<StreamIndex>,
+    ) -> Self {
+        Self {
+            begin,
+            end,
+            signals_end,
+            reject_signals,
+        }
+    }
+
+    pub fn begin(&self) -> StreamIndex {
+        self.begin
+    }
+
+    pub fn end(&self) -> StreamIndex {
+        self.end
+    }
+
+    pub fn signals_end(&self) -> StreamIndex {
+        self.signals_end
+    }
+
+    pub fn reject_signals(&self) -> &VecDeque<StreamIndex> {
+        &self.reject_signals
+    }
 }
 
 /// A continuous slice of messages pulled from a remote subnet.  The slice also
@@ -260,8 +292,24 @@ pub struct QueueId {
 }
 
 pub mod testing {
-    use super::{StreamHeader, StreamIndexedQueue};
+    use super::{StreamHeader, StreamIndex, StreamIndexedQueue};
     use crate::messages::RequestOrResponse;
+
+    /// Provides test-only methods for `StreamHeader`.
+    pub trait StreamHeaderTesting {
+        fn set_begin(&mut self, begin: StreamIndex);
+        fn set_end(&mut self, end: StreamIndex);
+    }
+
+    impl StreamHeaderTesting for super::StreamHeader {
+        fn set_begin(&mut self, begin: StreamIndex) {
+            self.begin = begin;
+        }
+
+        fn set_end(&mut self, end: StreamIndex) {
+            self.end = end;
+        }
+    }
 
     /// Provides test-only methods for `StreamSlice`.
     pub trait StreamSliceTesting {

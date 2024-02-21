@@ -360,8 +360,8 @@ impl StreamHandlerImpl {
                     let rejected_messages = self.garbage_collect_messages(
                         &mut stream,
                         *remote_subnet,
-                        stream_slice.header().signals_end,
-                        &stream_slice.header().reject_signals,
+                        stream_slice.header().signals_end(),
+                        stream_slice.header().reject_signals(),
                     );
                     self.garbage_collect_signals(&mut stream, *remote_subnet, stream_slice);
 
@@ -376,22 +376,22 @@ impl StreamHandlerImpl {
                 None => {
                     // New stream.
                     assert_eq!(
-                        stream_slice.header().signals_end,
+                        stream_slice.header().signals_end(),
                         StreamIndex::from(0),
                         "Cannot garbage collect a stream for subnet {} that does not exist",
                         remote_subnet
                     );
                     assert_eq!(
-                        stream_slice.header().begin, StreamIndex::from(0),
+                        stream_slice.header().begin(), StreamIndex::from(0),
                         "Signals from subnet {} do not start from 0 in the first communication attempt",
                         remote_subnet
                     );
                 }
             }
             let backlog = if let Some(messages) = stream_slice.messages() {
-                stream_slice.header().end - messages.end()
+                stream_slice.header().end() - messages.end()
             } else {
-                stream_slice.header().end - stream_slice.header().begin
+                stream_slice.header().end() - stream_slice.header().begin()
             };
             self.metrics
                 .xnet_message_backlog
@@ -462,11 +462,11 @@ impl StreamHandlerImpl {
         );
         assert_valid_signals_for_messages(
             stream.signals_end(),
-            stream_slice.header().begin,
+            stream_slice.header().begin(),
             stream_slice
                 .messages()
                 .map(|q| q.end())
-                .unwrap_or_else(|| stream_slice.header().end),
+                .unwrap_or_else(|| stream_slice.header().end()),
             StreamComponent::MessagesFrom(remote_subnet),
         );
         assert_valid_slice_messages_for_stream(
@@ -475,7 +475,7 @@ impl StreamHandlerImpl {
             remote_subnet,
         );
 
-        self.discard_signals_before(stream, stream_slice.header().begin);
+        self.discard_signals_before(stream, stream_slice.header().begin());
     }
 
     /// Wrapper around `Stream::discard_signals_before()` plus telemetry.

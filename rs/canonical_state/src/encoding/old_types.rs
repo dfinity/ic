@@ -301,21 +301,21 @@ pub struct StreamHeaderV6 {
 impl From<(&StreamHeader, CertificationVersion)> for StreamHeaderV6 {
     fn from((header, _certification_version): (&StreamHeader, CertificationVersion)) -> Self {
         Self {
-            begin: header.begin.get(),
-            end: header.end.get(),
-            signals_end: header.signals_end.get(),
+            begin: header.begin().get(),
+            end: header.end().get(),
+            signals_end: header.signals_end().get(),
         }
     }
 }
 
 impl From<StreamHeaderV6> for StreamHeader {
     fn from(header: StreamHeaderV6) -> Self {
-        Self {
-            begin: header.begin.into(),
-            end: header.end.into(),
-            signals_end: header.signals_end.into(),
-            reject_signals: Default::default(),
-        }
+        Self::new(
+            header.begin.into(),
+            header.end.into(),
+            header.signals_end.into(),
+            Default::default(),
+        )
     }
 }
 
