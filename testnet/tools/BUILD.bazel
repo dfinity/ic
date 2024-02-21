@@ -1,7 +1,6 @@
 genrule(
     name = "icos_deploy",
     srcs = [
-        "//rs/tests:src/default_firewall_whitelist.conf",
         "//ic-os/guestos/envs/dev:version.txt",
         "//ic-os/guestos/envs/dev:upload_disk-img",
         "//ic-os/guestos/envs/dev:upload_update-img",
