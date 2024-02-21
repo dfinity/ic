@@ -308,11 +308,10 @@ pub(super) fn transcript_op_summary(op: &IDkgTranscriptOperation) -> String {
 /// Return key_id and dealings.
 pub(crate) fn inspect_ecdsa_initializations(
     ecdsa_initializations: &[pb::EcdsaInitialization],
-) -> Result<Option<(EcdsaKeyId, InitialIDkgDealings)>, String> {
-    if ecdsa_initializations.is_empty() {
-        return Ok(None);
-    }
+) -> Result<BTreeMap<EcdsaKeyId, InitialIDkgDealings>, String> {
+    let mut initial_dealings_per_key_id = BTreeMap::new();
 
+    // TODO(CON-1053): remove this check
     if ecdsa_initializations.len() > 1 {
         return Err(
             "More than one ecdsa_initialization is not supported. Choose the first one."
@@ -320,35 +319,35 @@ pub(crate) fn inspect_ecdsa_initializations(
         );
     }
 
-    let ecdsa_init = ecdsa_initializations
-        .first()
-        .expect("Error: Ecdsa Initialization is None");
+    for ecdsa_init in ecdsa_initializations {
+        let ecdsa_key_id = ecdsa_init
+            .key_id
+            .clone()
+            .expect("Error: Failed to find key_id in ecdsa_initializations")
+            .try_into()
+            .map_err(|err| {
+                format!(
+                    "Error reading ECDSA key_id: {:?}. Setting ecdsa_summary to None.",
+                    err
+                )
+            })?;
 
-    let ecdsa_key_id = ecdsa_init
-        .key_id
-        .clone()
-        .expect("Error: Failed to find key_id in ecdsa_initializations")
-        .try_into()
-        .map_err(|err| {
-            format!(
-                "Error reading ECDSA key_id: {:?}. Setting ecdsa_summary to None.",
-                err
-            )
-        })?;
+        let dealings = ecdsa_init
+            .dealings
+            .as_ref()
+            .expect("Error: Failed to find dealings in ecdsa_initializations")
+            .try_into()
+            .map_err(|err| {
+                format!(
+                    "Error reading ECDSA dealings: {:?}. Setting ecdsa_summary to None.",
+                    err
+                )
+            })?;
 
-    let dealings = ecdsa_init
-        .dealings
-        .as_ref()
-        .expect("Error: Failed to find dealings in ecdsa_initializations")
-        .try_into()
-        .map_err(|err| {
-            format!(
-                "Error reading ECDSA dealings: {:?}. Setting ecdsa_summary to None.",
-                err
-            )
-        })?;
+        initial_dealings_per_key_id.insert(ecdsa_key_id, dealings);
+    }
 
-    Ok(Some((ecdsa_key_id, dealings)))
+    Ok(initial_dealings_per_key_id)
 }
 
 /// Return [`EcdsaConfig`] if it is enabled for the given subnet.
@@ -439,7 +438,7 @@ pub(crate) fn get_quadruple_ids_to_deliver(
     quadruple_ids
 }
 
-/// This function returns the ECDSA subnet public key to be added to the batch, if required.
+/// This function returns the ECDSA subnet public keys to be added to the batch, if required.
 /// We return `Ok(Some(key))`, if
 /// - The block contains an ECDSA payload with current key transcript ref, and
 /// - the corresponding transcript exists in past blocks, and
@@ -452,18 +451,9 @@ pub(crate) fn get_ecdsa_subnet_public_key(
     block: &Block,
     pool: &PoolReader<'_>,
     log: &ReplicaLogger,
-) -> Result<Option<(EcdsaKeyId, MasterEcdsaPublicKey)>, String> {
+) -> Result<BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>, String> {
     let Some(ecdsa_payload) = block.payload.as_ref().as_ecdsa() else {
-        return Ok(None);
-    };
-
-    let Some(transcript_ref) = ecdsa_payload
-        .key_transcript
-        .current
-        .as_ref()
-        .map(|unmasked| *unmasked.as_ref())
-    else {
-        return Ok(None);
+        return Ok(BTreeMap::new());
     };
 
     let Some(summary) = pool.dkg_summary_block_for_finalized_height(block.height) else {
@@ -474,6 +464,19 @@ pub(crate) fn get_ecdsa_subnet_public_key(
     };
     let chain = build_consensus_block_chain(pool.pool(), &summary, block);
     let block_reader = EcdsaBlockReaderImpl::new(chain);
+
+    let mut public_keys = BTreeMap::new();
+
+    // TODO(CON-1053): add a support for multiple keys
+    let key_id = ecdsa_payload.key_transcript.key_id.clone();
+    let Some(transcript_ref) = ecdsa_payload
+        .key_transcript
+        .current
+        .as_ref()
+        .map(|unmasked| *unmasked.as_ref())
+    else {
+        return Ok(BTreeMap::new());
+    };
 
     let ecdsa_subnet_public_key = match block_reader.transcript(&transcript_ref) {
         Ok(transcript) => get_ecdsa_subnet_public_key_(&transcript, log),
@@ -487,8 +490,11 @@ pub(crate) fn get_ecdsa_subnet_public_key(
         }
     };
 
-    Ok(ecdsa_subnet_public_key
-        .map(|public_key| (ecdsa_payload.key_transcript.key_id.clone(), public_key)))
+    if let Some(public_key) = ecdsa_subnet_public_key {
+        public_keys.insert(key_id, public_key);
+    }
+
+    Ok(public_keys)
 }
 
 fn get_ecdsa_subnet_public_key_(
@@ -548,7 +554,7 @@ mod tests {
         let init =
             inspect_ecdsa_initializations(&[]).expect("Should successfully get initializations");
 
-        assert!(init.is_none());
+        assert!(init.is_empty());
     }
 
     #[test]
@@ -567,7 +573,7 @@ mod tests {
         let init = inspect_ecdsa_initializations(&[ecdsa_init])
             .expect("Should successfully get initializations");
 
-        assert_eq!(init, Some((key_id, initial_dealings)));
+        assert_eq!(init, BTreeMap::from([(key_id, initial_dealings)]));
     }
 
     #[test]
