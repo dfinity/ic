@@ -34,6 +34,7 @@ use anyhow::{bail, Result};
 use async_trait::async_trait;
 use flate2::{write::GzEncoder, Compression};
 use ic_agent::{Agent, AgentError};
+use kube::ResourceExt;
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use slog::info;
@@ -430,7 +431,7 @@ impl BoundaryNode {
             self.qemu_cli_args.clone(),
             match &self.boot_image {
                 None => {
-                    let url = boundary_node_img_url;
+                    let url = boundary_node_img_url.clone();
                     let sha256 = boundary_node_img_sha256;
                     ImageLocation::IcOsImageViaUrl { url, sha256 }
                 }
@@ -450,7 +451,15 @@ impl BoundaryNode {
         let allocated_vm = match InfraProvider::read_attribute(env) {
             InfraProvider::K8s => {
                 let mut tnet = TNet::read_attribute(env);
-                let vm_res = block_on(tnet.vm_create(create_vm_req)).expect("failed to create vm");
+                block_on(tnet.deploy_boundary_image(boundary_node_img_url))
+                    .expect("failed to deploy guestos image");
+                let vm_res = block_on(tnet.vm_create(CreateVmRequest {
+                    primary_image: ImageLocation::PersistentVolumeClaim {
+                        name: format!("{}-image-boundaryos", tnet.owner.name_any()),
+                    },
+                    ..create_vm_req
+                }))
+                .expect("failed to create vm");
                 tnet.write_attribute(env);
                 vm_res
             }
@@ -864,12 +873,17 @@ echo "$ipv4"
 
 impl RetrieveIpv4Addr for BoundaryNodeSnapshot {
     fn block_on_ipv4(&self) -> Result<Ipv4Addr> {
-        use anyhow::Context;
-        let ipv4_string = self.block_on_bash_script(IPV4_RETRIEVE_SH_SCRIPT)?;
-        ipv4_string
-            .trim()
-            .parse::<Ipv4Addr>()
-            .context("ipv4 retrieval")
+        match InfraProvider::read_attribute(&self.env) {
+            InfraProvider::K8s => Ok(self.vm.ipv4.expect("ipv4 should be present")),
+            InfraProvider::Farm => {
+                use anyhow::Context;
+                let ipv4_string = self.block_on_bash_script(IPV4_RETRIEVE_SH_SCRIPT)?;
+                ipv4_string
+                    .trim()
+                    .parse::<Ipv4Addr>()
+                    .context("ipv4 retrieval")
+            }
+        }
     }
 }
 
