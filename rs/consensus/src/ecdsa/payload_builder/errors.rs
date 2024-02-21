@@ -16,17 +16,15 @@ use ic_types::{
 use super::InvalidChainCacheError;
 
 #[derive(Clone, Debug)]
-pub enum EcdsaPayloadError {
+pub(crate) enum EcdsaPayloadError {
     RegistryClientError(RegistryClientError),
     MegaKeyFromRegistryError(MegaKeyFromRegistryError),
     ConsensusSummaryBlockNotFound(Height),
-    ConsensusRegistryVersionNotFound(Height),
     StateManagerError(StateManagerError),
     SubnetWithNoNodes(SubnetId, RegistryVersion),
     PreSignatureError(PresignatureQuadrupleCreationError),
     IDkgParamsValidationError(IDkgParamsValidationError),
     IDkgTranscriptIdError(IDkgTranscriptIdError),
-    DkgSummaryBlockNotFound(Height),
     ThresholdEcdsaSigInputsCreationError(ThresholdEcdsaSigInputsCreationError),
     TranscriptLookupError(ecdsa::TranscriptLookupError),
     TranscriptCastError(ecdsa::TranscriptCastError),

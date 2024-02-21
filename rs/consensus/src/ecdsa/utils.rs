@@ -36,7 +36,7 @@ use std::convert::TryInto;
 use std::sync::Arc;
 
 #[derive(Clone, Debug)]
-pub struct InvalidChainCacheError(String);
+pub(crate) struct InvalidChainCacheError(String);
 
 pub(super) struct EcdsaBlockReaderImpl {
     chain: Arc<dyn ConsensusBlockChain>,
