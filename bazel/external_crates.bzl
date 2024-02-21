@@ -376,6 +376,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "ed25519-consensus": crate.spec(
                 version = "^2.0.1",
             ),
+            "ed25519-dalek": crate.spec(
+                version = "^2.1.1",
+                features = ["std", "zeroize", "digest", "batch", "pkcs8", "pem"],
+            ),
             "educe": crate.spec(
                 version = "^0.4",
             ),
