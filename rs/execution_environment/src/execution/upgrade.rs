@@ -10,8 +10,8 @@ use crate::canister_manager::{
 };
 use crate::execution::common::{ingress_status_with_processing_state, update_round_limits};
 use crate::execution::install_code::{
-    canister_layout, finish_err, InstallCodeHelper, MemoryHandling, OriginalContext,
-    PausedInstallCodeHelper,
+    canister_layout, finish_err, InstallCodeHelper, MainMemoryHandling, MemoryHandling,
+    OriginalContext, PausedInstallCodeHelper, StableMemoryHandling,
 };
 use crate::execution_environment::{RoundContext, RoundLimits};
 use ic_base_types::PrincipalId;
@@ -264,17 +264,20 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
         original.compilation_cost_handling,
     );
 
-    let keep_main_memory = match context.mode {
+    let main_memory_handling = match context.mode {
         CanisterInstallModeV2::Upgrade(Some(upgrade_options)) => {
-            upgrade_options.keep_main_memory.unwrap_or(false)
+            match upgrade_options.keep_main_memory {
+                Some(true) => MainMemoryHandling::Keep,
+                Some(false) => MainMemoryHandling::Replace { explicit: true },
+                None => MainMemoryHandling::Replace { explicit: false },
+            }
         }
-        _ => false,
+        _ => MainMemoryHandling::Replace { explicit: false },
     };
 
-    let memory_handling = if keep_main_memory {
-        MemoryHandling::KeepBothMemories
-    } else {
-        MemoryHandling::KeepOnlyStableMemory
+    let memory_handling = MemoryHandling {
+        stable_memory_handling: StableMemoryHandling::Keep,
+        main_memory_handling,
     };
     if let Err(err) = helper.replace_execution_state_and_allocations(
         instructions_from_compilation,
