@@ -22,6 +22,7 @@ use ic_types::Height;
 use itertools::Itertools;
 use phantom_newtype::Id;
 use serde::{Deserialize, Serialize};
+use std::cmp::Ordering;
 use strum_macros::{EnumCount, EnumIter};
 
 /// The (soft) maximum of the number of overlay files.
@@ -66,17 +67,17 @@ pub enum OverlayVersion {
     ///           encode two numbers as 64 bit little-endian unsigned integers:
     ///
     ///           1. The `PageIndex` of the first page in the range.
-    ///           2. The `FileIndex` (offset in PAGE_SIZE blocks) of the first page in the range.
+    ///           2. The `PageIndex` past the last page in the range
+    ///           3. The `FileIndex` (offset in PAGE_SIZE blocks) of the first page in the range.
     ///
     /// 4. Data: The data of any number of 4KB pages concatenated.
     ///
     /// Example: An overlay containing pages 5,6, and 10
-    ///          [Data5][Data6][Data10]       [[5,0][10,2]]         [3]                 [0]
-    ///              Data (3*4 KB)          Index (4*8 bytes)  Size (8 bytes)    Version (4 bytes)
+    ///          [Data5][Data6][Data10]       [[5,7,0][10,11,2]]         [3]                 [0]
+    ///              Data (3*4 KB)          Index (2*3*8 bytes)    Size (8 bytes)    Version (4 bytes)
     ///
-    /// In this example, we can infer that the first range has length 2, as the first range starts
-    /// at file index 0, and the second range starts at file index 2. Similarly, the second range has
-    /// length 1 as the range starts at file index 2, and the total number of pages is 3.
+    /// We can read the version and size based on offset from the end of the file, then knowing the
+    /// data size we can parse the index.
     ///
     /// Note that the version, size and index are at the end, so that data pages are aligned with the page
     /// size, which is required to mmap them.
@@ -90,7 +91,7 @@ const VERSION_NUM_BYTES: usize = 4;
 const SIZE_NUM_BYTES: usize = 8;
 
 /// Number of bytes storing a range in an overlay file.
-const INDEX_ENTRY_NUM_BYTES: usize = 16;
+const PAGE_INDEX_RANGE_NUM_BYTES: usize = 24;
 
 impl std::convert::TryFrom<u32> for OverlayVersion {
     type Error = ();
@@ -209,11 +210,7 @@ impl Storage {
 
         for overlay in self.overlays.iter().rev() {
             // The order within the same overlay doesn't matter as they are nonoverlapping.
-            result.append(
-                &mut overlay
-                    .get_memory_instructions(range.clone(), filter)
-                    .instructions,
-            );
+            result.append(&mut overlay.get_memory_instructions(range.clone(), filter));
         }
 
         // We reverse so that instructions from earlier layers appear earlier.
@@ -384,16 +381,16 @@ impl OverlayFile {
     }
 
     /// The index as a slice.
-    fn index_slice(&self) -> &[[[u8; 8]; 2]] {
+    fn index_slice(&self) -> &[[[u8; 8]; 3]] {
         index_slice(&self.mapping)
     }
 
     /// The number of logical pages covered by this overlay file, i.e. the largest `PageIndex`
     /// contained + 1.
     fn num_logical_pages(&self) -> usize {
-        let slice = self.index_slice();
-        let last_range = index_range(slice, slice.len() - 1, self.num_pages() as u64);
-        last_range.end_page.get() as usize
+        PageIndexRange::from(self.index_slice().iter().last().unwrap())
+            .end_page
+            .get() as usize
     }
 
     /// For base overlays we mmap all content in constructor.
@@ -430,93 +427,77 @@ impl OverlayFile {
         &self,
         range: Range<PageIndex>,
         filter: &mut BitVec,
-    ) -> MemoryInstructions {
+    ) -> Vec<MemoryInstruction> {
         let slice = self.index_slice();
-        let binary_search =
-            slice.binary_search_by(|probe| IndexEntry::from(probe).start_page.cmp(&range.start));
         // `range.start` cannot be contained in any index range before this index, no need to iterate over them.
-        let start_slice_index = match binary_search {
-            Ok(loc) => loc,
-            Err(0) => 0,
-            Err(loc) => loc - 1,
-        };
+        let start_slice_index =
+            slice.partition_point(|probe| PageIndexRange::from(probe).end_page <= range.start);
 
         let mut result = Vec::<MemoryInstruction>::new();
 
-        for slice_index in start_slice_index..slice.len() {
-            let page_index_range = index_range(slice, slice_index, self.num_pages() as u64);
+        for page_index_range in slice[start_slice_index..].iter().map(PageIndexRange::from) {
             if page_index_range.start_page >= range.end {
                 // Any later `PageIndexRange` in `slice` won't intersect with `range` anymore.
                 break;
             }
-            // This condition can be false if `range.start` is not contained in the overlay.
-            // In this case `range.start` would be between the `start_slice_index` and `start_slice_index + 1`.
-            if page_index_range.end_page > range.start {
-                // `clamped_range` is the intersection of `range` and `page_index_range`.
-                let clamped_range = PageIndex::new(std::cmp::max(
-                    page_index_range.start_page.get(),
-                    range.start.get(),
-                ))
-                    ..PageIndex::new(std::cmp::min(
-                        page_index_range.end_page.get(),
-                        range.end.get(),
-                    ));
-                let shifted_range = (clamped_range.start.get() - range.start.get())
-                    ..(clamped_range.end.get() - range.start.get());
+            // `clamped_range` is the intersection of `range` and `page_index_range`.
+            let clamped_range = PageIndex::new(std::cmp::max(
+                page_index_range.start_page.get(),
+                range.start.get(),
+            ))
+                ..PageIndex::new(std::cmp::min(
+                    page_index_range.end_page.get(),
+                    range.end.get(),
+                ));
+            let shifted_range = (clamped_range.start.get() - range.start.get())
+                ..(clamped_range.end.get() - range.start.get());
 
-                // Count how many pages from `shifted_range` are not covered yet by `filter`.
-                let needed_pages = shifted_range
-                    .clone()
-                    .filter(|page| {
-                        !filter
-                            .get(*page as usize)
-                            .expect("Page index in shifted_range is out of bound")
-                    })
-                    .count() as u64;
+            // Count how many pages from `shifted_range` are not covered yet by `filter`.
+            let needed_pages = shifted_range
+                .clone()
+                .filter(|page| {
+                    !filter
+                        .get(*page as usize)
+                        .expect("Page index in shifted_range is out of bound")
+                })
+                .count() as u64;
 
-                if needed_pages > MAX_COPY_MEMORY_INSTRUCTION {
-                    // If we need many pages from the `page_index_range`, we mmap the entire range.
-                    let offset =
-                        (page_index_range.start_file_index.get() + clamped_range.start.get()
-                            - page_index_range.start_page.get()) as usize
-                            * PAGE_SIZE;
-                    result.push((
-                        clamped_range,
-                        MemoryMapOrData::MemoryMap(self.mapping.file_descriptor().clone(), offset),
-                    ));
-                } else if needed_pages > 0 {
-                    // We copy the needed pages individually.
-                    for page_index in clamped_range.start.get()..clamped_range.end.get() {
-                        let shifted_index = page_index - range.start.get();
-                        if !filter
-                            .get(shifted_index as usize)
-                            .expect("Page index in shifted_range is out of bound")
-                        {
-                            let file_index = page_index_range.start_file_index.get() + page_index
-                                - page_index_range.start_page.get();
-                            let page =
-                                get_page_in_mapping(&self.mapping, FileIndex::new(file_index));
-                            // In a valid overlay file the file index is within range.
-                            debug_assert!(page.is_some());
-                            result.push((
-                                PageIndex::new(page_index)..PageIndex::new(page_index + 1),
-                                MemoryMapOrData::Data(page.unwrap()),
-                            ));
-                        }
+            if needed_pages > MAX_COPY_MEMORY_INSTRUCTION {
+                // If we need many pages from the `page_index_range`, we mmap the entire range.
+                let offset = (page_index_range.start_file_index.get() + clamped_range.start.get()
+                    - page_index_range.start_page.get()) as usize
+                    * PAGE_SIZE;
+                result.push((
+                    clamped_range,
+                    MemoryMapOrData::MemoryMap(self.mapping.file_descriptor().clone(), offset),
+                ));
+            } else if needed_pages > 0 {
+                // We copy the needed pages individually.
+                for page_index in clamped_range.start.get()..clamped_range.end.get() {
+                    let shifted_index = page_index - range.start.get();
+                    if !filter
+                        .get(shifted_index as usize)
+                        .expect("Page index in shifted_range is out of bound")
+                    {
+                        let file_index = page_index_range.start_file_index.get() + page_index
+                            - page_index_range.start_page.get();
+                        let page = get_page_in_mapping(&self.mapping, FileIndex::new(file_index));
+                        // In a valid overlay file the file index is within range.
+                        debug_assert!(page.is_some());
+                        result.push((
+                            PageIndex::new(page_index)..PageIndex::new(page_index + 1),
+                            MemoryMapOrData::Data(page.unwrap()),
+                        ));
                     }
                 }
+            }
 
-                // Mark all new pages in `filter`.
-                for page in shifted_range {
-                    filter.set(page as usize, true);
-                }
+            // Mark all new pages in `filter`.
+            for page in shifted_range {
+                filter.set(page as usize, true);
             }
         }
-
-        MemoryInstructions {
-            range,
-            instructions: result,
-        }
+        result
     }
 
     /// The overlay version contained in the file.
@@ -533,43 +514,42 @@ impl OverlayFile {
     /// If `index` is present in this overlay, returns its `FileIndex`.
     fn get_file_index(&self, index: PageIndex) -> Option<FileIndex> {
         let slice = self.index_slice();
-        let result = slice.binary_search_by(|probe| IndexEntry::from(probe).start_page.cmp(&index));
-
-        match result {
-            Ok(loc) => Some(IndexEntry::from(&slice[loc]).start_file_index),
-            Err(0) => None,
-            Err(loc) => {
-                let entry: IndexEntry = (&slice[loc - 1]).into();
-                let next_file_index = if loc < slice.len() {
-                    IndexEntry::from(&slice[loc]).start_file_index
+        slice
+            .binary_search_by(|probe| {
+                let probe = PageIndexRange::from(probe);
+                if probe.start_page > index {
+                    Ordering::Greater
+                } else if probe.end_page <= index {
+                    Ordering::Less
                 } else {
-                    FileIndex::from(self.num_pages() as u64)
-                };
-                let range = PageIndexRange::new(&entry, next_file_index);
-                range.file_index(index)
-            }
-        }
+                    Ordering::Equal
+                }
+            })
+            .map_or(None, |loc| {
+                let index = PageIndexRange::from(&slice[loc]).file_index(index);
+                debug_assert!(index.is_some());
+                index
+            })
     }
 
     /// Iterate over all ranges in the index.
     fn index_iter(&self) -> impl Iterator<Item = PageIndexRange> + '_ {
-        let slice = self.index_slice();
-        (0..slice.len()).map(|i| index_range(slice, i, self.num_pages() as u64))
+        self.index_slice().iter().map(PageIndexRange::from)
     }
 }
 
 /// The index portion of the file as a slice of pairs of numbers, each describing
 /// a range of pages.
 /// See `OverlayVersion` for an explanation of how the index is structured.
-fn index_slice(mapping: &Mapping) -> &[[[u8; 8]; 2]] {
+fn index_slice(mapping: &Mapping) -> &[[[u8; 8]; 3]] {
     let full_slice = mapping.as_slice();
     let start = num_pages(mapping) * PAGE_SIZE;
     let end = full_slice.len() - VERSION_NUM_BYTES - SIZE_NUM_BYTES;
 
-    let (prefix, slice, suffix) = unsafe { full_slice[start..end].align_to::<[[u8; 8]; 2]>() };
+    let (prefix, slice, suffix) = unsafe { full_slice[start..end].align_to::<[[u8; 8]; 3]>() };
     // Prefix would be non-empty if the address wasn't u64-aligned, but mmap is always page-aligned.
     assert!(prefix.is_empty());
-    // Suffix would be non-empty if the length (in bytes) isn't a multiple of 8*2, which would be a
+    // Suffix would be non-empty if the length (in bytes) isn't a multiple of 8*3, which would be a
     // bug in the loading step.
     assert!(suffix.is_empty());
 
@@ -646,7 +626,7 @@ fn check_mapping_correctness(mapping: &Mapping, path: &Path) -> Result<(), Persi
         - num_pages(mapping) * PAGE_SIZE
         - VERSION_NUM_BYTES
         - SIZE_NUM_BYTES;
-    if index_length % INDEX_ENTRY_NUM_BYTES != 0 {
+    if index_length % PAGE_INDEX_RANGE_NUM_BYTES != 0 {
         return Err(PersistenceError::InvalidOverlay {
             path: path.display().to_string(),
             message: "Invalid index length".to_string(),
@@ -674,12 +654,12 @@ fn check_mapping_correctness(mapping: &Mapping, path: &Path) -> Result<(), Persi
     let slice = index_slice(mapping);
     // The first range should start at file_index 0
     if !slice.is_empty() {
-        let entry = IndexEntry::from(&slice[0]);
+        let entry = PageIndexRange::from(&slice[0]);
         if entry.start_file_index != FileIndex::from(0) {
             return Err(PersistenceError::InvalidOverlay {
                 path: path.display().to_string(),
                 message: format!(
-                    "Broken overlay file: First IndexEntry ({:?}) does not start at file_index 0",
+                    "Broken overlay file: First PageIndexRange ({:?}) does not start at file_index 0",
                     entry,
                 ),
             });
@@ -689,15 +669,18 @@ fn check_mapping_correctness(mapping: &Mapping, path: &Path) -> Result<(), Persi
         let next_file_index = if i == slice.len() - 1 {
             FileIndex::from(num_pages(mapping) as u64)
         } else {
-            IndexEntry::from(&slice[i + 1]).start_file_index
+            PageIndexRange::from(&slice[i + 1]).start_file_index
         };
         let next_page_index = if i == slice.len() - 1 {
             None
         } else {
-            Some(IndexEntry::from(&slice[i + 1]).start_page)
+            Some(PageIndexRange::from(&slice[i + 1]).start_page)
         };
-        let entry = IndexEntry::from(&slice[i]);
-        let has_error = if entry.start_file_index >= next_file_index {
+        let entry = PageIndexRange::from(&slice[i]);
+        let has_error = if entry.start_file_index >= next_file_index
+            || entry.end_page.get() - entry.start_page.get()
+                != next_file_index.get() - entry.start_file_index.get()
+        {
             true
         } else if let Some(next_page_index) = next_page_index {
             if next_page_index <= entry.start_page {
@@ -716,7 +699,7 @@ fn check_mapping_correctness(mapping: &Mapping, path: &Path) -> Result<(), Persi
             return Err(PersistenceError::InvalidOverlay {
                 path: path.display().to_string(),
                 message: format!(
-                    "Broken overlay file: IndexEntry[{}], entry: {:?}, next_file_index: {}, \
+                    "Broken overlay file: PageIndexRange[{}], entry: {:?}, next_file_index: {}, \
                          next_page_index: {:?}, num_pages: {}",
                     i,
                     entry,
@@ -1003,66 +986,10 @@ impl MergeCandidate {
     }
 }
 
-/// Construct a `PageIndexRange` for the range at `index`.
-/// In the slice the information is stored in a fairly compressed format. An `PageIndexRange` is more convenient
-/// to work with.
-fn index_range(slice: &[[[u8; 8]; 2]], index: usize, num_pages: u64) -> PageIndexRange {
-    PageIndexRange::new(
-        &IndexEntry::from(&slice[index]),
-        if index + 1 < slice.len() {
-            FileIndex::from(IndexEntry::from(&slice[index + 1]).start_file_index)
-        } else {
-            FileIndex::from(num_pages)
-        },
-    )
-}
-
 struct FileIndexTag;
 /// Physical position of a page in an overlay file (smallest `PageIndex` has `FileIndex` 0, second smallest
 /// has `FileIndex` 1).
 type FileIndex = Id<FileIndexTag, u64>;
-
-/// The two numbers we store for each range in the overlay file.
-#[derive(Copy, Clone, Debug)]
-struct IndexEntry {
-    /// Page index in the mmap.
-    start_page: PageIndex,
-    /// Offset in the file measured in `PAGE_SIZE` blocks.
-    start_file_index: FileIndex,
-}
-
-impl From<&[[u8; 8]; 2]> for IndexEntry {
-    fn from(source: &[[u8; 8]; 2]) -> Self {
-        let start_page = u64::from_le_bytes(source[0]).into();
-        let start_file_index = u64::from_le_bytes(source[1]).into();
-
-        Self {
-            start_page,
-            start_file_index,
-        }
-    }
-}
-
-impl From<&PageIndexRange> for IndexEntry {
-    fn from(source: &PageIndexRange) -> Self {
-        Self {
-            start_page: source.start_page,
-            start_file_index: source.start_file_index,
-        }
-    }
-}
-
-impl IndexEntry {
-    /// A `PageIndexRange` as it is serialized in the overlay file.
-    fn bytes(&self) -> [u8; INDEX_ENTRY_NUM_BYTES] {
-        let start = self.start_page.get().to_le_bytes();
-        let file_index = self.start_file_index.get().to_le_bytes();
-        let mut result = [0; 16];
-        result[..8].copy_from_slice(&start);
-        result[8..].copy_from_slice(&file_index);
-        result
-    }
-}
 
 /// A representation of a range of `PageIndex` that is intended to be easier to use
 /// than the raw representation in the file.
@@ -1077,19 +1004,17 @@ struct PageIndexRange {
 }
 
 impl PageIndexRange {
-    /// Construct a `PageIndexRange` for a single `IndexEntry` and the relevant information
-    /// from the next `IndexEntry`.
-    fn new(entry: &IndexEntry, next_file_index: FileIndex) -> Self {
-        debug_assert!(next_file_index > entry.start_file_index);
-        Self {
-            start_page: entry.start_page,
-            end_page: PageIndex::from(
-                next_file_index.get() - entry.start_file_index.get() + entry.start_page.get(),
-            ),
-            start_file_index: entry.start_file_index,
-        }
+    /// A `PageIndexRange` as it is serialized in the overlay file.
+    fn bytes(&self) -> [u8; PAGE_INDEX_RANGE_NUM_BYTES] {
+        let start = self.start_page.get().to_le_bytes();
+        let end = self.end_page.get().to_le_bytes();
+        let file_index = self.start_file_index.get().to_le_bytes();
+        let mut result = [0; 24];
+        result[..8].copy_from_slice(&start);
+        result[8..16].copy_from_slice(&end);
+        result[16..].copy_from_slice(&file_index);
+        result
     }
-
     /// If a page is covered by this `PageIndexRange`, returns its `FileIndex`
     /// in the the overlay file.
     fn file_index(&self, index: PageIndex) -> Option<FileIndex> {
@@ -1103,9 +1028,23 @@ impl PageIndexRange {
     }
 }
 
+impl From<&[[u8; 8]; 3]> for PageIndexRange {
+    fn from(source: &[[u8; 8]; 3]) -> Self {
+        let start_page = u64::from_le_bytes(source[0]).into();
+        let end_page = u64::from_le_bytes(source[1]).into();
+        let start_file_index = u64::from_le_bytes(source[2]).into();
+
+        Self {
+            start_page,
+            end_page,
+            start_file_index,
+        }
+    }
+}
+
 /// Convert a sorted list of `PageIndex` to a sorted list of `PageIndexRange`, combining
 /// adjacent `PageIndex` to a single range.
-fn group_pages_into_ranges(page_indices: &[PageIndex]) -> Vec<IndexEntry> {
+fn group_pages_into_ranges(page_indices: &[PageIndex]) -> Vec<PageIndexRange> {
     page_indices
         .iter()
         .enumerate()
@@ -1118,8 +1057,10 @@ fn group_pages_into_ranges(page_indices: &[PageIndex]) -> Vec<IndexEntry> {
             // Each `group` is made of `(u64, PageIndex)` tuples, the u64 stands for index in the input
             // `page_indices`.
             let (start_file_index, start_page) = group.next().unwrap();
-            IndexEntry {
+            let len = 1 + group.count(); // +1 because we already consumed one element of the iterator above.
+            PageIndexRange {
                 start_page: *start_page,
+                end_page: PageIndex::from(start_page.get() + len as u64),
                 start_file_index: FileIndex::from(start_file_index as u64),
             }
         })
@@ -1234,7 +1175,7 @@ fn write_overlay(
         .into_iter()
         .map(|range| range.bytes())
         .fold(
-            Vec::with_capacity(INDEX_ENTRY_NUM_BYTES * indices.len()),
+            Vec::with_capacity(PAGE_INDEX_RANGE_NUM_BYTES * indices.len()),
             |mut data, slice| {
                 data.extend(slice);
                 data

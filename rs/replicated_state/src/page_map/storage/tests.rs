@@ -8,7 +8,7 @@ use std::{
 use crate::page_map::{
     storage::{
         Checkpoint, MergeCandidate, OverlayFile, Storage, CURRENT_OVERLAY_VERSION,
-        INDEX_ENTRY_NUM_BYTES, SIZE_NUM_BYTES, VERSION_NUM_BYTES,
+        PAGE_INDEX_RANGE_NUM_BYTES, SIZE_NUM_BYTES, VERSION_NUM_BYTES,
     },
     FileDescriptor, MemoryInstructions, MemoryMapOrData, PageAllocator, PageDelta, PageMap,
     PersistDestination, PersistenceError, StorageLayout, StorageMetrics, MAX_NUMBER_OF_FILES,
@@ -46,7 +46,7 @@ impl StorageLayout for TestStorageLayout {
 /// ranges of indices there are.
 fn expected_overlay_file_size(num_pages: u64, num_ranges: u64) -> u64 {
     let data = num_pages * PAGE_SIZE as u64;
-    let index = num_ranges * INDEX_ENTRY_NUM_BYTES as u64;
+    let index = num_ranges * PAGE_INDEX_RANGE_NUM_BYTES as u64;
 
     data + index + SIZE_NUM_BYTES as u64 + VERSION_NUM_BYTES as u64
 }
@@ -84,7 +84,12 @@ fn verify_overlay_file(path: &Path, expected: &PageDelta) {
     // Verify every single page in the range.
     for index in 0..overlay.num_logical_pages() as u64 {
         let index = PageIndex::new(index);
-        assert_eq!(overlay.get_page(index), expected.get_page(index));
+        assert_eq!(
+            overlay.get_page(index),
+            expected.get_page(index),
+            "Index: {}",
+            index
+        );
     }
 
     // `get_page` should return `None` beyond the range of the overlay.
@@ -881,9 +886,8 @@ fn can_get_small_memory_regions_from_file() {
     let actual_instructions =
         overlay.get_memory_instructions(PageIndex::new(0)..PageIndex::new(30), &mut empty_filter);
 
-    assert_eq!(actual_instructions.range, range);
-    assert_eq!(actual_instructions.instructions.len(), indices.len());
-    for (_range, instruction) in actual_instructions.instructions {
+    assert_eq!(actual_instructions.len(), indices.len());
+    for (_range, instruction) in actual_instructions {
         assert_matches!(instruction, MemoryMapOrData::Data { .. });
     }
 
@@ -904,9 +908,8 @@ fn can_get_small_memory_regions_from_file() {
     let actual_instructions = overlay
         .get_memory_instructions(PageIndex::new(0)..PageIndex::new(30), &mut nonempty_filter);
 
-    assert_eq!(actual_instructions.range, range);
-    assert_eq!(actual_instructions.instructions.len(), indices.len() - 2); // 2 results are filtered out.
-    for (_range, instruction) in actual_instructions.instructions {
+    assert_eq!(actual_instructions.len(), indices.len() - 2); // 2 results are filtered out.
+    for (_range, instruction) in actual_instructions {
         assert_matches!(instruction, MemoryMapOrData::Data { .. });
     }
 
@@ -938,9 +941,8 @@ fn can_get_large_memory_regions_from_file() {
     let actual_instructions =
         overlay.get_memory_instructions(PageIndex::new(0)..PageIndex::new(30), &mut empty_filter);
 
-    assert_eq!(actual_instructions.range, range);
-    assert_eq!(actual_instructions.instructions.len(), 1);
-    let (mmap_range, instruction) = &actual_instructions.instructions[0];
+    assert_eq!(actual_instructions.len(), 1);
+    let (mmap_range, instruction) = &actual_instructions[0];
     assert_eq!(*mmap_range, PageIndex::new(9)..PageIndex::new(21));
     assert_matches!(instruction, MemoryMapOrData::MemoryMap { .. });
 
@@ -960,9 +962,8 @@ fn can_get_large_memory_regions_from_file() {
     let actual_instructions = overlay
         .get_memory_instructions(PageIndex::new(0)..PageIndex::new(30), &mut nonempty_filter);
 
-    assert_eq!(actual_instructions.range, range);
-    assert_eq!(actual_instructions.instructions.len(), 1);
-    let (mmap_range, instruction) = &actual_instructions.instructions[0];
+    assert_eq!(actual_instructions.len(), 1);
+    let (mmap_range, instruction) = &actual_instructions[0];
     assert_eq!(*mmap_range, PageIndex::new(9)..PageIndex::new(21));
     assert_matches!(instruction, MemoryMapOrData::MemoryMap { .. });
 
@@ -975,9 +976,8 @@ fn can_get_large_memory_regions_from_file() {
     let actual_instructions = overlay
         .get_memory_instructions(PageIndex::new(0)..PageIndex::new(30), &mut nonempty_filter);
 
-    assert_eq!(actual_instructions.range, range);
-    assert_eq!(actual_instructions.instructions.len(), indices.len() - 2); // 9, 11 should be missing
-    for (_range, instruction) in actual_instructions.instructions {
+    assert_eq!(actual_instructions.len(), indices.len() - 2); // 9, 11 should be missing
+    for (_range, instruction) in actual_instructions {
         assert_matches!(instruction, MemoryMapOrData::Data { .. });
     }
 
