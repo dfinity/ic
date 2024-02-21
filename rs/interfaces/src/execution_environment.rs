@@ -201,9 +201,6 @@ pub enum SystemApiCallId {
 pub struct SystemApiCallCounters {
     /// Counter for `ic0.data_certificate_copy()`
     pub data_certificate_copy: usize,
-    /// Counter for `ic0.call_perform()`
-    // TODO: RUN-918: Remove tracking, as we support the composite queries now.
-    pub call_perform: usize,
     /// Counter for `ic0.canister_cycle_balance()`
     pub canister_cycle_balance: usize,
     /// Counter for `ic0.canister_cycle_balance128()`
@@ -217,7 +214,6 @@ impl SystemApiCallCounters {
         self.data_certificate_copy = self
             .data_certificate_copy
             .saturating_add(rhs.data_certificate_copy);
-        self.call_perform = self.call_perform.saturating_add(rhs.call_perform);
         self.canister_cycle_balance = self
             .canister_cycle_balance
             .saturating_add(rhs.canister_cycle_balance);

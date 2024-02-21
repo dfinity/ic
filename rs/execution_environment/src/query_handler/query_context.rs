@@ -6,8 +6,8 @@ use crate::{
     hypervisor::Hypervisor,
     metrics::{
         CallTreeMetricsNoOp, MeasurementScope, QueryHandlerMetrics, QUERY_HANDLER_CRITICAL_ERROR,
-        SYSTEM_API_CALL_PERFORM, SYSTEM_API_CANISTER_CYCLE_BALANCE,
-        SYSTEM_API_CANISTER_CYCLE_BALANCE128, SYSTEM_API_DATA_CERTIFICATE_COPY, SYSTEM_API_TIME,
+        SYSTEM_API_CANISTER_CYCLE_BALANCE, SYSTEM_API_CANISTER_CYCLE_BALANCE128,
+        SYSTEM_API_DATA_CERTIFICATE_COPY, SYSTEM_API_TIME,
     },
     NonReplicatedQueryKind, RoundInstructions,
 };
@@ -515,9 +515,6 @@ impl<'a> QueryContext<'a> {
         query_system_api_calls
             .with_label_values(&[SYSTEM_API_DATA_CERTIFICATE_COPY])
             .inc_by(self.system_api_call_counters.data_certificate_copy as u64);
-        query_system_api_calls
-            .with_label_values(&[SYSTEM_API_CALL_PERFORM])
-            .inc_by(self.system_api_call_counters.call_perform as u64);
         query_system_api_calls
             .with_label_values(&[SYSTEM_API_CANISTER_CYCLE_BALANCE])
             .inc_by(self.system_api_call_counters.canister_cycle_balance as u64);
