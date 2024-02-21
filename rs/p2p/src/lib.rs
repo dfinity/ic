@@ -233,7 +233,11 @@ fn start_p2p_event_loop(
                     recv(rx) -> recv_res => {
                         match recv_res {
                             Ok(advert) => gossip.broadcast_advert(advert),
-                            Err(RecvError {}) => break,
+                            // Do not break out of the event loop. During the transition
+                            // to the new P2P it is important to have this running so new
+                            // registry versions are fetched and keeping the old transport
+                            // connected to the correct peers so we don't page.
+                            Err(RecvError {}) => (),
                         }
                     }
                     recv(ticker) -> _ => gossip.on_gossip_timer(),
