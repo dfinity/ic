@@ -4343,16 +4343,11 @@ fn test_enhanced_orthogonal_persistence_upgrade_preserves_main_memory() {
                 global.get 1
                 i32.const 5678
                 call $check_word
-                ;; check Wasm data segment
-                i32.const 2097156
-                i32.const 67305985 ;; "\01\02\03\04"
-                call $check_word
             )
             (start $start)
             (memory 160)
             (global (mut i32) (i32.const 8500000))
             (global (mut i32) (i32.const 9000000))
-            (data (i32.const 2097156) "\01\02\03\04")
         )
         "#;
     let version1_wasm = wat::parse_str(version1_wat).unwrap();
@@ -4378,16 +4373,11 @@ fn test_enhanced_orthogonal_persistence_upgrade_preserves_main_memory() {
                 global.get 1
                 i32.const 5678
                 call $check_word
-                ;; check Wasm data segment
-                i32.const 2097156
-                i32.const 134678021 ;; "\05\06\07\08"
-                call $check_word
             )
             (start $check)
             (memory 160)
             (global (mut i32) (i32.const 8500000))
             (global (mut i32) (i32.const 9000000))
-            (data (i32.const 2097156) "\05\06\07\08")
         )
         "#;
 
