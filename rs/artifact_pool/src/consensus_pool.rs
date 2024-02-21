@@ -31,10 +31,15 @@ use std::{marker::PhantomData, sync::Arc, time::Duration};
 
 #[derive(Debug, Clone)]
 pub enum PoolSectionOp<T> {
+    /// Insert the artifact into the pool section.
     Insert(T),
+    /// Remove the artifact with the given [`ConsensusMessageId`] from the pool section.
     Remove(ConsensusMessageId),
-    PurgeBelow(Height),                            // Non-inclusive
-    PurgeTypeBelow(PurgeableArtifactType, Height), // Non-inclusive
+    /// Remove all the artifacts _strictly_ below the height from the pool section.
+    PurgeBelow(Height),
+    /// Remove all the artifacts of the given type _strictly_ below the height from the pool
+    /// section.
+    PurgeTypeBelow(PurgeableArtifactType, Height),
 }
 
 #[derive(Clone, Debug, Default)]
@@ -46,16 +51,29 @@ impl<T> PoolSectionOps<T> {
     pub fn new() -> PoolSectionOps<T> {
         PoolSectionOps { ops: Vec::new() }
     }
+
+    /// Insert the artifact into the pool section.
     pub fn insert(&mut self, artifact: T) {
         self.ops.push(PoolSectionOp::Insert(artifact));
     }
-    pub fn remove(&mut self, msg_id: ConsensusMessageId) {
+
+    /// Remove the artifact with the given [`ConsensusMessageId`] from the pool section.
+    pub(crate) fn remove(&mut self, msg_id: ConsensusMessageId) {
         self.ops.push(PoolSectionOp::Remove(msg_id));
     }
-    pub fn purge_below(&mut self, height: Height) {
+
+    /// Remove all the artifacts _strictly_ below the height from the pool section.
+    pub(crate) fn purge_below(&mut self, height: Height) {
         self.ops.push(PoolSectionOp::PurgeBelow(height));
     }
-    pub fn purge_type_below(&mut self, artifact_type: PurgeableArtifactType, height: Height) {
+
+    /// Remove all the artifacts of the given type _strictly_ below the height from the pool
+    /// section.
+    pub(crate) fn purge_type_below(
+        &mut self,
+        artifact_type: PurgeableArtifactType,
+        height: Height,
+    ) {
         self.ops
             .push(PoolSectionOp::PurgeTypeBelow(artifact_type, height));
     }
@@ -69,6 +87,7 @@ pub trait MutablePoolSection<T>: PoolSection<T> {
     /// Mutate the pool by applying the given [`PoolSectionOps`]. Return [`ConsensusMessageId`]s
     /// of artifacts that were deleted during the mutation.
     fn mutate(&mut self, ops: PoolSectionOps<T>) -> Vec<ConsensusMessageId>;
+
     /// Return a reference to the [`PoolSection`].
     fn pool_section(&self) -> &dyn PoolSection<T>;
 }
@@ -609,6 +628,9 @@ impl MutablePool<ConsensusArtifact> for ConsensusPoolImpl {
                 ChangeAction::AddToValidated(to_add) => {
                     adverts.push(ConsensusArtifact::message_to_advert(&to_add.msg));
                     validated_ops.insert(to_add);
+                }
+                ChangeAction::RemoveFromValidated(to_remove) => {
+                    validated_ops.remove(to_remove.get_id());
                 }
                 ChangeAction::MoveToValidated(to_move) => {
                     if !to_move.is_share() {

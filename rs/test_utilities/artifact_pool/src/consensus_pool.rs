@@ -204,15 +204,20 @@ impl TestConsensusPool {
     }
 
     pub fn make_next_block(&self) -> BlockProposal {
+        self.make_next_block_with_rank(Rank(0))
+    }
+
+    pub fn make_next_block_with_rank(&self, rank: Rank) -> BlockProposal {
         if let Some(parent) = self.latest_notarized_blocks().next() {
-            self.make_next_block_from_parent(&parent)
+            self.make_next_block_from_parent(&parent, rank)
         } else {
             panic!("Pool contains a valid notarization on a block that is not in the pool");
         }
     }
 
-    pub fn make_next_block_from_parent(&self, parent: &Block) -> BlockProposal {
+    pub fn make_next_block_from_parent(&self, parent: &Block, rank: Rank) -> BlockProposal {
         let mut block = Block::from_parent(parent);
+        block.rank = rank;
         let registry_version = self.registry_client.get_latest_version();
 
         // Increase time monotonically by at least initial_notary_delay
@@ -480,7 +485,9 @@ impl TestConsensusPool {
         let mut blocks = Vec::new();
         for i in 0..new_blocks {
             let parent = &candidates[rand_num.next().unwrap() % candidates.len()];
-            let mut block: Block = self.make_next_block_from_parent(parent).into();
+            let mut block: Block = self
+                .make_next_block_from_parent(parent, Rank(i as u64))
+                .into();
             // if it is a dkg summary block and catch up package is required, we must
             // finalize this round too.
             if block.payload.as_ref().is_summary() && add_catch_up_package_if_needed {
@@ -488,7 +495,6 @@ impl TestConsensusPool {
             } else {
                 add_catch_up_package_if_needed = false;
             }
-            block.rank = Rank(i as u64);
             if let Some(height) = certified_height {
                 block.context.certified_height = height;
             }
@@ -591,14 +597,20 @@ impl TestConsensusPool {
         height
     }
 
-    pub fn notarize(&mut self, block: &BlockProposal) {
+    pub fn notarize(&mut self, block: &BlockProposal) -> Notarization {
         let content = NotarizationContent::new(block.height(), block.content.get_hash().clone());
-        self.insert_validated(Notarization::fake(content))
+        let notarization = Notarization::fake(content);
+        self.insert_validated(notarization.clone());
+
+        notarization
     }
 
-    pub fn finalize(&mut self, block: &BlockProposal) {
+    pub fn finalize(&mut self, block: &BlockProposal) -> Finalization {
         let content = FinalizationContent::new(block.height(), block.content.get_hash().clone());
-        self.insert_validated(Finalization::fake(content))
+        let finalization = Finalization::fake(content);
+        self.insert_validated(finalization.clone());
+
+        finalization
     }
 
     pub fn finalize_block(&mut self, block: &Block) {
@@ -645,7 +657,7 @@ impl TestConsensusPool {
         let mut result = Vec::new();
         let mut last = start;
         while last.height() <= to {
-            let next = self.make_next_block_from_parent(last.as_ref());
+            let next = self.make_next_block_from_parent(last.as_ref(), Rank(0));
             result.push(last.clone());
             self.insert_validated(last.clone());
             self.notarize(&last);

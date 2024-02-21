@@ -31,7 +31,7 @@ use ic_interfaces_registry::RegistryClient;
 use ic_logger::{debug, trace, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
-    consensus::{Block, FinalizationContent, FinalizationShare},
+    consensus::{FinalizationContent, FinalizationShare, HashedBlock},
     replica_config::ReplicaConfig,
     Height, ReplicaVersion,
 };
@@ -156,7 +156,7 @@ impl Finalizer {
     ///
     /// In this case, the single notarized block is returned. Otherwise,
     /// return `None`
-    fn pick_block_to_finality_sign(&self, pool: &PoolReader<'_>, h: Height) -> Option<Block> {
+    fn pick_block_to_finality_sign(&self, pool: &PoolReader<'_>, h: Height) -> Option<HashedBlock> {
         let me = self.replica_config.node_id;
         let previous_beacon = pool.get_random_beacon(h.decrement())?;
         // check whether this replica was a notary at height h
@@ -200,10 +200,9 @@ impl Finalizer {
 
         // If notarization shares exists created by this replica at height `h`
         // that sign a block different than `notarized_block`, do not finalize.
-        let other_notarized_shares_exists = pool.get_notarization_shares(h).any(|x| {
-            x.signature.signer == me
-                && x.content.block != ic_types::crypto::crypto_hash(&notarized_block)
-        });
+        let other_notarized_shares_exists = pool
+            .get_notarization_shares(h)
+            .any(|x| x.signature.signer == me && x.content.block != *notarized_block.get_hash());
         if other_notarized_shares_exists {
             return None;
         }
@@ -216,7 +215,9 @@ impl Finalizer {
     fn finalize_height(&self, pool: &PoolReader<'_>, height: Height) -> Option<FinalizationShare> {
         let content = FinalizationContent::new(
             height,
-            ic_types::crypto::crypto_hash(&self.pick_block_to_finality_sign(pool, height)?),
+            self.pick_block_to_finality_sign(pool, height)?
+                .get_hash()
+                .clone(),
         );
         let signature = self
             .crypto

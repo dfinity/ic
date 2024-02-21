@@ -41,12 +41,25 @@ pub type ChangeSet = Vec<ChangeAction>;
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ChangeAction {
+    /// Add the given artifact to the validated section of the pool.
     AddToValidated(ValidatedConsensusArtifact),
+    /// Remove the given artifact from the validated section of the pool.
+    RemoveFromValidated(ConsensusMessage),
+    /// Remove the given artifact from the unvalidated section of the pool and add it to the
+    /// validated section of the pool.
     MoveToValidated(ConsensusMessage),
+    /// Remove the given artifact from the unvalidated section of the pool.
     RemoveFromUnvalidated(ConsensusMessage),
+    /// Remove an invalid artifact from the unvalidated section of the pool.
     HandleInvalid(ConsensusMessage, String),
+    /// Purge all the artifacts _strictly_ below the provided height from the validated section of
+    /// the pool.
     PurgeValidatedBelow(Height),
+    /// Purge all the artifacts _strictly_ below the provided height from the unvalidated section of
+    /// the pool.
     PurgeUnvalidatedBelow(Height),
+    /// Purge all the artifacts of the given type _strictly_ below the provided height from the
+    /// validated section of the pool.
     PurgeValidatedOfGivenTypeBelow(PurgeableArtifactType, Height),
 }
 
@@ -97,6 +110,9 @@ impl ContentEq for ChangeAction {
         match (self, other) {
             (ChangeAction::AddToValidated(x), ChangeAction::AddToValidated(y)) => {
                 x.msg.content_eq(&y.msg)
+            }
+            (ChangeAction::RemoveFromValidated(x), ChangeAction::RemoveFromValidated(y)) => {
+                x.content_eq(y)
             }
             (ChangeAction::MoveToValidated(x), ChangeAction::MoveToValidated(y)) => x.content_eq(y),
             (ChangeAction::RemoveFromUnvalidated(x), ChangeAction::RemoveFromUnvalidated(y)) => {

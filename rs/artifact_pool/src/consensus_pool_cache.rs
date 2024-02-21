@@ -13,7 +13,7 @@ use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::sync::{Arc, RwLock};
 
-/// Implementation of ConsensusCache and ConsensusPoolCache.
+/// Implementation of [`ConsensusBlockCache`] and [`ConsensusPoolCache`].
 pub(crate) struct ConsensusCacheImpl {
     cache: RwLock<CachedData>,
 }
@@ -25,7 +25,7 @@ pub(crate) enum CacheUpdateAction {
     CatchUpPackage,
 }
 
-// Internal cached data held by the the ConsensusCache.
+/// Internal cached data held by the [`ConsensusCacheImpl`].
 struct CachedData {
     finalized_block: Block,
     summary_block: Block,
