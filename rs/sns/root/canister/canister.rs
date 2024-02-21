@@ -347,9 +347,8 @@ async fn heartbeat() {
     // dependencies to run_periodic_tasks.
     let now = CanisterEnvironment {}.now();
     let ledger_client = create_ledger_client();
-    let management_canister_client = ManagementCanisterClientImpl::<CanisterRuntime>::new(None);
 
-    SnsRootCanister::heartbeat(&STATE, &ledger_client, &management_canister_client, now).await
+    SnsRootCanister::heartbeat(&STATE, &ledger_client, now).await
 }
 
 // Resources to serve for a given http_request

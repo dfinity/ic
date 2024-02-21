@@ -79,9 +79,8 @@ use ic_canister_log::log;
 use ic_canister_profiler::SpanStats;
 use ic_ledger_core::Tokens;
 use ic_management_canister_types::{
-    CanisterChangeDetails, CanisterInfoRequest, CanisterInfoResponse, CanisterInstallMode, IC_00,
+    CanisterChangeDetails, CanisterInfoRequest, CanisterInfoResponse, CanisterInstallMode,
 };
-use ic_nervous_system_clients::update_settings::{CanisterSettings, UpdateSettings};
 use ic_nervous_system_collections_union_multi_map::UnionMultiMap;
 use ic_nervous_system_common::{
     cmc::CMC,
@@ -4569,80 +4568,6 @@ impl Governance {
         self.maybe_move_staked_maturity();
 
         self.maybe_gc();
-
-        // TODO(NNS1-2835): Remove this call after changes published.
-        self.set_sns_canisters_memory_allocations().await;
-    }
-
-    // TODO(NNS1-2835): Remove this method after changes published.
-    async fn set_sns_canisters_memory_allocations(&self) {
-        use candid::Nat;
-
-        // Check if this hotfix has been applied before; return if that's the case.
-        let already_tried_executing_hotfix = ATTEMPTED_FIXING_MEMORY_ALLOCATIONS.with(
-            |attempted_doubling_user_index_canister_memory_allocation| {
-                *attempted_doubling_user_index_canister_memory_allocation.borrow()
-            },
-        );
-
-        if already_tried_executing_hotfix {
-            return;
-        }
-
-        // Acquire the lock.
-        ATTEMPTED_FIXING_MEMORY_ALLOCATIONS.with(
-            |attempted_doubling_user_index_canister_memory_allocation| {
-                let mut cell =
-                    attempted_doubling_user_index_canister_memory_allocation.borrow_mut();
-                *cell = true;
-            },
-        );
-
-        // Get SNS Canister IDs
-        let root_canister_id = self.proto.root_canister_id;
-
-        if let Some(canister_id) = root_canister_id {
-            for i in 0..10 {
-                let response = self
-                    .env
-                    .call_canister(
-                        IC_00,
-                        "update_settings",
-                        Encode!(&UpdateSettings {
-                            canister_id,
-                            settings: CanisterSettings {
-                                memory_allocation: Some(Nat::from(0_u8)),
-                                ..Default::default()
-                            },
-                            sender_canister_version: self.env.canister_version()
-                        })
-                        .unwrap(),
-                    )
-                    .await;
-
-                match &response {
-                    Ok(_) => {
-                        log!(
-                            INFO,
-                            "Updating SNS canister {:?} to unbounded memory allocation succeeded!",
-                            canister_id
-                        );
-                        break;
-                    }
-                    Err(err) => {
-                        if i < 9 {
-                            log!(
-                                ERROR,
-                                "Updating SNS canister {:?} to unbounded memory allocation failed!: {:?}",
-                                canister_id, err
-                            );
-                        } else {
-                            log!(ERROR, "Updating SNS canister {:?} to unbounded memory allocation failed after 10 attempts!: {:?}", canister_id, err);
-                        }
-                    }
-                }
-            }
-        }
     }
 
     fn should_update_maturity_modulation(&self) -> bool {
