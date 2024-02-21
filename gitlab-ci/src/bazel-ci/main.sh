@@ -20,7 +20,7 @@ if [ "${RUN_ON_DIFF_ONLY:-}" == "true" ] \
 fi
 
 # pass info about bazel targets to bazel-targets file
-echo "$BAZEL_TARGETS" > bazel-targets
+echo "$BAZEL_TARGETS" >bazel-targets
 
 # if bazel targets is empty we don't need to run any tests
 if [ -z "${BAZEL_TARGETS:-}" ]; then
