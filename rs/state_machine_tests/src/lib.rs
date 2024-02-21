@@ -1080,7 +1080,10 @@ impl StateMachine {
             sm_config.lsmt_storage = lsmt_override;
         }
 
-        if !(std::env::var("SANDBOX_BINARY").is_ok() && std::env::var("LAUNCHER_BINARY").is_ok()) {
+        if !(std::env::var("SANDBOX_BINARY").is_ok()
+            && std::env::var("LAUNCHER_BINARY").is_ok()
+            && std::env::var("COMPILER_BINARY").is_ok())
+        {
             hypervisor_config.canister_sandboxing_flag = FlagStatus::Disabled;
             hypervisor_config.deterministic_time_slicing = FlagStatus::Disabled;
         }

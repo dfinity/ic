@@ -10,9 +10,12 @@ use std::{
 
 use once_cell::sync::OnceCell;
 
-use crate::{RUN_AS_CANISTER_SANDBOX_FLAG, RUN_AS_SANDBOX_LAUNCHER_FLAG};
+use crate::{
+    RUN_AS_CANISTER_SANDBOX_FLAG, RUN_AS_COMPILER_SANDBOX_FLAG, RUN_AS_SANDBOX_LAUNCHER_FLAG,
+};
 use ic_config::embedders::Config as EmbeddersConfig;
 
+const COMPILER_EXECUTABLE_NAME: &str = "compiler_sandbox";
 const SANDBOX_EXECUTABLE_NAME: &str = "canister_sandbox";
 const LAUNCHER_EXECUTABLE_NAME: &str = "sandbox_launcher";
 
@@ -22,6 +25,7 @@ const RUNNABLE_AS_SANDBOX: &[&str] = &["drun", "ic-replay", "ic-recovery"];
 enum SandboxCrate {
     SandboxLauncher,
     CanisterSandbox,
+    CompilerSandbox,
 }
 
 impl SandboxCrate {
@@ -29,6 +33,7 @@ impl SandboxCrate {
         match self {
             Self::SandboxLauncher => LAUNCHER_EXECUTABLE_NAME,
             Self::CanisterSandbox => SANDBOX_EXECUTABLE_NAME,
+            Self::CompilerSandbox => COMPILER_EXECUTABLE_NAME,
         }
     }
 
@@ -36,6 +41,7 @@ impl SandboxCrate {
         match self {
             Self::SandboxLauncher => std::env::var("LAUNCHER_BINARY").ok(),
             Self::CanisterSandbox => std::env::var("SANDBOX_BINARY").ok(),
+            Self::CompilerSandbox => std::env::var("COMPILER_BINARY").ok(),
         }
     }
 
@@ -43,6 +49,7 @@ impl SandboxCrate {
         match self {
             Self::SandboxLauncher => RUN_AS_SANDBOX_LAUNCHER_FLAG,
             Self::CanisterSandbox => RUN_AS_CANISTER_SANDBOX_FLAG,
+            Self::CompilerSandbox => RUN_AS_COMPILER_SANDBOX_FLAG,
         }
     }
 }
@@ -62,8 +69,22 @@ pub(super) fn create_sandbox_argv(embedder_config: &EmbeddersConfig) -> Option<V
 }
 
 /// Gets the executable and arguments for spawning the sandbox launcher.
-pub(super) fn create_launcher_argv() -> Option<Vec<String>> {
-    create_child_process_argv(SandboxCrate::SandboxLauncher)
+pub(super) fn create_launcher_argv(embedder_config: &EmbeddersConfig) -> Option<Vec<String>> {
+    let argv = create_child_process_argv(SandboxCrate::SandboxLauncher);
+    if let Some(mut argv) = argv {
+        argv.push("--embedder-config".to_string());
+        argv.push(
+            serde_json::to_string(embedder_config)
+                .expect("Failed to serialize the embedder config to JSON."),
+        );
+        return Some(argv);
+    }
+    argv
+}
+
+/// Gets the executable for spawning the compiler sandbox.
+pub fn create_compiler_sandbox_argv() -> Option<Vec<String>> {
+    create_child_process_argv(SandboxCrate::CompilerSandbox)
 }
 
 /// Gets the executable and arguments for spawning a canister sandbox.
@@ -118,6 +139,7 @@ fn create_sandbox_argv_for_testing(krate: SandboxCrate) -> Option<Vec<String>> {
 
     static SANDBOX_COMPILED: OnceCell<()> = OnceCell::new();
     static LAUNCHER_COMPILED: OnceCell<()> = OnceCell::new();
+    static COMPILER_COMPILED: OnceCell<()> = OnceCell::new();
 
     // When running in a dev environment we expect `cargo` to be in our path and
     // we should be able to find the `canister_sandbox` or `sandbox_launcher`
@@ -132,6 +154,7 @@ fn create_sandbox_argv_for_testing(krate: SandboxCrate) -> Option<Vec<String>> {
             let cell = match krate {
                 SandboxCrate::CanisterSandbox => &SANDBOX_COMPILED,
                 SandboxCrate::SandboxLauncher => &LAUNCHER_COMPILED,
+                SandboxCrate::CompilerSandbox => &COMPILER_COMPILED,
             };
             cell.get_or_init(|| {
                 build_sandbox_with_cargo_for_testing(executable_name, &path, &manifest_path)
@@ -176,6 +199,7 @@ fn cargo_manifest_for_testing(krate: &SandboxCrate) -> Option<PathBuf> {
         &match krate {
             SandboxCrate::SandboxLauncher => Path::new("canister_sandbox").join("sandbox_launcher"),
             SandboxCrate::CanisterSandbox => PathBuf::from("canister_sandbox"),
+            SandboxCrate::CompilerSandbox => PathBuf::from("compiler_sandbox"),
         },
         Path::new("Cargo.toml"),
     ]

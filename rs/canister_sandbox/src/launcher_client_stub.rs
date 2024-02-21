@@ -23,6 +23,16 @@ impl LauncherService for LauncherClientStub {
         Call::new(cell)
     }
 
+    fn launch_compiler(&self, req: LaunchCompilerRequest) -> Call<LaunchCompilerReply> {
+        let cell = self
+            .channel
+            .call(Request::LaunchCompiler(req), |rep| match rep {
+                Reply::LaunchCompiler(rep) => Ok(rep),
+                _ => Err(Error::ServerError),
+            });
+        Call::new(cell)
+    }
+
     fn terminate(&self, req: TerminateRequest) -> Call<TerminateReply> {
         let cell = self.channel.call(Request::Terminate(req), |rep| match rep {
             Reply::Terminate(rep) => Ok(rep),

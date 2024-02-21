@@ -37,6 +37,7 @@ use url::Url;
 pub fn set_sandbox_env_vars(dir: PathBuf) {
     set_var_to_path("SANDBOX_BINARY", dir.join("canister_sandbox"));
     set_var_to_path("LAUNCHER_BINARY", dir.join("sandbox_launcher"));
+    set_var_to_path("COMPILER_BINARY", dir.join("compiler_sandbox"));
 }
 
 /// break a subnet by breaking the replica binary on f+1 = (subnet_size - 1) / 3 +1

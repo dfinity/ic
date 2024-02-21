@@ -2,6 +2,7 @@
 /opt/ic/bin/replica                         -- gen_context(system_u:object_r:ic_replica_exec_t,s0)
 /opt/ic/bin/ic-https-outcalls-adapter        -- gen_context(system_u:object_r:ic_http_adapter_exec_t,s0)
 /opt/ic/bin/canister_sandbox                -- gen_context(system_u:object_r:ic_canister_sandbox_exec_t,s0)
+/opt/ic/bin/compiler_sandbox                -- gen_context(system_u:object_r:ic_canister_sandbox_exec_t,s0)
 /var/lib/ic/backup(/.*)?                       gen_context(system_u:object_r:ic_data_t,s0)
 /var/lib/ic/data(/.*)?                         gen_context(system_u:object_r:ic_data_t,s0)
 /var/lib/ic/data/ic_state/page_deltas(/.*)?    gen_context(system_u:object_r:ic_canister_mem_t,s0)
