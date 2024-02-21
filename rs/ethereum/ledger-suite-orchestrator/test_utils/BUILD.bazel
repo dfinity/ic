@@ -1,0 +1,24 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "test_utils",
+    srcs = glob(
+        ["src/**/*.rs"],
+    ),
+    crate_name = "ic_ledger_suite_orchestrator_test_utils",
+    proc_macro_deps = [
+        "@crate_index//:paste",
+    ],
+    version = "0.1.0",
+    deps = [
+        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator",
+        "//rs/state_machine_tests",
+        "//rs/test_utilities/load_wasm",
+        "//rs/types/base_types",
+        "@crate_index//:candid",
+        "@crate_index//:proptest",
+    ],
+)
