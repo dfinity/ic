@@ -80,7 +80,7 @@ pub struct DeployTestflightArgs {
 
     /// The initial config file, this file should have all the necessary parameters to deploy an SNS.
     /// See command "init-config-file"
-    #[clap(long, parse(from_os_str))]
+    #[clap(long, value_parser = clap::value_parser!(std::path::PathBuf))]
     pub init_config_file: Option<PathBuf>,
 
     /// The canister ID of the wallet to use on this subnet.

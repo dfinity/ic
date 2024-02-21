@@ -28,7 +28,7 @@ pub struct ProposeArgs {
     network: String,
 
     /// Path to a configuration file specifying the SNS to be created.
-    #[clap(parse(from_os_str), default_value = "sns_init.yaml")]
+    #[clap(default_value = "sns_init.yaml", value_parser = clap::value_parser!(std::path::PathBuf))]
     pub init_config_file: PathBuf,
 
     /// The neuron with which to make the proposal. The current dfx identity

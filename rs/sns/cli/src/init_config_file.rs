@@ -8,7 +8,7 @@ const DEFAULT_INIT_CONFIG_PATH: &str = "sns_init.yaml";
 
 #[derive(Debug, Parser)]
 pub struct InitConfigFileArgs {
-    #[clap(long, parse(from_os_str))]
+    #[clap(long, value_parser = clap::value_parser!(std::path::PathBuf))]
     init_config_file_path: Option<PathBuf>,
 
     #[clap(subcommand)]

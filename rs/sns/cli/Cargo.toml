@@ -17,7 +17,7 @@ path = "src/lib.rs"
 anyhow = "1.0"
 base64 = { workspace = true }
 candid = { workspace = true }
-clap = { workspace = true }
+clap = { version = "^4.0.0" }
 hex = "0.4.3"
 ic-base-types = { path = "../../types/base_types" }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
