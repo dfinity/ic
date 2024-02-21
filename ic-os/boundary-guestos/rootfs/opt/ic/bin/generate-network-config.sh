@@ -8,8 +8,8 @@ source '/opt/ic/bin/helpers.shlib'
 readonly NETWORK_CONFIG="${BOOT_DIR}/network.conf"
 
 readonly SYSTEMD_NETWORK='/run/systemd/network'
-readonly IPV6_NETWORK="${SYSTEMD_NETWORK}/10-enp1s0.network"
-readonly IPV4_NETWORK="${SYSTEMD_NETWORK}/enp2s0.network"
+readonly ENP1S0_NETWORK="${SYSTEMD_NETWORK}/10-enp1s0.network"
+readonly ENP2S0_NETWORK="${SYSTEMD_NETWORK}/enp2s0.network"
 
 HAS_IPV6=false
 HAS_IPV4=false
@@ -42,7 +42,9 @@ function read_variables() {
 
     # Ensure IPv6 only on enp1s0
     sysctl -w net.ipv6.conf.enp1s0.disable_ipv6=0
-    sysctl -w net.ipv6.conf.enp2s0.disable_ipv6=1
+    if [[ -d /sys/class/net/enp2s0 ]]; then
+        sysctl -w net.ipv6.conf.enp2s0.disable_ipv6=1
+    fi
 
     # Check the config
     if [[ -n "${ipv6_address:-}" ]]; then
@@ -63,7 +65,9 @@ function read_variables() {
     sysctl -w net.ipv6.conf.default.accept_ra=0
     sysctl -w net.ipv6.conf.all.accept_ra=0
     sysctl -w net.ipv6.conf.enp1s0.accept_ra=0
-    sysctl -w net.ipv6.conf.enp2s0.accept_ra=0
+    if [[ -d /sys/class/net/enp2s0 ]]; then
+        sysctl -w net.ipv6.conf.enp2s0.accept_ra=0
+    fi
 
     if [[ -n "${ipv4_address:-}" ]]; then
         if [[ -n "${ipv4_gateway:-}" ]]; then
@@ -110,8 +114,9 @@ function generate_ipv4_block() {
 function generate_network_config() {
     mkdir -p "${SYSTEMD_NETWORK}"
 
-    # Handle ipv6
-    cat >"${IPV6_NETWORK}" <<EOF
+    if [[ -d /sys/class/net/enp2s0 ]]; then
+        # Handle ipv6
+        cat >"${ENP1S0_NETWORK}" <<EOF
 [Match]
 Name=enp1s0
 Virtualization=!container
@@ -121,8 +126,8 @@ $(generate_ipv6_block)
 $(generate_name_server_list "${ipv6_name_servers}")
 EOF
 
-    # Handle ipv4
-    cat >"${IPV4_NETWORK}" <<EOF
+        # Handle ipv4
+        cat >"${ENP2S0_NETWORK}" <<EOF
 [Match]
 Name=enp2s0
 
@@ -131,6 +136,19 @@ $(generate_ipv4_block)
 $(generate_name_server_list "${ipv4_name_servers}")
 IPv6AcceptRA=no
 EOF
+    else
+        # Single network interface, setup dual stack
+        cat >"${ENP1S0_NETWORK}" <<EOF
+[Match]
+Name=enp1s0
+Virtualization=!container
+
+[Network]
+DHCP=yes
+$(generate_name_server_list "${ipv4_name_servers}")
+$(generate_name_server_list "${ipv6_name_servers}")
+EOF
+    fi
 }
 
 function main() {

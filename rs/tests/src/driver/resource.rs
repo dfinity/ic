@@ -3,6 +3,7 @@ use crate::driver::universal_vm::UniversalVm;
 use crate::k8s::tnet::TNet;
 use anyhow::{self, bail};
 use flate2::{write::GzEncoder, Compression};
+use kube::ResourceExt;
 use serde::{Deserialize, Serialize};
 use slog::{info, warn};
 use std::collections::BTreeMap;
@@ -329,7 +330,13 @@ pub fn allocate_resources(
                 let mut tnet = TNet::read_attribute(env);
                 vm_responses.push((
                     vm_name,
-                    block_on(tnet.vm_create(create_vm_request)).expect("failed to create vm"),
+                    block_on(tnet.vm_create(CreateVmRequest {
+                        primary_image: ImageLocation::PersistentVolumeClaim {
+                            name: format!("{}-image-guestos", tnet.owner.name_any()),
+                        },
+                        ..create_vm_request
+                    }))
+                    .expect("failed to create vm"),
                 ));
                 tnet.write_attribute(env);
             }

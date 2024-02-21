@@ -1,5 +1,6 @@
 use crate::k8s::config::*;
 use anyhow::Result;
+use backon::{ExponentialBuilder, Retryable};
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::OwnerReference;
 use kube::api::{DynamicObject, Patch, PatchParams};
 use kube::{Api, Client};
@@ -20,7 +21,6 @@ spec:
   template:
     metadata:
       annotations:
-        "cni.projectcalico.org/ipAddrs": '["{ipv6}"]'
         "container.apparmor.security.beta.kubernetes.io/compute": unconfined
       labels:
         kubevirt.io/vm: {name}
@@ -76,7 +76,6 @@ spec:
 pub async fn create_vm(
     api: &Api<DynamicObject>,
     name: &str,
-    ipv6: &str,
     cpus: &str,
     memory: &str,
     running: bool,
@@ -88,8 +87,7 @@ pub async fn create_vm(
         .replace("{tnet}", &owner.name)
         .replace("{running}", &running.to_string())
         .replace("{memory}", memory)
-        .replace("{cpus}", cpus)
-        .replace("{ipv6}", ipv6);
+        .replace("{cpus}", cpus);
     let mut data: DynamicObject = serde_yaml::from_str(&yaml)?;
     data.metadata.owner_references = vec![owner].into();
     let response = api
@@ -134,31 +132,36 @@ pub async fn delete_vm(name: &str) -> Result<String> {
 async fn action_vm(name: &str, action: Action) -> Result<String> {
     let client = Client::try_default().await?;
 
-    let request = match action {
-        Action::Start | Action::Stop | Action::Restart => http::Request::builder()
-            .method("PUT")
-            .uri(format!(
-                "/apis/subresources.kubevirt.io/v1/namespaces/{}/virtualmachines/{}/{}",
-                *TNET_NAMESPACE,
-                name,
-                action.as_ref(),
-            ))
-            .body("{}".as_bytes().to_vec())
-            .unwrap(),
-        Action::Delete => http::Request::builder()
-            .method("DELETE")
-            .uri(format!(
-                "/apis/kubevirt.io/v1/namespaces/{}/virtualmachines/{}",
-                *TNET_NAMESPACE, name
-            ))
-            .body("{}".as_bytes().to_vec())
-            .unwrap(),
-    };
-
-    Ok(client.request_text(request).await.or_else(|e| match e {
-        kube::Error::Api(error_response) if error_response.reason == "Conflict" => {
-            kube::Result::Ok(Default::default())
-        }
-        _ => kube::Result::Err(e),
-    })?)
+    Ok((|| async {
+        client
+            .request_text(match action {
+                Action::Start | Action::Stop | Action::Restart => http::Request::builder()
+                    .method("PUT")
+                    .uri(format!(
+                        "/apis/subresources.kubevirt.io/v1/namespaces/{}/virtualmachines/{}/{}",
+                        *TNET_NAMESPACE,
+                        name,
+                        action.as_ref(),
+                    ))
+                    .body("{}".as_bytes().to_vec())
+                    .unwrap(),
+                Action::Delete => http::Request::builder()
+                    .method("DELETE")
+                    .uri(format!(
+                        "/apis/kubevirt.io/v1/namespaces/{}/virtualmachines/{}",
+                        *TNET_NAMESPACE, name
+                    ))
+                    .body("{}".as_bytes().to_vec())
+                    .unwrap(),
+            })
+            .await
+            .or_else(|e| match e {
+                kube::Error::Api(error_response) if error_response.reason == "Conflict" => {
+                    kube::Result::Ok(Default::default())
+                }
+                _ => kube::Result::Err(e),
+            })
+    })
+    .retry(&ExponentialBuilder::default())
+    .await?)
 }

@@ -1,12 +1,13 @@
 use std::collections::BTreeMap;
-use std::net::Ipv6Addr;
+use std::net::{Ipv4Addr, Ipv6Addr};
+use std::str::FromStr;
+use url::Url;
 
 use anyhow::Result;
-use backon::ExponentialBuilder;
 use backon::Retryable;
-use cidr::Ipv6Cidr;
+use backon::{ConstantBuilder, ExponentialBuilder};
 use k8s_openapi::api::core::v1::{
-    ConfigMap, PersistentVolumeClaim, Pod, TypedLocalObjectReference,
+    ConfigMap, PersistentVolumeClaim, Pod, Service, TypedLocalObjectReference,
 };
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::OwnerReference;
 use k8s_openapi::chrono::DateTime;
@@ -19,13 +20,11 @@ use kube::{
     api::{Api, DynamicObject, GroupVersionKind},
     Client,
 };
-use rand::seq::SliceRandom;
-use regex::Regex;
 use serde::{Deserialize, Serialize};
 use tokio;
 use tracing::*;
 
-use crate::driver::farm::{CreateVmRequest, VMCreateResponse, VmSpec};
+use crate::driver::farm::{CreateVmRequest, ImageLocation, VMCreateResponse, VmSpec};
 use crate::driver::test_env::TestEnvAttribute;
 use crate::k8s::config::*;
 use crate::k8s::datavolume::*;
@@ -39,6 +38,7 @@ pub struct K8sClient {
     pub(crate) api_vmi: Api<DynamicObject>,
     pub(crate) api_pvc: Api<PersistentVolumeClaim>,
     pub(crate) api_pod: Api<Pod>,
+    pub(crate) api_svc: Api<Service>,
 }
 
 impl K8sClient {
@@ -46,6 +46,7 @@ impl K8sClient {
         let client = Client::try_default().await?;
         let api_pod: Api<Pod> = Api::namespaced(client.clone(), &TNET_NAMESPACE);
         let api_pvc: Api<PersistentVolumeClaim> = Api::namespaced(client.clone(), &TNET_NAMESPACE);
+        let api_svc: Api<Service> = Api::namespaced(client.clone(), &TNET_NAMESPACE);
 
         let gvk = GroupVersionKind::gvk("cdi.kubevirt.io", "v1beta1", "DataVolume");
         let (ar, _caps) = kube::discovery::pinned_kind(&client, &gvk).await?;
@@ -65,6 +66,7 @@ impl K8sClient {
             api_vmi,
             api_pvc,
             api_pod,
+            api_svc,
         })
     }
 }
@@ -126,12 +128,8 @@ pub struct TNet {
     pub version: String,
     pub image_url: String,
     pub config_url: Option<String>,
-    pub index: Option<u32>,
     pub nodes: Vec<TNode>,
-    pub free_ipv6_addrs: Vec<Ipv6Addr>,
-    #[serde(skip)]
-    ipv6_net: Option<Ipv6Cidr>,
-    owner: ConfigMap,
+    pub owner: ConfigMap,
     terminate_time: Option<DateTime<Utc>>,
 }
 
@@ -196,30 +194,17 @@ impl TNet {
 
         debug!("Creating owner configmap");
         let config_map = (|| async {
-            let mut rng = rand::thread_rng();
-            let tnet_idx = (0..65536)
-                .collect::<Vec<u32>>()
-                .choose(&mut rng)
-                .unwrap()
-                .to_owned();
-            let rg = Regex::new(r"(\d+)$").unwrap();
-            let unique_name = rg
-                .replace(&self.group_name, &tnet_idx.to_string())
-                .to_string();
             config_map_api
                 .create(
                     &PostParams::default(),
                     &ConfigMap {
                         metadata: ObjectMeta {
-                            name: unique_name.clone().into(),
-                            labels: [
-                                (TNET_NAME_LABEL.to_string(), unique_name.clone()),
-                                (TNET_INDEX_LABEL.to_string(), tnet_idx.to_string()),
-                            ]
-                            .into_iter()
-                            .chain(TNET_STATIC_LABELS.clone().into_iter())
-                            .collect::<BTreeMap<String, String>>()
-                            .into(),
+                            generate_name: format!("{}-", self.group_name).into(),
+                            labels: [(TNET_NAME_LABEL.to_string(), self.group_name.clone())]
+                                .into_iter()
+                                .chain(TNET_STATIC_LABELS.clone().into_iter())
+                                .collect::<BTreeMap<String, String>>()
+                                .into(),
                             annotations: [(
                                 TNET_TERMINATE_TIME_ANNOTATION.to_string(),
                                 self.terminate_time
@@ -242,17 +227,7 @@ impl TNet {
         .retry(&ExponentialBuilder::default())
         .await?;
 
-        self.index = config_map
-            .metadata
-            .labels
-            .as_ref()
-            .unwrap()
-            .get(TNET_INDEX_LABEL)
-            .unwrap()
-            .parse::<u32>()?
-            .into();
-        let index = self.index.expect("should have an index");
-        debug!("Tnet index: {}", index);
+        debug!("Tnet owner: {}", config_map.name_any());
         self.unique_name = config_map.metadata.name.clone();
         self.owner = config_map;
         self.config_url = Some(format!(
@@ -261,12 +236,6 @@ impl TNet {
             *TNET_BUCKET,
             self.unique_name.clone().unwrap(),
         ));
-        self.ipv6_net = Some(format!("{}:{:x}::/80", *TNET_IPV6, index).parse().unwrap());
-        let mut iter = self.ipv6_net.unwrap().iter();
-        iter.next(); // skip network address
-        for _ in 0..1024 {
-            self.free_ipv6_addrs.push(iter.next().unwrap().address());
-        }
         Ok(self)
     }
 
@@ -287,9 +256,9 @@ impl TNet {
         Ok(())
     }
 
-    pub async fn deploy_boundary_image(&self) -> Result<()> {
+    pub async fn deploy_boundary_image(&self, url: Url) -> Result<()> {
         let image_name = &format!("{}-image-boundaryos", self.owner.name_any());
-        self.deploy_image(image_name, &self.image_url).await?;
+        self.deploy_image(image_name, url.as_str()).await?;
         Ok(())
     }
 
@@ -334,8 +303,12 @@ impl TNet {
         let data_source = Some(TypedLocalObjectReference {
             api_group: None,
             kind: "PersistentVolumeClaim".to_string(),
-            name: format!("{}-image-guestos", self.owner.name_any()),
+            name: match vm_req.primary_image {
+                ImageLocation::PersistentVolumeClaim { name } => name,
+                _ => unimplemented!(),
+            },
         });
+
         create_pvc(
             &k8s_client.api_pvc,
             &pvc_name,
@@ -347,11 +320,9 @@ impl TNet {
         )
         .await?;
 
-        let ipv6_addr = self.free_ipv6_addrs.remove(0);
         create_vm(
             &k8s_client.api_vm,
             &vm_name.clone(),
-            &ipv6_addr.clone().to_string(),
             &vm_req.vcpus.to_string(),
             &vm_req.memory_kibibytes.to_string(),
             false,
@@ -359,16 +330,113 @@ impl TNet {
         )
         .await?;
 
+        let mut svc: Service = serde_yaml::from_str(&format!(
+            r#"
+apiVersion: v1
+kind: Service
+metadata:
+  name: {name}
+spec:
+  ipFamilyPolicy: PreferDualStack
+  ipFamilies:
+  - IPv6
+  - IPv4
+  ports:
+    - port: 22
+      targetPort: 22
+      name: port-22
+    - port: 80
+      targetPort: 80
+      name: port-80
+    - port: 443
+      targetPort: 443
+      name: port-443
+    - port: 2497
+      targetPort: 2497
+      name: port-2497
+    - port: 4100
+      targetPort: 4100
+      name: port-4100
+    - port: 7070
+      targetPort: 7070
+      name: port-7070
+    - port: 8080
+      targetPort: 8080
+      name: port-8080
+    - port: 9090
+      targetPort: 9090
+      name: port-9090
+    - port: 9091
+      targetPort: 9091
+      name: port-9091
+    - port: 9100
+      targetPort: 9100
+      name: port-9100
+    - port: 19100
+      targetPort: 19100
+      name: port-19100
+    - port: 19531
+      targetPort: 19531
+      name: port-19531
+  selector:
+    kubevirt.io/vm: {name}
+  type: ClusterIP
+    "#,
+            name = vm_name,
+        ))?;
+        svc.metadata.owner_references = vec![self.owner_reference()].into();
+
+        (|| async {
+            k8s_client
+                .api_svc
+                .create(&PostParams::default(), &svc)
+                .await
+        })
+        .retry(&ExponentialBuilder::default())
+        .await?;
+
+        let (ipv4, ipv6) = (|| async {
+            k8s_client
+                .api_svc
+                .get(&vm_name)
+                .await
+                .map_err(|e| anyhow::anyhow!(e))
+                .and_then(|s| s.spec.ok_or_else(|| anyhow::anyhow!("missing spec")))
+                .and_then(|s| {
+                    s.cluster_ips
+                        .ok_or_else(|| anyhow::anyhow!("missing clusterIPs"))
+                })
+                .and_then(|ips| {
+                    ips.iter()
+                        .map(|ip| Ipv4Addr::from_str(ip).map_err(|e| anyhow::anyhow!(e)))
+                        .find_map(|r| r.ok())
+                        .ok_or_else(|| anyhow::anyhow!("missing ipv4 address"))
+                        .and_then(|ipv4| {
+                            ips.iter()
+                                .map(|ip| Ipv6Addr::from_str(ip).map_err(|e| anyhow::anyhow!(e)))
+                                .find_map(|r| r.ok().map(|ipv6| (ipv4, ipv6)))
+                                .ok_or_else(|| anyhow::anyhow!("missing ipv6 address"))
+                        })
+                })
+        })
+        .retry(
+            &ConstantBuilder::default()
+                .with_max_times(60)
+                .with_delay(std::time::Duration::from_secs(1)),
+        )
+        .await?;
+
         self.nodes.push(TNode {
             node_id: vm_req.name.clone().into(),
             name: vm_name.clone().into(),
-            ipv6_addr: ipv6_addr.into(),
+            ipv6_addr: ipv6.into(),
             config_url: format!("{}/{}", self.config_url.clone().unwrap(), vm_name.clone()).into(),
             owner: self.owner.clone(),
         });
 
         Ok(VMCreateResponse {
-            ipv6: ipv6_addr,
+            ipv4: ipv4.into(),
+            ipv6,
             mac6: "00:11:22:33:44:55".to_string(),
             hostname: vm_name,
             spec: VmSpec {
@@ -403,9 +471,7 @@ mod tests {
         assert_eq!(tnet.group_name, "testnet");
         assert_eq!(tnet.version, "");
         assert_eq!(tnet.image_url, "");
-        assert_eq!(tnet.ipv6_net, None);
         assert_eq!(tnet.config_url, None);
-        assert_eq!(tnet.index, None);
     }
 
     #[tokio::test]

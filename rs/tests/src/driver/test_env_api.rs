@@ -1187,7 +1187,7 @@ impl HasGroupSetup for TestEnv {
                 "Group {} already set up.", group_setup.infra_group_name
             );
         } else {
-            let group_setup = GroupSetup::new(group_base_name);
+            let group_setup = GroupSetup::new(group_base_name.clone());
             match InfraProvider::read_attribute(self) {
                 InfraProvider::Farm => {
                     let farm_base_url = FarmBaseUrl::read_attribute(self);
@@ -1209,7 +1209,7 @@ impl HasGroupSetup for TestEnv {
                 }
                 InfraProvider::K8s => {
                     let mut tnet =
-                        TNet::new(&group_setup.infra_group_name).expect("new tnet failed");
+                        TNet::new(&group_base_name.replace('_', "-")).expect("new tnet failed");
                     block_on(tnet.create()).expect("failed creating tnet");
                     tnet.write_attribute(self);
                 }
