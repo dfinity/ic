@@ -35,6 +35,8 @@ use crate::{
 #[cfg(test)]
 mod tests;
 
+pub const MOTOKO_ORTHOGONAL_PERSISTENCE_CUSTOM_SECTION: &str = "motoko:orthogonal-persistence";
+
 /// Indicates whether the stable memory is kept or replaced with new (empty) memory.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) enum StableMemoryHandling {
@@ -543,7 +545,7 @@ impl InstallCodeHelper {
                     // Safety guard checking that the `keep_main_memory` upgrade option has not been omitted in error.
                     let uses_orthogonal_persistence = old
                         .metadata
-                        .get_custom_section("motoko:orthogonal-persistence")
+                        .get_custom_section(MOTOKO_ORTHOGONAL_PERSISTENCE_CUSTOM_SECTION)
                         .is_some();
                     if !explicit && uses_orthogonal_persistence {
                         return Err(CanisterManagerError::MissingUpgradeOptionError { message: "Motoko's enhanced orthogonal persistence requires the `keep_main_memory` upgrade option.".to_string() });

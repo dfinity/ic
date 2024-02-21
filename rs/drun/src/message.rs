@@ -2,6 +2,7 @@ use super::CanisterId;
 
 use hex::decode;
 use ic00::{CanisterInstallModeV2, UpgradeOptions};
+use ic_execution_environment::execution::install_code::MOTOKO_ORTHOGONAL_PERSISTENCE_CUSTOM_SECTION;
 use ic_ic00_types::{self as ic00, Payload};
 use ic_types::{
     messages::{SignedIngress, UserQuery},
@@ -216,14 +217,15 @@ fn parse_create(nonce: u64) -> Result<Message, String> {
     Ok(Message::Create(signed_ingress))
 }
 
-fn contains_custom_section(wasm_binary: &[u8], name: &str) -> Result<bool, String> {
+fn contains_icp_private_custom_section(wasm_binary: &[u8], name: &str) -> Result<bool, String> {
     use wasmparser::{Parser, Payload::CustomSection};
 
+    let icp_section_name = format!("icp:private {name}");
     let parser = Parser::new(0);
     for payload in parser.parse_all(wasm_binary) {
         match payload.map_err(|e| format!("Wasm parsing error: {}", e))? {
             CustomSection(reader) => {
-                if reader.name() == name {
+                if reader.name() == icp_section_name {
                     return Ok(true);
                 }
             }
@@ -232,8 +234,6 @@ fn contains_custom_section(wasm_binary: &[u8], name: &str) -> Result<bool, Strin
     }
     Ok(false)
 }
-
-const ORTHOGONAL_PERSISTENCE_CUSTOM_SECTION: &str = "icp:private motoko:orthogonal-persistence";
 
 fn parse_install(
     nonce: u64,
@@ -258,9 +258,9 @@ fn parse_install(
         "install" => CanisterInstallModeV2::Install,
         "reinstall" => CanisterInstallModeV2::Reinstall,
         "upgrade" => {
-            let keep_main_memory = if contains_custom_section(
+            let keep_main_memory = if contains_icp_private_custom_section(
                 wasm_data.as_ref(),
-                ORTHOGONAL_PERSISTENCE_CUSTOM_SECTION,
+                MOTOKO_ORTHOGONAL_PERSISTENCE_CUSTOM_SECTION,
             )? {
                 Some(true)
             } else {
