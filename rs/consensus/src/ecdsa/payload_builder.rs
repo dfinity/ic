@@ -53,7 +53,7 @@ pub(super) mod signatures;
 
 /// Builds the very first ecdsa summary block. This would trigger the subsequent
 /// data blocks to create the initial key transcript.
-pub fn make_bootstrap_summary(
+pub(crate) fn make_bootstrap_summary(
     subnet_id: SubnetId,
     key_id: EcdsaKeyId,
     height: Height,
@@ -77,7 +77,7 @@ pub fn make_bootstrap_summary(
 
 /// Builds the very first ecdsa summary block. This would trigger the subsequent
 /// data blocks to create the initial key transcript.
-pub fn make_bootstrap_summary_with_initial_dealings(
+pub(crate) fn make_bootstrap_summary_with_initial_dealings(
     subnet_id: SubnetId,
     key_id: EcdsaKeyId,
     height: Height,

@@ -32,7 +32,6 @@ use crate::ecdsa::payload_builder::{create_data_payload_helper, create_summary_p
 use crate::ecdsa::utils::build_signature_inputs;
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_consensus_utils::pool_reader::PoolReader;
-use ic_crypto::MegaKeyFromRegistryError;
 use ic_interfaces::validation::{ValidationError, ValidationResult};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{StateManager, StateManagerError};
@@ -55,7 +54,7 @@ use ic_types::{
         ThresholdEcdsaCombinedSignature,
     },
     registry::RegistryClientError,
-    Height, RegistryVersion, SubnetId,
+    Height, SubnetId,
 };
 use prometheus::HistogramVec;
 use std::collections::BTreeMap;
@@ -63,16 +62,14 @@ use std::convert::TryFrom;
 
 #[allow(clippy::enum_variant_names)]
 #[derive(Debug)]
-pub enum TransientError {
+pub(crate) enum TransientError {
     RegistryClientError(RegistryClientError),
-    EcdsaPayloadError(EcdsaPayloadError),
     StateManagerError(StateManagerError),
 }
 
 #[derive(Debug)]
-pub enum PermanentError {
+pub(crate) enum PermanentError {
     // wrapper of other errors
-    RegistryClientError(RegistryClientError),
     UnexpectedSummaryPayload(EcdsaPayloadError),
     UnexpectedDataPayload(Option<EcdsaPayloadError>),
     InvalidChainCacheError(InvalidChainCacheError),
@@ -81,20 +78,16 @@ pub enum PermanentError {
     ThresholdEcdsaVerifyCombinedSignatureError(ThresholdEcdsaVerifyCombinedSignatureError),
     IDkgVerifyTranscriptError(IDkgVerifyTranscriptError),
     IDkgVerifyInitialDealingsError(IDkgVerifyInitialDealingsError),
-    MegaKeyFromRegistryError(MegaKeyFromRegistryError),
     // local errors
     ConsensusRegistryVersionNotFound(Height),
-    SubnetWithNoNodes(SubnetId, RegistryVersion),
     EcdsaConfigNotFound,
     SummaryPayloadMismatch,
     DataPayloadMismatch,
     MissingEcdsaDataPayload,
-    MissingParentDataPayload,
     NewTranscriptRefWrongHeight(TranscriptRef, Height),
     NewTranscriptNotFound(IDkgTranscriptId),
     NewTranscriptMiscount(u64),
     NewTranscriptMissingParams(IDkgTranscriptId),
-    NewTranscriptHeightMismatch(IDkgTranscriptId),
     NewSignatureUnexpected(ecdsa::PseudoRandomId),
     NewSignatureMissingInput(ecdsa::PseudoRandomId),
     NewSignatureMissingContext(ecdsa::PseudoRandomId),
@@ -157,10 +150,10 @@ impl From<StateManagerError> for TransientError {
     }
 }
 
-pub type EcdsaValidationError = ValidationError<PermanentError, TransientError>;
+pub(crate) type EcdsaValidationError = ValidationError<PermanentError, TransientError>;
 
 #[allow(clippy::too_many_arguments)]
-pub fn validate_payload(
+pub(crate) fn validate_payload(
     subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
     crypto: &dyn ConsensusCrypto,
@@ -210,7 +203,7 @@ pub fn validate_payload(
 /// Validates a threshold ECDSA summary payload.
 /// This is an entirely deterministic operation, so we can just check if
 /// the given summary payload matches what we would have created locally.
-pub fn validate_summary_payload(
+fn validate_summary_payload(
     subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
     pool_reader: &PoolReader<'_>,
@@ -264,7 +257,7 @@ pub fn validate_summary_payload(
 
 #[allow(clippy::too_many_arguments)]
 /// Validates a threshold ECDSA data payload.
-pub fn validate_data_payload(
+fn validate_data_payload(
     subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
     crypto: &dyn ConsensusCrypto,
