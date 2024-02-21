@@ -3285,10 +3285,7 @@ fn test_fetch_canister_logs_should_accept_ingress_message_disabled() {
     let result = test.should_accept_ingress_message(
         test.state().metadata.own_subnet_id.into(),
         Method::FetchCanisterLogs,
-        FetchCanisterLogsRequest {
-            canister_id: canister_id.into(),
-        }
-        .encode(),
+        FetchCanisterLogsRequest::new(canister_id).encode(),
     );
     // Assert.
     // Expect error because the API is disabled.
@@ -3318,10 +3315,7 @@ fn test_fetch_canister_logs_should_accept_ingress_message_enabled() {
     let result = test.should_accept_ingress_message(
         test.state().metadata.own_subnet_id.into(),
         Method::FetchCanisterLogs,
-        FetchCanisterLogsRequest {
-            canister_id: canister_id.into(),
-        }
-        .encode(),
+        FetchCanisterLogsRequest::new(canister_id).encode(),
     );
     // Assert.
     // Expect error since `should_accept_ingress_message` is only called in replicated mode which is not supported.

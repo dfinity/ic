@@ -2334,6 +2334,12 @@ pub struct FetchCanisterLogsRequest {
 impl Payload<'_> for FetchCanisterLogsRequest {}
 
 impl FetchCanisterLogsRequest {
+    pub fn new(canister_id: CanisterId) -> Self {
+        Self {
+            canister_id: canister_id.into(),
+        }
+    }
+
     pub fn get_canister_id(&self) -> CanisterId {
         CanisterId::unchecked_from_principal(self.canister_id)
     }

@@ -142,6 +142,7 @@ pub fn execute_replicated_query(
         time,
     );
 
+    canister.append_log_records(&output.canister_log_records);
     let result = output.wasm_result;
     let log = round.log;
     let result = result.map_err(|err| err.into_user_error(&canister.canister_id()));
