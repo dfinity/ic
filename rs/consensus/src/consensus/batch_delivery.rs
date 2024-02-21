@@ -109,8 +109,9 @@ pub fn deliver_batches(
 
                 let randomness = Randomness::from(crypto_hashable_to_seed(&tape));
 
-                let ecdsa_subnet_public_key = match get_ecdsa_subnet_public_key(&block, pool, log) {
-                    Ok(maybe_key) => maybe_key,
+                let ecdsa_subnet_public_keys = match get_ecdsa_subnet_public_key(&block, pool, log)
+                {
+                    Ok(keys) => keys,
                     Err(e) => {
                         // Do not deliver batch if we can't find a previous summary block,
                         // this means we should continue with the latest CUP.
@@ -186,7 +187,7 @@ pub fn deliver_batches(
                     requires_full_state_hash,
                     messages: batch_messages,
                     randomness,
-                    ecdsa_subnet_public_keys: ecdsa_subnet_public_key.into_iter().collect(),
+                    ecdsa_subnet_public_keys,
                     ecdsa_quadruple_ids: get_quadruple_ids_to_deliver(&block),
                     registry_version: block.context.registry_version,
                     time: block.context.time,

@@ -1560,17 +1560,21 @@ fn bootstrap_ecdsa_summary_from_cup_contents(
     subnet_id: SubnetId,
     logger: &ReplicaLogger,
 ) -> Result<ecdsa::Summary, String> {
-    let Some((key_id, dealings)) =
-        inspect_ecdsa_initializations(&cup_contents.ecdsa_initializations)?
-    else {
+    let initial_dealings = inspect_ecdsa_initializations(&cup_contents.ecdsa_initializations)?;
+    if initial_dealings.is_empty() {
         return Ok(None);
     };
 
+    // TODO(kpop): use all dealings
+    let (key_id, dealings) = initial_dealings
+        .first_key_value()
+        .expect("Should not be empty");
+
     make_bootstrap_summary_with_initial_dealings(
         subnet_id,
-        key_id,
+        key_id.clone(),
         Height::new(cup_contents.height),
-        dealings,
+        dealings.clone(),
         logger,
     )
     .map_err(|err| format!("Failed to create ECDSA summary block: {:?}", err))
