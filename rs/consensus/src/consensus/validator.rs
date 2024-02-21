@@ -544,6 +544,7 @@ fn get_notarized_parent(
     let parent = &proposal.as_ref().parent;
     let height = proposal.height().decrement();
     pool.get_notarized_block(parent, height)
+        .map(|block| block.into_inner())
         .map_err(|_| TransientError::BlockNotFound(parent.clone(), height).into())
 }
 
@@ -2342,9 +2343,9 @@ pub mod test {
 
             // Create and insert the block whose validation we will be testing
             let parent: &Block = block_chain.last().unwrap().as_ref();
-            let mut test_block: Block = pool.make_next_block_from_parent(parent).into();
-
             let rank = Rank(1);
+            let mut test_block: Block = pool.make_next_block_from_parent(parent, rank).into();
+
             let node_id = get_block_maker_by_rank(
                 membership.borrow(),
                 &PoolReader::new(&pool),
@@ -2355,7 +2356,6 @@ pub mod test {
 
             test_block.context.registry_version = RegistryVersion::from(11);
             test_block.context.certified_height = Height::from(1);
-            test_block.rank = rank;
             let block_proposal = BlockProposal::fake(test_block.clone(), node_id);
             pool.insert_unvalidated(block_proposal.clone());
 
@@ -2466,8 +2466,8 @@ pub mod test {
 
             // Create and insert the block whose validation we will be testing
             let parent: &Block = block_chain.last().unwrap().as_ref();
-            let mut test_block: Block = pool.make_next_block_from_parent(parent).into();
             let rank = Rank(1);
+            let mut test_block: Block = pool.make_next_block_from_parent(parent, rank).into();
             let node_id = get_block_maker_by_rank(
                 membership.borrow(),
                 &PoolReader::new(&pool),
@@ -2479,7 +2479,6 @@ pub mod test {
             test_block.context.registry_version = RegistryVersion::from(11);
             test_block.context.certified_height = Height::from(1);
             test_block.version = ReplicaVersion::try_from("old_version").unwrap();
-            test_block.rank = rank;
 
             let block_proposal = BlockProposal::fake(test_block.clone(), node_id);
             pool.insert_unvalidated(block_proposal.clone());
@@ -2629,17 +2628,18 @@ pub mod test {
             assert_block_valid(&valid_results, &test_block);
             pool.apply_changes(valid_results);
 
-            let mut next_block = pool.make_next_block_from_parent(test_block.as_ref());
+            let rank = Rank(0);
+            let mut next_block = pool.make_next_block_from_parent(test_block.as_ref(), rank);
             next_block.signature.signer = get_block_maker_by_rank(
                 membership.borrow(),
                 &PoolReader::new(&pool),
                 next_block.height(),
                 &committee,
-                Rank(0),
+                rank,
             );
             next_block.content.as_mut().context.registry_version = RegistryVersion::from(11);
             next_block.content.as_mut().context.certified_height = Height::from(1);
-            next_block.content.as_mut().rank = Rank(0);
+            next_block.content.as_mut().rank = rank;
             next_block.update_content();
             pool.insert_unvalidated(next_block.clone());
             // Forward time correctly
@@ -3280,15 +3280,15 @@ pub mod test {
             // First ensure that we require the parent block
             pool.insert_validated(pool.make_next_beacon());
             let parent_block = pool.make_next_block();
-            let mut block = pool.make_next_block_from_parent(parent_block.as_ref());
+            let rank = Rank(0);
+            let mut block = pool.make_next_block_from_parent(parent_block.as_ref(), rank);
             block.signature.signer = get_block_maker_by_rank(
                 membership.borrow(),
                 &PoolReader::new(&pool),
                 block.height(),
                 &subnet_members,
-                Rank(0),
+                rank,
             );
-            block.content.as_mut().rank = Rank(0);
 
             block.update_content();
             let content = NotarizationContent::new(

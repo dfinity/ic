@@ -146,7 +146,7 @@ impl ShareAggregator {
                         panic!("Block not found for {:?}, error: {:?}", share, err)
                     });
                 Signed {
-                    content: CatchUpContent::from_share_content(share.content, block),
+                    content: CatchUpContent::from_share_content(share.content, block.into_inner()),
                     signature: share.signature,
                 }
             });
