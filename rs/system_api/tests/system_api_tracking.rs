@@ -71,41 +71,6 @@ fn track_data_certificate_copy() {
 }
 
 #[test]
-fn track_call_perform() {
-    let wat = r#"(module
-            (import "ic0" "call_new"
-                (func $ic0_call_new
-                (param $callee_src i32)         (param $callee_size i32)
-                (param $name_src i32)           (param $name_size i32)
-                (param $reply_fun i32)          (param $reply_env i32)
-                (param $reject_fun i32)         (param $reject_env i32)
-            ))
-            (import "ic0" "call_perform" (func $ic0_call_perform (result i32)))
-            (memory 1)
-            (func (export "canister_composite_query call_system_api")
-                (call $ic0_call_new
-                    (i32.const 0)   (i32.const 10)
-                    (i32.const 100) (i32.const 18)
-                    (i32.const 11)  (i32.const 0) ;; non-existent function
-                    (i32.const 22)  (i32.const 0) ;; non-existent function
-                )
-                (drop (call $ic0_call_perform))
-            )
-        )"#;
-    let call_counters = call_counters_on_ok_call(wat);
-    assert_eq!(call_counters.call_perform, 1);
-    let wat = r#"(module
-            (import "ic0" "call_perform" (func $ic0_call_perform (result i32)))
-            (memory 1)
-            (func (export "canister_composite_query call_system_api")
-                (drop (call $ic0_call_perform))
-            )
-        )"#;
-    let call_counters = call_counters_on_err_call(wat);
-    assert_eq!(call_counters.call_perform, 1);
-}
-
-#[test]
 fn track_canister_cycle_balance() {
     let wat = r#"(module
             (import "ic0" "canister_cycle_balance"
@@ -164,12 +129,10 @@ fn track_other() {
             )
         )"#;
     let call_counters = call_counters_on_ok_call(wat);
-    assert_eq!(call_counters.call_perform, 0);
     assert_eq!(call_counters.canister_cycle_balance, 0);
     assert_eq!(call_counters.canister_cycle_balance128, 0);
     assert_eq!(call_counters.time, 0);
     let call_counters = call_counters_on_err_call(wat);
-    assert_eq!(call_counters.call_perform, 0);
     assert_eq!(call_counters.canister_cycle_balance, 0);
     assert_eq!(call_counters.canister_cycle_balance128, 0);
     assert_eq!(call_counters.time, 0);

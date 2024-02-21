@@ -2069,7 +2069,6 @@ impl SystemApi for SystemApiImpl {
     // or the output queues are full. In this case, we need to perform the
     // necessary cleanups.
     fn ic0_call_perform(&mut self) -> HypervisorResult<i32> {
-        self.call_counters.call_perform += 1;
         let result = match &mut self.api_type {
             ApiType::Start { .. }
             | ApiType::Init { .. }

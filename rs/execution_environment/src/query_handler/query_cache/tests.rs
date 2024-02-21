@@ -930,13 +930,6 @@ fn composite_query_cache_reports_system_api_calls_metric() {
         .unwrap();
 
     let m = &query_handler(&test).metrics;
-    // Two nested calls.
-    assert_eq!(
-        2,
-        m.query_system_api_calls
-            .with_label_values(&[metrics::SYSTEM_API_CALL_PERFORM])
-            .get()
-    );
     // Four `ic0.canister_cycle_balance()` calls.
     assert_eq!(
         4,
