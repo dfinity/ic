@@ -5,7 +5,8 @@
 //! Interface for the cryptographic service provider
 
 pub mod api;
-pub mod builder;
+#[cfg(test)]
+pub mod builder_for_test;
 pub mod canister_threshold;
 #[cfg(test)]
 pub mod imported_test_utils;
@@ -156,7 +157,7 @@ impl Csp {
     /// # Panics
     /// Panics if the `config`'s vault type is `UnixSocket` and
     /// `tokio_runtime_handle` is `None`.
-    pub fn new(
+    pub fn new_from_config(
         config: &CryptoConfig,
         tokio_runtime_handle: Option<tokio::runtime::Handle>,
         logger: Option<ReplicaLogger>,
@@ -169,7 +170,19 @@ impl Csp {
             new_logger!(&logger),
             Arc::clone(&metrics),
         );
-        Csp::builder(vault, logger, metrics).build()
+        Self::new_from_vault(vault, logger, metrics)
+    }
+
+    pub fn new_from_vault(
+        vault: Arc<dyn CspVault>,
+        logger: ReplicaLogger,
+        metrics: Arc<CryptoMetrics>,
+    ) -> Self {
+        Csp {
+            csp_vault: vault,
+            logger,
+            metrics,
+        }
     }
 }
 
