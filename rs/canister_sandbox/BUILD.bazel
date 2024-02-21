@@ -115,3 +115,11 @@ rust_binary(
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [":backend_lib"],
 )
+
+rust_binary(
+    name = "compiler_sandbox",
+    srcs = ["bin/compiler.rs"],
+    crate_name = "canister_sandbox",
+    version = "0.9.0",
+    deps = [":backend_lib"],
+)

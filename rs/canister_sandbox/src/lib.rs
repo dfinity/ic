@@ -1,3 +1,4 @@
+pub mod compiler_sandbox;
 pub mod controller_client_stub;
 pub mod controller_launcher_client_stub;
 pub mod controller_launcher_service;
@@ -51,6 +52,10 @@ pub const RUN_AS_CANISTER_SANDBOX_FLAG: &str = "--run-as-canister-sandbox";
 /// This command line flag switches some binaries (ic-replica, drun) into the
 /// launcher mode.
 pub const RUN_AS_SANDBOX_LAUNCHER_FLAG: &str = "--run-as-sandbox-launcher";
+
+/// This command line flag switches some binaries (ic-replica, drun) into the
+/// compiler mode.
+pub const RUN_AS_COMPILER_SANDBOX_FLAG: &str = "--run-as-compiler-sandbox";
 
 // Declare how messages are multiplexed on channels between the controller <->
 // (sandbox or launcher).

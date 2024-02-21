@@ -14,7 +14,10 @@ use crate::{
     protocol::{
         self,
         ctllaunchersvc::SandboxExitedRequest,
-        launchersvc::{LaunchSandboxReply, LaunchSandboxRequest, TerminateReply, TerminateRequest},
+        launchersvc::{
+            LaunchCompilerReply, LaunchCompilerRequest, LaunchSandboxReply, LaunchSandboxRequest,
+            TerminateReply, TerminateRequest,
+        },
     },
     rpc,
     transport::{self, SocketReaderConfig},
@@ -31,10 +34,23 @@ use nix::{
 ///
 pub fn sandbox_launcher_main() {
     let socket = child_process_initialization();
-    run_launcher(socket);
+    let mut embedder_config_arg: Option<String> = None;
+
+    let mut args = std::env::args();
+    while let Some(arg) = args.next() {
+        if arg.as_str() == "--embedder-config" {
+            embedder_config_arg = args.next();
+            break;
+        }
+    }
+
+    run_launcher(
+        socket,
+        embedder_config_arg.expect("Missing embedder config."),
+    );
 }
 
-pub fn run_launcher(socket: std::os::unix::net::UnixStream) {
+pub fn run_launcher(socket: std::os::unix::net::UnixStream, embedder_config_arg: String) {
     let socket = Arc::new(socket);
 
     let out_stream =
@@ -52,7 +68,7 @@ pub fn run_launcher(socket: std::os::unix::net::UnixStream) {
     ));
 
     // Construct RPC server for launching sandbox processes.
-    let svc = Arc::new(LauncherServer::new(controller));
+    let svc = Arc::new(LauncherServer::new(controller, embedder_config_arg));
 
     // Wrap it all up to handle frames received on socket.
     let frame_handler = transport::Demux::<_, _, protocol::transport::ControllerToLauncher>::new(
@@ -70,24 +86,30 @@ pub fn run_launcher(socket: std::os::unix::net::UnixStream) {
     );
 }
 
+#[derive(Debug)]
+struct ProcessInfo {
+    canister_id: Option<CanisterId>,
+    panic_on_failure: bool,
+}
 pub struct LauncherServer {
-    pid_to_canister_id: Arc<Mutex<HashMap<Pid, CanisterId>>>,
+    pid_to_process_info: Arc<Mutex<HashMap<Pid, ProcessInfo>>>,
     has_children: Arc<Condvar>,
+    embedder_config_arg: String,
 }
 
 impl LauncherServer {
-    fn new(controller: ControllerLauncherClientStub) -> Self {
-        let pid_to_canister_id = Arc::new(Mutex::new(HashMap::new()));
+    fn new(controller: ControllerLauncherClientStub, embedder_config_arg: String) -> Self {
+        let pid_to_process_info = Arc::new(Mutex::new(HashMap::<Pid, ProcessInfo>::new()));
         let has_children = Arc::new(Condvar::new());
-        let watcher_canister_id_map = Arc::clone(&pid_to_canister_id);
+        let watcher_process_info_map = Arc::clone(&pid_to_process_info);
         let watcher_has_children = Arc::clone(&has_children);
         thread::spawn(move || loop {
             // Explicitly drop the lock on the id map before waiting on children
             // (to avoid a deadlock with the `launch_sandbox`).
             drop(
                 watcher_has_children
-                    .wait_while(watcher_canister_id_map.lock().unwrap(), |id_map| {
-                        id_map.is_empty()
+                    .wait_while(watcher_process_info_map.lock().unwrap(), |info_map| {
+                        info_map.is_empty()
                     })
                     .unwrap(),
             );
@@ -100,34 +122,43 @@ impl LauncherServer {
                 },
                 Ok(status) => match status {
                     WaitStatus::Exited(pid, 0) => {
-                        watcher_canister_id_map.lock().unwrap().remove(&pid);
+                        watcher_process_info_map.lock().unwrap().remove(&pid);
                     }
                     WaitStatus::StillAlive => {}
                     _ => {
                         let pid = status
                             .pid()
                             .expect("WaitStatus is not StillAlive so it should have a pid");
-                        let mut canister_ids = watcher_canister_id_map.lock().unwrap();
-                        let canister_id = canister_ids.remove(&pid);
+
+                        let mut info_map = watcher_process_info_map.lock().unwrap();
+                        let process_info = info_map.remove(&pid);
                         eprintln!(
                             "Sandbox pid {} for canister {:?} exited unexpectedly with status {:?}",
-                            pid, canister_id, status
+                            pid, process_info, status
                         );
-                        // If we have a canister id, tell the replica process to print its history.
-                        if let Some(canister_id) = canister_id {
-                            controller
-                                .sandbox_exited(SandboxExitedRequest { canister_id })
-                                .sync()
-                                .unwrap();
+
+                        let should_panic = process_info
+                            .as_ref()
+                            .map(|x| x.panic_on_failure)
+                            .unwrap_or(true);
+                        if should_panic {
+                            // If we have a canister id, tell the replica process to print its history.
+                            if let Some(canister_id) = process_info.and_then(|x| x.canister_id) {
+                                controller
+                                    .sandbox_exited(SandboxExitedRequest { canister_id })
+                                    .sync()
+                                    .unwrap();
+                            }
+                            panic!("Launcher detected sandbox exit");
                         }
-                        panic!("Launcher detected sandbox exit");
                     }
                 },
             }
         });
         Self {
-            pid_to_canister_id,
+            pid_to_process_info,
             has_children,
+            embedder_config_arg,
         }
     }
 }
@@ -147,22 +178,72 @@ impl LauncherService for LauncherServer {
                 // Ensure the launcher closes its end of the socket.
                 drop(unsafe { UnixStream::from_raw_fd(socket) });
 
-                let mut id_map = self.pid_to_canister_id.lock().unwrap();
+                let mut info_map = self.pid_to_process_info.lock().unwrap();
 
                 // If there were no children before, then notify the waiting
                 // thread that we have children.
-                if id_map.is_empty() {
+                if info_map.is_empty() {
                     self.has_children.notify_one();
                 }
 
                 // Record the canister id associated with this process.
                 let pid = child_handle.id();
-                id_map.insert(Pid::from_raw(pid as i32), canister_id);
+                info_map.insert(
+                    Pid::from_raw(pid as i32),
+                    ProcessInfo {
+                        canister_id: Some(canister_id),
+                        panic_on_failure: true,
+                    },
+                );
 
                 rpc::Call::new_resolved(Ok(LaunchSandboxReply { pid }))
             }
             Err(err) => {
                 eprintln!("Error spawning sandbox process: {}", err);
+                rpc::Call::new_resolved(Err(rpc::Error::ServerError))
+            }
+        }
+    }
+
+    fn launch_compiler(
+        &self,
+        LaunchCompilerRequest {
+            exec_path,
+            argv,
+            socket,
+        }: LaunchCompilerRequest,
+    ) -> rpc::Call<LaunchCompilerReply> {
+        let mut args = argv.clone();
+        args.push("--embedder-config".to_string());
+        args.push(self.embedder_config_arg.clone());
+
+        match spawn_socketed_process(&exec_path, &args, socket) {
+            Ok(child_handle) => {
+                // Ensure the launcher closes its end of the socket.
+                drop(unsafe { UnixStream::from_raw_fd(socket) });
+
+                let mut info_map = self.pid_to_process_info.lock().unwrap();
+
+                // If there were no children before, then notify the waiting
+                // thread that we have children.
+                if info_map.is_empty() {
+                    self.has_children.notify_one();
+                }
+
+                // Record the canister id associated with this process.
+                let pid = child_handle.id();
+                info_map.insert(
+                    Pid::from_raw(pid as i32),
+                    ProcessInfo {
+                        canister_id: None,
+                        panic_on_failure: false,
+                    },
+                );
+
+                rpc::Call::new_resolved(Ok(LaunchCompilerReply { pid }))
+            }
+            Err(err) => {
+                eprintln!("Error spawning compiler process {}: {}", exec_path, err);
                 rpc::Call::new_resolved(Err(rpc::Error::ServerError))
             }
         }

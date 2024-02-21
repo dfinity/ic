@@ -118,6 +118,7 @@ pub fn test(env: TestEnv) {
     copy_file(&binaries_path, &backup_binaries_dir, "ic-replay");
     copy_file(&binaries_path, &backup_binaries_dir, "sandbox_launcher");
     copy_file(&binaries_path, &backup_binaries_dir, "canister_sandbox");
+    copy_file(&binaries_path, &backup_binaries_dir, "compiler_sandbox");
 
     info!(
         log,

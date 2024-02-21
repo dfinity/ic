@@ -65,6 +65,10 @@ name = "canister_sandbox"
 path = "bin/canister_sandbox.rs"
 
 [[bin]]
+name = "compiler_sandbox"
+path = "bin/compiler.rs"
+
+[[bin]]
 name = "sandbox_launcher"
 path = "bin/sandbox_launcher.rs"
 

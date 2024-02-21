@@ -250,6 +250,14 @@ impl<Message> ReplyManager<Message> {
         mut_repr.cells.insert(cookie, cell);
         cookie
     }
+
+    pub fn flush_with_errors(&self) {
+        let mut mut_repr = self.repr.lock().unwrap();
+        for (_cookie, cell) in mut_repr.cells.iter() {
+            cell.post_result(Err(Error::ServerError));
+        }
+        mut_repr.cells.clear();
+    }
 }
 
 impl<Message> MessageSink<Message> for ReplyManager<Message> {
