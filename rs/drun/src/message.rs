@@ -2,7 +2,7 @@ use super::CanisterId;
 
 use hex::decode;
 use ic00::{CanisterInstallModeV2, UpgradeOptions};
-use ic_execution_environment::execution::install_code::MOTOKO_ORTHOGONAL_PERSISTENCE_CUSTOM_SECTION;
+use ic_execution_environment::execution::install_code::ENHANCED_ORTHOGONAL_PERSISTENCE_SECTION;
 use ic_ic00_types::{self as ic00, Payload};
 use ic_types::{
     messages::{SignedIngress, UserQuery},
@@ -260,7 +260,7 @@ fn parse_install(
         "upgrade" => {
             let keep_main_memory = if contains_icp_private_custom_section(
                 wasm_data.as_ref(),
-                MOTOKO_ORTHOGONAL_PERSISTENCE_CUSTOM_SECTION,
+                ENHANCED_ORTHOGONAL_PERSISTENCE_SECTION,
             )? {
                 Some(true)
             } else {

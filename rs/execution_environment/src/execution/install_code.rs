@@ -35,7 +35,7 @@ use crate::{
 #[cfg(test)]
 mod tests;
 
-pub const MOTOKO_ORTHOGONAL_PERSISTENCE_CUSTOM_SECTION: &str = "motoko:orthogonal-persistence";
+pub const ENHANCED_ORTHOGONAL_PERSISTENCE_SECTION: &str = "enhanced-orthogonal-persistence";
 
 /// Indicates whether the stable memory is kept or replaced with new (empty) memory.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -50,10 +50,10 @@ pub(crate) enum StableMemoryHandling {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) enum MainMemoryHandling {
     /// Erase the main memory on install, re-install, or on an ordinary upgrade that does not
-    /// use Motoko's enhanced orthogonal persistence.
+    /// use enhanced orthogonal persistence.
     /// `explicit` denotes whether the upgrade option `keep_main_memory = false` is specified.
     Replace { explicit: bool },
-    /// For Motoko's enhanced orthogonal persistence: Retain the main memory on upgrade.
+    /// For enhanced orthogonal persistence (as with Motoko): Retain the main memory on upgrade.
     Keep,
 }
 
@@ -61,8 +61,8 @@ pub(crate) enum MainMemoryHandling {
 /// * On install and re-install:
 ///   - Replace both stable and main memory.
 /// * On upgrade:
-///   - For Motoko's enhanced orthogonal persistence: Retain both main and stable memory.
-///   - For standard non-Motoko canisters: Retain only stable memory and erase main memory.
+///   - For canisters with enhanced orthogonal persistence (Motoko): Retain both main and stable memory.
+///   - For all other canisters: Retain only stable memory and erase main memory.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct MemoryHandling {
     pub stable_memory_handling: StableMemoryHandling,
@@ -545,10 +545,10 @@ impl InstallCodeHelper {
                     // Safety guard checking that the `keep_main_memory` upgrade option has not been omitted in error.
                     let uses_orthogonal_persistence = old
                         .metadata
-                        .get_custom_section(MOTOKO_ORTHOGONAL_PERSISTENCE_CUSTOM_SECTION)
+                        .get_custom_section(ENHANCED_ORTHOGONAL_PERSISTENCE_SECTION)
                         .is_some();
                     if !explicit && uses_orthogonal_persistence {
-                        return Err(CanisterManagerError::MissingUpgradeOptionError { message: "Motoko's enhanced orthogonal persistence requires the `keep_main_memory` upgrade option.".to_string() });
+                        return Err(CanisterManagerError::MissingUpgradeOptionError { message: "Enhanced orthogonal persistence requires the `keep_main_memory` upgrade option.".to_string() });
                     }
                 }
             }
