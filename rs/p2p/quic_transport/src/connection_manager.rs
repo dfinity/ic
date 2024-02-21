@@ -592,7 +592,7 @@ impl ConnectionManager {
                         .close(VarInt::from_u32(0), b"using newer connection");
                     info!(
                         self.log,
-                        "Replacing old connection to {}  with newer", peer_id
+                        "Replacing old connection to {} with newer", peer_id
                     );
                 } else {
                     self.metrics.peer_map_size.inc();
