@@ -183,7 +183,6 @@ GUESTOS_DEV_VERSION = "//ic-os/guestos/envs/dev:version.txt"
 GUESTOS_RUNTIME_DEPS = [
     GUESTOS_DEV_VERSION,
     "//ic-os:scripts/build-bootstrap-config-image.sh",
-    "//rs/tests:src/default_firewall_whitelist.conf",
 ]
 
 MAINNET_REVISION_RUNTIME_DEPS = ["//testnet:mainnet_nns_revision"]

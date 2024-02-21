@@ -28,8 +28,8 @@ end::catalog[] */
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
-    HasDependencies, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
-    NnsInstallationBuilder, SshSession,
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, NnsInstallationBuilder,
+    SshSession,
 };
 use crate::nns::{
     await_proposal_execution, submit_external_proposal_with_test_id,
@@ -111,20 +111,16 @@ pub fn override_firewall_rules_with_priority(env: TestEnv) {
 
     info!(
         log,
-        "Firewall priority test is ready. Setting base rules in the registry..."
+        "Firewall priority test is ready. Setting default rules in the registry..."
     );
 
-    // Grab the prefixes from the test whitelist
-    let ipv6_prefixes = read_firewall_whitelist_config(&env);
+    // Set the default rules in the registry for the first time
+    block_on(set_default_registry_rules(&log, &nns_node));
 
-    // Set the base rules in the registry for the first time
-    block_on(set_base_registry_rules(
-        &log,
-        &nns_node,
-        ipv6_prefixes.clone(),
-    ));
-
-    info!(log, "Base rules set. Testing connectivity with backoff...");
+    info!(
+        log,
+        "Default rules set. Testing connectivity with backoff..."
+    );
 
     assert!(await_rule_execution_with_backoff(
         &log,
@@ -144,10 +140,12 @@ pub fn override_firewall_rules_with_priority(env: TestEnv) {
     );
 
     // add a firewall rule that disables 9090 on the first node
+    let firewall_config = util::get_config().firewall.unwrap();
+
     let deny_port = FirewallAction::Deny;
     let mut node_rules = vec![FirewallRule {
         ipv4_prefixes: vec![],
-        ipv6_prefixes,
+        ipv6_prefixes: firewall_config.default_rules[0].ipv6_prefixes.clone(),
         ports: vec![9090],
         action: deny_port.into(),
         comment: "Test rule".to_string(),
@@ -338,38 +336,13 @@ pub fn override_firewall_rules_with_priority(env: TestEnv) {
     info!(log, "Firewall priority tests has succeeded.")
 }
 
-fn read_firewall_whitelist_config(env: &TestEnv) -> Vec<String> {
-    let default_firewall_whitelist_path =
-        env.get_dependency_path("rs/tests/src/default_firewall_whitelist.conf");
-    let default_firewall_whitelist = std::fs::read_to_string(default_firewall_whitelist_path)
-        .expect("Could not read default whitelist");
-    let ipv6_whitelist = default_firewall_whitelist
-        .lines()
-        .find_map(|v| v.strip_prefix("ipv6_whitelist="))
-        .expect("Could not find ipv6_whitelist");
-
-    serde_json::from_str(&format!("[{}]", ipv6_whitelist)).expect("Unable to read ipv6_whitelist")
-}
-
-async fn set_base_registry_rules(
-    log: &Logger,
-    nns_node: &IcNodeSnapshot,
-    ipv6_prefixes: Vec<String>,
-) {
-    let base_rules = vec![FirewallRule {
-        ipv4_prefixes: vec![],
-        ipv6_prefixes,
-        ports: vec![22, 2497, 4100, 7070, 8080, 9090, 9091, 9100, 19100, 19531],
-        action: FirewallAction::Allow as i32,
-        comment: "Base rule for test".to_string(),
-        user: None,
-        direction: Some(FirewallRuleDirection::Inbound as i32),
-    }];
-
+async fn set_default_registry_rules(log: &Logger, nns_node: &IcNodeSnapshot) {
+    let firewall_config = util::get_config().firewall.unwrap();
+    let default_rules = firewall_config.default_rules.clone();
     let proposal = prepare_add_rules_proposal(
         FirewallRulesScope::ReplicaNodes,
-        base_rules.clone(),
-        (0..base_rules.len()).map(|u| u as i32).collect(),
+        default_rules.clone(),
+        (0..default_rules.len()).map(|u| u as i32).collect(),
         vec![],
     );
     execute_proposal(

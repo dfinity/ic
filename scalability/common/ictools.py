@@ -50,13 +50,10 @@ def build_bootstrap_config_image(name, **kwargs):
 
     p = Path(__file__).parents[2]
     bootstrap_script = os.path.join(p, "ic-os/scripts/build-bootstrap-config-image.sh")
-    default_firewall_whitelist = os.path.join(p, "rs/tests/src/default_firewall_whitelist.conf")
     args = [bootstrap_script, config_image]
     for key, value in kwargs.items():
         args.append("--" + key)
         args.append(value)
-    args.append("--default_firewall_whitelist")
-    args.append(default_firewall_whitelist)
     subprocess.run(args, stdout=subprocess.DEVNULL, check=True)
     return config_image
 
