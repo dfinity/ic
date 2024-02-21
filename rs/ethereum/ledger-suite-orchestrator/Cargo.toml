@@ -32,11 +32,11 @@ serde_json = { workspace = true }
 serde_bytes = { workspace = true }
 
 [dev-dependencies]
+ic-ledger-suite-orchestrator-test-utils = { path = "test_utils" }
 assert_matches = "1.5.0"
 proptest = "1.0"
 candid_parser = { workspace = true }
 ic-state-machine-tests = { path = "../../state_machine_tests" }
-ic-test-utilities-load-wasm = { path = "../../test_utilities/load_wasm" }
 mockall = { workspace = true }
 paste = "1.0.12"
 scraper = "0.17.1"
