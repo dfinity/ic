@@ -1,5 +1,3 @@
-use crate::KEEP_MAIN_MEMORY_ON_UPGRADE;
-
 use super::CanisterId;
 
 use hex::decode;
@@ -179,10 +177,10 @@ fn parse_message(s: &str, nonce: u64) -> Result<Message, String> {
         })),
         ["create"] => parse_create(nonce),
         ["install", canister_id, wasm_file, payload] => {
-            parse_install(nonce, canister_id, payload, wasm_file, "install")
+            parse_install(nonce, canister_id, payload, wasm_file,  "install")
         }
         ["reinstall", canister_id, wasm_file, payload] => {
-            parse_install(nonce, canister_id, payload, wasm_file, "reinstall")
+            parse_install(nonce, canister_id, payload, wasm_file,  "reinstall")
         }
         ["upgrade", canister_id, wasm_file, payload] => {
             parse_install(nonce, canister_id, payload, wasm_file, "upgrade")
@@ -218,6 +216,25 @@ fn parse_create(nonce: u64) -> Result<Message, String> {
     Ok(Message::Create(signed_ingress))
 }
 
+fn contains_custom_section(wasm_binary: &[u8], name: &str) -> Result<bool, String> {
+    use wasmparser::{Parser, Payload::CustomSection};
+
+    let parser = Parser::new(0);
+    for payload in parser.parse_all(wasm_binary) {
+        match payload.map_err(|e| format!("Wasm parsing error: {}", e))? {
+            CustomSection(reader) => {
+                if reader.name() == name {
+                    return Ok(true)
+                }
+            }
+            _ => {}
+        }
+    };
+    Ok(false)
+}
+
+const ORTHOGONAL_PERSISTENCE_CUSTOM_SECTION: &str = "icp:private motoko:orthogonal-persistence";
+
 fn parse_install(
     nonce: u64,
     canister_id: &str,
@@ -240,10 +257,17 @@ fn parse_install(
     let install_mode = match mode {
         "install" => CanisterInstallModeV2::Install,
         "reinstall" => CanisterInstallModeV2::Reinstall,
-        "upgrade" => CanisterInstallModeV2::Upgrade(Some(UpgradeOptions {
-            skip_pre_upgrade: None,
-            keep_main_memory: Some(KEEP_MAIN_MEMORY_ON_UPGRADE),
-        })),
+        "upgrade" => {
+            let keep_main_memory = if contains_custom_section(wasm_data.as_ref(), ORTHOGONAL_PERSISTENCE_CUSTOM_SECTION)? {
+                Some(true)
+            } else {
+                None
+            };
+            CanisterInstallModeV2::Upgrade(Some(UpgradeOptions {
+                skip_pre_upgrade: None,
+                keep_main_memory,
+            }))
+        },
         _ => {
             return Err(String::from("Unsupported install mode: {mode}"));
         }

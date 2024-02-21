@@ -41,6 +41,7 @@ slog = { workspace = true }
 slog-term = "2.6.0"
 tokio = { workspace = true }
 rand = "0.8"
+wasmparser = "0.115.0"
 
 [[bin]]
 name = "drun"

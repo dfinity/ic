@@ -7366,6 +7366,7 @@ dependencies = [
  "slog",
  "slog-term",
  "tokio",
+ "wasmparser 0.115.0",
 ]
 
 [[package]]
@@ -7481,7 +7482,6 @@ dependencies = [
  "ic-universal-canister",
  "ic-utils 0.9.0",
  "ic-utils-lru-cache",
- "ic-wasm-transform",
  "ic-wasm-types",
  "lazy_static",
  "libflate",
