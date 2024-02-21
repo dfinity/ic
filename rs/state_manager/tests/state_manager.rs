@@ -5404,7 +5404,7 @@ proptest! {
 
                     messages.push(req.into());
 
-                    let signals_end = decoded_slice.header().signals_end;
+                    let signals_end = decoded_slice.header().signals_end();
 
                     Stream::new(messages, signals_end)
                 })
@@ -5434,7 +5434,7 @@ proptest! {
                     slice,
                     |decoded_slice| {
                     let mut messages = StreamIndexedQueue::with_begin(StreamIndex::from(99999));
-                    let signals_end = decoded_slice.header().signals_end;
+                    let signals_end = decoded_slice.header().signals_end();
 
                     if let Some(decoded_messages) = decoded_slice.messages() {
                         for (_index, msg) in decoded_messages.iter() {
@@ -5466,7 +5466,7 @@ proptest! {
                 modify_encoded_stream_helper(state_manager, slice, |decoded_slice| {
                     let messages = decoded_slice.messages()
                         .unwrap_or(&StreamIndexedQueue::default()).clone();
-                    let signals_end = decoded_slice.header().signals_end + 99999.into();
+                    let signals_end = decoded_slice.header().signals_end() + 99999.into();
 
                     Stream::new(messages, signals_end)
                 })
@@ -5492,7 +5492,7 @@ proptest! {
                 modify_encoded_stream_helper(state_manager, slice, |decoded_slice| {
                     let messages = decoded_slice.messages()
                         .unwrap_or(&StreamIndexedQueue::default()).clone();
-                    let mut signals_end = decoded_slice.header().signals_end;
+                    let mut signals_end = decoded_slice.header().signals_end();
 
                     signals_end.inc_assign();
 

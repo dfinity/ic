@@ -241,7 +241,7 @@ impl LatencyMetrics {
     /// Records a `MessageTime` entry for messages to/from `subnet_id` before
     /// `header.end` (if not already recorded).
     pub(crate) fn record_header(&mut self, subnet_id: SubnetId, header: &StreamHeader) {
-        self.with_timeline(subnet_id, |t| t.add_entry(header.end));
+        self.with_timeline(subnet_id, |t| t.add_entry(header.end()));
     }
 
     /// Observes message durations for all messages to/from `subnet_id` with

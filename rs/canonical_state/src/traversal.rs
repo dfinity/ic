@@ -66,11 +66,12 @@ mod tests {
     use ic_test_utilities::{
         state::new_canister_state,
         types::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id},
+        types::xnet::StreamHeaderBuilder,
     };
-    use ic_types::{xnet::StreamHeader, CanisterId, Cycles, ExecutionRound};
+    use ic_types::{CanisterId, Cycles, ExecutionRound};
     use ic_wasm_types::CanisterModule;
     use maplit::{btreemap, btreeset};
-    use std::collections::{BTreeSet, VecDeque};
+    use std::collections::BTreeSet;
     use std::convert::TryFrom;
     use std::sync::Arc;
     use std::time::Duration;
@@ -345,12 +346,11 @@ mod tests {
         use ic_replicated_state::metadata_state::Stream;
         use ic_types::xnet::{StreamIndex, StreamIndexedQueue};
 
-        let header = StreamHeader {
-            begin: StreamIndex::from(4),
-            end: StreamIndex::from(4),
-            signals_end: StreamIndex::new(11),
-            reject_signals: VecDeque::new(),
-        };
+        let header = StreamHeaderBuilder::new()
+            .begin(4.into())
+            .end(4.into())
+            .signals_end(11.into())
+            .build();
 
         let stream = Stream::new(
             StreamIndexedQueue::with_begin(StreamIndex::from(4)),

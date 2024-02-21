@@ -281,10 +281,10 @@ pub fn decode_slice_from_tree(
             queue.push(msg);
         }
 
-        if queue.begin() < header.begin || header.end < queue.end() {
+        if queue.begin() < header.begin() || header.end() < queue.end() {
             return Err(DecodeStreamError::SerializationError(
                 format!("the range of message indices [{}, {}) does not agree with the range in header [{}, {})",
-                        queue.begin(), queue.end(), header.begin, header.end)
+                        queue.begin(), queue.end(), header.begin(), header.end())
             ));
         }
     }

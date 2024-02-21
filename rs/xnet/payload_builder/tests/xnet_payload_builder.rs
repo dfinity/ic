@@ -308,9 +308,9 @@ proptest! {
             );
             // ...from SUBNET_2...
             if let Some(slice) = payload.get(&SUBNET_2) {
-                assert_eq!(stream.messages_begin(), slice.header().begin);
-                assert_eq!(stream.messages_end(), slice.header().end);
-                assert_eq!(stream.signals_end(), slice.header().signals_end);
+                assert_eq!(stream.messages_begin(), slice.header().begin());
+                assert_eq!(stream.messages_end(), slice.header().end());
+                assert_eq!(stream.signals_end(), slice.header().signals_end());
 
                 // ...with non-empty messages...
                 if let Some(messages) = slice.messages() {
@@ -448,7 +448,7 @@ proptest! {
         let from = out_stream.signals_end();
         let stream = Stream::new(
             StreamIndexedQueue::with_begin(from),
-            out_stream.header().begin,
+            out_stream.header().begin(),
         );
 
         with_test_replica_logger(|log| {
@@ -487,9 +487,9 @@ proptest! {
                 payload.len()
             );
             if let Some(slice) = payload.get(&REMOTE_SUBNET) {
-                assert_eq!(stream.messages_begin(), slice.header().begin);
-                assert_eq!(stream.messages_end(), slice.header().end);
-                assert_eq!(updated_stream.signals_end(), slice.header().signals_end);
+                assert_eq!(stream.messages_begin(), slice.header().begin());
+                assert_eq!(stream.messages_end(), slice.header().end());
+                assert_eq!(updated_stream.signals_end(), slice.header().signals_end());
                 assert!(slice.messages().is_none());
             } else {
                 panic!(

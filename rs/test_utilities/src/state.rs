@@ -849,12 +849,12 @@ prop_compose! {
         let begin = StreamIndex::from(msg_start);
         let end = StreamIndex::from(msg_start + msg_len);
 
-        StreamHeader {
+        StreamHeader::new(
             begin,
             end,
             signals_end,
             reject_signals,
-        }
+        )
     }
 }
 

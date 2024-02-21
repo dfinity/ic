@@ -167,22 +167,22 @@ impl From<(&ic_types::xnet::StreamHeader, CertificationVersion)> for StreamHeade
         // includes replicas with certification version 8, but they may "inherit" reject
         // signals from a replica with certification version 9 after a downgrade.
         assert!(
-            header.reject_signals.is_empty() || certification_version >= CertificationVersion::V8,
+            header.reject_signals().is_empty() || certification_version >= CertificationVersion::V8,
             "Replicas with certification version < 9 should not be producing reject signals"
         );
 
-        let mut next_index = header.signals_end;
-        let mut reject_signal_deltas = vec![0; header.reject_signals.len()];
-        for (i, stream_index) in header.reject_signals.iter().enumerate().rev() {
+        let mut next_index = header.signals_end();
+        let mut reject_signal_deltas = vec![0; header.reject_signals().len()];
+        for (i, stream_index) in header.reject_signals().iter().enumerate().rev() {
             assert!(next_index > *stream_index);
             reject_signal_deltas[i] = next_index.get() - stream_index.get();
             next_index = *stream_index;
         }
 
         Self {
-            begin: header.begin.get(),
-            end: header.end.get(),
-            signals_end: header.signals_end.get(),
+            begin: header.begin().get(),
+            end: header.end().get(),
+            signals_end: header.signals_end().get(),
             reject_signal_deltas,
         }
     }
@@ -206,12 +206,12 @@ impl TryFrom<StreamHeader> for ic_types::xnet::StreamHeader {
             reject_signals.push_front(stream_index);
         }
 
-        Ok(Self {
-            begin: header.begin.into(),
-            end: header.end.into(),
-            signals_end: header.signals_end.into(),
+        Ok(Self::new(
+            header.begin.into(),
+            header.end.into(),
+            header.signals_end.into(),
             reject_signals,
-        })
+        ))
     }
 }
 

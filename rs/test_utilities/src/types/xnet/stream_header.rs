@@ -3,18 +3,12 @@ use std::collections::VecDeque;
 
 /// Builder for StreamHeader objects.  Allows for creation of a default struct
 /// and subsequent population of fields with specified values.
-pub struct StreamHeaderBuilder(StreamHeader);
-
-impl Default for StreamHeaderBuilder {
-    /// Creates a dummy StreamHeader with default values.
-    fn default() -> Self {
-        Self(StreamHeader {
-            begin: StreamIndex::from(0),
-            end: StreamIndex::from(0),
-            signals_end: StreamIndex::from(0),
-            reject_signals: VecDeque::default(),
-        })
-    }
+#[derive(Default)]
+pub struct StreamHeaderBuilder {
+    begin: StreamIndex,
+    end: StreamIndex,
+    signals_end: StreamIndex,
+    reject_signals: VecDeque<StreamIndex>,
 }
 
 impl StreamHeaderBuilder {
@@ -25,24 +19,30 @@ impl StreamHeaderBuilder {
 
     /// Sets the `begin` field.
     pub fn begin(mut self, begin: StreamIndex) -> Self {
-        self.0.begin = begin;
+        self.begin = begin;
         self
     }
 
     /// Sets the `end` field.
     pub fn end(mut self, end: StreamIndex) -> Self {
-        self.0.end = end;
+        self.end = end;
         self
     }
 
     /// Sets the `signals_end` field.
     pub fn signals_end(mut self, signals_end: StreamIndex) -> Self {
-        self.0.signals_end = signals_end;
+        self.signals_end = signals_end;
+        self
+    }
+
+    /// Sets the `reject_signals` field.
+    pub fn reject_signals(mut self, reject_signals: VecDeque<StreamIndex>) -> Self {
+        self.reject_signals = reject_signals;
         self
     }
 
     /// Returns the built `StreamHeader`.
     pub fn build(self) -> StreamHeader {
-        self.0
+        StreamHeader::new(self.begin, self.end, self.signals_end, self.reject_signals)
     }
 }

@@ -751,9 +751,9 @@ fn induct_messages_and_track_callback_ids(
             let (reverse_header, _) = stream_snapshot(into_subnet, from_subnet).unwrap();
             for (stream_index, msg) in messages
                 .iter()
-                .take_while(|(stream_index, _)| *stream_index < reverse_header.signals_end)
+                .take_while(|(stream_index, _)| *stream_index < reverse_header.signals_end())
             {
-                if !reverse_header.reject_signals.contains(&stream_index) {
+                if !reverse_header.reject_signals().contains(&stream_index) {
                     update_callback_id_trackers(
                         msg,
                         add_callback_id_tracker,

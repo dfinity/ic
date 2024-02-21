@@ -131,19 +131,19 @@ mod header {
 
     impl Header {
         pub(super) fn begin(&self) -> StreamIndex {
-            self.decoded.begin
+            self.decoded.begin()
         }
 
         pub(super) fn end(&self) -> StreamIndex {
-            self.decoded.end
+            self.decoded.end()
         }
 
         pub(super) fn signals_end(&self) -> StreamIndex {
-            self.decoded.signals_end
+            self.decoded.signals_end()
         }
 
         pub(super) fn reject_signals_len(&self) -> usize {
-            self.decoded.reject_signals.len()
+            self.decoded.reject_signals().len()
         }
     }
 
@@ -152,7 +152,7 @@ mod header {
 
         fn try_from(bytes: Vec<u8>) -> Result<Self, Self::Error> {
             let decoded = encoding::decode_stream_header(&bytes)?;
-            if decoded.begin > decoded.end {
+            if decoded.begin() > decoded.end() {
                 return Err(CertifiedSliceError::InvalidPayload(
                     InvalidSlice::InvalidBounds,
                 ));
