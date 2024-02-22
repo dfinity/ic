@@ -173,6 +173,7 @@ pub fn update_settings_of_frozen_canister(env: TestEnv) {
                     compute_allocation: None,
                     memory_allocation: None,
                     freezing_threshold: Some(low_freezing_threshold.into()),
+                    reserved_cycles_limit: None,
                 },
             };
             let bytes = Encode!(&arg).unwrap();

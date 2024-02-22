@@ -9,6 +9,7 @@ type CanisterStatusResponse = record {
   idle_cycles_burned_per_day : nat;
   module_hash : opt vec nat8;
   query_stats : QueryStats;
+  reserved_cycles : nat;
 };
 
 type QueryStats = record {
@@ -25,6 +26,7 @@ type DefiniteCanisterSettings = record {
   controllers : vec principal;
   memory_allocation : nat;
   compute_allocation : nat;
+  reserved_cycles_limit : nat;
 };
 
 type RetrieveBtcArgs = record {
