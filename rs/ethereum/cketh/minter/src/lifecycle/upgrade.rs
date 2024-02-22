@@ -4,7 +4,7 @@ use crate::state::audit::{process_event, replay_events, EventType};
 use crate::state::mutate_state;
 use crate::state::STATE;
 use crate::storage::total_event_count;
-use candid::{CandidType, Deserialize, Nat};
+use candid::{CandidType, Deserialize, Nat, Principal};
 use ic_canister_log::log;
 use minicbor::{Decode, Encode};
 
@@ -18,6 +18,8 @@ pub struct UpgradeArg {
     pub ethereum_contract_address: Option<String>,
     #[n(3)]
     pub ethereum_block_height: Option<CandidBlockTag>,
+    #[cbor(n(4), with = "crate::cbor::principal::option")]
+    pub ledger_suite_orchestrator_id: Option<Principal>,
 }
 
 pub fn post_upgrade(upgrade_args: Option<UpgradeArg>) {

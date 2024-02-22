@@ -15,3 +15,24 @@ pub fn encode<Ctx, W: Write>(
     e.bytes(v.as_slice())?;
     Ok(())
 }
+
+pub mod option {
+    use super::*;
+    use minicbor::{Decode, Encode};
+
+    #[derive(Encode, Decode)]
+    #[cbor(transparent)]
+    struct CborPrincipal(#[cbor(n(0), with = "crate::cbor::principal")] pub Principal);
+
+    pub fn decode<Ctx>(d: &mut Decoder<'_>, ctx: &mut Ctx) -> Result<Option<Principal>, Error> {
+        Ok(Option::<CborPrincipal>::decode(d, ctx)?.map(|n| n.0))
+    }
+
+    pub fn encode<Ctx, W: Write>(
+        v: &Option<Principal>,
+        e: &mut Encoder<W>,
+        ctx: &mut Ctx,
+    ) -> Result<(), minicbor::encode::Error<W::Error>> {
+        (*v).map(CborPrincipal).encode(e, ctx)
+    }
+}

@@ -1,6 +1,6 @@
 use crate::state::transactions::EthWithdrawalRequest;
 use crate::tx::{SignedEip1559TransactionRequest, TransactionPrice};
-use candid::{CandidType, Deserialize, Nat};
+use candid::{CandidType, Deserialize, Nat, Principal};
 use icrc_ledger_types::icrc2::transfer_from::TransferFromError;
 use minicbor::{Decode, Encode};
 use std::fmt::{Display, Formatter};
@@ -186,6 +186,14 @@ impl From<TransferFromError> for WithdrawalError {
     }
 }
 
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
+pub struct AddCkErc20Token {
+    pub chain_id: Nat,
+    pub address: String,
+    pub ckerc20_token_symbol: String,
+    pub ckerc20_ledger_id: Principal,
+}
+
 pub mod events {
     use crate::lifecycle::init::InitArg;
     use crate::lifecycle::upgrade::UpgradeArg;
@@ -306,6 +314,12 @@ pub mod events {
         },
         SkippedBlock {
             block_number: Nat,
+        },
+        AddedCkErc20Token {
+            chain_id: Nat,
+            address: String,
+            ckerc20_token_symbol: String,
+            ckerc20_ledger_id: Principal,
         },
     }
 }

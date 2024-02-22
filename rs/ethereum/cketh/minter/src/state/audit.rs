@@ -82,6 +82,9 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
         EventType::SkippedBlock(block_number) => {
             state.record_skipped_block(*block_number);
         }
+        EventType::AddedCkErc20Token(ckerc20_token) => {
+            state.record_add_ckerc20_token(ckerc20_token.clone());
+        }
     }
 }
 

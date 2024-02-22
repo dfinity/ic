@@ -90,6 +90,8 @@ impl TryFrom<InitArg> for State {
             active_tasks: Default::default(),
             http_request_counter: 0,
             last_transaction_price_estimate: None,
+            ledger_suite_orchestrator_id: None,
+            ckerc20_tokens: Default::default(),
         };
         state.validate_config()?;
         Ok(state)
