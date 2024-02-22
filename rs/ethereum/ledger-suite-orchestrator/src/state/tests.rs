@@ -217,7 +217,7 @@ mod validate_config {
     use proptest::arbitrary::any;
     use proptest::collection::{vec, SizeRange};
     use proptest::prelude::Strategy;
-    use proptest::proptest;
+    use proptest::{option, proptest};
 
     proptest! {
         #[test]
@@ -231,6 +231,7 @@ mod validate_config {
         fn should_error_when_too_many_additional_controllers(additional_controllers in vec(arb_principal(), 10..=100)) {
             let init_arg = InitArg {
                 more_controller_ids: additional_controllers.clone(),
+                minter_id: None,
             };
 
             let result = State::try_from(init_arg);
@@ -241,9 +242,12 @@ mod validate_config {
 
     pub fn arb_init_arg(size: impl Into<SizeRange>) -> impl Strategy<Value = InitArg> {
         // at most 10 principals, including the orchestrator's principal
-        vec(arb_principal(), size).prop_map(|more_controller_ids| InitArg {
-            more_controller_ids,
-        })
+        (vec(arb_principal(), size), option::of(arb_principal())).prop_map(
+            |(more_controller_ids, minter_id)| InitArg {
+                more_controller_ids,
+                minter_id,
+            },
+        )
     }
 
     fn arb_principal() -> impl Strategy<Value = Principal> {

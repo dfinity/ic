@@ -63,7 +63,16 @@ pub fn add_erc20(token: AddErc20Arg) {
         read_wasm_store(|w| InstallLedgerSuiteArgs::validate_add_erc20(s, w, token.clone()))
     }) {
         Ok(args) => {
+            let erc20_token = args.erc20_contract().clone();
             mutate_state(|s| s.add_task(Task::InstallLedgerSuite(args)));
+            mutate_state(|s| {
+                if let Some(&minter_id) = s.minter_id() {
+                    s.add_task(Task::NotifyErc20Added {
+                        erc20_token,
+                        minter_id,
+                    });
+                }
+            });
             ic_cdk_timers::set_timer(Duration::from_secs(0), || ic_cdk::spawn(execute_tasks()));
         }
         Err(e) => {

@@ -15,6 +15,7 @@ pub enum OrchestratorArg {
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct InitArg {
     pub more_controller_ids: Vec<Principal>,
+    pub minter_id: Option<Principal>,
 }
 
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -116,4 +117,13 @@ impl Display for ManagedCanisterIds {
             )
             .finish()
     }
+}
+
+// TODO XC-47: extract type to separate crate since used between ckETH minter and LSO
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
+pub struct AddCkErc20Token {
+    pub chain_id: Nat,
+    pub address: String,
+    pub ckerc20_token_symbol: String,
+    pub ckerc20_ledger_id: Principal,
 }

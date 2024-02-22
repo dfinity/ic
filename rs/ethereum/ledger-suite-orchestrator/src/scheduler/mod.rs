@@ -3,9 +3,9 @@ pub mod test_fixtures;
 #[cfg(test)]
 mod tests;
 
-use crate::candid::{AddErc20Arg, LedgerInitArg, UpgradeArg};
+use crate::candid::{AddCkErc20Token, AddErc20Arg, LedgerInitArg, UpgradeArg};
 use crate::logs::INFO;
-use crate::management::{CallError, CanisterRuntime};
+use crate::management::{CallError, CanisterRuntime, Reason};
 use crate::state::{
     mutate_state, read_state, Canisters, CanistersMetadata, Index, Ledger, ManageSingleCanister,
     ManagedCanisterStatus, State, WasmHash,
@@ -14,7 +14,7 @@ use crate::storage::{
     read_wasm_store, validate_wasm_hashes, wasm_store_try_get, StorableWasm, WasmHashError,
     WasmStore, WasmStoreError,
 };
-use candid::{CandidType, Encode, Principal};
+use candid::{CandidType, Encode, Nat, Principal};
 use ic_base_types::PrincipalId;
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
@@ -39,6 +39,10 @@ impl Tasks {
 
     pub fn add_task(&mut self, task: Task) {
         self.0.push_back(task);
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
     }
 }
 
@@ -68,9 +72,14 @@ impl Tasks {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub enum Task {
     InstallLedgerSuite(InstallLedgerSuiteArgs),
+    NotifyErc20Added {
+        erc20_token: Erc20Token,
+        minter_id: Principal,
+    },
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
@@ -112,6 +121,12 @@ pub struct InstallLedgerSuiteArgs {
     ledger_init_arg: LedgerInitArg,
     ledger_compressed_wasm_hash: WasmHash,
     index_compressed_wasm_hash: WasmHash,
+}
+
+impl InstallLedgerSuiteArgs {
+    pub fn erc20_contract(&self) -> &Erc20Token {
+        &self.contract
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -158,6 +173,8 @@ pub enum TaskError {
     InstallCodeError(CallError),
     WasmHashNotFound(WasmHash),
     WasmStoreError(WasmStoreError),
+    LedgerNotFound(Erc20Token),
+    InterCanisterCallError(CallError),
 }
 
 impl TaskError {
@@ -169,6 +186,14 @@ impl TaskError {
             TaskError::InstallCodeError(_) => true,
             TaskError::WasmHashNotFound(_) => false,
             TaskError::WasmStoreError(_) => false,
+            TaskError::LedgerNotFound(_) => true, //ledger may not yet be created
+            TaskError::InterCanisterCallError(CallError { method: _, reason }) => match reason {
+                Reason::OutOfCycles => true,
+                Reason::CanisterError(_) => false,
+                Reason::Rejected(_) => false,
+                Reason::TransientInternalError(_) => true,
+                Reason::InternalError(_) => false,
+            },
         }
     }
 }
@@ -177,6 +202,10 @@ impl Task {
     pub async fn execute<R: CanisterRuntime>(&self, runtime: &R) -> Result<(), TaskError> {
         match self {
             Task::InstallLedgerSuite(args) => install_ledger_suite(args, runtime).await,
+            Task::NotifyErc20Added {
+                erc20_token,
+                minter_id,
+            } => notify_erc20_added(erc20_token, minter_id, runtime).await,
         }
     }
 }
@@ -402,6 +431,33 @@ where
     mutate_state(|s| s.record_installed_canister::<C>(contract, wasm_hash.clone()));
 
     Ok(())
+}
+
+async fn notify_erc20_added<R: CanisterRuntime>(
+    token: &Erc20Token,
+    minter_id: &Principal,
+    runtime: &R,
+) -> Result<(), TaskError> {
+    let managed_canisters = read_state(|s| s.managed_canisters(token).cloned());
+    match managed_canisters {
+        Some(Canisters {
+            ledger: Some(ledger),
+            metadata,
+            ..
+        }) => {
+            let args = AddCkErc20Token {
+                chain_id: Nat::from(*token.chain_id().as_ref()),
+                address: token.address().to_string(),
+                ckerc20_token_symbol: metadata.ckerc20_token_symbol,
+                ckerc20_ledger_id: *ledger.canister_id(),
+            };
+            runtime
+                .call_canister(*minter_id, "add_ckerc20_token", args)
+                .await
+                .map_err(TaskError::InterCanisterCallError)
+        }
+        _ => Err(TaskError::LedgerNotFound(token.clone())),
+    }
 }
 
 #[derive(Debug, PartialEq, Clone, Ord, PartialOrd, Eq, Serialize, Deserialize)]

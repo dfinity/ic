@@ -397,6 +397,7 @@ pub struct State {
     tasks: Tasks,
     processing_tasks_guard: bool,
     more_controller_ids: Vec<Principal>,
+    minter_id: Option<Principal>,
 }
 
 impl State {
@@ -406,6 +407,10 @@ impl State {
 
     pub fn more_controller_ids(&self) -> &[Principal] {
         &self.more_controller_ids
+    }
+
+    pub fn minter_id(&self) -> Option<&Principal> {
+        self.minter_id.as_ref()
     }
 
     pub fn add_task(&mut self, task: Task) {
@@ -601,6 +606,7 @@ impl TryFrom<InitArg> for State {
     fn try_from(
         InitArg {
             more_controller_ids,
+            minter_id,
         }: InitArg,
     ) -> Result<Self, Self::Error> {
         let state = Self {
@@ -608,6 +614,7 @@ impl TryFrom<InitArg> for State {
             tasks: Default::default(),
             processing_tasks_guard: false,
             more_controller_ids,
+            minter_id,
         };
         state.validate_config()?;
         Ok(state)
