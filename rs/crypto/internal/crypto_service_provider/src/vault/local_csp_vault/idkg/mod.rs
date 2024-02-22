@@ -551,9 +551,11 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                         key_id: opener_key_id.to_string(),
                     }
                 }
-                _ => IDkgOpenTranscriptError::InternalError {
-                    internal_error: format!("{:?}", e),
-                },
+                deser_err @ MEGaKeysetFromSksError::DeserializationError(_) => {
+                    IDkgOpenTranscriptError::InternalError {
+                        internal_error: format!("{:?}", deser_err),
+                    }
+                }
             })?;
         open_dealing(
             &dealing,
