@@ -16,6 +16,12 @@ pub struct Funds {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct StreamFlags {
+    #[prost(bool, tag = "1")]
+    pub responses_only: bool,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Stream {
     #[prost(uint64, tag = "1")]
     pub messages_begin: u64,
@@ -25,6 +31,8 @@ pub struct Stream {
     pub signals_end: u64,
     #[prost(uint64, repeated, tag = "6")]
     pub reject_signals: ::prost::alloc::vec::Vec<u64>,
+    #[prost(message, optional, tag = "7")]
+    pub reverse_stream_flags: ::core::option::Option<StreamFlags>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

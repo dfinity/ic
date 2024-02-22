@@ -168,6 +168,16 @@ pub struct StreamHeader {
 
     /// Stream indices of rejected messages, in ascending order.
     reject_signals: VecDeque<StreamIndex>,
+
+    /// Flags informing the other subnet e.g. what kinds of messages will be accepted.
+    flags: StreamFlags,
+}
+
+/// Flags for `Stream`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct StreamFlags {
+    /// Indicates that the subnet expects responses only in the reverse stream.
+    pub responses_only: bool,
 }
 
 impl StreamHeader {
@@ -176,12 +186,14 @@ impl StreamHeader {
         end: StreamIndex,
         signals_end: StreamIndex,
         reject_signals: VecDeque<StreamIndex>,
+        flags: StreamFlags,
     ) -> Self {
         Self {
             begin,
             end,
             signals_end,
             reject_signals,
+            flags,
         }
     }
 
@@ -199,6 +211,10 @@ impl StreamHeader {
 
     pub fn reject_signals(&self) -> &VecDeque<StreamIndex> {
         &self.reject_signals
+    }
+
+    pub fn flags(&self) -> &StreamFlags {
+        &self.flags
     }
 }
 
@@ -292,13 +308,14 @@ pub struct QueueId {
 }
 
 pub mod testing {
-    use super::{StreamHeader, StreamIndex, StreamIndexedQueue};
+    use super::{StreamFlags, StreamHeader, StreamIndex, StreamIndexedQueue};
     use crate::messages::RequestOrResponse;
 
     /// Provides test-only methods for `StreamHeader`.
     pub trait StreamHeaderTesting {
         fn set_begin(&mut self, begin: StreamIndex);
         fn set_end(&mut self, end: StreamIndex);
+        fn set_flags(&mut self, flags: StreamFlags);
     }
 
     impl StreamHeaderTesting for super::StreamHeader {
@@ -308,6 +325,10 @@ pub mod testing {
 
         fn set_end(&mut self, end: StreamIndex) {
             self.end = end;
+        }
+
+        fn set_flags(&mut self, flags: StreamFlags) {
+            self.flags = flags;
         }
     }
 

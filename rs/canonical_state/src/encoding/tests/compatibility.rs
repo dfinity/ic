@@ -29,6 +29,7 @@ use ic_types::{
         CallbackId, Payload, RejectContext, Request, RequestMetadata, RequestOrResponse, Response,
     },
     nominal_cycles::NominalCycles,
+    xnet::StreamFlags,
     CryptoHashOfPartialState, Cycles, Funds, NumBytes, Time,
 };
 use serde_cbor::value::Value;
@@ -46,6 +47,7 @@ use std::collections::BTreeMap;
 ///     end: 25.into(),
 ///     signals_end: 256.into(),
 ///     reject_signals: VecDeque::new(),
+///     flags: StreamFlags::default(),
 /// }
 /// ```
 ///
@@ -85,6 +87,7 @@ fn canonical_encoding_stream_header() {
 ///     end: 25.into(),
 ///     signals_end: 256.into(),
 ///     reject_signals: vec![249.into(), 250.into(), 252.into()].into(),
+///     flags: StreamFlags::default(),
 /// }
 /// ```
 ///
@@ -118,6 +121,61 @@ fn canonical_encoding_stream_header_v8_plus() {
 
         assert_eq!(
             "A4 00 17 01 18 19 02 19 01 00 03 83 01 02 04",
+            as_hex(&encode_stream_header(&header, certification_version))
+        );
+    }
+}
+
+/// Canonical CBOR encoding (with certification versions 17 and up) of:
+///
+/// ```no_run
+/// StreamHeader {
+///     begin: 23.into(),
+///     end: 25.into(),
+///     signals_end: 256.into(),
+///     reject_signals: vec![249.into(), 250.into(), 252.into()].into(),
+///     flags: StreamFlags {
+///        responses_only: true,
+///     },
+/// }
+/// ```
+///
+/// Expected:
+///
+/// ```text
+/// A5         # map(5)
+///    00      # field_index(StreamHeader::begin)
+///    17      # unsigned(23)
+///    01      # field_index(StreamHeader::end)
+///    18 19   # unsigned(25)
+///    02      # field_index(StreamHeader::signals_end)
+///    19 0100 # unsigned(256)
+///    03      # field_index(StreamHeader::reject_signals)
+///    83      # array(3)
+///       01   # unsigned(1)
+///       02   # unsigned(2)
+///       04   # unsigned(4)
+///    04      # field_index(StreamHeader::flags)
+///    01      # unsigned(1)
+/// ```
+/// Used http://cbor.me/ for printing the human friendly output.
+#[test]
+fn canonical_encoding_stream_header_v17_plus() {
+    for certification_version in
+        all_supported_versions().filter(|v| v >= &CertificationVersion::V17)
+    {
+        let header = StreamHeaderBuilder::new()
+            .begin(23.into())
+            .end(25.into())
+            .signals_end(256.into())
+            .reject_signals(vec![249.into(), 250.into(), 252.into()].into())
+            .flags(StreamFlags {
+                responses_only: true,
+            })
+            .build();
+
+        assert_eq!(
+            "A5 00 17 01 18 19 02 19 01 00 03 83 01 02 04 04 01",
             as_hex(&encode_stream_header(&header, certification_version))
         );
     }

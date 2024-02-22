@@ -39,6 +39,8 @@ pub enum CertificationVersion {
     V15 = 15,
     /// Added `/api_boundary_nodes` subtree with domain, ipv4_address and ipv6_address for each API boundary node.
     V16 = 16,
+    /// Added `flags` to `StreamHeader`. Defined `StreamHeaderFlagBits::ResponsesOnly` flag.
+    V17 = 17,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -77,7 +79,7 @@ pub const CURRENT_CERTIFICATION_VERSION: CertificationVersion = CertificationVer
 ///
 /// The replica will panic if requested to certify using a version higher than
 /// this.
-pub const MAX_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V16;
+pub const MAX_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V17;
 
 /// Returns a list of all certification versions up to [MAX_SUPPORTED_CERTIFICATION_VERSION].
 pub fn all_supported_versions() -> impl std::iter::Iterator<Item = CertificationVersion> {

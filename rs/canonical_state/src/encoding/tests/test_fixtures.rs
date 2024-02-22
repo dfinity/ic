@@ -7,7 +7,7 @@ use ic_test_utilities::types::{
 };
 use ic_types::{
     messages::{CallbackId, Payload, RejectContext, RequestMetadata, RequestOrResponse},
-    xnet::StreamHeader,
+    xnet::{StreamFlags, StreamHeader},
     Cycles, Time,
 };
 use std::collections::VecDeque;
@@ -21,6 +21,9 @@ pub fn stream_header(certification_version: CertificationVersion) -> StreamHeade
             VecDeque::new()
         } else {
             vec![10.into(), 200.into(), 250.into()].into()
+        })
+        .flags(StreamFlags {
+            responses_only: certification_version >= CertificationVersion::V17,
         })
         .build()
 }

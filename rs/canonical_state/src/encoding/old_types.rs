@@ -11,10 +11,11 @@ use std::{
 use crate::CertificationVersion;
 
 use super::types;
-use crate::encoding::types::{Bytes, Cycles, Funds, Response};
+use crate::encoding::types::{Bytes, Cycles, Funds, Response, STREAM_DEFAULT_FLAGS};
 use ic_protobuf::proxy::ProxyDecodeError;
-use ic_types::xnet::StreamHeader;
+use ic_types::xnet::{StreamHeader, StreamIndex};
 use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
 
 // Copy of `types::RequestOrResponse` at canonical version 13 (before the
 // addition of `metadata` to `types::Request`).
@@ -288,6 +289,85 @@ impl TryFrom<RequestOrResponseV3> for ic_types::messages::RequestOrResponse {
     }
 }
 
+// Copy of `types::StreamHeader` at canonical version 16 (before the addition of `flags`).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct StreamHeaderV16 {
+    pub begin: u64,
+    pub end: u64,
+    pub signals_end: u64,
+    /// Delta encoded reject signals: the last signal is encoded as the delta
+    /// between `signals_end` and the stream index of the rejected message; all
+    /// other signals are encoded as the delta between the next stream index and
+    /// the current one.
+    ///
+    /// Note that `signals_end` is NOT part of the reject signals.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reject_signal_deltas: Vec<u64>,
+}
+
+impl From<(&StreamHeader, CertificationVersion)> for StreamHeaderV16 {
+    fn from(
+        (header, certification_version): (&ic_types::xnet::StreamHeader, CertificationVersion),
+    ) -> Self {
+        // Replicas with certification version < 9 do not produce reject signals. This
+        // includes replicas with certification version 8, but they may "inherit" reject
+        // signals from a replica with certification version 9 after a downgrade.
+        assert!(
+            header.reject_signals().is_empty() || certification_version >= CertificationVersion::V8,
+            "Replicas with certification version < 9 should not be producing reject signals"
+        );
+        // Replicas with certification version < 17 must not have flags set.
+        //
+        // This `assert` was added for testing purposes and was never present
+        // in any version on main net.
+        assert_eq!(*header.flags(), STREAM_DEFAULT_FLAGS);
+
+        let mut next_index = header.signals_end();
+        let mut reject_signal_deltas = vec![0; header.reject_signals().len()];
+        for (i, stream_index) in header.reject_signals().iter().enumerate().rev() {
+            assert!(next_index > *stream_index);
+            reject_signal_deltas[i] = next_index.get() - stream_index.get();
+            next_index = *stream_index;
+        }
+
+        Self {
+            begin: header.begin().get(),
+            end: header.end().get(),
+            signals_end: header.signals_end().get(),
+            reject_signal_deltas,
+        }
+    }
+}
+
+impl TryFrom<StreamHeaderV16> for StreamHeader {
+    type Error = ProxyDecodeError;
+    fn try_from(header: StreamHeaderV16) -> Result<Self, Self::Error> {
+        let mut reject_signals = VecDeque::with_capacity(header.reject_signal_deltas.len());
+        let mut stream_index = StreamIndex::new(header.signals_end);
+        for delta in header.reject_signal_deltas.iter().rev() {
+            if stream_index < StreamIndex::new(*delta) {
+                // Reject signal deltas are invalid.
+                return Err(ProxyDecodeError::Other(format!(
+                    "StreamHeader: reject signals are invalid, got `signals_end` {:?}, `reject_signal_deltas` {:?}",
+                    header.signals_end,
+                    header.reject_signal_deltas,
+                )));
+            }
+            stream_index -= StreamIndex::new(*delta);
+            reject_signals.push_front(stream_index);
+        }
+
+        Ok(Self::new(
+            header.begin.into(),
+            header.end.into(),
+            header.signals_end.into(),
+            reject_signals,
+            ic_types::xnet::StreamFlags::default(),
+        ))
+    }
+}
+
 // Copy of `types::StreamHeader` at canonical version 6 (before the addition of
 // `reject_signals`).
 #[derive(Debug, Serialize, Deserialize)]
@@ -314,7 +394,8 @@ impl From<StreamHeaderV6> for StreamHeader {
             header.begin.into(),
             header.end.into(),
             header.signals_end.into(),
-            Default::default(),
+            Default::default(), // reject_signals
+            Default::default(), // flags
         )
     }
 }

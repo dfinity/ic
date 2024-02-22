@@ -90,7 +90,7 @@ mod tests {
         ingress::{IngressState, IngressStatus},
         messages::RequestMetadata,
         nominal_cycles::NominalCycles,
-        xnet::{StreamIndex, StreamIndexedQueue},
+        xnet::{StreamFlags, StreamIndex, StreamIndexedQueue},
         CryptoHashOfPartialState, Cycles, ExecutionRound, Time,
     };
     use ic_wasm_types::CanisterModule;
@@ -223,6 +223,11 @@ mod tests {
                 stream.push_reject_signal(10.into());
                 stream.increment_signals_end();
             }
+            if certification_version >= CertificationVersion::V17 {
+                stream.set_reverse_stream_flags(StreamFlags {
+                    responses_only: true,
+                });
+            }
             state.modify_streams(|streams| {
                 streams.insert(subnet_test_id(5), stream);
             });
@@ -350,6 +355,7 @@ mod tests {
             "80D4B528CC9E09C775273994261DD544D45EFFF90B655D90FC3A6E3F633ED718",
             "970BC5155AEB4B4F81E470CBF6748EFA7D8805B936998A54AE70B7DD21F5DDCC",
             "EA3B53B72150E3982CB0E6773F86634685EE7B153DCFE10D86D9927778409D97",
+            "D13F75C42D3E2BDA2F742510029088A9ADB119E30241AC969DE24936489168B5",
             "D13F75C42D3E2BDA2F742510029088A9ADB119E30241AC969DE24936489168B5",
         ];
 
