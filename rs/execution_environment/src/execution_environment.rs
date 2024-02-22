@@ -40,8 +40,8 @@ use ic_management_canister_types::{
     ECDSAPublicKeyResponse, EcdsaKeyId, EmptyBlob, InstallChunkedCodeArgs, InstallCodeArgsV2,
     Method as Ic00Method, NodeMetricsHistoryArgs, Payload as Ic00Payload,
     ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs, SetupInitialDKGArgs,
-    SignWithECDSAArgs, StoredChunksArgs, UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs,
-    IC_00,
+    SignWithECDSAArgs, StoredChunksArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs,
+    UpdateSettingsArgs, UploadChunkArgs, IC_00,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -1135,14 +1135,17 @@ impl ExecutionEnvironment {
 
             Ok(Ic00Method::TakeCanisterSnapshot) => match self.config.canister_snapshots {
                 FlagStatus::Enabled => {
-                    // TODO(EXC-1529): Implement take_canister_snapshot.
-                    Some((
-                        Err(UserError::new(
-                            ErrorCode::CanisterRejectedMessage,
-                            "Canister snapshotting API is not yet implemented.",
-                        )),
-                        msg.take_cycles(),
-                    ))
+                    let res = match TakeCanisterSnapshotArgs::decode(payload) {
+                        Err(err) => Err(err),
+                        Ok(_) => {
+                            // TODO(EXC-1529): Implement take_canister_snapshot.
+                            Err(UserError::new(
+                                ErrorCode::CanisterRejectedMessage,
+                                "Canister snapshotting API is not yet implemented.",
+                            ))
+                        }
+                    };
+                    Some((res, msg.take_cycles()))
                 }
                 FlagStatus::Disabled => {
                     let err = Err(UserError::new(

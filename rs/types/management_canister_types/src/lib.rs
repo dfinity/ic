@@ -2553,3 +2553,61 @@ impl StoredChunksArgs {
 pub struct StoredChunksReply(pub Vec<ChunkHash>);
 
 impl Payload<'_> for StoredChunksReply {}
+
+/// Struct used for encoding/decoding
+/// `(record {
+///     canister_id: principal;
+///     replace_snapshot: opt nat;
+/// })`
+#[derive(Default, Clone, CandidType, Deserialize, Debug, PartialEq, Eq)]
+pub struct TakeCanisterSnapshotArgs {
+    pub canister_id: PrincipalId,
+    pub replace_snapshot: Option<candid::Nat>,
+}
+
+impl Payload<'_> for TakeCanisterSnapshotArgs {}
+
+impl TakeCanisterSnapshotArgs {
+    pub fn new(canister_id: CanisterId, replace_snapshot: Option<u64>) -> Self {
+        Self {
+            canister_id: canister_id.get(),
+            replace_snapshot: replace_snapshot.map(candid::Nat::from),
+        }
+    }
+
+    pub fn get_canister_id(&self) -> CanisterId {
+        CanisterId::unchecked_from_principal(self.canister_id)
+    }
+
+    pub fn replace_snapshot(&self) -> Option<u64> {
+        match self.replace_snapshot.clone() {
+            Some(nat) => Some(nat.0.to_u64().unwrap()),
+            None => None,
+        }
+    }
+}
+
+/// Struct to be returned when taking a canister snapshot.
+/// `(record {
+///      id: nat;
+///      taken_at_timestamp: nat64;
+///      total_size: nat;
+/// })`
+#[derive(Default, Clone, CandidType, Deserialize, Debug, PartialEq, Eq)]
+pub struct TakeCanisterSnapshotResponse {
+    pub snapshot_id: candid::Nat,
+    pub taken_at_timestamp: u64,
+    pub total_size: candid::Nat,
+}
+
+impl Payload<'_> for TakeCanisterSnapshotResponse {}
+
+impl TakeCanisterSnapshotResponse {
+    pub fn new(snapshot_id: u64, taken_at_timestamp: u64, total_size: u64) -> Self {
+        Self {
+            snapshot_id: candid::Nat::from(snapshot_id),
+            taken_at_timestamp,
+            total_size: candid::Nat::from(total_size),
+        }
+    }
+}
