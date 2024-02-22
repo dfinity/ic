@@ -267,13 +267,22 @@ impl QueryHandler for InternalHttpQueryHandler {
                 route_bitcoin_message(network, &state.get_ref().metadata.network_topology)?;
         }
 
+        let query_stats_collector = if self.config.query_stats_aggregation == FlagStatus::Enabled {
+            Some(&self.local_query_execution_stats)
+        } else {
+            None
+        };
+
         // Check the query cache first (if the query caching is enabled).
         // If a valid cache entry found, the result will be immediately returned.
         // Otherwise, the key and the env will be kept for the `push` below.
         let cache_entry_key = if self.config.query_caching == FlagStatus::Enabled {
             let key = query_cache::EntryKey::from(&query);
             let state = state.get_ref().as_ref();
-            if let Some(result) = self.query_cache.get_valid_result(&key, state) {
+            if let Some(result) =
+                self.query_cache
+                    .get_valid_result(&key, state, query_stats_collector)
+            {
                 return result;
             }
             Some(key)
@@ -305,11 +314,7 @@ impl QueryHandler for InternalHttpQueryHandler {
             self.config.composite_queries,
             query.receiver,
             &self.metrics.query_critical_error,
-            if self.config.query_stats_aggregation == FlagStatus::Enabled {
-                Some(&self.local_query_execution_stats)
-            } else {
-                None
-            },
+            query_stats_collector,
             Arc::clone(&self.cycles_account_manager),
         );
 
@@ -321,10 +326,10 @@ impl QueryHandler for InternalHttpQueryHandler {
         if let Some(key) = cache_entry_key {
             let state = state.get_ref().as_ref();
             let counters = context.system_api_call_counters();
-            let ids = context.evaluated_canister_ids();
+            let stats = context.evaluated_canister_stats();
             let errors = context.nested_execution_errors();
             self.query_cache
-                .push(key, &result, state, counters, ids, errors);
+                .push(key, &result, state, counters, stats, errors);
         }
         result
     }

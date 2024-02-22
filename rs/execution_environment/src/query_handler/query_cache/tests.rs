@@ -12,13 +12,14 @@ use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_test_utilities::{types::ids::user_test_id, universal_canister::wasm};
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
 use ic_types::{
+    batch::QueryStats,
     ingress::WasmResult,
     messages::{CanisterTask, UserQuery},
     time, CountBytes,
 };
 use ic_types_test_utils::ids::subnet_test_id;
 use ic_universal_canister::call_args;
-use std::{collections::BTreeSet, sync::Arc, time::Duration};
+use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
 const MAX_EXPIRY_TIME: Duration = Duration::from_secs(10);
 const MORE_THAN_MAX_EXPIRY_TIME: Duration = Duration::from_secs(11);
@@ -83,11 +84,13 @@ fn query_cache_metrics(test: &ExecutionTest) -> &QueryCacheMetrics {
     &query_cache(test).metrics
 }
 
-/// Return `ExecutionTestBuilder` with query caching and composite queries enabled.
+/// Return `ExecutionTestBuilder` with query caching, composite queries
+/// and query stats enabled.
 fn builder_with_query_caching() -> ExecutionTestBuilder {
     ExecutionTestBuilder::new()
         .with_query_caching()
         .with_composite_queries()
+        .with_query_stats()
 }
 
 /// Return `ExecutionTestBuilder` with specified query cache `capacity`.
@@ -129,7 +132,7 @@ fn query_cache_entry_value_counts_elapsed_seconds() {
     let current_time = time::GENESIS;
     let entry_env = EntryEnv {
         batch_time: current_time,
-        canisters_versions_balances: vec![],
+        canisters_versions_balances_stats: vec![],
     };
     let entry_value = EntryValue::new(
         entry_env,
@@ -228,14 +231,14 @@ fn query_cache_reports_count_bytes_metric_on_invalidation() {
     // Push a big result into the cache.
     let big_result = Ok(WasmResult::Reply(vec![0; BIG_REPLY_SIZE]));
     let query_cache = &query_handler(&test).query_cache;
-    let mut evaluated_ids = BTreeSet::new();
-    evaluated_ids.insert(a_id);
+    let mut evaluated_stats = BTreeMap::new();
+    evaluated_stats.insert(a_id, QueryStats::default());
     query_cache.push(
         key.clone(),
         &big_result,
         test.state(),
         &SystemApiCallCounters::default(),
-        &evaluated_ids,
+        &evaluated_stats,
         0,
     );
     assert_eq!(0, m.hits.get());
@@ -248,7 +251,7 @@ fn query_cache_reports_count_bytes_metric_on_invalidation() {
 
     // Invalidate and pop the result.
     let query_cache = &query_handler(&test).query_cache;
-    query_cache.get_valid_result(&key, test.state());
+    query_cache.get_valid_result(&key, test.state(), None);
     let m = query_cache_metrics(&test);
     assert_eq!(0, m.hits.get());
     assert_eq!(1, m.misses.get());
@@ -1361,6 +1364,58 @@ fn composite_query_cache_never_caches_calls_to_management_canister() {
     assert_eq!(query_cache_metrics(&test).hits.get(), 0);
     assert_eq!(query_cache_metrics(&test).misses.get(), 2);
     assert_eq!(res_1, res_2);
+}
+
+#[test]
+fn query_cache_supports_query_stats() {
+    let q = wasm().reply_data(&[42]);
+    for_query_and_composite_query(q, |mut test, a_id, b_id, method, q| {
+        let res_1 = test.non_replicated_query(a_id, method, q.clone());
+        assert_eq!(query_cache_metrics(&test).hits.get(), 0);
+        assert_eq!(query_cache_metrics(&test).misses.get(), 1);
+        assert_eq!(res_1, Ok(WasmResult::Reply(vec![42])));
+
+        let a_stats_1 = test.query_stats_for_testing(&a_id).unwrap();
+        let b_stats_1 = test.query_stats_for_testing(&b_id).unwrap();
+        assert_eq!(a_stats_1.num_calls, 1);
+        assert_eq!(b_stats_1.num_calls, 1);
+        assert!(a_stats_1.num_instructions > 0);
+        assert!(b_stats_1.num_instructions > 0);
+        assert!(a_stats_1.ingress_payload_size > 0);
+        assert!(b_stats_1.ingress_payload_size > 0);
+
+        // Do not change balance or time.
+
+        let res_2 = test.non_replicated_query(a_id, method, q);
+        assert_eq!(query_cache_metrics(&test).hits.get(), 1);
+        assert_eq!(query_cache_metrics(&test).misses.get(), 1);
+        assert_eq!(res_1, res_2);
+
+        let a_stats_2 = test.query_stats_for_testing(&a_id).unwrap();
+        let b_stats_2 = test.query_stats_for_testing(&b_id).unwrap();
+        // As the second query is served form the cache, there should be
+        // twice the amount of calls, instructions and payload now.
+        assert_eq!(a_stats_2.num_calls, 2);
+        assert_eq!(b_stats_2.num_calls, 2);
+        assert_eq!(a_stats_1.num_instructions * 2, a_stats_2.num_instructions);
+        assert_eq!(b_stats_1.num_instructions * 2, b_stats_2.num_instructions);
+        assert_eq!(
+            a_stats_1.ingress_payload_size * 2,
+            a_stats_2.ingress_payload_size
+        );
+        assert_eq!(
+            b_stats_1.ingress_payload_size * 2,
+            b_stats_2.ingress_payload_size
+        );
+        assert_eq!(
+            a_stats_1.egress_payload_size * 2,
+            a_stats_2.egress_payload_size
+        );
+        assert_eq!(
+            b_stats_1.egress_payload_size * 2,
+            b_stats_2.egress_payload_size
+        );
+    });
 }
 
 #[test]
