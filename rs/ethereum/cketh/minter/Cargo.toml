@@ -53,6 +53,7 @@ candid_parser = { workspace = true }
 ethers-core = "2.0.8"
 ic-base-types = { path = "../../../types/base_types" }
 ic-cketh-test-utils = { path = "../test_utils" }
+ic-ledger-suite-orchestrator-test-utils = { path = "../../ledger-suite-orchestrator/test_utils" }
 ic-config = { path = "../../../config" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../crypto/test_utils/reproducible_rng" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
