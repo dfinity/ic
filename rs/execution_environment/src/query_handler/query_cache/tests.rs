@@ -88,7 +88,6 @@ fn query_cache_metrics(test: &ExecutionTest) -> &QueryCacheMetrics {
 /// and query stats enabled.
 fn builder_with_query_caching() -> ExecutionTestBuilder {
     ExecutionTestBuilder::new()
-        .with_query_caching()
         .with_composite_queries()
         .with_query_stats()
 }
