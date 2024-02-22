@@ -615,6 +615,19 @@ wait_for_sns_governance_to_be_in_normal_mode() {
 }
 
 set_testnet_env_variables() {
+    # Check for NNS_URL and NEURON_ID environment variables
+    if [ ! -z "${NNS_URL:-}" ] || [ ! -z "${NEURON_ID:-}" ]; then
+        if [ -z "${NNS_URL:-}" ] || [ -z "${NEURON_ID:-}" ]; then
+            echo >&2 "It seems like you set one of NNS_URL and NEURON_ID, but not both. Both variables should be set to use custom values, or neither should be set to default to the values in the test directory. Setting only one creates ambiguity, so the script will exit to avoid misconfiguration."
+            exit 1
+        fi
+    fi
+
+    if [ -n "${NNS_URL:-}" ] && [ -n "${NEURON_ID:-}" ]; then
+        echo "Skipping sourcing set_testnet_env_variables.sh file because both NNS_URL and NEURON_ID are set."
+        return
+    fi
+
     TEST_TMPDIR=${TEST_TMPDIR:-"/ic/test_tmpdir/_tmp"}
 
     # Check if the target directory exists
@@ -626,26 +639,14 @@ set_testnet_env_variables() {
     # Count the number of directories in the target directory
     DIR_COUNT=$(find "${TEST_TMPDIR}" -mindepth 1 -maxdepth 1 -type d | wc -l)
 
-    # Check for NNS_URL and NEURON_ID environment variables
-    if [ ! -z "${NNS_URL:-}" ] || [ ! -z "${NEURON_ID:-}" ]; then
-        if [ -z "${NNS_URL:-}" ] || [ -z "${NEURON_ID:-}" ]; then
-            echo >&2 "It seems like you set one of NNS_URL and NEURON_ID, but not both. Both variables should be set to use custom values, or neither should be set to default to the values in ${TEST_TMPDIR}. Setting only one creates ambiguity, so the script will exit to avoid misconfiguration."
-            exit 1
-        fi
-    fi
-
     # Proceed based on the count of directories found
     if [ "${DIR_COUNT}" -eq 1 ]; then
-        if [ -z "${NNS_URL:-}" ] && [ -z "${NEURON_ID:-}" ]; then
-            # If both are unset, proceed with sourcing
-            # Get the directory name
-            DIR_NAME=$(find "${TEST_TMPDIR}" -mindepth 1 -maxdepth 1 -type d -print | head -n 1 | sed 's|.*/||')
-            # Source the script without changing the user's directory
-            source "${TEST_TMPDIR}/${DIR_NAME}/setup/set_testnet_env_variables.sh"
-            echo "Sourced ${TEST_TMPDIR}/${DIR_NAME}/setup/set_testnet_env_variables.sh"
-        else
-            echo "Using provided NNS_URL and NEURON_ID environment variables."
-        fi
+        # If both are unset, proceed with sourcing
+        # Get the directory name
+        DIR_NAME=$(find "${TEST_TMPDIR}" -mindepth 1 -maxdepth 1 -type d -print | head -n 1 | sed 's|.*/||')
+        # Source the script without changing the user's directory
+        source "${TEST_TMPDIR}/${DIR_NAME}/setup/set_testnet_env_variables.sh"
+        echo "Sourced ${TEST_TMPDIR}/${DIR_NAME}/setup/set_testnet_env_variables.sh"
     else
         # Print an error and exit if not exactly one directory
         echo >&2 "Error: There must be exactly one folder in ${TEST_TMPDIR}."
