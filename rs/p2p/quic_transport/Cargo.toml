@@ -6,6 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+anyhow = "1.0.80"
 async-trait = "0.1.36"
 axum = { workspace = true }
 bincode = "1.2.1"
