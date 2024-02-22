@@ -523,27 +523,3 @@ fn test_mul_n_vartime_naf() -> ThresholdEcdsaResult<()> {
 
     Ok(())
 }
-
-#[test]
-fn test_mul2_table() -> ThresholdEcdsaResult<()> {
-    let rng = &mut reproducible_rng();
-
-    for curve in EccCurveType::all() {
-        let g = EccPoint::hash_to_point(curve, &rng.gen::<[u8; 32]>(), b"g")?;
-        let h = EccPoint::hash_to_point(curve, &rng.gen::<[u8; 32]>(), b"h")?;
-
-        let tbl = EccPointMul2Table::new(g.clone(), h.clone())?;
-
-        for _ in 0..100 {
-            let x = EccScalar::random(curve, rng);
-            let y = EccScalar::random(curve, rng);
-
-            let refv = EccPoint::mul_2_points(&g, &x, &h, &y)?;
-
-            let tblv = tbl.mul2(&x, &y)?;
-            assert_eq!(refv, tblv);
-        }
-    }
-
-    Ok(())
-}

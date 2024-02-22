@@ -1,3 +1,4 @@
+use hex_literal::hex;
 use k256::elliptic_curve::{
     group::{ff::PrimeField, GroupEncoding},
     ops::{LinearCombination, MulByGenerator, Reduce},
@@ -16,6 +17,7 @@ pub struct Scalar {
 
 impl Scalar {
     pub const BYTES: usize = 32;
+    pub const BITS: usize = 256;
 
     /// Internal constructor (private)
     fn new(s: k256::Scalar) -> Self {
@@ -151,6 +153,15 @@ pub struct Point {
     p: k256::ProjectivePoint,
 }
 
+lazy_static::lazy_static! {
+
+    /// Static deserialization of the fixed alternative group generator
+    static ref SECP256K1_GENERATOR_H: Point = Point::deserialize(
+        &hex!("037bdcfc024cf697a41fd3cda2436c843af5669e50042be3314a532d5b70572f59"))
+        .expect("The secp256k1 generator_h point is invalid");
+
+}
+
 impl Point {
     /// Internal constructor (private)
     fn new(p: k256::ProjectivePoint) -> Self {
@@ -188,12 +199,23 @@ impl Point {
         Self::new(k256::ProjectivePoint::GENERATOR)
     }
 
+    /// Return the alternative generator of the group
+    pub fn generator_h() -> Self {
+        SECP256K1_GENERATOR_H.clone()
+    }
+
     /// Perform multi-exponentiation
     ///
     /// Equivalent to p1*s1 + p2*s2
     #[inline]
     pub fn lincomb(p1: &Point, s1: &Scalar, p2: &Point, s2: &Scalar) -> Self {
         Self::new(k256::ProjectivePoint::lincomb(&p1.p, &s1.s, &p2.p, &s2.s))
+    }
+
+    pub fn pedersen(s1: &Scalar, s2: &Scalar) -> Self {
+        let g = Self::generator();
+        let h = Self::generator_h();
+        Self::new(k256::ProjectivePoint::lincomb(&g.p, &s1.s, &h.p, &s2.s))
     }
 
     /// Add two points
