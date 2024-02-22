@@ -71,8 +71,7 @@ use ic_nns_common::{
 };
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID,
-    IS_UPDATE_ALLOWED_PRINCIPALS_ENABLED, LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID,
-    ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
+    LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
 use ic_protobuf::registry::dc::v1::AddOrRemoveDataCentersProposalPayload;
 use ic_sns_init::pb::v1::SnsInitPayload;
@@ -80,8 +79,7 @@ use ic_sns_swap::pb::v1::{self as sns_swap_pb, Lifecycle, NeuronsFundParticipati
 use ic_sns_wasm::pb::v1::{
     DeployNewSnsRequest, DeployNewSnsResponse, ListDeployedSnsesRequest, ListDeployedSnsesResponse,
 };
-use ic_stable_structures::storable::Bound;
-use ic_stable_structures::Storable;
+use ic_stable_structures::{storable::Bound, Storable};
 use icp_ledger::{
     AccountIdentifier, Subaccount, Tokens, DEFAULT_TRANSFER_FEE, TOKEN_SUBDIVIDABLE_BY,
 };
@@ -4657,10 +4655,7 @@ impl Governance {
                     ),
                 }
             } else if update.nns_function == NnsFunction::UpdateAllowedPrincipals as i32 {
-                match IS_UPDATE_ALLOWED_PRINCIPALS_ENABLED {
-                    true => return Ok(()),
-                    false => "UpdateAllowedPrincipals proposal is disabled".to_string(),
-                }
+                "UpdateAllowedPrincipals proposal is disabled".to_string()
             } else {
                 return Ok(());
             }
