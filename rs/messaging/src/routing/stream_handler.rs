@@ -46,6 +46,8 @@ struct StreamHandlerMetrics {
     pub gced_xnet_messages: IntCounter,
     /// Garbage collected XNet reject signals.
     pub gced_xnet_reject_signals: IntCounter,
+    /// Change in stream flags observed.
+    pub stream_flags_changes: IntCounter,
     /// Backlog of XNet messages based on end in stream header and last message
     /// in slice, per subnet.
     pub xnet_message_backlog: IntGaugeVec,
@@ -69,6 +71,7 @@ const METRIC_INDUCTED_XNET_MESSAGES: &str = "mr_inducted_xnet_message_count";
 const METRIC_INDUCTED_XNET_PAYLOAD_SIZES: &str = "mr_inducted_xnet_payload_size_bytes";
 const METRIC_GCED_XNET_MESSAGES: &str = "mr_gced_xnet_message_count";
 const METRIC_GCED_XNET_REJECT_SIGNALS: &str = "mr_gced_xnet_reject_signal_count";
+const METRIC_STREAM_FLAGS_CHANGES: &str = "mr_stream_flags_changes_count";
 
 const METRIC_XNET_MESSAGE_BACKLOG: &str = "mr_xnet_message_backlog";
 
@@ -111,6 +114,10 @@ impl StreamHandlerMetrics {
             METRIC_GCED_XNET_REJECT_SIGNALS,
             "Garbage collected XNet reject signals.",
         );
+        let stream_flags_changes = metrics_registry.int_counter(
+            METRIC_STREAM_FLAGS_CHANGES,
+            "Change in stream flags observed.",
+        );
         let xnet_message_backlog = metrics_registry.int_gauge_vec(
             METRIC_XNET_MESSAGE_BACKLOG,
             "Backlog of XNet messages, by sending subnet.",
@@ -150,6 +157,7 @@ impl StreamHandlerMetrics {
             inducted_xnet_payload_sizes,
             gced_xnet_messages,
             gced_xnet_reject_signals,
+            stream_flags_changes,
             xnet_message_backlog,
             critical_error_reject_signals_for_request,
             critical_error_induct_response_failed,
@@ -364,6 +372,11 @@ impl StreamHandlerImpl {
                         stream_slice.header().reject_signals(),
                     );
                     self.garbage_collect_signals(&mut stream, *remote_subnet, stream_slice);
+
+                    if stream.reverse_stream_flags() != stream_slice.header().flags() {
+                        stream.set_reverse_stream_flags(*stream_slice.header().flags());
+                        self.metrics.stream_flags_changes.inc();
+                    }
 
                     // Reroute any rejected responses.
                     self.reroute_rejected_messages(

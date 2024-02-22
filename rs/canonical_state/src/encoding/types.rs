@@ -20,6 +20,8 @@ use std::{
     convert::{From, Into, TryFrom, TryInto},
     sync::Arc,
 };
+use strum::EnumCount;
+use strum_macros::EnumIter;
 
 pub(crate) type Bytes = Vec<u8>;
 
@@ -38,6 +40,8 @@ pub struct StreamHeader {
     /// Note that `signals_end` is NOT part of the reject signals.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub reject_signal_deltas: Vec<u64>,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub flags: u64,
 }
 
 /// Canonical representation of `ic_types::messages::RequestOrResponse`.
@@ -159,6 +163,21 @@ pub struct SubnetMetrics {
     pub update_transactions_total: u64,
 }
 
+/// Bits used for encoding `ic_types::xnet::StreamFlags`.
+#[derive(EnumCount, EnumIter)]
+#[repr(u64)]
+pub enum StreamFlagBits {
+    ResponsesOnly = 1,
+}
+
+/// Constant version of `ic_types::xnet::StreamFlags::default()`.
+pub const STREAM_DEFAULT_FLAGS: ic_types::xnet::StreamFlags = ic_types::xnet::StreamFlags {
+    responses_only: false,
+};
+
+/// A mask containing the supported bits.
+pub const STREAM_SUPPORTED_FLAGS: u64 = (1 << StreamFlagBits::COUNT) - 1;
+
 impl From<(&ic_types::xnet::StreamHeader, CertificationVersion)> for StreamHeader {
     fn from(
         (header, certification_version): (&ic_types::xnet::StreamHeader, CertificationVersion),
@@ -170,6 +189,11 @@ impl From<(&ic_types::xnet::StreamHeader, CertificationVersion)> for StreamHeade
             header.reject_signals().is_empty() || certification_version >= CertificationVersion::V8,
             "Replicas with certification version < 9 should not be producing reject signals"
         );
+        // Replicas with certification version < 17 should not have flags set.
+        assert!(
+            *header.flags() == STREAM_DEFAULT_FLAGS
+                || certification_version >= CertificationVersion::V17
+        );
 
         let mut next_index = header.signals_end();
         let mut reject_signal_deltas = vec![0; header.reject_signals().len()];
@@ -179,11 +203,18 @@ impl From<(&ic_types::xnet::StreamHeader, CertificationVersion)> for StreamHeade
             next_index = *stream_index;
         }
 
+        let mut flags = 0;
+        let ic_types::xnet::StreamFlags { responses_only } = *header.flags();
+        if responses_only {
+            flags |= StreamFlagBits::ResponsesOnly as u64;
+        }
+
         Self {
             begin: header.begin().get(),
             end: header.end().get(),
             signals_end: header.signals_end().get(),
             reject_signal_deltas,
+            flags,
         }
     }
 }
@@ -206,11 +237,22 @@ impl TryFrom<StreamHeader> for ic_types::xnet::StreamHeader {
             reject_signals.push_front(stream_index);
         }
 
+        if header.flags & !STREAM_SUPPORTED_FLAGS != 0 {
+            return Err(ProxyDecodeError::Other(format!(
+                "StreamHeader: unsupported flags: got `flags` {:#b}, `supported_flags` {:#b}",
+                header.flags, STREAM_SUPPORTED_FLAGS,
+            )));
+        }
+        let flags = ic_types::xnet::StreamFlags {
+            responses_only: header.flags & StreamFlagBits::ResponsesOnly as u64 != 0,
+        };
+
         Ok(Self::new(
             header.begin.into(),
             header.end.into(),
             header.signals_end.into(),
             reject_signals,
+            flags,
         ))
     }
 }

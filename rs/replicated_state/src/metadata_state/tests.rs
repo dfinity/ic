@@ -1456,6 +1456,25 @@ fn stream_discard_signals_before() {
 }
 
 #[test]
+fn stream_roundtrip_encoding() {
+    let mut stream = generate_stream(
+        MessageConfig {
+            begin: 30,
+            count: 5,
+        },
+        SignalConfig { end: 153 },
+    );
+    stream.reverse_stream_flags = StreamFlags {
+        responses_only: true,
+    };
+
+    let proto_stream: pb_queues::Stream = (&stream).into();
+    let deserialized_stream: Stream = proto_stream.try_into().expect("bad conversion");
+
+    assert_eq!(stream, deserialized_stream);
+}
+
+#[test]
 fn consumed_cycles_total_calculates_the_right_amount() {
     let mut consumed_cycles_by_use_case = BTreeMap::new();
     consumed_cycles_by_use_case.insert(CyclesUseCase::DeletedCanisters, NominalCycles::from(5));

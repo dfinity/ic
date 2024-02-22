@@ -1,4 +1,4 @@
-use ic_types::xnet::{StreamHeader, StreamIndex};
+use ic_types::xnet::{StreamFlags, StreamHeader, StreamIndex};
 use std::collections::VecDeque;
 
 /// Builder for StreamHeader objects.  Allows for creation of a default struct
@@ -9,6 +9,7 @@ pub struct StreamHeaderBuilder {
     end: StreamIndex,
     signals_end: StreamIndex,
     reject_signals: VecDeque<StreamIndex>,
+    flags: StreamFlags,
 }
 
 impl StreamHeaderBuilder {
@@ -41,8 +42,20 @@ impl StreamHeaderBuilder {
         self
     }
 
+    /// Sets the `flags` field.
+    pub fn flags(mut self, flags: StreamFlags) -> Self {
+        self.flags = flags;
+        self
+    }
+
     /// Returns the built `StreamHeader`.
     pub fn build(self) -> StreamHeader {
-        StreamHeader::new(self.begin, self.end, self.signals_end, self.reject_signals)
+        StreamHeader::new(
+            self.begin,
+            self.end,
+            self.signals_end,
+            self.reject_signals,
+            self.flags,
+        )
     }
 }

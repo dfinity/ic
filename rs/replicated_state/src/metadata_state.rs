@@ -40,7 +40,7 @@ use ic_types::{
     state_sync::{StateSyncVersion, CURRENT_STATE_SYNC_VERSION},
     subnet_id_into_protobuf, subnet_id_try_from_protobuf,
     time::{Time, UNIX_EPOCH},
-    xnet::{StreamHeader, StreamIndex, StreamIndexedQueue, StreamSlice},
+    xnet::{StreamFlags, StreamHeader, StreamIndex, StreamIndexedQueue, StreamSlice},
     CountBytes, CryptoHashOfPartialState, NodeId, NumBytes, PrincipalId, SubnetId,
 };
 use ic_wasm_types::WasmHash;
@@ -1202,6 +1202,9 @@ pub struct Stream {
 
     /// Estimated byte size of `self.messages`.
     messages_size_bytes: usize,
+
+    /// Stream flags observed in the header of the reverse stream.
+    reverse_stream_flags: StreamFlags,
 }
 
 impl Default for Stream {
@@ -1210,11 +1213,15 @@ impl Default for Stream {
         let signals_end = Default::default();
         let reject_signals = VecDeque::default();
         let messages_size_bytes = Self::size_bytes(&messages);
+        let reverse_stream_flags = StreamFlags {
+            responses_only: false,
+        };
         Self {
             messages,
             signals_end,
             reject_signals,
             messages_size_bytes,
+            reverse_stream_flags,
         }
     }
 }
@@ -1231,6 +1238,9 @@ impl From<&Stream> for pb_queues::Stream {
                 .collect(),
             signals_end: item.signals_end.get(),
             reject_signals,
+            reverse_stream_flags: Some(pb_queues::StreamFlags {
+                responses_only: item.reverse_stream_flags.responses_only,
+            }),
         }
     }
 }
@@ -1256,6 +1266,12 @@ impl TryFrom<pb_queues::Stream> for Stream {
             signals_end: item.signals_end.into(),
             reject_signals,
             messages_size_bytes,
+            reverse_stream_flags: item
+                .reverse_stream_flags
+                .map(|flags| StreamFlags {
+                    responses_only: flags.responses_only,
+                })
+                .unwrap_or_default(),
         })
     }
 }
@@ -1269,6 +1285,7 @@ impl Stream {
             signals_end,
             reject_signals: VecDeque::new(),
             messages_size_bytes,
+            reverse_stream_flags: Default::default(),
         }
     }
 
@@ -1284,6 +1301,7 @@ impl Stream {
             signals_end,
             reject_signals,
             messages_size_bytes,
+            reverse_stream_flags: Default::default(),
         }
     }
 
@@ -1301,6 +1319,7 @@ impl Stream {
             self.messages.end(),
             self.signals_end,
             self.reject_signals.clone(),
+            StreamFlags::default(),
         )
     }
 
@@ -1419,6 +1438,16 @@ impl Stream {
     fn size_bytes(messages: &StreamIndexedQueue<RequestOrResponse>) -> usize {
         messages.iter().map(|(_, m)| m.count_bytes()).sum()
     }
+
+    /// Returns a reference to the reverse stream flags.
+    pub fn reverse_stream_flags(&self) -> &StreamFlags {
+        &self.reverse_stream_flags
+    }
+
+    /// Sets the reverse stream flags.
+    pub fn set_reverse_stream_flags(&mut self, flags: StreamFlags) {
+        self.reverse_stream_flags = flags;
+    }
 }
 
 impl CountBytes for Stream {
@@ -1478,7 +1507,9 @@ impl Streams {
                 .entry(response.respondent)
                 .or_default() += msg.count_bytes();
         }
+
         self.streams.entry(destination).or_default().push(msg);
+
         #[cfg(debug_assertions)]
         self.debug_validate_stats();
     }
@@ -1651,6 +1682,16 @@ impl<'a> StreamHandle<'a> {
     /// Garbage collects signals before `new_signals_begin`.
     pub fn discard_signals_before(&mut self, new_signals_begin: StreamIndex) {
         self.stream.discard_signals_before(new_signals_begin);
+    }
+
+    /// Returns a reference to the reverse stream flags.
+    pub fn reverse_stream_flags(&self) -> &StreamFlags {
+        &self.stream.reverse_stream_flags
+    }
+
+    /// Sets the reverse stream flags.
+    pub fn set_reverse_stream_flags(&mut self, flags: StreamFlags) {
+        self.stream.set_reverse_stream_flags(flags);
     }
 }
 
