@@ -8,7 +8,7 @@ use ic_ledger_suite_orchestrator::candid::{
 };
 use ic_ledger_suite_orchestrator_test_utils::arbitrary::arb_init_arg;
 use ic_ledger_suite_orchestrator_test_utils::{
-    supported_erc20_tokens, usdc, usdc_erc20_contract, LedgerSuiteOrchestrator,
+    new_state_machine, supported_erc20_tokens, usdc, usdc_erc20_contract, LedgerSuiteOrchestrator,
 };
 use ic_state_machine_tests::ErrorCode;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as LedgerMetadataValue;
@@ -16,6 +16,7 @@ use icrc_ledger_types::icrc1::account::Account as LedgerAccount;
 use proptest::prelude::ProptestConfig;
 use proptest::proptest;
 use std::str::FromStr;
+use std::sync::Arc;
 
 const MAX_TICKS: usize = 10;
 const GIT_COMMIT_HASH: &str = "6a8e5fca2c6b4e12966638c444e994e204b42989";
@@ -28,7 +29,7 @@ proptest! {
     #[test]
     fn should_install_orchestrator_and_add_supported_erc20_tokens(init_arg in arb_init_arg()) {
         let more_controllers = init_arg.more_controller_ids.clone();
-        let mut orchestrator = LedgerSuiteOrchestrator::new(init_arg);
+        let mut orchestrator = LedgerSuiteOrchestrator::new(Arc::new(new_state_machine()), init_arg);
         let orchestrator_principal: Principal = orchestrator.ledger_suite_orchestrator_id.get().into();
         let embedded_ledger_wasm_hash = orchestrator.embedded_ledger_wasm_hash.clone();
         let embedded_index_wasm_hash = orchestrator.embedded_index_wasm_hash.clone();

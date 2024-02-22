@@ -11,6 +11,7 @@ use ic_state_machine_tests::{
 use ic_test_utilities_load_wasm::load_wasm;
 pub use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as LedgerMetadataValue;
 pub use icrc_ledger_types::icrc1::account::Account as LedgerAccount;
+use std::sync::Arc;
 
 pub mod arbitrary;
 pub mod flow;
@@ -19,7 +20,7 @@ const MAX_TICKS: usize = 10;
 const GIT_COMMIT_HASH: &str = "6a8e5fca2c6b4e12966638c444e994e204b42989";
 
 pub struct LedgerSuiteOrchestrator {
-    pub env: StateMachine,
+    pub env: Arc<StateMachine>,
     pub ledger_suite_orchestrator_id: CanisterId,
     pub embedded_ledger_wasm_hash: WasmHash,
     pub embedded_index_wasm_hash: WasmHash,
@@ -27,18 +28,18 @@ pub struct LedgerSuiteOrchestrator {
 
 impl Default for LedgerSuiteOrchestrator {
     fn default() -> Self {
-        Self::new(InitArg {
-            more_controller_ids: vec![],
-            minter_id: None,
-        })
+        Self::new(
+            Arc::new(new_state_machine()),
+            InitArg {
+                more_controller_ids: vec![],
+                minter_id: None,
+            },
+        )
     }
 }
 
 impl LedgerSuiteOrchestrator {
-    pub fn new(init_arg: InitArg) -> Self {
-        let env = StateMachineBuilder::new()
-            .with_default_canister_range()
-            .build();
+    pub fn new(env: Arc<StateMachine>, init_arg: InitArg) -> Self {
         let ledger_suite_orchestrator_id =
             env.create_canister_with_cycles(None, Cycles::new(u128::MAX), None);
         install_ledger_orchestrator(&env, ledger_suite_orchestrator_id, init_arg);
@@ -105,6 +106,12 @@ impl LedgerSuiteOrchestrator {
     }
 }
 
+pub fn new_state_machine() -> StateMachine {
+    StateMachineBuilder::new()
+        .with_default_canister_range()
+        .build()
+}
+
 fn install_ledger_orchestrator(
     env: &StateMachine,
     ledger_suite_orchestrator_id: CanisterId,
@@ -161,7 +168,7 @@ pub fn usdc(
 ) -> AddErc20Arg {
     AddErc20Arg {
         contract: usdc_erc20_contract(),
-        ledger_init_arg: ledger_init_arg("USD Coin", "USDC"),
+        ledger_init_arg: ledger_init_arg("Chain-Key USD Coin", "ckUSDC"),
         git_commit_hash: GIT_COMMIT_HASH.to_string(),
         ledger_compressed_wasm_hash: ledger_compressed_wasm_hash.to_string(),
         index_compressed_wasm_hash: index_compressed_wasm_hash.to_string(),
@@ -184,7 +191,7 @@ fn usdt(
             chain_id: Nat::from(1_u8),
             address: "0xdAC17F958D2ee523a2206206994597C13D831ec7".to_string(),
         },
-        ledger_init_arg: ledger_init_arg("Tether USD", "USDT"),
+        ledger_init_arg: ledger_init_arg("Chain-Key Tether USD", "ckUSDT"),
         git_commit_hash: GIT_COMMIT_HASH.to_string(),
         ledger_compressed_wasm_hash: ledger_compressed_wasm_hash.to_string(),
         index_compressed_wasm_hash: index_compressed_wasm_hash.to_string(),

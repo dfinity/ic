@@ -24,8 +24,10 @@ use num_traits::cast::ToPrimitive;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::sync::Arc;
 use std::time::Duration;
 
+pub mod ckerc20;
 pub mod flow;
 pub mod mock;
 pub mod response;
@@ -60,7 +62,7 @@ pub const HEADER_SIZE_LIMIT: u64 = 2 * 1024;
 pub const MAX_ETH_LOGS_BLOCK_RANGE: u64 = 799;
 
 pub struct CkEthSetup {
-    pub env: StateMachine,
+    pub env: Arc<StateMachine>,
     pub caller: PrincipalId,
     pub ledger_id: CanisterId,
     pub minter_id: CanisterId,
@@ -68,15 +70,12 @@ pub struct CkEthSetup {
 
 impl Default for CkEthSetup {
     fn default() -> Self {
-        Self::new()
+        Self::new(Arc::new(new_state_machine()))
     }
 }
 
 impl CkEthSetup {
-    pub fn new() -> Self {
-        let env = StateMachineBuilder::new()
-            .with_default_canister_range()
-            .build();
+    pub fn new(env: Arc<StateMachine>) -> Self {
         let minter_id =
             env.create_canister_with_cycles(None, Cycles::new(100_000_000_000_000), None);
         let ledger_id = env.create_canister(None);
@@ -346,8 +345,9 @@ impl CkEthSetup {
             }
             assert!(
                 found_event_indexes.contains_key(&index_expected_event),
-                "Missing event {:?}",
-                expected_event
+                "Missing event {:?}. All events: {:?}",
+                expected_event,
+                audit_events
             )
         }
         let audit_event_indexes = found_event_indexes.into_values().collect::<Vec<_>>();
@@ -475,6 +475,12 @@ impl CkEthSetup {
     }
 }
 
+fn new_state_machine() -> StateMachine {
+    StateMachineBuilder::new()
+        .with_default_canister_range()
+        .build()
+}
+
 fn ledger_wasm() -> Vec<u8> {
     let path = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
         .parent()
@@ -486,7 +492,7 @@ fn ledger_wasm() -> Vec<u8> {
         .join("rosetta-api")
         .join("icrc1")
         .join("ledger");
-    load_wasm(path, "ic-icrc1-ledger", &[])
+    load_wasm(path, "ledger_canister", &[])
 }
 
 fn minter_wasm() -> Vec<u8> {

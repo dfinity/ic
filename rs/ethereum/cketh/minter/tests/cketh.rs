@@ -39,7 +39,7 @@ use std::str::FromStr;
 
 #[test]
 fn should_deposit_and_withdraw() {
-    let cketh = CkEthSetup::new();
+    let cketh = CkEthSetup::default();
     let minter: Principal = cketh.minter_id.into();
     let caller: Principal = cketh.caller.into();
     let withdrawal_amount = Nat::from(EXPECTED_BALANCE - CKETH_TRANSFER_FEE);
@@ -141,7 +141,7 @@ fn should_deposit_and_withdraw() {
 
 #[test]
 fn should_retrieve_cache_transaction_price() {
-    let cketh = CkEthSetup::new();
+    let cketh = CkEthSetup::default();
     let caller: Principal = cketh.caller.into();
     let withdrawal_amount = Nat::from(EXPECTED_BALANCE - CKETH_TRANSFER_FEE);
     let destination = DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string();
@@ -180,7 +180,7 @@ fn should_retrieve_cache_transaction_price() {
 
 #[test]
 fn should_block_deposit_from_blocked_address() {
-    let cketh = CkEthSetup::new();
+    let cketh = CkEthSetup::default();
     let from_address_blocked: Address = "0x01e2919679362dFBC9ee1644Ba9C6da6D6245BB1"
         .parse()
         .unwrap();
@@ -214,7 +214,7 @@ fn should_not_mint_when_logs_inconsistent() {
     };
     assert_ne!(ankr_logs, public_node_logs);
 
-    CkEthSetup::new()
+    CkEthSetup::default()
         .deposit(deposit_params.with_mock_eth_get_logs(move |mock| {
             mock.respond_with(JsonRpcProvider::Ankr, ankr_logs.clone())
                 .respond_with(JsonRpcProvider::PublicNode, public_node_logs.clone())
@@ -225,7 +225,7 @@ fn should_not_mint_when_logs_inconsistent() {
 
 #[test]
 fn should_block_withdrawal_to_blocked_address() {
-    let cketh = CkEthSetup::new();
+    let cketh = CkEthSetup::default();
     let caller: Principal = cketh.caller.into();
     let withdrawal_amount = Nat::from(EXPECTED_BALANCE - CKETH_TRANSFER_FEE);
     let blocked_address = "0x01e2919679362dFBC9ee1644Ba9C6da6D6245BB1".to_string();
@@ -243,7 +243,7 @@ fn should_block_withdrawal_to_blocked_address() {
 
 #[test]
 fn should_fail_to_withdraw_without_approval() {
-    let cketh = CkEthSetup::new();
+    let cketh = CkEthSetup::default();
     let caller: Principal = cketh.caller.into();
 
     cketh
@@ -261,7 +261,7 @@ fn should_fail_to_withdraw_without_approval() {
 
 #[test]
 fn should_fail_to_withdraw_when_insufficient_funds() {
-    let cketh = CkEthSetup::new();
+    let cketh = CkEthSetup::default();
     let caller: Principal = cketh.caller.into();
     let deposit_amount = 10_000_000_000_000_000_u64;
     let amount_after_approval = deposit_amount - CKETH_TRANSFER_FEE;
@@ -287,7 +287,7 @@ fn should_fail_to_withdraw_when_insufficient_funds() {
 
 #[test]
 fn should_fail_to_withdraw_too_small_amount() {
-    let cketh = CkEthSetup::new();
+    let cketh = CkEthSetup::default();
     let caller: Principal = cketh.caller.into();
     cketh
         .deposit(DepositParams::default())
@@ -306,7 +306,7 @@ fn should_fail_to_withdraw_too_small_amount() {
 
 #[test]
 fn should_not_finalize_transaction_when_receipts_do_not_match() {
-    let cketh = CkEthSetup::new();
+    let cketh = CkEthSetup::default();
     let caller: Principal = cketh.caller.into();
     let withdrawal_amount = Nat::from(EXPECTED_BALANCE - CKETH_TRANSFER_FEE);
 
@@ -344,7 +344,7 @@ fn should_not_finalize_transaction_when_receipts_do_not_match() {
 
 #[test]
 fn should_not_send_eth_transaction_when_fee_history_inconsistent() {
-    let cketh = CkEthSetup::new();
+    let cketh = CkEthSetup::default();
     let caller: Principal = cketh.caller.into();
     let withdrawal_amount = Nat::from(EXPECTED_BALANCE - CKETH_TRANSFER_FEE);
 
@@ -385,7 +385,7 @@ fn should_not_send_eth_transaction_when_fee_history_inconsistent() {
 
 #[test]
 fn should_reimburse() {
-    let cketh = CkEthSetup::new();
+    let cketh = CkEthSetup::default();
     let minter: Principal = cketh.minter_id.into();
     let caller: Principal = cketh.caller.into();
     let withdrawal_amount = Nat::from(EXPECTED_BALANCE - CKETH_TRANSFER_FEE);
@@ -551,7 +551,7 @@ fn should_reimburse() {
 
 #[test]
 fn should_resubmit_transaction_as_is_when_price_still_actual() {
-    let cketh = CkEthSetup::new();
+    let cketh = CkEthSetup::default();
     let caller: Principal = cketh.caller.into();
     let withdrawal_amount = Nat::from(EXPECTED_BALANCE - CKETH_TRANSFER_FEE);
     let (expected_tx, expected_sig) = default_signed_eip_1559_transaction();
@@ -614,7 +614,7 @@ fn should_resubmit_transaction_as_is_when_price_still_actual() {
 
 #[test]
 fn should_resubmit_new_transaction_when_price_increased() {
-    let cketh = CkEthSetup::new();
+    let cketh = CkEthSetup::default();
     let caller: Principal = cketh.caller.into();
     let withdrawal_amount = Nat::from(EXPECTED_BALANCE - CKETH_TRANSFER_FEE);
     let (expected_tx, expected_sig) = default_signed_eip_1559_transaction();
@@ -727,7 +727,7 @@ fn should_resubmit_new_transaction_when_price_increased() {
 
 #[test]
 fn should_not_overlap_when_scrapping_logs() {
-    let cketh = CkEthSetup::new();
+    let cketh = CkEthSetup::default();
 
     cketh.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
@@ -776,7 +776,7 @@ fn should_not_overlap_when_scrapping_logs() {
 
 #[test]
 fn should_retry_from_same_block_when_scrapping_fails() {
-    let cketh = CkEthSetup::new();
+    let cketh = CkEthSetup::default();
 
     cketh.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
@@ -830,7 +830,7 @@ fn should_retry_from_same_block_when_scrapping_fails() {
 
 #[test]
 fn should_scrap_one_block_when_at_boundary_with_last_finalized_block() {
-    let cketh = CkEthSetup::new();
+    let cketh = CkEthSetup::default();
 
     cketh.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
@@ -852,7 +852,7 @@ fn should_scrap_one_block_when_at_boundary_with_last_finalized_block() {
 
 #[test]
 fn should_panic_when_last_finalized_block_in_the_past() {
-    let cketh = CkEthSetup::new();
+    let cketh = CkEthSetup::default();
 
     cketh.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
     MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
@@ -897,7 +897,7 @@ fn should_panic_when_last_finalized_block_in_the_past() {
 fn should_skip_scrapping_when_last_seen_block_newer_than_current_height() {
     let safe_block_number = LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 100;
     let finalized_block_number = safe_block_number - 32;
-    let cketh = CkEthSetup::new().check_audit_logs_and_upgrade(UpgradeArg {
+    let cketh = CkEthSetup::default().check_audit_logs_and_upgrade(UpgradeArg {
         ethereum_block_height: Some(CandidBlockTag::Safe),
         ..Default::default()
     });
@@ -948,7 +948,7 @@ fn should_skip_scrapping_when_last_seen_block_newer_than_current_height() {
 
 #[test]
 fn should_half_range_of_scrapped_logs_when_response_over_two_mega_bytes() {
-    let cketh = CkEthSetup::new();
+    let cketh = CkEthSetup::default();
     let deposit = DepositParams::default().eth_log_entry();
     // around 600 bytes per log
     // we need at least 3334 logs to reach the 2MB limit
@@ -1004,7 +1004,7 @@ fn should_half_range_of_scrapped_logs_when_response_over_two_mega_bytes() {
 
 #[test]
 fn should_skip_single_block_containing_too_many_events() {
-    let cketh = CkEthSetup::new();
+    let cketh = CkEthSetup::default();
     let deposit = DepositParams::default().eth_log_entry();
     // around 600 bytes per log
     // we need at least 3334 logs to reach the 2MB limit
@@ -1084,7 +1084,7 @@ fn should_skip_single_block_containing_too_many_events() {
 
 #[test]
 fn should_retrieve_minter_info() {
-    let cketh = CkEthSetup::new();
+    let cketh = CkEthSetup::default();
     let caller: Principal = cketh.caller.into();
     let withdrawal_amount = Nat::from(EXPECTED_BALANCE - CKETH_TRANSFER_FEE);
     let destination = DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string();
