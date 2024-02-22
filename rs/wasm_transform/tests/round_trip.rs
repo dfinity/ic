@@ -38,6 +38,7 @@ mod round_trip {
         table_init,
         globals,
         exports,
-        start
+        start,
+        const_expr
     );
 }

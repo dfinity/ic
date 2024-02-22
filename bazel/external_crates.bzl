@@ -1355,7 +1355,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.2",
             ),
             "wasm-encoder": crate.spec(
-                version = "^0.36.2",
+                version = "^0.38.1",
+                features = [
+                    "wasmparser",
+                ],
             ),
             "wasm-smith": crate.spec(
                 git = "https://github.com/bytecodealliance/wasm-tools",
@@ -1366,13 +1369,13 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "wasmparser": crate.spec(
-                version = "^0.116.1",
+                version = "^0.118.1",
             ),
             "wasmprinter": crate.spec(
                 version = "^0.2.50",
             ),
             "wasmtime": crate.spec(
-                version = "^15.0.0",
+                version = "^16.0.0",
                 default_features = False,
                 features = [
                     "cranelift",
@@ -1380,10 +1383,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "wasmtime-environ": crate.spec(
-                version = "^15.0.0",
+                version = "^16.0.0",
             ),
             "wasmtime-runtime": crate.spec(
-                version = "^15.0.0",
+                version = "^16.0.0",
             ),
             "wast": crate.spec(
                 version = "^53.0.0",
