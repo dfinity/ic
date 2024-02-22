@@ -201,8 +201,7 @@ pub struct NeuronStore {
     /// - `Governance::validate`: soon to be deprecated since we have subaccount index.
     /// - `voting_eligible_neurons()`: inactive neurons have been dissolved for 14 days, so it
     ///   cannot be voting eligible.
-    /// - `list_community_fund_neuron_ids` and `list_active_neurons_fund_neurons`: inactive neurons
-    ///   must not be NF.
+    /// - `list_active_neurons_fund_neurons`: inactive neurons must not be NF.
     /// - `list_neurons_ready_to_unstake_maturity`: inactive neurons have 0 stake (which also means
     ///   0 staked maturity), so no inactive neurons need to unstake maturity.
     /// - `list_ready_to_spawn_neuron_ids`: inactive neurons must have 0 maturity, and spawning
