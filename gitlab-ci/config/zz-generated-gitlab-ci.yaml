@@ -520,7 +520,6 @@ bazel-build-fuzzers-archives:
   needs: []
   rules:
     - changes:
-        - gitlab-ci/config/main.yml
         - bin/build-all-fuzzers.sh
         - bazel/fuzz_testing.bzl
       if: $CI_PIPELINE_SOURCE == "merge_request_event"
