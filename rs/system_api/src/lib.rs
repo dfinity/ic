@@ -36,6 +36,7 @@ use sandbox_safe_system_state::{CanisterStatusView, SandboxSafeSystemState, Syst
 use serde::{Deserialize, Serialize};
 use stable_memory::StableMemory;
 use std::{
+    collections::VecDeque,
     convert::{From, TryFrom},
     rc::Rc,
 };
@@ -1338,14 +1339,6 @@ impl SystemApiImpl {
 
     /// Appends the specified bytes on the heap as a string to the canister's logs.
     pub fn save_log_message(&mut self, src: u32, size: u32, heap: &[u8]) {
-        const MAX_LOG_MESSAGE_SIZE: u32 = 4 * 1024;
-        let size = size.min(MAX_LOG_MESSAGE_SIZE);
-        let msg = match valid_subslice("save_log_message", src, size, heap) {
-            Ok(bytes) => String::from_utf8_lossy(bytes).to_string(),
-            // Do not trap here!
-            // If the specified memory range is invalid, ignore it and log the error message.
-            Err(_) => "(save log message out of memory bounds)".to_string(),
-        };
         match &self.api_type {
             ApiType::Start { time }
             | ApiType::Init { time, .. }
@@ -1357,14 +1350,21 @@ impl SystemApiImpl {
             | ApiType::PreUpgrade { time, .. }
             | ApiType::ReplyCallback { time, .. }
             | ApiType::RejectCallback { time, .. }
-            | ApiType::InspectMessage { time, .. } => self
-                .sandbox_safe_system_state
-                .append_canister_log(time, msg.to_string()),
+            | ApiType::InspectMessage { time, .. } => {
+                self.sandbox_safe_system_state.append_canister_log(
+                    time,
+                    valid_subslice("save_log_message", src, size, heap).unwrap_or(
+                        // Do not trap here!
+                        // If the specified memory range is invalid, ignore it and log the error message.
+                        b"(debug_print message out of memory bounds)",
+                    ),
+                )
+            }
         }
     }
 
     /// Returns collected canister log records.
-    pub fn canister_log_records(&self) -> &Vec<CanisterLogRecord> {
+    pub fn canister_log_records(&self) -> &VecDeque<CanisterLogRecord> {
         self.sandbox_safe_system_state.canister_log_records()
     }
 }

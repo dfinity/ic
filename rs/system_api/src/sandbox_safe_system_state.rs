@@ -10,7 +10,7 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 use ic_logger::{info, ReplicaLogger};
 use ic_management_canister_types::{
-    CanisterLogRecord, CreateCanisterArgs, InstallChunkedCodeArgs, InstallCodeArgsV2,
+    CanisterLogRecord, CreateCanisterArgs, DataSize, InstallChunkedCodeArgs, InstallCodeArgsV2,
     Method as Ic00Method, Payload, ProvisionalCreateCanisterWithCyclesArgs, UninstallCodeArgs,
     UpdateSettingsArgs, IC_00,
 };
@@ -27,9 +27,13 @@ use ic_types::{
 };
 use ic_wasm_types::WasmEngineError;
 use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
 use std::str::FromStr;
 
 use crate::{cycles_balance_change::CyclesBalanceChange, routing, CERTIFIED_DATA_MAX_LENGTH};
+
+/// The maximum allowed size of a canister log buffer.
+pub const MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE: usize = 4 * 1024;
 
 /// The information that canisters can see about their own status.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -70,7 +74,7 @@ pub struct SystemStateChanges {
     request_slots_used: BTreeMap<CanisterId, usize>,
     requests: Vec<Request>,
     pub(super) new_global_timer: Option<CanisterTimer>,
-    canister_log_records: Vec<CanisterLogRecord>,
+    canister_log_records: VecDeque<CanisterLogRecord>,
 }
 
 impl Default for SystemStateChanges {
@@ -85,7 +89,7 @@ impl Default for SystemStateChanges {
             request_slots_used: BTreeMap::new(),
             requests: vec![],
             new_global_timer: None,
-            canister_log_records: vec![],
+            canister_log_records: Default::default(),
         }
     }
 }
@@ -1190,18 +1194,25 @@ impl SandboxSafeSystemState {
     }
 
     /// Appends a log record to the system state changes.
-    pub fn append_canister_log(&mut self, time: &Time, text: String) {
-        self.system_state_changes
-            .canister_log_records
-            .push(CanisterLogRecord {
-                idx: 27, // TODO(IC-272): populate idx value.
-                timestamp_nanos: time.as_nanos_since_unix_epoch(),
-                content: text.into_bytes(),
-            });
+    pub fn append_canister_log(&mut self, time: &Time, content: &[u8]) {
+        // Keep the new log record size within limit.
+        let max_content_size =
+            MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE - CanisterLogRecord::default().data_size();
+        let size = content.len().min(max_content_size);
+        let canister_log_records = &mut self.system_state_changes.canister_log_records;
+        canister_log_records.push_back(CanisterLogRecord {
+            idx: 27, // TODO(IC-272): populate idx value.
+            timestamp_nanos: time.as_nanos_since_unix_epoch(),
+            content: content[..size].to_vec(),
+        });
+        // Keep the total canister log records size within limit.
+        while canister_log_records.data_size() > MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE {
+            canister_log_records.pop_front();
+        }
     }
 
     /// Returns collected canister log records.
-    pub fn canister_log_records(&self) -> &Vec<CanisterLogRecord> {
+    pub fn canister_log_records(&self) -> &VecDeque<CanisterLogRecord> {
         &self.system_state_changes.canister_log_records
     }
 }

@@ -9,13 +9,14 @@ use ic_interfaces::execution_environment::{
     SubnetAvailableMemory, SystemApi, TrapCode,
 };
 use ic_logger::replica_logger::no_op_logger;
+use ic_management_canister_types::DataSize;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     testing::CanisterQueuesTesting, CallOrigin, Memory, NetworkTopology, SystemState,
 };
 use ic_system_api::{
-    sandbox_safe_system_state::SandboxSafeSystemState, ApiType, DefaultOutOfInstructionsHandler,
-    NonReplicatedQueryKind, SystemApiImpl,
+    sandbox_safe_system_state::{SandboxSafeSystemState, MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE},
+    ApiType, DefaultOutOfInstructionsHandler, NonReplicatedQueryKind, SystemApiImpl,
 };
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
@@ -1866,95 +1867,109 @@ fn test_ic0_cycles_burn() {
 
 #[test]
 fn test_save_log_message_adds_canister_log_records() {
-    let message = "Hello, world!";
-    // Create system api and remember the initial number of log records.
+    let messages: Vec<Vec<_>> = vec![
+        b"message #1".to_vec(),
+        b"message #2".to_vec(),
+        b"message #3".to_vec(),
+        vec![1, 2, 3],
+        vec![],
+    ];
     let mut api = get_system_api(
         ApiTypeBuilder::build_update_api(),
         &SystemStateBuilder::default().build(),
         CyclesAccountManagerBuilder::new().build(),
     );
-    let initial_number_of_records = api.canister_log_records().len();
-    // Save a log message.
-    let bytes = message.as_bytes();
-    api.save_log_message(0, bytes.len() as u32, bytes);
-    // Expect the number of log records to have increased by 1
-    // and the last record to contain the message.
+    let initial_records_number = api.canister_log_records().len();
+    // Save several log messages.
+    for message in &messages {
+        api.save_log_message(0, message.len() as u32, message);
+    }
     let records = api.canister_log_records();
-    assert_eq!(records.len(), initial_number_of_records + 1);
-    assert_eq!(
-        String::from_utf8(records.last().unwrap().content.clone()).unwrap(),
-        message
-    );
+    // Expect increased number of log records and the content to match the messages.
+    assert_eq!(records.len(), initial_records_number + messages.len());
+    for (i, message) in messages.into_iter().enumerate() {
+        let record = records[initial_records_number + i].clone();
+        assert_eq!(record.content, message);
+    }
 }
 
 #[test]
 fn test_save_log_message_invalid_message_size() {
-    let message = "Hello, world!";
-    let bytes = message.as_bytes();
-    let invalid_size = (bytes.len() + 1) as u32;
-    // Create system api and remember the initial number of log records.
+    let message = b"Hello, world!";
+    let invalid_size = (message.len() + 1) as u32;
     let mut api = get_system_api(
         ApiTypeBuilder::build_update_api(),
         &SystemStateBuilder::default().build(),
         CyclesAccountManagerBuilder::new().build(),
     );
-    let initial_number_of_records = api.canister_log_records().len();
+    let initial_records_number = api.canister_log_records().len();
     // Save a log message.
-    api.save_log_message(0, invalid_size, bytes);
-    // Expect the number of log records to have increased by 1
-    // and the last record to contain the message.
+    api.save_log_message(0, invalid_size, message);
+    // Expect added log record with an error message.
     let records = api.canister_log_records();
-    assert_eq!(records.len(), initial_number_of_records + 1);
+    assert_eq!(records.len(), initial_records_number + 1);
     assert_eq!(
-        String::from_utf8(records.last().unwrap().content.clone()).unwrap(),
-        "(save log message out of memory bounds)"
+        String::from_utf8(records.back().unwrap().content.clone()).unwrap(),
+        "(debug_print message out of memory bounds)"
     );
 }
 
 #[test]
 fn test_save_log_message_invalid_message_offset() {
-    let message = "Hello, world!";
+    let message = b"Hello, world!";
     let invalid_src = 1;
-    // Create system api and remember the initial number of log records.
     let mut api = get_system_api(
         ApiTypeBuilder::build_update_api(),
         &SystemStateBuilder::default().build(),
         CyclesAccountManagerBuilder::new().build(),
     );
-    let initial_number_of_records = api.canister_log_records().len();
+    let initial_records_number = api.canister_log_records().len();
     // Save a log message.
-    let bytes = message.as_bytes();
-    api.save_log_message(invalid_src, bytes.len() as u32, bytes);
-    // Expect the number of log records to have increased by 1
-    // and the last record to contain the message.
+    api.save_log_message(invalid_src, message.len() as u32, message);
+    // Expect added log record with an error message.
     let records = api.canister_log_records();
-    assert_eq!(records.len(), initial_number_of_records + 1);
+    assert_eq!(records.len(), initial_records_number + 1);
     assert_eq!(
-        String::from_utf8(records.last().unwrap().content.clone()).unwrap(),
-        "(save log message out of memory bounds)"
+        String::from_utf8(records.back().unwrap().content.clone()).unwrap(),
+        "(debug_print message out of memory bounds)"
     );
 }
 
 #[test]
 fn test_save_log_message_trims_long_message() {
-    let long_message_size = 32 * 1024;
-    let max_allowed_message_size = 4 * 1024;
-    // Prefix size should cover canister id, the exact value is not important.
-    let prefix_size = 256;
-    assert!(prefix_size + max_allowed_message_size < long_message_size);
-    // Create system api and remember the initial number of log records.
+    let long_message_size = 2 * MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE;
     let mut api = get_system_api(
         ApiTypeBuilder::build_update_api(),
         &SystemStateBuilder::default().build(),
         CyclesAccountManagerBuilder::new().build(),
     );
-    let initial_number_of_records = api.canister_log_records().len();
-    // Save a log message.
+    let initial_records_number = api.canister_log_records().len();
+    // Save a long log message.
     let bytes = vec![b'x'; long_message_size];
     api.save_log_message(0, bytes.len() as u32, &bytes);
-    // Expect the number of log records to have increased by 1
-    // and the last record to contain trimmed message.
+    // Expect added log record with the content trimmed to the allowed size.
     let records = api.canister_log_records();
-    assert_eq!(records.len(), initial_number_of_records + 1);
-    assert!(records.last().unwrap().content.len() < prefix_size + max_allowed_message_size);
+    assert_eq!(records.len(), initial_records_number + 1);
+    assert!(records.back().unwrap().content.len() <= MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE);
+}
+
+#[test]
+fn test_save_log_message_keeps_total_log_size_limited() {
+    let messages_number = 10;
+    let long_message_size = 2 * MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE;
+    let mut api = get_system_api(
+        ApiTypeBuilder::build_update_api(),
+        &SystemStateBuilder::default().build(),
+        CyclesAccountManagerBuilder::new().build(),
+    );
+    let initial_records_number = api.canister_log_records().len();
+    // Save several long messages.
+    for _ in 0..messages_number {
+        let bytes = vec![b'x'; long_message_size];
+        api.save_log_message(0, bytes.len() as u32, &bytes);
+    }
+    // Expect only one log record to be kept, with the total size kept within the limit.
+    let records = api.canister_log_records();
+    assert_eq!(records.len(), initial_records_number + 1);
+    assert!(records.data_size() <= MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE);
 }

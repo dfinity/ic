@@ -1,5 +1,6 @@
 use candid::{CandidType, Deserialize};
 use serde::Deserializer;
+use std::collections::VecDeque;
 use std::fmt;
 
 // NOTES:
@@ -21,7 +22,7 @@ use std::fmt;
 /// It is depending entirely on the data inside the type.
 ///
 /// Default implementation returns zero.
-pub(crate) trait DataSize {
+pub trait DataSize {
     /// Default implementation returns zero.
     fn data_size(&self) -> usize {
         0
@@ -37,6 +38,12 @@ impl DataSize for u8 {
 impl DataSize for [u8] {
     fn data_size(&self) -> usize {
         std::mem::size_of_val(self)
+    }
+}
+
+impl DataSize for u64 {
+    fn data_size(&self) -> usize {
+        std::mem::size_of::<u64>()
     }
 }
 
@@ -58,6 +65,12 @@ impl<T: DataSize> DataSize for Vec<T> {
     }
 }
 
+impl<T: DataSize> DataSize for VecDeque<T> {
+    fn data_size(&self) -> usize {
+        self.iter().map(|x| x.data_size()).sum()
+    }
+}
+
 #[test]
 fn test_data_size() {
     // u8.
@@ -70,10 +83,19 @@ fn test_data_size() {
     assert_eq!([1_u8].data_size(), 1);
     assert_eq!([1_u8, 2_u8].data_size(), 2);
 
+    // u64.
+    assert_eq!(0_u64.data_size(), 8);
+    assert_eq!(42_u64.data_size(), 8);
+
     // Vec<u8>.
     assert_eq!(Vec::<u8>::from([]).data_size(), 0);
     assert_eq!(Vec::<u8>::from([1]).data_size(), 1);
     assert_eq!(Vec::<u8>::from([1, 2]).data_size(), 2);
+
+    // VecDeque<u8>.
+    assert_eq!(VecDeque::<u8>::from([]).data_size(), 0);
+    assert_eq!(VecDeque::<u8>::from([1]).data_size(), 1);
+    assert_eq!(VecDeque::<u8>::from([1, 2]).data_size(), 2);
 
     // &str.
     assert_eq!("a".data_size(), 1);
