@@ -108,6 +108,7 @@ test:ci --flaky_test_attempts=default
 
 build:ci --noremote_local_fallback
 build:ci --build_tag_filters="-system_test,-fuzz_test"
+build:ci --verbose_failures
 
 # So that developers can build in debug mode.
 build:dev --compilation_mode=fastbuild
