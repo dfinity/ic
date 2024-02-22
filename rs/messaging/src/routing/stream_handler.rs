@@ -184,10 +184,6 @@ pub(crate) struct StreamHandlerImpl {
     /// existence of a message from an incoming stream header; and inducting it.
     time_in_backlog_metrics: RefCell<LatencyMetrics>,
     log: ReplicaLogger,
-
-    /// Testing-only flag that forces generation of reject signals even if
-    /// `CURRENT_CERTIFICATION_VERSION` is less than 9.
-    testing_flag_generate_reject_signals: bool,
 }
 
 impl StreamHandlerImpl {
@@ -207,7 +203,6 @@ impl StreamHandlerImpl {
                 metrics_registry,
             )),
             log,
-            testing_flag_generate_reject_signals: false,
         }
     }
 }
@@ -676,9 +671,7 @@ impl StreamHandlerImpl {
                         }
 
                         RequestOrResponse::Response(_) => {
-                            if state.metadata.certification_version >= CertificationVersion::V9
-                                || self.testing_flag_generate_reject_signals
-                            {
+                            if state.metadata.certification_version >= CertificationVersion::V9 {
                                 debug!(self.log, "Canister {} is being migrated, generating reject signal for {:?}", msg.receiver(), msg);
                                 stream.push_reject_signal(stream_index);
                             } else {
