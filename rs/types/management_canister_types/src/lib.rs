@@ -2363,6 +2363,14 @@ pub struct CanisterLogRecord {
 
 impl Payload<'_> for CanisterLogRecord {}
 
+impl DataSize for CanisterLogRecord {
+    fn data_size(&self) -> usize {
+        self.idx.data_size()
+            + self.timestamp_nanos.data_size()
+            + self.content.as_slice().data_size()
+    }
+}
+
 impl From<pb_canister_state_bits::CanisterLogRecord> for CanisterLogRecord {
     fn from(item: pb_canister_state_bits::CanisterLogRecord) -> Self {
         Self {

@@ -642,7 +642,7 @@ pub fn process(
     //unwrap should not fail, because we have passed Some(system_api) to the instance above
     let system_api = instance.store_data_mut().system_api_mut().unwrap();
     let system_api_call_counters = system_api.call_counters();
-    let canister_log_records = system_api.canister_log_records().clone();
+    let canister_log_records = system_api.canister_log_records().iter().cloned().collect();
     let slice_instruction_limit = system_api.slice_instruction_limit();
     // Capping at the limit to preserve the existing behaviour. It should be
     // possible to remove capping after ensuring that all callers can handle
