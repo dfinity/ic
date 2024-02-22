@@ -101,7 +101,3 @@ pub fn memory_allocation_of(canister_id: CanisterId) -> u64 {
         NNS_DEFAULT_CANISTER_MEMORY_ALLOCATION_IN_BYTES
     }
 }
-
-/// Returns whether the UpdateAllowedPrincipals NnsFunction is enabled. Currently, the
-/// proposals should be disabled in non-test builds.
-pub const IS_UPDATE_ALLOWED_PRINCIPALS_ENABLED: bool = cfg! { any(test, feature = "test") };
