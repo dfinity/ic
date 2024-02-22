@@ -8,10 +8,14 @@ use crate::vault::api::IDkgProtocolCspVault;
 use crate::vault::local_csp_vault::idkg::SecretKeyStoreWriteError;
 use crate::vault::local_csp_vault::PublicKeyStore;
 use crate::vault::test_utils;
+use crate::KeyId;
 use crate::LocalCspVault;
 use assert_matches::assert_matches;
+use ic_crypto_internal_types::NodeIndex;
 use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_idkg_transcript_id_for_tests;
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
+use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_types::crypto::canister_threshold_sig::idkg::{
     BatchSignedIDkgDealing, IDkgDealing, SignedIDkgDealing,
 };
@@ -1122,7 +1126,6 @@ mod idkg_load_transcript {
     };
     use ic_crypto_internal_types::NodeIndex;
     use ic_crypto_secrets_containers::SecretArray;
-    use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_protobuf::registry::crypto::v1::PublicKey;
     use ic_types::crypto::canister_threshold_sig::error::IDkgLoadTranscriptError;
     use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptOperation;
@@ -1369,7 +1372,6 @@ mod idkg_load_transcript {
         ) -> Result<BTreeMap<NodeIndex, IDkgComplaintInternal>, IDkgLoadTranscriptError> {
             let rng = &mut reproducible_rng();
             let vault = LocalCspVault::builder_for_test().build();
-
             let pk = vault
                 .idkg_gen_dealing_encryption_key_pair()
                 .expect("failed to generate key pair");
@@ -1524,7 +1526,6 @@ mod idkg_load_transcript_with_openings {
     };
     use ic_crypto_internal_types::NodeIndex;
     use ic_crypto_secrets_containers::SecretArray;
-    use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_protobuf::registry::crypto::v1::PublicKey;
     use ic_types::crypto::canister_threshold_sig::error::IDkgLoadTranscriptError;
     use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptOperation;
@@ -1934,6 +1935,221 @@ mod idkg_load_transcript_with_openings {
             } else {
                 dealing_bytes.as_ref().to_vec()
             }
+        }
+    }
+}
+
+mod idkg_open_dealing {
+    use super::*;
+    use crate::{types::CspSecretKey, vault::api::IDkgDealingInternalBytes};
+    use ic_crypto_internal_threshold_sig_ecdsa::{CommitmentOpening, MEGaPublicKeyK256Bytes};
+    use ic_types::{
+        crypto::{
+            canister_threshold_sig::{
+                error::IDkgOpenTranscriptError, idkg::IDkgTranscriptOperation,
+            },
+            AlgorithmId,
+        },
+        NumberOfNodes,
+    };
+
+    /// Dealer/receiver/opener index.
+    const NODE_INDEX: NodeIndex = 0;
+    const CONTEXT_DATA: [u8; 10] = [49; 10];
+
+    #[test]
+    fn should_work() {
+        assert_matches!(IDkgOpenDealingTest::new_with_valid_params().run(), Ok(_));
+    }
+
+    #[test]
+    fn should_fail_on_invalid_dealing_raw_encoding() {
+        let mut test = IDkgOpenDealingTest::new_with_valid_params();
+        test.additional_operation =
+            Some(IDkgOpenDealingTestAdditionalOperation::UseDealingWithInvalidEncoding);
+
+        assert_matches!(
+            test.run(),
+            Err(IDkgOpenTranscriptError::InternalError { internal_error })
+            if internal_error.contains("Error deserializing a signed dealing: ThresholdEcdsaSerializationError")
+        );
+    }
+
+    #[test]
+    fn should_fail_if_private_key_not_found() {
+        let mut test = IDkgOpenDealingTest::new_with_valid_params();
+        // Using a new vault here will cause the private key to be missing
+        test.custom_vault_fn =
+            Box::new(|_vault| Box::new(LocalCspVault::builder_for_test().build()));
+        assert_matches!(
+            test.run(),
+            Err(IDkgOpenTranscriptError::PrivateKeyNotFound { .. })
+        );
+    }
+
+    #[test]
+    fn should_fail_if_mega_keyset_has_invalid_serialization() {
+        let mut test = IDkgOpenDealingTest::new_with_valid_params();
+
+        test.custom_vault_fn = Box::new(|vault| {
+            let vault_arc = Arc::new(vault);
+            let mut mnsks = MockSecretKeyStore::new();
+
+            let encoding_with_invalid_k256_point = [
+                33, 0, 0, 0, 0, 0, 0, 0, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+                0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+                0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+            ];
+            let mega_pk_bytes_with_invalid_point_encoding: MEGaPublicKeyK256Bytes =
+                bincode::deserialize(&encoding_with_invalid_k256_point).expect(
+                    "failed to deserialize an invalid k256 point into MEGaPublicKeyK256Bytes",
+                );
+
+            {
+                let vault_arc = Arc::clone(&vault_arc);
+                mnsks.expect_get().times(1).return_once(move |key_id| {
+                    let mut key = vault_arc.sks_read_lock().get(key_id);
+                    match &mut key {
+                        Some(CspSecretKey::MEGaEncryptionK256(keyset_bytes)) => {
+                            // replace public key with one on a wrong curve
+                            keyset_bytes.public_key = mega_pk_bytes_with_invalid_point_encoding;
+                        }
+                        _ => panic!("expected a call to N-SKS to get a MEGa keyset"),
+                    }
+                    key
+                });
+            }
+
+            Box::new(
+                LocalCspVault::builder_for_test()
+                    .with_node_secret_key_store(mnsks)
+                    .build(),
+            )
+        });
+        assert_matches!(
+            test.run(),
+            Err(IDkgOpenTranscriptError::InternalError { internal_error })
+            if internal_error.contains("DeserializationError") && internal_error.contains("InvalidPoint")
+        );
+    }
+
+    #[test]
+    fn should_fail_on_invalid_commitment() {
+        let mut test = IDkgOpenDealingTest::new_with_valid_params();
+        test.custom_vault_fn = Box::new(|_vault| {
+            // create a new keyset
+            let tmp_vault = LocalCspVault::builder_for_test().build();
+            let pk = tmp_vault
+                .idkg_gen_dealing_encryption_key_pair()
+                .expect("failed to generate key pair");
+
+            let mut mnsks = MockSecretKeyStore::new();
+            mnsks.expect_get().times(1).return_once(move |_key_id| {
+                let wrong_key_that_will_fail_to_decrypt_ciphertexts =
+                    tmp_vault.sks_read_lock().get(
+                        &KeyId::try_from(&pk).expect("failed to convert a public key to the KeyId"),
+                    );
+                wrong_key_that_will_fail_to_decrypt_ciphertexts
+            });
+
+            Box::new(
+                LocalCspVault::builder_for_test()
+                    .with_node_secret_key_store(mnsks)
+                    .build(),
+            )
+        });
+
+        // because we replaced the keyset, the decryption results in an invalid
+        // opening, which is mapped to an `InvalidCommitment` error
+        assert_matches!(
+            test.run(),
+            Err(IDkgOpenTranscriptError::InternalError { internal_error })
+            if internal_error.contains("InvalidCommitment")
+        );
+    }
+
+    struct IDkgOpenDealingTest {
+        additional_operation: Option<IDkgOpenDealingTestAdditionalOperation>,
+        custom_vault_fn: CustomVaultFn,
+    }
+
+    #[derive(PartialEq)]
+    enum IDkgOpenDealingTestAdditionalOperation {
+        UseDealingWithInvalidEncoding,
+    }
+
+    impl IDkgOpenDealingTest {
+        fn new_with_valid_params() -> Self {
+            Self {
+                additional_operation: None,
+                custom_vault_fn: Box::new(|vault| Box::new(vault) as Box<dyn IDkgProtocolCspVault>),
+            }
+        }
+
+        fn run(self) -> Result<CommitmentOpening, IDkgOpenTranscriptError> {
+            let vault = LocalCspVault::builder_for_test().build();
+
+            let pk = vault
+                .idkg_gen_dealing_encryption_key_pair()
+                .expect("failed to generate key pair");
+            let key_id =
+                KeyId::try_from(&pk).expect("failed to generate the key id for the MEGA pubkey");
+            let pk_proto = idkg_dealing_encryption_pk_to_proto(pk.clone());
+            let dealing_bytes = self.dealing_bytes(pk_proto, &vault);
+
+            let signed_dealings = BTreeMap::from([(
+                NODE_INDEX,
+                // the signature is not verified here, so we just need some
+                // signature that contains the required content
+                dummy_batch_signed_dealing_with(dealing_bytes.as_ref().to_vec(), node_id(456)),
+            )]);
+
+            let dealing = match self.additional_operation {
+                Some(IDkgOpenDealingTestAdditionalOperation::UseDealingWithInvalidEncoding) => {
+                    let invalid_internal_dealing_raw = vec![0xFFu8; 100];
+                    dummy_batch_signed_dealing_with(invalid_internal_dealing_raw, node_id(456))
+                }
+                None => signed_dealings
+                    .values()
+                    .next()
+                    .expect("empty dealings")
+                    .clone(),
+            };
+
+            let opener_vault = (self.custom_vault_fn)(vault);
+            opener_vault.idkg_open_dealing(
+                dealing,
+                NODE_INDEX,
+                CONTEXT_DATA.to_vec(),
+                NODE_INDEX,
+                key_id,
+            )
+        }
+
+        fn dealing_bytes(
+            &self,
+            pk_proto: PublicKey,
+            vault: &LocalCspVaultForTest,
+        ) -> IDkgDealingInternalBytes {
+            let reconstruction_threshold_in_transcript = NumberOfNodes::from(2);
+            let receiver_keys = {
+                let mut result = vec![];
+                for _ in 0..reconstruction_threshold_in_transcript.get() {
+                    result.push(pk_proto.clone());
+                }
+                result
+            };
+
+            vault
+                .idkg_create_dealing(
+                    AlgorithmId::ThresholdEcdsaSecp256k1,
+                    CONTEXT_DATA.to_vec(),
+                    NODE_INDEX,
+                    reconstruction_threshold_in_transcript,
+                    receiver_keys,
+                    IDkgTranscriptOperation::Random,
+                )
+                .expect("failed to generate dealing")
         }
     }
 }
