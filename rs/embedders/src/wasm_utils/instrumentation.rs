@@ -492,21 +492,21 @@ fn add_func_type(module: &mut Module, ty: FuncType) -> u32 {
 }
 
 fn mutate_function_indices(module: &mut Module, f: impl Fn(u32) -> u32) {
-    fn mutate_instructions(f: &impl Fn(u32) -> u32, ops: &mut [Operator]) {
-        for op in ops {
-            match op {
-                Operator::Call { function_index }
-                | Operator::ReturnCall { function_index }
-                | Operator::RefFunc { function_index } => {
-                    *function_index = f(*function_index);
-                }
-                _ => {}
+    fn mutate_instruction(f: &impl Fn(u32) -> u32, op: &mut Operator) {
+        match op {
+            Operator::Call { function_index }
+            | Operator::ReturnCall { function_index }
+            | Operator::RefFunc { function_index } => {
+                *function_index = f(*function_index);
             }
+            _ => {}
         }
     }
 
     for func_body in &mut module.code_sections {
-        mutate_instructions(&f, &mut func_body.instructions)
+        for op in &mut func_body.instructions {
+            mutate_instruction(&f, op);
+        }
     }
 
     for exp in &mut module.exports {
@@ -523,15 +523,15 @@ fn mutate_function_indices(module: &mut Module, f: impl Fn(u32) -> u32) {
                 }
             }
             ic_wasm_transform::ElementItems::ConstExprs { ty: _, exprs } => {
-                for ops in exprs {
-                    mutate_instructions(&f, ops)
+                for op in exprs {
+                    mutate_instruction(&f, op)
                 }
             }
         }
     }
 
     for global in &mut module.globals {
-        mutate_instructions(&f, &mut global.init_expr)
+        mutate_instruction(&f, &mut global.init_expr)
     }
 
     for data_segment in &mut module.data {
@@ -541,9 +541,7 @@ fn mutate_function_indices(module: &mut Module, f: impl Fn(u32) -> u32) {
                 memory_index: _,
                 offset_expr,
             } => {
-                let mut temp = [offset_expr.clone()];
-                mutate_instructions(&f, &mut temp);
-                *offset_expr = temp.into_iter().next().unwrap();
+                mutate_instruction(&f, offset_expr);
             }
         }
     }
@@ -812,8 +810,13 @@ pub(super) fn instrument(
     for body in &module.code_sections {
         wasm_instruction_count += body.instructions.len() as u64;
     }
-    for glob in &module.globals {
-        wasm_instruction_count += glob.init_expr.len() as u64;
+    for global in &module.globals {
+        // Each global has a single instruction initializer and an `End`
+        // instruction will be added during encoding.
+        // We statically assert this is the case to ensure this calculation is
+        // adjusted if we add support for longer initialization expressions.
+        let _: &Operator = &global.init_expr;
+        wasm_instruction_count += 2;
     }
 
     let result = module.encode().map_err(|err| {
@@ -1084,7 +1087,7 @@ fn export_additional_symbols<'a>(
             content_type: ValType::I64,
             mutable: true,
         },
-        init_expr: vec![Operator::I64Const { value: 0 }, Operator::End],
+        init_expr: Operator::I64Const { value: 0 },
     });
 
     if wasm_native_stable_memory == FlagStatus::Enabled {
@@ -1094,7 +1097,7 @@ fn export_additional_symbols<'a>(
                 content_type: ValType::I64,
                 mutable: true,
             },
-            init_expr: vec![Operator::I64Const { value: 0 }, Operator::End],
+            init_expr: Operator::I64Const { value: 0 },
         });
         // push the accessed page counter
         module.globals.push(Global {
@@ -1102,7 +1105,7 @@ fn export_additional_symbols<'a>(
                 content_type: ValType::I64,
                 mutable: true,
             },
-            init_expr: vec![Operator::I64Const { value: 0 }, Operator::End],
+            init_expr: Operator::I64Const { value: 0 },
         });
     }
 

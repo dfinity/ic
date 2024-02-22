@@ -31,14 +31,14 @@ serde = { workspace = true }
 serde_bytes = { workspace = true }
 slog = { workspace = true }
 slog-term = "2.6.0"
-wasmtime = { version = "15.0.0", default-features = false, features = [
+wasmtime = { version = "16.0.0", default-features = false, features = [
     'cranelift',
     'parallel-compilation',
 ] }
-wasmtime-environ = "15.0.0"
-wasmtime-runtime = "15.0.0"
-wasm-encoder = "0.36.2"
-wasmparser = "0.116.1"
+wasmtime-environ = "16.0.0"
+wasmtime-runtime = "16.0.0"
+wasm-encoder = { version = "0.38.1", features = ["wasmparser"] }
+wasmparser = "0.118.1"
 rayon = "1.5.1"
 
 
