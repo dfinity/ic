@@ -105,7 +105,7 @@ pub(crate) fn execute_install(
         result,
         MemoryHandling {
             stable_memory_handling: StableMemoryHandling::Replace,
-            main_memory_handling: MainMemoryHandling::Replace { explicit: false },
+            main_memory_handling: MainMemoryHandling::Replace { explicit: true },
         },
         &original,
     ) {

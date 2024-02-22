@@ -51,7 +51,8 @@ pub(crate) enum StableMemoryHandling {
 pub(crate) enum MainMemoryHandling {
     /// Erase the main memory on install, re-install, or on an ordinary upgrade that does not
     /// use enhanced orthogonal persistence.
-    /// `explicit` denotes whether the upgrade option `keep_main_memory = false` is specified.
+    /// `explicit` denotes whether the upgrade option `keep_main_memory = false` is specified
+    /// or it is an install or re-install.
     Replace { explicit: bool },
     /// For enhanced orthogonal persistence (as with Motoko): Retain the main memory on upgrade.
     Keep,
