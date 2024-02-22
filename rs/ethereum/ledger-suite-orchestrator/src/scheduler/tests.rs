@@ -1,4 +1,4 @@
-use crate::candid::{InitArg, LedgerInitArg};
+use crate::candid::{AddCkErc20Token, InitArg, LedgerInitArg};
 use crate::management::{CallError, Reason};
 use crate::scheduler::test_fixtures::{usdc, usdc_metadata};
 use crate::scheduler::tests::mock::MockCanisterRuntime;
@@ -14,6 +14,7 @@ use candid::Principal;
 const ORCHESTRATOR_PRINCIPAL: Principal = Principal::from_slice(&[0_u8; 29]);
 const LEDGER_PRINCIPAL: Principal = Principal::from_slice(&[1_u8; 29]);
 const INDEX_PRINCIPAL: Principal = Principal::from_slice(&[2_u8; 29]);
+const MINTER_PRINCIPAL: Principal = Principal::from_slice(&[3_u8; 29]);
 
 #[tokio::test]
 async fn should_install_ledger_suite() {
@@ -55,6 +56,7 @@ async fn should_install_ledger_suite_with_additional_controllers() {
     crate::state::init_state(
         State::try_from(InitArg {
             more_controller_ids: vec![OTHER_PRINCIPAL],
+            minter_id: None,
         })
         .unwrap(),
     );
@@ -294,6 +296,174 @@ async fn should_discard_add_erc20_task_when_index_wasm_not_found() {
     );
 }
 
+mod notify_erc_20_added {
+    use crate::candid::AddCkErc20Token;
+    use crate::management::{CallError, Reason};
+    use crate::scheduler::test_fixtures::{usdc, usdc_metadata};
+    use crate::scheduler::tests::mock::MockCanisterRuntime;
+    use crate::scheduler::tests::{
+        expect_call_canister_add_ckerc20_token, init_state, LEDGER_PRINCIPAL, MINTER_PRINCIPAL,
+    };
+    use crate::scheduler::{Task, TaskError, Tasks};
+    use crate::state::{mutate_state, Ledger};
+    use candid::Nat;
+
+    #[tokio::test]
+    async fn should_retry_when_ledger_not_yet_created() {
+        init_state();
+        let mut tasks = Tasks::default();
+        let usdc = usdc();
+        tasks.add_task(Task::NotifyErc20Added {
+            erc20_token: usdc.clone(),
+            minter_id: MINTER_PRINCIPAL,
+        });
+        let runtime = MockCanisterRuntime::new();
+
+        assert_eq!(
+            tasks.execute(&runtime).await,
+            Err(TaskError::LedgerNotFound(usdc.clone()))
+        );
+
+        assert_eq!(
+            tasks.execute(&runtime).await,
+            Err(TaskError::LedgerNotFound(usdc.clone()))
+        );
+
+        mutate_state(|s| {
+            s.record_new_erc20_token(usdc.clone(), usdc_metadata());
+        });
+        assert_eq!(
+            tasks.execute(&runtime).await,
+            Err(TaskError::LedgerNotFound(usdc))
+        );
+    }
+
+    #[tokio::test]
+    async fn should_notify_erc20_added() {
+        init_state();
+        let mut tasks = Tasks::default();
+        let usdc = usdc();
+        let usdc_metadata = usdc_metadata();
+        mutate_state(|s| {
+            s.record_new_erc20_token(usdc.clone(), usdc_metadata.clone());
+            s.record_created_canister::<Ledger>(&usdc, LEDGER_PRINCIPAL);
+        });
+        tasks.add_task(Task::NotifyErc20Added {
+            erc20_token: usdc.clone(),
+            minter_id: MINTER_PRINCIPAL,
+        });
+        let mut runtime = MockCanisterRuntime::new();
+        expect_call_canister_add_ckerc20_token(
+            &mut runtime,
+            MINTER_PRINCIPAL,
+            AddCkErc20Token {
+                chain_id: Nat::from(1_u8),
+                address: usdc.address().to_string(),
+                ckerc20_token_symbol: usdc_metadata.ckerc20_token_symbol,
+                ckerc20_ledger_id: LEDGER_PRINCIPAL,
+            },
+            Ok(()),
+        );
+
+        assert_eq!(tasks.execute(&runtime).await, Ok(()));
+    }
+
+    #[tokio::test]
+    async fn should_not_retry_when_error_unrecoverable() {
+        init_state();
+        let mut tasks = Tasks::default();
+        let usdc = usdc();
+        let usdc_metadata = usdc_metadata();
+        mutate_state(|s| {
+            s.record_new_erc20_token(usdc.clone(), usdc_metadata.clone());
+            s.record_created_canister::<Ledger>(&usdc, LEDGER_PRINCIPAL);
+        });
+
+        for unrecoverable_reason in [
+            Reason::CanisterError("trap".to_string()),
+            Reason::Rejected("rejected".to_string()),
+            Reason::InternalError("internal".to_string()),
+        ] {
+            tasks.add_task(Task::NotifyErc20Added {
+                erc20_token: usdc.clone(),
+                minter_id: MINTER_PRINCIPAL,
+            });
+            let expected_error = CallError {
+                method: "error".to_string(),
+                reason: unrecoverable_reason,
+            };
+            let mut runtime = MockCanisterRuntime::new();
+            runtime
+                .expect_call_canister::<AddCkErc20Token, ()>()
+                .times(1)
+                .withf(move |_canister_id, method, _args: &AddCkErc20Token| {
+                    method == "add_ckerc20_token"
+                })
+                .return_const(Err(expected_error.clone()));
+
+            assert_eq!(
+                tasks.execute(&runtime).await,
+                Err(TaskError::InterCanisterCallError(expected_error))
+            );
+            assert!(tasks.is_empty());
+        }
+    }
+
+    #[tokio::test]
+    async fn should_retry_when_error_is_recoverable() {
+        init_state();
+        let mut tasks = Tasks::default();
+        let usdc = usdc();
+        let usdc_metadata = usdc_metadata();
+        mutate_state(|s| {
+            s.record_new_erc20_token(usdc.clone(), usdc_metadata.clone());
+            s.record_created_canister::<Ledger>(&usdc, LEDGER_PRINCIPAL);
+        });
+
+        for recoverable_reason in [
+            Reason::OutOfCycles,
+            Reason::TransientInternalError("transient".to_string()),
+        ] {
+            tasks.add_task(Task::NotifyErc20Added {
+                erc20_token: usdc.clone(),
+                minter_id: MINTER_PRINCIPAL,
+            });
+            let expected_error = CallError {
+                method: "error".to_string(),
+                reason: recoverable_reason,
+            };
+            let mut runtime = MockCanisterRuntime::new();
+            runtime
+                .expect_call_canister::<AddCkErc20Token, ()>()
+                .times(1)
+                .withf(move |_canister_id, method, _args: &AddCkErc20Token| {
+                    method == "add_ckerc20_token"
+                })
+                .return_const(Err(expected_error.clone()));
+
+            assert_eq!(
+                tasks.execute(&runtime).await,
+                Err(TaskError::InterCanisterCallError(expected_error))
+            );
+            runtime.checkpoint();
+
+            expect_call_canister_add_ckerc20_token(
+                &mut runtime,
+                MINTER_PRINCIPAL,
+                AddCkErc20Token {
+                    chain_id: Nat::from(1_u8),
+                    address: usdc.address().to_string(),
+                    ckerc20_token_symbol: usdc_metadata.ckerc20_token_symbol.clone(),
+                    ckerc20_ledger_id: LEDGER_PRINCIPAL,
+                },
+                Ok(()),
+            );
+
+            assert_eq!(tasks.execute(&runtime).await, Ok(()));
+        }
+    }
+}
+
 fn init_state() {
     crate::state::init_state(new_state());
     register_embedded_wasms();
@@ -366,12 +536,33 @@ fn expect_create_canister_returning(
         });
 }
 
+fn expect_call_canister_add_ckerc20_token(
+    runtime: &mut MockCanisterRuntime,
+    expected_canister_id: Principal,
+    expected_args: AddCkErc20Token,
+    mocked_result: Result<(), CallError>,
+) {
+    runtime
+        .expect_call_canister()
+        .times(1)
+        .withf(move |&canister_id, method, args: &AddCkErc20Token| {
+            canister_id == expected_canister_id
+                && method == "add_ckerc20_token"
+                && args == &expected_args
+        })
+        .return_const(mocked_result);
+}
+
 mod mock {
     use crate::management::CanisterRuntime;
     use crate::scheduler::CallError;
     use async_trait::async_trait;
+    use candid::CandidType;
     use candid::Principal;
+    use core::fmt::Debug;
     use mockall::mock;
+    use serde::de::DeserializeOwned;
+    use std::marker::Send;
 
     mock! {
        pub CanisterRuntime{}
@@ -393,6 +584,16 @@ mod mock {
                 wasm_module:Vec<u8>,
                 arg: Vec<u8>,
             ) -> Result<(), CallError>;
+
+            async fn call_canister<I, O>(
+                &self,
+                canister_id: Principal,
+                method: &str,
+                args: I,
+            ) -> Result<O, CallError>
+            where
+                I: CandidType + Debug + Send + 'static,
+                O: CandidType + DeserializeOwned + Debug + 'static;
         }
     }
 }
@@ -526,7 +727,7 @@ mod install_ledger_suite_args {
             record_icrc1_ledger_suite_wasms(
                 &mut store,
                 1_620_328_630_000_000_000,
-                GitCommitHash::default()
+                GitCommitHash::default(),
             ),
             Ok(())
         );

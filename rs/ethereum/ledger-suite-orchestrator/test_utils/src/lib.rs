@@ -29,6 +29,7 @@ impl Default for LedgerSuiteOrchestrator {
     fn default() -> Self {
         Self::new(InitArg {
             more_controller_ids: vec![],
+            minter_id: None,
         })
     }
 }

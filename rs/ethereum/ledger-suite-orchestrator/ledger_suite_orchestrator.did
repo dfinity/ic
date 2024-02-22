@@ -8,6 +8,9 @@ type InitArg = record {
     // All canisters that will be spawned off by the orchestrator will be controlled by the orchestrator
     // and *additionally* by the following controllers.
     more_controller_ids : vec principal;
+
+    // Canister ID of the minter that will be notified when new ERC-20 tokens are added.
+    minter_id: opt principal;
 };
 
 type UpgradeArg = record {

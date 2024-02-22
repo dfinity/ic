@@ -1,6 +1,8 @@
+use crate::logs::DEBUG;
 use async_trait::async_trait;
 use candid::{CandidType, Principal};
 use ic_base_types::PrincipalId;
+use ic_canister_log::log;
 use ic_cdk::api::call::RejectionCode;
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterInstallMode, CanisterSettingsArgsBuilder, CreateCanisterArgs,
@@ -8,6 +10,7 @@ use ic_management_canister_types::{
 };
 use serde::de::DeserializeOwned;
 use std::fmt;
+use std::fmt::Debug;
 
 // TODO: extract to common crate since copied form ckETH
 
@@ -107,6 +110,16 @@ pub trait CanisterRuntime {
         wasm_module: Vec<u8>,
         arg: Vec<u8>,
     ) -> Result<(), CallError>;
+
+    async fn call_canister<I, O>(
+        &self,
+        canister_id: Principal,
+        method: &str,
+        args: I,
+    ) -> Result<O, CallError>
+    where
+        I: CandidType + Debug + Send + 'static,
+        O: CandidType + DeserializeOwned + Debug + 'static;
 }
 
 pub struct IcCanisterRuntime {}
@@ -199,5 +212,41 @@ impl CanisterRuntime for IcCanisterRuntime {
         self.call("install_code", 0, &install_code).await?;
 
         Ok(())
+    }
+
+    async fn call_canister<I, O>(
+        &self,
+        canister_id: Principal,
+        method: &str,
+        args: I,
+    ) -> Result<O, CallError>
+    where
+        I: CandidType + Debug + Send + 'static,
+        O: CandidType + DeserializeOwned + Debug + 'static,
+    {
+        log!(
+            DEBUG,
+            "Calling canister '{}' with method '{}' and payload '{:?}'",
+            canister_id,
+            method,
+            args
+        );
+        let res: Result<(O,), _> = ic_cdk::api::call::call(canister_id, method, (&args,)).await;
+        log!(
+            DEBUG,
+            "Result of calling canister '{}' with method '{}' and payload '{:?}': {:?}",
+            canister_id,
+            method,
+            args,
+            res
+        );
+
+        match res {
+            Ok((output,)) => Ok(output),
+            Err((code, msg)) => Err(CallError {
+                method: method.to_string(),
+                reason: Reason::from_reject(code, msg),
+            }),
+        }
     }
 }
