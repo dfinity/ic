@@ -1,9 +1,8 @@
-use crate::KEEP_MAIN_MEMORY_ON_UPGRADE;
-
 use super::CanisterId;
 
 use hex::decode;
 use ic00::{CanisterInstallModeV2, UpgradeOptions};
+use ic_execution_environment::execution::install_code::ENHANCED_ORTHOGONAL_PERSISTENCE_SECTION;
 use ic_ic00_types::{self as ic00, Payload};
 use ic_types::{
     messages::{SignedIngress, UserQuery},
@@ -218,6 +217,24 @@ fn parse_create(nonce: u64) -> Result<Message, String> {
     Ok(Message::Create(signed_ingress))
 }
 
+fn contains_icp_private_custom_section(wasm_binary: &[u8], name: &str) -> Result<bool, String> {
+    use wasmparser::{Parser, Payload::CustomSection};
+
+    let icp_section_name = format!("icp:private {name}");
+    let parser = Parser::new(0);
+    for payload in parser.parse_all(wasm_binary) {
+        match payload.map_err(|e| format!("Wasm parsing error: {}", e))? {
+            CustomSection(reader) => {
+                if reader.name() == icp_section_name {
+                    return Ok(true);
+                }
+            }
+            _ => {}
+        }
+    }
+    Ok(false)
+}
+
 fn parse_install(
     nonce: u64,
     canister_id: &str,
@@ -240,10 +257,20 @@ fn parse_install(
     let install_mode = match mode {
         "install" => CanisterInstallModeV2::Install,
         "reinstall" => CanisterInstallModeV2::Reinstall,
-        "upgrade" => CanisterInstallModeV2::Upgrade(Some(UpgradeOptions {
-            skip_pre_upgrade: None,
-            keep_main_memory: Some(KEEP_MAIN_MEMORY_ON_UPGRADE),
-        })),
+        "upgrade" => {
+            let keep_main_memory = if contains_icp_private_custom_section(
+                wasm_data.as_ref(),
+                ENHANCED_ORTHOGONAL_PERSISTENCE_SECTION,
+            )? {
+                Some(true)
+            } else {
+                None
+            };
+            CanisterInstallModeV2::Upgrade(Some(UpgradeOptions {
+                skip_pre_upgrade: None,
+                keep_main_memory,
+            }))
+        }
         _ => {
             return Err(String::from("Unsupported install mode: {mode}"));
         }

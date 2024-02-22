@@ -1178,7 +1178,7 @@ enum Scope {
 #[derive(Copy, Clone, Debug, PartialEq)]
 enum InjectionPointCostDetail {
     StaticCost { scope: Scope, cost: u64 },
-    DynamicCost,
+    DynamicCost { extend64: bool },
 }
 
 impl InjectionPointCostDetail {
@@ -1187,7 +1187,7 @@ impl InjectionPointCostDetail {
     fn increment_cost(&mut self, additional_cost: u64) {
         match self {
             Self::StaticCost { scope: _, cost } => *cost += additional_cost,
-            Self::DynamicCost => {}
+            Self::DynamicCost { .. } => {}
         }
     }
 }
@@ -1207,9 +1207,9 @@ impl InjectionPoint {
         }
     }
 
-    fn new_dynamic_cost(position: usize) -> Self {
+    fn new_dynamic_cost(position: usize, extend64: bool) -> Self {
         InjectionPoint {
-            cost_detail: InjectionPointCostDetail::DynamicCost,
+            cost_detail: InjectionPointCostDetail::DynamicCost { extend64 },
             position,
         }
     }
@@ -1231,9 +1231,9 @@ fn inject_metering(
     main_memory_mode: MemoryMode,
 ) {
     let points = match metering_type {
-        MeteringType::Old => injections_old(code),
+        MeteringType::Old => injections_old(code, main_memory_mode),
         MeteringType::None => Vec::new(),
-        MeteringType::New => injections_new(code),
+        MeteringType::New => injections_new(code, main_memory_mode),
     };
     let points = points.iter().filter(|point| match point.cost_detail {
         InjectionPointCostDetail::StaticCost {
@@ -1241,7 +1241,7 @@ fn inject_metering(
             cost: _,
         } => true,
         InjectionPointCostDetail::StaticCost { scope: _, cost } => cost > 0,
-        InjectionPointCostDetail::DynamicCost => true,
+        InjectionPointCostDetail::DynamicCost { .. } => true,
     });
     let orig_elems = code;
     let mut elems: Vec<Operator> = Vec::new();
@@ -1280,25 +1280,22 @@ fn inject_metering(
                     ]);
                 }
             }
-            InjectionPointCostDetail::DynamicCost => {
+            InjectionPointCostDetail::DynamicCost { extend64 } => {
                 let call = Call {
                     function_index: export_data_module.decr_instruction_counter_fn,
                 };
 
-                match main_memory_mode {
-                    MemoryMode::Memory32 => {
-                        elems.extend_from_slice(&[
-                            I64ExtendI32U,
-                            call,
-                            // decr_instruction_counter returns it's argument unchanged,
-                            // so we can convert back to I32 without worrying about
-                            // overflows.
-                            I32WrapI64,
-                        ]);
-                    }
-                    MemoryMode::Memory64 => {
-                        elems.extend_from_slice(&[call]);
-                    }
+                if extend64 {
+                    elems.extend_from_slice(&[
+                        I64ExtendI32U,
+                        call,
+                        // decr_instruction_counter returns it's argument unchanged,
+                        // so we can convert back to I32 without worrying about
+                        // overflows.
+                        I32WrapI64,
+                    ]);
+                } else {
+                    elems.extend_from_slice(&[call]);
                 };
             }
         }
@@ -1591,7 +1588,7 @@ fn inject_update_available_memory(
 // contains a "hint" about the context of every basic block, specifically if
 // it's re-entrant or not. This version over-estimates the cost of code with
 // returns and jumps.
-fn injections_old(code: &[Operator]) -> Vec<InjectionPoint> {
+fn injections_old(code: &[Operator], main_memory_mode: MemoryMode) -> Vec<InjectionPoint> {
     let mut res = Vec::new();
     let mut stack = Vec::new();
     use Operator::*;
@@ -1627,13 +1624,15 @@ fn injections_old(code: &[Operator]) -> Vec<InjectionPoint> {
             }
             // Bulk memory instructions require injected metering __before__ the instruction
             // executes so that size arguments can be read from the stack at runtime.
-            MemoryFill { .. }
-            | MemoryCopy { .. }
-            | MemoryInit { .. }
-            | TableCopy { .. }
-            | TableInit { .. }
-            | TableFill { .. } => {
-                res.push(InjectionPoint::new_dynamic_cost(position));
+            MemoryFill { .. } | MemoryCopy { .. } => {
+                let extend64 = match main_memory_mode {
+                    MemoryMode::Memory32 => true,
+                    MemoryMode::Memory64 => false,
+                };
+                res.push(InjectionPoint::new_dynamic_cost(position, extend64));
+            }
+            MemoryInit { .. } | TableCopy { .. } | TableInit { .. } | TableFill { .. } => {
+                res.push(InjectionPoint::new_dynamic_cost(position, true));
             }
             // Nothing special to be done for other instructions.
             _ => (),
@@ -1649,7 +1648,7 @@ fn injections_old(code: &[Operator]) -> Vec<InjectionPoint> {
 // with no branches) and before each bulk memory instruction. An injection point
 // contains a "hint" about the context of every basic block, specifically if
 // it's re-entrant or not.
-fn injections_new(code: &[Operator]) -> Vec<InjectionPoint> {
+fn injections_new(code: &[Operator], main_memory_mode: MemoryMode) -> Vec<InjectionPoint> {
     let mut res = Vec::new();
     use Operator::*;
     // The function itself is a re-entrant code block.
@@ -1687,13 +1686,15 @@ fn injections_new(code: &[Operator]) -> Vec<InjectionPoint> {
             }
             // Bulk memory instructions require injected metering __before__ the instruction
             // executes so that size arguments can be read from the stack at runtime.
-            MemoryFill { .. }
-            | MemoryCopy { .. }
-            | MemoryInit { .. }
-            | TableCopy { .. }
-            | TableInit { .. }
-            | TableFill { .. } => {
-                res.push(InjectionPoint::new_dynamic_cost(position));
+            MemoryFill { .. } | MemoryCopy { .. } => {
+                let extend64 = match main_memory_mode {
+                    MemoryMode::Memory32 => true,
+                    MemoryMode::Memory64 => false,
+                };
+                res.push(InjectionPoint::new_dynamic_cost(position, extend64));
+            }
+            MemoryInit { .. } | TableCopy { .. } | TableInit { .. } | TableFill { .. } => {
+                res.push(InjectionPoint::new_dynamic_cost(position, true));
             }
             // Nothing special to be done for other instructions.
             _ => (),
@@ -1711,6 +1712,10 @@ fn get_data(
 ) -> Result<Segments, WasmInstrumentationError> {
     let res = data_section
         .iter()
+        .filter(|segment| match &segment.kind {
+            ic_wasm_transform::DataSegmentKind::Passive => false,
+            _ => true
+        })
         .map(|segment| {
             let offset = match &segment.kind {
                 ic_wasm_transform::DataSegmentKind::Active {
@@ -1723,17 +1728,34 @@ fn get_data(
                         "complex initialization expressions for data segments are not supported!".into()
                     ))),
                 },
-
-                _ => return Err(WasmInstrumentationError::WasmDeserializeError(
-                    WasmError::new("no offset found for the data segment".into())
-                )),
+                ic_wasm_transform::DataSegmentKind::Passive => unreachable!(),
             };
 
             Ok((offset, segment.data.to_vec()))
         })
         .collect::<Result<_,_>>()?;
 
-    data_section.clear();
+    // Clear all active data segments, but retain the indices of passive data segments:
+    // * Clear the data of active data segments if (directly or indirectly) followed by a passive segment.
+    // * Delete all active data segments not followed by any passive data segment.
+    let mut ends_with_passive_segment = false;
+    for index in (0..data_section.len()).rev() {
+        let kind = &data_section[index].kind;
+        match kind {
+            ic_wasm_transform::DataSegmentKind::Passive => ends_with_passive_segment = true,
+            ic_wasm_transform::DataSegmentKind::Active { .. } => {
+                if ends_with_passive_segment {
+                    data_section[index] = ic_wasm_transform::DataSegment {
+                        kind: kind.clone(),
+                        data: &[],
+                    };
+                } else {
+                    data_section.remove(index);
+                }
+            }
+        }
+    }
+
     Ok(res)
 }
 

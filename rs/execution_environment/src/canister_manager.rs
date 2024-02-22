@@ -1766,6 +1766,9 @@ pub(crate) enum CanisterManagerError {
     WasmChunkStoreError {
         message: String,
     },
+    MissingUpgradeOptionError {
+        message: String,
+    },
 }
 
 impl From<CanisterManagerError> for UserError {
@@ -1999,6 +2002,14 @@ impl From<CanisterManagerError> for UserError {
                     ErrorCode::CanisterContractViolation,
                     format!(
                         "Error from Wasm chunk store: {}", message
+                    )
+                )
+            }
+            MissingUpgradeOptionError { message } => {
+                Self::new(
+                    ErrorCode::CanisterContractViolation,
+                    format!(
+                        "Missing upgrade option: {}", message
                     )
                 )
             }
