@@ -85,6 +85,10 @@ type UpgradeArg = record {
 
     // Change the ethereum block height observed by the minter.
     ethereum_block_height : opt BlockTag;
+
+    // The principal of the ledger suite orchestrator that handles the ICRC1 ledger suites
+    // for all ckERC20 tokens.
+    ledger_suite_orchestrator_id : opt principal;
 };
 
 type MinterArg = variant { UpgradeArg : UpgradeArg; InitArg : InitArg };
@@ -289,7 +293,27 @@ type Event = record {
         SkippedBlock : record {
             block_number : nat;
         };
+        AddedCkErc20Token : record {
+            chain_id : nat;
+            address : text;
+            ckerc20_token_symbol : text;
+            ckerc20_ledger_id : principal;
+        };
     };
+};
+
+type AddCkErc20Token = record {
+    // Ethereum chain ID.
+    chain_id : nat;
+
+    // The Ethereum address of the ERC-20 smart contract.
+    address : text;
+
+    // The ckERC20 token symbol on the ledger.
+    ckerc20_token_symbol : text;
+
+    // The ledger ID for that ckERC20 token.
+    ckerc20_ledger_id : principal;
 };
 
 service : (MinterArg) -> {
@@ -329,4 +353,8 @@ service : (MinterArg) -> {
     // Retrieve events from the minter's audit log.
     // The endpoint can return fewer events than requested to bound the response size.
     get_events : (record { start : nat64; length : nat64 }) -> (record { events : vec Event; total_event_count : nat64 }) query;
+
+    // Add a ckERC-20 token to be supported by the minter.
+    // This call is restricted to the orchestrator ID.
+    add_ckerc20_token : (AddCkErc20Token) -> ();
 }

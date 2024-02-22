@@ -2,7 +2,7 @@ load("@aspect_rules_sol//sol:defs.bzl", "sol_binary")
 load("@io_bazel_rules_closure//closure:defs.bzl", "closure_js_library", "closure_js_test")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_doc", "rust_doc_test", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
-load("//bazel:defs.bzl", "rust_ic_test")
+load("//bazel:defs.bzl", "rust_ic_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -166,9 +166,9 @@ rust_binary(
     ],
 )
 
-rust_ic_test(
+rust_ic_test_suite(
     name = "integration_tests",
-    srcs = ["tests/tests.rs"],
+    srcs = glob(["tests/**/*.rs"]),
     data = [
         ":cketh_minter_debug.wasm",
         "//rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm",

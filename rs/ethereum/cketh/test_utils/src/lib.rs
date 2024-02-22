@@ -5,7 +5,7 @@ use crate::mock::JsonRpcMethod;
 use candid::{Decode, Encode, Nat, Principal};
 use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_cketh_minter::endpoints::events::{Event, EventPayload, GetEventsResult};
-use ic_cketh_minter::endpoints::{MinterInfo, RetrieveEthStatus, WithdrawalArg};
+use ic_cketh_minter::endpoints::{AddCkErc20Token, MinterInfo, RetrieveEthStatus, WithdrawalArg};
 use ic_cketh_minter::lifecycle::upgrade::UpgradeArg;
 use ic_cketh_minter::logs::Log;
 use ic_cketh_minter::{
@@ -15,7 +15,7 @@ use ic_cketh_minter::{
 use ic_ethereum_types::Address;
 use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
 use ic_state_machine_tests::{
-    CanisterId, Cycles, PrincipalId, StateMachine, StateMachineBuilder, WasmResult,
+    CanisterId, Cycles, PrincipalId, StateMachine, StateMachineBuilder, UserError, WasmResult,
 };
 use ic_test_utilities_load_wasm::load_wasm;
 use icrc_ledger_types::icrc1::account::Account;
@@ -186,6 +186,28 @@ impl CkEthSetup {
             Eip1559TransactionPrice
         )
         .unwrap()
+    }
+
+    pub fn add_ckerc20_token(
+        &self,
+        from: Principal,
+        erc20: &AddCkErc20Token,
+    ) -> Result<WasmResult, UserError> {
+        self.env.execute_ingress_as(
+            PrincipalId::from(from),
+            self.minter_id,
+            "add_ckerc20_token",
+            Encode!(erc20).unwrap(),
+        )
+    }
+
+    pub fn add_ckerc20_token_expecting_ok(self, from: Principal, erc20: &AddCkErc20Token) -> Self {
+        Decode!(
+            &assert_reply(self.add_ckerc20_token(from, erc20).unwrap()),
+            ()
+        )
+        .unwrap();
+        self
     }
 
     pub fn get_minter_info(&self) -> MinterInfo {
@@ -410,6 +432,17 @@ impl CkEthSetup {
                 Encode!(&MinterArg::UpgradeArg(upgrade_arg)).unwrap(),
             )
             .unwrap();
+    }
+
+    pub fn upgrade_minter_to_add_orchestrator_id(self, orchestrator_id: Principal) -> Self {
+        self.upgrade_minter(UpgradeArg {
+            next_transaction_nonce: None,
+            minimum_withdrawal_amount: None,
+            ethereum_contract_address: None,
+            ethereum_block_height: None,
+            ledger_suite_orchestrator_id: Some(orchestrator_id),
+        });
+        self
     }
 
     pub fn check_audit_logs_and_upgrade(self, upgrade_arg: UpgradeArg) -> Self {

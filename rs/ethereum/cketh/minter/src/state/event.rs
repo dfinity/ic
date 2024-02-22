@@ -1,3 +1,4 @@
+use crate::erc20::CkErc20Token;
 use crate::eth_logs::{EventSource, ReceivedEthEvent};
 use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::lifecycle::{init::InitArg, upgrade::UpgradeArg};
@@ -93,6 +94,9 @@ pub enum EventType {
     /// The minter could not scrap the logs for that block.
     #[n(13)]
     SkippedBlock(#[n(0)] BlockNumber),
+    /// Add a new ckERC20 token.
+    #[n(14)]
+    AddedCkErc20Token(#[n(0)] CkErc20Token),
 }
 
 #[derive(Encode, Decode, Debug, PartialEq, Eq)]

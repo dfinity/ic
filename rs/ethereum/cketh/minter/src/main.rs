@@ -8,9 +8,10 @@ use ic_cketh_minter::endpoints::events::{
     Event as CandidEvent, EventSource as CandidEventSource, GetEventsArg, GetEventsResult,
 };
 use ic_cketh_minter::endpoints::{
-    Eip1559TransactionPrice, GasFeeEstimate, MinterInfo, RetrieveEthRequest, RetrieveEthStatus,
-    WithdrawalArg, WithdrawalError,
+    AddCkErc20Token, Eip1559TransactionPrice, GasFeeEstimate, MinterInfo, RetrieveEthRequest,
+    RetrieveEthStatus, WithdrawalArg, WithdrawalError,
 };
+use ic_cketh_minter::erc20::CkErc20Token;
 use ic_cketh_minter::eth_logs::{EventSource, ReceivedEthEvent};
 use ic_cketh_minter::guard::retrieve_eth_guard;
 use ic_cketh_minter::lifecycle::MinterArg;
@@ -276,6 +277,21 @@ fn is_address_blocked(address_string: String) -> bool {
 }
 
 #[update]
+async fn add_ckerc20_token(erc20_token: AddCkErc20Token) {
+    let orchestrator_id = read_state(|s| s.ledger_suite_orchestrator_id)
+        .unwrap_or_else(|| ic_cdk::trap("ERROR: ERC-20 feature is not activated"));
+    if orchestrator_id != ic_cdk::caller() {
+        ic_cdk::trap(&format!(
+            "ERROR: only the orchestrator {} can add ERC-20 tokens",
+            orchestrator_id
+        ));
+    }
+    let ckerc20_token = CkErc20Token::try_from(erc20_token)
+        .unwrap_or_else(|e| ic_cdk::trap(&format!("ERROR: {}", e)));
+    mutate_state(|s| process_event(s, EventType::AddedCkErc20Token(ckerc20_token)));
+}
+
+#[update]
 async fn get_canister_status() -> ic_cdk::api::management_canister::main::CanisterStatusResponse {
     ic_cdk::api::management_canister::main::canister_status(
         ic_cdk::api::management_canister::main::CanisterIdRecord {
@@ -447,6 +463,12 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                 },
                 EventType::SkippedBlock(block_number) => EP::SkippedBlock {
                     block_number: block_number.into(),
+                },
+                EventType::AddedCkErc20Token(token) => EP::AddedCkErc20Token {
+                    chain_id: token.erc20_ethereum_network.chain_id().into(),
+                    address: token.erc20_contract_address.to_string(),
+                    ckerc20_token_symbol: token.ckerc20_token_symbol,
+                    ckerc20_ledger_id: token.ckerc20_ledger_id,
                 },
             },
         }
