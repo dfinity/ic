@@ -1603,8 +1603,6 @@ impl Default for ExecutionTestBuilder {
                 rate_limiting_of_instructions: FlagStatus::Disabled,
                 canister_sandboxing_flag: FlagStatus::Enabled,
                 composite_queries: FlagStatus::Disabled,
-                query_caching: FlagStatus::Disabled,
-                query_cache_capacity: NumBytes::new(100_000_000), // 100MB
                 allocatable_compute_capacity_in_percent: 100,
                 ..Config::default()
             },
@@ -1815,11 +1813,6 @@ impl ExecutionTestBuilder {
 
     pub fn with_composite_queries(mut self) -> Self {
         self.execution_config.composite_queries = FlagStatus::Enabled;
-        self
-    }
-
-    pub fn with_query_caching(mut self) -> Self {
-        self.execution_config.query_caching = FlagStatus::Enabled;
         self
     }
 
