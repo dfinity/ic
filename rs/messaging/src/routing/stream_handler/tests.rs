@@ -257,8 +257,7 @@ fn induct_loopback_stream_reject_response() {
 #[test]
 fn induct_loopback_stream_reroute_response() {
     with_test_replica_logger(|log| {
-        let (mut stream_handler, mut initial_state, metrics_registry) = new_fixture(&log);
-        stream_handler.testing_flag_generate_reject_signals = true;
+        let (stream_handler, mut initial_state, metrics_registry) = new_fixture(&log);
 
         let initial_canister_state = new_canister_state(
             *LOCAL_CANISTER,
@@ -1889,8 +1888,7 @@ fn induct_stream_slices_receiver_subnet_mismatch() {
 #[test]
 fn induct_stream_slices_with_messages_to_migrating_canister() {
     with_test_replica_logger(|log| {
-        let (mut stream_handler, mut initial_state, metrics_registry) = new_fixture(&log);
-        stream_handler.testing_flag_generate_reject_signals = true;
+        let (stream_handler, mut initial_state, metrics_registry) = new_fixture(&log);
 
         // `REMOTE_CANISTER` is hosted by `CANISTER_MIGRATION_SUBNET` but in the process
         // of being migrated to `LOCAL_SUBNET`.
@@ -2026,8 +2024,7 @@ fn induct_stream_slices_with_messages_to_migrating_canister() {
 #[test]
 fn induct_stream_slices_with_messages_to_migrated_canister() {
     with_test_replica_logger(|log| {
-        let (mut stream_handler, mut initial_state, metrics_registry) = new_fixture(&log);
-        stream_handler.testing_flag_generate_reject_signals = true;
+        let (stream_handler, mut initial_state, metrics_registry) = new_fixture(&log);
 
         // `LOCAL_CANISTER` was hosted by the `LOCAL_SUBNET` but then migrated.
         initial_state = simulate_canister_migration(
@@ -2159,8 +2156,7 @@ fn induct_stream_slices_with_messages_to_migrated_canister() {
 #[test]
 fn induct_stream_slices_with_messages_from_migrating_canister() {
     with_test_replica_logger(|log| {
-        let (mut stream_handler, mut initial_state, metrics_registry) = new_fixture(&log);
-        stream_handler.testing_flag_generate_reject_signals = true;
+        let (stream_handler, mut initial_state, metrics_registry) = new_fixture(&log);
 
         // Canister with a reservation for one incoming response.
         let mut initial_canister_state = new_canister_state(
@@ -2269,8 +2265,7 @@ fn induct_stream_slices_with_messages_from_migrating_canister() {
 #[test]
 fn induct_stream_slices_with_messages_from_migrated_canister() {
     with_test_replica_logger(|log| {
-        let (mut stream_handler, mut initial_state, metrics_registry) = new_fixture(&log);
-        stream_handler.testing_flag_generate_reject_signals = true;
+        let (stream_handler, mut initial_state, metrics_registry) = new_fixture(&log);
 
         // Canister with a reservation for one incoming response.
         let mut initial_canister_state = new_canister_state(
@@ -2567,8 +2562,7 @@ fn induct_stream_slices_with_memory_limit_setup(
 #[test]
 fn process_stream_slices_with_reject_signals_partial_success() {
     with_test_replica_logger(|log| {
-        let (mut stream_handler, mut initial_state, metrics_registry) = new_fixture(&log);
-        stream_handler.testing_flag_generate_reject_signals = true;
+        let (stream_handler, mut initial_state, metrics_registry) = new_fixture(&log);
         let mut expected_state = initial_state.clone();
 
         // The initial state consists of a blank CanisterState...
@@ -2755,8 +2749,7 @@ fn process_stream_slices_with_reject_signals_partial_success() {
 #[test]
 fn process_stream_slices_canister_migration_in_both_subnets_success() {
     with_test_replica_logger(|log| {
-        let (mut stream_handler, mut initial_state, metrics_registry) = new_fixture(&log);
-        stream_handler.testing_flag_generate_reject_signals = true;
+        let (stream_handler, mut initial_state, metrics_registry) = new_fixture(&log);
 
         //
         // Initial state with canister migrations happening in both sending and
@@ -3052,6 +3045,7 @@ fn new_fixture_with_config(
     hypervisor_config: HypervisorConfig,
 ) -> (StreamHandlerImpl, ReplicatedState, MetricsRegistry) {
     let mut state = ReplicatedState::new(LOCAL_SUBNET, SubnetType::Application);
+    state.metadata.certification_version = ic_certification_version::CURRENT_CERTIFICATION_VERSION;
     let metrics_registry = MetricsRegistry::new();
     let stream_handler = StreamHandlerImpl::new(
         LOCAL_SUBNET,
