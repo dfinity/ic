@@ -246,6 +246,9 @@ bazel-system-test-nightly-nns:
 bazel-config-check-all-rebuild:
   extends:
     - .bazel-test-all
+  rules:
+    - if: $CI_MERGE_REQUEST_EVENT_TYPE == "merge_train"
+    - !reference [.rules-master-pipeline-no-merge-train-rust-bazel-changed, rules]
   variables:
     BAZEL_EXTRA_ARGS: "--keep_going --config=check"
     BAZEL_COMMAND: "build"
