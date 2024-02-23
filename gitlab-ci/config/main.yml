@@ -6,8 +6,12 @@ no-interrupt:
     - echo "This pipeline is not interruptible"
 
 after-script-test:
-  extends:
-    - .rules-master-pipeline-and-merge-request
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
+      changes:
+        - "gitlab-ci/src/after_script/*"
+        - "gitlab-ci/config/*"
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
   needs: [] # don't wait on other jobs
   script:
     - |
