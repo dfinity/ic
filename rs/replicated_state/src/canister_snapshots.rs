@@ -1,7 +1,9 @@
 use ic_types::{CanisterId, Time};
 use ic_wasm_types::CanisterModule;
 
-use crate::{canister_state::system_state::wasm_chunk_store::WasmChunkStore, PageMap};
+use crate::{
+    canister_state::system_state::wasm_chunk_store::WasmChunkStore, NumWasmPages, PageMap,
+};
 
 use phantom_newtype::Id;
 use std::{collections::BTreeMap, sync::Arc};
@@ -106,8 +108,12 @@ pub struct CanisterSnapshot {
     wasm_binary: Option<CanisterModule>,
     /// Snapshot of stable memory.
     stable_memory: Option<PageMap>,
+    /// The size of the stable memory in wasm pages.
+    stable_memory_size: Option<NumWasmPages>,
     /// Snapshot of wasm memory.
     wasm_memory: Option<PageMap>,
+    /// The size of the wasm memory in wasm pages.
+    wasm_memory_size: Option<NumWasmPages>,
 }
 
 impl CanisterSnapshot {
@@ -117,7 +123,9 @@ impl CanisterSnapshot {
         canister_version: u64,
         certified_data: Vec<u8>,
         stable_memory: Option<PageMap>,
+        stable_memory_size: Option<NumWasmPages>,
         wasm_memory: Option<PageMap>,
+        wasm_memory_size: Option<NumWasmPages>,
         chunk_store: WasmChunkStore,
         wasm_binary: Option<CanisterModule>,
     ) -> CanisterSnapshot {
@@ -127,7 +135,9 @@ impl CanisterSnapshot {
             canister_version,
             certified_data,
             stable_memory,
+            stable_memory_size,
             wasm_memory,
+            wasm_memory_size,
             chunk_store,
             wasm_binary,
         }
@@ -181,7 +191,9 @@ mod tests {
             0,
             vec![],
             Some(PageMap::new_for_testing()),
+            Some(NumWasmPages::new(10)),
             Some(PageMap::new_for_testing()),
+            Some(NumWasmPages::new(10)),
             WasmChunkStore::new_for_testing(NumBytes::from(20)),
             Some(CanisterModule::new(vec![1, 2, 3])),
         );
