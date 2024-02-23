@@ -61,7 +61,11 @@ pub fn network_status(storage_client: &StorageClient) -> Result<NetworkStatusRes
         .map_err(|e| {
             Error::unable_to_find_block(&format!("Error retrieving genesis block: {:?}", e))
         })?
-        .ok_or_else(|| Error::unable_to_find_block(&"Genesis block not found".to_owned()))?;
+        .ok_or_else(|| {
+            Error::unable_to_find_block(
+                &"Genesis block not found! Perhaps the initial sync is still running?".to_owned(),
+            )
+        })?;
     let genesis_block_identifier = BlockIdentifier::from(&genesis_block);
 
     Ok(NetworkStatusResponse {

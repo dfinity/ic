@@ -45,7 +45,6 @@ use rosetta_core::response_types::BlockResponse;
 use rosetta_core::response_types::ConstructionPreprocessResponse;
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::thread;
 use std::{
     path::PathBuf,
     sync::Arc,
@@ -189,21 +188,17 @@ impl RosettaTestingEnvironmentBuilder {
 
         // Wait for rosetta to catch up with the ledger
         if let Some(last_block_idx) = block_idxes.last() {
-            while rosetta_client
-                .block(
-                    network_identifier.clone(),
-                    PartialBlockIdentifier {
-                        index: Some(*last_block_idx),
-                        hash: None,
-                    },
-                )
-                .await
-                .unwrap()
-                .block
-                .is_none()
-            {
-                thread::sleep(Duration::from_secs(1));
-            }
+            let rosetta_last_block_idx = wait_for_rosetta_block(
+                &rosetta_client,
+                network_identifier.clone(),
+                *last_block_idx,
+            )
+            .await;
+            assert_eq!(
+                Some(*last_block_idx),
+                rosetta_last_block_idx,
+                "Wait for rosetta sync failed."
+            );
         }
 
         RosettaTestingEnvironment {
@@ -714,23 +709,19 @@ fn test_account_balance() {
 async fn test_continuous_block_sync() {
     let env = RosettaTestingEnvironmentBuilder::new().build().await;
 
-    for blocks in 1..6 {
-        let last_block_idx_start = env
-            .rosetta_client
-            .network_status(env.network_identifier.clone())
-            .await
-            .expect("Unable to call network_status")
-            .current_block_identifier
-            .index;
+    // The empty test ledger has 1 block at index 0 - mint to the test identity.
+    let mut last_block_idx_start = 0;
 
-        let args = TransferArg {
-            from_subaccount: None,
-            to: *TEST_ACCOUNT,
-            fee: Some(DEFAULT_TRANSFER_FEE.into()),
-            amount: 1u64.into(),
-            memo: None,
-            created_at_time: None,
-        };
+    let args = TransferArg {
+        from_subaccount: None,
+        to: *TEST_ACCOUNT,
+        fee: Some(DEFAULT_TRANSFER_FEE.into()),
+        amount: 1u64.into(),
+        memo: None,
+        created_at_time: None,
+    };
+
+    for blocks in 1..6 {
         for i in 0..blocks {
             let block_index = env
                 .icrc1_agent
@@ -750,9 +741,11 @@ async fn test_continuous_block_sync() {
 
         assert_eq!(
             last_block_idx,
-            last_block_idx_start + blocks,
+            Some(last_block_idx_start + blocks),
             "Rosetta did not sync the last block!"
         );
+
+        last_block_idx_start = last_block_idx.expect("Last block not found");
     }
 }
 
