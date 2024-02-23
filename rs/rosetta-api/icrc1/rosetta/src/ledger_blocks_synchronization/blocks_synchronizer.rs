@@ -1,6 +1,6 @@
 use crate::common::{
     storage::{storage_client::StorageClient, types::RosettaBlock},
-    utils::utils::create_progress_bar,
+    utils::utils::create_progress_bar_if_needed,
 };
 use anyhow::{bail, Context};
 use candid::{Decode, Encode, Nat};
@@ -178,7 +178,7 @@ async fn sync_blocks_interval(
     sync_range: SyncRange,
 ) -> anyhow::Result<()> {
     // Create a progress bar for visualization.
-    let pb = create_progress_bar(
+    let pb = create_progress_bar_if_needed(
         *sync_range.index_range.start(),
         *sync_range.index_range.end(),
     );
@@ -219,7 +219,9 @@ async fn sync_blocks_interval(
 
         leading_block_hash = fetched_blocks[0].parent_hash.clone();
         let number_of_blocks_fetched = fetched_blocks.len();
-        pb.inc(number_of_blocks_fetched as u64);
+        if let Some(ref pb) = pb {
+            pb.inc(number_of_blocks_fetched as u64);
+        }
 
         // Store the fetched blocks in the database.
         storage_client.store_blocks(fetched_blocks.clone())?;
@@ -253,10 +255,13 @@ async fn sync_blocks_interval(
         );
         next_index_interval = RangeInclusive::new(interval_start, interval_end);
     }
-    pb.finish_with_message(format!(
+    if let Some(pb) = pb {
+        pb.finish_with_message("Done");
+    }
+    info!(
         "Synced Up to block height: {}",
         *sync_range.index_range.end()
-    ));
+    );
     Ok(())
 }
 
