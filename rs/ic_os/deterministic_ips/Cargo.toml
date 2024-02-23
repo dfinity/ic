@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
-thiserror = "1.0"
+thiserror = { workspace = true }
 anyhow = "1.0.71"
 clap = { version = "4.3.3", features = ["derive"] }
 

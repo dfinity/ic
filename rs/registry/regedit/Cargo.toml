@@ -24,7 +24,7 @@ ic-base-types = { path = "../../types/base_types" }
 prost = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-thiserror = "1.0"
+thiserror = { workspace = true }
 tokio = { workspace = true }
 url = { version = "2.1.1", features = ["serde"] }
 

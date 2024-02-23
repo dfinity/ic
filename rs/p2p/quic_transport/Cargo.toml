@@ -29,7 +29,7 @@ serde = { workspace = true }
 serde_bytes = { workspace = true }
 slog = { workspace = true }
 socket2 = { version = "0.5", features = ["all"] }
-thiserror = "1.0.50"
+thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-metrics = { workspace = true }
 tokio-rustls = { workspace = true }

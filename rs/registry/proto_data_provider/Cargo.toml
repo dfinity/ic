@@ -13,4 +13,4 @@ ic-registry-common-proto = { path = "../proto" }
 ic-registry-transport = { path = "../transport" }
 ic-sys = { path = "../../sys" }
 ic-types = { path = "../../types/types" }
-thiserror = "1.0"
+thiserror = { workspace = true }

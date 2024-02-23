@@ -158,10 +158,10 @@ slog = { workspace = true }
 slog-async = { version = "2.5", features = ["nested-values"] }
 slog-term = "2.6.0"
 ssh2 = "0.9.4"
-strum = { workspace = true}
-strum_macros = { workspace = true}
+strum = { workspace = true }
+strum_macros = { workspace = true }
 tempfile = "3.1.0"
-thiserror = "1.0"
+thiserror = { workspace = true }
 time = "^0.3.20"
 walkdir = "2.3.1"
 tokio = { workspace = true }

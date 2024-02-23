@@ -13,7 +13,7 @@ ic-crypto-sha2 = { path = "../sha2" }
 ic-protobuf = { path = "../../protobuf" }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
-thiserror = "1.0"
+thiserror = { workspace = true }
 
 [dev-dependencies]
 criterion = "0.5"
