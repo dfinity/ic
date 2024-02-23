@@ -6079,6 +6079,7 @@ dependencies = [
 name = "ic-consensus-manager"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "axum 0.7.4",
  "backoff",
  "bytes",
@@ -8713,6 +8714,7 @@ dependencies = [
 name = "ic-memory-transport"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "async-trait",
  "axum 0.7.4",
  "bytes",
@@ -9597,6 +9599,7 @@ dependencies = [
 name = "ic-p2p-test-utils"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "async-trait",
  "axum 0.7.4",
  "bytes",
@@ -9790,7 +9793,6 @@ dependencies = [
  "serde_bytes",
  "slog",
  "socket2 0.5.5",
- "thiserror",
  "tokio",
  "tokio-metrics",
  "tokio-rustls",

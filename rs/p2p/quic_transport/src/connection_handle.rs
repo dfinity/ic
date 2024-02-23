@@ -15,7 +15,7 @@ use crate::{
         ERROR_TYPE_WRITE, REQUEST_TYPE_PUSH, REQUEST_TYPE_RPC,
     },
     utils::{read_response, write_request},
-    ConnId, SendError,
+    ConnId,
 };
 
 #[derive(Clone, Debug)]
@@ -48,7 +48,7 @@ impl ConnectionHandle {
     pub(crate) async fn rpc(
         &self,
         mut request: Request<Bytes>,
-    ) -> Result<Response<Bytes>, SendError> {
+    ) -> Result<Response<Bytes>, anyhow::Error> {
         let _timer = self
             .metrics
             .connection_handle_duration_seconds
@@ -106,7 +106,7 @@ impl ConnectionHandle {
         Ok(response)
     }
 
-    pub(crate) async fn push(&self, mut request: Request<Bytes>) -> Result<(), SendError> {
+    pub(crate) async fn push(&self, mut request: Request<Bytes>) -> Result<(), anyhow::Error> {
         let _timer = self
             .metrics
             .connection_handle_duration_seconds

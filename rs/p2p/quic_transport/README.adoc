@@ -23,7 +23,7 @@ The IC Transport layer enables message delivery between nodes within a subnet.
 | https://en.wikipedia.org/wiki/Network_congestion#Congestion_control[Fair congestion control] - if a server is at capacity regardless of the reason then messages should be processed fairly across different connections.
 | In cases where a replica receives more requests than it can handle (e.g. malicious peer, bug, or it just cannot keep up with processing), messages from particular peer should not be favoured over other messages because it is unknown which peers are malicious.
 
-| Application specific handshake - TLS, SEV-SNP attestation.
+| Application specific handshake - TLS.
 | Security.
 
 | Persistent connections.
@@ -43,11 +43,19 @@ For the sending side, transport exposes two API calls - `+rpc+` and `+push+`. Fo
 The key difference between the two is that the `+push+` method doesn't return a response from the receving side.
 It is effectively the same as `+rpc+` just slightly more performant because there is less data to be exchanged. 
 
+Transport uses https://docs.rs/anyhow/latest/anyhow/struct.Error.html[anyhow::Error] instead of https://docs.rs/thiserror/latest/thiserror/derive.Error.html[thiserror::Error] as the error type 
+because the errors are transient and it is expected that the user retries on failure.
+
+How do you make sure there are only transient errors? For example, how do you ruled out
+
+* Invalid arguments - Invalid arguments are prevented from making it to the transport methods by using the type system.
+* Internal, unknown errors - By definition, internal errors can't be handled meaningfully by the caller. Transport desides if it should crash the process or just propagate the error with the expectations that the user will retry.
+
 [source, rust]
 ----
-    async fn rpc(&self, peer_id: &NodeId, request: Request<Bytes>) -> Result<Response<Bytes>, SendError>;
+    async fn rpc(&self, peer_id: &NodeId, request: Request<Bytes>) -> Result<Response<Bytes>, anyhow::Error>;
 
-    async fn push(&self, peer_id: &NodeId, request: Request<Bytes>) -> Result<(), SendError>;
+    async fn push(&self, peer_id: &NodeId, request: Request<Bytes>) -> Result<(), anyhow::Error>;
 ----
 
 The receiving side, is a collection of callbacks, called handlers. Each possible URI is associated with a single handler. 
