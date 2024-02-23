@@ -10,7 +10,7 @@ use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_PRINCIPAL;
 use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
     pocket_ic_helpers::{
-        install_canister, install_nns_canisters, nns,
+        add_wasms_to_sns_wasm, install_canister, install_nns_canisters, nns,
         sns::{self, swap::SwapFinalizationStatus},
     },
 };
@@ -19,7 +19,7 @@ use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance::pb::v1::{
     create_service_nervous_system::initial_token_distribution::developer_distribution::NeuronDistribution,
     get_neurons_fund_audit_info_response, neurons_fund_snapshot::NeuronsFundNeuronPortion,
-    proposal, CreateServiceNervousSystem, Neuron, Proposal,
+    CreateServiceNervousSystem, Neuron,
 };
 use ic_sns_governance::{governance::TREASURY_SUBACCOUNT_NONCE, pb::v1 as sns_pb};
 use ic_sns_init::distributions::MAX_DEVELOPER_DISTRIBUTION_COUNT;
@@ -32,7 +32,7 @@ use ic_sns_swap::{
     },
     swap::principal_to_subaccount,
 };
-use ic_sns_wasm::pb::v1::get_deployed_sns_by_proposal_id_response::GetDeployedSnsByProposalIdResult;
+use ic_sns_wasm::pb::v1::DeployedSns;
 use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
 use icp_ledger::{AccountIdentifier, DEFAULT_TRANSFER_FEE};
 use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
@@ -128,11 +128,11 @@ struct DirectParticipantConfig {
 /// 7.2. `{ true } FinalizeSuccessfully   { SNS token balances are as expected. }`
 fn test_sns_lifecycle(
     ensure_swap_timeout_is_reached: bool,
-    create_service_nervous_system_proposal: CreateServiceNervousSystem,
+    create_service_nervous_system: CreateServiceNervousSystem,
     direct_participant_principal_ids: BTreeMap<PrincipalId, DirectParticipantConfig>,
 ) {
     // 0. Deconstruct and clone some immutable objects for convenience.
-    let initial_token_distribution = create_service_nervous_system_proposal
+    let initial_token_distribution = create_service_nervous_system
         .initial_token_distribution
         .clone()
         .unwrap();
@@ -146,7 +146,7 @@ fn test_sns_lifecycle(
         .iter()
         .map(|x| x.controller.unwrap())
         .collect();
-    let swap_parameters = create_service_nervous_system_proposal
+    let swap_parameters = create_service_nervous_system
         .swap_parameters
         .clone()
         .unwrap();
@@ -188,7 +188,7 @@ fn test_sns_lifecycle(
             swap_distribution_sns_e8s,
         )
     };
-    let transaction_fee_sns_e8s = create_service_nervous_system_proposal
+    let transaction_fee_sns_e8s = create_service_nervous_system
         .ledger_parameters
         .as_ref()
         .unwrap()
@@ -230,14 +230,17 @@ fn test_sns_lifecycle(
             .values()
             .map(|(account_identifier, balance_icp, _)| (*account_identifier, *balance_icp))
             .collect();
-        let with_mainnet_sns_wasm_wasm = false;
-        let with_mainnet_ledger_wasms = false;
-        let (nns_neuron_controller_principal_ids, _) = install_nns_canisters(
+
+        let with_mainnet_nns_canister_versions = false;
+        let nns_neuron_controller_principal_ids = install_nns_canisters(
             &pocket_ic,
             direct_participant_initial_icp_balances,
-            with_mainnet_sns_wasm_wasm,
-            with_mainnet_ledger_wasms,
+            with_mainnet_nns_canister_versions,
         );
+
+        let with_mainnet_sns_wasms = false;
+        add_wasms_to_sns_wasm(&pocket_ic, with_mainnet_sns_wasms).unwrap();
+
         nns_neuron_controller_principal_ids
             .into_iter()
             .map(|controller_principal_id| {
@@ -290,7 +293,7 @@ fn test_sns_lifecycle(
         .collect();
 
     // Install the test dapp.
-    let dapp_canister_ids: Vec<_> = create_service_nervous_system_proposal
+    let dapp_canister_ids: Vec<_> = create_service_nervous_system
         .dapp_canisters
         .iter()
         .map(|canister| CanisterId::unchecked_from_principal(canister.id.unwrap()))
@@ -320,35 +323,21 @@ fn test_sns_lifecycle(
     }
 
     // 2. Create an SNS instance
-    let proposal_info = nns::governance::propose_and_wait(
+    let sns_instance_label = "1";
+    let (deployed_sns, nns_proposal_id) = nns::governance::propose_to_deploy_sns_and_wait(
         &pocket_ic,
-        Proposal {
-            title: Some(format!("Create SNS #{}", 1)),
-            summary: "".to_string(),
-            url: "".to_string(),
-            action: Some(proposal::Action::CreateServiceNervousSystem(
-                create_service_nervous_system_proposal,
-            )),
-        },
-    )
-    .unwrap();
-    let proposal_id = proposal_info.id.unwrap();
-
-    let Some(GetDeployedSnsByProposalIdResult::DeployedSns(deployed_sns)) =
-        nns::sns_wasm::get_deployed_sns_by_proposal_id(&pocket_ic, proposal_id)
-            .get_deployed_sns_by_proposal_id_result
+        create_service_nervous_system,
+        sns_instance_label,
+    );
+    let DeployedSns {
+        governance_canister_id: Some(sns_governance_canister_id),
+        swap_canister_id: Some(swap_canister_id),
+        ledger_canister_id: Some(sns_ledger_canister_id),
+        ..
+    } = deployed_sns
     else {
-        panic!(
-            "Proposal {:?} did not result in a successfully deployed SNS",
-            proposal_id
-        );
+        panic!("Cannot find some SNS caniser IDs in {:#?}", deployed_sns);
     };
-
-    // The proposal created a Swap and SNS Governance canisters that we can now start
-    // interacting with.
-    let sns_governance_canister_id = deployed_sns.governance_canister_id.unwrap();
-    let swap_canister_id = deployed_sns.swap_canister_id.unwrap();
-    let sns_ledger_canister_id = deployed_sns.ledger_canister_id.unwrap();
 
     // Check that total SNS Ledger supply adds up.
     let original_total_supply_sns_e8s =
@@ -1079,11 +1068,11 @@ fn test_sns_lifecycle(
             get_neurons_fund_audit_info_response::Ok {
                 neurons_fund_audit_info: Some(neurons_fund_audit_info),
             },
-        )) = nns::governance::get_neurons_fund_audit_info(&pocket_ic, proposal_id).result
+        )) = nns::governance::get_neurons_fund_audit_info(&pocket_ic, nns_proposal_id).result
         else {
             panic!(
                 "Proposal {:?} did not result in a successfully deployed SNS",
-                proposal_id
+                nns_proposal_id
             );
         };
         neurons_fund_audit_info
@@ -1389,15 +1378,15 @@ fn test_sns_lifecycle(
                 );
             }
 
-            if neurons_fund_neuron_controllers_to_neuron_portions.is_empty()
-                || swap_finalization_status == SwapFinalizationStatus::Aborted
+            if swap_finalization_status == SwapFinalizationStatus::Aborted
+                || neurons_fund_neuron_controllers_to_neuron_portions.is_empty()
                 || nns_controller_to_neurons_fund_neurons
                     .get(principal_id)
                     .is_none()
             {
-                // ((The Neuron's Fund has not participated at all)
-                //  || (This is not a Neuron's Fund participant)
-                //  || (The swap has aborted))
+                // ((The swap has aborted)
+                //  || (The Neuron's Fund has not participated in this swap)
+                //  || (The are no Neurons' Fund neurons))
                 //     ==>  There should not be any Neurons' Fund-related SNS neurons.
                 assert_eq!(actually_swapped_neurons_fund_sns_tokens_e8s, 0);
             } else {
@@ -1519,11 +1508,11 @@ fn test_sns_lifecycle(
             get_neurons_fund_audit_info_response::Ok {
                 neurons_fund_audit_info: Some(neurons_fund_audit_info),
             },
-        )) = nns::governance::get_neurons_fund_audit_info(&pocket_ic, proposal_id).result
+        )) = nns::governance::get_neurons_fund_audit_info(&pocket_ic, nns_proposal_id).result
         else {
             panic!(
                 "Proposal {:?} did not result in a successfully deployed SNS",
-                proposal_id
+                nns_proposal_id
             );
         };
         // Maps neuron IDs to maturity equivalent ICP e8s.
@@ -1746,7 +1735,7 @@ fn test_sns_lifecycle_happy_scenario_with_lots_of_dev_neurons() {
         vesting_period: Some(DurationPb::from_secs(0)),
     });
 
-    let create_service_nervous_system_proposal = CreateServiceNervousSystemBuilder::default()
+    let create_service_nervous_system = CreateServiceNervousSystemBuilder::default()
         .neurons_fund_participation(true)
         .initial_token_distribution_developer_neurons(developer_neurons)
         .initial_token_distribution_total(TokensPb::from_e8s((num_neurons * 2 - 1) * E8))
@@ -1754,7 +1743,7 @@ fn test_sns_lifecycle_happy_scenario_with_lots_of_dev_neurons() {
 
     test_sns_lifecycle(
         false,
-        create_service_nervous_system_proposal,
+        create_service_nervous_system,
         btreemap! { PrincipalId::new_user_test_id(1) => DirectParticipantConfig { use_ticketing_system: true } },
     );
 }
@@ -1787,7 +1776,7 @@ fn test_sns_lifecycle_swap_timeout_with_lots_of_dev_neurons() {
         vesting_period: Some(DurationPb::from_secs(0)),
     });
 
-    let create_service_nervous_system_proposal = CreateServiceNervousSystemBuilder::default()
+    let create_service_nervous_system = CreateServiceNervousSystemBuilder::default()
         .neurons_fund_participation(false)
         .initial_token_distribution_developer_neurons(developer_neurons)
         .initial_token_distribution_total(TokensPb::from_e8s((num_neurons * 2 - 1) * E8))
@@ -1795,7 +1784,7 @@ fn test_sns_lifecycle_swap_timeout_with_lots_of_dev_neurons() {
 
     test_sns_lifecycle(
         true,
-        create_service_nervous_system_proposal,
+        create_service_nervous_system,
         btreemap! { PrincipalId::new_user_test_id(1) => DirectParticipantConfig { use_ticketing_system: true } },
     );
 }

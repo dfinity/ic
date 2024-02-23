@@ -428,12 +428,30 @@ pub fn add_real_wasms_to_sns_wasms_and_return_immediately(
     }
 }
 
+/// Builds the mainnet SnsWasm for the root canister.
+pub fn build_mainnet_root_sns_wasm() -> SnsWasm {
+    let root_wasm = Project::cargo_bin_maybe_from_env("mainnet-sns-root-canister", &[]);
+    SnsWasm {
+        wasm: root_wasm.bytes(),
+        canister_type: SnsCanisterType::Root.into(),
+    }
+}
+
 /// Builds the SnsWasm for the root canister.
 pub fn build_root_sns_wasm() -> SnsWasm {
     let root_wasm = Project::cargo_bin_maybe_from_env("sns-root-canister", &[]);
     SnsWasm {
         wasm: root_wasm.bytes(),
         canister_type: SnsCanisterType::Root.into(),
+    }
+}
+
+/// Builds the mainnet SnsWasm for the governance canister.
+pub fn build_mainnet_governance_sns_wasm() -> SnsWasm {
+    let governance_wasm = Project::cargo_bin_maybe_from_env("mainnet-sns-governance-canister", &[]);
+    SnsWasm {
+        wasm: governance_wasm.bytes(),
+        canister_type: SnsCanisterType::Governance.into(),
     }
 }
 
@@ -446,21 +464,12 @@ pub fn build_governance_sns_wasm() -> SnsWasm {
     }
 }
 
-/// Builds the SnsWasm for the ledger canister.
-pub fn build_ledger_sns_wasm() -> SnsWasm {
-    let ledger_wasm = Project::cargo_bin_maybe_from_env("ic-icrc1-ledger", &[]);
+/// Builds the mainnet SnsWasm for the Swap Canister
+pub fn build_mainnet_swap_sns_wasm() -> SnsWasm {
+    let swap_wasm = Project::cargo_bin_maybe_from_env("mainnet-sns-swap-canister", &[]);
     SnsWasm {
-        wasm: ledger_wasm.bytes(),
-        canister_type: SnsCanisterType::Ledger.into(),
-    }
-}
-
-/// Builds the mainnet SnsWasm for the ledger canister.
-pub fn build_mainnet_ledger_sns_wasm() -> SnsWasm {
-    let ledger_wasm = Project::cargo_bin_maybe_from_env("mainnet-ic-icrc1-ledger", &[]);
-    SnsWasm {
-        wasm: ledger_wasm.bytes(),
-        canister_type: SnsCanisterType::Ledger.into(),
+        wasm: swap_wasm.bytes(),
+        canister_type: SnsCanisterType::Swap.into(),
     }
 }
 
@@ -473,18 +482,36 @@ pub fn build_swap_sns_wasm() -> SnsWasm {
     }
 }
 
-/// Builds the SnsWasm for the Ledger Archive Canister
-pub fn build_archive_sns_wasm() -> SnsWasm {
-    let archive_wasm = Project::cargo_bin_maybe_from_env("ic-icrc1-archive", &[]);
+/// Builds the mainnet SnsWasm for the ledger canister.
+pub fn build_mainnet_ledger_sns_wasm() -> SnsWasm {
+    let ledger_wasm = Project::cargo_bin_maybe_from_env("mainnet-ic-icrc1-ledger", &[]);
     SnsWasm {
-        wasm: archive_wasm.bytes(),
-        canister_type: SnsCanisterType::Archive.into(),
+        wasm: ledger_wasm.bytes(),
+        canister_type: SnsCanisterType::Ledger.into(),
+    }
+}
+
+/// Builds the SnsWasm for the ledger canister.
+pub fn build_ledger_sns_wasm() -> SnsWasm {
+    let ledger_wasm = Project::cargo_bin_maybe_from_env("ic-icrc1-ledger", &[]);
+    SnsWasm {
+        wasm: ledger_wasm.bytes(),
+        canister_type: SnsCanisterType::Ledger.into(),
     }
 }
 
 /// Builds the mainnet SnsWasm for the Ledger Archive Canister
 pub fn build_mainnet_archive_sns_wasm() -> SnsWasm {
     let archive_wasm = Project::cargo_bin_maybe_from_env("mainnet-ic-icrc1-archive", &[]);
+    SnsWasm {
+        wasm: archive_wasm.bytes(),
+        canister_type: SnsCanisterType::Archive.into(),
+    }
+}
+
+/// Builds the SnsWasm for the Ledger Archive Canister
+pub fn build_archive_sns_wasm() -> SnsWasm {
+    let archive_wasm = Project::cargo_bin_maybe_from_env("ic-icrc1-archive", &[]);
     SnsWasm {
         wasm: archive_wasm.bytes(),
         canister_type: SnsCanisterType::Archive.into(),

@@ -1,13 +1,13 @@
 use crate::common::{
-    build_cmc_wasm, build_genesis_token_wasm, build_governance_wasm, build_ledger_wasm,
-    build_lifeline_wasm, build_registry_wasm, build_root_wasm, build_sns_wasms_wasm,
-    NnsInitPayloads,
+    build_cmc_wasm, build_genesis_token_wasm, build_governance_wasm_with_features,
+    build_ledger_wasm, build_lifeline_wasm, build_registry_wasm, build_root_wasm,
+    build_sns_wasms_wasm, NnsInitPayloads,
 };
 use candid::{CandidType, Decode, Encode, Nat};
 use canister_test::Wasm;
-use cycles_minting_canister::CYCLES_LEDGER_CANISTER_ID;
 use cycles_minting_canister::{
     IcpXdrConversionRateCertifiedResponse, SetAuthorizedSubnetworkListArgs,
+    CYCLES_LEDGER_CANISTER_ID,
 };
 use dfn_candid::candid_one;
 use dfn_http::types::{HttpRequest, HttpResponse};
@@ -473,7 +473,7 @@ pub fn setup_nns_governance_with_correct_canister_id(
     );
 
     assert_eq!(canister_id, GOVERNANCE_CANISTER_ID);
-    let governance_wasm = build_governance_wasm(features);
+    let governance_wasm = build_governance_wasm_with_features(features);
     machine
         .install_wasm_in_mode(
             canister_id,

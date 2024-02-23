@@ -642,7 +642,7 @@ impl Swap {
     /// This function updates the current contribution from direct and Neurons' Fund participants.
     ///
     /// This function should be called directly exclusively in the following two cases:
-    /// (1) In `Swap.try_open_after_delay` to ensure that the fields are initialized.
+    /// (1) In `Swap.try_open` to ensure that the fields are initialized.
     /// (2) Directly in unit tests (see `update_derived_fields`).
     #[cfg(target_arch = "wasm32")]
     fn update_derived_fields(&mut self) {

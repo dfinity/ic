@@ -286,10 +286,16 @@ pub fn modify_wasm_bytes(wasm_bytes: &[u8], modify_with: &str) -> Vec<u8> {
 /// Build Wasm for NNS Governance canister
 pub fn build_test_governance_wasm() -> Wasm {
     let features = ["test"];
-    build_governance_wasm(&features)
+    build_governance_wasm_with_features(&features)
 }
+/// Build Wasm for NNS Governance canister with no features
+pub fn build_governance_wasm() -> Wasm {
+    let features = [];
+    build_governance_wasm_with_features(&features)
+}
+
 /// Build Wasm for NNS Governance canister
-pub fn build_governance_wasm(features: &[&str]) -> Wasm {
+pub fn build_governance_wasm_with_features(features: &[&str]) -> Wasm {
     Project::cargo_bin_maybe_from_env("governance-canister", features)
 }
 /// Build Wasm for NNS Root canister
@@ -332,4 +338,21 @@ pub fn build_sns_wasms_wasm() -> Wasm {
 pub fn build_mainnet_sns_wasms_wasm() -> Wasm {
     let features = [];
     Project::cargo_bin_maybe_from_env("mainnet-sns-wasm-canister", &features)
+}
+
+/// Build mainnet Wasm for NNS Root Canister
+pub fn build_mainnet_root_wasm() -> Wasm {
+    let features = [];
+    Project::cargo_bin_maybe_from_env("mainnet-root-canister", &features)
+}
+
+/// Build mainnet Wasm for NNS Ledger Canister
+pub fn build_mainnet_ledger_wasm() -> Wasm {
+    Project::cargo_bin_maybe_from_env("mainnet-icp-ledger-canister", &[])
+}
+
+/// Build mainnet Wasm for NNS Governance Canister
+pub fn build_mainnet_governance_wasm() -> Wasm {
+    let features = [];
+    Project::cargo_bin_maybe_from_env("mainnet-governance-canister", &features)
 }
