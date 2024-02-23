@@ -82,7 +82,7 @@ serde_json = { workspace = true }
 slog = { workspace = true }
 strum = "0.25.0"
 tempfile = "3.6.0"
-thiserror = "1.0.40"
+thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-rustls = { workspace = true }
 tower = { workspace = true }

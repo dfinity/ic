@@ -833,9 +833,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "parking_lot": crate.spec(
                 version = "^0.12.1",
             ),
-            "parse_int": crate.spec(
-                version = "^0.4.0",
-            ),
             "paste": crate.spec(
                 version = "^1.0.0",
             ),
@@ -1199,7 +1196,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.8",
             ),
             "thiserror": crate.spec(
-                version = "^1.0",
+                version = "^1.0.57",
             ),
             "thousands": crate.spec(
                 version = "^0.2.0",

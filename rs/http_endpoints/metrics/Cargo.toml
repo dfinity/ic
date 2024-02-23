@@ -17,7 +17,7 @@ ic-types = { path = "../../types/types" }
 prometheus = { workspace = true }
 serde = { workspace = true }
 slog = { workspace = true }
-thiserror = "1.0.37"
+thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-io-timeout = "1.2.0"
 tower = { workspace = true }

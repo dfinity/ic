@@ -11,7 +11,7 @@ async-trait = "0.1.41"
 ic-types = { path = "../../types/types" }
 ic-protobuf = { path = "../../protobuf" }
 serde = { workspace = true }
-thiserror = "1.0.56"
+thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-rustls = { workspace = true }
 x509-parser = "0.15.1"

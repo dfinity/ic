@@ -54,7 +54,7 @@ tracing-subscriber = { workspace = true }
 tokio = { workspace = true }
 ic-response-verification = { workspace = true }
 ic-http-certification = { workspace = true }
-thiserror = "1.0.40"
+thiserror = { workspace = true }
 url = { version = "2.4.1", features = ["serde"] }
 
 [features]

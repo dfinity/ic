@@ -28,7 +28,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }
 slog-async = "2.7.0"
-thiserror = "1.0.26"
+thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-socks = "0.5.1"
 tonic = { workspace = true }

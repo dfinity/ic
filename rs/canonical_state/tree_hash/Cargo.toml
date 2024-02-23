@@ -11,7 +11,7 @@ ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
 itertools = { workspace = true }
 leb128 = "0.2.1"
 scoped_threadpool = "0.1.*"
-thiserror = "1.0"
+thiserror = { workspace = true }
 
 [dev-dependencies]
 ic-canonical-state-tree-hash-test-utils = { path = "test_utils" }
