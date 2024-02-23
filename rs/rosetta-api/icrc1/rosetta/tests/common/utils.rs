@@ -51,18 +51,18 @@ pub async fn wait_for_rosetta_block(
     rosetta_client: &RosettaClient,
     network_identifier: NetworkIdentifier,
     block_index: u64,
-) -> u64 {
+) -> Option<u64> {
     const MAX_ATTEMPTS: u8 = 10;
-    let mut last_block = 0;
+    let mut last_block = None;
     for _ in 0..MAX_ATTEMPTS {
-        last_block = rosetta_client
+        let response = rosetta_client
             .network_status(network_identifier.clone())
-            .await
-            .expect("Unable to call network_status")
-            .current_block_identifier
-            .index;
-        if last_block >= block_index {
-            return last_block;
+            .await;
+        if let Ok(response) = response {
+            last_block = Some(response.current_block_identifier.index);
+            if last_block >= Some(block_index) {
+                return last_block;
+            }
         }
         std::thread::sleep(std::time::Duration::from_secs(1));
     }

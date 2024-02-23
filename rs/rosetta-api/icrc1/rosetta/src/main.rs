@@ -281,7 +281,11 @@ async fn main() -> Result<()> {
         ledger_canister_id: args.ledger_id.into(),
     });
 
-    if !args.offline {
+    if args.exit_on_sync {
+        if args.offline {
+            bail!("'exit-on-sync' and 'offline' parameters cannot be specified at the same time.");
+        }
+
         info!("Starting to sync blocks");
         start_synching_blocks(
             icrc1_agent.clone(),
@@ -289,14 +293,7 @@ async fn main() -> Result<()> {
             *MAXIMUM_BLOCKS_PER_REQUEST,
         )
         .await?;
-    }
 
-    info!("Starting to update account balances");
-    // Once the entire blockchain has been synched and no gaps remain, the account_balance table can be updated
-    storage.update_account_balances()?;
-
-    // If the option of exiting after the synchronization is completed is set we can exit rosetta
-    if args.exit_on_sync {
         process::exit(0);
     }
 
