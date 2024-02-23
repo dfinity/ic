@@ -8,7 +8,6 @@ test -z "${SSH_AUTH_SOCK:-}" && {
 }
 ssh-add -L || true
 date
-end=$(date +%s)
 export PYTHONPATH="${CI_PROJECT_DIR}/gitlab-ci/src"
 
 ENG_CONS_CHANNEL="eng-consensus-test-failures"
@@ -67,12 +66,3 @@ if [[ "$CI_JOB_NAME" == "notify-gitlab-success" ]] || [[ "$CI_JOB_NAME" == "noti
     PIPELINE_STATUS=$(echo "$CI_JOB_NAME" | cut -d'-' -f3) # success or failure
     buildevents build "$ROOT_PIPELINE_ID" "$PIPELINE_START_TIME" "$PIPELINE_STATUS"
 fi
-
-# This only works if shellcheck is run from the repo root.
-# shellcheck source=gitlab-ci/src/artifacts/collect_core_dumps.sh
-. "${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/collect_core_dumps.sh
-
-"${CI_PROJECT_DIR}"/gitlab-ci/src/log_metrics/log_metrics.py \
-    build_time=$((end - $(cat "/tmp/job_start_date_$CI_JOB_ID"))) \
-    start_time="$(cat "/tmp/job_start_iso_date_$CI_JOB_ID")" \
-    HOSTNAME="$(hostname -f)"
