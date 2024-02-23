@@ -66,6 +66,7 @@ tempfile = "3.1.0"
 tokio = { workspace = true }
 wat = "1.0.52"
 maplit = "1.0.2"
+tower = { workspace = true }
 
 [dev-dependencies]
 proptest = "1.0"

@@ -55,6 +55,7 @@ DEPENDENCIES = [
     "@crate_index//:slog-term",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
+    "@crate_index//:tower",
     "@crate_index//:wat",
 ]
 

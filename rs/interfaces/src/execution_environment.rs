@@ -1177,20 +1177,6 @@ pub trait Scheduler: Send {
     ) -> Self::State;
 }
 
-/// Synchronous interface for use in testing
-/// to filter out ingress messages that
-/// the canister is not willing to accept.
-pub trait IngressFilter: Send + Sync {
-    type State;
-
-    fn should_accept_ingress_message(
-        &self,
-        state: Arc<Self::State>,
-        provisional_whitelist: &ProvisionalWhitelist,
-        ingress: &SignedIngressContent,
-    ) -> Result<(), UserError>;
-}
-
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct WasmExecutionOutput {
     pub wasm_result: Result<Option<WasmResult>, HypervisorError>,
