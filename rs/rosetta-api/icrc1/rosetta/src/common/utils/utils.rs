@@ -1,6 +1,6 @@
 use crate::{
     common::{
-        constants::DEFAULT_BLOCKCHAIN,
+        constants::{DEFAULT_BLOCKCHAIN, MIN_PROGRESS_BAR},
         storage::{
             storage_client::StorageClient,
             types::{RosettaBlock, RosettaToken},
@@ -104,7 +104,10 @@ pub fn get_rosetta_block_from_partial_block_identifier(
     )
 }
 
-pub fn create_progress_bar(start: u64, end: u64) -> ProgressBar {
+pub fn create_progress_bar_if_needed(start: u64, end: u64) -> Option<ProgressBar> {
+    if end - start < MIN_PROGRESS_BAR {
+        return None;
+    }
     // Progress bar for better visualization
     let pb = ProgressBar::new(end.saturating_sub(start).saturating_add(1));
     pb.set_style(
@@ -117,7 +120,7 @@ pub fn create_progress_bar(start: u64, end: u64) -> ProgressBar {
         })
         .progress_chars("#>-"),
     );
-    pb
+    Some(pb)
 }
 
 // Converts a RosettaBlock into a Block from the rosetta_core crate

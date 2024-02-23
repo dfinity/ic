@@ -1,5 +1,5 @@
 use crate::common::storage::types::{MetadataEntry, RosettaBlock, RosettaToken, Tokens};
-use crate::common::utils::utils::create_progress_bar;
+use crate::common::utils::utils::create_progress_bar_if_needed;
 use anyhow::{anyhow, bail, Context};
 use candid::Principal;
 use ic_icrc1::{Operation, Transaction};
@@ -13,6 +13,7 @@ use rusqlite::{Connection, Statement, ToSql};
 use serde_bytes::ByteBuf;
 use std::collections::{BTreeMap, HashMap};
 use std::str::FromStr;
+use tracing::info;
 
 pub fn store_metadata(connection: &Connection, metadata: Vec<MetadataEntry>) -> anyhow::Result<()> {
     connection.execute_batch("BEGIN TRANSACTION;")?;
@@ -142,7 +143,7 @@ pub fn update_account_balances(connection: &mut Connection) -> anyhow::Result<()
         return Ok(());
     }
     // Create a progressbar to visualize the updating process
-    let pb = create_progress_bar(next_block_to_be_updated, highest_block_idx);
+    let pb = create_progress_bar_if_needed(next_block_to_be_updated, highest_block_idx);
 
     // Take an interval of 100000 blocks and update the account balances for these blocks
     const BATCH_SIZE: u64 = 100000;
@@ -226,7 +227,9 @@ pub fn update_account_balances(connection: &mut Connection) -> anyhow::Result<()
                     }
                 }
             }
-            pb.inc(1);
+            if let Some(ref pb) = pb {
+                pb.inc(1);
+            }
         }
 
         // Flush the cache
@@ -252,7 +255,10 @@ pub fn update_account_balances(connection: &mut Connection) -> anyhow::Result<()
         batch_end_idx = batch_start_idx + BATCH_SIZE;
         rosetta_blocks = get_blocks_by_index_range(connection, batch_start_idx, batch_end_idx)?;
     }
-    pb.finish_with_message("Account Balances have been updated successfully");
+    if let Some(pb) = pb {
+        pb.finish_with_message("Done");
+    }
+    info!("Account Balances have been updated successfully");
     Ok(())
 }
 
