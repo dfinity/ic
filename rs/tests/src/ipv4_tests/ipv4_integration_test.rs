@@ -94,7 +94,6 @@ pub fn config(env: TestEnv) {
 pub fn test(env: TestEnv) {
     let log = env.logger();
     let topology = env.topology_snapshot();
-    let registry_version = topology.get_registry_version().get();
     let nns_node = env.get_first_healthy_system_node_snapshot();
     let app_node = env.get_first_healthy_application_node_snapshot();
     info!(log, "Creating an agent with node provider's identity");
@@ -130,11 +129,8 @@ pub fn test(env: TestEnv) {
             .await
             .expect("Could not update the node's IPv4 config");
 
-        info!(log, "Waiting for the topology snapshot with the new registry version {} ...", registry_version + 1);
-        let _topology = env.topology_snapshot()
-            .block_for_min_registry_version(ic_types::RegistryVersion::from(registry_version + 1))
-            .await
-            .unwrap();
+        info!(log, "Waiting for the registry to update from version {:?} ...", topology.get_registry_version());
+        let topology = topology.block_for_newer_registry_version().await.unwrap();
 
         info!(log, "Check that the IPv4 address is in the node record in the registry ...");
         let app_node = env.get_first_healthy_application_node_snapshot();
@@ -155,14 +151,14 @@ pub fn test(env: TestEnv) {
             .call_and_wait()
             .await
             .expect("Could not remove the unassigned node");
+
+        info!(log, "Waiting for the registry to update from version {:?} ...", topology.get_registry_version());
+        let topology = topology.block_for_newer_registry_version().await.unwrap();
+
         info!(log, "Make sure we have no unassigned nodes anymore");
-        let num_unassigned_nodes = env.topology_snapshot()
-            .block_for_min_registry_version(ic_types::RegistryVersion::from(registry_version + 2))
-            .await
-            .unwrap()
-            .unassigned_nodes()
-            .count();
+        let num_unassigned_nodes = topology.unassigned_nodes().count();
         assert_eq!(num_unassigned_nodes, 0);
+
         info!(log, "Waiting until the removed node registers itself again and updates the registry ...");
         if let Err(e) = unassigned_node.block_on_bash_script(&indoc::formatdoc! {r#"set -e
             sudo systemctl stop ic-crypto-csp
@@ -179,11 +175,11 @@ EOT
             "#}) {
             panic!("Script execution failed: {:?}", e);
         }
+
+        info!(log, "Waiting for the registry to update from version {:?} ...", topology.get_registry_version());
+        let topology = topology.block_for_newer_registry_version().await.unwrap();
+
         info!(log, "Assert there is 1 unassigned node again");
-        let topology = env.topology_snapshot()
-            .block_for_min_registry_version(ic_types::RegistryVersion::from(registry_version + 3))
-            .await
-            .unwrap();
         assert_eq!(topology.unassigned_nodes().count(), 1);
 
         info!(log, "Checking unassigned node's IPv4 config and domain name after its registration");
@@ -229,10 +225,8 @@ EOT
             .await
             .expect("Could not update the node's IPv4 config");
 
-        let topology = env.topology_snapshot()
-            .block_for_min_registry_version(ic_types::RegistryVersion::from(registry_version + 4))
-            .await
-            .unwrap();
+        info!(log, "Waiting for the registry to update from version {:?} ...", topology.get_registry_version());
+        let topology = topology.block_for_newer_registry_version().await.unwrap();
 
         info!(log, "Check that the IPv4 address has been updated in the node record in the registry ...");
         let unassigned_node: IcNodeSnapshot = topology.unassigned_nodes().next().unwrap();
@@ -264,6 +258,9 @@ EOT
             .await
             .expect("Could not update the node's IPv4 config");
 
+        info!(log, "Waiting for the registry to update from version {:?} ...", topology.get_registry_version());
+        let topology = topology.block_for_newer_registry_version().await.unwrap();
+
         let payload = UpdateNodeIPv4ConfigDirectlyPayload {
             node_id: app_node.node_id,
             ipv4_config: None,
@@ -276,10 +273,8 @@ EOT
             .await
             .expect("Could not update the node's IPv4 config");
 
-        let topology = env.topology_snapshot()
-            .block_for_min_registry_version(ic_types::RegistryVersion::from(registry_version + 8))
-            .await
-            .unwrap();
+        info!(log, "Waiting for the registry to update from version {:?} ...", topology.get_registry_version());
+        let topology = topology.block_for_newer_registry_version().await.unwrap();
 
         info!(log, "Check that the IPv4 address is removed in the registry ...");
         let unassigned_node: IcNodeSnapshot = topology.unassigned_nodes().next().unwrap();
