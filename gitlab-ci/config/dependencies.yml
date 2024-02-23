@@ -6,8 +6,8 @@ dependencies-check:
     # On the merge_train, this will be different i.e the merge
     # commit in the master branch. This would cause the job to
     # fail even if it has successfully passed.
-  rules :
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
+  extends:
+    - .rules-master-pipeline-no-merge-train-rust-bazel-changed
   needs: []  # don't wait on other jobs
   variables:
     PYTHONPATH : "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"

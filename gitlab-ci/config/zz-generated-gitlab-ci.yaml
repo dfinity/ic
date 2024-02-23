@@ -2559,9 +2559,21 @@ delegated-identity-bench:
     TESTNET: cdslo
 dependencies-check:
   allow_failure: false
+  extends:
+    - ".rules-master-pipeline-no-merge-train-rust-bazel-changed"
   needs: []
   rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"
+    - changes:
+        - ".bazelrc"
+        - ".bazelversion"
+        - "**/*.bazel"
+        - "**/*.bzl"
+        - "**/*.lock"
+        - "**/*.rs"
+        - "**/*.toml"
+      if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"
+    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/
   script:
     - |
       set -euo pipefail
