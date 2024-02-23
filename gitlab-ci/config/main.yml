@@ -391,6 +391,14 @@ build-ic-release:
 lock-generate:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes:
+        - ".bazelrc"
+        - ".bazelversion"
+        - "**/*.bazel"
+        - "**/*.bzl"
+        - "**/*.lock"
+        - "**/*.rs"
+        - "**/*.toml"
   needs: []
   tags:
     - dfinity-ic
