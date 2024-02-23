@@ -1143,10 +1143,17 @@ impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
     }
 }
 
-fn fetch_sha256(base_url: String, file: &str, logger: Logger) -> Result<String> {
-    let sha256sums_url = format!("{base_url}/SHA256SUMS");
+pub const FETCH_SHA256SUMS_RETRY_TIMEOUT: Duration = Duration::from_secs(120);
+pub const FETCH_SHA256SUMS_RETRY_BACKOFF: Duration = Duration::from_secs(5);
 
-    let response = reqwest::blocking::get(sha256sums_url)?;
+fn fetch_sha256(base_url: String, file: &str, logger: Logger) -> Result<String> {
+    let response = retry(
+        logger.clone(),
+        FETCH_SHA256SUMS_RETRY_TIMEOUT,
+        FETCH_SHA256SUMS_RETRY_BACKOFF,
+        || reqwest::blocking::get(format!("{base_url}/SHA256SUMS")).map_err(|e| anyhow!("{:?}", e)),
+    )?;
+
     if !response.status().is_success() {
         error!(
             logger,
