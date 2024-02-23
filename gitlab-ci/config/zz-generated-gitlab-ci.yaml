@@ -2711,7 +2711,15 @@ large-response-downloading-nightly:
 lock-generate:
   needs: []
   rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - changes:
+        - ".bazelrc"
+        - ".bazelversion"
+        - "**/*.bazel"
+        - "**/*.bzl"
+        - "**/*.lock"
+        - "**/*.rs"
+        - "**/*.toml"
+      if: $CI_PIPELINE_SOURCE == "merge_request_event"
   script:
     - |
       set -euo pipefail
