@@ -283,6 +283,7 @@ async fn bump_last_request_timestamp(
     if *min_alive_until < alive_until {
         *min_alive_until = alive_until;
     }
+    drop(min_alive_until);
     next.run(request).await
 }
 
