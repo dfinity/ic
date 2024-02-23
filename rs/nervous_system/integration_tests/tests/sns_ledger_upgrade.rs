@@ -1,76 +1,158 @@
-use candid::{Encode, Nat, Principal};
+use candid::Nat;
 use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_ledger_core::Tokens;
-use ic_management_canister_types::CanisterInstallMode;
 use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
     pocket_ic_helpers::{
-        add_wasm_via_nns_proposal, install_canister, install_nns_canisters, nns, sns,
+        add_wasm_via_nns_proposal, add_wasms_to_sns_wasm, install_canister, install_nns_canisters,
+        nns, sns, upgrade_root_controlled_nns_canister_to_tip_of_master_or_panic,
     },
 };
-use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
-use ic_nns_constants::{self, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID};
-use ic_nns_governance::{
-    governance::ONE_MONTH_SECONDS,
-    pb::v1::{
-        proposal, CreateServiceNervousSystem, ExecuteNnsFunction, Neuron, NnsFunction, Proposal,
-    },
+use ic_nns_constants::{self, GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID};
+use ic_nns_governance::governance::ONE_MONTH_SECONDS;
+use ic_nns_test_utils::sns_wasm::{
+    build_archive_sns_wasm, build_index_ng_sns_wasm, build_ledger_sns_wasm, build_swap_sns_wasm,
+    create_modified_wasm,
 };
-use ic_nns_test_utils::{
-    common::build_sns_wasms_wasm,
-    sns_wasm::{build_archive_sns_wasm, build_index_ng_sns_wasm, build_ledger_sns_wasm},
-};
-use ic_sns_governance::pb::v1::{self as sns_pb, UpgradeSnsToNextVersion};
-use ic_sns_swap::swap::principal_to_subaccount;
-use ic_sns_wasm::pb::v1::get_deployed_sns_by_proposal_id_response::GetDeployedSnsByProposalIdResult;
+use ic_sns_wasm::pb::v1::{DeployedSns, SnsCanisterType};
 use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
-use icp_ledger::{AccountIdentifier, DEFAULT_TRANSFER_FEE};
 use icrc_ledger_types::{
     icrc1::{account::Account, transfer::TransferArg},
     icrc2::{allowance::AllowanceArgs, approve::ApproveArgs, transfer_from::TransferFromArgs},
 };
-use maplit::btreemap;
 use pocket_ic::PocketIcBuilder;
 use rust_decimal::prelude::ToPrimitive;
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    time::{Duration, SystemTime},
-};
+use std::time::SystemTime;
 
-#[derive(Clone, Copy, Debug)]
-pub struct DirectParticipantConfig {
-    pub use_ticketing_system: bool,
-}
+#[test]
+fn test_deploy_fresh_sns() {
+    let create_service_nervous_system = CreateServiceNervousSystemBuilder::default()
+        .with_governance_parameters_neuron_minimum_dissolve_delay_to_vote(ONE_MONTH_SECONDS * 6)
+        .with_one_developer_neuron(
+            PrincipalId::new_user_test_id(830947),
+            ONE_MONTH_SECONDS * 6,
+            756575,
+            0,
+        )
+        .build();
 
-fn test_sns_ledger_upgrade_with_params(
-    create_service_nervous_system_proposal: CreateServiceNervousSystem,
-    direct_participant_principal_ids: BTreeMap<PrincipalId, DirectParticipantConfig>,
-) {
-    let swap_parameters = create_service_nervous_system_proposal
-        .swap_parameters
-        .clone()
-        .unwrap();
-
-    let min_participant_icp_e8s = swap_parameters
-        .minimum_participant_icp
-        .unwrap()
-        .e8s
-        .unwrap();
-
-    let max_direct_participation_icp_e8s = swap_parameters
-        .maximum_direct_participation_icp
-        .unwrap()
-        .e8s
-        .unwrap();
-
-    let dapp_canister_ids: Vec<_> = create_service_nervous_system_proposal
+    let dapp_canister_ids: Vec<_> = create_service_nervous_system
         .dapp_canisters
         .iter()
         .map(|canister| CanisterId::unchecked_from_principal(canister.id.unwrap()))
         .collect();
 
-    let transaction_fee_sns_e8s = create_service_nervous_system_proposal
+    // 1. Prepare the world (use mainnet WASMs for all NNS and SNS canisters).
+    let pocket_ic = {
+        let pocket_ic = PocketIcBuilder::new()
+            .with_nns_subnet()
+            .with_sns_subnet()
+            .build();
+
+        // Install the test dapp.
+        for dapp_canister_id in dapp_canister_ids.clone() {
+            install_canister(
+                &pocket_ic,
+                "My Test Dapp",
+                dapp_canister_id,
+                vec![],
+                Wasm::from_bytes(UNIVERSAL_CANISTER_WASM),
+                None,
+            );
+        }
+
+        // Install the (mainnet) NNS canisters.
+        let with_mainnet_nns_canisters = true;
+        install_nns_canisters(&pocket_ic, vec![], with_mainnet_nns_canisters);
+
+        // Publish (mainnet) SNS Wasms to SNS-W.
+        let with_mainnet_sns_wasms = true;
+        add_wasms_to_sns_wasm(&pocket_ic, with_mainnet_sns_wasms).unwrap();
+
+        pocket_ic
+    };
+
+    // Step 1. Upgrade NNS Governance and SNS-W to the latest version.
+    upgrade_root_controlled_nns_canister_to_tip_of_master_or_panic(
+        &pocket_ic,
+        GOVERNANCE_CANISTER_ID,
+    );
+    upgrade_root_controlled_nns_canister_to_tip_of_master_or_panic(
+        &pocket_ic,
+        SNS_WASM_CANISTER_ID,
+    );
+
+    // Publish the newest Swap. This needs to happen here due to a recent breaking change in sns_init
+    {
+        let wasm = build_swap_sns_wasm();
+        let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm).unwrap();
+        assert_eq!(proposal_info.failure_reason, None);
+    }
+    // Test upgrading SNS Ledger via proposals. First, add all the WASMs to SNS-W.
+    {
+        let wasm = build_index_ng_sns_wasm();
+        let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm).unwrap();
+        assert_eq!(proposal_info.failure_reason, None);
+    }
+    {
+        let wasm = build_ledger_sns_wasm();
+        let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm).unwrap();
+        assert_eq!(proposal_info.failure_reason, None);
+    }
+    {
+        let wasm = build_archive_sns_wasm();
+        let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm).unwrap();
+        assert_eq!(proposal_info.failure_reason, None);
+    }
+
+    // ---------------------------
+    // --- Run code under test ---
+    // ---------------------------
+
+    // Deploy an SNS instance via proposal.
+    let sns_instance_label = "1";
+    let (deployed_sns, _) = nns::governance::propose_to_deploy_sns_and_wait(
+        &pocket_ic,
+        create_service_nervous_system,
+        sns_instance_label,
+    );
+    let DeployedSns {
+        governance_canister_id: Some(sns_governance_canister_id),
+        ledger_canister_id: Some(sns_ledger_canister_id),
+        ..
+    } = deployed_sns
+    else {
+        panic!("Cannot find some SNS caniser IDs in {:#?}", deployed_sns);
+    };
+
+    // Testing the Archive canister requires that it can be spawned.
+    sns::ensure_archive_canister_is_spawned_or_panic(
+        &pocket_ic,
+        sns_governance_canister_id,
+        sns_ledger_canister_id,
+    );
+    // TODO eventually we need to test a swap
+}
+
+#[test]
+fn test_upgrade_existing_sns() {
+    let create_service_nervous_system = CreateServiceNervousSystemBuilder::default()
+        .with_governance_parameters_neuron_minimum_dissolve_delay_to_vote(ONE_MONTH_SECONDS * 6)
+        .with_one_developer_neuron(
+            PrincipalId::new_user_test_id(830947),
+            ONE_MONTH_SECONDS * 6,
+            756575,
+            0,
+        )
+        .build();
+
+    let dapp_canister_ids: Vec<_> = create_service_nervous_system
+        .dapp_canisters
+        .iter()
+        .map(|canister| CanisterId::unchecked_from_principal(canister.id.unwrap()))
+        .collect();
+
+    let transaction_fee_sns_e8s = create_service_nervous_system
         .ledger_parameters
         .as_ref()
         .unwrap()
@@ -79,352 +161,138 @@ fn test_sns_ledger_upgrade_with_params(
         .e8s
         .unwrap();
 
-    // 1. Prepare the world
-    let pocket_ic = PocketIcBuilder::new()
-        .with_nns_subnet()
-        .with_sns_subnet()
-        .build();
+    // 1. Prepare the world (use mainnet WASMs for all NNS and SNS canisters)
+    let pocket_ic = {
+        let pocket_ic = PocketIcBuilder::new()
+            .with_nns_subnet()
+            .with_sns_subnet()
+            .build();
 
-    let direct_participants: BTreeMap<PrincipalId, _> = if direct_participant_principal_ids
-        .is_empty()
-    {
-        btreemap! {}
-    } else {
-        let participation_amount_per_direct_participant_icp = Tokens::from_e8s(
-            (max_direct_participation_icp_e8s / (direct_participant_principal_ids.len() as u64))
-                + DEFAULT_TRANSFER_FEE.get_e8s(),
-        );
-        // Sanity check
-        assert!(
-            participation_amount_per_direct_participant_icp.get_e8s() >= min_participant_icp_e8s
-        );
-        direct_participant_principal_ids
-            .iter()
-            .map(|(direct_participant, direct_participant_config)| {
-                (
-                    *direct_participant,
-                    (
-                        AccountIdentifier::new(*direct_participant, None),
-                        participation_amount_per_direct_participant_icp,
-                        direct_participant_config,
-                    ),
-                )
-            })
-            .collect()
-    };
-
-    // Install the pre-configured NNS canisters, obtaining information about the original neuron(s).
-    let (_original_nns_controller_to_neurons, _sns_wasms) = {
-        let direct_participant_initial_icp_balances = direct_participants
-            .values()
-            .map(|(account_identifier, balance_icp, _)| (*account_identifier, *balance_icp))
-            .collect();
-
-        let with_mainnet_sns_wasm_wasm = true;
-        let with_mainnet_ledger_wasms = true;
-        let (nns_neuron_controller_principal_ids, sns_wasms) = install_nns_canisters(
-            &pocket_ic,
-            direct_participant_initial_icp_balances,
-            with_mainnet_sns_wasm_wasm,
-            with_mainnet_ledger_wasms,
-        );
-
-        let nns_neurons = nns_neuron_controller_principal_ids
-            .into_iter()
-            .map(|controller_principal_id| {
-                let response = nns::governance::list_neurons(&pocket_ic, controller_principal_id);
-                (controller_principal_id, response.full_neurons)
-            })
-            .collect::<BTreeMap<PrincipalId, Vec<Neuron>>>();
-        (nns_neurons, sns_wasms)
-    };
-
-    // Install the test dapp.
-    for dapp_canister_id in dapp_canister_ids.clone() {
-        install_canister(
-            &pocket_ic,
-            "My Test Dapp",
-            dapp_canister_id,
-            vec![],
-            Wasm::from_bytes(UNIVERSAL_CANISTER_WASM),
-            None,
-        );
-    }
-
-    // TODO[NNS1-2856]: Move the SNS-W upgrade to the end of the runbook.
-    //
-    // We currently need the order to be (SNS-W, Index, Ledger, Archive) due to a breaking change
-    // in `SnsInitPayload` validation.
-    //
-    // Normally, the order should be (Index, Ledger, Archive, SNS-W) to avoid breaking changes in
-    // one the init args of one of the (Index, Ledger, Archive) canisters to prevent SNS deployment.
-    //
-    // The special order (SNS-W, Index, Ledger, Archive) works so long as we have the
-    // 234f489698681ec6b6f4b996c19d693d9cbb418fd52294348c1e704d0d8f98c6 version of Index, for which
-    // there is a special code path in `SnsInitPayload.build_canister_payloads`.
-    {
-        let pre_upgrade_module_hash = pocket_ic
-            .canister_status(SNS_WASM_CANISTER_ID.into(), Some(ROOT_CANISTER_ID.get().0))
-            .unwrap()
-            .module_hash;
-
-        let new_sns_wasm_wasm = build_sns_wasms_wasm();
-        let change_canister_request =
-            ChangeCanisterRequest::new(true, CanisterInstallMode::Upgrade, SNS_WASM_CANISTER_ID)
-                .with_memory_allocation(ic_nns_constants::memory_allocation_of(
-                    SNS_WASM_CANISTER_ID,
-                ))
-                .with_wasm(new_sns_wasm_wasm.bytes());
-        let proposal_info = nns::governance::propose_and_wait(
-            &pocket_ic,
-            Proposal {
-                title: Some("Upgrade SNS-WASM to the latest version.".to_string()),
-                summary: "".to_string(),
-                url: "".to_string(),
-                action: Some(proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
-                    nns_function: NnsFunction::NnsCanisterUpgrade as i32,
-                    payload: Encode!(&change_canister_request).unwrap(),
-                })),
-            },
-        )
-        .unwrap();
-
-        // SNS-W check 1: The upgrade proposal did not fail.
-        assert_eq!(proposal_info.failure_reason, None);
-
-        // SNS-W check 2: The upgrade proposal succeeded.
-        assert!(proposal_info.executed_timestamp_seconds > 0);
-
-        pocket_ic.advance_time(Duration::from_secs(1));
-        for _ in 0..10 {
-            pocket_ic.tick();
+        // Install the test dapp.
+        for dapp_canister_id in dapp_canister_ids.clone() {
+            install_canister(
+                &pocket_ic,
+                "My Test Dapp",
+                dapp_canister_id,
+                vec![],
+                Wasm::from_bytes(UNIVERSAL_CANISTER_WASM),
+                None,
+            );
         }
 
-        // SNS-W check 3: WASM module hash must change.
-        let post_upgrade_module_hash = pocket_ic
-            .canister_status(SNS_WASM_CANISTER_ID.into(), Some(ROOT_CANISTER_ID.get().0))
-            .unwrap()
-            .module_hash;
-        assert!(
-            post_upgrade_module_hash != pre_upgrade_module_hash,
-            "post_upgrade_module_hash == pre_upgrade_module_hash == {:#?}",
-            pre_upgrade_module_hash
-        );
+        // Install the (mainnet) NNS canisters.
+        let with_mainnet_nns_canisters = true;
+        install_nns_canisters(&pocket_ic, vec![], with_mainnet_nns_canisters);
+
+        // Publish (mainnet) SNS Wasms to SNS-W.
+        let with_mainnet_sns_wasms = true;
+        add_wasms_to_sns_wasm(&pocket_ic, with_mainnet_sns_wasms).unwrap();
+
+        pocket_ic
+    };
+
+    // We don't publish or upgrade any release candidate canisters yet. We want to deploy a mainnet
+    // version of the SNS first, then upgrade and validate.
+
+    // Deploy an SNS instance via proposal.
+    let sns_instance_label = "1";
+    let (deployed_sns, _) = nns::governance::propose_to_deploy_sns_and_wait(
+        &pocket_ic,
+        create_service_nervous_system,
+        sns_instance_label,
+    );
+    let DeployedSns {
+        governance_canister_id: Some(sns_governance_canister_id),
+        root_canister_id: Some(sns_root_canister_id),
+        index_canister_id: Some(index_canister_id),
+        ledger_canister_id: Some(sns_ledger_canister_id),
+        ..
+    } = deployed_sns
+    else {
+        panic!("Cannot find some SNS caniser IDs in {:#?}", deployed_sns);
+    };
+
+    // Testing the Archive canister requires that it can be spawned.
+    sns::ensure_archive_canister_is_spawned_or_panic(
+        &pocket_ic,
+        sns_governance_canister_id,
+        sns_ledger_canister_id,
+    );
+
+    // Step 3. Upgrade SNS to the tip of master
+
+    // Step 4. Upgrade NNS Governance and SNS-W to the latest version.
+    upgrade_root_controlled_nns_canister_to_tip_of_master_or_panic(
+        &pocket_ic,
+        GOVERNANCE_CANISTER_ID,
+    );
+    upgrade_root_controlled_nns_canister_to_tip_of_master_or_panic(
+        &pocket_ic,
+        SNS_WASM_CANISTER_ID,
+    );
+
+    // Publish the newest Swap.
+    {
+        let wasm = build_swap_sns_wasm();
+        let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm).unwrap();
+        assert_eq!(proposal_info.failure_reason, None);
     }
 
-    // 2. Create an SNS instance
-    let proposal_info = nns::governance::propose_and_wait(
-        &pocket_ic,
-        Proposal {
-            title: Some(format!("Create SNS #{}", 1)),
-            summary: "".to_string(),
-            url: "".to_string(),
-            action: Some(proposal::Action::CreateServiceNervousSystem(
-                create_service_nervous_system_proposal,
-            )),
-        },
-    )
-    .unwrap();
-    let proposal_id = proposal_info.id.unwrap();
-
-    let Some(GetDeployedSnsByProposalIdResult::DeployedSns(deployed_sns)) =
-        nns::sns_wasm::get_deployed_sns_by_proposal_id(&pocket_ic, proposal_id)
-            .get_deployed_sns_by_proposal_id_result
-    else {
-        panic!(
-            "Proposal {:?} did not result in a successfully deployed SNS",
-            proposal_id
-        );
-    };
-
-    // The proposal created a Swap and SNS Governance canisters that we can now start
-    // interacting with.
-    let sns_root_canister_id = deployed_sns.root_canister_id.unwrap();
-    let sns_governance_canister_id = deployed_sns.governance_canister_id.unwrap();
-    let swap_canister_id = deployed_sns.swap_canister_id.unwrap();
-    let sns_ledger_canister_id = deployed_sns.ledger_canister_id.unwrap();
-    let index_canister_id = deployed_sns.index_canister_id.unwrap();
-
-    // Get an ID of an SNS neuron that can submit proposals. We rely on the fact that this neuron
-    // either holds the majority of the voting power or the follow graph is set up s.t. when this
-    // neuron submits a proposal, that proposal gets through without the need for any voting.
-    let (sns_neuron_id, sns_neuron_principal_id) =
-        sns::governance::find_neuron_with_majority_voting_power(
-            &pocket_ic,
-            sns_governance_canister_id,
-        )
-        .expect("cannot find SNS neuron with dissolve delay over 6 months.");
-
-    // Try to spawn an Archive canister. We assume that this number of transactions are needed,
-    // which currently cannot be configured via proposals and is thus hard coded.
-    let num_transactions_needed_to_spawn_first_archive = 2000_u64;
-
-    // Testing the Archive canister requires that it can be spawned quickly enough.
-    let archive_canister_id = {
-        // Generate a bunch of SNS token transactions.
-        (0..num_transactions_needed_to_spawn_first_archive)
-            .find_map(|i| {
-                let mut archives = sns::ledger::archives(&pocket_ic, sns_ledger_canister_id);
-                if let Some(archive) = archives.pop() {
-                    return Some(PrincipalId::from(archive.canister_id));
-                }
-
-                let user_principal_id = PrincipalId::new_user_test_id(i);
-                let direct_participant_swap_subaccount =
-                    Some(principal_to_subaccount(&user_principal_id));
-                let direct_participant_swap_account = Account {
-                    owner: swap_canister_id.0,
-                    subaccount: direct_participant_swap_subaccount,
-                };
-                let _block_height = sns::ledger::icrc1_transfer(
-                    &pocket_ic,
-                    sns_ledger_canister_id,
-                    sns_governance_canister_id,
-                    TransferArg {
-                        from_subaccount: None,
-                        to: direct_participant_swap_account,
-                        fee: None,
-                        created_at_time: None,
-                        memo: None,
-                        amount: Nat::from(100_000_u64), // mint an arbitrary amount of SNS tokens
-                    },
-                )
-                .unwrap();
-                None
-            })
-            .unwrap()
-    };
-    // A local helper function that checks whether archived and non-archived blocks add up.
-    let check_blocks = |label: &str| {
-        let all_blocks: BTreeSet<_> =
-            sns::ledger::get_all_blocks(&pocket_ic, sns_ledger_canister_id, 0, u64::MAX)
-                .blocks
-                .into_iter()
-                .collect();
-        let non_archived_blocks: BTreeSet<_> = {
-            let response = sns::ledger::get_blocks(&pocket_ic, sns_ledger_canister_id, 0, u64::MAX);
-            println!("response = {:#?}", response);
-            response.blocks.into_iter().collect()
-        };
-        assert!(non_archived_blocks.is_subset(&all_blocks));
-        assert!(
-            !all_blocks.is_empty(),
-            "There should be some blocks.\nall_blocks = {:?}\nnon_archived_blocks = {:?}",
-            all_blocks,
-            non_archived_blocks
-        );
-        assert!(
-            !non_archived_blocks.is_empty(),
-            "Some blocks should not be archived.\nall_blocks = {:?}\nnon_archived_blocks = {:?}",
-            all_blocks,
-            non_archived_blocks
-        );
-        assert!(
-            non_archived_blocks.len() < all_blocks.len(),
-            "Some blocks should be archived.\nall_blocks = {:?}\nnon_archived_blocks = {:?}",
-            all_blocks,
-            non_archived_blocks
-        );
-        println!("{} check passed!", label);
-    };
-
-    // Test upgrading SNS Ledger via proposal
-    // Add all the WASMs to SNS-W.
+    // Test upgrading SNS Ledger via proposals. First, add all the WASMs to SNS-W.
     {
         let wasm = build_index_ng_sns_wasm();
         let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm).unwrap();
         assert_eq!(proposal_info.failure_reason, None);
-        println!("Add Index WASM proposal info: {:?}", proposal_info);
     }
     {
         let wasm = build_ledger_sns_wasm();
         let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm).unwrap();
         assert_eq!(proposal_info.failure_reason, None);
-        println!("Add Ledger WASM proposal info: {:?}", proposal_info);
     }
     {
         let wasm = build_archive_sns_wasm();
         let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm).unwrap();
         assert_eq!(proposal_info.failure_reason, None);
-        println!("Add Archive WASM proposal info: {:?}", proposal_info);
     }
 
-    // Upgrade; one canister at a time.
-    let upgrade_sns_to_next_version = || {
-        let proposal_result = sns::governance::propose_and_wait(
-            &pocket_ic,
-            sns_governance_canister_id,
-            sns_neuron_principal_id,
-            sns_neuron_id.clone(),
-            sns_pb::Proposal {
-                title: "Upgrade to the next SNS version.".to_string(),
-                summary: "".to_string(),
-                url: "".to_string(),
-                action: Some(sns_pb::proposal::Action::UpgradeSnsToNextVersion(
-                    UpgradeSnsToNextVersion {},
-                )),
-            },
-        )
-        .unwrap();
-        assert_eq!(proposal_result.failure_reason, None);
+    // ---------------------------
+    // --- Run code under test ---
+    // ---------------------------
 
-        pocket_ic.advance_time(Duration::from_secs(1));
-        pocket_ic.tick();
-    };
+    // Upgrade Swap - should be non-event
+    sns::upgrade_sns_to_next_version_and_assert_change(
+        &pocket_ic,
+        sns_root_canister_id,
+        SnsCanisterType::Swap,
+    );
 
     // Upgrade Index-Ng
     {
-        let pre_upgrade_module_hash = pocket_ic
-            .canister_status(
-                index_canister_id.into(),
-                Some(Principal::from(sns_root_canister_id)),
-            )
-            .unwrap()
-            .module_hash;
-
-        upgrade_sns_to_next_version();
-
-        // Index-Ng check 1: WASM module hash must change.
-        let post_upgrade_module_hash = pocket_ic
-            .canister_status(
-                index_canister_id.into(),
-                Some(Principal::from(sns_root_canister_id)),
-            )
-            .unwrap()
-            .module_hash;
-        assert!(
-            post_upgrade_module_hash != pre_upgrade_module_hash,
-            "post_upgrade_module_hash == pre_upgrade_module_hash == {:#?}",
-            pre_upgrade_module_hash
+        sns::upgrade_sns_to_next_version_and_assert_change(
+            &pocket_ic,
+            sns_root_canister_id,
+            SnsCanisterType::Index,
         );
 
-        // Index-Ng check 2: The Index canister still recognised our Ledger canitser.
+        // Index-Ng check 1: The Index canister still recognised our Ledger canitser.
         assert_eq!(
             sns::index_ng::ledger_id(&pocket_ic, index_canister_id),
             sns_ledger_canister_id
         );
 
-        // Index-Ng check 3: Index and Ledger sync.
+        // Index-Ng check 2: Index and Ledger sync.
         sns::wait_until_ledger_and_index_sync_is_completed(
             &pocket_ic,
             sns_ledger_canister_id,
             index_canister_id,
         );
 
-        // Index-Ng check 4: The same blocks can be observed via Index and Ledger.
+        // Index-Ng check 3: The same blocks can be observed via Index and Ledger.
         sns::assert_ledger_index_parity(&pocket_ic, sns_ledger_canister_id, index_canister_id);
     }
 
     // Upgrade SNS Ledger
     {
-        let pre_upgrade_module_hash = pocket_ic
-            .canister_status(
-                sns_ledger_canister_id.into(),
-                Some(Principal::from(sns_root_canister_id)),
-            )
-            .unwrap()
-            .module_hash;
-
         let original_total_supply_sns_e8s =
             sns::ledger::icrc1_total_supply(&pocket_ic, sns_ledger_canister_id)
                 .0
@@ -434,34 +302,24 @@ fn test_sns_ledger_upgrade_with_params(
         let pre_upgrade_chain_length =
             sns::ledger::get_blocks(&pocket_ic, sns_ledger_canister_id, 0_u64, 1_u64).chain_length;
 
-        check_blocks("SNS Ledger pre_upgrade");
+        sns::ledger::check_blocks_or_panic(&pocket_ic, sns_ledger_canister_id);
 
-        upgrade_sns_to_next_version();
-
-        // Ledger check 1: WASM module hash must change.
-        let post_upgrade_module_hash = pocket_ic
-            .canister_status(
-                sns_ledger_canister_id.into(),
-                Some(Principal::from(sns_root_canister_id)),
-            )
-            .unwrap()
-            .module_hash;
-        assert!(
-            post_upgrade_module_hash != pre_upgrade_module_hash,
-            "post_upgrade_module_hash == pre_upgrade_module_hash == {:#?}",
-            pre_upgrade_module_hash
+        sns::upgrade_sns_to_next_version_and_assert_change(
+            &pocket_ic,
+            sns_root_canister_id,
+            SnsCanisterType::Ledger,
         );
 
-        // Ledger check 2: We get the expected state in the archive(s).
-        check_blocks("SNS Ledger post_upgrade");
+        // Ledger check 1: We get the expected state in the archive(s).
+        sns::ledger::check_blocks_or_panic(&pocket_ic, sns_ledger_canister_id);
 
-        // Ledger check 3: We get the same number of blocks that we had before the upgrade (because
+        // Ledger check 2: We get the same number of blocks that we had before the upgrade (because
         // no transactions have happened after the upgrade).
         let post_upgrade_chain_length =
             sns::ledger::get_blocks(&pocket_ic, sns_ledger_canister_id, 0_u64, 1_u64).chain_length;
         assert_eq!(post_upgrade_chain_length, pre_upgrade_chain_length);
 
-        // Ledger check 4: Total supply remains unchanged.
+        // Ledger check 3: Total supply remains unchanged.
         let total_supply_sns_e8s =
             sns::ledger::icrc1_total_supply(&pocket_ic, sns_ledger_canister_id)
                 .0
@@ -469,7 +327,7 @@ fn test_sns_ledger_upgrade_with_params(
                 .unwrap();
         assert_eq!(total_supply_sns_e8s, original_total_supply_sns_e8s);
 
-        // Ledger check 5: ICRC-2 endpoints. First we "create" a wealthy user by minting tokens into
+        // Ledger check 4: ICRC-2 endpoints. First we "create" a wealthy user by minting tokens into
         // their account. Second, we use the wealthy user's credentials to test a pre-approved
         // (ICRC-2) transaction.
         let (wealthy_user_principal_id, wealthy_user_account) = {
@@ -550,47 +408,50 @@ fn test_sns_ledger_upgrade_with_params(
 
     // Upgrade SNS Archive
     {
-        let pre_upgrade_module_hash = pocket_ic
-            .canister_status(
-                archive_canister_id.into(),
-                Some(Principal::from(sns_root_canister_id)),
-            )
-            .unwrap()
-            .module_hash;
+        sns::ledger::check_blocks_or_panic(&pocket_ic, sns_ledger_canister_id);
 
-        check_blocks("SNS Archive pre_upgrade");
-
-        upgrade_sns_to_next_version();
-
-        // Archive check 1: WASM module hash must change.
-        let post_upgrade_module_hash = pocket_ic
-            .canister_status(
-                archive_canister_id.into(),
-                Some(Principal::from(sns_root_canister_id)),
-            )
-            .unwrap()
-            .module_hash;
-        assert!(
-            post_upgrade_module_hash != pre_upgrade_module_hash,
-            "post_upgrade_module_hash == pre_upgrade_module_hash == {:#?}",
-            pre_upgrade_module_hash
+        sns::upgrade_sns_to_next_version_and_assert_change(
+            &pocket_ic,
+            sns_root_canister_id,
+            SnsCanisterType::Archive,
         );
 
-        // Archive check 2: We get the expected state in the archive(s).
-        check_blocks("SNS Archive post_upgrade");
+        // Archive check 1: We get the expected state in the archive(s).
+        sns::ledger::check_blocks_or_panic(&pocket_ic, sns_ledger_canister_id);
     }
-}
 
-#[test]
-fn test_sns_ledger_upgrade() {
-    let create_service_nervous_system = CreateServiceNervousSystemBuilder::default()
-        .with_governance_parameters_neuron_minimum_dissolve_delay_to_vote(ONE_MONTH_SECONDS * 6)
-        .with_one_developer_neuron(
-            PrincipalId::new_user_test_id(830947),
-            ONE_MONTH_SECONDS * 6,
-            756575,
-            0,
-        )
-        .build();
-    test_sns_ledger_upgrade_with_params(create_service_nervous_system, btreemap! {})
+    // Publish modified versions of all the wasms and ensure we can upgrade a second time (pre-upgrade smoke test)
+    {
+        let wasm = create_modified_wasm(&build_swap_sns_wasm(), Some("foo"));
+        let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm).unwrap();
+        assert_eq!(proposal_info.failure_reason, None);
+    }
+    {
+        let wasm = create_modified_wasm(&build_index_ng_sns_wasm(), Some("foo"));
+        let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm).unwrap();
+        assert_eq!(proposal_info.failure_reason, None);
+    }
+    {
+        let wasm = create_modified_wasm(&build_ledger_sns_wasm(), Some("foo"));
+        let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm).unwrap();
+        assert_eq!(proposal_info.failure_reason, None);
+    }
+    {
+        let wasm = create_modified_wasm(&build_archive_sns_wasm(), Some("foo"));
+        let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm).unwrap();
+        assert_eq!(proposal_info.failure_reason, None);
+    }
+
+    for sns_canister_type in [
+        SnsCanisterType::Swap,
+        SnsCanisterType::Index,
+        SnsCanisterType::Ledger,
+        SnsCanisterType::Archive,
+    ] {
+        sns::upgrade_sns_to_next_version_and_assert_change(
+            &pocket_ic,
+            sns_root_canister_id,
+            sns_canister_type,
+        );
+    }
 }

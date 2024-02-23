@@ -557,28 +557,28 @@ http_file(
 
 # Deployed SNS canisters
 
-# From https://dashboard.internetcomputer.org/proposal/114485
+# From https://dashboard.internetcomputer.org/proposal/127698
 http_file(
     name = "mainnet_sns-root-canister",
     downloaded_file_path = "sns-root-canister.wasm.gz",
-    sha256 = "fde766f00e72f3888161159b93275f4febb8eb399dcc68fc1a5bade7922d18ba",
-    url = "https://download.dfinity.systems/ic/8573ad55864cd396e963ab03668cc4bf634375c4/canisters/sns-root-canister.wasm.gz",
+    sha256 = "8d479572f739d13ba05f1d98b834edb4bbd3f96abab90397a4701e6ed3142829",
+    url = "https://download.dfinity.systems/ic/7a3db052ed4c3306272ed372039d9775f189c0bc/canisters/sns-root-canister.wasm.gz",
 )
 
-# From https://dashboard.internetcomputer.org/proposal/114483
+# From https://dashboard.internetcomputer.org/proposal/127699
 http_file(
     name = "mainnet_sns-governance-canister",
     downloaded_file_path = "sns-governance-canister.wasm.gz",
-    sha256 = "6a82f46c75d45f22f782ad808ccaeb6175180537bb6565b6d7e868a10ace6b0a",
-    url = "https://download.dfinity.systems/ic/8573ad55864cd396e963ab03668cc4bf634375c4/canisters/sns-governance-canister.wasm.gz",
+    sha256 = "2bb65acf203f7816f30ca150dd72841f7971b6f94fd831cf418ada4a217b6a0d",
+    url = "https://download.dfinity.systems/ic/7a3db052ed4c3306272ed372039d9775f189c0bc/canisters/sns-governance-canister.wasm.gz",
 )
 
-# From https://dashboard.internetcomputer.org/proposal/114191
+# From https://dashboard.internetcomputer.org/proposal/127064
 http_file(
     name = "mainnet_sns-swap-canister",
     downloaded_file_path = "sns-swap-canister.wasm.gz",
-    sha256 = "028aa2d9817903fe8c5b94f2f31c596b682b013d4ac8acbb74d5a91ac56bc0b7",
-    url = "https://download.dfinity.systems/ic/932c1bfc04728783a815e0867b579c1eb26df99d/canisters/sns-swap-canister.wasm.gz",
+    sha256 = "f1414b67ca335d15a7d9fc021f6afa9002143af3c7ce10edf48d4ccd9b9d1703",
+    url = "https://download.dfinity.systems/ic/6ed74ab9788e4601bbbf02ae1ce92b7f480387df/canisters/sns-swap-canister.wasm.gz",
 )
 
 # From https://dashboard.internetcomputer.org/proposal/124255
