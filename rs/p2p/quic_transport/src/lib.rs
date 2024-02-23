@@ -35,6 +35,7 @@ use std::{
     sync::{Arc, RwLock},
 };
 
+use anyhow::anyhow;
 use async_trait::async_trait;
 use axum::{
     http::{Request, Response},
@@ -49,8 +50,7 @@ use ic_interfaces_registry::RegistryClient;
 use ic_logger::{info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use phantom_newtype::AmountOf;
-use quinn::{AsyncUdpSocket, ConnectionError, WriteError};
-use thiserror::Error;
+use quinn::AsyncUdpSocket;
 use tokio::sync::watch;
 use tokio_util::{sync::CancellationToken, task::task_tracker::TaskTracker};
 
@@ -137,15 +137,16 @@ impl QuicTransport {
         self.conn_manager_task_tracker.wait().await;
     }
 
-    pub(crate) fn get_conn_handle(&self, peer_id: &NodeId) -> Result<ConnectionHandle, SendError> {
+    pub(crate) fn get_conn_handle(
+        &self,
+        peer_id: &NodeId,
+    ) -> Result<ConnectionHandle, anyhow::Error> {
         let conn = self
             .conn_handles
             .read()
             .unwrap()
             .get(peer_id)
-            .ok_or(SendError::ConnectionUnavailable(
-                "Currently not connected to this peer".to_string(),
-            ))?
+            .ok_or(anyhow!("Currently not connected to this peer"))?
             .clone();
         Ok(conn)
     }
@@ -157,12 +158,12 @@ impl Transport for QuicTransport {
         &self,
         peer_id: &NodeId,
         request: Request<Bytes>,
-    ) -> Result<Response<Bytes>, SendError> {
+    ) -> Result<Response<Bytes>, anyhow::Error> {
         let peer = self.get_conn_handle(peer_id)?;
         peer.rpc(request).await
     }
 
-    async fn push(&self, peer_id: &NodeId, request: Request<Bytes>) -> Result<(), SendError> {
+    async fn push(&self, peer_id: &NodeId, request: Request<Bytes>) -> Result<(), anyhow::Error> {
         let peer = self.get_conn_handle(peer_id)?;
         peer.push(request).await
     }
@@ -177,40 +178,15 @@ impl Transport for QuicTransport {
     }
 }
 
-#[derive(Debug, Error)]
-pub enum SendError {
-    #[error("the connection to peer `{0}` is unavailable")]
-    ConnectionUnavailable(String),
-    // This serves as catch-all error for invariant breaking errors.
-    // E.g. failing to serialize, peer closing connections unexpectedly, etc.
-    #[error("internal error `{0}`")]
-    Internal(String),
-}
-
-impl From<ConnectionError> for SendError {
-    fn from(conn_err: ConnectionError) -> Self {
-        SendError::Internal(conn_err.to_string())
-    }
-}
-
-impl From<WriteError> for SendError {
-    fn from(write_err: WriteError) -> Self {
-        match write_err {
-            WriteError::ConnectionLost(conn_err) => conn_err.into(),
-            _ => SendError::Internal(write_err.to_string()),
-        }
-    }
-}
-
 #[async_trait]
 pub trait Transport: Send + Sync {
     async fn rpc(
         &self,
         peer_id: &NodeId,
         request: Request<Bytes>,
-    ) -> Result<Response<Bytes>, SendError>;
+    ) -> Result<Response<Bytes>, anyhow::Error>;
 
-    async fn push(&self, peer_id: &NodeId, request: Request<Bytes>) -> Result<(), SendError>;
+    async fn push(&self, peer_id: &NodeId, request: Request<Bytes>) -> Result<(), anyhow::Error>;
 
     fn peers(&self) -> Vec<(NodeId, ConnId)>;
 }

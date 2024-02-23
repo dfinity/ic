@@ -18,7 +18,6 @@ use ic_p2p_test_utils::{
     },
     ConnectivityChecker,
 };
-use ic_quic_transport::SendError;
 use ic_quic_transport::{DummyUdpSocket, QuicTransport, Transport};
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, NODE_4, NODE_5, SUBNET_1};
@@ -175,10 +174,7 @@ fn test_graceful_shutdown() {
         rt.block_on(async move {
             Arc::get_mut(&mut transport_2).unwrap().shutdown().await;
             let request = Request::builder().uri("/Ping").body(Bytes::new()).unwrap();
-            assert!(matches!(
-                transport_2.push(&NODE_1, request).await,
-                Err(SendError::ConnectionUnavailable(_))
-            ));
+            assert!(transport_2.push(&NODE_1, request).await.is_err());
         });
     })
 }

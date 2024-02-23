@@ -401,6 +401,7 @@ impl AvailableSlotSet {
 
 #[cfg(test)]
 mod tests {
+    use anyhow::anyhow;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_p2p_test_utils::{
@@ -408,7 +409,6 @@ mod tests {
         mocks::{MockTransport, MockValidatedPoolReader},
     };
     use ic_protobuf::proxy::ProtoProxy;
-    use ic_quic_transport::SendError;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_types_test_utils::ids::{NODE_1, NODE_2};
     use mockall::Sequence;
@@ -620,7 +620,7 @@ mod tests {
             mock_transport
                 .expect_push()
                 .times(5)
-                .returning(move |_, _| Err(SendError::ConnectionUnavailable(String::new())))
+                .returning(move |_, _| Err(anyhow!("")))
                 .in_sequence(&mut seq);
             mock_transport
                 .expect_push()

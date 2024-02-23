@@ -6,7 +6,7 @@ use ic_interfaces::p2p::{
     consensus::{PriorityFnAndFilterProducer, ValidatedPoolReader},
     state_sync::{AddChunkError, Chunk, ChunkId, Chunkable, StateSyncArtifactId, StateSyncClient},
 };
-use ic_quic_transport::{ConnId, SendError, Transport};
+use ic_quic_transport::{ConnId, Transport};
 use ic_types::artifact::PriorityFn;
 use ic_types::NodeId;
 use mockall::mock;
@@ -41,13 +41,13 @@ mock! {
             &self,
             peer_id: &NodeId,
             request: Request<Bytes>,
-        ) -> Result<Response<Bytes>, SendError>;
+        ) -> Result<Response<Bytes>, anyhow::Error>;
 
         async fn push(
             &self,
             peer_id: &NodeId,
             request: Request<Bytes>,
-        ) -> Result<(), SendError>;
+        ) -> Result<(), anyhow::Error>;
 
         fn peers(&self) -> Vec<(NodeId, ConnId)>;
     }

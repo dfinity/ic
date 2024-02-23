@@ -417,6 +417,7 @@ opt-level = 3
 jsonrpc = { git = "https://github.com/apoelstra/rust-jsonrpc", rev = "e42044d" }
 
 [workspace.dependencies]
+anyhow = "1.0.80"
 arrayvec = "0.7.4"
 askama = { version = "0.12.1", features = ["serde-json"] }
 async-recursion = "1.0.5"
