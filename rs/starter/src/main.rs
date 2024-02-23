@@ -655,6 +655,8 @@ impl ValidatedConfig {
             rate_limiting_of_instructions: FlagStatus::Disabled,
             composite_queries: FlagStatus::Enabled,
             wasm_chunk_store: FlagStatus::Enabled,
+            query_stats_aggregation: FlagStatus::Enabled,
+            query_stats_epoch_length: 60,
             ..HypervisorConfig::default()
         };
 
