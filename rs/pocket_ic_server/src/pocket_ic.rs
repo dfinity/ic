@@ -558,6 +558,7 @@ impl Operation for ExecuteIngressMessage {
                         let max_rounds = 100;
                         for _i in 0..max_rounds {
                             for subnet_ in pic.subnets.read().unwrap().values() {
+                                subnet_.advance_time(Duration::from_nanos(1));
                                 subnet_.execute_round();
                             }
                             match subnet.ingress_status(&msg_id) {
