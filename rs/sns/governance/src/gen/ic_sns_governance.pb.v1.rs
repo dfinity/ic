@@ -700,6 +700,18 @@ pub mod governance_error {
         InvalidProposal = 15,
         /// The NeuronId is invalid.
         InvalidNeuronId = 16,
+        /// This indicates that we have a bug. It should be impossible for users to provoke this.
+        ///
+        /// For example, supposed you put some auxiliary data into a ProposalData during proposal
+        /// submission. That data is supposed to be used during execution of the proposal. But during
+        /// execution, the auxiliary data is invalid (e.g. absent).
+        InconsistentInternalData = 17,
+        /// Users cannot provoke this.
+        ///
+        /// E.g. 1 / E8 somehow provokes a divide by zero error, even though E8 is a positive number.
+        ///
+        /// This is a generalization of INCONSISTENT_INTERNAL_DATA.
+        UnreachableCode = 18,
     }
     impl ErrorType {
         /// String value of the enum field names used in the ProtoBuf definition.
@@ -725,6 +737,8 @@ pub mod governance_error {
                 ErrorType::InvalidPrincipal => "ERROR_TYPE_INVALID_PRINCIPAL",
                 ErrorType::InvalidProposal => "ERROR_TYPE_INVALID_PROPOSAL",
                 ErrorType::InvalidNeuronId => "ERROR_TYPE_INVALID_NEURON_ID",
+                ErrorType::InconsistentInternalData => "ERROR_TYPE_INCONSISTENT_INTERNAL_DATA",
+                ErrorType::UnreachableCode => "ERROR_TYPE_UNREACHABLE_CODE",
             }
         }
         /// Creates an enum from field names used in the ProtoBuf definition.
@@ -747,6 +761,8 @@ pub mod governance_error {
                 "ERROR_TYPE_INVALID_PRINCIPAL" => Some(Self::InvalidPrincipal),
                 "ERROR_TYPE_INVALID_PROPOSAL" => Some(Self::InvalidProposal),
                 "ERROR_TYPE_INVALID_NEURON_ID" => Some(Self::InvalidNeuronId),
+                "ERROR_TYPE_INCONSISTENT_INTERNAL_DATA" => Some(Self::InconsistentInternalData),
+                "ERROR_TYPE_UNREACHABLE_CODE" => Some(Self::UnreachableCode),
                 _ => None,
             }
         }
@@ -959,6 +975,98 @@ pub struct ProposalData {
     #[prost(message, optional, tag = "21")]
     pub minimum_yes_proportion_of_exercised:
         ::core::option::Option<::ic_nervous_system_proto::pb::v1::Percentage>,
+    /// In general, this holds data retrieved at proposal submission/creation time and used later
+    /// during execution is stored. This varies based on the action of the proposal.
+    #[prost(oneof = "proposal_data::ActionAuxiliary", tags = "22")]
+    pub action_auxiliary: ::core::option::Option<proposal_data::ActionAuxiliary>,
+}
+/// Nested message and enum types in `ProposalData`.
+pub mod proposal_data {
+    #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct TransferSnsTreasuryFundsActionAuxiliary {
+        #[prost(message, optional, tag = "1")]
+        pub valuation: ::core::option::Option<super::Valuation>,
+    }
+    /// In general, this holds data retrieved at proposal submission/creation time and used later
+    /// during execution is stored. This varies based on the action of the proposal.
+    #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum ActionAuxiliary {
+        #[prost(message, tag = "22")]
+        TransferSnsTreasuryFunds(TransferSnsTreasuryFundsActionAuxiliary),
+    }
+}
+#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Valuation {
+    #[prost(enumeration = "valuation::Token", optional, tag = "1")]
+    pub token: ::core::option::Option<i32>,
+    #[prost(message, optional, tag = "2")]
+    pub account: ::core::option::Option<Account>,
+    #[prost(uint64, optional, tag = "3")]
+    pub timestamp_seconds: ::core::option::Option<u64>,
+    #[prost(message, optional, tag = "4")]
+    pub valuation_factors: ::core::option::Option<valuation::ValuationFactors>,
+}
+/// Nested message and enum types in `Valuation`.
+pub mod valuation {
+    #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct ValuationFactors {
+        #[prost(message, optional, tag = "1")]
+        pub tokens: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Tokens>,
+        #[prost(message, optional, tag = "2")]
+        pub icps_per_token: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Decimal>,
+        #[prost(message, optional, tag = "3")]
+        pub xdrs_per_icp: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Decimal>,
+    }
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        Copy,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+        PartialOrd,
+        Ord,
+        ::prost::Enumeration,
+    )]
+    #[repr(i32)]
+    pub enum Token {
+        Unspecified = 0,
+        Icp = 1,
+        SnsToken = 2,
+    }
+    impl Token {
+        /// String value of the enum field names used in the ProtoBuf definition.
+        ///
+        /// The values are not transformed in any way and thus are considered stable
+        /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+        pub fn as_str_name(&self) -> &'static str {
+            match self {
+                Token::Unspecified => "TOKEN_UNSPECIFIED",
+                Token::Icp => "TOKEN_ICP",
+                Token::SnsToken => "TOKEN_SNS_TOKEN",
+            }
+        }
+        /// Creates an enum from field names used in the ProtoBuf definition.
+        pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+            match value {
+                "TOKEN_UNSPECIFIED" => Some(Self::Unspecified),
+                "TOKEN_ICP" => Some(Self::Icp),
+                "TOKEN_SNS_TOKEN" => Some(Self::SnsToken),
+                _ => None,
+            }
+        }
+    }
 }
 /// The nervous system's parameters, which are parameters that can be changed, via proposals,
 /// by each nervous system community.

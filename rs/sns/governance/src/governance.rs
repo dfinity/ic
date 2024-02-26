@@ -2,6 +2,7 @@
 use crate::pb::v1::{
     AddMaturityRequest, AddMaturityResponse, MintTokensRequest, MintTokensResponse,
 };
+
 use crate::{
     canister_control::{
         get_canister_id, perform_execute_generic_nervous_system_function_call,
@@ -39,6 +40,7 @@ use crate::{
             },
             neuron::{DissolveState, Followees},
             proposal::Action,
+            proposal_data::ActionAuxiliary as ActionAuxiliaryPb,
             transfer_sns_treasury_funds::TransferFrom,
             Account as AccountProto, Ballot, ClaimSwapNeuronsError, ClaimSwapNeuronsRequest,
             ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus, DefaultFollowees,
@@ -60,6 +62,8 @@ use crate::{
         },
     },
     proposal::{
+        get_action_auxiliary,
+        transfer_sns_treasury_funds_amount_is_small_enough_at_execution_time_or_err,
         validate_and_render_proposal, ValidGenericNervousSystemFunction, MAX_LIST_PROPOSAL_RESULTS,
         MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
     },
@@ -94,6 +98,7 @@ use ic_nervous_system_governance::maturity_modulation::{
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
 use ic_sns_governance_proposal_criticality::ProposalCriticality;
+use ic_sns_governance_token_valuation::Valuation;
 use icp_ledger::DEFAULT_TRANSFER_FEE as NNS_DEFAULT_TRANSFER_FEE;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use lazy_static::lazy_static;
@@ -1902,7 +1907,7 @@ impl Governance {
             }
         }
 
-        // A yes decision as been made, execute the proposal!
+        // A yes decision has been made, execute the proposal!
         // Safely unwrap action.
         let action = proposal_data
             .proposal
@@ -2046,7 +2051,13 @@ impl Governance {
                 self.perform_manage_sns_metadata(manage_sns_metadata)
             }
             Action::TransferSnsTreasuryFunds(transfer) => {
-                self.perform_transfer_sns_treasury_funds(transfer).await
+                let valuation =
+                    get_action_auxiliary(&self.proto.proposals, ProposalId { id: proposal_id })
+                        .and_then(|action_auxiliary| {
+                            action_auxiliary.unwrap_transfer_sns_treasury_funds_or_err()
+                        });
+                self.perform_transfer_sns_treasury_funds(valuation, &transfer)
+                    .await
             }
             Action::MintSnsTokens(mint) => self.perform_mint_sns_tokens(mint).await,
             Action::ManageLedgerParameters(manage_ledger_parameters) => {
@@ -2553,8 +2564,16 @@ impl Governance {
 
     async fn perform_transfer_sns_treasury_funds(
         &mut self,
-        transfer: TransferSnsTreasuryFunds,
+        valuation: Result<Valuation, GovernanceError>,
+        transfer: &TransferSnsTreasuryFunds,
     ) -> Result<(), GovernanceError> {
+        transfer_sns_treasury_funds_amount_is_small_enough_at_execution_time_or_err(
+            transfer,
+            &valuation?,
+            self.proto.proposals.values(),
+            self.env.now(),
+        )?;
+
         let to = Account {
             owner: transfer
                 .to_principal
@@ -2911,7 +2930,7 @@ impl Governance {
     async fn validate_and_render_proposal(
         &mut self,
         proposal: &Proposal,
-    ) -> Result<String, GovernanceError> {
+    ) -> Result<(String, Option<ActionAuxiliaryPb>), GovernanceError> {
         if !proposal.allowed_when_resources_are_low() {
             self.check_heap_can_grow()?;
         }
@@ -2951,7 +2970,7 @@ impl Governance {
         let now_seconds = self.env.now();
 
         // Validate proposal
-        let rendering = self.validate_and_render_proposal(proposal).await?;
+        let (rendering, action_auxiliary) = self.validate_and_render_proposal(proposal).await?;
 
         // This should not panic, because the proposal was just validated.
         let action = proposal.action.as_ref().expect("No action.");
@@ -3155,6 +3174,7 @@ impl Governance {
                 .reward_event_end_timestamp_seconds,
             minimum_yes_proportion_of_total: Some(minimum_yes_proportion_of_total),
             minimum_yes_proportion_of_exercised: Some(minimum_yes_proportion_of_exercised),
+            action_auxiliary,
         };
 
         proposal_data.wait_for_quiet_state = Some(WaitForQuietState {

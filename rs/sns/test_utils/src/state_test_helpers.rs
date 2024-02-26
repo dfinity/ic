@@ -20,7 +20,10 @@ use ic_nns_test_utils::{
     state_test_helpers::set_controllers,
 };
 use ic_sns_governance::pb::v1::{
-    governance::Version, ListNeurons, ListNeuronsResponse, NervousSystemParameters,
+    governance::Version,
+    manage_neuron::{self, RegisterVote},
+    ListNeurons, ListNeuronsResponse, ManageNeuron, ManageNeuronResponse, NervousSystemParameters,
+    NeuronId, ProposalId, Vote,
 };
 use ic_sns_init::SnsCanisterInitPayloads;
 use ic_sns_root::{
@@ -219,6 +222,57 @@ pub fn sns_governance_get_nervous_system_parameters(
         }
     };
     Decode!(&result, NervousSystemParameters).unwrap()
+}
+
+#[must_use]
+fn manage_neuron(
+    state_machine: &mut StateMachine,
+    sns_governance_canister_id: CanisterId,
+    sender: PrincipalId,
+    neuron_id: NeuronId,
+    command: manage_neuron::Command,
+) -> ManageNeuronResponse {
+    let result = state_machine
+        .execute_ingress_as(
+            sender,
+            sns_governance_canister_id,
+            "manage_neuron",
+            Encode!(&ManageNeuron {
+                command: Some(command),
+                subaccount: neuron_id.id,
+            })
+            .unwrap(),
+        )
+        .unwrap();
+
+    let result = match result {
+        WasmResult::Reply(result) => result,
+        WasmResult::Reject(s) => panic!("Call to manage_neuron failed: {:#?}", s),
+    };
+
+    Decode!(&result, ManageNeuronResponse).unwrap()
+}
+
+pub fn sns_cast_vote(
+    state_machine: &mut StateMachine,
+    sns_governance_canister_id: CanisterId,
+    sender: PrincipalId,
+    neuron_id: NeuronId,
+    proposal_id: ProposalId,
+    vote: Vote,
+) -> ManageNeuronResponse {
+    let command = manage_neuron::Command::RegisterVote(RegisterVote {
+        proposal: Some(proposal_id),
+        vote: vote as i32,
+    });
+
+    manage_neuron(
+        state_machine,
+        sns_governance_canister_id,
+        sender,
+        neuron_id,
+        command,
+    )
 }
 
 pub fn participate_in_swap(
