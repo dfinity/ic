@@ -12289,7 +12289,7 @@ async fn test_settle_neurons_fund_participation_restores_lifecycle_on_sns_w_fail
     assert_eq!(proposal.neurons_fund_data, *NEURONS_FUND_DATA_BEFORE_SETTLE);
 }
 
-/// Failure when settling the Neurons' fund should result in the Lifecycle remaining
+/// Failure when settling the Neurons' Fund should result in the Lifecycle remaining
 /// what it was before the method invocation.
 #[tokio::test]
 async fn test_settle_neurons_fund_participation_restores_lifecycle_on_ledger_failure() {
@@ -12314,7 +12314,7 @@ async fn test_settle_neurons_fund_participation_restores_lifecycle_on_ledger_fai
 
     let driver = fake::FakeDriver::default();
     let icp_ledger: SpyLedger = SpyLedger::new(vec![LedgerReply::TransferFunds(Err(
-        NervousSystemError::new_with_message("Error conducting the the transfer"),
+        NervousSystemError::new_with_message("Error conducting the transfer"),
     ))]);
     let mut gov = Governance::new(
         governance_proto,
@@ -12388,7 +12388,7 @@ async fn test_settle_neurons_fund_participation_restores_lifecycle_on_ledger_fai
         settle_neurons_fund_participation_response,
     );
     assert!(
-        settle_neurons_fund_participation_response.contains("Error conducting the the transfer"),
+        settle_neurons_fund_participation_response.contains("Error conducting the transfer"),
         "unexpected settle_neurons_fund_participation_response: {:?}",
         settle_neurons_fund_participation_response,
     );
