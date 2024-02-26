@@ -16,12 +16,13 @@ use ic_logger::ReplicaLogger;
 use ic_memory_transport::TransportRouter;
 use ic_metrics::MetricsRegistry;
 use ic_p2p_test_utils::mocks::{MockChunkable, MockStateSync};
+use ic_quic_transport::Shutdown;
 use ic_state_manager::state_sync::types::{Manifest, MetaManifest, StateSyncMessage};
 use ic_types::{
     crypto::CryptoHash, state_sync::StateSyncVersion, CryptoHashOfState, Height, NodeId,
     PrincipalId,
 };
-use tokio::{runtime::Handle, task::JoinHandle};
+use tokio::runtime::Handle;
 
 const META_MANIFEST_ID: u32 = u32::MAX - 1;
 
@@ -448,7 +449,7 @@ pub fn create_node(
     uses_global: bool,
     global_state: State,
     link: (Duration, usize),
-) -> (Arc<FakeStateSync>, JoinHandle<()>) {
+) -> (Arc<FakeStateSync>, Shutdown) {
     let local_state = State::new();
     let state_sync = Arc::new(FakeStateSync {
         local_state,
@@ -468,7 +469,7 @@ pub fn create_node(
         link.0,
         link.1,
     );
-    let jh = ic_state_sync_manager::start_state_sync_manager(
+    let shutdown = ic_state_sync_manager::start_state_sync_manager(
         &log,
         &MetricsRegistry::default(),
         rt,
@@ -477,5 +478,5 @@ pub fn create_node(
         rx,
     );
 
-    (state_sync, jh)
+    (state_sync, shutdown)
 }

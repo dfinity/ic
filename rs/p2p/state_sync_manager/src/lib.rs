@@ -25,18 +25,14 @@ use ic_base_types::NodeId;
 use ic_interfaces::p2p::state_sync::{StateSyncArtifactId, StateSyncClient};
 use ic_logger::{info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_quic_transport::Transport;
+use ic_quic_transport::{Shutdown, Transport};
 use metrics::{StateSyncManagerHandlerMetrics, StateSyncManagerMetrics};
 use ongoing::OngoingStateSyncHandle;
 use routes::{
     build_advert_handler_request, state_sync_advert_handler, state_sync_chunk_handler,
     StateSyncAdvertHandler, StateSyncChunkHandler, STATE_SYNC_ADVERT_PATH, STATE_SYNC_CHUNK_PATH,
 };
-use tokio::{
-    runtime::Handle,
-    select,
-    task::{JoinHandle, JoinSet},
-};
+use tokio::{runtime::Handle, select, task::JoinSet};
 use tokio_util::sync::CancellationToken;
 
 use crate::ongoing::start_ongoing_state_sync;
@@ -89,20 +85,21 @@ pub fn start_state_sync_manager<T: Send + 'static>(
     transport: Arc<dyn Transport>,
     state_sync: Arc<dyn StateSyncClient<Message = T>>,
     advert_receiver: tokio::sync::mpsc::Receiver<(StateSyncArtifactId, NodeId)>,
-) -> JoinHandle<()> {
-    let cancellation = CancellationToken::new();
+) -> Shutdown {
     let state_sync_manager_metrics = StateSyncManagerMetrics::new(metrics);
+    let shutdown = Shutdown::new(rt.clone());
     let manager = StateSyncManager {
         log: log.clone(),
         rt: rt.clone(),
         metrics: state_sync_manager_metrics,
         transport,
-        cancellation,
         state_sync,
         advert_receiver,
         ongoing_state_sync: None,
     };
-    rt.spawn(manager.run())
+    shutdown
+        .spawn_on_with_cancellation(|cancellation: CancellationToken| manager.run(cancellation));
+    shutdown
 }
 
 struct StateSyncManager<T> {
@@ -110,19 +107,18 @@ struct StateSyncManager<T> {
     rt: Handle,
     metrics: StateSyncManagerMetrics,
     transport: Arc<dyn Transport>,
-    cancellation: CancellationToken,
     state_sync: Arc<dyn StateSyncClient<Message = T>>,
     advert_receiver: tokio::sync::mpsc::Receiver<(StateSyncArtifactId, NodeId)>,
     ongoing_state_sync: Option<OngoingStateSyncHandle>,
 }
 
 impl<T: 'static + Send> StateSyncManager<T> {
-    async fn run(mut self) {
+    async fn run(mut self, cancellation: CancellationToken) {
         let mut interval = tokio::time::interval(ADVERT_BROADCAST_INTERVAL);
         let mut advertise_task = JoinSet::new();
         loop {
             select! {
-                () = self.cancellation.cancelled() => {
+                () = cancellation.cancelled() => {
                     break;
                 }
                 // Make sure we only have one active advertise task.
@@ -138,7 +134,7 @@ impl<T: 'static + Send> StateSyncManager<T> {
                     );
                 },
                 Some((advert, peer_id)) = self.advert_receiver.recv() =>{
-                    self.handle_advert(advert, peer_id).await;
+                    self.handle_advert(advert, peer_id, &cancellation).await;
                 }
                 Some(_) = advertise_task.join_next() => {}
             }
@@ -146,7 +142,12 @@ impl<T: 'static + Send> StateSyncManager<T> {
         advertise_task.shutdown().await;
     }
 
-    async fn handle_advert(&mut self, artifact_id: StateSyncArtifactId, peer_id: NodeId) {
+    async fn handle_advert(
+        &mut self,
+        artifact_id: StateSyncArtifactId,
+        peer_id: NodeId,
+        root_cancellation: &CancellationToken,
+    ) {
         self.metrics.adverts_received_total.inc();
         // Remove ongoing state sync if finished or try to add peer if ongoing.
         if let Some(ongoing) = &mut self.ongoing_state_sync {
@@ -186,7 +187,7 @@ impl<T: 'static + Send> StateSyncManager<T> {
                 artifact_id.clone(),
                 self.state_sync.clone(),
                 self.transport.clone(),
-                self.cancellation.child_token(),
+                root_cancellation.child_token(),
             );
             // Add peer that initiated this state sync to ongoing state sync.
             ongoing
