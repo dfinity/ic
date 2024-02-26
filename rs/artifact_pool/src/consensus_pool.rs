@@ -652,7 +652,7 @@ impl MutablePool<ConsensusArtifact> for ConsensusPoolImpl {
                 ChangeAction::PurgeValidatedBelow(height) => {
                     validated_ops.purge_below(height);
                 }
-                ChangeAction::PurgeValidatedOfGivenTypeBelow(artifact_type, height) => {
+                ChangeAction::PurgeValidatedOfTypeBelow(artifact_type, height) => {
                     validated_ops.purge_type_below(artifact_type, height);
                 }
                 ChangeAction::PurgeUnvalidatedBelow(height) => {

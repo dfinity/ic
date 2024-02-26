@@ -250,7 +250,7 @@ impl Purger {
         }
     }
 
-    /// Validated Finalization and Notarization shares older than the latest
+    /// Validated Finalization and Notarization shares at and below the latest
     /// finalized height can be purged from the pool.
     ///
     /// Return true if a purge action is taken.
@@ -259,13 +259,13 @@ impl Purger {
         finalized_height: Height,
         changeset: &mut ChangeSet,
     ) {
-        changeset.push(ChangeAction::PurgeValidatedOfGivenTypeBelow(
+        changeset.push(ChangeAction::PurgeValidatedOfTypeBelow(
             PurgeableArtifactType::NotarizationShare,
-            finalized_height,
+            finalized_height.increment(),
         ));
-        changeset.push(ChangeAction::PurgeValidatedOfGivenTypeBelow(
+        changeset.push(ChangeAction::PurgeValidatedOfTypeBelow(
             PurgeableArtifactType::FinalizationShare,
-            finalized_height,
+            finalized_height.increment(),
         ));
         trace!(
             self.log,
@@ -406,6 +406,7 @@ mod tests {
     use ic_interfaces_mocks::messaging::MockMessageRouting;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
+    use ic_test_utilities::message_routing::FakeMessageRouting;
     use ic_types::{consensus::Rank, crypto::CryptoHash, CryptoHashOfState};
     use std::sync::{Arc, RwLock};
 
@@ -473,19 +474,18 @@ mod tests {
             let pool_reader = PoolReader::new(&pool);
             *expected_batch_height.write().unwrap() = Height::from(10);
             let changeset = purger.on_state_change(&pool_reader);
+            let purge_height = expected_batch_height.read().unwrap().decrement();
             assert_eq!(
                 changeset,
                 vec![
-                    ChangeAction::PurgeUnvalidatedBelow(
-                        expected_batch_height.read().unwrap().decrement()
-                    ),
-                    ChangeAction::PurgeValidatedOfGivenTypeBelow(
+                    ChangeAction::PurgeUnvalidatedBelow(purge_height),
+                    ChangeAction::PurgeValidatedOfTypeBelow(
                         PurgeableArtifactType::NotarizationShare,
-                        expected_batch_height.read().unwrap().decrement()
+                        purge_height.increment()
                     ),
-                    ChangeAction::PurgeValidatedOfGivenTypeBelow(
+                    ChangeAction::PurgeValidatedOfTypeBelow(
                         PurgeableArtifactType::FinalizationShare,
-                        expected_batch_height.read().unwrap().decrement()
+                        purge_height.increment()
                     )
                 ]
             );
@@ -516,13 +516,13 @@ mod tests {
                     ChangeAction::PurgeUnvalidatedBelow(
                         expected_batch_height.read().unwrap().decrement()
                     ),
-                    ChangeAction::PurgeValidatedOfGivenTypeBelow(
+                    ChangeAction::PurgeValidatedOfTypeBelow(
                         PurgeableArtifactType::NotarizationShare,
-                        pool_reader.get_finalized_height()
+                        pool_reader.get_finalized_height().increment()
                     ),
-                    ChangeAction::PurgeValidatedOfGivenTypeBelow(
+                    ChangeAction::PurgeValidatedOfTypeBelow(
                         PurgeableArtifactType::FinalizationShare,
-                        pool_reader.get_finalized_height()
+                        pool_reader.get_finalized_height().increment()
                     ),
                     ChangeAction::PurgeValidatedBelow(get_purge_height(&pool_reader).unwrap()),
                 ]
@@ -533,6 +533,38 @@ mod tests {
             let pool_reader = PoolReader::new(&pool);
             let changeset = purger.on_state_change(&pool_reader);
             assert_eq!(changeset.len(), 0);
+        })
+    }
+
+    #[test]
+    fn test_purge_finalization_shares() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let Dependencies {
+                mut pool,
+                state_manager,
+                ..
+            } = dependencies(pool_config, 3);
+            state_manager
+                .get_mut()
+                .expect_latest_state_height()
+                .returning(|| Height::new(0));
+            let purger = Purger::new(
+                state_manager,
+                Arc::new(FakeMessageRouting::new()),
+                no_op_logger(),
+                MetricsRegistry::new(),
+            );
+
+            // Move to finalized height 30
+            pool.advance_round_normal_operation_n(30);
+
+            // We expect to purge finalization shares below AND at the finalized height.
+            let pool_reader = PoolReader::new(&pool);
+            let changeset = purger.on_state_change(&pool_reader);
+            assert!(changeset.contains(&ChangeAction::PurgeValidatedOfTypeBelow(
+                PurgeableArtifactType::FinalizationShare,
+                Height::new(31),
+            )));
         })
     }
 
