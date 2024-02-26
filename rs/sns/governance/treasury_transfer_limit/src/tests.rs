@@ -35,7 +35,7 @@ fn test_small_treasury_transfer_total_upper_bound_in_tokens() {
     };
 
     let observed_treasury_transfer_total_upper_bound_tokens =
-        TreasuryTransferTotalUpperBound::in_tokens(valuation).unwrap();
+        TreasuryTransferTotalUpperBound::in_tokens(&valuation).unwrap();
 
     assert_eq!(
         observed_treasury_transfer_total_upper_bound_tokens,
@@ -54,7 +54,7 @@ fn test_medium_treasury_transfer_total_upper_bound_in_tokens() {
     };
 
     let observed_treasury_transfer_total_upper_bound_tokens =
-        TreasuryTransferTotalUpperBound::in_tokens(valuation).unwrap();
+        TreasuryTransferTotalUpperBound::in_tokens(&valuation).unwrap();
 
     assert_eq!(
         observed_treasury_transfer_total_upper_bound_tokens,
@@ -73,7 +73,7 @@ fn test_large_treasury_transfer_total_upper_bound_in_tokens() {
     };
 
     let observed_treasury_transfer_total_upper_bound_tokens =
-        TreasuryTransferTotalUpperBound::in_tokens(valuation).unwrap();
+        TreasuryTransferTotalUpperBound::in_tokens(&valuation).unwrap();
 
     let xdrs_per_token = Decimal::from_f64_retain(1.95 * 5.05).unwrap();
     let tokens_per_xdr = xdrs_per_token.inv();

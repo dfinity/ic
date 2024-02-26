@@ -28,7 +28,7 @@ impl TreasuryTransferTotalUpperBound {
     // window).
     const MAX_XDR: Decimal = dec!(300_000);
 
-    pub fn in_tokens(valuation: Valuation) -> Result<Decimal, TreasuryLimitError> {
+    pub fn in_tokens(valuation: &Valuation) -> Result<Decimal, TreasuryLimitError> {
         let ValuationFactors {
             tokens: balance_tokens,
             icps_per_token,

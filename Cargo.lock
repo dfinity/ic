@@ -9044,6 +9044,7 @@ dependencies = [
  "ic-nervous-system-proto-protobuf-generator",
  "ic-test-utilities-compare-dirs",
  "prost",
+ "rust_decimal",
  "serde",
  "tempfile",
 ]

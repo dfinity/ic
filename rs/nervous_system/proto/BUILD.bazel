@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:prost.bzl", "generated_files_check")
 
 package(default_visibility = ["//rs/nervous_system:default_visibility"])
@@ -13,22 +13,43 @@ DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:comparable",
     "@crate_index//:prost",
+    "@crate_index//:rust_decimal",
     "@crate_index//:serde",
 ]
 
 MACRO_DEPENDENCIES = [
 ]
 
+DEV_DEPENDENCIES = [
+]
+
+MACRO_DEV_DEPENDENCIES = [
+]
+
 ALIASES = {}
+
+LIB_SRCS = glob(
+    ["src/**"],
+    exclude = ["**/*tests.rs"],
+)
 
 rust_library(
     name = "proto",
-    srcs = glob(["src/**"]),
+    srcs = LIB_SRCS,
     aliases = ALIASES,
     crate_name = "ic_nervous_system_proto",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.0.1",
     deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "proto_test",
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEV_DEPENDENCIES + MACRO_DEPENDENCIES,
+    version = "0.0.1",
+    deps = DEV_DEPENDENCIES + DEPENDENCIES,
 )
 
 generated_files_check(

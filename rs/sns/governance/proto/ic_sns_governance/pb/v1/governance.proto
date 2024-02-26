@@ -600,6 +600,20 @@ message GovernanceError {
 
     // The NeuronId is invalid.
     ERROR_TYPE_INVALID_NEURON_ID = 16;
+
+    // This indicates that we have a bug. It should be impossible for users to provoke this.
+    //
+    // For example, supposed you put some auxiliary data into a ProposalData during proposal
+    // submission. That data is supposed to be used during execution of the proposal. But during
+    // execution, the auxiliary data is invalid (e.g. absent).
+    ERROR_TYPE_INCONSISTENT_INTERNAL_DATA = 17;
+
+    // Users cannot provoke this.
+    //
+    // E.g. 1 / E8 somehow provokes a divide by zero error, even though E8 is a positive number.
+    //
+    // This is a generalization of INCONSISTENT_INTERNAL_DATA.
+    ERROR_TYPE_UNREACHABLE_CODE = 18;
   }
 
   ErrorType error_type = 1;
@@ -836,6 +850,36 @@ message ProposalData {
   // requirement that 50% of the exercised voting power votes to adopt the
   // proposal.
   optional ic_nervous_system.pb.v1.Percentage minimum_yes_proportion_of_exercised = 21;
+
+  message TransferSnsTreasuryFundsActionAuxiliary {
+    Valuation valuation = 1;
+  }
+
+  // In general, this holds data retrieved at proposal submission/creation time and used later
+  // during execution is stored. This varies based on the action of the proposal.
+  oneof action_auxiliary {
+    TransferSnsTreasuryFundsActionAuxiliary transfer_sns_treasury_funds = 22;
+  }
+}
+
+message Valuation {
+  enum Token {
+    TOKEN_UNSPECIFIED = 0;
+    TOKEN_ICP = 1;
+    TOKEN_SNS_TOKEN = 2;
+  }
+
+  optional Token token = 1;
+  Account account = 2;
+  optional uint64 timestamp_seconds = 3;
+
+  message ValuationFactors {
+    ic_nervous_system.pb.v1.Tokens tokens = 1;
+    ic_nervous_system.pb.v1.Decimal icps_per_token = 2;
+    ic_nervous_system.pb.v1.Decimal xdrs_per_icp = 3;
+  }
+
+  ValuationFactors valuation_factors = 4;
 }
 
 // The nervous system's parameters, which are parameters that can be changed, via proposals,

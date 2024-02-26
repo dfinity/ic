@@ -1,37 +1,10 @@
 use super::*;
 use assert_matches::assert_matches;
 use ic_base_types::PrincipalId;
-use ic_nervous_system_common::E8;
+use ic_nervous_system_common::{E8, WIDE_RANGE_OF_U64_VALUES};
 
 fn nid(id: u64) -> NeuronId {
     NeuronId { id }
-}
-
-fn get_u64_values_for_tests() -> impl Iterator<Item = u64> {
-    let interesting_u64_values: BTreeSet<u64> = (0..=64)
-        .flat_map(|i| {
-            let pow_of_two: u128 = 2_u128.pow(i);
-            vec![
-                pow_of_two.saturating_sub(42), // ensure we don't always hit (2^N), (2^N)+/-1
-                pow_of_two.saturating_sub(7),  // add even more diverse values
-                pow_of_two - 1,                // this means we also reach `0`
-                pow_of_two,
-                pow_of_two.saturating_add(1),
-                pow_of_two.saturating_add(7), // add even more diverse values
-                pow_of_two.saturating_add(42), // ensure we don't always hit (2^N), (2^N)+/-1
-            ]
-            .into_iter()
-            .map(|x| x.min(u64::MAX as u128) as u64)
-        })
-        .collect();
-    // smoke checks
-    assert!(interesting_u64_values.contains(&0));
-    assert!(interesting_u64_values.contains(&1));
-    assert!(interesting_u64_values.contains(&8));
-    assert!(interesting_u64_values.contains(&43));
-    assert!(interesting_u64_values.contains(&57));
-    assert!(interesting_u64_values.contains(&u64::MAX));
-    interesting_u64_values.into_iter()
 }
 
 fn get_swap_participation_limits_for_tests() -> impl Iterator<Item = SwapParticipationLimits> {
@@ -311,7 +284,9 @@ fn test() {
                 initial_participation_fn().unwrap();
             let initial_participation_clone = initial_participation_fn().unwrap();
             let initial_neuron_portions = initial_participation_fn().unwrap().into_snapshot();
-            for direct_participation_icp_e8s in get_u64_values_for_tests() {
+            for direct_participation_icp_e8s in &*WIDE_RANGE_OF_U64_VALUES {
+                let direct_participation_icp_e8s = *direct_participation_icp_e8s;
+
                 let final_participation = initial_participation_clone
                     .from_initial_participation(direct_participation_icp_e8s)
                     .unwrap();

@@ -1,4 +1,4 @@
-use candid::{Decode, Encode};
+use candid::{Decode, Encode, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::{tokens::CheckedSub, Tokens};
 use ic_nervous_system_common::{
@@ -8,10 +8,10 @@ use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    state_test_helpers,
     state_test_helpers::{
-        icrc1_balance, query, setup_nns_canisters, sns_claim_staked_neuron, sns_make_proposal,
-        sns_stake_neuron, sns_wait_for_proposal_execution,
+        self, icrc1_balance, query, setup_nns_canisters, sns_claim_staked_neuron, sns_get_proposal,
+        sns_make_proposal, sns_stake_neuron, sns_wait_for_proposal_executed_or_failed,
+        sns_wait_for_proposal_execution,
     },
 };
 use ic_sns_governance::{
@@ -20,14 +20,16 @@ use ic_sns_governance::{
         governance_error::ErrorType as SnsErrorType, proposal::Action,
         transfer_sns_treasury_funds::TransferFrom, GovernanceError as SnsGovernanceError,
         MintSnsTokens, NervousSystemParameters, NeuronId as SnsNeuronId, NeuronPermissionList,
-        NeuronPermissionType, Proposal, TransferSnsTreasuryFunds,
+        NeuronPermissionType, Proposal, TransferSnsTreasuryFunds, Vote,
     },
     types::{DEFAULT_TRANSFER_FEE, E8S_PER_TOKEN},
 };
 use ic_sns_swap::pb::v1::{Init as SwapInit, NeuronBasketConstructionParameters};
 use ic_sns_test_utils::{
     itest_helpers::SnsTestsInitPayloadBuilder,
-    state_test_helpers::{participate_in_swap, setup_sns_canisters, SnsTestCanisterIds},
+    state_test_helpers::{
+        participate_in_swap, setup_sns_canisters, sns_cast_vote, SnsTestCanisterIds,
+    },
 };
 use ic_state_machine_tests::StateMachine;
 use icp_ledger::{
@@ -35,6 +37,7 @@ use icp_ledger::{
     DEFAULT_TRANSFER_FEE as NNS_DEFAULT_TRANSFER_FEE,
 };
 use icrc_ledger_types::icrc1::account::Account;
+use lazy_static::lazy_static;
 use std::time::{Duration, SystemTime};
 
 fn icrc1_account_to_icp_accountidentifier(account: Account) -> AccountIdentifier {
@@ -42,6 +45,52 @@ fn icrc1_account_to_icp_accountidentifier(account: Account) -> AccountIdentifier
         PrincipalId(account.owner),
         account.subaccount.map(IcpSubaccount),
     )
+}
+
+trait DefaultAccount {
+    fn default_account(&self) -> Account;
+}
+
+impl DefaultAccount for PrincipalId {
+    fn default_account(&self) -> Account {
+        Account {
+            owner: Principal::from(*self),
+            subaccount: None,
+        }
+    }
+}
+
+// How can we generalize this to anything that can be converted to a PrincipalId?
+impl DefaultAccount for CanisterId {
+    fn default_account(&self) -> Account {
+        PrincipalId::from(*self).default_account()
+    }
+}
+
+trait FromAccount {
+    fn from_account(src: Account) -> Self;
+}
+
+impl FromAccount for AccountIdentifier {
+    fn from_account(src: Account) -> AccountIdentifier {
+        AccountIdentifier::new(PrincipalId(src.owner), src.subaccount.map(IcpSubaccount))
+    }
+}
+
+lazy_static! {
+    /// In new_treasury_scenario, this has a neuron with overwhelming voting power, such that it can
+    /// instantly pass any proposal it wants.
+    static ref WHALE: PrincipalId = PrincipalId::new_user_test_id(266_500_070);
+
+    /// Unlike the (primary) whale, new_treasury_scenario does not give this an uber neuron, but
+    /// this principal does have enough SNS tokens to create a neuron capable of voting in whatever
+    /// the counterweight wants.
+    static ref COUNTERWEIGHT: PrincipalId = PrincipalId::new_user_test_id(340_495_543);
+
+    /// This principal participates in the swap created by new_treasury_scenario so that the swap
+    /// reaches the Committed state. This is needed in order to determine a valuation of the
+    /// treasury, which is needed as part of TransferSnsTreasuryFunds proposal validation.
+    static ref PARTICIPANT: PrincipalId = PrincipalId::new_user_test_id(859_530_655);
 }
 
 /// Creates and installs NNS and SNS canisters.
@@ -56,11 +105,7 @@ fn icrc1_account_to_icp_accountidentifier(account: Account) -> AccountIdentifier
 /// The swap establishes that 1 SNS token is worth slightly less than 1 ICP.
 fn new_treasury_scenario(
     state_machine: &mut StateMachine,
-) -> (
-    /* whale */ PrincipalId,
-    /* also whale */ SnsNeuronId,
-    SnsTestCanisterIds,
-) {
+) -> (/* whale */ SnsNeuronId, SnsTestCanisterIds) {
     // What is special about this value: 1 second after the default value of
     // State.icp_xdr_conversion_rate.timestamp_seconds. This is
     // 10 May 2021 10 AM CEST + 1 second. We need to sync up with that in order for the
@@ -70,24 +115,6 @@ fn new_treasury_scenario(
         .checked_add(Duration::from_secs(start_timestamp_seconds))
         .unwrap();
     state_machine.set_time(start_time);
-
-    let whale_principal_id = PrincipalId::new_user_test_id(1000);
-    let whale_account = Account {
-        owner: whale_principal_id.0,
-        subaccount: None,
-    };
-    let whale_account_identifier = icrc1_account_to_icp_accountidentifier(whale_account);
-
-    // This principal will participate in the swap so that it reaches the Committed state. This is
-    // needed in order to determine a valuation of the treasury, which is needed as part of
-    // TransferSnsTreasuryFunds proposal validation.
-    let participant_principal_id = PrincipalId::new_user_test_id(440_894_806);
-    let participant_account = Account {
-        owner: participant_principal_id.0,
-        subaccount: None,
-    };
-    let participant_account_identifier =
-        icrc1_account_to_icp_accountidentifier(participant_account);
 
     let first_sns_canister_id = 11;
     let governance = CanisterId::from(first_sns_canister_id + 1);
@@ -109,13 +136,16 @@ fn new_treasury_scenario(
 
     let nns_init_payloads = NnsInitPayloadsBuilder::new()
         .with_ledger_accounts(vec![
-            (whale_account_identifier, Tokens::new(10_000, 0).unwrap()),
+            (
+                AccountIdentifier::from_account(WHALE.default_account()),
+                Tokens::new(10_000, 0).unwrap(),
+            ),
             (
                 sns_treasury_account_nns_identifier,
                 Tokens::new(10000, 0).unwrap(),
             ),
             (
-                participant_account_identifier,
+                AccountIdentifier::from_account(PARTICIPANT.default_account()),
                 Tokens::new(100, 10_000).unwrap(),
             ),
         ])
@@ -131,8 +161,12 @@ fn new_treasury_scenario(
 
     let mut sns_init_payload = SnsTestsInitPayloadBuilder::new()
         .with_ledger_account(sns_treasury_account_sns, Tokens::new(10000, 0).unwrap())
-        // Whale needs majority of tokens to pass proposals
-        .with_ledger_account(whale_account, Tokens::new(10001, 0).unwrap())
+        // Whale and counterweight need funds to make (SNS) neurons.
+        .with_ledger_account(WHALE.default_account(), Tokens::new(10001, 0).unwrap())
+        .with_ledger_account(
+            COUNTERWEIGHT.default_account(),
+            Tokens::new(30_000, 0).unwrap(),
+        )
         .with_nervous_system_parameters(system_params)
         .build();
     sns_init_payload.swap = SwapInit {
@@ -186,7 +220,7 @@ fn new_treasury_scenario(
     participate_in_swap(
         state_machine,
         swap_canister_id,
-        participant_principal_id,
+        *PARTICIPANT,
         ExplosiveTokens::from(Tokens::new(100, 0).unwrap()),
     );
 
@@ -196,8 +230,12 @@ fn new_treasury_scenario(
     // Double check original balances.
 
     // Double check the balances of the whale.
-    let whale_icp_balance = nns_ledger_balance(state_machine, whale_account);
-    let whale_sns_balance = icrc1_balance(state_machine, sns_ledger_canister_id, whale_account);
+    let whale_icp_balance = nns_ledger_balance(state_machine, WHALE.default_account());
+    let whale_sns_balance = icrc1_balance(
+        state_machine,
+        sns_ledger_canister_id,
+        WHALE.default_account(),
+    );
     assert_eq!(whale_sns_balance, Tokens::new(10001, 0).unwrap());
     assert_eq!(whale_icp_balance, Tokens::new(10000, 0).unwrap());
 
@@ -217,7 +255,7 @@ fn new_treasury_scenario(
         state_machine,
         governance_canister_id,
         sns_ledger_canister_id,
-        whale_principal_id,
+        *WHALE,
         Tokens::new(10001, 0)
             .unwrap()
             .checked_sub(&DEFAULT_TRANSFER_FEE)
@@ -227,12 +265,12 @@ fn new_treasury_scenario(
     let whale_neuron_id = sns_claim_staked_neuron(
         state_machine,
         governance_canister_id,
-        whale_principal_id,
+        *WHALE,
         neuron_nonce,
         Some(100_000_000),
     );
 
-    (whale_principal_id, whale_neuron_id, sns_test_canister_ids)
+    (whale_neuron_id, sns_test_canister_ids)
 }
 
 #[test]
@@ -242,8 +280,7 @@ fn test_sns_treasury_can_transfer_funds_via_proposals() {
     state_test_helpers::reduce_state_machine_logging_unless_env_set();
     let mut state_machine = StateMachine::new();
 
-    let (whale_principal_id, whale_neuron_id, sns_test_canister_ids) =
-        new_treasury_scenario(&mut state_machine);
+    let (whale_neuron_id, sns_test_canister_ids) = new_treasury_scenario(&mut state_machine);
 
     let SnsTestCanisterIds {
         governance_canister_id,
@@ -254,15 +291,7 @@ fn test_sns_treasury_can_transfer_funds_via_proposals() {
         index_canister_id: _,
     } = sns_test_canister_ids;
 
-    let whale_account = Account {
-        owner: whale_principal_id.0,
-        subaccount: None,
-    };
-
-    let treasury_icp_account = Account {
-        owner: PrincipalId::from(governance_canister_id).0,
-        subaccount: None,
-    };
+    let treasury_icp_account = governance_canister_id.default_account();
 
     let treasury_sns_token_account = Account {
         owner: PrincipalId::from(governance_canister_id).0,
@@ -305,7 +334,7 @@ fn test_sns_treasury_can_transfer_funds_via_proposals() {
     let transfer_icp_proposal_id = sns_make_proposal(
         &state_machine,
         governance_canister_id,
-        whale_principal_id,
+        *WHALE,
         whale_neuron_id.clone(),
         Proposal {
             title: "Transfer treasury NNS".to_string(),
@@ -315,7 +344,7 @@ fn test_sns_treasury_can_transfer_funds_via_proposals() {
                 from_treasury: TransferFrom::IcpTreasury.into(),
                 amount_e8s: 10000 * E8S_PER_TOKEN - NNS_DEFAULT_TRANSFER_FEE.get_e8s(),
                 memo: None,
-                to_principal: Some(whale_principal_id),
+                to_principal: Some(*WHALE),
                 to_subaccount: None,
             })),
         },
@@ -331,7 +360,7 @@ fn test_sns_treasury_can_transfer_funds_via_proposals() {
     let transfer_token_proposal_id = sns_make_proposal(
         &state_machine,
         governance_canister_id,
-        whale_principal_id,
+        *WHALE,
         whale_neuron_id,
         Proposal {
             title: "Transfer treasury SNS".to_string(),
@@ -341,7 +370,7 @@ fn test_sns_treasury_can_transfer_funds_via_proposals() {
                 from_treasury: TransferFrom::SnsTokenTreasury.into(),
                 amount_e8s: 10000 * E8S_PER_TOKEN - DEFAULT_TRANSFER_FEE.get_e8s(),
                 memo: None,
-                to_principal: Some(whale_principal_id),
+                to_principal: Some(*WHALE),
                 to_subaccount: None,
             })),
         },
@@ -356,8 +385,12 @@ fn test_sns_treasury_can_transfer_funds_via_proposals() {
     // Step 3: Inspect results.
 
     // Step 3.1: Inspect whale balances.
-    let whale_icp_balance = nns_ledger_balance(&state_machine, whale_account);
-    let whale_sns_balance = icrc1_balance(&state_machine, sns_ledger_canister_id, whale_account);
+    let whale_icp_balance = nns_ledger_balance(&state_machine, WHALE.default_account());
+    let whale_sns_balance = icrc1_balance(
+        &state_machine,
+        sns_ledger_canister_id,
+        WHALE.default_account(),
+    );
     assert_eq!(whale_sns_balance, Tokens::new(9999, 99990000).unwrap());
     assert_eq!(whale_icp_balance, Tokens::new(19999, 99990000).unwrap());
 
@@ -382,8 +415,7 @@ fn test_transfer_sns_treasury_funds_proposals_that_are_too_big_get_blocked_at_su
     state_test_helpers::reduce_state_machine_logging_unless_env_set();
     let mut state_machine = StateMachine::new();
 
-    let (whale_principal_id, whale_neuron_id, sns_test_canister_ids) =
-        new_treasury_scenario(&mut state_machine);
+    let (whale_neuron_id, sns_test_canister_ids) = new_treasury_scenario(&mut state_machine);
 
     let SnsTestCanisterIds {
         governance_canister_id,
@@ -394,15 +426,7 @@ fn test_transfer_sns_treasury_funds_proposals_that_are_too_big_get_blocked_at_su
         index_canister_id: _,
     } = sns_test_canister_ids;
 
-    let whale_account = Account {
-        owner: whale_principal_id.0,
-        subaccount: None,
-    };
-
-    let treasury_icp_account = Account {
-        owner: PrincipalId::from(governance_canister_id).0,
-        subaccount: None,
-    };
+    let treasury_icp_account = governance_canister_id.default_account();
 
     let treasury_sns_token_account = Account {
         owner: PrincipalId::from(governance_canister_id).0,
@@ -444,7 +468,7 @@ fn test_transfer_sns_treasury_funds_proposals_that_are_too_big_get_blocked_at_su
     let take_icp_result_make_proposal_result = sns_make_proposal(
         &state_machine,
         governance_canister_id,
-        whale_principal_id,
+        *WHALE,
         whale_neuron_id.clone(),
         Proposal {
             title: "Transfer treasury NNS".to_string(),
@@ -454,7 +478,7 @@ fn test_transfer_sns_treasury_funds_proposals_that_are_too_big_get_blocked_at_su
                 from_treasury: TransferFrom::IcpTreasury.into(),
                 amount_e8s: 10000 * E8S_PER_TOKEN - NNS_DEFAULT_TRANSFER_FEE.get_e8s(),
                 memo: None,
-                to_principal: Some(whale_principal_id),
+                to_principal: Some(*WHALE),
                 to_subaccount: None,
             })),
         },
@@ -464,7 +488,7 @@ fn test_transfer_sns_treasury_funds_proposals_that_are_too_big_get_blocked_at_su
     let take_sns_tokens_make_proposal_result = sns_make_proposal(
         &state_machine,
         governance_canister_id,
-        whale_principal_id,
+        *WHALE,
         whale_neuron_id,
         Proposal {
             title: "Transfer treasury SNS".to_string(),
@@ -474,7 +498,7 @@ fn test_transfer_sns_treasury_funds_proposals_that_are_too_big_get_blocked_at_su
                 from_treasury: TransferFrom::SnsTokenTreasury.into(),
                 amount_e8s: 10000 * E8S_PER_TOKEN - DEFAULT_TRANSFER_FEE.get_e8s(),
                 memo: None,
-                to_principal: Some(whale_principal_id),
+                to_principal: Some(*WHALE),
                 to_subaccount: None,
             })),
         },
@@ -527,8 +551,12 @@ fn test_transfer_sns_treasury_funds_proposals_that_are_too_big_get_blocked_at_su
     // Step 3.2: Assert that balances are unchanged.
 
     // Step 3.2.1: Assert that the balances of the whale have not changed.
-    let whale_icp_balance = nns_ledger_balance(&state_machine, whale_account);
-    let whale_sns_balance = icrc1_balance(&state_machine, sns_ledger_canister_id, whale_account);
+    let whale_icp_balance = nns_ledger_balance(&state_machine, WHALE.default_account());
+    let whale_sns_balance = icrc1_balance(
+        &state_machine,
+        sns_ledger_canister_id,
+        WHALE.default_account(),
+    );
     assert_eq!(whale_sns_balance, Tokens::new(0, 0).unwrap());
     assert_eq!(whale_icp_balance, Tokens::new(10_000, 0).unwrap());
 
@@ -541,6 +569,166 @@ fn test_transfer_sns_treasury_funds_proposals_that_are_too_big_get_blocked_at_su
     let treasury_icp_balance = nns_ledger_balance(&state_machine, treasury_icp_account);
     assert_eq!(treasury_sns_token_balance, Tokens::new(10_000, 0).unwrap());
     assert_eq!(treasury_icp_balance, Tokens::new(10_000, 0).unwrap());
+}
+
+/// Story:
+///
+///     1. Two proposals are made (successfully).
+///
+///     2. The second one is adopted and executed first.
+///
+///     3. The first is adopted, but execution fails, because a big chunk of the allowance has been
+///        spent by the second (already executed proposal).
+#[test]
+fn test_transfer_sns_treasury_funds_upper_bound_is_enforced_at_execution() {
+    // Step 1: Prepare the world.
+
+    state_test_helpers::reduce_state_machine_logging_unless_env_set();
+    let mut state_machine = StateMachine::new();
+
+    let (whale_neuron_id, sns_test_canister_ids) = new_treasury_scenario(&mut state_machine);
+
+    let SnsTestCanisterIds {
+        governance_canister_id,
+        ledger_canister_id: sns_ledger_canister_id,
+
+        root_canister_id: _,
+        swap_canister_id: _,
+        index_canister_id: _,
+    } = sns_test_canister_ids;
+
+    let start_timestamp_seconds = state_machine
+        .time()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    // Populate ICP price data in the Cycles Minting Canister. This is needed to verify that the
+    // amount in the TransferSnsTreasuryFunds proposals is not too big. This results in a treasury
+    // where the ICP in the treasury is worth roughly 42 * 10_000 XDR, which would be considered
+    // "medium" for the purposes of limiting TransferSnsTreasuryFunds proposals. Because the amount
+    // of ICP treasury is "medium", up to 25% of the ICP in the treasury can be disbursed within a 7
+    // day window.
+    state_machine
+        .execute_ingress_as(
+            PrincipalId::from(GOVERNANCE_CANISTER_ID), // sender
+            CYCLES_MINTING_CANISTER_ID,                // destination
+            "set_icp_xdr_conversion_rate",
+            Encode!(&UpdateIcpXdrConversionRatePayload {
+                data_source: "STONE TABLETS FROM HEAVEN".to_string(),
+                timestamp_seconds: start_timestamp_seconds,
+                xdr_permyriad_per_icp: 42 * 10_000, // 42 XDR per ICP.
+                reason: None,
+            })
+            .unwrap(),
+        )
+        .unwrap();
+
+    // Fashion another SNS neuron so that WHALE cannot instantly pass proposals.
+    let neuron_nonce = 0;
+    sns_stake_neuron(
+        &state_machine,
+        governance_canister_id,
+        sns_ledger_canister_id,
+        *COUNTERWEIGHT,
+        Tokens::new(30_000, 0)
+            .unwrap()
+            .checked_sub(&DEFAULT_TRANSFER_FEE)
+            .unwrap(),
+        neuron_nonce,
+    );
+    let counterweight_neuron_id = sns_claim_staked_neuron(
+        &state_machine,
+        governance_canister_id,
+        *COUNTERWEIGHT,
+        neuron_nonce,
+        Some(100_000_000),
+    );
+
+    // Steps 2: Run the code under test.
+
+    let make_transfer_sns_treasury_funds_proposal = |index| {
+        sns_make_proposal(
+            &state_machine,
+            governance_canister_id,
+            *WHALE,
+            whale_neuron_id.clone(),
+            Proposal {
+                title: format!("{}: Give whale 20% of the ICP in the treasury", index),
+                summary: "".to_string(),
+                url: "".to_string(),
+                action: Some(Action::TransferSnsTreasuryFunds(TransferSnsTreasuryFunds {
+                    from_treasury: TransferFrom::IcpTreasury as i32,
+                    amount_e8s: 2_000 * E8, // 20% of the treasury
+                    to_principal: Some(*WHALE),
+                    to_subaccount: None,
+                    memo: None,
+                })),
+            },
+        )
+        .unwrap()
+    };
+
+    let first_proposal_id = make_transfer_sns_treasury_funds_proposal(1);
+    let second_proposal_id = make_transfer_sns_treasury_funds_proposal(2);
+
+    // Make the second proposal pass.
+    sns_cast_vote(
+        &mut state_machine,
+        governance_canister_id,
+        *COUNTERWEIGHT,
+        counterweight_neuron_id.clone(),
+        second_proposal_id,
+        Vote::Yes,
+    );
+    sns_wait_for_proposal_execution(&state_machine, governance_canister_id, second_proposal_id);
+
+    // Make the first proposal pass.
+    sns_cast_vote(
+        &mut state_machine,
+        governance_canister_id,
+        *COUNTERWEIGHT,
+        counterweight_neuron_id,
+        first_proposal_id,
+        Vote::Yes,
+    );
+    sns_wait_for_proposal_executed_or_failed(
+        &state_machine,
+        governance_canister_id,
+        first_proposal_id,
+    );
+
+    // Step 3: Inspect results.
+
+    // Step 3.1: Inspect failure reason to make sure it didn't fail for some other reason.
+    let proposal =
+        sns_get_proposal(&state_machine, governance_canister_id, first_proposal_id).unwrap();
+    assert_ne!(proposal.failed_timestamp_seconds, 0, "{:#?}", proposal);
+
+    let failure_reason = proposal.failure_reason.unwrap();
+    let SnsGovernanceError {
+        error_type,
+        error_message,
+    } = &failure_reason;
+    assert_eq!(
+        SnsErrorType::try_from(*error_type),
+        Ok(SnsErrorType::PreconditionFailed),
+        "{:#?}",
+        failure_reason,
+    );
+    let error_message = error_message.to_lowercase();
+    for keyword in ["7 day", "upper bound", "exceed", "try again"] {
+        assert!(error_message.contains(keyword), "{:#?}", failure_reason);
+    }
+
+    // Step 3.2: Assert that treasury is smaller by approximately 2_000 ICP, not 4_000 ICP as would
+    // be the case if both proposals were executed.
+    let treasury_icp_account = governance_canister_id.default_account();
+    let treasury_icp_balance = nns_ledger_balance(&state_machine, treasury_icp_account);
+    assert_eq!(
+        treasury_icp_balance,
+        Tokens::from_e8s(8_000 * E8 - DEFAULT_TRANSFER_FEE.get_e8s()),
+    );
 }
 
 fn nns_ledger_balance(state_machine: &StateMachine, account: Account) -> Tokens {
