@@ -41,12 +41,26 @@ impl RosettaBlock {
     // Use this method for blocks that come directly from an ICRC-1 Ledger, because only then can be guarenteed that the block hash is correct
     pub fn from_generic_block(generic_block: GenericBlock, block_idx: u64) -> anyhow::Result<Self> {
         let block_hash = ByteBuf::from(generic_block.hash());
-        let encoded_block =
-            generic_block_to_encoded_block(generic_block.clone()).map_err(anyhow::Error::msg)?;
-        let block = Block::<Tokens>::decode(encoded_block.clone()).map_err(anyhow::Error::msg)?;
+        let encoded_block = generic_block_to_encoded_block(generic_block.clone()).map_err(|e| {
+            anyhow::Error::msg(format!(
+                "Failed to encode block at index {}, cause: {}",
+                block_idx, e
+            ))
+        })?;
+        let block = Block::<Tokens>::decode(encoded_block.clone()).map_err(|e| {
+            anyhow::Error::msg(format!(
+                "Failed to decode block at index {}, cause: {}",
+                block_idx, e
+            ))
+        })?;
         let transaction_hash = ByteBuf::from(
             generic_transaction_from_generic_block(generic_block)
-                .map_err(anyhow::Error::msg)?
+                .map_err(|e| {
+                    anyhow::Error::msg(format!(
+                        "Failed to decode transaction from block at index {}, cause: {}",
+                        block_idx, e
+                    ))
+                })?
                 .hash(),
         );
         let timestamp = block.timestamp;
