@@ -34,6 +34,8 @@ DEPENDENCIES = [
     "@crate_index//:tracing-subscriber",
     "@crate_index//:num-bigint",
     "@crate_index//:reqwest",
+    "@crate_index//:tracing-appender",
+    "@crate_index//:rolling-file",
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//packages/icrc-ledger-agent:icrc_ledger_agent",
     "//rs/rosetta-api",

@@ -7968,6 +7968,7 @@ dependencies = [
  "rand 0.8.5",
  "reqwest",
  "ring 0.16.20",
+ "rolling-file",
  "rosetta-core",
  "rusqlite",
  "serde",
@@ -7982,6 +7983,7 @@ dependencies = [
  "tower-http 0.4.4",
  "tower-request-id",
  "tracing",
+ "tracing-appender",
  "tracing-subscriber",
  "url",
 ]
