@@ -62,13 +62,13 @@ use tokio::{
     select,
     task::JoinSet,
 };
-use tokio_util::{sync::CancellationToken, task::task_tracker::TaskTracker, time::DelayQueue};
+use tokio_util::{sync::CancellationToken, time::DelayQueue};
 
 use crate::{
     connection_handle::ConnectionHandle,
     metrics::{CONNECTION_RESULT_FAILED_LABEL, CONNECTION_RESULT_SUCCESS_LABEL},
     utils::collect_metrics,
-    ConnId, SubnetTopology,
+    ConnId, Shutdown, SubnetTopology,
 };
 use crate::{metrics::QuicTransportMetrics, request_handler::run_stream_acceptor};
 
@@ -110,7 +110,6 @@ struct ConnectionManager {
 
     // Shared state
     watcher: tokio::sync::watch::Receiver<SubnetTopology>,
-    cancellation: CancellationToken,
     peer_map: Arc<RwLock<HashMap<NodeId, ConnectionHandle>>>,
     conn_id_counter: ConnId,
 
@@ -189,7 +188,6 @@ impl std::fmt::Display for ConnectionEstablishError {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn start_connection_manager(
     log: &ReplicaLogger,
     metrics_registry: &MetricsRegistry,
@@ -200,11 +198,9 @@ pub(crate) fn start_connection_manager(
     node_id: NodeId,
     peer_map: Arc<RwLock<HashMap<NodeId, ConnectionHandle>>>,
     watcher: tokio::sync::watch::Receiver<SubnetTopology>,
-    cancellation: CancellationToken,
-    task_tracker: TaskTracker,
     socket: Either<SocketAddr, impl AsyncUdpSocket>,
     router: Router,
-) {
+) -> Shutdown {
     let topology = watcher.borrow().clone();
 
     let metrics = QuicTransportMetrics::new(metrics_registry);
@@ -297,7 +293,6 @@ pub(crate) fn start_connection_manager(
         )
         .expect("Failed to create endpoint"),
     };
-
     let manager = ConnectionManager {
         log: log.clone(),
         rt: rt.clone(),
@@ -310,7 +305,6 @@ pub(crate) fn start_connection_manager(
         peer_map,
         conn_id_counter: ConnId::default(),
         watcher,
-        cancellation,
         endpoint,
         transport_config,
         outbound_connecting: JoinMap::new(),
@@ -318,7 +312,10 @@ pub(crate) fn start_connection_manager(
         active_connections: JoinMap::new(),
         router,
     };
-    task_tracker.spawn_on(manager.run(), rt);
+    let shutdown = Shutdown::new(rt.clone());
+    shutdown
+        .spawn_on_with_cancellation(|cancellation: CancellationToken| manager.run(cancellation));
+    shutdown
 }
 
 impl ConnectionManager {
@@ -326,10 +323,10 @@ impl ConnectionManager {
         self.node_id < *dst
     }
 
-    pub async fn run(mut self) {
+    pub async fn run(mut self, cancellation: CancellationToken) {
         loop {
             select! {
-                () = self.cancellation.cancelled() => {
+                () = cancellation.cancelled() => {
                     break;
                 },
                 Some(reconnect) = self.connect_queue.next() => {

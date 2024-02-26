@@ -31,6 +31,7 @@
 use std::{
     collections::{BTreeSet, HashMap},
     fmt::Debug,
+    future::Future,
     net::SocketAddr,
     sync::{Arc, RwLock},
 };
@@ -64,10 +65,43 @@ mod request_handler;
 mod utils;
 
 #[derive(Clone)]
+pub struct Shutdown {
+    rt_handle: tokio::runtime::Handle,
+    cancellation: CancellationToken,
+    task_tracker: TaskTracker,
+}
+
+impl Shutdown {
+    pub fn new(rt_handle: tokio::runtime::Handle) -> Self {
+        Self {
+            rt_handle,
+            cancellation: CancellationToken::new(),
+            task_tracker: TaskTracker::new(),
+        }
+    }
+
+    pub async fn shutdown(&self) {
+        let _ = self.task_tracker.close();
+        // If an error is returned it means the conn manager is already stopped.
+        self.cancellation.cancel();
+        self.task_tracker.wait().await;
+    }
+
+    pub fn spawn_on_with_cancellation<F>(&self, run: impl FnOnce(CancellationToken) -> F)
+    where
+        F: Future + Send + 'static,
+        F::Output: Send + 'static,
+    {
+        self.task_tracker
+            .spawn_on(run(self.cancellation.clone()), &self.rt_handle);
+        // no need to return the join handle because it is already managed by the task tracker
+    }
+}
+
+#[derive(Clone)]
 pub struct QuicTransport {
     conn_handles: Arc<RwLock<HashMap<NodeId, ConnectionHandle>>>,
-    cancellation: CancellationToken,
-    conn_manager_task_tracker: TaskTracker,
+    shutdown: Shutdown,
 }
 
 /// This is the main transport handle used for communication between peers.
@@ -102,11 +136,9 @@ impl QuicTransport {
     ) -> QuicTransport {
         info!(log, "Starting Quic transport.");
 
-        let cancellation = CancellationToken::new();
         let conn_handles = Arc::new(RwLock::new(HashMap::new()));
-        let conn_manager_task_tracker = TaskTracker::new();
 
-        start_connection_manager(
+        let shutdown = start_connection_manager(
             log,
             metrics_registry,
             rt,
@@ -116,25 +148,19 @@ impl QuicTransport {
             node_id,
             conn_handles.clone(),
             topology_watcher,
-            cancellation.clone(),
-            conn_manager_task_tracker.clone(),
             udp_socket,
             router,
         );
 
         QuicTransport {
             conn_handles,
-            cancellation,
-            conn_manager_task_tracker,
+            shutdown,
         }
     }
 
-    /// Graceful shutdown of transport.
+    /// Graceful shutdown of transport
     pub async fn shutdown(&self) {
-        let _ = self.conn_manager_task_tracker.close();
-        // If an error is returned it means the conn manager is already stopped.
-        self.cancellation.cancel();
-        self.conn_manager_task_tracker.wait().await;
+        self.shutdown.shutdown().await;
     }
 
     pub(crate) fn get_conn_handle(
