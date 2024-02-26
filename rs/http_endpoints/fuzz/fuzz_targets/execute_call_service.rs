@@ -1,7 +1,9 @@
 #![no_main]
 use arbitrary::Arbitrary;
+use axum::body::Body;
 use bytes::Bytes;
-use hyper::{Body, Method, Request, Response};
+use http_body_util::Full;
+use hyper::{Method, Request, Response};
 use ic_agent::{
     agent::{http_transport::reqwest_transport::ReqwestHttpReplicaV2Transport, UpdateBuilder},
     export::Principal,
@@ -42,7 +44,7 @@ use common::{basic_registry_client, get_free_localhost_socket_addr, setup_ingres
 
 type IngressFilterHandle =
     Handle<(ProvisionalWhitelist, SignedIngressContent), Result<(), UserError>>;
-type CallServiceEndpoint = BoxCloneService<Request<Bytes>, Response<Body>, Infallible>;
+type CallServiceEndpoint = BoxCloneService<Request<Body>, Response<Body>, Infallible>;
 
 #[derive(Arbitrary, Clone, Debug)]
 struct CallServiceImpl {
@@ -128,7 +130,7 @@ fuzz_target!(|call_impls: Vec<CallServiceImpl>| {
                     canister_id.to_text(),
                 ))
                 .header("Content-Type", "application/cbor")
-                .body(Bytes::from(signed_update_call))
+                .body(Body::new(Full::new(Bytes::from(signed_update_call))))
                 .expect("Failed to build the request");
 
             // The effective_canister_id is added to the request during routing

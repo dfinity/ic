@@ -45,7 +45,10 @@ fn test_invalid_content_type(env: TestEnv) {
         assert_eq!(res.status(), StatusCode::BAD_REQUEST);
 
         // Not specifying a content type should also result in a 400.
-        let res = client.post(format!("{}{}", node_url, e)).send().unwrap();
+        let res = client
+            .post(format!("{}api/v2/canister/{}/{}", node_url, canister_id, e))
+            .send()
+            .unwrap();
         assert_eq!(res.status(), StatusCode::BAD_REQUEST);
     }
 }
@@ -61,7 +64,7 @@ fn test_invalid_get_requests(env: TestEnv) {
             .get(format!("{}api/v2/canister/{}/{}", node_url, canister_id, e))
             .send()
             .unwrap();
-        assert_eq!(res.status(), StatusCode::NOT_FOUND);
+        assert_eq!(res.status(), StatusCode::METHOD_NOT_ALLOWED);
     }
 }
 

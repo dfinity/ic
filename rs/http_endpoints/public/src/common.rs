@@ -1,7 +1,8 @@
-use crate::state_reader_executor::StateReaderExecutor;
-use crate::HttpError;
+use crate::{state_reader_executor::StateReaderExecutor, HttpError};
+use axum::body::Body;
 use http::request::Parts;
-use hyper::{header, Body, HeaderMap, Response, StatusCode};
+use http_body_util::{BodyExt, Empty, Full};
+use hyper::{header, HeaderMap, Response, StatusCode};
 use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path, TooLongPathError};
 use ic_error_types::UserError;
 use ic_interfaces_registry::RegistryClient;
@@ -16,25 +17,13 @@ use ic_validator::RequestValidationError;
 use serde::Serialize;
 use serde_cbor::value::Value as CBOR;
 use std::collections::BTreeMap;
-use std::convert::Infallible;
 use std::sync::Arc;
-use std::task::Poll;
 use tower::{load_shed::error::Overloaded, timeout::error::Elapsed, BoxError};
 
 pub const CONTENT_TYPE_HTML: &str = "text/html";
 pub const CONTENT_TYPE_CBOR: &str = "application/cbor";
 pub const CONTENT_TYPE_PROTOBUF: &str = "application/x-protobuf";
 pub const CONTENT_TYPE_TEXT: &str = "text/plain";
-
-pub(crate) fn poll_ready(r: Poll<Result<(), Infallible>>) -> Poll<Result<(), BoxError>> {
-    match r {
-        Poll::Pending => Poll::Pending,
-        Poll::Ready(Ok(())) => Poll::Ready(Ok(())),
-        Poll::Ready(Err(_infallible)) => {
-            panic!("Can't enter match arm when Infallible");
-        }
-    }
-}
 
 pub(crate) fn get_root_threshold_public_key(
     log: &ReplicaLogger,
@@ -56,7 +45,7 @@ pub(crate) fn get_root_threshold_public_key(
 }
 
 pub(crate) fn make_plaintext_response(status: StatusCode, message: String) -> Response<Body> {
-    let mut resp = Response::new(Body::from(message));
+    let mut resp = Response::new(Body::new(message.map_err(BoxError::from)));
     *resp.status_mut() = status;
     *resp.headers_mut() = get_cors_headers();
     resp.headers_mut().insert(
@@ -99,7 +88,7 @@ pub(crate) fn make_response(user_error: UserError) -> Response<Body> {
     cbor_response(&reject_response).0
 }
 
-pub(crate) fn map_box_error_to_response(err: BoxError) -> Response<Body> {
+pub(crate) async fn map_box_error_to_response(err: BoxError) -> Response<Body> {
     if err.is::<Overloaded>() {
         make_plaintext_response(
             StatusCode::TOO_MANY_REQUESTS,
@@ -150,7 +139,7 @@ pub(crate) fn into_cbor<R: Serialize>(r: &R) -> Vec<u8> {
 pub(crate) fn cbor_response<R: Serialize>(r: &R) -> (Response<Body>, usize) {
     let cbor = into_cbor(r);
     let body_size_bytes = cbor.len();
-    let mut response = Response::new(Body::from(cbor));
+    let mut response = Response::new(Body::new(Full::from(cbor).map_err(BoxError::from)));
     *response.status_mut() = StatusCode::OK;
     *response.headers_mut() = get_cors_headers();
     response.headers_mut().insert(
@@ -162,7 +151,7 @@ pub(crate) fn cbor_response<R: Serialize>(r: &R) -> (Response<Body>, usize) {
 
 /// Empty response.
 pub(crate) fn empty_response() -> Response<Body> {
-    let mut response = Response::new(Body::from(""));
+    let mut response = Response::new(Body::new(Empty::new().map_err(BoxError::from)));
     *response.status_mut() = StatusCode::NO_CONTENT;
     response
 }

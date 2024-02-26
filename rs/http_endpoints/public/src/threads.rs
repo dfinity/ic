@@ -1,5 +1,6 @@
 use crate::common::make_plaintext_response;
-use hyper::{Body, Response, StatusCode};
+use axum::body::Body;
+use hyper::{Response, StatusCode};
 
 /// Collects a backtrace of all threads of this process in text format.
 pub(crate) async fn collect() -> Response<Body> {
