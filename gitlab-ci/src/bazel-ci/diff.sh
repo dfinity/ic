@@ -19,7 +19,7 @@ DIFF_FILES=$(git diff --name-only "${COMMIT_RANGE}")
 
 if grep -qE "(*.bazel|*.bzl|.bazelrc|.bazelversion)" <<<"$DIFF_FILES"; then
     echo "Changes detected in bazel files. Considering all targets." >&2
-    echo "//..."
+    echo ${BAZEL_TARGETS:-"//..."}
     exit 0
 fi
 
