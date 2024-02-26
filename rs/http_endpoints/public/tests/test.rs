@@ -7,7 +7,13 @@ use crate::common::{
     create_conn_and_send_request, default_get_latest_state, default_latest_certified_height,
     get_free_localhost_socket_addr, wait_for_status_healthy, HttpEndpointBuilder,
 };
-use hyper::{body::to_bytes, Body, Client, Method, Request, StatusCode};
+use axum::body::{to_bytes, Body};
+use bytes::Bytes;
+use futures_util::{future::BoxFuture, FutureExt, StreamExt};
+use http_body::Frame;
+use http_body_util::StreamBody;
+use hyper::{body::Incoming, Method, Request, StatusCode};
+use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 use ic_agent::{
     agent::{
         http_transport::reqwest_transport::ReqwestHttpReplicaV2Transport, QueryBuilder,
@@ -45,27 +51,23 @@ use ic_test_utilities::{
     types::ids::{canister_test_id, subnet_test_id, user_test_id},
 };
 use ic_types::{
-    batch::{BatchPayload, ValidationContext},
-    consensus::{
-        certification::{Certification, CertificationContent},
-        BlockPayload, DataPayload,
-        {dkg::Dealings, Block, Payload, Rank},
-    },
+    consensus::certification::{Certification, CertificationContent},
     crypto::{
         threshold_sig::{
             ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
             ThresholdSigPublicKey,
         },
-        CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, CryptoHashOf, Signed,
+        CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, Signed,
     },
     messages::{Blob, CertificateDelegation, HttpQueryResponse, HttpQueryResponseReply},
     signature::ThresholdSignature,
-    time::{current_time, UNIX_EPOCH},
+    time::current_time,
     CryptoHashOfPartialState, Height, PrincipalId, RegistryVersion,
 };
 use prost::Message;
 use serde_bytes::ByteBuf;
 use std::{
+    convert::Infallible,
     net::TcpStream,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -76,7 +78,6 @@ use tokio::{
     runtime::Runtime,
     time::{sleep, Duration},
 };
-use tower::ServiceExt;
 
 #[test]
 fn test_healthy_behind() {
@@ -86,42 +87,14 @@ fn test_healthy_behind() {
         listen_addr: addr,
         ..Default::default()
     };
-    let certified_state_height = Height::from(1);
-    let consensus_height = Height::from(certified_state_height.get() + 25);
 
     // We use this atomic to make sure that the health transition is from healthy -> certified_state_behind
     let healthy = Arc::new(AtomicBool::new(false));
     let healthy_c = healthy.clone();
     let mut mock_consensus_cache = MockConsensusPoolCache::new();
     mock_consensus_cache
-        .expect_finalized_block()
-        .returning(move || {
-            // The last certified height seen in a block is used to determine if
-            // replica is behind.
-            let certified_height = if !healthy_c.load(Ordering::SeqCst) {
-                certified_state_height
-            } else {
-                consensus_height
-            };
-            Block::new(
-                CryptoHashOf::from(CryptoHash(Vec::new())),
-                Payload::new(
-                    ic_types::crypto::crypto_hash,
-                    BlockPayload::Data(DataPayload {
-                        batch: BatchPayload::default(),
-                        dealings: Dealings::new_empty(Height::from(1)),
-                        ecdsa: None,
-                    }),
-                ),
-                Height::from(224),
-                Rank(456),
-                ValidationContext {
-                    registry_version: RegistryVersion::from(99),
-                    certified_height,
-                    time: UNIX_EPOCH,
-                },
-            )
-        });
+        .expect_is_replica_behind()
+        .returning(move |_| healthy_c.load(Ordering::SeqCst));
 
     let mut mock_registry_client = MockRegistryClient::new();
     mock_registry_client
@@ -483,7 +456,7 @@ fn test_payload_too_large() {
 
     let request = |body: Vec<u8>| {
         rt.block_on(async {
-            let client = Client::new();
+            let client = Client::builder(TokioExecutor::new()).build_http();
 
             let req = Request::builder()
                 .method(Method::POST)
@@ -508,28 +481,29 @@ fn test_payload_too_large() {
     assert_eq!(StatusCode::PAYLOAD_TOO_LARGE, request(body.clone()));
 }
 
-/// Iff a http request body is slower to arrive than the configured limit, the endpoints responds with `408`.
+// /// Iff a http request body is slower to arrive than the configured limit, the endpoints responds with `408`.
 #[test]
 fn test_request_too_slow() {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
     let config = Config {
         listen_addr: addr,
-        max_request_receive_seconds: 1,
+        request_timeout_seconds: 1,
         ..Default::default()
     };
-
     HttpEndpointBuilder::new(rt.handle().clone(), config).run();
+    let agent = Agent::builder()
+        .with_transport(ReqwestHttpReplicaV2Transport::create(format!("http://{}", addr)).unwrap())
+        .build()
+        .unwrap();
 
     rt.block_on(async {
-        let (mut sender, body) = Body::channel();
-
-        assert!(sender
-            .send_data(bytes::Bytes::from("hello world"))
-            .await
-            .is_ok());
-
-        let client = Client::new();
+        wait_for_status_healthy(&agent).await.unwrap();
+        let initial_fut: BoxFuture<'static, Result<Frame<Bytes>, Infallible>> =
+            async { Ok(Frame::data(Bytes::from("hello".as_bytes()))) }.boxed();
+        let body =
+            StreamBody::new(futures::stream::once(initial_fut).chain(futures::stream::pending()));
+        let client = Client::builder(TokioExecutor::new()).build_http();
 
         let req = Request::builder()
             .method(Method::POST)
@@ -542,7 +516,7 @@ fn test_request_too_slow() {
             .expect("request builder");
 
         let response = client.request(req).await.unwrap();
-        assert_eq!(response.status(), StatusCode::REQUEST_TIMEOUT);
+        assert_eq!(response.status(), StatusCode::GATEWAY_TIMEOUT);
     })
 }
 
@@ -860,7 +834,7 @@ fn can_retrieve_subnet_metrics() {
     let request = |body: Vec<u8>| {
         rt.block_on(async {
             wait_for_status_healthy(&agent).await.unwrap();
-            let client = Client::new();
+            let client = Client::builder(TokioExecutor::new()).build_http();
 
             let req = Request::builder()
                 .method(Method::POST)
@@ -888,14 +862,14 @@ fn can_retrieve_subnet_metrics() {
     )
     .unwrap();
 
-    let mut response = request(body.as_ref().to_vec());
+    let response = request(body.as_ref().to_vec());
     assert_eq!(StatusCode::OK, response.status());
 
-    let bytes = |body: &mut Body| rt.block_on(async { to_bytes(body).await });
+    let bytes = |body: Incoming| rt.block_on(async { to_bytes(Body::new(body), usize::MAX).await });
     let subnet_metrics = parse_subnet_read_state_response(
         &subnet_id,
         Some(&root_pk),
-        serde_cbor::from_slice(&bytes(response.body_mut()).unwrap()).unwrap(),
+        serde_cbor::from_slice(&bytes(response.into_body()).unwrap()).unwrap(),
     )
     .unwrap();
     assert_eq!(expected_subnet_metrics, subnet_metrics);
@@ -923,7 +897,7 @@ fn subnet_metrics_not_supported_via_canister_read_state() {
     let request = |body: Vec<u8>| {
         rt.block_on(async {
             wait_for_status_healthy(&agent).await.unwrap();
-            let client = Client::new();
+            let client = Client::builder(TokioExecutor::new()).build_http();
 
             let req = Request::builder()
                 .method(Method::POST)

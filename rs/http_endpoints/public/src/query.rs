@@ -2,16 +2,16 @@
 
 use crate::{
     common::{cbor_response, make_plaintext_response, remove_effective_principal_id},
-    metrics::LABEL_UNKNOWN,
-    types::ApiReqType,
+    receive_request_body,
     validator_executor::ValidatorExecutor,
-    HttpHandlerMetrics, ReplicaHealthStatus,
+    ReplicaHealthStatus,
 };
-use bytes::Bytes;
+
+use axum::body::Body;
 use crossbeam::atomic::AtomicCell;
 use futures_util::FutureExt;
 use http::Request;
-use hyper::{Body, Response, StatusCode};
+use hyper::{Response, StatusCode};
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_interfaces::{
     crypto::BasicSigner,
@@ -39,7 +39,6 @@ use tower::Service;
 #[derive(Clone)]
 pub struct QueryService {
     log: ReplicaLogger,
-    metrics: HttpHandlerMetrics,
     node_id: NodeId,
     signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
@@ -51,7 +50,6 @@ pub struct QueryService {
 
 pub struct QueryServiceBuilder {
     log: Option<ReplicaLogger>,
-    metrics: Option<HttpHandlerMetrics>,
     node_id: NodeId,
     signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
     health_status: Option<Arc<AtomicCell<ReplicaHealthStatus>>>,
@@ -73,7 +71,6 @@ impl QueryServiceBuilder {
     ) -> Self {
         Self {
             log: None,
-            metrics: None,
             node_id,
             signer,
             health_status: None,
@@ -103,19 +100,11 @@ impl QueryServiceBuilder {
         self
     }
 
-    pub(crate) fn with_metrics(mut self, metrics: HttpHandlerMetrics) -> Self {
-        self.metrics = Some(metrics);
-        self
-    }
-
     pub fn build(self) -> QueryService {
         let log = self.log.unwrap_or(no_op_logger());
-        let default_metrics_registry = MetricsRegistry::default();
+        let _default_metrics_registry = MetricsRegistry::default();
         QueryService {
             log: log.clone(),
-            metrics: self
-                .metrics
-                .unwrap_or_else(|| HttpHandlerMetrics::new(&default_metrics_registry)),
             node_id: self.node_id,
             signer: self.signer,
             health_status: self
@@ -134,7 +123,7 @@ impl QueryServiceBuilder {
     }
 }
 
-impl Service<Request<Bytes>> for QueryService {
+impl Service<Request<Body>> for QueryService {
     type Response = Response<Body>;
     type Error = Infallible;
     #[allow(clippy::type_complexity)]
@@ -144,11 +133,7 @@ impl Service<Request<Bytes>> for QueryService {
         self.query_execution_service.poll_ready(cx)
     }
 
-    fn call(&mut self, request: Request<Bytes>) -> Self::Future {
-        self.metrics
-            .request_body_size_bytes
-            .with_label_values(&[ApiReqType::Query.into(), LABEL_UNKNOWN])
-            .observe(request.body().len() as f64);
+    fn call(&mut self, request: Request<Body>) -> Self::Future {
         if self.health_status.load() != ReplicaHealthStatus::Healthy {
             let res = make_plaintext_response(
                 StatusCode::SERVICE_UNAVAILABLE,
@@ -162,31 +147,6 @@ impl Service<Request<Bytes>> for QueryService {
         let delegation_from_nns = self.delegation_from_nns.read().unwrap().clone();
 
         let (mut parts, body) = request.into_parts();
-        let request = match <HttpRequestEnvelope<HttpQueryContent>>::try_from(
-            &SignedRequestBytes::from(body.to_vec()),
-        ) {
-            Ok(request) => request,
-            Err(e) => {
-                let res = make_plaintext_response(
-                    StatusCode::BAD_REQUEST,
-                    format!("Could not parse body as read request: {}", e),
-                );
-                return Box::pin(async move { Ok(res) });
-            }
-        };
-
-        // Convert the message to a strongly-typed struct, making structural validations
-        // on the way.
-        let request = match HttpRequest::<UserQuery>::try_from(request) {
-            Ok(request) => request,
-            Err(e) => {
-                let res = make_plaintext_response(
-                    StatusCode::BAD_REQUEST,
-                    format!("Malformed request: {:?}", e),
-                );
-                return Box::pin(async move { Ok(res) });
-            }
-        };
 
         let effective_principal_id = match remove_effective_principal_id(&mut parts) {
             Ok(principal_id) => principal_id,
@@ -206,17 +166,6 @@ impl Service<Request<Bytes>> for QueryService {
         // in the url and the replica processes the request based on the `canister_id`.
         // If this is not enforced, a blocked canisters can still be accessed by specifying
         // a non-blocked `effective_canister_id` and a blocked `canister_id`.
-        let canister_id = request.content().canister_id();
-        if canister_id != CanisterId::ic_00() && canister_id != effective_canister_id {
-            let res = make_plaintext_response(
-                StatusCode::BAD_REQUEST,
-                format!(
-                    "Specified CanisterId {} does not match effective canister id in URL {}",
-                    canister_id, effective_canister_id
-                ),
-            );
-            return Box::pin(async move { Ok(res) });
-        }
 
         // In case the inner service has state that's driven to readiness and
         // not tracked by clones (such as `Buffer`), pass the version we have
@@ -247,11 +196,50 @@ impl Service<Request<Bytes>> for QueryService {
         let signer_clone = self.signer.clone();
 
         let validator_executor = self.validator_executor.clone();
-        let response_body_size_bytes_metric = self.metrics.response_body_size_bytes.clone();
         let node_id = self.node_id;
         let logger = self.log.clone();
 
         async move {
+            let body = match receive_request_body(body).await {
+                Ok(bytes) => bytes,
+                Err(e) => return Ok(e),
+            };
+            let request = match <HttpRequestEnvelope<HttpQueryContent>>::try_from(
+                &SignedRequestBytes::from(body.to_vec()),
+            ) {
+                Ok(request) => request,
+                Err(e) => {
+                    let res = make_plaintext_response(
+                        StatusCode::BAD_REQUEST,
+                        format!("Could not parse body as read request: {}", e),
+                    );
+                    return Ok(res);
+                }
+            };
+
+            // Convert the message to a strongly-typed struct, making structural validations
+            // on the way.
+            let request = match HttpRequest::<UserQuery>::try_from(request) {
+                Ok(request) => request,
+                Err(e) => {
+                    let res = make_plaintext_response(
+                        StatusCode::BAD_REQUEST,
+                        format!("Malformed request: {:?}", e),
+                    );
+                    return Ok(res);
+                }
+            };
+            let canister_id = request.content().canister_id();
+            if canister_id != CanisterId::ic_00() && canister_id != effective_canister_id {
+                let res = make_plaintext_response(
+                    StatusCode::BAD_REQUEST,
+                    format!(
+                        "Specified CanisterId {} does not match effective canister id in URL {}",
+                        canister_id, effective_canister_id
+                    ),
+                );
+                return Ok(res);
+            }
             if let Err(http_err) = validator_executor
                 .validate_request(request.clone(), registry_version)
                 .await
@@ -302,10 +290,7 @@ impl Service<Request<Bytes>> for QueryService {
                         node_signature,
                     };
 
-                    let (resp, body_size) = cbor_response(&signed_query_response);
-                    response_body_size_bytes_metric
-                        .with_label_values(&[ApiReqType::Query.into()])
-                        .observe(body_size as f64);
+                    let (resp, _body_size) = cbor_response(&signed_query_response);
                     resp
                 }
                 Err(signing_error) => {

@@ -6,7 +6,9 @@ use crate::common::{
     HttpEndpointBuilder,
 };
 use async_trait::async_trait;
-use hyper::{Body, Client, Method, Request, StatusCode};
+use axum::body::Body;
+use hyper::{Method, Request, StatusCode};
+use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 use ic_agent::{
     agent::{http_transport::reqwest_transport::ReqwestHttpReplicaV2Transport, QueryBuilder},
     agent_error::HttpErrorPayload,
@@ -330,7 +332,7 @@ fn test_load_shedding_pprof() {
 
     // This request will fill the load shedder.
     let ok_request = rt.spawn(async move {
-        let client = Client::new();
+        let client = Client::builder(TokioExecutor::new()).build_http();
         let response = client.request(flame_graph_req()).await.unwrap();
         response.status()
     });
@@ -345,7 +347,7 @@ fn test_load_shedding_pprof() {
         buffer_filled.notified().await;
 
         for request_builder in requests {
-            let client = Client::new();
+            let client = Client::builder(TokioExecutor::new()).build_http();
             let response = client.request(request_builder()).await.unwrap();
 
             assert_eq!(StatusCode::TOO_MANY_REQUESTS, response.status());

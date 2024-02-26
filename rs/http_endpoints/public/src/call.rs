@@ -4,19 +4,19 @@ use crate::{
     common::{
         get_cors_headers, make_plaintext_response, make_response, remove_effective_principal_id,
     },
-    metrics::LABEL_UNKNOWN,
-    types::ApiReqType,
+    receive_request_body,
     validator_executor::ValidatorExecutor,
-    HttpError, HttpHandlerMetrics, IngressFilterService,
+    HttpError, IngressFilterService,
 };
-use bytes::Bytes;
+
+use axum::body::Body;
 use http::Request;
-use hyper::{Body, Response, StatusCode};
+use http_body_util::BodyExt;
+use hyper::{Response, StatusCode};
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_interfaces::ingress_pool::IngressPoolThrottler;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info_sample, replica_logger::no_op_logger, warn, ReplicaLogger};
-use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::{
     provisional_whitelist::ProvisionalWhitelistRegistry,
     subnet::{IngressMessageSettings, SubnetRegistry},
@@ -35,12 +35,11 @@ use std::pin::Pin;
 use std::sync::{Arc, RwLock};
 use std::task::{Context, Poll};
 use tokio::sync::mpsc::UnboundedSender;
-use tower::{Service, ServiceExt};
+use tower::{BoxError, Service, ServiceExt};
 
 #[derive(Clone)]
 pub struct CallService {
     log: ReplicaLogger,
-    metrics: HttpHandlerMetrics,
     node_id: NodeId,
     subnet_id: SubnetId,
     registry_client: Arc<dyn RegistryClient>,
@@ -52,7 +51,6 @@ pub struct CallService {
 
 pub struct CallServiceBuilder {
     log: Option<ReplicaLogger>,
-    metrics: Option<HttpHandlerMetrics>,
     node_id: NodeId,
     subnet_id: SubnetId,
     malicious_flags: Option<MaliciousFlags>,
@@ -75,7 +73,6 @@ impl CallServiceBuilder {
     ) -> Self {
         Self {
             log: None,
-            metrics: None,
             node_id,
             subnet_id,
             malicious_flags: None,
@@ -97,19 +94,10 @@ impl CallServiceBuilder {
         self
     }
 
-    pub(crate) fn with_metrics(mut self, metrics: HttpHandlerMetrics) -> Self {
-        self.metrics = Some(metrics);
-        self
-    }
-
     pub fn build(self) -> CallService {
         let log = self.log.unwrap_or(no_op_logger());
-        let default_metrics_registry = MetricsRegistry::default();
         CallService {
             log: log.clone(),
-            metrics: self
-                .metrics
-                .unwrap_or_else(|| HttpHandlerMetrics::new(&default_metrics_registry)),
             node_id: self.node_id,
             subnet_id: self.subnet_id,
             registry_client: self.registry_client.clone(),
@@ -175,7 +163,7 @@ fn get_registry_data(
 }
 
 /// Handles a call to /api/v2/canister/../call
-impl Service<Request<Bytes>> for CallService {
+impl Service<Request<Body>> for CallService {
     type Response = Response<Body>;
     type Error = Infallible;
     #[allow(clippy::type_complexity)]
@@ -185,70 +173,80 @@ impl Service<Request<Bytes>> for CallService {
         Poll::Ready(Ok(()))
     }
 
-    fn call(&mut self, request: Request<Bytes>) -> Self::Future {
-        // Actual parsing.
-        self.metrics
-            .request_body_size_bytes
-            .with_label_values(&[ApiReqType::Call.into(), LABEL_UNKNOWN])
-            .observe(request.body().len() as f64);
+    fn call(&mut self, request: Request<Body>) -> Self::Future {
+        let ingress_tx = self.ingress_tx.clone();
+        let ingress_filter = self.ingress_filter.clone();
+        let log = self.log.clone();
+        let validator_executor = self.validator_executor.clone();
+        let node_id = self.node_id;
+        let ingress_throttler = self.ingress_throttler.clone();
+        let registry_client = self.registry_client.clone();
+        let subnet_id = self.subnet_id;
+        Box::pin(async move {
+            let (mut parts, body) = request.into_parts();
+            let body = match receive_request_body(body).await {
+                Ok(bytes) => bytes,
+                Err(e) => return Ok(e),
+            };
+            let msg: SignedIngress = match SignedRequestBytes::from(body.to_vec()).try_into() {
+                Ok(msg) => msg,
+                Err(e) => {
+                    let res = make_plaintext_response(
+                        StatusCode::BAD_REQUEST,
+                        format!("Could not parse body as call message: {}", e),
+                    );
+                    return Ok(res);
+                }
+            };
 
-        let (mut parts, body) = request.into_parts();
-        let msg: SignedIngress = match SignedRequestBytes::from(body.to_vec()).try_into() {
-            Ok(msg) => msg,
-            Err(e) => {
+            let effective_principal_id = match remove_effective_principal_id(&mut parts) {
+                Ok(principal_id) => principal_id,
+                Err(res) => {
+                    error!(
+                        log,
+                        "Effective canister ID is not attached to call request. This is a bug."
+                    );
+                    return Ok(res);
+                }
+            };
+
+            let effective_canister_id =
+                CanisterId::unchecked_from_principal(effective_principal_id);
+
+            // Reject requests where `canister_id` != `effective_canister_id` for non mgmt canister calls.
+            // This needs to be enforced because boundary nodes block access based on the `effective_canister_id`
+            // in the url and the replica processes the request based on the `canister_id`.
+            // If this is not enforced, a blocked canisters can still be accessed by specifying
+            // a non-blocked `effective_canister_id` and a blocked `canister_id`.
+            if msg.canister_id() != CanisterId::ic_00()
+                && msg.canister_id() != effective_canister_id
+            {
                 let res = make_plaintext_response(
                     StatusCode::BAD_REQUEST,
-                    format!("Could not parse body as call message: {}", e),
+                    format!(
+                        "Specified CanisterId {} does not match effective canister id in URL {}",
+                        msg.canister_id(),
+                        effective_canister_id
+                    ),
                 );
-                return Box::pin(async move { Ok(res) });
+                return Ok(res);
             }
-        };
 
-        let effective_principal_id = match remove_effective_principal_id(&mut parts) {
-            Ok(principal_id) => principal_id,
-            Err(res) => {
-                error!(
-                    self.log,
-                    "Effective canister ID is not attached to call request. This is a bug."
-                );
-                return Box::pin(async move { Ok(res) });
-            }
-        };
-
-        let effective_canister_id = CanisterId::unchecked_from_principal(effective_principal_id);
-
-        // Reject requests where `canister_id` != `effective_canister_id` for non mgmt canister calls.
-        // This needs to be enforced because boundary nodes block access based on the `effective_canister_id`
-        // in the url and the replica processes the request based on the `canister_id`.
-        // If this is not enforced, a blocked canisters can still be accessed by specifying
-        // a non-blocked `effective_canister_id` and a blocked `canister_id`.
-        if msg.canister_id() != CanisterId::ic_00() && msg.canister_id() != effective_canister_id {
-            let res = make_plaintext_response(
-                StatusCode::BAD_REQUEST,
-                format!(
-                    "Specified CanisterId {} does not match effective canister id in URL {}",
-                    msg.canister_id(),
-                    effective_canister_id
-                ),
-            );
-            return Box::pin(async move { Ok(res) });
-        }
-
-        let message_id = msg.id();
-        let registry_version = self.registry_client.get_latest_version();
-        let (ingress_registry_settings, provisional_whitelist) = match get_registry_data(
-            &self.log,
-            self.subnet_id,
-            registry_version,
-            self.registry_client.as_ref(),
-        ) {
-            Ok((s, p)) => (s, p),
-            Err(HttpError { status, message }) => {
-                return Box::pin(async move { Ok(make_plaintext_response(status, message)) });
-            }
-        };
-        if msg.count_bytes() > ingress_registry_settings.max_ingress_bytes_per_message {
-            let res = make_plaintext_response(
+            let message_id = msg.id();
+            let registry_version = registry_client.get_latest_version();
+            let (ingress_registry_settings, provisional_whitelist) = match get_registry_data(
+                &log,
+                subnet_id,
+                registry_version,
+                registry_client.as_ref(),
+            ) {
+                Ok((s, p)) => (s, p),
+                Err(HttpError { status, message }) => {
+                    return Ok(make_plaintext_response(status, message));
+                }
+            };
+            if msg.count_bytes() > ingress_registry_settings.max_ingress_bytes_per_message {
+                let res = make_plaintext_response(
                 StatusCode::PAYLOAD_TOO_LARGE,
                 format!(
                     "Request {} is too large. Message byte size {} is larger than the max allowed {}.",
@@ -257,16 +255,9 @@ impl Service<Request<Bytes>> for CallService {
                     ingress_registry_settings.max_ingress_bytes_per_message
                 ),
             );
-            return Box::pin(async move { Ok(res) });
-        }
+                return Ok(res);
+            }
 
-        let ingress_tx = self.ingress_tx.clone();
-        let ingress_filter = self.ingress_filter.clone();
-        let log = self.log.clone();
-        let validator_executor = self.validator_executor.clone();
-        let node_id = self.node_id;
-        let ingress_throttler = self.ingress_throttler.clone();
-        Box::pin(async move {
             if let Err(http_err) = validator_executor
                 .validate_request(msg.as_ref().clone(), registry_version)
                 .await
@@ -315,7 +306,7 @@ impl Service<Request<Bytes>> for CallService {
 }
 
 fn make_accepted_response() -> Response<Body> {
-    let mut response = Response::new(Body::from(""));
+    let mut response = Response::new(Body::new(String::new().map_err(BoxError::from)));
     *response.status_mut() = StatusCode::ACCEPTED;
     *response.headers_mut() = get_cors_headers();
     response

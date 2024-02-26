@@ -1,10 +1,9 @@
 //! Module that deals with requests to /api/v2/status
 use crate::{common, state_reader_executor::StateReaderExecutor, EndpointService};
-use bytes::Bytes;
+use axum::body::Body;
 use crossbeam::atomic::AtomicCell;
 use http::Request;
-use hyper::{Body, Response};
-use ic_config::http_handler::Config;
+use hyper::Response;
 use ic_crypto_utils_threshold_sig_der::public_key_to_der;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{warn, ReplicaLogger};
@@ -20,9 +19,7 @@ use std::{
     sync::Arc,
     task::{Context, Poll},
 };
-use tower::{
-    limit::concurrency::GlobalConcurrencyLimitLayer, util::BoxCloneService, Service, ServiceBuilder,
-};
+use tower::{util::BoxCloneService, Service};
 
 // TODO(NET-776)
 // The IC API version reported on status requests.
@@ -39,7 +36,6 @@ pub(crate) struct StatusService {
 
 impl StatusService {
     pub(crate) fn new_service(
-        config: Config,
         log: ReplicaLogger,
         nns_subnet_id: SubnetId,
         registry_client: Arc<dyn RegistryClient>,
@@ -53,17 +49,11 @@ impl StatusService {
             replica_health_status,
             state_read_executor,
         };
-        BoxCloneService::new(
-            ServiceBuilder::new()
-                .layer(GlobalConcurrencyLimitLayer::new(
-                    config.max_status_concurrent_requests,
-                ))
-                .service(base_service),
-        )
+        BoxCloneService::new(base_service)
     }
 }
 
-impl Service<Request<Bytes>> for StatusService {
+impl Service<Request<Body>> for StatusService {
     type Response = Response<Body>;
     type Error = Infallible;
     #[allow(clippy::type_complexity)]
@@ -73,7 +63,7 @@ impl Service<Request<Bytes>> for StatusService {
         Poll::Ready(Ok(()))
     }
 
-    fn call(&mut self, _unused: Request<Bytes>) -> Self::Future {
+    fn call(&mut self, _unused: Request<Body>) -> Self::Future {
         let log = self.log.clone();
         let nns_subnet_id = self.nns_subnet_id;
         let replica_health_status = self.replica_health_status.clone();

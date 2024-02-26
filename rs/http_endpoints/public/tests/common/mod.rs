@@ -1,7 +1,9 @@
+use axum::body::Body;
 use hyper::{
-    client::conn::{handshake, SendRequest},
-    Body, Method, Request, StatusCode,
+    client::conn::http1::{handshake, SendRequest},
+    Method, Request, StatusCode,
 };
+use hyper_util::rt::TokioIo;
 use ic_agent::Agent;
 use ic_config::http_handler::Config;
 use ic_crypto_tls_interfaces_mocks::MockTlsHandshake;
@@ -45,18 +47,14 @@ use ic_test_utilities::{
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
     artifact_kind::IngressArtifact,
-    batch::{BatchPayload, RawQueryStats, ValidationContext},
-    consensus::{
-        certification::{Certification, CertificationContent},
-        dkg::Dealings,
-        Block, BlockPayload, DataPayload, Payload, Rank,
-    },
+    batch::RawQueryStats,
+    consensus::certification::{Certification, CertificationContent},
     crypto::{
         threshold_sig::{
             ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
             ThresholdSigPublicKey,
         },
-        CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, CryptoHashOf, Signed,
+        CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, Signed,
     },
     malicious_flags::MaliciousFlags,
     messages::{CertificateDelegation, SignedIngressContent, UserQuery},
@@ -256,27 +254,8 @@ fn basic_state_manager_mock() -> MockStateManager {
 fn basic_consensus_pool_cache() -> MockConsensusPoolCache {
     let mut mock_consensus_cache = MockConsensusPoolCache::new();
     mock_consensus_cache
-        .expect_finalized_block()
-        .returning(move || {
-            Block::new(
-                CryptoHashOf::from(CryptoHash(Vec::new())),
-                Payload::new(
-                    ic_types::crypto::crypto_hash,
-                    BlockPayload::Data(DataPayload {
-                        batch: BatchPayload::default(),
-                        dealings: Dealings::new_empty(Height::from(1)),
-                        ecdsa: None,
-                    }),
-                ),
-                Height::from(1),
-                Rank(456),
-                ValidationContext {
-                    registry_version: RegistryVersion::from(1),
-                    certified_height: Height::from(1),
-                    time: UNIX_EPOCH,
-                },
-            )
-        });
+        .expect_is_replica_behind()
+        .return_const(false);
     mock_consensus_cache
 }
 
@@ -372,7 +351,7 @@ pub async fn create_conn_and_send_request(addr: SocketAddr) -> (SendRequest<Body
         .await
         .expect("tcp connection to server address failed");
 
-    let (mut request_sender, connection) = handshake(target_stream)
+    let (mut request_sender, connection) = handshake(TokioIo::new(target_stream))
         .await
         .expect("tcp client handshake failed");
 

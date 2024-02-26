@@ -752,6 +752,7 @@ checksum = "1236b4b292f6c4d6dc34604bb5120d85c3fe1d1aa596bd5cc52ca054d13e7b9e"
 dependencies = [
  "async-trait",
  "axum-core 0.4.3",
+ "axum-macros",
  "bytes",
  "futures-util",
  "http 1.0.0",
@@ -836,6 +837,18 @@ dependencies = [
  "tower",
  "tower-layer",
  "tower-service",
+]
+
+[[package]]
+name = "axum-macros"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "00c055ee2d014ae5981ce1016374e8213682aa14d9bf40e48ab48b5f3ef20eaa"
+dependencies = [
+ "heck 0.4.1",
+ "proc-macro2 1.0.75",
+ "quote 1.0.35",
+ "syn 2.0.48",
 ]
 
 [[package]]
@@ -4845,6 +4858,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ca38ef113da30126bbff9cd1705f9273e15d45498615d138b0c20279ac7a76aa"
 dependencies = [
  "bytes",
+ "futures-channel",
  "futures-util",
  "http 1.0.0",
  "http-body 1.0.0",
@@ -4852,6 +4866,9 @@ dependencies = [
  "pin-project-lite",
  "socket2 0.5.5",
  "tokio",
+ "tower",
+ "tower-service",
+ "tracing",
 ]
 
 [[package]]
@@ -7691,6 +7708,7 @@ version = "0.9.0"
 dependencies = [
  "askama",
  "async-trait",
+ "axum 0.7.4",
  "byte-unit",
  "bytes",
  "cfg-if 1.0.0",
@@ -7698,8 +7716,11 @@ dependencies = [
  "futures",
  "futures-util",
  "hex",
- "http 0.2.9",
- "hyper 0.14.26",
+ "http 1.0.0",
+ "http-body 1.0.0",
+ "http-body-util",
+ "hyper 1.1.0",
+ "hyper-util",
  "ic-agent",
  "ic-async-utils",
  "ic-backtrace",
@@ -7752,6 +7773,7 @@ dependencies = [
  "tokio",
  "tokio-io-timeout",
  "tower",
+ "tower-http 0.5.1",
  "tower-test",
  "url",
 ]

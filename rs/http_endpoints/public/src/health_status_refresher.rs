@@ -1,7 +1,7 @@
-use crate::{
-    metrics::HttpHandlerMetrics, state_reader_executor::StateReaderExecutor, RequestWithTimer,
-};
+use crate::{metrics::HttpHandlerMetrics, state_reader_executor::StateReaderExecutor};
+use axum::body::Body;
 use crossbeam::atomic::AtomicCell;
+use http::Request;
 use ic_interfaces::consensus_pool::ConsensusPoolCache;
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_types::messages::ReplicaHealthStatus;
@@ -63,9 +63,9 @@ pub struct HealthStatusRefreshService<S> {
     inner: S,
 }
 
-impl<S> Service<RequestWithTimer> for HealthStatusRefreshService<S>
+impl<S> Service<Request<Body>> for HealthStatusRefreshService<S>
 where
-    S: Service<RequestWithTimer> + Clone + Send + 'static,
+    S: Service<Request<Body>> + Clone + Send + 'static,
 {
     type Response = S::Response;
     type Error = S::Error;
@@ -75,7 +75,7 @@ where
         self.inner.poll_ready(cx)
     }
 
-    fn call(&mut self, body: RequestWithTimer) -> Self::Future {
+    fn call(&mut self, body: Request<Body>) -> Self::Future {
         // If this replicas certified state height lags blocks behind the finalizied height,
         // we consider this replica unhealthy because it serves a old/stale state. This is a
         // best-effort check and does not detect any case where the replica is behind.
