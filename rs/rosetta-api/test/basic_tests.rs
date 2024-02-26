@@ -314,7 +314,10 @@ async fn blocks_test() {
         .unwrap();
     assert_eq!(
         resp.transactions,
-        vec![BlockTransaction::new(block_id, trans)]
+        vec![BlockTransaction {
+            block_identifier: block_id,
+            transaction: trans
+        }]
     );
     assert_eq!(resp.total_count, 1);
 

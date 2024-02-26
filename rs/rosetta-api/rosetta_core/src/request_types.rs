@@ -328,3 +328,73 @@ pub struct ConstructionHashRequest {
 
     pub signed_transaction: String,
 }
+
+/// SearchTransactionsRequest models a small subset of the /search/transactions
+/// endpoint. Currently we only support looking up a transaction given its hash;
+/// this functionality is desired by our crypto exchanges partners.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+pub struct SearchTransactionsRequest {
+    #[serde(rename = "network_identifier")]
+    pub network_identifier: NetworkIdentifier,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub operator: Option<Operator>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_block: Option<i64>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub offset: Option<i64>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit: Option<i64>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transaction_identifier: Option<TransactionIdentifier>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub account_identifier: Option<AccountIdentifier>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub coin_identifier: Option<CoinIdentifier>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub currency: Option<Currency>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub type_: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub address: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub success: Option<bool>,
+}
+
+impl SearchTransactionsRequest {
+    pub fn new(
+        network_identifier: NetworkIdentifier,
+        transaction_identifier: Option<TransactionIdentifier>,
+        account_identifier: Option<AccountIdentifier>,
+    ) -> SearchTransactionsRequest {
+        SearchTransactionsRequest {
+            network_identifier,
+            operator: None,
+            max_block: None,
+            offset: None,
+            limit: None,
+            transaction_identifier,
+            account_identifier,
+            coin_identifier: None,
+            currency: None,
+            status: None,
+            type_: None,
+            address: None,
+            success: None,
+        }
+    }
+}

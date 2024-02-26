@@ -435,10 +435,10 @@ impl RosettaRequestHandler {
         let mut txs: Vec<BlockTransaction> = Vec::new();
 
         for hb in block_range.into_iter().rev() {
-            txs.push(BlockTransaction::new(
-                convert::block_id(&hb)?,
-                convert::block_to_transaction(&hb, self.ledger.token_symbol())?,
-            ));
+            txs.push(BlockTransaction {
+                block_identifier: convert::block_id(&hb)?,
+                transaction: convert::block_to_transaction(&hb, self.ledger.token_symbol())?,
+            });
         }
 
         let next_offset = if start == first_idx {
@@ -447,11 +447,11 @@ impl RosettaRequestHandler {
             Some((max_block - start + 1) as i64)
         };
 
-        Ok(SearchTransactionsResponse::new(
-            txs,
-            (end - first_idx) as i64,
+        Ok(SearchTransactionsResponse {
+            transactions: txs,
+            total_count: (end - first_idx) as i64,
             next_offset,
-        ))
+        })
     }
 
     /// Search for a transaction given its hash
@@ -477,7 +477,7 @@ impl RosettaRequestHandler {
             return Err(ApiError::invalid_request("status not supported"));
         }
 
-        if msg._type.is_some() {
+        if msg.type_.is_some() {
             return Err(ApiError::invalid_request("type not supported"));
         }
 
@@ -584,20 +584,19 @@ impl RosettaRequestHandler {
         for i in heights {
             if i <= last_idx {
                 let hb = blocks.get_hashed_block(&i)?;
-                txs.push(BlockTransaction::new(
-                    convert::block_id(&hb)?,
-                    convert::block_to_transaction(&hb, self.ledger.token_symbol())?,
-                ));
+                txs.push(BlockTransaction {
+                    block_identifier: convert::block_id(&hb)?,
+                    transaction: convert::block_to_transaction(&hb, self.ledger.token_symbol())?,
+                });
             } else {
                 return Err(ApiError::InvalidBlockId(true, Default::default()));
             }
         }
-
-        Ok(SearchTransactionsResponse::new(
-            txs,
+        Ok(SearchTransactionsResponse {
+            transactions: txs,
             total_count,
             next_offset,
-        ))
+        })
     }
 
     pub async fn neuron_info(
