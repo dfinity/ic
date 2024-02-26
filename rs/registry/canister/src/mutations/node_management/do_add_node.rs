@@ -105,8 +105,8 @@ impl Registry {
         if let Some(ipv4_config) = ipv4_intf_config.clone() {
             if node_exists_with_ipv4(self, &ipv4_config.ip_addr) {
                 return Err(format!(
-                    "{}do_add_node: There is already another node with the same IPv4 address.",
-                    LOG_PREFIX,
+                    "{}do_add_node: There is already another node with the same IPv4 address ({}).",
+                    LOG_PREFIX, ipv4_config.ip_addr,
                 ));
             }
         }
