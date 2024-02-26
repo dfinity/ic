@@ -40,13 +40,12 @@ pub mod state_api;
 use crate::state_api::state::OpOut;
 use ::pocket_ic::common::rest::{BinaryBlob, BlobId};
 use axum::async_trait;
+use pocket_ic::PocketIc;
 
-/// Represents an identifiable operation on a TargetType.
+/// Represents an identifiable operation on PocketIC.
 pub trait Operation {
-    type TargetType: Send + Sync;
-
-    /// Consumes self and executes computation.
-    fn compute(&self, _pocket_ic: &mut Self::TargetType) -> OpOut;
+    /// Executes an operation.
+    fn compute(&self, pocket_ic: &mut PocketIc) -> OpOut;
 
     /// True iff this operation should be retried if the instance is busy.
     /// This must be the case if the caller cannot handle the error condition
@@ -55,6 +54,7 @@ pub trait Operation {
         false
     }
 
+    /// Returns the unique identifier of this operation.
     fn id(&self) -> OpId;
 }
 

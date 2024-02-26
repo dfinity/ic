@@ -4,7 +4,7 @@
 /// body. This has to be canonicalized into a PocketIc Operation before we can
 /// deterministically update the PocketIc state machine.
 ///
-use super::state::{InstanceState, OpOut, PocketIcApiState, PocketIcError, UpdateReply};
+use super::state::{ApiState, OpOut, PocketIcError, UpdateReply};
 use crate::pocket_ic::GetSubnet;
 use crate::pocket_ic::{
     AddCycles, ExecuteIngressMessage, GetCyclesBalance, GetStableMemory, GetTime, PubKey, Query,
@@ -39,11 +39,9 @@ use tracing::trace;
 /// response on a open http request.
 pub static TIMEOUT_HEADER_NAME: HeaderName = HeaderName::from_static("processing-timeout-ms");
 
-pub type ApiState = PocketIcApiState<PocketIc>;
-
 #[derive(Clone)]
 pub struct AppState {
-    pub api_state: ApiState,
+    pub api_state: Arc<ApiState>,
     pub min_alive_until: Arc<RwLock<Instant>>,
     pub runtime: Arc<Runtime>,
     pub blob_store: Arc<dyn BlobStore>,
@@ -104,10 +102,10 @@ where
 }
 
 async fn run_operation<T: Serialize>(
-    api_state: &ApiState,
+    api_state: Arc<ApiState>,
     instance_id: InstanceId,
     timeout: Option<Duration>,
-    op: impl Operation<TargetType = PocketIc> + Send + Sync + 'static,
+    op: impl Operation + Send + Sync + 'static,
 ) -> (StatusCode, ApiResponse<T>)
 where
     (StatusCode, ApiResponse<T>): From<OpOut>,
@@ -351,7 +349,7 @@ pub async fn handler_query(
             let query_op = Query(canister_call);
             // TODO: how to know what run_operation returns, i.e. to what to parse it? (type safety?)
             // (applies to all handlers)
-            let (code, response) = run_operation(&api_state, instance_id, timeout, query_op).await;
+            let (code, response) = run_operation(api_state, instance_id, timeout, query_op).await;
             (code, Json(response))
         }
         Err(e) => (
@@ -370,7 +368,7 @@ pub async fn handler_get_time(
 ) -> (StatusCode, Json<ApiResponse<RawTime>>) {
     let timeout = timeout_or_default(headers);
     let time_op = GetTime {};
-    let (code, response) = run_operation(&api_state, instance_id, timeout, time_op).await;
+    let (code, response) = run_operation(api_state, instance_id, timeout, time_op).await;
     (code, Json(response))
 }
 
@@ -384,7 +382,7 @@ pub async fn handler_get_cycles(
     match CanisterId::try_from(raw_canister_id.canister_id) {
         Ok(canister_id) => {
             let get_op = GetCyclesBalance { canister_id };
-            let (code, response) = run_operation(&api_state, instance_id, timeout, get_op).await;
+            let (code, response) = run_operation(api_state, instance_id, timeout, get_op).await;
             (code, Json(response))
         }
         Err(e) => (
@@ -406,7 +404,7 @@ pub async fn handler_get_stable_memory(
     match CanisterId::try_from(raw_canister_id.canister_id) {
         Ok(canister_id) => {
             let get_op = GetStableMemory { canister_id };
-            let (code, response) = run_operation(&api_state, instance_id, timeout, get_op).await;
+            let (code, response) = run_operation(api_state, instance_id, timeout, get_op).await;
             (code, Json(response))
         }
         Err(e) => (
@@ -428,7 +426,7 @@ pub async fn handler_get_subnet(
     match CanisterId::try_from(raw_canister_id.canister_id) {
         Ok(canister_id) => {
             let op = GetSubnet { canister_id };
-            let (code, res) = run_operation(&api_state, instance_id, timeout, op).await;
+            let (code, res) = run_operation(api_state, instance_id, timeout, op).await;
             (code, Json(res))
         }
         Err(e) => (
@@ -451,7 +449,7 @@ pub async fn handler_pub_key(
         &subnet_id,
     )));
     let op = PubKey { subnet_id };
-    let (code, res) = run_operation(&api_state, instance_id, timeout, op).await;
+    let (code, res) = run_operation(api_state, instance_id, timeout, op).await;
     (code, Json(res))
 }
 
@@ -468,8 +466,7 @@ pub async fn handler_execute_ingress_message(
     match crate::pocket_ic::CanisterCall::try_from(raw_canister_call) {
         Ok(canister_call) => {
             let ingress_op = ExecuteIngressMessage(canister_call);
-            let (code, response) =
-                run_operation(&api_state, instance_id, timeout, ingress_op).await;
+            let (code, response) = run_operation(api_state, instance_id, timeout, ingress_op).await;
             (code, Json(response))
         }
         Err(e) => (
@@ -491,7 +488,7 @@ pub async fn handler_set_time(
     let op = SetTime {
         time: ic_types::Time::from_nanos_since_unix_epoch(time.nanos_since_epoch),
     };
-    let (code, response) = run_operation(&api_state, instance_id, timeout, op).await;
+    let (code, response) = run_operation(api_state, instance_id, timeout, op).await;
     (code, Json(response))
 }
 
@@ -504,7 +501,7 @@ pub async fn handler_add_cycles(
     let timeout = timeout_or_default(headers);
     match AddCycles::try_from(raw_add_cycles) {
         Ok(add_op) => {
-            let (code, response) = run_operation(&api_state, instance_id, timeout, add_op).await;
+            let (code, response) = run_operation(api_state, instance_id, timeout, add_op).await;
             (code, Json(response))
         }
         Err(e) => (
@@ -530,7 +527,7 @@ pub async fn handler_set_stable_memory(
     let timeout = timeout_or_default(headers);
     match SetStableMemory::from_store(raw, blob_store).await {
         Ok(set_op) => {
-            let (code, response) = run_operation(&api_state, instance_id, timeout, set_op).await;
+            let (code, response) = run_operation(api_state, instance_id, timeout, set_op).await;
             (code, Json(response))
         }
         Err(e) => (
@@ -549,7 +546,7 @@ pub async fn handler_tick(
 ) -> (StatusCode, Json<ApiResponse<()>>) {
     let timeout = timeout_or_default(headers);
     let op = Tick;
-    let (code, res) = run_operation(&api_state, instance_id, timeout, op).await;
+    let (code, res) = run_operation(api_state, instance_id, timeout, op).await;
     (code, Json(res))
 }
 
@@ -627,17 +624,7 @@ pub async fn create_instance(
 pub async fn list_instances(
     State(AppState { api_state, .. }): State<AppState>,
 ) -> Json<Vec<String>> {
-    let instances = api_state.list_instances().await;
-    let instances: Vec<String> = instances
-        .iter()
-        .map(|instance_state| match instance_state {
-            InstanceState::Busy { state_label, op_id } => {
-                format!("Busy({:?}, {:?})", state_label, op_id)
-            }
-            InstanceState::Available(_) => "Available".to_string(),
-            InstanceState::Deleted => "Deleted".to_string(),
-        })
-        .collect();
+    let instances = api_state.list_instance_states().await;
     Json(instances)
 }
 
