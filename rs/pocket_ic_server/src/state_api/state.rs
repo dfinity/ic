@@ -1,7 +1,7 @@
 /// This module contains the core state of the PocketIc server.
-/// Axum handlers operate on a global state of type PocketIcApiState, whose
+/// Axum handlers operate on a global state of type ApiState, whose
 /// interface guarantees consistency and determinism.
-///
+use crate::pocket_ic::PocketIc;
 use crate::InstanceId;
 use crate::{OpId, Operation};
 use base64;
@@ -26,6 +26,9 @@ pub const STATE_LABEL_HASH_SIZE: usize = 32;
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Default)]
 pub struct StateLabel(pub [u8; STATE_LABEL_HASH_SIZE]);
 
+// The only error condition is if the vector has the wrong size.
+pub struct InvalidSize;
+
 impl std::fmt::Debug for StateLabel {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "StateLabel(")?;
@@ -49,47 +52,26 @@ impl std::convert::TryFrom<Vec<u8>> for StateLabel {
     }
 }
 
-// The only error condition is if the vector has the wrong size.
-pub struct InvalidSize;
-
-/// The state of the PocketIc-API.
-///
-/// The struct is Send + Sync and cloneable and can thus be shared between threads.
-pub struct PocketIcApiState<T> {
-    // todo: this should become private at some point, pub for testing for now.
-    inner: Arc<InnerApiState<T>>,
-}
-
-// We cannot derive Clone, as that would require the bound T: Clone, which we don't want.
-impl<T> Clone for PocketIcApiState<T> {
-    fn clone(&self) -> Self {
-        Self {
-            inner: self.inner.clone(),
-        }
-    }
-}
-
-struct InnerApiState<T> {
+/// The state of the PocketIC API.
+pub struct ApiState {
     // impl note: If locks are acquired on both fields, acquire first on instances, then on graph.
-    instances: RwLock<Vec<Mutex<InstanceState<T>>>>,
+    instances: Arc<RwLock<Vec<Mutex<InstanceState>>>>,
     graph: RwLock<HashMap<StateLabel, Computations>>,
     sync_wait_time: Duration,
     // dropping the PocketIC instance might be an expensive operation (the state machine is
     // deallocated, e.g.). Thus, we immediately mark the instance as deleted while sending the
     // PocketIC instance to a background worker and drop it there.
-    drop_sender: mpsc::UnboundedSender<T>,
+    drop_sender: mpsc::UnboundedSender<PocketIc>,
     _drop_worker_handle: JoinOnDrop<()>,
 }
 
-pub struct PocketIcApiStateBuilder<T> {
-    initial_instances: Vec<T>,
+#[derive(Default)]
+pub struct PocketIcApiStateBuilder {
+    initial_instances: Vec<PocketIc>,
     sync_wait_time: Option<Duration>,
 }
 
-impl<T> PocketIcApiStateBuilder<T>
-where
-    T: HasStateLabel + Send + 'static,
-{
+impl PocketIcApiStateBuilder {
     pub fn new() -> Self {
         Default::default()
     }
@@ -104,12 +86,12 @@ where
     }
 
     /// Will make the given instance available in the initial state.
-    pub fn add_initial_instance(mut self, instance: T) -> Self {
+    pub fn add_initial_instance(mut self, instance: PocketIc) -> Self {
         self.initial_instances.push(instance);
         self
     }
 
-    pub fn build(self) -> PocketIcApiState<T> {
+    pub fn build(self) -> Arc<ApiState> {
         let graph: HashMap<StateLabel, Computations> = self
             .initial_instances
             .iter()
@@ -126,7 +108,7 @@ where
 
         let sync_wait_time = self.sync_wait_time.unwrap_or(DEFAULT_SYNC_WAIT_DURATION);
         #[allow(clippy::disallowed_methods)]
-        let (drop_sender, mut rx) = mpsc::unbounded_channel::<T>();
+        let (drop_sender, mut rx) = mpsc::unbounded_channel::<PocketIc>();
         let drop_handle = ThreadBuilder::new()
             .name("PocketIC GC Thread".into())
             .spawn(move || {
@@ -136,23 +118,13 @@ where
             })
             .unwrap();
 
-        let inner = Arc::new(InnerApiState {
-            instances,
+        Arc::new(ApiState {
+            instances: instances.into(),
             graph,
             sync_wait_time,
             drop_sender,
             _drop_worker_handle: JoinOnDrop::new(drop_handle),
-        });
-        PocketIcApiState { inner }
-    }
-}
-
-impl<T> Default for PocketIcApiStateBuilder<T> {
-    fn default() -> Self {
-        Self {
-            initial_instances: vec![],
-            sync_wait_time: None,
-        }
+        })
     }
 }
 
@@ -240,13 +212,12 @@ pub type Computations = HashMap<OpId, (StateLabel, OpOut)>;
 /// vector is replaced by a Busy variant which contains information about the
 /// computation that is currently running. Afterwards, the instance is put back as
 /// Available.
-#[derive(Clone)]
-pub enum InstanceState<T> {
+pub enum InstanceState {
     Busy {
         state_label: StateLabel,
         op_id: OpId,
     },
-    Available(T),
+    Available(PocketIc),
     Deleted,
 }
 
@@ -296,10 +267,7 @@ pub trait HasStateLabel {
     fn get_state_label(&self) -> StateLabel;
 }
 
-impl<T> PocketIcApiState<T>
-where
-    T: HasStateLabel + Send + Sync + 'static,
-{
+impl ApiState {
     /// For polling:
     /// The client lib dispatches a long running operation and gets a Busy {state_label, op_id}.
     /// It then polls on that via this state tree api function.
@@ -308,13 +276,8 @@ where
         state_label: &StateLabel,
         op_id: &OpId,
     ) -> Option<(StateLabel, OpOut)> {
-        if let Some((new_state_label, op_out)) = self
-            .inner
-            .graph
-            .try_read()
-            .ok()?
-            .get(state_label)?
-            .get(op_id)
+        if let Some((new_state_label, op_out)) =
+            self.graph.try_read().ok()?.get(state_label)?.get(op_id)
         {
             Some((new_state_label.clone(), op_out.clone()))
         } else {
@@ -322,37 +285,35 @@ where
         }
     }
 
-    pub async fn add_instance(&self, instance: T) -> InstanceId {
-        let mut instances = self.inner.instances.write().await;
+    pub async fn add_instance(&self, instance: PocketIc) -> InstanceId {
+        let mut instances = self.instances.write().await;
         instances.push(Mutex::new(InstanceState::Available(instance)));
         instances.len() - 1
     }
 
     pub async fn delete_instance(&self, instance_id: InstanceId) {
-        let instances = self.inner.instances.read().await;
+        let instances = self.instances.read().await;
         let mut instance_state = instances[instance_id].lock().await;
         if let InstanceState::Available(pocket_ic) =
             std::mem::replace(&mut *instance_state, InstanceState::Deleted)
         {
-            self.inner.drop_sender.send(pocket_ic).unwrap();
+            self.drop_sender.send(pocket_ic).unwrap();
         }
     }
 
-    pub async fn list_instances(&self) -> Vec<InstanceState<()>> {
-        let instances = self.inner.instances.read().await;
+    pub async fn list_instance_states(&self) -> Vec<String> {
+        let instances = self.instances.read().await;
         let mut res = vec![];
 
         for instance_state in &*instances {
-            let guard = instance_state.lock().await;
-            let inst = match &*guard {
-                InstanceState::Busy { state_label, op_id } => InstanceState::Busy {
-                    state_label: state_label.clone(),
-                    op_id: op_id.clone(),
-                },
-                InstanceState::Available(_) => InstanceState::Available(()),
-                InstanceState::Deleted => InstanceState::Deleted,
-            };
-            res.push(inst);
+            let instance_state = &*instance_state.lock().await;
+            match instance_state {
+                InstanceState::Busy { state_label, op_id } => {
+                    res.push(format!("Busy({:?}, {:?})", state_label, op_id))
+                }
+                InstanceState::Available(_) => res.push("Available".to_string()),
+                InstanceState::Deleted => res.push("Deleted".to_string()),
+            }
         }
         res
     }
@@ -373,23 +334,23 @@ where
     /// the client has to retry until the operation is done. Some operations for which the client
     /// might be unable to retry are exceptions to this rule and they are queued up implicitly
     /// by a retry mechanism inside PocketIc.
-    pub async fn update<S>(&self, op: Arc<S>, instance_id: InstanceId) -> UpdateResult
+    pub async fn update<O>(&self, op: Arc<O>, instance_id: InstanceId) -> UpdateResult
     where
-        S: Operation<TargetType = T> + Send + Sync + 'static,
+        O: Operation + Send + Sync + 'static,
     {
         self.update_with_timeout(op, instance_id, None).await
     }
 
     /// Same as [Self::update] except that the timeout can be specified manually. This is useful in
     /// cases when clients want to enforce a long-running blocking call.
-    pub async fn update_with_timeout<S>(
+    pub async fn update_with_timeout<O>(
         &self,
-        op: Arc<S>,
+        op: Arc<O>,
         instance_id: InstanceId,
         sync_wait_time: Option<Duration>,
     ) -> UpdateResult
     where
-        S: Operation<TargetType = T> + Send + Sync + 'static,
+        O: Operation + Send + Sync + 'static,
     {
         let op_id = op.id().0;
         trace!(
@@ -397,9 +358,8 @@ where
             instance_id,
             op_id,
         );
-        let sync_wait_time = sync_wait_time.unwrap_or(self.inner.sync_wait_time);
-        let st = self.inner.clone();
-        let instances = st.instances.read().await;
+        let sync_wait_time = sync_wait_time.unwrap_or(self.sync_wait_time);
+        let instances = self.instances.read().await;
         let (bg_task, busy_outcome) = if let Some(instance_mutex) = instances.get(instance_id) {
             let mut instance_state = instance_mutex.lock().await;
             // If this instance is busy, return the running op and initial state
@@ -434,7 +394,8 @@ where
                     let bg_task = {
                         let old_state_label = state_label.clone();
                         let op_id = op_id.clone();
-                        let st = self.inner.clone();
+                        let instances = self.instances.clone();
+                        let drop_sender = self.drop_sender.clone();
                         move || {
                             trace!(
                                 "bg_task::start instance_id={} state_label={:?} op_id={}",
@@ -443,10 +404,10 @@ where
                                 op_id.0,
                             );
                             let result = op.compute(&mut pocket_ic);
-                            let instances = st.instances.blocking_read();
+                            let instances = instances.blocking_read();
                             let mut instance_state = instances[instance_id].blocking_lock();
                             if let InstanceState::Deleted = &*instance_state {
-                                st.drop_sender.send(pocket_ic).unwrap();
+                                drop_sender.send(pocket_ic).unwrap();
                             } else {
                                 *instance_state = InstanceState::Available(pocket_ic);
                             }
@@ -484,13 +445,13 @@ where
         // note: this assumes that cancelling the JoinHandle does not stop the execution of the
         // background task. This only works because the background thread, in this case, is a
         // kernel thread.
-        if let Ok(o) = time::timeout(sync_wait_time, bg_handle).await {
+        if let Ok(op_out) = time::timeout(sync_wait_time, bg_handle).await {
             trace!(
                 "update_with_timeout::synchronous instance_id={} op_id={}",
                 instance_id,
                 op_id,
             );
-            return Ok(UpdateReply::Output(o.expect("join failed!")));
+            return Ok(UpdateReply::Output(op_out.expect("join failed!")));
         }
 
         trace!(
@@ -502,7 +463,7 @@ where
     }
 }
 
-impl<T: HasStateLabel> std::fmt::Debug for InstanceState<T> {
+impl std::fmt::Debug for InstanceState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Busy { state_label, op_id } => {
@@ -515,7 +476,7 @@ impl<T: HasStateLabel> std::fmt::Debug for InstanceState<T> {
     }
 }
 
-impl<T: HasStateLabel> std::fmt::Debug for InnerApiState<T> {
+impl std::fmt::Debug for ApiState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let instances = self.instances.blocking_read();
         let graph = self.graph.blocking_read();
@@ -530,11 +491,5 @@ impl<T: HasStateLabel> std::fmt::Debug for InnerApiState<T> {
             writeln!(f, "  {k:?} => {v:?}")?;
         }
         Ok(())
-    }
-}
-
-impl<T: HasStateLabel> std::fmt::Debug for PocketIcApiState<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "{:?}", self.inner)
     }
 }

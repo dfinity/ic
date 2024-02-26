@@ -456,8 +456,6 @@ pub struct SetTime {
 }
 
 impl Operation for SetTime {
-    type TargetType = PocketIc;
-
     fn compute(&self, pic: &mut PocketIc) -> OpOut {
         // Sets the time on all subnets.
         for subnet in pic.subnets.read().unwrap().values() {
@@ -475,8 +473,6 @@ impl Operation for SetTime {
 pub struct GetTime;
 
 impl Operation for GetTime {
-    type TargetType = PocketIc;
-
     fn compute(&self, pic: &mut PocketIc) -> OpOut {
         // Time is kept in sync across subnets, so one can take any subnet.
         let nanos = systemtime_to_unix_epoch_nanos(pic.any_subnet().time());
@@ -494,8 +490,6 @@ pub struct PubKey {
 }
 
 impl Operation for PubKey {
-    type TargetType = PocketIc;
-
     fn compute(&self, pic: &mut PocketIc) -> OpOut {
         let subnet = pic.get_subnet_with_id(self.subnet_id);
         match subnet {
@@ -513,8 +507,6 @@ impl Operation for PubKey {
 pub struct Tick;
 
 impl Operation for Tick {
-    type TargetType = PocketIc;
-
     fn compute(&self, pic: &mut PocketIc) -> OpOut {
         for subnet in pic.subnets.read().unwrap().values() {
             subnet.advance_time(Duration::from_nanos(1));
@@ -532,8 +524,6 @@ impl Operation for Tick {
 pub struct ExecuteIngressMessage(pub CanisterCall);
 
 impl Operation for ExecuteIngressMessage {
-    type TargetType = PocketIc;
-
     fn compute(&self, pic: &mut PocketIc) -> OpOut {
         let canister_call = self.0.clone();
         let subnet = route_call(pic, canister_call);
@@ -599,7 +589,6 @@ impl Operation for ExecuteIngressMessage {
 pub struct Query(pub CanisterCall);
 
 impl Operation for Query {
-    type TargetType = PocketIc;
     fn compute(&self, pic: &mut PocketIc) -> OpOut {
         let canister_call = self.0.clone();
         let subnet = route_call(pic, canister_call);
@@ -766,8 +755,7 @@ fn decompress(data: Vec<u8>, compression: BlobCompression) -> Option<Vec<u8>> {
 }
 
 impl Operation for SetStableMemory {
-    type TargetType = PocketIc;
-    fn compute(&self, pocket_ic: &mut Self::TargetType) -> OpOut {
+    fn compute(&self, pocket_ic: &mut PocketIc) -> OpOut {
         pocket_ic
             .try_route_canister(self.canister_id)
             .unwrap()
@@ -793,8 +781,7 @@ pub struct GetStableMemory {
 }
 
 impl Operation for GetStableMemory {
-    type TargetType = PocketIc;
-    fn compute(&self, pocket_ic: &mut Self::TargetType) -> OpOut {
+    fn compute(&self, pocket_ic: &mut PocketIc) -> OpOut {
         OpOut::Bytes(
             pocket_ic
                 .try_route_canister(self.canister_id)
@@ -814,7 +801,6 @@ pub struct GetCyclesBalance {
 }
 
 impl Operation for GetCyclesBalance {
-    type TargetType = PocketIc;
     fn compute(&self, pic: &mut PocketIc) -> OpOut {
         let result = pic
             .try_route_canister(self.canister_id)
@@ -834,7 +820,6 @@ pub struct GetSubnet {
 }
 
 impl Operation for GetSubnet {
-    type TargetType = PocketIc;
     fn compute(&self, pic: &mut PocketIc) -> OpOut {
         let sm = pic.try_route_canister(self.canister_id);
         match sm {
@@ -886,8 +871,6 @@ impl TryFrom<RawAddCycles> for AddCycles {
 }
 
 impl Operation for AddCycles {
-    type TargetType = PocketIc;
-
     fn compute(&self, pic: &mut PocketIc) -> OpOut {
         let result = pic
             .try_route_canister(self.canister_id)
@@ -930,8 +913,6 @@ pub struct InstallCanisterAsController {
 }
 
 impl Operation for InstallCanisterAsController {
-    type TargetType = PocketIc;
-
     fn compute(&self, pic: &mut PocketIc) -> OpOut {
         pic.try_route_canister(self.canister_id)
             .unwrap()
@@ -1166,10 +1147,7 @@ mod tests {
         (pic, canister_id)
     }
 
-    fn compute_assert_state_change<O>(pic: &mut PocketIc, op: O) -> OpOut
-    where
-        O: Operation<TargetType = PocketIc>,
-    {
+    fn compute_assert_state_change(pic: &mut PocketIc, op: impl Operation) -> OpOut {
         let state0 = pic.get_state_label();
         let res = op.compute(pic);
         let state1 = pic.get_state_label();
@@ -1177,10 +1155,7 @@ mod tests {
         res
     }
 
-    fn compute_assert_state_immutable<O>(pic: &mut PocketIc, op: O) -> OpOut
-    where
-        O: Operation<TargetType = PocketIc>,
-    {
+    fn compute_assert_state_immutable(pic: &mut PocketIc, op: impl Operation) -> OpOut {
         let state0 = pic.get_state_label();
         let res = op.compute(pic);
         let state1 = pic.get_state_label();
