@@ -41,28 +41,28 @@ pub type ChangeSet = Vec<ChangeAction>;
 
 /// Change actions applicable to the consensus pool.
 #[allow(clippy::large_enum_variant)]
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ChangeAction {
     /// Add the given artifact to the validated section of the pool.
     AddToValidated(ValidatedConsensusArtifact),
     /// Remove the given artifact from the validated section of the pool.
     RemoveFromValidated(ConsensusMessage),
-    /// Remove the given artifact from the unvalidated section of the pool and add it to the
-    /// validated section of the pool.
+    /// Remove the given artifact from the unvalidated section of the pool and add it to
+    /// the validated section of the pool.
     MoveToValidated(ConsensusMessage),
     /// Remove the given artifact from the unvalidated section of the pool.
     RemoveFromUnvalidated(ConsensusMessage),
     /// Remove an invalid artifact from the unvalidated section of the pool.
     HandleInvalid(ConsensusMessage, String),
-    /// Purge all the artifacts _strictly_ below the provided height from the validated section of
-    /// the pool.
+    /// Purge all the artifacts _strictly_ below the provided height from the validated
+    /// section of the pool.
     PurgeValidatedBelow(Height),
-    /// Purge all the artifacts _strictly_ below the provided height from the unvalidated section of
-    /// the pool.
+    /// Purge all the artifacts _strictly_ below the provided height from the unvalidated
+    /// section of the pool.
     PurgeUnvalidatedBelow(Height),
-    /// Purge all the artifacts of the given type _strictly_ below the provided height from the
-    /// validated section of the pool.
-    PurgeValidatedOfGivenTypeBelow(PurgeableArtifactType, Height),
+    /// Purge all the artifacts of the given type _strictly_ below the provided height
+    /// from the validated section of the pool.
+    PurgeValidatedOfTypeBelow(PurgeableArtifactType, Height),
 }
 
 /// A type of consensus artifact which can be selectively deleted from the consensus pool.
@@ -132,8 +132,8 @@ impl ContentEq for ChangeAction {
             }
             (ChangeAction::PurgeValidatedBelow(x), ChangeAction::PurgeValidatedBelow(y)) => x == y,
             (
-                ChangeAction::PurgeValidatedOfGivenTypeBelow(type_1, x),
-                ChangeAction::PurgeValidatedOfGivenTypeBelow(type_2, y),
+                ChangeAction::PurgeValidatedOfTypeBelow(type_1, x),
+                ChangeAction::PurgeValidatedOfTypeBelow(type_2, y),
             ) => x == y && type_1 == type_2,
             // Default to false when comparing actions of different type
             _ => false,
