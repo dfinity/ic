@@ -409,18 +409,31 @@ pub fn encode_metrics(
             let voting_period = governance.voting_period_seconds()(data.topic());
             let deadline_ts = data.get_deadline_timestamp_seconds(voting_period);
             let proposal_topic = data.topic().as_str_name();
-            (proposal_id, (deadline_ts, proposal_topic))
-        })
-        .collect::<BTreeMap<&u64, (u64, &str)>>();
-    for (proposal_id, (deadline_ts, proposal_topic)) in open_proposals_deadline.iter() {
-        builder = builder
-            .value(
-                &[
-                    ("proposal_id", &proposal_id.to_string()),
-                    ("proposal_topic", *proposal_topic),
-                ],
-                Metric::into(*deadline_ts),
+            let proposal_action_type = data
+                .proposal
+                .as_ref()
+                .map(|proposal| proposal.action_type());
+
+            (
+                proposal_id,
+                (deadline_ts, proposal_topic, proposal_action_type),
             )
+        })
+        .collect::<BTreeMap<&u64, (u64, &str, Option<String>)>>();
+
+    for (proposal_id, (deadline_ts, proposal_topic, proposal_action_type)) in
+        open_proposals_deadline.iter()
+    {
+        let proposal_id = proposal_id.to_string();
+        let mut labels: Vec<(&str, &str)> = vec![
+            ("proposal_id", proposal_id.as_str()),
+            ("proposal_topic", *proposal_topic),
+        ];
+        if let Some(proposal_action_type) = proposal_action_type {
+            labels.push(("proposal_type", proposal_action_type))
+        }
+        builder = builder
+            .value(labels.as_slice(), Metric::into(*deadline_ts))
             .unwrap();
     }
 

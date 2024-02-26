@@ -778,6 +778,31 @@ impl Proposal {
         }
     }
 
+    /// String value representing the action type of the proposal used in governance canister metrics.
+    pub(crate) fn action_type(&self) -> String {
+        if let Some(action) = &self.action {
+            let action_name = action.as_str_name();
+
+            if let Action::ExecuteNnsFunction(m) = action {
+                let nns_function_name =
+                    if let Ok(nns_function) = NnsFunction::try_from(m.nns_function) {
+                        nns_function.as_str_name()
+                    } else {
+                        println!(
+                            "{}ERROR: Unknown NnsFunction: {}",
+                            LOG_PREFIX, m.nns_function
+                        );
+                        NnsFunction::Unspecified.as_str_name()
+                    };
+                return format!("{}-{}", action_name, nns_function_name);
+            }
+            action_name.to_string()
+        } else {
+            println!("{}ERROR: No action -> no action type.", LOG_PREFIX);
+            "NO_ACTION".to_string()
+        }
+    }
+
     /// Returns whether such a proposal should be allowed to
     /// be submitted when the heap growth potential is low.
     fn allowed_when_resources_are_low(&self) -> bool {
@@ -795,6 +820,30 @@ impl Proposal {
 }
 
 impl Action {
+    /// String value of the enum field names.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// and safe for programmatic use.
+    pub(crate) fn as_str_name(&self) -> &'static str {
+        match self {
+            Action::ManageNeuron(_) => "ACTION_MANAGE_NEURON",
+            Action::ManageNetworkEconomics(_) => "ACTION_MANAGE_NETWORK_ECONOMICS",
+            Action::Motion(_) => "ACTION_MOTION",
+            Action::ApproveGenesisKyc(_) => "ACTION_APPROVE_GENESIS_KYC",
+            Action::AddOrRemoveNodeProvider(_) => "ACTION_ADD_OR_REMOVE_NODE_PROVIDER",
+            Action::RewardNodeProvider(_) => "ACTION_REWARD_NODE_PROVIDER",
+            Action::RewardNodeProviders(_) => "ACTION_REWARD_NODE_PROVIDERS",
+            Action::SetDefaultFollowees(_) => "ACTION_SET_DEFAULT_FOLLOWEES",
+            Action::RegisterKnownNeuron(_) => "ACTION_REGISTER_KNOWN_NEURON",
+            Action::SetSnsTokenSwapOpenTimeWindow(_) => {
+                "ACTION_SET_SNS_TOKEN_SWAP_OPEN_TIME_WINDOW"
+            }
+            Action::OpenSnsTokenSwap(_) => "ACTION_OPEN_SNS_TOKEN_SWAP",
+            Action::CreateServiceNervousSystem(_) => "ACTION_CREATE_SERVICE_NERVOUS_SYSTEM",
+            Action::ExecuteNnsFunction(_) => "ACTION_EXECUTE_NNS_FUNCTION",
+        }
+    }
+
     /// Returns whether proposals with such an action should be allowed to
     /// be submitted when the heap growth potential is low.
     fn allowed_when_resources_are_low(&self) -> bool {
