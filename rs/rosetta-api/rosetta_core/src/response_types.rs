@@ -349,3 +349,22 @@ pub struct ConstructionHashResponse {
     pub transaction_identifier: TransactionIdentifier,
     pub metadata: ObjectMap,
 }
+
+/// SearchTransactionsResponse contains an ordered collection of
+/// BlockTransactions that match the query in SearchTransactionsRequest. These
+/// BlockTransactions are sorted from most recent block to oldest block.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+pub struct SearchTransactionsResponse {
+    /// transactions is an array of BlockTransactions sorted by most recent BlockIdentifier (meaning that transactions in recent blocks appear first).
+    /// If there are many transactions for a particular search, transactions may not contain all matching transactions. It is up to the caller to paginate these transactions using the max_block field.
+    pub transactions: Vec<BlockTransaction>,
+
+    /// total_count is the number of results for a given search. Callers typically use this value to concurrently fetch results by offset or to display a virtual page number associated with results.
+    #[serde(rename = "total_count")]
+    pub total_count: i64,
+
+    /// next_offset is the next offset to use when paginating through transaction results. If this field is not populated, there are no more transactions to query.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_offset: Option<i64>,
+}

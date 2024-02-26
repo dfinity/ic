@@ -688,3 +688,38 @@ pub struct Signature {
 
     pub hex_bytes: String,
 }
+
+/// BlockTransaction contains a populated Transaction and the BlockIdentifier that contains it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+pub struct BlockTransaction {
+    /// The block_identifier uniquely identifies a block in a particular network.
+    pub block_identifier: BlockIdentifier,
+
+    /// Transactions contain an array of Operations that are attributable to the same TransactionIdentifier.
+    pub transaction: Transaction,
+}
+
+/// Operator is used by query-related endpoints to determine how to apply
+/// conditions. If this field is not populated, the default and value will be
+/// used.
+#[allow(non_camel_case_types)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[cfg_attr(feature = "conversion", derive(LabelledGenericEnum))]
+pub enum Operator {
+    /// If any condition is satisfied, it is considered a match.
+    #[serde(rename = "or")]
+    Or,
+    /// If all conditions are satisfied, it is considered a match.
+    #[serde(rename = "and")]
+    And,
+}
+
+impl ::std::fmt::Display for Operator {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Operator::Or => write!(f, "or"),
+            Operator::And => write!(f, "and"),
+        }
+    }
+}
