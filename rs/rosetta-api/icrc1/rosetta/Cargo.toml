@@ -48,6 +48,7 @@ http = "0.2.9"
 tower-http = { version = "0.4.0", features = ["trace"] }
 tower-request-id = "0.2.1"
 tracing = { workspace = true }
+tracing-appender = { workspace = true }
 tracing-subscriber = { workspace = true }
 indicatif = "0.17.3"
 ic-rosetta-api = { path = "../../" }
@@ -57,6 +58,7 @@ strum = { workspace = true }
 num-bigint = "0.4.4"
 ic-ledger-hash-of = { path = "../../../../packages/ic-ledger-hash-of" }
 reqwest = { workspace = true }
+rolling-file = "0.2.0"
 
 [lib]
 path = "src/lib.rs"
