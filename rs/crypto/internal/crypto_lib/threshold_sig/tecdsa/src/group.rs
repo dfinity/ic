@@ -101,6 +101,7 @@ impl EccCurveType {
         match alg_id {
             AlgorithmId::ThresholdEcdsaSecp256k1 => Some(EccCurveType::K256),
             AlgorithmId::ThresholdEcdsaSecp256r1 => Some(EccCurveType::P256),
+            AlgorithmId::ThresholdSchnorrBip340 => Some(EccCurveType::K256),
             _ => None,
         }
     }
@@ -965,6 +966,48 @@ impl EccPoint {
             EccPointInternal::K256(pt) => pt.serialize(),
             EccPointInternal::P256(pt) => pt.serialize(),
         }
+    }
+
+    /// Serialize a point's x coordinate
+    ///
+    /// This is a funky format for secp256k1 used by BIP340.
+    /// This encoding format *requires* that the point have a y coordinate
+    /// that is even. If the y coordinate of the point is odd, then this
+    /// function will return an error. This function also requires
+    /// that the point be on secp256k1 and not any other curve.
+    ///
+    /// This function computes the standard SEC1 compressed point format, then
+    /// chops off the leading byte which is used to indicate the parity of y.
+    /// That effectively returns just the affine x coordinate in a fixed with
+    /// encoding.
+    pub fn serialize_bip340(&self) -> ThresholdEcdsaResult<Vec<u8>> {
+        if self.curve_type() != EccCurveType::K256 {
+            return Err(ThresholdEcdsaError::CurveMismatch);
+        }
+
+        let mut encoding = self.serialize();
+
+        // In the compressed SEC1 encoding, the parity of y is encoded in the
+        // first byte; if the affine y coordinate is even, then the first byte
+        // will be 0x02. If it is not, then we are attempting to compute the
+        // BIP340 representative of a point where that is non-sensensical - by
+        // design in BIP340 all points have even y.
+        if encoding[0] != 0x02 {
+            return Err(ThresholdEcdsaError::InvalidPoint);
+        }
+
+        encoding.remove(0);
+
+        Ok(encoding)
+    }
+
+    pub fn deserialize_bip340(curve: EccCurveType, pt: &[u8]) -> ThresholdEcdsaResult<Self> {
+        let mut sec1 = Vec::with_capacity(1 + pt.len());
+
+        sec1.push(0x02);
+        sec1.extend_from_slice(pt);
+
+        Self::deserialize(curve, pt)
     }
 
     /// Serialize a point in compressed form with a curve ID tag

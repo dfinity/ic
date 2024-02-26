@@ -92,7 +92,7 @@ fn verify_protocol_output_remains_unchanged_over_time_k256() -> Result<(), Thres
 
     let seed = Seed::from_bytes(b"ic-crypto-tecdsa-fixed-seed");
 
-    let setup = SignatureProtocolSetup::new(
+    let setup = EcdsaSignatureProtocolSetup::new(
         TestConfig::new(EccCurveType::K256),
         nodes,
         threshold,
@@ -177,7 +177,7 @@ fn verify_protocol_output_remains_unchanged_over_time_k256() -> Result<(), Thres
 
     let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
     let proto =
-        SignatureProtocolExecution::new(setup, signed_message, random_beacon, derivation_path);
+        EcdsaSignatureProtocolExecution::new(setup, signed_message, random_beacon, derivation_path);
 
     let shares = proto.generate_shares()?;
 
@@ -212,7 +212,7 @@ fn verify_protocol_output_remains_unchanged_over_time_k256_unmasked_kappa(
     let seed =
         Seed::from_bytes(b"ic-crypto-tecdsa-fixed-seed-for-k256-unmasked-kappa-stability-test");
 
-    let setup = SignatureProtocolSetup::new(
+    let setup = EcdsaSignatureProtocolSetup::new(
         TestConfig::new(EccCurveType::K256),
         nodes,
         threshold,
@@ -297,7 +297,7 @@ fn verify_protocol_output_remains_unchanged_over_time_k256_unmasked_kappa(
 
     let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
     let proto =
-        SignatureProtocolExecution::new(setup, signed_message, random_beacon, derivation_path);
+        EcdsaSignatureProtocolExecution::new(setup, signed_message, random_beacon, derivation_path);
 
     let shares = proto.generate_shares()?;
 
@@ -330,7 +330,7 @@ fn verify_protocol_output_remains_unchanged_over_time_p256() -> Result<(), Thres
 
     let seed = Seed::from_bytes(b"ic-crypto-tecdsa-fixed-seed-for-p256-stability-test");
 
-    let setup = SignatureProtocolSetup::new(
+    let setup = EcdsaSignatureProtocolSetup::new(
         TestConfig::new(EccCurveType::P256),
         nodes,
         threshold,
@@ -415,7 +415,7 @@ fn verify_protocol_output_remains_unchanged_over_time_p256() -> Result<(), Thres
 
     let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
     let proto =
-        SignatureProtocolExecution::new(setup, signed_message, random_beacon, derivation_path);
+        EcdsaSignatureProtocolExecution::new(setup, signed_message, random_beacon, derivation_path);
 
     let shares = proto.generate_shares()?;
 
@@ -449,7 +449,7 @@ fn verify_protocol_output_remains_unchanged_over_time_p256_sig_with_k256_mega(
 
     let seed = Seed::from_bytes(b"ic-crypto-tecdsa-fixed-seed-for-p256-sig-and-k256-mega");
 
-    let setup = SignatureProtocolSetup::new(
+    let setup = EcdsaSignatureProtocolSetup::new(
         TestConfig::new_mixed(EccCurveType::P256, EccCurveType::K256),
         nodes,
         threshold,
@@ -534,7 +534,7 @@ fn verify_protocol_output_remains_unchanged_over_time_p256_sig_with_k256_mega(
 
     let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
     let proto =
-        SignatureProtocolExecution::new(setup, signed_message, random_beacon, derivation_path);
+        EcdsaSignatureProtocolExecution::new(setup, signed_message, random_beacon, derivation_path);
 
     let shares = proto.generate_shares()?;
 

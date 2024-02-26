@@ -31,7 +31,7 @@ fn key_derivation(c: &mut Criterion) {
                 |b, size| {
                     b.iter_batched_ref(
                         || create_path_of_len(*size),
-                        |path| derive_public_key(&mpk, path),
+                        |path| derive_ecdsa_public_key(&mpk, path),
                         BatchSize::SmallInput,
                     )
                 },
