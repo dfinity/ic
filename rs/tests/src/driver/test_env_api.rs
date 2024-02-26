@@ -485,6 +485,22 @@ impl TopologySnapshot {
         result
     }
 
+    /// Like `block_for_newer_registry_version` but with a custom `duration` and `backoff`.
+    pub async fn block_for_newer_registry_version_within_duration(
+        &self,
+        duration: Duration,
+        backoff: Duration,
+    ) -> Result<TopologySnapshot> {
+        let minimum_version = self.local_registry.get_latest_version() + RegistryVersion::from(1);
+        let result = self
+            .block_for_min_registry_version_within_duration(minimum_version, duration, backoff)
+            .await;
+        if let Ok(ref topology) = result {
+            info!(self.env.logger(), "{}", topology);
+        }
+        result
+    }
+
     /// This method blocks and repeatedly fetches updates from the registry
     /// canister until the latest available registry version is higher or equal
     /// to `min_version`.
@@ -505,6 +521,17 @@ impl TopologySnapshot {
     ) -> Result<TopologySnapshot> {
         let duration = Duration::from_secs(180);
         let backoff = Duration::from_secs(2);
+        self.block_for_min_registry_version_within_duration(min_version, duration, backoff)
+            .await
+    }
+
+    /// Like `block_for_min_registry_version` but with a custom `duration` and `backoff`.
+    pub async fn block_for_min_registry_version_within_duration(
+        &self,
+        min_version: RegistryVersion,
+        duration: Duration,
+        backoff: Duration,
+    ) -> Result<TopologySnapshot> {
         let mut latest_version = self.local_registry.get_latest_version();
         if min_version > latest_version {
             latest_version = retry_async(&self.env.logger(), duration, backoff, || async move {
