@@ -1,7 +1,7 @@
 //! The time source public interface.
 use ic_types::time::{Time, UNIX_EPOCH};
 use std::sync::RwLock;
-use std::time::SystemTime;
+use std::time::{Instant, SystemTime};
 
 /// A interface that represent the source of time.
 pub trait TimeSource: Send + Sync {
@@ -9,6 +9,13 @@ pub trait TimeSource: Send + Sync {
     /// on the actual implementation. For [SysTimeSource] it is the UNIX
     /// epoch.
     fn get_relative_time(&self) -> Time;
+}
+
+/// A [`TimeSource`] that also allows measuring monotonic timestamps ("instants").
+pub trait MonotonicTimeSource: TimeSource {
+    /// Return a time measurement from a monotonic clock. For [`SysTimeSource`], it
+    /// will call and wrap [`std::time::Instant::now`].
+    fn get_monotonic_time(&self) -> Instant;
 }
 
 /// Time source using the system time.
@@ -52,11 +59,23 @@ impl TimeSource for SysTimeSource {
     }
 }
 
+impl MonotonicTimeSource for SysTimeSource {
+    fn get_monotonic_time(&self) -> Instant {
+        Instant::now()
+    }
+}
+
 pub struct RealClock;
 
 impl TimeSource for RealClock {
     fn get_relative_time(&self) -> Time {
         system_time_now()
+    }
+}
+
+impl MonotonicTimeSource for RealClock {
+    fn get_monotonic_time(&self) -> Instant {
+        Instant::now()
     }
 }
 

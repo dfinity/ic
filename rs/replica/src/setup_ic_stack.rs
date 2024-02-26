@@ -10,7 +10,10 @@ use ic_crypto::CryptoComponent;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::ExecutionServices;
 use ic_https_outcalls_adapter_client::setup_canister_http_client;
-use ic_interfaces::{execution_environment::QueryHandler, p2p::artifact_manager::JoinGuard};
+use ic_interfaces::{
+    execution_environment::QueryHandler, p2p::artifact_manager::JoinGuard,
+    time_source::MonotonicTimeSource,
+};
 use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_registry::{LocalStoreCertifiedTimeReader, RegistryClient};
 use ic_logger::{info, ReplicaLogger};
@@ -59,6 +62,7 @@ pub fn construct_ic_stack(
     registry: Arc<dyn RegistryClient + Send + Sync>,
     crypto: Arc<CryptoComponent>,
     catch_up_package: Option<pb::CatchUpPackage>,
+    time_source: Arc<dyn MonotonicTimeSource>,
 ) -> std::io::Result<(
     // TODO: remove this return value since it is used only in tests
     Arc<StateManagerImpl>,
@@ -146,6 +150,7 @@ pub fn construct_ic_stack(
         artifact_pool_config.clone(),
         metrics_registry.clone(),
         log.clone(),
+        time_source,
     )));
 
     // ---------- REPLICATED STATE DEPS FOLLOW ----------

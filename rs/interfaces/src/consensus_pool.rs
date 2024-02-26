@@ -13,11 +13,13 @@ use ic_types::{
         Finalization, FinalizationShare, HasHeight, HashedBlock, Notarization, NotarizationShare,
         RandomBeacon, RandomBeaconShare, RandomTape, RandomTapeShare,
     },
+    crypto::CryptoHashOf,
     time::Time,
     Height,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use std::time::Instant;
 
 /// The height, at which we consider a replica to be behind
 pub const HEIGHT_CONSIDERED_BEHIND: Height = Height::new(20);
@@ -265,6 +267,9 @@ pub trait PoolSection<T> {
 /// - The unvalidated section contains artifacts that have been received but
 ///   haven't yet been validated. This section is in-memory only and thus
 ///   volatile.
+///
+/// It also stores monotonic timestamps ("instants") for block proposals
+/// and notarizations.
 pub trait ConsensusPool {
     /// Return a reference to the validated PoolSection.
     fn validated(&self) -> &dyn PoolSection<ValidatedConsensusArtifact>;
@@ -277,6 +282,10 @@ pub trait ConsensusPool {
 
     /// Return a reference to the consensus block cache (ConsensusBlockCache).
     fn as_block_cache(&self) -> &dyn ConsensusBlockCache;
+
+    /// Return the first instant at which a block with the given hash was inserted
+    /// into the validated pool. Returns None if no timestamp was found.
+    fn block_instant(&self, hash: &CryptoHashOf<Block>) -> Option<Instant>;
 }
 
 /// HeightIndexedPool provides a set of interfaces for the Consensus component

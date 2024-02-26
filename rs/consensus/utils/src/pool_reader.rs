@@ -10,6 +10,7 @@ use ic_types::{
     consensus::catchup::*, consensus::*, crypto::CryptoHashOf, replica_config::ReplicaConfig,
     Height, NodeId, RegistryVersion, ReplicaVersion, Time,
 };
+use std::time::Instant;
 use std::{cmp::Ordering, collections::BTreeMap};
 
 /// A struct and corresponding impl with helper methods to obtain particular
@@ -167,6 +168,12 @@ impl<'a> PoolReader<'a> {
                 Ok(block)
             }
         })
+    }
+
+    /// Return the the first instant at which a block with the given hash was inserted
+    /// into the consensus pool. Returns None if no timestamp was found.
+    pub fn get_block_instant(&self, hash: &CryptoHashOf<Block>) -> Option<Instant> {
+        self.pool.block_instant(hash)
     }
 
     /// Return the finalized block of a given height which is either the genesis

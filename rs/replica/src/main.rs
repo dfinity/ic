@@ -5,6 +5,7 @@ use ic_config::Config;
 use ic_crypto_sha2::Sha256;
 use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
+use ic_interfaces::time_source::SysTimeSource;
 use ic_logger::{info, new_replica_logger_from_config};
 use ic_metrics::MetricsRegistry;
 use ic_replica::setup;
@@ -246,6 +247,7 @@ fn main() -> io::Result<()> {
         &logger.inner_logger.root,
     );
 
+    let time_source = Arc::new(SysTimeSource::new());
     info!(logger, "Constructing IC stack");
     let (_, _, _p2p_thread_joiner, _, _xnet_endpoint) =
         ic_replica::setup_ic_stack::construct_ic_stack(
@@ -261,6 +263,7 @@ fn main() -> io::Result<()> {
             registry,
             crypto,
             cup_proto,
+            time_source,
         )?;
 
     info!(logger, "Constructed IC stack");

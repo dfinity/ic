@@ -6,6 +6,7 @@ use ic_config::{crypto::CryptoConfig, transport::TransportConfig};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_execution_environment::IngressHistoryReaderImpl;
 use ic_interfaces::execution_environment::{IngressHistoryReader, QueryHandler};
+use ic_interfaces::time_source::SysTimeSource;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_management_canister_types::CanisterInstallMode;
@@ -279,6 +280,7 @@ where
         let rt = tokio::runtime::Runtime::new().unwrap();
         let _rt_guard = rt.enter();
 
+        let time_source = Arc::new(SysTimeSource::new());
         let metrics_registry = MetricsRegistry::new();
 
         let init_ic = ic_config.initialize().expect("can't fail");
@@ -342,6 +344,7 @@ where
                 registry.clone(),
                 crypto,
                 None,
+                time_source,
             )
             .expect("Failed to setup p2p");
 
