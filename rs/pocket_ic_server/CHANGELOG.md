@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Subnet IDs are derived from the subnets' public keys by default.
-- A tick advances the time of every subnet by 1ns to make sure time is strictly increasing in every round.
+- The time of every subnet advances by 1ns before every round execution to make sure the subnet time is strictly increasing in every round.
 
 
 ## 3.0.1 - 2024-02-14
