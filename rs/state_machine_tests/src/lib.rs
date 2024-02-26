@@ -25,7 +25,7 @@ use ic_interfaces::{
     certification::{Verifier, VerifierError},
     consensus::PayloadBuilder as ConsensusPayloadBuilder,
     consensus_pool::ConsensusTime,
-    execution_environment::{IngressFilter, IngressHistoryReader, QueryHandler},
+    execution_environment::{IngressFilterService, IngressHistoryReader, QueryHandler},
     validation::ValidationResult,
 };
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamError};
@@ -113,7 +113,7 @@ use ic_types::{
     consensus::certification::Certification,
     messages::{
         Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, Payload as MsgPayload,
-        SignedIngress, UserQuery,
+        SignedIngress, SignedIngressContent, UserQuery,
     },
     xnet::StreamIndex,
     CountBytes, CryptoHashOfPartialState, Height, NodeId, Randomness, RegistryVersion,
@@ -149,6 +149,8 @@ use std::{fmt, io};
 use tempfile::TempDir;
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc;
+use tower::buffer::Buffer as TowerBuffer;
+use tower::ServiceExt;
 
 #[cfg(test)]
 mod tests;
@@ -578,13 +580,14 @@ pub struct StateMachine {
     consensus_time: Arc<PocketConsensusTime>,
     ingress_pool: Arc<RwLock<PocketIngressPool>>,
     ingress_manager: Arc<IngressManager>,
-    ingress_filter: Arc<dyn IngressFilter<State = ReplicatedState>>,
+    ingress_filter:
+        tower::buffer::Buffer<IngressFilterService, (ProvisionalWhitelist, SignedIngressContent)>,
     payload_builder: Arc<RwLock<Option<PayloadBuilderImpl>>>,
     message_routing: SyncMessageRouting,
     metrics_registry: MetricsRegistry,
     ingress_history_reader: Box<dyn IngressHistoryReader>,
     query_handler: Arc<dyn QueryHandler<State = ReplicatedState>>,
-    _runtime: Arc<Runtime>,
+    runtime: Arc<Runtime>,
     pub state_dir: TempDir,
     checkpoints_enabled: std::sync::atomic::AtomicBool,
     nonce: std::sync::atomic::AtomicU64,
@@ -1220,13 +1223,14 @@ impl StateMachine {
             consensus_time,
             ingress_pool,
             ingress_manager: ingress_manager.clone(),
-            ingress_filter: execution_services.sync_ingress_filter,
+            ingress_filter: runtime
+                .block_on(async { TowerBuffer::new(execution_services.ingress_filter, 1) }),
             payload_builder: Arc::new(RwLock::new(None)), // set by `StateMachineBuilder::build_with_subnets`
             ingress_history_reader: execution_services.ingress_history_reader,
             message_routing,
             metrics_registry,
             query_handler: execution_services.sync_query_handler,
-            _runtime: runtime,
+            runtime,
             state_dir,
             // Note: state machine tests are commonly used for testing
             // canisters, such tests usually don't rely on any persistence.
@@ -1470,12 +1474,6 @@ impl StateMachine {
     ) -> Result<MessageId, SubmitIngressError> {
         // Make sure the latest state is certified and fetch it from `StateManager`.
         self.certify_latest_state();
-        let certified_height = self.state_manager.latest_certified_height();
-        let state = self
-            .state_manager
-            .get_state_at(certified_height)
-            .unwrap()
-            .take();
 
         // Fetch ingress validation settings from the registry.
         let registry_version = self.registry_client.get_latest_version();
@@ -1501,8 +1499,10 @@ impl StateMachine {
         }
 
         // Run `IngressFilter` on the ingress message.
-        self.ingress_filter
-            .should_accept_ingress_message(state, &provisional_whitelist, msg.content())
+        let ingress_filter = self.ingress_filter.clone();
+        self.runtime
+            .block_on(ingress_filter.oneshot((provisional_whitelist, msg.clone().into())))
+            .unwrap()
             .map_err(SubmitIngressError::UserError)?;
 
         // All checks were successful at this point so we can push the ingress message to the ingress pool.

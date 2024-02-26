@@ -11181,6 +11181,7 @@ dependencies = [
  "slog-term",
  "tempfile",
  "tokio",
+ "tower",
  "wat",
 ]
 
