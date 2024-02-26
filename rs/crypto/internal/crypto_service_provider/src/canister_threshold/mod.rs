@@ -15,12 +15,13 @@ use crate::vault::api::{
 };
 use crate::{Csp, KeyId};
 use ic_crypto_internal_threshold_sig_ecdsa::{
-    combine_sig_shares as tecdsa_combine_sig_shares, create_transcript as tecdsa_create_transcript,
+    combine_ecdsa_signature_shares as tecdsa_combine_sig_shares,
+    create_transcript as tecdsa_create_transcript,
     publicly_verify_dealing as tecdsa_verify_dealing_public,
     verify_complaint as tecdsa_verify_complaint,
     verify_dealing_opening as tecdsa_verify_dealing_opening,
-    verify_signature_share as tecdsa_verify_signature_share,
-    verify_threshold_signature as tecdsa_verify_combined_signature,
+    verify_ecdsa_signature_share as tecdsa_verify_signature_share,
+    verify_ecdsa_threshold_signature as tecdsa_verify_combined_signature,
     verify_transcript as tecdsa_verify_transcript, CommitmentOpening, DerivationPath,
     IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
     IDkgTranscriptOperationInternal, MEGaPublicKey, ThresholdEcdsaCombinedSigInternal,

@@ -202,6 +202,15 @@ impl ThresholdEcdsaSigShareInternal {
 
         Ok(())
     }
+
+    pub fn serialize(&self) -> ThresholdEcdsaSerializationResult<Vec<u8>> {
+        serde_cbor::to_vec(self).map_err(|e| ThresholdEcdsaSerializationError(format!("{}", e)))
+    }
+
+    pub fn deserialize(raw: &[u8]) -> ThresholdEcdsaSerializationResult<Self> {
+        serde_cbor::from_slice::<Self>(raw)
+            .map_err(|e| ThresholdEcdsaSerializationError(format!("{}", e)))
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]

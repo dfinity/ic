@@ -669,6 +669,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "pem",
                     "pkcs8",
                     "precomputed-tables",
+                    "schnorr",
                     "std",
                 ],
                 default_features = False,

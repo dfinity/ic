@@ -468,6 +468,7 @@ k256 = { version = "0.13.3", default_features = false, features = [
   "pem",
   "pkcs8",
   "precomputed-tables",
+  "schnorr",
   "std",
 ] }
 libnss = "0.5.0"
