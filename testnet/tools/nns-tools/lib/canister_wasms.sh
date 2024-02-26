@@ -42,7 +42,7 @@ _canister_download_name_for_sns_canister_type() {
     type__ledger="ic-icrc1-ledger"
     type__swap="sns-swap-canister"
     type__archive="ic-icrc1-archive"
-    type__index="ic-icrc1-index"
+    type__index="ic-icrc1-index-ng"
 
     local INDEX=type__${CANISTER_TYPE}
     echo ${!INDEX}
