@@ -10,7 +10,7 @@ use ic_interfaces::{
     crypto::{MultiSigner, ThresholdSigner},
     dkg::DkgPool,
     p2p::consensus::{ChangeResult, MutablePool},
-    time_source::TimeSource,
+    time_source::MonotonicTimeSource,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
@@ -29,13 +29,14 @@ use ic_types::{
 use ic_types::{consensus::*, crypto::*, *};
 use std::sync::Arc;
 use std::sync::RwLock;
+use std::time::Instant;
 
 #[allow(clippy::type_complexity)]
 pub struct TestConsensusPool {
     subnet_id: SubnetId,
     registry_client: Arc<dyn RegistryClient>,
     pool: ConsensusPoolImpl,
-    time_source: Arc<dyn TimeSource>,
+    time_source: Arc<dyn MonotonicTimeSource>,
     dkg_payload_builder:
         Box<dyn Fn(&dyn ConsensusPool, Block, &ValidationContext) -> consensus::dkg::Payload>,
 }
@@ -165,7 +166,7 @@ impl TestConsensusPool {
         node_id: NodeId,
         subnet_id: SubnetId,
         pool_config: ArtifactPoolConfig,
-        time_source: Arc<dyn TimeSource>,
+        time_source: Arc<dyn MonotonicTimeSource>,
         registry_client: Arc<dyn RegistryClient>,
         crypto: Arc<CryptoReturningOk>,
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
@@ -193,6 +194,7 @@ impl TestConsensusPool {
             pool_config,
             ic_metrics::MetricsRegistry::new(),
             no_op_logger(),
+            time_source.clone(),
         );
         TestConsensusPool {
             subnet_id,
@@ -734,6 +736,10 @@ impl ConsensusPool for TestConsensusPool {
 
     fn as_block_cache(&self) -> &dyn ConsensusBlockCache {
         self.pool.as_block_cache()
+    }
+
+    fn block_instant(&self, hash: &CryptoHashOf<Block>) -> Option<Instant> {
+        self.pool.block_instant(hash)
     }
 }
 

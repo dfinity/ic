@@ -16,6 +16,7 @@ use ic_consensus_utils::{crypto_hashable_to_seed, lookup_replica_version};
 use ic_crypto_for_verification_only::CryptoComponentForVerificationOnly;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::ExecutionServices;
+use ic_interfaces::time_source::SysTimeSource;
 use ic_interfaces::{
     certification::CertificationPool,
     execution_environment::{IngressHistoryReader, QueryHandler},
@@ -144,6 +145,7 @@ impl Player {
     ) -> Self {
         let (log, _async_log_guard) = new_replica_logger_from_config(&cfg.logger);
 
+        let time_source = Arc::new(SysTimeSource::new());
         let data_provider = Arc::new(LocalStoreImpl::new(registry_local_store_path));
         let registry = Arc::new(RegistryClientImpl::new(data_provider, None));
         registry
@@ -186,6 +188,7 @@ impl Player {
             artifact_pool_config,
             MetricsRegistry::new(),
             log.clone(),
+            time_source,
         );
 
         let mut player = Player::new_with_params(
@@ -208,6 +211,7 @@ impl Player {
         let (log, _async_log_guard) = new_replica_logger_from_config(&cfg.logger);
         let metrics_registry = MetricsRegistry::new();
         let registry = setup_registry(cfg.clone(), Some(&metrics_registry));
+        let time_source = Arc::new(SysTimeSource::new());
 
         let consensus_pool = if cfg.artifact_pool.consensus_pool_path.exists() {
             let mut artifact_pool_config = ArtifactPoolConfig::from(cfg.artifact_pool.clone());
@@ -219,6 +223,7 @@ impl Player {
                 UncachedConsensusPoolImpl::new(artifact_pool_config, log.clone()),
                 MetricsRegistry::new(),
                 log.clone(),
+                time_source,
             );
             Some(consensus_pool)
         } else {

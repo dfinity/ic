@@ -18,7 +18,7 @@ use ic_interfaces::{
     messaging::XNetPayloadBuilder,
     p2p::consensus::{ChangeSetProducer, PriorityFnAndFilterProducer},
     self_validating_payload::SelfValidatingPayloadBuilder,
-    time_source::TimeSource,
+    time_source::{MonotonicTimeSource, TimeSource},
 };
 use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_registry::RegistryClient;
@@ -188,6 +188,7 @@ impl ConsensusDependencies {
         pool_config: ArtifactPoolConfig,
         registry_client: Arc<dyn RegistryClient>,
         cup: CatchUpPackage,
+        time_source: Arc<dyn MonotonicTimeSource>,
     ) -> ConsensusDependencies {
         let state_manager = FakeStateManager::new();
         let state_manager = Arc::new(state_manager);
@@ -201,6 +202,7 @@ impl ConsensusDependencies {
             pool_config.clone(),
             metrics_registry.clone(),
             no_op_logger(),
+            time_source,
         )));
         let dkg_pool = dkg_pool::DkgPoolImpl::new(metrics_registry.clone(), no_op_logger());
         let ecdsa_pool =

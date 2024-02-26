@@ -50,7 +50,7 @@ use ic_interfaces::{
     messaging::{MessageRouting, XNetPayloadBuilder},
     p2p::consensus::{ChangeSetProducer, PriorityFnAndFilterProducer},
     self_validating_payload::SelfValidatingPayloadBuilder,
-    time_source::TimeSource,
+    time_source::MonotonicTimeSource,
 };
 use ic_interfaces_registry::{LocalStoreCertifiedTimeReader, RegistryClient, POLLING_PERIOD};
 use ic_interfaces_state_manager::StateManager;
@@ -132,7 +132,7 @@ pub struct ConsensusImpl {
     aggregator: ShareAggregator,
     purger: Purger,
     metrics: ConsensusMetrics,
-    time_source: Arc<dyn TimeSource>,
+    time_source: Arc<dyn MonotonicTimeSource>,
     registry_client: Arc<dyn RegistryClient>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     dkg_key_manager: Arc<Mutex<DkgKeyManager>>,
@@ -164,7 +164,7 @@ impl ConsensusImpl {
         dkg_key_manager: Arc<Mutex<DkgKeyManager>>,
         message_routing: Arc<dyn MessageRouting>,
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
-        time_source: Arc<dyn TimeSource>,
+        time_source: Arc<dyn MonotonicTimeSource>,
         stable_registry_version_age: Duration,
         malicious_flags: MaliciousFlags,
         metrics_registry: MetricsRegistry,
@@ -684,7 +684,7 @@ pub fn setup(
     dkg_key_manager: Arc<Mutex<DkgKeyManager>>,
     message_routing: Arc<dyn MessageRouting>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
-    time_source: Arc<dyn TimeSource>,
+    time_source: Arc<dyn MonotonicTimeSource>,
     malicious_flags: MaliciousFlags,
     metrics_registry: MetricsRegistry,
     logger: ReplicaLogger,
@@ -735,6 +735,7 @@ mod tests {
     use ic_config::artifact_pool::ArtifactPoolConfig;
     use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
     use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
+    use ic_interfaces::time_source::TimeSource;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_protobuf::registry::subnet::v1::SubnetRecord;

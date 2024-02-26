@@ -114,6 +114,7 @@ where
             pool_config.clone(),
             ic_metrics::MetricsRegistry::new(),
             no_op_logger(),
+            time_source.clone(),
         );
 
         let subnet_id = subnet_test_id(0);

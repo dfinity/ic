@@ -92,7 +92,7 @@ fn consensus_produces_expected_batches() {
         let fake_crypto = CryptoReturningOk::default();
         let fake_crypto = Arc::new(fake_crypto);
         let metrics_registry = MetricsRegistry::new();
-        let time = FastForwardTimeSource::new();
+        let time_source = FastForwardTimeSource::new();
         let dkg_pool = Arc::new(RwLock::new(dkg_pool::DkgPoolImpl::new(
             metrics_registry.clone(),
             no_op_logger(),
@@ -115,6 +115,7 @@ fn consensus_produces_expected_batches() {
             pool_config.clone(),
             MetricsRegistry::new(),
             no_op_logger(),
+            time_source.clone(),
         )));
         let consensus_cache = consensus_pool.read().unwrap().get_cache();
         let membership = Membership::new(
@@ -130,7 +131,7 @@ fn consensus_produces_expected_batches() {
             &PoolReader::new(&*consensus_pool.read().unwrap()),
         )));
         let fake_local_store_certified_time_reader =
-            Arc::new(FakeLocalStoreCertifiedTimeReader::new(time.clone()));
+            Arc::new(FakeLocalStoreCertifiedTimeReader::new(time_source.clone()));
 
         let (consensus, consensus_gossip) = ic_consensus::consensus::setup(
             replica_config.clone(),
@@ -147,7 +148,7 @@ fn consensus_produces_expected_batches() {
             dkg_key_manager.clone(),
             Arc::clone(&router) as Arc<_>,
             Arc::clone(&state_manager) as Arc<_>,
-            Arc::clone(&time) as Arc<_>,
+            Arc::clone(&time_source) as Arc<_>,
             MaliciousFlags::default(),
             metrics_registry.clone(),
             no_op_logger(),
@@ -196,9 +197,9 @@ fn consensus_produces_expected_batches() {
             metrics_registry,
         );
         driver.step(); // this stops before notary timeout expires after making 1st block
-        time.advance_time(Duration::from_millis(2000));
+        time_source.advance_time(Duration::from_millis(2000));
         driver.step(); // this stops before notary timeout expires after making 2nd block
-        time.advance_time(Duration::from_millis(2000));
+        time_source.advance_time(Duration::from_millis(2000));
         driver.step(); // this stops before notary timeout expires after making 3rd block
         let batches = router.batches.read().unwrap().clone();
         *router.batches.write().unwrap() = Vec::new();

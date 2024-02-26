@@ -3,7 +3,7 @@ use crate::{crypto::Aggregate, membership::Membership, pool_reader::PoolReader};
 use ic_interfaces::{
     consensus::{PayloadTransientError, PayloadValidationError},
     consensus_pool::ConsensusPoolCache,
-    time_source::TimeSource,
+    time_source::MonotonicTimeSource,
     validation::ValidationError,
 };
 use ic_interfaces_registry::RegistryClient;
@@ -119,7 +119,7 @@ pub fn is_time_to_make_block(
     pool: &PoolReader<'_>,
     height: Height,
     rank: Rank,
-    time_source: &dyn TimeSource,
+    time_source: &dyn MonotonicTimeSource,
 ) -> bool {
     let registry_version = match pool.registry_version(height) {
         Some(rv) => rv,

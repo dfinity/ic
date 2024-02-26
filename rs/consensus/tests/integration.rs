@@ -247,6 +247,7 @@ fn run_test(
                     pool_config.clone(),
                     Arc::clone(&registry_client) as Arc<dyn RegistryClient>,
                     cup.clone(),
+                    time_source.clone(),
                 )
             })
             .collect();
