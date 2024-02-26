@@ -128,6 +128,7 @@ After=systemd-networkd.service
 [Service]
 Type=simple
 User=${USER_ID}
+LimitNOFILE=65536
 Environment=RUST_MIN_STACK=8192000
 WorkingDirectory=${WORK_DIR}
 ExecStart=${WORK_DIR}/ic-backup --config-file ${WORK_DIR}/config.json5
