@@ -4,8 +4,10 @@ use ic_management_canister_types::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode,
     LogVisibility, IC_00,
 };
-use ic_replicated_state::canister_state::system_state::CanisterHistory;
-use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeCallId;
+use ic_replicated_state::{
+    canister_state::system_state::CanisterHistory,
+    metadata_state::subnet_call_context_manager::InstallCodeCallId, NumWasmPages,
+};
 use ic_test_utilities::types::ids::user_test_id;
 use ic_test_utilities::types::{
     ids::canister_test_id,
@@ -204,6 +206,8 @@ fn test_canister_snapshots_decode() {
         binary_hash: Some(WasmHash::from(&CanisterModule::new(vec![2, 3, 4]))),
         certified_data: vec![3, 4, 7],
         wasm_chunk_store_metadata: WasmChunkStoreMetadata::default(),
+        stable_memory_size: NumWasmPages::new(10),
+        wasm_memory_size: NumWasmPages::new(10),
     };
 
     let pb_bits = pb_canister_snapshot_bits::CanisterSnapshotBits::from(&canister_snapshot_bits);

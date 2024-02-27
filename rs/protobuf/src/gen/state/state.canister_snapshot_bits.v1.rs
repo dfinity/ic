@@ -16,4 +16,8 @@ pub struct CanisterSnapshotBits {
     #[prost(message, optional, tag = "7")]
     pub wasm_chunk_store_metadata:
         ::core::option::Option<super::super::canister_state_bits::v1::WasmChunkStoreMetadata>,
+    #[prost(uint64, tag = "8")]
+    pub stable_memory_size: u64,
+    #[prost(uint64, tag = "9")]
+    pub wasm_memory_size: u64,
 }
