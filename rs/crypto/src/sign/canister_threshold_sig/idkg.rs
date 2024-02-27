@@ -216,6 +216,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentImpl<C> {
         let start_time = self.metrics.now();
         let result = dealing::create_dealing(
             &self.csp,
+            &self.vault,
             &self.node_id,
             self.registry_client.as_ref(),
             params,
@@ -292,7 +293,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentImpl<C> {
         );
         let start_time = self.metrics.now();
         let result = dealing::verify_dealing_private(
-            &self.csp,
+            &self.vault,
             &self.node_id,
             self.registry_client.as_ref(),
             params,
@@ -460,7 +461,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentImpl<C> {
         );
         let start_time = self.metrics.now();
         let result = transcript::load_transcript(
-            &self.csp,
+            &self.vault,
             &self.node_id,
             self.registry_client.as_ref(),
             transcript,
@@ -540,7 +541,6 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentImpl<C> {
         );
         let start_time = self.metrics.now();
         let result = complaint::verify_complaint(
-            &self.csp,
             self.registry_client.as_ref(),
             transcript,
             complaint,
@@ -588,7 +588,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentImpl<C> {
         );
         let start_time = self.metrics.now();
         let result = transcript::open_transcript(
-            &self.csp,
+            &self.vault,
             &self.node_id,
             self.registry_client.as_ref(),
             transcript,
@@ -639,7 +639,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentImpl<C> {
             crypto.complaint => format!("{:?}", complaint),
         );
         let start_time = self.metrics.now();
-        let result = transcript::verify_opening(&self.csp, transcript, opener, opening, complaint);
+        let result = transcript::verify_opening(transcript, opener, opening, complaint);
         self.metrics.observe_parameter_size(
             MetricsDomain::IdkgProtocol,
             "verify_opening",
@@ -680,7 +680,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentImpl<C> {
         );
         let start_time = self.metrics.now();
         let result = transcript::load_transcript_with_openings(
-            &self.csp,
+            &self.vault,
             &self.node_id,
             self.registry_client.as_ref(),
             transcript,
@@ -733,9 +733,10 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentImpl<C> {
             transcripts_len += transcript.internal_transcript_raw.len();
         }
         let result = retain_active_keys::retain_keys_for_transcripts(
-            &self.csp,
+            &self.vault,
             &self.node_id,
             self.registry_client.as_ref(),
+            &self.metrics,
             active_transcripts,
         );
         self.metrics.observe_parameter_size(

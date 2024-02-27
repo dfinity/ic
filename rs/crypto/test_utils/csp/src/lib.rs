@@ -1,4 +1,3 @@
-use ic_base_types::RegistryVersion;
 use ic_crypto_internal_csp::api::{
     CspCreateMEGaKeyError, CspIDkgProtocol, CspKeyGenerator, CspPublicAndSecretKeyStoreChecker,
     CspPublicKeyStore, CspSigVerifier, CspSigner, CspThresholdEcdsaSigVerifier,
@@ -12,9 +11,6 @@ use ic_crypto_internal_csp::vault::api::CspBasicSignatureKeygenError;
 use ic_crypto_internal_csp::vault::api::CspMultiSignatureKeygenError;
 use ic_crypto_internal_csp::vault::api::CspPublicKeyStoreError;
 use ic_crypto_internal_csp::vault::api::CspTlsKeygenError;
-use ic_crypto_internal_csp::vault::api::IDkgCreateDealingVaultError;
-use ic_crypto_internal_csp::vault::api::IDkgDealingInternalBytes;
-use ic_crypto_internal_csp::vault::api::IDkgTranscriptInternalBytes;
 use ic_crypto_internal_csp::vault::api::PksAndSksContainsErrors;
 use ic_crypto_internal_csp::vault::api::ValidatePksAndSksError;
 use ic_crypto_internal_csp::TlsHandshakeCspVault;
@@ -25,8 +21,7 @@ use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
     CspDkgVerifyReshareDealingError,
 };
 use ic_crypto_internal_threshold_sig_ecdsa::{
-    CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
-    IDkgTranscriptOperationInternal, MEGaPublicKey, ThresholdEcdsaCombinedSigInternal,
+    IDkgTranscriptInternal, MEGaPublicKey, ThresholdEcdsaCombinedSigInternal,
     ThresholdEcdsaSigShareInternal,
 };
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
@@ -35,18 +30,11 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
-use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_types::crypto::canister_threshold_sig::error::{
-    IDkgCreateTranscriptError, IDkgLoadTranscriptError, IDkgOpenTranscriptError,
-    IDkgRetainKeysError, IDkgVerifyComplaintError, IDkgVerifyDealingPrivateError,
-    IDkgVerifyDealingPublicError, IDkgVerifyOpeningError, IDkgVerifyTranscriptError,
     ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
     ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
 };
-use ic_types::crypto::canister_threshold_sig::{
-    idkg::{BatchSignedIDkgDealing, IDkgTranscriptOperation},
-    ExtendedDerivationPath, ThresholdEcdsaSigInputs,
-};
+use ic_types::crypto::canister_threshold_sig::{ExtendedDerivationPath, ThresholdEcdsaSigInputs};
 use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
 use ic_types::crypto::{AlgorithmId, CryptoResult, CurrentNodePublicKeys};
 use ic_types::{NodeId, NodeIndex, NumberOfNodes, Randomness};
@@ -270,111 +258,7 @@ mock! {
     }
 
     impl CspIDkgProtocol for AllCryptoServiceProvider {
-        fn idkg_create_dealing(
-            &self,
-            algorithm_id: AlgorithmId,
-            context_data: Vec<u8>,
-            dealer_index: NodeIndex,
-            reconstruction_threshold: NumberOfNodes,
-            receiver_keys: Vec<PublicKey>,
-            transcript_operation: IDkgTranscriptOperation,
-        ) -> Result<IDkgDealingInternalBytes, IDkgCreateDealingVaultError>;
-
-        fn idkg_verify_dealing_private(
-            &self,
-            algorithm_id: AlgorithmId,
-            dealing: IDkgDealingInternalBytes,
-            dealer_index: NodeIndex,
-            receiver_index: NodeIndex,
-            receiver_public_key: MEGaPublicKey,
-            context_data: Vec<u8>,
-        ) -> Result<(), IDkgVerifyDealingPrivateError>;
-
-        fn idkg_verify_dealing_public(
-            &self,
-            algorithm_id: AlgorithmId,
-            dealing: &IDkgDealingInternal,
-            operation_mode: &IDkgTranscriptOperationInternal,
-            reconstruction_threshold: NumberOfNodes,
-            dealer_index: NodeIndex,
-            number_of_receivers: NumberOfNodes,
-            context_data: &[u8],
-        ) -> Result<(), IDkgVerifyDealingPublicError>;
-
-        fn idkg_create_transcript(
-            &self,
-            algorithm_id: AlgorithmId,
-            reconstruction_threshold: NumberOfNodes,
-            verified_dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
-            operation_mode: &IDkgTranscriptOperationInternal,
-        ) -> Result<IDkgTranscriptInternal, IDkgCreateTranscriptError>;
-
-        fn idkg_verify_transcript(
-            &self,
-            transcript: &IDkgTranscriptInternal,
-            algorithm_id: AlgorithmId,
-            reconstruction_threshold: NumberOfNodes,
-            verified_dealings: &BTreeMap<NodeIndex, IDkgDealingInternal>,
-            operation_mode: &IDkgTranscriptOperationInternal,
-        ) -> Result<(), IDkgVerifyTranscriptError>;
-
-        fn idkg_load_transcript(
-            &self,
-            dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
-            context_data: Vec<u8>,
-            receiver_index: NodeIndex,
-            public_key: MEGaPublicKey,
-            transcript: IDkgTranscriptInternalBytes,
-        ) -> Result<BTreeMap<NodeIndex, IDkgComplaintInternal>, IDkgLoadTranscriptError>;
-
-        fn idkg_load_transcript_with_openings(
-            &self,
-            dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
-            openings: BTreeMap<NodeIndex, BTreeMap<NodeIndex, CommitmentOpening>>,
-            context_data: Vec<u8>,
-            receiver_index: NodeIndex,
-            public_key: MEGaPublicKey,
-            transcript: IDkgTranscriptInternalBytes,
-        ) -> Result<(), IDkgLoadTranscriptError>;
-
-        fn idkg_retain_active_keys(
-            &self,
-            active_transcripts: std::collections::BTreeSet<IDkgTranscriptInternal>,
-            oldest_public_key: MEGaPublicKey,
-        ) -> Result<(), IDkgRetainKeysError>;
-
         fn idkg_gen_dealing_encryption_key_pair(&self) -> Result<MEGaPublicKey, CspCreateMEGaKeyError>;
-
-        fn idkg_verify_complaint(
-            &self,
-            complaint: &IDkgComplaintInternal,
-            complainer_index: NodeIndex,
-            complainer_key: &MEGaPublicKey,
-            dealing: &IDkgDealingInternal,
-            dealer_index: NodeIndex,
-            context_data: &[u8],
-        ) -> Result<(), IDkgVerifyComplaintError>;
-
-        fn idkg_open_dealing(
-            &self,
-            dealing: BatchSignedIDkgDealing,
-            dealer_index: NodeIndex,
-            context_data: Vec<u8>,
-            opener_index: NodeIndex,
-            opener_public_key: MEGaPublicKey,
-        ) -> Result<CommitmentOpening, IDkgOpenTranscriptError>;
-
-        fn idkg_verify_dealing_opening(
-            &self,
-            dealing: IDkgDealingInternal,
-            opener_index: NodeIndex,
-            opening: CommitmentOpening,
-        ) -> Result<(), IDkgVerifyOpeningError>;
-
-        fn idkg_observe_minimum_registry_version_in_active_idkg_transcripts(
-            &self,
-            registry_version: RegistryVersion,
-        );
     }
 
     impl CspThresholdEcdsaSigner for AllCryptoServiceProvider {
