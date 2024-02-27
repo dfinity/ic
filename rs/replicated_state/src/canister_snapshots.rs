@@ -2,7 +2,9 @@ use ic_types::{CanisterId, Time};
 use ic_wasm_types::CanisterModule;
 
 use crate::{
-    canister_state::system_state::wasm_chunk_store::WasmChunkStore, NumWasmPages, PageMap,
+    canister_state::execution_state::Memory,
+    canister_state::system_state::wasm_chunk_store::WasmChunkStore, CanisterState, NumWasmPages,
+    PageMap,
 };
 
 use phantom_newtype::Id;
@@ -89,6 +91,36 @@ impl CanisterSnapshots {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PageMemory {
+    /// The contents of this memory.
+    pub page_map: PageMap,
+    /// The size of the memory in wasm pages. This does not indicate how much
+    /// data is stored in the `page_map`, only the number of pages the memory
+    /// has access to.
+    pub size: NumWasmPages,
+}
+
+impl From<&Memory> for PageMemory {
+    fn from(memory: &Memory) -> Self {
+        Self {
+            page_map: memory.page_map.clone(),
+            size: memory.size,
+        }
+    }
+}
+
+/// Contains all information related to a canister's execution state.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ExecutionStateSnapshot {
+    /// The raw canister module.
+    pub wasm_binary: CanisterModule,
+    /// Snapshot of stable memory.
+    pub stable_memory: PageMemory,
+    /// Snapshot of wasm memory.
+    pub wasm_memory: PageMemory,
+}
+
 /// Contains all information related to a canister snapshot.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CanisterSnapshot {
@@ -102,18 +134,9 @@ pub struct CanisterSnapshot {
     certified_data: Vec<u8>,
     /// Snapshot of chunked store.
     chunk_store: WasmChunkStore,
-    /// The raw canister module.
     /// May not exist depending on whether or not the canister has
-    /// an actual wasm module.
-    wasm_binary: Option<CanisterModule>,
-    /// Snapshot of stable memory.
-    stable_memory: Option<PageMap>,
-    /// The size of the stable memory in wasm pages.
-    stable_memory_size: Option<NumWasmPages>,
-    /// Snapshot of wasm memory.
-    wasm_memory: Option<PageMap>,
-    /// The size of the wasm memory in wasm pages.
-    wasm_memory_size: Option<NumWasmPages>,
+    /// an actual `ExecutionState`.
+    execution_snapshot: Option<ExecutionStateSnapshot>,
 }
 
 impl CanisterSnapshot {
@@ -122,24 +145,37 @@ impl CanisterSnapshot {
         taken_at_timestamp: Time,
         canister_version: u64,
         certified_data: Vec<u8>,
-        stable_memory: Option<PageMap>,
-        stable_memory_size: Option<NumWasmPages>,
-        wasm_memory: Option<PageMap>,
-        wasm_memory_size: Option<NumWasmPages>,
         chunk_store: WasmChunkStore,
-        wasm_binary: Option<CanisterModule>,
+        execution_snapshot: Option<ExecutionStateSnapshot>,
     ) -> CanisterSnapshot {
         Self {
             canister_id,
             taken_at_timestamp,
             canister_version,
             certified_data,
-            stable_memory,
-            stable_memory_size,
-            wasm_memory,
-            wasm_memory_size,
             chunk_store,
-            wasm_binary,
+            execution_snapshot,
+        }
+    }
+
+    pub fn from(canister: &CanisterState, taken_at_timestamp: Time) -> Self {
+        let execution_snapshot =
+            canister
+                .execution_state
+                .as_ref()
+                .map(|execution_state| ExecutionStateSnapshot {
+                    wasm_binary: execution_state.wasm_binary.binary.clone(),
+                    stable_memory: PageMemory::from(&execution_state.stable_memory),
+                    wasm_memory: PageMemory::from(&execution_state.wasm_memory),
+                });
+
+        Self {
+            canister_id: canister.canister_id(),
+            taken_at_timestamp,
+            canister_version: canister.system_state.canister_version,
+            certified_data: canister.system_state.certified_data.clone(),
+            chunk_store: canister.system_state.wasm_chunk_store.clone(),
+            execution_snapshot,
         }
     }
 
@@ -155,12 +191,22 @@ impl CanisterSnapshot {
         &self.taken_at_timestamp
     }
 
-    pub fn stable_memory(&self) -> &Option<PageMap> {
-        &self.stable_memory
+    pub fn stable_memory(&self) -> Option<&PageMemory> {
+        self.execution_snapshot
+            .as_ref()
+            .map(|exec| &exec.stable_memory)
     }
 
-    pub fn wasm_memory(&self) -> &Option<PageMap> {
-        &self.wasm_memory
+    pub fn wasm_memory(&self) -> Option<&PageMemory> {
+        self.execution_snapshot
+            .as_ref()
+            .map(|exec| &exec.wasm_memory)
+    }
+
+    pub fn canister_module(&self) -> Option<&CanisterModule> {
+        self.execution_snapshot
+            .as_ref()
+            .map(|exec| &exec.wasm_binary)
     }
 
     pub fn chunk_store(&self) -> &WasmChunkStore {
@@ -185,17 +231,24 @@ mod tests {
     use ic_types::NumBytes;
     #[test]
     fn test_push_and_remove_snapshot() {
+        let execution_snapshot = ExecutionStateSnapshot {
+            wasm_binary: CanisterModule::new(vec![1, 2, 3]),
+            stable_memory: PageMemory {
+                page_map: PageMap::new_for_testing(),
+                size: NumWasmPages::new(10),
+            },
+            wasm_memory: PageMemory {
+                page_map: PageMap::new_for_testing(),
+                size: NumWasmPages::new(10),
+            },
+        };
         let snapshot = CanisterSnapshot::new(
             canister_test_id(0),
             UNIX_EPOCH,
             0,
             vec![],
-            Some(PageMap::new_for_testing()),
-            Some(NumWasmPages::new(10)),
-            Some(PageMap::new_for_testing()),
-            Some(NumWasmPages::new(10)),
             WasmChunkStore::new_for_testing(NumBytes::from(20)),
-            Some(CanisterModule::new(vec![1, 2, 3])),
+            Some(execution_snapshot),
         );
         let mut snapshot_manager = CanisterSnapshots::default();
         assert_eq!(snapshot_manager.snapshots.len(), 0);
