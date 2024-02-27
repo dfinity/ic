@@ -1,5 +1,5 @@
 {
-  "checksum": "e18b6bf50a9eb409b09fdb9ed7e6045402f90c5ea99c882f70d82f00b46ac5f7",
+  "checksum": "0095d8b05322a027d49f1b6708bfc5b54b44618061460549695ea76cc361e487",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -8476,6 +8476,36 @@
       },
       "license": "MIT/Apache-2.0"
     },
+    "c_linked_list 1.1.1": {
+      "name": "c_linked_list",
+      "version": "1.1.1",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/c_linked_list/1.1.1/download",
+          "sha256": "4964518bd3b4a8190e832886cdc0da9794f12e8e6c1613a9e90ff331c4c8724b"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "c_linked_list",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "c_linked_list",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2015",
+        "version": "1.1.1"
+      },
+      "license": "MIT OR BSD-3-Clause"
+    },
     "cached 0.41.0": {
       "name": "cached",
       "version": "0.41.0",
@@ -15453,6 +15483,10 @@
               "target": "futures_util"
             },
             {
+              "id": "get_if_addrs 0.5.3",
+              "target": "get_if_addrs"
+            },
+            {
               "id": "getrandom 0.2.10",
               "target": "getrandom"
             },
@@ -21088,6 +21122,36 @@
       },
       "license": "Apache-2.0/MIT"
     },
+    "gcc 0.3.55": {
+      "name": "gcc",
+      "version": "0.3.55",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/gcc/0.3.55/download",
+          "sha256": "8f5f3913fa0bfe7ee1fd8248b6b9f42a5af4b9d65ec2dd2c3c26132b950ecfc2"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "gcc",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "gcc",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2015",
+        "version": "0.3.55"
+      },
+      "license": "MIT/Apache-2.0"
+    },
     "generic-array 0.14.7": {
       "name": "generic-array",
       "version": "0.14.7",
@@ -21164,6 +21228,129 @@
         }
       },
       "license": "MIT"
+    },
+    "get_if_addrs 0.5.3": {
+      "name": "get_if_addrs",
+      "version": "0.5.3",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/get_if_addrs/0.5.3/download",
+          "sha256": "abddb55a898d32925f3148bd281174a68eeb68bbfd9a5938a57b18f506ee4ef7"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "get_if_addrs",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "get_if_addrs",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "c_linked_list 1.1.1",
+              "target": "c_linked_list"
+            },
+            {
+              "id": "libc 0.2.150",
+              "target": "libc"
+            }
+          ],
+          "selects": {
+            "cfg(target_os = \"android\")": [
+              {
+                "id": "get_if_addrs-sys 0.1.1",
+                "target": "get_if_addrs_sys"
+              }
+            ],
+            "cfg(target_os = \"windows\")": [
+              {
+                "id": "winapi 0.2.8",
+                "target": "winapi"
+              }
+            ]
+          }
+        },
+        "edition": "2015",
+        "version": "0.5.3"
+      },
+      "license": "MIT OR BSD-3-Clause"
+    },
+    "get_if_addrs-sys 0.1.1": {
+      "name": "get_if_addrs-sys",
+      "version": "0.1.1",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/get_if_addrs-sys/0.1.1/download",
+          "sha256": "0d04f9fb746cf36b191c00f3ede8bde9c8e64f9f4b05ae2694a9ccf5e3f5ab48"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "get_if_addrs_sys",
+            "crate_root": "lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "get_if_addrs_sys",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "get_if_addrs-sys 0.1.1",
+              "target": "build_script_build"
+            },
+            {
+              "id": "libc 0.2.150",
+              "target": "libc"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2015",
+        "version": "0.1.1"
+      },
+      "build_script_attrs": {
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "gcc 0.3.55",
+              "target": "gcc"
+            }
+          ],
+          "selects": {}
+        },
+        "links": "ifaddrs"
+      },
+      "license": "MIT OR BSD-3-Clause"
     },
     "getopts 0.2.21": {
       "name": "getopts",
