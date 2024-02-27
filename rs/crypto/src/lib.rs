@@ -55,7 +55,7 @@ pub type CryptoComponent = CryptoComponentImpl<Csp>;
 /// handshakes.
 pub struct CryptoComponentImpl<C: CryptoServiceProvider> {
     lockable_threshold_sig_data_store: LockableThresholdSigDataStore,
-    _vault: Arc<dyn CspVault>,
+    vault: Arc<dyn CspVault>,
     csp: C,
     registry_client: Arc<dyn RegistryClient>,
     // The node id of the node that instantiated this crypto component.
@@ -109,7 +109,7 @@ impl<C: CryptoServiceProvider> CryptoComponentImpl<C> {
         CryptoComponentImpl {
             lockable_threshold_sig_data_store: LockableThresholdSigDataStore::new(),
             csp,
-            _vault: vault,
+            vault,
             registry_client,
             node_id,
             logger: new_logger!(&logger),
@@ -215,7 +215,7 @@ impl CryptoComponentImpl<Csp> {
         let crypto_component = CryptoComponentImpl {
             lockable_threshold_sig_data_store: LockableThresholdSigDataStore::new(),
             csp,
-            _vault: vault,
+            vault,
             registry_client,
             node_id,
             time_source: Arc::new(CurrentSystemTimeSource::new(new_logger!(&logger))),

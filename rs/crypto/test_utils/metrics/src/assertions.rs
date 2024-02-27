@@ -3,7 +3,7 @@
 use ic_crypto_internal_logmon::metrics::MetricsResult;
 use ic_metrics::MetricsRegistry;
 use ic_test_utilities_metrics::{
-    fetch_counter_vec, fetch_gauge_vec, fetch_int_counter, labels, Labels,
+    fetch_counter_vec, fetch_gauge, fetch_gauge_vec, fetch_int_counter, labels, Labels,
 };
 
 pub struct MetricsObservationsAssert {
@@ -26,7 +26,7 @@ impl MetricsObservationsAssert {
         idkg_dealing_encryption_public_key_count: u8,
         result: MetricsResult,
     ) -> &Self {
-        assert!(self.contains_crypto_gauge_metric(
+        assert!(self.contains_crypto_gauge_vec_metric(
             "crypto_idkg_dealing_encryption_pubkey_count",
             labels(&[("result", format!("{}", result))]),
             idkg_dealing_encryption_public_key_count as f64,
@@ -42,21 +42,21 @@ impl MetricsObservationsAssert {
         result: MetricsResult,
     ) -> &Self {
         assert!(
-            self.contains_crypto_gauge_metric(
+            self.contains_crypto_gauge_vec_metric(
                 "crypto_key_counts",
                 labels(&[
                     ("key_type", "public_registry"),
                     ("result", &format!("{}", result))
                 ]),
                 registry_public_key_count as f64,
-            ) && self.contains_crypto_gauge_metric(
+            ) && self.contains_crypto_gauge_vec_metric(
                 "crypto_key_counts",
                 labels(&[
                     ("key_type", "public_local"),
                     ("result", &format!("{}", result))
                 ]),
                 local_public_key_count as f64,
-            ) && self.contains_crypto_gauge_metric(
+            ) && self.contains_crypto_gauge_vec_metric(
                 "crypto_key_counts",
                 labels(&[
                     ("key_type", "secret_sks"),
@@ -95,6 +95,17 @@ impl MetricsObservationsAssert {
 
     pub fn contains_crypto_secret_key_store_cleanup_error(&self, value: u64) -> &Self {
         assert!(self.contains_crypto_counter_metric("crypto_secret_key_store_cleanup_error", value));
+        self
+    }
+
+    pub fn contains_minimum_registry_version_in_active_idkg_transcripts(
+        &self,
+        value: u64,
+    ) -> &Self {
+        assert!(self.contains_crypto_gauge_metric(
+            "crypto_minimum_registry_version_in_active_idkg_transcripts",
+            value as f64
+        ));
         self
     }
 
@@ -145,7 +156,7 @@ impl MetricsObservationsAssert {
         }
     }
 
-    fn contains_crypto_gauge_metric(
+    fn contains_crypto_gauge_vec_metric(
         &self,
         metric_name: &str,
         metric_labels: Labels,
@@ -167,6 +178,23 @@ impl MetricsObservationsAssert {
                         "Expected gauge value {}, found {}",
                         metric_value, actual_value
                     );
+                    false
+                }
+            }
+        }
+    }
+
+    fn contains_crypto_gauge_metric(&self, metric_name: &str, metric_value: f64) -> bool {
+        match fetch_gauge(&self.metrics_registry, metric_name) {
+            None => {
+                println!("no gauge found with name {}", metric_name);
+                false
+            }
+            Some(actual_value) => {
+                if actual_value == metric_value {
+                    true
+                } else {
+                    println!("Expected gauge value {metric_value}, found {actual_value}",);
                     false
                 }
             }

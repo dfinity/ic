@@ -3348,8 +3348,8 @@ mod verify_dealing_private {
     }
 
     #[test]
-    fn should_fail_on_csp_errors() {
-        let csp_errors = vec![
+    fn should_fail_on_vault_errors() {
+        let vault_errors = vec![
             // if mega_keyset_from_sks fails on deserialization of private or public key
             IDkgVerifyDealingPrivateError::InternalError("deserialization error".to_string()),
             // if mega_keyset_from_sks fails because the private key cannot be found
@@ -3362,13 +3362,13 @@ mod verify_dealing_private {
         let rng = &mut reproducible_rng();
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            for csp_error in &csp_errors {
-                let setup = Setup::new_with_expected_csp_error(alg, csp_error.clone(), rng);
+            for vault_error in &vault_errors {
+                let setup = Setup::new_with_expected_vault_error(alg, vault_error.clone(), rng);
 
                 assert_matches!(
                     setup.crypto.verify_dealing_private(&setup.params, &setup.signed_dealing),
                     Err(error)
-                        if error == *csp_error
+                        if error == *vault_error
                 );
             }
         }
@@ -3405,30 +3405,31 @@ mod verify_dealing_private {
             expected_registry_error: RegistryClientError,
             rng: &mut ReproducibleRng,
         ) -> Setup {
-            Self::new_with_csp_and_optional_registry_client_error(
+            Self::new_with_vault_and_optional_registry_client_error(
                 alg,
-                MockAllCryptoServiceProvider::new(),
+                MockLocalCspVault::new(),
                 Some(expected_registry_error),
                 rng,
             )
         }
 
-        fn new_with_expected_csp_error(
+        fn new_with_expected_vault_error(
             alg: AlgorithmId,
-            expected_csp_error: IDkgVerifyDealingPrivateError,
+            expected_error: IDkgVerifyDealingPrivateError,
             rng: &mut ReproducibleRng,
         ) -> Setup {
-            let mut csp = MockAllCryptoServiceProvider::new();
-            csp.expect_idkg_verify_dealing_private()
+            let mut mock_vault = MockLocalCspVault::new();
+            mock_vault
+                .expect_idkg_verify_dealing_private()
                 .times(1)
-                .returning(move |_, _, _, _, _, _| Err(expected_csp_error.clone()));
+                .returning(move |_, _, _, _, _, _| Err(expected_error.clone()));
 
-            Self::new_with_csp_and_optional_registry_client_error(alg, csp, None, rng)
+            Self::new_with_vault_and_optional_registry_client_error(alg, mock_vault, None, rng)
         }
 
-        fn new_with_csp_and_optional_registry_client_error(
+        fn new_with_vault_and_optional_registry_client_error(
             alg: AlgorithmId,
-            csp: MockAllCryptoServiceProvider,
+            mock_vault: MockLocalCspVault,
             registry_client_error: Option<RegistryClientError>,
             rng: &mut ReproducibleRng,
         ) -> Setup {
@@ -3476,8 +3477,8 @@ mod verify_dealing_private {
             let crypto_metrics = Arc::new(CryptoMetrics::new(Some(&metrics)));
             let time_source = None;
             let crypto = CryptoComponentImpl::new_for_test(
-                csp,
-                Arc::new(MockLocalCspVault::new()),
+                MockAllCryptoServiceProvider::new(),
+                Arc::new(mock_vault),
                 logger,
                 registry_client,
                 node_id,
