@@ -24,7 +24,6 @@ runs:
   steps:
       - name: Run Bazel Test All
         id: bazel-test-all
-        if: ${{ github.event.pull_request.title }}
         shell: bash
         run: ${GITHUB_WORKSPACE}/gitlab-ci/src/bazel-ci/main.sh
         env:
