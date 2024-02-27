@@ -47,6 +47,7 @@ fn test_wasmtime_system_api() {
     let canister_id = canister_test_id(53);
     let system_state =
         SystemState::new_for_start(canister_id, Arc::new(TestPageAllocatorFileDescriptorImpl));
+    let api_type = ApiType::start(UNIX_EPOCH);
     let sandbox_safe_system_state = SandboxSafeSystemState::new(
         &system_state,
         CyclesAccountManagerBuilder::new().build(),
@@ -54,12 +55,13 @@ fn test_wasmtime_system_api() {
         SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
         RequestMetadata::new(0, UNIX_EPOCH),
+        api_type.caller(),
     );
     let canister_memory_limit = NumBytes::from(4 << 30);
     let canister_current_memory_usage = NumBytes::from(0);
     let canister_current_message_memory_usage = NumBytes::from(0);
     let system_api = SystemApiImpl::new(
-        ApiType::start(UNIX_EPOCH),
+        api_type,
         sandbox_safe_system_state,
         canister_current_memory_usage,
         canister_current_message_memory_usage,

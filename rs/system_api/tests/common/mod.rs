@@ -135,6 +135,7 @@ pub fn get_system_api(
         SchedulerConfig::application_subnet().dirty_page_overhead,
         execution_parameters().compute_allocation,
         RequestMetadata::new(0, UNIX_EPOCH),
+        api_type.caller(),
     );
     SystemApiImpl::new(
         api_type,

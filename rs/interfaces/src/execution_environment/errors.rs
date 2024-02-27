@@ -140,6 +140,7 @@ pub enum HypervisorError {
         bytes: NumBytes,
         available: Cycles,
         threshold: Cycles,
+        reveal_top_up: bool,
     },
     ReservedCyclesLimitExceededInMemoryGrow {
         bytes: NumBytes,
@@ -150,6 +151,7 @@ pub enum HypervisorError {
         bytes: NumBytes,
         available: Cycles,
         threshold: Cycles,
+        reveal_top_up: bool,
     },
 }
 
@@ -332,14 +334,20 @@ impl HypervisorError {
                 format!("Canister exceeded memory access limits: {}", s)
 
             ),
-            Self::InsufficientCyclesInMemoryGrow { bytes, available, threshold } => UserError::new(
+            Self::InsufficientCyclesInMemoryGrow { bytes, available, threshold, reveal_top_up } => {
+              let msg = if reveal_top_up {
+                  format!(" At least {} additional cycles are required.", threshold - available)
+              } else {
+                  "".to_string()
+              };
+              UserError::new(
                 E::InsufficientCyclesInMemoryGrow,
                 format!(
-                    "Canister cannot grow memory by {} bytes due to insufficient cycles. \
-                     At least {} additional cycles are required.",
-                     bytes,
-                     threshold - available)
-            ),
+                    "Canister cannot grow memory by {} bytes due to insufficient cycles.{}",
+                    bytes, msg
+                )
+              )
+            },
             Self::ReservedCyclesLimitExceededInMemoryGrow { bytes, requested, limit } => UserError::new(
                 E::ReservedCyclesLimitExceededInMemoryGrow,
                     format!(
@@ -348,14 +356,19 @@ impl HypervisorError {
                         bytes, limit, requested - limit,
                     ),
             ),
-            Self::InsufficientCyclesInMessageMemoryGrow { bytes, available, threshold } => UserError::new(
+            Self::InsufficientCyclesInMessageMemoryGrow { bytes, available, threshold, reveal_top_up } => {
+              let msg = if reveal_top_up {
+                  format!(" At least {} additional cycles are required.", threshold - available)
+              } else {
+                  "".to_string()
+              };
+              UserError::new(
                 E::InsufficientCyclesInMessageMemoryGrow,
                 format!(
-                    "Canister cannot grow message memory by {} bytes due to insufficient cycles. \
-                     At least {} additional cycles are required.",
-                     bytes,
-                     threshold - available)
-            ),
+                    "Canister cannot grow message memory by {} bytes due to insufficient cycles.{}",
+                    bytes, msg,
+                )
+            )},
         }
     }
 

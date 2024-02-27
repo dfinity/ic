@@ -565,6 +565,7 @@ pub struct SandboxSafeSystemState {
     canister_version: u64,
     controllers: BTreeSet<PrincipalId>,
     pub(super) request_metadata: RequestMetadata,
+    caller: Option<PrincipalId>,
 }
 
 impl SandboxSafeSystemState {
@@ -592,6 +593,7 @@ impl SandboxSafeSystemState {
         canister_version: u64,
         controllers: BTreeSet<PrincipalId>,
         request_metadata: RequestMetadata,
+        caller: Option<PrincipalId>,
     ) -> Self {
         Self {
             canister_id,
@@ -616,6 +618,7 @@ impl SandboxSafeSystemState {
             canister_version,
             controllers,
             request_metadata,
+            caller,
         }
     }
 
@@ -626,6 +629,7 @@ impl SandboxSafeSystemState {
         dirty_page_overhead: NumInstructions,
         compute_allocation: ComputeAllocation,
         request_metadata: RequestMetadata,
+        caller: Option<PrincipalId>,
     ) -> Self {
         let call_context_balances = match system_state.call_context_manager() {
             Some(call_context_manager) => call_context_manager
@@ -689,6 +693,7 @@ impl SandboxSafeSystemState {
             system_state.canister_version,
             system_state.controllers.clone(),
             request_metadata,
+            caller,
         )
     }
 
@@ -1035,6 +1040,7 @@ impl SandboxSafeSystemState {
                         bytes: new_memory_usage - old_memory_usage,
                         available: self.cycles_balance(),
                         threshold,
+                        reveal_top_up: self.caller_is_controller(),
                     })
                 }
             }
@@ -1078,6 +1084,7 @@ impl SandboxSafeSystemState {
                 bytes: new_message_memory_usage - old_message_memory_usage,
                 available: self.cycles_balance(),
                 threshold,
+                reveal_top_up: self.caller_is_controller(),
             })
         }
     }
@@ -1157,6 +1164,7 @@ impl SandboxSafeSystemState {
                         bytes: allocated_bytes,
                         available: old_balance,
                         threshold: cycles_to_reserve,
+                        reveal_top_up: self.caller_is_controller(),
                     });
                 }
                 let new_balance = old_balance - cycles_to_reserve;
@@ -1214,6 +1222,14 @@ impl SandboxSafeSystemState {
     /// Returns collected canister log records.
     pub fn canister_log_records(&self) -> &VecDeque<CanisterLogRecord> {
         &self.system_state_changes.canister_log_records
+    }
+
+    fn caller_is_controller(&self) -> bool {
+        if let Some(caller) = self.caller {
+            self.controllers.contains(&caller)
+        } else {
+            false
+        }
     }
 }
 
