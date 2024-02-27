@@ -1,5 +1,5 @@
 use crate::{
-    common::{get_cors_headers, make_plaintext_response, CONTENT_TYPE_HTML, CONTENT_TYPE_PROTOBUF},
+    common::{make_plaintext_response, CONTENT_TYPE_HTML, CONTENT_TYPE_PROTOBUF},
     EndpointService,
 };
 
@@ -94,7 +94,6 @@ fn ok_response(body: Vec<u8>, content_type: &'static str) -> Response<Body> {
         .status(StatusCode::OK)
         .body(Body::new(Full::from(body).map_err(BoxError::from)))
         .unwrap();
-    *response.headers_mut() = get_cors_headers();
     response.headers_mut().insert(
         header::CONTENT_TYPE,
         header::HeaderValue::from_static(content_type),
@@ -131,7 +130,6 @@ impl Service<Request<Body>> for PprofHomeService {
             PPROF_HOME_HTML.to_string().map_err(BoxError::from),
         ));
         *response.status_mut() = StatusCode::OK;
-        *response.headers_mut() = get_cors_headers();
         response.headers_mut().insert(
             header::CONTENT_TYPE,
             header::HeaderValue::from_static(CONTENT_TYPE_HTML),

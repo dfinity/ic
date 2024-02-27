@@ -1,9 +1,7 @@
 //! Module that deals with requests to /api/v2/canister/.../call
 
 use crate::{
-    common::{
-        get_cors_headers, make_plaintext_response, make_response, remove_effective_principal_id,
-    },
+    common::{make_plaintext_response, make_response, remove_effective_principal_id},
     receive_request_body,
     validator_executor::ValidatorExecutor,
     HttpError, IngressFilterService,
@@ -308,7 +306,6 @@ impl Service<Request<Body>> for CallService {
 fn make_accepted_response() -> Response<Body> {
     let mut response = Response::new(Body::new(String::new().map_err(BoxError::from)));
     *response.status_mut() = StatusCode::ACCEPTED;
-    *response.headers_mut() = get_cors_headers();
     response
 }
 

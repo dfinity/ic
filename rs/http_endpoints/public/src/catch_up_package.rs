@@ -43,7 +43,6 @@ fn protobuf_response<R: Message>(r: &R) -> Response<Body> {
         .expect("impossible: Serialization failed");
     let mut response = Response::new(Body::new(Full::from(buf).map_err(BoxError::from)));
     *response.status_mut() = StatusCode::OK;
-    *response.headers_mut() = common::get_cors_headers();
     response.headers_mut().insert(
         header::CONTENT_TYPE,
         header::HeaderValue::from_static(common::CONTENT_TYPE_PROTOBUF),
