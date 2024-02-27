@@ -105,6 +105,7 @@ fn setup_wasm_execution_input(func_ref: FuncRef) -> WasmExecutionInput {
         dirty_page_overhead,
         ComputeAllocation::default(),
         RequestMetadata::new(0, UNIX_EPOCH),
+        api_type.caller(),
     );
 
     let canister_current_memory_usage = NumBytes::new(0);

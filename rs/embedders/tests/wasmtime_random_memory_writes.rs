@@ -71,6 +71,7 @@ fn test_api_for_update(
         .dirty_page_overhead,
         ComputeAllocation::default(),
         RequestMetadata::new(0, UNIX_EPOCH),
+        Some(caller),
     );
     let canister_memory_limit = NumBytes::from(4 << 30);
     let canister_current_memory_usage = NumBytes::from(0);

@@ -67,6 +67,7 @@ fn push_output_request_fails_not_enough_cycles_for_request() {
         SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
         RequestMetadata::new(0, UNIX_EPOCH),
+        Some(request.sender().into()),
     );
 
     assert_eq!(
@@ -119,6 +120,7 @@ fn push_output_request_fails_not_enough_cycles_for_response() {
         SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
         RequestMetadata::new(0, UNIX_EPOCH),
+        Some(request.sender().into()),
     );
 
     assert_eq!(
@@ -146,6 +148,7 @@ fn push_output_request_succeeds_with_enough_cycles() {
         NumSeconds::from(100_000),
     );
 
+    let caller = None;
     let mut sandbox_safe_system_state = SandboxSafeSystemState::new(
         &system_state,
         cycles_account_manager,
@@ -153,6 +156,7 @@ fn push_output_request_succeeds_with_enough_cycles() {
         SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
         RequestMetadata::new(0, UNIX_EPOCH),
+        caller,
     );
 
     let prepayment_for_response_execution =
@@ -190,6 +194,11 @@ fn correct_charging_source_canister_for_a_request() {
 
     let initial_cycles_balance = system_state.balance();
 
+    let request = RequestBuilder::default()
+        .sender(canister_test_id(0))
+        .receiver(canister_test_id(1))
+        .build();
+
     let mut sandbox_safe_system_state = SandboxSafeSystemState::new(
         &system_state,
         cycles_account_manager,
@@ -197,12 +206,8 @@ fn correct_charging_source_canister_for_a_request() {
         SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
         RequestMetadata::new(0, UNIX_EPOCH),
+        Some(request.sender().into()),
     );
-
-    let request = RequestBuilder::default()
-        .sender(canister_test_id(0))
-        .receiver(canister_test_id(1))
-        .build();
 
     let xnet_cost = cycles_account_manager.xnet_call_performed_fee(SMALL_APP_SUBNET_MAX_SIZE);
     let request_payload_cost = cycles_account_manager
@@ -339,6 +344,7 @@ fn is_controller_test() {
     let mut system_state = SystemStateBuilder::default().build();
     system_state.controllers = BTreeSet::from([user_test_id(1).get(), user_test_id(2).get()]);
 
+    let caller = None;
     let sandbox_safe_system_state = SandboxSafeSystemState::new(
         &system_state,
         CyclesAccountManagerBuilder::new().build(),
@@ -346,6 +352,7 @@ fn is_controller_test() {
         SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
         RequestMetadata::new(0, UNIX_EPOCH),
+        caller,
     );
 
     // Users IDs 1 and 2 are controllers, hence is_controller should return true,
@@ -431,6 +438,7 @@ fn test_inter_canister_call(
         SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
         RequestMetadata::new(0, UNIX_EPOCH),
+        Some(sender.into()),
     );
 
     let request = RequestBuilder::default()

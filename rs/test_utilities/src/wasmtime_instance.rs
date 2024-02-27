@@ -136,6 +136,7 @@ impl WasmtimeInstanceBuilder {
             dirty_page_overhead,
             ComputeAllocation::default(),
             RequestMetadata::new(0, UNIX_EPOCH),
+            self.api_type.caller(),
         );
 
         let subnet_memory_capacity = i64::MAX / 2;

@@ -575,6 +575,22 @@ impl ApiType {
             ApiType::Cleanup { .. } => "cleanup",
         }
     }
+
+    pub fn caller(&self) -> Option<PrincipalId> {
+        match self {
+            ApiType::Start { .. } => None,
+            ApiType::Init { caller, .. } => Some(*caller),
+            ApiType::SystemTask { .. } => None,
+            ApiType::Update { caller, .. } => Some(*caller),
+            ApiType::ReplicatedQuery { caller, .. } => Some(*caller),
+            ApiType::NonReplicatedQuery { caller, .. } => Some(*caller),
+            ApiType::ReplyCallback { caller, .. } => Some(*caller),
+            ApiType::RejectCallback { caller, .. } => Some(*caller),
+            ApiType::PreUpgrade { caller, .. } => Some(*caller),
+            ApiType::InspectMessage { caller, .. } => Some(*caller),
+            ApiType::Cleanup { caller, .. } => Some(*caller),
+        }
+    }
 }
 
 // This type is potentially serialized and exposed to the external world.  We

@@ -399,6 +399,7 @@ impl Hypervisor {
             self.dirty_page_overhead,
             execution_parameters.compute_allocation,
             request_metadata,
+            api_type.caller(),
         );
         let (compilation_result, execution_result) = Arc::clone(&self.wasm_executor).execute(
             WasmExecutionInput {

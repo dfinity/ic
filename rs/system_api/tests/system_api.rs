@@ -1499,6 +1499,7 @@ fn update_available_memory_updates_subnet_available_memory() {
         subnet_available_memory.get_wasm_custom_sections_memory();
     let system_state = SystemStateBuilder::default().build();
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
+    let api_type = ApiTypeBuilder::build_update_api();
     let sandbox_safe_system_state = SandboxSafeSystemState::new(
         &system_state,
         cycles_account_manager,
@@ -1506,9 +1507,10 @@ fn update_available_memory_updates_subnet_available_memory() {
         SchedulerConfig::application_subnet().dirty_page_overhead,
         execution_parameters().compute_allocation,
         RequestMetadata::new(0, UNIX_EPOCH),
+        api_type.caller(),
     );
     let mut api = SystemApiImpl::new(
-        ApiTypeBuilder::build_update_api(),
+        api_type,
         sandbox_safe_system_state,
         CANISTER_CURRENT_MEMORY_USAGE,
         CANISTER_CURRENT_MESSAGE_MEMORY_USAGE,
@@ -1554,6 +1556,7 @@ fn push_output_request_respects_memory_limits() {
     );
     let mut system_state = SystemStateBuilder::default().build();
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
+    let api_type = ApiTypeBuilder::build_update_api();
     let mut sandbox_safe_system_state = SandboxSafeSystemState::new(
         &system_state,
         cycles_account_manager,
@@ -1561,6 +1564,7 @@ fn push_output_request_respects_memory_limits() {
         SchedulerConfig::application_subnet().dirty_page_overhead,
         execution_parameters().compute_allocation,
         RequestMetadata::new(0, UNIX_EPOCH),
+        api_type.caller(),
     );
     let own_canister_id = system_state.canister_id;
     let callback_id = sandbox_safe_system_state
@@ -1577,7 +1581,7 @@ fn push_output_request_respects_memory_limits() {
         ))
         .unwrap();
     let mut api = SystemApiImpl::new(
-        ApiTypeBuilder::build_update_api(),
+        api_type,
         sandbox_safe_system_state,
         CANISTER_CURRENT_MEMORY_USAGE,
         CANISTER_CURRENT_MESSAGE_MEMORY_USAGE,
@@ -1660,6 +1664,7 @@ fn push_output_request_oversized_request_memory_limits() {
     );
     let mut system_state = SystemStateBuilder::default().build();
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
+    let api_type = ApiTypeBuilder::build_update_api();
     let mut sandbox_safe_system_state = SandboxSafeSystemState::new(
         &system_state,
         cycles_account_manager,
@@ -1667,6 +1672,7 @@ fn push_output_request_oversized_request_memory_limits() {
         SchedulerConfig::application_subnet().dirty_page_overhead,
         execution_parameters().compute_allocation,
         RequestMetadata::new(0, UNIX_EPOCH),
+        api_type.caller(),
     );
     let own_canister_id = system_state.canister_id;
     let callback_id = sandbox_safe_system_state
@@ -1683,7 +1689,7 @@ fn push_output_request_oversized_request_memory_limits() {
         ))
         .unwrap();
     let mut api = SystemApiImpl::new(
-        ApiTypeBuilder::build_update_api(),
+        api_type,
         sandbox_safe_system_state,
         CANISTER_CURRENT_MEMORY_USAGE,
         CANISTER_CURRENT_MESSAGE_MEMORY_USAGE,
