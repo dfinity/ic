@@ -123,22 +123,18 @@ pub struct ListenConfig {
 #[derive(Args)]
 pub struct HealthChecksConfig {
     /// How frequently to run node checks in milliseconds
-    #[clap(long, default_value = "2000")]
+    #[clap(long, default_value = "1000")]
     pub check_interval: u64,
 
-    /// How many attempts to do when checking a node
-    #[clap(long, default_value = "1")]
-    pub check_retries: u32,
+    /// How frequently to recalculate healthy nodes set (per-subnet) e.g. based on height lagging
+    #[clap(long, default_value = "5000")]
+    pub update_interval: u64,
 
     /// Timeout for the check request in milliseconds.
     /// This includes connection phase and the actual HTTP request.
-    #[clap(long, default_value = "1850")]
+    /// Should be longer than --http-timeout-connect
+    #[clap(long, default_value = "3000")]
     pub check_timeout: u64,
-
-    /// Minimum required successful health checks
-    /// for a replica to be included in the routing table
-    #[clap(long, default_value = "2")]
-    pub min_ok_count: u8,
 
     /// Maximum block height lag for a replica to be included in the routing table
     #[clap(long, default_value = "50")]

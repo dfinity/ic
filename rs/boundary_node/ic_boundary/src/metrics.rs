@@ -442,6 +442,7 @@ impl MetricParamsPersist {
     }
 }
 
+#[derive(Clone)]
 pub struct WithMetricsCheck<T>(pub T, pub MetricParamsCheck);
 
 #[derive(Clone)]

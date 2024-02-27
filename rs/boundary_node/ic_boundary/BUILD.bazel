@@ -71,6 +71,7 @@ DEPENDENCIES = [
     "@crate_index//:tempfile",
     "@crate_index//:thiserror",
     "@crate_index//:tokio-rustls",
+    "@crate_index//:tokio-util",
     "@crate_index//:tokio",
     "@crate_index//:tower",
     "@crate_index//:tower_governor",
