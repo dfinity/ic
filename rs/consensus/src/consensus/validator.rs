@@ -3109,18 +3109,18 @@ pub mod test {
             // Only one notarization is emitted in the ChangeSet.
             let changeset = validator.on_state_change(&PoolReader::new(&pool));
             assert_eq!(changeset.len(), 1);
-            assert!(matches!(
+            assert_matches!(
                 changeset[0],
                 ChangeAction::MoveToValidated(ConsensusMessage::Notarization(_))
-            ));
+            );
             pool.apply_changes(changeset);
 
             let changeset = validator.on_state_change(&PoolReader::new(&pool));
             assert_eq!(changeset.len(), 1);
-            assert!(matches!(
+            assert_matches!(
                 changeset[0],
                 ChangeAction::RemoveFromUnvalidated(ConsensusMessage::Notarization(_))
-            ));
+            );
             pool.apply_changes(changeset);
 
             // Finally, changeset should be empty.
@@ -3184,10 +3184,10 @@ pub mod test {
 
             // Only one finalization is emitted in the ChangeSet.
             let changeset = validator.on_state_change(&PoolReader::new(&pool));
-            assert!(matches!(
+            assert_matches!(
                 changeset[0],
                 ChangeAction::MoveToValidated(ConsensusMessage::Finalization(_))
-            ));
+            );
             assert_eq!(changeset.len(), 1);
             pool.apply_changes(changeset);
 

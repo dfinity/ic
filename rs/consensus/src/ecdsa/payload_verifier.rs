@@ -657,7 +657,7 @@ mod test {
             .idkg_transcripts
             .insert(transcript_id_0, transcript_0);
         // Error because transcript is not referenced
-        assert!(matches!(
+        assert_matches!(
             validate_transcript_refs(
                 crypto,
                 &block_reader,
@@ -668,7 +668,7 @@ mod test {
             Err(ValidationError::Permanent(
                 PermanentError::NewTranscriptMiscount(_)
             ))
-        ));
+        );
 
         // Add the reference
         prev_payload.key_transcript.next_in_creation =
@@ -693,7 +693,7 @@ mod test {
         assert!(res.is_ok());
 
         // Error because of height mismatch
-        assert!(matches!(
+        assert_matches!(
             validate_transcript_refs(
                 crypto,
                 &block_reader,
@@ -704,7 +704,7 @@ mod test {
             Err(ValidationError::Permanent(
                 PermanentError::NewTranscriptRefWrongHeight(_, _)
             ))
-        ));
+        );
 
         // Add another reference
         let transcript_1 =
@@ -713,7 +713,7 @@ mod test {
             ecdsa::UnmaskedTranscript::try_from((Height::new(100), &transcript_1)).unwrap();
         curr_payload.key_transcript.next_in_creation =
             ecdsa::KeyTranscriptCreation::Created(transcript_ref_1);
-        assert!(matches!(
+        assert_matches!(
             validate_transcript_refs(
                 crypto,
                 &block_reader,
@@ -724,7 +724,7 @@ mod test {
             Err(ValidationError::Permanent(
                 PermanentError::NewTranscriptNotFound(_)
             ))
-        ));
+        );
 
         curr_payload.idkg_transcripts = BTreeMap::new();
         block_reader.add_transcript(*transcript_ref_1.as_ref(), transcript_1);
@@ -799,10 +799,10 @@ mod test {
             &no_op_logger(),
         );
         assert_eq!(payload.xnet_reshare_agreements.len(), 1);
-        assert!(matches!(
+        assert_matches!(
             payload.xnet_reshare_agreements.get(&req_1).unwrap(),
             ecdsa::CompletedReshareRequest::Unreported(_)
-        ));
+        );
 
         // The payload should verify, and should return 1 dealing.
         let result = validate_reshare_dealings(crypto, &block_reader, &prev_payload, &payload);
@@ -813,12 +813,12 @@ mod test {
         let mut payload_ = payload.clone();
         payload_.ongoing_xnet_reshares.remove(&req_2);
         let result = validate_reshare_dealings(crypto, &block_reader, &prev_payload, &payload_);
-        assert!(matches!(
+        assert_matches!(
             result,
             Err(ValidationError::Permanent(
                 PermanentError::XNetReshareRequestDisappeared(_)
             ))
-        ));
+        );
 
         // Create another request and dealings
         let reshare_params = payload.ongoing_xnet_reshares.get(&req_2).unwrap().as_ref();
@@ -842,12 +842,12 @@ mod test {
         // to validate.
         prev_payload.ongoing_xnet_reshares.remove(&req_2);
         let result = validate_reshare_dealings(crypto, &block_reader, &prev_payload, &payload);
-        assert!(matches!(
+        assert_matches!(
             result,
             Err(ValidationError::Permanent(
                 PermanentError::XNetReshareAgreementWithoutRequest(_)
             ))
-        ));
+        );
     }
 
     #[test]
@@ -1007,12 +1007,12 @@ mod test {
             &ecdsa_payload,
             false,
         );
-        assert!(matches!(
+        assert_matches!(
             res,
             Err(ValidationError::Permanent(
                 PermanentError::NewSignatureUnexpected(_)
             ))
-        ));
+        );
     }
 
     #[test]
@@ -1358,14 +1358,10 @@ mod test {
 
         // Previously it would report NewTranscriptMiscount error as a proof that
         // the same transcripts have been verified many times.
-        assert!(!matches!(
-            error,
-            ValidationError::Permanent(PermanentError::NewTranscriptMiscount(_))
-        ));
         // Now that we fixed the problem, it reports NewTranscriptRefWrongHeight instead.
-        assert!(matches!(
+        assert_matches!(
             error,
             ValidationError::Permanent(PermanentError::NewTranscriptRefWrongHeight(_, _))
-        ));
+        );
     }
 }
