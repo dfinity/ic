@@ -20,6 +20,8 @@ function install_hostos() {
     pv -f -s "$size" "${TMPDIR}/disk.img" | dd of="/dev/${target_drive}" bs=10M conv=sparse
     log_and_reboot_on_error "${?}" "Unable to install HostOS disk-image on drive: /dev/${target_drive}"
 
+    rm -rf "${TMPDIR}"
+
     sync
     log_and_reboot_on_error "${?}" "Unable to synchronize cached writes to persistent storage."
 }
