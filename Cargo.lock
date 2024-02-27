@@ -14974,6 +14974,7 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
+ "wat",
 ]
 
 [[package]]

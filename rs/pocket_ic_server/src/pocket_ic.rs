@@ -520,6 +520,23 @@ impl Operation for Tick {
     }
 }
 
+#[derive(Clone, Debug, Copy)]
+pub struct SetTimeAndTick(pub SystemTime);
+
+impl Operation for SetTimeAndTick {
+    fn compute(&self, pic: &mut PocketIc) -> OpOut {
+        for subnet in pic.subnets.read().unwrap().values() {
+            subnet.set_time(self.0);
+            subnet.execute_round();
+        }
+        OpOut::NoOutput
+    }
+
+    fn id(&self) -> OpId {
+        OpId(format!("set_time_and_tick({:?})", self.0))
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct ExecuteIngressMessage(pub CanisterCall);
 

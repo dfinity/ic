@@ -1,7 +1,7 @@
 /// This module contains the core state of the PocketIc server.
 /// Axum handlers operate on a global state of type ApiState, whose
 /// interface guarantees consistency and determinism.
-use crate::pocket_ic::PocketIc;
+use crate::pocket_ic::{PocketIc, SetTimeAndTick};
 use crate::InstanceId;
 use crate::{OpId, Operation};
 use base64;
@@ -9,16 +9,25 @@ use ic_types::{CanisterId, SubnetId};
 use ic_utils::thread::JoinOnDrop;
 use pocket_ic::{ErrorCode, UserError, WasmResult};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, sync::Arc, thread::Builder as ThreadBuilder, time::Duration};
+use std::{
+    collections::HashMap,
+    sync::Arc,
+    thread::Builder as ThreadBuilder,
+    time::{Duration, SystemTime},
+};
 use tokio::{
+    sync::mpsc::error::TryRecvError,
     sync::{mpsc, Mutex, RwLock},
-    task::spawn_blocking,
-    time,
+    task::{spawn, spawn_blocking, JoinHandle},
+    time::{self, sleep},
 };
 use tracing::trace;
 
 // The maximum wait time for a computation to finish synchronously.
 const DEFAULT_SYNC_WAIT_DURATION: Duration = Duration::from_secs(10);
+
+// The minimum delay between consecutive ticks in auto progress mode.
+const MIN_TICK_DELAY: Duration = Duration::from_millis(100);
 
 pub const STATE_LABEL_HASH_SIZE: usize = 32;
 
@@ -52,11 +61,18 @@ impl std::convert::TryFrom<Vec<u8>> for StateLabel {
     }
 }
 
+struct ProgressThread {
+    handle: JoinHandle<()>,
+    sender: mpsc::Sender<()>,
+}
+
 /// The state of the PocketIC API.
 pub struct ApiState {
     // impl note: If locks are acquired on both fields, acquire first on instances, then on graph.
     instances: Arc<RwLock<Vec<Mutex<InstanceState>>>>,
-    graph: RwLock<HashMap<StateLabel, Computations>>,
+    graph: Arc<RwLock<HashMap<StateLabel, Computations>>>,
+    // threads making IC instances progress automatically
+    progress_threads: RwLock<Vec<Mutex<Option<ProgressThread>>>>,
     sync_wait_time: Duration,
     // dropping the PocketIC instance might be an expensive operation (the state machine is
     // deallocated, e.g.). Thus, we immediately mark the instance as deleted while sending the
@@ -104,7 +120,10 @@ impl PocketIcApiStateBuilder {
             .into_iter()
             .map(|inst| Mutex::new(InstanceState::Available(inst)))
             .collect();
+        let instances_len = instances.len();
         let instances = RwLock::new(instances);
+
+        let progress_threads = RwLock::new((0..instances_len).map(|_| Mutex::new(None)).collect());
 
         let sync_wait_time = self.sync_wait_time.unwrap_or(DEFAULT_SYNC_WAIT_DURATION);
         #[allow(clippy::disallowed_methods)]
@@ -120,7 +139,8 @@ impl PocketIcApiStateBuilder {
 
         Arc::new(ApiState {
             instances: instances.into(),
-            graph,
+            graph: graph.into(),
+            progress_threads,
             sync_wait_time,
             drop_sender,
             _drop_worker_handle: JoinOnDrop::new(drop_handle),
@@ -272,12 +292,11 @@ impl ApiState {
     /// The client lib dispatches a long running operation and gets a Busy {state_label, op_id}.
     /// It then polls on that via this state tree api function.
     pub fn read_result(
-        &self,
+        graph: Arc<RwLock<HashMap<StateLabel, Computations>>>,
         state_label: &StateLabel,
         op_id: &OpId,
     ) -> Option<(StateLabel, OpOut)> {
-        if let Some((new_state_label, op_out)) =
-            self.graph.try_read().ok()?.get(state_label)?.get(op_id)
+        if let Some((new_state_label, op_out)) = graph.try_read().ok()?.get(state_label)?.get(op_id)
         {
             Some((new_state_label.clone(), op_out.clone()))
         } else {
@@ -288,6 +307,8 @@ impl ApiState {
     pub async fn add_instance(&self, instance: PocketIc) -> InstanceId {
         let mut instances = self.instances.write().await;
         instances.push(Mutex::new(InstanceState::Available(instance)));
+        let mut progress_threads = self.progress_threads.write().await;
+        progress_threads.push(Mutex::new(None));
         instances.len() - 1
     }
 
@@ -298,6 +319,68 @@ impl ApiState {
             std::mem::replace(&mut *instance_state, InstanceState::Deleted)
         {
             self.drop_sender.send(pocket_ic).unwrap();
+        }
+        let progress_threads = self.progress_threads.read().await;
+        let mut progress_thread = progress_threads[instance_id].lock().await;
+        if let Some(t) = progress_thread.take() {
+            t.sender.send(()).await.unwrap();
+            t.handle.await.unwrap();
+        }
+    }
+
+    pub async fn auto_progress(&self, instance_id: InstanceId) {
+        let progress_threads = self.progress_threads.read().await;
+        let mut progress_thread = progress_threads[instance_id].lock().await;
+        let instances = self.instances.clone();
+        let graph = self.graph.clone();
+        let drop_sender = self.drop_sender.clone();
+        let sync_wait_time = self.sync_wait_time;
+        if progress_thread.is_none() {
+            let (tx, mut rx) = mpsc::channel::<()>(1);
+            let handle = spawn(async move {
+                loop {
+                    use std::time::Instant;
+                    let start = Instant::now();
+                    let cur_op = SetTimeAndTick(SystemTime::now());
+                    match Self::update_instances_with_timeout(
+                        instances.clone(),
+                        drop_sender.clone(),
+                        cur_op.into(),
+                        instance_id,
+                        sync_wait_time,
+                    )
+                    .await
+                    {
+                        Ok(UpdateReply::Busy { .. }) => {}
+                        Ok(UpdateReply::Output(_)) => {}
+                        Ok(UpdateReply::Started { state_label, op_id }) => loop {
+                            if Self::read_result(graph.clone(), &state_label, &op_id).is_some() {
+                                break;
+                            }
+                            sleep(Duration::from_millis(100)).await;
+                        },
+                        Err(_) => {}
+                    }
+                    let duration = start.elapsed();
+                    sleep(std::cmp::max(duration, MIN_TICK_DELAY)).await;
+                    match rx.try_recv() {
+                        Ok(_) | Err(TryRecvError::Disconnected) => {
+                            break;
+                        }
+                        Err(TryRecvError::Empty) => {}
+                    }
+                }
+            });
+            *progress_thread = Some(ProgressThread { handle, sender: tx });
+        }
+    }
+
+    pub async fn stop_progress(&self, instance_id: InstanceId) {
+        let progress_threads = self.progress_threads.read().await;
+        let mut progress_thread = progress_threads[instance_id].lock().await;
+        if let Some(t) = progress_thread.take() {
+            t.sender.send(()).await.unwrap();
+            t.handle.await.unwrap();
         }
     }
 
@@ -352,15 +435,40 @@ impl ApiState {
     where
         O: Operation + Send + Sync + 'static,
     {
+        let sync_wait_time = sync_wait_time.unwrap_or(self.sync_wait_time);
+        Self::update_instances_with_timeout(
+            self.instances.clone(),
+            self.drop_sender.clone(),
+            op,
+            instance_id,
+            sync_wait_time,
+        )
+        .await
+    }
+
+    /// Same as [Self::update] except that the timeout can be specified manually. This is useful in
+    /// cases when clients want to enforce a long-running blocking call.
+    async fn update_instances_with_timeout<O>(
+        instances: Arc<RwLock<Vec<Mutex<InstanceState>>>>,
+        drop_sender: mpsc::UnboundedSender<PocketIc>,
+        op: Arc<O>,
+        instance_id: InstanceId,
+        sync_wait_time: Duration,
+    ) -> UpdateResult
+    where
+        O: Operation + Send + Sync + 'static,
+    {
         let op_id = op.id().0;
         trace!(
             "update_with_timeout::start instance_id={} op_id={}",
             instance_id,
             op_id,
         );
-        let sync_wait_time = sync_wait_time.unwrap_or(self.sync_wait_time);
-        let instances = self.instances.read().await;
-        let (bg_task, busy_outcome) = if let Some(instance_mutex) = instances.get(instance_id) {
+        let instances_cloned = instances.clone();
+        let instances_locked = instances_cloned.read().await;
+        let (bg_task, busy_outcome) = if let Some(instance_mutex) =
+            instances_locked.get(instance_id)
+        {
             let mut instance_state = instance_mutex.lock().await;
             // If this instance is busy, return the running op and initial state
             match &*instance_state {
@@ -394,8 +502,7 @@ impl ApiState {
                     let bg_task = {
                         let old_state_label = state_label.clone();
                         let op_id = op_id.clone();
-                        let instances = self.instances.clone();
-                        let drop_sender = self.drop_sender.clone();
+                        let drop_sender = drop_sender.clone();
                         move || {
                             trace!(
                                 "bg_task::start instance_id={} state_label={:?} op_id={}",
@@ -426,7 +533,7 @@ impl ApiState {
             });
         };
         // drop lock, otherwise we end up with a deadlock
-        std::mem::drop(instances);
+        std::mem::drop(instances_locked);
 
         // We schedule a blocking background task on the tokio runtime. Note that if all
         // blocking workers are busy, the task is put on a queue (which is what we want).

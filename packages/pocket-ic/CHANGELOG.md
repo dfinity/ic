@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+- New functions `auto_progress` and `stop_progress` to make IC instances
+  progress (updating time and executing rounds) automatically.
+
 ## 2.2.0 - 2024-02-14
 
 ### Added
