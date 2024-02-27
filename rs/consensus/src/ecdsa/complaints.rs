@@ -1023,14 +1023,14 @@ mod tests {
         );
 
         // Messages for transcripts currently active
-        assert!(matches!(
+        assert_matches!(
             Action::action(&block_reader, &active, &requested, Height::from(10), &id_1),
             Action::Process(_)
-        ));
-        assert!(matches!(
+        );
+        assert_matches!(
             Action::action(&block_reader, &active, &requested, Height::from(20), &id_2),
             Action::Process(_)
-        ));
+        );
     }
 
     #[test]
