@@ -434,6 +434,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "futures-util": crate.spec(
                 version = "^0.3.8",
             ),
+            "get_if_addrs": crate.spec(
+                version = "^0.5.3",
+            ),
             "getrandom": crate.spec(
                 version = "^0.2",
                 features = [
