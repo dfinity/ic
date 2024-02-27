@@ -54,7 +54,7 @@ threadpool = "1.8.1"
 tokio = { workspace = true }
 tokio-io-timeout = "1.2.0"
 tower = { workspace = true }
-tower-http = { version = "0.5.1", features = ["limit"] }
+tower-http = { version = "0.5.1", features = ["limit", "cors"] }
 url = "2.1.1"
 
 [target.'cfg(target_os = "linux")'.dependencies]

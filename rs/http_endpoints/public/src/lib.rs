@@ -40,6 +40,7 @@ use crate::{
     status::StatusService,
 };
 pub use call::CallServiceBuilder;
+pub use common::cors_layer;
 
 use axum::{
     body::Body,
@@ -819,7 +820,8 @@ fn make_router(
             ))
             .layer(RequestBodyLimitLayer::new(
                 config.max_request_size_bytes as usize,
-            )),
+            ))
+            .layer(cors_layer()),
     )
 }
 
@@ -1208,7 +1210,13 @@ async fn get_random_node_from_nns_subnet(
 #[cfg(test)]
 mod tests {
     use futures_util::{future::select_all, stream::pending, FutureExt};
-    use http::{header::CONTENT_TYPE, HeaderName, HeaderValue, Method};
+    use http::{
+        header::{
+            ACCESS_CONTROL_ALLOW_HEADERS, ACCESS_CONTROL_ALLOW_METHODS,
+            ACCESS_CONTROL_ALLOW_ORIGIN, CONTENT_TYPE,
+        },
+        HeaderName, HeaderValue, Method,
+    };
     use http_body_util::Empty;
     use ic_interfaces_mocks::consensus_pool::MockConsensusPoolCache;
     use ic_interfaces_state_manager_mocks::MockStateManager;
@@ -1330,6 +1338,50 @@ mod tests {
             .unwrap();
         let resp = router.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::METHOD_NOT_ALLOWED);
+    }
+
+    #[tokio::test]
+    async fn pre_flight_cors() {
+        let router = dummy_router(Config::default());
+        let req = Request::builder()
+            .uri("/_/catch_up_package")
+            .method(hyper::Method::OPTIONS)
+            .body(Body::new(Empty::new()))
+            .unwrap();
+        let resp = router.oneshot(req).await.unwrap();
+        assert!(resp.headers().contains_key(ACCESS_CONTROL_ALLOW_HEADERS));
+        assert!(resp.headers().contains_key(ACCESS_CONTROL_ALLOW_ORIGIN));
+        assert!(resp.headers().contains_key(ACCESS_CONTROL_ALLOW_METHODS));
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn pre_flight_cors_fallback_path() {
+        let router = dummy_router(Config::default());
+        let req = Request::builder()
+            .uri("/_/sdfsfdsfd")
+            .method(hyper::Method::OPTIONS)
+            .body(Body::new(Empty::new()))
+            .unwrap();
+        let resp = router.oneshot(req).await.unwrap();
+        assert!(resp.headers().contains_key(ACCESS_CONTROL_ALLOW_HEADERS));
+        assert!(resp.headers().contains_key(ACCESS_CONTROL_ALLOW_ORIGIN));
+        assert!(resp.headers().contains_key(ACCESS_CONTROL_ALLOW_METHODS));
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn origin_cors() {
+        let router = dummy_router(Config::default());
+        let req = Request::builder()
+            .uri(format!("/api/v2/canister/{}/query", CanisterId::ic_00()))
+            .header(CONTENT_TYPE, CONTENT_TYPE_CBOR)
+            .method(hyper::Method::POST)
+            .body(Body::new(Empty::new()))
+            .unwrap();
+        let resp = router.oneshot(req).await.unwrap();
+        assert!(resp.headers().contains_key(ACCESS_CONTROL_ALLOW_ORIGIN));
+        assert_eq!(resp.status(), StatusCode::OK);
     }
 
     #[tokio::test]

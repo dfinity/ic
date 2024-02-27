@@ -1282,6 +1282,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 package = "tower-http",
                 version = "^0.5.1",
                 features = [
+                    "cors",
                     "limit",
                     "trace",
                     "request-id",

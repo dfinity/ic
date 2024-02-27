@@ -1,5 +1,5 @@
 {
-  "checksum": "d5d466a29ea0a8620a65961284696b89772cdbcc63464c1802063ee08a515562",
+  "checksum": "a53d72f2b90e6808b8e0c81696a661581acc8a24157a5c457dc6ae0f1d3c3421",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -57017,6 +57017,7 @@
             "compression-full",
             "compression-gzip",
             "compression-zstd",
+            "cors",
             "default",
             "futures-core",
             "limit",
