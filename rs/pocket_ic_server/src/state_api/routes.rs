@@ -99,6 +99,15 @@ where
         //
         // All the state-changing endpoints
         .nest("/:id/update", instance_update_routes())
+        //
+        // Configures an IC instance to make progress automatically,
+        // i.e., periodically update the time of the IC instance
+        // to the real time and execute rounds on the subnets.
+        .api_route("/:id/auto_progress", post(auto_progress))
+        //
+        // Stop automatic progress (see endpoint `auto_progress`)
+        // on an IC instance.
+        .api_route("/:id/stop_progress", post(stop_progress))
 }
 
 async fn run_operation<T: Serialize>(
@@ -634,6 +643,22 @@ pub async fn delete_instance(
 ) -> StatusCode {
     api_state.delete_instance(id).await;
     StatusCode::OK
+}
+
+pub async fn auto_progress(
+    State(AppState { api_state, .. }): State<AppState>,
+    Path(id): Path<InstanceId>,
+) -> (StatusCode, Json<ApiResponse<()>>) {
+    api_state.auto_progress(id).await;
+    (StatusCode::OK, Json(ApiResponse::Success(())))
+}
+
+pub async fn stop_progress(
+    State(AppState { api_state, .. }): State<AppState>,
+    Path(id): Path<InstanceId>,
+) -> (StatusCode, Json<ApiResponse<()>>) {
+    api_state.stop_progress(id).await;
+    (StatusCode::OK, Json(ApiResponse::Success(())))
 }
 
 pub trait RouterExt<S>

@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+- New endpoints `/instances/<instance_id>/auto_progress` and `/instances/<instance_id>/stop_progress` to make IC instances
+  progress (updating time and executing rounds) automatically.
+
 ### Fixed
 
 - Subnet IDs are derived from the subnets' public keys by default.

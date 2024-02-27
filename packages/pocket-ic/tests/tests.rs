@@ -10,10 +10,97 @@ use pocket_ic::{
     common::rest::{BlobCompression, SubnetConfigSet, SubnetKind},
     PocketIc, PocketIcBuilder, WasmResult,
 };
-use std::{collections::HashMap, io::Read, time::SystemTime};
+use std::{
+    collections::HashMap,
+    io::Read,
+    thread,
+    time::{Duration, SystemTime},
+};
 
 // 2T cycles
 const INIT_CYCLES: u128 = 2_000_000_000_000;
+
+// Canister code incrementing a counter in every heartbeat
+// and exporting a query method to read the counter.
+const AUTO_PROGRESS_WAT: &str = r#"
+    (module
+        (import "ic0" "msg_reply" (func $msg_reply))
+        (import "ic0" "msg_reply_data_append"
+            (func $msg_reply_data_append (param i32 i32)))
+        (func $inc
+            ;; Increment a counter.
+            (i32.store
+                (i32.const 0)
+                (i32.add (i32.load (i32.const 0)) (i32.const 1))))
+        (func $read
+            (call $msg_reply_data_append
+                (i32.const 0) ;; the counter from heap[0]
+                (i32.const 4)) ;; length
+            (call $msg_reply))
+        (memory $memory 1)
+        (export "canister_query read" (func $read))
+        (export "canister_heartbeat" (func $inc))
+    )
+"#;
+
+#[test]
+fn test_auto_progress() {
+    let pic = PocketIc::new();
+
+    // Create a canister and charge it with 2T cycles.
+    let can_id = pic.create_canister();
+    pic.add_cycles(can_id, INIT_CYCLES);
+
+    // Install the auto progress canister wasm file on the canister.
+    let auto_progress_wasm = wat::parse_str(AUTO_PROGRESS_WAT).unwrap();
+    pic.install_canister(can_id, auto_progress_wasm, vec![], None);
+
+    // Capture the original value of the counter.
+    let old_counter = match pic.query_call(can_id, Principal::anonymous(), "read", vec![]) {
+        Ok(WasmResult::Reply(data)) => u32::from_le_bytes(data.try_into().unwrap()),
+        _ => panic!("could not read counter"),
+    };
+
+    // Starting auto progress on the IC.
+    // Consequently, heartbeats should be executed on the auto progress canister automatically
+    // and its counter should increase.
+    pic.auto_progress();
+
+    let mut ok = false;
+    for _ in 0..100 {
+        let counter = match pic.query_call(can_id, Principal::anonymous(), "read", vec![]) {
+            Ok(WasmResult::Reply(data)) => u32::from_le_bytes(data.try_into().unwrap()),
+            _ => panic!("could not read counter"),
+        };
+        if counter > old_counter {
+            ok = true;
+            break;
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+    if !ok {
+        panic!("did not observe a counter increase")
+    }
+
+    // Stopping auto progress on the IC.
+    // The counter should not increase anymore.
+    pic.stop_progress();
+
+    // Capture the current value of the counter.
+    let cur_counter = match pic.query_call(can_id, Principal::anonymous(), "read", vec![]) {
+        Ok(WasmResult::Reply(data)) => u32::from_le_bytes(data.try_into().unwrap()),
+        _ => panic!("could not read counter"),
+    };
+
+    for _ in 0..100 {
+        let counter = match pic.query_call(can_id, Principal::anonymous(), "read", vec![]) {
+            Ok(WasmResult::Reply(data)) => u32::from_le_bytes(data.try_into().unwrap()),
+            _ => panic!("could not read counter"),
+        };
+        assert_eq!(counter, cur_counter);
+        thread::sleep(Duration::from_millis(100));
+    }
+}
 
 #[test]
 fn test_counter_canister() {

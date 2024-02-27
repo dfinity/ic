@@ -349,6 +349,22 @@ impl PocketIc {
         self.post::<(), _>(endpoint, "");
     }
 
+    /// Configures the IC to make progress automatically,
+    /// i.e., periodically update the time of the IC
+    /// to the real time and execute rounds on the subnets.
+    #[instrument(skip(self), fields(instance_id=self.instance_id))]
+    pub fn auto_progress(&self) {
+        let endpoint = "auto_progress";
+        self.post::<(), _>(endpoint, "");
+    }
+
+    /// Stops automatic progress (see `auto_progress`) on the IC.
+    #[instrument(skip(self), fields(instance_id=self.instance_id))]
+    pub fn stop_progress(&self) {
+        let endpoint = "stop_progress";
+        self.post::<(), _>(endpoint, "");
+    }
+
     /// Get the root key of this IC instance. Returns `None` if the IC has no NNS subnet.
     #[instrument(skip(self), fields(instance_id=self.instance_id))]
     pub fn root_key(&self) -> Option<Vec<u8>> {
@@ -758,32 +774,47 @@ impl PocketIc {
     }
 
     fn get<T: DeserializeOwned>(&self, endpoint: &str) -> T {
-        let result = self
-            .reqwest_client
-            .get(self.instance_url().join(endpoint).unwrap())
-            .header(PROCESSING_TIME_HEADER, PROCESSING_TIME_VALUE_MS)
-            .send()
-            .expect("HTTP failure");
-        Self::check_response(result)
+        loop {
+            let result = self
+                .reqwest_client
+                .get(self.instance_url().join(endpoint).unwrap())
+                .header(PROCESSING_TIME_HEADER, PROCESSING_TIME_VALUE_MS)
+                .send()
+                .expect("HTTP failure");
+            if let Some(t) = self.check_response(result) {
+                break t;
+            }
+        }
     }
 
     fn post<T: DeserializeOwned, B: Serialize>(&self, endpoint: &str, body: B) -> T {
-        let result = self
-            .reqwest_client
-            .post(self.instance_url().join(endpoint).unwrap())
-            .header(PROCESSING_TIME_HEADER, PROCESSING_TIME_VALUE_MS)
-            .json(&body)
-            .send()
-            .expect("HTTP failure");
-        Self::check_response(result)
+        loop {
+            let result = self
+                .reqwest_client
+                .post(self.instance_url().join(endpoint).unwrap())
+                .header(PROCESSING_TIME_HEADER, PROCESSING_TIME_VALUE_MS)
+                .json(&body)
+                .send()
+                .expect("HTTP failure");
+            if let Some(t) = self.check_response(result) {
+                break t;
+            }
+        }
     }
 
-    fn check_response<T: DeserializeOwned>(result: reqwest::blocking::Response) -> T {
+    fn check_response<T: DeserializeOwned>(
+        &self,
+        result: reqwest::blocking::Response,
+    ) -> Option<T> {
         match result.into() {
-            ApiResponse::Success(t) => t,
+            ApiResponse::Success(t) => Some(t),
             ApiResponse::Error { message } => panic!("{}", message),
             ApiResponse::Busy { state_label, op_id } => {
-                panic!("Busy: state_label: {}, op_id: {}", state_label, op_id)
+                debug!(
+                    "instance_id={} Instance is busy: state_label: {}, op_id: {}",
+                    self.instance_id, state_label, op_id
+                );
+                None
             }
             ApiResponse::Started { state_label, op_id } => {
                 panic!("Started: state_label: {}, op_id: {}", state_label, op_id)
