@@ -185,6 +185,10 @@ pub struct CanisterSnapshotBits {
     pub certified_data: Vec<u8>,
     /// The metadata required for a wasm chunk store.
     pub wasm_chunk_store_metadata: WasmChunkStoreMetadata,
+    /// The size of the stable memory in pages.
+    pub stable_memory_size: NumWasmPages,
+    /// The size of the wasm memory in pages.
+    pub wasm_memory_size: NumWasmPages,
 }
 
 #[derive(Clone)]
@@ -1999,6 +2003,8 @@ impl From<&CanisterSnapshotBits> for pb_canister_snapshot_bits::CanisterSnapshot
             binary_hash: item.binary_hash.as_ref().map(|h| h.to_vec()),
             certified_data: item.certified_data.clone(),
             wasm_chunk_store_metadata: Some((&item.wasm_chunk_store_metadata).into()),
+            stable_memory_size: item.stable_memory_size.get() as u64,
+            wasm_memory_size: item.wasm_memory_size.get() as u64,
         }
     }
 }
@@ -2035,6 +2041,8 @@ impl TryFrom<pb_canister_snapshot_bits::CanisterSnapshotBits> for CanisterSnapsh
                 "CanisterSnapshotBits::wasm_chunk_store_metadata",
             )
             .unwrap_or_default(),
+            stable_memory_size: NumWasmPages::from(item.stable_memory_size as usize),
+            wasm_memory_size: NumWasmPages::from(item.wasm_memory_size as usize),
         })
     }
 }
