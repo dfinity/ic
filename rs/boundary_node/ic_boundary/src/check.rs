@@ -1,44 +1,32 @@
 use std::{
     fmt,
-    num::Wrapping,
     str::FromStr,
     sync::Arc,
     time::{Duration, Instant},
 };
 
-use anyhow::{anyhow, Error};
-use arc_swap::ArcSwapOption;
-use async_scoped::TokioScope;
+use anyhow::Error;
 use async_trait::async_trait;
 use bytes::Buf;
-use candid::Principal;
-use dashmap::DashMap;
 use http::Method;
 use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use mockall::automock;
-use tracing::warn;
+use tokio::{
+    select,
+    sync::{mpsc, watch},
+};
+use tokio_util::{sync::CancellationToken, task::TaskTracker};
+use tracing::{debug, info, warn};
 use url::Url;
 
 use crate::{
-    core::{Run, WithRetryLimited},
+    core::Run,
     http::HttpClient,
     metrics::{MetricParamsCheck, WithMetricsCheck},
     persist::Persist,
     snapshot::RegistrySnapshot,
     snapshot::{Node, Subnet},
 };
-
-struct NodeState {
-    ok_count: u8,
-    last_check_id: Wrapping<u64>,
-    replica_version: String,
-}
-
-struct NodeCheckResult {
-    node: Arc<Node>,
-    ok_count: u8,
-    height: u64,
-}
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum CheckError {
@@ -76,179 +64,451 @@ impl fmt::Display for CheckError {
     }
 }
 
-pub struct Runner<P: Persist, C: Check> {
-    published_registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
-    node_states: Arc<DashMap<Principal, NodeState>>,
-    last_check_id: Wrapping<u64>,
-    min_ok_count: u8,
-    max_height_lag: u64,
-    persist: P,
-    checker: C,
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Default)]
+struct NodeState {
+    healthy: bool,
+    height: u64,
 }
 
-impl<P: Persist, C: Check> Runner<P, C> {
-    pub fn new(
-        published_registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
-        min_ok_count: u8,
-        max_height_lag: u64,
-        persist: P,
-        checker: C,
+// NodeActor periodically runs the health checking with given interval and sends the NodeState down to
+// SubnetActor when it changes
+struct NodeActor {
+    idx: usize,
+    node: Arc<Node>,
+    channel: mpsc::Sender<(usize, NodeState)>,
+    token: CancellationToken,
+    checker: Arc<dyn Check>,
+    state: Option<NodeState>,
+}
+
+impl NodeActor {
+    fn new(
+        idx: usize,
+        node: Arc<Node>,
+        channel: mpsc::Sender<(usize, NodeState)>,
+        token: CancellationToken,
+        checker: Arc<dyn Check>,
     ) -> Self {
         Self {
-            published_registry_snapshot,
-            node_states: Arc::new(DashMap::new()),
-            last_check_id: Wrapping(0u64),
-            min_ok_count,
-            max_height_lag,
-            persist,
+            idx,
+            node,
+            channel,
+            token,
             checker,
+            state: None,
         }
     }
 
-    // Perform a health check on a given node
-    async fn check_node(&self, node: Arc<Node>) -> Result<NodeCheckResult, CheckError> {
-        // Perform Health Check
-        let check_result = self.checker.check(&node).await;
+    // Perform the health check
+    async fn check(&mut self) {
+        let res = self.checker.check(&self.node).await;
 
-        // Look up the node state and get a mutable reference if there's any
-        // Locking behavior on DashMap is relevant to multiple locks from a single thread
-        // In Tokio environment where we have a thread-per-node it shouldn't deadlock
-        let node_state = self.node_states.get_mut(&node.id);
-
-        let check_result = match check_result {
-            // Just return the result if it's an error while also updating the state
-            Err(e) => {
-                if let Some(mut x) = node_state {
-                    x.ok_count = 0;
-                    x.last_check_id = self.last_check_id;
-                }
-
-                return Err(e);
-            }
-
-            Ok(v) => v,
+        let state = NodeState {
+            healthy: res.is_ok(),
+            height: res.map_or(0, |x| x.height),
         };
 
-        let ok_count = match &node_state {
-            // If it's a first success -> set to max
-            None => self.min_ok_count,
-
-            Some(entry) => {
-                // If replica version has changed -> then the node just came up after the upgrade
-                // Bump to min_ok_count to bring it up immediately
-                if entry.replica_version != check_result.replica_version {
-                    self.min_ok_count
-                } else {
-                    // Otherwise, increment OK count
-                    self.min_ok_count.min(entry.ok_count + 1)
-                }
-            }
-        };
-
-        let height = check_result.height;
-
-        // Insert or update the entry
-        match node_state {
-            None => {
-                self.node_states.insert(
-                    node.id,
-                    NodeState {
-                        ok_count,
-                        last_check_id: self.last_check_id,
-                        replica_version: check_result.replica_version,
-                    },
-                );
-            }
-
-            Some(mut e) => {
-                e.ok_count = ok_count;
-                e.last_check_id = self.last_check_id;
-                e.replica_version = check_result.replica_version;
-            }
-        };
-
-        Ok(NodeCheckResult {
-            node,
-            height,
-            ok_count,
-        })
+        // Send the state down the line if it has changed
+        if Some(state) != self.state {
+            self.state = Some(state);
+            // It can never fail in our case
+            let _ = self.channel.send((self.idx, state)).await;
+        }
     }
 
-    // Healthcheck all the nodes in a subnet
-    async fn check_subnet(&self, subnet: Subnet) -> Subnet {
-        // Check all nodes, using green threads for each node
-        let ((), nodes) = TokioScope::scope_and_block(|s| {
-            for node in subnet.nodes.into_iter() {
-                s.spawn(self.check_node(node));
-            }
-        });
+    async fn run(&mut self, check_interval: Duration) {
+        debug!("Healthcheck actor for node {} started", self.node);
 
-        // Filter out bad nodes
-        let mut nodes = nodes
-            .into_iter()
-            .filter_map(Result::ok) // Filter any green thread errors
-            .filter_map(Result::ok) // Filter any `check` errors
+        let mut interval = tokio::time::interval(check_interval);
+        loop {
+            select! {
+                // Check if we need to shut down
+                _ = self.token.cancelled() => {
+                    debug!("Healthcheck actor for node {} stopped", self.node);
+                    return;
+                }
+
+                // Run the check with given interval
+                _ = interval.tick() => self.check().await,
+            }
+        }
+    }
+}
+
+// SubnetActor spawns NodeActors, receives their state, computes minimum height for the subnet and sends the
+// Subnet with healthy nodes down to GlobalActor when the health state changes
+struct SubnetActor {
+    idx: usize,
+    subnet: Subnet,
+    token: CancellationToken,
+    token_nodes: CancellationToken,
+    tracker: TaskTracker,
+    channel_recv: mpsc::Receiver<(usize, NodeState)>,
+    channel_out: mpsc::Sender<(usize, Subnet)>,
+    states: Vec<Option<NodeState>>,
+    max_height_lag: u64,
+    healthy_nodes: Option<Vec<Arc<Node>>>,
+    state_changed: bool,
+    init_done: bool,
+}
+
+impl SubnetActor {
+    fn new(
+        idx: usize,
+        subnet: Subnet,
+        check_interval: Duration,
+        token: CancellationToken,
+        checker: Arc<dyn Check>,
+        channel_out: mpsc::Sender<(usize, Subnet)>,
+        max_height_lag: u64,
+    ) -> Self {
+        let (channel_send, channel_recv) = mpsc::channel(128);
+        let tracker = TaskTracker::new();
+        let token_nodes = CancellationToken::new();
+
+        for (idx, node) in subnet.nodes.iter().enumerate() {
+            let mut actor = NodeActor::new(
+                idx,
+                node.clone(),
+                channel_send.clone(),
+                token_nodes.child_token(),
+                checker.clone(),
+            );
+
+            tracker.spawn(async move {
+                actor.run(check_interval).await;
+            });
+        }
+
+        Self {
+            idx,
+            states: vec![None; subnet.nodes.len()],
+            subnet,
+            token,
+            token_nodes,
+            tracker,
+            channel_recv,
+            channel_out,
+            max_height_lag,
+            healthy_nodes: None,
+            state_changed: false,
+            init_done: false,
+        }
+    }
+
+    fn calc_min_height(&self) -> u64 {
+        let mut heights = self
+            .states
+            .iter()
+            // calc_min_height is called only when all states are Some()
+            .map(|x| x.unwrap())
+            .filter(|x| x.healthy)
+            .map(|x| x.height)
             .collect::<Vec<_>>();
 
         // Calculate the minimum block height requirement for given subnet
-        let min_height = match nodes.len() {
+        match heights.len() {
             0 => 0,
             _ => {
-                nodes.sort_by_key(|node| node.height);
-                let mid_height_0 = nodes[(nodes.len() - 1) / 2].height;
-                let mid_height_1 = nodes[nodes.len() / 2].height;
+                heights.sort();
+                let mid_height_0 = heights[(heights.len() - 1) / 2];
+                let mid_height_1 = heights[heights.len() / 2];
                 // We use the median because it's a good approximation of
                 // the "consensus" and keeps us resilient to malicious replicas
-                // sending an artificially high height to DOS the BNs
+                // sending an artificially high height to DoS the BNs
                 let median_height = (mid_height_0 + mid_height_1) / 2;
                 median_height.saturating_sub(self.max_height_lag)
             }
-        };
+        }
+    }
 
-        // Filter out nodes that fail the predicates
-        let nodes = nodes
-            .into_iter()
-            .filter(|x| x.height >= min_height) // Filter below min_height
-            .filter(|x| x.ok_count >= self.min_ok_count) // Filter below min_ok_count
-            .map(|x| x.node)
+    // This remembers if we have passed the init state so that we don't have to iterate each time
+    fn init_done(&mut self) -> bool {
+        if !self.init_done {
+            self.init_done = !self.states.iter().any(|x| x.is_none());
+        }
+
+        self.init_done
+    }
+
+    async fn update(&mut self) {
+        // Don't do anything unless we already got initial iteration of states from all node actors
+        if !self.init_done() {
+            return;
+        }
+
+        // Calc the minimum height
+        let min_height = self.calc_min_height();
+
+        // Generate a list of healthy nodes
+        let nodes = self
+            .states
+            .iter()
+            // All states are Some() - it's checked above
+            .map(|x| x.unwrap())
+            .enumerate()
+            // Map from idx to a node
+            .map(|(idx, state)| (self.subnet.nodes[idx].clone(), state))
+            // Discard unhealthy & lagging behind
+            .filter(|(_, state)| state.healthy && state.height >= min_height)
+            .map(|(node, _)| node)
             .collect::<Vec<_>>();
 
-        Subnet { nodes, ..subnet }
+        // See if the healthy nodes set changed
+        if self.healthy_nodes.is_none() || &nodes != self.healthy_nodes.as_ref().unwrap() {
+            self.healthy_nodes = Some(nodes.clone());
+
+            // Publish the new subnet
+            let subnet = Subnet {
+                id: self.subnet.id,
+                subnet_type: self.subnet.subnet_type,
+                ranges: self.subnet.ranges.clone(),
+                nodes,
+                replica_version: self.subnet.replica_version.clone(),
+            };
+
+            // It can never fail in our case
+            let _ = self.channel_out.send((self.idx, subnet)).await;
+        }
+    }
+
+    async fn run(&mut self, update_interval: Duration) {
+        debug!("Healthcheck actor for subnet {} started", self.subnet);
+
+        let mut interval = tokio::time::interval(update_interval);
+        loop {
+            select! {
+                // Check if we need to shut down
+                _ = self.token.cancelled() => {
+                    // Cancel the node actors token
+                    self.token_nodes.cancel();
+                    // Wait for all node actors to exit
+                    self.tracker.close();
+                    self.tracker.wait().await;
+                    self.channel_recv.close();
+                    debug!("Healthcheck actor for subnet {} stopped", self.subnet);
+                    return;
+                }
+
+                // Read messages from node actors
+                msg = self.channel_recv.recv() => {
+                    let (idx, state) = match msg {
+                        Some(v) => v,
+                        None => return,
+                    };
+
+                    let old_state = self.states[idx];
+                    self.states[idx] = Some(state);
+
+                    // Trigger an immediate refresh if the node's health state has changed
+                    if Some(state.healthy) != old_state.map(|x| x.healthy) {
+                        self.update().await;
+                    } else {
+                        // Otherwise it'll be handled by a periodic job
+                        self.state_changed = true;
+                    }
+                }
+
+                // Periodically recalculate the healthy nodes list
+                _ = interval.tick() => {
+                    // Check if we've received some new states from node actors
+                    if self.state_changed {
+                        self.update().await;
+                        self.state_changed = false;
+                    }
+                }
+            }
+        }
+    }
+}
+
+// GlobalActor spawns SubnetActors, receives & aggregates their state and persists the new routing table snapshots
+struct GlobalActor {
+    subnets: Vec<Option<Subnet>>,
+    token: CancellationToken,
+    token_subnets: CancellationToken,
+    tracker: TaskTracker,
+    channel_recv: mpsc::Receiver<(usize, Subnet)>,
+    persister: Arc<dyn Persist>,
+    init_done: bool,
+}
+
+impl GlobalActor {
+    fn new(
+        subnets: Vec<Subnet>,
+        check_interval: Duration,
+        update_interval: Duration,
+        max_height_lag: u64,
+        checker: Arc<dyn Check>,
+        persister: Arc<dyn Persist>,
+        token: CancellationToken,
+    ) -> Self {
+        let tracker = TaskTracker::new();
+        let token_subnets = CancellationToken::new();
+        let (channel_send, channel_recv) = mpsc::channel(128);
+
+        // Create & start per-subnet actors
+        for (idx, subnet) in subnets.iter().enumerate() {
+            let mut actor = SubnetActor::new(
+                idx,
+                subnet.clone(),
+                check_interval,
+                token_subnets.child_token(),
+                checker.clone(),
+                channel_send.clone(),
+                max_height_lag,
+            );
+
+            tracker.spawn(async move {
+                actor.run(update_interval).await;
+            });
+        }
+
+        Self {
+            subnets: vec![None; subnets.len()],
+            token,
+            token_subnets,
+            tracker,
+            channel_recv,
+            persister,
+            init_done: false,
+        }
+    }
+
+    // This remembers if we have passed the init state so that we don't have to iterate each time
+    fn init_done(&mut self) -> bool {
+        if !self.init_done {
+            self.init_done = !self.subnets.iter().any(|x| x.is_none());
+        }
+
+        self.init_done
+    }
+
+    // Persist the current health state in a routing table
+    fn persist(&mut self) {
+        // Don't do anything unless we already got an initial iteration of states from all subnet actors
+        if !self.init_done() {
+            return;
+        }
+
+        let subnets = self
+            .subnets
+            .clone()
+            .into_iter()
+            // Subnets are Some() at this stage - this is checked above
+            .map(|x| x.unwrap())
+            .collect::<Vec<_>>();
+
+        self.persister.persist(subnets);
+    }
+
+    async fn run(&mut self) {
+        debug!("Healthcheck global actor started");
+
+        loop {
+            select! {
+                // Check if we need to shut down
+                _ = self.token.cancelled() => {
+                    // Cancel the node actors token
+                    self.token_subnets.cancel();
+                    // Wait for all subnet actors to exit
+                    self.tracker.close();
+                    self.tracker.wait().await;
+                    self.channel_recv.close();
+                    debug!("Healthcheck global actor stopped");
+                    return;
+                }
+
+                // Read messages from subnet actors
+                msg = self.channel_recv.recv() => {
+                    let (idx, subnet) = match msg {
+                        Some(v) => v,
+                        None => return,
+                    };
+
+                    self.subnets[idx] = Some(subnet);
+                    self.persist();
+                }
+            }
+        }
+    }
+}
+
+// Runner receives new registry snapshots and restarts GlobalActor
+pub struct Runner {
+    max_height_lag: u64,
+    check_interval: Duration,
+    update_interval: Duration,
+    tracker: TaskTracker,
+    token: CancellationToken,
+    checker: Arc<dyn Check>,
+    persister: Arc<dyn Persist>,
+    channel_snapshot: watch::Receiver<Option<Arc<RegistrySnapshot>>>,
+}
+
+impl Runner {
+    pub fn new(
+        channel_snapshot: watch::Receiver<Option<Arc<RegistrySnapshot>>>,
+        max_height_lag: u64,
+        persister: Arc<dyn Persist>,
+        checker: Arc<dyn Check>,
+        check_interval: Duration,
+        update_interval: Duration,
+    ) -> Self {
+        Self {
+            max_height_lag,
+            tracker: TaskTracker::new(),
+            token: CancellationToken::new(),
+            persister,
+            checker,
+            check_interval,
+            update_interval,
+            channel_snapshot,
+        }
+    }
+
+    // Start global actor
+    fn start(&mut self) {
+        self.tracker = TaskTracker::new();
+        self.token = CancellationToken::new();
+
+        // Read the latest snapshot, if it was updated then it's always Some()
+        let snapshot = self.channel_snapshot.borrow_and_update().clone().unwrap();
+
+        // Create & spawn new global actor
+        let mut actor = GlobalActor::new(
+            snapshot.subnets.clone(),
+            self.check_interval,
+            self.update_interval,
+            self.max_height_lag,
+            self.checker.clone(),
+            self.persister.clone(),
+            self.token.child_token(),
+        );
+
+        self.tracker.spawn(async move {
+            actor.run().await;
+        });
+    }
+
+    // Stop global actor
+    async fn stop(&mut self) {
+        self.token.cancel();
+        self.tracker.close();
+        self.tracker.wait().await;
     }
 }
 
 #[async_trait]
-impl<P: Persist, C: Check> Run for Runner<P, C> {
+impl Run for Runner {
     async fn run(&mut self) -> Result<(), Error> {
-        // Clone the the latest registry snapshot if there's one
-        let snapshot = self
-            .published_registry_snapshot
-            .load_full()
-            .ok_or_else(|| anyhow!("no registry snapshot available"))?
-            .as_ref()
-            .clone();
-
-        // Increment the id so we can delete stale entries
-        self.last_check_id += 1;
-
-        // Check all the subnets, using green threads for each subnet
-        let ((), subnets) = TokioScope::scope_and_block(|s| {
-            for subnet in snapshot.subnets.into_iter() {
-                s.spawn(self.check_subnet(subnet));
-            }
-        });
-
-        // Filter out failed subnets
-        let subnets = subnets.into_iter().filter_map(Result::ok).collect();
-
-        // Clear stale entries.
-        // All entries that existed in a registry have now been updated with `last_check_id`
-        // Anything that didn't get touched is stale.
-        self.node_states
-            .retain(|_, x| x.last_check_id == self.last_check_id);
-
-        // Persist the routing table
-        self.persist.persist(subnets);
+        // Watch for snapshot updates and restart global actor
+        while self.channel_snapshot.changed().await.is_ok() {
+            info!("New registry snapshot - restarting health check actors");
+            self.stop().await;
+            self.start();
+            info!("Health check actors restarted");
+        }
 
         Ok(())
     }
@@ -256,7 +516,6 @@ impl<P: Persist, C: Check> Run for Runner<P, C> {
 
 pub struct CheckResult {
     pub height: u64,
-    pub latency: Duration,
     pub replica_version: String,
 }
 
@@ -291,15 +550,11 @@ impl Check for Checker {
         *request.timeout_mut() = Some(self.timeout);
 
         // Execute request
-        let start_time = Instant::now();
-
         let response = self
             .http_client
             .execute(request)
             .await
             .map_err(|err| CheckError::Network(err.to_string()))?;
-
-        let latency = start_time.elapsed();
 
         if response.status() != reqwest::StatusCode::OK {
             return Err(CheckError::Http(response.status().into()));
@@ -330,41 +585,8 @@ impl Check for Checker {
 
         Ok(CheckResult {
             height: certified_height.map_or(0, |v| v.get()),
-            latency,
             replica_version: impl_version.unwrap(),
         })
-    }
-}
-
-#[async_trait]
-impl<T: Check> Check for WithRetryLimited<T> {
-    async fn check(&self, node: &Node) -> Result<CheckResult, CheckError> {
-        let mut remaining_attempts = self.1;
-        let attempt_interval = self.2;
-
-        loop {
-            let start_time = Instant::now();
-
-            let out = self.0.check(node).await;
-            // Retry only on network errors
-            match &out {
-                Ok(_) => return out,
-                Err(e) => match e {
-                    CheckError::Network(_) => {}
-                    _ => return out,
-                },
-            }
-
-            remaining_attempts -= 1;
-            if remaining_attempts == 0 {
-                return out;
-            }
-
-            let duration = start_time.elapsed();
-            if duration < attempt_interval {
-                tokio::time::sleep(attempt_interval - duration).await;
-            }
-        }
     }
 }
 

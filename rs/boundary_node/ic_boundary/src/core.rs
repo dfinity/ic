@@ -95,6 +95,10 @@ lazy_static! {
 }
 
 pub async fn main(cli: Cli) -> Result<(), Error> {
+    if cli.listen.http_timeout_connect > cli.health.check_timeout {
+        panic!("--check-timeout should be longer than --http-timeout-connect");
+    }
+
     // Metrics
     let metrics_registry: Registry = Registry::new_custom(Some(SERVICE_NAME.into()), None)?;
 
@@ -270,10 +274,12 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     );
 
     // Snapshots
+    let (channel_snapshot_send, channel_snapshot_recv) = tokio::sync::watch::channel(None);
     let snapshot_runner = WithMetricsSnapshot(
         {
             let mut snapshotter = Snapshotter::new(
                 Arc::clone(&registry_snapshot),
+                channel_snapshot_send,
                 registry_client.clone(),
                 Duration::from_secs(cli.registry.min_version_age),
             );
@@ -305,22 +311,14 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
 
     let checker = Checker::new(http_client, Duration::from_millis(cli.health.check_timeout));
     let checker = WithMetricsCheck(checker, MetricParamsCheck::new(&metrics_registry));
-    let checker = WithRetryLimited(checker, cli.health.check_retries, Duration::ZERO);
 
     let check_runner = CheckRunner::new(
-        Arc::clone(&registry_snapshot),
-        cli.health.min_ok_count,
+        channel_snapshot_recv,
         cli.health.max_height_lag,
-        persister,
-        checker,
-    );
-    let check_runner = WithMetrics(
-        check_runner,
-        MetricParams::new(&metrics_registry, "run_check"),
-    );
-    let check_runner = WithThrottle(
-        check_runner,
-        ThrottleParams::new(Duration::from_millis(cli.health.check_interval)),
+        Arc::new(persister),
+        Arc::new(checker),
+        Duration::from_millis(cli.health.check_interval),
+        Duration::from_millis(cli.health.update_interval),
     );
 
     // Runners
@@ -702,12 +700,6 @@ impl<T: Run> Run for WithMetrics<T> {
         out
     }
 }
-
-pub struct WithRetryLimited<T>(
-    pub T,
-    pub u32,      // max_attempts
-    pub Duration, // attempt_interval
-);
 
 pub struct WithRetry<T>(
     pub T,

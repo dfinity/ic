@@ -18,7 +18,10 @@ async fn test_resolve() -> Result<(), Error> {
     let reg = Arc::new(reg);
     let snapshot = Arc::new(ArcSwapOption::empty());
     let helper = DnsResolver::new(Arc::clone(&snapshot));
-    let mut snapshotter = Snapshotter::new(Arc::clone(&snapshot), reg, Duration::ZERO);
+
+    let (channel_send, _) = tokio::sync::watch::channel(None);
+    let mut snapshotter =
+        Snapshotter::new(Arc::clone(&snapshot), channel_send, reg, Duration::ZERO);
     snapshotter.snapshot()?;
 
     // Check that resolved node's IPs match expected ones
