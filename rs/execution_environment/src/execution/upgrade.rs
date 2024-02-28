@@ -6,12 +6,12 @@
 use std::sync::Arc;
 
 use crate::canister_manager::{
-    DtsInstallCodeResult, InstallCodeContext, PausedInstallCodeExecution,
+    CanisterManagerError, DtsInstallCodeResult, InstallCodeContext, PausedInstallCodeExecution,
 };
 use crate::execution::common::{ingress_status_with_processing_state, update_round_limits};
 use crate::execution::install_code::{
-    canister_layout, finish_err, InstallCodeHelper, MainMemoryHandling, MemoryHandling,
-    OriginalContext, PausedInstallCodeHelper, StableMemoryHandling,
+    canister_layout, finish_err, CanisterMemoryHandling, InstallCodeHelper, OriginalContext,
+    PausedInstallCodeHelper,
 };
 use crate::execution_environment::{RoundContext, RoundLimits};
 use ic_base_types::PrincipalId;
@@ -26,6 +26,8 @@ use ic_replicated_state::{
 use ic_system_api::ApiType;
 use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
 use ic_types::{funds::Cycles, messages::CanisterCall};
+
+use super::install_code::MemoryHandling;
 
 #[cfg(test)]
 mod tests;
@@ -263,7 +265,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
         original.compilation_cost_handling,
     );
 
-    let main_memory_handling = match context.mode {
+    let main_memory_retention = match context.mode {
         CanisterInstallModeV2::Upgrade(Some(upgrade_options)) => {
             match upgrade_options.keep_main_memory {
                 Some(true) => MemoryHandling::Keep,
@@ -285,7 +287,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
                 }
             }
         }
-        _ => MainMemoryHandling::Replace { explicit: false },
+        _ => MemoryHandling::Replace,
     };
 
     let memory_handling = CanisterMemoryHandling {

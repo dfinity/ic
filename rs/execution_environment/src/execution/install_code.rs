@@ -37,37 +37,28 @@ mod tests;
 
 pub const ENHANCED_ORTHOGONAL_PERSISTENCE_SECTION: &str = "enhanced-orthogonal-persistence";
 
-/// Indicates whether the stable memory is kept or replaced with new (empty) memory.
+/// Indicates whether the memory is kept or replaced with new (initial) memory.
+/// Applicable to both the stable memory and the main memory of a canister.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) enum StableMemoryHandling {
-    /// Erase the stable memory on install or re-install.
+pub(crate) enum MemoryHandling {
+    /// Retain the memory.
+    Keep,
+    /// Reset the memory.
     Replace,
-    /// Retain the stable memory on upgrade.
-    Keep,
 }
 
-/// Indicates whether the main memory is kept or replaced with new (empty) memory.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) enum MainMemoryHandling {
-    /// Erase the main memory on install, re-install, or on an ordinary upgrade that does not
-    /// use enhanced orthogonal persistence.
-    /// `explicit` denotes whether the upgrade option `keep_main_memory = false` is specified
-    /// or it is an install or re-install.
-    Replace { explicit: bool },
-    /// For enhanced orthogonal persistence (as with Motoko): Retain the main memory on upgrade.
-    Keep,
-}
-
-/// Specifies the retention of the canister's memories.
+/// Specifies the handling of the canister's memories.
 /// * On install and re-install:
-///   - Replace both stable and main memory.
+///   - Replace both the stable memory and the main memory.
 /// * On upgrade:
-///   - For canisters with enhanced orthogonal persistence (Motoko): Retain both main and stable memory.
-///   - For all other canisters: Retain only stable memory and erase main memory.
+///   - For canisters with enhanced orthogonal persistence (Motoko):
+///     Retain both the main memory and the stable memory.
+///   - For all other canisters:
+///     Retain only the stable memory and erase the main memory.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) struct MemoryHandling {
-    pub stable_memory_handling: StableMemoryHandling,
-    pub main_memory_handling: MainMemoryHandling,
+pub(crate) struct CanisterMemoryHandling {
+    pub stable_memory_handling: MemoryHandling,
+    pub main_memory_handling: MemoryHandling,
 }
 
 /// The main steps of `install_code` execution that may fail with an error or
@@ -79,7 +70,7 @@ pub(crate) enum InstallCodeStep {
     ReplaceExecutionStateAndAllocations {
         instructions_from_compilation: NumInstructions,
         maybe_execution_state: HypervisorResult<ExecutionState>,
-        memory_handling: MemoryHandling,
+        memory_handling: CanisterMemoryHandling,
     },
     ClearCertifiedData,
     DeactivateGlobalTimer,
@@ -506,7 +497,7 @@ impl InstallCodeHelper {
         &mut self,
         instructions_from_compilation: NumInstructions,
         maybe_execution_state: HypervisorResult<ExecutionState>,
-        memory_handling: MemoryHandling,
+        memory_handling: CanisterMemoryHandling,
         original: &OriginalContext,
     ) -> Result<(), CanisterManagerError> {
         self.steps
@@ -537,21 +528,12 @@ impl InstallCodeHelper {
 
         if let Some(old) = self.canister.execution_state.take() {
             match memory_handling.stable_memory_handling {
-                StableMemoryHandling::Keep => execution_state.stable_memory = old.stable_memory,
-                StableMemoryHandling::Replace => {}
+                MemoryHandling::Keep => execution_state.stable_memory = old.stable_memory,
+                MemoryHandling::Replace => {}
             }
             match memory_handling.main_memory_handling {
-                MainMemoryHandling::Keep => execution_state.wasm_memory = old.wasm_memory,
-                MainMemoryHandling::Replace { explicit } => {
-                    // Safety guard checking that the `keep_main_memory` upgrade option has not been omitted in error.
-                    let uses_orthogonal_persistence = old
-                        .metadata
-                        .get_custom_section(ENHANCED_ORTHOGONAL_PERSISTENCE_SECTION)
-                        .is_some();
-                    if !explicit && uses_orthogonal_persistence {
-                        return Err(CanisterManagerError::MissingUpgradeOptionError { message: "Enhanced orthogonal persistence requires the `keep_main_memory` upgrade option.".to_string() });
-                    }
-                }
+                MemoryHandling::Keep => execution_state.wasm_memory = old.wasm_memory,
+                MemoryHandling::Replace => {}
             }
         };
 
@@ -600,6 +582,18 @@ impl InstallCodeHelper {
             new_wasm_custom_sections_memory_used,
         );
         Ok(())
+    }
+
+    /// Tests whether the canister uses enhanced orthogonal persistence.
+    /// Used for checking that the `keep_main_memory` upgrade option is not omitted in error.
+    pub fn expects_orthogonal_persistence(&self) -> bool {
+        match &self.canister.execution_state {
+            Some(old_state) => old_state
+                .metadata
+                .get_custom_section(ENHANCED_ORTHOGONAL_PERSISTENCE_SECTION)
+                .is_some(),
+            None => false,
+        }
     }
 
     // A helper method to keep track of allocated and deallocated memory bytes.
