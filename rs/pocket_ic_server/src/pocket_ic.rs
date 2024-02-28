@@ -1,10 +1,19 @@
+use crate::async_trait;
 use crate::state_api::state::{HasStateLabel, OpOut, PocketIcError, StateLabel};
 use crate::OpId;
 use crate::Operation;
 use crate::{copy_dir, BlobStore};
+use axum::{extract::State, response::IntoResponse};
+use hyper::body::Bytes;
+use hyper::header::HeaderValue;
+use ic_boundary::{Health, RootKey};
 use ic_config::execution_environment;
 use ic_config::subnet_config::SubnetConfig;
 use ic_crypto_sha2::Sha256;
+use ic_http_endpoints_public::{
+    CallServiceBuilder, CanisterReadStateServiceBuilder, QueryServiceBuilder,
+};
+use ic_interfaces::{crypto::BasicSigner, ingress_pool::IngressPoolThrottler};
 use ic_management_canister_types::CanisterInstallMode;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET};
@@ -13,8 +22,14 @@ use ic_state_machine_tests::{
     finalize_registry, IngressState, IngressStatus, StateMachine, StateMachineBuilder,
     StateMachineConfig, SubmitIngressError, Time,
 };
-use ic_types::messages::CertificateDelegation;
-use ic_types::{CanisterId, PrincipalId, SubnetId};
+use ic_types::{
+    artifact::UnvalidatedArtifactMutation,
+    artifact_kind::IngressArtifact,
+    crypto::{BasicSig, BasicSigOf, CryptoResult, Signable},
+    messages::{CertificateDelegation, QueryResponseHash, ReplicaHealthStatus},
+    CanisterId, NodeId, PrincipalId, RegistryVersion, SubnetId,
+};
+use ic_validator_ingress_message::StandaloneIngressSigVerifier;
 use itertools::Itertools;
 use pocket_ic::common::rest::{
     self, BinaryBlob, BlobCompression, ExtendedSubnetConfigSet, RawAddCycles, RawCanisterCall,
@@ -24,6 +39,7 @@ use rand::rngs::StdRng;
 use rand::Rng;
 use rand::SeedableRng;
 use serde::{Deserialize, Serialize};
+use std::hash::Hash;
 use std::str::FromStr;
 use std::{
     collections::{BTreeMap, HashMap},
@@ -32,6 +48,11 @@ use std::{
 };
 use tempfile::TempDir;
 use tokio::runtime::Runtime;
+use tokio::sync::mpsc;
+use tower::{
+    service_fn,
+    util::{BoxCloneService, ServiceExt},
+};
 
 /// We assume that the maximum number of subnets on the mainnet is 1024.
 /// Used for generating canister ID ranges that do not appear on mainnet.
@@ -556,7 +577,7 @@ impl Operation for ExecuteIngressMessage {
                         eprintln!("Failed to submit ingress message: {}", e);
                         OpOut::Error(PocketIcError::BadIngressMessage(e))
                     }
-                    Err(ic_state_machine_tests::SubmitIngressError::UserError(e)) => {
+                    Err(SubmitIngressError::UserError(e)) => {
                         eprintln!("Failed to submit ingress message: {:?}", e);
                         Err::<ic_state_machine_tests::WasmResult, ic_state_machine_tests::UserError>(e).into()
                     }
@@ -629,6 +650,348 @@ impl Operation for Query {
     fn id(&self) -> OpId {
         let call_id = self.0.id();
         OpId(format!("canister_query_{}", call_id.0))
+    }
+}
+
+pub struct StatusRequest {
+    pub bytes: Bytes,
+    pub runtime: Arc<Runtime>,
+}
+
+struct PocketHealth;
+
+#[async_trait]
+impl Health for PocketHealth {
+    async fn health(&self) -> ReplicaHealthStatus {
+        ReplicaHealthStatus::Healthy
+    }
+}
+
+struct PocketRootKey(pub Option<Vec<u8>>);
+
+#[async_trait]
+impl RootKey for PocketRootKey {
+    async fn root_key(&self) -> Option<Vec<u8>> {
+        self.0.clone()
+    }
+}
+
+// START COPY from rs/boundary_node/ic_boundary/src/routes.rs
+// TODO: reshare once ic_boundary upgrades to axum 0.7.
+
+const IC_API_VERSION: &str = "0.18.0";
+// Clippy complains that these are interior-mutable.
+// We don't mutate them, so silence it.
+// https://rust-lang.github.io/rust-clippy/master/index.html#/declare_interior_mutable_const
+#[allow(clippy::declare_interior_mutable_const)]
+const CONTENT_TYPE_CBOR: HeaderValue = HeaderValue::from_static("application/cbor");
+
+pub async fn status(
+    State((rk, h)): State<(Arc<dyn RootKey>, Arc<dyn Health>)>,
+) -> impl IntoResponse {
+    use hyper::header::CONTENT_TYPE;
+    use ic_types::messages::HttpStatusResponse;
+
+    let health = h.health().await;
+
+    let status = HttpStatusResponse {
+        ic_api_version: IC_API_VERSION.to_string(),
+        root_key: rk.root_key().await.map(|x| x.into()),
+        impl_version: None,
+        impl_hash: None,
+        replica_health_status: Some(health),
+        certified_height: None,
+    };
+
+    // Serialize to CBOR
+    let mut ser = serde_cbor::Serializer::new(Vec::new());
+    // These should not really fail, better to panic if something in serde changes which would cause them to fail
+    ser.self_describe().unwrap();
+    status.serialize(&mut ser).unwrap();
+    let cbor = ser.into_inner();
+
+    // Construct response and inject health status for middleware
+    let mut response = cbor.into_response();
+    response.extensions_mut().insert(health);
+    response
+        .headers_mut()
+        .insert(CONTENT_TYPE, CONTENT_TYPE_CBOR);
+
+    response
+}
+
+// END COPY
+
+impl Operation for StatusRequest {
+    fn compute(&self, pic: &mut PocketIc) -> OpOut {
+        let root_key_bytes = pic.nns_subnet().map(|nns_subnet| nns_subnet.root_key_der());
+        let root_key = PocketRootKey(root_key_bytes);
+
+        let resp = self
+            .runtime
+            .block_on(async { status(State((Arc::new(root_key), Arc::new(PocketHealth)))).await })
+            .into_response();
+
+        OpOut::ApiV2Response((
+            resp.status().into(),
+            resp.headers()
+                .iter()
+                .map(|(name, value)| (name.as_str().to_string(), value.as_bytes().to_vec()))
+                .collect(),
+            self.runtime
+                .block_on(axum::body::to_bytes(resp.into_body(), usize::MAX))
+                .unwrap()
+                .to_vec(),
+        ))
+    }
+
+    fn retry_if_busy(&self) -> bool {
+        true
+    }
+
+    fn id(&self) -> OpId {
+        let mut hasher = Sha256::new();
+        self.bytes.hash(&mut hasher);
+        let hash = Digest(hasher.finish());
+        OpId(format!("status({})", hash,))
+    }
+}
+
+pub struct CallRequest {
+    pub effective_canister_id: CanisterId,
+    pub bytes: Bytes,
+    pub runtime: Arc<Runtime>,
+}
+
+#[derive(Clone)]
+struct PocketIngressPoolThrottler;
+
+impl IngressPoolThrottler for PocketIngressPoolThrottler {
+    fn exceeds_threshold(&self) -> bool {
+        false
+    }
+}
+
+impl Operation for CallRequest {
+    fn compute(&self, pic: &mut PocketIc) -> OpOut {
+        let subnet = route(
+            pic,
+            EffectivePrincipal::CanisterId(self.effective_canister_id),
+            None,
+        );
+        match subnet {
+            Err(e) => OpOut::Error(PocketIcError::RequestRoutingError(e)),
+            Ok(subnet) => {
+                let node = &subnet.nodes[0];
+                #[allow(clippy::disallowed_methods)]
+                let (s, mut r) =
+                    mpsc::unbounded_channel::<UnvalidatedArtifactMutation<IngressArtifact>>();
+                let ingress_filter = subnet.ingress_filter.clone();
+
+                let svc = CallServiceBuilder::builder(
+                    node.node_id,
+                    subnet.get_subnet_id(),
+                    subnet.registry_client.clone(),
+                    Arc::new(StandaloneIngressSigVerifier),
+                    BoxCloneService::new(service_fn(move |arg| {
+                        let ingress_filter = ingress_filter.clone();
+                        async {
+                            let r = ingress_filter
+                                .oneshot(arg)
+                                .await
+                                .expect("Inner service should be alive. I hope.");
+                            Ok(r)
+                        }
+                    })),
+                    Arc::new(RwLock::new(PocketIngressPoolThrottler)),
+                    s,
+                )
+                .build();
+
+                let request = axum::http::Request::builder()
+                    .extension(PrincipalId(self.effective_canister_id.get().into()))
+                    .body(self.bytes.clone().into())
+                    .unwrap();
+                let resp = self.runtime.block_on(svc.oneshot(request)).unwrap();
+
+                if let Ok(UnvalidatedArtifactMutation::Insert((msg, _node_id))) = r.try_recv() {
+                    subnet.push_signed_ingress(msg);
+                }
+
+                OpOut::ApiV2Response((
+                    resp.status().into(),
+                    resp.headers()
+                        .iter()
+                        .map(|(name, value)| (name.as_str().to_string(), value.as_bytes().to_vec()))
+                        .collect(),
+                    self.runtime
+                        .block_on(axum::body::to_bytes(resp.into_body(), usize::MAX))
+                        .unwrap()
+                        .to_vec(),
+                ))
+            }
+        }
+    }
+
+    fn retry_if_busy(&self) -> bool {
+        true
+    }
+
+    fn id(&self) -> OpId {
+        let mut hasher = Sha256::new();
+        self.bytes.hash(&mut hasher);
+        let hash = Digest(hasher.finish());
+        OpId(format!("call({},{})", self.effective_canister_id, hash,))
+    }
+}
+
+pub struct QueryRequest {
+    pub effective_canister_id: CanisterId,
+    pub bytes: Bytes,
+    pub runtime: Arc<Runtime>,
+}
+
+#[derive(Clone)]
+struct PocketNodeSigner(pub ed25519_consensus::SigningKey);
+
+impl BasicSigner<QueryResponseHash> for PocketNodeSigner {
+    fn sign_basic(
+        &self,
+        message: &QueryResponseHash,
+        _signer: NodeId,
+        _registry_version: RegistryVersion,
+    ) -> CryptoResult<BasicSigOf<QueryResponseHash>> {
+        Ok(BasicSigOf::new(BasicSig(
+            self.0.sign(&message.as_signed_bytes()).to_bytes().to_vec(),
+        )))
+    }
+}
+
+impl Operation for QueryRequest {
+    fn compute(&self, pic: &mut PocketIc) -> OpOut {
+        let subnet = route(
+            pic,
+            EffectivePrincipal::CanisterId(self.effective_canister_id),
+            None,
+        );
+        match subnet {
+            Err(e) => OpOut::Error(PocketIcError::RequestRoutingError(e)),
+            Ok(subnet) => {
+                let delegation = pic.get_nns_delegation_for_subnet(subnet.get_subnet_id());
+                let node = &subnet.nodes[0];
+                subnet.certify_latest_state();
+                let query_handler = subnet.query_handler.clone();
+                let svc = QueryServiceBuilder::builder(
+                    node.node_id,
+                    Arc::new(PocketNodeSigner(node.signing_key.clone())),
+                    subnet.registry_client.clone(),
+                    Arc::new(StandaloneIngressSigVerifier),
+                    Arc::new(RwLock::new(delegation)),
+                    BoxCloneService::new(service_fn(move |arg| {
+                        let query_handler = query_handler.clone();
+                        async {
+                            let r = query_handler
+                                .oneshot(arg)
+                                .await
+                                .expect("Inner service should be alive. I hope.");
+                            Ok(r)
+                        }
+                    })),
+                )
+                .build();
+
+                let request = axum::http::Request::builder()
+                    .extension(PrincipalId(self.effective_canister_id.get().into()))
+                    .body(self.bytes.clone().into())
+                    .unwrap();
+                let resp = self.runtime.block_on(svc.oneshot(request)).unwrap();
+
+                OpOut::ApiV2Response((
+                    resp.status().into(),
+                    resp.headers()
+                        .iter()
+                        .map(|(name, value)| (name.as_str().to_string(), value.as_bytes().to_vec()))
+                        .collect(),
+                    self.runtime
+                        .block_on(axum::body::to_bytes(resp.into_body(), usize::MAX))
+                        .unwrap()
+                        .to_vec(),
+                ))
+            }
+        }
+    }
+
+    fn retry_if_busy(&self) -> bool {
+        true
+    }
+
+    fn id(&self) -> OpId {
+        let mut hasher = Sha256::new();
+        self.bytes.hash(&mut hasher);
+        let hash = Digest(hasher.finish());
+        OpId(format!("query({},{})", self.effective_canister_id, hash,))
+    }
+}
+
+#[derive(Debug)]
+pub struct ReadStateRequest {
+    pub effective_canister_id: CanisterId,
+    pub bytes: Bytes,
+    pub runtime: Arc<Runtime>,
+}
+
+impl Operation for ReadStateRequest {
+    fn compute(&self, pic: &mut PocketIc) -> OpOut {
+        match route(
+            pic,
+            EffectivePrincipal::CanisterId(self.effective_canister_id),
+            None,
+        ) {
+            Err(e) => OpOut::Error(PocketIcError::RequestRoutingError(e)),
+            Ok(subnet) => {
+                let delegation = pic.get_nns_delegation_for_subnet(subnet.get_subnet_id());
+                subnet.certify_latest_state();
+                let svc = CanisterReadStateServiceBuilder::builder(
+                    subnet.state_manager.clone(),
+                    subnet.registry_client.clone(),
+                    Arc::new(StandaloneIngressSigVerifier),
+                    Arc::new(RwLock::new(delegation)),
+                )
+                .build();
+
+                let request = axum::http::Request::builder()
+                    .extension(PrincipalId(self.effective_canister_id.get().into()))
+                    .body(self.bytes.clone().into())
+                    .unwrap();
+                let resp = self.runtime.block_on(svc.oneshot(request)).unwrap();
+
+                OpOut::ApiV2Response((
+                    resp.status().into(),
+                    resp.headers()
+                        .iter()
+                        .map(|(name, value)| (name.as_str().to_string(), value.as_bytes().to_vec()))
+                        .collect(),
+                    self.runtime
+                        .block_on(axum::body::to_bytes(resp.into_body(), usize::MAX))
+                        .unwrap()
+                        .to_vec(),
+                ))
+            }
+        }
+    }
+
+    fn retry_if_busy(&self) -> bool {
+        true
+    }
+
+    fn id(&self) -> OpId {
+        let mut hasher = Sha256::new();
+        self.bytes.hash(&mut hasher);
+        let hash = Digest(hasher.finish());
+        OpId(format!(
+            "read_state({},{})",
+            self.effective_canister_id, hash,
+        ))
     }
 }
 
@@ -950,11 +1313,11 @@ impl Operation for InstallCanisterAsController {
 // ================================================================================================================= //
 // Helpers
 
-fn route_call(
+fn route(
     pic: &mut PocketIc,
-    canister_call: CanisterCall,
+    effective_principal: EffectivePrincipal,
+    canister_id: Option<CanisterId>,
 ) -> Result<Arc<StateMachine>, String> {
-    let effective_principal = canister_call.effective_principal.clone();
     match effective_principal {
         EffectivePrincipal::SubnetId(subnet_id) => pic
             .get_subnet_with_id(subnet_id)
@@ -965,14 +1328,29 @@ fn route_call(
             ))
         }
         EffectivePrincipal::None => {
-            if canister_call.canister_id == CanisterId::ic_00() {
-                Ok(pic.random_subnet())
+            if let Some(canister_id) = canister_id {
+                if canister_id == CanisterId::ic_00() {
+                    Ok(pic.random_subnet())
+                } else {
+                    pic.try_route_canister(canister_id)
+                        .ok_or("Canister not found".into())
+                }
             } else {
-                pic.try_route_canister(canister_call.canister_id)
-                    .ok_or("Canister not found".into())
+                Err("No effective principal and no canister id provided".to_string())
             }
         }
     }
+}
+
+fn route_call(
+    pic: &mut PocketIc,
+    canister_call: CanisterCall,
+) -> Result<Arc<StateMachine>, String> {
+    route(
+        pic,
+        canister_call.effective_principal.clone(),
+        Some(canister_call.canister_id),
+    )
 }
 
 fn systemtime_to_unix_epoch_nanos(st: SystemTime) -> u64 {

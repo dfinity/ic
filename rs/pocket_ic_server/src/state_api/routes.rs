@@ -5,24 +5,31 @@
 /// deterministically update the PocketIc state machine.
 ///
 use super::state::{ApiState, OpOut, PocketIcError, UpdateReply};
-use crate::pocket_ic::GetSubnet;
 use crate::pocket_ic::{
-    AddCycles, ExecuteIngressMessage, GetCyclesBalance, GetStableMemory, GetTime, PubKey, Query,
-    SetStableMemory, SetTime, Tick,
+    AddCycles, CallRequest, ExecuteIngressMessage, GetCyclesBalance, GetStableMemory, GetSubnet,
+    GetTime, PubKey, Query, QueryRequest, ReadStateRequest, SetStableMemory, SetTime,
+    StatusRequest, Tick,
 };
 use crate::{pocket_ic::PocketIc, BlobStore, InstanceId, Operation};
-use aide::axum::routing::{delete, get, post, ApiMethodRouter};
-use aide::axum::ApiRouter;
+use aide::{
+    axum::routing::{delete, get, post, ApiMethodRouter},
+    axum::ApiRouter,
+    NoApi,
+};
+
 use axum::{
+    body::{Body, Bytes},
     extract::{self, Path, State},
     http::{self, HeaderMap, HeaderName, StatusCode},
+    response::Response,
     Json,
 };
 use axum_extra::headers;
 use axum_extra::headers::HeaderMapExt;
 use backoff::backoff::Backoff;
-use backoff::exponential::ExponentialBackoffBuilder;
-use backoff::ExponentialBackoff;
+use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
+use hyper::header;
+use ic_http_endpoints_public::cors_layer;
 use ic_types::CanisterId;
 use pocket_ic::common::rest::{
     self, ApiResponse, ExtendedSubnetConfigSet, RawAddCycles, RawCanisterCall, RawCanisterId,
@@ -31,9 +38,12 @@ use pocket_ic::common::rest::{
 };
 use pocket_ic::WasmResult;
 use serde::Serialize;
-use std::{sync::Arc, time::Duration};
+use std::{collections::BTreeMap, sync::Arc, time::Duration};
 use tokio::{runtime::Runtime, sync::RwLock, time::Instant};
+use tower::ServiceBuilder;
 use tracing::trace;
+
+type PocketHttpResponse = (BTreeMap<String, Vec<u8>>, Vec<u8>);
 
 /// Name of a header that allows clients to specify for how long their are willing to wait for a
 /// response on a open http request.
@@ -53,7 +63,7 @@ where
     AppState: extract::FromRef<S>,
 {
     ApiRouter::new()
-        .directory_route("/query", post(handler_query))
+        .directory_route("/query", post(handler_json_query))
         .directory_route("/get_time", get(handler_get_time))
         .directory_route("/get_cycles", post(handler_get_cycles))
         .directory_route("/get_stable_memory", post(handler_get_stable_memory))
@@ -75,6 +85,18 @@ where
         .directory_route("/add_cycles", post(handler_add_cycles))
         .directory_route("/set_stable_memory", post(handler_set_stable_memory))
         .directory_route("/tick", post(handler_tick))
+}
+
+pub fn instance_api_v2_routes<S>() -> ApiRouter<S>
+where
+    S: Clone + Send + Sync + 'static,
+    AppState: extract::FromRef<S>,
+{
+    ApiRouter::new()
+        .directory_route("/status", get(handler_status))
+        .directory_route("/canister/:ecid/call", post(handler_call))
+        .directory_route("/canister/:ecid/query", post(handler_query))
+        .directory_route("/canister/:ecid/read_state", post(handler_read_state))
 }
 
 pub fn instances_routes<S>() -> ApiRouter<S>
@@ -100,6 +122,8 @@ where
         // All the state-changing endpoints
         .nest("/:id/update", instance_update_routes())
         //
+        // All the api v2 endpoints
+        .nest("/:id/api/v2", instance_api_v2_routes())
         // Configures an IC instance to make progress automatically,
         // i.e., periodically update the time of the IC instance
         // to the real time and execute rounds on the subnets.
@@ -108,6 +132,7 @@ where
         // Stop automatic progress (see endpoint `auto_progress`)
         // on an IC instance.
         .api_route("/:id/stop_progress", post(stop_progress))
+        .layer(ServiceBuilder::new().layer(cors_layer()))
 }
 
 async fn run_operation<T: Serialize>(
@@ -343,10 +368,39 @@ impl From<OpOut> for (StatusCode, ApiResponse<Vec<u8>>) {
     }
 }
 
+#[derive(Debug, Serialize)]
+struct ApiV2Error(String);
+
+impl From<OpOut>
+    for (
+        StatusCode,
+        ApiResponse<Result<PocketHttpResponse, ApiV2Error>>,
+    )
+{
+    fn from(value: OpOut) -> Self {
+        match value {
+            OpOut::ApiV2Response((status, headers, bytes)) => (
+                StatusCode::from_u16(status).unwrap(),
+                ApiResponse::Success(Ok((headers, bytes))),
+            ),
+            OpOut::Error(PocketIcError::RequestRoutingError(e)) => (
+                StatusCode::BAD_REQUEST,
+                ApiResponse::Success(Err(ApiV2Error(e))),
+            ),
+            _ => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                ApiResponse::Error {
+                    message: "operation returned invalid type".into(),
+                },
+            ),
+        }
+    }
+}
+
 // ----------------------------------------------------------------------------------------------------------------- //
 // Read handlers
 
-pub async fn handler_query(
+pub async fn handler_json_query(
     State(AppState { api_state, .. }): State<AppState>,
     Path(instance_id): Path<InstanceId>,
     headers: HeaderMap,
@@ -460,6 +514,87 @@ pub async fn handler_pub_key(
     let op = PubKey { subnet_id };
     let (code, res) = run_operation(api_state, instance_id, timeout, op).await;
     (code, Json(res))
+}
+
+pub async fn handler_status(
+    State(AppState {
+        api_state, runtime, ..
+    }): State<AppState>,
+    NoApi(Path(instance_id)): NoApi<Path<InstanceId>>,
+    bytes: Bytes,
+) -> (StatusCode, NoApi<Response<Body>>) {
+    let op = StatusRequest { bytes, runtime };
+    handler_api_v2(api_state, instance_id, op).await
+}
+
+pub async fn handler_call(
+    State(AppState {
+        api_state, runtime, ..
+    }): State<AppState>,
+    NoApi(Path((instance_id, effective_canister_id))): NoApi<Path<(InstanceId, CanisterId)>>,
+    bytes: Bytes,
+) -> (StatusCode, NoApi<Response<Body>>) {
+    let op = CallRequest {
+        effective_canister_id,
+        bytes,
+        runtime,
+    };
+    handler_api_v2(api_state, instance_id, op).await
+}
+
+pub async fn handler_query(
+    State(AppState {
+        api_state, runtime, ..
+    }): State<AppState>,
+    NoApi(Path((instance_id, effective_canister_id))): NoApi<Path<(InstanceId, CanisterId)>>,
+    bytes: Bytes,
+) -> (StatusCode, NoApi<Response<Body>>) {
+    let op = QueryRequest {
+        effective_canister_id,
+        bytes,
+        runtime,
+    };
+    handler_api_v2(api_state, instance_id, op).await
+}
+
+pub async fn handler_read_state(
+    State(AppState {
+        api_state, runtime, ..
+    }): State<AppState>,
+    NoApi(Path((instance_id, effective_canister_id))): NoApi<Path<(InstanceId, CanisterId)>>,
+    bytes: Bytes,
+) -> (StatusCode, NoApi<Response<Body>>) {
+    let op = ReadStateRequest {
+        effective_canister_id,
+        bytes,
+        runtime,
+    };
+    handler_api_v2(api_state, instance_id, op).await
+}
+
+async fn handler_api_v2<T: Operation + Send + Sync + 'static>(
+    api_state: Arc<ApiState>,
+    instance_id: InstanceId,
+    op: T,
+) -> (StatusCode, NoApi<Response<Body>>) {
+    let (code, res): (
+        StatusCode,
+        ApiResponse<Result<PocketHttpResponse, ApiV2Error>>,
+    ) = run_operation(api_state, instance_id, None, op).await;
+    let response = match res {
+        ApiResponse::Success(Ok((headers, bytes))) => {
+            let mut resp = Response::builder().status(code);
+            for (name, value) in headers {
+                resp = resp.header(name, value);
+            }
+            resp.body(Body::from(bytes)).unwrap()
+        }
+        ApiResponse::Success(Err(ApiV2Error(e))) => make_plaintext_response(code, e),
+        ApiResponse::Busy { .. } | ApiResponse::Started { .. } | ApiResponse::Error { .. } => {
+            make_plaintext_response(code, format!("{:?}", res))
+        }
+    };
+    (code, NoApi(response))
 }
 
 // ----------------------------------------------------------------------------------------------------------------- //
@@ -717,4 +852,19 @@ impl headers::Header for ProcessingTimeout {
 
 pub fn timeout_or_default(header_map: HeaderMap) -> Option<Duration> {
     header_map.typed_get::<ProcessingTimeout>().map(|x| x.0)
+}
+
+// ----------------------------------------------------------------------------------------------------------------- //
+// HTTP handler helpers
+
+const CONTENT_TYPE_TEXT: &str = "text/plain";
+
+fn make_plaintext_response(status: StatusCode, message: String) -> Response<Body> {
+    let mut resp = Response::new(Body::from(message));
+    *resp.status_mut() = status;
+    resp.headers_mut().insert(
+        header::CONTENT_TYPE,
+        header::HeaderValue::from_static(CONTENT_TYPE_TEXT),
+    );
+    resp
 }

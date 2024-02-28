@@ -10,7 +10,7 @@ use ic_utils::thread::JoinOnDrop;
 use pocket_ic::{ErrorCode, UserError, WasmResult};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     sync::Arc,
     thread::Builder as ThreadBuilder,
     time::{Duration, SystemTime},
@@ -158,6 +158,7 @@ pub enum OpOut {
     Bytes(Vec<u8>),
     SubnetId(SubnetId),
     Error(PocketIcError),
+    ApiV2Response((u16, BTreeMap<String, Vec<u8>>, Vec<u8>)),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
@@ -165,6 +166,7 @@ pub enum PocketIcError {
     CanisterNotFound(CanisterId),
     BadIngressMessage(String),
     SubnetNotFound(candid::Principal),
+    RequestRoutingError(String),
 }
 
 impl From<Result<ic_state_machine_tests::WasmResult, ic_state_machine_tests::UserError>> for OpOut {
@@ -219,8 +221,20 @@ impl std::fmt::Debug for OpOut {
             OpOut::Error(PocketIcError::SubnetNotFound(sid)) => {
                 write!(f, "SubnetNotFound({})", sid)
             }
+            OpOut::Error(PocketIcError::RequestRoutingError(msg)) => {
+                write!(f, "RequestRoutingError({:?})", msg)
+            }
             OpOut::Bytes(bytes) => write!(f, "Bytes({})", base64::encode(bytes)),
             OpOut::SubnetId(subnet_id) => write!(f, "SubnetId({})", subnet_id),
+            OpOut::ApiV2Response((status, headers, bytes)) => {
+                write!(
+                    f,
+                    "ApiV2Resp({}:{:?}:{})",
+                    status,
+                    headers,
+                    base64::encode(bytes)
+                )
+            }
         }
     }
 }
