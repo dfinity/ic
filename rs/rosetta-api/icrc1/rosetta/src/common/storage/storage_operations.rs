@@ -1,33 +1,27 @@
 use crate::common::storage::types::{MetadataEntry, RosettaBlock, RosettaToken, Tokens};
 use crate::common::utils::utils::create_progress_bar_if_needed;
-use anyhow::{anyhow, bail, Context};
-use candid::Principal;
+use anyhow::{bail, Context};
 use ic_icrc1::{Operation, Transaction};
 use ic_ledger_core::block::EncodedBlock;
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
 use icrc_ledger_types::icrc1::account::Account;
-use icrc_ledger_types::icrc1::transfer::Memo;
 use num_traits::Bounded;
 use rusqlite::{named_params, params, Params};
-use rusqlite::{Connection, Statement, ToSql};
+use rusqlite::{Connection, Statement};
 use serde_bytes::ByteBuf;
 use std::collections::{BTreeMap, HashMap};
-use std::str::FromStr;
 use tracing::info;
 
-pub fn store_metadata(connection: &Connection, metadata: Vec<MetadataEntry>) -> anyhow::Result<()> {
-    connection.execute_batch("BEGIN TRANSACTION;")?;
-
-    let mut stmt_metadata = connection.prepare("INSERT INTO metadata (key, value) VALUES (?1, ?2) ON CONFLICT (key) DO UPDATE SET value = excluded.value;")?;
+pub fn store_metadata(
+    connection: &mut Connection,
+    metadata: Vec<MetadataEntry>,
+) -> anyhow::Result<()> {
+    let insert_tx = connection.transaction()?;
 
     for entry in metadata.into_iter() {
-        execute_or_rollback(
-            connection,
-            &mut stmt_metadata,
-            params![entry.key.clone(), entry.value],
-        )?;
+        insert_tx.prepare_cached("INSERT INTO metadata (key, value) VALUES (?1, ?2) ON CONFLICT (key) DO UPDATE SET value = excluded.value;")?.execute(params![entry.key.clone(), entry.value])?;
     }
-    connection.execute_batch("COMMIT TRANSACTION;")?;
+    insert_tx.commit()?;
     Ok(())
 }
 
@@ -264,33 +258,11 @@ pub fn update_account_balances(connection: &mut Connection) -> anyhow::Result<()
 
 // Stores a batch of RosettaBlocks
 pub fn store_blocks(
-    connection: &Connection,
+    connection: &mut Connection,
     rosetta_blocks: Vec<RosettaBlock>,
 ) -> anyhow::Result<()> {
-    connection.execute_batch("BEGIN TRANSACTION;")?;
-    let mut stmt_blocks = connection.prepare(
-        "INSERT OR IGNORE INTO blocks (idx, hash, serialized_block, parent_hash, timestamp) VALUES (?1, ?2, ?3, ?4, ?5)",
-    )?;
-
-    let mut stmt_transactions = connection.prepare(
-        "INSERT OR IGNORE INTO transactions (block_idx,tx_hash,operation_type,from_principal,from_subaccount,to_principal,to_subaccount,spender_principal,spender_subaccount,memo,amount,expected_allowance,fee,transaction_created_at_time,approval_expires_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13,?14,?15)",
-    )?;
+    let insert_tx = connection.transaction()?;
     for rosetta_block in rosetta_blocks.into_iter() {
-        execute_or_rollback(
-            connection,
-            &mut stmt_blocks,
-            params![
-                rosetta_block.index,
-                rosetta_block.block_hash.as_slice().to_vec(),
-                rosetta_block.encoded_block.clone().into_vec(),
-                rosetta_block
-                    .parent_hash
-                    .clone()
-                    .map(|hash| hash.as_slice().to_vec()),
-                rosetta_block.timestamp
-            ],
-        )?;
-
         let transaction: Transaction<Tokens> = rosetta_block.get_transaction()?;
         let (
             operation_type,
@@ -371,30 +343,31 @@ pub fn store_blocks(
                 expires_at,
             ),
         };
-
-        execute_or_rollback(
-            connection,
-            &mut stmt_transactions,
-            params![
-                rosetta_block.index,
-                rosetta_block.transaction_hash.as_slice().to_vec(),
-                operation_type,
-                from_principal.map(|x| x.as_slice().to_vec()),
-                from_subaccount,
-                to_principal.map(|x| x.as_slice().to_vec()),
-                to_subaccount,
-                spender_principal.map(|x| x.as_slice().to_vec()),
-                spender_subaccount,
-                transaction.memo.map(|x| x.0.as_slice().to_vec()),
-                amount.to_string(),
-                expected_allowance.map(|ea| ea.to_string()),
-                fee.map(|fee| fee.to_string()),
-                transaction.created_at_time,
-                approval_expires_at
-            ],
-        )?;
+        insert_tx.prepare_cached(
+        "INSERT OR IGNORE INTO blocks (idx, hash, serialized_block, parent_hash, timestamp,tx_hash,operation_type,from_principal,from_subaccount,to_principal,to_subaccount,spender_principal,spender_subaccount,memo,amount,expected_allowance,fee,transaction_created_at_time,approval_expires_at) VALUES (:idx, :hash, :serialized_block, :parent_hash, :timestamp,:tx_hash,:operation_type,:from_principal,:from_subaccount,:to_principal,:to_subaccount,:spender_principal,:spender_subaccount,:memo,:amount,:expected_allowance,:fee,:transaction_created_at_time,:approval_expires_at)")?
+                    .execute(named_params! {
+                        ":idx":rosetta_block.index, 
+                        ":hash":rosetta_block.block_hash.as_slice().to_vec(), 
+                        ":serialized_block":rosetta_block.encoded_block.clone().into_vec(), 
+                        ":parent_hash":rosetta_block.parent_hash.clone().map(|hash| hash.as_slice().to_vec()), 
+                        ":timestamp":rosetta_block.timestamp,
+                        ":tx_hash":rosetta_block.transaction_hash.as_slice().to_vec(),
+                        ":operation_type":operation_type,
+                        ":from_principal":from_principal.map(|x| x.as_slice().to_vec()),
+                        ":from_subaccount":from_subaccount,
+                        ":to_principal":to_principal.map(|x| x.as_slice().to_vec()),
+                        ":to_subaccount":to_subaccount,
+                        ":spender_principal":spender_principal.map(|x| x.as_slice().to_vec()),
+                        ":spender_subaccount":spender_subaccount,
+                        ":memo":transaction.memo.map(|x| x.0.as_slice().to_vec()),
+                        ":amount":amount.to_string(),
+                        ":expected_allowance":expected_allowance.map(|ea| ea.to_string()),
+                        ":fee":fee.map(|fee| fee.to_string()),
+                        ":transaction_created_at_time":transaction.created_at_time,
+                        ":approval_expires_at":approval_expires_at
+                    })?;
     }
-    connection.execute_batch("COMMIT TRANSACTION;")?;
+    insert_tx.commit()?;
     Ok(())
 }
 
@@ -482,25 +455,15 @@ pub fn get_blockchain_gaps(
     Ok(gap_limits)
 }
 
-// Returns a icrc1 Transaction if the block index exists in the database, else returns None.
-// Returns an Error if the query fails.
-pub fn get_transaction_at_idx(
-    connection: &Connection,
-    block_idx: u64,
-) -> anyhow::Result<Option<Transaction<Tokens>>> {
-    let command = format!("SELECT * FROM transactions WHERE block_idx = {}", block_idx);
-    let mut stmt = connection.prepare(&command)?;
-    read_single_transaction(&mut stmt, params![])
-}
-
 // Returns icrc1 Transactions if the transaction hash exists in the database, else returns None.
 // Returns an Error if the query fails.
-pub fn get_transactions_by_hash(
+pub fn get_blocks_by_transaction_hash(
     connection: &Connection,
     hash: ByteBuf,
-) -> anyhow::Result<Vec<Transaction<Tokens>>> {
-    let mut stmt = connection.prepare("SELECT * FROM transactions WHERE tx_hash = ?1")?;
-    read_transactions(&mut stmt, params![hash.as_slice().to_vec()])
+) -> anyhow::Result<Vec<RosettaBlock>> {
+    let mut stmt =
+        connection.prepare("SELECT idx,serialized_block FROM blocks WHERE tx_hash = ?1")?;
+    read_blocks(&mut stmt, params![hash.as_slice().to_vec()])
 }
 
 pub fn get_account_balance_at_highest_block_idx(
@@ -578,175 +541,4 @@ where
         result.push(block??);
     }
     Ok(result)
-}
-
-fn read_single_transaction<P>(
-    stmt: &mut Statement,
-    params: P,
-) -> anyhow::Result<Option<Transaction<Tokens>>>
-where
-    P: Params,
-{
-    let transactions: Vec<Transaction<Tokens>> = read_transactions(stmt, params)?;
-    if transactions.len() == 1 {
-        // Return the block if only one block was found
-        Ok(transactions.into_iter().next())
-    } else if transactions.is_empty() {
-        // Return None if no block was found
-        Ok(None)
-    } else {
-        // If more than one block was found return an error
-        bail!("Multiple transactions found with given parameters")
-    }
-}
-
-// Executes the constructed statement that reads transactions.
-fn read_transactions<P>(stmt: &mut Statement, params: P) -> anyhow::Result<Vec<Transaction<Tokens>>>
-where
-    P: Params,
-{
-    fn opt_bytes_to_principal(bytes: Option<Vec<u8>>) -> Option<Principal> {
-        Some(Principal::from_slice(bytes?.as_slice()))
-    }
-    fn opt_bytes_to_memo(bytes: Option<Vec<u8>>) -> Option<Memo> {
-        Some(Memo(ByteBuf::from(bytes?)))
-    }
-    let rows = stmt.query_map(params, |row| {
-        Ok((
-            row.get::<usize, String>(2)?,
-            row.get(3).map(opt_bytes_to_principal)?,
-            row.get(4)?,
-            row.get(5).map(opt_bytes_to_principal)?,
-            row.get(6)?,
-            row.get(7).map(opt_bytes_to_principal)?,
-            row.get(8)?,
-            row.get(9).map(opt_bytes_to_memo)?,
-            row.get::<usize, String>(10)?,
-            row.get::<usize, Option<String>>(11)?,
-            row.get::<usize, Option<String>>(12)?,
-            row.get::<usize, Option<u64>>(13)?,
-            row.get::<usize, Option<u64>>(14)?,
-        ))
-    })?;
-    let mut result = vec![];
-    for row in rows {
-        let (
-            operation_type,
-            maybe_from_principal,
-            from_subaccount,
-            maybe_to_principal,
-            to_subaccount,
-            maybe_spender_principal,
-            spender_subaccount,
-            memo,
-            amount_str,
-            expected_allowance_str,
-            fee_str,
-            transaction_created_at_time,
-            approval_expires_at,
-        ) = row?;
-        let amount = Tokens::from_str(&amount_str)
-            .with_context(|| format!("Cannot parse Tokens from string: {}", amount_str))?;
-        let expected_allowance = if let Some(expected_allowance_str) = expected_allowance_str {
-            Some(Tokens::from_str(&expected_allowance_str).with_context(|| {
-                format!(
-                    "Cannot parse Tokens from string: {}",
-                    expected_allowance_str
-                )
-            })?)
-        } else {
-            None
-        };
-        let fee = if let Some(fee_str) = fee_str {
-            Some(
-                Tokens::from_str(&fee_str)
-                    .with_context(|| format!("Cannot parse Tokens from string: {}", fee_str))?,
-            )
-        } else {
-            None
-        };
-        result.push(Transaction {
-            operation: match operation_type.as_str() {
-                "mint" => Operation::Mint {
-                    to: Account {
-                        owner: maybe_to_principal.ok_or_else(|| {
-                            anyhow!("a mint transaction is missing the to_principal field")
-                        })?,
-                        subaccount: to_subaccount,
-                    },
-                    amount,
-                },
-                "transfer" => Operation::Transfer {
-                    from: Account {
-                        owner: maybe_from_principal.ok_or_else(|| {
-                            anyhow!("a transfer transaction is missing the from_principal field")
-                        })?,
-                        subaccount: from_subaccount,
-                    },
-                    to: Account {
-                        owner: maybe_to_principal.ok_or_else(|| {
-                            anyhow!("a transfer transaction is missing the to_principal field")
-                        })?,
-                        subaccount: to_subaccount,
-                    },
-                    spender: None,
-                    amount,
-                    fee,
-                },
-                "burn" => Operation::Burn {
-                    from: Account {
-                        owner: maybe_from_principal.ok_or_else(|| {
-                            anyhow!("a burn transaction is missing the from_principal field")
-                        })?,
-                        subaccount: from_subaccount,
-                    },
-                    spender: None,
-                    amount,
-                },
-                "approve" => Operation::Approve {
-                    from: Account {
-                        owner: maybe_from_principal.ok_or_else(|| {
-                            anyhow!("an approve transaction is missing the from_principal field")
-                        })?,
-                        subaccount: from_subaccount,
-                    },
-                    spender: Account {
-                        owner: maybe_spender_principal.ok_or_else(|| {
-                            anyhow!("an approve transaction is missing the spender_principal field")
-                        })?,
-                        subaccount: spender_subaccount,
-                    },
-                    amount,
-                    expected_allowance,
-                    expires_at: approval_expires_at,
-                    fee,
-                },
-                k => bail!("Operation type {} is not supported", k),
-            },
-            memo,
-            created_at_time: transaction_created_at_time,
-        });
-    }
-    Ok(result)
-}
-
-// Executes a constructed statement
-fn execute(stmt: &mut Statement, params: &[&dyn ToSql]) -> anyhow::Result<()> {
-    stmt.execute(params)
-        .with_context(|| format!("Failed to execute statement: {:?}.", stmt))?;
-    Ok(())
-}
-
-fn execute_or_rollback(
-    connection: &Connection,
-    stmt: &mut Statement,
-    params: &[&dyn ToSql],
-) -> anyhow::Result<()> {
-    match execute(stmt, params) {
-        Ok(_) => Ok(()),
-        Err(e) => {
-            connection.execute_batch("ROLLBACK TRANSACTION;")?;
-            Err(e)
-        }
-    }
 }
