@@ -657,6 +657,7 @@ impl ValidatedConfig {
             wasm_chunk_store: FlagStatus::Enabled,
             query_stats_aggregation: FlagStatus::Enabled,
             query_stats_epoch_length: 60,
+            canister_logging: FlagStatus::Enabled,
             ..HypervisorConfig::default()
         };
 
