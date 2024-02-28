@@ -7,8 +7,8 @@ use std::{
 
 use crate::page_map::{
     storage::{
-        Checkpoint, MergeCandidate, OverlayFile, Storage, CURRENT_OVERLAY_VERSION,
-        PAGE_INDEX_RANGE_NUM_BYTES, SIZE_NUM_BYTES, VERSION_NUM_BYTES,
+        Checkpoint, FileIndex, MergeCandidate, OverlayFile, PageIndexRange, Storage,
+        CURRENT_OVERLAY_VERSION, PAGE_INDEX_RANGE_NUM_BYTES, SIZE_NUM_BYTES, VERSION_NUM_BYTES,
     },
     FileDescriptor, MemoryInstructions, MemoryMapOrData, PageAllocator, PageDelta, PageMap,
     PersistDestination, PersistenceError, StorageLayout, StorageMetrics, MAX_NUMBER_OF_FILES,
@@ -1004,6 +1004,53 @@ fn overlay_version_is_current() {
     let overlay = OverlayFile::load(path).unwrap();
     let version = overlay.version();
     assert_eq!(version, CURRENT_OVERLAY_VERSION);
+}
+
+#[test]
+fn overlapping_page_ranges() {
+    let tempdir = tempdir().unwrap();
+    // File indices:
+    //  0  1  2  3   4   5   6   7   8    9    10   11   12
+    let instructions = vec![WriteOverlay(vec![
+        1, 2, 3, 10, 11, 12, 13, 20, 100, 101, 102, 110, 120,
+    ])];
+
+    fn page_index_range(start: u64, end: u64, file: u64) -> PageIndexRange {
+        PageIndexRange {
+            start_page: PageIndex::from(start),
+            end_page: PageIndex::from(end),
+            start_file_index: FileIndex::from(file),
+        }
+    }
+    write_overlays_and_verify_with_tempdir(instructions, &tempdir);
+    let storage_files = storage_files(tempdir.path());
+    assert!(storage_files.base.is_none());
+    assert_eq!(storage_files.overlays.len(), 1);
+    let overlay = OverlayFile::load(&storage_files.overlays[0]).unwrap();
+    let overlapped_ranges = overlay
+        .get_overlapping_page_ranges(PageIndex::from(11)..PageIndex::from(102))
+        .collect::<Vec<_>>();
+    // Can clamp both first and last index, the start has clamped start_file_index.
+    assert_eq!(
+        overlapped_ranges,
+        vec![
+            page_index_range(11, 14, 4),
+            page_index_range(20, 21, 7),
+            page_index_range(100, 102, 8)
+        ]
+    );
+    assert_eq!(
+        overlay
+            .get_overlapping_page_ranges(PageIndex::from(0)..PageIndex::from(1))
+            .count(),
+        0
+    );
+    assert_eq!(
+        overlay
+            .get_overlapping_page_ranges(PageIndex::from(21)..PageIndex::from(100))
+            .count(),
+        0
+    );
 }
 
 mod proptest_tests {

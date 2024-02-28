@@ -256,6 +256,7 @@ impl Storage {
         })
     }
 }
+
 /// A single overlay file describing a not necessarily exhaustive set of pages.
 #[derive(Clone)]
 pub(crate) struct OverlayFile {
@@ -409,6 +410,44 @@ impl OverlayFile {
         }
     }
 
+    /// Get page index ranges overlapping with input `range`; clamp all fields of `PageIndexRange`
+    /// if the overlap is partial.
+    /// E.g. if the Index is [{2, 20, 0}, {25, 26, 18}, {30, 40, 19}] and `range` is (4, 31) return
+    /// an iterator over     [{4, 20, 2}, {25, 26, 18}, {30, 31, 19}]
+    fn get_overlapping_page_ranges(
+        &self,
+        range: Range<PageIndex>,
+    ) -> impl Iterator<Item = PageIndexRange> + '_ {
+        let slice = self.index_slice();
+        // `range.start` cannot be contained in any index range before this index, no need to iterate over them.
+        let start_slice_index =
+            slice.partition_point(|probe| PageIndexRange::from(probe).end_page <= range.start);
+
+        let range_end = range.end;
+        (start_slice_index..slice.len())
+            .map(|slice_index| PageIndexRange::from(&slice[slice_index]))
+            .take_while(move |page_index_range| page_index_range.start_page < range_end)
+            .map(move |page_index_range| {
+                // Return intersection of `range` and `page_index_range`.
+                let clamped_range = PageIndex::new(std::cmp::max(
+                    page_index_range.start_page.get(),
+                    range.start.get(),
+                ))
+                    ..PageIndex::new(std::cmp::min(
+                        page_index_range.end_page.get(),
+                        range.end.get(),
+                    ));
+                PageIndexRange {
+                    start_page: clamped_range.start,
+                    end_page: clamped_range.end,
+                    start_file_index: FileIndex::from(
+                        page_index_range.start_file_index.get() + clamped_range.start.get()
+                            - page_index_range.start_page.get(),
+                    ),
+                }
+            })
+    }
+
     /// Get memory instructions for all pages in `range`.
     ///
     /// Page indices marked true in `filter` are omitted from the result where convenient.
@@ -428,73 +467,50 @@ impl OverlayFile {
         range: Range<PageIndex>,
         filter: &mut BitVec,
     ) -> Vec<MemoryInstruction> {
-        let slice = self.index_slice();
-        // `range.start` cannot be contained in any index range before this index, no need to iterate over them.
-        let start_slice_index =
-            slice.partition_point(|probe| PageIndexRange::from(probe).end_page <= range.start);
-
         let mut result = Vec::<MemoryInstruction>::new();
 
-        for page_index_range in slice[start_slice_index..].iter().map(PageIndexRange::from) {
-            if page_index_range.start_page >= range.end {
-                // Any later `PageIndexRange` in `slice` won't intersect with `range` anymore.
-                break;
-            }
-            // `clamped_range` is the intersection of `range` and `page_index_range`.
-            let clamped_range = PageIndex::new(std::cmp::max(
-                page_index_range.start_page.get(),
-                range.start.get(),
-            ))
-                ..PageIndex::new(std::cmp::min(
-                    page_index_range.end_page.get(),
-                    range.end.get(),
-                ));
-            let shifted_range = (clamped_range.start.get() - range.start.get())
-                ..(clamped_range.end.get() - range.start.get());
-
-            // Count how many pages from `shifted_range` are not covered yet by `filter`.
-            let needed_pages = shifted_range
-                .clone()
+        for page_index_range in self.get_overlapping_page_ranges(range.clone()) {
+            // Count how many pages are not covered yet by `filter`.
+            let range_start = range.start.get();
+            let needed_pages = page_index_range
+                .iter_page_indices()
                 .filter(|page| {
                     !filter
-                        .get(*page as usize)
-                        .expect("Page index in shifted_range is out of bound")
+                        .get(page.get() as usize - range_start as usize)
+                        .expect("Page index is out of bound")
                 })
                 .count() as u64;
 
             if needed_pages > MAX_COPY_MEMORY_INSTRUCTION {
                 // If we need many pages from the `page_index_range`, we mmap the entire range.
-                let offset = (page_index_range.start_file_index.get() + clamped_range.start.get()
-                    - page_index_range.start_page.get()) as usize
-                    * PAGE_SIZE;
+                let offset = page_index_range.start_file_index.get() as usize * PAGE_SIZE;
                 result.push((
-                    clamped_range,
+                    page_index_range.start_page..page_index_range.end_page,
                     MemoryMapOrData::MemoryMap(self.mapping.file_descriptor().clone(), offset),
                 ));
             } else if needed_pages > 0 {
                 // We copy the needed pages individually.
-                for page_index in clamped_range.start.get()..clamped_range.end.get() {
-                    let shifted_index = page_index - range.start.get();
-                    if !filter
-                        .get(shifted_index as usize)
-                        .expect("Page index in shifted_range is out of bound")
+                for (page_index, file_index) in page_index_range.iter_page_and_file_indices() {
+                    let filter_index = page_index.get() - range.start.get();
+                    if filter
+                        .get(filter_index as usize)
+                        .expect("Page index is out of bound")
                     {
-                        let file_index = page_index_range.start_file_index.get() + page_index
-                            - page_index_range.start_page.get();
-                        let page = get_page_in_mapping(&self.mapping, FileIndex::new(file_index));
-                        // In a valid overlay file the file index is within range.
-                        debug_assert!(page.is_some());
-                        result.push((
-                            PageIndex::new(page_index)..PageIndex::new(page_index + 1),
-                            MemoryMapOrData::Data(page.unwrap()),
-                        ));
+                        continue;
                     }
+                    let page = get_page_in_mapping(&self.mapping, file_index);
+                    // In a valid overlay file the file index is within range.
+                    debug_assert!(page.is_some());
+                    result.push((
+                        page_index..PageIndex::new(page_index.get() + 1),
+                        MemoryMapOrData::Data(page.unwrap()),
+                    ));
                 }
             }
 
             // Mark all new pages in `filter`.
-            for page in shifted_range {
-                filter.set(page as usize, true);
+            for page_index in page_index_range.iter_page_indices() {
+                filter.set(page_index.get() as usize - range.start.get() as usize, true);
             }
         }
         result
@@ -991,9 +1007,8 @@ struct FileIndexTag;
 /// has `FileIndex` 1).
 type FileIndex = Id<FileIndexTag, u64>;
 
-/// A representation of a range of `PageIndex` that is intended to be easier to use
-/// than the raw representation in the file.
-#[derive(Copy, Clone, Debug)]
+/// A representation of a range of `PageIndex` backed by an overlay file.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 struct PageIndexRange {
     /// Start of the range in the `PageMap`, i.e. where to mmap to.
     start_page: PageIndex,
@@ -1015,6 +1030,7 @@ impl PageIndexRange {
         result[16..].copy_from_slice(&file_index);
         result
     }
+
     /// If a page is covered by this `PageIndexRange`, returns its `FileIndex`
     /// in the the overlay file.
     fn file_index(&self, index: PageIndex) -> Option<FileIndex> {
@@ -1025,6 +1041,19 @@ impl PageIndexRange {
                 self.start_file_index.get() + index.get() - self.start_page.get(),
             ))
         }
+    }
+
+    fn iter_page_indices(&self) -> impl Iterator<Item = PageIndex> + '_ {
+        (self.start_page.get()..self.end_page.get()).map(PageIndex::from)
+    }
+
+    fn iter_page_and_file_indices(&self) -> impl Iterator<Item = (PageIndex, FileIndex)> + '_ {
+        (self.start_page.get()..self.end_page.get()).map(|i| {
+            (
+                PageIndex::from(i),
+                FileIndex::from(i - self.start_page.get() + self.start_file_index.get()),
+            )
+        })
     }
 }
 
