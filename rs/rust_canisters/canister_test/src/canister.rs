@@ -867,6 +867,7 @@ impl<'a> Query<'a> {
             Runtime::Local(t) => {
                 let result = t
                     .query(canister.canister_id, &self.method_name, payload)
+                    .await
                     .map_err(|e| e.to_string())?;
                 match result {
                     WasmResult::Reply(v) => Ok(v),

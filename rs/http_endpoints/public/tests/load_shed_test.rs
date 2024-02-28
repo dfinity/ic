@@ -19,10 +19,7 @@ use ic_agent::{
 use ic_config::http_handler::Config;
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_pprof::{Error, PprofCollector};
-use ic_types::{
-    messages::{Blob, HttpQueryResponse, HttpQueryResponseReply},
-    time::current_time,
-};
+use ic_types::{ingress::WasmResult, time::current_time};
 use std::{
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -91,11 +88,7 @@ fn test_load_shedding_query() {
         load_shedder_returned.notified().await;
 
         resp.send_response(Ok((
-            HttpQueryResponse::Replied {
-                reply: HttpQueryResponseReply {
-                    arg: Blob("success".into()),
-                },
-            },
+            Ok(WasmResult::Reply("success".into())),
             current_time(),
         )))
     });

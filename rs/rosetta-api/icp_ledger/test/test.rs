@@ -630,50 +630,6 @@ fn archive_blocks_large_test() {
 }
 
 #[test]
-fn query_blocks_certificate() {
-    local_test_e(|r| async move {
-        let proj = Project::new();
-
-        let accounts = make_accounts(4, 3);
-        println!("[test] accounts: {:?}", accounts);
-
-        println!("[test] installing ledger canister");
-        let minting_account = create_sender(0);
-
-        let ledger: canister_test::Canister = {
-            let payload = LedgerCanisterInitPayload::builder()
-                .minting_account(
-                    CanisterId::try_from(minting_account.get_principal_id())
-                        .unwrap()
-                        .into(),
-                )
-                .initial_values(accounts)
-                .build()
-                .unwrap();
-            let mut install = proj.cargo_bin("ledger-canister", &[]).install(&r);
-            install.memory_allocation = Some(128 * 1024 * 1024);
-            install.bytes(CandidOne(payload).into_bytes()?).await?
-        };
-        println!("[test] ledger canister id: {}", ledger.canister_id());
-
-        let result = query_blocks(&ledger, 0, 1).await;
-        assert!(result.certificate.is_some());
-        assert_eq!(
-            result.certificate,
-            query_encoded_blocks(&ledger, 0, 1).await.certificate
-        );
-
-        let result = query_blocks(&ledger, 0, 100).await;
-        assert!(result.certificate.is_some());
-        assert_eq!(
-            result.certificate,
-            query_encoded_blocks(&ledger, 0, 1).await.certificate
-        );
-        Ok(())
-    })
-}
-
-#[test]
 fn archived_blocks_ranges() {
     local_test_e(|r| async move {
         let proj = Project::new();
