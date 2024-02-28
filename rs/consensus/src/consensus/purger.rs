@@ -57,12 +57,11 @@ impl Purger {
         metrics_registry: MetricsRegistry,
     ) -> Purger {
         Self {
-            // expected_batch_height starts from 1
-            prev_expected_batch_height: RefCell::new(Height::from(1)),
-            prev_finalized_certified_height: RefCell::new(Height::from(1)),
-            prev_finalized_height: RefCell::new(Height::from(1)),
-            prev_maximum_cup_height: RefCell::new(Height::from(1)),
-            prev_latest_state_height: RefCell::new(Height::from(1)),
+            prev_expected_batch_height: RefCell::new(Height::from(0)),
+            prev_finalized_certified_height: RefCell::new(Height::from(0)),
+            prev_finalized_height: RefCell::new(Height::from(0)),
+            prev_maximum_cup_height: RefCell::new(Height::from(0)),
+            prev_latest_state_height: RefCell::new(Height::from(0)),
             state_manager,
             message_routing,
             log,
