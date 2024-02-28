@@ -91,8 +91,18 @@ impl StorageClient {
         &self,
         hash: ByteBuf,
     ) -> anyhow::Result<Vec<Transaction<Tokens>>> {
+        self.get_blocks_by_transaction_hash(hash)?
+            .into_iter()
+            .map(|block| block.get_transaction())
+            .collect::<Result<Vec<Transaction<Tokens>>>>()
+    }
+
+    pub fn get_blocks_by_transaction_hash(
+        &self,
+        hash: ByteBuf,
+    ) -> anyhow::Result<Vec<RosettaBlock>> {
         let open_connection = self.storage_connection.lock().unwrap();
-        storage_operations::get_transactions_by_hash(&open_connection, hash)
+        storage_operations::get_blocks_by_transaction_hash(&open_connection, hash)
     }
 
     // Gets a transaction with a certain index. Returns None if no transaction exists in the database with that index. Returns an error if multiple transactions with that index exist.
@@ -100,8 +110,9 @@ impl StorageClient {
         &self,
         block_idx: u64,
     ) -> anyhow::Result<Option<Transaction<Tokens>>> {
-        let open_connection = self.storage_connection.lock().unwrap();
-        storage_operations::get_transaction_at_idx(&open_connection, block_idx)
+        self.get_block_at_idx(block_idx)?
+            .map(|block| block.get_transaction())
+            .transpose()
     }
 
     pub fn read_metadata(&self) -> anyhow::Result<Vec<MetadataEntry>> {
@@ -110,8 +121,8 @@ impl StorageClient {
     }
 
     pub fn write_metadata(&self, metadata: Vec<MetadataEntry>) -> anyhow::Result<()> {
-        let open_connection = self.storage_connection.lock().unwrap();
-        storage_operations::store_metadata(&open_connection, metadata)
+        let mut open_connection = self.storage_connection.lock().unwrap();
+        storage_operations::store_metadata(&mut open_connection, metadata)
     }
 
     fn create_tables(&self) -> Result<(), rusqlite::Error> {
@@ -133,14 +144,7 @@ impl StorageClient {
                 serialized_block BLOB NOT NULL,
                 parent_hash BLOB,
                 timestamp INTEGER,
-                verified BOOLEAN)
-            "#,
-            [],
-        )?;
-        open_connection.execute(
-            r#"
-            CREATE TABLE IF NOT EXISTS transactions (
-                block_idx INTEGER NOT NULL,
+                verified BOOLEAN,
                 tx_hash BLOB NOT NULL,
                 operation_type VARCHAR(255) NOT NULL,
                 from_principal BLOB,
@@ -154,9 +158,7 @@ impl StorageClient {
                 expected_allowance TEXT,
                 fee TEXT,
                 transaction_created_at_time INTEGER,
-                approval_expires_at INTEGER,
-                PRIMARY KEY(block_idx),
-                FOREIGN KEY(block_idx) REFERENCES blocks(idx)
+                approval_expires_at INTEGER
             )
             "#,
             [],
@@ -187,8 +189,8 @@ impl StorageClient {
     // Populates the blocks and transactions table by the Rosettablocks provided
     // This function does NOT populate the account_balance table.
     pub fn store_blocks(&self, blocks: Vec<RosettaBlock>) -> anyhow::Result<()> {
-        let open_connection = self.storage_connection.lock().unwrap();
-        storage_operations::store_blocks(&open_connection, blocks)
+        let mut open_connection = self.storage_connection.lock().unwrap();
+        storage_operations::store_blocks(&mut open_connection, blocks)
     }
 
     // Extracts the information from the transaction and blocks table and fills the account balance table with that information
