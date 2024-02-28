@@ -11,9 +11,9 @@ use ic_tests::systest;
 // Test parameters
 const CONFIG: Config = Config {
     nodes_system_subnet: 4,
-    nodes_app_subnet: 4,
+    nodes_app_subnet: 7,
     runtime: Duration::from_secs(180),
-    rps: 100,
+    rps: 20,
 };
 // Timeout parameters
 const TASK_TIMEOUT: Duration = Duration::from_secs(320 * 60);
