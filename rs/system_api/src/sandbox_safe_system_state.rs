@@ -75,6 +75,7 @@ pub struct SystemStateChanges {
     requests: Vec<Request>,
     pub(super) new_global_timer: Option<CanisterTimer>,
     canister_log_records: VecDeque<CanisterLogRecord>,
+    next_canister_log_record_idx: u64,
 }
 
 impl Default for SystemStateChanges {
@@ -90,6 +91,7 @@ impl Default for SystemStateChanges {
             requests: vec![],
             new_global_timer: None,
             canister_log_records: Default::default(),
+            next_canister_log_record_idx: 0,
         }
     }
 }
@@ -594,6 +596,7 @@ impl SandboxSafeSystemState {
         controllers: BTreeSet<PrincipalId>,
         request_metadata: RequestMetadata,
         caller: Option<PrincipalId>,
+        next_canister_log_record_idx: u64,
     ) -> Self {
         Self {
             canister_id,
@@ -604,7 +607,11 @@ impl SandboxSafeSystemState {
             freeze_threshold,
             memory_allocation,
             compute_allocation,
-            system_state_changes: SystemStateChanges::default(),
+            system_state_changes: SystemStateChanges {
+                // Start indexing new batch of canister log records from the given index.
+                next_canister_log_record_idx,
+                ..SystemStateChanges::default()
+            },
             initial_cycles_balance,
             initial_reserved_balance,
             reserved_balance_limit,
@@ -694,6 +701,7 @@ impl SandboxSafeSystemState {
             system_state.controllers.clone(),
             request_metadata,
             caller,
+            system_state.next_canister_log_record_idx,
         )
     }
 
@@ -1203,13 +1211,16 @@ impl SandboxSafeSystemState {
 
     /// Appends a log record to the system state changes.
     pub fn append_canister_log(&mut self, time: &Time, content: &[u8]) {
+        // Update the next canister log record index of the current batch.
+        let idx = self.system_state_changes.next_canister_log_record_idx;
+        self.system_state_changes.next_canister_log_record_idx = idx + 1;
         // Keep the new log record size within limit.
         let max_content_size =
             MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE - CanisterLogRecord::default().data_size();
         let size = content.len().min(max_content_size);
         let canister_log_records = &mut self.system_state_changes.canister_log_records;
         canister_log_records.push_back(CanisterLogRecord {
-            idx: 27, // TODO(IC-272): populate idx value.
+            idx,
             timestamp_nanos: time.as_nanos_since_unix_epoch(),
             content: content[..size].to_vec(),
         });

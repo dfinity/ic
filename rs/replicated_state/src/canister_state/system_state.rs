@@ -339,6 +339,9 @@ pub struct SystemState {
 
     /// Log records of the canister.
     pub canister_log_records: Vec<CanisterLogRecord>,
+
+    /// The index of the next log record to be created.
+    pub next_canister_log_record_idx: u64,
 }
 
 /// A wrapper around the different canister statuses.
@@ -710,6 +713,7 @@ impl SystemState {
             wasm_chunk_store,
             log_visibility: LogVisibility::default(),
             canister_log_records: Vec::new(),
+            next_canister_log_record_idx: 0,
         }
     }
 
@@ -755,6 +759,7 @@ impl SystemState {
         wasm_chunk_store_metadata: WasmChunkStoreMetadata,
         log_visibility: LogVisibility,
         canister_log_records: Vec<CanisterLogRecord>,
+        next_canister_log_record_idx: u64,
     ) -> Self {
         Self {
             controllers,
@@ -779,6 +784,7 @@ impl SystemState {
             ),
             log_visibility,
             canister_log_records,
+            next_canister_log_record_idx,
         }
     }
 

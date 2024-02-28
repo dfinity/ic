@@ -619,6 +619,9 @@ pub struct CanisterStateBits {
     /// Log records of the canister.
     #[prost(message, repeated, tag = "43")]
     pub canister_log_records: ::prost::alloc::vec::Vec<CanisterLogRecord>,
+    /// The index of the next log record to be created.
+    #[prost(uint64, tag = "44")]
+    pub next_canister_log_record_idx: u64,
     #[prost(oneof = "canister_state_bits::CanisterStatus", tags = "11, 12, 13")]
     pub canister_status: ::core::option::Option<canister_state_bits::CanisterStatus>,
 }

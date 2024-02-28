@@ -421,6 +421,7 @@ pub fn load_canister_state<P: ReadPolicy>(
         canister_state_bits.wasm_chunk_store_metadata,
         canister_state_bits.log_visibility,
         canister_state_bits.canister_log_records,
+        canister_state_bits.next_canister_log_record_idx,
     );
 
     let canister_state = CanisterState {
