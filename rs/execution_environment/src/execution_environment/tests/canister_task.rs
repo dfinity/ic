@@ -1,5 +1,6 @@
 use assert_matches::assert_matches;
 use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
+use ic_error_types::RejectCode;
 use ic_management_canister_types::CanisterSettingsArgsBuilder;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::NumWasmPages;
@@ -802,4 +803,17 @@ fn global_timer_resumes_after_canister_is_being_frozen_and_unfrozen_again() {
         assert_matches!(result, Ok(_));
     };
     global_timer_resumes(freeze, unfreeze);
+}
+
+#[test]
+fn global_timer_produces_transient_error_on_out_of_cycles() {
+    let env = StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+    // The canister has no enough cycles for the install.
+    let err = env
+        .install_canister_with_cycles(UNIVERSAL_CANISTER_WASM.to_vec(), vec![], None, 0_u64.into())
+        .unwrap_err();
+
+    assert_eq!(RejectCode::SysTransient, err.code().into());
 }
