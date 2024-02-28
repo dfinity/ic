@@ -568,24 +568,48 @@ fn stopping_an_already_stopped_canister_succeeds() {
 }
 
 #[test]
-fn stopping_a_running_canister_does_not_update_ingress_history() {
+fn stopping_a_running_canister_updates_ingress_history() {
     let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
     let canister_id = test.universal_canister().unwrap();
     let ingress_id = test.stop_canister(canister_id);
     let ingress_status = test.ingress_status(&ingress_id);
-    assert_eq!(ingress_status, IngressStatus::Unknown);
+    assert_eq!(
+        ingress_status,
+        IngressStatus::Known {
+            receiver: ic00::IC_00.get(),
+            user_id: test.user_id(),
+            time: test.time(),
+            state: IngressState::Processing,
+        }
+    );
 }
 
 #[test]
-fn stopping_a_stopping_canister_does_not_update_ingress_history() {
+fn stopping_a_stopping_canister_updates_ingress_history() {
     let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
     let canister_id = test.universal_canister().unwrap();
     let ingress_id = test.stop_canister(canister_id);
     let ingress_status = test.ingress_status(&ingress_id);
-    assert_eq!(ingress_status, IngressStatus::Unknown);
+    assert_eq!(
+        ingress_status,
+        IngressStatus::Known {
+            receiver: ic00::IC_00.get(),
+            user_id: test.user_id(),
+            time: test.time(),
+            state: IngressState::Processing,
+        }
+    );
     let ingress_id = test.stop_canister(canister_id);
     let ingress_status = test.ingress_status(&ingress_id);
-    assert_eq!(ingress_status, IngressStatus::Unknown);
+    assert_eq!(
+        ingress_status,
+        IngressStatus::Known {
+            receiver: ic00::IC_00.get(),
+            user_id: test.user_id(),
+            time: test.time(),
+            state: IngressState::Processing,
+        }
+    );
 }
 
 #[test]
@@ -1079,9 +1103,14 @@ fn clean_in_progress_stop_canister_calls_from_subnet_call_context_manager() {
             .stop_canister_calls_len(),
         1
     );
-    assert_matches!(
+    assert_eq!(
         test.ingress_status(&ingress_id),
-        IngressStatus::Unknown // As opposed to `Known::Failed`.
+        IngressStatus::Known {
+            receiver: ic00::IC_00.get(),
+            user_id: test.user_id(),
+            time: test.time(),
+            state: IngressState::Processing,
+        } // As opposed to `Known::Failed`.
     );
 
     // Simulate a subnet split that migrates canister 2 to another subnet.
