@@ -99,10 +99,6 @@ use ic_types::crypto::{
     CombinedThresholdSigOf, KeyPurpose, Signable, Signed,
 };
 use ic_types::malicious_flags::MaliciousFlags;
-use ic_types::messages::{
-    CallbackId, Certificate, CertificateDelegation, RejectContext, Response,
-    EXPECTED_MESSAGE_ID_LENGTH,
-};
 use ic_types::signature::ThresholdSignature;
 use ic_types::time::GENESIS;
 use ic_types::xnet::CertifiedStreamSlice;
@@ -110,8 +106,9 @@ use ic_types::{
     batch::{Batch, BatchMessages, XNetPayload},
     consensus::certification::Certification,
     messages::{
-        Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, Payload as MsgPayload,
-        SignedIngress, SignedIngressContent, UserQuery,
+        Blob, CallbackId, Certificate, CertificateDelegation, HttpCallContent, HttpCanisterUpdate,
+        HttpRequestEnvelope, Payload as MsgPayload, RejectContext, Response, SignedIngress,
+        SignedIngressContent, UserQuery, EXPECTED_MESSAGE_ID_LENGTH,
     },
     xnet::StreamIndex,
     CountBytes, CryptoHashOfPartialState, Height, NodeId, Randomness, RegistryVersion,
@@ -535,10 +532,10 @@ impl XNetSlicePool for PocketXNetSlicePoolImpl {
 }
 
 /// A replica node of the subnet with the corresponding `StateMachine`.
-struct StateMachineNode {
-    node_id: NodeId,
-    node_pk_proto: PublicKeyProto,
-    signing_key: ed25519_consensus::SigningKey,
+pub struct StateMachineNode {
+    pub node_id: NodeId,
+    pub node_pk_proto: PublicKeyProto,
+    pub signing_key: ed25519_consensus::SigningKey,
 }
 
 impl From<u64> for StateMachineNode {
@@ -573,18 +570,18 @@ pub struct StateMachine {
     secret_key: SecretKeyBytes,
     ecdsa_secret_key: PrivateKey,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
-    registry_client: Arc<FakeRegistryClient>,
+    pub registry_client: Arc<FakeRegistryClient>,
     pub state_manager: Arc<StateManagerImpl>,
     consensus_time: Arc<PocketConsensusTime>,
     ingress_pool: Arc<RwLock<PocketIngressPool>>,
     ingress_manager: Arc<IngressManager>,
-    ingress_filter:
+    pub ingress_filter:
         tower::buffer::Buffer<IngressFilterService, (ProvisionalWhitelist, SignedIngressContent)>,
     payload_builder: Arc<RwLock<Option<PayloadBuilderImpl>>>,
     message_routing: SyncMessageRouting,
     metrics_registry: MetricsRegistry,
     ingress_history_reader: Box<dyn IngressHistoryReader>,
-    query_handler:
+    pub query_handler:
         tower::buffer::Buffer<QueryExecutionService, (UserQuery, Option<CertificateDelegation>)>,
     runtime: Arc<Runtime>,
     pub state_dir: TempDir,
@@ -593,7 +590,7 @@ pub struct StateMachine {
     time: std::sync::atomic::AtomicU64,
     ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
     replica_logger: ReplicaLogger,
-    nodes: Vec<StateMachineNode>,
+    pub nodes: Vec<StateMachineNode>,
 }
 
 impl Default for StateMachine {
@@ -1258,28 +1255,6 @@ impl StateMachine {
         path
     }
 
-    /// Compute the node signature of provided data with respect to the i-th node signing key.
-    ///
-    /// Precondition: 0 <= i < subnet_size in StateMachineBuilder
-    pub fn compute_node_signature(
-        &self,
-        i: usize,
-        data: &[u8],
-    ) -> Result<(NodeId, [u8; 64]), String> {
-        if i < self.nodes.len() {
-            Ok((
-                self.nodes[i].node_id,
-                self.nodes[i].signing_key.sign(data).to_bytes(),
-            ))
-        } else {
-            Err(format!(
-                "The provided node index {} exceeds the number of nodes {} in this StateMachine.",
-                i,
-                self.nodes.len()
-            ))
-        }
-    }
-
     /// Emulates a node restart, including checkpoint recovery.
     pub fn restart_node(self) -> Self {
         // We must drop self before setup_form_dir so that we don't have two StateManagers pointing
@@ -1503,6 +1478,16 @@ impl StateMachine {
             .unwrap()
             .push(msg, self.get_time());
         Ok(message_id)
+    }
+
+    /// Push an ingress message into the ingress pool used by `PayloadBuilderImpl`
+    /// in `Self::execute_round`. This method does not perform any validation
+    /// and thus it should only be called on already validated `SignedIngress`.
+    pub fn push_signed_ingress(&self, msg: SignedIngress) {
+        self.ingress_pool
+            .write()
+            .unwrap()
+            .push(msg, self.get_time());
     }
 
     /// Triggers a single round of execution without any new inputs.  The state
