@@ -2,7 +2,7 @@ use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
 use ic_config::{
     flag_status::FlagStatus,
-    state_manager::{lsmt_storage_default, Config},
+    state_manager::{lsmt_config_default, Config, LsmtConfig},
 };
 use ic_interfaces::{
     certification::{CertificationPermanentError, Verifier, VerifierError},
@@ -649,7 +649,21 @@ where
     });
 }
 
-pub fn state_manager_restart_test_with_lsmt<Test>(lsmt_storage: FlagStatus, test: Test)
+pub fn lsmt_without_sharding() -> LsmtConfig {
+    LsmtConfig {
+        lsmt_status: FlagStatus::Enabled,
+        shard_num_pages: 0,
+    }
+}
+
+pub fn lsmt_disabled() -> LsmtConfig {
+    LsmtConfig {
+        lsmt_status: FlagStatus::Disabled,
+        shard_num_pages: 0,
+    }
+}
+
+pub fn state_manager_restart_test_with_lsmt<Test>(lsmt_config: LsmtConfig, test: Test)
 where
     Test: FnOnce(
         &MetricsRegistry,
@@ -658,7 +672,7 @@ where
             dyn Fn(
                 StateManagerImpl,
                 Option<Height>,
-                FlagStatus,
+                LsmtConfig,
             ) -> (MetricsRegistry, StateManagerImpl),
         >,
     ),
@@ -669,11 +683,11 @@ where
     let verifier: Arc<dyn Verifier> = Arc::new(FakeVerifier::new());
 
     with_test_replica_logger(|log| {
-        let make_state_manager = move |starting_height, lsmt_storage| {
+        let make_state_manager = move |starting_height, lsmt_config| {
             let metrics_registry = MetricsRegistry::new();
 
             let mut config = config.clone();
-            config.lsmt_storage = lsmt_storage;
+            config.lsmt_config = lsmt_config;
 
             let state_manager = StateManagerImpl::new(
                 Arc::clone(&verifier),
@@ -689,11 +703,11 @@ where
             (metrics_registry, state_manager)
         };
 
-        let (metrics_registry, state_manager) = make_state_manager(None, lsmt_storage);
+        let (metrics_registry, state_manager) = make_state_manager(None, lsmt_config);
 
-        let restart_fn = Box::new(move |state_manager, starting_height, lsmt_storage| {
+        let restart_fn = Box::new(move |state_manager, starting_height, lsmt_config| {
             drop(state_manager);
-            make_state_manager(starting_height, lsmt_storage)
+            make_state_manager(starting_height, lsmt_config)
         });
 
         test(&metrics_registry, state_manager, restart_fn);
@@ -709,10 +723,10 @@ where
     ),
 {
     state_manager_restart_test_with_lsmt(
-        lsmt_storage_default(),
+        lsmt_config_default(),
         |metrics, state_manager, restart_fn| {
             let restart_fn_simplified = Box::new(move |state_manager, starting_height| {
-                restart_fn(state_manager, starting_height, lsmt_storage_default())
+                restart_fn(state_manager, starting_height, lsmt_config_default())
             });
             test(metrics, state_manager, restart_fn_simplified);
         },

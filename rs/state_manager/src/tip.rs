@@ -9,14 +9,13 @@ use crate::{
 use crossbeam_channel::{unbounded, Sender};
 use ic_base_types::subnet_id_into_protobuf;
 use ic_config::flag_status::FlagStatus;
+use ic_config::state_manager::LsmtConfig;
 use ic_logger::{error, fatal, info, ReplicaLogger};
 use ic_protobuf::state::{
     stats::v1::Stats,
     system_metadata::v1::{SplitFrom, SystemMetadata},
 };
-use ic_replicated_state::page_map::{
-    MergeCandidate, PersistDestination, StorageMetrics, MAX_NUMBER_OF_FILES,
-};
+use ic_replicated_state::page_map::{MergeCandidate, StorageMetrics, MAX_NUMBER_OF_FILES};
 #[allow(unused)]
 use ic_replicated_state::{
     canister_state::execution_state::SandboxMemory,
@@ -129,15 +128,15 @@ fn request_timer(metrics: &StateManagerMetrics, name: &str) -> HistogramTimer {
         .start_timer()
 }
 
-struct PageMapLayout<Access>
+struct PageMapLayout<'a, Access>
 where
     Access: AccessPolicy,
 {
     page_map_type: PageMapType,
-    layout: CanisterLayout<Access>,
+    layout: &'a CanisterLayout<Access>,
 }
 
-impl<Access> StorageLayout for PageMapLayout<Access>
+impl<'a, Access> StorageLayout for PageMapLayout<'a, Access>
 where
     Access: AccessPolicy,
 {
@@ -184,7 +183,7 @@ pub(crate) fn spawn_tip_thread(
     log: ReplicaLogger,
     mut tip_handler: TipHandler,
     state_layout: StateLayout,
-    lsmt_storage: FlagStatus,
+    lsmt_config: LsmtConfig,
     metrics: StateManagerMetrics,
     malicious_flags: MaliciousFlags,
 ) -> (JoinOnDrop<()>, Sender<TipRequest>) {
@@ -195,7 +194,7 @@ pub(crate) fn spawn_tip_thread(
     // On top of tip state transitions, we enforce that each checkpoint gets manifest before we
     // create next one. Height(0) doesn't need manifest, so original state is true.
     let mut have_latest_manifest = true;
-    let mut downgrade_state = if lsmt_storage == FlagStatus::Enabled {
+    let mut downgrade_state = if lsmt_config.lsmt_status == FlagStatus::Enabled {
         DowngradeState::NotNeeded
     } else {
         DowngradeState::Unknown
@@ -285,29 +284,28 @@ pub(crate) fn spawn_tip_thread(
                                          truncate,
                                          page_map,
                                      }| {
-                                        let canister_layout = layout
-                                            .canister(&page_map_type.id())
-                                            .unwrap_or_else(|err| {
-                                                fatal!(
-                                                    log,
-                                                    "Failed to get layout for {:?}: {}",
-                                                    page_map_type,
-                                                    err
-                                                );
-                                            });
                                         (
+                                            layout.canister(&page_map_type.id()).unwrap_or_else(
+                                                |err| {
+                                                    fatal!(
+                                                        log,
+                                                        "Failed to get layout for {:?}: {}",
+                                                        page_map_type,
+                                                        err
+                                                    );
+                                                },
+                                            ),
                                             truncate,
                                             page_map,
-                                            PageMapLayout {
-                                                page_map_type,
-                                                layout: canister_layout,
-                                            },
+                                            page_map_type,
                                         )
                                     },
                                 ),
-                                |(truncate, page_map, page_map_layout)| {
-                                    let base_file_path = page_map_layout.base();
-                                    let next_overlay_path = page_map_layout.overlay(height);
+                                |(canister_layout, truncate, page_map, page_map_type)| {
+                                    let page_map_layout = PageMapLayout {
+                                        page_map_type: *page_map_type,
+                                        layout: canister_layout,
+                                    };
                                     if *truncate {
                                         let existing_overlays = page_map_layout
                                             .existing_overlays()
@@ -319,6 +317,7 @@ pub(crate) fn spawn_tip_thread(
                                                     err
                                                 )
                                             });
+                                        let base_file_path = page_map_layout.base();
                                         delete_pagemap_files(
                                             &log,
                                             &base_file_path,
@@ -328,15 +327,15 @@ pub(crate) fn spawn_tip_thread(
                                     if page_map.is_some()
                                         && !page_map.as_ref().unwrap().unflushed_delta_is_empty()
                                     {
-                                        let dst = PersistDestination::new(
-                                            base_file_path.clone(),
-                                            next_overlay_path.clone(),
-                                            lsmt_storage,
-                                        );
                                         page_map
                                             .as_ref()
                                             .unwrap()
-                                            .persist_unflushed_delta(dst, &metrics.storage_metrics)
+                                            .persist_unflushed_delta(
+                                                &page_map_layout,
+                                                height,
+                                                &lsmt_config,
+                                                &metrics.storage_metrics,
+                                            )
                                             .unwrap_or_else(|err| {
                                                 fatal!(
                                                     log,
@@ -372,7 +371,7 @@ pub(crate) fn spawn_tip_thread(
                                 }),
                                 &mut thread_pool,
                                 &metrics.storage_metrics,
-                                lsmt_storage,
+                                &lsmt_config,
                             )
                             .unwrap_or_else(|err| {
                                 fatal!(log, "Failed to serialize to tip @{}: {}", height, err);
@@ -389,7 +388,7 @@ pub(crate) fn spawn_tip_thread(
                                 .reset_tip_to(
                                     &state_layout,
                                     &checkpoint_layout,
-                                    lsmt_storage,
+                                    lsmt_config.lsmt_status,
                                     Some(&mut thread_pool),
                                 )
                                 .unwrap_or_else(|err| {
@@ -400,7 +399,7 @@ pub(crate) fn spawn_tip_thread(
                                         err
                                     );
                                 });
-                            match lsmt_storage {
+                            match lsmt_config.lsmt_status {
                                 FlagStatus::Enabled => merge(
                                     &mut tip_handler,
                                     &pagemaptypes_with_num_pages,
@@ -631,19 +630,20 @@ fn merge(
         pagemaptypes_with_num_pages
             .iter()
             .map(|(page_map_type, num_pages)| {
-                let canister_layout = layout.canister(&page_map_type.id()).unwrap_or_else(|err| {
-                    fatal!(log, "Failed to get layout for {:?}: {}", page_map_type, err);
-                });
                 (
-                    PageMapLayout {
-                        page_map_type: *page_map_type,
-                        layout: canister_layout,
-                    },
+                    layout.canister(&page_map_type.id()).unwrap_or_else(|err| {
+                        fatal!(log, "Failed to get layout for {:?}: {}", page_map_type, err);
+                    }),
+                    *page_map_type,
                     *num_pages,
                 )
             }),
-        |(pm_layout, num_pages)| {
-            MergeCandidateAndMetrics::new(pm_layout, height, *num_pages).unwrap_or_else(|err| {
+        |(canister_layout, page_map_type, num_pages)| {
+            let pm_layout = PageMapLayout {
+                page_map_type: *page_map_type,
+                layout: canister_layout,
+            };
+            MergeCandidateAndMetrics::new(&pm_layout, height, *num_pages).unwrap_or_else(|err| {
                 fatal!(
                     log,
                     "Failed to get MergeCandidateAndMetrics for {:?}: {}",
@@ -758,16 +758,19 @@ fn merge_to_base(
         pagemaptypes_with_num_pages
             .iter()
             .map(|(page_map_type, _)| {
-                let canister_layout = layout.canister(&page_map_type.id()).unwrap_or_else(|err| {
-                    fatal!(log, "Failed to get layout for {:?}: {}", page_map_type, err);
-                });
-                PageMapLayout {
-                    page_map_type: *page_map_type,
-                    layout: canister_layout,
-                }
+                (
+                    layout.canister(&page_map_type.id()).unwrap_or_else(|err| {
+                        fatal!(log, "Failed to get layout for {:?}: {}", page_map_type, err);
+                    }),
+                    *page_map_type,
+                )
             }),
-        |pm_layout| {
-            let merge_candidate = MergeCandidate::merge_to_base(pm_layout)
+        |(canister_layout, page_map_type)| {
+            let pm_layout = PageMapLayout {
+                page_map_type: *page_map_type,
+                layout: canister_layout,
+            };
+            let merge_candidate = MergeCandidate::merge_to_base(&pm_layout)
                 .unwrap_or_else(|err| fatal!(log, "Failed to merge page map: {}", err));
             if let Some(m) = merge_candidate.as_ref() {
                 m.apply(&metrics.storage_metrics).unwrap_or_else(|err| {
@@ -787,7 +790,7 @@ fn serialize_to_tip(
     tip: &CheckpointLayout<RwPolicy<TipHandler>>,
     thread_pool: &mut scoped_threadpool::Pool,
     metrics: &StorageMetrics,
-    lsmt_storage: FlagStatus,
+    lsmt_config: &LsmtConfig,
 ) -> Result<(), CheckpointError> {
     //TODO(MR-530): Implement serializing canister snapshots.
     debug_assert!(state.canister_snapshots.is_unflushed_changes_empty());
@@ -826,7 +829,7 @@ fn serialize_to_tip(
     })?;
 
     let results = parallel_map(thread_pool, state.canisters_iter(), |canister_state| {
-        serialize_canister_to_tip(log, canister_state, tip, metrics, lsmt_storage)
+        serialize_canister_to_tip(log, canister_state, tip, metrics, lsmt_config)
     });
 
     for result in results.into_iter() {
@@ -841,9 +844,10 @@ fn serialize_canister_to_tip(
     canister_state: &CanisterState,
     tip: &CheckpointLayout<RwPolicy<TipHandler>>,
     metrics: &StorageMetrics,
-    lsmt_storage: FlagStatus,
+    lsmt_config: &LsmtConfig,
 ) -> Result<(), CheckpointError> {
-    let canister_layout = tip.canister(&canister_state.canister_id())?;
+    let canister_id = canister_state.canister_id();
+    let canister_layout = tip.canister(&canister_id)?;
     canister_layout
         .queues()
         .serialize(canister_state.system_state.queues().into())?;
@@ -873,24 +877,26 @@ fn serialize_canister_to_tip(
                         .serialize(&execution_state.wasm_binary.binary)?;
                 }
             }
-            let memory_dst = PersistDestination::new(
-                canister_layout.vmemory_0(),
-                canister_layout.vmemory_0_overlay(tip.height()),
-                lsmt_storage,
-            );
-            let stable_dst = PersistDestination::new(
-                canister_layout.stable_memory_blob(),
-                canister_layout.stable_memory_overlay(tip.height()),
-                lsmt_storage,
-            );
-            execution_state
-                .wasm_memory
-                .page_map
-                .persist_delta(memory_dst, metrics)?;
-            execution_state
-                .stable_memory
-                .page_map
-                .persist_delta(stable_dst, metrics)?;
+            let memory_layout = PageMapLayout {
+                page_map_type: PageMapType::WasmMemory(canister_id),
+                layout: &canister_layout,
+            };
+            let stable_layout = PageMapLayout {
+                page_map_type: PageMapType::StableMemory(canister_id),
+                layout: &canister_layout,
+            };
+            execution_state.wasm_memory.page_map.persist_delta(
+                &memory_layout,
+                tip.height(),
+                lsmt_config,
+                metrics,
+            )?;
+            execution_state.stable_memory.page_map.persist_delta(
+                &stable_layout,
+                tip.height(),
+                lsmt_config,
+                metrics,
+            )?;
 
             Some(ExecutionStateBits {
                 exported_globals: execution_state.exported_globals.clone(),
@@ -918,16 +924,15 @@ fn serialize_canister_to_tip(
         }
     };
 
-    let wasm_chunk_store_dst = PersistDestination::new(
-        canister_layout.wasm_chunk_store(),
-        canister_layout.wasm_chunk_store_overlay(tip.height()),
-        lsmt_storage,
-    );
+    let wasm_chunk_store_layout = PageMapLayout {
+        page_map_type: PageMapType::WasmChunkStore(canister_id),
+        layout: &canister_layout,
+    };
     canister_state
         .system_state
         .wasm_chunk_store
         .page_map()
-        .persist_delta(wasm_chunk_store_dst, metrics)?;
+        .persist_delta(&wasm_chunk_store_layout, tip.height(), lsmt_config, metrics)?;
 
     // Priority credit must be zero at this point
     assert_eq!(canister_state.scheduler_state.priority_credit.get(), 0);
@@ -1254,7 +1259,7 @@ fn handle_compute_manifest_request(
 #[cfg(test)]
 mod test {
     use super::*;
-    use ic_config::state_manager::lsmt_storage_default;
+    use ic_config::state_manager::lsmt_config_default;
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities::types::ids::canister_test_id;
     use ic_test_utilities_logger::with_test_replica_logger;
@@ -1273,7 +1278,7 @@ mod test {
                 log,
                 tip_handler,
                 layout,
-                lsmt_storage_default(),
+                lsmt_config_default(),
                 metrics,
                 MaliciousFlags::default(),
             );

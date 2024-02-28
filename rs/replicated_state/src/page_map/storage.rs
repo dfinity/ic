@@ -12,8 +12,8 @@ use std::{
 use crate::page_map::{
     checkpoint::{Checkpoint, Mapping, ZEROED_PAGE},
     CheckpointSerialization, MappingSerialization, MemoryInstruction, MemoryInstructions,
-    MemoryMapOrData, PageDelta, PersistDestination, PersistenceError, StorageMetrics,
-    LABEL_OP_FLUSH, LABEL_OP_MERGE, LABEL_TYPE_INDEX, LABEL_TYPE_PAGE_DATA,
+    MemoryMapOrData, PageDelta, PersistenceError, StorageMetrics, LABEL_OP_FLUSH, LABEL_OP_MERGE,
+    LABEL_TYPE_INDEX, LABEL_TYPE_PAGE_DATA,
 };
 
 use bit_vec::BitVec;
@@ -741,6 +741,13 @@ pub trait StorageLayout {
     fn existing_overlays(&self) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>>;
 }
 
+/// Whether to merge into a base file or an overlay.
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum MergeDestination {
+    BaseFile(PathBuf),
+    OverlayFile(PathBuf),
+}
+
 /// `MergeCandidate` shows which files to merge into a single `PageMap`.
 #[derive(Clone, Debug)]
 pub struct MergeCandidate {
@@ -748,10 +755,10 @@ pub struct MergeCandidate {
     overlays: Vec<PathBuf>,
     /// Base to merge if any.
     base: Option<PathBuf>,
-    /// File to create. The format is based on `PersistDestination` variant, either `Base` or
+    /// File to create. The format is based on `MergeDestination` variant, either `Base` or
     /// `Overlay`.
     /// We merge all the data from `overlays` and `base` into it, and remove old files.
-    dst: PersistDestination,
+    dst: MergeDestination,
     is_full: bool,
 }
 
@@ -812,7 +819,7 @@ impl MergeCandidate {
         Ok(Some(MergeCandidate {
             overlays,
             base,
-            dst: PersistDestination::OverlayFile(layout.overlay(height).to_path_buf()),
+            dst: MergeDestination::OverlayFile(layout.overlay(height).to_path_buf()),
             is_full,
         }))
     }
@@ -833,7 +840,7 @@ impl MergeCandidate {
                 } else {
                     None
                 },
-                dst: PersistDestination::BaseFile(base_path),
+                dst: MergeDestination::BaseFile(base_path),
                 is_full: true,
             }))
         }
@@ -898,7 +905,7 @@ impl MergeCandidate {
     }
 
     fn merge_impl(
-        dst: &PersistDestination,
+        dst: &MergeDestination,
         existing_base: Option<Checkpoint>,
         existing: &[OverlayFile],
         is_full: bool,
@@ -966,10 +973,10 @@ impl MergeCandidate {
         }
 
         match dst {
-            PersistDestination::OverlayFile(path) => {
+            MergeDestination::OverlayFile(path) => {
                 write_overlay(&pages_data, &pages_indices, path, metrics, LABEL_OP_MERGE)
             }
-            PersistDestination::BaseFile(path) => {
+            MergeDestination::BaseFile(path) => {
                 write_base(&pages_data, &pages_indices, path, metrics, LABEL_OP_MERGE)
             }
         }
@@ -1271,5 +1278,7 @@ pub struct OverlayFileSerialization {
     pub mapping: MappingSerialization,
 }
 
+#[cfg(test)]
+pub mod test_utils;
 #[cfg(test)]
 mod tests;

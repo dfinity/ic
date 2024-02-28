@@ -186,7 +186,7 @@ fn write_checkpoint(
         .reset_tip_to(
             &state_layout,
             old_cp,
-            config.lsmt_storage,
+            config.lsmt_config.lsmt_status,
             Some(thread_pool),
         )
         .map_err(|e| e.to_string())?;
@@ -194,7 +194,7 @@ fn write_checkpoint(
         log,
         tip_handler,
         state_layout,
-        config.lsmt_storage,
+        config.lsmt_config.clone(),
         metrics.clone(),
         MaliciousFlags::default(),
     );
@@ -206,7 +206,7 @@ fn write_checkpoint(
         &metrics.checkpoint_metrics,
         thread_pool,
         fd_factory,
-        config.lsmt_storage,
+        config.lsmt_config.lsmt_status,
     )
     .map_err(|e| format!("Failed to write checkpoint: {}", e))?;
 

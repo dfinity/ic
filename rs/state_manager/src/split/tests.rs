@@ -7,7 +7,7 @@ use crate::{
 };
 use assert_matches::assert_matches;
 use ic_base_types::{subnet_id_try_from_protobuf, CanisterId, NumSeconds};
-use ic_config::{flag_status::FlagStatus, state_manager::lsmt_storage_default};
+use ic_config::{flag_status::FlagStatus, state_manager::lsmt_config_default};
 use ic_error_types::{ErrorCode, UserError};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
@@ -84,7 +84,7 @@ const SUBNET_B_RANGES: &[CanisterIdRange] = &[
 /// Note that any queue files are missing as they would be empty.
 fn subnet_a_files() -> &'static [&'static str] {
     // With lsmt enabled, we do do not write empty files for the wasm chunk store.
-    match lsmt_storage_default() {
+    match lsmt_config_default().lsmt_status {
         FlagStatus::Enabled => &[
             "canister_states/00000000000000010101/canister.pbuf",
             "canister_states/00000000000000020101/canister.pbuf",
@@ -109,7 +109,7 @@ fn subnet_a_files() -> &'static [&'static str] {
 
 /// Full list of files expected to be listed in the manifest of subnet A'.
 fn subnet_a_prime_files() -> &'static [&'static str] {
-    match lsmt_storage_default() {
+    match lsmt_config_default().lsmt_status {
         FlagStatus::Enabled => &[
             "canister_states/00000000000000010101/canister.pbuf",
             "canister_states/00000000000000030101/canister.pbuf",
@@ -133,7 +133,7 @@ fn subnet_a_prime_files() -> &'static [&'static str] {
 
 /// Full list of files expected to be listed in the manifest of subnet B.
 fn subnet_b_files() -> &'static [&'static str] {
-    match lsmt_storage_default() {
+    match lsmt_config_default().lsmt_status {
         FlagStatus::Enabled => &[
             "canister_states/00000000000000020101/canister.pbuf",
             INGRESS_HISTORY_FILE,
@@ -367,7 +367,7 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
         log,
         tip_handler,
         layout.clone(),
-        lsmt_storage_default(),
+        lsmt_config_default(),
         state_manager_metrics.clone(),
         MaliciousFlags::default(),
     );
@@ -425,7 +425,7 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
         &state_manager_metrics.checkpoint_metrics,
         &mut thread_pool(),
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
-        lsmt_storage_default(),
+        lsmt_config_default().lsmt_status,
     )
     .unwrap_or_else(|err| panic!("Expected make_checkpoint to succeed, got {:?}", err))
     .1;

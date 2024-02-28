@@ -7,11 +7,12 @@ use std::{
 
 use crate::page_map::{
     storage::{
-        Checkpoint, FileIndex, MergeCandidate, OverlayFile, PageIndexRange, Storage,
-        CURRENT_OVERLAY_VERSION, PAGE_INDEX_RANGE_NUM_BYTES, SIZE_NUM_BYTES, VERSION_NUM_BYTES,
+        test_utils::TestStorageLayout, Checkpoint, FileIndex, MergeCandidate, MergeDestination,
+        OverlayFile, PageIndexRange, Storage, CURRENT_OVERLAY_VERSION, PAGE_INDEX_RANGE_NUM_BYTES,
+        SIZE_NUM_BYTES, VERSION_NUM_BYTES,
     },
     FileDescriptor, MemoryInstructions, MemoryMapOrData, PageAllocator, PageDelta, PageMap,
-    PersistDestination, PersistenceError, StorageLayout, StorageMetrics, MAX_NUMBER_OF_FILES,
+    PersistenceError, StorageMetrics, MAX_NUMBER_OF_FILES,
 };
 use assert_matches::assert_matches;
 use bit_vec::BitVec;
@@ -21,24 +22,6 @@ use ic_test_utilities::io::{make_mutable, make_readonly, write_all_at};
 use ic_test_utilities_metrics::fetch_int_counter_vec;
 use ic_types::Height;
 use tempfile::{tempdir, TempDir};
-
-struct TestStorageLayout {
-    base: PathBuf,
-    overlay_dst: PathBuf,
-    existing_overlays: Vec<PathBuf>,
-}
-
-impl StorageLayout for TestStorageLayout {
-    fn base(&self) -> PathBuf {
-        self.base.clone()
-    }
-    fn overlay(&self, _height: Height) -> PathBuf {
-        self.overlay_dst.clone()
-    }
-    fn existing_overlays(&self) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
-        Ok(self.existing_overlays.clone())
-    }
-}
 
 /// The expected size of an overlay file.
 ///
@@ -477,10 +460,10 @@ fn write_overlays_and_verify_with_tempdir(
                 // Check that the new file is equivalent to the deleted files.
                 if let Some(merge) = merge {
                     match merge.dst {
-                        PersistDestination::OverlayFile(ref path) => {
+                        MergeDestination::OverlayFile(ref path) => {
                             verify_merge_to_overlay(path, merged_base, merged_overlays);
                         }
-                        PersistDestination::BaseFile(ref path) => {
+                        MergeDestination::BaseFile(ref path) => {
                             verify_merge_to_base(path, merged_base, merged_overlays);
                         }
                     }
@@ -797,7 +780,7 @@ fn test_make_merge_candidate_to_overlay() {
     .unwrap();
     assert_eq!(
         merge_candidate.dst,
-        PersistDestination::OverlayFile(tempdir.path().join("000003_vmemory_0.overlay"))
+        MergeDestination::OverlayFile(tempdir.path().join("000003_vmemory_0.overlay"))
     );
     assert!(merge_candidate.base.is_none());
     assert_eq!(merge_candidate.overlays, storage_files.overlays[1..3]);
@@ -828,7 +811,7 @@ fn test_make_merge_candidate_to_base() {
     .unwrap();
     assert_eq!(
         merge_candidate.dst,
-        PersistDestination::BaseFile(tempdir.path().join("vmemory_0.bin"))
+        MergeDestination::BaseFile(tempdir.path().join("vmemory_0.bin"))
     );
     assert!(merge_candidate.base.is_none());
     assert_eq!(merge_candidate.overlays, storage_files.overlays);
