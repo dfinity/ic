@@ -77,7 +77,7 @@ impl From<ErrorCode> for RejectCode {
             CanisterWasmModuleNotFound => DestinationInvalid,
             CanisterAlreadyInstalled => DestinationInvalid,
             CanisterNonEmpty => CanisterError,
-            CanisterOutOfCycles => CanisterError,
+            CanisterOutOfCycles => SysTransient,
             CanisterTrapped => CanisterError,
             CanisterCalledTrap => CanisterError,
             CanisterContractViolation => CanisterError,
