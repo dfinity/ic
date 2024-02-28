@@ -4393,6 +4393,41 @@ fn test_enhanced_orthogonal_persistence_upgrade_preserves_main_memory() {
     .unwrap();
 }
 
+#[test]
+fn fails_with_missing_main_memory_option_for_enhanced_orthogonal_persistence() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let version1_wat = r#"
+        (module
+            (memory 1)
+            (@custom "icp:private enhanced-orthogonal-persistence" "")
+        )
+        "#;
+    let version1_wasm = wat::parse_str(version1_wat).unwrap();
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
+    test.install_canister(canister_id, version1_wasm).unwrap();
+
+    let version2_wat = r#"
+        (module
+            (memory 1)
+        )
+        "#;
+
+    let version2_wasm = wat::parse_str(version2_wat).unwrap();
+    let error = test
+        .upgrade_canister_v2(
+            canister_id,
+            version2_wasm,
+            UpgradeOptions {
+                skip_pre_upgrade: None,
+                keep_main_memory: None,
+            },
+        )
+        .unwrap_err();
+    assert_eq!(error.code(), ErrorCode::CanisterContractViolation);
+    assert_eq!(error.description(), "Missing upgrade option: Enhanced orthogonal persistence requires the `keep_main_memory` upgrade option.");
+}
+
 fn create_canisters(test: &mut ExecutionTest, canisters: usize) {
     for _ in 1..=canisters {
         test.canister_from_binary(MINIMAL_WASM.to_vec()).unwrap();
