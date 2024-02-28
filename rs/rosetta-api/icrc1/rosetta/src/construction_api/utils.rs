@@ -1,18 +1,24 @@
-use super::types::{CanisterMethodName, EnvelopePair, SignedTransaction, UnsignedTransaction};
+use super::types::{
+    CanisterMethodName, ConstructionPayloadsRequestMetadata, EnvelopePair, SignedTransaction,
+    UnsignedTransaction,
+};
 use crate::common::storage::types::RosettaToken;
 use crate::common::types::OperationType;
-use crate::common::utils::utils::rosetta_core_operation_to_icrc1_operation;
+use crate::common::utils::utils::{
+    icrc1_operation_to_rosetta_core_operation, rosetta_core_operation_to_icrc1_operation,
+};
 use anyhow::anyhow;
 use anyhow::{bail, Context};
 use candid::{Decode, Encode, Nat, Principal};
 use ic_agent::agent::{Envelope, EnvelopeContent};
 use ic_ledger_canister_core::ledger::LedgerTransaction;
+use ic_rosetta_api::models::ConstructionParseResponse;
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
 use icrc_ledger_types::icrc2::approve::ApproveArgs;
 use icrc_ledger_types::icrc2::transfer_from::TransferFromArgs;
-use rosetta_core::objects::{Operation, PublicKey, Signature, SigningPayload};
+use rosetta_core::objects::{Currency, Operation, PublicKey, Signature, SigningPayload};
 use rosetta_core::response_types::ConstructionHashResponse;
 use rosetta_core::response_types::{ConstructionCombineResponse, ConstructionPayloadsResponse};
 use rosetta_core::{
@@ -501,4 +507,193 @@ pub fn handle_construction_payloads(
         unsigned_transaction: UnsignedTransaction { envelope_contents }.to_string(),
         payloads: signing_payloads,
     })
+}
+
+pub fn handle_construction_parse(
+    envelope_contents: Vec<EnvelopeContent>,
+    currency: Currency,
+    ingress_expiry_start: Option<u64>,
+    ingress_expiry_end: Option<u64>,
+) -> anyhow::Result<ConstructionParseResponse> {
+    let mut construction_parse_response = ConstructionParseResponse {
+        operations: vec![],
+        account_identifier_signers: None,
+        metadata: None,
+    };
+
+    //TODO: Support multiple ingress expiries
+
+    // Iterate over all Call EnvelopeContents as they are the only ones that contain the information we need to construct the rosetta core operations
+    for envelope_content in envelope_contents.into_iter() {
+        // First we can derive the canister method args and the caller of the function from the https update
+        if let EnvelopeContent::Call { arg, .. } = &envelope_content {
+            let canister_method_name =
+                CanisterMethodName::new_from_envelope_content(&envelope_content)?;
+
+            // Then we can derive the icrc1 transaction from the canister method args and the caller
+            let icrc1_transaction = build_icrc1_transaction_from_canister_method_args(
+                &canister_method_name,
+                envelope_content.sender(),
+                arg.clone(),
+            )?;
+
+            // For the response object we need to convert the icrc1 transaction to a rosetta core operation
+            let rosetta_core_operation = icrc1_operation_to_rosetta_core_operation(
+                icrc1_transaction.operation,
+                currency.clone(),
+            )?;
+
+            // Metadata stays the same for all transactions requested in the same batch.
+            construction_parse_response.metadata = Some(
+                ConstructionPayloadsRequestMetadata {
+                    memo: icrc1_transaction
+                        .memo
+                        .map(|memo| memo.0.as_slice().to_vec()),
+                    created_at_time: icrc1_transaction.created_at_time,
+                    // The ingress start is the first ingress expiry set minus the ingress interval
+                    ingress_start: ingress_expiry_start
+                        .map(|start| start - ic_constants::MAX_INGRESS_TTL.as_nanos() as u64),
+                    ingress_end: ingress_expiry_end,
+                }
+                .try_into()?,
+            );
+
+            let caller = Account::from(*envelope_content.sender()).into();
+            construction_parse_response
+                .operations
+                .push(rosetta_core_operation);
+
+            construction_parse_response
+                .account_identifier_signers
+                .get_or_insert_with(Default::default)
+                .push(caller);
+        };
+    }
+
+    Ok(construction_parse_response)
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use ic_agent::Identity;
+    use ic_icrc1_test_utils::minter_identity;
+    use ic_icrc1_test_utils::valid_transactions_strategy;
+    use ic_icrc1_test_utils::LedgerEndpointArg;
+    use ic_icrc1_test_utils::DEFAULT_TRANSFER_FEE;
+    use proptest::strategy::Strategy;
+    use proptest::test_runner::Config as TestRunnerConfig;
+    use proptest::test_runner::TestRunner;
+    use std::time::SystemTime;
+
+    const NUM_TEST_CASES: u32 = 10;
+    const NUM_BLOCKS: usize = 10;
+
+    #[test]
+    fn test_transfer_arg_conversion() {
+        let mut runner = TestRunner::new(TestRunnerConfig {
+            max_shrink_iters: 0,
+            cases: NUM_TEST_CASES,
+            ..Default::default()
+        });
+
+        runner
+            .run(
+                &(valid_transactions_strategy(
+                    Arc::new(minter_identity()),
+                    DEFAULT_TRANSFER_FEE,
+                    NUM_BLOCKS,
+                    SystemTime::now(),
+                )
+                .no_shrink()),
+                |args_with_caller| {
+                    for arg_with_caller in args_with_caller.into_iter() {
+                        let (canister_method_name, candid_bytes) = match &arg_with_caller.arg {
+                            LedgerEndpointArg::TransferArg(args) => {
+                                (CanisterMethodName::Icrc1Transfer, Encode!(&args).unwrap())
+                            }
+                            LedgerEndpointArg::ApproveArg(args) => {
+                                (CanisterMethodName::Icrc2Approve, Encode!(&args).unwrap())
+                            }
+                        };
+
+                        let icrc1_transaction = build_icrc1_transaction_from_canister_method_args(
+                            &canister_method_name,
+                            &arg_with_caller.caller.sender().unwrap(),
+                            candid_bytes,
+                        )
+                        .unwrap();
+
+                        match arg_with_caller.arg {
+                            LedgerEndpointArg::TransferArg(args) => {
+                                // ICRC Rosetta only supports transfer and approve operations, no burn or mint
+                                match icrc1_transaction.operation {
+                                    ic_icrc1::Operation::Transfer {
+                                        to,
+                                        amount,
+                                        from,
+                                        fee,
+                                        ..
+                                    } => {
+                                        assert_eq!(to, args.to);
+                                        assert_eq!(args.amount, Nat::from(amount));
+                                        assert_eq!(
+                                            from,
+                                            Account {
+                                                owner: arg_with_caller.caller.sender().unwrap(),
+                                                subaccount: args.from_subaccount
+                                            }
+                                        );
+                                        assert_eq!(fee.map(Nat::from), args.fee);
+                                        assert_eq!(args.memo, icrc1_transaction.memo);
+                                        assert_eq!(
+                                            args.created_at_time,
+                                            icrc1_transaction.created_at_time
+                                        );
+                                    }
+                                    _ => panic!("Operation type mismatch"),
+                                }
+                            }
+                            LedgerEndpointArg::ApproveArg(args) => {
+                                // ICRC Rosetta only supports transfer and approve operations, no burn or mint
+                                match icrc1_transaction.operation {
+                                    ic_icrc1::Operation::Approve {
+                                        spender,
+                                        amount,
+                                        from,
+                                        fee,
+                                        expected_allowance,
+                                        expires_at,
+                                    } => {
+                                        assert_eq!(spender, args.spender);
+                                        assert_eq!(Nat::from(amount), args.amount);
+                                        assert_eq!(
+                                            from,
+                                            Account {
+                                                owner: arg_with_caller.caller.sender().unwrap(),
+                                                subaccount: args.from_subaccount
+                                            }
+                                        );
+                                        assert_eq!(fee.map(Nat::from), args.fee);
+                                        assert_eq!(
+                                            expected_allowance.map(Nat::from),
+                                            args.expected_allowance
+                                        );
+                                        assert_eq!(expires_at, args.expires_at);
+                                        assert_eq!(icrc1_transaction.memo, args.memo);
+                                        assert_eq!(
+                                            icrc1_transaction.created_at_time,
+                                            args.created_at_time
+                                        );
+                                    }
+                                    _ => panic!("Operation type mismatch"),
+                                }
+                            }
+                        }
+                    }
+                    Ok(())
+                },
+            )
+            .unwrap();
+    }
 }

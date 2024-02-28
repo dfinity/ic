@@ -4,7 +4,8 @@ use super::types::{
 };
 use super::utils::{
     extract_caller_principal_from_rosetta_core_operation, handle_construction_combine,
-    handle_construction_hash, handle_construction_payloads, handle_construction_submit,
+    handle_construction_hash, handle_construction_parse, handle_construction_payloads,
+    handle_construction_submit,
 };
 use crate::common::types::Error;
 use candid::Principal;
@@ -189,13 +190,62 @@ pub fn construction_payloads(
     .map_err(|err| Error::processing_construction_failed(&err))
 }
 
+pub fn construction_parse(
+    transaction_string: String,
+    transaction_is_signed: bool,
+    currency: Currency,
+) -> Result<ConstructionParseResponse, Error> {
+    let (ingress_expiry_start, ingress_expiry_end, envelope_contents) = if transaction_is_signed {
+        let signed_transaction = SignedTransaction::from_str(&transaction_string)
+            .map_err(|err| Error::parsing_unsuccessful(&err))?;
+        (
+            signed_transaction.get_lowest_ingress_expiry(),
+            signed_transaction.get_highest_ingress_expiry(),
+            signed_transaction
+                .envelope_pairs
+                .into_iter()
+                .map(|envelope_pair| envelope_pair.call_envelope.content.into_owned())
+                .collect(),
+        )
+    } else {
+        let unsigned_transaction = UnsignedTransaction::from_str(&transaction_string)
+            .map_err(|err| Error::parsing_unsuccessful(&err))?;
+        (
+            unsigned_transaction.get_lowest_ingress_expiry(),
+            unsigned_transaction.get_highest_ingress_expiry(),
+            unsigned_transaction.envelope_contents,
+        )
+    };
+
+    handle_construction_parse(
+        envelope_contents,
+        currency,
+        ingress_expiry_start,
+        ingress_expiry_end,
+    )
+    .map_err(|err| Error::processing_construction_failed(&err))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::common::utils::utils::icrc1_operation_to_rosetta_core_operation;
+    use ic_agent::Identity;
     use ic_canister_client_sender::{Ed25519KeyPair, Secp256k1KeyPair};
+    use ic_icrc1_test_utils::minter_identity;
+    use ic_icrc1_test_utils::valid_construction_payloads_request_metadata;
+    use ic_icrc1_test_utils::valid_transactions_strategy;
+    use ic_icrc1_test_utils::DEFAULT_TRANSFER_FEE;
+    use ic_icrc_rosetta_client::RosettaClient;
     use proptest::prelude::any;
     use proptest::proptest;
+    use proptest::strategy::Strategy;
+    use proptest::test_runner::Config as TestRunnerConfig;
+    use proptest::test_runner::TestRunner;
     use rosetta_core::models::RosettaSupportedKeyPair;
+
+    const NUM_TEST_CASES: u32 = 100;
+    const NUM_BLOCKS: usize = 1;
 
     fn call_construction_derive<T: RosettaSupportedKeyPair>(key_pair: &T) {
         let principal_id = key_pair.generate_principal_id().unwrap();
@@ -216,6 +266,40 @@ mod tests {
         );
     }
 
+    fn assert_parse_response(
+        parse_response: ConstructionParseResponse,
+        operations: Vec<Operation>,
+        metadata: ConstructionPayloadsRequestMetadata,
+        now: SystemTime,
+    ) {
+        let received_metadata =
+            ConstructionPayloadsRequestMetadata::try_from(parse_response.metadata).unwrap();
+
+        parse_response.operations.into_iter().for_each(|operation| {
+            assert!(
+                operations.contains(&operation),
+                "{}",
+                format!(
+                    "Operation {:?} not found in operations {:?}",
+                    operation, operations
+                )
+            )
+        });
+
+        if let Some(_created_at_time) = metadata.created_at_time {
+            assert_eq!(received_metadata.created_at_time, metadata.created_at_time);
+        } else {
+            assert!(
+                received_metadata.created_at_time.unwrap()
+                    >= now
+                        .duration_since(SystemTime::UNIX_EPOCH)
+                        .unwrap()
+                        .as_nanos() as u64
+            );
+        }
+        assert_eq!(received_metadata.memo, metadata.memo);
+    }
+
     proptest! {
         #[test]
         fn test_construction_derive_ed(seed in any::<u64>()) {
@@ -228,5 +312,116 @@ mod tests {
             let key_pair = Secp256k1KeyPair::generate_from_u64(seed);
             call_construction_derive(&key_pair);
         }
+    }
+
+    #[test]
+    fn test_construction_parse() {
+        let mut runner = TestRunner::new(TestRunnerConfig {
+            max_shrink_iters: 0,
+            cases: NUM_TEST_CASES,
+            ..Default::default()
+        });
+
+        runner
+            .run(
+                &(
+                    valid_transactions_strategy(
+                        minter_identity().into(),
+                        DEFAULT_TRANSFER_FEE,
+                        NUM_BLOCKS,
+                        SystemTime::now(),
+                    )
+                    .no_shrink(),
+                    valid_construction_payloads_request_metadata().no_shrink(),
+                ),
+                |(args_with_caller, construction_payloads_request_metadata)| {
+                    for arg_with_caller in args_with_caller.into_iter() {
+                        let currency = Currency {
+                            symbol: "ICP".to_string(),
+                            decimals: 8,
+                            metadata: None,
+                        };
+                        let now = SystemTime::now();
+                        let icrc1_transaction = arg_with_caller
+                            .to_transaction(minter_identity().sender().unwrap().into());
+                        let rosetta_core_operation = icrc1_operation_to_rosetta_core_operation(
+                            icrc1_transaction.operation,
+                            currency.clone(),
+                        )
+                        .unwrap();
+
+                        let ConstructionPreprocessResponse {
+                            required_public_keys,
+                            ..
+                        } = construction_preprocess(vec![rosetta_core_operation.clone()]).unwrap();
+
+                        assert_eq!(
+                            required_public_keys,
+                            Some(vec![icrc_ledger_types::icrc1::account::Account::from(
+                                arg_with_caller.caller.sender().unwrap()
+                            )
+                            .into()])
+                        );
+
+                        let construction_payloads_response = construction_payloads(
+                            vec![rosetta_core_operation.clone()],
+                            Some(
+                                construction_payloads_request_metadata
+                                    .clone()
+                                    .try_into()
+                                    .unwrap(),
+                            ),
+                            &PrincipalId::new_anonymous().0,
+                            vec![(&arg_with_caller.caller).into()],
+                        )
+                        .unwrap();
+
+                        let construction_parse_response = construction_parse(
+                            construction_payloads_response.unsigned_transaction.clone(),
+                            false,
+                            currency.clone(),
+                        )
+                        .unwrap();
+
+                        assert_parse_response(
+                            construction_parse_response.clone(),
+                            vec![rosetta_core_operation.clone()],
+                            construction_payloads_request_metadata
+                                .clone()
+                                .try_into()
+                                .unwrap(),
+                            now,
+                        );
+
+                        let signatures = RosettaClient::sign_transaction(
+                            &arg_with_caller.caller,
+                            construction_payloads_response.clone(),
+                        )
+                        .unwrap();
+
+                        let ConstructionCombineResponse { signed_transaction } =
+                            construction_combine(
+                                construction_payloads_response.unsigned_transaction,
+                                signatures,
+                            )
+                            .unwrap();
+
+                        let construction_parse_response =
+                            construction_parse(signed_transaction, true, currency.clone()).unwrap();
+
+                        assert_parse_response(
+                            construction_parse_response.clone(),
+                            vec![rosetta_core_operation.clone()],
+                            construction_payloads_request_metadata
+                                .clone()
+                                .try_into()
+                                .unwrap(),
+                            now,
+                        );
+                    }
+                    Ok(())
+                },
+            )
+            .unwrap();
     }
 }

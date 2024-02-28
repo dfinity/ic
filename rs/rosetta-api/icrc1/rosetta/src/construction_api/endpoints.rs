@@ -103,3 +103,16 @@ pub async fn construction_payloads(
         request.public_keys.unwrap_or_else(Vec::new),
     )?))
 }
+
+pub async fn construction_parse(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<ConstructionParseRequest>,
+) -> Result<Json<ConstructionParseResponse>> {
+    verify_network_id(&request.network_identifier, &state)
+        .map_err(|err| Error::invalid_network_id(&err))?;
+    Ok(Json(services::construction_parse(
+        request.transaction,
+        request.signed,
+        state.metadata.clone().into(),
+    )?))
+}
