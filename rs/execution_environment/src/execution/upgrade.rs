@@ -7,9 +7,12 @@ use std::sync::Arc;
 
 use crate::canister_manager::{
     CanisterManagerError, DtsInstallCodeResult, InstallCodeContext, PausedInstallCodeExecution,
+    CanisterManagerError, DtsInstallCodeResult, InstallCodeContext, PausedInstallCodeExecution,
 };
 use crate::execution::common::{ingress_status_with_processing_state, update_round_limits};
 use crate::execution::install_code::{
+    canister_layout, finish_err, CanisterMemoryHandling, InstallCodeHelper, OriginalContext,
+    PausedInstallCodeHelper,
     canister_layout, finish_err, CanisterMemoryHandling, InstallCodeHelper, OriginalContext,
     PausedInstallCodeHelper,
 };
@@ -26,6 +29,8 @@ use ic_replicated_state::{
 use ic_system_api::ApiType;
 use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
 use ic_types::{funds::Cycles, messages::CanisterCall};
+
+use super::install_code::MemoryHandling;
 
 use super::install_code::MemoryHandling;
 
