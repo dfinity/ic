@@ -23,7 +23,7 @@ use crate::driver::test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeCo
 use crate::nns::get_subnet_list_from_registry;
 use crate::tecdsa::{
     create_new_subnet_with_keys, empty_subnet_update, enable_ecdsa_signing,
-    execute_update_subnet_proposal, verify_signature, DKG_INTERVAL,
+    execute_update_subnet_proposal, get_public_key_with_retries, verify_signature, DKG_INTERVAL,
 };
 use crate::util::*;
 use canister_test::{Canister, Cycles};
@@ -359,7 +359,7 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
 
         let message_hash = [0xabu8; 32];
         assert_eq!(
-            get_public_key_with_logger(make_key(KEY_ID2), &msg_can, log)
+            get_public_key_with_retries(make_key(KEY_ID2), &msg_can, log, 20)
                 .await
                 .unwrap_err(),
             AgentError::ReplicaError(RejectResponse {
@@ -477,28 +477,20 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
                 log,
             )
             .await;
-            if sig_result.is_err() {
+            if let Err(sig_err) = sig_result {
+                assert_eq!(
+                    sig_err,
+                    AgentError::ReplicaError(RejectResponse {
+                        reject_code: RejectCode::CanisterReject,
+                        reject_message: "Unable to route management canister request sign_with_ecdsa: EcdsaKeyError(\"Requested ECDSA key: Secp256k1:some_other_key, existing keys with signing enabled: []\")".to_string(),
+                        error_code: None
+                    })
+                );
                 break;
             } else {
                 tokio::time::sleep(Duration::from_millis(500)).await;
             }
         }
-        assert_eq!(
-            get_signature_with_logger(
-                &message_hash,
-                scale_cycles(ECDSA_SIGNATURE_FEE),
-                make_key(KEY_ID2),
-                &msg_can,
-                log,
-            )
-            .await
-            .unwrap_err(),
-            AgentError::ReplicaError(RejectResponse {
-                reject_code: RejectCode::CanisterReject,
-                reject_message: "Unable to route management canister request sign_with_ecdsa: EcdsaKeyError(\"Requested ECDSA key: Secp256k1:some_other_key, existing keys with signing enabled: []\")".to_string(),
-                error_code: None
-            })
-        );
 
         info!(log, "4. Enabling signing on new subnet then verifying that signing works and public key is unchanged.");
 

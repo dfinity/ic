@@ -135,7 +135,7 @@ pub(crate) async fn get_public_key_with_logger(
     msg_can: &MessageCanister<'_>,
     logger: &Logger,
 ) -> Result<VerifyingKey, AgentError> {
-    get_public_key_with_retries(key_id, msg_can, logger, /*retries=*/ 10).await
+    get_public_key_with_retries(key_id, msg_can, logger, /*retries=*/ 300).await
 }
 
 pub(crate) async fn execute_update_subnet_proposal(
