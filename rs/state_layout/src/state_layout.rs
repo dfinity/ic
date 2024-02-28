@@ -165,6 +165,7 @@ pub struct CanisterStateBits {
     pub total_query_stats: TotalQueryStats,
     pub log_visibility: LogVisibility,
     pub canister_log_records: Vec<CanisterLogRecord>,
+    pub next_canister_log_record_idx: u64,
 }
 
 /// This struct contains bits of the `CanisterSnapshot` that are not already
@@ -1800,6 +1801,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
                 .into_iter()
                 .map(|record| record.into())
                 .collect(),
+            next_canister_log_record_idx: item.next_canister_log_record_idx,
         }
     }
 }
@@ -1925,6 +1927,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
                 .into_iter()
                 .map(|record| record.into())
                 .collect(),
+            next_canister_log_record_idx: value.next_canister_log_record_idx,
         })
     }
 }

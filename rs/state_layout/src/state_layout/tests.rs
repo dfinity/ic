@@ -56,6 +56,7 @@ fn default_canister_state_bits() -> CanisterStateBits {
         total_query_stats: TotalQueryStats::default(),
         log_visibility: LogVisibility::default(),
         canister_log_records: Vec::new(),
+        next_canister_log_record_idx: 0,
     }
 }
 

@@ -220,6 +220,7 @@ mod tests {
             BTreeSet::from([controller]),
             RequestMetadata::new(0, Time::from_nanos_since_unix_epoch(0)),
             caller,
+            0,
         )
     }
 

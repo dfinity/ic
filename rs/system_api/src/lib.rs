@@ -1374,7 +1374,7 @@ impl SystemApiImpl {
                         // If the specified memory range is invalid, ignore it and log the error message.
                         b"(debug_print message out of memory bounds)",
                     ),
-                )
+                );
             }
         }
     }

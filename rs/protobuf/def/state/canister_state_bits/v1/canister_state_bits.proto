@@ -378,4 +378,6 @@ message CanisterStateBits {
   LogVisibility log_visibility = 42;
   // Log records of the canister.
   repeated CanisterLogRecord canister_log_records = 43;
+  // The index of the next log record to be created.
+  uint64 next_canister_log_record_idx = 44;
 }

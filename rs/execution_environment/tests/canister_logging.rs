@@ -14,6 +14,7 @@ use ic_test_utilities::universal_canister::{wasm, UNIVERSAL_CANISTER_WASM};
 use ic_test_utilities_execution_environment::get_reply;
 use ic_types::{ingress::WasmResult, CanisterId, Cycles};
 use proptest::{prelude::ProptestConfig, prop_assume};
+use std::time::Duration;
 
 const MAX_LOG_MESSAGE_LEN: usize = 4 * 1024;
 
@@ -59,6 +60,16 @@ fn setup_with_controller(
             .build(),
     );
     (env, canister_id, controller)
+}
+
+fn restart_node(env: StateMachine, canister_logging: FlagStatus) -> StateMachine {
+    env.restart_node_with_config(StateMachineConfig::new(
+        SubnetConfig::new(SubnetType::Application),
+        ExecutionConfig {
+            canister_logging,
+            ..ExecutionConfig::default()
+        },
+    ))
 }
 
 #[test]
@@ -235,7 +246,7 @@ fn test_appending_logs_in_replied_update_call(#[strategy("\\PC*")] message: Stri
         FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
         FetchCanisterLogsResponse {
             canister_log_records: vec![CanisterLogRecord {
-                idx: 27,
+                idx: 0,
                 timestamp_nanos: 1620328630000000000,
                 content: message.as_bytes().to_vec()
             }]
@@ -262,7 +273,7 @@ fn test_appending_logs_in_trapped_update_call(#[strategy("\\PC*")] message: Stri
         FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
         FetchCanisterLogsResponse {
             canister_log_records: vec![CanisterLogRecord {
-                idx: 27,
+                idx: 0,
                 timestamp_nanos: 1620328630000000000,
                 content: message.as_bytes().to_vec()
             }]
@@ -289,7 +300,7 @@ fn test_appending_logs_in_replied_replicated_query_call(#[strategy("\\PC*")] mes
         FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
         FetchCanisterLogsResponse {
             canister_log_records: vec![CanisterLogRecord {
-                idx: 27,
+                idx: 0,
                 timestamp_nanos: 1620328630000000000,
                 content: message.as_bytes().to_vec()
             }]
@@ -316,10 +327,134 @@ fn test_appending_logs_in_trapped_replicated_query_call(#[strategy("\\PC*")] mes
         FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
         FetchCanisterLogsResponse {
             canister_log_records: vec![CanisterLogRecord {
-                idx: 27,
+                idx: 0,
                 timestamp_nanos: 1620328630000000000,
                 content: message.as_bytes().to_vec()
             }]
+        }
+    );
+}
+
+#[test]
+fn test_canister_log_record_index_increment_for_different_calls() {
+    // Test that the index of the log records is incremented for each log message,
+    // both for logging them in the same and different update calls.
+    let (env, canister_id, controller) = setup_with_controller(FlagStatus::Enabled);
+    let _ = env.execute_ingress(
+        canister_id,
+        "update",
+        wasm()
+            .debug_print(b"message 0")
+            .debug_print(b"message 1")
+            .reply()
+            .build(),
+    );
+    env.advance_time(Duration::from_nanos(123_456));
+    let _ = env.execute_ingress(
+        canister_id,
+        "update",
+        wasm()
+            .debug_print(b"message 2")
+            .debug_print(b"message 3")
+            .reply()
+            .build(),
+    );
+    let result = env.query_as(
+        controller,
+        CanisterId::ic_00(),
+        "fetch_canister_logs",
+        FetchCanisterLogsRequest::new(canister_id).encode(),
+    );
+    assert_eq!(
+        FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
+        FetchCanisterLogsResponse {
+            canister_log_records: vec![
+                CanisterLogRecord {
+                    idx: 0,
+                    timestamp_nanos: 1620328630000000000,
+                    content: b"message 0".to_vec()
+                },
+                CanisterLogRecord {
+                    idx: 1,
+                    timestamp_nanos: 1620328630000000000,
+                    content: b"message 1".to_vec()
+                },
+                CanisterLogRecord {
+                    idx: 2,
+                    timestamp_nanos: 1620328630000123456,
+                    content: b"message 2".to_vec()
+                },
+                CanisterLogRecord {
+                    idx: 3,
+                    timestamp_nanos: 1620328630000123456,
+                    content: b"message 3".to_vec()
+                }
+            ],
+        }
+    );
+}
+
+#[test]
+fn test_canister_log_record_index_increment_after_node_restart() {
+    // Test that the index of the log records is incremented for each log message
+    // even after checkpoint and node restart.
+    let canister_logging = FlagStatus::Enabled;
+    let (env, canister_id, controller) = setup_with_controller(canister_logging);
+    env.set_checkpoints_enabled(true);
+
+    let _ = env.execute_ingress(
+        canister_id,
+        "update",
+        wasm()
+            .debug_print(b"message 0")
+            .debug_print(b"message 1")
+            .reply()
+            .build(),
+    );
+
+    let env = restart_node(env, canister_logging);
+    env.advance_time(Duration::from_nanos(123_456));
+
+    let _ = env.execute_ingress(
+        canister_id,
+        "update",
+        wasm()
+            .debug_print(b"message 2")
+            .debug_print(b"message 3")
+            .reply()
+            .build(),
+    );
+    let result = env.query_as(
+        controller,
+        CanisterId::ic_00(),
+        "fetch_canister_logs",
+        FetchCanisterLogsRequest::new(canister_id).encode(),
+    );
+    assert_eq!(
+        FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
+        FetchCanisterLogsResponse {
+            canister_log_records: vec![
+                CanisterLogRecord {
+                    idx: 0,
+                    timestamp_nanos: 1620328630000000000,
+                    content: b"message 0".to_vec()
+                },
+                CanisterLogRecord {
+                    idx: 1,
+                    timestamp_nanos: 1620328630000000000,
+                    content: b"message 1".to_vec()
+                },
+                CanisterLogRecord {
+                    idx: 2,
+                    timestamp_nanos: 1620328630000123456,
+                    content: b"message 2".to_vec()
+                },
+                CanisterLogRecord {
+                    idx: 3,
+                    timestamp_nanos: 1620328630000123456,
+                    content: b"message 3".to_vec()
+                }
+            ],
         }
     );
 }
