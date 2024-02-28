@@ -117,6 +117,23 @@ pub(crate) fn update_ongoing_signatures(
     Ok(())
 }
 
+/// Helper to create a reject response to the management canister
+/// with the given code and message
+fn reject_response(
+    callback_id: CallbackId,
+    context: &SignWithEcdsaContext,
+    code: RejectCode,
+    message: impl ToString,
+) -> ic_types::messages::Response {
+    ic_types::messages::Response {
+        originator: context.request.sender,
+        respondent: ic_types::CanisterId::ic_00(),
+        originator_reply_callback: callback_id,
+        refund: context.request.payment,
+        response_payload: ic_types::messages::Payload::Reject(RejectContext::new(code, message)),
+    }
+}
+
 /// Update signature agreements in the data payload by:
 /// - dropping agreements that don't have a [SignWithEcdsaContext] anymore (because
 ///   the response has been delivered)
@@ -160,22 +177,17 @@ pub(crate) fn update_signature_agreements_improved_latency(
         if !valid_keys.contains(&context.key_id) {
             // Reject new requests with unknown key Ids.
             // Note that no quadruples are consumed at this stage.
-            let response = ic_types::messages::Response {
-                originator: context.request.sender,
-                respondent: ic_types::CanisterId::ic_00(),
-                originator_reply_callback: *callback_id,
-                refund: context.request.payment,
-                response_payload: ic_types::messages::Payload::Reject(RejectContext::new(
+            payload.signature_agreements.insert(
+                context.pseudo_random_id,
+                ecdsa::CompletedSignature::Unreported(reject_response(
+                    *callback_id,
+                    context,
                     RejectCode::CanisterReject,
                     format!(
                         "Invalid or disabled key_id in signature request: {:?}",
                         context.key_id
                     ),
                 )),
-            };
-            payload.signature_agreements.insert(
-                context.pseudo_random_id,
-                ecdsa::CompletedSignature::Unreported(response),
             );
 
             if let Some(metrics) = ecdsa_payload_metrics {
@@ -192,24 +204,40 @@ pub(crate) fn update_signature_agreements_improved_latency(
         };
 
         if request_expiry_time.is_some_and(|expiry| context.batch_time < expiry) {
-            let response = ic_types::messages::Response {
-                originator: context.request.sender,
-                respondent: ic_types::CanisterId::ic_00(),
-                originator_reply_callback: *callback_id,
-                refund: context.request.payment,
-                response_payload: ic_types::messages::Payload::Reject(RejectContext::new(
+            payload.signature_agreements.insert(
+                context.pseudo_random_id,
+                ecdsa::CompletedSignature::Unreported(reject_response(
+                    *callback_id,
+                    context,
                     RejectCode::CanisterError,
                     "Signature request expired",
                 )),
-            };
-            payload.signature_agreements.insert(
-                context.pseudo_random_id,
-                ecdsa::CompletedSignature::Unreported(response),
             );
             payload.available_quadruples.remove(quadruple_id);
 
             if let Some(metrics) = ecdsa_payload_metrics {
                 metrics.payload_errors_inc("expired_requests");
+            }
+
+            continue;
+        }
+
+        // In case of subnet recoveries, available quadruples are purged.
+        // This means that pre-existing requests that were already matched
+        // cannot be completed, and we should reject them.
+        if !payload.available_quadruples.contains_key(quadruple_id) {
+            payload.signature_agreements.insert(
+                context.pseudo_random_id,
+                ecdsa::CompletedSignature::Unreported(reject_response(
+                    *callback_id,
+                    context,
+                    RejectCode::CanisterError,
+                    "Signature request was matched to non-existent pre-signature.",
+                )),
+            );
+
+            if let Some(metrics) = ecdsa_payload_metrics {
+                metrics.payload_errors_inc("missing_pre_signature");
             }
 
             continue;
@@ -547,6 +575,9 @@ mod tests {
         let quadruple_ids = (0..4)
             .map(|i| create_available_quadruple(&mut ecdsa_payload, key_id.clone(), i as u8))
             .collect::<Vec<_>>();
+        let missing_quadruple = ecdsa_payload
+            .uid_generator
+            .next_quadruple_id(key_id.clone());
 
         let contexts = BTreeMap::from([
             // insert request without completed signature
@@ -557,6 +588,8 @@ mod tests {
             fake_completed_sign_with_ecdsa_context(2, quadruple_ids[2].clone()),
             // insert request without a matched quadruple
             fake_sign_with_ecdsa_context_with_quadruple(3, key_id.clone(), None),
+            // insert request matched to a non-existent quadruple
+            fake_sign_with_ecdsa_context_with_quadruple(4, key_id.clone(), Some(missing_quadruple)),
         ]);
 
         // insert agreement for completed request
@@ -595,7 +628,7 @@ mod tests {
             .available_quadruples
             .contains_key(&quadruple_ids[1]));
 
-        assert_eq!(ecdsa_payload.signature_agreements.len(), 2);
+        assert_eq!(ecdsa_payload.signature_agreements.len(), 3);
         let Some(ecdsa::CompletedSignature::Unreported(response_1)) =
             ecdsa_payload.signature_agreements.get(&[1; 32])
         else {
@@ -605,9 +638,21 @@ mod tests {
             &response_1.response_payload,
             ic_types::messages::Payload::Data(_)
         );
+
         assert_matches!(
             ecdsa_payload.signature_agreements.get(&[2; 32]),
             Some(ecdsa::CompletedSignature::ReportedToExecution)
+        );
+
+        let Some(ecdsa::CompletedSignature::Unreported(response_3)) =
+            ecdsa_payload.signature_agreements.get(&[4; 32])
+        else {
+            panic!("Request 3 should have a response");
+        };
+        assert_matches!(
+            &response_3.response_payload,
+            ic_types::messages::Payload::Reject(context)
+            if context.message().contains("matched to non-existent pre-signature")
         );
     }
 }
