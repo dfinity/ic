@@ -1,7 +1,7 @@
 use super::*;
 use crate::{spawn_tip_thread, StateManagerMetrics, NUMBER_OF_CHECKPOINT_THREADS};
 use ic_base_types::NumSeconds;
-use ic_config::state_manager::lsmt_storage_default;
+use ic_config::state_manager::lsmt_config_default;
 use ic_logger::ReplicaLogger;
 use ic_management_canister_types::CanisterStatusType;
 use ic_metrics::MetricsRegistry;
@@ -78,7 +78,7 @@ fn make_checkpoint_and_get_state_impl(
         &state_manager_metrics(log).checkpoint_metrics,
         &mut thread_pool(),
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
-        ic_config::state_manager::lsmt_storage_default(),
+        ic_config::state_manager::lsmt_config_default().lsmt_status,
     )
     .unwrap_or_else(|err| panic!("Expected make_checkpoint to succeed, got {:?}", err))
     .1
@@ -105,7 +105,7 @@ fn can_make_a_checkpoint() {
             log.clone(),
             tip_handler,
             layout.clone(),
-            lsmt_storage_default(),
+            lsmt_config_default(),
             state_manager_metrics(&log),
             MaliciousFlags::default(),
         );
@@ -170,7 +170,7 @@ fn scratchpad_dir_is_deleted_if_checkpointing_failed() {
             log,
             tip_handler,
             layout,
-            lsmt_storage_default(),
+            lsmt_config_default(),
             state_manager_metrics.clone(),
             MaliciousFlags::default(),
         );
@@ -197,7 +197,7 @@ fn scratchpad_dir_is_deleted_if_checkpointing_failed() {
             &state_manager_metrics.checkpoint_metrics,
             &mut thread_pool(),
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
-            ic_config::state_manager::lsmt_storage_default(),
+            ic_config::state_manager::lsmt_config_default().lsmt_status,
         );
 
         match replicated_state {
@@ -222,7 +222,7 @@ fn can_recover_from_a_checkpoint() {
             log.clone(),
             tip_handler,
             layout.clone(),
-            lsmt_storage_default(),
+            lsmt_config_default(),
             state_manager_metrics.clone(),
             MaliciousFlags::default(),
         );
@@ -325,7 +325,7 @@ fn can_recover_an_empty_state() {
             log.clone(),
             tip_handler,
             layout.clone(),
-            lsmt_storage_default(),
+            lsmt_config_default(),
             state_manager_metrics.clone(),
             MaliciousFlags::default(),
         );
@@ -411,7 +411,7 @@ fn can_recover_a_stopping_canister() {
             log.clone(),
             tip_handler,
             layout.clone(),
-            lsmt_storage_default(),
+            lsmt_config_default(),
             state_manager_metrics.clone(),
             MaliciousFlags::default(),
         );
@@ -479,7 +479,7 @@ fn can_recover_a_stopped_canister() {
             log.clone(),
             tip_handler,
             layout.clone(),
-            lsmt_storage_default(),
+            lsmt_config_default(),
             state_manager_metrics.clone(),
             MaliciousFlags::default(),
         );
@@ -532,7 +532,7 @@ fn can_recover_a_running_canister() {
             log.clone(),
             tip_handler,
             layout.clone(),
-            lsmt_storage_default(),
+            lsmt_config_default(),
             state_manager_metrics.clone(),
             MaliciousFlags::default(),
         );
@@ -585,7 +585,7 @@ fn can_recover_subnet_queues() {
             log.clone(),
             tip_handler,
             layout.clone(),
-            lsmt_storage_default(),
+            lsmt_config_default(),
             state_manager_metrics.clone(),
             MaliciousFlags::default(),
         );
@@ -636,7 +636,7 @@ fn empty_protobufs_are_loaded_correctly() {
             log.clone(),
             tip_handler,
             layout.clone(),
-            lsmt_storage_default(),
+            lsmt_config_default(),
             state_manager_metrics.clone(),
             MaliciousFlags::default(),
         );

@@ -5,7 +5,7 @@ use ic_certification_version::{
 };
 use ic_config::{
     flag_status::FlagStatus,
-    state_manager::{lsmt_storage_default, Config},
+    state_manager::{lsmt_config_default, Config, LsmtConfig},
 };
 use ic_crypto_tree_hash::{
     flatmap, sparse_labeled_tree_from_paths, Label, LabeledTree, LookupStatus, MixedHashTree,
@@ -117,7 +117,7 @@ fn stable_memory_size(canister_layout: &ic_state_layout::CanisterLayout<ReadOnly
 
 /// Combined size of wasm chunk store including overlays.
 fn wasm_chunk_store_size(canister_layout: &ic_state_layout::CanisterLayout<ReadOnly>) -> u64 {
-    if lsmt_storage_default() == FlagStatus::Enabled {
+    if lsmt_config_default().lsmt_status == FlagStatus::Enabled {
         canister_layout
             .wasm_chunk_store_overlays()
             .unwrap()
@@ -325,7 +325,7 @@ fn merge_overhead() {
     }
 
     let env = StateMachineBuilder::new()
-        .with_lsmt_override(Some(FlagStatus::Enabled))
+        .with_lsmt_override(Some(lsmt_without_sharding()))
         .build();
 
     let canister_ids = (0..10)
@@ -447,7 +447,7 @@ fn skipping_flushing_is_invisible_for_state() {
 
     // We only skip flushes nondetermistically when `lsmt_storage` is disabled, so this test
     // makes no sense otherwise.
-    if lsmt_storage_default() == FlagStatus::Disabled {
+    if lsmt_config_default().lsmt_status == FlagStatus::Disabled {
         assert_eq!(execute(false), execute(true));
     }
 }
@@ -2992,7 +2992,7 @@ fn can_recover_from_corruption_on_state_sync() {
             // The code below prepares all 5 types of corruption.
 
             let canister_90_layout = mutable_cp_layout.canister(&canister_test_id(90)).unwrap();
-            let canister_90_memory = if lsmt_storage_default() == FlagStatus::Enabled {
+            let canister_90_memory = if lsmt_config_default().lsmt_status == FlagStatus::Enabled {
                 canister_90_layout.vmemory_0_overlays().unwrap().remove(0)
             } else {
                 canister_90_layout.vmemory_0()
@@ -3008,7 +3008,7 @@ fn can_recover_from_corruption_on_state_sync() {
 
             let canister_100_layout = mutable_cp_layout.canister(&canister_test_id(100)).unwrap();
 
-            let canister_100_memory = if lsmt_storage_default() == FlagStatus::Enabled {
+            let canister_100_memory = if lsmt_config_default().lsmt_status == FlagStatus::Enabled {
                 canister_100_layout.vmemory_0_overlays().unwrap().remove(0)
             } else {
                 canister_100_layout.vmemory_0()
@@ -3017,14 +3017,15 @@ fn can_recover_from_corruption_on_state_sync() {
             write_all_at(&canister_100_memory, &[3u8; PAGE_SIZE], 4).unwrap();
             make_readonly(&canister_100_memory).unwrap();
 
-            let canister_100_stable_memory = if lsmt_storage_default() == FlagStatus::Enabled {
-                canister_100_layout
-                    .stable_memory_overlays()
-                    .unwrap()
-                    .remove(0)
-            } else {
-                canister_100_layout.stable_memory_blob()
-            };
+            let canister_100_stable_memory =
+                if lsmt_config_default().lsmt_status == FlagStatus::Enabled {
+                    canister_100_layout
+                        .stable_memory_overlays()
+                        .unwrap()
+                        .remove(0)
+                } else {
+                    canister_100_layout.stable_memory_blob()
+                };
             make_mutable(&canister_100_stable_memory).unwrap();
             write_all_at(
                 &canister_100_stable_memory,
@@ -3383,7 +3384,7 @@ fn can_reuse_chunk_hashes_when_computing_manifest() {
 
         // Second checkpoint can leverage heap chunks computed previously as well as the wasm binary.
         let chunk_bytes = fetch_int_counter_vec(metrics, "state_manager_manifest_chunk_bytes");
-        if lsmt_storage_default() == FlagStatus::Enabled {
+        if lsmt_config_default().lsmt_status == FlagStatus::Enabled {
             let expected_size_estimate =
                 PAGE_SIZE as u64 * (WASM_PAGES + STABLE_PAGES) + empty_wasm_size() as u64;
             let size = chunk_bytes[&reused_label] + chunk_bytes[&compared_label];
@@ -5104,7 +5105,7 @@ fn checkpoints_are_readonly() {
 #[test]
 fn can_downgrade_from_lsmt() {
     state_manager_restart_test_with_lsmt(
-        FlagStatus::Enabled,
+        lsmt_without_sharding(),
         |metrics, state_manager, restart_fn| {
             let (_height, mut state) = state_manager.take_tip();
 
@@ -5153,7 +5154,7 @@ fn can_downgrade_from_lsmt() {
             assert_error_counters(metrics);
 
             // restart the state_manager
-            let (metrics, state_manager) = restart_fn(state_manager, None, FlagStatus::Disabled);
+            let (metrics, state_manager) = restart_fn(state_manager, None, lsmt_disabled());
 
             let (_height, mut state) = state_manager.take_tip();
             let canister_state = state.canister_state_mut(&canister_test_id(1)).unwrap();
@@ -5189,125 +5190,122 @@ fn can_downgrade_from_lsmt() {
 
 #[test]
 fn can_upgrade_to_lsmt() {
-    state_manager_restart_test_with_lsmt(
-        FlagStatus::Disabled,
-        |metrics, state_manager, restart_fn| {
-            let (_height, mut state) = state_manager.take_tip();
+    state_manager_restart_test_with_lsmt(lsmt_disabled(), |metrics, state_manager, restart_fn| {
+        let (_height, mut state) = state_manager.take_tip();
 
-            insert_dummy_canister(&mut state, canister_test_id(1));
-            let canister_state = state.canister_state_mut(&canister_test_id(1)).unwrap();
-            let execution_state = canister_state.execution_state.as_mut().unwrap();
+        insert_dummy_canister(&mut state, canister_test_id(1));
+        let canister_state = state.canister_state_mut(&canister_test_id(1)).unwrap();
+        let execution_state = canister_state.execution_state.as_mut().unwrap();
 
-            const NEW_WASM_PAGE: u64 = 100;
+        const NEW_WASM_PAGE: u64 = 100;
 
-            fn verify_page_map(page_map: &PageMap, value: u8) {
-                assert_eq!(page_map.get_page(PageIndex::new(0)), &[1u8; PAGE_SIZE]);
-                for i in 1..NEW_WASM_PAGE {
-                    assert_eq!(page_map.get_page(PageIndex::new(i)), &[0u8; PAGE_SIZE]);
-                }
-                assert_eq!(
-                    page_map.get_page(PageIndex::new(NEW_WASM_PAGE)),
-                    &[value; PAGE_SIZE]
-                );
+        fn verify_page_map(page_map: &PageMap, value: u8) {
+            assert_eq!(page_map.get_page(PageIndex::new(0)), &[1u8; PAGE_SIZE]);
+            for i in 1..NEW_WASM_PAGE {
+                assert_eq!(page_map.get_page(PageIndex::new(i)), &[0u8; PAGE_SIZE]);
             }
-
-            execution_state.wasm_memory.page_map.update(&[
-                (PageIndex::new(0), &[1u8; PAGE_SIZE]),
-                (PageIndex::new(NEW_WASM_PAGE), &[2u8; PAGE_SIZE]),
-            ]);
-
-            verify_page_map(&execution_state.wasm_memory.page_map, 2u8);
-
-            state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
-            wait_for_checkpoint(&state_manager, height(1));
-
-            assert!(vmemory0_base_exists(
-                &state_manager,
-                &canister_test_id(1),
-                height(1)
-            ));
             assert_eq!(
-                vmemory0_num_overlays(&state_manager, &canister_test_id(1), height(1)),
-                0
+                page_map.get_page(PageIndex::new(NEW_WASM_PAGE)),
+                &[value; PAGE_SIZE]
             );
+        }
 
-            let (_height, mut state) = state_manager.take_tip();
-            let canister_state = state.canister_state_mut(&canister_test_id(1)).unwrap();
-            let execution_state = canister_state.execution_state.as_mut().unwrap();
-            verify_page_map(&execution_state.wasm_memory.page_map, 2u8);
+        execution_state.wasm_memory.page_map.update(&[
+            (PageIndex::new(0), &[1u8; PAGE_SIZE]),
+            (PageIndex::new(NEW_WASM_PAGE), &[2u8; PAGE_SIZE]),
+        ]);
 
-            execution_state.wasm_memory.page_map.update(&[
-                (PageIndex::new(0), &[1u8; PAGE_SIZE]),
-                (PageIndex::new(NEW_WASM_PAGE), &[3u8; PAGE_SIZE]),
-            ]);
+        verify_page_map(&execution_state.wasm_memory.page_map, 2u8);
 
-            state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
-            wait_for_checkpoint(&state_manager, height(2));
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        wait_for_checkpoint(&state_manager, height(1));
 
-            let (_height, mut state) = state_manager.take_tip();
-            let canister_state = state.canister_state_mut(&canister_test_id(1)).unwrap();
-            let execution_state = canister_state.execution_state.as_mut().unwrap();
-            verify_page_map(&execution_state.wasm_memory.page_map, 3u8);
+        assert!(vmemory0_base_exists(
+            &state_manager,
+            &canister_test_id(1),
+            height(1)
+        ));
+        assert_eq!(
+            vmemory0_num_overlays(&state_manager, &canister_test_id(1), height(1)),
+            0
+        );
 
-            assert!(vmemory0_base_exists(
-                &state_manager,
-                &canister_test_id(1),
-                height(2)
-            ));
-            assert_eq!(
-                vmemory0_num_overlays(&state_manager, &canister_test_id(1), height(2)),
-                0
-            );
+        let (_height, mut state) = state_manager.take_tip();
+        let canister_state = state.canister_state_mut(&canister_test_id(1)).unwrap();
+        let execution_state = canister_state.execution_state.as_mut().unwrap();
+        verify_page_map(&execution_state.wasm_memory.page_map, 2u8);
 
-            assert_error_counters(metrics);
+        execution_state.wasm_memory.page_map.update(&[
+            (PageIndex::new(0), &[1u8; PAGE_SIZE]),
+            (PageIndex::new(NEW_WASM_PAGE), &[3u8; PAGE_SIZE]),
+        ]);
 
-            // restart the state_manager
-            let (metrics, state_manager) = restart_fn(state_manager, None, FlagStatus::Enabled);
+        state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+        wait_for_checkpoint(&state_manager, height(2));
 
-            let (_height, mut state) = state_manager.take_tip();
-            let canister_state = state.canister_state_mut(&canister_test_id(1)).unwrap();
-            let execution_state = canister_state.execution_state.as_mut().unwrap();
-            verify_page_map(&execution_state.wasm_memory.page_map, 3u8);
+        let (_height, mut state) = state_manager.take_tip();
+        let canister_state = state.canister_state_mut(&canister_test_id(1)).unwrap();
+        let execution_state = canister_state.execution_state.as_mut().unwrap();
+        verify_page_map(&execution_state.wasm_memory.page_map, 3u8);
 
-            assert!(vmemory0_base_exists(
-                &state_manager,
-                &canister_test_id(1),
-                height(2)
-            ));
-            assert_eq!(
-                vmemory0_num_overlays(&state_manager, &canister_test_id(1), height(2)),
-                0
-            );
+        assert!(vmemory0_base_exists(
+            &state_manager,
+            &canister_test_id(1),
+            height(2)
+        ));
+        assert_eq!(
+            vmemory0_num_overlays(&state_manager, &canister_test_id(1), height(2)),
+            0
+        );
 
-            execution_state.wasm_memory.page_map.update(&[
-                (PageIndex::new(0), &[1u8; PAGE_SIZE]),
-                (PageIndex::new(NEW_WASM_PAGE), &[4u8; PAGE_SIZE]),
-            ]);
+        assert_error_counters(metrics);
 
-            state_manager.commit_and_certify(state, height(3), CertificationScope::Full);
-            wait_for_checkpoint(&state_manager, height(3));
+        // restart the state_manager
+        let (metrics, state_manager) = restart_fn(state_manager, None, lsmt_without_sharding());
 
-            let (_height, mut state) = state_manager.take_tip();
-            let canister_state = state.canister_state_mut(&canister_test_id(1)).unwrap();
-            let execution_state = canister_state.execution_state.as_mut().unwrap();
-            verify_page_map(&execution_state.wasm_memory.page_map, 4u8);
+        let (_height, mut state) = state_manager.take_tip();
+        let canister_state = state.canister_state_mut(&canister_test_id(1)).unwrap();
+        let execution_state = canister_state.execution_state.as_mut().unwrap();
+        verify_page_map(&execution_state.wasm_memory.page_map, 3u8);
 
-            assert!(vmemory0_base_exists(
-                &state_manager,
-                &canister_test_id(1),
-                height(3)
-            ));
-            assert_eq!(
-                vmemory0_num_overlays(&state_manager, &canister_test_id(1), height(3)),
-                1
-            );
+        assert!(vmemory0_base_exists(
+            &state_manager,
+            &canister_test_id(1),
+            height(2)
+        ));
+        assert_eq!(
+            vmemory0_num_overlays(&state_manager, &canister_test_id(1), height(2)),
+            0
+        );
 
-            state_manager.commit_and_certify(state, height(4), CertificationScope::Full);
-            wait_for_checkpoint(&state_manager, height(4));
+        execution_state.wasm_memory.page_map.update(&[
+            (PageIndex::new(0), &[1u8; PAGE_SIZE]),
+            (PageIndex::new(NEW_WASM_PAGE), &[4u8; PAGE_SIZE]),
+        ]);
 
-            assert_error_counters(&metrics);
-        },
-    );
+        state_manager.commit_and_certify(state, height(3), CertificationScope::Full);
+        wait_for_checkpoint(&state_manager, height(3));
+
+        let (_height, mut state) = state_manager.take_tip();
+        let canister_state = state.canister_state_mut(&canister_test_id(1)).unwrap();
+        let execution_state = canister_state.execution_state.as_mut().unwrap();
+        verify_page_map(&execution_state.wasm_memory.page_map, 4u8);
+
+        assert!(vmemory0_base_exists(
+            &state_manager,
+            &canister_test_id(1),
+            height(3)
+        ));
+        assert_eq!(
+            vmemory0_num_overlays(&state_manager, &canister_test_id(1), height(3)),
+            1
+        );
+
+        state_manager.commit_and_certify(state, height(4), CertificationScope::Full);
+        wait_for_checkpoint(&state_manager, height(4));
+
+        assert_error_counters(&metrics);
+    });
 }
 
 proptest! {
@@ -5752,14 +5750,14 @@ fn query_stats_are_collected() {
 /// An operation against a state machine running a single `TEST_CANISTER`,
 /// including various update calls, checkpointing, canister upgrades and replica upgrades
 /// with different LSMT flags.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 enum TestCanisterOp {
     UpdateCall(&'static str),
     TriggerMerge,
     CanisterUpgrade,
     CanisterReinstall,
     Checkpoint,
-    RestartWithLSMT(FlagStatus),
+    RestartWithLSMT(LsmtConfig),
 }
 
 /// A strategy with an arbitrary enum element, including a selection of update functions
@@ -5775,8 +5773,8 @@ fn arbitrary_test_canister_op() -> impl Strategy<Value = TestCanisterOp> {
         Just(TestCanisterOp::CanisterUpgrade),
         Just(TestCanisterOp::CanisterReinstall),
         Just(TestCanisterOp::Checkpoint),
-        Just(TestCanisterOp::RestartWithLSMT(FlagStatus::Enabled)),
-        Just(TestCanisterOp::RestartWithLSMT(FlagStatus::Disabled)),
+        Just(TestCanisterOp::RestartWithLSMT(lsmt_without_sharding())),
+        Just(TestCanisterOp::RestartWithLSMT(lsmt_disabled())),
     }
 }
 
@@ -5829,10 +5827,10 @@ fn random_canister_input_lsmt(ops in proptest::collection::vec(arbitrary_test_ca
 
     // Setup two state machines with a single TEST_CANISTER installed.
     let mut lsmt_env = StateMachineBuilder::new()
-        .with_lsmt_override(Some(FlagStatus::Enabled))
+        .with_lsmt_override(Some(lsmt_without_sharding()))
         .build();
     let mut base_env = StateMachineBuilder::new()
-        .with_lsmt_override(Some(FlagStatus::Disabled))
+        .with_lsmt_override(Some(lsmt_disabled()))
         .build();
 
     let canister_id = lsmt_env.install_canister_wat(TEST_CANISTER, vec![], None);
@@ -5848,13 +5846,13 @@ fn random_canister_input_lsmt(ops in proptest::collection::vec(arbitrary_test_ca
 
     // Execute all operations against both state machines, except never enable LSTM on `base_env`.
     for op in ops {
-        lsmt_env = execute_op(lsmt_env, canister_id, op);
+        lsmt_env = execute_op(lsmt_env, canister_id, op.clone());
         if let TestCanisterOp::RestartWithLSMT(_) = op {
             // With the base environment, we never enable LSMT
             base_env = execute_op(
                 base_env,
                 canister_id,
-                TestCanisterOp::RestartWithLSMT(FlagStatus::Disabled),
+                TestCanisterOp::RestartWithLSMT(lsmt_disabled()),
             );
         } else {
             base_env = execute_op(base_env, canister_id, op);
@@ -5879,7 +5877,7 @@ fn random_canister_input_lsmt(ops in proptest::collection::vec(arbitrary_test_ca
         let env = execute_op(
             env,
             canister_id,
-            TestCanisterOp::RestartWithLSMT(FlagStatus::Disabled),
+            TestCanisterOp::RestartWithLSMT(lsmt_disabled()),
         );
         let env = execute_op(env, canister_id, TestCanisterOp::Checkpoint);
         env.state_manager.flush_tip_channel();
@@ -5891,12 +5889,12 @@ fn random_canister_input_lsmt(ops in proptest::collection::vec(arbitrary_test_ca
     lsmt_env = execute_op(
         lsmt_env,
         canister_id,
-        TestCanisterOp::RestartWithLSMT(FlagStatus::Disabled),
+        TestCanisterOp::RestartWithLSMT(lsmt_disabled()),
     );
     base_env = execute_op(
         base_env,
         canister_id,
-        TestCanisterOp::RestartWithLSMT(FlagStatus::Disabled),
+        TestCanisterOp::RestartWithLSMT(lsmt_disabled()),
     );
     lsmt_env = execute_op(lsmt_env, canister_id, TestCanisterOp::Checkpoint);
     base_env = execute_op(base_env, canister_id, TestCanisterOp::Checkpoint);

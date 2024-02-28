@@ -1384,7 +1384,7 @@ impl StateManagerImpl {
             log.clone(),
             state_layout.capture_tip_handler(),
             state_layout.clone(),
-            config.lsmt_storage,
+            config.lsmt_config.clone(),
             metrics.clone(),
             malicious_flags.clone(),
         );
@@ -1609,7 +1609,7 @@ impl StateManagerImpl {
             fd_factory,
             malicious_flags,
             latest_height_update_time: Arc::new(Mutex::new(Instant::now())),
-            lsmt_storage: config.lsmt_storage,
+            lsmt_storage: config.lsmt_config.lsmt_status,
         }
     }
     /// Returns the Page Allocator file descriptor factory. This will then be

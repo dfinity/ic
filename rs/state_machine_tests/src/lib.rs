@@ -1,7 +1,10 @@
 use candid::Decode;
 use core::sync::atomic::Ordering;
 use ic_config::flag_status::FlagStatus;
-use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
+use ic_config::{
+    execution_environment::Config as HypervisorConfig, state_manager::LsmtConfig,
+    subnet_config::SubnetConfig,
+};
 use ic_consensus::consensus::payload_builder::PayloadBuilderImpl;
 use ic_constants::{MAX_INGRESS_TTL, PERMITTED_DRIFT, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_crypto_ecdsa_secp256k1::{PrivateKey, PublicKey};
@@ -624,7 +627,7 @@ pub struct StateMachineBuilder {
     features: SubnetFeatures,
     runtime: Option<Arc<Runtime>>,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
-    lsmt_override: Option<FlagStatus>,
+    lsmt_override: Option<LsmtConfig>,
     is_root_subnet: bool,
     seq_no: u8,
     with_extra_canister_range: Option<std::ops::RangeInclusive<CanisterId>>,
@@ -661,7 +664,7 @@ impl StateMachineBuilder {
         }
     }
 
-    pub fn with_lsmt_override(self, lsmt_override: Option<FlagStatus>) -> Self {
+    pub fn with_lsmt_override(self, lsmt_override: Option<LsmtConfig>) -> Self {
         Self {
             lsmt_override,
             ..self
@@ -1039,7 +1042,7 @@ impl StateMachine {
         features: SubnetFeatures,
         runtime: Arc<Runtime>,
         registry_data_provider: Arc<ProtoRegistryDataProvider>,
-        lsmt_override: Option<FlagStatus>,
+        lsmt_override: Option<LsmtConfig>,
         is_root_subnet: bool,
         seq_no: u8,
     ) -> Self {
@@ -1076,7 +1079,7 @@ impl StateMachine {
 
         let mut sm_config = ic_config::state_manager::Config::new(state_dir.path().to_path_buf());
         if let Some(lsmt_override) = lsmt_override {
-            sm_config.lsmt_storage = lsmt_override;
+            sm_config.lsmt_config = lsmt_override;
         }
 
         if !(std::env::var("SANDBOX_BINARY").is_ok()
@@ -1292,7 +1295,7 @@ impl StateMachine {
     }
 
     /// Same as [restart_node], but allows overwriting the LSMT flag.
-    pub fn restart_node_with_lsmt_override(self, lsmt_override: Option<FlagStatus>) -> Self {
+    pub fn restart_node_with_lsmt_override(self, lsmt_override: Option<LsmtConfig>) -> Self {
         // We must drop self before setup_form_dir so that we don't have two StateManagers pointing
         // to the same root.
         let (state_dir, nonce, time, checkpoints_enabled) = self.into_components();
