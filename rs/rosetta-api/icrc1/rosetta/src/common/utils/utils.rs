@@ -260,7 +260,14 @@ pub fn icrc1_rosetta_block_to_rosetta_core_operation(
     currency: Currency,
 ) -> anyhow::Result<rosetta_core::objects::Operation> {
     let icrc1_transaction = rosetta_block.get_transaction()?;
-    Ok(match icrc1_transaction.operation {
+    icrc1_operation_to_rosetta_core_operation(icrc1_transaction.operation, currency)
+}
+
+pub fn icrc1_operation_to_rosetta_core_operation(
+    operation: ic_icrc1::Operation<RosettaToken>,
+    currency: Currency,
+) -> anyhow::Result<rosetta_core::objects::Operation> {
+    Ok(match operation {
         ic_icrc1::Operation::Mint { to, amount } => {
             // A Mint operation only has one OperationIdentifier and thus no related Operations
             rosetta_core::objects::Operation::new(

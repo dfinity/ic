@@ -10,6 +10,7 @@ DEV_DEPENDENCIES = [
     "//rs/rosetta-api/ledger_canister_core",
     "//rs/rosetta-api/ledger_core",
     "//rs/canister_client/sender",
+    "//rs/constants",
     "@crate_index//:ic-agent",
     "@crate_index//:candid",
     "@crate_index//:num-traits",

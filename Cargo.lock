@@ -8332,6 +8332,7 @@ dependencies = [
  "ed25519-consensus",
  "ic-agent",
  "ic-canister-client-sender",
+ "ic-constants",
  "ic-icrc1",
  "ic-ledger-canister-core",
  "ic-ledger-core",

@@ -317,4 +317,21 @@ impl RosettaClient {
         )
         .await
     }
+
+    pub async fn construction_parse(
+        &self,
+        network_identifier: NetworkIdentifier,
+        transaction: String,
+        is_signed: bool,
+    ) -> Result<ConstructionParseResponse, Error> {
+        self.call_endpoint(
+            "/construction/parse",
+            &ConstructionParseRequest {
+                network_identifier,
+                transaction,
+                signed: is_signed,
+            },
+        )
+        .await
+    }
 }

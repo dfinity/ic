@@ -833,6 +833,21 @@ async fn test_construction_submit() {
         .await
         .expect("Unable to call /construction/payloads");
 
+    let construction_parse_response = env
+        .rosetta_client
+        .construction_parse(
+            env.network_identifier.clone(),
+            construction_payloads_response.unsigned_transaction.clone(),
+            false,
+        )
+        .await
+        .expect("Unable to call /construction/parse");
+
+    assert_eq!(
+        construction_parse_response.operations,
+        vec![operation.clone()]
+    );
+
     let signatures =
         RosettaClient::sign_transaction(&sender_keypair, construction_payloads_response.clone())
             .unwrap();
@@ -848,6 +863,21 @@ async fn test_construction_submit() {
         .expect("Unable to call /construction/combine");
 
     let signed_transaction = construction_combine_response.signed_transaction;
+
+    let construction_parse_response = env
+        .rosetta_client
+        .construction_parse(
+            env.network_identifier.clone(),
+            signed_transaction.clone(),
+            true,
+        )
+        .await
+        .expect("Unable to call /construction/parse");
+
+    assert_eq!(
+        construction_parse_response.operations,
+        vec![operation.clone()]
+    );
 
     let balance_before_transfer = env
         .icrc1_agent

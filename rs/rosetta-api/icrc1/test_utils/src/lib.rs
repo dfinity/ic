@@ -17,6 +17,7 @@ use proptest::sample::select;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 use rosetta_core::objects::Currency;
+use rosetta_core::objects::ObjectMap;
 use serde_bytes::ByteBuf;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -334,21 +335,24 @@ impl ArgWithCaller {
         };
         fee.as_ref().map(|fee| fee.0.to_u64().unwrap())
     }
-    pub fn to_transaction(&self, minter: Account) -> Transaction<Tokens> {
+    pub fn to_transaction<T>(&self, minter: Account) -> Transaction<T>
+    where
+        T: TokensType,
+    {
         let from = self.from();
         let (operation, created_at_time, memo) = match self.arg.clone() {
             LedgerEndpointArg::ApproveArg(approve_arg) => {
-                let operation = Operation::<Tokens>::Approve {
-                    amount: Tokens::try_from(approve_arg.amount.clone()).unwrap(),
+                let operation = Operation::<T>::Approve {
+                    amount: T::try_from(approve_arg.amount.clone()).unwrap(),
                     expires_at: approve_arg.expires_at,
                     fee: approve_arg
                         .fee
                         .clone()
-                        .map(|f| Tokens::try_from(f.clone()).unwrap()),
+                        .map(|f| T::try_from(f.clone()).unwrap()),
                     expected_allowance: approve_arg
                         .expected_allowance
                         .clone()
-                        .map(|a| Tokens::try_from(a.clone()).unwrap()),
+                        .map(|a| T::try_from(a.clone()).unwrap()),
                     spender: approve_arg.spender,
                     from,
                 };
@@ -359,32 +363,29 @@ impl ArgWithCaller {
                 let mint_operation = from == minter;
                 let operation = if mint_operation {
                     Operation::Mint {
-                        amount: Tokens::try_from(transfer_arg.amount.clone()).unwrap(),
+                        amount: T::try_from(transfer_arg.amount.clone()).unwrap(),
                         to: transfer_arg.to,
                     }
                 } else if burn_operation {
                     Operation::Burn {
-                        amount: Tokens::try_from(transfer_arg.amount.clone()).unwrap(),
+                        amount: T::try_from(transfer_arg.amount.clone()).unwrap(),
                         from,
                         spender: None,
                     }
                 } else {
                     Operation::Transfer {
-                        amount: Tokens::try_from(transfer_arg.amount.clone()).unwrap(),
+                        amount: T::try_from(transfer_arg.amount.clone()).unwrap(),
                         to: transfer_arg.to,
                         from,
                         spender: None,
-                        fee: transfer_arg
-                            .fee
-                            .clone()
-                            .map(|f| Tokens::try_from(f).unwrap()),
+                        fee: transfer_arg.fee.clone().map(|f| T::try_from(f).unwrap()),
                     }
                 };
 
                 (operation, transfer_arg.created_at_time, transfer_arg.memo)
             }
         };
-        Transaction::<Tokens> {
+        Transaction::<T> {
             operation,
             created_at_time,
             memo,
@@ -1065,6 +1066,27 @@ pub fn currency_strategy() -> impl Strategy<Value = Currency> {
         decimals: decimals.into(),
         metadata: None,
     })
+}
+
+pub fn valid_construction_payloads_request_metadata() -> impl Strategy<Value = ObjectMap> {
+    let memo_strategy = arb_memo();
+    let now = SystemTime::now();
+    let now_u64 = now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
+    let ingress_start_strategy = prop::option::of(Just(now_u64));
+    let created_at_time = valid_created_at_time_strategy(now);
+
+    (memo_strategy, ingress_start_strategy, created_at_time).prop_map(
+        |(memo, ingress_start, created_at_time)| {
+            let mut map = ObjectMap::new();
+            map.insert(
+                "memo".to_string(),
+                memo.map(|m| m.0.as_slice().to_vec()).into(),
+            );
+            map.insert("ingress_start".to_string(), ingress_start.into());
+            map.insert("created_at_time".to_string(), created_at_time.into());
+            map
+        },
+    )
 }
 
 #[cfg(test)]

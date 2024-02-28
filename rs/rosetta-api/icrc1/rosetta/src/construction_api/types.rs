@@ -6,6 +6,7 @@ use ic_agent::agent::EnvelopeContent;
 use rosetta_core::objects::*;
 use serde::Deserialize;
 use serde::Serialize;
+use std::cmp;
 use std::str::FromStr;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -61,6 +62,31 @@ impl<'a> FromStr for SignedTransaction<'a> {
     type Err = anyhow::Error;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         serde_cbor::from_slice(hex::decode(s)?.as_slice()).map_err(|err| anyhow!("{:?}", err))
+    }
+}
+impl<'a> SignedTransaction<'a> {
+    pub fn get_lowest_ingress_expiry(&self) -> Option<u64> {
+        self.envelope_pairs
+            .iter()
+            .map(|pair| {
+                cmp::min(
+                    pair.call_envelope.content.ingress_expiry(),
+                    pair.read_state_envelope.content.ingress_expiry(),
+                )
+            })
+            .min()
+    }
+
+    pub fn get_highest_ingress_expiry(&self) -> Option<u64> {
+        self.envelope_pairs
+            .iter()
+            .map(|pair| {
+                cmp::max(
+                    pair.call_envelope.content.ingress_expiry(),
+                    pair.read_state_envelope.content.ingress_expiry(),
+                )
+            })
+            .max()
     }
 }
 
@@ -134,6 +160,22 @@ impl FromStr for UnsignedTransaction {
     }
 }
 
+impl UnsignedTransaction {
+    pub fn get_lowest_ingress_expiry(&self) -> Option<u64> {
+        self.envelope_contents
+            .iter()
+            .map(|ec: &EnvelopeContent| ec.ingress_expiry())
+            .min()
+    }
+
+    pub fn get_highest_ingress_expiry(&self) -> Option<u64> {
+        self.envelope_contents
+            .iter()
+            .map(|ec: &EnvelopeContent| ec.ingress_expiry())
+            .max()
+    }
+}
+
 /// Typed metadata of ConstructionPayloadsRequest.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConstructionPayloadsRequestMetadata {
@@ -159,11 +201,13 @@ pub struct ConstructionPayloadsRequestMetadata {
     pub created_at_time: Option<u64>,
 }
 
-impl From<ConstructionPayloadsRequestMetadata> for ObjectMap {
-    fn from(p: ConstructionPayloadsRequestMetadata) -> Self {
-        match serde_json::to_value(p) {
-            Ok(serde_json::Value::Object(o)) => o,
-            _ => unreachable!(),
+impl TryFrom<ConstructionPayloadsRequestMetadata> for ObjectMap {
+    type Error = anyhow::Error;
+    fn try_from(d: ConstructionPayloadsRequestMetadata) -> Result<ObjectMap, Self::Error> {
+        match serde_json::to_value(d) {
+            Ok(serde_json::Value::Object(o)) => Ok(o),
+            Ok(o) => bail!("Could not convert ConstructionPayloadsRequestMetadata to ObjectMap. Expected type Object but received: {:?}",o),
+            Err(err) => bail!("Could not convert ConstructionPayloadsRequestMetadata to ObjectMap: {:?}",err),
         }
     }
 }
