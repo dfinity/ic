@@ -41,7 +41,7 @@ fn main() -> Result<(), String> {
 #[tokio::main]
 async fn drun_main() -> Result<(), String> {
     let matches = get_arg_matches();
-    Config::run_with_temp_config(|mut default_config| {
+    Config::run_with_temp_config(|mut default_config| async {
         let source = matches
             .value_of(ARG_CONF)
             .map(|arg| ConfigSource::File(PathBuf::from(arg)))
@@ -105,8 +105,9 @@ async fn drun_main() -> Result<(), String> {
             instruction_limit,
             subnet_type,
         };
-        run_drun(uo)
+        run_drun(uo).await
     })
+    .await
 }
 
 fn get_arg_matches() -> ArgMatches {

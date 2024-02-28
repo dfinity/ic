@@ -220,6 +220,18 @@ fn test_canister_uninstall_restart() {
     );
 }
 
+#[test]
+fn query_nonexisting_canister() {
+    let env = StateMachine::new();
+    env.tick(); // needed to create a certified state
+
+    let canister_id = CanisterId::from_u64(0);
+    assert_eq!(
+        env.query(canister_id, "read", vec![]).unwrap_err().code(),
+        ErrorCode::CanisterNotFound
+    );
+}
+
 /// Same test as above, but checks the upgrade path when no upgrade
 /// hooks are present instead of the re-install path.
 #[test]

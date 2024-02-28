@@ -40,6 +40,7 @@ DEPENDENCIES = [
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
     "@crate_index//:tonic",
+    "@crate_index//:tower",
     "@crate_index//:wat",
 ]
 

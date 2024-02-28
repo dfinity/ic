@@ -1,14 +1,18 @@
 //! Standalone interface for testing application canisters.
 
 use crate::message::{msg_stream_from_file, Message};
+use futures::future::join_all;
 use hex::encode;
 use ic_config::{subnet_config::SubnetConfig, Config};
+use ic_crypto_test_utils_ni_dkg::dummy_initial_dkg_transcript_with_master_key;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
 use ic_execution_environment::ExecutionServices;
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
-use ic_interfaces::{execution_environment::IngressHistoryReader, messaging::MessageRouting};
-use ic_interfaces_state_manager::StateReader;
+use ic_interfaces::{
+    execution_environment::{IngressHistoryReader, QueryExecutionError},
+    messaging::MessageRouting,
+};
 use ic_messaging::MessageRoutingImpl;
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::{
@@ -25,6 +29,7 @@ use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{routing_table_insert_subnet, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
+use ic_state_machine_tests::certify_latest_state_helper;
 use ic_state_manager::StateManagerImpl;
 use ic_test_utilities::consensus::fake::FakeVerifier;
 use ic_test_utilities_registry::{
@@ -40,12 +45,15 @@ use ic_types::{
     time, CanisterId, NodeId, NumInstructions, PrincipalId, Randomness, RegistryVersion, SubnetId,
 };
 use rand::distributions::{Distribution, Uniform};
+use rand::rngs::StdRng;
+use rand::SeedableRng;
 use slog::{Drain, Logger};
 use std::collections::BTreeMap;
 use std::fs::OpenOptions;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::{thread::sleep, time::Duration};
+use tower::util::ServiceExt;
 
 mod message;
 
@@ -153,7 +161,7 @@ fn get_registry(
     registry_client
 }
 
-pub fn run_drun(uo: DrunOptions) -> Result<(), String> {
+pub async fn run_drun(uo: DrunOptions) -> Result<(), String> {
     let DrunOptions {
         msg_filename,
         mut cfg,
@@ -182,7 +190,7 @@ pub fn run_drun(uo: DrunOptions) -> Result<(), String> {
         subnet_id,
     };
 
-    let mut msg_stream = msg_stream_from_file(&msg_filename)?;
+    let msg_stream = msg_stream_from_file(&msg_filename)?;
     let log = match log_file {
         Some(log_file) => setup_logger(log_file),
         None => slog::Logger::root(slog::Discard, slog::o!()),
@@ -214,7 +222,7 @@ pub fn run_drun(uo: DrunOptions) -> Result<(), String> {
         None,
         ic_types::malicious_flags::MaliciousFlags::default(),
     ));
-    let (_, ingress_history_writer, ingress_hist_reader, query_handler, _, _, scheduler) =
+    let (_, ingress_history_writer, ingress_hist_reader, _, query_handler, _, scheduler) =
         ExecutionServices::setup_execution(
             log.clone().into(),
             &metrics_registry,
@@ -228,8 +236,9 @@ pub fn run_drun(uo: DrunOptions) -> Result<(), String> {
         )
         .into_parts();
 
+    let runtime = tokio::runtime::Handle::current();
     let _metrics_endpoint = MetricsHttpEndpoint::new_insecure(
-        tokio::runtime::Handle::current(),
+        runtime.clone(),
         cfg.metrics,
         metrics_registry.clone(),
         &log,
@@ -249,46 +258,62 @@ pub fn run_drun(uo: DrunOptions) -> Result<(), String> {
         MaliciousFlags::default(),
     );
 
-    msg_stream.try_for_each(|parse_result| {
-        parse_result.map(|msg| match msg {
-            Message::Install(msg) => {
+    join_all(msg_stream.map(|parse_result| async {
+        match parse_result {
+            Ok(Message::Install(msg)) => {
                 deliver_message(
                     msg,
                     &message_routing,
                     ingress_hist_reader.as_ref(),
                     extra_batches,
                 );
+                Ok(())
             }
 
-            Message::Query(q) => {
-                // NOTE: Data certificates aren't supported in drun yet.
-                // To support them, we'd need to do something similar to
-                // http_handler::get_latest_certified_state_and_data_certificate
-                print_query_result(query_handler.query(
-                    q,
-                    state_manager.get_latest_state(),
-                    Vec::new(),
-                ));
+            Ok(Message::Query(q)) => {
+                let (_ni_dkg_transcript, secret_key) =
+                    dummy_initial_dkg_transcript_with_master_key(&mut StdRng::seed_from_u64(42));
+                certify_latest_state_helper(
+                    state_manager.clone(),
+                    &secret_key,
+                    replica_config.subnet_id,
+                );
+                let query_result = match query_handler.clone().oneshot((q, None)).await.unwrap() {
+                    Ok((result, _)) => result,
+                    Err(QueryExecutionError::CertifiedStateUnavailable) => {
+                        panic!("Certified state unavailable for query call.")
+                    }
+                };
+                print_query_result(query_result);
+                Ok(())
             }
 
-            Message::Ingress(msg) => {
+            Ok(Message::Ingress(msg)) => {
                 deliver_message(
                     msg,
                     &message_routing,
                     ingress_hist_reader.as_ref(),
                     extra_batches,
                 );
+                Ok(())
             }
-            Message::Create(msg) => {
+
+            Ok(Message::Create(msg)) => {
                 deliver_message(
                     msg,
                     &message_routing,
                     ingress_hist_reader.as_ref(),
                     extra_batches,
                 );
+                Ok(())
             }
-        })
-    })
+
+            Err(e) => Err(e),
+        }
+    }))
+    .await
+    .into_iter()
+    .collect()
 }
 
 fn print_query_result(res: Result<WasmResult, UserError>) {

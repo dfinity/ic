@@ -9,10 +9,7 @@ use ic_crypto_extended_bip32::{DerivationIndex, DerivationPath};
 use ic_crypto_test_utils_ni_dkg::{
     dummy_initial_dkg_transcript_with_master_key, sign_message, SecretKeyBytes,
 };
-use ic_crypto_tree_hash::{
-    flatmap, sparse_labeled_tree_from_paths, Label, LabeledTree, LabeledTree::SubTree,
-    Path as LabeledTreePath,
-};
+use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path as LabeledTreePath};
 use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
 use ic_cycles_account_manager::CyclesAccountManager;
 pub use ic_error_types::{ErrorCode, UserError};
@@ -25,14 +22,12 @@ use ic_interfaces::{
     certification::{Verifier, VerifierError},
     consensus::PayloadBuilder as ConsensusPayloadBuilder,
     consensus_pool::ConsensusTime,
-    execution_environment::{IngressFilterService, IngressHistoryReader, QueryHandler},
+    execution_environment::{IngressFilterService, IngressHistoryReader, QueryExecutionService},
     validation::ValidationResult,
 };
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamError};
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::{
-    CertificationScope, Labeled, StateHashError, StateManager, StateReader,
-};
+use ic_interfaces_state_manager::{CertificationScope, StateHashError, StateManager, StateReader};
 use ic_logger::ReplicaLogger;
 use ic_management_canister_types::{
     self as ic00, CanisterIdRecord, InstallCodeArgs, Method, Payload,
@@ -586,7 +581,8 @@ pub struct StateMachine {
     message_routing: SyncMessageRouting,
     metrics_registry: MetricsRegistry,
     ingress_history_reader: Box<dyn IngressHistoryReader>,
-    query_handler: Arc<dyn QueryHandler<State = ReplicatedState>>,
+    query_handler:
+        tower::buffer::Buffer<QueryExecutionService, (UserQuery, Option<CertificateDelegation>)>,
     runtime: Arc<Runtime>,
     pub state_dir: TempDir,
     checkpoints_enabled: std::sync::atomic::AtomicBool,
@@ -1229,7 +1225,9 @@ impl StateMachine {
             ingress_history_reader: execution_services.ingress_history_reader,
             message_routing,
             metrics_registry,
-            query_handler: execution_services.sync_query_handler,
+            query_handler: runtime.block_on(async {
+                TowerBuffer::new(execution_services.query_execution_service, 1)
+            }),
             runtime,
             state_dir,
             // Note: state machine tests are commonly used for testing
@@ -1421,16 +1419,6 @@ impl StateMachine {
         .map(|certified_stream| XNetPayload {
             stream_slices: btreemap! { self.get_subnet_id() => certified_stream },
         })
-    }
-
-    /// Make sure the latest state is certified.
-    fn certify_latest_state(&self) {
-        if self.state_manager.latest_state_height() > self.state_manager.latest_certified_height() {
-            let state_hashes = self.state_manager.list_state_hashes_to_certify();
-            let (height, hash) = state_hashes.last().unwrap();
-            self.state_manager
-                .deliver_state_certification(self.certify_hash(height, hash));
-        }
     }
 
     /// Submit an ingress message into the ingress pool used by `PayloadBuilderImpl`
@@ -2174,58 +2162,22 @@ impl StateMachine {
         delegation: Option<CertificateDelegation>,
     ) -> Result<WasmResult, UserError> {
         self.certify_latest_state();
-        let path = SubTree(flatmap! {
-            Label::from("canister") => SubTree(
-                flatmap! {
-                    Label::from(receiver) => SubTree(
-                        flatmap!(Label::from("certified_data") => LabeledTree::Leaf(()))
-                    )
-                }),
-            Label::from("time") => LabeledTree::Leaf(())
-        });
-        let (state, tree, certification) = self.state_manager.read_certified_state(&path).unwrap();
-        let data_certificate = into_cbor(&Certificate {
-            tree,
-            signature: Blob(certification.signed.signature.signature.get().0),
-            delegation,
-        });
-        self.query_handler.query(
-            UserQuery {
-                receiver,
-                source: UserId::from(sender),
-                method_name: method.to_string(),
-                method_payload,
-                ingress_expiry: 0,
-                nonce: None,
-            },
-            Labeled::new(certification.height, state),
-            data_certificate,
-        )
-    }
-
-    fn certify_hash(&self, height: &Height, hash: &CryptoHashOfPartialState) -> Certification {
-        let signature = sign_message(
-            CertificationContent::new(hash.clone())
-                .as_signed_bytes()
-                .as_slice(),
-            &self.secret_key,
-        );
-        let combined_sig =
-            CombinedThresholdSigOf::from(CombinedThresholdSig(signature.as_ref().to_vec()));
-        Certification {
-            height: *height,
-            signed: Signed {
-                content: CertificationContent { hash: hash.clone() },
-                signature: ThresholdSignature {
-                    signature: combined_sig,
-                    signer: NiDkgId {
-                        dealer_subnet: self.subnet_id,
-                        target_subnet: NiDkgTargetSubnet::Local,
-                        start_block_height: *height,
-                        dkg_tag: NiDkgTag::LowThreshold,
-                    },
-                },
-            },
+        let user_query = UserQuery {
+            receiver,
+            source: UserId::from(sender),
+            method_name: method.to_string(),
+            method_payload,
+            ingress_expiry: 0,
+            nonce: None,
+        };
+        if let Ok((result, _)) = self
+            .runtime
+            .block_on(self.query_handler.clone().oneshot((user_query, delegation)))
+            .unwrap()
+        {
+            result
+        } else {
+            unreachable!()
         }
     }
 
@@ -2649,6 +2601,56 @@ impl StateMachine {
 
     pub fn deliver_query_stats(&self, query_stats: QueryStatsPayload) -> Height {
         self.execute_payload(PayloadBuilder::new().with_query_stats(Some(query_stats)))
+    }
+
+    /// Make sure the latest state is certified.
+    pub fn certify_latest_state(&self) {
+        certify_latest_state_helper(self.state_manager.clone(), &self.secret_key, self.subnet_id)
+    }
+}
+
+/// Make sure the latest state is certified.
+pub fn certify_latest_state_helper(
+    state_manager: Arc<StateManagerImpl>,
+    secret_key: &SecretKeyBytes,
+    subnet_id: SubnetId,
+) {
+    if state_manager.latest_state_height() > state_manager.latest_certified_height() {
+        let state_hashes = state_manager.list_state_hashes_to_certify();
+        let (height, hash) = state_hashes.last().unwrap();
+        state_manager
+            .deliver_state_certification(certify_hash(secret_key, subnet_id, height, hash));
+    }
+}
+
+fn certify_hash(
+    secret_key: &SecretKeyBytes,
+    subnet_id: SubnetId,
+    height: &Height,
+    hash: &CryptoHashOfPartialState,
+) -> Certification {
+    let signature = sign_message(
+        CertificationContent::new(hash.clone())
+            .as_signed_bytes()
+            .as_slice(),
+        secret_key,
+    );
+    let combined_sig =
+        CombinedThresholdSigOf::from(CombinedThresholdSig(signature.as_ref().to_vec()));
+    Certification {
+        height: *height,
+        signed: Signed {
+            content: CertificationContent { hash: hash.clone() },
+            signature: ThresholdSignature {
+                signature: combined_sig,
+                signer: NiDkgId {
+                    dealer_subnet: subnet_id,
+                    target_subnet: NiDkgTargetSubnet::Local,
+                    start_block_height: *height,
+                    dkg_tag: NiDkgTag::LowThreshold,
+                },
+            },
+        },
     }
 }
 

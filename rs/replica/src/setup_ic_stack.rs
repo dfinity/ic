@@ -11,7 +11,7 @@ use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::ExecutionServices;
 use ic_https_outcalls_adapter_client::setup_canister_http_client;
 use ic_interfaces::{
-    execution_environment::QueryHandler, p2p::artifact_manager::JoinGuard,
+    execution_environment::QueryExecutionService, p2p::artifact_manager::JoinGuard,
     time_source::MonotonicTimeSource,
 };
 use ic_interfaces_certified_stream_store::CertifiedStreamStore;
@@ -24,7 +24,6 @@ use ic_protobuf::types::v1 as pb;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_local_store::LocalStoreImpl;
 use ic_replica_setup_ic_network::setup_consensus_and_p2p;
-use ic_replicated_state::ReplicatedState;
 use ic_state_manager::{state_sync::StateSync, StateManagerImpl};
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
@@ -67,7 +66,7 @@ pub fn construct_ic_stack(
     // TODO: remove this return value since it is used only in tests
     Arc<StateManagerImpl>,
     // TODO: remove this return value since it is used only in tests
-    Arc<dyn QueryHandler<State = ReplicatedState>>,
+    QueryExecutionService,
     Vec<Box<dyn JoinGuard>>,
     // TODO: remove this return value since it is used only in tests
     UnboundedSender<UnvalidatedArtifactMutation<IngressArtifact>>,
@@ -318,7 +317,7 @@ pub fn construct_ic_stack(
         metrics_registry,
         config.http_handler.clone(),
         execution_services.ingress_filter,
-        execution_services.async_query_handler,
+        execution_services.query_execution_service.clone(),
         ingress_throttler,
         ingress_tx.clone(),
         Arc::clone(&state_manager) as Arc<_>,
@@ -339,7 +338,7 @@ pub fn construct_ic_stack(
 
     Ok((
         state_manager,
-        execution_services.sync_query_handler,
+        execution_services.query_execution_service,
         p2p_runner,
         ingress_tx,
         xnet_endpoint,

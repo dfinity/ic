@@ -59,7 +59,8 @@ use ic_types::{
         },
         CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, Signed,
     },
-    messages::{Blob, CertificateDelegation, HttpQueryResponse, HttpQueryResponseReply},
+    ingress::WasmResult,
+    messages::{Blob, CertificateDelegation},
     signature::ThresholdSignature,
     time::current_time,
     CryptoHashOfPartialState, Height, PrincipalId, RegistryVersion,
@@ -215,11 +216,7 @@ fn test_unauthorized_query() {
         loop {
             let (_, resp) = query_handler.next_request().await.unwrap();
             resp.send_response(Ok((
-                HttpQueryResponse::Replied {
-                    reply: HttpQueryResponseReply {
-                        arg: Blob("success".into()),
-                    },
-                },
+                Ok(WasmResult::Reply("success".into())),
                 current_time(),
             )))
         }
@@ -412,11 +409,7 @@ fn test_request_timeout() {
             let (_, resp) = query_handler.next_request().await.unwrap();
             sleep(Duration::from_secs(request_timeout_seconds + 1)).await;
             resp.send_response(Ok((
-                HttpQueryResponse::Replied {
-                    reply: HttpQueryResponseReply {
-                        arg: Blob("success".into()),
-                    },
-                },
+                Ok(WasmResult::Reply("success".into())),
                 current_time(),
             )))
         }

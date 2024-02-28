@@ -19,7 +19,7 @@ use ic_config::execution_environment::Config;
 use ic_config::flag_status::FlagStatus;
 use ic_crypto_tree_hash::{flatmap, Label, LabeledTree, LabeledTree::SubTree};
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_error_types::{ErrorCode, RejectCode, UserError};
+use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{
     QueryExecutionError, QueryExecutionResponse, QueryExecutionService, QueryHandler,
 };
@@ -33,10 +33,7 @@ use ic_types::batch::QueryStats;
 use ic_types::QueryStatsEpoch;
 use ic_types::{
     ingress::WasmResult,
-    messages::{
-        Blob, Certificate, CertificateDelegation, HttpQueryResponse, HttpQueryResponseReply,
-        UserQuery,
-    },
+    messages::{Blob, Certificate, CertificateDelegation, UserQuery},
     CanisterId, NumInstructions, PrincipalId,
 };
 use prometheus::Histogram;
@@ -442,26 +439,7 @@ impl Service<(UserQuery, Option<CertificateDelegation>)> for HttpQueryHandler {
                             .height_diff_during_query_scheduling
                             .observe(height_diff as f64);
 
-                        let result = internal.query(query, state, cert);
-
-                        let response = match result {
-                            Ok(res) => match res {
-                                WasmResult::Reply(vec) => HttpQueryResponse::Replied {
-                                    reply: HttpQueryResponseReply { arg: Blob(vec) },
-                                },
-                                WasmResult::Reject(message) => HttpQueryResponse::Rejected {
-                                    error_code: ErrorCode::CanisterRejectedMessage.to_string(),
-                                    reject_code: RejectCode::CanisterReject as u64,
-                                    reject_message: message,
-                                },
-                            },
-
-                            Err(user_error) => HttpQueryResponse::Rejected {
-                                error_code: user_error.code().to_string(),
-                                reject_code: user_error.reject_code() as u64,
-                                reject_message: user_error.to_string(),
-                            },
-                        };
+                        let response = internal.query(query, state, cert);
 
                         Ok((response, time))
                     }

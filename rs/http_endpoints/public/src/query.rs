@@ -13,6 +13,7 @@ use futures_util::FutureExt;
 use http::Request;
 use hyper::{Response, StatusCode};
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
+use ic_error_types::{ErrorCode, RejectCode};
 use ic_interfaces::{
     crypto::BasicSigner,
     execution_environment::{QueryExecutionError, QueryExecutionService},
@@ -21,11 +22,12 @@ use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, replica_logger::no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
+    ingress::WasmResult,
     malicious_flags::MaliciousFlags,
     messages::{
-        Blob, CertificateDelegation, HasCanisterId, HttpQueryContent, HttpRequest,
-        HttpRequestEnvelope, HttpSignedQueryResponse, NodeSignature, QueryResponseHash,
-        SignedRequestBytes, UserQuery,
+        Blob, CertificateDelegation, HasCanisterId, HttpQueryContent, HttpQueryResponse,
+        HttpQueryResponseReply, HttpRequest, HttpRequestEnvelope, HttpSignedQueryResponse,
+        NodeSignature, QueryResponseHash, SignedRequestBytes, UserQuery,
     },
     CanisterId, NodeId,
 };
@@ -254,7 +256,7 @@ impl Service<Request<Body>> for QueryService {
                 .call((user_query.clone(), delegation_from_nns))
                 .await?;
 
-            let (query_response, timestamp) = match query_execution_response {
+            let (response, timestamp) = match query_execution_response {
                 Err(QueryExecutionError::CertifiedStateUnavailable) => {
                     return Ok(make_plaintext_response(
                         StatusCode::SERVICE_UNAVAILABLE,
@@ -262,6 +264,25 @@ impl Service<Request<Body>> for QueryService {
                     ))
                 }
                 Ok((response, time)) => (response, time),
+            };
+
+            let query_response = match response {
+                Ok(res) => match res {
+                    WasmResult::Reply(vec) => HttpQueryResponse::Replied {
+                        reply: HttpQueryResponseReply { arg: Blob(vec) },
+                    },
+                    WasmResult::Reject(message) => HttpQueryResponse::Rejected {
+                        error_code: ErrorCode::CanisterRejectedMessage.to_string(),
+                        reject_code: RejectCode::CanisterReject as u64,
+                        reject_message: message,
+                    },
+                },
+
+                Err(user_error) => HttpQueryResponse::Rejected {
+                    error_code: user_error.code().to_string(),
+                    reject_code: user_error.reject_code() as u64,
+                    reject_message: user_error.to_string(),
+                },
             };
 
             let response_hash = QueryResponseHash::new(&query_response, &user_query, timestamp);

@@ -44,6 +44,7 @@ tonic = { workspace = true }
 tokio = { workspace = true }
 prost = { workspace = true }
 wat = "1.0.52"
+tower = { workspace = true }
 
 [dev-dependencies]
 assert_matches = "1.3.0"

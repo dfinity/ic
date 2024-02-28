@@ -83,7 +83,7 @@ pub struct ExecutionServices {
     pub ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
     pub ingress_history_reader: Box<dyn IngressHistoryReader>,
     pub sync_query_handler: Arc<dyn QueryHandler<State = ReplicatedState>>,
-    pub async_query_handler: QueryExecutionService,
+    pub query_execution_service: QueryExecutionService,
     pub anonymous_query_handler: AnonymousQueryService,
     pub scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
     pub query_stats_payload_builder: QueryStatsPayloadBuilderParams,
@@ -164,7 +164,7 @@ impl ExecutionServices {
 
         // Creating the async services require that a tokio runtime context is available.
 
-        let async_query_handler = HttpQueryHandler::new_service(
+        let query_execution_service = HttpQueryHandler::new_service(
             Arc::clone(&sync_query_handler) as Arc<_>,
             query_scheduler.clone(),
             Arc::clone(&state_reader),
@@ -202,7 +202,7 @@ impl ExecutionServices {
             ingress_history_writer,
             ingress_history_reader,
             sync_query_handler,
-            async_query_handler,
+            query_execution_service,
             anonymous_query_handler,
             scheduler,
             query_stats_payload_builder,
@@ -226,7 +226,7 @@ impl ExecutionServices {
             self.ingress_history_writer,
             self.ingress_history_reader,
             self.sync_query_handler,
-            self.async_query_handler,
+            self.query_execution_service,
             self.anonymous_query_handler,
             self.scheduler,
         )
