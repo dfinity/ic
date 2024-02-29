@@ -125,7 +125,6 @@ pub(crate) fn execute_upgrade(
     };
 
     let method = WasmMethod::System(SystemMethod::CanisterPreUpgrade);
-
     let skip_pre_upgrade = match context.mode {
         CanisterInstallModeV2::Upgrade(Some(upgrade_option)) => {
             upgrade_option.skip_pre_upgrade.unwrap_or(false)

@@ -25,7 +25,7 @@ use ic_ic00_types::{
     CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgsBuilder,
     CanisterStatusResultV2, CanisterStatusType, ClearChunkStoreArgs, CreateCanisterArgs, EmptyBlob,
     InstallCodeArgsV2, Method, Payload, StoredChunksArgs, StoredChunksReply, UpdateSettingsArgs,
-    UpgradeOptions, UploadChunkArgs, UploadChunkReply,
+    CanisterUpgradeOptions, UploadChunkArgs, UploadChunkReply,
 };
 use ic_interfaces::execution_environment::{ExecutionMode, HypervisorError, SubnetAvailableMemory};
 use ic_logger::replica_logger::no_op_logger;
@@ -6303,7 +6303,7 @@ fn test_upgrade_with_skip_pre_upgrade_preserves_stable_memory() {
     test.upgrade_canister_v2(
         canister_id,
         UNIVERSAL_CANISTER_WASM.to_vec(),
-        UpgradeOptions {
+        CanisterUpgradeOptions {
             skip_pre_upgrade: Some(true),
             keep_main_memory: None,
         },
@@ -6323,7 +6323,7 @@ fn test_upgrade_with_skip_pre_upgrade_preserves_stable_memory() {
         .upgrade_canister_v2(
             canister_id,
             UNIVERSAL_CANISTER_WASM.to_vec(),
-            UpgradeOptions {
+            CanisterUpgradeOptions {
                 skip_pre_upgrade: None,
                 keep_main_memory: None,
             },

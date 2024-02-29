@@ -773,12 +773,13 @@ impl ExecutionTest {
         Ok(())
     }
 
-    /// Installs the given canister with the given Wasm binary.
+    /// Upgrades the given canister with the given Wasm binary and
+    /// upgrade options.
     pub fn upgrade_canister_v2(
         &mut self,
         canister_id: CanisterId,
         wasm_binary: Vec<u8>,
-        upgrade_options: UpgradeOptions,
+        upgrade_options: CanisterUpgradeOptions,
     ) -> Result<(), UserError> {
         let args = InstallCodeArgsV2::new(
             CanisterInstallModeV2::Upgrade(Some(upgrade_options)),

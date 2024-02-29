@@ -352,20 +352,7 @@ fn test_install_and_reinstall_with_canister_install_mode_v2() {
 fn test_pre_upgrade_execution_with_canister_install_mode_v2() {
     let mut test = execution_test_with_max_rounds(1);
 
-    for upgrade_options in [
-        UpgradeOptions {
-            skip_pre_upgrade: None,
-            keep_main_memory: None,
-        },
-        UpgradeOptions {
-            skip_pre_upgrade: Some(false),
-            keep_main_memory: None,
-        },
-        UpgradeOptions {
-            skip_pre_upgrade: Some(true),
-            keep_main_memory: None,
-        },
-    ] {
+    for skip_pre_upgrade in [None, Some(false), Some(true)] {
         let old_binary = binary(&[(Function::PreUpgrade, Execution::ShortTrap)]);
         let canister_id = test.create_canister(Cycles::from(1_000_000_000_000u128));
         test.install_canister_v2(canister_id, old_binary).unwrap();
@@ -393,20 +380,7 @@ fn test_pre_upgrade_execution_with_canister_install_mode_v2() {
 fn test_upgrade_execution_with_canister_install_mode_v2() {
     let mut test = execution_test_with_max_rounds(1);
 
-    for upgrade_options in [
-        UpgradeOptions {
-            skip_pre_upgrade: None,
-            keep_main_memory: None,
-        },
-        UpgradeOptions {
-            skip_pre_upgrade: Some(false),
-            keep_main_memory: None,
-        },
-        UpgradeOptions {
-            skip_pre_upgrade: Some(true),
-            keep_main_memory: None,
-        },
-    ] {
+    for skip_pre_upgrade in [None, Some(false), Some(true)] {
         let old_binary = binary(&[(Function::PreUpgrade, Execution::Short)]);
         let canister_id = test.create_canister(Cycles::from(1_000_000_000_000u128));
         test.install_canister_v2(canister_id, old_binary).unwrap();
@@ -415,7 +389,7 @@ fn test_upgrade_execution_with_canister_install_mode_v2() {
         let result = test.upgrade_canister_v2(
             canister_id,
             binary(&[(Function::PostUpgrade, Execution::ShortTrap)]),
-            upgrade_options,
+            CanisterUpgradeOptions { skip_pre_upgrade },
         );
 
         assert_eq!(result.unwrap_err().code(), ErrorCode::CanisterTrapped);
@@ -1011,7 +985,7 @@ fn upgrade_with_skip_pre_upgrade_fails_on_no_execution_state() {
     let result = test.upgrade_canister_v2(
         canister_id,
         new_empty_binary(),
-        UpgradeOptions {
+        CanisterUpgradeOptions {
             skip_pre_upgrade: Some(true),
             keep_main_memory: None,
         },
@@ -1032,7 +1006,7 @@ fn upgrade_with_skip_pre_upgrade_ok_with_no_pre_upgrade() {
     let result = test.upgrade_canister_v2(
         canister_id,
         new_empty_binary(),
-        UpgradeOptions {
+        CanisterUpgradeOptions {
             skip_pre_upgrade: Some(true),
             keep_main_memory: None,
         },
