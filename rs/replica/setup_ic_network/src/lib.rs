@@ -218,7 +218,7 @@ pub fn setup_consensus_and_p2p(
     let (ingress_tx, ingress_rx) = tokio::sync::mpsc::channel(MAX_ADVERT_BUFFER);
     let (ecdsa_tx, ecdsa_rx) = tokio::sync::mpsc::channel(MAX_ADVERT_BUFFER);
     let (http_outcalls_tx, http_outcalls_rx) = tokio::sync::mpsc::channel(MAX_ADVERT_BUFFER);
-    let advert_tx = P2PSenders {
+    let p2p_senders = P2PSenders {
         consensus: if ENABLE_NEW_P2P_CONSENSUS {
             Channel::New(consensus_advert_tx)
         } else {
@@ -247,10 +247,14 @@ pub fn setup_consensus_and_p2p(
         https_outcalls: if ENABLE_NEW_P2P_HTTPS_OUTCALLS {
             Channel::New(http_outcalls_tx)
         } else {
-            Channel::Old(advert_tx)
+            Channel::Old(advert_tx.clone())
         },
     };
-    let (p2p_clients, mut join_handles, artifact_pools) = start_consensus(advert_tx);
+    // TODO: Remove when new p2p is rolled out.
+    // The send side is in intentionally leaked to keep the old p2p running in idle.
+    #[allow(clippy::mem_forget)]
+    std::mem::forget(advert_tx);
+    let (p2p_clients, mut join_handles, artifact_pools) = start_consensus(p2p_senders);
     let ArtifactPools {
         certification_pool,
         dkg_pool,
