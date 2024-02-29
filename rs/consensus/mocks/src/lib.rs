@@ -15,6 +15,7 @@ use ic_registry_keys::ROOT_SUBNET_ID_KEY;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
 use ic_test_utilities::{
+    consensus::EcdsaStatsNoOp,
     crypto::CryptoReturningOk,
     state_manager::RefMockStateManager,
     types::ids::{node_test_id, subnet_test_id},
@@ -102,6 +103,7 @@ pub fn dependencies_with_subnet_records_with_raw_state_manager(
         pool_config.clone(),
         log.clone(),
         ic_metrics::MetricsRegistry::new(),
+        Box::new(EcdsaStatsNoOp {}),
     )));
     let canister_http_pool = Arc::new(RwLock::new(CanisterHttpPoolImpl::new(
         ic_metrics::MetricsRegistry::new(),

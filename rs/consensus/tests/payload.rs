@@ -11,6 +11,7 @@ use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_test_utilities::consensus::batch::MockBatchPayloadBuilder;
+use ic_test_utilities::consensus::EcdsaStatsNoOp;
 use ic_test_utilities::{
     consensus::make_genesis,
     crypto::CryptoReturningOk,
@@ -101,6 +102,7 @@ fn consensus_produces_expected_batches() {
             pool_config.clone(),
             no_op_logger(),
             metrics_registry.clone(),
+            Box::new(EcdsaStatsNoOp {}),
         )));
 
         let registry_client = setup_registry(
