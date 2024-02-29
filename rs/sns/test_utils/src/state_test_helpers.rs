@@ -14,7 +14,7 @@ use ic_nns_constants::{
 };
 use ic_nns_test_utils::{
     sns_wasm::{
-        build_governance_sns_wasm, build_index_sns_wasm, build_ledger_sns_wasm,
+        build_governance_sns_wasm, build_index_ng_sns_wasm, build_ledger_sns_wasm,
         build_root_sns_wasm, build_swap_sns_wasm,
     },
     state_test_helpers::set_controllers,
@@ -119,8 +119,7 @@ pub fn setup_sns_canisters(
         ledger,
         root,
         swap,
-        index,
-        index_ng: _,
+        index_ng,
     } = payloads;
 
     let (root_sns_wasm, governance_sns_wasm, ledger_sns_wasm, swap_sns_wasm, index_sns_wasm) = (
@@ -128,7 +127,7 @@ pub fn setup_sns_canisters(
         build_governance_sns_wasm(),
         build_ledger_sns_wasm(),
         build_swap_sns_wasm(),
-        build_index_sns_wasm(),
+        build_index_ng_sns_wasm(),
     );
 
     let deployed_version = Version {
@@ -165,7 +164,7 @@ pub fn setup_sns_canisters(
     install_canister(
         index_canister_id,
         index_sns_wasm.wasm,
-        Encode!(&index.expect("Index payload was None")).unwrap(),
+        Encode!(&index_ng.expect("Index payload was None")).unwrap(),
     );
 
     SnsTestCanisterIds {

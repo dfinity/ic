@@ -27,8 +27,9 @@ use ic_nns_test_utils::{
     sns_wasm::{
         build_archive_sns_wasm, build_governance_sns_wasm, build_index_ng_sns_wasm,
         build_ledger_sns_wasm, build_mainnet_archive_sns_wasm, build_mainnet_governance_sns_wasm,
-        build_mainnet_index_sns_wasm, build_mainnet_ledger_sns_wasm, build_mainnet_root_sns_wasm,
-        build_mainnet_swap_sns_wasm, build_root_sns_wasm, build_swap_sns_wasm,
+        build_mainnet_index_ng_sns_wasm, build_mainnet_ledger_sns_wasm,
+        build_mainnet_root_sns_wasm, build_mainnet_swap_sns_wasm, build_root_sns_wasm,
+        build_swap_sns_wasm,
     },
 };
 use ic_sns_governance::pb::v1::{self as sns_pb, governance::Version};
@@ -135,7 +136,7 @@ pub fn add_wasms_to_sns_wasm(
                 build_mainnet_root_sns_wasm(),
                 build_mainnet_governance_sns_wasm(),
                 build_mainnet_swap_sns_wasm(),
-                build_mainnet_index_sns_wasm(),
+                build_mainnet_index_ng_sns_wasm(),
                 build_mainnet_ledger_sns_wasm(),
                 build_mainnet_archive_sns_wasm(),
             )

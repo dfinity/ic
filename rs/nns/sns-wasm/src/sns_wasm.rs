@@ -1004,18 +1004,7 @@ where
                 canister_api.install_wasm(
                     CanisterId::unchecked_from_principal(canisters.index.unwrap()),
                     latest_wasms.index,
-                    {
-                        // TODO[NNS1-2856]: Remove the legacy branch.
-                        if let Some(legacy_index_init) = init_payloads.index {
-                            // Use the legacy init arg if it was provided. Encode as non-optional.
-                            // See rs/rosetta-api/icrc1/index/index.did
-                            Encode!(&legacy_index_init).unwrap()
-                        } else {
-                            // Use the legacy init arg if it was provided. Encode as optional.
-                            // See rs/rosetta-api/icrc1/index-ng/index-ng.did
-                            Encode!(&init_payloads.index_ng).unwrap()
-                        }
-                    },
+                    Encode!(&init_payloads.index_ng).unwrap(),
                 ),
                 canister_api.install_wasm(
                     CanisterId::unchecked_from_principal(canisters.swap.unwrap()),

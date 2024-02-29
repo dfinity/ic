@@ -449,19 +449,8 @@ impl DirectSnsDeployerForTests {
 
     /// Install and initialize Index
     fn install_index(&self) {
-        let init_args = {
-            // TODO[NNS1-2856]: Remove the legacy branch.
-            if let Some(ref legacy_index_init) = self.sns_canister_payloads.index {
-                // Use the legacy init arg if it was provided. Encode as non-optional.
-                // See rs/rosetta-api/icrc1/index/index.did
-                hex_encode_candid(legacy_index_init)
-            } else {
-                // Use the legacy init arg if it was provided. Encode as optional.
-                // See rs/rosetta-api/icrc1/index-ng/index-ng.did
-                hex_encode_candid(&self.sns_canister_payloads.index_ng)
-            }
-        };
-        self.install_canister("sns_index", "ic-icrc1-index", &init_args);
+        let init_args = hex_encode_candid(&self.sns_canister_payloads.index_ng);
+        self.install_canister("sns_index", "ic-icrc1-index-ng", &init_args);
     }
 
     /// Install the given canister

@@ -493,11 +493,12 @@ http_file(
     url = "https://download.dfinity.systems/ic/87f48a595b6f666fbc7fe6ad4081aa98fd113d12/canisters/registry-canister.wasm.gz",
 )
 
+# From https://dashboard.internetcomputer.org/proposal/128090
 http_file(
     name = "mainnet_nns_governance_canister",
     downloaded_file_path = "governance-canister.wasm.gz",
-    sha256 = "0588a175af106fa0849d8175f47bd89648f96e244abba705211a3cbcb889daee",
-    url = "https://download.dfinity.systems/ic/87f48a595b6f666fbc7fe6ad4081aa98fd113d12/canisters/governance-canister.wasm.gz",
+    sha256 = "6bd26499d2091c794ba814ad8d729fdff3c741b9dc0560760aecd7dd8db19d95",
+    url = "https://download.dfinity.systems/ic/48e7e1f072c259810236488ff770c809f362fb63/canisters/governance-canister.wasm.gz",
 )
 
 http_file(
@@ -547,12 +548,12 @@ http_file(
     url = "https://download.dfinity.systems/ic/e813c43a337a26c026c2f2ec19099bd2036e7280/canisters/cycles-minting-canister.wasm.gz",
 )
 
-# From https://dashboard.internetcomputer.org/proposal/127102
+# From https://dashboard.internetcomputer.org/proposal/128091
 http_file(
     name = "mainnet_nns_sns-wasm-canister",
     downloaded_file_path = "sns-wasm-canister.wasm.gz",
-    sha256 = "2d11dda2a42ab3521d724c5c7243f2a65788d5e37ba8648f62022bd9d9da34a8",
-    url = "https://download.dfinity.systems/ic/e7c7105a54fdf43892c46b5560d5dbee687dcba0/canisters/sns-wasm-canister.wasm.gz",
+    sha256 = "d31113c19ae571694a33b1689092b76d60c7e5722f27601291b67ef29b2ecee7",
+    url = "https://download.dfinity.systems/ic/48e7e1f072c259810236488ff770c809f362fb63/canisters/sns-wasm-canister.wasm.gz",
 )
 
 # Deployed SNS canisters
@@ -573,36 +574,36 @@ http_file(
     url = "https://download.dfinity.systems/ic/7a3db052ed4c3306272ed372039d9775f189c0bc/canisters/sns-governance-canister.wasm.gz",
 )
 
-# From https://dashboard.internetcomputer.org/proposal/127064
+# From https://dashboard.internetcomputer.org/proposal/128092
 http_file(
     name = "mainnet_sns-swap-canister",
     downloaded_file_path = "sns-swap-canister.wasm.gz",
-    sha256 = "f1414b67ca335d15a7d9fc021f6afa9002143af3c7ce10edf48d4ccd9b9d1703",
-    url = "https://download.dfinity.systems/ic/6ed74ab9788e4601bbbf02ae1ce92b7f480387df/canisters/sns-swap-canister.wasm.gz",
+    sha256 = "9531eafc54069e835636011e17a19a4709a3123c6a4d2f56c58a44c3cc31e1d6",
+    url = "https://download.dfinity.systems/ic/48e7e1f072c259810236488ff770c809f362fb63/canisters/sns-swap-canister.wasm.gz",
 )
 
-# From https://dashboard.internetcomputer.org/proposal/124255
+# From https://dashboard.internetcomputer.org/proposal/128094
 http_file(
     name = "mainnet_ic-icrc1-ledger",
     downloaded_file_path = "ic-icrc1-ledger.wasm.gz",
-    sha256 = "b8312889e602c1092832c27958df5cd9f3ad76c22fd4951317047bc0c3122bca",
-    url = "https://download.dfinity.systems/ic/f99495f3772d5a85d25ef5008179b49a5f12c5c2/canisters/ic-icrc1-ledger.wasm.gz",
+    sha256 = "af8fc1469e553ac90f704521a97a1e3545c2b68049b4618a6549171b4ea4fba8",
+    url = "https://download.dfinity.systems/ic/48e7e1f072c259810236488ff770c809f362fb63/canisters/ic-icrc1-ledger.wasm.gz",
 )
 
-# From https://dashboard.internetcomputer.org/proposal/124254
+# From https://dashboard.internetcomputer.org/proposal/128095
 http_file(
     name = "mainnet_ic-icrc1-archive",
     downloaded_file_path = "ic-icrc1-archive.wasm.gz",
-    sha256 = "6513337917eec322bdfba5dd00ac44bec63e7064bba30e668dbaf14fb0488c49",
-    url = "https://download.dfinity.systems/ic/f99495f3772d5a85d25ef5008179b49a5f12c5c2/canisters/ic-icrc1-archive.wasm.gz",
+    sha256 = "e691826056ac4ba1f95ebb9e24d06d6e787d4cb66fd36cb356358637d5041f49",
+    url = "https://download.dfinity.systems/ic/48e7e1f072c259810236488ff770c809f362fb63/canisters/ic-icrc1-archive.wasm.gz",
 )
 
-# From https://dashboard.internetcomputer.org/proposal/127686
+# From https://dashboard.internetcomputer.org/proposal/128093
 http_file(
-    name = "mainnet_ic-icrc1-index",
-    downloaded_file_path = "ic-icrc1-index.wasm.gz",
-    sha256 = "234f489698681ec6b6f4b996c19d693d9cbb418fd52294348c1e704d0d8f98c6",
-    url = "https://download.dfinity.systems/ic/046de5375825975b57ca3a6f92cd80eaf062f21a/canisters/ic-icrc1-index.wasm.gz",
+    name = "mainnet_ic-icrc1-index-ng",
+    downloaded_file_path = "ic-icrc1-index-ng.wasm.gz",
+    sha256 = "5ed3e211f820252ab11c063ca2f00948d13e7dd48d27cd6fcd508bec4a3b1f51",
+    url = "https://download.dfinity.systems/ic/48e7e1f072c259810236488ff770c809f362fb63/canisters/ic-icrc1-index-ng.wasm.gz",
 )
 
 # Asset canister
