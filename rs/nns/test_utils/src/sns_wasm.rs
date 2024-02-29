@@ -518,9 +518,9 @@ pub fn build_archive_sns_wasm() -> SnsWasm {
     }
 }
 
-/// Builds the SnsWasm for the index canister.
-pub fn build_index_sns_wasm() -> SnsWasm {
-    let index_wasm = Project::cargo_bin_maybe_from_env("ic-icrc1-index", &[]);
+/// Builds the SnsWasm for the index-ng canister.
+pub fn build_index_ng_sns_wasm() -> SnsWasm {
+    let index_wasm = Project::cargo_bin_maybe_from_env("ic-icrc1-index-ng", &[]);
     SnsWasm {
         wasm: index_wasm.bytes(),
         canister_type: SnsCanisterType::Index.into(),
@@ -528,17 +528,8 @@ pub fn build_index_sns_wasm() -> SnsWasm {
 }
 
 /// Builds the mainnet SnsWasm for the index canister.
-pub fn build_mainnet_index_sns_wasm() -> SnsWasm {
-    let index_wasm = Project::cargo_bin_maybe_from_env("mainnet-ic-icrc1-index", &[]);
-    SnsWasm {
-        wasm: index_wasm.bytes(),
-        canister_type: SnsCanisterType::Index.into(),
-    }
-}
-
-/// Builds the SnsWasm for the index-ng canister.
-pub fn build_index_ng_sns_wasm() -> SnsWasm {
-    let index_wasm = Project::cargo_bin_maybe_from_env("ic-icrc1-index-ng", &[]);
+pub fn build_mainnet_index_ng_sns_wasm() -> SnsWasm {
+    let index_wasm = Project::cargo_bin_maybe_from_env("mainnet-ic-icrc1-index-ng", &[]);
     SnsWasm {
         wasm: index_wasm.bytes(),
         canister_type: SnsCanisterType::Index.into(),

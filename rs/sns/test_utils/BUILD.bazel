@@ -17,7 +17,6 @@ BASE_DEPENDENCIES = [
     "//rs/state_machine_tests",
     "//rs/rosetta-api/icp_ledger",
     "//rs/rosetta-api/icrc1",
-    "//rs/rosetta-api/icrc1/index",
     "//rs/rosetta-api/icrc1/index-ng",
     "//rs/rosetta-api/icrc1/ledger",
     "//rs/rosetta-api/ledger_canister_core",
