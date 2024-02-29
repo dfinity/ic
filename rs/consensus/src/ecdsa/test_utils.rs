@@ -22,7 +22,7 @@ use ic_management_canister_types::EcdsaKeyId;
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithEcdsaContext;
 use ic_replicated_state::ReplicatedState;
-use ic_test_utilities::consensus::fake::*;
+use ic_test_utilities::consensus::{fake::*, EcdsaStatsNoOp};
 use ic_test_utilities::state::ReplicatedStateBuilder;
 use ic_test_utilities::types::ids::{node_test_id, NODE_1, NODE_2};
 use ic_test_utilities::types::messages::RequestBuilder;
@@ -625,6 +625,14 @@ impl CertifiedStateSnapshot for FakeCertifiedStateSnapshot {
     }
 }
 
+pub(crate) fn create_ecdsa_pool(
+    config: ArtifactPoolConfig,
+    log: ReplicaLogger,
+    metrics_registry: MetricsRegistry,
+) -> EcdsaPoolImpl {
+    EcdsaPoolImpl::new(config, log, metrics_registry, Box::new(EcdsaStatsNoOp {}))
+}
+
 // Sets up the dependencies and creates the pre signer
 pub(crate) fn create_pre_signer_dependencies_with_crypto(
     pool_config: ArtifactPoolConfig,
@@ -642,7 +650,7 @@ pub(crate) fn create_pre_signer_dependencies_with_crypto(
         metrics_registry.clone(),
         logger.clone(),
     );
-    let ecdsa_pool = EcdsaPoolImpl::new(pool_config, logger, metrics_registry);
+    let ecdsa_pool = create_ecdsa_pool(pool_config, logger, metrics_registry);
 
     (ecdsa_pool, pre_signer)
 }
@@ -677,7 +685,7 @@ pub(crate) fn create_signer_dependencies_with_crypto(
         metrics_registry.clone(),
         logger.clone(),
     );
-    let ecdsa_pool = EcdsaPoolImpl::new(pool_config, logger, metrics_registry);
+    let ecdsa_pool = create_ecdsa_pool(pool_config, logger, metrics_registry);
 
     (ecdsa_pool, signer)
 }
@@ -729,7 +737,7 @@ pub(crate) fn create_signer_dependencies_with_state_and_crypto(
         metrics_registry.clone(),
         logger.clone(),
     );
-    let ecdsa_pool = EcdsaPoolImpl::new(pool_config, logger, metrics_registry);
+    let ecdsa_pool = create_ecdsa_pool(pool_config, logger, metrics_registry);
 
     (ecdsa_pool, signer)
 }
@@ -751,7 +759,7 @@ pub(crate) fn create_complaint_dependencies_with_crypto_and_node_id(
         metrics_registry.clone(),
         logger.clone(),
     );
-    let ecdsa_pool = EcdsaPoolImpl::new(pool_config, logger, metrics_registry);
+    let ecdsa_pool = create_ecdsa_pool(pool_config, logger, metrics_registry);
 
     (ecdsa_pool, complaint_handler)
 }

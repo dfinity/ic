@@ -904,7 +904,7 @@ fn init_artifact_pools(
         log.clone(),
     )));
 
-    let mut ecdsa_pool = EcdsaPoolImpl::new_with_stats(
+    let mut ecdsa_pool = EcdsaPoolImpl::new(
         config.clone(),
         log.clone(),
         registry.clone(),

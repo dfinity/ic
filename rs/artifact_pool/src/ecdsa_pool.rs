@@ -26,7 +26,7 @@ use ic_types::artifact_kind::EcdsaArtifact;
 use ic_types::consensus::{
     ecdsa::{
         EcdsaArtifactId, EcdsaComplaint, EcdsaMessage, EcdsaMessageType, EcdsaOpening,
-        EcdsaPrefixOf, EcdsaSigShare, EcdsaStats, EcdsaStatsNoOp,
+        EcdsaPrefixOf, EcdsaSigShare, EcdsaStats,
     },
     CatchUpPackage,
 };
@@ -288,7 +288,7 @@ pub struct EcdsaPoolImpl {
 }
 
 impl EcdsaPoolImpl {
-    pub fn new_with_stats(
+    pub fn new(
         config: ArtifactPoolConfig,
         log: ReplicaLogger,
         metrics_registry: MetricsRegistry,
@@ -325,14 +325,6 @@ impl EcdsaPoolImpl {
             stats,
             log,
         }
-    }
-
-    pub fn new(
-        config: ArtifactPoolConfig,
-        log: ReplicaLogger,
-        metrics_registry: MetricsRegistry,
-    ) -> Self {
-        Self::new_with_stats(config, log, metrics_registry, Box::new(EcdsaStatsNoOp {}))
     }
 
     // Populates the validated pool with the initial dealings from the CUP.
@@ -475,6 +467,7 @@ mod tests {
     use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_idkg_transcript_id_for_tests;
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities::consensus::fake::*;
+    use ic_test_utilities::consensus::EcdsaStatsNoOp;
     use ic_test_utilities::types::ids::{NODE_1, NODE_2, NODE_3, NODE_4, NODE_5, NODE_6};
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_types::consensus::ecdsa::{dealing_support_prefix, EcdsaObject};
@@ -483,6 +476,15 @@ mod tests {
     use ic_types::signature::BasicSignature;
     use ic_types::{time::UNIX_EPOCH, NodeId};
     use std::collections::BTreeSet;
+
+    fn create_ecdsa_pool(config: ArtifactPoolConfig, log: ReplicaLogger) -> EcdsaPoolImpl {
+        EcdsaPoolImpl::new(
+            config,
+            log,
+            MetricsRegistry::new(),
+            Box::new(EcdsaStatsNoOp {}),
+        )
+    }
 
     fn create_ecdsa_dealing(transcript_id: IDkgTranscriptId) -> SignedIDkgDealing {
         let mut idkg_dealing = dummy_idkg_dealing_for_tests();
@@ -763,8 +765,7 @@ mod tests {
     fn test_ecdsa_pool_insert_remove() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let mut ecdsa_pool =
-                    EcdsaPoolImpl::new(pool_config, logger, MetricsRegistry::new());
+                let mut ecdsa_pool = create_ecdsa_pool(pool_config, logger);
 
                 let msg_id_1 = {
                     let ecdsa_dealing =
@@ -801,8 +802,7 @@ mod tests {
     fn test_ecdsa_pool_add_validated() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let mut ecdsa_pool =
-                    EcdsaPoolImpl::new(pool_config, logger, MetricsRegistry::new());
+                let mut ecdsa_pool = create_ecdsa_pool(pool_config, logger);
 
                 let msg_id_1 = {
                     let ecdsa_dealing =
@@ -835,8 +835,7 @@ mod tests {
     fn test_ecdsa_pool_move_validated() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let mut ecdsa_pool =
-                    EcdsaPoolImpl::new(pool_config, logger, MetricsRegistry::new());
+                let mut ecdsa_pool = create_ecdsa_pool(pool_config, logger);
 
                 let msg_id_1 = {
                     let ecdsa_dealing =
@@ -894,8 +893,7 @@ mod tests {
     fn test_ecdsa_pool_remove_validated() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let mut ecdsa_pool =
-                    EcdsaPoolImpl::new(pool_config, logger, MetricsRegistry::new());
+                let mut ecdsa_pool = create_ecdsa_pool(pool_config, logger);
                 let msg_id_1 = {
                     let ecdsa_dealing =
                         create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(100));
@@ -957,8 +955,7 @@ mod tests {
     fn test_ecdsa_pool_remove_unvalidated() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let mut ecdsa_pool =
-                    EcdsaPoolImpl::new(pool_config, logger, MetricsRegistry::new());
+                let mut ecdsa_pool = create_ecdsa_pool(pool_config, logger);
                 let msg_id = {
                     let ecdsa_dealing =
                         create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(200));
@@ -986,8 +983,7 @@ mod tests {
     fn test_ecdsa_pool_handle_invalid_unvalidated() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let mut ecdsa_pool =
-                    EcdsaPoolImpl::new(pool_config, logger, MetricsRegistry::new());
+                let mut ecdsa_pool = create_ecdsa_pool(pool_config, logger);
                 let msg_id = {
                     let ecdsa_dealing =
                         create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(200));
@@ -1014,8 +1010,7 @@ mod tests {
     fn test_ecdsa_pool_handle_invalid_validated() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let mut ecdsa_pool =
-                    EcdsaPoolImpl::new(pool_config, logger, MetricsRegistry::new());
+                let mut ecdsa_pool = create_ecdsa_pool(pool_config, logger);
 
                 let msg_id = {
                     let ecdsa_dealing =
@@ -1042,8 +1037,7 @@ mod tests {
     fn test_ecdsa_prefix_search_unvalidated() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let mut ecdsa_pool =
-                    EcdsaPoolImpl::new(pool_config, logger, MetricsRegistry::new());
+                let mut ecdsa_pool = create_ecdsa_pool(pool_config, logger);
                 check_search_by_prefix(&mut ecdsa_pool, true);
             })
         })
@@ -1053,8 +1047,7 @@ mod tests {
     fn test_ecdsa_prefix_search_validated() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let mut ecdsa_pool =
-                    EcdsaPoolImpl::new(pool_config, logger, MetricsRegistry::new());
+                let mut ecdsa_pool = create_ecdsa_pool(pool_config, logger);
                 check_search_by_prefix(&mut ecdsa_pool, false);
             })
         })

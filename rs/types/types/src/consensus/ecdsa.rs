@@ -1745,30 +1745,6 @@ pub trait EcdsaStats: Send + Sync {
     fn record_sig_share_aggregation(&self, request_id: &RequestId, duration: Duration);
 }
 
-/// For testing
-pub struct EcdsaStatsNoOp {}
-impl EcdsaStats for EcdsaStatsNoOp {
-    fn update_active_transcripts(&self, _block_reader: &dyn EcdsaBlockReader) {}
-    fn update_active_quadruples(&self, _block_reader: &dyn EcdsaBlockReader) {}
-    fn record_support_validation(&self, _support: &IDkgDealingSupport, _duration: Duration) {}
-    fn record_support_aggregation(
-        &self,
-        _transcript_params: &IDkgTranscriptParams,
-        _support_shares: &[IDkgDealingSupport],
-        _duration: Duration,
-    ) {
-    }
-    fn record_transcript_creation(
-        &self,
-        _transcript_params: &IDkgTranscriptParams,
-        _duration: Duration,
-    ) {
-    }
-    fn update_active_signature_requests(&self, _block_reader: &dyn EcdsaBlockReader) {}
-    fn record_sig_share_validation(&self, _request_id: &RequestId, _duration: Duration) {}
-    fn record_sig_share_aggregation(&self, _request_id: &RequestId, _duration: Duration) {}
-}
-
 /// EcdsaObject should be implemented by the ECDSA message types
 /// (e.g) EcdsaSignedDealing, EcdsaDealingSupport, etc
 pub trait EcdsaObject: CryptoHashable + Clone + Sized {

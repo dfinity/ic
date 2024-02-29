@@ -1344,9 +1344,10 @@ mod tests {
     };
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
+    use ic_test_utilities::consensus::EcdsaStatsNoOp;
     use ic_test_utilities::types::ids::{NODE_1, NODE_2, NODE_3, NODE_4};
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_types::consensus::ecdsa::{EcdsaObject, EcdsaStatsNoOp};
+    use ic_types::consensus::ecdsa::EcdsaObject;
     use ic_types::crypto::{AlgorithmId, BasicSig, BasicSigOf, CryptoHash};
     use ic_types::time::UNIX_EPOCH;
     use ic_types::{Height, RegistryVersion};

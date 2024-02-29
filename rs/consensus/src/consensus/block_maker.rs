@@ -514,6 +514,8 @@ pub(crate) fn already_proposed(pool: &PoolReader<'_>, h: Height, this_node: Node
 
 #[cfg(test)]
 mod tests {
+    use crate::ecdsa::test_utils::create_ecdsa_pool;
+
     use super::*;
     use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies, MockPayloadBuilder};
     use ic_consensus_utils::get_block_maker_delay;
@@ -750,13 +752,11 @@ mod tests {
                 MetricsRegistry::new(),
                 no_op_logger(),
             )));
-            let ecdsa_pool = Arc::new(RwLock::new(
-                ic_artifact_pool::ecdsa_pool::EcdsaPoolImpl::new(
-                    pool_config,
-                    no_op_logger(),
-                    MetricsRegistry::new(),
-                ),
-            ));
+            let ecdsa_pool = Arc::new(RwLock::new(create_ecdsa_pool(
+                pool_config,
+                no_op_logger(),
+                MetricsRegistry::new(),
+            )));
 
             state_manager
                 .get_mut()
