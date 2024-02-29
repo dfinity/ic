@@ -755,15 +755,6 @@ fn make_router(
             "/_/",
             get(|| async { Redirect::to(HTTP_DASHBOARD_URL_PATH) }),
         )
-        .route(
-            "/_/threads",
-            get(threads::collect).layer(
-                ServiceBuilder::new()
-                    .layer(HandleErrorLayer::new(map_box_error_to_response))
-                    .load_shed()
-                    .layer(pprof_concurrency_limiter.clone()),
-            ),
-        )
         .route_service(
             "/_/pprof",
             get_service(pprof_home_service).layer(
