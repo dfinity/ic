@@ -25,9 +25,9 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterIdRecord,
     CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgsBuilder,
-    CanisterStatusResultV2, CanisterStatusType, ChunkHash, ClearChunkStoreArgs, CreateCanisterArgs,
-    EmptyBlob, InstallCodeArgsV2, Method, Payload, SkipPreUpgrade, StoredChunksArgs,
-    StoredChunksReply, UpdateSettingsArgs, UploadChunkArgs, UploadChunkReply,
+    CanisterStatusResultV2, CanisterStatusType, CanisterUpgradeOptions, ChunkHash,
+    ClearChunkStoreArgs, CreateCanisterArgs, EmptyBlob, InstallCodeArgsV2, Method, Payload,
+    StoredChunksArgs, StoredChunksReply, UpdateSettingsArgs, UploadChunkArgs, UploadChunkReply,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -6271,7 +6271,9 @@ fn test_upgrade_with_skip_pre_upgrade_preserves_stable_memory() {
     test.upgrade_canister_v2(
         canister_id,
         UNIVERSAL_CANISTER_WASM.to_vec(),
-        Some(SkipPreUpgrade(Some(true))),
+        CanisterUpgradeOptions {
+            skip_pre_upgrade: Some(true),
+        },
     )
     .unwrap();
 
@@ -6288,7 +6290,9 @@ fn test_upgrade_with_skip_pre_upgrade_preserves_stable_memory() {
         .upgrade_canister_v2(
             canister_id,
             UNIVERSAL_CANISTER_WASM.to_vec(),
-            Some(SkipPreUpgrade(None)),
+            CanisterUpgradeOptions {
+                skip_pre_upgrade: None,
+            },
         )
         .unwrap_err();
     assert_eq!(ErrorCode::CanisterCalledTrap, err.code());

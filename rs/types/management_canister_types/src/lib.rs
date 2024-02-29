@@ -19,7 +19,8 @@ use ic_protobuf::registry::subnet::v1::{InitialIDkgDealings, InitialNiDkgTranscr
 use ic_protobuf::state::canister_state_bits::v1::{self as pb_canister_state_bits};
 use ic_protobuf::types::v1::CanisterInstallModeV2 as CanisterInstallModeV2Proto;
 use ic_protobuf::types::v1::{
-    CanisterInstallMode as CanisterInstallModeProto, CanisterUpgradeOptions,
+    CanisterInstallMode as CanisterInstallModeProto,
+    CanisterUpgradeOptions as CanisterUpgradeOptionsProto,
 };
 use ic_protobuf::{proxy::ProxyDecodeError, registry::crypto::v1 as pb_registry_crypto};
 use num_traits::cast::ToPrimitive;
@@ -1036,12 +1037,20 @@ impl CanisterInstallMode {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, Eq, Hash, CandidType, Copy, Default)]
-pub struct SkipPreUpgrade(pub Option<bool>);
+/// Struct used for encoding/decoding:
+/// `record {
+///    skip_pre_upgrade: opt bool
+/// }`
+/// Extendibility for the future: Adding new optional fields ensures both backwards- and
+/// forwards-compatibility in Candid.
+pub struct CanisterUpgradeOptions {
+    /// Determine whether the pre-upgrade hook should be skipped during upgrade.
+    pub skip_pre_upgrade: Option<bool>,
+}
 
 /// The mode with which a canister is installed.
 ///
-/// This second version of the mode allows someone to specify the
-/// optional `SkipPreUpgrade` parameter in case of an upgrade
+/// This second version of the mode allows someone to specify upgrade options.
 #[derive(
     Clone, Debug, Deserialize, PartialEq, Serialize, Eq, EnumString, Hash, CandidType, Copy, Default,
 )]
@@ -1058,7 +1067,7 @@ pub enum CanisterInstallModeV2 {
     /// Upgrade an existing canister.
     #[serde(rename = "upgrade")]
     #[strum(serialize = "upgrade")]
-    Upgrade(Option<SkipPreUpgrade>),
+    Upgrade(Option<CanisterUpgradeOptions>),
 }
 
 impl CanisterInstallModeV2 {
@@ -1067,9 +1076,15 @@ impl CanisterInstallModeV2 {
             CanisterInstallModeV2::Install,
             CanisterInstallModeV2::Reinstall,
             CanisterInstallModeV2::Upgrade(None),
-            CanisterInstallModeV2::Upgrade(Some(SkipPreUpgrade(None))),
-            CanisterInstallModeV2::Upgrade(Some(SkipPreUpgrade(Some(false)))),
-            CanisterInstallModeV2::Upgrade(Some(SkipPreUpgrade(Some(true)))),
+            CanisterInstallModeV2::Upgrade(Some(CanisterUpgradeOptions {
+                skip_pre_upgrade: None,
+            })),
+            CanisterInstallModeV2::Upgrade(Some(CanisterUpgradeOptions {
+                skip_pre_upgrade: Some(false),
+            })),
+            CanisterInstallModeV2::Upgrade(Some(CanisterUpgradeOptions {
+                skip_pre_upgrade: Some(true),
+            })),
         ];
         MODES.iter()
     }
@@ -1145,9 +1160,11 @@ impl TryFrom<CanisterInstallModeV2Proto> for CanisterInstallModeV2 {
 
             ic_protobuf::types::v1::canister_install_mode_v2::CanisterInstallModeV2::Mode2(
                 upgrade_mode,
-            ) => Ok(CanisterInstallModeV2::Upgrade(Some(SkipPreUpgrade(
-                upgrade_mode.skip_pre_upgrade,
-            )))),
+            ) => Ok(CanisterInstallModeV2::Upgrade(Some(
+                CanisterUpgradeOptions {
+                    skip_pre_upgrade: upgrade_mode.skip_pre_upgrade,
+                },
+            ))),
         }
     }
 }
@@ -1191,10 +1208,10 @@ impl From<&CanisterInstallModeV2> for CanisterInstallModeV2Proto {
                         CanisterInstallModeProto::Upgrade.into(),
                     )
                 }
-                CanisterInstallModeV2::Upgrade(Some(skip_pre_upgrade)) => {
+                CanisterInstallModeV2::Upgrade(Some(upgrade_options)) => {
                     ic_protobuf::types::v1::canister_install_mode_v2::CanisterInstallModeV2::Mode2(
-                        CanisterUpgradeOptions {
-                            skip_pre_upgrade: skip_pre_upgrade.0,
+                        CanisterUpgradeOptionsProto {
+                            skip_pre_upgrade: upgrade_options.skip_pre_upgrade,
                         },
                     )
                 }
