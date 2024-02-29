@@ -10,7 +10,6 @@ use rusqlite::{named_params, params, Params};
 use rusqlite::{Connection, Statement};
 use serde_bytes::ByteBuf;
 use std::collections::{BTreeMap, HashMap};
-use tracing::info;
 
 pub fn store_metadata(
     connection: &mut Connection,
@@ -250,9 +249,8 @@ pub fn update_account_balances(connection: &mut Connection) -> anyhow::Result<()
         rosetta_blocks = get_blocks_by_index_range(connection, batch_start_idx, batch_end_idx)?;
     }
     if let Some(pb) = pb {
-        pb.finish_with_message("Done");
+        pb.finish_with_message("Account Balances have been updated successfully");
     }
-    info!("Account Balances have been updated successfully");
     Ok(())
 }
 
