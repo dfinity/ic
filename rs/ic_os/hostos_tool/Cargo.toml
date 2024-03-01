@@ -8,7 +8,7 @@ name = "hostos_tool"
 path = "src/main.rs"
 
 [dependencies]
-anyhow = {version = "^1"} 
+anyhow = { workspace = true }
 clap = {version = "^4", features = ["derive"]}
 config = { path = "../config" }
 network = { path = "../network" }

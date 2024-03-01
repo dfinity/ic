@@ -14,7 +14,7 @@ path = "src/main.rs"
 path = "src/lib.rs"
 
 [dependencies]
-anyhow = "1.0"
+anyhow = { workspace = true }
 base64 = { workspace = true }
 candid = { workspace = true }
 clap = { version = "^4.0.0" }

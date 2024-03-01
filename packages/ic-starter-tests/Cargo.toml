@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-anyhow = "1.0.58"
+anyhow = { workspace = true }
 ic-agent = { workspace = true }
 reqwest = { workspace = true }
 tempfile = "3.3.0"

@@ -7,7 +7,7 @@ edition.workspace = true
 documentation.workspace = true
 
 [dependencies]
-anyhow = "1.0.72"
+anyhow = { workspace = true }
 async-trait = "0.1.72"
 candid = { workspace = true }
 ic-base-types = { path = "../../../../types/base_types" }

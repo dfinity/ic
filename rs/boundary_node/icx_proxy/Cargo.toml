@@ -17,7 +17,7 @@ name = "icx-proxy"
 path = "src/main.rs"
 
 [dependencies]
-anyhow = "1"
+anyhow = { workspace = true }
 arc-swap = "1"
 async-trait = "0.1"
 axum = "0.6.1"

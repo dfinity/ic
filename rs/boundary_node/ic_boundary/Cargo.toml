@@ -15,7 +15,7 @@ bench = []
 tls = []
 
 [dependencies]
-anyhow = "1.0.56"
+anyhow = { workspace = true }
 arc-swap = "1"
 async-scoped = { version = "0.8", features = ["use-tokio"] }
 async-trait = "0.1.56"
