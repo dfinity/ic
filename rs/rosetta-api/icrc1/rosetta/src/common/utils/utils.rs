@@ -1,10 +1,8 @@
+use crate::common::storage::types::RosettaBlock;
 use crate::{
     common::{
         constants::{DEFAULT_BLOCKCHAIN, MIN_PROGRESS_BAR},
-        storage::{
-            storage_client::StorageClient,
-            types::{RosettaBlock, RosettaToken},
-        },
+        storage::storage_client::StorageClient,
         types::{
             ApproveMetadata, BlockMetadata, BurnMetadata, OperationType, TransactionMetadata,
             TransferMetadata,
@@ -13,8 +11,7 @@ use crate::{
     AppState,
 };
 use anyhow::{bail, Context};
-use ic_ledger_core::block::EncodedBlock;
-use ic_ledger_hash_of::HashOf;
+use candid::Nat;
 use indicatif::{ProgressBar, ProgressState, ProgressStyle};
 use rosetta_core::{
     identifiers::{BlockIdentifier, NetworkIdentifier, PartialBlockIdentifier},
@@ -22,6 +19,7 @@ use rosetta_core::{
 };
 use serde_bytes::ByteBuf;
 use std::fmt::Write;
+use std::str::FromStr;
 use std::time::Duration;
 
 const MINT_OPERATION_IDENTIFIER: u64 = 0;
@@ -94,8 +92,8 @@ pub fn get_rosetta_block_from_partial_block_identifier(
                     .get_block_at_idx(block_idx)
                     .with_context(|| format!("Unable to retrieve block with idx: {}", block_idx))?
                     .with_context(|| format!("Block at index {} could not be found", block_idx))?;
-                if &hex::encode(&rosetta_block.block_hash) != hash {
-                    bail!("Both index {} and hash {} were provided but they do not match the same block. Actual index {} and hash {}",block_idx,hash,rosetta_block.index,hex::encode(&rosetta_block.block_hash));
+                if &hex::encode(rosetta_block.clone().get_block_hash()) != hash {
+                    bail!("Both index {} and hash {} were provided but they do not match the same block. Actual index {} and hash {}",block_idx,hash,rosetta_block.index,hex::encode(rosetta_block.clone().get_block_hash()));
                 }
                 rosetta_block
             }
@@ -130,11 +128,11 @@ pub fn icrc1_rosetta_block_to_rosetta_core_block(
 ) -> anyhow::Result<rosetta_core::objects::Block> {
     Ok(rosetta_core::objects::Block {
         metadata: Some(
-            BlockMetadata::new(rosetta_block.get_icrc1_block()?, currency.clone())?.try_into()?,
+            BlockMetadata::new(rosetta_block.get_icrc1_block(), currency.clone())?.try_into()?,
         ),
-        block_identifier: rosetta_block.get_block_identifier(),
+        block_identifier: rosetta_block.clone().get_block_identifier(),
         parent_block_identifier: rosetta_block.get_parent_block_identifier(),
-        timestamp: convert_timestamp_to_millis(rosetta_block.timestamp)?,
+        timestamp: convert_timestamp_to_millis(rosetta_block.get_timestamp())?,
         transactions: vec![icrc1_rosetta_block_to_rosetta_core_transaction(
             rosetta_block,
             currency,
@@ -145,7 +143,7 @@ pub fn icrc1_rosetta_block_to_rosetta_core_block(
 // Converts a rosetta_core Block into an ICRC-1 Block
 pub fn rosetta_core_block_to_icrc1_block(
     mut block: rosetta_core::objects::Block,
-) -> anyhow::Result<ic_icrc1::Block<RosettaToken>> {
+) -> anyhow::Result<crate::common::storage::types::IcrcBlock> {
     let block_metadata = BlockMetadata::try_from(block.metadata)?;
 
     if block.transactions.len() != 1 {
@@ -162,30 +160,30 @@ pub fn rosetta_core_block_to_icrc1_block(
             .context("Transaction vector of rosetta_core Block is empty")?,
     )?;
 
-    Ok(ic_icrc1::Block {
+    Ok(crate::common::storage::types::IcrcBlock {
         effective_fee: match icrc1_transaction.operation.clone() {
-            ic_icrc1::Operation::Mint { .. } => None,
-            ic_icrc1::Operation::Transfer { fee, .. } => {
+            crate::common::storage::types::IcrcOperation::Mint { .. } => None,
+            crate::common::storage::types::IcrcOperation::Transfer { fee, .. } => {
                 if fee.is_none() {
                     block_metadata
                         .fee_paid_by_user
-                        .map(RosettaToken::try_from)
+                        .map(|f| Nat::from_str(&f.value))
                         .transpose()?
                 } else {
                     None
                 }
             }
-            ic_icrc1::Operation::Approve { fee, .. } => {
+            crate::common::storage::types::IcrcOperation::Approve { fee, .. } => {
                 if fee.is_none() {
                     block_metadata
                         .fee_paid_by_user
-                        .map(RosettaToken::try_from)
+                        .map(|f| Nat::from_str(&f.value))
                         .transpose()?
                 } else {
                     None
                 }
             }
-            ic_icrc1::Operation::Burn { .. } => None,
+            crate::common::storage::types::IcrcOperation::Burn { .. } => None,
         },
         transaction: icrc1_transaction,
         timestamp: block_metadata.block_created_at_nano_seconds,
@@ -199,11 +197,11 @@ pub fn rosetta_core_block_to_icrc1_block(
         parent_hash: if block.parent_block_identifier == block.block_identifier {
             None
         } else {
-            Some(HashOf::<EncodedBlock>::new(
+            Some(
                 ByteBuf::try_from(block.parent_block_identifier)?
                     .as_slice()
                     .try_into()?,
-            ))
+            )
         },
         fee_collector_block_index: block_metadata.fee_collector_block_index,
     })
@@ -214,11 +212,11 @@ pub fn icrc1_rosetta_block_to_rosetta_core_transaction(
     rosetta_block: RosettaBlock,
     currency: Currency,
 ) -> anyhow::Result<rosetta_core::objects::Transaction> {
-    let icrc1_transaction = rosetta_block.get_transaction()?;
+    let icrc1_transaction = rosetta_block.get_transaction();
     let metadata: TransactionMetadata = icrc1_transaction.into();
 
     Ok(rosetta_core::objects::Transaction {
-        transaction_identifier: rosetta_block.get_transaction_identifier(),
+        transaction_identifier: rosetta_block.clone().get_transaction_identifier(),
         operations: vec![icrc1_rosetta_block_to_rosetta_core_operation(
             rosetta_block,
             currency,
@@ -232,7 +230,7 @@ pub fn icrc1_rosetta_block_to_rosetta_core_transaction(
 // Converts a rosetta_core Transaction into an ICRC-1 Transaction
 pub fn rosetta_core_transaction_to_icrc1_transaction(
     mut transaction: rosetta_core::objects::Transaction,
-) -> anyhow::Result<ic_icrc1::Transaction<RosettaToken>> {
+) -> anyhow::Result<crate::common::storage::types::IcrcTransaction> {
     let metadata = TransactionMetadata::try_from(transaction.metadata)?;
 
     if transaction.operations.len() != 1 {
@@ -242,7 +240,7 @@ pub fn rosetta_core_transaction_to_icrc1_transaction(
         )
     }
 
-    Ok(ic_icrc1::Transaction {
+    Ok(crate::common::storage::types::IcrcTransaction {
         operation: rosetta_core_operation_to_icrc1_operation(
             transaction
                 .operations
@@ -259,16 +257,16 @@ pub fn icrc1_rosetta_block_to_rosetta_core_operation(
     rosetta_block: RosettaBlock,
     currency: Currency,
 ) -> anyhow::Result<rosetta_core::objects::Operation> {
-    let icrc1_transaction = rosetta_block.get_transaction()?;
+    let icrc1_transaction = rosetta_block.get_transaction();
     icrc1_operation_to_rosetta_core_operation(icrc1_transaction.operation, currency)
 }
 
 pub fn icrc1_operation_to_rosetta_core_operation(
-    operation: ic_icrc1::Operation<RosettaToken>,
+    operation: crate::common::storage::types::IcrcOperation,
     currency: Currency,
 ) -> anyhow::Result<rosetta_core::objects::Operation> {
     Ok(match operation {
-        ic_icrc1::Operation::Mint { to, amount } => {
+        crate::common::storage::types::IcrcOperation::Mint { to, amount } => {
             // A Mint operation only has one OperationIdentifier and thus no related Operations
             rosetta_core::objects::Operation::new(
                 MINT_OPERATION_IDENTIFIER,
@@ -282,7 +280,7 @@ pub fn icrc1_operation_to_rosetta_core_operation(
                 None,
             )
         }
-        ic_icrc1::Operation::Transfer {
+        crate::common::storage::types::IcrcOperation::Transfer {
             from,
             to,
             spender,
@@ -306,7 +304,7 @@ pub fn icrc1_operation_to_rosetta_core_operation(
                 .try_into()?,
             ),
         ),
-        ic_icrc1::Operation::Burn {
+        crate::common::storage::types::IcrcOperation::Burn {
             from,
             spender,
             amount,
@@ -327,7 +325,7 @@ pub fn icrc1_operation_to_rosetta_core_operation(
                 .try_into()?,
             ),
         ),
-        ic_icrc1::Operation::Approve {
+        crate::common::storage::types::IcrcOperation::Approve {
             from,
             spender,
             amount,
@@ -359,17 +357,19 @@ pub fn icrc1_operation_to_rosetta_core_operation(
 // Fails if the given operation is unable to form an icrc1 Operation
 pub fn rosetta_core_operation_to_icrc1_operation(
     operation: rosetta_core::objects::Operation,
-) -> anyhow::Result<ic_icrc1::Operation<RosettaToken>> {
+) -> anyhow::Result<crate::common::storage::types::IcrcOperation> {
     Ok(match operation.type_.parse::<OperationType>()? {
-        OperationType::Mint => ic_icrc1::Operation::Mint {
+        OperationType::Mint => crate::common::storage::types::IcrcOperation::Mint {
             to: operation
                 .account
                 .context("Account field needs to be populated for Mint operation")?
                 .try_into()?,
-            amount: operation
-                .amount
-                .context("Amount field needs to be populated for Mint operation")?
-                .try_into()?,
+            amount: Nat::from_str(
+                &operation
+                    .amount
+                    .context("Amount field needs to be populated for Mint operation")?
+                    .value,
+            )?,
         },
         OperationType::Burn => {
             let metadata = BurnMetadata::try_from(
@@ -377,12 +377,14 @@ pub fn rosetta_core_operation_to_icrc1_operation(
                     .metadata
                     .context("Metadata field needs to be populated for Burn operation")?,
             )?;
-            ic_icrc1::Operation::Burn {
+            crate::common::storage::types::IcrcOperation::Burn {
                 from: metadata.from_account.try_into()?,
-                amount: operation
-                    .amount
-                    .context("Amount field needs to be populated for Burn operation")?
-                    .try_into()?,
+                amount: Nat::from_str(
+                    &operation
+                        .amount
+                        .context("Amount field needs to be populated for Burn operation")?
+                        .value,
+                )?,
                 spender: metadata
                     .spender_account
                     .map(|spender| spender.try_into())
@@ -395,12 +397,14 @@ pub fn rosetta_core_operation_to_icrc1_operation(
                     .metadata
                     .context("Metadata field needs to be populated for Transfer operation")?,
             )?;
-            ic_icrc1::Operation::Transfer {
+            crate::common::storage::types::IcrcOperation::Transfer {
                 from: metadata.from_account.try_into()?,
-                amount: operation
-                    .amount
-                    .context("Amount field needs to be populated for Transfer operation")?
-                    .try_into()?,
+                amount: Nat::from_str(
+                    &operation
+                        .amount
+                        .context("Amount field needs to be populated for Transfer operation")?
+                        .value,
+                )?,
                 spender: metadata
                     .spender_account
                     .map(|spender| spender.try_into())
@@ -411,7 +415,7 @@ pub fn rosetta_core_operation_to_icrc1_operation(
                     .try_into()?,
                 fee: metadata
                     .fee_set_by_user
-                    .map(|fee| fee.try_into())
+                    .map(|fee| Nat::from_str(&fee.value))
                     .transpose()?,
             }
         }
@@ -421,12 +425,14 @@ pub fn rosetta_core_operation_to_icrc1_operation(
                     .metadata
                     .context("Metadata field needs to be populated for Approve operation")?,
             )?;
-            ic_icrc1::Operation::Approve {
+            crate::common::storage::types::IcrcOperation::Approve {
                 from: metadata.approver_account.try_into()?,
-                amount: operation
-                    .amount
-                    .context("Amount field needs to be populated for Approve operation")?
-                    .try_into()?,
+                amount: Nat::from_str(
+                    &operation
+                        .amount
+                        .context("Amount field needs to be populated for Approve operation")?
+                        .value,
+                )?,
                 spender: operation
                     .account
                     .map(|spender| spender.try_into())
@@ -434,11 +440,11 @@ pub fn rosetta_core_operation_to_icrc1_operation(
                     .context("Account field needs to be populated for Approve operation")?,
                 fee: metadata
                     .fee_set_by_user
-                    .map(|fee| fee.try_into())
+                    .map(|fee| Nat::from_str(&fee.value))
                     .transpose()?,
                 expected_allowance: metadata
                     .expected_allowance
-                    .map(|expected_allowance| expected_allowance.try_into())
+                    .map(|expected_allowance| Nat::from_str(&expected_allowance.value))
                     .transpose()?,
                 expires_at: metadata.expires_at,
             }
@@ -449,7 +455,6 @@ pub fn rosetta_core_operation_to_icrc1_operation(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_icrc1::Block;
     use ic_icrc1_test_utils::account_strategy;
     use ic_icrc1_test_utils::arb_amount;
     use ic_icrc1_test_utils::blocks_strategy;
@@ -462,13 +467,13 @@ mod tests {
 
     const NUM_TEST_CASES: u32 = 100;
 
-    fn test_block_conversion<T: TokensType>(block: Block<T>) {
+    fn test_block_conversion<T: TokensType>(block: ic_icrc1::Block<T>) {
         let currency = Currency::default();
-        let rosetta_block = RosettaBlock::from_encoded_block(block.encode(), 0).unwrap();
+        let rosetta_block = RosettaBlock::from_encoded_block(&block.encode(), 0).unwrap();
         let rosetta_core_block =
             icrc1_rosetta_block_to_rosetta_core_block(rosetta_block.clone(), currency).unwrap();
         let derived_block = rosetta_core_block_to_icrc1_block(rosetta_core_block).unwrap();
-        assert_eq!(rosetta_block.get_icrc1_block().unwrap(), derived_block);
+        assert_eq!(rosetta_block.get_icrc1_block(), derived_block);
     }
 
     proptest! {
@@ -485,18 +490,13 @@ mod tests {
             }
 
             #[test]
-            fn test_block_conversions_rosetta_tokens(block in blocks_strategy::<RosettaToken>(arb_amount())){
-                test_block_conversion(block)
-            }
-
-            #[test]
             fn test_block_conversions_u64(block in blocks_strategy::<U64>(arb_amount())){
-                test_block_conversion(block)
+                test_block_conversion::<U64>(block)
             }
 
             #[test]
             fn test_block_conversions_u256(block in blocks_strategy::<U256>(arb_amount())){
-                test_block_conversion(block)
+                test_block_conversion::<U256>(block)
             }
     }
 }

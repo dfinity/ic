@@ -1,4 +1,3 @@
-use super::storage::types::RosettaToken;
 use anyhow::Context;
 use axum::{http::StatusCode, response::IntoResponse, Json};
 use candid::Deserialize;
@@ -330,8 +329,8 @@ impl TryFrom<Option<ObjectMap>> for TransactionMetadata {
     }
 }
 
-impl From<ic_icrc1::Transaction<RosettaToken>> for TransactionMetadata {
-    fn from(value: ic_icrc1::Transaction<RosettaToken>) -> Self {
+impl From<crate::common::storage::types::IcrcTransaction> for TransactionMetadata {
+    fn from(value: crate::common::storage::types::IcrcTransaction) -> Self {
         Self {
             memo: value.memo.map(|memo| memo.0),
             created_at_time: value.created_at_time,
@@ -377,13 +376,20 @@ impl TryFrom<Option<ObjectMap>> for BlockMetadata {
 }
 
 impl BlockMetadata {
-    pub fn new(block: ic_icrc1::Block<RosettaToken>, currency: Currency) -> anyhow::Result<Self> {
+    pub fn new(
+        block: crate::common::storage::types::IcrcBlock,
+        currency: Currency,
+    ) -> anyhow::Result<Self> {
         Ok(Self {
             fee_paid_by_user: match block.transaction.operation {
-                ic_icrc1::Operation::Mint { .. } => None,
-                ic_icrc1::Operation::Transfer { fee, .. } => fee.or(block.effective_fee),
-                ic_icrc1::Operation::Approve { fee, .. } => fee.or(block.effective_fee),
-                ic_icrc1::Operation::Burn { .. } => None,
+                crate::common::storage::types::IcrcOperation::Mint { .. } => None,
+                crate::common::storage::types::IcrcOperation::Transfer { fee, .. } => {
+                    fee.or(block.effective_fee)
+                }
+                crate::common::storage::types::IcrcOperation::Approve { fee, .. } => {
+                    fee.or(block.effective_fee)
+                }
+                crate::common::storage::types::IcrcOperation::Burn { .. } => None,
             }
             .map(|fee| Amount::new(fee.to_string(), currency)),
             fee_collector: block.fee_collector.map(|collector| collector.into()),

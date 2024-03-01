@@ -1,6 +1,6 @@
 use crate::common::{
     constants::{NODE_VERSION, ROSETTA_VERSION},
-    storage::{storage_client::StorageClient, types::RosettaToken},
+    storage::storage_client::StorageClient,
     types::Error,
     utils::utils::{
         convert_timestamp_to_millis, get_rosetta_block_from_block_identifier,
@@ -8,10 +8,12 @@ use crate::common::{
         icrc1_rosetta_block_to_rosetta_core_transaction,
     },
 };
+use candid::Nat;
 use candid::Principal;
 use ic_ledger_core::tokens::Zero;
 use ic_rosetta_api::DEFAULT_BLOCKCHAIN;
 use icrc_ledger_types::icrc1::account::Account;
+use num_bigint::BigUint;
 use rosetta_core::{identifiers::*, miscellaneous::Version, objects::*, response_types::*};
 
 pub fn network_list(ledger_id: &Principal) -> NetworkListResponse {
@@ -66,12 +68,12 @@ pub fn network_status(storage_client: &StorageClient) -> Result<NetworkStatusRes
                 &"Genesis block not found! Perhaps the initial sync is still running?".to_owned(),
             )
         })?;
-    let genesis_block_identifier = BlockIdentifier::from(&genesis_block);
+    let genesis_block_identifier = BlockIdentifier::from(genesis_block);
 
     Ok(NetworkStatusResponse {
-        current_block_identifier: BlockIdentifier::from(&current_block),
-        current_block_timestamp: convert_timestamp_to_millis(current_block.timestamp)
+        current_block_timestamp: convert_timestamp_to_millis(current_block.get_timestamp())
             .map_err(|err| Error::parsing_unsuccessful(&err))?,
+        current_block_identifier: BlockIdentifier::from(current_block),
         genesis_block_identifier: genesis_block_identifier.clone(),
         oldest_block_identifier: Some(genesis_block_identifier),
         sync_status: None,
@@ -90,11 +92,11 @@ pub fn block_transaction(
         get_rosetta_block_from_block_identifier(block_identifier.clone(), storage_client)
             .map_err(|err| Error::invalid_block_identifier(&err))?;
 
-    if &rosetta_block.get_block_identifier() != block_identifier {
-        return Err(Error::invalid_block_identifier(&format!("Both index {} and hash {} were provided but they do not match the same block. Actual index {} and hash {}",block_identifier.index,block_identifier.hash,rosetta_block.index,hex::encode(&rosetta_block.block_hash))));
+    if &rosetta_block.clone().get_block_identifier() != block_identifier {
+        return Err(Error::invalid_block_identifier(&format!("Both index {} and hash {} were provided but they do not match the same block. Actual index {} and hash {}",block_identifier.index,block_identifier.hash,rosetta_block.index,hex::encode(rosetta_block.clone().get_block_hash()))));
     }
 
-    if &rosetta_block.get_transaction_identifier() != transaction_identifier {
+    if &rosetta_block.clone().get_transaction_identifier() != transaction_identifier {
         return Err(Error::invalid_transaction_identifier());
     }
 
@@ -154,7 +156,7 @@ pub fn account_balance(
             rosetta_block.index,
         )
         .map_err(|e| Error::unable_to_find_account_balance(&e))?
-        .unwrap_or(RosettaToken::zero());
+        .unwrap_or(Nat(BigUint::zero()));
 
     Ok(AccountBalanceResponse {
         block_identifier: rosetta_block.get_block_identifier(),
@@ -174,11 +176,12 @@ pub fn account_balance(
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{
-        common::storage::types::{RosettaBlock, Tokens},
-        Metadata,
-    };
+    use crate::common::storage::types::RosettaBlock;
+    use crate::Metadata;
+    use ic_icrc1::blocks::encoded_block_to_generic_block;
     use ic_icrc1_test_utils::valid_blockchain_strategy;
+    use ic_icrc1_tokens_u256::U256;
+    use ic_ledger_core::block::BlockType;
     use proptest::prelude::*;
     use std::sync::Arc;
 
@@ -190,11 +193,11 @@ mod test {
             ..ProptestConfig::default()
         })]
                        #[test]
-                    fn test_network_status_service(blockchain in valid_blockchain_strategy::<Tokens>(BLOCKHAIN_LENGTH)){
+                    fn test_network_status_service(blockchain in valid_blockchain_strategy::<U256>(BLOCKHAIN_LENGTH)){
                         let storage_client_memory = Arc::new(StorageClient::new_in_memory().unwrap());
                         let mut rosetta_blocks = vec![];
                         for (index,block) in blockchain.clone().into_iter().enumerate(){
-                            rosetta_blocks.push(RosettaBlock::from_icrc_ledger_block(block,index as u64).unwrap());
+                            rosetta_blocks.push(RosettaBlock::from_generic_block(encoded_block_to_generic_block(&block.encode()),index as u64).unwrap());
                         }
 
                         // If there is no block in the database the service should return an error
@@ -209,10 +212,10 @@ mod test {
                         let network_status_response = network_status(&storage_client_memory).unwrap();
 
                         assert_eq!(NetworkStatusResponse {
-                            current_block_identifier: BlockIdentifier::from(&block_with_highest_idx),
-                            current_block_timestamp: convert_timestamp_to_millis(block_with_highest_idx.timestamp).map_err(|err| Error::parsing_unsuccessful(&err)).unwrap(),
-                            genesis_block_identifier: BlockIdentifier::from(&genesis_block).clone(),
-                            oldest_block_identifier: Some(BlockIdentifier::from(&genesis_block)),
+                            current_block_identifier: BlockIdentifier::from(block_with_highest_idx.clone()),
+                            current_block_timestamp: convert_timestamp_to_millis(block_with_highest_idx.get_timestamp()).map_err(|err| Error::parsing_unsuccessful(&err)).unwrap(),
+                            genesis_block_identifier: BlockIdentifier::from(genesis_block.clone()),
+                            oldest_block_identifier: Some(BlockIdentifier::from(genesis_block)),
                             sync_status: None,
                             peers: vec![],
                         },network_status_response)
@@ -220,7 +223,7 @@ mod test {
                     }
 
                     #[test]
-                    fn test_block_service(blockchain in valid_blockchain_strategy::<Tokens>(BLOCKHAIN_LENGTH)){
+                    fn test_block_service(blockchain in valid_blockchain_strategy::<U256>(BLOCKHAIN_LENGTH)){
                         let storage_client_memory = Arc::new(StorageClient::new_in_memory().unwrap());
                         let invalid_block_hash = "0x1234".to_string();
                         let invalid_block_idx = blockchain.len() as u64 + 1;
@@ -228,7 +231,7 @@ mod test {
                         let mut rosetta_blocks = vec![];
 
                         for (index,block) in blockchain.clone().into_iter().enumerate(){
-                            rosetta_blocks.push(RosettaBlock::from_icrc_ledger_block(block,index as u64).unwrap());
+                            rosetta_blocks.push(RosettaBlock::from_generic_block(encoded_block_to_generic_block(&block.encode()),index as u64).unwrap());
                         }
 
                         storage_client_memory.store_blocks(rosetta_blocks.clone()).unwrap();
@@ -275,7 +278,7 @@ mod test {
                         assert!(block_res.unwrap_err().0.description.unwrap().contains("Invalid block hash provided"));
 
                         if !blockchain.is_empty() {
-                            let valid_block_hash = hex::encode(&rosetta_blocks[valid_block_idx as usize].block_hash);
+                            let valid_block_hash = hex::encode(rosetta_blocks[valid_block_idx as usize].clone().get_block_hash());
 
                             block_identifier = PartialBlockIdentifier{
                                 index: Some(valid_block_idx),
@@ -341,7 +344,7 @@ mod test {
             }
 
             #[test]
-            fn test_block_transaction_service(blockchain in valid_blockchain_strategy::<Tokens>(BLOCKHAIN_LENGTH)){
+            fn test_block_transaction_service(blockchain in valid_blockchain_strategy::<U256>(BLOCKHAIN_LENGTH)){
                 let storage_client_memory = Arc::new(StorageClient::new_in_memory().unwrap());
                 let invalid_block_hash = "0x1234".to_string();
                 let invalid_block_idx = blockchain.len() as u64 + 1;
@@ -349,7 +352,7 @@ mod test {
                 let mut rosetta_blocks = vec![];
 
                 for (index,block) in blockchain.clone().into_iter().enumerate(){
-                    rosetta_blocks.push(RosettaBlock::from_icrc_ledger_block(block,index as u64).unwrap());
+                    rosetta_blocks.push(RosettaBlock::from_generic_block(encoded_block_to_generic_block(&block.encode()),index as u64).unwrap());
                 }
 
                 let metadata = Metadata{
@@ -377,8 +380,8 @@ mod test {
                 assert!(block_transaction_res.unwrap_err().0.description.unwrap().contains(&format!("Block at index {} could not be found",invalid_block_idx)));
 
                 if !blockchain.is_empty() {
-                    let valid_block_hash = hex::encode(&rosetta_blocks[valid_block_idx as usize].block_hash);
-                    let valid_tx_hash = hex::encode(rosetta_blocks[valid_block_idx as usize].transaction_hash.as_ref());
+                    let valid_block_hash = hex::encode(rosetta_blocks[valid_block_idx as usize].clone().get_block_hash());
+                    let valid_tx_hash = hex::encode(rosetta_blocks[valid_block_idx as usize].clone().get_transaction_hash().as_ref());
 
                     block_identifier = BlockIdentifier{
                         index: valid_block_idx,

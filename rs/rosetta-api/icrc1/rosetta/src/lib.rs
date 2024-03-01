@@ -1,5 +1,6 @@
 use anyhow::{bail, Context};
-use common::storage::{storage_client::StorageClient, types::MetadataEntry};
+use common::storage::storage_client::StorageClient;
+use common::storage::types::MetadataEntry;
 use ic_base_types::CanisterId;
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
