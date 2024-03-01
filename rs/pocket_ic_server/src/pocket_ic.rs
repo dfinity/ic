@@ -27,13 +27,14 @@ use ic_types::{
     artifact_kind::IngressArtifact,
     crypto::{BasicSig, BasicSigOf, CryptoResult, Signable},
     messages::{CertificateDelegation, QueryResponseHash, ReplicaHealthStatus},
-    CanisterId, NodeId, PrincipalId, RegistryVersion, SubnetId,
+    CanisterId, NodeId, NumInstructions, PrincipalId, RegistryVersion, SubnetId,
 };
 use ic_validator_ingress_message::StandaloneIngressSigVerifier;
 use itertools::Itertools;
 use pocket_ic::common::rest::{
     self, BinaryBlob, BlobCompression, ExtendedSubnetConfigSet, RawAddCycles, RawCanisterCall,
-    RawEffectivePrincipal, RawSetStableMemory, SubnetKind, SubnetSpec, Topology,
+    RawEffectivePrincipal, RawSetStableMemory, SubnetInstructionConfig, SubnetKind, SubnetSpec,
+    Topology,
 };
 use rand::rngs::StdRng;
 use rand::Rng;
@@ -74,14 +75,20 @@ impl PocketIc {
         let fixed_range_subnets = subnet_configs.get_named();
         let flexible_subnets = {
             // note that for these, the subnet ids are currently ignored.
-            let sys = subnet_configs
-                .system
-                .iter()
-                .map(|spec| (SubnetKind::System, spec.get_path()));
-            let app = subnet_configs
-                .application
-                .iter()
-                .map(|spec| (SubnetKind::Application, spec.get_path()));
+            let sys = subnet_configs.system.iter().map(|spec| {
+                (
+                    SubnetKind::System,
+                    spec.get_state_path(),
+                    spec.get_instruction_config(),
+                )
+            });
+            let app = subnet_configs.application.iter().map(|spec| {
+                (
+                    SubnetKind::Application,
+                    spec.get_state_path(),
+                    spec.get_instruction_config(),
+                )
+            });
             sys.chain(app)
         };
 
@@ -96,7 +103,7 @@ impl PocketIc {
 
         let ii_subnet_split = subnet_configs.ii.is_some();
 
-        for (subnet_kind, subnet_state_dir) in
+        for (subnet_kind, subnet_state_dir, instruction_config) in
             fixed_range_subnets.into_iter().chain(flexible_subnets)
         {
             let RangeConfig {
@@ -117,6 +124,7 @@ impl PocketIc {
                 alloc_range,
                 subnet_kind,
                 state_dir,
+                instruction_config,
             });
         }
 
@@ -133,11 +141,23 @@ impl PocketIc {
                 alloc_range,
                 subnet_kind,
                 state_dir,
+                instruction_config,
             },
         ) in subnet_config_info.into_iter().enumerate()
         {
-            let subnet_config = SubnetConfig::new(conv_type(subnet_kind));
-            let hypervisor_config = execution_environment::Config::default();
+            let mut subnet_config = SubnetConfig::new(conv_type(subnet_kind));
+            let mut hypervisor_config = execution_environment::Config::default();
+            if let SubnetInstructionConfig::Benchmarking = instruction_config {
+                let instruction_limit = NumInstructions::new(99_999_999_999_999);
+                if instruction_limit > subnet_config.scheduler_config.max_instructions_per_round {
+                    subnet_config.scheduler_config.max_instructions_per_round = instruction_limit;
+                }
+                subnet_config.scheduler_config.max_instructions_per_message = instruction_limit;
+                subnet_config
+                    .scheduler_config
+                    .max_instructions_per_message_without_dts = instruction_limit;
+                hypervisor_config.max_query_call_graph_instructions = instruction_limit;
+            }
             let sm_config = StateMachineConfig::new(subnet_config, hypervisor_config);
             let subnet_size = subnet_size(subnet_kind);
             let mut builder = StateMachineBuilder::new()
@@ -181,6 +201,7 @@ impl PocketIc {
                 subnet_kind,
                 size: subnet_size,
                 canister_ranges: ranges.iter().map(from_range).collect(),
+                instruction_config,
             };
             topology.0.insert(subnet_id.get().0, subnet_config);
         }
@@ -296,7 +317,7 @@ impl Default for PocketIc {
         Self::new(
             Runtime::new().unwrap().into(),
             ExtendedSubnetConfigSet {
-                application: vec![SubnetSpec::New],
+                application: vec![SubnetSpec::default()],
                 ..Default::default()
             },
         )
@@ -460,6 +481,7 @@ struct SubnetConfigInfo {
     pub alloc_range: Option<CanisterIdRange>,
     pub subnet_kind: SubnetKind,
     pub state_dir: Option<TempDir>,
+    pub instruction_config: SubnetInstructionConfig,
 }
 
 // ---------------------------------------------------------------------------------------- //
@@ -607,10 +629,10 @@ impl Operation for ExecuteIngressMessage {
                                 _ => {}
                             }
                         }
-                        panic!(
-                            "Failed to answer to ingress {} after {} xnet rounds.",
+                        OpOut::Error(PocketIcError::BadIngressMessage(format!(
+                            "Failed to answer to ingress {} after {} rounds.",
                             msg_id, max_rounds
-                        );
+                        )))
                     }
                 }
             }
@@ -1523,7 +1545,7 @@ mod tests {
         let mut pic = PocketIc::new(
             Runtime::new().unwrap().into(),
             ExtendedSubnetConfigSet {
-                ii: Some(SubnetSpec::New),
+                ii: Some(SubnetSpec::default()),
                 ..Default::default()
             },
         );

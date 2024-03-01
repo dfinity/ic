@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - New endpoints `/instances/<instance_id>/auto_progress` and `/instances/<instance_id>/stop_progress` to make IC instances
   progress (updating time and executing rounds) automatically.
+- New endpoints `/instances/<instance_id>/api/v2/...` supporting the HTTP interface of the IC as described
+  by the [Interface Specification](https://internetcomputer.org/docs/current/references/ic-interface-spec).
+- New subnet specification allowing to set very high instruction limits for (asymptotic) benchmarking canister code.
 
 ### Fixed
 
@@ -25,7 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Traps in tECDSA calls due to malformed tECDSA public key.
-- Server rejects jsons containing unimplemented variants of `SubnetSpec`.
+- Server rejects jsons containing unimplemented variants of `SubnetStateConfig`.
 - The `inspect_message` method no longer panics when call is rejected.
 
 ## 3.0.0 - 2024-02-06

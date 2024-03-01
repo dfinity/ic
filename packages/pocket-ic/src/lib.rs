@@ -89,7 +89,7 @@ impl PocketIcBuilder {
     pub fn with_nns_subnet(self) -> Self {
         Self {
             config: ExtendedSubnetConfigSet {
-                nns: Some(SubnetSpec::New),
+                nns: Some(SubnetSpec::default()),
                 ..self.config
             },
         }
@@ -131,10 +131,7 @@ impl PocketIcBuilder {
     pub fn with_nns_state(self, nns_subnet_id: SubnetId, path_to_state: PathBuf) -> Self {
         Self {
             config: ExtendedSubnetConfigSet {
-                nns: Some(SubnetSpec::FromPath(
-                    path_to_state,
-                    RawSubnetId::from(nns_subnet_id),
-                )),
+                nns: Some(SubnetSpec::default().with_state_dir(path_to_state, nns_subnet_id)),
                 ..self.config
             },
         }
@@ -144,7 +141,7 @@ impl PocketIcBuilder {
     pub fn with_sns_subnet(self) -> Self {
         Self {
             config: ExtendedSubnetConfigSet {
-                sns: Some(SubnetSpec::New),
+                sns: Some(SubnetSpec::default()),
                 ..self.config
             },
         }
@@ -153,7 +150,7 @@ impl PocketIcBuilder {
     pub fn with_ii_subnet(self) -> Self {
         Self {
             config: ExtendedSubnetConfigSet {
-                ii: Some(SubnetSpec::New),
+                ii: Some(SubnetSpec::default()),
                 ..self.config
             },
         }
@@ -163,7 +160,7 @@ impl PocketIcBuilder {
     pub fn with_fiduciary_subnet(self) -> Self {
         Self {
             config: ExtendedSubnetConfigSet {
-                fiduciary: Some(SubnetSpec::New),
+                fiduciary: Some(SubnetSpec::default()),
                 ..self.config
             },
         }
@@ -173,7 +170,7 @@ impl PocketIcBuilder {
     pub fn with_bitcoin_subnet(self) -> Self {
         Self {
             config: ExtendedSubnetConfigSet {
-                bitcoin: Some(SubnetSpec::New),
+                bitcoin: Some(SubnetSpec::default()),
                 ..self.config
             },
         }
@@ -181,13 +178,20 @@ impl PocketIcBuilder {
 
     /// Add an empty generic system subnet
     pub fn with_system_subnet(mut self) -> Self {
-        self.config.system.push(SubnetSpec::New);
+        self.config.system.push(SubnetSpec::default());
         self
     }
 
     /// Add an empty generic application subnet
     pub fn with_application_subnet(mut self) -> Self {
-        self.config.application.push(SubnetSpec::New);
+        self.config.application.push(SubnetSpec::default());
+        self
+    }
+
+    pub fn with_benchmarking_application_subnet(mut self) -> Self {
+        self.config
+            .application
+            .push(SubnetSpec::default().with_benchmarking_instruction_config());
         self
     }
 }
