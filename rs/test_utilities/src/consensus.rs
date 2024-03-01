@@ -233,7 +233,7 @@ impl EcdsaStats for EcdsaStatsNoOp {
         _duration: Duration,
     ) {
     }
-    fn update_active_signature_requests(&self, _block_reader: &dyn EcdsaBlockReader) {}
+    fn update_active_signature_requests(&self, _requests: Vec<RequestId>) {}
     fn record_sig_share_validation(&self, _request_id: &RequestId, _duration: Duration) {}
     fn record_sig_share_aggregation(&self, _request_id: &RequestId, _duration: Duration) {}
 }
