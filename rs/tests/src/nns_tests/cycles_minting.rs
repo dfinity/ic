@@ -36,12 +36,9 @@ use ic_nns_common::types::{NeuronId, UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, ROOT_CANISTER_ID,
 };
-use ic_nns_governance::pb::v1::NnsFunction;
-use ic_nns_test_utils::{
-    governance::{
-        submit_external_update_proposal_allowing_error, upgrade_nns_canister_by_proposal,
-    },
-    ids::TEST_NEURON_1_ID,
+use ic_nns_governance::{init::TEST_NEURON_1_ID, pb::v1::NnsFunction};
+use ic_nns_test_utils::governance::{
+    submit_external_update_proposal_allowing_error, upgrade_nns_canister_by_proposal,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_rosetta_test_utils::make_user_ed25519;

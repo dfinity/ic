@@ -7,8 +7,10 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount_bytes;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::ROOT_CANISTER_ID;
-use ic_nns_governance::pb::v1::{manage_neuron::NeuronIdOrSubaccount, proposal::Action, Proposal};
-use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
+use ic_nns_governance::{
+    init::TEST_NEURON_1_ID,
+    pb::v1::{manage_neuron::NeuronIdOrSubaccount, proposal::Action, Proposal},
+};
 use std::{
     collections::HashSet,
     fmt::{Debug, Display, Formatter},

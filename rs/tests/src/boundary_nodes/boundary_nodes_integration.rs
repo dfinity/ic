@@ -46,9 +46,8 @@ use ic_canister_client::Sender;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nns_common::types::NeuronId;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
-use ic_nns_governance::pb::v1::NnsFunction;
+use ic_nns_governance::{init::TEST_NEURON_1_ID, pb::v1::NnsFunction};
 use ic_nns_test_utils::governance::submit_external_update_proposal;
-use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
 use registry_canister::mutations::{
     do_add_api_boundary_node::AddApiBoundaryNodePayload,
     node_management::do_update_node_domain_directly::UpdateNodeDomainDirectlyPayload,

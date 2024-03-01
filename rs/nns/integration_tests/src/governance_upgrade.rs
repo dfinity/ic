@@ -19,7 +19,7 @@ use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID, GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET, ROOT_CANISTER_ID,
 };
 use ic_nns_governance::{
-    init::GovernanceCanisterInitPayloadBuilder,
+    init::{GovernanceCanisterInitPayloadBuilder, TEST_NEURON_1_ID},
     pb::v1::{
         manage_neuron::{configure, Command, Configure, NeuronIdOrSubaccount, RemoveHotKey},
         ManageNeuron, ManageNeuronResponse,
@@ -27,7 +27,6 @@ use ic_nns_governance::{
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    ids::TEST_NEURON_1_ID,
     itest_helpers::install_governance_canister,
     state_test_helpers::{
         create_canister_id_at_position, setup_nns_root_with_correct_canister_id, update_with_sender,

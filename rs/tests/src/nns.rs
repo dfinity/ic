@@ -23,13 +23,16 @@ use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID};
-use ic_nns_governance::pb::v1::{
-    manage_neuron::{Command, NeuronIdOrSubaccount, RegisterVote},
-    ManageNeuron, ManageNeuronResponse, NnsFunction, ProposalInfo, ProposalStatus, Vote,
+use ic_nns_governance::{
+    init::TEST_NEURON_1_ID,
+    pb::v1::{
+        manage_neuron::{Command, NeuronIdOrSubaccount, RegisterVote},
+        ManageNeuron, ManageNeuronResponse, NnsFunction, ProposalInfo, ProposalStatus, Vote,
+    },
 };
+use ic_nns_test_utils::governance::get_proposal_info;
 use ic_nns_test_utils::governance::submit_external_update_proposal_allowing_error;
 use ic_nns_test_utils::governance::{submit_external_update_proposal, wait_for_final_state};
-use ic_nns_test_utils::{governance::get_proposal_info, ids::TEST_NEURON_1_ID};
 use ic_prep_lib::subnet_configuration::{self, duration_to_millis};
 use ic_protobuf::registry::subnet::v1::SubnetListRecord;
 use ic_registry_client_helpers::deserialize_registry_value;

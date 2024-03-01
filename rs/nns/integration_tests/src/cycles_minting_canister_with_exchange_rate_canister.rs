@@ -7,12 +7,12 @@ use ic_nns_common::{
     types::{UpdateIcpXdrConversionRatePayload, UpdateIcpXdrConversionRatePayloadReason},
 };
 use ic_nns_constants::EXCHANGE_RATE_CANISTER_ID;
-use ic_nns_governance::pb::v1::{
-    manage_neuron_response, proposal::Action, ExecuteNnsFunction, NnsFunction, Proposal,
+use ic_nns_governance::{
+    init::TEST_NEURON_1_ID,
+    pb::v1::{manage_neuron_response, proposal::Action, ExecuteNnsFunction, NnsFunction, Proposal},
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    ids::TEST_NEURON_1_ID,
     state_test_helpers::{
         create_canister, get_icp_xdr_conversion_rate, nns_governance_make_proposal,
         nns_wait_for_proposal_execution, setup_nns_canisters,

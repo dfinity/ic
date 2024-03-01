@@ -13,6 +13,7 @@ use ic_nervous_system_common_test_keys::{
 use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
 use ic_nns_constants::{LIFELINE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance::{
+    init::{TEST_NEURON_1_ID, TEST_NEURON_2_ID},
     pb::v1::{
         manage_neuron::{Command, NeuronIdOrSubaccount},
         manage_neuron_response::Command as CommandResponse,
@@ -23,7 +24,6 @@ use ic_nns_governance::{
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     governance::{get_pending_proposals, wait_for_final_state, UpgradeRootProposal},
-    ids::{TEST_NEURON_1_ID, TEST_NEURON_2_ID},
     itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
     state_test_helpers::{nns_governance_make_proposal, setup_nns_canisters, update_with_sender},
 };

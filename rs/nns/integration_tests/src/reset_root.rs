@@ -4,13 +4,15 @@ use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_PRINCIPAL;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{LIFELINE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance::{
-    pb::v1::{manage_neuron_response::Command, NnsFunction},
-    proposals::proposal_submission::create_external_update_proposal_candid,
+    init::TEST_NEURON_1_ID,
+    {
+        pb::v1::{manage_neuron_response::Command, NnsFunction},
+        proposals::proposal_submission::create_external_update_proposal_candid,
+    },
 };
 use ic_nns_test_utils::{
     common::{build_root_wasm, modify_wasm_bytes, NnsInitPayloadsBuilder},
     governance::HardResetNnsRootToVersionPayload,
-    ids::TEST_NEURON_1_ID,
     state_test_helpers::{
         nns_governance_make_proposal, nns_wait_for_proposal_execution, setup_nns_canisters,
         update_with_sender,

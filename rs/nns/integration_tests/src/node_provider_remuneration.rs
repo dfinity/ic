@@ -10,6 +10,7 @@ use ic_nns_common::{pb::v1::NeuronId as ProtoNeuronId, types::UpdateIcpXdrConver
 use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
 use ic_nns_governance::{
     governance::{ONE_DAY_SECONDS, ONE_MONTH_SECONDS},
+    init::TEST_NEURON_1_ID,
     pb::v1::{
         add_or_remove_node_provider::Change,
         manage_neuron_response::Command as CommandResponse,
@@ -21,7 +22,6 @@ use ic_nns_governance::{
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    ids::TEST_NEURON_1_ID,
     state_test_helpers::{
         get_pending_proposals, ledger_account_balance, nns_get_monthly_node_provider_rewards,
         nns_get_most_recent_monthly_node_provider_rewards, nns_get_network_economics_parameters,

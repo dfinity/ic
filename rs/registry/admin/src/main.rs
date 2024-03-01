@@ -36,6 +36,7 @@ use ic_nns_common::types::{NeuronId, ProposalId, UpdateIcpXdrConversionRatePaylo
 use ic_nns_constants::{memory_allocation_of, GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance::{
     governance::{BitcoinNetwork, BitcoinSetConfigProposal},
+    init::TEST_NEURON_1_ID,
     pb::v1::{
         add_or_remove_node_provider::Change,
         create_service_nervous_system::{
@@ -59,10 +60,7 @@ use ic_nns_governance::{
 };
 use ic_nns_handler_root::root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot};
 use ic_nns_init::make_hsm_sender;
-use ic_nns_test_utils::{
-    governance::{HardResetNnsRootToVersionPayload, UpgradeRootProposal},
-    ids::TEST_NEURON_1_ID,
-};
+use ic_nns_test_utils::governance::{HardResetNnsRootToVersionPayload, UpgradeRootProposal};
 use ic_prep_lib::subnet_configuration;
 use ic_protobuf::registry::{
     api_boundary_node::v1::ApiBoundaryNodeRecord,
