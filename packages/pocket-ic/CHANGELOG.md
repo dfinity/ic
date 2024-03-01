@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - New functions `auto_progress` and `stop_progress` to make IC instances
   progress (updating time and executing rounds) automatically.
+- New subnet specification allowing to set very high instruction limits for (asymptotic) benchmarking canister code.
 
 ## 2.2.0 - 2024-02-14
 

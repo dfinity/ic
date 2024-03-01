@@ -175,12 +175,15 @@ pub async fn run_drun(uo: DrunOptions) -> Result<(), String> {
 
     // If an instruction limit was specified, update the config with the provided instruction limit.
     if let Some(instruction_limit) = instruction_limit {
-        subnet_config.scheduler_config.max_instructions_per_message =
-            NumInstructions::new(instruction_limit);
+        let instruction_limit = NumInstructions::new(instruction_limit);
+        if instruction_limit > subnet_config.scheduler_config.max_instructions_per_round {
+            subnet_config.scheduler_config.max_instructions_per_round = instruction_limit;
+        }
+        subnet_config.scheduler_config.max_instructions_per_message = instruction_limit;
         subnet_config
             .scheduler_config
-            .max_instructions_per_message_without_dts = NumInstructions::new(instruction_limit);
-        cfg.hypervisor.max_query_call_graph_instructions = NumInstructions::new(instruction_limit);
+            .max_instructions_per_message_without_dts = instruction_limit;
+        cfg.hypervisor.max_query_call_graph_instructions = instruction_limit;
     }
 
     let subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(0));

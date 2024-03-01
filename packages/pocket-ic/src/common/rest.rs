@@ -332,13 +332,33 @@ impl From<SubnetConfigSet> for ExtendedSubnetConfigSet {
         }: SubnetConfigSet,
     ) -> Self {
         ExtendedSubnetConfigSet {
-            nns: if nns { Some(SubnetSpec::New) } else { None },
-            sns: if sns { Some(SubnetSpec::New) } else { None },
-            ii: if ii { Some(SubnetSpec::New) } else { None },
-            fiduciary: if fid { Some(SubnetSpec::New) } else { None },
-            bitcoin: if bitcoin { Some(SubnetSpec::New) } else { None },
-            system: vec![SubnetSpec::New; system],
-            application: vec![SubnetSpec::New; application],
+            nns: if nns {
+                Some(SubnetSpec::default())
+            } else {
+                None
+            },
+            sns: if sns {
+                Some(SubnetSpec::default())
+            } else {
+                None
+            },
+            ii: if ii {
+                Some(SubnetSpec::default())
+            } else {
+                None
+            },
+            fiduciary: if fid {
+                Some(SubnetSpec::default())
+            } else {
+                None
+            },
+            bitcoin: if bitcoin {
+                Some(SubnetSpec::default())
+            } else {
+                None
+            },
+            system: vec![SubnetSpec::default(); system],
+            application: vec![SubnetSpec::default(); application],
         }
     }
 }
@@ -354,10 +374,71 @@ pub struct ExtendedSubnetConfigSet {
     pub application: Vec<SubnetSpec>,
 }
 
+/// Specifies various configurations for a subnet.
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct SubnetSpec {
+    state_config: SubnetStateConfig,
+    instruction_config: SubnetInstructionConfig,
+}
+
+impl SubnetSpec {
+    pub fn with_state_dir(mut self, path: PathBuf, subnet_id: SubnetId) -> SubnetSpec {
+        self.state_config = SubnetStateConfig::FromPath(path, RawSubnetId::from(subnet_id));
+        self
+    }
+
+    pub fn with_benchmarking_instruction_config(mut self) -> SubnetSpec {
+        self.instruction_config = SubnetInstructionConfig::Benchmarking;
+        self
+    }
+
+    pub fn get_state_path(&self) -> Option<PathBuf> {
+        self.state_config.get_path()
+    }
+
+    pub fn get_subnet_id(&self) -> Option<RawSubnetId> {
+        match &self.state_config {
+            SubnetStateConfig::New => None,
+            SubnetStateConfig::FromPath(_, subnet_id) => Some(subnet_id.clone()),
+            SubnetStateConfig::FromBlobStore(_, subnet_id) => Some(subnet_id.clone()),
+        }
+    }
+
+    pub fn get_instruction_config(&self) -> SubnetInstructionConfig {
+        self.instruction_config.clone()
+    }
+
+    pub fn is_supported(&self) -> bool {
+        match &self.state_config {
+            SubnetStateConfig::New => true,
+            SubnetStateConfig::FromPath(..) => true,
+            SubnetStateConfig::FromBlobStore(..) => false,
+        }
+    }
+}
+
+impl Default for SubnetSpec {
+    fn default() -> Self {
+        Self {
+            state_config: SubnetStateConfig::New,
+            instruction_config: SubnetInstructionConfig::Production,
+        }
+    }
+}
+
+/// Specifies instruction limits for canister execution on this subnet.
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub enum SubnetInstructionConfig {
+    /// Use default instruction limits as in production.
+    Production,
+    /// Use very high instruction limits useful for asymptotic canister benchmarking.
+    Benchmarking,
+}
+
 /// Specifies whether the subnet should be created from scratch or loaded
 /// from a path.
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
-pub enum SubnetSpec {
+pub enum SubnetStateConfig {
     /// Create new subnet with empty state.
     New,
     /// Load existing subnet state from the given path.
@@ -368,26 +449,26 @@ pub enum SubnetSpec {
     FromBlobStore(BlobId, RawSubnetId),
 }
 
-impl SubnetSpec {
+impl SubnetStateConfig {
     pub fn get_path(&self) -> Option<PathBuf> {
         match self {
-            SubnetSpec::FromPath(path, _) => Some(path.clone()),
-            SubnetSpec::FromBlobStore(_, _) => None,
-            SubnetSpec::New => None,
+            SubnetStateConfig::FromPath(path, _) => Some(path.clone()),
+            SubnetStateConfig::FromBlobStore(_, _) => None,
+            SubnetStateConfig::New => None,
         }
     }
     pub fn get_subnet_id(&self) -> Option<RawSubnetId> {
         match self {
-            SubnetSpec::FromPath(_, id) => Some(id.clone()),
-            SubnetSpec::FromBlobStore(_, id) => Some(id.clone()),
-            SubnetSpec::New => None,
+            SubnetStateConfig::FromPath(_, id) => Some(id.clone()),
+            SubnetStateConfig::FromBlobStore(_, id) => Some(id.clone()),
+            SubnetStateConfig::New => None,
         }
     }
 }
 
 impl ExtendedSubnetConfigSet {
     // Return the configured named subnets in order.
-    pub fn get_named(&self) -> Vec<(SubnetKind, Option<PathBuf>)> {
+    pub fn get_named(&self) -> Vec<(SubnetKind, Option<PathBuf>, SubnetInstructionConfig)> {
         use SubnetKind::*;
         vec![
             (self.nns.clone(), NNS),
@@ -398,7 +479,10 @@ impl ExtendedSubnetConfigSet {
         ]
         .into_iter()
         .filter(|(mb, _)| mb.is_some())
-        .map(|(mb, kind)| (kind, mb.unwrap().get_path()))
+        .map(|(mb, kind)| {
+            let spec = mb.unwrap();
+            (kind, spec.get_state_path(), spec.get_instruction_config())
+        })
         .collect()
     }
 
@@ -421,6 +505,8 @@ impl ExtendedSubnetConfigSet {
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct SubnetConfig {
     pub subnet_kind: SubnetKind,
+    /// Instruction limits for canister execution on this subnet.
+    pub instruction_config: SubnetInstructionConfig,
     /// Number of nodes in the subnet.
     pub size: u64,
     /// Some mainnet subnets have several disjunct canister ranges.
@@ -438,7 +524,14 @@ pub struct Topology(pub HashMap<SubnetId, SubnetConfig>);
 
 impl Topology {
     pub fn get_app_subnets(&self) -> Vec<SubnetId> {
-        self.find_subnets(SubnetKind::Application)
+        self.find_subnets(SubnetKind::Application, None)
+    }
+
+    pub fn get_benchmarking_app_subnets(&self) -> Vec<SubnetId> {
+        self.find_subnets(
+            SubnetKind::Application,
+            Some(SubnetInstructionConfig::Benchmarking),
+        )
     }
 
     pub fn get_bitcoin(&self) -> Option<SubnetId> {
@@ -462,13 +555,23 @@ impl Topology {
     }
 
     pub fn get_system_subnets(&self) -> Vec<SubnetId> {
-        self.find_subnets(SubnetKind::System)
+        self.find_subnets(SubnetKind::System, None)
     }
 
-    fn find_subnets(&self, kind: SubnetKind) -> Vec<SubnetId> {
+    fn find_subnets(
+        &self,
+        kind: SubnetKind,
+        instruction_config: Option<SubnetInstructionConfig>,
+    ) -> Vec<SubnetId> {
         self.0
             .iter()
-            .filter(|(_, config)| config.subnet_kind == kind)
+            .filter(|(_, config)| {
+                config.subnet_kind == kind
+                    && instruction_config
+                        .as_ref()
+                        .map(|instruction_config| config.instruction_config == *instruction_config)
+                        .unwrap_or(true)
+            })
             .map(|(id, _)| *id)
             .collect()
     }

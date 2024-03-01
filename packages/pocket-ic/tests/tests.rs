@@ -8,7 +8,7 @@ use icp_ledger::{
 };
 use pocket_ic::{
     common::rest::{BlobCompression, SubnetConfigSet, SubnetKind},
-    PocketIc, PocketIcBuilder, WasmResult,
+    PocketIc, PocketIcBuilder, UserError, WasmResult,
 };
 use std::{
     collections::HashMap,
@@ -100,6 +100,80 @@ fn test_auto_progress() {
         assert_eq!(counter, cur_counter);
         thread::sleep(Duration::from_millis(100));
     }
+}
+
+// Canister code with a very slow method.
+const VERY_SLOW_WAT: &str = r#"
+    (module
+        (import "ic0" "msg_reply" (func $msg_reply))
+        (import "ic0" "msg_reply_data_append"
+            (func $msg_reply_data_append (param i32 i32)))
+        (func $inc
+            ;; Increment a counter.
+            (i32.store
+                (i32.const 0)
+                (i32.add (i32.load (i32.const 0)) (i32.const 1))))
+        (func $run
+            ;; create a local variable and initialize it to 0
+            (local $i i32)
+            (local $j i32)
+            (loop $my_loop
+                i32.const 0
+                local.set $j
+                (loop $my_inner_loop
+                    ;; add one to $j
+                    local.get $j
+                    i32.const 1
+                    i32.add
+                    local.set $j
+                    ;; if $j is less than 100000 branch to loop
+                    local.get $j
+                    i32.const 100000
+                    i32.lt_s
+                    br_if $my_inner_loop
+                )
+                ;; add one to $i
+                local.get $i
+                i32.const 1
+                i32.add
+                local.set $i
+                ;; if $i is less than 200000 branch to loop
+                local.get $i
+                i32.const 200000
+                i32.lt_s
+                br_if $my_loop
+            )
+            (call $msg_reply))
+        (memory $memory 1)
+        (export "canister_update run" (func $run))
+        (export "canister_heartbeat" (func $inc))
+    )
+"#;
+
+fn run_very_slow_method(pic: &PocketIc) -> Result<WasmResult, UserError> {
+    // Create a canister and charge it with 2T cycles.
+    let can_id = pic.create_canister();
+    pic.add_cycles(can_id, 100 * INIT_CYCLES);
+
+    // Install the very slow canister wasm file on the canister.
+    let very_slow_wasm = wat::parse_str(VERY_SLOW_WAT).unwrap();
+    pic.install_canister(can_id, very_slow_wasm, vec![], None);
+
+    pic.update_call(can_id, Principal::anonymous(), "run", vec![])
+}
+
+#[test]
+fn test_benchmarking_subnet() {
+    let pic = PocketIcBuilder::new()
+        .with_benchmarking_application_subnet()
+        .build();
+    run_very_slow_method(&pic).unwrap();
+}
+
+#[test]
+fn very_slow_method_on_application_subnet() {
+    let pic = PocketIcBuilder::new().with_application_subnet().build();
+    run_very_slow_method(&pic).unwrap_err();
 }
 
 #[test]

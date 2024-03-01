@@ -709,16 +709,12 @@ fn contains_unimplemented(config: ExtendedSubnetConfigSet) -> bool {
             .chain(config.system)
             .chain(config.application),
         |spec: pocket_ic::common::rest::SubnetSpec| {
-            spec.get_subnet_id().is_some()
-                || matches!(
-                    spec,
-                    pocket_ic::common::rest::SubnetSpec::FromBlobStore(_, _)
-                )
+            spec.get_subnet_id().is_some() || !spec.is_supported()
         },
-    ) || matches!(
-        config.nns,
-        Some(pocket_ic::common::rest::SubnetSpec::FromBlobStore(_, _))
-    )
+    ) || config
+        .nns
+        .map(|spec| !spec.is_supported())
+        .unwrap_or_default()
 }
 
 /// Create a new empty IC instance from a given subnet configuration.
@@ -740,12 +736,12 @@ pub async fn create_instance(
             }),
         );
     }
-    // TODO: Remove this once the SubnetSpec variants are implemented
+    // TODO: Remove this once the SubnetStateConfig variants are implemented
     if contains_unimplemented(subnet_configs.clone()) {
         return (
             StatusCode::BAD_REQUEST,
             Json(rest::CreateInstanceResponse::Error {
-                message: "SubnetSpec::FromPath is currently only implemented for NNS. SubnetSpec::FromBlobStore is not yet implemented".to_owned(),
+                message: "SubnetStateConfig::FromPath is currently only implemented for NNS. SubnetStateConfig::FromBlobStore is not yet implemented".to_owned(),
             }),
         );
     }
