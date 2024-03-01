@@ -17,7 +17,7 @@ pub use page_allocator::{
     PageDeltaSerialization, PageSerialization,
 };
 pub use storage::{
-    BaseFileSerialization, MergeCandidate, OverlayFileSerialization, StorageLayout,
+    BaseFileSerialization, MergeCandidate, OverlayFileSerialization, Shard, StorageLayout,
     StorageSerialization, MAX_NUMBER_OF_FILES,
 };
 use storage::{OverlayFile, OverlayVersion, Storage};
@@ -187,11 +187,6 @@ impl PageDelta {
     /// If the page delta is empty, then it returns `None`.
     fn max_page_index(&self) -> Option<PageIndex> {
         self.0.max_key().map(PageIndex::from)
-    }
-
-    /// Number of pages in the PageDelta.
-    fn num_pages(&self) -> usize {
-        self.0.len()
     }
 }
 
@@ -504,9 +499,13 @@ impl PageMap {
     ) -> Result<(), PersistenceError> {
         match lsmt_config.lsmt_status {
             FlagStatus::Disabled => self.persist_to_file(&self.page_delta, &storage_layout.base()),
-            FlagStatus::Enabled => {
-                self.persist_to_overlay(&self.page_delta, &storage_layout.overlay(height), metrics)
-            }
+            FlagStatus::Enabled => self.persist_to_overlay(
+                &self.page_delta,
+                storage_layout,
+                height,
+                lsmt_config,
+                metrics,
+            ),
         }
     }
 
@@ -525,7 +524,9 @@ impl PageMap {
             }
             FlagStatus::Enabled => self.persist_to_overlay(
                 &self.unflushed_delta,
-                &storage_layout.overlay(height),
+                storage_layout,
+                height,
+                lsmt_config,
                 metrics,
             ),
         }
@@ -534,11 +535,13 @@ impl PageMap {
     fn persist_to_overlay(
         &self,
         page_delta: &PageDelta,
-        dst: &Path,
+        storage_layout: &dyn StorageLayout,
+        height: Height,
+        lsmt_config: &LsmtConfig,
         metrics: &StorageMetrics,
     ) -> Result<(), PersistenceError> {
         if !page_delta.is_empty() {
-            OverlayFile::write(page_delta, dst, metrics)
+            OverlayFile::write(page_delta, storage_layout, height, lsmt_config, metrics)
         } else {
             metrics.empty_delta_writes.inc();
             Ok(())

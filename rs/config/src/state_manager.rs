@@ -6,8 +6,8 @@ use std::path::PathBuf;
 pub struct LsmtConfig {
     /// Whether LSMT is enabled or not.
     pub lsmt_status: FlagStatus,
-    /// Number of pages per shard in sharded overlays; 0 if unlimited.
-    pub shard_num_pages: usize,
+    /// Number of pages per shard in sharded overlays; u64::MAX if unlimited.
+    pub shard_num_pages: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -48,6 +48,6 @@ fn file_backed_memory_allocator_default() -> FlagStatus {
 pub fn lsmt_config_default() -> LsmtConfig {
     LsmtConfig {
         lsmt_status: FlagStatus::Disabled,
-        shard_num_pages: 0,
+        shard_num_pages: u64::MAX,
     }
 }

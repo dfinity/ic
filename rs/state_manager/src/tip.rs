@@ -19,7 +19,7 @@ use ic_replicated_state::page_map::{MergeCandidate, StorageMetrics, MAX_NUMBER_O
 #[allow(unused)]
 use ic_replicated_state::{
     canister_state::execution_state::SandboxMemory,
-    page_map::{StorageLayout, PAGE_SIZE},
+    page_map::{Shard, StorageLayout, PAGE_SIZE},
     CanisterState, NumWasmPages, PageMap, ReplicatedState,
 };
 use ic_state_layout::{
@@ -148,11 +148,11 @@ where
         }
     }
 
-    fn overlay(&self, height: Height) -> PathBuf {
+    fn overlay(&self, height: Height, shard: Shard) -> PathBuf {
         match &self.page_map_type {
-            PageMapType::WasmMemory(_) => self.layout.vmemory_0_overlay(height),
-            PageMapType::StableMemory(_) => self.layout.stable_memory_overlay(height),
-            PageMapType::WasmChunkStore(_) => self.layout.wasm_chunk_store_overlay(height),
+            PageMapType::WasmMemory(_) => self.layout.vmemory_0_overlay(height, shard),
+            PageMapType::StableMemory(_) => self.layout.stable_memory_overlay(height, shard),
+            PageMapType::WasmChunkStore(_) => self.layout.wasm_chunk_store_overlay(height, shard),
         }
     }
 
@@ -162,6 +162,14 @@ where
             PageMapType::StableMemory(_) => self.layout.stable_memory_overlays(),
             PageMapType::WasmChunkStore(_) => self.layout.wasm_chunk_store_overlays(),
         }?)
+    }
+
+    fn overlay_height(&self, overlay: &Path) -> Result<Height, Box<dyn std::error::Error>> {
+        Ok(ic_state_layout::overlay_height(overlay)?)
+    }
+
+    fn overlay_shard(&self, overlay: &Path) -> Result<Shard, Box<dyn std::error::Error>> {
+        Ok(ic_state_layout::overlay_shard(overlay)?)
     }
 }
 

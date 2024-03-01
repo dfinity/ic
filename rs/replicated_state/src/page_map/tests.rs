@@ -31,7 +31,7 @@ fn persist_delta_to_base(
         Height::new(0),
         &LsmtConfig {
             lsmt_status: FlagStatus::Disabled,
-            shard_num_pages: 0,
+            shard_num_pages: u64::MAX,
         },
         metrics,
     )
