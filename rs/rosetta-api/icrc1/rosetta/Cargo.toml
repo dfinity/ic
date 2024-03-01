@@ -16,7 +16,7 @@ rusqlite = { version = "~0.28.0", features = ["bundled"] }
 ic-ledger-core = { path = "../../ledger_core" }
 ic-ledger-canister-core = { path = "../../ledger_canister_core" }
 ic-base-types = { path = "../../../types/base_types" }
-anyhow = { version = "1.0", default-features = false }
+anyhow = { workspace = true }
 tempfile = "3.1.0"
 candid = { workspace = true }
 serde_bytes = { workspace = true }

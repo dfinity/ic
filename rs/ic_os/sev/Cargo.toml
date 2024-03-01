@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-anyhow = "1.0.57"
+anyhow = { workspace = true }
 async-trait = "0.1.41"
 ic-types = { path = "../../types/types" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }

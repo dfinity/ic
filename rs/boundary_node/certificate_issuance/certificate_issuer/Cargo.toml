@@ -10,7 +10,7 @@ documentation.workspace = true
 path = "../certificate_orchestrator_interface"
 
 [dependencies]
-anyhow = "1.0.66"
+anyhow = { workspace = true }
 async-trait = "0.1.58"
 axum = { version = "0.6.1", features = ["json"] }
 candid = { workspace = true }

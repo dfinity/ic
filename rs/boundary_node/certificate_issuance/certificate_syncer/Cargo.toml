@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-anyhow = "1.0.66"
+anyhow = { workspace = true }
 async-trait = "0.1.59"
 axum = { version = "0.6.1", features = ["json"] }
 candid = { workspace = true }

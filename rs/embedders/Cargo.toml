@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-anyhow = "1.0.31"
+anyhow = { workspace = true }
 ic-config = { path = "../config" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-interfaces = { path = "../interfaces" }

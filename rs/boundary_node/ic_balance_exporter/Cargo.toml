@@ -11,7 +11,7 @@ name = "ic-balance-exporter"
 path = "src/main.rs"
 
 [dependencies]
-anyhow = "1.0.56"
+anyhow = { workspace = true }
 async-trait = "0.1.53"
 axum = "0.6.1"
 candid = { workspace = true }

@@ -7,7 +7,7 @@ edition.workspace = true
 documentation.workspace = true
 
 [dependencies]
-anyhow = "1.0.31"
+anyhow = { workspace = true }
 clap = { workspace = true }
 ed25519-consensus = "2.0.1"
 rand = "0.8"
