@@ -39,14 +39,14 @@ thread_local! {
 #[export_name = "canister_query <ic-cdk internal> http_transform"]
 extern "C" fn http_transform() {
     use crate::api::{
-        call::{arg_data, reply},
+        call::{arg_data, reply, ArgDecoderConfig},
         caller,
     };
     if caller() != Principal::management_canister() {
         crate::trap("This function is internal to ic-cdk and should not be called externally.");
     }
     crate::setup();
-    let (args,): (TransformArgs,) = arg_data();
+    let (args,): (TransformArgs,) = arg_data(ArgDecoderConfig::default());
     let int = u64::from_be_bytes(args.context[..].try_into().unwrap());
     let key = DefaultKey::from(KeyData::from_ffi(int));
     let func = TRANSFORMS.with(|transforms| transforms.borrow_mut().remove(key));
