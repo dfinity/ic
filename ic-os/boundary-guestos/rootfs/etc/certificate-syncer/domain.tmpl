@@ -76,8 +76,7 @@ server {
         proxy_set_header Host "{canister_id}.$primary_application_domain";
 
         # Cache
-        proxy_buffering on;
-        proxy_cache cache_static;
+        include "includes/cache.conf";
 
         proxy_pass http://icx_proxy;
         include "includes/proxy_headers.conf";
