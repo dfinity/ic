@@ -258,10 +258,10 @@ impl EcdsaStats for EcdsaStatsImpl {
         transcript_stats.create_transcript_duration.push(duration);
     }
 
-    fn update_active_signature_requests(&self, block_reader: &dyn EcdsaBlockReader) {
+    fn update_active_signature_requests(&self, requests: Vec<RequestId>) {
         let mut active_requests = HashSet::new();
         let mut state = self.state.lock().unwrap();
-        for (request_id, _) in block_reader.requested_signatures() {
+        for request_id in &requests {
             active_requests.insert(request_id);
 
             state
