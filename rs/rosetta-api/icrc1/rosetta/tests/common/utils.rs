@@ -1,13 +1,10 @@
 use candid::Nat;
-
 use ic_icrc_rosetta::common::storage::types::RosettaBlock;
 use ic_icrc_rosetta_client::RosettaClient;
-
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
 use icrc_ledger_types::icrc3::blocks::GetBlocksResponse;
 use rosetta_core::identifiers::NetworkIdentifier;
-
 use std::sync::Arc;
 
 pub async fn get_rosetta_blocks_from_icrc1_ledger(

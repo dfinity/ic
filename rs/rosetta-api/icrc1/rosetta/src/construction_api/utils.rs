@@ -2,7 +2,6 @@ use super::types::{
     CanisterMethodName, ConstructionPayloadsRequestMetadata, EnvelopePair, SignedTransaction,
     UnsignedTransaction,
 };
-use crate::common::storage::types::RosettaToken;
 use crate::common::types::OperationType;
 use crate::common::utils::utils::{
     icrc1_operation_to_rosetta_core_operation, rosetta_core_operation_to_icrc1_operation,
@@ -11,7 +10,6 @@ use anyhow::anyhow;
 use anyhow::{bail, Context};
 use candid::{Decode, Encode, Nat, Principal};
 use ic_agent::agent::{Envelope, EnvelopeContent};
-use ic_ledger_canister_core::ledger::LedgerTransaction;
 use ic_rosetta_api::models::ConstructionParseResponse;
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::account::Account;
@@ -111,7 +109,7 @@ pub fn build_icrc1_transaction_from_canister_method_args(
     canister_method_name: &CanisterMethodName,
     caller: &Principal,
     candid_bytes: Vec<u8>,
-) -> anyhow::Result<ic_icrc1::Transaction<RosettaToken>> {
+) -> anyhow::Result<crate::common::storage::types::IcrcTransaction> {
     Ok(match canister_method_name {
         CanisterMethodName::Icrc2Approve => {
             let ApproveArgs {
@@ -127,22 +125,18 @@ pub fn build_icrc1_transaction_from_canister_method_args(
                 format!("Could not decode approve args from: {:?} ", candid_bytes)
             })?;
 
-            let operation = ic_icrc1::Operation::Approve {
+            let operation = crate::common::storage::types::IcrcOperation::Approve {
                 spender,
-                amount: RosettaToken::try_from(amount).map_err(|err| anyhow!("{:?}", err))?,
+                amount,
                 from: Account {
                     owner: *caller,
                     subaccount: from_subaccount,
                 },
-                fee: fee
-                    .map(|fee| RosettaToken::try_from(fee).map_err(|err| anyhow!("{:?}", err)))
-                    .transpose()?,
-                expected_allowance: expected_allowance
-                    .map(|fee| RosettaToken::try_from(fee).map_err(|err| anyhow!("{:?}", err)))
-                    .transpose()?,
+                fee,
+                expected_allowance,
                 expires_at,
             };
-            ic_icrc1::Transaction {
+            crate::common::storage::types::IcrcTransaction {
                 operation,
                 memo,
                 created_at_time,
@@ -164,19 +158,17 @@ pub fn build_icrc1_transaction_from_canister_method_args(
                 )
             })?;
 
-            let operation = ic_icrc1::Operation::Transfer {
+            let operation = crate::common::storage::types::IcrcOperation::Transfer {
                 to,
-                amount: RosettaToken::try_from(amount).map_err(|err| anyhow!("{:?}", err))?,
+                amount,
                 from,
                 spender: Some(Account {
                     owner: *caller,
                     subaccount: spender_subaccount,
                 }),
-                fee: fee
-                    .map(|fee| RosettaToken::try_from(fee).map_err(|err| anyhow!("{:?}", err)))
-                    .transpose()?,
+                fee,
             };
-            ic_icrc1::Transaction {
+            crate::common::storage::types::IcrcTransaction {
                 operation,
                 memo,
                 created_at_time,
@@ -194,19 +186,17 @@ pub fn build_icrc1_transaction_from_canister_method_args(
                 format!("Could not decode transfer args from: {:?} ", candid_bytes)
             })?;
 
-            let operation = ic_icrc1::Operation::Transfer {
+            let operation = crate::common::storage::types::IcrcOperation::Transfer {
                 to,
-                amount: RosettaToken::try_from(amount).map_err(|err| anyhow!("{:?}", err))?,
+                amount,
                 from: Account {
                     owner: *caller,
                     subaccount: from_subaccount,
                 },
                 spender: None,
-                fee: fee
-                    .map(|fee| RosettaToken::try_from(fee).map_err(|err| anyhow!("{:?}", err)))
-                    .transpose()?,
+                fee,
             };
-            ic_icrc1::Transaction {
+            crate::common::storage::types::IcrcTransaction {
                 operation,
                 memo,
                 created_at_time,
@@ -236,19 +226,22 @@ pub fn build_transaction_hash_from_envelope_content(
         candid_encoded_bytes,
     )?;
 
-    // TODO Transaction hash may not match up due to incoherence of RosettaToken and U64/U256: https://dfinity.atlassian.net/browse/FI-1154?atlOrigin=eyJpIjoiOWMwNWEwOGI3ZTZmNDFiZDlhMjc0YTQ0YmFmZmY1MmEiLCJwIjoiaiJ9
-    Ok(icrc1_transaction.hash().to_string())
+    Ok(format!("{:?}", icrc1_transaction.hash().to_vec()))
 }
 
 pub fn build_icrc1_ledger_canister_method_args(
-    operation: ic_icrc1::Operation<RosettaToken>,
+    operation: crate::common::storage::types::IcrcOperation,
     memo: Option<Memo>,
     created_at_time: u64,
 ) -> anyhow::Result<Vec<u8>> {
     match operation {
-        ic_icrc1::Operation::Burn { .. } => bail!("Burn Operation not supported"),
-        ic_icrc1::Operation::Mint { .. } => bail!("Mint Operation not supported"),
-        ic_icrc1::Operation::Approve {
+        crate::common::storage::types::IcrcOperation::Burn { .. } => {
+            bail!("Burn Operation not supported")
+        }
+        crate::common::storage::types::IcrcOperation::Mint { .. } => {
+            bail!("Mint Operation not supported")
+        }
+        crate::common::storage::types::IcrcOperation::Approve {
             from,
             spender,
             amount,
@@ -258,14 +251,14 @@ pub fn build_icrc1_ledger_canister_method_args(
         } => Encode!(&ApproveArgs {
             from_subaccount: from.subaccount,
             spender,
-            amount: amount.into(),
-            expected_allowance: expected_allowance.map(|ea| ea.into()),
+            amount,
+            expected_allowance,
             expires_at,
-            fee: fee.map(|f| f.into()),
+            fee,
             memo: memo.clone(),
             created_at_time: Some(created_at_time),
         }),
-        ic_icrc1::Operation::Transfer {
+        crate::common::storage::types::IcrcOperation::Transfer {
             from,
             to,
             amount,
@@ -277,19 +270,19 @@ pub fn build_icrc1_ledger_canister_method_args(
                     spender_subaccount: spender.subaccount,
                     from,
                     to,
-                    fee: fee.map(|f| f.into()),
+                    fee,
                     created_at_time: Some(created_at_time),
                     memo,
-                    amount: amount.into(),
+                    amount,
                 })
             } else {
                 Encode!(&TransferArg {
                     from_subaccount: from.subaccount,
                     to,
-                    fee: fee.map(|f| f.into()),
+                    fee,
                     created_at_time: Some(created_at_time),
                     memo,
-                    amount: amount.into(),
+                    amount,
                 })
             }
         }
@@ -306,13 +299,19 @@ pub fn extract_caller_principal_from_rosetta_core_operation(
 
 /// This function takes in an icrc1 ledger operation and returns the principal that needs to call the icrc1 ledger for the given operation to be successful
 fn extract_caller_principal_from_icrc1_ledger_operation(
-    operation: &ic_icrc1::Operation<RosettaToken>,
+    operation: &crate::common::storage::types::IcrcOperation,
 ) -> anyhow::Result<Principal> {
     Ok(match operation {
-        ic_icrc1::Operation::Burn { .. } => bail!("Burn Operation not supported"),
-        ic_icrc1::Operation::Mint { .. } => bail!("Mint Operation not supported"),
-        ic_icrc1::Operation::Approve { from, .. } => from.owner,
-        ic_icrc1::Operation::Transfer { from, spender, .. } => spender.unwrap_or(*from).owner,
+        crate::common::storage::types::IcrcOperation::Burn { .. } => {
+            bail!("Burn Operation not supported")
+        }
+        crate::common::storage::types::IcrcOperation::Mint { .. } => {
+            bail!("Mint Operation not supported")
+        }
+        crate::common::storage::types::IcrcOperation::Approve { from, .. } => from.owner,
+        crate::common::storage::types::IcrcOperation::Transfer { from, spender, .. } => {
+            spender.unwrap_or(*from).owner
+        }
     })
 }
 
@@ -628,7 +627,7 @@ mod test {
                             LedgerEndpointArg::TransferArg(args) => {
                                 // ICRC Rosetta only supports transfer and approve operations, no burn or mint
                                 match icrc1_transaction.operation {
-                                    ic_icrc1::Operation::Transfer {
+                                    crate::common::storage::types::IcrcOperation::Transfer {
                                         to,
                                         amount,
                                         from,
@@ -636,7 +635,7 @@ mod test {
                                         ..
                                     } => {
                                         assert_eq!(to, args.to);
-                                        assert_eq!(args.amount, Nat::from(amount));
+                                        assert_eq!(args.amount, amount);
                                         assert_eq!(
                                             from,
                                             Account {
@@ -657,7 +656,7 @@ mod test {
                             LedgerEndpointArg::ApproveArg(args) => {
                                 // ICRC Rosetta only supports transfer and approve operations, no burn or mint
                                 match icrc1_transaction.operation {
-                                    ic_icrc1::Operation::Approve {
+                                    crate::common::storage::types::IcrcOperation::Approve {
                                         spender,
                                         amount,
                                         from,
@@ -666,7 +665,7 @@ mod test {
                                         expires_at,
                                     } => {
                                         assert_eq!(spender, args.spender);
-                                        assert_eq!(Nat::from(amount), args.amount);
+                                        assert_eq!(amount, args.amount);
                                         assert_eq!(
                                             from,
                                             Account {

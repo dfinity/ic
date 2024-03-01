@@ -236,6 +236,7 @@ mod tests {
     use ic_icrc1_test_utils::valid_construction_payloads_request_metadata;
     use ic_icrc1_test_utils::valid_transactions_strategy;
     use ic_icrc1_test_utils::DEFAULT_TRANSFER_FEE;
+    use ic_icrc1_tokens_u256::U256;
     use ic_icrc_rosetta_client::RosettaClient;
     use proptest::prelude::any;
     use proptest::proptest;
@@ -342,10 +343,10 @@ mod tests {
                             metadata: None,
                         };
                         let now = SystemTime::now();
-                        let icrc1_transaction = arg_with_caller
+                        let icrc1_transaction: ic_icrc1::Transaction<U256> = arg_with_caller
                             .to_transaction(minter_identity().sender().unwrap().into());
                         let rosetta_core_operation = icrc1_operation_to_rosetta_core_operation(
-                            icrc1_transaction.operation,
+                            icrc1_transaction.operation.into(),
                             currency.clone(),
                         )
                         .unwrap();

@@ -1,15 +1,17 @@
-use crate::common::storage::types::{MetadataEntry, RosettaBlock, RosettaToken, Tokens};
+use crate::common::storage::types::RosettaBlock;
 use crate::common::utils::utils::create_progress_bar_if_needed;
+use crate::MetadataEntry;
 use anyhow::{bail, Context};
-use ic_icrc1::{Operation, Transaction};
-use ic_ledger_core::block::EncodedBlock;
+use candid::Nat;
+use ic_ledger_core::tokens::Zero;
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
 use icrc_ledger_types::icrc1::account::Account;
-use num_traits::Bounded;
+use num_bigint::BigUint;
 use rusqlite::{named_params, params, Params};
 use rusqlite::{Connection, Statement};
 use serde_bytes::ByteBuf;
 use std::collections::{BTreeMap, HashMap};
+use std::str::FromStr;
 
 pub fn store_metadata(
     connection: &mut Connection,
@@ -60,8 +62,8 @@ pub fn update_account_balances(connection: &mut Connection) -> anyhow::Result<()
         account: &Account,
         index: u64,
         connection: &mut Connection,
-        account_balances_cache: &mut HashMap<Account, BTreeMap<u64, Tokens>>,
-    ) -> anyhow::Result<Option<RosettaToken>> {
+        account_balances_cache: &mut HashMap<Account, BTreeMap<u64, Nat>>,
+    ) -> anyhow::Result<Option<Nat>> {
         // Either fetch the balance from the cache or from the database
         match account_balances_cache.get(account).map(|balances| {
             balances
@@ -75,20 +77,20 @@ pub fn update_account_balances(connection: &mut Connection) -> anyhow::Result<()
 
     fn debit(
         account: Account,
-        amount: Tokens,
+        amount: Nat,
         index: u64,
         connection: &mut Connection,
-        account_balances_cache: &mut HashMap<Account, BTreeMap<u64, Tokens>>,
+        account_balances_cache: &mut HashMap<Account, BTreeMap<u64, Nat>>,
     ) -> anyhow::Result<()> {
         let new_balance = if let Some(balance) =
             get_account_balance_with_cache(&account, index, connection, account_balances_cache)?
         {
-            balance.checked_sub(&amount).with_context(|| {
+            Nat(balance.0.checked_sub(&amount.0).with_context(|| {
                 format!(
                     "Underflow while debiting account {} for amount {} at index {} (balance: {})",
                     account, amount, index, balance
                 )
-            })?
+            })?)
         } else {
             bail!("Trying to debit an account {} that has not yet been allocated any tokens (index: {})", account, index)
         };
@@ -101,20 +103,20 @@ pub fn update_account_balances(connection: &mut Connection) -> anyhow::Result<()
 
     fn credit(
         account: Account,
-        amount: Tokens,
+        amount: Nat,
         index: u64,
         connection: &mut Connection,
-        account_balances_cache: &mut HashMap<Account, BTreeMap<u64, Tokens>>,
+        account_balances_cache: &mut HashMap<Account, BTreeMap<u64, Nat>>,
     ) -> anyhow::Result<()> {
         let new_balance = if let Some(balance) =
             get_account_balance_with_cache(&account, index, connection, account_balances_cache)?
         {
-            balance.checked_add(&amount).with_context(|| {
+            Nat(balance.0.checked_add(&amount.0).with_context(|| {
                 format!(
                     "Overflow while crediting an account {} for amount {} at index {} (balance: {})",
                     account, amount, index, balance
                 )
-            })?
+            })?)
         } else {
             amount
         };
@@ -146,13 +148,13 @@ pub fn update_account_balances(connection: &mut Connection) -> anyhow::Result<()
 
     // For faster inserts, keep a cache of the account balances within a batch range in memory
     // This also makes the inserting of the account balances batchable and therefore faster
-    let mut account_balances_cache: HashMap<Account, BTreeMap<u64, Tokens>> = HashMap::new();
+    let mut account_balances_cache: HashMap<Account, BTreeMap<u64, Nat>> = HashMap::new();
 
     // As long as there are blocks to be fetched, keep on iterating over the blocks in the database with the given BATCH_SIZE interval
     while !rosetta_blocks.is_empty() {
         for rosetta_block in rosetta_blocks {
-            match rosetta_block.get_transaction()?.operation {
-                Operation::Burn { from, amount, .. } => {
+            match rosetta_block.get_transaction().operation {
+                crate::common::storage::types::IcrcOperation::Burn { from, amount, .. } => {
                     debit(
                         from,
                         amount,
@@ -161,7 +163,7 @@ pub fn update_account_balances(connection: &mut Connection) -> anyhow::Result<()
                         &mut account_balances_cache,
                     )?;
                 }
-                Operation::Mint { to, amount } => {
+                crate::common::storage::types::IcrcOperation::Mint { to, amount } => {
                     credit(
                         to,
                         amount,
@@ -170,10 +172,10 @@ pub fn update_account_balances(connection: &mut Connection) -> anyhow::Result<()
                         &mut account_balances_cache,
                     )?;
                 }
-                Operation::Approve { from, .. } => {
+                crate::common::storage::types::IcrcOperation::Approve { from, .. } => {
                     let fee = rosetta_block
                         .get_fee_payed()?
-                        .unwrap_or(Tokens::min_value());
+                        .unwrap_or(Nat(BigUint::zero()));
                     debit(
                         from,
                         fee,
@@ -182,17 +184,16 @@ pub fn update_account_balances(connection: &mut Connection) -> anyhow::Result<()
                         &mut account_balances_cache,
                     )?;
                 }
-                Operation::Transfer {
+                crate::common::storage::types::IcrcOperation::Transfer {
                     from, to, amount, ..
                 } => {
                     let fee = rosetta_block
                         .get_fee_payed()?
-                        .unwrap_or(Tokens::min_value());
-                    let payable_amount = amount
-                        .checked_add(&fee)
+                        .unwrap_or(Nat(BigUint::zero()));
+                    let payable_amount = Nat(amount.0.checked_add(&fee.0)
                         .with_context(|| format!("Overflow while adding the fee {} to the amount {} for block at index {}",
                             fee, amount, rosetta_block.index
-                    ))?;
+                    ))?);
 
                     credit(
                         to,
@@ -209,7 +210,7 @@ pub fn update_account_balances(connection: &mut Connection) -> anyhow::Result<()
                         &mut account_balances_cache,
                     )?;
 
-                    if let Some(collector) = rosetta_block.get_fee_collector()? {
+                    if let Some(collector) = rosetta_block.get_fee_collector() {
                         credit(
                             collector,
                             fee,
@@ -261,7 +262,8 @@ pub fn store_blocks(
 ) -> anyhow::Result<()> {
     let insert_tx = connection.transaction()?;
     for rosetta_block in rosetta_blocks.into_iter() {
-        let transaction: Transaction<Tokens> = rosetta_block.get_transaction()?;
+        let transaction: crate::common::storage::types::IcrcTransaction =
+            rosetta_block.get_transaction();
         let (
             operation_type,
             from_principal,
@@ -275,7 +277,7 @@ pub fn store_blocks(
             fee,
             approval_expires_at,
         ) = match transaction.operation {
-            ic_icrc1::Operation::Mint { to, amount } => (
+            crate::common::storage::types::IcrcOperation::Mint { to, amount } => (
                 "mint",
                 None,
                 None,
@@ -288,7 +290,7 @@ pub fn store_blocks(
                 None,
                 None,
             ),
-            ic_icrc1::Operation::Transfer {
+            crate::common::storage::types::IcrcOperation::Transfer {
                 from,
                 to,
                 amount,
@@ -307,7 +309,7 @@ pub fn store_blocks(
                 fee,
                 None,
             ),
-            ic_icrc1::Operation::Burn { from, amount, .. } => (
+            crate::common::storage::types::IcrcOperation::Burn { from, amount, .. } => (
                 "burn",
                 Some(from.owner),
                 from.subaccount,
@@ -320,7 +322,7 @@ pub fn store_blocks(
                 None,
                 None,
             ),
-            ic_icrc1::Operation::Approve {
+            crate::common::storage::types::IcrcOperation::Approve {
                 from,
                 spender,
                 amount,
@@ -345,11 +347,11 @@ pub fn store_blocks(
         "INSERT OR IGNORE INTO blocks (idx, hash, serialized_block, parent_hash, timestamp,tx_hash,operation_type,from_principal,from_subaccount,to_principal,to_subaccount,spender_principal,spender_subaccount,memo,amount,expected_allowance,fee,transaction_created_at_time,approval_expires_at) VALUES (:idx, :hash, :serialized_block, :parent_hash, :timestamp,:tx_hash,:operation_type,:from_principal,:from_subaccount,:to_principal,:to_subaccount,:spender_principal,:spender_subaccount,:memo,:amount,:expected_allowance,:fee,:transaction_created_at_time,:approval_expires_at)")?
                     .execute(named_params! {
                         ":idx":rosetta_block.index, 
-                        ":hash":rosetta_block.block_hash.as_slice().to_vec(), 
-                        ":serialized_block":rosetta_block.encoded_block.clone().into_vec(), 
-                        ":parent_hash":rosetta_block.parent_hash.clone().map(|hash| hash.as_slice().to_vec()), 
-                        ":timestamp":rosetta_block.timestamp,
-                        ":tx_hash":rosetta_block.transaction_hash.as_slice().to_vec(),
+                        ":hash":rosetta_block.clone().get_block_hash().as_slice().to_vec(), 
+                        ":serialized_block":rosetta_block.block, 
+                        ":parent_hash":rosetta_block.get_parent_hash().clone().map(|hash| hash.as_slice().to_vec()), 
+                        ":timestamp":rosetta_block.get_timestamp(),
+                        ":tx_hash":rosetta_block.clone().get_transaction_hash().as_slice().to_vec(),
                         ":operation_type":operation_type,
                         ":from_principal":from_principal.map(|x| x.as_slice().to_vec()),
                         ":from_subaccount":from_subaccount,
@@ -467,7 +469,7 @@ pub fn get_blocks_by_transaction_hash(
 pub fn get_account_balance_at_highest_block_idx(
     connection: &Connection,
     account: &Account,
-) -> anyhow::Result<Option<Tokens>> {
+) -> anyhow::Result<Option<Nat>> {
     get_account_balance_at_block_idx(connection, account, i64::MAX as u64)
 }
 
@@ -475,8 +477,8 @@ pub fn get_account_balance_at_block_idx(
     connection: &Connection,
     account: &Account,
     block_idx: u64,
-) -> anyhow::Result<Option<Tokens>> {
-    connection
+) -> anyhow::Result<Option<Nat>> {
+    Ok(connection
         .prepare_cached(
             "SELECT amount \
              FROM account_balances \
@@ -499,7 +501,9 @@ pub fn get_account_balance_at_block_idx(
                 "Unable to fetch balance of account {} at index {}",
                 account, block_idx
             )
-        })
+        })?
+        .map(|x: String| Nat::from_str(&x))
+        .transpose()?)
 }
 
 fn read_single_block<P>(stmt: &mut Statement, params: P) -> anyhow::Result<Option<RosettaBlock>>
@@ -525,18 +529,14 @@ where
     P: Params,
 {
     let blocks = stmt.query_map(params, |row| {
-        row.get(1).map(|x| {
-            RosettaBlock::from_encoded_block(
-                EncodedBlock::from_vec(x),
-                row.get(0)
-                    .context("Cannot retrieve Row 0 from blocks table")?,
-            )
-            .context("Cannot create RosettaBlock from Encoded Block")
+        Ok(RosettaBlock {
+            index: row.get(0)?,
+            block: row.get(1)?,
         })
     })?;
     let mut result = vec![];
     for block in blocks {
-        result.push(block??);
+        result.push(block?);
     }
     Ok(result)
 }

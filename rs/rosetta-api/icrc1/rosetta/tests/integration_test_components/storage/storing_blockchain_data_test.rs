@@ -1,6 +1,7 @@
 use crate::common::local_replica;
 use crate::common::local_replica::get_custom_agent;
 use crate::common::local_replica::test_identity;
+use candid::Nat;
 use ic_agent::identity::BasicIdentity;
 use ic_agent::Identity;
 use ic_base_types::PrincipalId;
@@ -12,14 +13,14 @@ use ic_icrc1_test_utils::ArgWithCaller;
 use ic_icrc1_test_utils::LedgerEndpointArg;
 use ic_icrc1_test_utils::DEFAULT_TRANSFER_FEE;
 use ic_icrc_rosetta::common::storage::storage_client::StorageClient;
-use ic_icrc_rosetta::common::storage::types::Tokens;
 use ic_icrc_rosetta::ledger_blocks_synchronization::blocks_synchronizer::{self};
 use ic_ledger_canister_core::archive::ArchiveOptions;
+use ic_ledger_core::tokens::Zero;
 use icrc_ledger_agent::CallMode;
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;
-use num_traits::Bounded;
+use num_bigint::BigUint;
 use num_traits::ToPrimitive;
 use proptest::prelude::*;
 use std::collections::HashMap;
@@ -115,8 +116,8 @@ more_controller_ids: None,
                 };
 
                 // Store the current balance of the involved accounts and add them to the list of accounts if not already present
-                let balance_acc1:Tokens = agent.balance_of(account1,CallMode::Query).await.unwrap().try_into().unwrap();
-                let balance_acc2:Tokens = agent.balance_of(account2,CallMode::Query).await.unwrap().try_into().unwrap();
+                let balance_acc1 = agent.balance_of(account1,CallMode::Query).await.unwrap();
+                let balance_acc2 = agent.balance_of(account2,CallMode::Query).await.unwrap();
                 account_balance_at_block_idx.insert((account1,block_idx),balance_acc1);
                 account_balance_at_block_idx.insert((account2,block_idx),balance_acc2);
                 accounts.insert(account1);
@@ -126,7 +127,7 @@ more_controller_ids: None,
 
             let mut current_balances = HashMap::new();
             for account in accounts.clone().into_iter(){
-                current_balances.insert(account,Tokens::min_value());
+                current_balances.insert(account,Nat(BigUint::zero()));
             }
 
             blocks_synchronizer::start_synching_blocks(agent.clone(), storage_client.clone(), 10).await.unwrap();
@@ -139,14 +140,14 @@ more_controller_ids: None,
             for idx in block_indices_iter.into_iter(){
                 for account in accounts.clone().into_iter(){
                     account_balance_at_block_idx.contains_key(&(account,idx)).then(|| current_balances.entry(account).and_modify(|balance| *balance = account_balance_at_block_idx.get(&(account,idx)).unwrap().clone()));
-                    assert_eq!(*current_balances.get(&account).unwrap(),storage_client.get_account_balance_at_block_idx(&account,idx).unwrap().unwrap_or(Tokens::min_value()));
+                    assert_eq!(*current_balances.get(&account).unwrap(),storage_client.get_account_balance_at_block_idx(&account,idx).unwrap().unwrap_or(Nat(BigUint::zero())));
                 }
             }
 
             // Check that the current balances of the ledger and rosetta storage match up
             for account  in accounts.clone().into_iter(){
-                let balance_ledger:Tokens = agent.balance_of(account,CallMode::Query).await.unwrap().try_into().unwrap();
-                let balance_rosetta = storage_client.get_account_balance(&account).unwrap().unwrap_or(Tokens::min_value());
+                let balance_ledger = agent.balance_of(account,CallMode::Query).await.unwrap();
+                let balance_rosetta = storage_client.get_account_balance(&account).unwrap().unwrap_or(Nat(BigUint::zero()));
                 assert_eq!(balance_ledger,balance_rosetta);
             }
         });

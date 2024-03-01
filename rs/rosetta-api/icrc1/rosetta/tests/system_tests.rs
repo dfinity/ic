@@ -233,7 +233,7 @@ async fn assert_rosetta_balance(
         .unwrap()
         .clone()
         .value;
-    assert_eq!(rosetta_balance, balance.to_string());
+    assert_eq!(rosetta_balance, Nat::from(balance).to_string());
 }
 
 #[tokio::test]
@@ -300,22 +300,22 @@ fn test_network_status(args_with_caller in valid_transactions_strategy(
         );
 
         assert_eq!(
-            hex::encode(rosetta_blocks.first().unwrap().block_hash.clone()),
+            hex::encode(rosetta_blocks.first().unwrap().clone().get_block_hash().clone()),
             rosetta_response.genesis_block_identifier.hash,
             "Genesis block hashes do not match"
         );
         assert_eq!(
-            hex::encode(rosetta_blocks.last().unwrap().block_hash.clone()),
+            hex::encode(rosetta_blocks.last().unwrap().clone().get_block_hash().clone()),
             rosetta_response.current_block_identifier.hash,
             "Current block hashes do not match"
         );
         assert_eq!(
-            hex::encode(rosetta_blocks.first().unwrap().block_hash.clone()),
+            hex::encode(rosetta_blocks.first().unwrap().clone().get_block_hash().clone()),
             rosetta_response.oldest_block_identifier.unwrap().hash,
             "Genesis block hashes do not match"
         );
         assert_eq!(
-            Duration::from_nanos(rosetta_blocks.last().unwrap().timestamp).as_millis() as u64,
+            Duration::from_nanos(rosetta_blocks.last().unwrap().get_timestamp()).as_millis() as u64,
             rosetta_response.current_block_timestamp
         );
     }
@@ -358,10 +358,10 @@ proptest! {
                 }).unwrap(),
             ));
 
-        assert_eq!(hex::encode(block.block_hash.clone()),expected_block_response.clone().block.unwrap().block_identifier.hash);
+        assert_eq!(hex::encode(block.clone().get_block_hash().clone()),expected_block_response.clone().block.unwrap().block_identifier.hash);
                 // Rosetta should be able to handle blockidentifieres with both the hash and the block index set
         let actual_block_response = env.rosetta_client.block(env.network_identifier.clone(), PartialBlockIdentifier{
-            hash:Some(hex::encode(block.block_hash.clone())),
+            hash:Some(hex::encode(block.clone().get_block_hash().clone())),
             index:Some(block.index)
         })
         .await
@@ -370,7 +370,7 @@ proptest! {
 
         // Rosetta should be able to handle blockidentifieres with only the hash set
         let actual_block_response = env.rosetta_client.block(env.network_identifier.clone(), PartialBlockIdentifier{
-            hash:Some(hex::encode(block.block_hash)),
+            hash:Some(hex::encode(block.clone().get_block_hash())),
             index:None
         })
         .await
@@ -429,15 +429,15 @@ proptest! {
                 ..Default::default()
             }).unwrap()};
 
-        assert_eq!(hex::encode(block.transaction_hash.clone()),expected_block_transaction_response.clone().transaction.transaction_identifier.hash);
+        assert_eq!(hex::encode(block.clone().get_transaction_hash().clone()),expected_block_transaction_response.clone().transaction.transaction_identifier.hash);
 
                 // Rosetta should be able to handle blockidentifieres with both the hash and the block index set
         let actual_block_transaction_response = env.rosetta_client.block_transaction(env.network_identifier.clone(),
             BlockIdentifier {
                             index: block.index,
-                            hash: hex::encode(block.block_hash.clone()),
+                            hash: hex::encode(block.clone().get_block_hash().clone()),
 
-        }, TransactionIdentifier{ hash: hex::encode(block.transaction_hash.clone()) })
+        }, TransactionIdentifier{ hash: hex::encode(block.clone().get_transaction_hash().clone()) })
         .await
         .expect("Failed to find block in Rosetta");
         assert_eq!(expected_block_transaction_response,actual_block_transaction_response);
@@ -445,9 +445,9 @@ proptest! {
         assert!(env.rosetta_client.block_transaction(env.network_identifier.clone(),
         BlockIdentifier {
                         index: u64::MAX,
-                        hash: hex::encode(block.block_hash.clone()),
+                        hash: hex::encode(block.clone().get_block_hash().clone()),
 
-    }, TransactionIdentifier{ hash: hex::encode(block.transaction_hash.clone()) })
+    }, TransactionIdentifier{ hash: hex::encode(block.clone().get_transaction_hash().clone()) })
     .await.is_err());
 
     assert!(env.rosetta_client.block_transaction(env.network_identifier.clone(),
@@ -455,13 +455,13 @@ proptest! {
                     index: block.index,
                     hash: hex::encode("wrong hash"),
 
-    }, TransactionIdentifier{ hash: hex::encode(block.transaction_hash) })
+    }, TransactionIdentifier{ hash: hex::encode(block.clone().get_transaction_hash()) })
     .await.is_err());
 
     assert!(env.rosetta_client.block_transaction(env.network_identifier.clone(),
         BlockIdentifier {
                         index: block.index,
-                        hash: hex::encode(block.block_hash),
+                        hash: hex::encode(block.clone().get_block_hash()),
 
 }, TransactionIdentifier{ hash: hex::encode("wrong tx hash") })
 .await.is_err());
