@@ -41,6 +41,7 @@ use crate::{
         ListNeurons, ListNeuronsResponse, ListProposalInfo, ListProposalInfoResponse, ManageNeuron,
         ManageNeuronResponse, MostRecentMonthlyNodeProviderRewards, Motion, NetworkEconomics,
         Neuron, NeuronInfo, NeuronState, NeuronsFundAuditInfo, NeuronsFundData,
+        NeuronsFundEconomics as NeuronsFundNetworkEconomicsPb,
         NeuronsFundParticipation as NeuronsFundParticipationPb,
         NeuronsFundSnapshot as NeuronsFundSnapshotPb, NnsFunction, NodeProvider, Proposal,
         ProposalData, ProposalInfo, ProposalRewardStatus, ProposalStatus, RewardEvent,
@@ -213,13 +214,13 @@ const VALID_MATURITY_MODULATION_BASIS_POINTS_RANGE: RangeInclusive<i32> = -500..
 // on small arrays.
 pub const DEPRECATED_TOPICS: [Topic; 1] = [Topic::SnsDecentralizationSale];
 
-// The default values for network economics (until we initialize it).
-// Can't implement Default since it conflicts with Prost's.
 impl NetworkEconomics {
     /// The multiplier applied to minimum_icp_xdr_rate to convert the XDR unit to basis_points
     pub const ICP_XDR_RATE_TO_BASIS_POINT_MULTIPLIER: u64 = 100;
 
-    pub const fn with_default_values() -> Self {
+    // The default values for network economics (until we initialize it).
+    // Can't implement Default since it conflicts with Prost's.
+    pub fn with_default_values() -> Self {
         Self {
             reject_cost_e8s: E8S_PER_ICP,                               // 1 ICP
             neuron_management_fee_per_proposal_e8s: 1_000_000,          // 0.01 ICP
@@ -229,6 +230,7 @@ impl NetworkEconomics {
             minimum_icp_xdr_rate: 100,                                  // 1 XDR
             transaction_fee_e8s: DEFAULT_TRANSFER_FEE.get_e8s(),
             max_proposals_to_keep_per_topic: 100,
+            neurons_fund_economics: Some(NeuronsFundNetworkEconomicsPb::with_default_values()),
         }
     }
 }
