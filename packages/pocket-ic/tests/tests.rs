@@ -137,9 +137,9 @@ const VERY_SLOW_WAT: &str = r#"
                 i32.const 1
                 i32.add
                 local.set $i
-                ;; if $i is less than 200000 branch to loop
+                ;; if $i is less than 100000 branch to loop
                 local.get $i
-                i32.const 200000
+                i32.const 100000
                 i32.lt_s
                 br_if $my_loop
             )
