@@ -2157,6 +2157,138 @@ fn can_do_simple_state_sync_transfer() {
 }
 
 #[test]
+fn test_start_and_cancel_state_sync() {
+    state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
+        let (_height, mut state) = src_state_manager.take_tip();
+        insert_dummy_canister(&mut state, canister_test_id(101));
+        src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        let hash1 = wait_for_checkpoint(&*src_state_manager, height(1));
+
+        let (_height, mut state) = src_state_manager.take_tip();
+        insert_dummy_canister(&mut state, canister_test_id(102));
+        src_state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+        let hash2 = wait_for_checkpoint(&*src_state_manager, height(2));
+
+        let (_height, mut state) = src_state_manager.take_tip();
+        insert_dummy_canister(&mut state, canister_test_id(103));
+        src_state_manager.commit_and_certify(state, height(3), CertificationScope::Full);
+        let hash3 = wait_for_checkpoint(&*src_state_manager, height(3));
+
+        let id1 = StateSyncArtifactId {
+            height: height(1),
+            hash: hash1.clone().get(),
+        };
+
+        let id2 = StateSyncArtifactId {
+            height: height(2),
+            hash: hash2.clone().get(),
+        };
+
+        let id3 = StateSyncArtifactId {
+            height: height(3),
+            hash: hash3.clone().get(),
+        };
+
+        let state = src_state_manager.get_latest_state().take();
+
+        assert_error_counters(src_metrics);
+
+        state_manager_test_with_state_sync(|dst_metrics, dst_state_manager, dst_state_sync| {
+            // the dst state manager is not requested to download any state.
+            assert!(dst_state_sync.start_state_sync(&id1).is_none());
+
+            // Request fetching of state @1.
+            dst_state_manager.fetch_state(height(1), hash1, Height::new(499));
+
+            // the dst state manager just reaches state height @1.
+            let (_height, mut dst_state) = dst_state_manager.take_tip();
+            insert_dummy_canister(&mut dst_state, canister_test_id(101));
+            dst_state_manager.commit_and_certify(dst_state, height(1), CertificationScope::Full);
+            wait_for_checkpoint(&*dst_state_manager, height(1));
+
+            // the dst state manager won't fetch any state which it has reached.
+            assert!(dst_state_sync.start_state_sync(&id1).is_none());
+
+            // Request fetching of state @2.
+            dst_state_manager.fetch_state(height(2), hash2.clone(), Height::new(499));
+
+            // the dst state manager won't fetch the state with a mismatched hash.
+            let malicious_id = StateSyncArtifactId {
+                height: height(2),
+                hash: CryptoHash(vec![0; 32]),
+            };
+            assert!(dst_state_sync.start_state_sync(&malicious_id).is_none());
+
+            // the dst state manager won't fetch the state with a mismatched height.
+            let malicious_id = StateSyncArtifactId {
+                height: height(100),
+                hash: hash2.get(),
+            };
+            assert!(dst_state_sync.start_state_sync(&malicious_id).is_none());
+
+            // starting state sync for state @2 should succeed with the correct artifact ID.
+            let chunkable = dst_state_sync
+                .start_state_sync(&id2)
+                .expect("failed to start state sync");
+
+            // TODO: (MR-537) Currently, this line of code will panic where we start a state sync at the same height as the ongoing one.
+            // The caller of `start_state_sync` (i.e. the state sync manager) currently ensures that the improper use of the API won't happen.
+            // We will improve this case by returning `None` instead of panicking.
+            // dst_state_sync.start_state_sync(&id2);
+
+            // Request fetching of state @3.
+            dst_state_manager.fetch_state(height(3), hash3, Height::new(499));
+            // a new start state sync won't be started if there is already an ongoing one.
+            assert!(dst_state_sync.start_state_sync(&id3).is_none());
+
+            // When `EXTRA_CHECKPOINTS_TO_KEEP` is set as 0, we should cancel an ongoing state sync if requested to fetch a newer state.
+            assert!(dst_state_sync.should_cancel(&id2));
+            drop(chunkable);
+
+            // starting state sync for state @3 should succeed after the old one is cancelled.
+            let chunkable = dst_state_sync
+                .start_state_sync(&id3)
+                .expect("failed to start state sync");
+            // The dst state manager has not reached the state @3 yet. It is not requested to fetch a newer state either.
+            // We should not cancel this ongoing state sync for state @3.
+            assert!(!dst_state_sync.should_cancel(&id3));
+
+            let msg = src_state_sync
+                .get_validated_by_identifier(&id3)
+                .expect("failed to get state sync messages");
+            let dst_msg = pipe_state_sync(msg, chunkable);
+
+            // Although the dst state manager finishes downloading chunks, the state sync is not delivered yet.
+            // We should not cancel this ongoing state sync for state @3.
+            assert!(!dst_state_sync.should_cancel(&id3));
+
+            // the state sync should finish successfully.
+            dst_state_sync.deliver_state_sync(dst_msg);
+
+            let recovered_state = dst_state_manager
+                .get_state_at(height(3))
+                .expect("Destination state manager didn't receive the state")
+                .take();
+
+            assert_eq!(height(3), dst_state_manager.latest_state_height());
+            assert_eq!(state, recovered_state);
+
+            let mut tip = dst_state_manager.take_tip().1;
+            // Because `take_tip()` modifies the `prev_state_hash`, we change it back to compare the rest of state.
+            tip.metadata.prev_state_hash = state.metadata.prev_state_hash.clone();
+            assert_eq!(*state.as_ref(), tip);
+            assert_eq!(
+                vec![height(1), height(3)],
+                heights_to_certify(&*dst_state_manager)
+            );
+
+            assert_error_counters(dst_metrics);
+            assert_no_remaining_chunks(dst_metrics);
+        })
+    })
+}
+
+#[test]
 fn state_sync_message_returns_none_for_invalid_chunk_requests() {
     state_manager_test_with_state_sync(|_, src_state_manager, src_state_sync| {
         let (_height, mut state) = src_state_manager.take_tip();
