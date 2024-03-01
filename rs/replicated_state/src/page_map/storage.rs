@@ -17,10 +17,11 @@ use crate::page_map::{
 };
 
 use bit_vec::BitVec;
+use ic_config::state_manager::LsmtConfig;
 use ic_sys::{PageBytes, PageIndex, PAGE_SIZE};
 use ic_types::Height;
 use itertools::Itertools;
-use phantom_newtype::Id;
+use phantom_newtype::{AmountOf, Id};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use strum_macros::{EnumCount, EnumIter};
@@ -297,26 +298,46 @@ impl OverlayFile {
         get_page_in_mapping(&self.mapping, position)
     }
 
-    /// Write a new overlay file to `path` containing all pages from `delta`.
+    /// Write a new overlay to the destination specified by `storage_layout` containing
+    /// all pages from `delta`.
+    /// The resulting overlay may consist of multiple shards.
     pub(crate) fn write(
         delta: &PageDelta,
-        path: &Path,
+        storage_layout: &dyn StorageLayout,
+        height: Height,
+        lsmt_config: &LsmtConfig,
         metrics: &StorageMetrics,
     ) -> Result<(), PersistenceError> {
         let _timer = metrics
             .write_duration
             .with_label_values(&[LABEL_OP_FLUSH])
             .start_timer();
-        let max_size = delta.num_pages();
-        let mut page_data: Vec<&[u8]> = Vec::with_capacity(max_size);
-        let mut page_indices: Vec<PageIndex> = Vec::with_capacity(max_size);
+        if delta.max_page_index().is_none() {
+            return Ok(());
+        }
+        let max_index = delta.max_page_index().unwrap().get();
+        // We actually need a division with rounding up, but we skip empty shards anyway so simple +1
+        // works.
+        let num_shards = 1 + max_index / lsmt_config.shard_num_pages;
+        let mut page_data: Vec<Vec<&[u8]>> = vec![Vec::new(); num_shards as usize];
+        let mut page_indices: Vec<Vec<PageIndex>> = vec![Vec::new(); num_shards as usize];
 
         for (index, data) in delta.iter() {
-            page_data.push(data.contents());
-            page_indices.push(index);
+            let shard = index.get() / lsmt_config.shard_num_pages;
+            page_data[shard as usize].push(data.contents());
+            page_indices[shard as usize].push(index);
         }
 
-        write_overlay(&page_data, &page_indices, path, metrics, LABEL_OP_FLUSH)
+        for shard in 0..num_shards {
+            write_overlay(
+                &page_data[shard as usize],
+                &page_indices[shard as usize],
+                &storage_layout.overlay(height, Shard::new(shard)),
+                metrics,
+                LABEL_OP_FLUSH,
+            )?
+        }
+        Ok(())
     }
 
     /// Load an overlay file from `path`.
@@ -729,16 +750,28 @@ fn check_mapping_correctness(mapping: &Mapping, path: &Path) -> Result<(), Persi
     Ok(())
 }
 
+/// Too large files are hard to write within one checkpoint interval, so we split them into multiple
+/// shards. E.g. if we need 400 GiB stable memory, we can write it as 8x50GiB files.
+/// If a certain range has no data, we don't create the shard. E.g. if the 400GiB file shaded by
+/// 50GiB only contains the last page, we would have only the shard number 7.
+pub struct ShardTag {}
+pub type Shard = AmountOf<ShardTag, u64>;
 /// Provide information from `StateLayout` about paths of a specific `PageMap`.
 pub trait StorageLayout {
     /// Base file path.
     fn base(&self) -> PathBuf;
 
     /// Path for overlay of given height.
-    fn overlay(&self, height: Height) -> PathBuf;
+    fn overlay(&self, height: Height, shard: Shard) -> PathBuf;
 
     /// All existing overlay files.
     fn existing_overlays(&self) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>>;
+
+    /// Get the height of an existing overlay path.
+    fn overlay_height(&self, overlay: &Path) -> Result<Height, Box<dyn std::error::Error>>;
+
+    /// Get the shard of an existing overlay path.
+    fn overlay_shard(&self, overlay: &Path) -> Result<Shard, Box<dyn std::error::Error>>;
 }
 
 /// Whether to merge into a base file or an overlay.
@@ -819,7 +852,7 @@ impl MergeCandidate {
         Ok(Some(MergeCandidate {
             overlays,
             base,
-            dst: MergeDestination::OverlayFile(layout.overlay(height).to_path_buf()),
+            dst: MergeDestination::OverlayFile(layout.overlay(height, Shard::new(0)).to_path_buf()),
             is_full,
         }))
     }
@@ -1207,6 +1240,9 @@ fn write_overlay(
     metrics: &StorageMetrics,
     op_label: &str, // `LABEL_OP_FLUSH` or `LABEL_OP_MERGE`
 ) -> Result<(), PersistenceError> {
+    if pages.is_empty() {
+        return Ok(());
+    }
     let ranges_serialized = group_pages_into_ranges(indices)
         .into_iter()
         .map(|range| range.bytes())

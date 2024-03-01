@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeMap,
     fs::File,
     io::Write,
     os::{fd::FromRawFd, unix::prelude::FileExt},
@@ -7,8 +8,9 @@ use std::{
 
 use crate::page_map::{
     storage::{
-        test_utils::TestStorageLayout, Checkpoint, FileIndex, MergeCandidate, MergeDestination,
-        OverlayFile, PageIndexRange, Storage, CURRENT_OVERLAY_VERSION, PAGE_INDEX_RANGE_NUM_BYTES,
+        test_utils::{ShardedTestStorageLayout, TestStorageLayout},
+        Checkpoint, FileIndex, MergeCandidate, MergeDestination, OverlayFile, PageIndexRange,
+        Shard, Storage, StorageLayout, CURRENT_OVERLAY_VERSION, PAGE_INDEX_RANGE_NUM_BYTES,
         SIZE_NUM_BYTES, VERSION_NUM_BYTES,
     },
     FileDescriptor, MemoryInstructions, MemoryMapOrData, PageAllocator, PageDelta, PageMap,
@@ -16,6 +18,8 @@ use crate::page_map::{
 };
 use assert_matches::assert_matches;
 use bit_vec::BitVec;
+use ic_config::flag_status::FlagStatus;
+use ic_config::state_manager::LsmtConfig;
 use ic_metrics::MetricsRegistry;
 use ic_sys::{PageIndex, PAGE_SIZE};
 use ic_test_utilities::io::{make_mutable, make_readonly, write_all_at};
@@ -28,62 +32,110 @@ use tempfile::{tempdir, TempDir};
 /// The expectation is based on how many pages the overlay contains and how many distinct
 /// ranges of indices there are.
 fn expected_overlay_file_size(num_pages: u64, num_ranges: u64) -> u64 {
+    // We should not create overlays for zero pages.
+    assert!(num_pages != 0);
     let data = num_pages * PAGE_SIZE as u64;
     let index = num_ranges * PAGE_INDEX_RANGE_NUM_BYTES as u64;
 
     data + index + SIZE_NUM_BYTES as u64 + VERSION_NUM_BYTES as u64
 }
 
-/// Verify that the overlay file at `path` is internally consistent and contains
-/// the same data as `expected`.
-fn verify_overlay_file(path: &Path, expected: &PageDelta) {
-    // Count the number of separate index ranges.
-    let mut num_separate_ranges: u64 = 0;
+/// Division with rounding up, e.g. 2 / 2 -> 1, 1 / 2 -> 1
+fn divide_rounding_up(a: u64, b: u64) -> u64 {
+    a / b + if a % b != 0 { 1 } else { 0 }
+}
+
+/// Expected sizes of the shards; 0 if the shards has no data and should not exist.
+fn expected_shard_sizes(delta: &PageDelta, shard_num_pages: u64) -> Vec<u64> {
+    let num_shards = divide_rounding_up(delta.max_page_index().unwrap().get() + 1, shard_num_pages);
+    let mut num_separate_ranges_by_shard = vec![0; num_shards as usize];
+    let mut num_pages_by_shard = vec![0; num_shards as usize];
     let mut last_index = None;
-    for (key, _) in expected.iter() {
+    for (key, _) in delta.iter() {
         let key = key.get();
-        if last_index.is_none() || last_index.unwrap() != key - 1 {
-            num_separate_ranges += 1;
+        let shard = (key / shard_num_pages) as usize;
+        if last_index.is_none() || last_index.unwrap() != key - 1 || key % shard_num_pages == 0 {
+            num_separate_ranges_by_shard[shard] += 1;
         }
+        num_pages_by_shard[shard] += 1;
         last_index = Some(key);
     }
+    (0..num_shards)
+        .map(|shard| {
+            if num_pages_by_shard[shard as usize] == 0 {
+                0
+            } else {
+                expected_overlay_file_size(
+                    num_pages_by_shard[shard as usize],
+                    num_separate_ranges_by_shard[shard as usize],
+                )
+            }
+        })
+        .collect()
+}
 
-    // Verify the file size is as expected.
-    let file_size = path.metadata().unwrap().len();
+/// Verify that the (potentially sharded) overlay at height `height` is identical to the
+/// data in `expected` page delta.
+fn verify_overlays(
+    layout: &dyn StorageLayout,
+    height: Height,
+    lsmt_config: &LsmtConfig,
+    expected: &PageDelta,
+) {
+    let existing_shards: BTreeMap<Shard, OverlayFile> = layout
+        .existing_overlays()
+        .unwrap()
+        .into_iter()
+        .filter(|p| layout.overlay_height(p).unwrap() == height)
+        .map(|p| {
+            (
+                layout.overlay_shard(&p).unwrap(),
+                OverlayFile::load(&p).unwrap(),
+            )
+        })
+        .collect();
+    let expected_shard_sizes = expected_shard_sizes(expected, lsmt_config.shard_num_pages);
+    // Check number of shards.
     assert_eq!(
-        expected_overlay_file_size(expected.num_pages() as u64, num_separate_ranges),
-        file_size
+        existing_shards.last_key_value().unwrap().0.get() as usize + 1,
+        expected_shard_sizes.len(),
     );
-
-    let overlay = OverlayFile::load(path).unwrap();
-
-    // Verify `num_pages` and `num_logical_pages`.
-    assert_eq!(expected.num_pages(), overlay.num_pages());
-    assert_eq!(
-        expected.max_page_index().unwrap().get() + 1,
-        overlay.num_logical_pages() as u64
-    );
-
-    // Verify every single page in the range.
-    for index in 0..overlay.num_logical_pages() as u64 {
-        let index = PageIndex::new(index);
+    // Check the sizes of individual shards.
+    for (shard, size) in expected_shard_sizes.into_iter().enumerate() {
         assert_eq!(
-            overlay.get_page(index),
-            expected.get_page(index),
-            "Index: {}",
-            index
+            layout
+                .overlay(height, Shard::new(shard as u64))
+                .metadata()
+                .map_or(0, |m| m.len()),
+            size,
+            "Shard: {}",
+            shard
         );
     }
-
-    // `get_page` should return `None` beyond the range of the overlay.
-    assert_eq!(
-        overlay.get_page(PageIndex::new(overlay.num_logical_pages() as u64)),
-        None
-    );
-    assert_eq!(
-        overlay.get_page(PageIndex::new(overlay.num_logical_pages() as u64 + 1)),
-        None
-    );
+    // Check that the content of expected page delta matches the overlays.
+    let zeroes = [0; PAGE_SIZE];
+    for page in 0..expected.0.len() as u64 {
+        let shard = page / lsmt_config.shard_num_pages;
+        match (
+            existing_shards
+                .get(&Shard::new(shard))
+                .and_then(|overlay| overlay.get_page(PageIndex::new(page))),
+            expected.get_page(PageIndex::new(page)),
+        ) {
+            (Some(overlay), Some(delta)) => assert_eq!(overlay, delta),
+            (None, Some(delta)) => assert_eq!(delta, &zeroes),
+            (Some(overlay), None) => panic!("Overlay: {:#?}", overlay),
+            (None, None) => (),
+        }
+    }
+    // Check the overlay is sharded properly.
+    for (shard, overlay_file) in existing_shards {
+        for (page_index, _) in overlay_file.iter() {
+            assert!(page_index.get() >= shard.get() * lsmt_config.shard_num_pages);
+            assert!(page_index.get() < (shard.get() + 1) * lsmt_config.shard_num_pages);
+            assert!(page_index.get() <= expected.max_page_index().unwrap().get());
+        }
+    }
 }
 
 /// Read all data in input files as PageDelta.
@@ -359,12 +411,44 @@ enum Instruction {
 }
 use Instruction::*;
 
+/// Write the `delta` as overlay file.
+fn write_overlay(
+    delta: &PageDelta,
+    path: &Path,
+    height: Height,
+    metrics: &StorageMetrics,
+) -> Result<(), PersistenceError> {
+    let storage_layout = TestStorageLayout {
+        base: "".into(),
+        overlay_dst: path.to_path_buf(),
+        existing_overlays: Vec::new(),
+    };
+    OverlayFile::write(
+        delta,
+        &storage_layout,
+        height,
+        &LsmtConfig {
+            lsmt_status: FlagStatus::Enabled,
+            shard_num_pages: u64::MAX,
+        },
+        metrics,
+    )
+}
+
+fn lsmt_config_unsharded() -> LsmtConfig {
+    LsmtConfig {
+        lsmt_status: FlagStatus::Enabled,
+        shard_num_pages: u64::MAX,
+    }
+}
+
 /// This function applies `instructions` to a new `Storage` in a temporary directory.
 /// At the same time, we apply the same instructions to a `PageDelta`, which acts as the reference
 /// implementation. After each operation, we check that all overlay files are as expected and
 /// correspond to the reference.
 fn write_overlays_and_verify_with_tempdir(
     instructions: Vec<Instruction>,
+    lsmt_config: &LsmtConfig,
     tempdir: &TempDir,
 ) -> MetricsRegistry {
     let allocator = PageAllocator::new_for_testing();
@@ -374,10 +458,6 @@ fn write_overlays_and_verify_with_tempdir(
     let mut combined_delta = PageDelta::default();
 
     for (round, instruction) in instructions.iter().enumerate() {
-        let path_overlay = &tempdir
-            .path()
-            .join(format!("{:06}_vmemory_0.overlay", round));
-        let path_base = &tempdir.path().join("vmemory_0.bin");
         match instruction {
             WriteOverlay(round_indices) => {
                 let data = &[round as u8; PAGE_SIZE];
@@ -388,10 +468,28 @@ fn write_overlays_and_verify_with_tempdir(
 
                 let delta = PageDelta::from(allocator.allocate(&overlay_pages));
 
-                OverlayFile::write(&delta, path_overlay, &metrics).unwrap();
+                let storage_layout = ShardedTestStorageLayout {
+                    dir_path: tempdir.path().to_path_buf(),
+                    base: "".into(),
+                    overlay_suffix: "vmemory_0.overlay".to_owned(),
+                    existing_overlays: Vec::new(),
+                };
 
-                // Check both the file we just wrote and the resulting directory for correctness.
-                verify_overlay_file(path_overlay, &delta);
+                OverlayFile::write(
+                    &delta,
+                    &storage_layout,
+                    Height::new(round as u64),
+                    lsmt_config,
+                    &metrics,
+                )
+                .unwrap();
+                // Check both the sharded overlay we just wrote and the resulting directory for correctness.
+                verify_overlays(
+                    &storage_layout,
+                    Height::new(round as u64),
+                    lsmt_config,
+                    &delta,
+                );
 
                 combined_delta.update(delta);
 
@@ -402,6 +500,10 @@ fn write_overlays_and_verify_with_tempdir(
                 is_downgrade,
                 assert_files_merged,
             } => {
+                let path_overlay = &tempdir
+                    .path()
+                    .join(format!("{:06}_0000_vmemory_0.overlay", round));
+                let path_base = &tempdir.path().join("vmemory_0.bin");
                 let files_before = storage_files(tempdir.path());
 
                 let mut page_map = PageMap::new_for_testing();
@@ -484,13 +586,17 @@ fn write_overlays_and_verify_with_tempdir(
 /// after every step.
 fn write_overlays_and_verify(instructions: Vec<Instruction>) -> MetricsRegistry {
     let tempdir = tempdir().unwrap();
-    write_overlays_and_verify_with_tempdir(instructions, &tempdir)
+    write_overlays_and_verify_with_tempdir(instructions, &lsmt_config_unsharded(), &tempdir)
 }
 
 #[test]
 fn corrupt_overlay_is_an_error() {
     let tempdir = tempdir().unwrap();
-    write_overlays_and_verify_with_tempdir(vec![WriteOverlay(vec![9, 10])], &tempdir);
+    write_overlays_and_verify_with_tempdir(
+        vec![WriteOverlay(vec![9, 10])],
+        &lsmt_config_unsharded(),
+        &tempdir,
+    );
     let StorageFiles { overlays, .. } = storage_files(tempdir.path());
     assert!(overlays.len() == 1);
     let overlay_path = &overlays[0];
@@ -681,7 +787,7 @@ fn can_merge_all() {
         is_downgrade: false,
     });
 
-    write_overlays_and_verify_with_tempdir(instructions, &tempdir);
+    write_overlays_and_verify_with_tempdir(instructions, &lsmt_config_unsharded(), &tempdir);
     let storage_files = storage_files(tempdir.path());
     assert_eq!(storage_files.overlays.len(), 1);
     assert!(storage_files.base.is_none());
@@ -733,7 +839,7 @@ fn test_make_none_merge_candidate() {
     // Write a single file, 10 pages.
     let instructions = vec![WriteOverlay((0..10).collect())];
 
-    write_overlays_and_verify_with_tempdir(instructions, &tempdir);
+    write_overlays_and_verify_with_tempdir(instructions, &lsmt_config_unsharded(), &tempdir);
     let storage_files = storage_files(tempdir.path());
     assert!(storage_files.base.is_none());
     assert_eq!(storage_files.overlays.len(), 1);
@@ -763,7 +869,7 @@ fn test_make_merge_candidate_to_overlay() {
         WriteOverlay((0..2).collect()),
     ];
 
-    write_overlays_and_verify_with_tempdir(instructions, &tempdir);
+    write_overlays_and_verify_with_tempdir(instructions, &lsmt_config_unsharded(), &tempdir);
     let storage_files = storage_files(tempdir.path());
     assert!(storage_files.base.is_none());
     assert_eq!(storage_files.overlays.len(), 3);
@@ -797,7 +903,7 @@ fn test_make_merge_candidate_to_base() {
         WriteOverlay((0..2).collect()),
     ];
 
-    write_overlays_and_verify_with_tempdir(instructions, &tempdir);
+    write_overlays_and_verify_with_tempdir(instructions, &lsmt_config_unsharded(), &tempdir);
     let storage_files = storage_files(tempdir.path());
     assert!(storage_files.base.is_none());
     assert_eq!(storage_files.overlays.len(), 2);
@@ -828,7 +934,7 @@ fn test_two_same_length_files_are_a_pyramid() {
         WriteOverlay((0..2).collect()),
     ];
 
-    write_overlays_and_verify_with_tempdir(instructions, &tempdir);
+    write_overlays_and_verify_with_tempdir(instructions, &lsmt_config_unsharded(), &tempdir);
     let storage_files = storage_files(tempdir.path());
     assert!(storage_files.base.is_none());
     assert_eq!(storage_files.overlays.len(), 2);
@@ -860,7 +966,7 @@ fn can_get_small_memory_regions_from_file() {
 
     let delta = PageDelta::from(allocator.allocate(&overlay_pages));
 
-    OverlayFile::write(&delta, path, &metrics).unwrap();
+    write_overlay(&delta, path, Height::new(0), &metrics).unwrap();
     let overlay = OverlayFile::load(path).unwrap();
     let range = PageIndex::new(0)..PageIndex::new(30);
 
@@ -912,10 +1018,8 @@ fn can_get_large_memory_regions_from_file() {
 
     let data = &[42_u8; PAGE_SIZE];
     let overlay_pages: Vec<_> = indices.iter().map(|i| (PageIndex::new(*i), data)).collect();
-
     let delta = PageDelta::from(allocator.allocate(&overlay_pages));
-
-    OverlayFile::write(&delta, path, &metrics).unwrap();
+    write_overlay(&delta, path, Height::new(0), &metrics).unwrap();
     let overlay = OverlayFile::load(path).unwrap();
     let range = PageIndex::new(0)..PageIndex::new(30);
 
@@ -983,10 +1087,35 @@ fn overlay_version_is_current() {
 
     let delta = PageDelta::from(allocator.allocate(&overlay_pages));
 
-    OverlayFile::write(&delta, path, &metrics).unwrap();
+    write_overlay(&delta, path, Height::new(0), &metrics).unwrap();
     let overlay = OverlayFile::load(path).unwrap();
     let version = overlay.version();
     assert_eq!(version, CURRENT_OVERLAY_VERSION);
+}
+
+#[test]
+fn can_write_shards() {
+    let tempdir = tempdir().unwrap();
+
+    let instructions = vec![WriteOverlay(vec![9, 10])];
+
+    write_overlays_and_verify_with_tempdir(
+        instructions,
+        &LsmtConfig {
+            lsmt_status: FlagStatus::Enabled,
+            shard_num_pages: 1,
+        },
+        &tempdir,
+    );
+    let files = storage_files(tempdir.path());
+    assert!(files.base.is_none());
+    assert_eq!(
+        files.overlays,
+        vec![
+            tempdir.path().join("000000_009_vmemory_0.overlay"),
+            tempdir.path().join("000000_010_vmemory_0.overlay"),
+        ]
+    );
 }
 
 #[test]
@@ -1005,7 +1134,7 @@ fn overlapping_page_ranges() {
             start_file_index: FileIndex::from(file),
         }
     }
-    write_overlays_and_verify_with_tempdir(instructions, &tempdir);
+    write_overlays_and_verify_with_tempdir(instructions, &lsmt_config_unsharded(), &tempdir);
     let storage_files = storage_files(tempdir.path());
     assert!(storage_files.base.is_none());
     assert_eq!(storage_files.overlays.len(), 1);
