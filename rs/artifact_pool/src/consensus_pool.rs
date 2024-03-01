@@ -384,6 +384,10 @@ impl ConsensusPool for UncachedConsensusPoolImpl {
         self
     }
 
+    fn build_block_chain(&self, start: &Block, end: &Block) -> Arc<dyn ConsensusBlockChain> {
+        Arc::new(ConsensusBlockChainImpl::new(self, start, end))
+    }
+
     fn block_instant(&self, _hash: &CryptoHashOf<Block>) -> Option<Instant> {
         // The uncached consensus pool is only used temporarily for genesis init.
         // We are not inserting new artifacts in this pool, so we don't have any
@@ -647,6 +651,10 @@ impl ConsensusPool for ConsensusPoolImpl {
 
     fn as_block_cache(&self) -> &dyn ConsensusBlockCache {
         self.cache.as_ref()
+    }
+
+    fn build_block_chain(&self, start: &Block, end: &Block) -> Arc<dyn ConsensusBlockChain> {
+        Arc::new(ConsensusBlockChainImpl::new(self, start, end))
     }
 
     fn block_instant(&self, hash: &CryptoHashOf<Block>) -> Option<Instant> {
@@ -963,16 +971,6 @@ impl ValidatedPoolReader<ConsensusArtifact> for ConsensusPoolImpl {
                 .chain(random_tape_iterator),
         )
     }
-}
-
-/// Returns the block chain cache between the given start/end
-/// blocks (inclusive)
-pub fn build_consensus_block_chain(
-    consensus_pool: &dyn ConsensusPool,
-    start: &Block,
-    end: &Block,
-) -> Arc<dyn ConsensusBlockChain> {
-    Arc::new(ConsensusBlockChainImpl::new(consensus_pool, start, end))
 }
 
 #[cfg(test)]

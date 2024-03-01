@@ -2,7 +2,6 @@
 
 use crate::consensus::metrics::EcdsaPayloadMetrics;
 use crate::ecdsa::complaints::{EcdsaTranscriptLoader, TranscriptLoadStatus};
-use ic_artifact_pool::consensus_pool::build_consensus_block_chain;
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_crypto::get_tecdsa_master_public_key;
 use ic_interfaces::consensus_pool::ConsensusBlockChain;
@@ -197,7 +196,7 @@ pub(super) fn block_chain_cache(
     start: &Block,
     end: &Block,
 ) -> Result<Arc<dyn ConsensusBlockChain>, InvalidChainCacheError> {
-    let chain = build_consensus_block_chain(pool_reader.pool(), start, end);
+    let chain = pool_reader.pool().build_block_chain(start, end);
     let expected_len = (end.height().get() - start.height().get() + 1) as usize;
     let chain_len = chain.len();
     if chain_len == expected_len {
@@ -456,7 +455,7 @@ pub(crate) fn get_ecdsa_subnet_public_key(
             block.height
         ));
     };
-    let chain = build_consensus_block_chain(pool.pool(), &summary, block);
+    let chain = pool.pool().build_block_chain(&summary, block);
     let block_reader = EcdsaBlockReaderImpl::new(chain);
 
     let mut public_keys = BTreeMap::new();

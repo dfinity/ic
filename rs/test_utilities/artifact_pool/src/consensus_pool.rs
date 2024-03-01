@@ -4,8 +4,8 @@ use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_interfaces::{
     consensus_pool::{
-        ChangeAction, ChangeSet, ConsensusBlockCache, ConsensusPool, ConsensusPoolCache,
-        PoolSection, UnvalidatedConsensusArtifact, ValidatedConsensusArtifact,
+        ChangeAction, ChangeSet, ConsensusBlockCache, ConsensusBlockChain, ConsensusPool,
+        ConsensusPoolCache, PoolSection, UnvalidatedConsensusArtifact, ValidatedConsensusArtifact,
     },
     crypto::{MultiSigner, ThresholdSigner},
     dkg::DkgPool,
@@ -736,6 +736,10 @@ impl ConsensusPool for TestConsensusPool {
 
     fn as_block_cache(&self) -> &dyn ConsensusBlockCache {
         self.pool.as_block_cache()
+    }
+
+    fn build_block_chain(&self, start: &Block, end: &Block) -> Arc<dyn ConsensusBlockChain> {
+        self.pool.build_block_chain(start, end)
     }
 
     fn block_instant(&self, hash: &CryptoHashOf<Block>) -> Option<Instant> {
