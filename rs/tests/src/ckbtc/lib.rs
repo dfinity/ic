@@ -34,10 +34,12 @@ use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_constants::ROOT_CANISTER_ID;
-use ic_nns_governance::pb::v1::{NnsFunction, ProposalStatus};
+use ic_nns_governance::{
+    init::TEST_NEURON_1_ID,
+    pb::v1::{NnsFunction, ProposalStatus},
+};
 use ic_nns_test_utils::{
-    governance::submit_external_update_proposal, ids::TEST_NEURON_1_ID,
-    itest_helpers::install_rust_canister_from_path,
+    governance::submit_external_update_proposal, itest_helpers::install_rust_canister_from_path,
 };
 use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;

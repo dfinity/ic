@@ -1,6 +1,5 @@
 use crate::{
     common::modify_wasm_bytes,
-    ids::TEST_NEURON_1_ID,
     state_test_helpers::{query, update, update_with_sender},
 };
 use candid::{Decode, Encode};
@@ -10,6 +9,7 @@ use ic_base_types::CanisterId;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_PRINCIPAL;
 use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
+use ic_nns_governance::init::TEST_NEURON_1_ID;
 use ic_nns_governance::pb::v1::{
     manage_neuron::{Command, NeuronIdOrSubaccount},
     manage_neuron_response::Command as CommandResponse,

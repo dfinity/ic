@@ -10,7 +10,6 @@ BASE_DEPENDENCIES = [
     "//rs/nervous_system/proto",
     "//rs/nns/common",
     "//rs/nns/constants",
-    "//rs/nns/test_utils",
     "//rs/sns/root",
     "//rs/types/base_types",
     "@crate_index//:anyhow",
@@ -33,7 +32,6 @@ DEPENDENCIES = BASE_DEPENDENCIES + [
     "//rs/nns/sns-wasm",
     "//rs/sns/governance",
     "//rs/sns/init",
-    "//rs/sns/test_utils",
 ]
 
 DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
@@ -41,7 +39,6 @@ DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
     "//rs/nns/sns-wasm:sns-wasm--test_feature",
     "//rs/sns/governance:governance--test_feature",
     "//rs/sns/init:init--test_feature",
-    "//rs/sns/test_utils:test_utils--test_feature",
 ]
 
 MACRO_DEPENDENCIES = []

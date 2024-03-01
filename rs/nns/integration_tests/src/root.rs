@@ -13,12 +13,15 @@ use ic_nervous_system_root::change_canister::{
 };
 use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
 use ic_nns_constants::{ALL_NNS_CANISTER_IDS, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
-use ic_nns_governance::pb::v1::{
-    manage_neuron::{Command, NeuronIdOrSubaccount},
-    manage_neuron_response::Command as CommandResponse,
-    proposal::Action,
-    ExecuteNnsFunction, ManageNeuron, ManageNeuronResponse, NnsFunction, Proposal, ProposalStatus,
-    Vote,
+use ic_nns_governance::{
+    init::{TEST_NEURON_1_ID, TEST_NEURON_2_ID},
+    pb::v1::{
+        manage_neuron::{Command, NeuronIdOrSubaccount},
+        manage_neuron_response::Command as CommandResponse,
+        proposal::Action,
+        ExecuteNnsFunction, ManageNeuron, ManageNeuronResponse, NnsFunction, Proposal,
+        ProposalStatus, Vote,
+    },
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -26,9 +29,9 @@ use ic_nns_test_utils::{
         get_pending_proposals, maybe_upgrade_root_controlled_canister_to_self,
         submit_external_update_proposal, wait_for_final_state,
     },
-    ids::{TEST_NEURON_1_ID, TEST_NEURON_2_ID},
     itest_helpers::{local_test_on_nns_subnet, NnsCanisters, UpgradeTestingScenario},
 };
+
 use ic_nns_test_utils_macros::parameterized_upgrades;
 use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
 use icp_ledger::{

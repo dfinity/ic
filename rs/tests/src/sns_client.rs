@@ -25,13 +25,14 @@ use ic_nns_governance::pb::v1::create_service_nervous_system::{
     swap_parameters::NeuronBasketConstructionParameters,
     GovernanceParameters, InitialTokenDistribution, LedgerParameters, SwapParameters,
 };
-use ic_nns_governance::pb::v1::proposal::Action;
-use ic_nns_governance::pb::v1::CreateServiceNervousSystem;
-use ic_nns_governance::pb::v1::{
-    manage_neuron::Command, manage_neuron_response::Command as CommandResp, ManageNeuron,
-    ManageNeuronResponse, NnsFunction, OpenSnsTokenSwap, Proposal,
+use ic_nns_governance::{
+    init::TEST_NEURON_1_ID,
+    pb::v1::{
+        manage_neuron::Command, manage_neuron_response::Command as CommandResp, proposal::Action,
+        CreateServiceNervousSystem, ManageNeuron, ManageNeuronResponse, NnsFunction,
+        OpenSnsTokenSwap, Proposal,
+    },
 };
-use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
 use ic_sns_governance::pb::v1::governance::Mode;
 use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_swap::pb::v1::{GetStateRequest, GetStateResponse, Init, Lifecycle};

@@ -4,6 +4,7 @@ use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nns_common::types::NeuronId;
 use ic_nns_governance::{
     governance::REWARD_DISTRIBUTION_PERIOD_SECONDS,
+    init::TEST_NEURON_1_ID,
     pb::v1::{
         Ballot, Governance as GovernanceProto, GovernanceError, NetworkEconomics, Neuron,
         ProposalData, RewardEvent, Vote,
@@ -11,7 +12,6 @@ use ic_nns_governance::{
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    ids::TEST_NEURON_1_ID,
     itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
 };
 use std::{

@@ -6,6 +6,7 @@ use ic_nervous_system_common_test_keys::{
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::{
     governance::{TimeWarp, ONE_DAY_SECONDS},
+    init::TEST_NEURON_2_ID,
     pb::v1::{
         add_or_remove_node_provider::Change,
         manage_neuron::{self, Command, NeuronIdOrSubaccount},
@@ -16,9 +17,7 @@ use ic_nns_governance::{
         Proposal, ProposalInfo, Vote,
     },
 };
-use ic_nns_test_utils::{
-    common::NnsInitPayloadsBuilder, ids::TEST_NEURON_2_ID, itest_helpers::NnsCanisters,
-};
+use ic_nns_test_utils::{common::NnsInitPayloadsBuilder, itest_helpers::NnsCanisters};
 
 #[test]
 fn test_deadline_is_extended_with_wait_for_quiet() {
