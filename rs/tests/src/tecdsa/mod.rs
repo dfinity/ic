@@ -30,6 +30,7 @@ pub mod tecdsa_add_nodes_test;
 pub mod tecdsa_complaint_test;
 pub mod tecdsa_remove_nodes_test;
 pub mod tecdsa_signature_test;
+pub mod tecdsa_two_signing_subnets_test;
 
 pub(crate) const KEY_ID1: &str = "secp256k1";
 pub(crate) const KEY_ID2: &str = "some_other_key";
