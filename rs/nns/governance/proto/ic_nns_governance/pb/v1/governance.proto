@@ -1700,6 +1700,43 @@ message NetworkEconomics {
   //
   // If unspecified or zero, all proposals are kept.
   uint32 max_proposals_to_keep_per_topic = 10;
+
+  // Global Neurons' Fund participation thresholds.
+  optional NeuronsFundEconomics neurons_fund_economics = 11;
+}
+
+// The thresholds specify the shape of the matching function used by the Neurons' Fund to
+// determine how much to contribute for a given direct participation amount. Note that the actual
+// swap participation is in ICP, whereas these thresholds are specifid in XDR; the conversion rate
+// is determined at the time of execution of the CreateServiceNervousSystem proposal.
+message NeuronsFundMatchedFundingCurveCoefficients {
+  // Up to this amount of direct participation, the Neurons' Fund does not contribute to this SNS.
+  optional ic_nervous_system.pb.v1.Decimal contribution_threshold_xdr = 1;
+
+  // At this amount of direct participation, the Neurons' Fund contributes 50% of that amount.
+  optional ic_nervous_system.pb.v1.Decimal one_third_participation_milestone_xdr = 2;
+
+  // At this amount of direct participation, the Neurons' Fund contributes 100% of that amount.
+  // This is the maximum participation rate of the Neurons' Fund.
+  optional ic_nervous_system.pb.v1.Decimal full_participation_milestone_xdr = 3;
+}
+
+// When the Neurons' Fund decides to participates in an SNS swap, the amount of participation is
+// determined according to the rules of Matched Funding. The amount of ICP tokens contributed by
+// the Neurons' Fund depends on four factors:
+// (1) Direct participation amount at the time of the swap's successful finalization.
+// (2) Amount of maturity held by all eligible neurons that were members of the Neurons' Fund
+//     at the time of the CreateServiceNervousSystem proposal execution.
+// (3) Global Neurons' Fund participation thresholds, held in this structure (defined in XDR).
+// (4) ICP/XDR conversion rate at the time of the CreateServiceNervousSystem proposal execution.
+message NeuronsFundEconomics {
+  // This is a theoretical limit which should be smaller than any realistic amount of maturity
+  // that practically needs to be reserved from the Neurons' Fund for a given SNS swap.
+  optional ic_nervous_system.pb.v1.Decimal max_theoretical_neurons_fund_participation_amount_xdr = 1;
+
+  // Thresholds specifying the shape of the matching function used by the Neurons' Fund to
+  // determine how much to contribute for a given direct participation amount.
+  optional NeuronsFundMatchedFundingCurveCoefficients neurons_fund_matched_funding_curve_coefficients = 2;
 }
 
 // A reward event is an event at which neuron maturity is increased
