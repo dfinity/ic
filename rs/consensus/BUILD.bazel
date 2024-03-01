@@ -5,7 +5,6 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/artifact_pool",
     "//rs/config",
     "//rs/consensus/utils",
     "//rs/crypto",
@@ -37,6 +36,7 @@ DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
+    "//rs/artifact_pool",
     "//rs/bitcoin/types/internal",
     "//rs/consensus/mocks",
     "//rs/crypto/temp_crypto",

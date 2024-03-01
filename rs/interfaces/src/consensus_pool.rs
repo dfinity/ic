@@ -283,6 +283,9 @@ pub trait ConsensusPool {
     /// Return a reference to the consensus block cache (ConsensusBlockCache).
     fn as_block_cache(&self) -> &dyn ConsensusBlockCache;
 
+    /// Return the block chain between the given start/end.
+    fn build_block_chain(&self, start: &Block, end: &Block) -> Arc<dyn ConsensusBlockChain>;
+
     /// Return the first instant at which a block with the given hash was inserted
     /// into the validated pool. Returns None if no timestamp was found.
     fn block_instant(&self, hash: &CryptoHashOf<Block>) -> Option<Instant>;
@@ -295,15 +298,13 @@ pub trait HeightIndexedPool<T> {
     /// Returns the height range of artifacts of type T currently in the pool.
     fn height_range(&self) -> Option<HeightRange>;
 
-    /// Returns the max height across all artifacts of type T currently in the
-    /// pool.
+    /// Returns the max height across all artifacts of type T currently in the pool.
     fn max_height(&self) -> Option<Height>;
 
     /// Return an iterator over all of the artifacts of type T.
     fn get_all(&self) -> Box<dyn Iterator<Item = T>>;
 
-    /// Return an iterator over the artifacts of type T at height
-    /// 'h'.
+    /// Return an iterator over the artifacts of type T at height 'h'.
     fn get_by_height(&self, h: Height) -> Box<dyn Iterator<Item = T>>;
 
     /// Return an iterator over the artifacts of type T

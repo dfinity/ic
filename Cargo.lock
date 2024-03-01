@@ -6113,7 +6113,6 @@ dependencies = [
  "ic-types",
  "phantom_newtype",
  "prometheus",
- "proptest",
  "prost",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
