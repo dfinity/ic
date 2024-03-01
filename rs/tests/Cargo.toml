@@ -270,6 +270,10 @@ name = "ic-systest-tecdsa-signature-timeout"
 path = "consensus/tecdsa/tecdsa_signature_timeout_test.rs"
 
 [[bin]]
+name = "ic-systest-tecdsa-two-signing-subnets"
+path = "consensus/tecdsa/tecdsa_two_signing_subnets_test.rs"
+
+[[bin]]
 name = "ic-systest-btc-get-balance"
 path = "financial_integrations/btc_get_balance_test.rs"
 
