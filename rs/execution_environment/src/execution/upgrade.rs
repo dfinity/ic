@@ -266,16 +266,30 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
     let main_memory_handling = match context.mode {
         CanisterInstallModeV2::Upgrade(Some(upgrade_options)) => {
             match upgrade_options.keep_main_memory {
-                Some(true) => MainMemoryHandling::Keep,
-                Some(false) => MainMemoryHandling::Replace { explicit: true },
-                None => MainMemoryHandling::Replace { explicit: false },
+                Some(true) => MemoryHandling::Keep,
+                Some(false) => MemoryHandling::Replace,
+                None => {
+                    // Safety guard checking that the `keep_main_memory` upgrade option has not been omitted in error.
+                    if helper.expects_orthogonal_persistence() {
+                        let instructions_left = helper.instructions_left();
+                        let error = CanisterManagerError::MissingUpgradeOptionError { message: "Enhanced orthogonal persistence requires the `keep_main_memory` upgrade option.".to_string() };
+                        return finish_err(
+                            clean_canister,
+                            instructions_left,
+                            original,
+                            round,
+                            error,
+                        );
+                    }
+                    MemoryHandling::Replace
+                }
             }
         }
         _ => MainMemoryHandling::Replace { explicit: false },
     };
 
-    let memory_handling = MemoryHandling {
-        stable_memory_handling: StableMemoryHandling::Keep,
+    let memory_handling = CanisterMemoryHandling {
+        stable_memory_handling: MemoryHandling::Keep,
         main_memory_handling,
     };
     if let Err(err) = helper.replace_execution_state_and_allocations(

@@ -358,7 +358,14 @@ fn test_pre_upgrade_execution_with_canister_install_mode_v2() {
         test.install_canister_v2(canister_id, old_binary).unwrap();
         let canister_state_before = test.canister_state(canister_id).clone();
 
-        let result = test.upgrade_canister_v2(canister_id, new_empty_binary(), upgrade_options);
+        let result = test.upgrade_canister_v2(
+            canister_id,
+            new_empty_binary(),
+            CanisterUpgradeOptions {
+                skip_pre_upgrade,
+                keep_main_memory: None,
+            },
+        );
 
         if upgrade_options.skip_pre_upgrade.unwrap_or(false) {
             assert_eq!(result, Ok(()));
@@ -389,7 +396,10 @@ fn test_upgrade_execution_with_canister_install_mode_v2() {
         let result = test.upgrade_canister_v2(
             canister_id,
             binary(&[(Function::PostUpgrade, Execution::ShortTrap)]),
-            CanisterUpgradeOptions { skip_pre_upgrade },
+            CanisterUpgradeOptions {
+                skip_pre_upgrade,
+                keep_main_memory: None,
+            },
         );
 
         assert_eq!(result.unwrap_err().code(), ErrorCode::CanisterTrapped);

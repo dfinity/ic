@@ -980,7 +980,7 @@ pub enum CanisterInstallModeV2 {
 
 impl CanisterInstallModeV2 {
     pub fn iter() -> Iter<'static, CanisterInstallModeV2> {
-        static MODES: [CanisterInstallModeV2; 7] = [
+        static MODES: [CanisterInstallModeV2; 12] = [
             CanisterInstallModeV2::Install,
             CanisterInstallModeV2::Reinstall,
             CanisterInstallModeV2::Upgrade(None),
@@ -990,11 +990,31 @@ impl CanisterInstallModeV2 {
             })),
             CanisterInstallModeV2::Upgrade(Some(CanisterUpgradeOptions {
                 skip_pre_upgrade: None,
+                keep_main_memory: Some(false),
+            })),
+            CanisterInstallModeV2::Upgrade(Some(CanisterUpgradeOptions {
+                skip_pre_upgrade: None,
+                keep_main_memory: Some(true),
+            })),
+            CanisterInstallModeV2::Upgrade(Some(CanisterUpgradeOptions {
+                skip_pre_upgrade: Some(false),
+                keep_main_memory: None,
+            })),
+            CanisterInstallModeV2::Upgrade(Some(CanisterUpgradeOptions {
+                skip_pre_upgrade: Some(false),
+                keep_main_memory: Some(false),
+            })),
+            CanisterInstallModeV2::Upgrade(Some(CanisterUpgradeOptions {
+                skip_pre_upgrade: Some(false),
                 keep_main_memory: Some(true),
             })),
             CanisterInstallModeV2::Upgrade(Some(CanisterUpgradeOptions {
                 skip_pre_upgrade: Some(true),
                 keep_main_memory: None,
+            })),
+            CanisterInstallModeV2::Upgrade(Some(CanisterUpgradeOptions {
+                skip_pre_upgrade: Some(true),
+                keep_main_memory: Some(false),
             })),
             CanisterInstallModeV2::Upgrade(Some(CanisterUpgradeOptions {
                 skip_pre_upgrade: Some(true),
