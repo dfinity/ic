@@ -1,4 +1,5 @@
 use candid::{CandidType, Deserialize, Int, Nat, Principal};
+use num_bigint::BigUint;
 use num_traits::ToPrimitive;
 use serde::Serialize;
 use serde_bytes::ByteBuf;
@@ -126,6 +127,10 @@ impl Value {
         match self {
             Self::Nat(n) => Ok(n),
             Self::Nat64(n) => Ok(Nat::from(n)),
+            Self::Int(i) => match BigUint::try_from(i.0) {
+                Ok(n) => Ok(Nat(n)),
+                Err(e) => Err(format!("Failed to convert Int to Nat: {:?}", e)),
+            },
             _ => Err(self.variant_name()),
         }
     }
@@ -194,7 +199,6 @@ impl TryFrom<Value> for u64 {
     type Error = String;
 
     fn try_from(value: Value) -> Result<Self, Self::Error> {
-        // TODO do we want to map also int to u64?
         Nat::try_from(value)?
             .0
             .to_u64()
