@@ -198,18 +198,16 @@ pub enum OperationType {
     Mint,
     Burn,
     Transfer,
+    Spender,
     Approve,
+    Fee,
+    FeeCollector,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct ApproveMetadata {
-    pub approver_account: AccountIdentifier,
-
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expected_allowance: Option<Amount>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub fee_set_by_user: Option<Amount>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expires_at: Option<u64>,
@@ -222,7 +220,8 @@ impl TryFrom<ApproveMetadata> for ObjectMap {
             Ok(v) => match v {
                 serde_json::Value::Object(ob) => Ok(ob),
                 _ => anyhow::bail!("Could not convert ApproveMetadata to ObjectMap. Expected type Object but received: {:?}",v)
-            },Err(err) => anyhow::bail!("Could not convert ApproveMetadata to ObjectMap: {:?}",err),
+            },
+            Err(err) => anyhow::bail!("Could not convert ApproveMetadata to ObjectMap: {:?}",err),
         }
     }
 }
@@ -235,62 +234,11 @@ impl TryFrom<ObjectMap> for ApproveMetadata {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
-pub struct BurnMetadata {
-    pub from_account: AccountIdentifier,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub spender_account: Option<AccountIdentifier>,
-}
-
-impl TryFrom<BurnMetadata> for ObjectMap {
+impl TryFrom<Option<ObjectMap>> for ApproveMetadata {
     type Error = anyhow::Error;
-    fn try_from(d: BurnMetadata) -> Result<ObjectMap, Self::Error> {
-        match serde_json::to_value(d) {
-            Ok(v) => match v {
-                serde_json::Value::Object(ob) => Ok(ob),
-                _ => anyhow::bail!("Could not convert BurnMetadata to ObjectMap. Expected type Object but received: {:?}",v)
-            },Err(err) => anyhow::bail!("Could not convert BurnMetadata to ObjectMap: {:?}",err),
-        }
-    }
-}
-
-impl TryFrom<ObjectMap> for BurnMetadata {
-    type Error = anyhow::Error;
-    fn try_from(o: ObjectMap) -> anyhow::Result<Self> {
-        serde_json::from_value(serde_json::Value::Object(o.clone()))
-            .with_context(|| format!("Could not parse BurnMetadata from Object: {:?}", o))
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
-pub struct TransferMetadata {
-    pub from_account: AccountIdentifier,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub spender_account: Option<AccountIdentifier>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub fee_set_by_user: Option<Amount>,
-}
-
-impl TryFrom<TransferMetadata> for ObjectMap {
-    type Error = anyhow::Error;
-    fn try_from(d: TransferMetadata) -> Result<ObjectMap, Self::Error> {
-        match serde_json::to_value(d) {
-            Ok(v) => match v {
-                serde_json::Value::Object(ob) => Ok(ob),
-                _ => anyhow::bail!("Could not convert TransferMetadata to ObjectMap. Expected type Object but received: {:?}",v)
-            },Err(err) => anyhow::bail!("Could not convert TransferMetadata to ObjectMap: {:?}",err),
-        }
-    }
-}
-
-impl TryFrom<ObjectMap> for TransferMetadata {
-    type Error = anyhow::Error;
-    fn try_from(o: ObjectMap) -> anyhow::Result<Self> {
-        serde_json::from_value(serde_json::Value::Object(o.clone()))
-            .with_context(|| format!("Could not parse TransferMetadata from Object: {:?}", o))
+    fn try_from(o: Option<ObjectMap>) -> anyhow::Result<Self> {
+        serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default()))
+            .context("Could not parse ApproveMetadata from JSON object")
     }
 }
 
@@ -341,14 +289,13 @@ impl From<crate::common::storage::types::IcrcTransaction> for TransactionMetadat
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct BlockMetadata {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub fee_paid_by_user: Option<Amount>,
+    pub fee_collector_block_index: Option<u64>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub effective_fee: Option<Amount>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fee_collector: Option<AccountIdentifier>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub fee_collector_block_index: Option<u64>,
-
     // The Rosetta API standard field for timestamp is required in milliseconds
     // To ensure a lossless conversion we need to store the nano seconds for the timestamp
     pub block_created_at_nano_seconds: u64,
@@ -381,20 +328,55 @@ impl BlockMetadata {
         currency: Currency,
     ) -> anyhow::Result<Self> {
         Ok(Self {
-            fee_paid_by_user: match block.transaction.operation {
-                crate::common::storage::types::IcrcOperation::Mint { .. } => None,
-                crate::common::storage::types::IcrcOperation::Transfer { fee, .. } => {
-                    fee.or(block.effective_fee)
-                }
-                crate::common::storage::types::IcrcOperation::Approve { fee, .. } => {
-                    fee.or(block.effective_fee)
-                }
-                crate::common::storage::types::IcrcOperation::Burn { .. } => None,
-            }
-            .map(|fee| Amount::new(fee.to_string(), currency)),
             fee_collector: block.fee_collector.map(|collector| collector.into()),
             fee_collector_block_index: block.fee_collector_block_index,
             block_created_at_nano_seconds: block.timestamp,
+            effective_fee: block
+                .effective_fee
+                .map(|fee| Amount::new(fee.to_string(), currency)),
         })
+    }
+}
+
+#[derive(
+    Display,
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    EnumIter,
+    EnumString,
+    EnumVariantNames,
+    Serialize,
+    Deserialize,
+)]
+#[strum(serialize_all = "SCREAMING_SNAKE_CASE")]
+pub enum FeeSetter {
+    User,
+    Ledger,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct FeeMetadata {
+    pub fee_set_by: FeeSetter,
+}
+
+impl TryFrom<FeeMetadata> for ObjectMap {
+    type Error = anyhow::Error;
+    fn try_from(d: FeeMetadata) -> Result<ObjectMap, Self::Error> {
+        match serde_json::to_value(d) {
+            Ok(v) => match v {
+                serde_json::Value::Object(ob) => Ok(ob),
+                _ => anyhow::bail!("Could not convert FeeMetadata to ObjectMap. Expected type Object but received: {:?}",v)
+            },Err(err) => anyhow::bail!("Could not convert FeeMetadata to ObjectMap: {:?}",err),
+        }
+    }
+}
+
+impl TryFrom<ObjectMap> for FeeMetadata {
+    type Error = anyhow::Error;
+    fn try_from(o: ObjectMap) -> anyhow::Result<Self> {
+        serde_json::from_value(serde_json::Value::Object(o))
+            .context("Could not parse FeeMetadata from JSON object")
     }
 }

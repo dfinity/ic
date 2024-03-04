@@ -18,7 +18,6 @@ use rosetta_core::{
     convert::principal_id_from_public_key, objects::PublicKey,
     response_types::ConstructionDeriveResponse,
 };
-use std::collections::HashSet;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::SystemTime;
@@ -33,13 +32,14 @@ pub fn construction_derive(public_key: PublicKey) -> Result<ConstructionDeriveRe
 pub fn construction_preprocess(
     operations: Vec<Operation>,
 ) -> Result<ConstructionPreprocessResponse, Error> {
-    let mut caller_public_keys = HashSet::new();
-    for operation in operations.clone().into_iter() {
-        let caller: Account = extract_caller_principal_from_rosetta_core_operation(operation)
+    let required_public_keys = if !operations.is_empty() {
+        let caller: Account = extract_caller_principal_from_rosetta_core_operation(operations)
             .map_err(|err| Error::processing_construction_failed(&err))?
             .into();
-        caller_public_keys.insert(caller);
-    }
+        Some(vec![caller.into()])
+    } else {
+        None
+    };
 
     Ok(ConstructionPreprocessResponse {
         options: Some(
@@ -49,16 +49,7 @@ pub fn construction_preprocess(
             .try_into()
             .map_err(|err| Error::processing_construction_failed(&err))?,
         ),
-        required_public_keys: if caller_public_keys.is_empty() {
-            None
-        } else {
-            Some(
-                caller_public_keys
-                    .into_iter()
-                    .map(|account| account.into())
-                    .collect(),
-            )
-        },
+        required_public_keys,
     })
 }
 
@@ -156,13 +147,6 @@ pub fn construction_payloads(
         ));
     }
 
-    // TODO: support multiple operations
-    if operations.len() != 1 {
-        return Err(Error::processing_construction_failed(
-            &"Only one operation is supported",
-        ));
-    }
-
     // ICRC Rosetta only supports one transaction per request
     // Each transaction has exactly one PublicKey that is associated with the entity making the call to the ledger
     if public_keys.is_empty() {
@@ -180,7 +164,7 @@ pub fn construction_payloads(
     let sender_public_key = public_keys[0].clone();
 
     handle_construction_payloads(
-        operations[0].clone(),
+        operations,
         created_at_time,
         memo,
         ingress_end,
@@ -229,7 +213,7 @@ pub fn construction_parse(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::common::utils::utils::icrc1_operation_to_rosetta_core_operation;
+    use crate::common::utils::utils::icrc1_operation_to_rosetta_core_operations;
     use ic_agent::Identity;
     use ic_canister_client_sender::{Ed25519KeyPair, Secp256k1KeyPair};
     use ic_icrc1_test_utils::minter_identity;
@@ -345,16 +329,22 @@ mod tests {
                         let now = SystemTime::now();
                         let icrc1_transaction: ic_icrc1::Transaction<U256> = arg_with_caller
                             .to_transaction(minter_identity().sender().unwrap().into());
-                        let rosetta_core_operation = icrc1_operation_to_rosetta_core_operation(
+                        let fee = match icrc1_transaction.operation {
+                            ic_icrc1::Operation::Transfer { fee, .. } => fee,
+                            ic_icrc1::Operation::Approve { fee, .. } => fee,
+                            _ => panic!("Invalid operation"),
+                        };
+                        let rosetta_core_operations = icrc1_operation_to_rosetta_core_operations(
                             icrc1_transaction.operation.into(),
                             currency.clone(),
+                            fee.map(|fee| fee.into()),
                         )
                         .unwrap();
 
                         let ConstructionPreprocessResponse {
                             required_public_keys,
                             ..
-                        } = construction_preprocess(vec![rosetta_core_operation.clone()]).unwrap();
+                        } = construction_preprocess(rosetta_core_operations.clone()).unwrap();
 
                         assert_eq!(
                             required_public_keys,
@@ -365,7 +355,7 @@ mod tests {
                         );
 
                         let construction_payloads_response = construction_payloads(
-                            vec![rosetta_core_operation.clone()],
+                            rosetta_core_operations.clone(),
                             Some(
                                 construction_payloads_request_metadata
                                     .clone()
@@ -386,7 +376,7 @@ mod tests {
 
                         assert_parse_response(
                             construction_parse_response.clone(),
-                            vec![rosetta_core_operation.clone()],
+                            rosetta_core_operations.clone(),
                             construction_payloads_request_metadata
                                 .clone()
                                 .try_into()
@@ -412,7 +402,7 @@ mod tests {
 
                         assert_parse_response(
                             construction_parse_response.clone(),
-                            vec![rosetta_core_operation.clone()],
+                            rosetta_core_operations,
                             construction_payloads_request_metadata
                                 .clone()
                                 .try_into()

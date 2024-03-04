@@ -173,7 +173,7 @@ impl TryFrom<TransactionIdentifier> for ByteBuf {
 
 /// The operation_identifier uniquely identifies an operation within a
 /// transaction.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
 #[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct OperationIdentifier {
     /// The operation index is used to ensure each operation has a unique

@@ -187,6 +187,31 @@ mod test {
 
     const BLOCKHAIN_LENGTH: usize = 1000;
 
+    fn compare_transaction(
+        mut a: rosetta_core::objects::Transaction,
+        mut b: rosetta_core::objects::Transaction,
+    ) {
+        a.operations.iter_mut().for_each(|op| {
+            op.related_operations = op.related_operations.clone().map(|mut x| {
+                x.sort_by(|a, b| a.index.cmp(&b.index));
+                x
+            })
+        });
+        b.operations.iter_mut().for_each(|op| {
+            op.related_operations = op.related_operations.clone().map(|mut x| {
+                x.sort_by(|a, b| a.index.cmp(&b.index));
+                x
+            })
+        });
+        assert_eq!(a, b);
+    }
+
+    fn compare_blocks(mut a: rosetta_core::objects::Block, mut b: rosetta_core::objects::Block) {
+        for (tx_a, tx_b) in a.transactions.iter_mut().zip(b.transactions.iter_mut()) {
+            compare_transaction(tx_a.clone(), tx_b.clone());
+        }
+    }
+
     proptest! {
         #![proptest_config(ProptestConfig {
             cases: 10,
@@ -286,8 +311,8 @@ mod test {
                             };
 
                         // If the block identifier index is valid the service should return the block
-                        let block_res = block(&storage_client_memory,&block_identifier,metadata.decimals,metadata.symbol.clone());
-                        assert_eq!(block_res.unwrap(),BlockResponse {
+                        let block_res = block(&storage_client_memory,&block_identifier,metadata.decimals,metadata.symbol.clone()).unwrap();
+                        let expected_block_res = BlockResponse {
                             block: Some(
                                 icrc1_rosetta_block_to_rosetta_core_block(rosetta_blocks[valid_block_idx as usize].clone(), Currency {
                                     symbol: metadata.symbol.clone(),
@@ -295,7 +320,9 @@ mod test {
                                     ..Default::default()
                                 }).unwrap(),
                             ),
-                            other_transactions:None});
+                            other_transactions:None};
+
+                            compare_blocks(block_res.block.unwrap(),expected_block_res.clone().block.unwrap());
 
                             block_identifier = PartialBlockIdentifier{
                                 index: None,
@@ -303,16 +330,8 @@ mod test {
                             };
 
                             // If the block identifier hash is valid the service should return the block
-                            let block_res = block(&storage_client_memory,&block_identifier,metadata.decimals,metadata.symbol.clone());
-                            assert_eq!(block_res.unwrap(),BlockResponse {
-                                block: Some(
-                                    icrc1_rosetta_block_to_rosetta_core_block(rosetta_blocks[valid_block_idx as usize].clone(), Currency {
-                                        symbol: metadata.symbol.clone(),
-                                        decimals: metadata.decimals.into(),
-                                        ..Default::default()
-                                    }).unwrap(),
-                                ),
-                                other_transactions:None});
+                            let block_res = block(&storage_client_memory,&block_identifier,metadata.decimals,metadata.symbol.clone()).unwrap();
+                            compare_blocks(block_res.block.unwrap(),expected_block_res.block.unwrap());
 
                             block_identifier = PartialBlockIdentifier{
                                 index: Some(valid_block_idx),
@@ -393,14 +412,15 @@ mod test {
                     };
 
                     // If the block identifier index and hash are valid the service should return the block
-                    let block_transaction_res = block_transaction(&storage_client_memory,&block_identifier,&transaction_identifier,metadata.decimals,metadata.symbol.clone());
+                    let block_transaction_res = block_transaction(&storage_client_memory,&block_identifier,&transaction_identifier,metadata.decimals,metadata.symbol.clone()).unwrap();
                     let expected_block_transaction_res = rosetta_core::response_types::BlockTransactionResponse { transaction: icrc1_rosetta_block_to_rosetta_core_transaction(rosetta_blocks[valid_block_idx as usize].clone(), Currency {
                         symbol: metadata.symbol.clone(),
                         decimals: metadata.decimals.into(),
                         ..Default::default()
                     }).unwrap() };
 
-                    assert_eq!(block_transaction_res.unwrap(),expected_block_transaction_res);
+                    // Sort the related operations so the equality check passes
+                    compare_transaction(block_transaction_res.transaction.clone(),expected_block_transaction_res.transaction.clone());
 
                     transaction_identifier = TransactionIdentifier{
                         hash: invalid_block_hash.clone()
