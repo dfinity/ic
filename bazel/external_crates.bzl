@@ -1208,9 +1208,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "threadpool": crate.spec(
                 version = "^1.8.1",
             ),
-            "tiny_http": crate.spec(
-                version = "^0.10.0",
-            ),
             "time": crate.spec(
                 version = "^0.3.31",
             ),
