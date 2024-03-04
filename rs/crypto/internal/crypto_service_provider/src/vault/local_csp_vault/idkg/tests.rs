@@ -326,15 +326,12 @@ mod idkg_retain_active_keys {
     use crate::public_key_store::{PublicKeyRetainError, PublicKeyStore};
     use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
     use crate::secret_key_store::SecretKeyStoreWriteError;
-    use crate::types::CspSecretKey;
     use crate::vault::api::{IDkgProtocolCspVault, PublicKeyStoreCspVault, SecretKeyStoreCspVault};
-    use crate::vault::local_csp_vault::idkg::{CommitmentOpeningBytes, PublicKeyRetainCheckError};
+    use crate::vault::local_csp_vault::idkg::PublicKeyRetainCheckError;
     use crate::LocalCspVault;
     use crate::SecretKeyStore;
     use assert_matches::assert_matches;
-    use ic_crypto_internal_threshold_sig_ecdsa::{
-        EccCurveType, EccScalar, EccScalarBytes, MEGaPublicKey,
-    };
+    use ic_crypto_internal_threshold_sig_ecdsa::MEGaPublicKey;
     use ic_crypto_internal_types::scope::{ConstScope, Scope};
     use ic_crypto_test_utils_keys::public_keys::valid_idkg_dealing_encryption_public_key;
     use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
@@ -342,7 +339,6 @@ mod idkg_retain_active_keys {
     use ic_types::crypto::canister_threshold_sig::error::IDkgRetainKeysError;
     use mockall::predicate::eq;
     use mockall::Sequence;
-    use parking_lot::RwLock;
     use rand::CryptoRng;
     use rand::Rng;
     use std::collections::BTreeSet;
@@ -803,49 +799,39 @@ mod idkg_retain_active_keys {
     fn should_use_correct_key_scope() {
         let pks = TempPublicKeyStore::new();
 
-        let nsks = Arc::new(RwLock::new(TempSecretKeyStore::new()));
-        let csks = Arc::new(RwLock::new(TempSecretKeyStore::new()));
-
-        let mut mcsks = MockSecretKeyStore::new();
         let mut mnsks = MockSecretKeyStore::new();
+        let mut mcsks = MockSecretKeyStore::new();
 
-        {
-            let csks = Arc::clone(&csks);
-            mcsks
-                .expect_retain_would_modify_keystore()
-                .times(1)
-                .withf(|_, scope| scope == &IDKG_THRESHOLD_KEYS_SCOPE)
-                .returning(move |filter, scope| {
-                    csks.read().retain_would_modify_keystore(filter, scope)
-                });
-        }
+        let mut seq = Sequence::new();
 
-        {
-            let csks = Arc::clone(&csks);
-            mcsks
-                .expect_retain()
-                .times(1)
-                .withf(|_, scope| scope == &IDKG_THRESHOLD_KEYS_SCOPE)
-                .returning(move |filter, scope| csks.write().retain(filter, scope));
-        }
+        const NUMBER_OF_KEYS: usize = 5;
+        mnsks
+            .expect_insert()
+            .times(NUMBER_OF_KEYS)
+            .withf(|_, _, scope| scope == &Some(IDKG_MEGA_SCOPE))
+            .in_sequence(&mut seq)
+            .return_const(Ok(()));
 
-        {
-            let nsks = Arc::clone(&nsks);
-            mnsks
-                .expect_retain()
-                .times(1)
-                .withf(|_, scope| scope == &IDKG_MEGA_SCOPE)
-                .returning(move |filter, scope| nsks.write().retain(filter, scope));
-        }
-        let number_of_keys = 5;
-        {
-            let nsks = Arc::clone(&nsks);
-            mnsks
-                .expect_insert()
-                .times(number_of_keys)
-                .withf(|_, _, scope| scope.expect("empty scope") == IDKG_MEGA_SCOPE)
-                .returning(move |key, id, scope| nsks.write().insert(key, id, scope));
-        }
+        mnsks
+            .expect_retain()
+            .times(1)
+            .withf(|_, scope| scope == &IDKG_MEGA_SCOPE)
+            .in_sequence(&mut seq)
+            .return_const(Ok(()));
+
+        mcsks
+            .expect_retain_would_modify_keystore()
+            .times(1)
+            .withf(|_, scope| scope == &IDKG_THRESHOLD_KEYS_SCOPE)
+            .in_sequence(&mut seq)
+            .return_const(true);
+
+        mcsks
+            .expect_retain()
+            .times(1)
+            .withf(|_, scope| scope == &IDKG_THRESHOLD_KEYS_SCOPE)
+            .in_sequence(&mut seq)
+            .return_const(Ok(()));
 
         let vault = LocalCspVault::builder_for_test()
             .with_public_key_store(pks)
@@ -853,24 +839,9 @@ mod idkg_retain_active_keys {
             .with_node_secret_key_store(mnsks)
             .build();
 
-        // Add a dummy opening to the CSKS to avoid going here through the
-        // full stack of loading a transcript. The correctness of the scope
-        // variable for `insert_or_replace` is tested in the this file's
-        // `load_transcript` module.
-        let scalar = EccScalar::zero(EccCurveType::K256);
-        let scalar_bytes = EccScalarBytes::try_from(&scalar).expect("serialization failed");
-        let opening_bytes = CommitmentOpeningBytes::Simple(scalar_bytes);
-        csks.write()
-            .insert_or_replace(
-                KeyId::from([29u8; 32]),
-                CspSecretKey::IDkgCommitmentOpening(opening_bytes),
-                Some(IDKG_THRESHOLD_KEYS_SCOPE),
-            )
-            .expect("failed to add dummy commitment opening to CSKS");
-
         let oldest_public_key_index = 2;
         let rotated_public_keys =
-            generate_idkg_dealing_encryption_key_pairs(&vault, number_of_keys);
+            generate_idkg_dealing_encryption_key_pairs(&vault, NUMBER_OF_KEYS);
 
         vault
             .idkg_retain_active_keys(
