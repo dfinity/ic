@@ -51,13 +51,13 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities/registry",
     "//rs/test_utilities/time",
     "@crate_index//:assert_matches",
+    "@crate_index//:axum_0_7_0",
     "@crate_index//:maplit",
     "@crate_index//:mockall",
     "@crate_index//:nix",
     "@crate_index//:proptest",
     "@crate_index//:reqwest",
     "@crate_index//:tempfile",
-    "@crate_index//:tiny_http",
     "@crate_index//:url",
 ]
 
