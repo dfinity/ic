@@ -783,7 +783,7 @@ pub struct StateManagerImpl {
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     malicious_flags: MaliciousFlags,
     latest_height_update_time: Arc<Mutex<Instant>>,
-    lsmt_storage: FlagStatus,
+    lsmt_status: FlagStatus,
 }
 
 #[cfg(debug_assertions)]
@@ -1609,7 +1609,7 @@ impl StateManagerImpl {
             fd_factory,
             malicious_flags,
             latest_height_update_time: Arc::new(Mutex::new(Instant::now())),
-            lsmt_storage: config.lsmt_config.lsmt_status,
+            lsmt_status: config.lsmt_config.lsmt_status,
         }
     }
     /// Returns the Page Allocator file descriptor factory. This will then be
@@ -2308,9 +2308,9 @@ impl StateManagerImpl {
                 })
                 .and_then(|(base_manifest, base_height)| {
                     if let Ok(checkpoint_layout) = self.state_layout.checkpoint(base_height) {
-                        // If `lsmt_storage` is enabled, then `dirty_pages` is not needed, as each file is either completely
+                        // If `lsmt_status` is enabled, then `dirty_pages` is not needed, as each file is either completely
                         // new, or identical (same inode) to before.
-                        let dirty_pages = match self.lsmt_storage {
+                        let dirty_pages = match self.lsmt_status {
                             FlagStatus::Enabled => Vec::new(),
                             FlagStatus::Disabled => get_dirty_pages(state),
                         };
@@ -2348,7 +2348,7 @@ impl StateManagerImpl {
                 &self.metrics.checkpoint_metrics,
                 &mut scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS),
                 self.get_fd_factory(),
-                self.lsmt_storage,
+                self.lsmt_status,
             )
         };
         let (cp_layout, checkpointed_state) = match result {
@@ -2433,7 +2433,7 @@ impl StateManagerImpl {
                         target_height: height,
                         dirty_memory_pages: dirty_pages,
                         base_checkpoint: checkpoint_layout,
-                        lsmt_storage: self.lsmt_storage,
+                        lsmt_status: self.lsmt_status,
                     }
                 },
             )
@@ -2449,7 +2449,7 @@ impl StateManagerImpl {
             let checkpoint_layout = self.state_layout.checkpoint(height).unwrap();
             // With lsmt, we do not need the defrag.
             // Without lsmt, the ResetTipAndMerge happens earlier in make_checkpoint.
-            let tip_requests = if self.lsmt_storage == FlagStatus::Enabled {
+            let tip_requests = if self.lsmt_status == FlagStatus::Enabled {
                 vec![TipRequest::ResetTipAndMerge {
                     checkpoint_layout: checkpoint_layout.clone(),
                     pagemaptypes_with_num_pages: pagemaptypes_with_num_pages(state),
@@ -3057,7 +3057,7 @@ impl StateManager for StateManagerImpl {
                 checkpointed_state
             }
             CertificationScope::Metadata => {
-                match self.lsmt_storage {
+                match self.lsmt_status {
                     FlagStatus::Enabled => {
                         let is_nns =
                             self.own_subnet_id == state.metadata.network_topology.nns_subnet_id;
