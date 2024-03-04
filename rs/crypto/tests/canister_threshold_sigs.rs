@@ -1,6 +1,10 @@
 use assert_matches::assert_matches;
 use ic_base_types::PrincipalId;
 use ic_crypto::get_tecdsa_master_public_key;
+use ic_crypto::CryptoComponentImpl;
+use ic_crypto_internal_csp::vault::api::IDkgCreateDealingVaultError;
+use ic_crypto_internal_csp::Csp;
+use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_internal_threshold_sig_ecdsa::test_utils::ComplaintCorrupter;
 use ic_crypto_tecdsa::derive_tecdsa_public_key;
 use ic_crypto_temp_crypto::TempCryptoComponent;
@@ -21,6 +25,7 @@ use ic_crypto_test_utils_canister_threshold_sigs::{setup_masked_random_params, I
 use ic_crypto_test_utils_local_csp_vault::MockLocalCspVault;
 use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
 use ic_interfaces::crypto::{IDkgProtocol, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner};
+use ic_logger::{new_logger, replica_logger::no_op_logger};
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgOpenTranscriptError,
     IDkgVerifyComplaintError, IDkgVerifyDealingPublicError, IDkgVerifyInitialDealingsError,
@@ -542,6 +547,123 @@ mod create_dealing {
             );
         }
     }
+
+    #[test]
+    fn should_fail_on_vault_errors() {
+        fn setup(
+            alg: AlgorithmId,
+            err: IDkgCreateDealingVaultError,
+            rng: &mut ReproducibleRng,
+        ) -> (
+            CanisterThresholdSigTestEnvironment,
+            IDkgTranscriptParams,
+            CryptoComponentImpl<Csp>,
+        ) {
+            let subnet_size = rng.gen_range(1..10);
+            let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
+            let (random_dealers, random_receivers) =
+                env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
+
+            let params =
+                setup_masked_random_params(&env, alg, &random_dealers, &random_receivers, rng);
+
+            let vault = Arc::new({
+                let mut vault = MockLocalCspVault::new();
+                vault
+                    .expect_idkg_create_dealing()
+                    .times(1)
+                    .return_once(move |_, _, _, _, _, _| Err(err));
+                vault
+            });
+
+            let logger = no_op_logger();
+            let metrics = Arc::new(CryptoMetrics::none());
+
+            let csp = Csp::new_from_vault(
+                Arc::clone(&vault) as _,
+                new_logger!(&logger),
+                Arc::clone(&metrics),
+            );
+
+            let dealer = CryptoComponentImpl::new_for_test(
+                csp,
+                vault,
+                logger,
+                Arc::clone(&env.registry) as _,
+                env.nodes.random_dealer(&params, rng).id(),
+                Arc::new(CryptoMetrics::none()),
+                None,
+            );
+
+            (env, params, dealer)
+        }
+
+        macro_rules! setup_with_vault_error_and_assert_matches {
+            ( $rng:expr, $alg:expr; $vault_error:expr => $expected_result_pattern:pat if $cond:expr) => {
+                let (_env, params, dealer) = setup($alg, $vault_error, $rng);
+                assert_matches!(dealer.create_dealing(&params), $expected_result_pattern if $cond);
+            };
+            ( $rng:expr, $alg:expr; $vault_error:expr => $expected_result_pattern:pat ) => {
+                setup_with_vault_error_and_assert_matches!($rng, $alg; $vault_error => $expected_result_pattern if true);
+            };
+        }
+
+        let rng = &mut reproducible_rng();
+
+        for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
+            let valid_receiver_index = 0;
+            let invalid_receiver_index = 1_000_000;
+            let invalid_algorithm_id =
+                ic_protobuf::registry::crypto::v1::AlgorithmId::ThresBls12381;
+
+            setup_with_vault_error_and_assert_matches!(
+                rng, alg;
+                IDkgCreateDealingVaultError::MalformedPublicKey {
+                    receiver_index: valid_receiver_index,
+                    key_bytes: vec![0, 1, 2, 3],
+                } =>
+                    Err(IDkgCreateDealingError::MalformedPublicKey {..})
+            );
+
+            setup_with_vault_error_and_assert_matches!(
+                rng, alg;
+                IDkgCreateDealingVaultError::MalformedPublicKey {
+                    receiver_index: invalid_receiver_index,
+                    key_bytes: vec![0, 1, 2, 3],
+                } =>
+                    Err(IDkgCreateDealingError::InternalError { internal_error })
+                    if internal_error.contains("out of bounds for malformed public key")
+            );
+
+            setup_with_vault_error_and_assert_matches!(
+                rng, alg;
+                IDkgCreateDealingVaultError::UnsupportedAlgorithm(Some(invalid_algorithm_id)) =>
+                    Err(IDkgCreateDealingError::UnsupportedAlgorithm { algorithm_id })
+                    if algorithm_id == Some(invalid_algorithm_id)
+            );
+
+            setup_with_vault_error_and_assert_matches!(
+                rng, alg;
+                IDkgCreateDealingVaultError::TransientInternalError("oh no!".to_string()) =>
+                    Err(IDkgCreateDealingError::TransientInternalError { internal_error })
+                    if internal_error == "oh no!"
+            );
+
+            setup_with_vault_error_and_assert_matches!(
+                rng, alg;
+                IDkgCreateDealingVaultError::SerializationError("oh no!".to_string()) =>
+                    Err(IDkgCreateDealingError::SerializationError { internal_error })
+                    if internal_error == "oh no!"
+            );
+
+            setup_with_vault_error_and_assert_matches!(
+                rng, alg;
+                IDkgCreateDealingVaultError::InternalError("oh no!".to_string()) =>
+                    Err(IDkgCreateDealingError::InternalError { internal_error })
+                    if internal_error == "oh no!"
+            );
+        }
+    }
 }
 
 mod create_transcript {
@@ -855,6 +977,53 @@ mod create_transcript {
                 Err(IDkgCreateTranscriptError::InvalidSignatureBatch {
                     crypto_error: CryptoError::SignatureVerification { .. }
                 })
+            );
+        }
+    }
+
+    #[test]
+    fn should_fail_create_transcript_on_invalid_encoding_of_transcript_operation() {
+        let rng = &mut reproducible_rng();
+        let subnet_size = rng.gen_range(1..10);
+        let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
+        let (dealers, receivers) =
+            env.choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
+
+        for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
+            let masked_params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
+            let mut masked_transcript = env
+                .nodes
+                .run_idkg_and_create_and_verify_transcript(&masked_params, rng);
+            let unmasked_params = build_params_from_previous(
+                masked_params.clone(),
+                IDkgTranscriptOperation::ReshareOfMasked(masked_transcript.clone()),
+                rng,
+            );
+            // invalidate the encoding of transcript
+            masked_transcript.internal_transcript_raw = vec![0xFF; 100];
+            let invalid_unmasked_params = build_params_from_previous(
+                masked_params,
+                IDkgTranscriptOperation::ReshareOfMasked(masked_transcript.clone()),
+                rng,
+            );
+
+            let dealings = env
+                .nodes
+                .load_previous_transcripts_and_create_signed_dealings(&unmasked_params);
+            let multisigned_dealings = env
+                .nodes
+                .support_dealings_from_all_receivers(dealings, &unmasked_params);
+            let creator = env
+                .nodes
+                .filter_by_receivers(&unmasked_params)
+                .next()
+                .unwrap();
+
+            let result = creator.create_transcript(&invalid_unmasked_params, &multisigned_dealings);
+
+            assert_matches!(
+                result,
+                Err(IDkgCreateTranscriptError::SerializationError { .. })
             );
         }
     }
@@ -1659,6 +1828,58 @@ mod verify_transcript {
 
             assert_matches!(r, Err(IDkgVerifyTranscriptError::InvalidArgument(msg))
                             if msg.starts_with("failed to verify transcript against params: insufficient number of dealings"));
+        }
+    }
+
+    #[test]
+    fn should_fail_on_invalid_encoding_of_transcript_operation() {
+        const MIN_NUM_NODES: usize = 4;
+        let rng = &mut reproducible_rng();
+        let subnet_size = rng.gen_range(MIN_NUM_NODES..10);
+        let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
+        let (dealers, receivers) =
+            env.choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
+
+        for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
+            let masked_key_params =
+                setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
+
+            let mut masked_key_transcript = env
+                .nodes
+                .run_idkg_and_create_and_verify_transcript(&masked_key_params, rng);
+
+            let params = build_params_from_previous(
+                masked_key_params.clone(),
+                IDkgTranscriptOperation::ReshareOfMasked(masked_key_transcript.clone()),
+                rng,
+            );
+
+            let transcript = env
+                .nodes
+                .run_idkg_and_create_and_verify_transcript(&params, rng);
+
+            // invalidate the internal transcript
+            masked_key_transcript.internal_transcript_raw = vec![0xF; 100];
+
+            let invalid_params = IDkgTranscriptParams::new(
+                params.transcript_id(),
+                masked_key_params.dealers().get().clone(),
+                masked_key_params.receivers().get().clone(),
+                masked_key_params.registry_version(),
+                masked_key_params.algorithm_id(),
+                IDkgTranscriptOperation::ReshareOfMasked(masked_key_transcript),
+            )
+            .expect("failed to create resharing/multiplication IDkgTranscriptParams");
+
+            let result = env
+                .nodes
+                .random_filtered_by_receivers(invalid_params.receivers(), rng)
+                .verify_transcript(&invalid_params, &transcript);
+
+            assert_matches!(
+                result, Err(IDkgVerifyTranscriptError::InvalidArgument(internal_error))
+                if internal_error.starts_with("failed to convert transcript operation to internal counterpart")
+            );
         }
     }
 
@@ -2568,6 +2789,53 @@ mod load_transcript_with_openings {
     }
 
     #[test]
+    fn should_return_ok_immediately_if_receiver_id_is_not_in_receivers() {
+        let rng = &mut reproducible_rng();
+        let subnet_size = rng.gen_range(1..10);
+        let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
+        let (dealers, receivers) = env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
+
+        for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
+            let params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
+            let transcript = env
+                .nodes
+                .run_idkg_and_create_and_verify_transcript(&params, rng);
+            // the loader with the id that is not in the receivers
+            let node_id_not_in_receivers = loop {
+                let node_id = NodeId::from(PrincipalId::new_node_test_id(rng.gen()));
+                if !params.receivers().contains(node_id) {
+                    break node_id;
+                }
+            };
+            let vault = Arc::new(MockLocalCspVault::new());
+            let logger = no_op_logger();
+            let metrics = Arc::new(CryptoMetrics::none());
+            let csp = Csp::new_from_vault(
+                Arc::clone(&vault) as _,
+                new_logger!(&logger),
+                Arc::clone(&metrics),
+            );
+            let loader = CryptoComponentImpl::new_for_test(
+                csp,
+                vault,
+                logger,
+                Arc::clone(&env.registry) as _,
+                node_id_not_in_receivers,
+                metrics,
+                None,
+            );
+
+            env.nodes
+                .random_filtered_by_receivers(params.receivers(), rng);
+            let openings = BTreeMap::new();
+
+            let result = loader.load_transcript_with_openings(&transcript, &openings);
+
+            assert_eq!(result, Ok(()));
+        }
+    }
+
+    #[test]
     fn should_load_with_enough_openings() {
         const MIN_NUM_NODES: usize = 2;
         let rng = &mut reproducible_rng();
@@ -2736,6 +3004,169 @@ mod load_transcript_with_openings {
             assert_matches!(
                 result,
                 Err(IDkgLoadTranscriptError::InsufficientOpenings { .. })
+            );
+        }
+    }
+
+    #[test]
+    fn should_fail_if_opener_id_not_in_receivers() {
+        const MIN_NUM_NODES: usize = 4;
+        let rng = &mut reproducible_rng();
+        let subnet_size = rng.gen_range(MIN_NUM_NODES..10);
+        let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
+        let (dealers, receivers) = env.choose_dealers_and_receivers(
+            &IDkgParticipants::RandomWithAtLeast {
+                min_num_dealers: 1,
+                min_num_receivers: MIN_NUM_NODES,
+            },
+            rng,
+        );
+        for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
+            let params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
+            let mut transcript = env
+                .nodes
+                .run_idkg_and_create_and_verify_transcript(&params, rng);
+            let reconstruction_threshold =
+                usize::try_from(transcript.reconstruction_threshold().get())
+                    .expect("invalid number");
+            let number_of_openings = reconstruction_threshold;
+
+            let (complainer, complaint) =
+                corrupt_random_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
+            let mut complaint_with_openings = generate_and_verify_openings_for_complaint(
+                number_of_openings,
+                &transcript,
+                &env,
+                complainer,
+                complaint,
+            );
+
+            let (_complaint, openings) = complaint_with_openings
+                .iter_mut()
+                .next()
+                .expect("empty openings");
+
+            let (key_to_replace, opening) = openings
+                .first_key_value()
+                .map(|(k, o)| (*k, o.clone()))
+                .expect("empty openings");
+            openings.remove(&key_to_replace);
+            openings.insert(NodeId::from(PrincipalId::new_anonymous()), opening);
+
+            let result =
+                complainer.load_transcript_with_openings(&transcript, &complaint_with_openings);
+
+            assert_matches!(
+                result,
+                Err(IDkgLoadTranscriptError::InvalidArguments { internal_error })
+                if internal_error.contains("invalid opener")
+            );
+        }
+    }
+
+    #[test]
+    fn should_fail_if_opening_cannot_be_deserialized() {
+        const MIN_NUM_NODES: usize = 4;
+        let rng = &mut reproducible_rng();
+        let subnet_size = rng.gen_range(MIN_NUM_NODES..10);
+        let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
+        let (dealers, receivers) = env.choose_dealers_and_receivers(
+            &IDkgParticipants::RandomWithAtLeast {
+                min_num_dealers: 1,
+                min_num_receivers: MIN_NUM_NODES,
+            },
+            rng,
+        );
+        for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
+            let params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
+            let mut transcript = env
+                .nodes
+                .run_idkg_and_create_and_verify_transcript(&params, rng);
+            let reconstruction_threshold =
+                usize::try_from(transcript.reconstruction_threshold().get())
+                    .expect("invalid number");
+            let number_of_openings = reconstruction_threshold;
+
+            let (complainer, complaint) =
+                corrupt_random_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
+            let mut complaint_with_openings = generate_and_verify_openings_for_complaint(
+                number_of_openings,
+                &transcript,
+                &env,
+                complainer,
+                complaint,
+            );
+
+            let openings = complaint_with_openings
+                .values_mut()
+                .next()
+                .expect("empty openings");
+            let (_opener_id, opening) = openings.iter_mut().next().expect("empty openings");
+            // invalidate the opening encoding
+            opening.internal_opening_raw = vec![0xFF; 100];
+
+            let result =
+                complainer.load_transcript_with_openings(&transcript, &complaint_with_openings);
+
+            assert_matches!(
+                result,
+                Err(IDkgLoadTranscriptError::SerializationError { internal_error })
+                if internal_error.contains("failed to deserialize opening")
+            );
+        }
+    }
+
+    #[test]
+    fn should_fail_if_dealer_id_in_complaint_is_not_among_dealers_in_transcript() {
+        const MIN_NUM_NODES: usize = 4;
+        let rng = &mut reproducible_rng();
+        let subnet_size = rng.gen_range(MIN_NUM_NODES..10);
+        let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
+        let (dealers, receivers) = env.choose_dealers_and_receivers(
+            &IDkgParticipants::RandomWithAtLeast {
+                min_num_dealers: 1,
+                min_num_receivers: MIN_NUM_NODES,
+            },
+            rng,
+        );
+        for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
+            let params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
+            let mut transcript = env
+                .nodes
+                .run_idkg_and_create_and_verify_transcript(&params, rng);
+            let reconstruction_threshold =
+                usize::try_from(transcript.reconstruction_threshold().get())
+                    .expect("invalid number");
+            let number_of_openings = reconstruction_threshold;
+
+            let (complainer, complaint) =
+                corrupt_random_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
+            let mut complaint_with_openings = generate_and_verify_openings_for_complaint(
+                number_of_openings,
+                &transcript,
+                &env,
+                complainer,
+                complaint,
+            );
+
+            let (mut complaint, mut openings) = complaint_with_openings
+                .first_key_value()
+                .map(|(c, o)| (c.clone(), o.clone()))
+                .expect("empty openings");
+            complaint_with_openings.remove(&complaint);
+            complaint.dealer_id = NodeId::from(PrincipalId::new_anonymous());
+            for (_opener_id, opening) in openings.iter_mut() {
+                opening.dealer_id = NodeId::from(PrincipalId::new_anonymous());
+            }
+            complaint_with_openings.insert(complaint, openings);
+
+            let result =
+                complainer.load_transcript_with_openings(&transcript, &complaint_with_openings);
+
+            assert_matches!(
+                result,
+                Err(IDkgLoadTranscriptError::InvalidArguments { internal_error })
+                if internal_error.contains("invalid complaint") && internal_error.contains("not a dealer")
             );
         }
     }
@@ -3170,13 +3601,10 @@ mod get_tecdsa_master_public_key {
 
 mod verify_dealing_private {
     use super::*;
-    use ic_crypto::CryptoComponentImpl;
-    use ic_crypto_internal_logmon::metrics::CryptoMetrics;
     use ic_crypto_test_utils_canister_threshold_sigs::{setup_masked_random_params, IntoBuilder};
     use ic_crypto_test_utils_csp::MockAllCryptoServiceProvider;
     use ic_crypto_test_utils_keys::public_keys::valid_idkg_dealing_encryption_public_key;
     use ic_interfaces_registry_mocks::MockRegistryClient;
-    use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_registry_keys::make_crypto_node_key;
     use ic_types::crypto::canister_threshold_sig::error::IDkgVerifyDealingPrivateError;
@@ -3330,19 +3758,71 @@ mod verify_dealing_private {
     }
 
     #[test]
-    fn should_panic_on_public_key_registry_error() {
+    fn should_fail_if_dealing_signer_id_is_not_a_dealer_id() {
+        let rng = &mut reproducible_rng();
+        let subnet_size = rng.gen_range(1..10);
+        let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
+        let (dealers, receivers) = env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
+
+        for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
+            let params = setup_masked_random_params(&env, alg, &dealers, &receivers, rng);
+            let dealer = env.nodes.random_dealer(&params, rng);
+            let signed_dealing = dealer.create_dealing_or_panic(&params);
+            let receiver = env
+                .nodes
+                .random_filtered_by_receivers(params.receivers(), rng);
+
+            let invalid_dealer_id = NodeId::from(PrincipalId::new_anonymous());
+
+            let result = receiver.verify_dealing_private(
+                &params,
+                &signed_dealing
+                    .into_builder()
+                    .with_dealer_id(invalid_dealer_id)
+                    .build(),
+            );
+
+            assert_matches!(
+                result,
+                Err(IDkgVerifyDealingPrivateError::InvalidArgument(reason))
+                if reason.starts_with("failed to determine dealer index: node") &&
+                reason.contains("is not a dealer"));
+        }
+    }
+
+    #[test]
+    fn should_fail_on_public_key_registry_error() {
         let rng = &mut reproducible_rng();
         let registry_client_error = RegistryClientError::PollLockFailed {
             error: "oh no!".to_string(),
         };
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            let setup = Setup::new_with_registry_error(alg, registry_client_error.clone(), rng);
+            let setup =
+                Setup::new_with_registry_result(alg, Err(registry_client_error.clone()), rng);
 
             assert_matches!(
                 setup.crypto.verify_dealing_private(&setup.params, &setup.signed_dealing),
                 Err(IDkgVerifyDealingPrivateError::RegistryError(error))
                     if error == registry_client_error
+            );
+        }
+    }
+
+    #[test]
+    fn should_fail_on_missing_key_in_the_registry() {
+        let rng = &mut reproducible_rng();
+
+        let key_not_found = Ok(None);
+
+        for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
+            let setup = Setup::new_with_registry_result(alg, key_not_found.clone(), rng);
+
+            assert_matches!(
+                setup
+                    .crypto
+                    .verify_dealing_private(&setup.params, &setup.signed_dealing),
+                Err(IDkgVerifyDealingPrivateError::PublicKeyNotInRegistry { .. })
             );
         }
     }
@@ -3363,7 +3843,7 @@ mod verify_dealing_private {
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
             for vault_error in &vault_errors {
-                let setup = Setup::new_with_expected_vault_error(alg, vault_error.clone(), rng);
+                let setup = Setup::new_with_vault_error(alg, vault_error.clone(), rng);
 
                 assert_matches!(
                     setup.crypto.verify_dealing_private(&setup.params, &setup.signed_dealing),
@@ -3400,37 +3880,37 @@ mod verify_dealing_private {
     }
 
     impl Setup {
-        fn new_with_registry_error(
+        fn new_with_registry_result(
             alg: AlgorithmId,
-            expected_registry_error: RegistryClientError,
+            registry_result: Result<Option<Vec<u8>>, RegistryClientError>,
             rng: &mut ReproducibleRng,
         ) -> Setup {
-            Self::new_with_vault_and_optional_registry_client_error(
+            Self::new_with_vault_and_optional_registry_client_result(
                 alg,
                 MockLocalCspVault::new(),
-                Some(expected_registry_error),
+                Some(registry_result),
                 rng,
             )
         }
 
-        fn new_with_expected_vault_error(
+        fn new_with_vault_error(
             alg: AlgorithmId,
-            expected_error: IDkgVerifyDealingPrivateError,
+            vault_error: IDkgVerifyDealingPrivateError,
             rng: &mut ReproducibleRng,
         ) -> Setup {
             let mut mock_vault = MockLocalCspVault::new();
             mock_vault
                 .expect_idkg_verify_dealing_private()
                 .times(1)
-                .returning(move |_, _, _, _, _, _| Err(expected_error.clone()));
+                .returning(move |_, _, _, _, _, _| Err(vault_error.clone()));
 
-            Self::new_with_vault_and_optional_registry_client_error(alg, mock_vault, None, rng)
+            Self::new_with_vault_and_optional_registry_client_result(alg, mock_vault, None, rng)
         }
 
-        fn new_with_vault_and_optional_registry_client_error(
+        fn new_with_vault_and_optional_registry_client_result(
             alg: AlgorithmId,
             mock_vault: MockLocalCspVault,
-            registry_client_error: Option<RegistryClientError>,
+            registry_client_result: Option<Result<Option<Vec<u8>>, RegistryClientError>>,
             rng: &mut ReproducibleRng,
         ) -> Setup {
             let subnet_size = rng.gen_range(1..10);
@@ -3446,7 +3926,7 @@ mod verify_dealing_private {
                 .expect("should contain at least one receiver");
 
             let mut mock_registry = MockRegistryClient::new();
-            match registry_client_error {
+            match registry_client_result {
                 None => {
                     let registry_key = make_crypto_node_key(node_id, IDkgMEGaEncryption);
                     let registry_version = params.registry_version();
@@ -3463,11 +3943,11 @@ mod verify_dealing_private {
                         })
                         .return_const(Ok(Some(idkg_dealing_encryption_public_key_bytes)));
                 }
-                Some(registry_client_error) => {
+                Some(result) => {
                     mock_registry
                         .expect_get_value()
                         .times(1)
-                        .returning(move |_, _| Err(registry_client_error.clone()));
+                        .return_once(move |_, _| result);
                 }
             }
             let registry_client = Arc::new(mock_registry);
