@@ -54,7 +54,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use candid::{Decode, Encode};
-use cycles_minting_canister::IcpXdrConversionRateCertifiedResponse;
+use cycles_minting_canister::{IcpXdrConversionRate, IcpXdrConversionRateCertifiedResponse};
 use dfn_core::api::spawn;
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
@@ -1476,6 +1476,18 @@ pub struct Governance {
 
     /// Scope guard for minting node provider rewards.
     minting_node_provider_rewards: bool,
+
+    /// Local cache for XDR-related conversion rates (the source of truth is in the CMC canister).
+    pub xdr_conversion_rate: Option<XdrConversionRate>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct XdrConversionRate {
+    /// Time at which this rate has been fetched.
+    pub timestamp_seconds: u64,
+
+    /// Number of 1/10,000ths of XDR that 1 ICP is worth.
+    pub xdr_permyriad_per_icp: u64,
 }
 
 pub fn governance_minting_account() -> AccountIdentifier {
@@ -1649,6 +1661,7 @@ impl Governance {
             latest_gc_num_proposals: 0,
             neuron_data_validator: NeuronDataValidator::new(),
             minting_node_provider_rewards: false,
+            xdr_conversion_rate: None,
         }
     }
 
@@ -1673,6 +1686,7 @@ impl Governance {
             latest_gc_num_proposals: 0,
             neuron_data_validator: NeuronDataValidator::new(),
             minting_node_provider_rewards: false,
+            xdr_conversion_rate: None,
         }
     }
 
@@ -6031,6 +6045,14 @@ impl Governance {
         // Try to spawn neurons (potentially multiple times per day).
         } else if self.can_spawn_neurons() {
             self.spawn_neurons().await;
+        } else {
+            let refresh_xdr_rate_result = self.maybe_refresh_xdr_rate().await;
+            if let Err(err) = refresh_xdr_rate_result {
+                println!(
+                    "{}Error when refreshing XDR rate in run_periodic_tasks: {}",
+                    LOG_PREFIX, err,
+                );
+            }
         }
 
         self.unstake_maturity_of_dissolved_neurons();
@@ -6071,6 +6093,40 @@ impl Governance {
         self.heap_data.cached_daily_maturity_modulation_basis_points = Some(maturity_modulation);
         self.heap_data
             .maturity_modulation_last_updated_at_timestamp_seconds = Some(now_seconds);
+    }
+
+    fn should_refresh_xdr_rate(&self) -> bool {
+        let Some(ref xdr_conversion_rate) = self.xdr_conversion_rate else {
+            return true;
+        };
+
+        let now_seconds = self.env.now();
+
+        // Return `true` if more than 1 day has passed since the last `xdr_conversion_rate` was
+        // updated. This assumes that `xdr_conversion_rate.timestamp_seconds` is rounded down to
+        // the nearest day's beginning.
+        now_seconds.saturating_sub(xdr_conversion_rate.timestamp_seconds) > ONE_DAY_SECONDS
+    }
+
+    async fn maybe_refresh_xdr_rate(&mut self) -> Result<(), GovernanceError> {
+        if !self.should_refresh_xdr_rate() {
+            return Ok(());
+        };
+
+        // The average (last 30 days) conversion rate from 10,000ths of an XDR to 1 ICP
+        let IcpXdrConversionRate {
+            timestamp_seconds,
+            xdr_permyriad_per_icp,
+        } = self.get_average_icp_xdr_conversion_rate().await?.data;
+
+        let xdr_conversion_rate = XdrConversionRate {
+            timestamp_seconds,
+            xdr_permyriad_per_icp,
+        };
+
+        self.xdr_conversion_rate = Some(xdr_conversion_rate);
+
+        Ok(())
     }
 
     /// When a neuron is finally dissolved, if there is any staked maturity it is moved to regular maturity
