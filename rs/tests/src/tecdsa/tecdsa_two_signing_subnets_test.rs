@@ -21,17 +21,17 @@ Success::
 
 end::catalog[] */
 
-use crate::consensus::catch_up_test::await_node_certified_height;
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
-    HasIcDependencies, HasPublicApiUrl, HasRegistryVersion, HasTopologySnapshot, IcNodeContainer,
-    SubnetSnapshot,
+    retry, HasIcDependencies, HasPublicApiUrl, HasRegistryVersion, HasTopologySnapshot,
+    IcNodeContainer, SubnetSnapshot, TopologySnapshot, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
 };
 use crate::orchestrator::utils::rw_message::install_nns_and_check_progress;
 use crate::orchestrator::utils::subnet_recovery::{get_ecdsa_pub_key, run_ecdsa_signature_test};
 use crate::tecdsa::{create_new_subnet_with_keys, make_key};
 use crate::{tecdsa::KEY_ID1, util::*};
+use anyhow::bail;
 use canister_test::Canister;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
@@ -45,6 +45,7 @@ use super::{empty_subnet_update, execute_update_subnet_proposal};
 
 const NODES_COUNT: usize = 4;
 const DKG_INTERVAL: u64 = 9;
+const MR_REGISTRY_VERSION: &str = "mr_registry_version";
 
 pub fn config(env: TestEnv) {
     InternetComputer::new()
@@ -95,17 +96,51 @@ fn disable_signing(governance: &Canister<'_>, subnet_id: SubnetId, logger: &Logg
     ));
 }
 
-fn wait_for_three_intervals(subnet: &SubnetSnapshot, logger: &Logger) {
-    let node = subnet.nodes().next().unwrap();
-    let current_height = node.status().unwrap().certified_height.unwrap().get();
-    let target_height = current_height + 3 * DKG_INTERVAL;
+fn wait_until_ic_mr_version(
+    snapshot: &TopologySnapshot,
+    target_registry_version: u64,
+    logger: &Logger,
+) {
+    snapshot
+        .subnets()
+        .for_each(|subnet| wait_until_subnet_mr_version(&subnet, target_registry_version, logger));
+}
 
-    info!(logger, "Waiting until height {}", target_height);
-    await_node_certified_height(
-        &subnet.nodes().next().unwrap(),
-        Height::new(target_height),
-        logger.clone(),
+fn wait_until_subnet_mr_version(
+    subnet: &SubnetSnapshot,
+    target_registry_version: u64,
+    logger: &Logger,
+) {
+    info!(
+        logger,
+        "Waiting until message routing registry version {} on subnet {}",
+        target_registry_version,
+        subnet.subnet_id,
     );
+    let metrics = MetricsFetcher::new(subnet.nodes().take(1), vec![MR_REGISTRY_VERSION.into()]);
+    retry(
+        logger.clone(),
+        READY_WAIT_TIMEOUT,
+        RETRY_BACKOFF,
+        || match block_on(metrics.fetch::<u64>()) {
+            Ok(val) => {
+                let current_registry_version = val[MR_REGISTRY_VERSION][0];
+                if current_registry_version >= target_registry_version {
+                    Ok(())
+                } else {
+                    bail!(
+                        "Target registry version not yet reached, current: {}, target: {}",
+                        current_registry_version,
+                        target_registry_version,
+                    )
+                }
+            }
+            Err(err) => {
+                bail!("Could not connect to metrics yet {:?}", err);
+            }
+        },
+    )
+    .expect("The subnet did not reach the specified registry version in time")
 }
 
 pub fn test(env: TestEnv) {
@@ -122,7 +157,7 @@ pub fn test(env: TestEnv) {
     let governance = Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
 
     let replica_version = env.get_initial_replica_version().unwrap();
-    let registry_version = snapshot.get_registry_version();
+    let mut registry_version = snapshot.get_registry_version();
     let root_subnet_id = snapshot.root_subnet_id();
 
     let unassigned_node_ids = snapshot.unassigned_nodes().map(|n| n.node_id).collect();
@@ -138,9 +173,8 @@ pub fn test(env: TestEnv) {
         replica_version,
         &logger,
     ));
-
-    let snapshot =
-        block_on(snapshot.block_for_min_registry_version(registry_version.increment())).unwrap();
+    registry_version.inc_assign();
+    let snapshot = block_on(snapshot.block_for_min_registry_version(registry_version)).unwrap();
 
     let app_subnet = snapshot
         .subnets()
@@ -154,17 +188,19 @@ pub fn test(env: TestEnv) {
 
     info!(logger, "Enabling signing on NNS.");
     enable_signing(&governance, root_subnet_id, &logger);
+    registry_version.inc_assign();
     let pub_key = get_ecdsa_pub_key(&nns_canister, &logger);
     run_ecdsa_signature_test(&nns_canister, &logger, pub_key);
 
-    let nns = snapshot.root_subnet();
     info!(logger, "Enabling signing on App subnet.");
     enable_signing(&governance, app_subnet.subnet_id, &logger);
-    wait_for_three_intervals(&nns, &logger);
+    registry_version.inc_assign();
+    wait_until_ic_mr_version(&snapshot, registry_version.get(), &logger);
     run_ecdsa_signature_test(&nns_canister, &logger, pub_key);
 
     info!(logger, "Disabling signing on NNS.");
     disable_signing(&governance, root_subnet_id, &logger);
-    wait_for_three_intervals(&nns, &logger);
+    registry_version.inc_assign();
+    wait_until_ic_mr_version(&snapshot, registry_version.get(), &logger);
     run_ecdsa_signature_test(&nns_canister, &logger, pub_key);
 }
