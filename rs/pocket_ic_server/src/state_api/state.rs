@@ -1,7 +1,7 @@
 /// This module contains the core state of the PocketIc server.
 /// Axum handlers operate on a global state of type ApiState, whose
 /// interface guarantees consistency and determinism.
-use crate::pocket_ic::{PocketIc, SetTimeAndTick};
+use crate::pocket_ic::{AdvanceTimeAndTick, PocketIc};
 use crate::InstanceId;
 use crate::{OpId, Operation};
 use base64;
@@ -13,7 +13,7 @@ use std::{
     collections::{BTreeMap, HashMap},
     sync::Arc,
     thread::Builder as ThreadBuilder,
-    time::{Duration, SystemTime},
+    time::Duration,
 };
 use tokio::{
     sync::mpsc::error::TryRecvError,
@@ -28,6 +28,8 @@ const DEFAULT_SYNC_WAIT_DURATION: Duration = Duration::from_secs(10);
 
 // The minimum delay between consecutive ticks in auto progress mode.
 const MIN_TICK_DELAY: Duration = Duration::from_millis(100);
+// The retry delay when polling for status of a long-running tick.
+const POLL_TICK_STATUS_DELAY: Duration = Duration::from_millis(100);
 
 pub const STATE_LABEL_HASH_SIZE: usize = 32;
 
@@ -352,11 +354,15 @@ impl ApiState {
         if progress_thread.is_none() {
             let (tx, mut rx) = mpsc::channel::<()>(1);
             let handle = spawn(async move {
+                use std::time::Instant;
+                let mut now = Instant::now();
+                let mut advance_time = Duration::default();
                 loop {
-                    use std::time::Instant;
                     let start = Instant::now();
-                    let cur_op = SetTimeAndTick(SystemTime::now());
-                    match Self::update_instances_with_timeout(
+                    let old = std::mem::replace(&mut now, Instant::now());
+                    advance_time += old.elapsed();
+                    let cur_op = AdvanceTimeAndTick(advance_time);
+                    let retry_immediately = match Self::update_instances_with_timeout(
                         instances.clone(),
                         drop_sender.clone(),
                         cur_op.into(),
@@ -365,18 +371,24 @@ impl ApiState {
                     )
                     .await
                     {
-                        Ok(UpdateReply::Busy { .. }) => {}
-                        Ok(UpdateReply::Output(_)) => {}
+                        Ok(UpdateReply::Busy { .. }) => true,
+                        Ok(UpdateReply::Output(_)) => {
+                            advance_time = Duration::default();
+                            false
+                        }
                         Ok(UpdateReply::Started { state_label, op_id }) => loop {
                             if Self::read_result(graph.clone(), &state_label, &op_id).is_some() {
-                                break;
+                                advance_time = Duration::default();
+                                break false;
                             }
-                            sleep(Duration::from_millis(100)).await;
+                            sleep(POLL_TICK_STATUS_DELAY).await;
                         },
-                        Err(_) => {}
-                    }
+                        Err(_) => true,
+                    };
                     let duration = start.elapsed();
-                    sleep(std::cmp::max(duration, MIN_TICK_DELAY)).await;
+                    if !retry_immediately {
+                        sleep(std::cmp::max(duration, MIN_TICK_DELAY)).await;
+                    }
                     match rx.try_recv() {
                         Ok(_) | Err(TryRecvError::Disconnected) => {
                             break;

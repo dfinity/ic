@@ -4,13 +4,14 @@ use ic_registry_subnet_type::SubnetType;
 use ic_tests::spec_compliance::run_ic_ref_test;
 use ic_types::PrincipalId;
 use pocket_ic::common::rest::{
-    CanisterIdRange as RawCanisterIdRange, CreateInstanceResponse, SubnetConfigSet, Topology,
+    CanisterIdRange as RawCanisterIdRange, CreateInstanceResponse, RawTime, SubnetConfigSet,
+    Topology,
 };
 use reqwest::blocking::Client;
 use reqwest::{StatusCode, Url};
 use std::path::PathBuf;
 use std::process::Command;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 const LOCALHOST: &str = "127.0.0.1";
 
@@ -209,7 +210,20 @@ fn setup_and_run_ic_ref_test(test_nns: bool, excluded_tests: Vec<&str>, included
             ..Default::default()
         },
     );
-    let endpoint = url.join(&format!("instances/{}/", instance_id)).unwrap();
+    let endpoint = url.join(&format!("instances/{instance_id}/")).unwrap();
+
+    // set time of the IC instance to the current time
+    let time_url = url
+        .join(&format!("instances/{instance_id}/update/set_time"))
+        .unwrap();
+    let now = std::time::SystemTime::now();
+    let body = RawTime {
+        nanos_since_epoch: now
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("Time went backwards")
+            .as_nanos() as u64,
+    };
+    client.post(time_url.clone()).json(&body).send().unwrap();
 
     // set auto_progress on the IC instance
     let progress_url = url
