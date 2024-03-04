@@ -463,7 +463,7 @@ fn dts_works_in_response_callback() {
             "update",
             call_args()
                 .other_side(b.clone())
-                .on_reject(wasm().reject_code().reject_message().reject())
+                .on_reject(wasm().reject_message().reject())
                 .on_reply(
                     wasm()
                         .instruction_counter_is_at_least(1_000_000)
@@ -544,7 +544,7 @@ fn dts_works_in_cleanup_callback() {
             call_args()
                 .other_side(b)
                 .on_reply(wasm().trap())
-                .on_reject(wasm().reject_code().reject_message().reject())
+                .on_reject(wasm().reject_message().reject())
                 .on_cleanup(wasm().instruction_counter_is_at_least(1_000_000)),
             Cycles::from(1000u128),
         )
@@ -621,7 +621,7 @@ fn dts_out_of_subnet_memory_in_response_callback() {
             "update",
             call_args()
                 .other_side(b)
-                .on_reject(wasm().reject_code().reject_message().reject())
+                .on_reject(wasm().reject_message().reject())
                 .on_reply(
                     wasm()
                         .stable_grow(1280)
@@ -726,7 +726,7 @@ fn dts_out_of_subnet_memory_in_cleanup_callback() {
             call_args()
                 .other_side(b)
                 .on_reply(wasm().trap())
-                .on_reject(wasm().reject_code().reject_message().reject())
+                .on_reject(wasm().reject_message().reject())
                 .on_cleanup(
                     wasm()
                         .stable_grow(1280)
@@ -825,7 +825,7 @@ fn dts_abort_works_in_response_callback() {
             "update",
             call_args()
                 .other_side(b.clone())
-                .on_reject(wasm().reject_code().reject_message().reject())
+                .on_reject(wasm().reject_message().reject())
                 .on_reply(
                     wasm()
                         .instruction_counter_is_at_least(1_000_000)
@@ -921,7 +921,7 @@ fn dts_abort_works_in_cleanup_callback() {
             call_args()
                 .other_side(b)
                 .on_reply(wasm().trap())
-                .on_reject(wasm().reject_code().reject_message().reject())
+                .on_reject(wasm().reject_message().reject())
                 .on_cleanup(wasm().instruction_counter_is_at_least(1_000_000)),
             Cycles::from(1000u128),
         )
@@ -1003,7 +1003,7 @@ fn successful_response_scenario(test: &mut ExecutionTest) -> (CanisterId, Messag
             "update",
             call_args()
                 .other_side(b.clone())
-                .on_reject(wasm().reject_code().reject_message().reject())
+                .on_reject(wasm().reject_message().reject())
                 .on_reply(
                     wasm()
                         .instruction_counter_is_at_least(1_000_000)
@@ -1855,7 +1855,7 @@ fn response_callback_succeeds_with_memory_reservation() {
             "update",
             call_args()
                 .other_side(b)
-                .on_reject(wasm().reject_code().reject_message().reject())
+                .on_reject(wasm().reject_message().reject())
                 .on_reply(
                     wasm()
                         .stable_grow(1280)
@@ -1979,7 +1979,7 @@ fn cleanup_callback_succeeds_with_memory_reservation() {
             call_args()
                 .other_side(b)
                 .on_reply(wasm().trap())
-                .on_reject(wasm().reject_code().reject_message().reject())
+                .on_reject(wasm().reject_message().reject())
                 .on_cleanup(
                     wasm()
                         .stable_grow(1280)
@@ -2103,7 +2103,7 @@ fn subnet_available_memory_does_not_change_on_response_abort() {
             "update",
             call_args()
                 .other_side(b)
-                .on_reject(wasm().reject_code().reject_message().reject())
+                .on_reject(wasm().reject_message().reject())
                 .on_reply(
                     wasm()
                         .stable_grow(1280)
@@ -2180,7 +2180,7 @@ fn subnet_available_memory_does_not_change_on_cleanup_abort() {
             call_args()
                 .other_side(b)
                 .on_reply(wasm().trap())
-                .on_reject(wasm().reject_code().reject_message().reject())
+                .on_reject(wasm().reject_message().reject())
                 .on_cleanup(
                     wasm()
                         .stable_grow(1280)
@@ -2254,7 +2254,7 @@ fn subnet_available_memory_does_not_change_on_response_validation_failure() {
             "update",
             call_args()
                 .other_side(b)
-                .on_reject(wasm().reject_code().reject_message().reject())
+                .on_reject(wasm().reject_message().reject())
                 .on_reply(
                     wasm()
                         .stable_grow(1280)
@@ -2326,7 +2326,7 @@ fn subnet_available_memory_does_not_change_on_response_resume_failure() {
             "update",
             call_args()
                 .other_side(b)
-                .on_reject(wasm().reject_code().reject_message().reject())
+                .on_reject(wasm().reject_message().reject())
                 .on_reply(
                     wasm()
                         .stable_grow(1280)
@@ -2412,7 +2412,7 @@ fn subnet_available_memory_does_not_change_on_cleanup_resume_failure() {
             call_args()
                 .other_side(b)
                 .on_reply(wasm().trap())
-                .on_reject(wasm().reject_code().reject_message().reject())
+                .on_reject(wasm().reject_message().reject())
                 .on_cleanup(
                     wasm()
                         .stable_grow(1280)
