@@ -2,9 +2,9 @@ use super::types::{
     CanisterMethodName, ConstructionPayloadsRequestMetadata, EnvelopePair, SignedTransaction,
     UnsignedTransaction,
 };
-use crate::common::types::OperationType;
+
 use crate::common::utils::utils::{
-    icrc1_operation_to_rosetta_core_operation, rosetta_core_operation_to_icrc1_operation,
+    icrc1_operation_to_rosetta_core_operations, rosetta_core_operations_to_icrc1_operation,
 };
 use anyhow::anyhow;
 use anyhow::{bail, Context};
@@ -291,9 +291,9 @@ pub fn build_icrc1_ledger_canister_method_args(
 }
 
 pub fn extract_caller_principal_from_rosetta_core_operation(
-    operation: rosetta_core::objects::Operation,
+    operations: Vec<rosetta_core::objects::Operation>,
 ) -> anyhow::Result<Principal> {
-    let icrc1_operation = rosetta_core_operation_to_icrc1_operation(operation)?;
+    let icrc1_operation = rosetta_core_operations_to_icrc1_operation(operations)?;
     extract_caller_principal_from_icrc1_ledger_operation(&icrc1_operation)
 }
 
@@ -465,21 +465,19 @@ fn build_payloads_from_call_envelope_content(
 }
 
 pub fn handle_construction_payloads(
-    rosetta_core_operation: Operation,
+    rosetta_core_operations: Vec<Operation>,
     created_at_time: u64,
     memo: Option<Memo>,
     ingress_expiry: u64,
     canister_id: Principal,
     sender_public_key: PublicKey,
 ) -> anyhow::Result<ConstructionPayloadsResponse> {
-    // Try to parse the operation type
-    let operation_type = rosetta_core_operation.type_.parse::<OperationType>()?;
-
     // Parse the canister method name from the operation type
-    let canister_method_name = CanisterMethodName::new_from_operation_type(&operation_type)?;
+    let canister_method_name =
+        CanisterMethodName::new_from_rosetta_core_operations(&rosetta_core_operations)?;
 
     // First we need to convert the generic operations into icrc1 operations
-    let icrc1_operation = rosetta_core_operation_to_icrc1_operation(rosetta_core_operation)?;
+    let icrc1_operation = rosetta_core_operations_to_icrc1_operation(rosetta_core_operations)?;
 
     let caller = extract_caller_principal_from_icrc1_ledger_operation(&icrc1_operation)?;
 
@@ -536,10 +534,20 @@ pub fn handle_construction_parse(
                 arg.clone(),
             )?;
 
+            let fee = match &icrc1_transaction.operation {
+                crate::common::storage::types::IcrcOperation::Transfer { fee, .. } => fee.clone(),
+                crate::common::storage::types::IcrcOperation::Approve { fee, .. } => fee.clone(),
+                _ => bail!(
+                    "Operation type not supported: {:?}",
+                    icrc1_transaction.operation
+                ),
+            };
+
             // For the response object we need to convert the icrc1 transaction to a rosetta core operation
-            let rosetta_core_operation = icrc1_operation_to_rosetta_core_operation(
+            let rosetta_core_operations = icrc1_operation_to_rosetta_core_operations(
                 icrc1_transaction.operation,
                 currency.clone(),
+                fee,
             )?;
 
             // Metadata stays the same for all transactions requested in the same batch.
@@ -560,7 +568,7 @@ pub fn handle_construction_parse(
             let caller = Account::from(*envelope_content.sender()).into();
             construction_parse_response
                 .operations
-                .push(rosetta_core_operation);
+                .extend(rosetta_core_operations);
 
             construction_parse_response
                 .account_identifier_signers

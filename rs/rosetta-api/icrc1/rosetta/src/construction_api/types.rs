@@ -110,13 +110,22 @@ impl CanisterMethodName {
         }
     }
 
-    pub fn new_from_operation_type(operation_type: &OperationType) -> anyhow::Result<Self> {
-        match operation_type {
-            OperationType::Burn => bail!("Burn Operation not supported"),
-            OperationType::Mint => bail!("Mint Operation not supported"),
-            OperationType::Transfer => Ok(Self::Icrc1Transfer),
-            OperationType::Approve => Ok(Self::Icrc2Approve),
+    pub fn new_from_rosetta_core_operations(
+        operations: &Vec<rosetta_core::objects::Operation>,
+    ) -> anyhow::Result<Self> {
+        for operation in operations {
+            let operation_type = operation.type_.parse::<OperationType>()?;
+            match operation_type {
+                OperationType::Transfer => return Ok(Self::Icrc1Transfer),
+                OperationType::Approve => return Ok(Self::Icrc2Approve),
+                // An icrc1 operation is made up of multiple rosetta_core operations, so we have to look for the definining operation
+                _ => continue,
+            }
         }
+        bail!(
+            "Could not derive a valid CanisterMethodName from the given operations vector: {:?} ",
+            operations
+        )
     }
 }
 

@@ -74,7 +74,7 @@ impl RosettaBlock {
         self.block.parent_hash.map(ByteBuf::from)
     }
 
-    pub fn get_fee_payed(&self) -> anyhow::Result<Option<Nat>> {
+    pub fn get_fee_paid(&self) -> anyhow::Result<Option<Nat>> {
         Ok(self
             .get_effective_fee()
             .or(match self.get_transaction().operation {

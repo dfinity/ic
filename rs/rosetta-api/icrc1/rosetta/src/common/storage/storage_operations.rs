@@ -174,7 +174,7 @@ pub fn update_account_balances(connection: &mut Connection) -> anyhow::Result<()
                 }
                 crate::common::storage::types::IcrcOperation::Approve { from, .. } => {
                     let fee = rosetta_block
-                        .get_fee_payed()?
+                        .get_fee_paid()?
                         .unwrap_or(Nat(BigUint::zero()));
                     debit(
                         from,
@@ -188,7 +188,7 @@ pub fn update_account_balances(connection: &mut Connection) -> anyhow::Result<()
                     from, to, amount, ..
                 } => {
                     let fee = rosetta_block
-                        .get_fee_payed()?
+                        .get_fee_paid()?
                         .unwrap_or(Nat(BigUint::zero()));
                     let payable_amount = Nat(amount.0.checked_add(&fee.0)
                         .with_context(|| format!("Overflow while adding the fee {} to the amount {} for block at index {}",

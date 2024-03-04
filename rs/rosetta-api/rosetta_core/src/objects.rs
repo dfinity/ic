@@ -9,9 +9,12 @@ use crate::{
     miscellaneous::*,
 };
 use anyhow::bail;
+use anyhow::Context;
+use candid::Nat;
 use candid::Principal;
 use ic_types::PrincipalId;
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 
 pub type Object = serde_json::Value;
 pub type ObjectMap = serde_json::map::Map<String, Object>;
@@ -316,6 +319,17 @@ impl Amount {
             currency,
             metadata: None,
         }
+    }
+}
+
+impl TryFrom<Amount> for Nat {
+    type Error = anyhow::Error;
+    fn try_from(value: Amount) -> std::prelude::v1::Result<Self, Self::Error> {
+        Nat::from_str(match value.value.strip_prefix('-') {
+            Some(value) => value,
+            None => &value.value,
+        })
+        .with_context(|| format!("Failed to convert Amount to Nat: {:?}", value))
     }
 }
 
