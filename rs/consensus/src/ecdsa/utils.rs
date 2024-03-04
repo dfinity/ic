@@ -30,6 +30,7 @@ use ic_types::crypto::canister_threshold_sig::{ExtendedDerivationPath, MasterEcd
 use ic_types::registry::RegistryClientError;
 use ic_types::{Height, RegistryVersion, SubnetId};
 use phantom_newtype::Id;
+use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryInto;
 use std::sync::Arc;
@@ -502,6 +503,13 @@ fn get_ecdsa_subnet_public_key_(
             None
         }
     }
+}
+
+/// Updates the latest purge height, and returns true if
+/// it increased. Otherwise returns false.
+pub(crate) fn update_purge_height(cell: &RefCell<Height>, new_height: Height) -> bool {
+    let prev_purge_height = cell.replace(new_height);
+    new_height > prev_purge_height
 }
 
 #[cfg(test)]
