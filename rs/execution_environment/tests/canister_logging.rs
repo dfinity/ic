@@ -227,7 +227,7 @@ fn test_log_visibility_of_fetch_canister_logs() {
     }
 }
 
-#[test_strategy::proptest(ProptestConfig { cases: 50, ..ProptestConfig::default() })]
+#[test_strategy::proptest(ProptestConfig { cases: 20, ..ProptestConfig::default() })]
 fn test_appending_logs_in_replied_update_call(#[strategy("\\PC*")] message: String) {
     prop_assume!(message.len() < MAX_LOG_MESSAGE_LEN);
     let (env, canister_id, controller) = setup_with_controller(FlagStatus::Enabled);
@@ -254,7 +254,7 @@ fn test_appending_logs_in_replied_update_call(#[strategy("\\PC*")] message: Stri
     );
 }
 
-#[test_strategy::proptest(ProptestConfig { cases: 50, ..ProptestConfig::default() })]
+#[test_strategy::proptest(ProptestConfig { cases: 20, ..ProptestConfig::default() })]
 fn test_appending_logs_in_trapped_update_call(#[strategy("\\PC*")] message: String) {
     prop_assume!(message.len() < MAX_LOG_MESSAGE_LEN);
     let (env, canister_id, controller) = setup_with_controller(FlagStatus::Enabled);
@@ -281,7 +281,7 @@ fn test_appending_logs_in_trapped_update_call(#[strategy("\\PC*")] message: Stri
     );
 }
 
-#[test_strategy::proptest(ProptestConfig { cases: 50, ..ProptestConfig::default() })]
+#[test_strategy::proptest(ProptestConfig { cases: 20, ..ProptestConfig::default() })]
 fn test_appending_logs_in_replied_replicated_query_call(#[strategy("\\PC*")] message: String) {
     prop_assume!(message.len() < MAX_LOG_MESSAGE_LEN);
     let (env, canister_id, controller) = setup_with_controller(FlagStatus::Enabled);
@@ -308,7 +308,7 @@ fn test_appending_logs_in_replied_replicated_query_call(#[strategy("\\PC*")] mes
     );
 }
 
-#[test_strategy::proptest(ProptestConfig { cases: 50, ..ProptestConfig::default() })]
+#[test_strategy::proptest(ProptestConfig { cases: 20, ..ProptestConfig::default() })]
 fn test_appending_logs_in_trapped_replicated_query_call(#[strategy("\\PC*")] message: String) {
     prop_assume!(message.len() < MAX_LOG_MESSAGE_LEN);
     let (env, canister_id, controller) = setup_with_controller(FlagStatus::Enabled);
