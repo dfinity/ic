@@ -62,6 +62,17 @@ impl TryFrom<&[u8; 32]> for Address {
     }
 }
 
+// Converting from 20-byte address to 32-byte, with left zero padding.
+impl From<&Address> for [u8; 32] {
+    fn from(address: &Address) -> Self {
+        let bytes = address.as_ref();
+        let pad = 32 - bytes.len();
+        let mut padded: [u8; 32] = [0; 32];
+        padded[pad..32].copy_from_slice(bytes);
+        padded
+    }
+}
+
 impl FromStr for Address {
     type Err = String;
 
