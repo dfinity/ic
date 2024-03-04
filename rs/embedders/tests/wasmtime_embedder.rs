@@ -1499,3 +1499,31 @@ fn wasm_heap_oob_access() {
         .unwrap_err();
     assert_eq!(err, HypervisorError::Trapped(TrapCode::HeapOutOfBounds));
 }
+
+#[test]
+fn passive_data_segment() {
+    let wat = r#"
+        (module
+            (export "memory" (memory 0))
+            (func (export "canister_update test")
+                i32.const 1024  ;; target memory address
+                i32.const 0     ;; data segment offset
+                i32.const 4     ;; byte length
+                memory.init 0   ;; load passive data segment by index
+    
+                i32.const 1024
+                i32.load
+                i32.const 0x04030201 ;; little endian
+                i32.ne
+                if
+                    unreachable
+                end
+            )
+            (memory i32 1)
+            (data (;0;) "\01\02\03\04")
+    )"#;
+    let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
+    instance
+        .run(FuncRef::Method(WasmMethod::Update(String::from("test"))))
+        .unwrap();
+}
