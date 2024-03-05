@@ -119,9 +119,6 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-#[cfg(not(feature = "test"))]
-use ic_sns_swap::pb::v1::CfNeuron;
-
 /// The 'fake' module is the old scheme for providing NNS test fixtures, aka
 /// the FakeDriver. It is being used here until the older tests have been
 /// ported to the new 'fixtures' module.
