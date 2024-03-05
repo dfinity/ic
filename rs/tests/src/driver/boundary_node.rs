@@ -453,12 +453,15 @@ impl BoundaryNode {
                 let mut tnet = TNet::read_attribute(env);
                 block_on(tnet.deploy_boundary_image(boundary_node_img_url))
                     .expect("failed to deploy guestos image");
-                let vm_res = block_on(tnet.vm_create(CreateVmRequest {
-                    primary_image: ImageLocation::PersistentVolumeClaim {
-                        name: format!("{}-image-boundaryos", tnet.owner.name_any()),
+                let vm_res = block_on(tnet.vm_create(
+                    CreateVmRequest {
+                        primary_image: ImageLocation::PersistentVolumeClaim {
+                            name: format!("{}-image-boundaryos", tnet.owner.name_any()),
+                        },
+                        ..create_vm_req
                     },
-                    ..create_vm_req
-                }))
+                    ImageType::IcOsImage,
+                ))
                 .expect("failed to create vm");
                 tnet.write_attribute(env);
                 vm_res

@@ -112,6 +112,8 @@ impl UniversalVm {
     pub fn start(&self, env: &TestEnv) -> Result<()> {
         let farm = Farm::from_test_env(env, "universal VM");
         let pot_setup = GroupSetup::read_attribute(env);
+
+        env.ssh_keygen()?;
         let res_request =
             get_resource_request_for_universal_vm(self, &pot_setup, &pot_setup.infra_group_name)?;
         let resource_group = allocate_resources(&farm, &res_request, env)?;
@@ -124,7 +126,6 @@ impl UniversalVm {
         env.write_json_object(univm_path.join("vm.json"), vm)?;
         let universal_vm_dir = env.get_path(univm_path);
 
-        env.ssh_keygen()?;
         let mut image_ids = vec![];
         if InfraProvider::read_attribute(env) == InfraProvider::Farm {
             // Setup SSH image
