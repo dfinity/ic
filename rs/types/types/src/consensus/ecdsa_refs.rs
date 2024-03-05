@@ -1380,7 +1380,7 @@ impl PreSignatureQuadrupleRef {
             *self.lambda_masked_ref.as_ref(),
             *self.kappa_times_lambda_ref.as_ref(),
             *self.key_times_lambda_ref.as_ref(),
-            // TODO(CON-1193): return key_unmasked_ref
+            *self.key_unmasked_ref.as_ref(),
         ]
     }
 
