@@ -292,6 +292,9 @@ fn verify_paths(
                     state,
                 )?
             }
+            [b"api_boundary_nodes"] => {}
+            [b"api_boundary_nodes", _node_id]
+            | [b"api_boundary_nodes", _node_id, b"domain" | b"ipv4_address" | b"ipv6_address"] => {}
             [b"subnet"] => {}
             [b"subnet", _subnet_id]
             | [b"subnet", _subnet_id, b"public_key" | b"canister_ranges" | b"node"] => {}
