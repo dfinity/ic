@@ -45,7 +45,6 @@ use ic_interfaces::{
 use ic_interfaces_adapter_client::NonBlockingChannel;
 use ic_interfaces_registry::{LocalStoreCertifiedTimeReader, RegistryClient};
 use ic_interfaces_state_manager::{StateManager, StateReader};
-use ic_interfaces_transport::Transport;
 use ic_logger::{info, replica_logger::ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_p2p::{start_p2p, MAX_ADVERT_BUFFER};
@@ -53,7 +52,6 @@ use ic_quic_transport::DummyUdpSocket;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::state_sync::types::StateSyncMessage;
-use ic_transport::transport::create_transport;
 use ic_types::{
     artifact::{ArtifactKind, ArtifactTag, UnvalidatedArtifactMutation},
     artifact_kind::{
@@ -139,9 +137,6 @@ pub fn setup_consensus_and_p2p(
     malicious_flags: MaliciousFlags,
     node_id: NodeId,
     subnet_id: SubnetId,
-    // For testing purposes the caller can pass a transport object instead. Otherwise, the callee
-    // constructs it from the 'transport_config'.
-    transport: Option<Arc<dyn Transport>>,
     tls_config: Arc<dyn TlsConfig + Send + Sync>,
     tls_handshake: Arc<dyn TlsHandshake + Send + Sync>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
@@ -401,40 +396,32 @@ pub fn setup_consensus_and_p2p(
 
     let _cancellation_token = new_p2p_consensus.run(quic_transport, topology_watcher);
 
-    // Tcp transport
-    let oldest_registry_version_in_use = consensus_pool_cache.get_oldest_registry_version_in_use();
-    let transport = transport.unwrap_or_else(|| {
-        create_transport(
+    if !(ENABLE_NEW_P2P_CONSENSUS
+        && ENABLE_NEW_P2P_CERTIFICATION
+        && ENABLE_NEW_P2P_DKG
+        && ENABLE_NEW_P2P_INGRESS
+        && ENABLE_NEW_P2P_ECDSA
+        && ENABLE_NEW_P2P_HTTPS_OUTCALLS)
+    {
+        let artifact_manager = Arc::new(
+            manager::ArtifactManagerImpl::new_with_default_priority_fn(backends),
+        );
+
+        join_handles.push(start_p2p(
+            log,
+            metrics_registry,
+            rt_handle,
             node_id,
-            transport_config.clone(),
-            registry_client.get_latest_version(),
-            oldest_registry_version_in_use,
-            metrics_registry.clone(),
+            subnet_id,
+            transport_config,
+            registry_client,
+            consensus_pool_cache,
+            artifact_manager,
+            advert_rx,
             tls_handshake,
             sev_handshake,
-            rt_handle.clone(),
-            log.clone(),
-            false,
-        )
-    });
-
-    let artifact_manager = Arc::new(manager::ArtifactManagerImpl::new_with_default_priority_fn(
-        backends,
-    ));
-
-    join_handles.push(start_p2p(
-        log,
-        metrics_registry,
-        rt_handle,
-        node_id,
-        subnet_id,
-        transport_config,
-        registry_client,
-        transport,
-        consensus_pool_cache,
-        artifact_manager,
-        advert_rx,
-    ));
+        ));
+    }
     (ingress_pool, ingress_sender, join_handles)
 }
 
