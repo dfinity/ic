@@ -12418,38 +12418,6 @@ async fn test_settle_neurons_fund_participation_restores_lifecycle_on_ledger_fai
     assert_eq!(proposal.neurons_fund_data, *NEURONS_FUND_DATA_BEFORE_SETTLE);
 }
 
-#[cfg(not(feature = "test"))]
-fn assert_neurons_fund_decremented(
-    gov: &Governance,
-    nf_participants: Vec<sns_swap_pb::CfParticipant>,
-    original_state: BTreeMap<u64, Neuron>,
-) {
-    for participant in nf_participants {
-        for nf_neuron in participant.cf_neurons {
-            let CfNeuron {
-                nns_neuron_id,
-                amount_icp_e8s,
-                has_created_neuron_recipes: _,
-            } = nf_neuron;
-
-            let current_neuron_maturity = gov
-                .neuron_store
-                .with_neuron(&NeuronId { id: nns_neuron_id }, |n| n.clone())
-                .unwrap()
-                .maturity_e8s_equivalent;
-            let original_neuron_maturity = original_state
-                .get(&nns_neuron_id)
-                .unwrap()
-                .maturity_e8s_equivalent;
-
-            assert_eq!(
-                current_neuron_maturity + amount_icp_e8s,
-                original_neuron_maturity
-            );
-        }
-    }
-}
-
 fn assert_neurons_fund_unchanged(gov: &Governance, original_state: BTreeMap<u64, Neuron>) {
     for (id, original_neuron) in original_state {
         let current_neuron = gov
