@@ -39,7 +39,7 @@ def image_deps(mode, malicious = False):
             "//publish/binaries:ic-regedit": "/opt/ic/bin/ic-regedit:0755",
             "//publish/binaries:ic-recovery": "/opt/ic/bin/ic-recovery:0755",
             "//publish/binaries:orchestrator": "/opt/ic/bin/orchestrator:0755",
-            "//publish/binaries:ic-boundary": "/opt/ic/bin/ic-boundary:0755",
+            "//publish/binaries:ic-boundary-tls": "/opt/ic/bin/ic-boundary:0755",
             ("//publish/malicious:replica" if malicious else "//publish/binaries:replica"): "/opt/ic/bin/replica:0755",  # Install the malicious replica if set
             "//publish/binaries:metrics-proxy": "/opt/ic/bin/metrics-proxy:0755",
             "//publish/binaries:sandbox_launcher": "/opt/ic/bin/sandbox_launcher:0755",

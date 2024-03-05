@@ -109,6 +109,19 @@ rust_binary(
     deps = DEPENDENCIES,
 )
 
+rust_binary(
+    name = "ic-boundary-tls",
+    srcs = glob(
+        ["src/**"],
+        exclude = ["src/lib.rs"],
+    ),
+    aliases = ALIASES,
+    crate_features = ["tls"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = VERSION,
+    deps = DEPENDENCIES,
+)
+
 rust_test(
     name = "ic_boundary_test",
     aliases = ALIASES,

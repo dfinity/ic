@@ -2956,6 +2956,20 @@ pub fn decentralization_test(env: TestEnv) {
 
     for (idx, node) in unassigned_nodes.iter().enumerate() {
         let domain = format!("api{}.com", idx + 1);
+
+        // Create an empty ACME json to signal ic-boundary that we don't need to create a new ACME account
+        // Create self-signed certificate & update permissions
+        node.block_on_bash_script(&format!(
+            "sudo touch /var/lib/ic/data/ic-boundary-acme.json && \
+            sudo openssl req -x509 -newkey rsa:2048 \
+            -keyout /var/lib/ic/data/ic-boundary-tls.key \
+            -out /var/lib/ic/data/ic-boundary-tls.crt -sha256 -days 3650 -nodes \
+            -subj \"/C=CH/ST=Zurich/L=Zurich/O=DFINITY/OU=BoundaryNodes/CN={}\" && \
+            sudo chmod +r /var/lib/ic/data/ic-boundary-tls.key",
+            domain
+        ))
+        .expect("unable to setup TLS files");
+
         let update_domain_payload = UpdateNodeDomainDirectlyPayload {
             node_id: node.node_id,
             domain: Some(domain.clone()),
@@ -3012,7 +3026,7 @@ pub fn decentralization_test(env: TestEnv) {
     // open the firewall ports - this is temporary until we complete the firewall for API BNs in the orchestrator
     for node in unassigned_nodes.iter() {
         node.block_on_bash_script(&indoc::formatdoc! {r#"
-            sudo nft add rule ip6 filter INPUT tcp dport 4444 accept
+            sudo nft add rule ip6 filter INPUT tcp dport 443 accept
         "#})
             .expect("unable to open firewall port");
     }
@@ -3022,6 +3036,7 @@ pub fn decentralization_test(env: TestEnv) {
         let mut client_builder = ClientBuilder::new()
             .redirect(Policy::none())
             .danger_accept_invalid_certs(true);
+
         for (idx, node) in unassigned_nodes.iter().enumerate() {
             // set port to 0 as it is being ignored by the client
             let node_addr = SocketAddr::new(node.get_ip_addr(), 0);
@@ -3031,6 +3046,7 @@ pub fn decentralization_test(env: TestEnv) {
                 "API BN {:?}: url {:?}, node addr {:?}", idx, api_domains[idx], node_addr
             );
         }
+
         client_builder.build().expect("failed to build http client")
     };
 
@@ -3042,7 +3058,7 @@ pub fn decentralization_test(env: TestEnv) {
             RETRY_BACKOFF,
             || async {
                 let response = http_client
-                    .get(format!("http://{}:4444/health", api_domains[idx]))
+                    .get(format!("https://{}/health", api_domains[idx]))
                     .send()
                     .await?;
                 if response.status().is_success() {
@@ -3054,6 +3070,7 @@ pub fn decentralization_test(env: TestEnv) {
         ))
         .expect("API BNs didn't report healthy");
     }
+
     info!(log, "Installing counter canisters");
     let canister_values: Vec<u32> = vec![1, 3];
     let canister_ids: Vec<Principal> = block_on(install_canisters(
@@ -3061,6 +3078,7 @@ pub fn decentralization_test(env: TestEnv) {
         wat::parse_str(COUNTER_CANISTER_WAT).unwrap().as_slice(),
         1,
     ));
+
     info!(
         log,
         "Successfully installed {} counter canisters",
@@ -3068,12 +3086,13 @@ pub fn decentralization_test(env: TestEnv) {
     );
     let api_bn_agent = {
         let api_bn_url = format!(
-            "http://[{:?}]:4444",
+            "https://[{:?}]",
             unassigned_nodes.first().unwrap().get_ip_addr()
         );
         info!(log, "Creating an agent for the API BN {api_bn_url:?}");
         block_on(assert_create_agent(&api_bn_url))
     };
+
     info!(log, "Incrementing counters on canisters");
     block_on(set_counters_on_counter_canisters(
         &log,
@@ -3083,6 +3102,7 @@ pub fn decentralization_test(env: TestEnv) {
         CANISTER_RETRY_BACKOFF,
         CANISTER_RETRY_TIMEOUT,
     ));
+
     info!(log, "Asserting expected counter values on canisters");
     let counters = block_on(read_counters_on_counter_canisters(
         &log,

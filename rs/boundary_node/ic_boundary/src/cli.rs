@@ -156,22 +156,26 @@ pub struct FirewallConfig {
 #[derive(Args)]
 pub struct TlsConfig {
     /// Hostname to request TLS certificate for
-    #[clap(long)]
+    #[clap(long, default_value = "")]
     pub hostname: String,
 
     /// How many days before certificate expires to start renewing it
     #[clap(long, default_value = "30", value_parser = clap::value_parser!(u32).range(1..90))]
     pub renew_days_before: u32,
 
-    /// The path to the ACME credentials file
-    #[clap(long, default_value = "acme.json")]
-    pub acme_credentials_path: PathBuf,
+    /// Path to the ACME credentials file. If file does not exist - new account will be created & saved to it, so the folder needs to be writeable.
+    /// If this argument is not specified or the file is empty then ACME client will not be created and only certificate specified by
+    /// --tls-*-path options will be used (this is useful mostly for testing).
+    #[clap(long)]
+    pub acme_credentials_path: Option<PathBuf>,
 
-    /// The path to the ingress TLS cert
+    /// The path to the ingress TLS cert.
+    /// If ACME client is used (see above) - the file needs to be writeable.
     #[clap(long, default_value = "cert.pem")]
     pub tls_cert_path: PathBuf,
 
-    /// The path to the ingress TLS private-key
+    /// The path to the ingress TLS private-key.
+    /// If ACME client is used (see above) - the file needs to be writeable.
     #[clap(long, default_value = "pkey.pem")]
     pub tls_pkey_path: PathBuf,
 }

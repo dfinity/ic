@@ -25,10 +25,8 @@ use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_local_store::{LocalStoreImpl, LocalStoreReader};
 use ic_registry_replicator::RegistryReplicator;
 use ic_types::CanisterId;
-use lazy_static::lazy_static;
 use little_loadshedder::{LoadShedError, LoadShedLayer};
 use prometheus::Registry;
-use regex::Regex;
 use rustls::cipher_suite::{TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384};
 use tokio::sync::RwLock;
 use tower::{limit::ConcurrencyLimitLayer, ServiceBuilder};
@@ -61,25 +59,13 @@ use crate::{
 use {hyperlocal::UnixServerExt, std::os::unix::fs::PermissionsExt};
 
 #[cfg(feature = "tls")]
-use {
-    crate::{
-        acme::Acme,
-        configuration::{ConfigurationRunner, Configurator, TlsConfigurator},
-        tls::{
-            acme_challenge, load_or_create_acme_account, redirect_to_https, CustomAcceptor,
-            Loader as TlsLoader, Provisioner, TokenOwner, WithLoad, WithStore,
-        },
-    },
-    instant_acme::LetsEncrypt,
-};
+use crate::tls::{acme_challenge, prepare_tls, redirect_to_https};
 
 pub const SERVICE_NAME: &str = "ic_boundary";
 pub const AUTHOR_NAME: &str = "Boundary Node Team <boundary-nodes@dfinity.org>";
 const SYSTEMCTL_BIN: &str = "/usr/bin/systemctl";
 
-const SECOND: Duration = Duration::from_secs(1);
-#[cfg(feature = "tls")]
-const DAY: Duration = Duration::from_secs(24 * 3600);
+pub const SECOND: Duration = Duration::from_secs(1);
 
 const KB: usize = 1024;
 const MB: usize = 1024 * KB;
@@ -88,11 +74,6 @@ pub const MAX_REQUEST_BODY_SIZE: usize = 4 * MB;
 const METRICS_CACHE_CAPACITY: usize = 15 * MB;
 
 pub const MANAGEMENT_CANISTER_ID_PRINCIPAL: CanisterId = CanisterId::ic_00();
-
-lazy_static! {
-    pub static ref HOSTNAME_REGEX: Regex =
-        Regex::new(r"^([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])(\.([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]{0,61}[a-zA-Z0-9]))*$").unwrap();
-}
 
 pub async fn main(cli: Cli) -> Result<(), Error> {
     if cli.listen.http_timeout_connect > cli.health.check_timeout {
@@ -321,15 +302,6 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         Duration::from_millis(cli.health.update_interval),
     );
 
-    // Runners
-    let runners: Vec<Box<dyn Run>> = vec![
-        #[cfg(feature = "tls")]
-        Box::new(configuration_runner),
-        Box::new(snapshot_runner),
-        Box::new(check_runner),
-        Box::new(metrics_runner),
-    ];
-
     let (registry_replicator, nns_pub_key) = if !cli.registry.disable_registry_replicator {
         // Check if we require an NNS key
         let nns_pub_key = {
@@ -372,6 +344,15 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     } else {
         (None, None)
     };
+
+    // Runners
+    let runners: Vec<Box<dyn Run>> = vec![
+        #[cfg(feature = "tls")]
+        Box::new(configuration_runner),
+        Box::new(snapshot_runner),
+        Box::new(check_runner),
+        Box::new(metrics_runner),
+    ];
 
     TokioScope::scope_and_block(|s| {
         s.spawn(
@@ -570,109 +551,6 @@ pub fn setup_router(
         .merge(health_route)
 }
 
-#[cfg(feature = "tls")]
-async fn prepare_tls(
-    cli: &Cli,
-    registry: &Registry,
-) -> Result<(impl Run, CustomAcceptor, Arc<TokenOwner>), Error> {
-    if !HOSTNAME_REGEX.is_match(&cli.tls.hostname) {
-        return Err(anyhow!(
-            "'{}' does not look like a valid hostname",
-            cli.tls.hostname
-        ));
-    }
-
-    // TLS Certificates (Ingress)
-    let tls_loader = TlsLoader {
-        cert_path: cli.tls.tls_cert_path.clone(),
-        pkey_path: cli.tls.tls_pkey_path.clone(),
-    };
-    let tls_loader = Arc::new(tls_loader);
-
-    // ACME
-    let acme_http_client = hyper::Client::builder().build(
-        hyper_rustls::HttpsConnectorBuilder::new()
-            .with_native_roots()
-            .https_only()
-            .enable_all_versions()
-            .build(),
-    );
-
-    let acme_account = load_or_create_acme_account(
-        &cli.tls.acme_credentials_path, // path
-        LetsEncrypt::Production.url(),  // acme_provider_url
-        Box::new(acme_http_client),     // http_client
-    )
-    .await
-    .context("failed to load acme credentials")?;
-
-    let acme_client = Acme::new(acme_account);
-
-    let acme_order = acme_client.clone();
-    let acme_order = Box::new(acme_order);
-
-    let acme_ready = acme_client.clone();
-    let acme_ready = Box::new(acme_ready);
-
-    let acme_finalize = acme_client.clone();
-    let acme_finalize = WithThrottle(acme_finalize, ThrottleParams::new(Duration::from_secs(5)));
-    let acme_finalize = WithRetry(acme_finalize, Duration::from_secs(60));
-    let acme_finalize = Box::new(acme_finalize);
-
-    let acme_obtain = acme_client;
-    let acme_obtain = WithThrottle(acme_obtain, ThrottleParams::new(Duration::from_secs(5)));
-    let acme_obtain = WithRetry(acme_obtain, Duration::from_secs(60));
-    let acme_obtain = Box::new(acme_obtain);
-
-    // ACME Token owner
-    let token_owner = Arc::new(TokenOwner::new());
-
-    let tls_provisioner = Provisioner::new(
-        Arc::clone(&token_owner),
-        acme_order,
-        acme_ready,
-        acme_finalize,
-        acme_obtain,
-    );
-    let tls_provisioner = WithStore(tls_provisioner, tls_loader.clone());
-    let tls_provisioner = WithLoad(
-        tls_provisioner,
-        tls_loader.clone(),
-        cli.tls.renew_days_before * DAY, // Renew if expiration within
-    );
-    let tls_provisioner = Box::new(tls_provisioner);
-
-    // TLS (Ingress) Configurator
-    let tls_acceptor = Arc::new(ArcSwapOption::new(None));
-
-    let tls_configurator = TlsConfigurator::new(tls_acceptor.clone(), tls_provisioner);
-    let tls_configurator = WithMetrics(
-        tls_configurator,
-        MetricParams::new(registry, "configure_tls"),
-    );
-
-    let tls_acceptor = CustomAcceptor::new(tls_acceptor);
-
-    // Service Configurator
-    let svc_configurator = Configurator {
-        tls: Box::new(tls_configurator),
-    };
-
-    // Configuration
-    let configuration_runner = ConfigurationRunner::new(
-        cli.tls.hostname.clone(),
-        svc_configurator, // configurator
-    );
-    let configuration_runner = WithMetrics(
-        configuration_runner,
-        MetricParams::new(registry, "run_configuration"),
-    );
-    let configuration_runner =
-        WithThrottle(configuration_runner, ThrottleParams::new(600 * SECOND));
-
-    Ok((configuration_runner, tls_acceptor, token_owner))
-}
-
 #[async_trait]
 pub trait Run: Send + Sync {
     async fn run(&mut self) -> Result<(), Error>;
@@ -712,7 +590,7 @@ pub struct ThrottleParams {
 }
 
 impl ThrottleParams {
-    fn new(throttle_duration: Duration) -> Self {
+    pub fn new(throttle_duration: Duration) -> Self {
         Self {
             throttle_duration,
             next_time: None,
