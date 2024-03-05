@@ -593,7 +593,9 @@ impl Orchestrator {
         let ipv4 = ifaces
             .iter()
             .find_map(|iface| match iface.addr {
-                get_if_addrs::IfAddr::V4(ref addr) => Some(addr.ip.to_string()),
+                get_if_addrs::IfAddr::V4(ref addr) if !addr.ip.is_loopback() => {
+                    Some(addr.ip.to_string())
+                }
                 _ => None,
             })
             .unwrap_or_else(|| "none configured".to_string());
