@@ -158,7 +158,6 @@ pub mod wasm_method {
         CanisterPostUpgrade = 4,
         CanisterInspectMessage = 5,
         CanisterHeartbeat = 6,
-        Empty = 7,
         CanisterGlobalTimer = 8,
     }
     impl SystemMethod {
@@ -175,7 +174,6 @@ pub mod wasm_method {
                 SystemMethod::CanisterPostUpgrade => "SYSTEM_METHOD_CANISTER_POST_UPGRADE",
                 SystemMethod::CanisterInspectMessage => "SYSTEM_METHOD_CANISTER_INSPECT_MESSAGE",
                 SystemMethod::CanisterHeartbeat => "SYSTEM_METHOD_CANISTER_HEARTBEAT",
-                SystemMethod::Empty => "SYSTEM_METHOD_EMPTY",
                 SystemMethod::CanisterGlobalTimer => "SYSTEM_METHOD_CANISTER_GLOBAL_TIMER",
             }
         }
@@ -189,7 +187,6 @@ pub mod wasm_method {
                 "SYSTEM_METHOD_CANISTER_POST_UPGRADE" => Some(Self::CanisterPostUpgrade),
                 "SYSTEM_METHOD_CANISTER_INSPECT_MESSAGE" => Some(Self::CanisterInspectMessage),
                 "SYSTEM_METHOD_CANISTER_HEARTBEAT" => Some(Self::CanisterHeartbeat),
-                "SYSTEM_METHOD_EMPTY" => Some(Self::Empty),
                 "SYSTEM_METHOD_CANISTER_GLOBAL_TIMER" => Some(Self::CanisterGlobalTimer),
                 _ => None,
             }

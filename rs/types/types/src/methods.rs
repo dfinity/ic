@@ -105,7 +105,6 @@ impl From<&WasmMethod> for pb::WasmMethod {
                     SystemMethod::CanisterPostUpgrade => PbSystemMethod::CanisterPostUpgrade,
                     SystemMethod::CanisterInspectMessage => PbSystemMethod::CanisterInspectMessage,
                     SystemMethod::CanisterHeartbeat => PbSystemMethod::CanisterHeartbeat,
-                    SystemMethod::Empty => PbSystemMethod::Empty,
                     SystemMethod::CanisterGlobalTimer => PbSystemMethod::CanisterGlobalTimer,
                 } as i32)),
             },
@@ -140,7 +139,6 @@ impl TryFrom<pb::WasmMethod> for WasmMethod {
                     PbSystemMethod::CanisterPostUpgrade => SystemMethod::CanisterPostUpgrade,
                     PbSystemMethod::CanisterInspectMessage => SystemMethod::CanisterInspectMessage,
                     PbSystemMethod::CanisterHeartbeat => SystemMethod::CanisterHeartbeat,
-                    PbSystemMethod::Empty => SystemMethod::Empty,
                     PbSystemMethod::CanisterGlobalTimer => SystemMethod::CanisterGlobalTimer,
                 }))
             }
@@ -166,12 +164,6 @@ pub enum SystemMethod {
     CanisterHeartbeat,
     /// A system method that is run after a specified time.
     CanisterGlobalTimer,
-    /// This is introduced as temporary scaffolding to aid in construction of
-    /// the initial ExecutionState. This isn't used to execute any actual wasm
-    /// but as a way to get to the wasm embedder from execution. Eventually, we
-    /// need to rethink some of the API between execution and wasm embedder so
-    /// that this is not needed.
-    Empty,
 }
 
 impl TryFrom<&str> for SystemMethod {
@@ -186,7 +178,6 @@ impl TryFrom<&str> for SystemMethod {
             "canister_inspect_message" => Ok(SystemMethod::CanisterInspectMessage),
             "canister_heartbeat" => Ok(SystemMethod::CanisterHeartbeat),
             "canister_global_timer" => Ok(SystemMethod::CanisterGlobalTimer),
-            "empty" => Ok(SystemMethod::Empty),
             _ => Err(format!("Cannot convert {} to SystemMethod.", value)),
         }
     }
@@ -201,7 +192,6 @@ impl fmt::Display for SystemMethod {
             Self::CanisterStart => write!(f, "canister_start"),
             Self::CanisterInspectMessage => write!(f, "canister_inspect_message"),
             Self::CanisterHeartbeat => write!(f, "canister_heartbeat"),
-            Self::Empty => write!(f, "empty"),
             Self::CanisterGlobalTimer => write!(f, "canister_global_timer"),
         }
     }
