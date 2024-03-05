@@ -29,7 +29,7 @@ use ic_cycles_account_manager::CyclesAccountManager;
 use ic_interfaces::execution_environment::AnonymousQueryService;
 use ic_interfaces::execution_environment::{
     IngressFilterService, IngressHistoryReader, IngressHistoryWriter, QueryExecutionService,
-    QueryHandler, Scheduler,
+    Scheduler,
 };
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
@@ -82,7 +82,6 @@ pub struct ExecutionServices {
     pub ingress_filter: IngressFilterService,
     pub ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
     pub ingress_history_reader: Box<dyn IngressHistoryReader>,
-    pub sync_query_handler: Arc<dyn QueryHandler<State = ReplicatedState>>,
     pub query_execution_service: QueryExecutionService,
     pub anonymous_query_handler: AnonymousQueryService,
     pub scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
@@ -201,7 +200,6 @@ impl ExecutionServices {
             ingress_filter,
             ingress_history_writer,
             ingress_history_reader,
-            sync_query_handler,
             query_execution_service,
             anonymous_query_handler,
             scheduler,
@@ -216,7 +214,6 @@ impl ExecutionServices {
         IngressFilterService,
         Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
         Box<dyn IngressHistoryReader>,
-        Arc<dyn QueryHandler<State = ReplicatedState>>,
         QueryExecutionService,
         AnonymousQueryService,
         Box<dyn Scheduler<State = ReplicatedState>>,
@@ -225,7 +222,6 @@ impl ExecutionServices {
             self.ingress_filter,
             self.ingress_history_writer,
             self.ingress_history_reader,
-            self.sync_query_handler,
             self.query_execution_service,
             self.anonymous_query_handler,
             self.scheduler,

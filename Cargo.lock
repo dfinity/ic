@@ -10200,6 +10200,7 @@ dependencies = [
  "ic-consensus",
  "ic-consensus-utils",
  "ic-crypto-for-verification-only",
+ "ic-crypto-test-utils-ni-dkg",
  "ic-cycles-account-manager",
  "ic-execution-environment",
  "ic-interfaces",
@@ -10227,12 +10228,14 @@ dependencies = [
  "ic-types",
  "icp-ledger",
  "prost",
+ "rand 0.8.5",
  "serde",
  "serde_json",
  "slog",
  "slog-async",
  "tempfile",
  "tokio",
+ "tower",
  "url",
 ]
 

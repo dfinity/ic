@@ -225,7 +225,7 @@ pub async fn run_drun(uo: DrunOptions) -> Result<(), String> {
         None,
         ic_types::malicious_flags::MaliciousFlags::default(),
     ));
-    let (_, ingress_history_writer, ingress_hist_reader, _, query_handler, _, scheduler) =
+    let (_, ingress_history_writer, ingress_hist_reader, query_handler, _, scheduler) =
         ExecutionServices::setup_execution(
             log.clone().into(),
             &metrics_registry,
