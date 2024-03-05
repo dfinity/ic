@@ -7,10 +7,12 @@ rust_library(
     srcs = ["src/lib.rs"],
     crate_name = "ic_icrc_rosetta_client",
     deps = [
+        "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/rosetta-api",
         "//rs/rosetta-api/icrc1/rosetta:ic-icrc-rosetta",
         "//rs/rosetta-api/rosetta_core:rosetta-core",
         "@crate_index//:anyhow",
+        "@crate_index//:candid",
         "@crate_index//:ed25519-consensus",
         "@crate_index//:hex",
         "@crate_index//:reqwest",

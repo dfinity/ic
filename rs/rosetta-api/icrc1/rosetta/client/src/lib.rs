@@ -1,7 +1,12 @@
 use anyhow::bail;
 use anyhow::Context;
+use candid::Nat;
+use ic_icrc_rosetta::common::types::ApproveMetadata;
 use ic_icrc_rosetta::common::types::Error;
 use ic_icrc_rosetta::construction_api::types::ConstructionMetadataRequestOptions;
+use ic_rosetta_api::models::Amount;
+use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc1::account::Subaccount;
 use reqwest::{Client, Url};
 use rosetta_core::identifiers::*;
 use rosetta_core::models::RosettaSupportedKeyPair;
@@ -93,6 +98,195 @@ impl RosettaClient {
             .await?
             .json()
             .await
+    }
+
+    pub async fn make_and_submit_transaction<T: RosettaSupportedKeyPair>(
+        &self,
+        signer_keypair: &T,
+        network_identifier: NetworkIdentifier,
+        operations: Vec<Operation>,
+    ) -> Result<ConstructionSubmitResponse, Error> {
+        let payloads_response = self
+            .construction_payloads(
+                network_identifier.clone(),
+                operations,
+                Some(vec![signer_keypair.into()]),
+            )
+            .await?;
+
+        let signatures = Self::sign_transaction(signer_keypair, payloads_response.clone())
+            .map_err(|err| Error::parsing_unsuccessful(&err))?;
+
+        let combine_response = self
+            .construction_combine(
+                network_identifier.clone(),
+                payloads_response.unsigned_transaction,
+                signatures,
+            )
+            .await?;
+
+        let submit_response = self
+            .construction_submit(
+                network_identifier.clone(),
+                combine_response.signed_transaction,
+            )
+            .await?;
+
+        Ok(submit_response)
+    }
+
+    pub async fn build_transfer_operations<T: RosettaSupportedKeyPair>(
+        &self,
+        signer_keypair: &T,
+        from_subaccount: Option<Subaccount>,
+        to_account: Account,
+        amount: Nat,
+        network_identifier: NetworkIdentifier,
+    ) -> Result<Vec<Operation>, Error> {
+        let preprocess_response = self
+            .construction_preprocess(vec![], network_identifier.clone())
+            .await?;
+
+        let metadata_response = self
+            .construction_metadata(
+                preprocess_response
+                    .options
+                    .try_into()
+                    .map_err(|err| Error::parsing_unsuccessful(&err))?,
+                network_identifier.clone(),
+            )
+            .await?;
+
+        let currency = &metadata_response.suggested_fee.unwrap()[0].currency;
+
+        let transfer_from_operation = Operation {
+            operation_identifier: OperationIdentifier {
+                index: 0,
+                network_index: None,
+            },
+            related_operations: None,
+            type_: "TRANSFER".to_string(),
+            status: None,
+            account: Some(
+                Account {
+                    owner: signer_keypair
+                        .generate_principal_id()
+                        .map_err(|err| Error::parsing_unsuccessful(&err))?
+                        .0,
+                    subaccount: from_subaccount,
+                }
+                .into(),
+            ),
+            amount: Some(Amount {
+                value: format!("-{}", amount),
+                currency: currency.clone(),
+                metadata: None,
+            }),
+            coin_change: None,
+            metadata: None,
+        };
+
+        let transfer_to_operation = Operation {
+            operation_identifier: OperationIdentifier {
+                index: 1,
+                network_index: None,
+            },
+            related_operations: None,
+            type_: "TRANSFER".to_string(),
+            status: None,
+            account: Some(to_account.into()),
+            amount: Some(Amount {
+                value: amount.to_string(),
+                currency: currency.clone(),
+                metadata: None,
+            }),
+            coin_change: None,
+            metadata: None,
+        };
+
+        Ok(vec![transfer_from_operation, transfer_to_operation])
+    }
+
+    pub async fn build_approve_operations<T: RosettaSupportedKeyPair>(
+        &self,
+        signer_keypair: &T,
+        from_subaccount: Option<Subaccount>,
+        spender_account: Account,
+        allowance: Nat,
+        expected_allowance: Option<Nat>,
+        network_identifier: NetworkIdentifier,
+        expires_at: Option<u64>,
+    ) -> Result<Vec<Operation>, Error> {
+        let preprocess_response = self
+            .construction_preprocess(vec![], network_identifier.clone())
+            .await?;
+
+        let metadata_response = self
+            .construction_metadata(
+                preprocess_response
+                    .options
+                    .try_into()
+                    .map_err(|err| Error::parsing_unsuccessful(&err))?,
+                network_identifier.clone(),
+            )
+            .await?;
+
+        let currency = &metadata_response.suggested_fee.unwrap()[0].currency;
+
+        let approver_operation = Operation {
+            operation_identifier: OperationIdentifier {
+                index: 0,
+                network_index: None,
+            },
+            related_operations: None,
+            type_: "APPROVE".to_string(),
+            status: None,
+            account: Some(
+                Account {
+                    owner: signer_keypair
+                        .generate_principal_id()
+                        .map_err(|err| Error::parsing_unsuccessful(&err))?
+                        .0,
+                    subaccount: from_subaccount,
+                }
+                .into(),
+            ),
+            amount: None,
+            coin_change: None,
+            metadata: Some(
+                ApproveMetadata {
+                    expected_allowance: expected_allowance.map(|a| Amount {
+                        value: a.to_string(),
+                        currency: currency.clone(),
+                        metadata: None,
+                    }),
+                    allowance: Amount {
+                        value: allowance.to_string(),
+                        currency: currency.clone(),
+                        metadata: None,
+                    },
+                    expires_at,
+                }
+                .try_into()
+                .map_err(|err| Error::parsing_unsuccessful(&err))?,
+            ),
+        };
+
+        let spender_operation = Operation {
+            operation_identifier: OperationIdentifier {
+                index: 1,
+                network_index: None,
+            },
+            related_operations: None,
+            type_: "SPENDER".to_string(),
+            status: None,
+            account: Some(spender_account.into()),
+            amount: None,
+            coin_change: None,
+            metadata: None,
+        };
+
+        Ok(vec![approver_operation, spender_operation])
     }
 
     async fn call_endpoint<T: Serialize + ?Sized, R: for<'a> Deserialize<'a>>(

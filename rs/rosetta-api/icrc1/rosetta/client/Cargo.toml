@@ -18,3 +18,5 @@ url = "2.2.1"
 rosetta-core = {path = "../../../rosetta_core"}
 ed25519-consensus = "2.0.1"
 hex = "^0.4.2"
+icrc-ledger-types = { path = "../../../../../packages/icrc-ledger-types" }
+candid = { workspace = true }

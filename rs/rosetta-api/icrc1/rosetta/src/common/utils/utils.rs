@@ -138,6 +138,7 @@ pub fn rosetta_core_operations_to_icrc1_operation(
         fee: Option<Nat>,
         expected_allowance: Option<Nat>,
         expires_at: Option<u64>,
+        allowance: Option<Nat>,
     }
 
     impl IcrcOperationBuilder {
@@ -151,6 +152,7 @@ pub fn rosetta_core_operations_to_icrc1_operation(
                 fee: None,
                 expected_allowance: None,
                 expires_at: None,
+                allowance: None,
             }
         }
 
@@ -186,6 +188,11 @@ pub fn rosetta_core_operations_to_icrc1_operation(
 
         pub fn with_expected_allowance(mut self, expected_allowance: Nat) -> Self {
             self.expected_allowance = Some(expected_allowance);
+            self
+        }
+
+        pub fn with_allowance(mut self, allowance: Nat) -> Self {
+            self.allowance = Some(allowance);
             self
         }
 
@@ -235,7 +242,7 @@ pub fn rosetta_core_operations_to_icrc1_operation(
                     }
                     crate::common::storage::types::IcrcOperation::Approve{
                     from: self.from.context("From AccountIdentifier field needs to be populated for Approve operation")?.try_into()?,
-                    amount: self.amount.context("Amount field needs to be populated for Approve operation")?,
+                    amount: self.allowance.context("Allowance field needs to be populated for Approve operation")?,
                     spender: self.spender.context("To AccountIdentifier field needs to be populated for Approve operation")?.try_into()?,
                     fee: self.fee,
                     expected_allowance: self.expected_allowance,
@@ -295,16 +302,13 @@ pub fn rosetta_core_operations_to_icrc1_operation(
 
             OperationType::Approve => {
                 let metadata = ApproveMetadata::try_from(operation.metadata)?;
-                let amount = operation
-                    .amount
-                    .context("Amount field needs to be populated for Approve operation")?;
                 let from_account = operation.account.context(
                     "From AccountIdentifier field needs to be populated for Approve operation",
                 )?;
+
                 icrc1_operation_builder = icrc1_operation_builder
                     .with_icrc_operation(IcrcOperation::Approve)
-                    .with_from_accountidentifier(from_account)
-                    .with_amount(Nat::try_from(amount)?);
+                    .with_from_accountidentifier(from_account);
 
                 icrc1_operation_builder =
                     if let Some(expected_allowance) = metadata.expected_allowance {
@@ -314,11 +318,12 @@ pub fn rosetta_core_operations_to_icrc1_operation(
                         icrc1_operation_builder
                     };
 
-                if let Some(expires_at) = metadata.expires_at {
+                icrc1_operation_builder = if let Some(expires_at) = metadata.expires_at {
                     icrc1_operation_builder.with_expires_at(expires_at)
                 } else {
                     icrc1_operation_builder
-                }
+                };
+                icrc1_operation_builder.with_allowance(Nat::try_from(metadata.allowance)?)
             }
             OperationType::Fee => {
                 let fee = operation
@@ -496,10 +501,11 @@ pub fn icrc1_operation_to_rosetta_core_operations(
                 APPROVE_OPERATION_IDENTIFIER,
                 OperationType::Approve.to_string(),
                 Some(from.into()),
-                Some(Amount::new(amount.to_string(), currency.clone())),
+                None,
                 None,
                 Some(
                     ApproveMetadata {
+                        allowance: Amount::new(amount.to_string(), currency.clone()),
                         expected_allowance: expected_allowance.map(|expected_allowance| {
                             Amount::new(expected_allowance.to_string(), currency.clone())
                         }),
