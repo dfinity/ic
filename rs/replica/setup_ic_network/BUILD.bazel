@@ -34,7 +34,6 @@ rust_library(
         "//rs/registry/helpers",
         "//rs/replicated_state",
         "//rs/state_manager",
-        "//rs/transport",
         "//rs/types/types",
         "@crate_index//:crossbeam-channel",
         "@crate_index//:either",

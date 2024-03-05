@@ -35,7 +35,6 @@ ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-replicated-state = { path = "../../replicated_state" }
 ic-state-manager = { path = "../../state_manager" }
 ic-state-sync-manager = { path = "../../p2p/state_sync_manager" }
-ic-transport = { path = "../../transport" }
 ic-types = { path = "../../types/types" }
 slog = { workspace = true }
 tokio = { workspace = true }
