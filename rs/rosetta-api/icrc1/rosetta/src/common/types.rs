@@ -206,6 +206,8 @@ pub enum OperationType {
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct ApproveMetadata {
+    pub allowance: Amount,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expected_allowance: Option<Amount>,
 

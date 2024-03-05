@@ -8045,10 +8045,12 @@ name = "ic-icrc-rosetta-client"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "candid",
  "ed25519-consensus",
  "hex",
  "ic-icrc-rosetta",
  "ic-rosetta-api",
+ "icrc-ledger-types",
  "reqwest",
  "rosetta-core",
  "serde",
