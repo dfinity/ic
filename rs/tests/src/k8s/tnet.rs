@@ -9,6 +9,7 @@ use backon::{ConstantBuilder, ExponentialBuilder};
 use k8s_openapi::api::core::v1::{
     ConfigMap, PersistentVolumeClaim, Pod, Service, TypedLocalObjectReference,
 };
+use k8s_openapi::api::networking::v1::Ingress;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::OwnerReference;
 use k8s_openapi::chrono::DateTime;
 use k8s_openapi::chrono::Duration;
@@ -25,6 +26,7 @@ use tokio;
 use tracing::*;
 
 use crate::driver::farm::{CreateVmRequest, ImageLocation, VMCreateResponse, VmSpec};
+use crate::driver::resource::ImageType;
 use crate::driver::test_env::TestEnvAttribute;
 use crate::k8s::config::*;
 use crate::k8s::datavolume::*;
@@ -39,6 +41,7 @@ pub struct K8sClient {
     pub(crate) api_pvc: Api<PersistentVolumeClaim>,
     pub(crate) api_pod: Api<Pod>,
     pub(crate) api_svc: Api<Service>,
+    pub(crate) api_ingress: Api<Ingress>,
 }
 
 impl K8sClient {
@@ -47,6 +50,7 @@ impl K8sClient {
         let api_pod: Api<Pod> = Api::namespaced(client.clone(), &TNET_NAMESPACE);
         let api_pvc: Api<PersistentVolumeClaim> = Api::namespaced(client.clone(), &TNET_NAMESPACE);
         let api_svc: Api<Service> = Api::namespaced(client.clone(), &TNET_NAMESPACE);
+        let api_ingress: Api<Ingress> = Api::namespaced(client.clone(), &TNET_NAMESPACE);
 
         let gvk = GroupVersionKind::gvk("cdi.kubevirt.io", "v1beta1", "DataVolume");
         let (ar, _caps) = kube::discovery::pinned_kind(&client, &gvk).await?;
@@ -67,6 +71,7 @@ impl K8sClient {
             api_pvc,
             api_pod,
             api_svc,
+            api_ingress,
         })
     }
 }
@@ -128,6 +133,7 @@ pub struct TNet {
     pub version: String,
     pub image_url: String,
     pub config_url: Option<String>,
+    pub access_key: Option<String>,
     pub nodes: Vec<TNode>,
     pub owner: ConfigMap,
     terminate_time: Option<DateTime<Utc>>,
@@ -292,12 +298,20 @@ impl TNet {
         Ok(())
     }
 
-    pub async fn vm_create(&mut self, vm_req: CreateVmRequest) -> Result<VMCreateResponse> {
+    pub async fn vm_create(
+        &mut self,
+        vm_req: CreateVmRequest,
+        vm_type: ImageType,
+    ) -> Result<VMCreateResponse> {
         let k8s_client = &K8sClient::new().await?;
         let vm_name = format!(
             "{}-{}",
             self.unique_name.clone().expect("no unique name"),
-            self.nodes.len()
+            match vm_type {
+                ImageType::IcOsImage => self.nodes.len().to_string(),
+                ImageType::UniversalImage | ImageType::PrometheusImage =>
+                    format!("{}-{}", self.nodes.len(), vm_req.name),
+            }
         );
         let pvc_name = format!("{}-guestos", vm_name.clone());
         let data_source = Some(TypedLocalObjectReference {
@@ -327,6 +341,8 @@ impl TNet {
             &vm_req.memory_kibibytes.to_string(),
             false,
             self.owner_reference(),
+            self.access_key.clone(),
+            vm_type.clone(),
         )
         .await?;
 
@@ -343,40 +359,30 @@ spec:
   - IPv4
   ports:
     - port: 22
-      targetPort: 22
-      name: port-22
+      name: ssh
     - port: 80
-      targetPort: 80
-      name: port-80
+      name: http
     - port: 443
-      targetPort: 443
-      name: port-443
+      name: https
     - port: 2497
-      targetPort: 2497
       name: port-2497
+    - port: 3000
+      name: grafana
     - port: 4100
-      targetPort: 4100
       name: port-4100
     - port: 7070
-      targetPort: 7070
       name: port-7070
     - port: 8080
-      targetPort: 8080
       name: port-8080
-    - port: 9090
-      targetPort: 9090
-      name: port-9090
     - port: 9091
-      targetPort: 9091
       name: port-9091
     - port: 9100
-      targetPort: 9100
-      name: port-9100
+      name: prometheus-node-exporter
+    - port: 9090
+      name: prometheus
     - port: 19100
-      targetPort: 19100
       name: port-19100
     - port: 19531
-      targetPort: 19531
       name: port-19531
   selector:
     kubevirt.io/vm: {name}
@@ -425,6 +431,59 @@ spec:
                 .with_delay(std::time::Duration::from_secs(1)),
         )
         .await?;
+
+        if vm_type == ImageType::PrometheusImage {
+            let mut ingress: Ingress = serde_yaml::from_str(&format!(
+                r#"
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {name}
+  labels:
+    app: nginx
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: grafana-{name}.{suffix}
+      http:
+        paths:
+          - backend:
+              service:
+                name: {svc_name}
+                port:
+                  number: 3000
+            path: /
+            pathType: Prefix
+    - host: prometheus-{name}.{suffix}
+      http:
+        paths:
+          - backend:
+              service:
+                name: {svc_name}
+                port:
+                  number: 9090
+            path: /
+            pathType: Prefix
+  tls:
+    - secretName: tnets-wildcard-tls
+      hosts:
+        - "*.tnets.{suffix}"
+"#,
+                name = self.unique_name.clone().expect("missing unique name"),
+                svc_name = vm_name,
+                suffix = *TNET_DNS_SUFFIX,
+            ))?;
+            ingress.metadata.owner_references = vec![self.owner_reference()].into();
+
+            (|| async {
+                k8s_client
+                    .api_ingress
+                    .create(&PostParams::default(), &ingress)
+                    .await
+            })
+            .retry(&ExponentialBuilder::default())
+            .await?;
+        }
 
         self.nodes.push(TNode {
             node_id: vm_req.name.clone().into(),

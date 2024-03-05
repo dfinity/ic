@@ -1,3 +1,4 @@
+use crate::driver::resource::ImageType;
 use crate::k8s::config::*;
 use anyhow::Result;
 use backon::{ExponentialBuilder, Retryable};
@@ -7,6 +8,100 @@ use kube::{Api, Client};
 use std::convert::AsRef;
 use strum_macros::AsRefStr;
 use tracing::*;
+
+static UVM_TEMPLATE: &str = r#"
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  labels:
+    kubevirt.io/vm: {name}
+    tnet.internetcomputer.org/name: {tnet}
+  name: {name}
+spec:
+  running: {running}
+  template:
+    metadata:
+      annotations:
+        "container.apparmor.security.beta.kubernetes.io/compute": unconfined
+      labels:
+        kubevirt.io/vm: {name}
+        kubevirt.io/network: passt
+    spec:
+      domain:
+        cpu:
+          cores: {cpus}
+        firmware:
+          bootloader:
+            efi:
+              secureBoot: false
+        devices:
+          disks:
+            - name: disk0
+              disk:
+                bus: virtio
+            - name: disk1
+              disk:
+                bus: scsi
+              serial: "config"
+            - name: cloudinitdisk
+              disk:
+                bus: virtio
+          interfaces:
+          - name: default
+            passt: {}
+            ports:
+              - port: 22
+              - port: 80
+              - port: 443
+              - port: 3000
+              - port: 9090
+        resources:
+          requests:
+            memory: {memory}Ki
+      networks:
+      - name: default
+        pod: {}
+      volumes:
+        - dataVolume:
+            name: "{name}-guestos"
+          name: disk0
+        - dataVolume:
+            name: "{name}-config"
+          name: disk1
+        - name: cloudinitdisk
+          cloudInitNoCloud:
+            userData: |
+              #cloud-config
+              mounts:
+                - ["/dev/sda", "/config", "vfat", "dmask=000,fmask=0111,user,nofail", 0, 0]
+              users:
+                - name: admin
+                  sudo: ALL=(ALL) NOPASSWD:ALL
+                  groups: docker
+                  no_user_group: true
+                  shell: /bin/bash
+                  ssh-authorized-keys:
+                    - {pub_key}
+              write_files:
+                - path: /etc/systemd/system/activate.service
+                  permissions: '0755'
+                  content: |
+                      [Unit]
+                      Description=Activate Script
+                      Requires=docker.service
+                      After=docker.service
+
+                      [Service]
+                      Type=simple
+                      ExecStart=bash /config/activate
+                      Restart=no
+
+                      [Install]
+                      WantedBy=multi-user.target
+              runcmd:
+                - systemctl daemon-reload
+                - systemctl enable --now activate
+"#;
 
 static NODE_TEMPLATE: &str = r#"
 apiVersion: kubevirt.io/v1
@@ -80,9 +175,15 @@ pub async fn create_vm(
     memory: &str,
     running: bool,
     owner: OwnerReference,
+    access_key: Option<String>,
+    vm_type: ImageType,
 ) -> Result<()> {
     info!("Creating virtual machine {}", name);
-    let yaml = NODE_TEMPLATE
+    let template = match vm_type {
+        ImageType::IcOsImage => NODE_TEMPLATE.to_string(),
+        _ => UVM_TEMPLATE.replace("{pub_key}", &access_key.unwrap()),
+    };
+    let yaml = template
         .replace("{name}", name)
         .replace("{tnet}", &owner.name)
         .replace("{running}", &running.to_string())

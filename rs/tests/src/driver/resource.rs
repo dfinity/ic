@@ -7,7 +7,7 @@ use kube::ResourceExt;
 use serde::{Deserialize, Serialize};
 use slog::{info, warn};
 use std::collections::BTreeMap;
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::{self, Write};
 use std::net::Ipv6Addr;
 use std::path::{Path, PathBuf};
@@ -27,6 +27,9 @@ use crate::driver::test_env::{TestEnv, TestEnvAttribute};
 use crate::driver::test_env_api::HasIcDependencies;
 use crate::driver::test_setup::{GroupSetup, InfraProvider};
 use crate::util::block_on;
+
+use super::constants::SSH_USERNAME;
+use super::driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR;
 
 const DEFAULT_VCPUS_PER_VM: NrOfVCPUs = NrOfVCPUs::new(6);
 const DEFAULT_MEMORY_KIB_PER_VM: AmountOfMemoryKiB = AmountOfMemoryKiB::new(25165824); // 24GiB
@@ -51,7 +54,8 @@ pub struct DiskImage {
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ImageType {
     IcOsImage,
-    RawImage,
+    PrometheusImage,
+    UniversalImage,
 }
 
 impl From<DiskImage> for ImageLocation {
@@ -61,7 +65,7 @@ impl From<DiskImage> for ImageLocation {
                 url: src.url.clone(),
                 sha256: src.sha256,
             },
-            ImageType::RawImage => ImageViaUrl {
+            ImageType::PrometheusImage | ImageType::UniversalImage => ImageViaUrl {
                 url: src.url.clone(),
                 sha256: src.sha256,
             },
@@ -243,7 +247,7 @@ pub fn get_resource_request_for_universal_vm(
     group_name: &str,
 ) -> anyhow::Result<ResourceRequest> {
     let primary_image = universal_vm.primary_image.clone().unwrap_or_else(|| DiskImage {
-        image_type: ImageType::RawImage,
+        image_type: ImageType::UniversalImage,
         url: Url::parse(&format!("http://download.proxy-global.dfinity.network:8080/farm/universal-vm/{DEFAULT_UNIVERSAL_VM_IMG_SHA256}/x86_64-linux/universal-vm.img.zst")).expect("should not fail!"),
         sha256: String::from(DEFAULT_UNIVERSAL_VM_IMG_SHA256),
     });
@@ -328,14 +332,28 @@ pub fn allocate_resources(
             }
             InfraProvider::K8s => {
                 let mut tnet = TNet::read_attribute(env);
+                tnet.access_key = fs::read_to_string(
+                    env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR).join(SSH_USERNAME),
+                )
+                .expect("failed to read ssh authorized pub key")
+                .into();
                 vm_responses.push((
                     vm_name,
-                    block_on(tnet.vm_create(CreateVmRequest {
-                        primary_image: ImageLocation::PersistentVolumeClaim {
-                            name: format!("{}-image-guestos", tnet.owner.name_any()),
+                    block_on(tnet.vm_create(
+                        CreateVmRequest {
+                            primary_image: ImageLocation::PersistentVolumeClaim {
+                                name: match req.primary_image.image_type {
+                                    ImageType::IcOsImage => {
+                                        format!("{}-image-guestos", tnet.owner.name_any())
+                                    }
+                                    ImageType::PrometheusImage => "image-prometheus-vm".into(),
+                                    ImageType::UniversalImage => "image-universal-vm".into(),
+                                },
+                            },
+                            ..create_vm_request
                         },
-                        ..create_vm_request
-                    }))
+                        req.primary_image.image_type.clone(),
+                    ))
                     .expect("failed to create vm"),
                 ));
                 tnet.write_attribute(env);
