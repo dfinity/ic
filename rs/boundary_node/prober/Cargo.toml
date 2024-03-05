@@ -13,13 +13,13 @@ path = "src/main.rs"
 [dependencies]
 anyhow = { workspace = true }
 async-trait = "0.1.53"
-axum = "0.6.1"
+axum = { workspace = true }
 candid = { workspace = true }
 clap = { workspace = true }
 futures = { workspace = true }
 glob = "0.3.0"
 humantime = "2.1.0"
-hyper = "0.14.18"
+hyper = "^1.0.1"
 ic-agent = { workspace = true }
 ic-utils = { workspace = true }
 indoc = "1.0.9"

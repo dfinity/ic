@@ -28,18 +28,18 @@ use ic_utils::{
 
 use anyhow::{anyhow, Context, Error};
 use async_trait::async_trait;
-use axum::{handler::Handler, routing::get, Extension, Router};
+use axum::{body::Body, handler::Handler, routing::get, Extension, Router};
 use clap::Parser;
-use futures::{future::TryFutureExt, stream::FuturesUnordered};
+use futures::stream::FuturesUnordered;
 use glob::glob;
-use hyper::{Body, Request, Response, StatusCode};
+use hyper::{Request, Response, StatusCode};
 use mockall::automock;
 use opentelemetry::baggage::BaggageExt;
 use opentelemetry::{metrics::MeterProvider as _, sdk::metrics::MeterProvider, KeyValue};
 use opentelemetry_prometheus::exporter;
 use prometheus::{labels, Encoder as PrometheusEncoder, Registry, TextEncoder};
 use serde::Deserialize;
-use tokio::{task, time::Instant};
+use tokio::{net::TcpListener, task, time::Instant};
 use tracing::info;
 
 mod metrics;
@@ -201,11 +201,12 @@ async fn main() -> Result<(), Error> {
         }));
     }
 
-    futs.push(task::spawn(
-        axum::Server::bind(&cli.metrics_addr)
-            .serve(metrics_router.into_make_service())
-            .map_err(|err| anyhow!("server failed: {:?}", err)),
-    ));
+    futs.push(task::spawn(async move {
+        let listener = TcpListener::bind(&cli.metrics_addr).await.unwrap();
+        axum::serve(listener, metrics_router.into_make_service())
+            .await
+            .map_err(|err| anyhow!("server failed: {:?}", err))
+    }));
 
     for fut in futs {
         let _ = fut.await?;
