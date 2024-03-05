@@ -273,7 +273,6 @@ impl InstallCodeContext {
 pub enum InstallCodeContextError {
     ComputeAllocation(InvalidComputeAllocationError),
     MemoryAllocation(InvalidMemoryAllocationError),
-    InvalidCanisterId(String),
     InvalidHash(String),
 }
 
@@ -294,13 +293,6 @@ impl From<InstallCodeContextError> for UserError {
                 format!(
                     "MemoryAllocation expected to be in the range [{}..{}], got {}",
                     err.min, err.max, err.given
-                ),
-            ),
-            InstallCodeContextError::InvalidCanisterId(bytes) => UserError::new(
-                ErrorCode::CanisterContractViolation,
-                format!(
-                    "Specified canister id is not a valid principal id {}",
-                    hex::encode(&bytes[..])
                 ),
             ),
             InstallCodeContextError::InvalidHash(err) => {
