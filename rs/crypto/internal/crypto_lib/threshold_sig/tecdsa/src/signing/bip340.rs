@@ -105,7 +105,7 @@ impl RerandomizedPresignature {
         let (key_tweak, _chain_key) = derivation_path.derive_tweak(&idkg_key)?;
 
         // Rerandomize presignature
-        let mut ro = ro::RandomOracle::new("ic-crypto-bip340-rerandomize-presig");
+        let mut ro = RandomOracle::new("ic-crypto-bip340-rerandomize-presig");
         ro.add_bytestring("randomness", &randomness.get())?;
         ro.add_bytestring("message", message)?;
         ro.add_point("pre_sig", &pre_sig)?;

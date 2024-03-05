@@ -50,7 +50,7 @@ fn derive_rho(
 
     let (key_tweak, _chain_key) = derivation_path.derive_tweak(&key_transcript.constant_term())?;
 
-    let mut ro = ro::RandomOracle::new("ic-crypto-tecdsa-rerandomize-presig");
+    let mut ro = RandomOracle::new("ic-crypto-tecdsa-rerandomize-presig");
     ro.add_bytestring("randomness", &randomness.get())?;
     ro.add_bytestring("hashed_message", hashed_message)?;
     ro.add_point("pre_sig", &pre_sig)?;
