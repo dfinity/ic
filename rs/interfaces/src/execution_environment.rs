@@ -4,7 +4,6 @@ mod errors;
 pub use errors::{CanisterOutOfCyclesError, HypervisorError, TrapCode};
 use ic_base_types::NumBytes;
 use ic_error_types::UserError;
-use ic_interfaces_state_manager::Labeled;
 use ic_management_canister_types::{CanisterLogRecord, EcdsaKeyId};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
@@ -20,7 +19,6 @@ use ic_types::{
     Cycles, ExecutionRound, Height, NumInstructions, NumPages, Randomness, Time,
 };
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use std::{collections::BTreeMap, ops};
 use std::{collections::BTreeSet, convert::TryFrom};
 use std::{convert::Infallible, fmt};
@@ -435,24 +433,6 @@ pub type QueryExecutionResponse =
 /// Interface for the component to execute queries.
 pub type QueryExecutionService =
     BoxCloneService<(UserQuery, Option<CertificateDelegation>), QueryExecutionResponse, Infallible>;
-
-/// Interface for the component to execute queries on canisters.  It can be used
-/// by the HttpHandler and other system components to execute queries.
-pub trait QueryHandler: Send + Sync {
-    /// Type of state managed by StateReader.
-    ///
-    /// Should typically be `ic_replicated_state::ReplicatedState`.
-    // Note [Associated Types in Interfaces]
-    type State;
-
-    /// Handle a query of type `UserQuery` which was sent by an end user.
-    fn query(
-        &self,
-        query: UserQuery,
-        state: Labeled<Arc<Self::State>>,
-        data_certificate: Vec<u8>,
-    ) -> Result<WasmResult, UserError>;
-}
 
 /// Errors that can be returned when reading/writing from/to ingress history.
 #[derive(Clone, Debug, PartialEq, Eq)]

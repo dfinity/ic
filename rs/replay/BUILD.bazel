@@ -11,6 +11,7 @@ DEPENDENCIES = [
     "//rs/consensus/utils",
     "//rs/crypto",
     "//rs/crypto/for_verification_only",
+    "//rs/crypto/test_utils/ni-dkg",
     "//rs/cycles_account_manager",
     "//rs/execution_environment",
     "//rs/interfaces",
@@ -40,12 +41,14 @@ DEPENDENCIES = [
     "@crate_index//:clap",
     "@crate_index//:hex",
     "@crate_index//:prost",
+    "@crate_index//:rand",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
     "@crate_index//:slog",
     "@crate_index//:slog-async",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
+    "@crate_index//:tower",
     "@crate_index//:url",
 ]
 
