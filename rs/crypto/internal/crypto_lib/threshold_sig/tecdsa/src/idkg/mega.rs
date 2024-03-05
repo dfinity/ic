@@ -1,4 +1,3 @@
-use crate::group::*;
 use crate::*;
 use core::fmt::{self, Debug};
 use ic_crypto_secrets_containers::SecretArray;
@@ -394,7 +393,7 @@ fn mega_hash_to_scalars(
         MEGaCiphertextType::Pairs => 2,
     };
 
-    let mut ro = ro::RandomOracle::new(ctype.encryption_domain_sep());
+    let mut ro = RandomOracle::new(ctype.encryption_domain_sep());
     ro.add_usize("dealer_index", dealer_index as usize)?;
     ro.add_usize("recipient_index", recipient_index as usize)?;
     ro.add_bytestring("associated_data", associated_data)?;
@@ -416,7 +415,7 @@ fn compute_pop_base(
     dealer_index: NodeIndex,
     ephemeral_key: &EccPoint,
 ) -> ThresholdEcdsaResult<EccPoint> {
-    let mut ro = ro::RandomOracle::new(ctype.pop_base_domain_sep());
+    let mut ro = RandomOracle::new(ctype.pop_base_domain_sep());
     ro.add_bytestring("associated_data", associated_data)?;
     ro.add_u32("dealer_index", dealer_index)?;
     ro.add_point("ephemeral_key", ephemeral_key)?;

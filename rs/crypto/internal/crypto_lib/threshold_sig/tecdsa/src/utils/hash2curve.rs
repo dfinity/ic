@@ -1,5 +1,5 @@
-use crate::fe::EccFieldElement;
-use crate::group::{EccCurveType, EccPoint, EccScalar};
+use super::fe::EccFieldElement;
+use super::group::{EccCurveType, EccPoint, EccScalar};
 use crate::{ThresholdEcdsaError, ThresholdEcdsaResult};
 use hex_literal::hex;
 use ic_crypto_internal_seed::xmd;

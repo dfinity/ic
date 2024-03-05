@@ -190,7 +190,7 @@ impl IDkgComplaintInternal {
         dealer_index: NodeIndex,
         public_key: &MEGaPublicKey,
     ) -> ThresholdEcdsaResult<Vec<u8>> {
-        let mut ro = ro::RandomOracle::new("ic-crypto-tecdsa-complaint-proof-assoc-data");
+        let mut ro = RandomOracle::new("ic-crypto-tecdsa-complaint-proof-assoc-data");
 
         ro.add_bytestring("associated_data", associated_data)?;
         ro.add_u32("receiver_index", receiver_index)?;

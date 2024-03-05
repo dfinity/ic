@@ -908,7 +908,8 @@ impl EcdsaSignatureProtocolSetup {
             algorithm_id: mpk_alg,
             public_key: self.key.transcript.constant_term().serialize(),
         };
-        ic_crypto_internal_threshold_sig_ecdsa::sign::derive_public_key(&master_public_key, path)
+        ic_crypto_internal_threshold_sig_ecdsa::derive_ecdsa_public_key(&master_public_key, path)
+            .map_err(|e| ThresholdEcdsaError::InvalidArguments(format!("{:?}", e)))
     }
 
     pub fn alg(&self) -> AlgorithmId {

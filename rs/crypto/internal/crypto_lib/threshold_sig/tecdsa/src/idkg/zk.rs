@@ -1,4 +1,8 @@
-use crate::*;
+use crate::{
+    EccCurveType, EccPoint, EccScalar, RandomOracle, Seed, ThresholdEcdsaError,
+    ThresholdEcdsaResult,
+};
+use serde::{Deserialize, Serialize};
 
 pub const PROOF_OF_DLOG_EQUIV_DST: &str = "ic-crypto-tecdsa-zk-proof-of-dlog-eq";
 pub const PROOF_OF_EQUAL_OPENINGS_DST: &str = "ic-crypto-tecdsa-zk-proof-of-equal-openings";
@@ -76,7 +80,7 @@ impl ProofOfEqualOpeningsInstance {
         commitment: &EccPoint,
         associated_data: &[u8],
     ) -> ThresholdEcdsaResult<EccScalar> {
-        let mut ro = ro::RandomOracle::new(PROOF_OF_EQUAL_OPENINGS_DST);
+        let mut ro = RandomOracle::new(PROOF_OF_EQUAL_OPENINGS_DST);
         ro.add_bytestring("associated_data", associated_data)?;
         ro.add_point("instance_g", &self.g)?;
         ro.add_point("instance_h", &self.h)?;
@@ -231,7 +235,7 @@ impl ProofOfProductInstance {
         c2: &EccPoint,
         associated_data: &[u8],
     ) -> ThresholdEcdsaResult<EccScalar> {
-        let mut ro = ro::RandomOracle::new(PROOF_OF_PRODUCT_DST);
+        let mut ro = RandomOracle::new(PROOF_OF_PRODUCT_DST);
         ro.add_bytestring("associated_data", associated_data)?;
         ro.add_point("instance_g", &self.g)?;
         ro.add_point("instance_h", &self.h)?;
@@ -372,7 +376,7 @@ impl ProofOfDLogEquivalenceInstance {
         c2: &EccPoint,
         associated_data: &[u8],
     ) -> ThresholdEcdsaResult<EccScalar> {
-        let mut ro = ro::RandomOracle::new(PROOF_OF_DLOG_EQUIV_DST);
+        let mut ro = RandomOracle::new(PROOF_OF_DLOG_EQUIV_DST);
         ro.add_bytestring("associated_data", associated_data)?;
         ro.add_point("instance_g", &self.g)?;
         ro.add_point("instance_h", &self.h)?;

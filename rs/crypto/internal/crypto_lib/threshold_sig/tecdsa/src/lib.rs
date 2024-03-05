@@ -251,35 +251,33 @@ pub struct ThresholdEcdsaSerializationError(pub String);
 pub type ThresholdEcdsaSerializationResult<T> =
     std::result::Result<T, ThresholdEcdsaSerializationError>;
 
-mod bip340;
-mod complaints;
-mod dealings;
-mod fe;
-mod group;
-mod hash2curve;
-mod key_derivation;
-mod mega;
-mod poly;
-pub mod ro;
-pub mod sign;
 pub mod test_utils;
-mod transcript;
-pub mod zk;
 
-pub use crate::complaints::IDkgComplaintInternal;
-pub use crate::dealings::*;
-pub use crate::fe::*;
-pub use crate::group::*;
-pub use crate::mega::*;
-pub use crate::poly::*;
-pub use crate::transcript::*;
+mod idkg;
+mod signing;
+mod utils;
 
-pub use crate::key_derivation::{DerivationIndex, DerivationPath};
-pub use bip340::{
+pub use crate::idkg::mega::*;
+
+pub use crate::idkg::complaints::*;
+pub use crate::idkg::dealings::*;
+pub use crate::idkg::transcript::*;
+pub use crate::idkg::zk;
+
+pub use crate::utils::fe::*;
+pub use crate::utils::group::*;
+pub use crate::utils::poly::*;
+
+pub use crate::utils::ro::*;
+
+pub use crate::signing::bip340::{
     derive_bip340_public_key, ThresholdBip340CombinedSignatureInternal,
     ThresholdBip340SignatureShareInternal,
 };
-pub use sign::{ThresholdEcdsaCombinedSigInternal, ThresholdEcdsaSigShareInternal};
+pub use crate::signing::ecdsa::{
+    ThresholdEcdsaCombinedSigInternal, ThresholdEcdsaSigShareInternal,
+};
+pub use crate::signing::key_derivation::{DerivationIndex, DerivationPath};
 
 /// Create MEGa encryption keypair
 pub fn gen_keypair(curve_type: EccCurveType, seed: Seed) -> (MEGaPublicKey, MEGaPrivateKey) {
@@ -625,7 +623,7 @@ impl From<&ExtendedDerivationPath> for DerivationPath {
         Self::new(
             std::iter::once(extended_derivation_path.caller.to_vec())
                 .chain(extended_derivation_path.derivation_path.clone())
-                .map(key_derivation::DerivationIndex)
+                .map(crate::signing::key_derivation::DerivationIndex)
                 .collect::<Vec<_>>(),
         )
     }
@@ -803,7 +801,7 @@ pub fn combine_ecdsa_signature_shares(
     let curve = EccCurveType::from_algorithm(algorithm_id)
         .ok_or(ThresholdEcdsaCombineSigSharesInternalError::UnsupportedAlgorithm)?;
 
-    sign::ThresholdEcdsaCombinedSigInternal::new(
+    crate::signing::ecdsa::ThresholdEcdsaCombinedSigInternal::new(
         derivation_path,
         hashed_message,
         randomness,
@@ -1094,7 +1092,7 @@ pub fn derive_ecdsa_public_key(
     master_public_key: &MasterEcdsaPublicKey,
     derivation_path: &DerivationPath,
 ) -> Result<EcdsaPublicKey, ThresholdEcdsaDerivePublicKeyError> {
-    Ok(crate::sign::derive_public_key(
+    Ok(crate::signing::ecdsa::derive_public_key(
         master_public_key,
         derivation_path,
     )?)
@@ -1149,7 +1147,7 @@ pub fn generate_complaints(
     public_key: &MEGaPublicKey,
     seed: Seed,
 ) -> Result<BTreeMap<NodeIndex, IDkgComplaintInternal>, IDkgGenerateComplaintsInternalError> {
-    Ok(complaints::generate_complaints(
+    Ok(idkg::complaints::generate_complaints(
         verified_dealings,
         associated_data,
         receiver_index,

@@ -1,5 +1,5 @@
+use super::fe::EccFieldElement;
 use crate::*;
-use fe::EccFieldElement;
 use ic_types::NodeIndex;
 use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -215,7 +215,7 @@ impl EccScalar {
         input: &[u8],
         domain_separator: &[u8],
     ) -> ThresholdEcdsaResult<Self> {
-        let h = hash2curve::hash_to_scalar(1, curve, input, domain_separator)?;
+        let h = super::hash2curve::hash_to_scalar(1, curve, input, domain_separator)?;
         Ok(h[0].clone())
     }
 
@@ -226,7 +226,7 @@ impl EccScalar {
         input: &[u8],
         domain_separator: &[u8],
     ) -> ThresholdEcdsaResult<Vec<Self>> {
-        hash2curve::hash_to_scalar(count, curve, input, domain_separator)
+        super::hash2curve::hash_to_scalar(count, curve, input, domain_separator)
     }
 
     /// Deserialize a SEC1 formatted scalar value (with tag)
@@ -540,7 +540,7 @@ impl EccPoint {
         input: &[u8],
         domain_separator: &[u8],
     ) -> ThresholdEcdsaResult<Self> {
-        hash2curve::hash2curve_ro(curve, input, domain_separator)
+        super::hash2curve::hash2curve_ro(curve, input, domain_separator)
     }
 
     /// Create a point from two field elements

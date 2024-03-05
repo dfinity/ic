@@ -7,7 +7,7 @@ fn test_random_oracle_stability() -> ThresholdEcdsaResult<()> {
 
     let rng = &mut seed.into_rng();
 
-    let mut ro = ro::RandomOracle::new("ic-test-domain-sep");
+    let mut ro = RandomOracle::new("ic-test-domain-sep");
 
     let s1 = EccScalar::random(curve_type, rng);
     let pt1 = EccPoint::generator_g(curve_type).scalar_mul(&s1)?;
@@ -31,7 +31,7 @@ fn test_random_oracle_stability() -> ThresholdEcdsaResult<()> {
     );
 
     // Test random oracle chaining:
-    let mut ro = ro::RandomOracle::new("ic-test-domain-sep-2");
+    let mut ro = RandomOracle::new("ic-test-domain-sep-2");
 
     ro.add_scalar("c1", &c1[1])?;
     ro.add_u64("round", 2)?;
@@ -43,7 +43,7 @@ fn test_random_oracle_stability() -> ThresholdEcdsaResult<()> {
         "f35e7f0a649f8c8e92084d04d40cd13cb82e9e2ebc3aabb5bd88c04ce2f5ebe9"
     );
 
-    let mut ro = ro::RandomOracle::new("ic-test-domain-sep-3");
+    let mut ro = RandomOracle::new("ic-test-domain-sep-3");
 
     ro.add_scalar("c2", &c2)?;
     ro.add_u64("round", 3)?;
@@ -55,7 +55,7 @@ fn test_random_oracle_stability() -> ThresholdEcdsaResult<()> {
         "c569bf3e900df5d5e61fdf3b9d798d3089bf9dfd875e8735cb99aef2e5a865f2eb44fb6f363730a4b2dc"
     );
 
-    let mut ro = ro::RandomOracle::new("ic-test-domain-sep-4");
+    let mut ro = RandomOracle::new("ic-test-domain-sep-4");
 
     ro.add_bytestring("c3", &byte_output)?;
     ro.add_u64("round", 4)?;
@@ -82,13 +82,13 @@ fn test_random_oracle_max_outputs() -> ThresholdEcdsaResult<()> {
          */
 
         for i in 1..170 {
-            let mut ro = ro::RandomOracle::new("ic-test-domain-sep");
+            let mut ro = RandomOracle::new("ic-test-domain-sep");
             ro.add_usize("input", i)?;
             assert_eq!(ro.output_scalars(curve_type, i).unwrap().len(), i);
         }
 
         for i in 171..256 {
-            let mut ro = ro::RandomOracle::new("ic-test-domain-sep");
+            let mut ro = RandomOracle::new("ic-test-domain-sep");
             ro.add_usize("input", i)?;
             assert!(ro.output_scalars(curve_type, i).is_err());
         }
@@ -100,7 +100,7 @@ fn test_random_oracle_max_outputs() -> ThresholdEcdsaResult<()> {
 #[test]
 fn test_random_oracle_min_inputs() -> ThresholdEcdsaResult<()> {
     for curve_type in EccCurveType::all() {
-        let ro = ro::RandomOracle::new("ic-test-domain-sep");
+        let ro = RandomOracle::new("ic-test-domain-sep");
         assert!(ro.output_scalar(curve_type).is_err());
     }
 
@@ -109,7 +109,7 @@ fn test_random_oracle_min_inputs() -> ThresholdEcdsaResult<()> {
 
 #[test]
 fn test_random_oracle_max_name_len() -> ThresholdEcdsaResult<()> {
-    let mut ro = ro::RandomOracle::new("ic-test-domain-sep");
+    let mut ro = RandomOracle::new("ic-test-domain-sep");
 
     let name255 = "YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY";
     let name256 = "NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN";
@@ -122,7 +122,7 @@ fn test_random_oracle_max_name_len() -> ThresholdEcdsaResult<()> {
 
 #[test]
 fn test_random_oracle_dup_names_rejected() -> ThresholdEcdsaResult<()> {
-    let mut ro = ro::RandomOracle::new("ic-test-domain-sep");
+    let mut ro = RandomOracle::new("ic-test-domain-sep");
 
     assert!(ro.add_usize("a", 1).is_ok());
     assert!(ro.add_usize("b", 1).is_ok());
@@ -147,7 +147,7 @@ fn test_random_oracle_dup_names_rejected() -> ThresholdEcdsaResult<()> {
 
 #[test]
 fn test_random_oracle_allows_duplicated_inputs() -> ThresholdEcdsaResult<()> {
-    let mut ro = ro::RandomOracle::new("ic-test-domain-sep");
+    let mut ro = RandomOracle::new("ic-test-domain-sep");
 
     let pt = EccPoint::hash_to_point(EccCurveType::K256, "input".as_bytes(), "dst".as_bytes())?;
 
@@ -172,7 +172,7 @@ fn test_random_oracle_allows_duplicated_inputs() -> ThresholdEcdsaResult<()> {
 
 #[test]
 fn test_random_oracle_empty_name_rejected() -> ThresholdEcdsaResult<()> {
-    let mut ro = ro::RandomOracle::new("ic-test-domain-sep");
+    let mut ro = RandomOracle::new("ic-test-domain-sep");
 
     assert!(ro.add_usize("", 5).is_err());
 
