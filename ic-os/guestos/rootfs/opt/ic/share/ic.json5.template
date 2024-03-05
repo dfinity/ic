@@ -196,6 +196,9 @@
     icmp type echo-reply accept\n\
     <<IPv4_TCP_RULES>>\n\
     <<IPv4_UDP_RULES>>\n\
+    ct state { invalid } drop\n\
+    #   - The rule accepts all established and related connections. It's required for the IPv4 connectivity check.\n\
+    ct state { established, related } accept\n\
     log prefix \"Drop - default policy: \"\n\
   }\n\
 \n\
