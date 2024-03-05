@@ -140,7 +140,6 @@ pub enum WasmInstrumentationError {
         offset: usize,
         len: usize,
     },
-    InvalidExport(String),
     InvalidFunctionType(String),
 }
 
@@ -163,7 +162,6 @@ impl std::fmt::Display for WasmInstrumentationError {
                 "Wasm module has invalid data segment of {} bytes at {}",
                 len, offset
             ),
-            Self::InvalidExport(err) => write!(f, "Failed to export: {}", err),
             Self::InvalidFunctionType(err) => write!(f, "Invalid function type: {}", err),
         }
     }
