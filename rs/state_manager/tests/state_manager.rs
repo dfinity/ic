@@ -470,7 +470,9 @@ fn rejoining_node_doesnt_accumulate_states() {
                     .get_validated_by_identifier(&id)
                     .expect("failed to get state sync messages");
 
-                let chunkable = dst_state_sync.create_chunkable_state(&id);
+                let chunkable = dst_state_sync
+                    .create_chunkable_state(&id)
+                    .expect("there exists an ongoing state sync");
                 let dst_msg = pipe_state_sync(msg.clone(), chunkable);
                 dst_state_sync.deliver_state_sync(dst_msg);
                 assert_eq!(
@@ -2131,7 +2133,9 @@ fn can_do_simple_state_sync_transfer() {
         assert_error_counters(src_metrics);
 
         state_manager_test_with_state_sync(|dst_metrics, dst_state_manager, dst_state_sync| {
-            let chunkable = dst_state_sync.create_chunkable_state(&id);
+            let chunkable = dst_state_sync
+                .create_chunkable_state(&id)
+                .expect("there exists an ongoing state sync");
 
             let dst_msg = pipe_state_sync(msg, chunkable);
             dst_state_sync.deliver_state_sync(dst_msg);
@@ -2231,14 +2235,12 @@ fn test_start_and_cancel_state_sync() {
                 .start_state_sync(&id2)
                 .expect("failed to start state sync");
 
-            // TODO: (MR-537) Currently, this line of code will panic where we start a state sync at the same height as the ongoing one.
-            // The caller of `start_state_sync` (i.e. the state sync manager) currently ensures that the improper use of the API won't happen.
-            // We will improve this case by returning `None` instead of panicking.
-            // dst_state_sync.start_state_sync(&id2);
+            // a new state sync won't be started if there is already an ongoing one no matter whether they are in the same height or not.
+            assert!(dst_state_sync.start_state_sync(&id2).is_none());
 
             // Request fetching of state @3.
             dst_state_manager.fetch_state(height(3), hash3, Height::new(499));
-            // a new start state sync won't be started if there is already an ongoing one.
+            // a new state sync won't be started if there is already an ongoing one no matter whether they are in the same height or not.
             assert!(dst_state_sync.start_state_sync(&id3).is_none());
 
             // When `EXTRA_CHECKPOINTS_TO_KEEP` is set as 0, we should cancel an ongoing state sync if requested to fetch a newer state.
@@ -2421,7 +2423,9 @@ fn can_state_sync_from_cache() {
 
             // First state sync is destroyed before completion
             {
-                let mut chunkable = dst_state_sync.create_chunkable_state(&id);
+                let mut chunkable = dst_state_sync
+                    .create_chunkable_state(&id)
+                    .expect("there exists an ongoing state sync");
 
                 // First fetch chunk 0 (the meta-manifest) and manifest chunks, and then ask for all chunks afterwards,
                 // but never receive the chunk for `system_metadata.pbuf` and FILE_GROUP_CHUNK_ID_OFFSET
@@ -2440,7 +2444,9 @@ fn can_state_sync_from_cache() {
                     hash: hash.get_ref().clone(),
                 };
 
-                let mut chunkable = dst_state_sync.create_chunkable_state(&id);
+                let mut chunkable = dst_state_sync
+                    .create_chunkable_state(&id)
+                    .expect("there exists an ongoing state sync");
 
                 let result = pipe_meta_manifest(&msg, &mut *chunkable, false);
                 assert!(matches!(result, Err(StateSyncErrorCode::ChunksMoreNeeded)));
@@ -2486,7 +2492,9 @@ fn can_state_sync_from_cache() {
                     hash: hash.get(),
                 };
 
-                let mut chunkable = dst_state_sync.create_chunkable_state(&id);
+                let mut chunkable = dst_state_sync
+                    .create_chunkable_state(&id)
+                    .expect("there exists an ongoing state sync");
 
                 // The meta-manifest and manifest are enough to complete the sync
                 let _res = pipe_meta_manifest(&msg, &mut *chunkable, false);
@@ -2556,7 +2564,9 @@ fn can_state_sync_after_aborting_in_prep_phase() {
 
             // First state sync is destroyed when fetching the manifest chunks in the Prep phase
             {
-                let mut chunkable = dst_state_sync.create_chunkable_state(&id);
+                let mut chunkable = dst_state_sync
+                    .create_chunkable_state(&id)
+                    .expect("there exists an ongoing state sync");
 
                 // First fetch chunk 0 (the meta-manifest) and manifest chunks but never receive chunk(MANIFEST_CHUNK_ID_OFFSET + 1).
                 let completion = pipe_partial_state_sync(&msg, &mut *chunkable, &omit, false);
@@ -2574,7 +2584,9 @@ fn can_state_sync_after_aborting_in_prep_phase() {
                     hash: hash.get_ref().clone(),
                 };
 
-                let mut chunkable = dst_state_sync.create_chunkable_state(&id);
+                let mut chunkable = dst_state_sync
+                    .create_chunkable_state(&id)
+                    .expect("there exists an ongoing state sync");
 
                 let result = pipe_meta_manifest(&msg, &mut *chunkable, false);
                 assert!(matches!(result, Err(StateSyncErrorCode::ChunksMoreNeeded)));
@@ -2639,7 +2651,9 @@ fn state_sync_can_reject_invalid_chunks() {
 
         state_manager_test_with_state_sync(|dst_metrics, dst_state_manager, dst_state_sync| {
             // Provide bad meta-manifest to dst
-            let mut chunkable = dst_state_sync.create_chunkable_state(&id);
+            let mut chunkable = dst_state_sync
+                .create_chunkable_state(&id)
+                .expect("there exists an ongoing state sync");
             let result = pipe_meta_manifest(&msg, &mut *chunkable, true);
             assert!(matches!(
                 result,
@@ -2740,7 +2754,9 @@ fn can_state_sync_into_existing_checkpoint() {
         assert_error_counters(src_metrics);
 
         state_manager_test_with_state_sync(|dst_metrics, dst_state_manager, dst_state_sync| {
-            let chunkable = dst_state_sync.create_chunkable_state(&id);
+            let chunkable = dst_state_sync
+                .create_chunkable_state(&id)
+                .expect("there exists an ongoing state sync");
 
             dst_state_manager.take_tip();
             dst_state_manager.commit_and_certify(
@@ -2808,7 +2824,9 @@ fn can_group_small_files_in_state_sync() {
         assert_error_counters(src_metrics);
 
         state_manager_test_with_state_sync(|dst_metrics, dst_state_manager, dst_state_sync| {
-            let mut chunkable = dst_state_sync.create_chunkable_state(&id);
+            let mut chunkable = dst_state_sync
+                .create_chunkable_state(&id)
+                .expect("there exists an ongoing state sync");
 
             let result = pipe_meta_manifest(&msg, &mut *chunkable, false);
             assert!(matches!(result, Err(StateSyncErrorCode::ChunksMoreNeeded)));
@@ -2870,7 +2888,9 @@ fn can_commit_after_prev_state_is_gone() {
 
             let (_height, tip) = dst_state_manager.take_tip();
 
-            let chunkable = dst_state_sync.create_chunkable_state(&id);
+            let chunkable = dst_state_sync
+                .create_chunkable_state(&id)
+                .expect("there exists an ongoing state sync");
             let dst_msg = pipe_state_sync(msg, chunkable);
             dst_state_sync.deliver_state_sync(dst_msg);
 
@@ -2925,7 +2945,9 @@ fn can_commit_without_prev_hash_mismatch_after_taking_tip_at_the_synced_height()
             insert_dummy_canister(&mut tip, canister_test_id(100));
             dst_state_manager.commit_and_certify(tip, height(1), CertificationScope::Metadata);
 
-            let chunkable = dst_state_sync.create_chunkable_state(&id);
+            let chunkable = dst_state_sync
+                .create_chunkable_state(&id)
+                .expect("there exists an ongoing state sync");
             let dst_msg = pipe_state_sync(msg, chunkable);
             dst_state_sync.deliver_state_sync(dst_msg);
 
@@ -2969,7 +2991,9 @@ fn can_state_sync_based_on_old_checkpoint() {
 
             wait_for_checkpoint(&*dst_state_manager, height(1));
 
-            let chunkable = dst_state_sync.create_chunkable_state(&id);
+            let chunkable = dst_state_sync
+                .create_chunkable_state(&id)
+                .expect("there exists an ongoing state sync");
 
             let dst_msg = pipe_state_sync(msg, chunkable);
             dst_state_sync.deliver_state_sync(dst_msg);
@@ -3172,7 +3196,9 @@ fn can_recover_from_corruption_on_state_sync() {
             std::fs::write(&canister_100_raw_pb, b"Garbage").unwrap();
             make_readonly(&canister_100_raw_pb).unwrap();
 
-            let chunkable = dst_state_sync.create_chunkable_state(&id);
+            let chunkable = dst_state_sync
+                .create_chunkable_state(&id)
+                .expect("there exists an ongoing state sync");
             let dst_msg = pipe_state_sync(msg, chunkable);
             dst_state_sync.deliver_state_sync(dst_msg);
 
@@ -3217,7 +3243,9 @@ fn can_commit_below_state_sync() {
         state_manager_test_with_state_sync(|dst_metrics, dst_state_manager, dst_state_sync| {
             let (tip_height, state) = dst_state_manager.take_tip();
             assert_eq!(tip_height, height(0));
-            let chunkable = dst_state_sync.create_chunkable_state(&id);
+            let chunkable = dst_state_sync
+                .create_chunkable_state(&id)
+                .expect("there exists an ongoing state sync");
             let dst_msg = pipe_state_sync(msg, chunkable);
             dst_state_sync.deliver_state_sync(dst_msg);
             // Check committing an old state doesn't panic
@@ -3268,7 +3296,9 @@ fn can_state_sync_below_commit() {
             let (_height, state) = dst_state_manager.take_tip();
             dst_state_manager.remove_states_below(height(2));
             assert_eq!(dst_state_manager.checkpoint_heights(), vec![height(2)]);
-            let chunkable = dst_state_sync.create_chunkable_state(&id);
+            let chunkable = dst_state_sync
+                .create_chunkable_state(&id)
+                .expect("there exists an ongoing state sync");
             let dst_msg = pipe_state_sync(msg, chunkable);
             dst_state_sync.deliver_state_sync(dst_msg);
             assert_eq!(
