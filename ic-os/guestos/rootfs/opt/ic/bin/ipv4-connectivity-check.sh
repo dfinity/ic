@@ -14,7 +14,7 @@ write_metric() {
     echo -e "# HELP ${name} ${help}\n# TYPE ${type}\n${name} ${value}" >"${METRICS_DIR}/${name}.prom"
 }
 
-endpoints=("1.1.1.1" "8.8.8.8" "9.9.9.9")
+endpoints=("1.1.1.1" "ic0.app" "httpbin.org")
 
 connectivity_status=0
 
