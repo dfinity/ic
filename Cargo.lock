@@ -9546,6 +9546,7 @@ dependencies = [
  "dfn_http",
  "dfn_json",
  "dfn_protobuf",
+ "flate2",
  "futures",
  "ic-base-types",
  "ic-btc-interface",
