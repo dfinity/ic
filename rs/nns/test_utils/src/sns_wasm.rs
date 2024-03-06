@@ -9,12 +9,14 @@ use ic_base_types::CanisterId;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_PRINCIPAL;
 use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_nns_governance::init::TEST_NEURON_1_ID;
-use ic_nns_governance::pb::v1::{
-    manage_neuron::{Command, NeuronIdOrSubaccount},
-    manage_neuron_response::Command as CommandResponse,
-    proposal, ExecuteNnsFunction, ManageNeuron, ManageNeuronResponse, NnsFunction, Proposal,
-    ProposalInfo, ProposalStatus,
+use ic_nns_governance::{
+    init::TEST_NEURON_1_ID,
+    pb::v1::{
+        manage_neuron::{Command, NeuronIdOrSubaccount},
+        manage_neuron_response::Command as CommandResponse,
+        proposal, ExecuteNnsFunction, ManageNeuron, ManageNeuronResponse, NnsFunction, Proposal,
+        ProposalInfo, ProposalStatus,
+    },
 };
 use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_wasm::pb::v1::{
@@ -28,6 +30,7 @@ use ic_state_machine_tests::StateMachine;
 use maplit::{btreemap, hashmap};
 use std::{
     collections::{BTreeMap, HashMap},
+    io::Write,
     time::{Duration, Instant},
 };
 
@@ -552,6 +555,20 @@ pub fn create_modified_wasm(original_wasm: &SnsWasm, modify_with: Option<&str>) 
 
     assert_ne!(new_wasm_hash, original_hash);
     sns_wasm_to_add
+}
+
+pub fn ensure_sns_wasm_gzipped(sns_wasm: SnsWasm) -> SnsWasm {
+    let bytes = &sns_wasm.wasm;
+    if (bytes.len() > 4) && (bytes[0] == 0x1F) && (bytes[1] == 0x8B) {
+        return sns_wasm;
+    }
+
+    let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+    encoder.write_all(bytes).unwrap();
+    let mut sns_wasm = sns_wasm;
+    sns_wasm.wasm = encoder.finish().unwrap();
+
+    sns_wasm
 }
 
 /// Translates a WasmMap to a Version
