@@ -1,9 +1,9 @@
 use crate::{state_reader_executor::StateReaderExecutor, HttpError};
-use axum::body::Body;
+use axum::{body::Body, response::IntoResponse};
 use http::{
     header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE},
     request::Parts,
-    Method,
+    HeaderValue, Method,
 };
 use http_body_util::{BodyExt, Empty, Full};
 use hyper::{header, Response, StatusCode};
@@ -129,6 +129,42 @@ pub(crate) fn into_cbor<R: Serialize>(r: &R) -> Vec<u8> {
     ser.into_inner()
 }
 
+/// `IntoResponse` implementation for Cbor. Similar to axum implementation for JSON.
+/// https://docs.rs/axum/latest/axum/struct.Json.html#impl-IntoResponse-for-Json%3CT%3E
+pub struct Cbor<T>(pub T);
+
+impl<T> IntoResponse for Cbor<T>
+where
+    T: Serialize,
+{
+    fn into_response(self) -> axum::response::Response {
+        // Use a small initial capacity of 128 bytes like serde_json::to_vec
+        // https://docs.rs/serde_json/1.0.82/src/serde_json/ser.rs.html#2189
+        let buf = Vec::with_capacity(128);
+        let mut ser = serde_cbor::Serializer::new(buf);
+        ser.self_describe().expect("Could not write magic tag.");
+        match &self.0.serialize(&mut ser) {
+            Ok(()) => (
+                [(
+                    header::CONTENT_TYPE,
+                    HeaderValue::from_static(CONTENT_TYPE_CBOR),
+                )],
+                ser.into_inner(),
+            )
+                .into_response(),
+            Err(err) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                [(
+                    header::CONTENT_TYPE,
+                    HeaderValue::from_static(CONTENT_TYPE_TEXT),
+                )],
+                err.to_string(),
+            )
+                .into_response(),
+        }
+    }
+}
+
 /// Write the "self describing" CBOR tag and serialize the response
 pub(crate) fn cbor_response<R: Serialize>(r: &R) -> (Response<Body>, usize) {
     let cbor = into_cbor(r);
@@ -210,6 +246,7 @@ pub(crate) fn remove_effective_principal_id(
 // A few test helpers, improving readability in the tests
 #[cfg(test)]
 pub(crate) mod test {
+
     use super::*;
     use hyper::header;
     use ic_types::messages::{Blob, CertificateDelegation};
