@@ -37,7 +37,6 @@ use crate::{
     pprof::{PprofFlamegraphService, PprofHomeService, PprofProfileService},
     read_state::subnet::SubnetReadStateService,
     state_reader_executor::StateReaderExecutor,
-    status::StatusService,
 };
 pub use call::CallServiceBuilder;
 pub use common::cors_layer;
@@ -48,7 +47,7 @@ use axum::{
     extract::{MatchedPath, State},
     middleware::Next,
     response::{IntoResponse, Redirect},
-    routing::{get, get_service, post_service},
+    routing::{get, get_service, post_service, MethodRouter},
     Router,
 };
 use bytes::Bytes;
@@ -98,6 +97,7 @@ use metrics::{HttpHandlerMetrics, LABEL_UNKNOWN};
 pub use query::QueryServiceBuilder;
 use rand::Rng;
 pub use read_state::canister::{CanisterReadStateService, CanisterReadStateServiceBuilder};
+use status::StatusState;
 use std::{
     convert::{Infallible, TryFrom},
     io::Write,
@@ -140,7 +140,7 @@ struct HttpHandler {
     query_service: EndpointService,
     catchup_service: EndpointService,
     dashboard_service: EndpointService,
-    status_service: EndpointService,
+    status_method: MethodRouter,
     canister_read_state_service: EndpointService,
     subnet_read_state_service: EndpointService,
     pprof_home_service: EndpointService,
@@ -352,13 +352,16 @@ pub fn start_server(
         Arc::clone(&delegation_from_nns),
         state_reader_executor.clone(),
     );
-    let status_service = StatusService::new_service(
-        log.clone(),
-        nns_subnet_id,
-        Arc::clone(&registry_client),
-        Arc::clone(&health_status),
-        state_reader_executor.clone(),
-    );
+    let status_method =
+        MethodRouter::new()
+            .get(crate::status::status)
+            .with_state(StatusState::new(
+                log.clone(),
+                nns_subnet_id,
+                Arc::clone(&registry_client),
+                Arc::clone(&health_status),
+                state_reader_executor.clone(),
+            ));
     let dashboard_service =
         DashboardService::new_service(config.clone(), subnet_type, state_reader_executor.clone());
     let catchup_service = CatchUpPackageService::new_service(consensus_pool_cache.clone());
@@ -397,7 +400,7 @@ pub fn start_server(
     let http_handler = HttpHandler {
         call_service,
         query_service,
-        status_service,
+        status_method,
         catchup_service,
         dashboard_service,
         canister_read_state_service,
@@ -654,7 +657,6 @@ fn make_router(
 ) -> Router {
     let call_service = http_handler.call_service.clone();
     let query_service = http_handler.query_service.clone();
-    let status_service = http_handler.status_service.clone();
     let catch_up_package_service = http_handler.catchup_service.clone();
     let dashboard_service = http_handler.dashboard_service.clone();
     let canister_read_state_service = http_handler.canister_read_state_service.clone();
@@ -740,7 +742,7 @@ fn make_router(
     let get_router = Router::new()
         .route_service(
             "/api/v2/status",
-            get_service(status_service).layer(
+            http_handler.status_method.layer(
                 ServiceBuilder::new()
                     .layer(HandleErrorLayer::new(map_box_error_to_response))
                     .load_shed()
@@ -1228,7 +1230,7 @@ mod tests {
             query_service: dummy_service.clone(),
             catchup_service: dummy_service.clone(),
             dashboard_service: dummy_service.clone(),
-            status_service: dummy_service.clone(),
+            status_method: MethodRouter::new().get_service(dummy_service.clone()),
             canister_read_state_service: dummy_service.clone(),
             subnet_read_state_service: dummy_service.clone(),
             pprof_home_service: dummy_service.clone(),
