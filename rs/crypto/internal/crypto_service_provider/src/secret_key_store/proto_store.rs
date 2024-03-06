@@ -9,8 +9,6 @@ use crate::types::CspSecretKey;
 use hex::{FromHex, ToHex};
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
-use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::types::convert_keyset_to_keyset_with_pop;
-use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::types::CspFsEncryptionKeySet;
 use ic_logger::{debug, info, replica_logger::no_op_logger, warn, ReplicaLogger};
 use parking_lot::RwLock;
 use prost::Message;
@@ -331,12 +329,6 @@ impl ProtoSecretKeyStore {
                     ProtoSecretKeyStore::sks_proto_to_secret_keys(&sks_proto);
                 Self::migrate_sks_from_v2_to_v3(secret_keys_from_disk)
             }
-            1 => {
-                let secret_keys_from_disk =
-                    ProtoSecretKeyStore::sks_proto_to_secret_keys(&sks_proto);
-                let sks_v2 = Self::migrate_sks_from_v1_to_v2(secret_keys_from_disk);
-                Self::migrate_sks_from_v2_to_v3(sks_v2)
-            }
             _ => panic!(
                 "Unsupported SecretKeyStore-proto version: {}",
                 sks_proto.version
@@ -352,23 +344,6 @@ impl ProtoSecretKeyStore {
                 _ => scope,
             };
             migrated_secret_keys.insert(key_id, (csp_key, migrated_scope));
-        }
-        migrated_secret_keys
-    }
-
-    fn migrate_sks_from_v1_to_v2(existing_secret_keys: SecretKeys) -> SecretKeys {
-        let mut migrated_secret_keys = SecretKeys::new();
-        for (key_id, (csp_key, scope)) in existing_secret_keys.into_iter() {
-            let migrated_secret_key = match &csp_key {
-                CspSecretKey::FsEncryption(CspFsEncryptionKeySet::Groth20_Bls12_381(key_set)) => {
-                    let key_set_with_pop = convert_keyset_to_keyset_with_pop(key_set.clone());
-                    CspSecretKey::FsEncryption(CspFsEncryptionKeySet::Groth20WithPop_Bls12_381(
-                        key_set_with_pop,
-                    ))
-                }
-                _ => csp_key,
-            };
-            migrated_secret_keys.insert(key_id, (migrated_secret_key, scope));
         }
         migrated_secret_keys
     }

@@ -59,7 +59,6 @@ pub mod utils {
                 )),
                 timestamp: None
             },
-            _=> panic!("Unsupported types")
         }
     }
 

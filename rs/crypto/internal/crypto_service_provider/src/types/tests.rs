@@ -9,7 +9,7 @@ use ic_crypto_internal_test_vectors::ed25519::{
 use ic_crypto_internal_test_vectors::multi_bls12_381::TESTVEC_MULTI_BLS12_381_1_PK;
 use ic_crypto_internal_test_vectors::unhex::hex_to_byte_vec;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::types::{
-    BTENodeBytes, FsEncryptionKeySet, FsEncryptionSecretKey,
+    BTENodeBytes, FsEncryptionKeySetWithPop, FsEncryptionSecretKey,
 };
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::types::CspFsEncryptionKeySet;
 use ic_crypto_internal_threshold_sig_ecdsa::{
@@ -17,7 +17,7 @@ use ic_crypto_internal_threshold_sig_ecdsa::{
 };
 use ic_crypto_internal_types::curves::bls12_381::{FrBytes, G1Bytes, G2Bytes};
 use ic_crypto_internal_types::encrypt::forward_secure::groth20_bls12_381::{
-    FsEncryptionPok, FsEncryptionPublicKey,
+    FsEncryptionPop, FsEncryptionPublicKey,
 };
 use ic_crypto_secrets_containers::SecretArray;
 use ic_types::crypto::{AlgorithmId, BasicSig, BasicSigOf, CryptoHashableTestDummy, UserPublicKey};
@@ -93,9 +93,14 @@ fn should_redact_csp_secret_key_tls_ed25519_debug() {
 
 #[test]
 fn should_redact_csp_secret_key_fs_encryption_debug() {
-    let cspsk_fs = CspSecretKey::FsEncryption(CspFsEncryptionKeySet::Groth20_Bls12_381(
-        FsEncryptionKeySet {
+    let cspsk_fs = CspSecretKey::FsEncryption(CspFsEncryptionKeySet::Groth20WithPop_Bls12_381(
+        FsEncryptionKeySetWithPop {
             public_key: FsEncryptionPublicKey(G1Bytes([1u8; G1Bytes::SIZE])),
+            pop: FsEncryptionPop {
+                pop_key: G1Bytes([1; G1Bytes::SIZE]),
+                challenge: FrBytes([1; FrBytes::SIZE]),
+                response: FrBytes([1; FrBytes::SIZE]),
+            },
             secret_key: FsEncryptionSecretKey {
                 bte_nodes: vec![
                     BTENodeBytes {
@@ -108,10 +113,6 @@ fn should_redact_csp_secret_key_fs_encryption_debug() {
                     };
                     1
                 ],
-            },
-            pok: FsEncryptionPok {
-                blinder: G1Bytes([1; G1Bytes::SIZE]),
-                response: FrBytes([1; FrBytes::SIZE]),
             },
         },
     ));
@@ -146,14 +147,15 @@ fn should_return_correct_enum_variant() {
     assert_eq!(key.enum_variant(), "TlsEd25519");
 
     // FsEncryption
-    let key = CspSecretKey::FsEncryption(CspFsEncryptionKeySet::Groth20_Bls12_381(
-        FsEncryptionKeySet {
+    let key = CspSecretKey::FsEncryption(CspFsEncryptionKeySet::Groth20WithPop_Bls12_381(
+        FsEncryptionKeySetWithPop {
             public_key: FsEncryptionPublicKey(G1Bytes([0; G1Bytes::SIZE])),
-            secret_key: FsEncryptionSecretKey { bte_nodes: vec![] },
-            pok: FsEncryptionPok {
-                blinder: G1Bytes([0; G1Bytes::SIZE]),
-                response: FrBytes([0; FrBytes::SIZE]),
+            pop: FsEncryptionPop {
+                pop_key: G1Bytes([1; G1Bytes::SIZE]),
+                challenge: FrBytes([1; FrBytes::SIZE]),
+                response: FrBytes([1; FrBytes::SIZE]),
             },
+            secret_key: FsEncryptionSecretKey { bte_nodes: vec![] },
         },
     ));
     assert_eq!(key.enum_variant(), "FsEncryption");
