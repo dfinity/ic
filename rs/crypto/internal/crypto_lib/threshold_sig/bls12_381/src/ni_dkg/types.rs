@@ -40,6 +40,5 @@ impl fmt::Debug for CspFsEncryptionSecretKey {
 #[cfg_attr(test, derive(Arbitrary))]
 #[allow(non_camel_case_types)]
 pub enum CspFsEncryptionKeySet {
-    Groth20_Bls12_381(groth20_bls12_381::FsEncryptionKeySet),
     Groth20WithPop_Bls12_381(groth20_bls12_381::FsEncryptionKeySetWithPop),
 }
