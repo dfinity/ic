@@ -4099,7 +4099,7 @@ fn cycles_are_refunded_if_callee_traps() {
             "update",
             call_args()
                 .other_side(b.clone())
-                .on_reject(wasm().reject_code().reject_message().reject()),
+                .on_reject(wasm().reject_message().reject()),
             a_to_b_transferred,
         )
         .build();
@@ -4248,7 +4248,7 @@ fn cycles_are_refunded_if_callee_is_uninstalled_before_execution() {
             "update",
             call_args()
                 .other_side(b.clone())
-                .on_reject(wasm().reject_code().reject_message().reject()),
+                .on_reject(wasm().reject_message().reject()),
             Cycles::from(a_to_b_transferred),
         )
         .build();
@@ -4326,7 +4326,7 @@ fn cycles_are_refunded_if_callee_is_uninstalled_after_execution() {
             "update",
             call_args()
                 .other_side(b.clone())
-                .on_reject(wasm().reject_code().reject_message().reject()),
+                .on_reject(wasm().reject_message().reject()),
             a_to_b_transferred,
         )
         .build();
@@ -4432,7 +4432,7 @@ fn cycles_are_refunded_if_callee_is_reinstalled() {
             "update",
             call_args()
                 .other_side(b.clone())
-                .on_reject(wasm().reject_code().reject_message().reject()),
+                .on_reject(wasm().reject_message().reject()),
             a_to_b_transferred,
         )
         .build();
@@ -4542,7 +4542,7 @@ fn cycles_are_refunded_if_callee_is_uninstalled_during_a_self_call() {
             "update",
             call_args()
                 .other_side(b_1.clone())
-                .on_reject(wasm().reject_code().reject_message().reject()),
+                .on_reject(wasm().reject_message().reject()),
             b_transferred_1,
         )
         .build();
@@ -4556,7 +4556,7 @@ fn cycles_are_refunded_if_callee_is_uninstalled_during_a_self_call() {
             "update",
             call_args()
                 .other_side(b_0.clone())
-                .on_reject(wasm().reject_code().reject_message().reject()),
+                .on_reject(wasm().reject_message().reject()),
             a_to_b_transferred,
         )
         .build();
@@ -4967,7 +4967,7 @@ fn system_state_apply_change_fails() {
             b_id,
             call_args()
                 .other_side(b)
-                .on_reject(wasm().reject_code().reject_message().reject()),
+                .on_reject(wasm().reject_message().reject()),
         )
         .build();
 

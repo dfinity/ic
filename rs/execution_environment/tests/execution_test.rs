@@ -882,7 +882,7 @@ fn subnet_memory_reservation_works() {
             "update",
             call_args()
                 .other_side(b)
-                .on_reject(wasm().reject_code().reject_message().reject())
+                .on_reject(wasm().reject_message().reject())
                 .on_reply(
                     wasm()
                         .stable_grow(800 / num_cores as u32)
@@ -940,7 +940,7 @@ fn subnet_memory_reservation_scales_with_number_of_cores() {
             "update",
             call_args()
                 .other_side(b)
-                .on_reject(wasm().reject_code().reject_message().reject())
+                .on_reject(wasm().reject_message().reject())
                 .on_reply(
                     wasm()
                         .stable_grow(800)

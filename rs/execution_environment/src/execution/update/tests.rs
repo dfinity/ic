@@ -563,7 +563,7 @@ fn dts_abort_of_call_works() {
             "update",
             call_args()
                 .other_side(b.clone())
-                .on_reject(wasm().reject_code().reject_message().reject()),
+                .on_reject(wasm().reject_message().reject()),
             transferred_cycles,
         )
         .build();
