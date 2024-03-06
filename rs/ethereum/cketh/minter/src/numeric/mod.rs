@@ -9,6 +9,9 @@ use phantom_newtype::Id;
 pub enum WeiTag {}
 pub type Wei = CheckedAmountOf<WeiTag>;
 
+pub enum Erc20Tag {}
+pub type Erc20Value = CheckedAmountOf<Erc20Tag>;
+
 pub enum WeiPerGasUnit {}
 pub type WeiPerGas = CheckedAmountOf<WeiPerGasUnit>;
 

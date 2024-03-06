@@ -1,14 +1,14 @@
 use crate::checked_amount::CheckedAmountOf;
 use crate::endpoints::CandidBlockTag;
-use crate::eth_logs::{EventSource, ReceivedEthEvent};
+use crate::eth_logs::{EventSource, ReceivedErc20Event, ReceivedEthEvent, ReceivedEvent};
 use crate::eth_rpc::{BlockTag, Hash};
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::lifecycle::init::InitArg;
 use crate::lifecycle::upgrade::UpgradeArg;
 use crate::lifecycle::EthereumNetwork;
 use crate::numeric::{
-    wei_from_milli_ether, BlockNumber, GasAmount, LedgerBurnIndex, LedgerMintIndex, LogIndex,
-    TransactionNonce, Wei, WeiPerGas,
+    wei_from_milli_ether, BlockNumber, Erc20Value, GasAmount, LedgerBurnIndex, LedgerMintIndex,
+    LogIndex, TransactionNonce, Wei, WeiPerGas,
 };
 use crate::state::event::{Event, EventType};
 use crate::state::State;
@@ -24,11 +24,11 @@ use proptest::collection::vec as pvec;
 use proptest::prelude::*;
 
 mod next_request_id {
-    use crate::state::tests::a_state;
+    use crate::state::tests::initial_state;
 
     #[test]
     fn should_retrieve_and_increment_counter() {
-        let mut state = a_state();
+        let mut state = initial_state();
 
         assert_eq!(state.next_request_id(), 0);
         assert_eq!(state.next_request_id(), 1);
@@ -38,7 +38,7 @@ mod next_request_id {
 
     #[test]
     fn should_wrap_to_0_when_overflow() {
-        let mut state = a_state();
+        let mut state = initial_state();
         state.http_request_counter = u64::MAX;
 
         assert_eq!(state.next_request_id(), u64::MAX);
@@ -46,7 +46,7 @@ mod next_request_id {
     }
 }
 
-fn a_state() -> State {
+fn initial_state() -> State {
     State::try_from(InitArg {
         ethereum_network: Default::default(),
         ecdsa_key_name: "test_key_1".to_string(),
@@ -64,7 +64,7 @@ fn a_state() -> State {
 mod mint_transaction {
     use crate::eth_logs::{EventSourceError, ReceivedEthEvent};
     use crate::numeric::{LedgerMintIndex, LogIndex};
-    use crate::state::tests::{initial_state, received_eth_event};
+    use crate::state::tests::{initial_state, received_erc20_event, received_eth_event};
     use crate::state::MintedEvent;
 
     #[test]
@@ -72,14 +72,14 @@ mod mint_transaction {
         let mut state = initial_state();
         let event = received_eth_event();
 
-        state.record_event_to_mint(&event);
+        state.record_event_to_mint(&event.clone().into());
 
         assert!(state.events_to_mint.contains_key(&event.source()));
 
         let block_index = LedgerMintIndex::new(1u64);
 
         let minted_event = MintedEvent {
-            deposit_event: event.clone(),
+            deposit_event: event.clone().into(),
             mint_block_index: block_index,
         };
 
@@ -98,11 +98,13 @@ mod mint_transaction {
         let event_1 = ReceivedEthEvent {
             log_index: LogIndex::from(1u8),
             ..received_eth_event()
-        };
+        }
+        .into();
         let event_2 = ReceivedEthEvent {
             log_index: LogIndex::from(2u8),
             ..received_eth_event()
-        };
+        }
+        .into();
 
         assert_ne!(event_1, event_2);
 
@@ -131,7 +133,7 @@ mod mint_transaction {
     #[should_panic = "invalid"]
     fn should_not_record_invalid_deposit_already_recorded_as_valid() {
         let mut state = initial_state();
-        let event = received_eth_event();
+        let event = received_eth_event().into();
 
         state.record_event_to_mint(&event);
 
@@ -159,7 +161,7 @@ mod mint_transaction {
     }
 
     #[test]
-    fn should_have_readable_debug_representation() {
+    fn should_have_readable_eth_debug_representation() {
         let expected = "ReceivedEthEvent { \
           transaction_hash: 0xf1ac37d920fa57d9caeebc7136fea591191250309ffca95ae0e8a7739de89cc2, \
           block_number: 3_960_623, \
@@ -169,6 +171,20 @@ mod mint_transaction {
           principal: k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae \
         }";
         assert_eq!(format!("{:?}", received_eth_event()), expected);
+    }
+
+    #[test]
+    fn should_have_readable_erc20_debug_representation() {
+        let expected = "ReceivedErc20Event { \
+          transaction_hash: 0x44d8e93a8f4bbc89ad35fc4fbbdb12cb597b4832da09c0b2300777be180fde87, \
+          block_number: 5_326_500, \
+          log_index: 39, \
+          from_address: 0xdd2851Cdd40aE6536831558DD46db62fAc7A844d, \
+          value: 10_000_000_000_000_000_000, \
+          principal: hkroy-sm7vs-yyjs7-ekppe-qqnwx-hm4zf-n7ybs-titsi-k6e3k-ucuiu-uqe, \
+          contract_address: 0x7439E9Bb6D8a84dd3A23fe621A30F95403F87fB9 \
+        }";
+        assert_eq!(format!("{:?}", received_erc20_event()), expected);
     }
 }
 
@@ -184,6 +200,26 @@ fn received_eth_event() -> ReceivedEthEvent {
             .unwrap(),
         value: Wei::from(10_000_000_000_000_000_u128),
         principal: "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae"
+            .parse()
+            .unwrap(),
+    }
+}
+
+fn received_erc20_event() -> ReceivedErc20Event {
+    ReceivedErc20Event {
+        transaction_hash: "0x44d8e93a8f4bbc89ad35fc4fbbdb12cb597b4832da09c0b2300777be180fde87"
+            .parse()
+            .unwrap(),
+        block_number: BlockNumber::new(5326500),
+        log_index: LogIndex::from(39_u8),
+        from_address: "0xdd2851Cdd40aE6536831558DD46db62fAc7A844d"
+            .parse()
+            .unwrap(),
+        value: Erc20Value::from(10_000_000_000_000_000_000_u128),
+        principal: "hkroy-sm7vs-yyjs7-ekppe-qqnwx-hm4zf-n7ybs-titsi-k6e3k-ucuiu-uqe"
+            .parse()
+            .unwrap(),
+        erc20_contract_address: "0x7439e9bb6d8a84dd3a23fe621a30f95403f87fb9"
             .parse()
             .unwrap(),
     }
@@ -266,7 +302,7 @@ mod upgrade {
         );
         assert_eq!(state.minimum_withdrawal_amount, Wei::from(100_u64));
         assert_eq!(
-            state.ethereum_contract_address,
+            state.eth_helper_contract_address,
             Some(Address::from_str("0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34").unwrap())
         );
         assert_eq!(state.ethereum_block_height, BlockTag::Safe);
@@ -397,21 +433,6 @@ mod erc20 {
     }
 }
 
-fn initial_state() -> State {
-    State::try_from(InitArg {
-        ethereum_network: Default::default(),
-        ecdsa_key_name: "test_key_1".to_string(),
-        ethereum_contract_address: None,
-        ledger_id: Principal::from_text("apia6-jaaaa-aaaar-qabma-cai")
-            .expect("BUG: invalid principal"),
-        ethereum_block_height: Default::default(),
-        minimum_withdrawal_amount: wei_from_milli_ether(10).into(),
-        next_transaction_nonce: Default::default(),
-        last_scraped_block_number: Default::default(),
-    })
-    .expect("valid init args")
-}
-
 fn arb_hash() -> impl Strategy<Value = Hash> {
     uniform32(any::<u8>()).prop_map(Hash)
 }
@@ -476,7 +497,7 @@ prop_compose! {
         next_transaction_nonce in arb_nat(),
         ledger_id in arb_principal(),
         ecdsa_key_name in "[a-z_]*",
-        last_scraped_block_number in arb_nat()
+        last_scraped_block_number in arb_nat(),
     ) -> InitArg {
         InitArg {
             ethereum_network: EthereumNetwork::Sepolia,
@@ -525,6 +546,28 @@ prop_compose! {
             from_address,
             value,
             principal,
+        }
+    }
+}
+
+prop_compose! {
+    fn arb_received_erc20_event()(
+        transaction_hash in arb_hash(),
+        block_number in arb_checked_amount_of(),
+        log_index in arb_checked_amount_of(),
+        from_address in arb_address(),
+        value in arb_checked_amount_of(),
+        principal in arb_principal(),
+        erc20_contract_address in arb_address(),
+    ) -> ReceivedErc20Event {
+        ReceivedErc20Event {
+            transaction_hash,
+            block_number,
+            log_index,
+            from_address,
+            value,
+            principal,
+            erc20_contract_address,
         }
     }
 }
@@ -605,6 +648,7 @@ fn arb_event_type() -> impl Strategy<Value = EventType> {
         arb_init_arg().prop_map(EventType::Init),
         arb_upgrade_arg().prop_map(EventType::Upgrade),
         arb_received_eth_event().prop_map(EventType::AcceptedDeposit),
+        arb_received_erc20_event().prop_map(EventType::AcceptedErc20Deposit),
         arb_event_source().prop_map(|event_source| EventType::InvalidDeposit {
             event_source,
             reason: "bad principal".to_string()
@@ -834,8 +878,13 @@ fn state_equivalence() {
         ethereum_network: EthereumNetwork::Mainnet,
         ecdsa_key_name: "test_key".to_string(),
         ledger_id: "apia6-jaaaa-aaaar-qabma-cai".parse().unwrap(),
-        ethereum_contract_address: Some(
+        eth_helper_contract_address: Some(
             "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34"
+                .parse()
+                .unwrap(),
+        ),
+        erc20_helper_contract_address: Some(
+            "0xe1788e4834c896f1932188645cc36c54d1b80ac1"
                 .parse()
                 .unwrap(),
         ),
@@ -847,6 +896,7 @@ fn state_equivalence() {
         ethereum_block_height: BlockTag::Finalized,
         first_scraped_block_number: BlockNumber::new(1_000_001),
         last_scraped_block_number: BlockNumber::new(1_000_000),
+        last_erc20_scraped_block_number: BlockNumber::new(1_000_000),
         last_observed_block_number: Some(BlockNumber::new(2_000_000)),
         events_to_mint: btreemap! {
             source("0xac493fb20c93bd3519a4a5d90ce72d69455c41c5b7e229dafee44344242ba467", 100) => ReceivedEthEvent {
@@ -856,7 +906,7 @@ fn state_equivalence() {
                 from_address: "0x9d68bd6F351bE62ed6dBEaE99d830BECD356Ed25".parse().unwrap(),
                 value: Wei::new(500_000_000_000_000_000),
                 principal: "lsywz-sl5vm-m6tct-7fhwt-6gdrw-4uzsg-ibknl-44d6d-a2oyt-c2cxu-7ae".parse().unwrap(),
-            }
+            }.into()
         },
         minted_events: btreemap! {
             source("0x705f826861c802b407843e99af986cfde8749b669e5e0a5a150f4350bcaa9bc3", 1) => MintedEvent {
@@ -867,7 +917,7 @@ fn state_equivalence() {
                     from_address: "0x9d68bd6F351bE62ed6dBEaE99d830BECD356Ed25".parse().unwrap(),
                     value: Wei::new(10_000_000_000_000_000),
                     principal: "2chl6-4hpzw-vqaaa-aaaaa-c".parse().unwrap(),
-                },
+                }.into(),
                 mint_block_index: LedgerMintIndex::new(1),
             }
         },
@@ -926,7 +976,7 @@ fn state_equivalence() {
     assert_ne!(
         Ok(()),
         state.is_equivalent_to(&State {
-            ethereum_contract_address: None,
+            eth_helper_contract_address: None,
             ..state.clone()
         }),
         "changing essential fields should break equivalence",
@@ -1122,13 +1172,14 @@ fn state_equivalence() {
 }
 
 mod eth_balance {
+    use super::*;
     use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
     use crate::lifecycle::EthereumNetwork;
     use crate::numeric::{
         BlockNumber, GasAmount, LedgerBurnIndex, TransactionNonce, Wei, WeiPerGas,
     };
     use crate::state::audit::{apply_state_transition, EventType};
-    use crate::state::tests::{a_state, received_eth_event};
+    use crate::state::tests::{initial_state, received_eth_event};
     use crate::state::transactions::EthWithdrawalRequest;
     use crate::state::{EthBalance, State};
     use crate::tx::{
@@ -1138,13 +1189,13 @@ mod eth_balance {
 
     #[test]
     fn should_add_deposit_to_eth_balance() {
-        let mut state = a_state();
+        let mut state = initial_state();
         let balance_before = state.eth_balance.clone();
 
         let deposit_event = received_eth_event();
         apply_state_transition(
             &mut state,
-            &EventType::AcceptedDeposit(deposit_event.clone()),
+            &ReceivedEvent::from(deposit_event.clone()).into_deposit(),
         );
         let balance_after = state.eth_balance.clone();
 
@@ -1159,7 +1210,7 @@ mod eth_balance {
 
     #[test]
     fn should_ignore_rejected_deposit() {
-        let mut state = a_state();
+        let mut state = initial_state();
         let balance_before = state.eth_balance.clone();
 
         let deposit_event = received_eth_event();
@@ -1177,7 +1228,7 @@ mod eth_balance {
 
     #[test]
     fn should_update_after_successful_and_failed_withdrawal() {
-        let mut state_before_withdrawal = a_state();
+        let mut state_before_withdrawal = initial_state();
         apply_state_transition(
             &mut state_before_withdrawal,
             &EventType::AcceptedDeposit(received_eth_event()),
