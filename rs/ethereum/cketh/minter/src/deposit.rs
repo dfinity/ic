@@ -1,4 +1,4 @@
-use crate::eth_logs::{report_transaction_error, ReceivedEthEventError};
+use crate::eth_logs::{report_transaction_error, ReceivedEventError};
 use crate::eth_rpc::{BlockSpec, HttpOutcallError};
 use crate::eth_rpc_client::EthRpcClient;
 use crate::guard::TimerGuard;
@@ -7,11 +7,18 @@ use crate::numeric::{BlockNumber, LedgerMintIndex};
 use crate::state::{
     audit::process_event, event::EventType, mutate_state, read_state, State, TaskType,
 };
+use hex_literal::hex;
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
 use num_traits::ToPrimitive;
 use std::cmp::{min, Ordering};
 use std::time::Duration;
+
+pub(crate) const RECEIVED_ETH_EVENT_TOPIC: [u8; 32] =
+    hex!("257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435");
+
+pub(crate) const RECEIVED_ERC20_EVENT_TOPIC: [u8; 32] =
+    hex!("4d69d0bd4287b7f66c548f90154dc81bc98f65a1b362775df5ae171a2ccd262b");
 
 async fn mint_cketh() {
     use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};
@@ -22,7 +29,7 @@ async fn mint_cketh() {
         Err(_) => return,
     };
 
-    let (ledger_canister_id, events) = read_state(|s| (s.ledger_id, s.events_to_mint.clone()));
+    let (ledger_canister_id, events) = read_state(|s| (s.ledger_id, s.eth_events_to_mint()));
     let client = ICRC1Client {
         runtime: CdkRuntime,
         ledger_canister_id,
@@ -30,7 +37,7 @@ async fn mint_cketh() {
 
     let mut error_count = 0;
 
-    for (event_source, event) in events {
+    for event in events {
         let block_index = match client
             .transfer(TransferArg {
                 from_subaccount: None,
@@ -61,7 +68,7 @@ async fn mint_cketh() {
             process_event(
                 s,
                 EventType::MintedCkEth {
-                    event_source,
+                    event_source: event.source(),
                     mint_block_index: LedgerMintIndex::new(block_index),
                 },
             )
@@ -87,11 +94,17 @@ async fn mint_cketh() {
 /// require that the number of blocks queried is no greater than MAX_BLOCK_SPREAD.
 /// Returns the last block number that was scraped (which is `min(from + MAX_BLOCK_SPREAD, to)`) if there
 /// was no error when querying the providers, otherwise returns `None`.
-async fn scrap_eth_logs_range_inclusive(
-    contract_address: Address,
+async fn scrape_logs_range_inclusive<F>(
+    topic: &[u8; 32],
+    topic_name: &str,
+    helper_contract_address: Address,
     from: BlockNumber,
     to: BlockNumber,
-) -> Option<BlockNumber> {
+    update_last_scraped_block_number: &F,
+) -> Option<BlockNumber>
+where
+    F: Fn(BlockNumber),
+{
     /// The maximum block spread is introduced by Cloudflare limits.
     /// https://developers.cloudflare.com/web3/ethereum-gateway/
     const MAX_BLOCK_SPREAD: u16 = 799;
@@ -103,14 +116,15 @@ async fn scrap_eth_logs_range_inclusive(
             let mut last_block_number = min(max_to, to);
             log!(
                 DEBUG,
-                "Scrapping ETH logs from block {:?} to block {:?}...",
+                "Scrapping {topic_name} logs from block {:?} to block {:?}...",
                 from,
                 last_block_number
             );
 
             let (transaction_events, errors) = loop {
-                match crate::eth_logs::last_received_eth_events(
-                    contract_address,
+                match crate::eth_logs::last_received_events(
+                    topic,
+                    helper_contract_address,
                     from,
                     last_block_number,
                 )
@@ -120,7 +134,7 @@ async fn scrap_eth_logs_range_inclusive(
                     Err(e) => {
                         log!(
                         INFO,
-                        "Failed to get ETH logs from block {from} to block {last_block_number}: {e:?}",
+                        "Failed to get {topic_name} logs from block {from} to block {last_block_number}: {e:?}",
                     );
                         if e.has_http_outcall_error_matching(
                             HttpOutcallError::is_response_too_large,
@@ -128,8 +142,8 @@ async fn scrap_eth_logs_range_inclusive(
                             if from == last_block_number {
                                 mutate_state(|s| {
                                     process_event(s, EventType::SkippedBlock(last_block_number));
-                                    s.last_scraped_block_number = last_block_number;
                                 });
+                                update_last_scraped_block_number(last_block_number);
                                 return Some(last_block_number);
                             } else {
                                 let new_last_block_number = from
@@ -151,38 +165,35 @@ async fn scrap_eth_logs_range_inclusive(
             for event in transaction_events {
                 log!(
                     INFO,
-                    "Received event {event:?}; will mint {} wei to {}",
-                    event.value,
-                    event.principal
+                    "Received event {event:?}; will mint {} {topic_name} to {}",
+                    event.value(),
+                    event.principal()
                 );
-                if crate::blocklist::is_blocked(event.from_address) {
+                if crate::blocklist::is_blocked(event.from_address()) {
                     log!(
                         INFO,
-                        "Received event from a blocked address: {} for {} WEI",
-                        event.from_address,
-                        event.value,
+                        "Received event from a blocked address: {} for {} {topic_name}",
+                        event.from_address(),
+                        event.value(),
                     );
                     mutate_state(|s| {
                         process_event(
                             s,
                             EventType::InvalidDeposit {
-                                event_source: crate::eth_logs::EventSource {
-                                    transaction_hash: event.transaction_hash,
-                                    log_index: event.log_index,
-                                },
-                                reason: format!("blocked address {}", event.from_address),
+                                event_source: event.source(),
+                                reason: format!("blocked address {}", event.from_address()),
                             },
                         )
                     });
                 } else {
-                    mutate_state(|s| process_event(s, EventType::AcceptedDeposit(event)));
+                    mutate_state(|s| process_event(s, event.into_deposit()));
                 }
             }
             if read_state(State::has_events_to_mint) {
                 ic_cdk_timers::set_timer(Duration::from_secs(0), || ic_cdk::spawn(mint_cketh()));
             }
             for error in errors {
-                if let ReceivedEthEventError::InvalidEventSource { source, error } = &error {
+                if let ReceivedEventError::InvalidEventSource { source, error } = &error {
                     mutate_state(|s| {
                         process_event(
                             s,
@@ -195,7 +206,7 @@ async fn scrap_eth_logs_range_inclusive(
                 }
                 report_transaction_error(error);
             }
-            mutate_state(|s| s.last_scraped_block_number = last_block_number);
+            update_last_scraped_block_number(last_block_number);
             Some(last_block_number)
         }
         Ordering::Greater => {
@@ -207,41 +218,38 @@ async fn scrap_eth_logs_range_inclusive(
     }
 }
 
-pub async fn scrap_eth_logs() {
-    let _guard = match TimerGuard::new(TaskType::ScrapEthLogs) {
-        Ok(guard) => guard,
-        Err(_) => return,
-    };
-    let contract_address = match read_state(|s| s.ethereum_contract_address) {
+async fn scrape_contract_logs<F>(
+    topic: &[u8; 32],
+    topic_name: &str,
+    helper_contract_address: Option<Address>,
+    last_block_number: BlockNumber,
+    mut last_scraped_block_number: BlockNumber,
+    update_last_scraped_block_number: F,
+) where
+    F: Fn(BlockNumber),
+{
+    let helper_contract_address = match helper_contract_address {
         Some(address) => address,
         None => {
             log!(
                 DEBUG,
-                "[scrap_eth_logs]: skipping scrapping ETH logs: no contract address"
+                "[scrape_contract_logs]: skipping scrapping logs: no contract address"
             );
             return;
         }
     };
-    let last_block_number = match update_last_observed_block_number().await {
-        Some(block_number) => block_number,
-        None => {
-            log!(
-                DEBUG,
-                "[scrap_eth_logs]: skipping scrapping ETH logs: no last observed block number"
-            );
-            return;
-        }
-    };
-    let mut last_scraped_block_number = read_state(|s| s.last_scraped_block_number);
 
     while last_scraped_block_number < last_block_number {
         let next_block_to_query = last_scraped_block_number
             .checked_increment()
             .unwrap_or(BlockNumber::MAX);
-        last_scraped_block_number = match scrap_eth_logs_range_inclusive(
-            contract_address,
+        last_scraped_block_number = match scrape_logs_range_inclusive(
+            topic,
+            topic_name,
+            helper_contract_address,
             next_block_to_query,
             last_block_number,
+            &update_last_scraped_block_number,
         )
         .await
         {
@@ -251,6 +259,51 @@ pub async fn scrap_eth_logs() {
             }
         };
     }
+}
+
+async fn scrape_eth_logs(last_block_number: BlockNumber) {
+    scrape_contract_logs(
+        &RECEIVED_ETH_EVENT_TOPIC,
+        "ETH",
+        read_state(|s| s.eth_helper_contract_address),
+        last_block_number,
+        read_state(|s| s.last_scraped_block_number),
+        &|last_block_number| mutate_state(|s| s.last_scraped_block_number = last_block_number),
+    )
+    .await
+}
+
+async fn scrape_erc20_logs(last_block_number: BlockNumber) {
+    scrape_contract_logs(
+        &RECEIVED_ERC20_EVENT_TOPIC,
+        "ERC-20",
+        read_state(|s| s.erc20_helper_contract_address),
+        last_block_number,
+        read_state(|s| s.last_erc20_scraped_block_number),
+        &|last_block_number| {
+            mutate_state(|s| s.last_erc20_scraped_block_number = last_block_number)
+        },
+    )
+    .await
+}
+
+pub async fn scrape_logs() {
+    let _guard = match TimerGuard::new(TaskType::ScrapEthLogs) {
+        Ok(guard) => guard,
+        Err(_) => return,
+    };
+    let last_block_number = match update_last_observed_block_number().await {
+        Some(block_number) => block_number,
+        None => {
+            log!(
+                DEBUG,
+                "[scrape_logs]: skipping scrapping logs: no last observed block number"
+            );
+            return;
+        }
+    };
+    scrape_eth_logs(last_block_number).await;
+    scrape_erc20_logs(last_block_number).await;
 }
 
 pub async fn update_last_observed_block_number() -> Option<BlockNumber> {

@@ -271,6 +271,15 @@ pub mod events {
             value: Nat,
             principal: Principal,
         },
+        AcceptedErc20Deposit {
+            transaction_hash: String,
+            block_number: Nat,
+            log_index: Nat,
+            from_address: String,
+            value: Nat,
+            principal: Principal,
+            erc20_contract_address: String,
+        },
         InvalidDeposit {
             event_source: EventSource,
             reason: String,

@@ -53,7 +53,7 @@ pub struct DashboardTemplate {
     pub ethereum_network: EthereumNetwork,
     pub ecdsa_key_name: String,
     pub minter_address: String,
-    pub contract_address: String,
+    pub eth_helper_contract_address: String,
     pub next_transaction_nonce: TransactionNonce,
     pub minimum_withdrawal_amount: Wei,
     pub first_synced_block: BlockNumber,
@@ -75,7 +75,7 @@ impl DashboardTemplate {
     pub fn from_state(state: &State) -> Self {
         let mut minted_events: Vec<_> = state.minted_events.values().cloned().collect();
         minted_events.sort_unstable_by_key(|event| Reverse(event.mint_block_index));
-        let mut events_to_mint: Vec<_> = state.events_to_mint.values().cloned().collect();
+        let mut events_to_mint: Vec<_> = state.eth_events_to_mint();
         events_to_mint.sort_unstable_by_key(|event| Reverse(event.block_number));
 
         let mut withdrawal_requests: Vec<_> = state
@@ -136,8 +136,8 @@ impl DashboardTemplate {
                 .minter_address()
                 .map(|addr| addr.to_string())
                 .unwrap_or_default(),
-            contract_address: state
-                .ethereum_contract_address
+            eth_helper_contract_address: state
+                .eth_helper_contract_address
                 .map_or("N/A".to_string(), |address| address.to_string()),
             ledger_id: state.ledger_id,
             next_transaction_nonce: state.eth_transactions.next_transaction_nonce(),

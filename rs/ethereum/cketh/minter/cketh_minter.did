@@ -301,6 +301,15 @@ type Event = record {
             ckerc20_token_symbol : text;
             ckerc20_ledger_id : principal;
         };
+        AcceptedErc20Deposit : record {
+            transaction_hash : text;
+            block_number : nat;
+            log_index : nat;
+            from_address : text;
+            value : nat;
+            "principal" : principal;
+            erc20_contract_address : text;
+        };
     };
 };
 
