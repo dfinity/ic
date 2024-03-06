@@ -4,8 +4,6 @@
 
 The GuestOS virtual machine ensures a consistent runtime environment across various hardware platforms for the GuestOS and its services (orchestrator, replica, etc.). Moreover, it provides a method for upgrading the GuestOS and all its services in a unified manner.
 
-For more details on the goals, structure, and disk layout of GuestOS, https://docs.google.com/presentation/d/1xECozJhVCqzFC3mMMvROD7rlB-xWDHHLKvZuVnuLgJc/edit?usp=sharing[see here]
-
 == How to build and run GuestOS
 === Building GuestOS
 
