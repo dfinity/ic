@@ -675,7 +675,7 @@ pub struct StateSyncRefs {
     /// dropped.
     /// The priority function for state sync artifacts uses this information on
     /// to prioritize state fetches.
-    active: Arc<parking_lot::RwLock<BTreeMap<Height, CryptoHashOfState>>>,
+    active: Arc<parking_lot::RwLock<Option<(Height, CryptoHashOfState)>>>,
     /// A cache of chunks from a previously aborted IncompleteState. State syncs
     /// can take chunks from the cache instead of fetching them from other nodes
     /// when possible.
@@ -685,33 +685,9 @@ pub struct StateSyncRefs {
 impl StateSyncRefs {
     fn new(log: ReplicaLogger) -> Self {
         Self {
-            active: Arc::new(parking_lot::RwLock::new(BTreeMap::new())),
+            active: Arc::new(parking_lot::RwLock::new(None)),
             cache: Arc::new(parking_lot::RwLock::new(StateSyncCache::new(log))),
         }
-    }
-
-    /// Get the hash of the active sync at `height`
-    fn get(&self, height: &Height) -> Option<CryptoHashOfState> {
-        let refs = self.active.read();
-        refs.get(height).cloned()
-    }
-
-    /// Insert into collection of active syncs
-    fn insert(&self, height: Height, root_hash: CryptoHashOfState) -> Option<CryptoHashOfState> {
-        let mut refs = self.active.write();
-        refs.insert(height, root_hash)
-    }
-
-    /// Remove from collection of active syncs
-    fn remove(&self, height: &Height) -> Option<CryptoHashOfState> {
-        let mut refs = self.active.write();
-        refs.remove(height)
-    }
-
-    /// True if there is no active sync
-    fn is_empty(&self) -> bool {
-        let refs = self.active.read();
-        refs.is_empty()
     }
 }
 

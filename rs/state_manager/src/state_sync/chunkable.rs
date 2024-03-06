@@ -75,7 +75,7 @@ enum DownloadState {
 /// sync priority function.  When priority function returns "Fetch", P2P calls
 /// StateManager to construct an IncompleteState corresponding to the state
 /// artifact advert.
-pub struct IncompleteState {
+pub(crate) struct IncompleteState {
     log: ReplicaLogger,
     root: PathBuf,
     state_layout: StateLayout,
@@ -164,18 +164,29 @@ impl Drop for IncompleteState {
         let cache = Arc::clone(&self.state_sync_refs.cache);
         cache.write().push(self);
 
-        if self.state_sync_refs.remove(&self.height).is_none() {
-            warn!(
-                self.log,
-                "State sync refs does not contain incomplete state @{}.", self.height,
-            );
+        // Remove the active state sync reference
+        let mut active = self.state_sync_refs.active.write();
+        match active.take() {
+            Some((active_height, _hash)) => {
+                if active_height != self.height {
+                    warn!(
+                        self.log,
+                        "the active state sync reference was for a different height @{}, expected @{}",
+                        active_height,
+                        self.height,
+                    );
+                }
+            }
+            None => {
+                warn!(self.log, "the active state sync reference was None",);
+            }
         }
     }
 }
 
 impl IncompleteState {
     #[allow(clippy::too_many_arguments)]
-    pub fn new(
+    pub(crate) fn try_new(
         log: ReplicaLogger,
         height: Height,
         root_hash: CryptoHashOfState,
@@ -187,16 +198,22 @@ impl IncompleteState {
         state_sync_refs: StateSyncRefs,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
         malicious_flags: MaliciousFlags,
-    ) -> Self {
-        if state_sync_refs.insert(height, root_hash.clone()).is_some() {
-            // Currently, we don't handle two concurrent fetches of the same state
-            // correctly. This case indicates a non-deterministic bug either in StateManager
-            // or P2P. We'd rather detect this early and crash, the replica
-            // should be able to recover after a restart.
-            fatal!(log, "There is already a live state sync @{}.", height);
+    ) -> Option<IncompleteState> {
+        // The state sync manager in the p2p layer is expected not to start a new state sync when there is an ongoing state sync.
+        // Here we check it again as a last resort and return `None` if there is already an active state sync reference.
+        let mut active = state_sync_refs.active.write();
+        if let Some((active_height, _hash)) = active.as_ref() {
+            warn!(
+                &log,
+                "Attempt to start state sync @{} while we are fetching state @{}",
+                height,
+                active_height
+            );
+            return None;
         }
-
-        Self {
+        *active = Some((height, root_hash.clone()));
+        // Create the `IncompleteState` object while holding the write lock on the active state sync reference.
+        Some(Self {
             log,
             root: state_layout
                 .state_sync_scratchpad(height)
@@ -211,10 +228,10 @@ impl IncompleteState {
             fetch_started_at: None,
             own_subnet_type,
             thread_pool,
-            state_sync_refs,
+            state_sync_refs: state_sync_refs.clone(),
             fd_factory,
             malicious_flags,
-        }
+        })
     }
 
     /// Creates all the files listed in the manifest and resizes them to their
