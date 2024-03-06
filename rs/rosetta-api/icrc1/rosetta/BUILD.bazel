@@ -119,6 +119,7 @@ LOCAL_REPLICA_DATA = [
     "//rs/rosetta-api/icrc1/archive:archive_canister",
     "//rs/rosetta-api/icrc1/ledger:ledger_canister",
     "//rs/rosetta-api/icrc1/rosetta:ic-icrc-rosetta-bin",
+    "//rs/rosetta-api/icrc1/rosetta/client:ic-icrc-rosetta-client-bin",
     "//rs/starter:ic-starter",
 ]
 
@@ -130,6 +131,7 @@ LOCAL_REPLICA_ENV = {
     "ROSETTA_BIN_PATH": "$(rootpath //rs/rosetta-api/icrc1/rosetta:ic-icrc-rosetta-bin)",
     "SANDBOX_LAUNCHER": "$(rootpath //rs/canister_sandbox:sandbox_launcher)",
     "STARTER_BIN": "$(rootpath //rs/starter:ic-starter)",
+    "ROSETTA_CLIENT_BIN_PATH": "$(rootpath //rs/rosetta-api/icrc1/rosetta/client:ic-icrc-rosetta-client-bin)",
 }
 
 rust_test_suite_with_extra_srcs(

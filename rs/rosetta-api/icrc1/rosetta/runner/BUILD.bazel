@@ -7,6 +7,8 @@ rust_library(
     srcs = ["src/lib.rs"],
     crate_name = "ic_icrc_rosetta_runner",
     deps = [
+        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "@crate_index//:anyhow",
         "@crate_index//:candid",
         "@crate_index//:tempfile",
         "@crate_index//:tokio",
@@ -21,6 +23,7 @@ rust_test(
         "//rs/canister_sandbox:sandbox_launcher",
         "//rs/replica",
         "//rs/rosetta-api/icrc1/rosetta:ic-icrc-rosetta-bin",
+        "//rs/rosetta-api/icrc1/rosetta/client:ic-icrc-rosetta-client-bin",
         "//rs/starter:ic-starter",
     ],
     env = {

@@ -4,6 +4,7 @@ use candid::Nat;
 use ic_icrc_rosetta::common::types::ApproveMetadata;
 use ic_icrc_rosetta::common::types::Error;
 use ic_icrc_rosetta::construction_api::types::ConstructionMetadataRequestOptions;
+use ic_icrc_rosetta::construction_api::types::ConstructionPayloadsRequestMetadata;
 use ic_rosetta_api::models::Amount;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::account::Subaccount;
@@ -105,12 +106,20 @@ impl RosettaClient {
         signer_keypair: &T,
         network_identifier: NetworkIdentifier,
         operations: Vec<Operation>,
+        memo: Option<Vec<u8>>,
+        created_at_time: Option<u64>,
     ) -> Result<ConstructionSubmitResponse, Error> {
         let payloads_response = self
             .construction_payloads(
                 network_identifier.clone(),
                 operations,
                 Some(vec![signer_keypair.into()]),
+                Some(ConstructionPayloadsRequestMetadata {
+                    memo,
+                    created_at_time,
+                    ingress_end: None,
+                    ingress_start: None,
+                }),
             )
             .await?;
 
@@ -499,13 +508,19 @@ impl RosettaClient {
         network_identifier: NetworkIdentifier,
         operations: Vec<Operation>,
         public_keys: Option<Vec<PublicKey>>,
+        metadata: Option<ConstructionPayloadsRequestMetadata>,
     ) -> Result<ConstructionPayloadsResponse, Error> {
         self.call_endpoint(
             "/construction/payloads",
             &ConstructionPayloadsRequest {
                 network_identifier,
                 operations,
-                metadata: None,
+                metadata: metadata
+                    .map(|m| {
+                        m.try_into()
+                            .map_err(|err| Error::parsing_unsuccessful(&err))
+                    })
+                    .transpose()?,
                 public_keys,
             },
         )
