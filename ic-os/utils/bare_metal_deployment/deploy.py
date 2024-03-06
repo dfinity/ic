@@ -237,8 +237,8 @@ def check_guestos_ping_connectivity(ip_address: IPv6Address, timeout_secs: int) 
 
 
 def check_guestos_metrics_version(ip_address: IPv6Address, timeout_secs: int) -> bool:
-    log.info("Attempting to curl metrics endpoint...")
     metrics_endpoint = f"https://[{ip_address.exploded}]:9100/metrics"
+    log.info(f"Attempting GET on metrics at {metrics_endpoint}...")
     metrics_output = get_url_content(metrics_endpoint, timeout_secs)
     if not metrics_output:
         log.warning(f"Request to {metrics_endpoint} failed.")
@@ -384,10 +384,10 @@ def deploy_server(bmc_info: BMCInfo, wait_time_mins: int, idrac_script_dir: Path
         )
         for i in tqdm.tqdm(range(int(60 * (wait_time_mins / timeout_secs))),disable=DISABLE_PROGRESS_BAR):
             if iterate_func():
-                break
+                log.info("*** Deployment SUCCESS!")
+                return OperationResult(bmc_info, success=True)
 
-        log.info("*** Deployment SUCCESS!")
-        return OperationResult(bmc_info, success=True)
+        raise Exception("Could not successfully verify connectivity to node.")
 
     except DeploymentError as e:
         log.error(f"Error: {e.result.error_msg}")
