@@ -8046,14 +8046,19 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "candid",
+ "clap 4.4.6",
  "ed25519-consensus",
  "hex",
+ "ic-agent",
+ "ic-crypto-ecdsa-secp256k1",
+ "ic-crypto-ed25519",
  "ic-icrc-rosetta",
  "ic-rosetta-api",
  "icrc-ledger-types",
  "reqwest",
  "rosetta-core",
  "serde",
+ "tokio",
  "url",
 ]
 
@@ -8061,7 +8066,9 @@ dependencies = [
 name = "ic-icrc-rosetta-runner"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "candid",
+ "icrc-ledger-types",
  "tempfile",
  "tokio",
 ]

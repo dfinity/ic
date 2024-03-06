@@ -1,24 +1,39 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//rs/rosetta-api",
+    "//rs/rosetta-api/icrc1/rosetta:ic-icrc-rosetta",
+    "//rs/rosetta-api/rosetta_core:rosetta-core",
+    "//rs/crypto/ecdsa_secp256k1",
+    "//rs/crypto/ed25519",
+    "@crate_index//:anyhow",
+    "@crate_index//:candid",
+    "@crate_index//:ed25519-consensus",
+    "@crate_index//:hex",
+    "@crate_index//:reqwest",
+    "@crate_index//:ic-agent",
+    "@crate_index//:serde",
+    "@crate_index//:url",
+    "@crate_index//:tokio",
+    "@crate_index//:clap_4_0_0",  # no clap because feature derive
+]
+
+DEV_DEPENDENCIES = [
+    ":ic-icrc-rosetta-client",
+    "//packages/ic-starter-tests",
+    "//rs/rosetta-api/icrc1/rosetta/runner:ic-icrc-rosetta-runner",
+    "@crate_index//:candid",
+    "@crate_index//:tokio",
+]
 
 rust_library(
     name = "ic-icrc-rosetta-client",
     srcs = ["src/lib.rs"],
     crate_name = "ic_icrc_rosetta_client",
-    deps = [
-        "//packages/icrc-ledger-types:icrc_ledger_types",
-        "//rs/rosetta-api",
-        "//rs/rosetta-api/icrc1/rosetta:ic-icrc-rosetta",
-        "//rs/rosetta-api/rosetta_core:rosetta-core",
-        "@crate_index//:anyhow",
-        "@crate_index//:candid",
-        "@crate_index//:ed25519-consensus",
-        "@crate_index//:hex",
-        "@crate_index//:reqwest",
-        "@crate_index//:serde",
-        "@crate_index//:url",
-    ],
+    deps = DEPENDENCIES,
 )
 
 rust_test(
@@ -38,11 +53,11 @@ rust_test(
         "SANDBOX_LAUNCHER": "$(rootpath //rs/canister_sandbox:sandbox_launcher)",
         "STARTER_BIN": "$(rootpath //rs/starter:ic-starter)",
     },
-    deps = [
-        ":ic-icrc-rosetta-client",
-        "//packages/ic-starter-tests",
-        "//rs/rosetta-api/icrc1/rosetta/runner:ic-icrc-rosetta-runner",
-        "@crate_index//:candid",
-        "@crate_index//:tokio",
-    ],
+    deps = DEV_DEPENDENCIES,
+)
+
+rust_binary(
+    name = "ic-icrc-rosetta-client-bin",
+    srcs = ["src/main.rs"],
+    deps = DEPENDENCIES + [":ic-icrc-rosetta-client"],
 )

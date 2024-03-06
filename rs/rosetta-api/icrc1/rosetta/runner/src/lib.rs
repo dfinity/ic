@@ -1,9 +1,10 @@
+use candid::Nat;
 use candid::Principal;
+use icrc_ledger_types::icrc1::account::Account;
 use std::default::Default;
 use std::path::Path;
 use std::process::{Child, Command};
 use std::str::FromStr;
-
 use tokio::time::{sleep, Duration};
 
 pub const DEFAULT_DECIMAL_PLACES: u8 = 8;
@@ -129,5 +130,112 @@ pub async fn start_rosetta(rosetta_bin: &Path, arguments: RosettaOptions) -> Ros
         _proc,
         _state: state,
         port,
+    }
+}
+
+pub struct RosettaClientArgs {
+    pub operation_type: String,
+    pub to: Option<Account>,
+    pub spender: Option<Account>,
+    pub from_subaccount: Option<Vec<u8>>,
+    pub amount: Option<Nat>,
+    pub allowance: Option<Nat>,
+    pub rosetta_url: String,
+    pub expires_at: Option<u64>,
+    pub expected_allowance: Option<Nat>,
+    pub memo: Option<Vec<u8>>,
+    pub created_at_time: Option<u64>,
+}
+
+pub async fn make_transaction_with_rosetta_client_binary(
+    rosetta_client_bin: &std::path::Path,
+    arguments: RosettaClientArgs,
+    sender_keypair_pem: String,
+) -> anyhow::Result<()> {
+    assert!(
+        rosetta_client_bin.exists(),
+        "ic-icrc-rosetta-client-bin path {} does not exist",
+        rosetta_client_bin.display()
+    );
+
+    let state = tempfile::TempDir::new().expect("failed to create a temporary directory");
+    let mut pem_file = state.path().join("port");
+    pem_file.set_file_name("sender_pem_file.pem");
+    std::fs::write(&pem_file, sender_keypair_pem).expect("Failed to write pem file");
+
+    let mut command = &mut Command::new(rosetta_client_bin);
+    command = command
+        .arg("--rosetta-url")
+        .arg(arguments.rosetta_url)
+        .arg("--sender-pem-file")
+        .arg(pem_file)
+        .arg(arguments.operation_type);
+
+    if arguments.to.is_some() {
+        command = command.arg("--to").arg(arguments.to.unwrap().to_string());
+    }
+
+    if arguments.spender.is_some() {
+        command = command
+            .arg("--spender")
+            .arg(arguments.spender.unwrap().to_string());
+    }
+
+    if arguments.from_subaccount.is_some() {
+        command = command.arg("--from-subaccount").arg(format!(
+            "{}",
+            String::from_utf8_lossy(arguments.from_subaccount.unwrap().as_slice())
+        ));
+    }
+
+    if arguments.amount.is_some() {
+        command = command
+            .arg("--amount")
+            .arg(arguments.amount.unwrap().to_string());
+    }
+
+    if arguments.allowance.is_some() {
+        command = command
+            .arg("--allowance")
+            .arg(arguments.allowance.unwrap().to_string());
+    }
+
+    if arguments.expires_at.is_some() {
+        command = command
+            .arg("--expires-at")
+            .arg(arguments.expires_at.unwrap().to_string());
+    }
+
+    if arguments.expected_allowance.is_some() {
+        command = command
+            .arg("--expected-allowance")
+            .arg(arguments.expected_allowance.unwrap().to_string());
+    }
+
+    if arguments.memo.is_some() {
+        command = command.arg("--memo").arg(format!(
+            "{}",
+            String::from_utf8_lossy(arguments.memo.unwrap().as_slice())
+        ));
+    }
+
+    if arguments.created_at_time.is_some() {
+        command = command
+            .arg("--created_at_time")
+            .arg(arguments.created_at_time.unwrap().to_string());
+    }
+
+    let child_process = command.output();
+    match child_process {
+        Ok(output) => {
+            if output.status.success() {
+                Ok(())
+            } else {
+                anyhow::bail!("Child process exited with: {:?}", output);
+            }
+        }
+        Err(err) => {
+            anyhow::bail!("Error waiting for child process: {}", err);
+        }
     }
 }
