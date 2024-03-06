@@ -1,6 +1,6 @@
 use crate::address::ecdsa_public_key_to_address;
 use crate::erc20::CkErc20Token;
-use crate::eth_logs::{EventSource, ReceivedEthEvent};
+use crate::eth_logs::{EventSource, ReceivedEthEvent, ReceivedEvent};
 use crate::eth_rpc::BlockTag;
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::lifecycle::upgrade::UpgradeArg;
@@ -32,7 +32,7 @@ thread_local! {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MintedEvent {
-    pub deposit_event: ReceivedEthEvent,
+    pub deposit_event: ReceivedEvent,
     pub mint_block_index: LedgerMintIndex,
 }
 
@@ -47,14 +47,16 @@ pub struct State {
     pub ethereum_network: EthereumNetwork,
     pub ecdsa_key_name: String,
     pub ledger_id: Principal,
-    pub ethereum_contract_address: Option<Address>,
+    pub eth_helper_contract_address: Option<Address>,
+    pub erc20_helper_contract_address: Option<Address>,
     pub ecdsa_public_key: Option<EcdsaPublicKeyResponse>,
     pub minimum_withdrawal_amount: Wei,
     pub ethereum_block_height: BlockTag,
     pub first_scraped_block_number: BlockNumber,
     pub last_scraped_block_number: BlockNumber,
+    pub last_erc20_scraped_block_number: BlockNumber,
     pub last_observed_block_number: Option<BlockNumber>,
-    pub events_to_mint: BTreeMap<EventSource, ReceivedEthEvent>,
+    pub events_to_mint: BTreeMap<EventSource, ReceivedEvent>,
     pub minted_events: BTreeMap<EventSource, MintedEvent>,
     pub invalid_events: BTreeMap<EventSource, String>,
     pub eth_transactions: EthTransactions,
@@ -109,12 +111,12 @@ impl State {
             ));
         }
         if self
-            .ethereum_contract_address
+            .eth_helper_contract_address
             .iter()
             .any(|address| address == &Address::ZERO)
         {
             return Err(InvalidStateError::InvalidEthereumContractAddress(
-                "ethereum_contract_address cannot be the zero address".to_string(),
+                "eth_helper_contract_address cannot be the zero address".to_string(),
             ));
         }
         if self.minimum_withdrawal_amount == Wei::ZERO {
@@ -133,7 +135,21 @@ impl State {
         Some(ecdsa_public_key_to_address(&pubkey))
     }
 
-    fn record_event_to_mint(&mut self, event: &ReceivedEthEvent) {
+    pub fn eth_events_to_mint(&self) -> Vec<ReceivedEthEvent> {
+        self.events_to_mint
+            .values()
+            .filter_map(|evt| {
+                if let ReceivedEvent::Eth(evt) = evt {
+                    Some(evt)
+                } else {
+                    None
+                }
+            })
+            .cloned()
+            .collect()
+    }
+
+    fn record_event_to_mint(&mut self, event: &ReceivedEvent) {
         let event_source = event.source();
         assert!(
             !self.events_to_mint.contains_key(&event_source),
@@ -211,8 +227,11 @@ impl State {
         current_request_id
     }
 
-    fn update_eth_balance_upon_deposit(&mut self, event: &ReceivedEthEvent) {
-        self.eth_balance.eth_balance_add(event.value);
+    fn update_eth_balance_upon_deposit(&mut self, event: &ReceivedEvent) {
+        // Only update the ETH balance if it is an ETH event
+        if let ReceivedEvent::Eth(event) = event {
+            self.eth_balance.eth_balance_add(event.value);
+        }
     }
 
     fn update_eth_balance_upon_withdrawal(
@@ -311,10 +330,10 @@ impl State {
             self.minimum_withdrawal_amount = minimum_withdrawal_amount;
         }
         if let Some(address) = ethereum_contract_address {
-            let ethereum_contract_address = Address::from_str(&address).map_err(|e| {
+            let eth_helper_contract_address = Address::from_str(&address).map_err(|e| {
                 InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {}", e))
             })?;
-            self.ethereum_contract_address = Some(ethereum_contract_address);
+            self.eth_helper_contract_address = Some(eth_helper_contract_address);
         }
         if let Some(block_height) = ethereum_block_height {
             self.ethereum_block_height = block_height.into();
@@ -340,8 +359,8 @@ impl State {
         ensure_eq!(self.ledger_id, other.ledger_id);
         ensure_eq!(self.ecdsa_key_name, other.ecdsa_key_name);
         ensure_eq!(
-            self.ethereum_contract_address,
-            other.ethereum_contract_address
+            self.eth_helper_contract_address,
+            other.eth_helper_contract_address
         );
         ensure_eq!(
             self.minimum_withdrawal_amount,

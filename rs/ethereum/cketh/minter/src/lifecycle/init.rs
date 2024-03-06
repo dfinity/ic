@@ -51,7 +51,7 @@ impl TryFrom<InitArg> for State {
         let minimum_withdrawal_amount = Wei::try_from(minimum_withdrawal_amount).map_err(|e| {
             InvalidStateError::InvalidMinimumWithdrawalAmount(format!("ERROR: {}", e))
         })?;
-        let ethereum_contract_address = ethereum_contract_address
+        let eth_helper_contract_address = ethereum_contract_address
             .map(|a| Address::from_str(&a))
             .transpose()
             .map_err(|e| {
@@ -72,7 +72,8 @@ impl TryFrom<InitArg> for State {
         let state = Self {
             ethereum_network,
             ecdsa_key_name,
-            ethereum_contract_address,
+            eth_helper_contract_address,
+            erc20_helper_contract_address: None,
             retrieve_eth_principals: Default::default(),
             eth_transactions: EthTransactions::new(initial_nonce),
             ledger_id,
@@ -80,6 +81,7 @@ impl TryFrom<InitArg> for State {
             ethereum_block_height: BlockTag::from(ethereum_block_height),
             first_scraped_block_number,
             last_scraped_block_number,
+            last_erc20_scraped_block_number: last_scraped_block_number,
             last_observed_block_number: None,
             events_to_mint: Default::default(),
             minted_events: Default::default(),

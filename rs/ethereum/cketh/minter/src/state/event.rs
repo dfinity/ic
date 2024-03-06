@@ -1,5 +1,5 @@
 use crate::erc20::CkErc20Token;
-use crate::eth_logs::{EventSource, ReceivedEthEvent};
+use crate::eth_logs::{EventSource, ReceivedErc20Event, ReceivedEthEvent, ReceivedEvent};
 use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::lifecycle::{init::InitArg, upgrade::UpgradeArg};
 use crate::numeric::{BlockNumber, LedgerBurnIndex, LedgerMintIndex};
@@ -97,6 +97,17 @@ pub enum EventType {
     /// Add a new ckERC20 token.
     #[n(14)]
     AddedCkErc20Token(#[n(0)] CkErc20Token),
+    #[n(15)]
+    AcceptedErc20Deposit(#[n(0)] ReceivedErc20Event),
+}
+
+impl ReceivedEvent {
+    pub fn into_deposit(self) -> EventType {
+        match self {
+            ReceivedEvent::Eth(event) => EventType::AcceptedDeposit(event),
+            ReceivedEvent::Erc20(event) => EventType::AcceptedErc20Deposit(event),
+        }
+    }
 }
 
 #[derive(Encode, Decode, Debug, PartialEq, Eq)]

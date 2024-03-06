@@ -111,9 +111,9 @@
                         <th>Minter address</th>
                         <td>{% call etherscan_address_link(minter_address) %}</td>
                     </tr>
-                    <tr id="contract-address">
+                    <tr id="eth-helper-contract-address">
                         <th>Helper contract address</th>
-                        <td>{% call etherscan_address_link(contract_address) %}</td>
+                        <td>{% call etherscan_address_link(eth_helper_contract_address) %}</td>
                     </tr>
                     <tr id="ledger-canister-id">
                         <th>Ledger canister ID</th>
@@ -226,11 +226,11 @@
                 <tbody>
                     {% for event in minted_events %}
                     <tr>
-                        <td>{% call etherscan_tx_link(event.deposit_event.transaction_hash.to_string()) %}</td>
-                        <td class="numeric">{{ event.deposit_event.log_index }}</td>
-                        <td>{% call etherscan_address_link(event.deposit_event.from_address.to_string()) %}</td>
-                        <td class="numeric">{{ event.deposit_event.value }}</td>
-                        <td><code>{{ event.deposit_event.principal }}</code></td>
+                        <td>{% call etherscan_tx_link(event.deposit_event.transaction_hash().to_string()) %}</td>
+                        <td class="numeric">{{ event.deposit_event.log_index() }}</td>
+                        <td>{% call etherscan_address_link(event.deposit_event.from_address().to_string()) %}</td>
+                        <td class="numeric">{{ event.deposit_event.value() }}</td>
+                        <td><code>{{ event.deposit_event.principal() }}</code></td>
                         <td class="numeric">{{ event.mint_block_index }}</td>
                     </tr>
                     {% endfor %}

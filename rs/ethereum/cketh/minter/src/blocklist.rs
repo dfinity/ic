@@ -128,6 +128,6 @@ const ETH_ADDRESS_BLOCKLIST: &[Address] = &[
     Address::new(hex!("ffbaC21a641Dcfe4552920138D90F3638B3c9fba")),
 ];
 
-pub fn is_blocked(from_address: Address) -> bool {
-    ETH_ADDRESS_BLOCKLIST.binary_search(&from_address).is_ok()
+pub fn is_blocked(from_address: &Address) -> bool {
+    ETH_ADDRESS_BLOCKLIST.binary_search(from_address).is_ok()
 }

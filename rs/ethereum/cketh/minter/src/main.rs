@@ -3,7 +3,7 @@ use ic_canister_log::log;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
 use ic_cketh_minter::address::{validate_address_as_destination, AddressValidationError};
-use ic_cketh_minter::deposit::scrap_eth_logs;
+use ic_cketh_minter::deposit::scrape_logs;
 use ic_cketh_minter::endpoints::events::{
     Event as CandidEvent, EventSource as CandidEventSource, GetEventsArg, GetEventsResult,
 };
@@ -12,7 +12,7 @@ use ic_cketh_minter::endpoints::{
     RetrieveEthStatus, WithdrawalArg, WithdrawalError,
 };
 use ic_cketh_minter::erc20::CkErc20Token;
-use ic_cketh_minter::eth_logs::{EventSource, ReceivedEthEvent};
+use ic_cketh_minter::eth_logs::{EventSource, ReceivedErc20Event, ReceivedEthEvent};
 use ic_cketh_minter::guard::retrieve_eth_guard;
 use ic_cketh_minter::lifecycle::MinterArg;
 use ic_cketh_minter::logs::{DEBUG, INFO};
@@ -56,10 +56,8 @@ fn setup_timers() {
         })
     });
     // Start scraping logs immediately after the install, then repeat with the interval.
-    ic_cdk_timers::set_timer(Duration::from_secs(0), || ic_cdk::spawn(scrap_eth_logs()));
-    ic_cdk_timers::set_timer_interval(SCRAPPING_ETH_LOGS_INTERVAL, || {
-        ic_cdk::spawn(scrap_eth_logs())
-    });
+    ic_cdk_timers::set_timer(Duration::from_secs(0), || ic_cdk::spawn(scrape_logs()));
+    ic_cdk_timers::set_timer_interval(SCRAPPING_ETH_LOGS_INTERVAL, || ic_cdk::spawn(scrape_logs()));
     ic_cdk_timers::set_timer_interval(PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, || {
         ic_cdk::spawn(process_retrieve_eth_requests())
     });
@@ -119,7 +117,7 @@ async fn minter_address() -> String {
 
 #[query]
 async fn smart_contract_address() -> String {
-    read_state(|s| s.ethereum_contract_address)
+    read_state(|s| s.eth_helper_contract_address)
         .map(|a| a.to_string())
         .unwrap_or("N/A".to_string())
 }
@@ -148,7 +146,7 @@ async fn eip_1559_transaction_price() -> Eip1559TransactionPrice {
 async fn get_minter_info() -> MinterInfo {
     read_state(|s| MinterInfo {
         minter_address: s.minter_address().map(|a| a.to_string()),
-        smart_contract_address: s.ethereum_contract_address.map(|a| a.to_string()),
+        smart_contract_address: s.eth_helper_contract_address.map(|a| a.to_string()),
         minimum_withdrawal_amount: Some(s.minimum_withdrawal_amount.into()),
         ethereum_block_height: Some(s.ethereum_block_height.into()),
         last_observed_block_number: s.last_observed_block_number.map(|n| n.into()),
@@ -273,7 +271,7 @@ async fn retrieve_eth_status(block_index: u64) -> RetrieveEthStatus {
 fn is_address_blocked(address_string: String) -> bool {
     let address = Address::from_str(&address_string)
         .unwrap_or_else(|e| ic_cdk::trap(&format!("invalid recipient address: {:?}", e)));
-    ic_cketh_minter::blocklist::is_blocked(address)
+    ic_cketh_minter::blocklist::is_blocked(&address)
 }
 
 #[update]
@@ -389,6 +387,23 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     from_address: from_address.to_string(),
                     value: value.into(),
                     principal,
+                },
+                EventType::AcceptedErc20Deposit(ReceivedErc20Event {
+                    transaction_hash,
+                    block_number,
+                    log_index,
+                    from_address,
+                    value,
+                    principal,
+                    erc20_contract_address,
+                }) => EP::AcceptedErc20Deposit {
+                    transaction_hash: transaction_hash.to_string(),
+                    block_number: block_number.into(),
+                    log_index: log_index.into(),
+                    from_address: from_address.to_string(),
+                    value: value.into(),
+                    principal,
+                    erc20_contract_address: erc20_contract_address.to_string(),
                 },
                 EventType::InvalidDeposit {
                     event_source,

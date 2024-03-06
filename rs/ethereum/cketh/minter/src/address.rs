@@ -50,7 +50,7 @@ pub fn validate_address_as_destination(address: &str) -> Result<Address, Address
     if address == Address::ZERO {
         return Err(AddressValidationError::NotSupported(address));
     }
-    if crate::blocklist::is_blocked(address) {
+    if crate::blocklist::is_blocked(&address) {
         return Err(AddressValidationError::Blocked(address));
     }
     Ok(address)
