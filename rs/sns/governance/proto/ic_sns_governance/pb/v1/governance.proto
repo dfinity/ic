@@ -350,6 +350,8 @@ message TransferSnsTreasuryFunds {
 // Fields with None values will remain unchanged.
 message ManageLedgerParameters {
   optional uint64 transfer_fee = 1;
+  optional string token_name = 2;
+  optional string token_symbol = 3;
 }
 
 // A proposal to mint SNS tokens to (optionally a Subaccount of) the

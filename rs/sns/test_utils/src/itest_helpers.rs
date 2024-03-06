@@ -199,6 +199,16 @@ impl SnsTestsInitPayloadBuilder {
         self
     }
 
+    pub fn with_ledger_token_name(&mut self, token_name: String) -> &mut Self {
+        self.ledger.token_name = token_name;
+        self
+    }
+
+    pub fn with_ledger_token_symbol(&mut self, token_symbol: String) -> &mut Self {
+        self.ledger.token_symbol = token_symbol;
+        self
+    }
+
     pub fn with_governance_init_payload(
         &mut self,
         governance_init_payload_builder: GovernanceCanisterInitPayloadBuilder,

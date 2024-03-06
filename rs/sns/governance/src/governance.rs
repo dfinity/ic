@@ -2716,6 +2716,8 @@ impl Governance {
         let ledger_upgrade_arg =
             candid::encode_one(Some(LedgerArgument::Upgrade(Some(UpgradeArgs {
                 transfer_fee: manage_ledger_parameters.transfer_fee.map(|tf| tf.into()),
+                token_name: manage_ledger_parameters.token_name,
+                token_symbol: manage_ledger_parameters.token_symbol,
                 ..UpgradeArgs::default()
             }))))
             .unwrap();

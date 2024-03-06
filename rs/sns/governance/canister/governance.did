@@ -243,7 +243,11 @@ type ManageDappCanisterSettings = record {
   memory_allocation : opt nat64;
   compute_allocation : opt nat64;
 };
-type ManageLedgerParameters = record { transfer_fee : opt nat64 };
+type ManageLedgerParameters = record {
+  token_symbol : opt text;
+  transfer_fee : opt nat64;
+  token_name : opt text;
+};
 type ManageNeuron = record { subaccount : vec nat8; command : opt Command };
 type ManageNeuronResponse = record { command : opt Command_1 };
 type ManageSnsMetadata = record {

@@ -6,8 +6,8 @@ use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     sns_wasm::{add_wasm_via_proposal, build_ledger_sns_wasm},
     state_test_helpers::{
-        icrc1_fee, icrc1_transfer, query, setup_nns_canisters, sns_claim_staked_neuron,
-        sns_make_proposal, sns_wait_for_proposal_execution, update,
+        icrc1_fee, icrc1_name, icrc1_symbol, icrc1_transfer, query, setup_nns_canisters,
+        sns_claim_staked_neuron, sns_make_proposal, sns_wait_for_proposal_execution, update,
     },
 };
 use ic_sns_governance::pb::v1::{
@@ -24,6 +24,8 @@ use num_traits::cast::ToPrimitive;
 
 const DEFAULT_LEDGER_TRANSFER_FEE: u64 = 10_000;
 const DEFAULT_NEURON_STAKE: u64 = 500500000000;
+const DEFAULT_TOKEN_NAME: &'static str = "RANDOM TOKEN";
+const DEFAULT_TOKEN_SYMBOL: &'static str = "RTK";
 
 #[test]
 fn test_manage_ledger_parameters_change_transfer_fee() {
@@ -53,6 +55,7 @@ fn test_manage_ledger_parameters_change_transfer_fee() {
             title: "Change ledger transfer fee".to_string(),
             action: Some(Action::ManageLedgerParameters(ManageLedgerParameters {
                 transfer_fee: Some(new_fee),
+                ..Default::default()
             })),
             ..Default::default()
         },
@@ -131,6 +134,104 @@ fn test_manage_ledger_parameters_change_transfer_fee() {
     );
 }
 
+#[test]
+fn test_manage_ledger_parameters_change_token_name() {
+    let state_machine = StateMachine::new();
+
+    let user = PrincipalId::new_user_test_id(1000);
+
+    let (sns_canisters, neuron) = set_up_sns_for_mlp(&state_machine, &user);
+
+    assert_eq!(
+        icrc1_name(&state_machine, sns_canisters.ledger_canister_id),
+        DEFAULT_TOKEN_NAME
+    );
+
+    // change ledger token_name with a ManageLedgerParameters proposal
+    let new_token_name = "PAPER TOKEN".to_string();
+
+    let change_ledger_token_name_proposal_id = sns_make_proposal(
+        &state_machine,
+        sns_canisters.governance_canister_id,
+        user,
+        neuron.clone(),
+        Proposal {
+            title: "Change ledger token name".to_string(),
+            action: Some(Action::ManageLedgerParameters(ManageLedgerParameters {
+                token_name: Some(new_token_name.clone()),
+                ..Default::default()
+            })),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+
+    sns_wait_for_proposal_execution(
+        &state_machine,
+        sns_canisters.governance_canister_id,
+        change_ledger_token_name_proposal_id,
+    );
+
+    wait_for_ledger_canister_to_start_after_an_upgrade(
+        &state_machine,
+        sns_canisters.ledger_canister_id,
+    );
+
+    assert_eq!(
+        icrc1_name(&state_machine, sns_canisters.ledger_canister_id),
+        new_token_name
+    );
+}
+
+#[test]
+fn test_manage_ledger_parameters_change_token_symbol() {
+    let state_machine = StateMachine::new();
+
+    let user = PrincipalId::new_user_test_id(1000);
+
+    let (sns_canisters, neuron) = set_up_sns_for_mlp(&state_machine, &user);
+
+    assert_eq!(
+        icrc1_symbol(&state_machine, sns_canisters.ledger_canister_id),
+        DEFAULT_TOKEN_SYMBOL
+    );
+
+    // change ledger token_symbol with a ManageLedgerParameters proposal
+    let new_token_symbol = "PPR".to_string();
+
+    let change_ledger_token_symbol_proposal_id = sns_make_proposal(
+        &state_machine,
+        sns_canisters.governance_canister_id,
+        user,
+        neuron.clone(),
+        Proposal {
+            title: "Change ledger token symbol".to_string(),
+            action: Some(Action::ManageLedgerParameters(ManageLedgerParameters {
+                token_symbol: Some(new_token_symbol.clone()),
+                ..Default::default()
+            })),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+
+    sns_wait_for_proposal_execution(
+        &state_machine,
+        sns_canisters.governance_canister_id,
+        change_ledger_token_symbol_proposal_id,
+    );
+
+    wait_for_ledger_canister_to_start_after_an_upgrade(
+        &state_machine,
+        sns_canisters.ledger_canister_id,
+    );
+
+    assert_eq!(
+        icrc1_symbol(&state_machine, sns_canisters.ledger_canister_id),
+        new_token_symbol
+    );
+}
+
 fn wait_for_ledger_canister_to_start_after_an_upgrade(
     machine: &StateMachine,
     ledger_id: CanisterId,
@@ -171,6 +272,8 @@ fn set_up_sns_for_mlp(
         .with_ledger_account(user_account, Tokens::new(10001, 0).unwrap())
         .with_nervous_system_parameters(system_params)
         .with_ledger_transfer_fee(DEFAULT_LEDGER_TRANSFER_FEE)
+        .with_ledger_token_name(DEFAULT_TOKEN_NAME.to_string())
+        .with_ledger_token_symbol(DEFAULT_TOKEN_SYMBOL.to_string())
         .build();
 
     setup_nns_canisters(state_machine, nns_init_payloads);

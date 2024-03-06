@@ -1270,6 +1270,14 @@ fn validate_and_render_manage_ledger_parameters(
         );
         no_change = false;
     }
+    if let Some(token_name) = &manage_ledger_parameters.token_name {
+        render += &format!("# Set new token name: {}. \n", token_name);
+        no_change = false;
+    }
+    if let Some(token_symbol) = &manage_ledger_parameters.token_symbol {
+        render += &format!("# Set new token symbol: {}. \n", token_symbol);
+        no_change = false;
+    }
     if no_change {
         Err(String::from(
             "ManageLedgerParameters must change at least one value, all values are None",
@@ -3835,13 +3843,17 @@ Version {
     #[test]
     fn test_validate_and_render_manage_ledger_parameters() {
         let new_fee = 751;
+        let new_token_name = "Random Token".to_string();
+        let new_token_symbol = "RTK".to_string();
         let render = validate_and_render_manage_ledger_parameters(&ManageLedgerParameters {
             transfer_fee: Some(new_fee),
+            token_name: Some(new_token_name.clone()),
+            token_symbol: Some(new_token_symbol.clone()),
         })
         .unwrap();
         assert_eq!(
             render,
-            format!("# Proposal to change ledger parameters:\n# Set token transfer fee: {} token-quantums. \n", new_fee)
+            format!("# Proposal to change ledger parameters:\n# Set token transfer fee: {} token-quantums. \n# Set new token name: {}. \n# Set new token symbol: {}. \n", new_fee, new_token_name, new_token_symbol)
         );
     }
 
