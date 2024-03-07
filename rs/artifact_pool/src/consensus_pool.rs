@@ -9,16 +9,14 @@ use crate::{
     metrics::{LABEL_POOL_TYPE, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED},
 };
 use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
-use ic_interfaces::consensus_pool::PurgeableArtifactType;
-use ic_interfaces::time_source::MonotonicTimeSource;
 use ic_interfaces::{
     consensus_pool::{
         ChangeAction, ChangeSet, ConsensusBlockCache, ConsensusBlockChain, ConsensusPool,
         ConsensusPoolCache, ConsensusTime, HeightIndexedPool, HeightRange, PoolSection,
-        UnvalidatedConsensusArtifact, ValidatedConsensusArtifact,
+        PurgeableArtifactType, UnvalidatedConsensusArtifact, ValidatedConsensusArtifact,
     },
     p2p::consensus::{ChangeResult, MutablePool, ValidatedPoolReader},
-    time_source::RealClock,
+    time_source::TimeSource,
 };
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::buckets::linear_buckets;
@@ -284,7 +282,7 @@ pub struct ConsensusPoolImpl {
     /// Instants below height h are purged whenever all validated and unvalidated
     /// artifacts are also purged below that height.
     block_instants_index: HeightIndex<CryptoHashOf<Block>>,
-    time_source: Arc<dyn MonotonicTimeSource>,
+    time_source: Arc<dyn TimeSource>,
     cache: Arc<ConsensusCacheImpl>,
     backup: Option<Backup>,
     log: ReplicaLogger,
@@ -408,12 +406,17 @@ impl ConsensusPoolImpl {
         config: ArtifactPoolConfig,
         registry: ic_metrics::MetricsRegistry,
         log: ReplicaLogger,
-        time_source: Arc<dyn MonotonicTimeSource>,
+        time_source: Arc<dyn TimeSource>,
     ) -> ConsensusPoolImpl {
         let mut pool = UncachedConsensusPoolImpl::new(config.clone(), log.clone());
         Self::init_genesis(cup_proto, pool.validated.as_mut());
-        let mut pool =
-            Self::from_uncached(node_id, pool, registry.clone(), log.clone(), time_source);
+        let mut pool = Self::from_uncached(
+            node_id,
+            pool,
+            registry.clone(),
+            log.clone(),
+            time_source.clone(),
+        );
         // If the back up directory is set, instantiate the backup component
         // and create a subdirectory with the subnet id as directory name.
         pool.backup = config.backup_config.map(|config| {
@@ -428,7 +431,7 @@ impl ConsensusPoolImpl {
                 Duration::from_secs(config.purging_interval_secs),
                 registry,
                 log,
-                Arc::new(RealClock),
+                time_source,
             )
         });
 
@@ -467,7 +470,7 @@ impl ConsensusPoolImpl {
         uncached: UncachedConsensusPoolImpl,
         registry: ic_metrics::MetricsRegistry,
         log: ReplicaLogger,
-        time_source: Arc<dyn MonotonicTimeSource>,
+        time_source: Arc<dyn TimeSource>,
     ) -> ConsensusPoolImpl {
         let cache = Arc::new(ConsensusCacheImpl::new(&uncached));
         ConsensusPoolImpl {
@@ -623,7 +626,7 @@ impl ConsensusPoolImpl {
     /// collection, for message types that we care about. If the message was already
     /// recorded, this function does nothing.
     fn record_instant(&mut self, msg: &ConsensusMessage) {
-        let now = self.time_source.get_monotonic_time();
+        let now = self.time_source.get_instant();
         if let ConsensusMessage::BlockProposal(bp) = msg {
             let hash = bp.content.get_hash().clone();
             if self
@@ -1009,7 +1012,7 @@ mod tests {
         config: ArtifactPoolConfig,
         registry: ic_metrics::MetricsRegistry,
         log: ReplicaLogger,
-        time_source: Arc<dyn MonotonicTimeSource>,
+        time_source: Arc<dyn TimeSource>,
     ) -> ConsensusPoolImpl {
         ConsensusPoolImpl::new(
             node_id,

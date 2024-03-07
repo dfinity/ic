@@ -18,7 +18,6 @@ DEPENDENCIES = [
     "//rs/crypto/tecdsa",
     "//rs/crypto/tls_interfaces",
     "//rs/crypto/utils/basic_sig",
-    "//rs/crypto/utils/time",
     "//rs/crypto/utils/tls",
     "//rs/interfaces",
     "//rs/interfaces/registry",

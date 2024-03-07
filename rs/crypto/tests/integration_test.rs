@@ -15,12 +15,11 @@ use ic_crypto_test_utils_keygen::TestKeygenCrypto;
 use ic_crypto_test_utils_keygen::{add_public_key_to_registry, add_tls_cert_to_registry};
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_crypto_test_utils_tls::x509_certificates::generate_ed25519_cert;
-use ic_crypto_utils_time::CurrentSystemTimeSource;
 use ic_interfaces::crypto::KeyManager;
 use ic_interfaces::crypto::{
     CheckKeysWithRegistryError, IDkgKeyRotationResult, KeyRotationOutcome,
 };
-use ic_interfaces::time_source::TimeSource;
+use ic_interfaces::time_source::{SysTimeSource, TimeSource};
 use ic_logger::replica_logger::no_op_logger;
 use ic_logger::ReplicaLogger;
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
@@ -1396,7 +1395,7 @@ fn should_transition_from_latest_rotation_too_recent_to_rotating_local_key_with_
     let key_rotation_period = Duration::from_secs(5);
     let registry_data = Arc::new(ProtoRegistryDataProvider::new());
     let registry_client = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
-    let time: Arc<dyn TimeSource> = Arc::new(CurrentSystemTimeSource::new(no_op_logger()));
+    let time: Arc<dyn TimeSource> = Arc::new(SysTimeSource::new());
     let crypto_component = TempCryptoComponent::builder()
         .with_keys(NodeKeysToGenerate::all())
         .with_registry_client_and_data(

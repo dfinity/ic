@@ -25,7 +25,7 @@ use ic_interfaces::{
     consensus_pool::*,
     dkg::DkgPool,
     messaging::MessageRouting,
-    time_source::MonotonicTimeSource,
+    time_source::TimeSource,
     validation::{ValidationError, ValidationResult},
 };
 use ic_interfaces_registry::RegistryClient;
@@ -581,7 +581,7 @@ pub struct Validator {
     log: ReplicaLogger,
     metrics: ValidatorMetrics,
     schedule: RoundRobin,
-    time_source: Arc<dyn MonotonicTimeSource>,
+    time_source: Arc<dyn TimeSource>,
     /// Earliest monotonic measurement available for the validator, used for fallback
     /// during out-of-sync validation. Should ideally represent a time close to the
     /// start of the replica process.
@@ -602,7 +602,7 @@ impl Validator {
         dkg_pool: Arc<RwLock<dyn DkgPool>>,
         log: ReplicaLogger,
         metrics: ValidatorMetrics,
-        time_source: Arc<dyn MonotonicTimeSource>,
+        time_source: Arc<dyn TimeSource>,
     ) -> Validator {
         Validator {
             replica_config,
@@ -616,7 +616,7 @@ impl Validator {
             log,
             metrics,
             schedule: RoundRobin::default(),
-            origin_instant: time_source.get_monotonic_time(),
+            origin_instant: time_source.get_instant(),
             time_source,
         }
     }
@@ -1033,7 +1033,7 @@ impl Validator {
             .unwrap_or(self.origin_instant);
         let duration_since_received_parent = self
             .time_source
-            .get_monotonic_time()
+            .get_instant()
             .saturating_duration_since(parent_block_instant);
 
         // Check that our locally available validation context is sufficient for

@@ -1,4 +1,4 @@
-use ic_interfaces::time_source::{MonotonicTimeSource, TimeNotMonotoneError, TimeSource};
+use ic_interfaces::time_source::TimeSource;
 use ic_types::time::{Time, UNIX_EPOCH};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
@@ -7,6 +7,9 @@ use std::time::{Duration, Instant};
 /// fast forward to advance time.
 pub struct FastForwardTimeSource(RwLock<TickTimeData>);
 
+/// Error when time update is not monotone.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub struct TimeNotMonotoneError;
 struct TickTimeData {
     current_time: Time,
     current_instant: Instant,
@@ -83,10 +86,8 @@ impl TimeSource for FastForwardTimeSource {
     fn get_relative_time(&self) -> Time {
         self.0.read().unwrap().current_time
     }
-}
 
-impl MonotonicTimeSource for FastForwardTimeSource {
-    fn get_monotonic_time(&self) -> Instant {
+    fn get_instant(&self) -> Instant {
         self.0.read().unwrap().current_instant
     }
 }

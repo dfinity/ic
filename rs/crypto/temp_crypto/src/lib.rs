@@ -1,4 +1,5 @@
 use ic_crypto_internal_csp::Csp;
+use ic_interfaces::time_source::SysTimeSource;
 use ic_protobuf::registry::crypto::v1::{EcdsaCurve, EcdsaKeyId};
 use ic_protobuf::registry::subnet::v1::{EcdsaConfig, SubnetRecord, SubnetType};
 use ic_types::{NodeId, ReplicaVersion, SubnetId};
@@ -43,7 +44,6 @@ pub mod internal {
         TlsHandshake, TlsPublicKeyCert, TlsServerHandshakeError, TlsStream,
     };
     use ic_crypto_utils_basic_sig::conversions::derive_node_id;
-    use ic_crypto_utils_time::CurrentSystemTimeSource;
     use ic_interfaces::crypto::{
         BasicSigVerifier, BasicSigner, CheckKeysWithRegistryError, CurrentNodePublicKeysError,
         IDkgDealingEncryptionKeyRotationError, IDkgKeyRotationResult, IDkgProtocol, KeyManager,
@@ -250,7 +250,7 @@ pub mod internal {
                 .unwrap_or_else(|| Arc::new(CryptoMetrics::none()));
             let time_source = self
                 .time_source
-                .unwrap_or_else(|| Arc::new(CurrentSystemTimeSource::new(new_logger!(&logger))));
+                .unwrap_or_else(|| Arc::new(SysTimeSource::new()));
 
             let (mut config, temp_dir) = CryptoConfig::new_in_temp_dir();
             if let Some(source) = self.temp_dir_source {

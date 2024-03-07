@@ -32,7 +32,6 @@ ic-crypto-node-key-validation = { path = "../../../crypto/node_key_validation" }
 ic-crypto-sha2 = { path = "../../sha2" }
 ic-crypto-standalone-sig-verifier = { path = "../../standalone-sig-verifier" }
 ic-crypto-tls-interfaces = { path = "../../tls_interfaces" }
-ic-crypto-utils-time = { path = "../../utils/time" }
 ic-interfaces = { path = "../../../interfaces" }
 ic-logger = { path = "../../../monitoring/logger" }
 ic-metrics = { path = "../../../monitoring/metrics" }

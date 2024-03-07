@@ -28,7 +28,6 @@ DEPENDENCIES = [
     "//rs/crypto/sha2",
     "//rs/crypto/standalone-sig-verifier",
     "//rs/crypto/tls_interfaces",
-    "//rs/crypto/utils/time",
     "//rs/interfaces",
     "//rs/monitoring/adapter_metrics",
     "//rs/monitoring/logger",

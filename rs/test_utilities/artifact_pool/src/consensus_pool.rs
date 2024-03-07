@@ -10,7 +10,7 @@ use ic_interfaces::{
     crypto::{MultiSigner, ThresholdSigner},
     dkg::DkgPool,
     p2p::consensus::{ChangeResult, MutablePool},
-    time_source::MonotonicTimeSource,
+    time_source::TimeSource,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
@@ -36,7 +36,7 @@ pub struct TestConsensusPool {
     subnet_id: SubnetId,
     registry_client: Arc<dyn RegistryClient>,
     pool: ConsensusPoolImpl,
-    time_source: Arc<dyn MonotonicTimeSource>,
+    time_source: Arc<dyn TimeSource>,
     dkg_payload_builder:
         Box<dyn Fn(&dyn ConsensusPool, Block, &ValidationContext) -> consensus::dkg::Payload>,
 }
@@ -166,7 +166,7 @@ impl TestConsensusPool {
         node_id: NodeId,
         subnet_id: SubnetId,
         pool_config: ArtifactPoolConfig,
-        time_source: Arc<dyn MonotonicTimeSource>,
+        time_source: Arc<dyn TimeSource>,
         registry_client: Arc<dyn RegistryClient>,
         crypto: Arc<CryptoReturningOk>,
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,

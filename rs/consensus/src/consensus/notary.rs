@@ -30,7 +30,7 @@ use ic_consensus_utils::{
     membership::{Membership, MembershipError},
     pool_reader::PoolReader,
 };
-use ic_interfaces::time_source::MonotonicTimeSource;
+use ic_interfaces::time_source::TimeSource;
 use ic_interfaces_state_manager::StateManager;
 use ic_logger::{error, trace, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -46,7 +46,7 @@ use ic_types::{
 use std::sync::Arc;
 
 pub struct Notary {
-    time_source: Arc<dyn MonotonicTimeSource>,
+    time_source: Arc<dyn TimeSource>,
     replica_config: ReplicaConfig,
     membership: Arc<Membership>,
     crypto: Arc<dyn ConsensusCrypto>,
@@ -57,7 +57,7 @@ pub struct Notary {
 
 impl Notary {
     pub fn new(
-        time_source: Arc<dyn MonotonicTimeSource>,
+        time_source: Arc<dyn TimeSource>,
         replica_config: ReplicaConfig,
         membership: Arc<Membership>,
         crypto: Arc<dyn ConsensusCrypto>,

@@ -12,7 +12,7 @@ use ic_execution_environment::ExecutionServices;
 use ic_https_outcalls_adapter_client::setup_canister_http_client;
 use ic_interfaces::{
     execution_environment::QueryExecutionService, p2p::artifact_manager::JoinGuard,
-    time_source::MonotonicTimeSource,
+    time_source::TimeSource,
 };
 use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_registry::{LocalStoreCertifiedTimeReader, RegistryClient};
@@ -61,7 +61,7 @@ pub fn construct_ic_stack(
     registry: Arc<dyn RegistryClient + Send + Sync>,
     crypto: Arc<CryptoComponent>,
     catch_up_package: Option<pb::CatchUpPackage>,
-    time_source: Arc<dyn MonotonicTimeSource>,
+    time_source: Arc<dyn TimeSource>,
 ) -> std::io::Result<(
     // TODO: remove this return value since it is used only in tests
     Arc<StateManagerImpl>,
