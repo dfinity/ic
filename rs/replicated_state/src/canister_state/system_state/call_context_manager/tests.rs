@@ -278,10 +278,7 @@ fn withdraw_cycles_fails_when_not_enough_available_cycles() {
         ccm.call_context_mut(cc_id)
             .unwrap()
             .withdraw_cycles(Cycles::new(40)),
-        Err(CallContextError::InsufficientCyclesInCall {
-            available: Cycles::new(30),
-            requested: Cycles::new(40),
-        })
+        Err(())
     );
 }
 

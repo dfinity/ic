@@ -314,7 +314,7 @@ impl SystemStateChanges {
                     .ok_or_else(|| {
                         Self::error("Canister accepted cycles from invalid call context")
                     })?;
-                call_context.withdraw_cycles(*amount_taken).map_err(|_| {
+                call_context.withdraw_cycles(*amount_taken).map_err(|()| {
                     Self::error("Canister accepted more cycles than available from call context")
                 })?;
                 if (*amount_taken).get() > LOG_CANISTER_OPERATION_CYCLES_THRESHOLD {

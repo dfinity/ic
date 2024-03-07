@@ -82,14 +82,12 @@ impl CallContext {
     /// Updates the available cycles in the `CallContext` based on how much
     /// cycles the canister requested to keep.
     ///
-    /// Returns a `CallContextError::InsufficientCyclesInCall` if `cycles` is
-    /// more than what's available in the call context.
-    pub fn withdraw_cycles(&mut self, cycles: Cycles) -> Result<(), CallContextError> {
+    /// Returns an error if `cycles` is more than what's available in the call
+    /// context.
+    #[allow(clippy::result_unit_err)]
+    pub fn withdraw_cycles(&mut self, cycles: Cycles) -> Result<(), ()> {
         if self.available_cycles < cycles {
-            return Err(CallContextError::InsufficientCyclesInCall {
-                available: self.available_cycles,
-                requested: cycles,
-            });
+            return Err(());
         }
         self.available_cycles -= cycles;
         Ok(())
@@ -170,28 +168,6 @@ impl TryFrom<pb::CallContext> for CallContext {
                 )),
             instructions_executed: value.instructions_executed.into(),
         })
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum CallContextError {
-    InsufficientCyclesInCall {
-        available: Cycles,
-        requested: Cycles,
-    },
-}
-
-impl From<CallContextError> for HypervisorError {
-    fn from(val: CallContextError) -> Self {
-        match val {
-            CallContextError::InsufficientCyclesInCall {
-                available,
-                requested,
-            } => HypervisorError::InsufficientCyclesInCall {
-                available,
-                requested,
-            },
-        }
     }
 }
 
