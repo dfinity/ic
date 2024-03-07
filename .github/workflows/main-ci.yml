@@ -64,9 +64,6 @@ jobs:
       - name: After script
         run: |
           bazel clean
-          if [[ -f bazel-build-log*.json ]]; then
-            gzip bazel-build-log*.json
-          fi
       - name: Upload Bazel artifacts
         uses: actions/upload-artifact@v3
         if: success() || failure() # don't run if CI job is cancelled
@@ -74,6 +71,7 @@ jobs:
           name: bazel-artifacts
           retention-days: 2
           if-no-files-found: ignore
+          compression-level: 7
           path: |
             bazel-build-log*.json*
             bazel-bep.pb
