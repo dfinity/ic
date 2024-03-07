@@ -367,8 +367,7 @@ impl UpdateHelper {
         round_limits: &mut RoundLimits,
         call_tree_metrics: &dyn CallTreeMetrics,
     ) -> ExecuteMessageResult {
-        self.canister
-            .append_log_records(&output.canister_log_records);
+        self.canister.append_log(&mut output.canister_log);
         self.canister
             .system_state
             .apply_ingress_induction_cycles_debit(

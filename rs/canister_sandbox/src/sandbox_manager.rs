@@ -138,7 +138,7 @@ impl Execution {
                 allocated_message_bytes,
                 instance_stats,
                 system_api_call_counters,
-                canister_log_records,
+                canister_log,
             },
             deltas,
             instance_or_system_api,
@@ -205,7 +205,7 @@ impl Execution {
                     num_instructions_left,
                     instance_stats,
                     system_api_call_counters,
-                    canister_log_records,
+                    canister_log,
                 };
                 self.sandbox_manager.controller.execution_finished(
                     protocol::ctlsvc::ExecutionFinishedRequest {
@@ -232,7 +232,7 @@ impl Execution {
                     allocated_message_bytes,
                     instance_stats,
                     system_api_call_counters,
-                    canister_log_records,
+                    canister_log,
                 };
 
                 self.sandbox_manager.controller.execution_finished(

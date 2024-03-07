@@ -10,7 +10,7 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 use ic_logger::{info, ReplicaLogger};
 use ic_management_canister_types::{
-    CanisterLogRecord, CreateCanisterArgs, DataSize, InstallChunkedCodeArgs, InstallCodeArgsV2,
+    CanisterLog, CreateCanisterArgs, InstallChunkedCodeArgs, InstallCodeArgsV2,
     Method as Ic00Method, Payload, ProvisionalCreateCanisterWithCyclesArgs, UninstallCodeArgs,
     UpdateSettingsArgs, IC_00,
 };
@@ -27,13 +27,9 @@ use ic_types::{
 };
 use ic_wasm_types::WasmEngineError;
 use serde::{Deserialize, Serialize};
-use std::collections::VecDeque;
 use std::str::FromStr;
 
 use crate::{cycles_balance_change::CyclesBalanceChange, routing, CERTIFIED_DATA_MAX_LENGTH};
-
-/// The maximum allowed size of a canister log buffer.
-pub const MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE: usize = 4 * 1024;
 
 /// The information that canisters can see about their own status.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -74,8 +70,7 @@ pub struct SystemStateChanges {
     request_slots_used: BTreeMap<CanisterId, usize>,
     requests: Vec<Request>,
     pub(super) new_global_timer: Option<CanisterTimer>,
-    canister_log_records: VecDeque<CanisterLogRecord>,
-    next_canister_log_record_idx: u64,
+    canister_log: CanisterLog,
 }
 
 impl Default for SystemStateChanges {
@@ -90,8 +85,7 @@ impl Default for SystemStateChanges {
             request_slots_used: BTreeMap::new(),
             requests: vec![],
             new_global_timer: None,
-            canister_log_records: Default::default(),
-            next_canister_log_record_idx: 0,
+            canister_log: Default::default(),
         }
     }
 }
@@ -609,7 +603,7 @@ impl SandboxSafeSystemState {
             compute_allocation,
             system_state_changes: SystemStateChanges {
                 // Start indexing new batch of canister log records from the given index.
-                next_canister_log_record_idx,
+                canister_log: CanisterLog::new_with_next_index(next_canister_log_record_idx),
                 ..SystemStateChanges::default()
             },
             initial_cycles_balance,
@@ -701,7 +695,7 @@ impl SandboxSafeSystemState {
             system_state.controllers.clone(),
             request_metadata,
             caller,
-            system_state.next_canister_log_record_idx,
+            system_state.canister_log.next_idx(),
         )
     }
 
@@ -1211,28 +1205,19 @@ impl SandboxSafeSystemState {
 
     /// Appends a log record to the system state changes.
     pub fn append_canister_log(&mut self, time: &Time, content: &[u8]) {
-        // Update the next canister log record index of the current batch.
-        let idx = self.system_state_changes.next_canister_log_record_idx;
-        self.system_state_changes.next_canister_log_record_idx = idx + 1;
-        // Keep the new log record size within limit.
-        let max_content_size =
-            MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE - CanisterLogRecord::default().data_size();
-        let size = content.len().min(max_content_size);
-        let canister_log_records = &mut self.system_state_changes.canister_log_records;
-        canister_log_records.push_back(CanisterLogRecord {
-            idx,
-            timestamp_nanos: time.as_nanos_since_unix_epoch(),
-            content: content[..size].to_vec(),
-        });
-        // Keep the total canister log records size within limit.
-        while canister_log_records.data_size() > MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE {
-            canister_log_records.pop_front();
-        }
+        self.system_state_changes
+            .canister_log
+            .add_record(time.as_nanos_since_unix_epoch(), content);
+    }
+
+    /// Takes collected canister log records.
+    pub fn take_canister_log(&mut self) -> CanisterLog {
+        std::mem::take(&mut self.system_state_changes.canister_log)
     }
 
     /// Returns collected canister log records.
-    pub fn canister_log_records(&self) -> &VecDeque<CanisterLogRecord> {
-        &self.system_state_changes.canister_log_records
+    pub fn canister_log(&self) -> &CanisterLog {
+        &self.system_state_changes.canister_log
     }
 
     fn caller_is_controller(&self) -> bool {

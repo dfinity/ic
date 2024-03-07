@@ -12,7 +12,7 @@ pub use call_context_manager::{CallContext, CallContextAction, CallContextManage
 use ic_base_types::NumSeconds;
 use ic_logger::{error, ReplicaLogger};
 use ic_management_canister_types::{
-    CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterLogRecord, LogVisibility,
+    CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterLog, LogVisibility,
 };
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -338,10 +338,7 @@ pub struct SystemState {
     pub log_visibility: LogVisibility,
 
     /// Log records of the canister.
-    pub canister_log_records: Vec<CanisterLogRecord>,
-
-    /// The index of the next log record to be created.
-    pub next_canister_log_record_idx: u64,
+    pub canister_log: CanisterLog,
 }
 
 /// A wrapper around the different canister statuses.
@@ -712,8 +709,7 @@ impl SystemState {
             canister_history: CanisterHistory::default(),
             wasm_chunk_store,
             log_visibility: LogVisibility::default(),
-            canister_log_records: Vec::new(),
-            next_canister_log_record_idx: 0,
+            canister_log: Default::default(),
         }
     }
 
@@ -758,8 +754,7 @@ impl SystemState {
         wasm_chunk_store_data: PageMap,
         wasm_chunk_store_metadata: WasmChunkStoreMetadata,
         log_visibility: LogVisibility,
-        canister_log_records: Vec<CanisterLogRecord>,
-        next_canister_log_record_idx: u64,
+        canister_log: CanisterLog,
     ) -> Self {
         Self {
             controllers,
@@ -783,8 +778,7 @@ impl SystemState {
                 wasm_chunk_store_metadata,
             ),
             log_visibility,
-            canister_log_records,
-            next_canister_log_record_idx,
+            canister_log,
         }
     }
 
