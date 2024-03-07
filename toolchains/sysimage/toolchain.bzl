@@ -2,6 +2,72 @@
 Tools for building IC OS image.
 """
 
+def _build_container_base_image_impl(ctx):
+    args = []
+    inputs = []
+    outputs = []
+
+    # Output file is the name given to the target
+    output_tar_file = ctx.actions.declare_file(ctx.label.name)
+    args.extend(["--output", output_tar_file.path])
+    outputs.append(output_tar_file)
+
+    # All files in the rootfs are inputs.
+    # But only the directory is passed to the script
+    context_dir = ctx.files.context_files[0].dirname
+    inputs += ctx.files.context_files
+    args.extend(["--context_dir", context_dir])
+
+    args.extend(["--image_tag", ctx.attr.image_tag])
+
+    inputs.append(ctx.file.dockerfile)
+    args.extend(["--dockerfile", ctx.file.dockerfile.path])
+
+    # Dir mounts prepared in `gitlab-ci/container/container-run.sh`
+    args.extend(["--tmpfs_container_sys_dir"])
+
+    if ctx.attr.build_args:
+        args.extend(["--build_args"])
+        for build_arg in ctx.attr.build_args:
+            args.extend([build_arg])
+
+    tool = ctx.attr._tool
+
+    ctx.actions.run(
+        executable = tool.files_to_run,
+        arguments = args,
+        inputs = inputs,
+        outputs = outputs,
+        tools = [tool.files_to_run],
+        # Base image is NOT reproducible (because `apt install`)
+        execution_requirements = {"no-remote-cache": "1"},
+    )
+
+    return [DefaultInfo(
+        files = depset(outputs),
+        runfiles = ctx.runfiles(outputs),
+    )]
+
+build_container_base_image = rule(
+    implementation = _build_container_base_image_impl,
+    attrs = {
+        # Glob of files from the rootfs
+        "context_files": attr.label_list(
+            allow_files = True,
+        ),
+        "dockerfile": attr.label(
+            allow_single_file = True,
+        ),
+        "image_tag": attr.string(mandatory = True),
+        "build_args": attr.string_list(),
+        "_tool": attr.label(
+            default = "//toolchains/sysimage:build_container_base_image",
+            executable = True,
+            cfg = "exec",
+        ),
+    },
+)
+
 def _build_container_filesystem_impl(ctx):
     args = []
     inputs = []
@@ -24,6 +90,11 @@ def _build_container_filesystem_impl(ctx):
     if ctx.file.dockerfile:
         inputs.append(ctx.file.dockerfile)
         args.extend(["--dockerfile", ctx.file.dockerfile.path])
+
+    if ctx.file.base_image_tar_file:
+        inputs.append(ctx.file.base_image_tar_file)
+        args.extend(["--base-image-tar-file", ctx.file.base_image_tar_file.path])
+        args.extend(["--base-image-tar-file-tag", ctx.attr.base_image_tar_file_tag])
 
     # Dir mounts prepared in `gitlab-ci/container/container-run.sh`
     args.extend(["--tmpfs-container-sys-dir"])
@@ -57,6 +128,10 @@ build_container_filesystem = rule(
         "dockerfile": attr.label(
             allow_single_file = True,
         ),
+        "base_image_tar_file": attr.label(
+            allow_single_file = True,
+        ),
+        "base_image_tar_file_tag": attr.string(mandatory = False),
         "_tool": attr.label(
             default = "//toolchains/sysimage:build_container_filesystem_tar",
             executable = True,

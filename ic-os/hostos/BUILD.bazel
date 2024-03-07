@@ -19,6 +19,7 @@ filegroup(
 ext4_image(
     name = "partition-config.tar",
     partition_size = "100M",
+    tags = ["manual"],
     target_compatible_with = [
         "@platforms//os:linux",
     ],

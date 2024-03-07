@@ -3,20 +3,33 @@
 # Build a container image and extract the single flattened filesystem into a tar file.
 from __future__ import annotations
 
-import atexit
-import os
-import pathlib
 import sys
-import tempfile
 import time
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable, List, Optional, TypeVar
 
 import configargparse
 import invoke
+from container_utils import (
+    generate_container_command,
+    path_owned_by_root,
+    process_temp_sys_dir_args,
+    remove_image,
+    take_ownership_of_file,
+)
 
-CONTAINER_COMMAND = "sudo podman "
-SYS_DIR_PREFIX = "podman_sys_dir_"
-DEFAULT_TMP_PREFIX = "/tmp"
+
+@dataclass(frozen=True)
+class BaseImageOverride:
+    image_file: Path
+    image_tag: str
+
+    def __post_init__(self):
+        assert self.image_tag is not None
+        assert self.image_file is not None
+        assert self.image_file.exists()
+
 
 ReturnType = TypeVar('ReturnType') # https://docs.python.org/3/library/typing.html#generics
 def retry(func: Callable[[], ReturnType], num_retries: int = 3 ) -> ReturnType:
@@ -40,12 +53,22 @@ def retry(func: Callable[[], ReturnType], num_retries: int = 3 ) -> ReturnType:
     return func()
 
 
+def load_base_image_tar_file(container_cmd: str, tar_file: Path):
+    """
+    Load the filesystem in the tar file into the podman repo.
+    It will be available to subsequent commands using the associated tag
+    """
+    cmd = f"{container_cmd} image load --quiet --input {tar_file}"
+    invoke.run(cmd)
+
+
 def build_container(container_cmd: str,
                     build_args: List[str],
                     context_dir: str,
                     dockerfile: str,
                     image_tag: str,
-                    no_cache: bool) -> str:
+                    no_cache: bool,
+                    base_image_override: Optional[BaseImageOverride]) -> str:
     """Run container build command with given args. Return the given tag."""
     assert image_tag and context_dir, "Arguments can not be empty"
 
@@ -61,6 +84,11 @@ def build_container(container_cmd: str,
     if no_cache:
         cmd += "--no-cache "
 
+    if base_image_override:
+        load_base_image_tar_file(container_cmd, base_image_override.image_file)
+        # Override the first FROM statement - grabs it from local cache
+        cmd += f"--from {base_image_override.image_tag} "
+
     # Set timestamp for all files for determinism
     cmd += "--timestamp 0 "
 
@@ -75,6 +103,7 @@ def build_container(container_cmd: str,
     retry(build_func)
     return image_tag
 
+
 def export_container_filesystem(container_cmd: str,
                                 image_tag: str,
                                 destination_tar_filename: str):
@@ -88,19 +117,11 @@ def export_container_filesystem(container_cmd: str,
     invoke.run("sync")
     invoke.run(f"{container_cmd} container rm {container_name}")
 
+    destination_tar_path = Path(destination_tar_filename)
     # Using sudo w/ podman requires changing permissions on the output tar file (not the tar contents)
-    file_owner_uid = os.stat(destination_tar_filename).st_uid
-    root_uid = 0
-    assert file_owner_uid == root_uid, \
-        f"'{destination_tar_filename}' not owned by root. Remove this and the next code block."
-
-    current_user = invoke.run("whoami").stdout.strip()
-    invoke.run(f"sudo chown {current_user} {destination_tar_filename}")
-    invoke.run(f"sudo chgrp {current_user} {destination_tar_filename}")
-
-
-def remove_image(image_tag: str):
-    invoke.run(f"{CONTAINER_COMMAND} image rm -f {image_tag}")
+    assert path_owned_by_root(destination_tar_path), \
+        f"'{destination_tar_path}' not owned by root. Remove this and the next line."
+    take_ownership_of_file(destination_tar_path)
 
 
 def resolve_file_args(context_dir: str, file_build_args: List[str]) -> List[str]:
@@ -111,13 +132,45 @@ def resolve_file_args(context_dir: str, file_build_args: List[str]) -> List[str]
             raise RuntimeError(f"File build arg '{arg}' is not valid")
         (name, pathname) = chunks
 
-        path = pathlib.Path(context_dir) / pathname
+        path = Path(context_dir) / pathname
 
         with open(path, 'r') as f:
             value = f.readline().strip()
             result.append(f"{name}={value}")
 
     return result
+
+
+def generate_image_tag(base: str) -> str:
+    # Image tags need to be unique and follow a specific format
+    # See the (unwieldy) format spec:
+    # https://github.com/opencontainers/distribution-spec/blob/main/spec.md#pulling-manifests
+    # Replace disallowed chars with dashes
+    return base.translate(str.maketrans({'/': '-', '.':'-', ':':'-'}))
+
+
+def build_and_export(container_cmd: str,
+                     build_args: List[str],
+                     context_dir: str,
+                     dockerfile: str,
+                     image_tag: str,
+                     no_cache: bool,
+                     base_image_override: Optional[BaseImageOverride],
+                     destination_tar_filename: str) -> None:
+
+    build_container(container_cmd,
+                    build_args,
+                    context_dir,
+                    dockerfile,
+                    image_tag,
+                    no_cache,
+                    base_image_override)
+
+    export_container_filesystem(container_cmd,
+                                image_tag,
+                                destination_tar_filename)
+
+
 
 
 def get_args():
@@ -189,68 +242,21 @@ def get_args():
         action="store_true"
     )
 
+    parser.add_argument(
+        "--base-image-tar-file",
+        help="Override the base image used by 'podman build'. The 'FROM' line in the target Dockerfile will be ignored",
+        default=None,
+        type=str)
+
+    # Need the image tag to identify the right image.
+    # `podman load` puts the image into the local image registry directly and labels it with the image tag used during `podman build`
+    parser.add_argument(
+        "--base-image-tar-file-tag",
+        help="Tag given to the container image during 'podman build'. Required if --base-image-tar-file is used.",
+        default=None,
+        type=str)
+
     return parser.parse_args()
-
-
-def generate_image_tag(base: str) -> str:
-    # Image tags need to be unique and follow a specific format
-    # See the (unwieldy) format spec:
-    # https://github.com/opencontainers/distribution-spec/blob/main/spec.md#pulling-manifests
-    # Replace disallowed chars with dashes
-    return base.translate(str.maketrans({'/': '-', '.':'-', ':':'-'}))
-
-
-def build_and_export(container_cmd: str,
-                     build_args: List[str],
-                     context_dir: str,
-                     dockerfile: str,
-                     image_tag: str,
-                     no_cache: bool,
-                     destination_tar_filename: str) -> None:
-
-    build_container(container_cmd,
-                    build_args,
-                    context_dir,
-                    dockerfile,
-                    image_tag,
-                    no_cache)
-
-    export_container_filesystem(container_cmd,
-                                image_tag,
-                                destination_tar_filename)
-
-
-def make_tmpfs(base_dir: str = DEFAULT_TMP_PREFIX) -> str:
-    """
-    Mount a tmpfs volume in a subdirectory of the given `base_dir`.
-    Auto unmount at exit.
-
-    This seems to work across environments:
-      - CI - running K8S containerd runners
-      - gitlab-ci/container/container-run.sh
-
-    Returns the unique tmpfs mount point
-    """
-    unique_tag = os.getpid()
-    temp_sys_dir = f"/tmp/tmpfs_{unique_tag}"
-    tmpfs_name = f"tmpfs_{unique_tag}"
-    invoke.run(f"mkdir -p {temp_sys_dir}")
-    invoke.run(f"sudo mount -t tmpfs {tmpfs_name} {temp_sys_dir}")
-    atexit.register(lambda: invoke.run(f"sudo umount {temp_sys_dir}"))
-    return temp_sys_dir
-
-
-def process_temp_sys_dir_args(temp_container_sys_dir: Optional[str],
-                              tmpfs_container_sys_dir: Optional[str]) -> Optional[str]:
-    assert not (temp_container_sys_dir and tmpfs_container_sys_dir), \
-        "temp_container_sys_dir and tmpfs_container_sys_dir flags are mutually exclusive"
-    if temp_container_sys_dir:
-        return temp_container_sys_dir
-
-    if tmpfs_container_sys_dir:
-        return make_tmpfs()
-
-    return None
 
 
 def main():
@@ -270,21 +276,27 @@ def main():
         resolved_file_args = resolve_file_args(context_dir, args.file_build_args)
         build_args.extend(resolved_file_args)
 
-    # Avoid repetition of args. Bind to a function
-    def build_func(container_cmd):
-        return build_and_export(container_cmd, build_args, context_dir, args.dockerfile, image_tag, no_cache, destination_tar_filename)
+    # Override the base image with a local tar file?
+    def only_one_defined(a,b) -> bool:
+        return (a and not b) or (b and not a)
+    assert not only_one_defined(args.base_image_tar_file, args.base_image_tar_file_tag), \
+        "Please specify BOTH --base-image-tar-file* flags"
 
-    if temp_sys_dir:
-        container_sys_dir = tempfile.mkdtemp(prefix=SYS_DIR_PREFIX, dir=temp_sys_dir)
-        container_run_dir = tempfile.mkdtemp(prefix=SYS_DIR_PREFIX, dir=temp_sys_dir)
-        # podman runs via sudo, so the files have root uid/gid.
-        # Use sudo to remove the files.
-        atexit.register(lambda: invoke.run(f"sudo rm -rf {container_sys_dir} {container_run_dir}"))
-        container_cmd = f"{CONTAINER_COMMAND} --root {container_sys_dir} --runroot {container_run_dir} "
-        build_func(container_cmd)
-    else:
-        build_func(CONTAINER_COMMAND)
-        remove_image(image_tag)
+    base_image_override = None
+    if args.base_image_tar_file:
+        base_image_override = BaseImageOverride(Path(args.base_image_tar_file),
+                                                args.base_image_tar_file_tag)
+
+    container_cmd = generate_container_command("sudo podman ", temp_sys_dir)
+    build_and_export(container_cmd,
+                     build_args,
+                     context_dir,
+                     args.dockerfile,
+                     image_tag,
+                     no_cache,
+                     base_image_override,
+                     destination_tar_filename)
+    remove_image(container_cmd, image_tag) # No harm removing if in the tmp dir
 
 
 if __name__ == "__main__":
