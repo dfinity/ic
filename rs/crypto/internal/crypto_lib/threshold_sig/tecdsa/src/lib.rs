@@ -24,7 +24,8 @@
 //! The dealing will either be "masked" (the commitments are Pedersen commitments)
 //! or "unmasked" (the commitments are simple dlog commitments).
 //!
-//! There are four types of dealings
+//! There are five types of dealings
+//!  - RandomUnmasked: outputs unmasked dealing, no proof
 //!  - Random: outputs masked dealing, no proof
 //!  - ReshareOfUnmasked: outputs unmasked dealing, no proof is
 //!    required since equivalence is provable from the commitments
