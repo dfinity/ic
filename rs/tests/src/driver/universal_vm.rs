@@ -188,11 +188,22 @@ impl UniversalVm {
             } else {
                 let tnet = TNet::read_attribute(env);
                 let tnet_node = tnet.nodes.last().expect("no nodes");
+                info!(
+                    env.logger(),
+                    "Uploading image {} to {}",
+                    config_img.clone().display().to_string(),
+                    tnet_node.config_url.clone().expect("missing config url")
+                );
                 block_on(upload_image(
                     config_img,
-                    &tnet_node.config_url.clone().expect("missing config url"),
+                    &format!(
+                        "{}/{}",
+                        tnet_node.config_url.clone().expect("missing config url"),
+                        CONF_IMG_FNAME
+                    ),
                 ))?;
-                block_on(tnet_node.deploy_config_image()).expect("deploying config image failed");
+                block_on(tnet_node.deploy_config_image(CONF_IMG_FNAME))
+                    .expect("deploying config image failed");
                 block_on(tnet_node.start()).expect("starting vm failed");
             }
         }

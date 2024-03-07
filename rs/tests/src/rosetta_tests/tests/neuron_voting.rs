@@ -23,7 +23,7 @@ use std::sync::Arc;
 use std::time::UNIX_EPOCH;
 
 const PORT: u32 = 8111;
-const VM_NAME: &str = "rosetta-test-neuron-voting";
+const VM_NAME: &str = "rosetta-neuron-voting";
 pub fn test(env: TestEnv) {
     let _logger = env.logger();
 

@@ -16,7 +16,7 @@ use std::sync::Arc;
 use std::time::{Duration, UNIX_EPOCH};
 
 const PORT: u32 = 8105;
-const VM_NAME: &str = "rosetta-test-neuron-dissolve";
+const VM_NAME: &str = "rosetta-neuron-dissolve";
 
 pub fn test(env: TestEnv) {
     let _logger = env.logger();

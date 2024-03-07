@@ -29,7 +29,7 @@ use std::sync::Arc;
 use std::time::UNIX_EPOCH;
 
 const PORT: u32 = 8104;
-const VM_NAME: &str = "rosetta-test-neuron-disburse";
+const VM_NAME: &str = "rosetta-neuron-disburse";
 
 pub fn test(env: TestEnv) {
     let logger = env.logger();
