@@ -7,7 +7,7 @@ load("//bazel:defs.bzl", "gzip_compress", "sha256sum2url", "zstd_compress")
 load("//bazel:output_files.bzl", "output_files")
 load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
 load("//ic-os/bootloader:defs.bzl", "build_grub_partition")
-load("//toolchains/sysimage:toolchain.bzl", "build_container_filesystem", "disk_image", "ext4_image", "sha256sum", "tar_extract", "upgrade_image")
+load("//toolchains/sysimage:toolchain.bzl", "build_container_base_image", "build_container_filesystem", "disk_image", "ext4_image", "sha256sum", "tar_extract", "upgrade_image")
 
 def icos_build(
         name,
@@ -18,6 +18,7 @@ def icos_build(
         upgrades = True,
         vuln_scan = True,
         visibility = None,
+        build_local_base_image = False,
         ic_version = "//bazel:version.txt"):
     """
     Generic ICOS build tooling.
@@ -31,6 +32,7 @@ def icos_build(
       upgrades: if True, build upgrade images as well
       vuln_scan: if True, create targets for vulnerability scanning
       visibility: See Bazel documentation
+      build_local_base_image: if True, build the base images from scratch. Do not download the docker.io base image.
       ic_version: the label pointing to the target that returns IC version
     """
 
@@ -67,13 +69,39 @@ def icos_build(
 
     build_container_filesystem_config_file = Label(image_deps.get("build_container_filesystem_config_file"))
 
-    build_container_filesystem(
-        name = "rootfs-tree.tar",
-        context_files = [image_deps["container_context_files"]],
-        config_file = build_container_filesystem_config_file,
-        target_compatible_with = ["@platforms//os:linux"],
-        tags = ["manual"],
-    )
+    if build_local_base_image:
+        base_image_tag = "base-image-" + name  # Reuse for build_container_filesystem_tar
+        package_files_arg = "PACKAGE_FILES=packages.common"
+        if "dev" in mode:
+            package_files_arg += " packages.dev"
+
+        build_container_base_image(
+            name = "base_image.tar",
+            context_files = [image_deps["container_context_files"]],
+            image_tag = base_image_tag,
+            dockerfile = image_deps["base_dockerfile"],
+            build_args = [package_files_arg],
+            target_compatible_with = ["@platforms//os:linux"],
+            tags = ["manual"],
+        )
+
+        build_container_filesystem(
+            name = "rootfs-tree.tar",
+            context_files = [image_deps["container_context_files"]],
+            config_file = build_container_filesystem_config_file,
+            base_image_tar_file = ":base_image.tar",
+            base_image_tar_file_tag = base_image_tag,
+            target_compatible_with = ["@platforms//os:linux"],
+            tags = ["manual"],
+        )
+    else:
+        build_container_filesystem(
+            name = "rootfs-tree.tar",
+            context_files = [image_deps["container_context_files"]],
+            config_file = build_container_filesystem_config_file,
+            target_compatible_with = ["@platforms//os:linux"],
+            tags = ["manual"],
+        )
 
     tar_extract(
         name = "file_contexts",
@@ -566,6 +594,7 @@ EOF
             ":update-img-test.tar.gz",
         ] if upgrades else []),
         visibility = visibility,
+        tags = ["manual"] if build_local_base_image else [],
     )
 
 # end def icos_build

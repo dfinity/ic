@@ -3,14 +3,15 @@ package(default_visibility = ["__subpackages__"])
 exports_files([
     "partitions.csv",
     "grub.cfg",
-    "rootfs/docker-base.dev",
-    "rootfs/extra_boot_args",
-    "rootfs/docker-base.prod",
     "config/config.ini",
-    "config/ssh_authorized_keys/admin",
     "config/node_operator_private_key.pem",
+    "config/ssh_authorized_keys/admin",
     "data/deployment.json.template",
     "data/nns_public_key.pem",
+    "rootfs/docker-base.dev",
+    "rootfs/docker-base.prod",
+    "rootfs/Dockerfile.base",
+    "rootfs/extra_boot_args",
 ])
 
 filegroup(

@@ -21,6 +21,8 @@ def image_deps(mode, _malicious = False):
     """
 
     deps = {
+        "base_dockerfile": "//ic-os/hostos:rootfs/Dockerfile.base",
+
         # Define rootfs and bootfs
         "bootfs": {
             # base layer
@@ -57,6 +59,14 @@ def image_deps(mode, _malicious = False):
         "dev": {
             "build_container_filesystem_config_file": "//ic-os/hostos/envs/dev:build_container_filesystem_config.txt",
         },
+        "local-base-dev": {
+            # Use the non-local-base file
+            "build_container_filesystem_config_file": "//ic-os/hostos/envs/dev:build_container_filesystem_config.txt",
+        },
+        "local-base-prod": {
+            # Use the non-local-base file
+            "build_container_filesystem_config_file": "//ic-os/hostos/envs/prod:build_container_filesystem_config.txt",
+        },
         "prod": {
             "build_container_filesystem_config_file": "//ic-os/hostos/envs/prod:build_container_filesystem_config.txt",
         },
@@ -82,7 +92,7 @@ def _custom_partitions():
         pv_uuid = "eu0VQE-HlTi-EyRc-GceP-xZtn-3j6t-iqEwyv",
         # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
         # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
-        tags = ["no-remote-cache"],
+        tags = ["no-remote-cache", "manual"],
         target_compatible_with = [
             "@platforms//os:linux",
         ],

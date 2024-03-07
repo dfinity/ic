@@ -4,18 +4,36 @@ load("@rules_python//python:defs.bzl", "py_binary")
 package(default_visibility = ["//visibility:public"])
 
 exports_files([
-    "build_vfat_image.py",
-    "build_fat32_image.py",
-    "build_ext4_image.py",
+    "build_base_container_image.py",
     "build_disk_image.py",
+    "build_ext4_image.py",
+    "build_fat32_image.py",
     "build_lvm_image.py",
     "build_upgrade_image.py",
+    "build_vfat_image.py",
     "verity_sign.py",
 ])
 
+# Creates a tar file as output
+py_binary(
+    name = "build_container_base_image",
+    srcs = [
+        "build_container_base_image.py",
+        "container_utils.py",
+    ],
+    deps = [
+        requirement("invoke"),
+        requirement("loguru"),
+        requirement("simple_parsing"),
+    ],
+)
+
 py_binary(
     name = "build_container_filesystem_tar",
-    srcs = ["build_container_filesystem_tar.py"],
+    srcs = [
+        "build_container_filesystem_tar.py",
+        "container_utils.py",
+    ],
     deps = [
         requirement("invoke"),
         requirement("configargparse"),
