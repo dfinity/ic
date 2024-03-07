@@ -46,6 +46,9 @@ py_test(
         "NEW_DID_TEST": "$(location :new_did_git_test)",
         "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
     },
-    tags = ["local"],
+    tags = [
+        "local",
+        "manual",
+    ],
     deps = [requirement("pytest")],
 )
