@@ -110,8 +110,6 @@ pub enum MeteringType {
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Config {
-    pub max_wasm_stack_size: usize,
-
     /// The number of threads to use for query execution per canister.
     pub query_execution_threads_per_canister: usize,
 
@@ -193,7 +191,6 @@ pub struct Config {
 impl Config {
     pub const fn new() -> Self {
         Config {
-            max_wasm_stack_size: 5 * 1024 * 1024,
             query_execution_threads_per_canister: QUERY_EXECUTION_THREADS_PER_CANISTER,
             max_globals: MAX_GLOBALS,
             max_functions: MAX_FUNCTIONS,

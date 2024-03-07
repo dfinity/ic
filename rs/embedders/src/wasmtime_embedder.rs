@@ -186,7 +186,7 @@ impl WasmtimeEmbedder {
     /// canisters __except__ the `host_memory`.
     #[doc(hidden)]
     pub fn wasmtime_execution_config(embedder_config: &EmbeddersConfig) -> wasmtime::Config {
-        let mut config = wasmtime_validation_config(embedder_config);
+        let mut config = wasmtime_validation_config();
 
         // Wasmtime features that differ between Wasm validation and execution.
         // Currently these are multi-memories and the 64-bit memory needed for
