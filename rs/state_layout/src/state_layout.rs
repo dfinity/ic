@@ -4,7 +4,7 @@ use crate::utils::do_copy;
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_config::flag_status::FlagStatus;
 use ic_logger::{error, info, warn, ReplicaLogger};
-use ic_management_canister_types::{CanisterLogRecord, LogVisibility};
+use ic_management_canister_types::{CanisterLog, LogVisibility};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -165,8 +165,7 @@ pub struct CanisterStateBits {
     pub wasm_chunk_store_metadata: WasmChunkStoreMetadata,
     pub total_query_stats: TotalQueryStats,
     pub log_visibility: LogVisibility,
-    pub canister_log_records: Vec<CanisterLogRecord>,
-    pub next_canister_log_record_idx: u64,
+    pub canister_log: CanisterLog,
 }
 
 /// This struct contains bits of the `CanisterSnapshot` that are not already
@@ -1864,11 +1863,12 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             total_query_stats: Some((&item.total_query_stats).into()),
             log_visibility: item.log_visibility.into(),
             canister_log_records: item
-                .canister_log_records
-                .into_iter()
-                .map(|record| record.into())
+                .canister_log
+                .records()
+                .iter()
+                .map(|record| record.clone().into())
                 .collect(),
-            next_canister_log_record_idx: item.next_canister_log_record_idx,
+            next_canister_log_record_idx: item.canister_log.next_idx(),
         }
     }
 }
@@ -1989,12 +1989,14 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             )
             .unwrap_or_default(),
             log_visibility: value.log_visibility.try_into()?,
-            canister_log_records: value
-                .canister_log_records
-                .into_iter()
-                .map(|record| record.into())
-                .collect(),
-            next_canister_log_record_idx: value.next_canister_log_record_idx,
+            canister_log: CanisterLog::new(
+                value.next_canister_log_record_idx,
+                value
+                    .canister_log_records
+                    .into_iter()
+                    .map(|record| record.into())
+                    .collect(),
+            ),
         })
     }
 }

@@ -16,7 +16,7 @@ use ic_interfaces::execution_environment::{
     TrapCode::{self, CyclesAmountTooBigFor64Bit},
 };
 use ic_logger::{error, ReplicaLogger};
-use ic_management_canister_types::CanisterLogRecord;
+use ic_management_canister_types::CanisterLog;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::WASM_PAGE_SIZE_IN_BYTES, memory_required_to_push_request, Memory, NumWasmPages,
@@ -36,7 +36,6 @@ use sandbox_safe_system_state::{CanisterStatusView, SandboxSafeSystemState, Syst
 use serde::{Deserialize, Serialize};
 use stable_memory::StableMemory;
 use std::{
-    collections::VecDeque,
     convert::{From, TryFrom},
     rc::Rc,
 };
@@ -589,6 +588,22 @@ impl ApiType {
             ApiType::PreUpgrade { caller, .. } => Some(*caller),
             ApiType::InspectMessage { caller, .. } => Some(*caller),
             ApiType::Cleanup { caller, .. } => Some(*caller),
+        }
+    }
+
+    pub fn time(&self) -> &Time {
+        match self {
+            ApiType::Start { time }
+            | ApiType::Init { time, .. }
+            | ApiType::SystemTask { time, .. }
+            | ApiType::Update { time, .. }
+            | ApiType::Cleanup { time, .. }
+            | ApiType::NonReplicatedQuery { time, .. }
+            | ApiType::ReplicatedQuery { time, .. }
+            | ApiType::PreUpgrade { time, .. }
+            | ApiType::ReplyCallback { time, .. }
+            | ApiType::RejectCallback { time, .. }
+            | ApiType::InspectMessage { time, .. } => time,
         }
     }
 }
@@ -1355,33 +1370,24 @@ impl SystemApiImpl {
 
     /// Appends the specified bytes on the heap as a string to the canister's logs.
     pub fn save_log_message(&mut self, src: u32, size: u32, heap: &[u8]) {
-        match &self.api_type {
-            ApiType::Start { time }
-            | ApiType::Init { time, .. }
-            | ApiType::SystemTask { time, .. }
-            | ApiType::Update { time, .. }
-            | ApiType::Cleanup { time, .. }
-            | ApiType::NonReplicatedQuery { time, .. }
-            | ApiType::ReplicatedQuery { time, .. }
-            | ApiType::PreUpgrade { time, .. }
-            | ApiType::ReplyCallback { time, .. }
-            | ApiType::RejectCallback { time, .. }
-            | ApiType::InspectMessage { time, .. } => {
-                self.sandbox_safe_system_state.append_canister_log(
-                    time,
-                    valid_subslice("save_log_message", src, size, heap).unwrap_or(
-                        // Do not trap here!
-                        // If the specified memory range is invalid, ignore it and log the error message.
-                        b"(debug_print message out of memory bounds)",
-                    ),
-                );
-            }
-        }
+        self.sandbox_safe_system_state.append_canister_log(
+            self.api_type.time(),
+            valid_subslice("save_log_message", src, size, heap).unwrap_or(
+                // Do not trap here!
+                // If the specified memory range is invalid, ignore it and log the error message.
+                b"(debug_print message out of memory bounds)",
+            ),
+        );
+    }
+
+    /// Takes collected canister log records.
+    pub fn take_canister_log(&mut self) -> CanisterLog {
+        self.sandbox_safe_system_state.take_canister_log()
     }
 
     /// Returns collected canister log records.
-    pub fn canister_log_records(&self) -> &VecDeque<CanisterLogRecord> {
-        self.sandbox_safe_system_state.canister_log_records()
+    pub fn canister_log(&self) -> &CanisterLog {
+        self.sandbox_safe_system_state.canister_log()
     }
 }
 

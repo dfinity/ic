@@ -356,7 +356,13 @@ fn fetch_canister_logs(
     }?;
 
     let response = FetchCanisterLogsResponse {
-        canister_log_records: canister.system_state.canister_log_records.clone(),
+        canister_log_records: canister
+            .system_state
+            .canister_log
+            .records()
+            .iter()
+            .cloned()
+            .collect(),
     };
     Ok(WasmResult::Reply(Encode!(&response).unwrap()))
 }

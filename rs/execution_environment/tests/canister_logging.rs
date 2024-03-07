@@ -72,6 +72,19 @@ fn restart_node(env: StateMachine, canister_logging: FlagStatus) -> StateMachine
     ))
 }
 
+fn fetch_canister_logs(
+    env: StateMachine,
+    sender: PrincipalId,
+    canister_id: CanisterId,
+) -> Result<WasmResult, UserError> {
+    env.query_as(
+        sender,
+        CanisterId::ic_00(),
+        "fetch_canister_logs",
+        FetchCanisterLogsRequest::new(canister_id).encode(),
+    )
+}
+
 #[test]
 fn test_fetch_canister_logs_via_submit_ingress() {
     // Test fetch_canister_logs API call results depending on the feature flag.
@@ -217,12 +230,7 @@ fn test_log_visibility_of_fetch_canister_logs() {
                 .with_controller(controller)
                 .build(),
         );
-        let actual_result = env.query_as(
-            sender,
-            CanisterId::ic_00(),
-            "fetch_canister_logs",
-            FetchCanisterLogsRequest::new(canister_id).encode(),
-        );
+        let actual_result = fetch_canister_logs(env, sender, canister_id);
         assert_eq!(actual_result, expected_result);
     }
 }
@@ -236,12 +244,7 @@ fn test_appending_logs_in_replied_update_call(#[strategy("\\PC*")] message: Stri
         "update",
         wasm().debug_print(message.as_bytes()).reply().build(),
     );
-    let result = env.query_as(
-        controller,
-        CanisterId::ic_00(),
-        "fetch_canister_logs",
-        FetchCanisterLogsRequest::new(canister_id).encode(),
-    );
+    let result = fetch_canister_logs(env, controller, canister_id);
     assert_eq!(
         FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
         FetchCanisterLogsResponse {
@@ -263,20 +266,22 @@ fn test_appending_logs_in_trapped_update_call(#[strategy("\\PC*")] message: Stri
         "update",
         wasm().debug_print(message.as_bytes()).trap().build(),
     );
-    let result = env.query_as(
-        controller,
-        CanisterId::ic_00(),
-        "fetch_canister_logs",
-        FetchCanisterLogsRequest::new(canister_id).encode(),
-    );
+    let result = fetch_canister_logs(env, controller, canister_id);
     assert_eq!(
         FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
         FetchCanisterLogsResponse {
-            canister_log_records: vec![CanisterLogRecord {
-                idx: 0,
-                timestamp_nanos: 1620328630000000000,
-                content: message.as_bytes().to_vec()
-            }]
+            canister_log_records: vec![
+                CanisterLogRecord {
+                    idx: 0,
+                    timestamp_nanos: 1620328630000000000,
+                    content: message.as_bytes().to_vec()
+                },
+                CanisterLogRecord {
+                    idx: 1,
+                    timestamp_nanos: 1620328630000000000,
+                    content: b"Canister explicitly called trap without a message".to_vec()
+                }
+            ]
         }
     );
 }
@@ -290,12 +295,7 @@ fn test_appending_logs_in_replied_replicated_query_call(#[strategy("\\PC*")] mes
         "query",
         wasm().debug_print(message.as_bytes()).reply().build(),
     );
-    let result = env.query_as(
-        controller,
-        CanisterId::ic_00(),
-        "fetch_canister_logs",
-        FetchCanisterLogsRequest::new(canister_id).encode(),
-    );
+    let result = fetch_canister_logs(env, controller, canister_id);
     assert_eq!(
         FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
         FetchCanisterLogsResponse {
@@ -317,20 +317,22 @@ fn test_appending_logs_in_trapped_replicated_query_call(#[strategy("\\PC*")] mes
         "query",
         wasm().debug_print(message.as_bytes()).trap().build(),
     );
-    let result = env.query_as(
-        controller,
-        CanisterId::ic_00(),
-        "fetch_canister_logs",
-        FetchCanisterLogsRequest::new(canister_id).encode(),
-    );
+    let result = fetch_canister_logs(env, controller, canister_id);
     assert_eq!(
         FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
         FetchCanisterLogsResponse {
-            canister_log_records: vec![CanisterLogRecord {
-                idx: 0,
-                timestamp_nanos: 1620328630000000000,
-                content: message.as_bytes().to_vec()
-            }]
+            canister_log_records: vec![
+                CanisterLogRecord {
+                    idx: 0,
+                    timestamp_nanos: 1620328630000000000,
+                    content: message.as_bytes().to_vec()
+                },
+                CanisterLogRecord {
+                    idx: 1,
+                    timestamp_nanos: 1620328630000000000,
+                    content: b"Canister explicitly called trap without a message".to_vec()
+                }
+            ]
         }
     );
 }
@@ -359,12 +361,7 @@ fn test_canister_log_record_index_increment_for_different_calls() {
             .reply()
             .build(),
     );
-    let result = env.query_as(
-        controller,
-        CanisterId::ic_00(),
-        "fetch_canister_logs",
-        FetchCanisterLogsRequest::new(canister_id).encode(),
-    );
+    let result = fetch_canister_logs(env, controller, canister_id);
     assert_eq!(
         FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
         FetchCanisterLogsResponse {
@@ -424,12 +421,7 @@ fn test_canister_log_record_index_increment_after_node_restart() {
             .reply()
             .build(),
     );
-    let result = env.query_as(
-        controller,
-        CanisterId::ic_00(),
-        "fetch_canister_logs",
-        FetchCanisterLogsRequest::new(canister_id).encode(),
-    );
+    let result = fetch_canister_logs(env, controller, canister_id);
     assert_eq!(
         FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
         FetchCanisterLogsResponse {
@@ -455,6 +447,66 @@ fn test_canister_log_record_index_increment_after_node_restart() {
                     content: b"message 3".to_vec()
                 }
             ],
+        }
+    );
+}
+
+#[test]
+fn test_logging_in_trapped_wasm_execution() {
+    let (env, canister_id, controller) = setup_with_controller(FlagStatus::Enabled);
+    // Grow stable memory by 1 page (64kb), reading outside of the page should trap.
+    let _ = env.execute_ingress(
+        canister_id,
+        "update",
+        wasm().stable_grow(1).stable_read(0, 70_000).build(),
+    );
+    let result = fetch_canister_logs(env, controller, canister_id);
+    assert_eq!(
+        FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
+        FetchCanisterLogsResponse {
+            canister_log_records: vec![CanisterLogRecord {
+                idx: 0,
+                timestamp_nanos: 1620328630000000000,
+                content: b"Canister trapped: stable memory out of bounds".to_vec()
+            }]
+        }
+    );
+}
+
+#[test]
+fn test_logging_explicit_canister_trap_without_message() {
+    let (env, canister_id, controller) = setup_with_controller(FlagStatus::Enabled);
+    let _ = env.execute_ingress(canister_id, "update", wasm().trap().build());
+    let result = fetch_canister_logs(env, controller, canister_id);
+    assert_eq!(
+        FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
+        FetchCanisterLogsResponse {
+            canister_log_records: vec![CanisterLogRecord {
+                idx: 0,
+                timestamp_nanos: 1620328630000000000,
+                content: b"Canister explicitly called trap without a message".to_vec()
+            }]
+        }
+    );
+}
+
+#[test]
+fn test_logging_explicit_canister_trap_with_message() {
+    let (env, canister_id, controller) = setup_with_controller(FlagStatus::Enabled);
+    let _ = env.execute_ingress(
+        canister_id,
+        "update",
+        wasm().trap_with_blob(b"some text").build(),
+    );
+    let result = fetch_canister_logs(env, controller, canister_id);
+    assert_eq!(
+        FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
+        FetchCanisterLogsResponse {
+            canister_log_records: vec![CanisterLogRecord {
+                idx: 0,
+                timestamp_nanos: 1620328630000000000,
+                content: b"Canister explicitly called trap: some text".to_vec()
+            }]
         }
     );
 }

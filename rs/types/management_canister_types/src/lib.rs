@@ -28,7 +28,14 @@ pub use provisional::{ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpC
 use serde::Serialize;
 use serde_bytes::ByteBuf;
 use std::mem::size_of;
-use std::{collections::BTreeSet, convert::TryFrom, error::Error, fmt, slice::Iter, str::FromStr};
+use std::{
+    collections::{BTreeSet, VecDeque},
+    convert::TryFrom,
+    error::Error,
+    fmt,
+    slice::Iter,
+    str::FromStr,
+};
 use strum_macros::{Display, EnumIter, EnumString};
 
 /// The id of the management canister.
@@ -2405,6 +2412,71 @@ impl From<CanisterLogRecord> for pb_canister_state_bits::CanisterLogRecord {
             timestamp_nanos: item.timestamp_nanos,
             content: item.content,
         }
+    }
+}
+
+/// The maximum allowed size of a canister log buffer.
+pub const MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE: usize = 4 * 1024;
+
+// TODO(EXC-1572): needs refactoring to find a proper place to put this.
+/// Holds canister log records and keeps track of the next canister log record index.
+#[derive(Default, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CanisterLog {
+    next_idx: u64,
+    records: VecDeque<CanisterLogRecord>,
+}
+
+impl CanisterLog {
+    /// Creates a new `CanisterLog` with the given next index and records.
+    pub fn new(next_idx: u64, records: Vec<CanisterLogRecord>) -> Self {
+        Self {
+            next_idx,
+            records: VecDeque::from(records),
+        }
+    }
+
+    /// Creates a new `CanisterLog` with the given next index and an empty records list.
+    pub fn new_with_next_index(next_idx: u64) -> Self {
+        Self::new(next_idx, Default::default())
+    }
+
+    /// Returns the next canister log record index.
+    pub fn next_idx(&self) -> u64 {
+        self.next_idx
+    }
+
+    /// Returns the canister log records.
+    pub fn records(&self) -> &VecDeque<CanisterLogRecord> {
+        &self.records
+    }
+
+    /// Adds a new log record.
+    pub fn add_record(&mut self, timestamp_nanos: u64, content: &[u8]) {
+        // Keep the new log record size within limit.
+        let max_content_size =
+            MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE - CanisterLogRecord::default().data_size();
+        let size = content.len().min(max_content_size);
+        self.records.push_back(CanisterLogRecord {
+            idx: self.next_idx,
+            timestamp_nanos,
+            content: content[..size].to_vec(),
+        });
+        // Update the next canister log record index.
+        self.next_idx += 1;
+        // Keep the total canister log records size within limit.
+        while self.records.data_size() > MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE {
+            self.records.pop_front();
+        }
+    }
+
+    /// Moves all the logs from `other` to `self`.
+    pub fn append(&mut self, other: &mut Self) {
+        // Assume records sorted cronologically (with increasing idx) and
+        // update the system state's next index with the last record's index.
+        if let Some(last) = other.records.back() {
+            self.next_idx = last.idx + 1;
+        }
+        self.records.append(&mut other.records);
     }
 }
 

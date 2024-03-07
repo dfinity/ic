@@ -1012,8 +1012,7 @@ fn serialize_canister_to_tip(
                 .clone(),
             total_query_stats: canister_state.scheduler_state.total_query_stats.clone(),
             log_visibility: canister_state.system_state.log_visibility,
-            canister_log_records: canister_state.system_state.canister_log_records.clone(),
-            next_canister_log_record_idx: canister_state.system_state.next_canister_log_record_idx,
+            canister_log: canister_state.system_state.canister_log.clone(),
         }
         .into(),
     )?;
