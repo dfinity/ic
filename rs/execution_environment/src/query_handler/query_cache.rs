@@ -31,7 +31,7 @@ pub(crate) struct QueryCacheMetrics {
     pub invalidated_entries_by_data_certificate_expiry_time: IntCounter,
     pub invalidated_entries_by_canister_version: IntCounter,
     pub invalidated_entries_by_canister_balance: IntCounter,
-    pub invalidated_entries_by_error: IntCounter,
+    pub invalidated_entries_by_transient_error: IntCounter,
     pub invalidated_entries_duration: Histogram,
     pub count_bytes: IntGauge,
     pub len: IntGauge,
@@ -91,9 +91,9 @@ impl QueryCacheMetrics {
                 "execution_query_cache_invalidated_entries_by_canister_balance_total",
                 "The total number of invalidated entries due to the changed canister balance",
             ),
-            invalidated_entries_by_error: metrics_registry.int_counter(
-                "execution_query_cache_invalidated_entries_by_error_total",
-                "The total number of invalidated entries due to an error",
+            invalidated_entries_by_transient_error: metrics_registry.int_counter(
+                "execution_query_cache_invalidated_entries_by_transient_error_total",
+                "The total number of invalidated entries due to a transient error",
             ),
             invalidated_entries_duration: duration_histogram(
                 "execution_query_cache_invalidated_entries_duration_seconds",
@@ -430,22 +430,21 @@ impl QueryCache {
         state: &ReplicatedState,
         system_api_counters: &SystemApiCallCounters,
         evaluated_stats: &BTreeMap<CanisterId, QueryStats>,
-        nested_errors: usize,
+        transient_errors: usize,
     ) {
         let now = state.metadata.batch_time;
         // Push is always a cache miss.
         self.metrics.misses.inc();
 
-        // The result should not be saved if there were errors.
-        // In the future we might distinguish between the transient and
-        // permanent errors, but for now we just avoid caching any errors.
-        if result.is_err() || nested_errors > 0 {
-            // Because of the error, the cache entry is immediately invalidated.
+        // The result should not be saved if there were transient errors.
+        if transient_errors > 0 {
+            // Because of the transient error, the cache entry is immediately invalidated.
             self.metrics.invalidated_entries.inc();
             self.metrics.invalidated_entries_duration.observe(0_f64);
-            self.metrics.invalidated_entries_by_error.inc();
+            self.metrics.invalidated_entries_by_transient_error.inc();
             return;
         }
+
         // This can fail only if there is no active canister ID,
         // which should not happen, as we just evaluated those canisters.
         let Ok(env) = EntryEnv::try_new(state, evaluated_stats) else {
