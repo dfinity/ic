@@ -101,15 +101,19 @@ impl TNode {
         }
     }
 
-    pub async fn deploy_config_image(&self) -> Result<()> {
+    pub async fn deploy_config_image(&self, image_name: &str) -> Result<()> {
         let client = Client::try_default().await?;
         let gvk = GroupVersionKind::gvk("cdi.kubevirt.io", "v1beta1", "DataVolume");
         let (ar, _) = kube::discovery::pinned_kind(&client, &gvk).await?;
         let api = Api::<DynamicObject>::namespaced_with(client, &TNET_NAMESPACE, &ar);
 
         let dvname = format!("{}-config", self.name.clone().unwrap());
-        let source = DvSource::url(self.config_url.clone().unwrap());
-        let dvinfo = DvInfo::new(&dvname, source, "kubevirt", "12Mi");
+        let source = DvSource::url(format!(
+            "{}/{}",
+            self.config_url.clone().unwrap(),
+            image_name
+        ));
+        let dvinfo = DvInfo::new(&dvname, source, "kubevirt", "512Mi");
         info!("Creating DV {}", dvname);
         create_datavolume(&api, &dvinfo, self.owner_reference()).await?;
         Ok(())
@@ -370,10 +374,36 @@ spec:
       name: grafana
     - port: 4100
       name: port-4100
+    - port: 4444
+      name: port-4444
     - port: 7070
       name: port-7070
     - port: 8080
       name: port-8080
+    - port: 8100
+      name: port-8100
+    - port: 8101
+      name: port-8101
+    - port: 8102
+      name: port-8102
+    - port: 8103
+      name: port-8103
+    - port: 8104
+      name: port-8104
+    - port: 8105
+      name: port-8105
+    - port: 8106
+      name: port-8106
+    - port: 8107
+      name: port-8107
+    - port: 8108
+      name: port-8108
+    - port: 8109
+      name: port-8109
+    - port: 8110
+      name: port-8110
+    - port: 8111
+      name: port-8111
     - port: 9091
       name: port-9091
     - port: 9100
@@ -384,6 +414,8 @@ spec:
       name: port-19100
     - port: 19531
       name: port-19531
+    - port: 20443
+      name: port-20443
   selector:
     kubevirt.io/vm: {name}
   type: ClusterIP

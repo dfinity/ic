@@ -24,7 +24,7 @@ use icp_ledger::AccountIdentifier;
 use std::{collections::HashMap, sync::Arc};
 
 const PORT: u32 = 8109;
-const VM_NAME: &str = "rosetta-test-neuron-maturity";
+const VM_NAME: &str = "rosetta-neuron-maturity";
 
 pub fn test(env: TestEnv) {
     let _logger = env.logger();

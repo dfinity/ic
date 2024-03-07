@@ -49,12 +49,6 @@ spec:
           interfaces:
           - name: default
             passt: {}
-            ports:
-              - port: 22
-              - port: 80
-              - port: 443
-              - port: 3000
-              - port: 9090
         resources:
           requests:
             memory: {memory}Ki
@@ -146,6 +140,7 @@ spec:
               - port: 443
               - port: 2497
               - port: 4100
+              - port: 4444
               - port: 7070
               - port: 8080
               - port: 9090
