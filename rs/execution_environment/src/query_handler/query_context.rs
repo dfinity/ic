@@ -113,8 +113,8 @@ pub(super) struct QueryContext<'a> {
     /// A map of canister IDs evaluated and executed at least once in this query context
     /// with their stats. The information is used by the query cache for composite queries.
     evaluated_canister_stats: BTreeMap<CanisterId, QueryStats>,
-    /// The number of nested composite query execution errors.
-    nested_execution_errors: usize,
+    /// The number of transient errors.
+    transient_errors: usize,
     cycles_account_manager: Arc<CyclesAccountManager>,
 }
 
@@ -169,7 +169,7 @@ impl<'a> QueryContext<'a> {
             // If the `context.run()` returns an error and hence the empty evaluated IDs set,
             // the original canister ID should always be tracked for changes.
             evaluated_canister_stats: BTreeMap::from([(canister_id, QueryStats::default())]),
-            nested_execution_errors: 0,
+            transient_errors: 0,
             cycles_account_manager,
         }
     }
@@ -482,15 +482,18 @@ impl<'a> QueryContext<'a> {
             .or_insert(stats.clone());
     }
 
-    /// Adds nested composite query execution errors.
-    ///
-    /// In the future we might distinguish between the transient and
-    /// permanent errors, but for now we just avoid caching any errors.
-    pub fn add_nested_execution_errors(&mut self, response: &Response) {
-        match response.response_payload {
-            Payload::Data(_) => {}
-            Payload::Reject(_) => {
-                self.nested_execution_errors += 1;
+    /// Accumulates transient errors from result.
+    pub fn accumulate_transient_errors_from_result<R>(&mut self, result: Result<R, &UserError>) {
+        if result.is_err_and(|err| err.reject_code() == RejectCode::SysTransient) {
+            self.transient_errors += 1;
+        }
+    }
+
+    /// Accumulates transient errors from payload.
+    pub fn accumulate_transient_errors_from_payload(&mut self, payload: &Payload) {
+        if let Payload::Reject(context) = payload {
+            if context.code() == RejectCode::SysTransient {
+                self.transient_errors += 1;
             }
         }
     }
@@ -534,10 +537,10 @@ impl<'a> QueryContext<'a> {
             .evaluated_canisters
             .observe(self.evaluated_canister_stats.len() as f64);
 
-        // Observe nested composite query execution errors.
+        // Observe transient errors.
         metrics
-            .nested_execution_errors
-            .inc_by(self.nested_execution_errors as u64);
+            .transient_errors
+            .inc_by(self.transient_errors as u64);
     }
 
     fn execute_callback(
@@ -1082,8 +1085,8 @@ impl<'a> QueryContext<'a> {
         &self.evaluated_canister_stats
     }
 
-    /// Returns a number of nested composite query execution errors.
-    pub fn nested_execution_errors(&self) -> usize {
-        self.nested_execution_errors
+    /// Returns a number of transient errors.
+    pub fn transient_errors(&self) -> usize {
+        self.transient_errors
     }
 }

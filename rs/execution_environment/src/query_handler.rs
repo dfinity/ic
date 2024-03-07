@@ -242,7 +242,7 @@ impl InternalHttpQueryHandler {
 
         // Check the query cache first (if the query caching is enabled).
         // If a valid cache entry found, the result will be immediately returned.
-        // Otherwise, the key and the env will be kept for the `push` below.
+        // Otherwise, the key will be kept for the `push` below.
         let cache_entry_key = if self.config.query_caching == FlagStatus::Enabled {
             let key = query_cache::EntryKey::from(&query);
             let state = state.get_ref().as_ref();
@@ -286,6 +286,7 @@ impl InternalHttpQueryHandler {
         );
 
         let result = context.run(query, &self.metrics, &measurement_scope);
+        context.accumulate_transient_errors_from_result(result.as_ref());
         context.observe_metrics(&self.metrics);
 
         // Add the query execution result to the query cache (if the query caching is enabled).
@@ -294,7 +295,7 @@ impl InternalHttpQueryHandler {
             let state = state.get_ref().as_ref();
             let counters = context.system_api_call_counters();
             let stats = context.evaluated_canister_stats();
-            let errors = context.nested_execution_errors();
+            let errors = context.transient_errors();
             self.query_cache
                 .push(key, &result, state, counters, stats, errors);
         }

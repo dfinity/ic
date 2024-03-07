@@ -145,8 +145,8 @@ pub(crate) struct QueryHandlerMetrics {
     /// The number of canisters evaluated and executed at least once
     /// during the call graph evaluation.
     pub evaluated_canisters: Histogram,
-    /// The number of nested composite query execution errors.
-    pub nested_execution_errors: IntCounter,
+    /// The number of transient errors.
+    pub transient_errors: IntCounter,
 }
 
 impl QueryHandlerMetrics {
@@ -259,12 +259,14 @@ impl QueryHandlerMetrics {
             ),
             evaluated_canisters: metrics_registry.histogram(
                 "execution_query_evaluated_canisters",
-                "The number of canisters evaluated and executed at least once during the call graph evaluation",
+                "The number of canisters evaluated and executed at least once \
+                        during the call graph evaluation",
                 vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 10.0],
             ),
-            nested_execution_errors: metrics_registry.int_counter(
-                "execution_query_nested_execution_errors_total",
-                "The total number of nested composite query execution errors"
+            transient_errors: metrics_registry.int_counter(
+                "execution_query_transient_errors_total",
+                "The total number of transient errors accumulated \
+                        during the query execution",
             ),
         }
     }
