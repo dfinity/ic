@@ -6,7 +6,7 @@ set -o pipefail
 SHELL="/bin/bash"
 PATH="/sbin:/bin:/usr/sbin:/usr/bin"
 
-function log_and_reboot_on_error() {
+function log_and_halt_installation_on_error() {
     local exit_code="${1}"
     local log_message="${2}"
 
@@ -27,8 +27,7 @@ function log_and_reboot_on_error() {
         echo "--------------------------------------------------------------------------------"
         echo "                                     ERROR"
         echo "--------------------------------------------------------------------------------"
-        sleep 120
-        shutdown -h now
+        sleep infinity
     fi
 }
 
@@ -37,7 +36,7 @@ function log_start() {
     TIME_START=$(date '+%s')
 
     echo "${script} - Start"
-    log_and_reboot_on_error "${?}" "Unable to start '${script}' script."
+    log_and_halt_installation_on_error "${?}" "Unable to start '${script}' script."
     echo " "
 }
 
@@ -49,7 +48,7 @@ function log_end() {
 
     echo " "
     echo "${script} - End (${time_hr})"
-    log_and_reboot_on_error "${?}" "Unable to end '${script}' script."
+    log_and_halt_installation_on_error "${?}" "Unable to end '${script}' script."
     echo " "
 }
 

@@ -51,10 +51,10 @@ function setup_storage() {
         fi
 
         test -b "/dev/${drive}"
-        log_and_reboot_on_error "${?}" "Drive '/dev/${drive}' not found. Are all drives correctly installed?"
+        log_and_halt_installation_on_error "${?}" "Drive '/dev/${drive}' not found. Are all drives correctly installed?"
 
         pvcreate "/dev/${drive}"
-        log_and_reboot_on_error "${?}" "Unable to setup PV on drive '/dev/${drive}'."
+        log_and_halt_installation_on_error "${?}" "Unable to setup PV on drive '/dev/${drive}'."
     done
 }
 
