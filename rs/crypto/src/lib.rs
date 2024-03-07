@@ -29,9 +29,8 @@ use ic_crypto_internal_csp::vault::vault_from_config;
 use ic_crypto_internal_csp::{CryptoServiceProvider, Csp};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_utils_basic_sig::conversions::derive_node_id;
-use ic_crypto_utils_time::CurrentSystemTimeSource;
 use ic_interfaces::crypto::KeyManager;
-use ic_interfaces::time_source::TimeSource;
+use ic_interfaces::time_source::{SysTimeSource, TimeSource};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{new_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -112,10 +111,9 @@ impl<C: CryptoServiceProvider> CryptoComponentImpl<C> {
             vault,
             registry_client,
             node_id,
-            logger: new_logger!(&logger),
+            logger,
             metrics,
-            time_source: time_source
-                .unwrap_or_else(|| Arc::new(CurrentSystemTimeSource::new(logger))),
+            time_source: time_source.unwrap_or_else(|| Arc::new(SysTimeSource::new())),
         }
     }
 }
@@ -218,7 +216,7 @@ impl CryptoComponentImpl<Csp> {
             vault,
             registry_client,
             node_id,
-            time_source: Arc::new(CurrentSystemTimeSource::new(new_logger!(&logger))),
+            time_source: Arc::new(SysTimeSource::new()),
             logger,
             metrics,
         };

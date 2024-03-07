@@ -13,7 +13,7 @@ use ic_consensus_utils::{
     get_subnet_record, is_time_to_make_block, membership::Membership, pool_reader::PoolReader,
 };
 use ic_interfaces::{
-    consensus::PayloadBuilder, dkg::DkgPool, ecdsa::EcdsaPool, time_source::MonotonicTimeSource,
+    consensus::PayloadBuilder, dkg::DkgPool, ecdsa::EcdsaPool, time_source::TimeSource,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
@@ -60,7 +60,7 @@ pub(crate) fn subnet_records_for_registry_version(
 
 /// A consensus subcomponent that is responsible for creating block proposals.
 pub struct BlockMaker {
-    time_source: Arc<dyn MonotonicTimeSource>,
+    time_source: Arc<dyn TimeSource>,
     pub(crate) replica_config: ReplicaConfig,
     registry_client: Arc<dyn RegistryClient>,
     pub(crate) membership: Arc<Membership>,
@@ -82,7 +82,7 @@ impl BlockMaker {
     /// Construct a [BlockMaker] from its dependencies.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        time_source: Arc<dyn MonotonicTimeSource>,
+        time_source: Arc<dyn TimeSource>,
         replica_config: ReplicaConfig,
         registry_client: Arc<dyn RegistryClient>,
         membership: Arc<Membership>,

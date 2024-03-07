@@ -50,7 +50,7 @@ use ic_interfaces::{
     messaging::{MessageRouting, XNetPayloadBuilder},
     p2p::consensus::{ChangeSetProducer, PriorityFnAndFilterProducer},
     self_validating_payload::SelfValidatingPayloadBuilder,
-    time_source::MonotonicTimeSource,
+    time_source::TimeSource,
 };
 use ic_interfaces_registry::{LocalStoreCertifiedTimeReader, RegistryClient, POLLING_PERIOD};
 use ic_interfaces_state_manager::StateManager;
@@ -132,7 +132,7 @@ pub struct ConsensusImpl {
     aggregator: ShareAggregator,
     purger: Purger,
     metrics: ConsensusMetrics,
-    time_source: Arc<dyn MonotonicTimeSource>,
+    time_source: Arc<dyn TimeSource>,
     registry_client: Arc<dyn RegistryClient>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     dkg_key_manager: Arc<Mutex<DkgKeyManager>>,
@@ -164,7 +164,7 @@ impl ConsensusImpl {
         dkg_key_manager: Arc<Mutex<DkgKeyManager>>,
         message_routing: Arc<dyn MessageRouting>,
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
-        time_source: Arc<dyn MonotonicTimeSource>,
+        time_source: Arc<dyn TimeSource>,
         stable_registry_version_age: Duration,
         malicious_flags: MaliciousFlags,
         metrics_registry: MetricsRegistry,
@@ -684,7 +684,7 @@ pub fn setup(
     dkg_key_manager: Arc<Mutex<DkgKeyManager>>,
     message_routing: Arc<dyn MessageRouting>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
-    time_source: Arc<dyn MonotonicTimeSource>,
+    time_source: Arc<dyn TimeSource>,
     malicious_flags: MaliciousFlags,
     metrics_registry: MetricsRegistry,
     logger: ReplicaLogger,

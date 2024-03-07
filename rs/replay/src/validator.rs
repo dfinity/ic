@@ -19,7 +19,7 @@ use ic_interfaces::{
     consensus_pool::{ChangeAction, ConsensusPool, ConsensusPoolCache, HeightIndexedPool},
     messaging::MessageRouting,
     p2p::consensus::{MutablePool, UnvalidatedArtifact},
-    time_source::{MonotonicTimeSource, SysTimeSource},
+    time_source::{SysTimeSource, TimeSource},
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
@@ -94,7 +94,7 @@ pub struct ReplayValidator {
     metrics_registry: MetricsRegistry,
     registry: Arc<dyn RegistryClient>,
     log: ReplicaLogger,
-    time_source: Arc<dyn MonotonicTimeSource>,
+    time_source: Arc<dyn TimeSource>,
 }
 
 impl ReplayValidator {
@@ -166,7 +166,7 @@ impl ReplayValidator {
         )
     }
 
-    pub fn get_timesource(&self) -> Arc<dyn MonotonicTimeSource> {
+    pub fn get_timesource(&self) -> Arc<dyn TimeSource> {
         self.time_source.clone()
     }
 

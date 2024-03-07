@@ -6259,7 +6259,6 @@ dependencies = [
  "ic-crypto-tls-interfaces",
  "ic-crypto-tree-hash",
  "ic-crypto-utils-basic-sig",
- "ic-crypto-utils-time",
  "ic-crypto-utils-tls",
  "ic-interfaces",
  "ic-interfaces-registry",
@@ -6622,7 +6621,6 @@ dependencies = [
  "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-tls-interfaces",
  "ic-crypto-utils-basic-sig",
- "ic-crypto-utils-time",
  "ic-interfaces",
  "ic-logger",
  "ic-metrics",
@@ -7040,7 +7038,6 @@ dependencies = [
  "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-tls-interfaces",
  "ic-crypto-utils-basic-sig",
- "ic-crypto-utils-time",
  "ic-interfaces",
  "ic-interfaces-registry",
  "ic-logger",
@@ -7394,16 +7391,6 @@ dependencies = [
  "ic-crypto-internal-types",
  "ic-types",
  "tempfile",
-]
-
-[[package]]
-name = "ic-crypto-utils-time"
-version = "0.9.0"
-dependencies = [
- "ic-interfaces",
- "ic-logger",
- "ic-types",
- "slog",
 ]
 
 [[package]]

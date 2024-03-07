@@ -25,7 +25,7 @@ impl ProdLocalCspVault {
             node_secret_key_store: Box::new(|| node_secret_key_store),
             canister_secret_key_store: Box::new(|| canister_secret_key_store),
             public_key_store: Box::new(|| public_key_store),
-            time_source: Arc::new(CurrentSystemTimeSource::new(new_logger!(&logger))),
+            time_source: Arc::new(SysTimeSource::new()),
             metrics,
             logger,
         }

@@ -106,7 +106,7 @@ use ic_interfaces::{
             ValidatedPoolReader,
         },
     },
-    time_source::SysTimeSource,
+    time_source::TimeSource,
 };
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_types::{artifact::*, artifact_kind::*, malicious_flags::MaliciousFlags};
@@ -224,7 +224,7 @@ pub fn run_artifact_processor<
     Artifact: ArtifactKind + 'static,
     S: Fn(ArtifactProcessorEvent<Artifact>) + Send + 'static,
 >(
-    time_source: Arc<SysTimeSource>,
+    time_source: Arc<dyn TimeSource>,
     metrics_registry: MetricsRegistry,
     client: Box<dyn ArtifactProcessor<Artifact>>,
     send_advert: S,
@@ -271,7 +271,7 @@ fn process_messages<
     Artifact: ArtifactKind + 'static,
     S: Fn(ArtifactProcessorEvent<Artifact>) + Send + 'static,
 >(
-    time_source: Arc<SysTimeSource>,
+    time_source: Arc<dyn TimeSource>,
     client: Box<dyn ArtifactProcessor<Artifact>>,
     send_advert: Box<S>,
     mut receiver: UnboundedReceiver<UnvalidatedArtifactMutation<Artifact>>,
@@ -315,7 +315,6 @@ fn process_messages<
                 return;
             }
         };
-        time_source.update_time().ok();
         let ChangeResult {
             adverts,
             purged,
@@ -353,7 +352,7 @@ pub fn create_ingress_handlers<
     S: Fn(ArtifactProcessorEvent<IngressArtifact>) + Send + 'static,
 >(
     send_advert: S,
-    time_source: Arc<SysTimeSource>,
+    time_source: Arc<dyn TimeSource>,
     ingress_pool: Arc<RwLock<PoolIngress>>,
     priority_fn_and_filter_producer: Arc<G>,
     ingress_handler: Arc<
@@ -398,7 +397,7 @@ pub fn create_consensus_handlers<
     send_advert: S,
     consensus: C,
     consensus_gossip: Arc<G>,
-    time_source: Arc<SysTimeSource>,
+    time_source: Arc<dyn TimeSource>,
     consensus_pool: Arc<RwLock<PoolConsensus>>,
     metrics_registry: MetricsRegistry,
 ) -> (ArtifactClientHandle<ConsensusArtifact>, Box<dyn JoinGuard>) {
@@ -437,7 +436,7 @@ pub fn create_certification_handlers<
     send_advert: S,
     certifier: C,
     certifier_gossip: Arc<G>,
-    time_source: Arc<SysTimeSource>,
+    time_source: Arc<dyn TimeSource>,
     certification_pool: Arc<RwLock<PoolCertification>>,
     metrics_registry: MetricsRegistry,
 ) -> (
@@ -473,7 +472,7 @@ pub fn create_dkg_handlers<
     send_advert: S,
     dkg: C,
     dkg_gossip: Arc<G>,
-    time_source: Arc<SysTimeSource>,
+    time_source: Arc<dyn TimeSource>,
     dkg_pool: Arc<RwLock<PoolDkg>>,
     metrics_registry: MetricsRegistry,
 ) -> (ArtifactClientHandle<DkgArtifact>, Box<dyn JoinGuard>) {
@@ -505,7 +504,7 @@ pub fn create_ecdsa_handlers<
     send_advert: S,
     ecdsa: C,
     ecdsa_gossip: Arc<G>,
-    time_source: Arc<SysTimeSource>,
+    time_source: Arc<dyn TimeSource>,
     ecdsa_pool: Arc<RwLock<PoolEcdsa>>,
     metrics_registry: MetricsRegistry,
 ) -> (ArtifactClientHandle<EcdsaArtifact>, Box<dyn JoinGuard>) {
@@ -541,7 +540,7 @@ pub fn create_https_outcalls_handlers<
     send_advert: S,
     pool_manager: C,
     canister_http_gossip: Arc<G>,
-    time_source: Arc<SysTimeSource>,
+    time_source: Arc<dyn TimeSource>,
     canister_http_pool: Arc<RwLock<PoolCanisterHttp>>,
     metrics_registry: MetricsRegistry,
 ) -> (
