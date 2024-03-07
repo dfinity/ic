@@ -743,7 +743,7 @@ fn run_testsuite(subdirectory: &str, config: &Config, parsing_multi_memory_enabl
 /// Returns the config that is as close as possible to the actual config used in
 /// production for validation.
 fn default_config() -> Config {
-    let mut config = wasmtime_validation_config(&ic_config::embedders::Config::default());
+    let mut config = wasmtime_validation_config();
     // Some tests require SIMD instructions to run.
     config.wasm_simd(true);
     // This is needed to avoid stack overflows in some tests.

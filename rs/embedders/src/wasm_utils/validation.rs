@@ -22,7 +22,7 @@ use crate::{
     wasm_utils::instrumentation::{
         ACCESSED_PAGES_COUNTER_GLOBAL_NAME, DIRTY_PAGES_COUNTER_GLOBAL_NAME,
     },
-    MIN_GUARD_REGION_SIZE,
+    MAX_WASM_STACK_SIZE, MIN_GUARD_REGION_SIZE,
 };
 use wasmparser::{CompositeType, ExternalKind, FuncType, Operator, TypeRef, ValType};
 
@@ -1324,7 +1324,7 @@ fn validate_code_section(
 }
 
 /// Returns a Wasmtime config that is used for Wasm validation.
-pub fn wasmtime_validation_config(embedder_config: &EmbeddersConfig) -> wasmtime::Config {
+pub fn wasmtime_validation_config() -> wasmtime::Config {
     let mut config = wasmtime::Config::default();
 
     // Keep this in the alphabetical order to simplify comparison with new
@@ -1369,19 +1369,19 @@ pub fn wasmtime_validation_config(embedder_config: &EmbeddersConfig) -> wasmtime
         .static_memory_maximum_size(MAX_STABLE_MEMORY_IN_BYTES)
         .guard_before_linear_memory(true)
         .static_memory_guard_size(MIN_GUARD_REGION_SIZE as u64)
-        .max_wasm_stack(embedder_config.max_wasm_stack_size);
+        .max_wasm_stack(MAX_WASM_STACK_SIZE);
     config
 }
 
-fn can_compile(
-    wasm: &BinaryEncodedWasm,
-    embedder_config: &EmbeddersConfig,
-) -> Result<(), WasmValidationError> {
-    let config = wasmtime_validation_config(embedder_config);
+#[test]
+fn can_create_engine_from_validation_config() {
+    let config = wasmtime_validation_config();
+    wasmtime::Engine::new(&config).expect("Cannot create engine from validation config");
+}
 
-    let engine = wasmtime::Engine::new(&config).map_err(|_| {
-        WasmValidationError::WasmtimeValidation(String::from("Failed to initialize Wasm engine"))
-    })?;
+fn can_compile(wasm: &BinaryEncodedWasm) -> Result<(), WasmValidationError> {
+    let config = wasmtime_validation_config();
+    let engine = wasmtime::Engine::new(&config).expect("Failed to create wasmtime::Engine");
     wasmtime::Module::validate(&engine, wasm.as_slice()).map_err(|err| {
         WasmValidationError::WasmtimeValidation(format!(
             "wasmtime::Module::validate() failed with {}",
@@ -1434,7 +1434,7 @@ pub(super) fn validate_wasm_binary<'a>(
     config: &EmbeddersConfig,
 ) -> Result<(WasmValidationDetails, Module<'a>), WasmValidationError> {
     check_code_section_size(wasm)?;
-    can_compile(wasm, config)?;
+    can_compile(wasm)?;
     let module = Module::parse(wasm.as_slice(), false)
         .map_err(|err| WasmValidationError::DecodingError(format!("{}", err)))?;
     let imports_details = validate_import_section(&module)?;
