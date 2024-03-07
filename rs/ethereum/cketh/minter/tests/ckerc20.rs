@@ -3,6 +3,7 @@ use candid::{Nat, Principal};
 use ic_cketh_minter::endpoints::events::EventPayload;
 use ic_cketh_minter::endpoints::AddCkErc20Token;
 use ic_cketh_test_utils::ckerc20::CkErc20Setup;
+use ic_cketh_test_utils::flow::DepositParams;
 use ic_cketh_test_utils::CkEthSetup;
 use ic_ethereum_types::Address;
 use ic_ledger_suite_orchestrator_test_utils::supported_erc20_tokens;
@@ -58,6 +59,14 @@ fn should_add_ckusdc_and_ckusdt_to_minter_via_orchestrator() {
             },
         ]);
     }
+}
+
+#[test]
+fn should_mint_with_ckerc20_setup() {
+    CkErc20Setup::default()
+        .cketh
+        .deposit(DepositParams::default())
+        .expect_mint();
 }
 
 fn format_ethereum_address_to_eip_55(address: &str) -> String {
