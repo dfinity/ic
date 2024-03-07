@@ -29,17 +29,17 @@ function get_network_settings() {
     retry=0
 
     ipv6_address_system_full=$(ip -6 a s | awk '(/inet6/) && (! / fe80| ::1/) { print $2 }')
-    log_and_reboot_on_error "${?}" "System network configuration failed."
+    log_and_halt_installation_on_error "${?}" "System network configuration failed."
 
     while [ -z "${ipv6_address_system_full}" ]; do
         let retry=retry+1
         if [ ${retry} -ge 3 ]; then
-            log_and_reboot_on_error "1" "System network configuration failed."
+            log_and_halt_installation_on_error "1" "System network configuration failed."
             break
         else
             sleep 1
             ipv6_address_system_full=$(ip -6 a s | awk '(/inet6/) && (! /fe80|::1/) { print $2 }')
-            log_and_reboot_on_error "${?}" "System network configuration failed."
+            log_and_halt_installation_on_error "${?}" "System network configuration failed."
         fi
     done
 
@@ -47,17 +47,17 @@ function get_network_settings() {
     retry=0
 
     ipv6_prefix_system=$(echo ${ipv6_address_system_full} | cut -d: -f1-4)
-    log_and_reboot_on_error "${?}" "Unable to get system's IPv6 prefix."
+    log_and_halt_installation_on_error "${?}" "Unable to get system's IPv6 prefix."
 
     while [ -z "${ipv6_prefix_system}" ]; do
         let retry=retry+1
         if [ ${retry} -ge 3 ]; then
-            log_and_reboot_on_error "1" "Unable to get system's IPv6 prefix."
+            log_and_halt_installation_on_error "1" "Unable to get system's IPv6 prefix."
             break
         else
             sleep 1
             ipv6_prefix_system=$(echo ${ipv6_address_system_full} | cut -d: -f1-4)
-            log_and_reboot_on_error "${?}" "Unable to get system's IPv6 prefix."
+            log_and_halt_installation_on_error "${?}" "Unable to get system's IPv6 prefix."
         fi
     done
 
@@ -65,17 +65,17 @@ function get_network_settings() {
     retry=0
 
     ipv6_subnet_system=$(echo ${ipv6_address_system_full} | awk -F '/' '{ print "/" $2 }')
-    log_and_reboot_on_error "${?}" "Unable to get system's IPv6 subnet."
+    log_and_halt_installation_on_error "${?}" "Unable to get system's IPv6 subnet."
 
     while [ -z "${ipv6_subnet_system}" ]; do
         let retry=retry+1
         if [ ${retry} -ge 3 ]; then
-            log_and_reboot_on_error "1" "Unable to get system's IPv6 subnet."
+            log_and_halt_installation_on_error "1" "Unable to get system's IPv6 subnet."
             break
         else
             sleep 1
             ipv6_subnet_system=$(echo ${ipv6_address_system_full} | awk -F '/' '{ print "/" $2 }')
-            log_and_reboot_on_error "${?}" "Unable to get system's IPv6 subnet."
+            log_and_halt_installation_on_error "${?}" "Unable to get system's IPv6 subnet."
         fi
     done
 
@@ -83,17 +83,17 @@ function get_network_settings() {
     retry=0
 
     ipv6_gateway_system=$(ip -6 r s | awk '(/^default/) { print $3 }')
-    log_and_reboot_on_error "${?}" "Unable to get system's IPv6 gateway."
+    log_and_halt_installation_on_error "${?}" "Unable to get system's IPv6 gateway."
 
     while [ -z "${ipv6_gateway_system}" ]; do
         let retry=retry+1
         if [ ${retry} -ge 3 ]; then
-            log_and_reboot_on_error "1" "Unable to get system's IPv6 gateway."
+            log_and_halt_installation_on_error "1" "Unable to get system's IPv6 gateway."
             break
         else
             sleep 1
             ipv6_gateway_system=$(ip -6 r s | awk '(/^default/) { print $3 }')
-            log_and_reboot_on_error "${?}" "Unable to get system's IPv6 gateway."
+            log_and_halt_installation_on_error "${?}" "Unable to get system's IPv6 gateway."
         fi
     done
 
@@ -101,17 +101,17 @@ function get_network_settings() {
     retry=0
 
     ipv6_address_system=$(echo ${ipv6_address_system_full} | awk -F '/' '{ print $1 }')
-    log_and_reboot_on_error "${?}" "Unable to get system's IPv6 subnet."
+    log_and_halt_installation_on_error "${?}" "Unable to get system's IPv6 subnet."
 
     while [ -z "${ipv6_address_system}" ]; do
         let retry=retry+1
         if [ ${retry} -ge 3 ]; then
-            log_and_reboot_on_error "1" "Unable to get system's IPv6 subnet."
+            log_and_halt_installation_on_error "1" "Unable to get system's IPv6 subnet."
             break
         else
             sleep 1
             ipv6_address_system=$(echo ${ipv6_address_system_full} | awk -F '/' '{ print $1 }')
-            log_and_reboot_on_error "${?}" "Unable to get system's IPv6 subnet."
+            log_and_halt_installation_on_error "${?}" "Unable to get system's IPv6 subnet."
         fi
     done
 
@@ -151,20 +151,20 @@ function validate_domain_name() {
     IFS='.' read -ra domain_parts <<<"${domain}"
 
     if [ ${#domain_parts[@]} -lt 2 ]; then
-        log_and_reboot_on_error 1 "Domain validation error: less than two domain parts in domain"
+        log_and_halt_installation_on_error 1 "Domain validation error: less than two domain parts in domain"
     fi
 
     for domain_part in "${domain_parts[@]}"; do
         if [ -z "$domain_part" ] || [ ${#domain_part} -gt 63 ]; then
-            log_and_reboot_on_error 1 "Domain validation error: domain part length violation"
+            log_and_halt_installation_on_error 1 "Domain validation error: domain part length violation"
         fi
 
         if [[ $domain_part == -* ]] || [[ $domain_part == *- ]]; then
-            log_and_reboot_on_error 1 "Domain validation error: domain part starts or ends with a hyphen"
+            log_and_halt_installation_on_error 1 "Domain validation error: domain part starts or ends with a hyphen"
         fi
 
         if ! [[ $domain_part =~ ^[a-zA-Z0-9-]+$ ]]; then
-            log_and_reboot_on_error 1 "Domain validation error: invalid characters in domain part"
+            log_and_halt_installation_on_error 1 "Domain validation error: invalid characters in domain part"
         fi
     done
 }
@@ -173,17 +173,17 @@ function setup_ipv4_network() {
     echo "* Setting up IPv4 network..."
 
     ip addr add ${ipv4_address}/${ipv4_prefix_length} dev 'br6'
-    log_and_reboot_on_error "${?}" "Unable to add IPv4 address to interface."
+    log_and_halt_installation_on_error "${?}" "Unable to add IPv4 address to interface."
 
     ip route add default via ${ipv4_gateway}
-    log_and_reboot_on_error "${?}" "Unable to set default route in IPv4 network configuration."
+    log_and_halt_installation_on_error "${?}" "Unable to set default route in IPv4 network configuration."
 }
 
 function ping_ipv4_gateway() {
     echo "* Pinging IPv4 gateway..."
     # wait 20 seconds maximum for any network changes to settle.
     ping4 -c 2 -w 20 ${ipv4_gateway} >/dev/null 2>&1
-    log_and_reboot_on_error "${?}" "Unable to ping IPv4 gateway."
+    log_and_halt_installation_on_error "${?}" "Unable to ping IPv4 gateway."
 
     echo "  success"
 }
@@ -192,7 +192,7 @@ function ping_ipv6_gateway() {
     echo "* Pinging IPv6 gateway..."
 
     ping6 -c 4 ${ipv6_gateway_system} >/dev/null 2>&1
-    log_and_reboot_on_error "${?}" "Unable to ping IPv6 gateway."
+    log_and_halt_installation_on_error "${?}" "Unable to ping IPv6 gateway."
 
     echo "  success"
     echo " "
@@ -227,7 +227,7 @@ function query_nns_nodes() {
             echo "  success"
             break
         elif [ ${i} -eq ${nodes} ]; then
-            log_and_reboot_on_error "1" "Unable to query enough healthy NNS nodes."
+            log_and_halt_installation_on_error "1" "Unable to query enough healthy NNS nodes."
         fi
     done
 }
