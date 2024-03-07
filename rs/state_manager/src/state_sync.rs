@@ -32,7 +32,7 @@ impl StateSync {
     }
 
     /// Returns requested state as a Chunkable artifact for StateSync.
-    pub fn create_chunkable_state(
+    fn create_chunkable_state(
         &self,
         id: &StateSyncArtifactId,
     ) -> Option<Box<dyn Chunkable<StateSyncMessage> + Send>> {
