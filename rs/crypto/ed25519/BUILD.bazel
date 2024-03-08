@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_library", "rust_test", "rus
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    "@crate_index//:curve25519-dalek",
     "@crate_index//:ed25519-dalek",
     "@crate_index//:rand",
     "@crate_index//:zeroize",
@@ -22,7 +23,7 @@ ALIASES = {}
 
 rust_library(
     name = "ed25519",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_crypto_ed25519",
     proc_macro_deps = MACRO_DEPENDENCIES,
