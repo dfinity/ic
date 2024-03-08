@@ -75,22 +75,14 @@ fn restart_node(env: StateMachine, canister_logging: FlagStatus) -> StateMachine
 #[test]
 fn test_fetch_canister_logs_via_submit_ingress() {
     // Test fetch_canister_logs API call results depending on the feature flag.
+    let error = Err(SubmitIngressError::UserError(UserError::new(
+        ErrorCode::CanisterRejectedMessage,
+        "fetch_canister_logs API is only accessible in non-replicated mode",
+    )));
     let test_cases = vec![
         // (feature flag, expected result)
-        (
-            FlagStatus::Disabled,
-            Err(SubmitIngressError::UserError(UserError::new(
-                ErrorCode::CanisterContractViolation,
-                "fetch_canister_logs API is not enabled on this subnet",
-            ))),
-        ),
-        (
-            FlagStatus::Enabled,
-            Err(SubmitIngressError::UserError(UserError::new(
-                ErrorCode::CanisterRejectedMessage,
-                "fetch_canister_logs API is only accessible in non-replicated mode",
-            ))),
-        ),
+        (FlagStatus::Disabled, error.clone()),
+        (FlagStatus::Enabled, error),
     ];
     for (feature_flag, expected_result) in test_cases {
         let (env, canister_id) = setup(
@@ -112,22 +104,14 @@ fn test_fetch_canister_logs_via_submit_ingress() {
 #[test]
 fn test_fetch_canister_logs_via_execute_ingress() {
     // Test fetch_canister_logs API call results depending on the feature flag.
+    let error = Err(UserError::new(
+        ErrorCode::CanisterRejectedMessage,
+        "fetch_canister_logs API is only accessible in non-replicated mode",
+    ));
     let test_cases = vec![
         // (feature flag, expected result)
-        (
-            FlagStatus::Disabled,
-            Err(UserError::new(
-                ErrorCode::CanisterContractViolation,
-                "fetch_canister_logs API is not enabled on this subnet",
-            )),
-        ),
-        (
-            FlagStatus::Enabled,
-            Err(UserError::new(
-                ErrorCode::CanisterRejectedMessage,
-                "fetch_canister_logs API is only accessible in non-replicated mode",
-            )),
-        ),
+        (FlagStatus::Disabled, error.clone()),
+        (FlagStatus::Enabled, error),
     ];
     for (feature_flag, expected_result) in test_cases {
         let (env, canister_id) = setup(
