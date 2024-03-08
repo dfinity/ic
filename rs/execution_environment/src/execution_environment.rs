@@ -1230,30 +1230,15 @@ impl ExecutionEnvironment {
                 }
             }
 
-            Ok(Ic00Method::FetchCanisterLogs) => match self.config.canister_logging {
-                FlagStatus::Enabled => ExecuteSubnetMessageResult::Finished {
-                    response: Err(UserError::new(
-                        ErrorCode::CanisterRejectedMessage,
-                        format!(
-                            "{} API is only accessible in non-replicated mode",
-                            Ic00Method::FetchCanisterLogs
-                        ),
-                    )),
-                    refund: msg.take_cycles(),
-                },
-                FlagStatus::Disabled => {
-                    let err = Err(UserError::new(
-                        ErrorCode::CanisterContractViolation,
-                        format!(
-                            "{} API is not enabled on this subnet",
-                            Ic00Method::FetchCanisterLogs
-                        ),
-                    ));
-                    ExecuteSubnetMessageResult::Finished {
-                        response: err,
-                        refund: msg.take_cycles(),
-                    }
-                }
+            Ok(Ic00Method::FetchCanisterLogs) => ExecuteSubnetMessageResult::Finished {
+                response: Err(UserError::new(
+                    ErrorCode::CanisterRejectedMessage,
+                    format!(
+                        "{} API is only accessible in non-replicated mode",
+                        Ic00Method::FetchCanisterLogs
+                    ),
+                )),
+                refund: msg.take_cycles(),
             },
 
             Ok(Ic00Method::TakeCanisterSnapshot) => match self.config.canister_snapshots {
@@ -2043,7 +2028,6 @@ impl ExecutionEnvironment {
                 provisional_whitelist,
                 ingress,
                 effective_canister_id,
-                self.config.canister_logging,
             );
         }
 

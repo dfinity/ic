@@ -3227,8 +3227,8 @@ fn test_fetch_canister_logs_should_accept_ingress_message_disabled() {
     assert_eq!(
         result,
         Err(UserError::new(
-            ErrorCode::CanisterContractViolation,
-            "fetch_canister_logs API is not enabled on this subnet"
+            ErrorCode::CanisterRejectedMessage,
+            "fetch_canister_logs API is only accessible in non-replicated mode"
         ))
     );
 }

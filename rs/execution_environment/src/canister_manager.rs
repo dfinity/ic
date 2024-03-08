@@ -429,7 +429,6 @@ impl CanisterManager {
         provisional_whitelist: &ProvisionalWhitelist,
         ingress: &SignedIngressContent,
         effective_canister_id: Option<CanisterId>,
-        canister_logging: FlagStatus,
     ) -> Result<(), UserError> {
         let method_name = ingress.method_name();
         let sender = ingress.sender();
@@ -524,24 +523,13 @@ impl CanisterManager {
                 }
             },
 
-            Ok(Ic00Method::FetchCanisterLogs) => {
-                match canister_logging {
-                    FlagStatus::Enabled => Err(UserError::new(
-                        ErrorCode::CanisterRejectedMessage,
-                        format!(
-                            "{} API is only accessible in non-replicated mode",
-                            Ic00Method::FetchCanisterLogs
-                        ),
-                    )),
-                    FlagStatus::Disabled => Err(UserError::new(
-                        ErrorCode::CanisterContractViolation,
-                        format!(
-                            "{} API is not enabled on this subnet",
-                            Ic00Method::FetchCanisterLogs
-                        ),
-                    ))
-                }
-            },
+            Ok(Ic00Method::FetchCanisterLogs) => Err(UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "{} API is only accessible in non-replicated mode",
+                    Ic00Method::FetchCanisterLogs
+                ),
+            )),
 
             Ok(Ic00Method::ProvisionalCreateCanisterWithCycles)
             | Ok(Ic00Method::BitcoinGetSuccessors)
