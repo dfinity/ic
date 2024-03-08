@@ -342,7 +342,9 @@ mod erc20 {
             state.record_add_ckerc20_token(ckerc20.clone());
 
             assert_eq!(
-                state.ckerc20_tokens.get(&ckerc20.erc20_contract_address),
+                state
+                    .ckerc20_tokens
+                    .get_alt(&ckerc20.erc20_contract_address),
                 Some(&ckerc20.ckerc20_ledger_id)
             );
         }
@@ -404,7 +406,7 @@ mod erc20 {
                 erc20_contract_address: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
                     .parse()
                     .unwrap(),
-                ckerc20_token_symbol: "ckUSDC".to_string(),
+                ckerc20_token_symbol: "ckUSDC".parse().unwrap(),
                 ckerc20_ledger_id: "mxzaz-hqaaa-aaaar-qaada-cai".parse().unwrap(),
             }
         }
@@ -415,7 +417,7 @@ mod erc20 {
                 erc20_contract_address: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238"
                     .parse()
                     .unwrap(),
-                ckerc20_token_symbol: "ckSepoliaUSDC".to_string(),
+                ckerc20_token_symbol: "ckSepoliaUSDC".parse().unwrap(),
                 ckerc20_ledger_id: "mxzaz-hqaaa-aaaar-qaada-cai".parse().unwrap(),
             }
         }
@@ -426,7 +428,7 @@ mod erc20 {
                 erc20_contract_address: "0xdac17f958d2ee523a2206206994597c13d831ec7"
                     .parse()
                     .unwrap(),
-                ckerc20_token_symbol: "ckUSDT".to_string(),
+                ckerc20_token_symbol: "ckUSDT".parse().unwrap(),
                 ckerc20_ledger_id: "nbsys-saaaa-aaaar-qaaga-cai".parse().unwrap(),
             }
         }
@@ -867,10 +869,10 @@ fn state_equivalence() {
     let mut ckerc20_tokens = MultiKeyMap::default();
     ckerc20_tokens
         .try_insert(
+            "ckUSDC".parse().unwrap(),
             "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
                 .parse()
                 .unwrap(),
-            "ckUSDC".to_string(),
             "mxzaz-hqaaa-aaaar-qaada-cai".parse().unwrap(),
         )
         .unwrap();

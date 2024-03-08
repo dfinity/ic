@@ -1,9 +1,10 @@
 #[cfg(test)]
 mod tests;
 
+use crate::erc20::CkTokenSymbol;
 use crate::eth_logs::ReceivedEthEvent;
 use crate::eth_rpc::Hash;
-use crate::numeric::LogIndex;
+use crate::numeric::{Erc20Value, LogIndex};
 use crate::state::transactions::ReimbursementRequest;
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::transfer::Memo;
@@ -50,10 +51,37 @@ impl From<MintMemo> for Memo {
 #[derive(Decode, Encode, Debug, Eq, PartialEq)]
 pub enum BurnMemo {
     #[n(0)]
-    /// The minter processed a withdraw request.
+    /// The minter processed a withdrawal request.
     Convert {
         #[n(0)]
-        /// The destination of the withdraw request.
+        /// The destination of the withdrawal request.
+        to_address: Address,
+    },
+    /// The minter processed a ckERC20 withdrawal request
+    /// and that burn pays the transaction fee.
+    #[n(1)]
+    Erc20GasFee {
+        /// ckERC20 token symbol of the withdrawal request.
+        #[n(0)]
+        ckerc20_token_symbol: CkTokenSymbol,
+
+        /// The amount of the ckERC20 withdrawal request.
+        #[n(1)]
+        ckerc20_withdrawal_amount: Erc20Value,
+
+        /// The destination of the withdrawal request.
+        #[n(2)]
+        to_address: Address,
+    },
+    /// The minter processed a ckERC20 withdrawal request.
+    #[n(2)]
+    Erc20Convert {
+        /// ckETH ledger burn index identifying the burn to pay for the transaction fee.
+        #[n(0)]
+        ckerc20_withdrawal_id: u64,
+
+        /// The destination of the withdrawal request.
+        #[n(1)]
         to_address: Address,
     },
 }

@@ -1,5 +1,5 @@
 use crate::address::ecdsa_public_key_to_address;
-use crate::erc20::CkErc20Token;
+use crate::erc20::{CkErc20Token, CkTokenSymbol};
 use crate::eth_logs::{EventSource, ReceivedEthEvent, ReceivedEvent};
 use crate::eth_rpc::BlockTag;
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
@@ -82,10 +82,10 @@ pub struct State {
     pub ledger_suite_orchestrator_id: Option<Principal>,
 
     /// ERC-20 tokens that the minter can mint:
-    /// - primary key: ERC-20 contract address on Ethereum
-    /// - secondary key: ckERC20 token symbol
+    /// - primary key: ckERC20 token symbol
+    /// - secondary key: ERC-20 contract address on Ethereum
     /// - value: ledger ID for the ckERC20 token
-    pub ckerc20_tokens: MultiKeyMap<Address, String, Principal>,
+    pub ckerc20_tokens: MultiKeyMap<CkTokenSymbol, Address, Principal>,
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -291,8 +291,8 @@ impl State {
         );
         assert_eq!(
             self.ckerc20_tokens.try_insert(
-                ckerc20_token.erc20_contract_address,
                 ckerc20_token.ckerc20_token_symbol,
+                ckerc20_token.erc20_contract_address,
                 ckerc20_token.ckerc20_ledger_id,
             ),
             Ok(()),
