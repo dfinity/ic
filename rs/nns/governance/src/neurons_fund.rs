@@ -2,7 +2,7 @@
 
 use ic_base_types::PrincipalId;
 use ic_nervous_system_governance::maturity_modulation::BASIS_POINTS_PER_UNITY;
-use ic_nervous_system_proto::pb::v1::Decimal as DecimalPb;
+use ic_nervous_system_proto::pb::v1::{Decimal as DecimalPb, Percentage as PercentagePb};
 use ic_neurons_fund::{
     dec_to_u64, rescale_to_icp, u64_to_dec, DeserializableFunction, HalfOpenInterval,
     IdealMatchingFunction, PolynomialMatchingFunction,
@@ -27,7 +27,7 @@ use crate::{
         create_service_nervous_system::SwapParameters, governance_error,
         neurons_fund_snapshot::NeuronsFundNeuronPortion as NeuronsFundNeuronPortionPb,
         GovernanceError, IdealMatchedParticipationFunction,
-        NeuronsFundEconomics as NeuronsFundNetworkEconomicsPb,
+        NeuronsFundEconomics as NeuronsFundEconomicsPb,
         NeuronsFundMatchedFundingCurveCoefficients as NeuronsFundMatchedFundingCurveCoefficientsPb,
         NeuronsFundParticipation as NeuronsFundParticipationPb,
         NeuronsFundSnapshot as NeuronsFundSnapshotPb,
@@ -54,7 +54,7 @@ pub fn take_max_initial_neurons_fund_participation_percentage(x: u64) -> u64 {
 // ------------------- NeuronsFundEconomics -------------------------------------------------
 // -------------------------------------------------------------------------------------------------
 
-impl NeuronsFundNetworkEconomicsPb {
+impl NeuronsFundEconomicsPb {
     /// The default values for network economics (until we initialize it).
     /// Can't implement Default since it conflicts with Prost's.
     /// The values here are computed under the assumption that 1 XDR = 0.75 USD. See also:
@@ -77,6 +77,12 @@ impl NeuronsFundNetworkEconomicsPb {
                     }),
                 },
             ),
+            minimum_icp_xdr_rate: Some(PercentagePb {
+                basis_points: Some(10_000), // 1:1
+            }),
+            maximum_icp_xdr_rate: Some(PercentagePb {
+                basis_points: Some(1_000_000), // 1:100
+            }),
         }
     }
 }
@@ -86,12 +92,14 @@ pub struct NeuronsFundEconomics {
     pub contribution_threshold_xdr: Decimal,
     pub one_third_participation_milestone_xdr: Decimal,
     pub full_participation_milestone_xdr: Decimal,
+    pub minimum_icp_xdr_rate_basis_points: u64,
+    pub maximum_icp_xdr_rate_basis_points: u64,
 }
 
-impl TryFrom<NeuronsFundNetworkEconomicsPb> for NeuronsFundEconomics {
+impl TryFrom<NeuronsFundEconomicsPb> for NeuronsFundEconomics {
     type Error = String;
 
-    fn try_from(src: NeuronsFundNetworkEconomicsPb) -> Result<Self, Self::Error> {
+    fn try_from(src: NeuronsFundEconomicsPb) -> Result<Self, Self::Error> {
         fn missing_field(fname: &str) -> String {
             format!("NeuronsFundEconomics.{} must be specified.", fname)
         }
@@ -125,6 +133,20 @@ impl TryFrom<NeuronsFundNetworkEconomicsPb> for NeuronsFundEconomics {
             .full_participation_milestone_xdr
             .ok_or_else(|| missing_field("full_participation_milestone_xdr"))?;
 
+        let minimum_icp_xdr_rate = src
+            .minimum_icp_xdr_rate
+            .ok_or_else(|| missing_field("minimum_icp_xdr_rate"))?;
+        let minimum_icp_xdr_rate_basis_points = minimum_icp_xdr_rate
+            .basis_points
+            .ok_or_else(|| missing_field("minimum_icp_xdr_rate.basis_points"))?;
+
+        let maximum_icp_xdr_rate = src
+            .maximum_icp_xdr_rate
+            .ok_or_else(|| missing_field("maximum_icp_xdr_rate"))?;
+        let maximum_icp_xdr_rate_basis_points = maximum_icp_xdr_rate
+            .basis_points
+            .ok_or_else(|| missing_field("maximum_icp_xdr_rate.basis_points"))?;
+
         let max_theoretical_neurons_fund_participation_amount_xdr = Decimal::try_from(
             max_theoretical_neurons_fund_participation_amount_xdr,
         )
@@ -144,24 +166,27 @@ impl TryFrom<NeuronsFundNetworkEconomicsPb> for NeuronsFundEconomics {
             contribution_threshold_xdr,
             one_third_participation_milestone_xdr,
             full_participation_milestone_xdr,
+            minimum_icp_xdr_rate_basis_points,
+            maximum_icp_xdr_rate_basis_points,
         })
     }
 }
 
 #[cfg(test)]
-mod test_neurons_fund_network_economics_pb {
+mod test_neurons_fund_economics_pb {
     use super::*;
     use rust_decimal_macros::dec;
 
     #[test]
     fn threasholds_can_be_parsed() {
-        let default_neurons_fund_network_economics =
-            NeuronsFundNetworkEconomicsPb::with_default_values();
+        let default_neurons_fund_network_economics = NeuronsFundEconomicsPb::with_default_values();
         let NeuronsFundEconomics {
             max_theoretical_neurons_fund_participation_amount_xdr,
             contribution_threshold_xdr,
             one_third_participation_milestone_xdr,
             full_participation_milestone_xdr,
+            minimum_icp_xdr_rate_basis_points,
+            maximum_icp_xdr_rate_basis_points,
         } = NeuronsFundEconomics::try_from(default_neurons_fund_network_economics).unwrap();
 
         assert_eq!(
@@ -171,6 +196,16 @@ mod test_neurons_fund_network_economics_pb {
         assert_eq!(contribution_threshold_xdr, dec!(75_000));
         assert_eq!(one_third_participation_milestone_xdr, dec!(225_000));
         assert_eq!(full_participation_milestone_xdr, dec!(375_000));
+        assert_eq!(
+            u64_to_dec((minimum_icp_xdr_rate_basis_points as u128 / BASIS_POINTS_PER_UNITY) as u64)
+                .unwrap(),
+            dec!(1.0),
+        );
+        assert_eq!(
+            u64_to_dec((maximum_icp_xdr_rate_basis_points as u128 / BASIS_POINTS_PER_UNITY) as u64)
+                .unwrap(),
+            dec!(100.0),
+        );
     }
 }
 

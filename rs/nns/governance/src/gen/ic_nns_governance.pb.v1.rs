@@ -1919,6 +1919,14 @@ pub struct NeuronsFundEconomics {
     #[prost(message, optional, tag = "2")]
     pub neurons_fund_matched_funding_curve_coefficients:
         ::core::option::Option<NeuronsFundMatchedFundingCurveCoefficients>,
+    /// The minimum value of the ICP/XDR conversion rate used by the Neurons' Fund for converting
+    /// XDR values into ICP.
+    #[prost(message, optional, tag = "3")]
+    pub minimum_icp_xdr_rate: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Percentage>,
+    /// The maximum value of the ICP/XDR conversion rate used by the Neurons' Fund for converting
+    /// XDR values into ICP.
+    #[prost(message, optional, tag = "4")]
+    pub maximum_icp_xdr_rate: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Percentage>,
 }
 /// A reward event is an event at which neuron maturity is increased
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]

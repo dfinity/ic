@@ -1737,6 +1737,14 @@ message NeuronsFundEconomics {
   // Thresholds specifying the shape of the matching function used by the Neurons' Fund to
   // determine how much to contribute for a given direct participation amount.
   optional NeuronsFundMatchedFundingCurveCoefficients neurons_fund_matched_funding_curve_coefficients = 2;
+
+  // The minimum value of the ICP/XDR conversion rate used by the Neurons' Fund for converting
+  // XDR values into ICP.
+  optional ic_nervous_system.pb.v1.Percentage minimum_icp_xdr_rate = 3;
+
+  // The maximum value of the ICP/XDR conversion rate used by the Neurons' Fund for converting
+  // XDR values into ICP.
+  optional ic_nervous_system.pb.v1.Percentage maximum_icp_xdr_rate = 4;
 }
 
 // A reward event is an event at which neuron maturity is increased
