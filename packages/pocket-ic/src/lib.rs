@@ -43,11 +43,10 @@ use candid::{
     utils::{ArgumentDecoder, ArgumentEncoder},
     CandidType, Nat, Principal,
 };
-use ic_cdk::api::management_canister::{
-    main::{
-        CanisterInstallMode, CanisterStatusResponse, InstallCodeArgument, UpdateSettingsArgument,
-    },
-    provisional::{CanisterId, CanisterIdRecord, CanisterSettings},
+pub use ic_cdk::api::management_canister::main::CanisterSettings;
+use ic_cdk::api::management_canister::main::{
+    CanisterId, CanisterIdRecord, CanisterInstallMode, CanisterStatusResponse, InstallCodeArgument,
+    UpdateSettingsArgument,
 };
 use reqwest::Url;
 use schemars::JsonSchema;

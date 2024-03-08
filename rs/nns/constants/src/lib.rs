@@ -84,7 +84,7 @@ pub const ALL_NNS_CANISTER_IDS: [&CanisterId; 10] = [
 // (4GiB)
 const NNS_MAX_CANISTER_MEMORY_ALLOCATION_IN_BYTES: u64 = 4 * 1024 * 1024 * 1024;
 
-// We preallocate 4GB stable memory for NNS governance so that pre_upgrade never fails trying to
+// We preallocate 10GB stable memory for NNS governance so that pre_upgrade never fails trying to
 // grow stable memory, and we might also have some other data occupying stable memory.
 const NNS_GOVERNANCE_CANISTER_MEMORY_ALLOCATION_IN_BYTES: u64 = 10 * 1024 * 1024 * 1024;
 

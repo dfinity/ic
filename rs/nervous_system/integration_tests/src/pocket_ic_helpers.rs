@@ -7,8 +7,8 @@ use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_PRINCIPAL;
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::{
-    self, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, ROOT_CANISTER_ID,
-    SNS_WASM_CANISTER_ID,
+    self, ALL_NNS_CANISTER_IDS, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID,
+    ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
 use ic_nns_governance::{
     init::TEST_NEURON_1_ID,
@@ -54,7 +54,7 @@ use icrc_ledger_types::icrc1::{
     transfer::{TransferArg, TransferError},
 };
 use maplit::btreemap;
-use pocket_ic::{PocketIc, WasmResult};
+use pocket_ic::{CanisterSettings, PocketIc, WasmResult};
 use prost::Message;
 use rust_decimal::prelude::ToPrimitive;
 use std::{collections::BTreeMap, fmt::Write, time::Duration};
@@ -88,14 +88,24 @@ pub fn extract_sns_canister_version(
 pub fn install_canister(
     pocket_ic: &PocketIc,
     name: &str,
-    id: CanisterId,
+    canister_id: CanisterId,
     arg: Vec<u8>,
     wasm: Wasm,
     controller: Option<PrincipalId>,
 ) {
     let controller_principal = controller.map(|c| c.0);
+    let memory_allocation = if ALL_NNS_CANISTER_IDS.contains(&&canister_id) {
+        let memory_allocation_bytes = ic_nns_constants::memory_allocation_of(canister_id);
+        Some(Nat::from(memory_allocation_bytes))
+    } else {
+        None
+    };
+    let settings = Some(CanisterSettings {
+        memory_allocation,
+        ..Default::default()
+    });
     let canister_id = pocket_ic
-        .create_canister_with_id(controller_principal, None, id.into())
+        .create_canister_with_id(controller_principal, settings, canister_id.into())
         .unwrap();
     pocket_ic.install_canister(canister_id, wasm.bytes(), arg, controller_principal);
     pocket_ic.add_cycles(canister_id, STARTING_CYCLES_PER_CANISTER);
@@ -302,9 +312,14 @@ pub fn upgrade_root_controlled_nns_canister_to_tip_of_master_or_panic(
         .module_hash
         .unwrap();
 
-    let request = ChangeCanisterRequest::new(false, CanisterInstallMode::Upgrade, canister_id)
-        .with_memory_allocation(ic_nns_constants::memory_allocation_of(canister_id))
-        .with_wasm(wasm.bytes());
+    let stop_before_installing = true;
+    let request = ChangeCanisterRequest::new(
+        stop_before_installing,
+        CanisterInstallMode::Upgrade,
+        canister_id,
+    )
+    .with_memory_allocation(ic_nns_constants::memory_allocation_of(canister_id))
+    .with_wasm(wasm.bytes());
     let proposal_info = nns::governance::propose_and_wait(
         pocket_ic,
         Proposal {
@@ -350,6 +365,7 @@ pub mod nns {
     use super::*;
     pub mod governance {
         use super::*;
+        use pocket_ic::{ErrorCode, UserError};
 
         pub fn list_neurons(pocket_ic: &PocketIc, sender: PrincipalId) -> ListNeuronsResponse {
             let result = pocket_ic
@@ -439,26 +455,25 @@ pub mod nns {
             pocket_ic: &PocketIc,
             proposal_id: u64,
             sender: PrincipalId,
-        ) -> ProposalInfo {
-            let result = pocket_ic
+        ) -> Result<ProposalInfo, UserError> {
+            pocket_ic
                 .query_call(
                     GOVERNANCE_CANISTER_ID.into(),
                     Principal::from(sender),
                     "get_proposal_info",
                     Encode!(&proposal_id).unwrap(),
                 )
-                .unwrap();
-
-            let result = match result {
-                WasmResult::Reply(reply) => reply,
-                WasmResult::Reject(reject) => {
-                    panic!(
-                        "get_proposal_info was rejected by the NNS governance canister: {:#?}",
-                        reject
-                    )
-                }
-            };
-            Decode!(&result, Option<ProposalInfo>).unwrap().unwrap()
+                .map(|result| match result {
+                    WasmResult::Reply(reply) => {
+                        Decode!(&reply, Option<ProposalInfo>).unwrap().unwrap()
+                    }
+                    WasmResult::Reject(reject) => {
+                        panic!(
+                            "get_proposal_info was rejected by the NNS governance canister: {:#?}",
+                            reject
+                        )
+                    }
+                })
         }
 
         pub fn wait_for_proposal_execution(
@@ -470,8 +485,27 @@ pub mod nns {
             for _attempt_count in 1..=100 {
                 pocket_ic.tick();
                 pocket_ic.advance_time(Duration::from_secs(1));
-                let proposal_info =
+
+                let proposal_info_result =
                     nns_get_proposal_info(pocket_ic, proposal_id, PrincipalId::new_anonymous());
+
+                let proposal_info = match proposal_info_result {
+                    Ok(proposal_info) => proposal_info,
+                    Err(user_error) => {
+                        // Upgrading NNS Governance results in the proposal info temporarily not
+                        // being available due to the canister being stopped. This requires
+                        // more attempts to get the proposal info to find out if the proposal
+                        // actually got executed.
+                        let is_benign = [ErrorCode::CanisterStopped, ErrorCode::CanisterStopping]
+                            .contains(&user_error.code);
+                        if is_benign {
+                            continue;
+                        } else {
+                            return Err(format!("Error getting proposal info: {:#?}", user_error));
+                        }
+                    }
+                };
+
                 if proposal_info.executed_timestamp_seconds > 0 {
                     return Ok(proposal_info);
                 }
