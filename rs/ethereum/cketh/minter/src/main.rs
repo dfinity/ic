@@ -482,7 +482,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                 EventType::AddedCkErc20Token(token) => EP::AddedCkErc20Token {
                     chain_id: token.erc20_ethereum_network.chain_id().into(),
                     address: token.erc20_contract_address.to_string(),
-                    ckerc20_token_symbol: token.ckerc20_token_symbol,
+                    ckerc20_token_symbol: token.ckerc20_token_symbol.to_string(),
                     ckerc20_ledger_id: token.ckerc20_ledger_id,
                 },
             },
