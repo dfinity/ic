@@ -6,15 +6,18 @@ use rand::Rng;
 fn secret_key_serialization_round_trips() {
     let mut rng = &mut rand::thread_rng();
     for _ in 0..100 {
-        let key = SecretKey::generate_key(&mut rng);
+        let key = PrivateKey::generate_using_rng(&mut rng);
 
-        let via_raw = SecretKey::deserialize_raw(&key.serialize_raw()).unwrap();
+        let via_raw = PrivateKey::deserialize_raw(&key.serialize_raw()).unwrap();
         assert_eq!(key, via_raw);
 
-        let via_pkcs8 = SecretKey::deserialize_pkcs8(&key.serialize_pkcs8()).unwrap();
+        let via_pkcs8 = PrivateKey::deserialize_pkcs8(&key.serialize_pkcs8()).unwrap();
         assert_eq!(key, via_pkcs8);
 
-        let via_pem = SecretKey::deserialize_pkcs8_pem(&key.serialize_pkcs8_pem()).unwrap();
+        let via_pkcs8v1 = PrivateKey::deserialize_pkcs8(&key.serialize_pkcs8_v1()).unwrap();
+        assert_eq!(key, via_pkcs8v1);
+
+        let via_pem = PrivateKey::deserialize_pkcs8_pem(&key.serialize_pkcs8_pem()).unwrap();
         assert_eq!(key, via_pem);
     }
 }
@@ -22,7 +25,7 @@ fn secret_key_serialization_round_trips() {
 #[test]
 fn pkcs8_rep_includes_the_public_key() {
     let mut rng = &mut rand::thread_rng();
-    let sk = SecretKey::generate_key(&mut rng);
+    let sk = PrivateKey::generate_using_rng(&mut rng);
     let pk = sk.public_key().serialize_raw();
 
     let sk_pkcs8 = sk.serialize_pkcs8();
@@ -36,7 +39,7 @@ fn pkcs8_rep_includes_the_public_key() {
 fn signatures_we_generate_will_verify() {
     let mut rng = &mut rand::thread_rng();
     for _ in 0..100 {
-        let sk = SecretKey::generate_key(&mut rng);
+        let sk = PrivateKey::generate_using_rng(&mut rng);
         let pk = sk.public_key();
 
         let msg = rng.gen::<[u8; 32]>();
@@ -93,7 +96,7 @@ fn batch_verification_works() {
 
     for batch_size in 1..15 {
         let sk = (0..batch_size)
-            .map(|_| SecretKey::generate_key(&mut rng))
+            .map(|_| PrivateKey::generate_using_rng(&mut rng))
             .collect::<Vec<_>>();
         let mut pk = sk.iter().map(|k| k.public_key()).collect::<Vec<_>>();
 
@@ -167,7 +170,7 @@ fn test_der_public_key_conversions() {
 #[test]
 fn can_parse_pkcs8_v1_der_secret_key() {
     let pkcs8_v1 = hex!("302e020100300506032b657004220420d4ee72dbf913584ad5b6d8f1f769f8ad3afe7c28cbf1d4fbe097a88f44755842");
-    let sk = SecretKey::deserialize_pkcs8(&pkcs8_v1).unwrap();
+    let sk = PrivateKey::deserialize_pkcs8(&pkcs8_v1).unwrap();
 
     assert_eq!(
         hex::encode(sk.serialize_raw()),
@@ -180,7 +183,7 @@ fn can_parse_pkcs8_v2_der_secret_key() {
     // From ring test data
     let pkcs8_v2 = hex!("3051020101300506032b657004220420d4ee72dbf913584ad5b6d8f1f769f8ad3afe7c28cbf1d4fbe097a88f4475584281210019bf44096984cdfe8541bac167dc3b96c85086aa30b6b6cb0c5c38ad703166e1");
 
-    let sk = SecretKey::deserialize_pkcs8(&pkcs8_v2).unwrap();
+    let sk = PrivateKey::deserialize_pkcs8(&pkcs8_v2).unwrap();
 
     assert_eq!(
         hex::encode(sk.serialize_raw()),
