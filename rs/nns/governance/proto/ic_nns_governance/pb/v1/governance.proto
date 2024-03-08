@@ -740,7 +740,7 @@ message Proposal {
   optional string title = 20;
 
   // Text providing a short description of the proposal, composed
-  // using a maximum of 15000 bytes of characters.
+  // using a maximum of 30000 bytes of characters.
   string summary = 1;
 
   // The Web address of additional content required to evaluate the

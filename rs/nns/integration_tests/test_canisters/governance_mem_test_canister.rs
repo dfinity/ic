@@ -319,7 +319,7 @@ fn allocate_proposal_data(with_ballots: bool, topic: Topic) -> ProposalData {
             title: Some(['t'; 256].iter().collect()), /* 256 bytes upper limit copied from the
                                                        * type
                                                        * definition. */
-            summary: ['a'; 15000].iter().collect(), /* 15000-bytes upper limit copied from type
+            summary: ['a'; 30000].iter().collect(), /* 30000-bytes upper limit copied from type
                                                      * definition */
             url: ['a'; 2000].iter().collect(), // 2000-bytes upper limit copied from type definition
             action: Some(Action::Motion(Motion {
