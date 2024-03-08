@@ -6,6 +6,7 @@ use crate::pb::v1::{
     neuron::Followees,
     Governance as GovernanceProto, MostRecentMonthlyNodeProviderRewards, NetworkEconomics, Neuron,
     NeuronStakeTransfer, NodeProvider, ProposalData, RewardEvent, Topic,
+    XdrConversionRate as XdrConversionRatePb,
 };
 use ic_nervous_system_governance::index::neuron_following::HeapNeuronFollowingIndex;
 use ic_nns_common::pb::v1::NeuronId;
@@ -34,6 +35,55 @@ pub struct HeapGovernanceData {
     pub spawning_neurons: Option<bool>,
     pub making_sns_proposal: Option<MakingSnsProposal>,
     pub migrations: Option<Migrations>,
+    pub xdr_conversion_rate: XdrConversionRate,
+}
+
+/// Internal representation for `XdrConversionRatePb`.
+#[derive(Clone, Debug, Default)]
+pub struct XdrConversionRate {
+    /// Time at which this rate has been fetched.
+    pub timestamp_seconds: u64,
+
+    /// Number of 1/10,000ths of XDR that 1 ICP is worth.
+    pub xdr_permyriad_per_icp: u64,
+}
+
+impl TryFrom<XdrConversionRatePb> for XdrConversionRate {
+    type Error = String;
+
+    fn try_from(src: XdrConversionRatePb) -> Result<Self, Self::Error> {
+        let XdrConversionRatePb {
+            timestamp_seconds,
+            xdr_permyriad_per_icp,
+        } = src;
+
+        let Some(timestamp_seconds) = timestamp_seconds else {
+            return Err("XdrConversionRate.timestamp_seconds must be specified.".to_string());
+        };
+
+        let Some(xdr_permyriad_per_icp) = xdr_permyriad_per_icp else {
+            return Err("XdrConversionRate.xdr_permyriad_per_icp must be specified.".to_string());
+        };
+
+        Ok(Self {
+            timestamp_seconds,
+            xdr_permyriad_per_icp,
+        })
+    }
+}
+
+impl From<XdrConversionRate> for XdrConversionRatePb {
+    fn from(src: XdrConversionRate) -> Self {
+        let XdrConversionRate {
+            timestamp_seconds,
+            xdr_permyriad_per_icp,
+        } = src;
+
+        Self {
+            timestamp_seconds: Some(timestamp_seconds),
+            xdr_permyriad_per_icp: Some(xdr_permyriad_per_icp),
+        }
+    }
 }
 
 fn proto_to_heap_topic_followee_index(
@@ -120,11 +170,21 @@ pub fn split_governance_proto(
         making_sns_proposal,
         migrations,
         topic_followee_index,
+        xdr_conversion_rate,
     } = governance_proto;
 
     let neuron_management_voting_period_seconds =
         neuron_management_voting_period_seconds.unwrap_or(48 * 60 * 60);
+
     let topic_followee_index = proto_to_heap_topic_followee_index(topic_followee_index);
+
+    let xdr_conversion_rate =
+        xdr_conversion_rate.expect("Governance.xdr_conversion_rate must be specified.");
+
+    let xdr_conversion_rate =
+        XdrConversionRate::try_from(xdr_conversion_rate).unwrap_or_else(|err| {
+            panic!("Deserialization failed for XdrConversionRate: {}", err);
+        });
 
     (
         neurons,
@@ -148,6 +208,7 @@ pub fn split_governance_proto(
             spawning_neurons,
             making_sns_proposal,
             migrations,
+            xdr_conversion_rate,
         },
     )
 }
@@ -183,9 +244,12 @@ pub fn reassemble_governance_proto(
         spawning_neurons,
         making_sns_proposal,
         migrations,
+        xdr_conversion_rate,
     } = heap_governance_proto;
 
     let neuron_management_voting_period_seconds = Some(neuron_management_voting_period_seconds);
+
+    let xdr_conversion_rate = XdrConversionRatePb::from(xdr_conversion_rate);
 
     GovernanceProto {
         neurons,
@@ -208,6 +272,7 @@ pub fn reassemble_governance_proto(
         making_sns_proposal,
         migrations,
         topic_followee_index: heap_topic_followee_index_to_proto(topic_followee_index),
+        xdr_conversion_rate: Some(xdr_conversion_rate),
     }
 }
 
@@ -248,6 +313,10 @@ mod tests {
             making_sns_proposal: Some(MakingSnsProposal::default()),
             migrations: Some(Migrations::default()),
             topic_followee_index: Default::default(),
+            xdr_conversion_rate: Some(XdrConversionRatePb {
+                timestamp_seconds: Some(1),
+                xdr_permyriad_per_icp: Some(50_000),
+            }),
         }
     }
 
@@ -310,8 +379,12 @@ mod tests {
 
     #[test]
     fn private_voting_period_assumed_to_be_48h() {
+        let governance_proto = GovernanceProto {
+            xdr_conversion_rate: Some(XdrConversionRatePb::with_default_values()),
+            ..GovernanceProto::default()
+        };
         // split_governance_proto should return a HeapGovernanceData where the neuron_management_voting_period_seconds is 0 when given a default input
-        let (_, _, heap_governance_proto) = split_governance_proto(GovernanceProto::default());
+        let (_, _, heap_governance_proto) = split_governance_proto(governance_proto);
         assert_eq!(
             heap_governance_proto.neuron_management_voting_period_seconds,
             48 * 60 * 60

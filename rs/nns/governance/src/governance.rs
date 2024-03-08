@@ -3,7 +3,7 @@ use crate::{
         execute_manage_neuron, simulate_manage_neuron, ManageNeuronRequest,
     },
     heap_governance_data::{
-        reassemble_governance_proto, split_governance_proto, HeapGovernanceData,
+        reassemble_governance_proto, split_governance_proto, HeapGovernanceData, XdrConversionRate,
     },
     migrations::maybe_run_migrations,
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
@@ -47,7 +47,7 @@ use crate::{
         ProposalData, ProposalInfo, ProposalRewardStatus, ProposalStatus, RewardEvent,
         RewardNodeProvider, RewardNodeProviders, SettleNeuronsFundParticipationRequest,
         SettleNeuronsFundParticipationResponse, Tally, Topic, UpdateNodeProvider, Vote,
-        WaitForQuietState,
+        WaitForQuietState, XdrConversionRate as XdrConversionRatePb,
     },
     proposals::create_service_nervous_system::ExecutedCreateServiceNervousSystemProposal,
     storage::with_stable_neuron_store,
@@ -1476,18 +1476,6 @@ pub struct Governance {
 
     /// Scope guard for minting node provider rewards.
     minting_node_provider_rewards: bool,
-
-    /// Local cache for XDR-related conversion rates (the source of truth is in the CMC canister).
-    pub xdr_conversion_rate: Option<XdrConversionRate>,
-}
-
-#[derive(Clone, Debug, Default)]
-pub struct XdrConversionRate {
-    /// Time at which this rate has been fetched.
-    pub timestamp_seconds: u64,
-
-    /// Number of 1/10,000ths of XDR that 1 ICP is worth.
-    pub xdr_permyriad_per_icp: u64,
 }
 
 pub fn governance_minting_account() -> AccountIdentifier {
@@ -1604,6 +1592,18 @@ impl TryFrom<SettleNeuronsFundParticipationRequest>
     }
 }
 
+impl XdrConversionRatePb {
+    /// This constructor should be used only at canister creation, and not, e.g., after upgrades.
+    /// The reason this function exists is because `Default::default` is already defined by prost.
+    /// However, the Governance canister relies on the fields of this structure being `Some`.
+    pub fn with_default_values() -> Self {
+        Self {
+            timestamp_seconds: Some(0),
+            xdr_permyriad_per_icp: Some(10_000),
+        }
+    }
+}
+
 impl Governance {
     /// Initializes Governance for the first time from init payload. When restoring after an upgrade
     /// with its persisted state, `Governance::new_restored` should be called instead.
@@ -1636,6 +1636,11 @@ impl Governance {
             })
         }
 
+        // Step 1.3: xdr_conversion_rate.
+        if governance_proto.xdr_conversion_rate.is_none() {
+            governance_proto.xdr_conversion_rate = Some(XdrConversionRatePb::with_default_values());
+        }
+
         // Step 2: Break out Neurons from governance_proto. Neurons are managed separately by
         // NeuronStore. NeuronStore is in charge of Neurons, because some are stored in stable
         // memory, while others are stored in heap. "inactive" Neurons live in stable memory, while
@@ -1661,7 +1666,6 @@ impl Governance {
             latest_gc_num_proposals: 0,
             neuron_data_validator: NeuronDataValidator::new(),
             minting_node_provider_rewards: false,
-            xdr_conversion_rate: None,
         }
     }
 
@@ -1686,7 +1690,6 @@ impl Governance {
             latest_gc_num_proposals: 0,
             neuron_data_validator: NeuronDataValidator::new(),
             minting_node_provider_rewards: false,
-            xdr_conversion_rate: None,
         }
     }
 
@@ -6096,16 +6099,17 @@ impl Governance {
     }
 
     fn should_refresh_xdr_rate(&self) -> bool {
-        let Some(ref xdr_conversion_rate) = self.xdr_conversion_rate else {
-            return true;
-        };
+        let xdr_conversion_rate = &self.heap_data.xdr_conversion_rate;
 
         let now_seconds = self.env.now();
+
+        let seconds_since_last_conversion_rate_refresh =
+            now_seconds.saturating_sub(xdr_conversion_rate.timestamp_seconds);
 
         // Return `true` if more than 1 day has passed since the last `xdr_conversion_rate` was
         // updated. This assumes that `xdr_conversion_rate.timestamp_seconds` is rounded down to
         // the nearest day's beginning.
-        now_seconds.saturating_sub(xdr_conversion_rate.timestamp_seconds) > ONE_DAY_SECONDS
+        seconds_since_last_conversion_rate_refresh > ONE_DAY_SECONDS
     }
 
     async fn maybe_refresh_xdr_rate(&mut self) -> Result<(), GovernanceError> {
@@ -6119,12 +6123,10 @@ impl Governance {
             xdr_permyriad_per_icp,
         } = self.get_average_icp_xdr_conversion_rate().await?.data;
 
-        let xdr_conversion_rate = XdrConversionRate {
+        self.heap_data.xdr_conversion_rate = XdrConversionRate {
             timestamp_seconds,
             xdr_permyriad_per_icp,
         };
-
-        self.xdr_conversion_rate = Some(xdr_conversion_rate);
 
         Ok(())
     }

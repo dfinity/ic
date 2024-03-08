@@ -2222,6 +2222,17 @@ message Governance {
   // Reserved id for deprecated `genesis_neuron_accounts`
   reserved 24;
   reserved "genesis_neuron_accounts";
+
+  // Local cache for XDR-related conversion rates (the source of truth is in the CMC canister).
+  optional XdrConversionRate xdr_conversion_rate = 26;
+}
+
+message XdrConversionRate {
+  /// Time at which this rate has been fetched.
+  optional uint64 timestamp_seconds = 1;
+
+  /// One ICP is worth this number of 1/10,000ths parts of an XDR.
+  optional uint64 xdr_permyriad_per_icp = 2;
 }
 
 // Proposals with restricted voting are not included unless the caller
