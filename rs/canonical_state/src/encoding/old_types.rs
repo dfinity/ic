@@ -13,6 +13,7 @@ use crate::CertificationVersion;
 use super::types;
 use crate::encoding::types::{Bytes, Cycles, Funds, Response, STREAM_DEFAULT_FLAGS};
 use ic_protobuf::proxy::ProxyDecodeError;
+use ic_types::messages::NO_DEADLINE;
 use ic_types::xnet::{StreamHeader, StreamIndex};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
@@ -129,6 +130,7 @@ impl TryFrom<RequestV13> for ic_types::messages::Request {
             method_name: request.method_name,
             method_payload: request.method_payload,
             metadata: None,
+            deadline: NO_DEADLINE,
         })
     }
 }
@@ -183,6 +185,7 @@ impl TryFrom<RequestV3> for ic_types::messages::Request {
             method_name: request.method_name,
             method_payload: request.method_payload,
             metadata: None,
+            deadline: NO_DEADLINE,
         })
     }
 }
@@ -232,6 +235,7 @@ impl TryFrom<ResponseV3> for ic_types::messages::Response {
             originator_reply_callback: response.originator_reply_callback.into(),
             refund: response.refund.cycles.try_into()?,
             response_payload: response.response_payload.try_into()?,
+            deadline: NO_DEADLINE,
         })
     }
 }

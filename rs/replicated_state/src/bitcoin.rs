@@ -61,6 +61,9 @@ pub fn push_response(
                 originator_reply_callback: callback_id,
                 refund: context.request.take_cycles(),
                 response_payload,
+                // Not relevant, the consensus queue is flushed every round by the
+                // scheduler, which uses only the payload and originator callback.
+                deadline: context.request.deadline,
             });
 
             Ok(())
@@ -87,6 +90,9 @@ pub fn push_response(
                 originator_reply_callback: callback_id,
                 refund: context.request.take_cycles(),
                 response_payload,
+                // Not relevant, the consensus queue is flushed every round by the
+                // scheduler, which uses only the payload and originator callback.
+                deadline: context.request.deadline,
             });
 
             Ok(())
@@ -113,6 +119,9 @@ pub fn push_response(
                 originator_reply_callback: callback_id,
                 refund: context.request.take_cycles(),
                 response_payload: reject_payload,
+                // Not relevant, the consensus queue is flushed every round by the
+                // scheduler, which uses only the payload and originator callback.
+                deadline: context.request.deadline,
             });
 
             Ok(())
@@ -139,6 +148,9 @@ pub fn push_response(
                 originator_reply_callback: callback_id,
                 refund: context.request.take_cycles(),
                 response_payload: reject_payload,
+                // Not relevant, the consensus queue is flushed every round by the
+                // scheduler, which uses only the payload and originator callback.
+                deadline: context.request.deadline,
             });
 
             Ok(())

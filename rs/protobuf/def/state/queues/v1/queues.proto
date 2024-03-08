@@ -58,6 +58,8 @@ message Request {
   bytes method_payload = 6;
   Cycles cycles_payment = 7;
   RequestMetadata metadata = 8;
+  // If non-zero, this is a best-effort call.
+  uint32 deadline_seconds = 9;
 }
 
 message RejectContext {
@@ -75,6 +77,8 @@ message Response {
     RejectContext reject = 6;
   }
   Cycles cycles_refund = 7;
+  // If non-zero, this is a best-effort call.
+  uint32 deadline_seconds = 8;
 }
 
 message RequestOrResponse {

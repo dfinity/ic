@@ -313,7 +313,7 @@ impl SystemStateChanges {
                 })?;
                 if (*amount_taken).get() > LOG_CANISTER_OPERATION_CYCLES_THRESHOLD {
                     match call_context.call_origin() {
-                        CallOrigin::CanisterUpdate(origin_canister_id, _)
+                        CallOrigin::CanisterUpdate(origin_canister_id, _, _)
                         | CallOrigin::CanisterQuery(origin_canister_id, _) => info!(
                             logger,
                             "Canister {} accepted {} cycles from canister {}.",
@@ -1232,7 +1232,7 @@ impl SandboxSafeSystemState {
 /// Holds the metadata and the number of downstream requests. Requests created during the same
 /// execution have the same metadata. This fact is reflected by the use of a counter, rather than
 /// a list of identical metadata.
-///      
+///
 /// This is used for call tree metrics.
 pub struct RequestMetadataStats {
     pub metadata: Option<RequestMetadata>,

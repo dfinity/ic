@@ -24,7 +24,7 @@ use ic_test_utilities_metrics::{
 use ic_types::{
     messages::{
         CallbackId, CanisterMessage, Payload, RejectContext, Request, RequestOrResponse, Response,
-        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64,
+        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64, NO_DEADLINE,
     },
     time::UNIX_EPOCH,
     xnet::{StreamFlags, StreamIndex, StreamIndexedQueue},
@@ -81,6 +81,7 @@ fn reject_local_request() {
             msg.sender,
             msg.receiver,
             msg.sender_reply_callback,
+            msg.deadline,
         );
 
         canister_state
@@ -123,6 +124,7 @@ fn reject_local_request() {
                     originator_reply_callback: msg.sender_reply_callback,
                     refund: msg.payment,
                     response_payload: Payload::Reject(expected_reject_context),
+                    deadline: msg.deadline,
                 }
                 .into(),
                 &mut (i64::MAX / 2),
@@ -186,6 +188,7 @@ fn reject_local_request_for_subnet() {
                         RejectCode::SysFatal,
                         reject_message,
                     )),
+                    deadline: msg.deadline,
                 }
                 .into(),
                 &mut (i64::MAX / 2),
@@ -805,6 +808,7 @@ fn build_streams_with_oversized_payloads() {
             method_name: method_name.clone(),
             method_payload: oversized_request_payload.clone(),
             metadata: None,
+            deadline: NO_DEADLINE,
         };
         assert!(local_request.payload_size_bytes() > MAX_INTER_CANISTER_PAYLOAD_IN_BYTES);
 
@@ -817,6 +821,7 @@ fn build_streams_with_oversized_payloads() {
             method_name,
             method_payload: oversized_request_payload,
             metadata: None,
+            deadline: NO_DEADLINE,
         };
         assert!(remote_request.payload_size_bytes() > MAX_INTER_CANISTER_PAYLOAD_IN_BYTES);
         let remote_request_reject = Response {
@@ -833,6 +838,7 @@ fn build_streams_with_oversized_payloads() {
                     MAX_INTER_CANISTER_PAYLOAD_IN_BYTES
                 ),
             )),
+            deadline: NO_DEADLINE,
         };
 
         // Oversized response: will be replaced with a reject response.
@@ -842,6 +848,7 @@ fn build_streams_with_oversized_payloads() {
             originator_reply_callback: CallbackId::from(3),
             refund: Cycles::new(3),
             response_payload: Payload::Data(oversized_response_payload),
+            deadline: NO_DEADLINE,
         };
         assert!(data_response.payload_size_bytes() > MAX_INTER_CANISTER_PAYLOAD_IN_BYTES);
         let data_response_reject = Response {
@@ -858,6 +865,7 @@ fn build_streams_with_oversized_payloads() {
                     MAX_INTER_CANISTER_PAYLOAD_IN_BYTES
                 ),
             )),
+            deadline: NO_DEADLINE,
         };
 
         // Oversized reject response: will be replaced with a reject response.
@@ -871,6 +879,7 @@ fn build_streams_with_oversized_payloads() {
                 RejectCode::SysTransient,
                 oversized_error_message,
             )),
+            deadline: NO_DEADLINE,
         };
         assert!(reject_response.payload_size_bytes() > MAX_INTER_CANISTER_PAYLOAD_IN_BYTES);
         let reject_response_reject = Response {
@@ -883,6 +892,7 @@ fn build_streams_with_oversized_payloads() {
                 // Long enough message to be properly truncated by the constructor.
                 "x".repeat(10 * 1024),
             )),
+            deadline: NO_DEADLINE,
         };
 
         let (stream_builder, mut provided_state, metrics_registry) = new_fixture(&log);
@@ -1115,6 +1125,7 @@ fn canister_states_with_outputs<M: Into<RequestOrResponse>>(
                     req.sender,
                     req.receiver,
                     req.sender_reply_callback,
+                    req.deadline,
                 );
 
                 canister_state.push_output_request(req, UNIX_EPOCH).unwrap();

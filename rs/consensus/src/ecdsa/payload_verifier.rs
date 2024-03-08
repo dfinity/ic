@@ -1219,6 +1219,7 @@ mod test {
             response_payload: ic_types::messages::Payload::Data(
                 SignWithECDSAReply { signature: vec![] }.encode(),
             ),
+            deadline: fake_context.request.deadline,
         });
 
         // Insert agreement for incomplete context

@@ -48,11 +48,10 @@ use ic_types::crypto::canister_threshold_sig::{
     ThresholdEcdsaSigShare,
 };
 use ic_types::crypto::AlgorithmId;
-use ic_types::messages::CallbackId;
-use ic_types::{signature::*, Time};
-use ic_types::{
-    time::UNIX_EPOCH, Height, NodeId, PrincipalId, Randomness, RegistryVersion, SubnetId,
-};
+use ic_types::messages::{CallbackId, NO_DEADLINE};
+use ic_types::signature::*;
+use ic_types::time::UNIX_EPOCH;
+use ic_types::{Height, NodeId, PrincipalId, Randomness, RegistryVersion, SubnetId, Time};
 use rand::{CryptoRng, Rng};
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
@@ -71,6 +70,7 @@ pub(crate) fn empty_response() -> ic_types::messages::Response {
         // be refunded to the canister.
         refund: ic_types::Cycles::new(0),
         response_payload: ic_types::messages::Payload::Data(vec![]),
+        deadline: NO_DEADLINE,
     }
 }
 

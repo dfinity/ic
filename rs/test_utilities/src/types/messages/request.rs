@@ -1,6 +1,7 @@
 use crate::types::ids::canister_test_id;
 use ic_types::{
-    messages::{CallbackId, Request, RequestMetadata},
+    messages::{CallbackId, Request, RequestMetadata, NO_DEADLINE},
+    time::CoarseTime,
     CanisterId, Cycles,
 };
 
@@ -21,6 +22,7 @@ impl Default for RequestBuilder {
                 method_name: name.to_string(),
                 method_payload: Vec::new(),
                 metadata: None,
+                deadline: NO_DEADLINE,
             },
         }
     }
@@ -72,6 +74,12 @@ impl RequestBuilder {
     /// Sets the `metadata` field.
     pub fn metadata(mut self, metadata: Option<RequestMetadata>) -> Self {
         self.request.metadata = metadata;
+        self
+    }
+
+    /// Sets the `deadline` field.
+    pub fn deadline(mut self, deadline: CoarseTime) -> Self {
+        self.request.deadline = deadline;
         self
     }
 

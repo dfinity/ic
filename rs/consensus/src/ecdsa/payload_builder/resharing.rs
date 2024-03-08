@@ -78,6 +78,9 @@ pub(super) fn make_reshare_dealings_response(
                             }
                             .encode(),
                         ),
+                        // Not relevant, the consensus queue is flushed every round by the
+                        // scheduler, which uses only the payload and originator callback.
+                        deadline: context.request.deadline,
                     });
                 }
             }

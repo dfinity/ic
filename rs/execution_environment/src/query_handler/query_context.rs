@@ -32,14 +32,10 @@ use ic_types::{
     ingress::WasmResult,
     messages::{
         CallContextId, CallbackId, Payload, RejectContext, Request, RequestOrResponse, Response,
-        UserQuery,
+        UserQuery, NO_DEADLINE,
     },
-    methods::WasmMethod,
-    CanisterId, Cycles, NumInstructions, NumMessages, Time,
-};
-use ic_types::{
-    methods::{FuncRef, WasmClosure},
-    NumSlices,
+    methods::{FuncRef, WasmClosure, WasmMethod},
+    CanisterId, Cycles, NumInstructions, NumMessages, NumSlices, Time,
 };
 use prometheus::IntCounter;
 use std::{
@@ -593,7 +589,7 @@ impl<'a> QueryContext<'a> {
         };
         let func_ref = match call_origin {
             CallOrigin::Ingress(_, _)
-            | CallOrigin::CanisterUpdate(_, _)
+            | CallOrigin::CanisterUpdate(_, _, _)
             | CallOrigin::SystemTask => unreachable!("Unreachable in the QueryContext."),
             CallOrigin::CanisterQuery(_, _) | CallOrigin::Query(_) => {
                 FuncRef::QueryClosure(closure)
@@ -723,7 +719,7 @@ impl<'a> QueryContext<'a> {
     ) -> (NumInstructions, Result<Option<WasmResult>, HypervisorError>) {
         let func_ref = match call_origin {
             CallOrigin::Ingress(_, _)
-            | CallOrigin::CanisterUpdate(_, _)
+            | CallOrigin::CanisterUpdate(_, _, _)
             | CallOrigin::SystemTask => unreachable!("Unreachable in the QueryContext."),
             CallOrigin::CanisterQuery(_, _) | CallOrigin::Query(_) => {
                 FuncRef::QueryClosure(cleanup_closure)
@@ -793,6 +789,7 @@ impl<'a> QueryContext<'a> {
                 originator_reply_callback: request.sender_reply_callback,
                 response_payload: payload,
                 refund: Cycles::zero(),
+                deadline: request.deadline,
             })
         };
 
@@ -947,7 +944,7 @@ impl<'a> QueryContext<'a> {
             };
 
         match call_origin {
-            CallOrigin::CanisterUpdate(_, _)
+            CallOrigin::CanisterUpdate(_, _, _)
             | CallOrigin::Ingress(_, _)
             | CallOrigin::SystemTask => {
                 error!(
@@ -982,6 +979,8 @@ impl<'a> QueryContext<'a> {
                         originator_reply_callback: callback_id,
                         refund: Cycles::zero(),
                         response_payload: payload,
+                        // `CallOrigin::CanisterQuery` has no deadline.
+                        deadline: NO_DEADLINE,
                     };
                     QueryResponse::CanisterResponse(response)
                 };
@@ -1032,7 +1031,7 @@ impl<'a> QueryContext<'a> {
         );
         match call_origin {
             CallOrigin::Ingress(_, _)
-            | CallOrigin::CanisterUpdate(_, _)
+            | CallOrigin::CanisterUpdate(_, _, _)
             | CallOrigin::SystemTask => {
                 unreachable!("Expected a query call context");
             }
@@ -1044,6 +1043,8 @@ impl<'a> QueryContext<'a> {
                     originator_reply_callback: callback_id,
                     refund: Cycles::zero(),
                     response_payload: Payload::Reject(RejectContext::from(error)),
+                    // `CallOrigin::CanisterQuery` has no deadline.
+                    deadline: NO_DEADLINE,
                 };
                 QueryResponse::CanisterResponse(response)
             }

@@ -500,6 +500,7 @@ impl ExecutionEnvironment {
                                 originator_reply_callback: request.sender_reply_callback,
                                 refund: request.payment,
                                 response_payload: response.response_payload.clone(),
+                                deadline: request.deadline,
                             }
                             .into(),
                         );
@@ -582,6 +583,7 @@ impl ExecutionEnvironment {
                                         "An empty message cannot be signed",
                                     ),
                                 ),
+                                deadline: request.deadline,
                             }
                             .into(),
                         );
@@ -2180,6 +2182,7 @@ impl ExecutionEnvironment {
                         originator_reply_callback: req.sender_reply_callback,
                         refund,
                         response_payload: payload,
+                        deadline: req.deadline,
                     };
 
                     state.push_subnet_output_response(response.into());
@@ -2274,6 +2277,7 @@ impl ExecutionEnvironment {
                     reply_callback,
                     call_id,
                     cycles,
+                    deadline,
                 } => {
                     // Rejecting a stop_canister request from a canister.
                     let subnet_id_as_canister_id = CanisterId::from(self.own_subnet_id);
@@ -2288,6 +2292,7 @@ impl ExecutionEnvironment {
                             RejectCode::CanisterError,
                             format!("Canister {}'s stop request cancelled", canister_id),
                         )),
+                        deadline,
                     };
                     state.push_subnet_output_response(response.into());
                 }
@@ -3053,6 +3058,7 @@ impl ExecutionEnvironment {
                 sender,
                 reply_callback,
                 cycles,
+                deadline,
                 ..
             } => {
                 // Responding to stop_canister request from a canister.
@@ -3070,6 +3076,7 @@ impl ExecutionEnvironment {
                     originator_reply_callback: *reply_callback,
                     refund: *cycles,
                     response_payload,
+                    deadline: *deadline,
                 };
                 state.push_subnet_output_response(response.into());
             }

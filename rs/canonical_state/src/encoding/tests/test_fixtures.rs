@@ -4,6 +4,7 @@ use ic_test_utilities::types::ids::canister_test_id;
 use ic_types::{
     messages::{
         CallbackId, Payload, RejectContext, Request, RequestMetadata, RequestOrResponse, Response,
+        NO_DEADLINE,
     },
     xnet::{StreamFlags, StreamHeader},
     Cycles, Time,
@@ -35,6 +36,7 @@ pub fn request(certification_version: CertificationVersion) -> RequestOrResponse
         method_name: "test".to_string(),
         method_payload: vec![6],
         metadata,
+        deadline: NO_DEADLINE,
     }
     .into()
 }
@@ -46,6 +48,7 @@ pub fn response() -> RequestOrResponse {
         originator_reply_callback: CallbackId::from(4),
         refund: Cycles::new(3),
         response_payload: Payload::Data(vec![1]),
+        deadline: NO_DEADLINE,
     }
     .into()
 }
@@ -57,6 +60,7 @@ pub fn reject_response() -> RequestOrResponse {
         originator_reply_callback: CallbackId::from(4),
         refund: Cycles::new(3),
         response_payload: Payload::Reject(RejectContext::new(RejectCode::SysFatal, "Oops")),
+        deadline: NO_DEADLINE,
     }
     .into()
 }

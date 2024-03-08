@@ -627,7 +627,7 @@ impl CountBytes for CanisterHttpResponseProof {
 
 #[cfg(test)]
 mod tests {
-    use crate::{time::UNIX_EPOCH, Cycles};
+    use crate::{messages::NO_DEADLINE, time::UNIX_EPOCH, Cycles};
 
     use super::*;
 
@@ -654,6 +654,7 @@ mod tests {
                 method_name: "tansform".to_string(),
                 method_payload: Vec::new(),
                 metadata: None,
+                deadline: NO_DEADLINE,
             },
             time: UNIX_EPOCH,
         };
@@ -695,6 +696,7 @@ mod tests {
                 method_name: "tansform".to_string(),
                 method_payload: Vec::new(),
                 metadata: None,
+                deadline: NO_DEADLINE,
             },
             time: UNIX_EPOCH,
         };

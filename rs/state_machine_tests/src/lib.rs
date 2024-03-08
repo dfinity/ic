@@ -108,7 +108,7 @@ use ic_types::{
     messages::{
         Blob, CallbackId, Certificate, CertificateDelegation, HttpCallContent, HttpCanisterUpdate,
         HttpRequestEnvelope, Payload as MsgPayload, RejectContext, Response, SignedIngress,
-        SignedIngressContent, UserQuery, EXPECTED_MESSAGE_ID_LENGTH,
+        SignedIngressContent, UserQuery, EXPECTED_MESSAGE_ID_LENGTH, NO_DEADLINE,
     },
     xnet::StreamIndex,
     CountBytes, CryptoHashOfPartialState, Height, NodeId, Randomness, RegistryVersion,
@@ -1008,6 +1008,7 @@ impl StateMachine {
                 originator_reply_callback: id,
                 refund: Cycles::zero(),
                 response_payload: MsgPayload::Data(reply.encode()),
+                deadline: NO_DEADLINE,
             });
         }
 
@@ -1525,6 +1526,7 @@ impl StateMachine {
                 originator_reply_callback: id,
                 refund: Cycles::zero(),
                 response_payload: MsgPayload::Data(reply.encode()),
+                deadline: NO_DEADLINE,
             });
         }
         self.execute_payload(payload);
@@ -2800,6 +2802,7 @@ impl PayloadBuilder {
             originator_reply_callback: id,
             refund: Cycles::zero(),
             response_payload: MsgPayload::Data(payload.encode()),
+            deadline: NO_DEADLINE,
         });
         self
     }
@@ -2816,6 +2819,7 @@ impl PayloadBuilder {
             originator_reply_callback: id,
             refund: Cycles::zero(),
             response_payload: MsgPayload::Reject(RejectContext::new(code, message)),
+            deadline: NO_DEADLINE,
         });
         self
     }

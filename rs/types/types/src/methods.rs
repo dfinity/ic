@@ -1,7 +1,7 @@
 //! This module contains a collection of types and structs that define the
 //! various types of methods in the IC.
 
-use crate::{messages::CallContextId, Cycles};
+use crate::{messages::CallContextId, time::CoarseTime, Cycles};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::{canister_state_bits::v1 as pb, queues::v1::Cycles as PbCycles};
@@ -243,6 +243,8 @@ pub struct Callback {
     /// An optional closure to be executed if the execution of `on_reply` or
     /// `on_reject` traps.
     pub on_cleanup: Option<WasmClosure>,
+    /// If non-zero, this is a best-effort call.
+    pub deadline: CoarseTime,
 }
 
 impl Callback {
@@ -256,6 +258,7 @@ impl Callback {
         on_reply: WasmClosure,
         on_reject: WasmClosure,
         on_cleanup: Option<WasmClosure>,
+        deadline: CoarseTime,
     ) -> Self {
         Self {
             call_context_id,
@@ -267,6 +270,7 @@ impl Callback {
             on_reply,
             on_reject,
             on_cleanup,
+            deadline,
         }
     }
 }
@@ -294,6 +298,7 @@ impl From<&Callback> for pb::Callback {
                 func_idx: on_cleanup.func_idx,
                 env: on_cleanup.env,
             }),
+            deadline_seconds: item.deadline.as_secs_since_unix_epoch(),
         }
     }
 }
@@ -337,6 +342,7 @@ impl TryFrom<pb::Callback> for Callback {
                 func_idx: on_cleanup.func_idx,
                 env: on_cleanup.env,
             }),
+            deadline: CoarseTime::from_secs_since_unix_epoch(value.deadline_seconds),
         })
     }
 }

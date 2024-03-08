@@ -23,14 +23,12 @@ use ic_management_canister_types::{
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::PausedExecutionId;
-use ic_replicated_state::testing::CanisterQueuesTesting;
-use ic_replicated_state::testing::SystemStateTesting;
+use ic_replicated_state::testing::{CanisterQueuesTesting, SystemStateTesting};
 use ic_state_machine_tests::{PayloadBuilder, StateMachineBuilder};
-use ic_test_utilities::types::ids::message_test_id;
 use ic_test_utilities::{
     state::{get_running_canister, get_stopped_canister, get_stopping_canister},
     types::{
-        ids::{canister_test_id, subnet_test_id},
+        ids::{canister_test_id, message_test_id, subnet_test_id},
         messages::RequestBuilder,
     },
 };
@@ -38,15 +36,15 @@ use ic_test_utilities_metrics::{
     fetch_counter, fetch_gauge, fetch_gauge_vec, fetch_histogram_stats, fetch_int_gauge,
     fetch_int_gauge_vec, metric_vec, HistogramStats,
 };
-use ic_types::methods::SystemMethod;
-use ic_types::time::expiry_time_from_now;
 use ic_types::{
     messages::{
         CallbackId, Payload, RejectContext, Response, StopCanisterCallId, MAX_RESPONSE_COUNT_BYTES,
+        NO_DEADLINE,
     },
-    Height,
+    methods::SystemMethod,
+    time::{expiry_time_from_now, UNIX_EPOCH},
+    ComputeAllocation, Cycles, Height, NumBytes,
 };
-use ic_types::{time::UNIX_EPOCH, ComputeAllocation, Cycles, NumBytes};
 use ic_types_test_utils::ids::user_test_id;
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use proptest::prelude::*;
@@ -3048,6 +3046,7 @@ fn ecdsa_signature_agreements_metric_is_updated() {
         originator_reply_callback: *callback_id,
         refund: context.request.payment,
         response_payload: Payload::Reject(RejectContext::new(RejectCode::SysFatal, "")),
+        deadline: context.request.deadline,
     };
 
     test.state_mut().consensus_queue.push(response);
@@ -3096,6 +3095,7 @@ fn ecdsa_signature_agreements_metric_is_updated() {
             }
             .encode(),
         ),
+        deadline: NO_DEADLINE,
     };
 
     test.state_mut().consensus_queue.push(response);

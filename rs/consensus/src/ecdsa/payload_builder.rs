@@ -859,6 +859,9 @@ pub(crate) fn get_signing_requests<'a>(
                         context.key_id
                     ),
                 )),
+                // Not relevant, the consensus queue is flushed every round by the
+                // scheduler, which uses only the payload and originator callback.
+                deadline: context.request.deadline,
             };
             ecdsa_payload.signature_agreements.insert(
                 context.pseudo_random_id,
@@ -915,6 +918,9 @@ pub(crate) fn get_signing_requests<'a>(
                         RejectCode::CanisterError,
                         "Signature request expired",
                     )),
+                    // Not relevant, the consensus queue is flushed every round by the
+                    // scheduler, which uses only the payload and originator callback.
+                    deadline: context.request.deadline,
                 };
                 ecdsa_payload.signature_agreements.insert(
                     context.pseudo_random_id,

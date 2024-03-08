@@ -1142,6 +1142,7 @@ impl SystemMetadata {
                         RejectCode::SysTransient,
                         format!("Canister {} migrated during a subnet split", canister_id),
                     )),
+                    deadline: request.deadline,
                 };
                 subnet_queues.push_output_response(response.into());
             }

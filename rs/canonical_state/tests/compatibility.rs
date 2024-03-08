@@ -236,12 +236,12 @@ pub(crate) fn arb_valid_versioned_message(
     prop_oneof![
         (
             // No `Request::metadata` populated for versions 13 and below.
-            arbitrary::request_or_response_with_config(false),
+            arbitrary::request_or_response_with_config(false, false),
             Just(CertificationVersion::V0..=MAX_SUPPORTED_CERTIFICATION_VERSION)
         ),
         (
             // Optionally populate `Request::metadata` from version 14 on.
-            arbitrary::request_or_response_with_config(true),
+            arbitrary::request_or_response_with_config(true, false),
             Just(CertificationVersion::V14..=MAX_SUPPORTED_CERTIFICATION_VERSION)
         ),
     ]

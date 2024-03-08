@@ -1397,6 +1397,7 @@ fn generate_reject_response_queue_full() {
             originator_reply_callback: msg.sender_reply_callback,
             refund: msg.payment,
             response_payload: Payload::Reject(RejectContext::new(RejectCode::SysTransient, &err)),
+            deadline: msg.deadline,
         }
         .into(),
     );
@@ -1437,6 +1438,7 @@ fn generate_reject_response_canister_not_found() {
                 RejectCode::DestinationInvalid,
                 &err,
             )),
+            deadline: msg.deadline,
         }
         .into(),
     );
@@ -3096,6 +3098,7 @@ fn make_input_queue_reservations(canister: &mut CanisterState, count: usize, rem
             msg.sender,
             msg.receiver,
             msg.sender_reply_callback,
+            msg.deadline,
         );
         canister
             .push_output_request(msg.into(), UNIX_EPOCH)

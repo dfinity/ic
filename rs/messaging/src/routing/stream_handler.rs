@@ -881,6 +881,7 @@ fn generate_reject_response(
                 message,
                 MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
             )),
+            deadline: msg.deadline,
         }
         .into()
     } else {
