@@ -1029,7 +1029,7 @@ impl ReplicatedState {
             .retain(|canister_id, _| routing_table.route(canister_id.get()) == Some(subnet_id));
         
         // Retain only the canister snapshots belonging to the local canisters.
-        let canister_snapshots = canister_snapshots.split(&canister_states);
+        canister_snapshots.split(|canister_id| canister_states.contains_key(&canister_id));
 
         // All subnet messages (ingress and canister) only remain on subnet A' because:
         //

@@ -140,10 +140,12 @@ impl CanisterSnapshots {
         self.unflushed_changes.is_empty()
     }
 
-    pub(crate) fn split(
-        self,
-        canister_states: &BTreeMap<CanisterId, CanisterState>,
-    ) -> Self {
+    pub(crate) fn split<F>(
+        &mut self,
+        is_local_canister: F,
+    ) where
+        F: Fn(CanisterId) -> bool,
+    {
 
         // Destructure `self` and put it back together, in order for the compiler to
         // enforce an explicit decision whenever new fields are added.
@@ -153,19 +155,13 @@ impl CanisterSnapshots {
             mut unflushed_changes,
         } = self;
 
-        let old_snapshot_ids =  snapshots.keys().cloned().collect::<Vec<_>>();
-        snapshots
-        .retain( |_, snapshot| canister_states.contains_key(&snapshot.canister_id));
-        
+        let old_snapshot_ids = snapshots.keys().cloned().collect::<Vec<_>>();
         for snapshot_id in old_snapshot_ids {
-            if !snapshots.contains_key(&snapshot_id) {
-                unflushed_changes.push(SnapshotOperation::Delete(snapshot_id))
+            // Unwrapping is safe here because `snapshot_id` is part of the keys collection.
+            let snapshot = self.snapshots.get(&snapshot_id).unwrap();
+            if !is_local_canister(snapshot.canister_id) {
+                self.remove(snapshot_id);
             }
-        }
-        Self {
-            next_snapshot_id, 
-            snapshots, 
-            unflushed_changes,
         }
     }
 }
