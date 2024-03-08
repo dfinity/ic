@@ -533,7 +533,7 @@ pub struct Proposal {
     #[prost(string, optional, tag = "20")]
     pub title: ::core::option::Option<::prost::alloc::string::String>,
     /// Text providing a short description of the proposal, composed
-    /// using a maximum of 15000 bytes of characters.
+    /// using a maximum of 30000 bytes of characters.
     #[prost(string, tag = "1")]
     pub summary: ::prost::alloc::string::String,
     /// The Web address of additional content required to evaluate the

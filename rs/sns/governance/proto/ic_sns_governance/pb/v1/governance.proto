@@ -436,7 +436,7 @@ message Proposal {
   string title = 1;
 
   // The description of the proposal which is a short text, composed
-  // using a maximum of 15000 bytes of characters.
+  // using a maximum of 30000 bytes of characters.
   string summary = 2;
 
   // The web address of additional content required to evaluate the

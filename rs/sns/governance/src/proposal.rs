@@ -52,7 +52,7 @@ use std::{
 /// The maximum number of bytes in an SNS proposal's title.
 pub const PROPOSAL_TITLE_BYTES_MAX: usize = 256;
 /// The maximum number of bytes in an SNS proposal's summary.
-pub const PROPOSAL_SUMMARY_BYTES_MAX: usize = 15000;
+pub const PROPOSAL_SUMMARY_BYTES_MAX: usize = 30000;
 /// The maximum number of bytes in an SNS proposal's URL.
 pub const PROPOSAL_URL_CHAR_MAX: usize = 2048;
 /// The maximum number of bytes in an SNS motion proposal's motion_text.
