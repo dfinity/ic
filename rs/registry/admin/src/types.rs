@@ -147,6 +147,7 @@ pub(crate) struct NodeDetails {
     pub node_provider_id: PrincipalId,
     pub dc_id: String,
     pub hostos_version_id: Option<String>,
+    pub domain: Option<String>,
 }
 
 impl From<IPv4InterfaceConfig> for IPv4Interface {

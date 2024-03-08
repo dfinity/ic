@@ -6155,6 +6155,7 @@ async fn get_node_list_since(
                     node_provider_id,
                     dc_id,
                     hostos_version_id: node_record.hostos_version_id,
+                    domain: node_record.domain,
                 },
             )
         })
