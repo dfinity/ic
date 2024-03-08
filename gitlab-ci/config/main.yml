@@ -268,18 +268,6 @@ bazel-test-all-rebuild:
     BAZEL_EXTRA_ARGS: "--repository_cache= --disk_cache= --noremote_accept_cached --remote_instance_name=${CI_COMMIT_SHA} --@rules_rust//rust/settings:pipelined_compilation=True"
   timeout: 2h
 
-# moved out of bazel-test-all to reduce noise in build logs.
-# can be reverted if https://dfinity.atlassian.net/browse/IDX-3081 is done
-bazel-test-candid-integration:
-  extends:
-    - .bazel-test-all
-  rules:
-    - changes:
-        - '**/*.did'
-  variables:
-    BAZEL_TARGETS: "//bazel/candid_integration_tests:candid_integration_tests"
-  timeout: 10m
-
 bazel-test-macos:
   extends:
     - .bazel-test-all
