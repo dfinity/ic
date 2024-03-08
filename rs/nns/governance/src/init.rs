@@ -11,7 +11,9 @@ use rand_chacha::ChaCha20Rng;
 #[cfg(not(target_arch = "wasm32"))]
 use std::path::Path;
 
-use crate::pb::v1::{Governance, NetworkEconomics, Neuron};
+use crate::pb::v1::{
+    Governance, NetworkEconomics, Neuron, XdrConversionRate as XdrConversionRatePb,
+};
 use ic_base_types::PrincipalId;
 use ic_nns_common::types::NeuronId;
 
@@ -41,6 +43,7 @@ impl GovernanceCanisterInitPayloadBuilder {
                 wait_for_quiet_threshold_seconds: 60 * 60 * 24 * 4, // 4 days
                 short_voting_period_seconds: 60 * 60 * 12,          // 12 hours
                 neuron_management_voting_period_seconds: Some(60 * 60 * 48), // 48 hours
+                xdr_conversion_rate: Some(XdrConversionRatePb::with_default_values()),
                 ..Default::default()
             },
             voters_to_add_to_all_neurons: Vec::new(),

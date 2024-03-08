@@ -2372,6 +2372,9 @@ pub struct Governance {
     /// This is the inverse of what is stored in a Neuron (its followees).
     #[prost(map = "int32, message", tag = "22")]
     pub topic_followee_index: ::std::collections::HashMap<i32, governance::FollowersMap>,
+    /// Local cache for XDR-related conversion rates (the source of truth is in the CMC canister).
+    #[prost(message, optional, tag = "26")]
+    pub xdr_conversion_rate: ::core::option::Option<XdrConversionRate>,
 }
 /// Nested message and enum types in `Governance`.
 pub mod governance {
@@ -2650,6 +2653,17 @@ pub mod governance {
             pub followers: ::prost::alloc::vec::Vec<::ic_nns_common::pb::v1::NeuronId>,
         }
     }
+}
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct XdrConversionRate {
+    /// / Time at which this rate has been fetched.
+    #[prost(uint64, optional, tag = "1")]
+    pub timestamp_seconds: ::core::option::Option<u64>,
+    /// / One ICP is worth this number of 1/10,000ths parts of an XDR.
+    #[prost(uint64, optional, tag = "2")]
+    pub xdr_permyriad_per_icp: ::core::option::Option<u64>,
 }
 /// Proposals with restricted voting are not included unless the caller
 /// is allowed to vote on them.

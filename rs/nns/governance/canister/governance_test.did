@@ -173,6 +173,7 @@ type Governance = record {
   topic_followee_index : vec record { int32; FollowersMap };
   migrations : opt Migrations;
   proposals : vec record { nat64; ProposalData };
+  xdr_conversion_rate : opt XdrConversionRate;
   in_flight_commands : vec record { nat64; NeuronInFlightCommand };
   neurons : vec record { nat64; Neuron };
   genesis_timestamp_seconds : nat64;
@@ -642,6 +643,10 @@ type VotingRewardParameters = record {
   final_reward_rate : opt Percentage;
 };
 type WaitForQuietState = record { current_deadline_timestamp_seconds : nat64 };
+type XdrConversionRate = record {
+  xdr_permyriad_per_icp : opt nat64;
+  timestamp_seconds : opt nat64;
+};
 service : (Governance) -> {
   claim_gtc_neurons : (principal, vec NeuronId) -> (Result);
   claim_or_refresh_neuron_from_account : (ClaimOrRefreshNeuronFromAccount) -> (
