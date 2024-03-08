@@ -32,7 +32,7 @@ use ic_types::{
         Block,
     },
     crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTranscript},
-    messages::{CallbackId, Payload, RejectContext, Response},
+    messages::{CallbackId, Payload, RejectContext, Response, NO_DEADLINE},
     CanisterId, Cycles, Height, PrincipalId, Randomness, ReplicaVersion, SubnetId,
 };
 use std::collections::BTreeMap;
@@ -339,6 +339,9 @@ pub fn generate_responses_to_setup_initial_dkg_calls(
                 originator_reply_callback: callback_id,
                 refund: Cycles::zero(),
                 response_payload,
+                // Not relevant, the consensus queue is flushed every round by the
+                // scheduler, which uses only the payload and originator callback.
+                deadline: NO_DEADLINE,
             });
         }
     }

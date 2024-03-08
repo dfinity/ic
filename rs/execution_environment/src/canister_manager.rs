@@ -2186,7 +2186,7 @@ pub fn uninstall_canister(
                         },
                     }));
                 }
-                CallOrigin::CanisterUpdate(caller_canister_id, callback_id) => {
+                CallOrigin::CanisterUpdate(caller_canister_id, callback_id, deadline) => {
                     rejects.push(Response::Canister(CanisterResponse {
                         originator: *caller_canister_id,
                         respondent: canister_id,
@@ -2196,6 +2196,7 @@ pub fn uninstall_canister(
                             RejectCode::CanisterReject,
                             "Canister has been uninstalled.",
                         )),
+                        deadline: *deadline,
                     }));
                 }
                 CallOrigin::CanisterQuery(_, _) | CallOrigin::Query(_) => fatal!(

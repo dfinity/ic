@@ -199,6 +199,7 @@ impl StreamBuilderImpl {
                             MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
                         ),
                     ),
+                    deadline: req.deadline,
                 }
                 .into(),
                 // Arbitrary large amount, pushing a response always returns memory.

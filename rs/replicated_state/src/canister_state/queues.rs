@@ -626,6 +626,7 @@ impl CanisterQueues {
             originator_reply_callback: request.sender_reply_callback,
             refund: request.payment,
             response_payload: Payload::Reject(reject_context),
+            deadline: request.deadline,
         }));
         self.push_input(response, InputQueueType::LocalSubnet)
             .map_err(|(e, _msg)| e)
@@ -1108,6 +1109,7 @@ fn generate_timeout_response(request: &Arc<Request>) -> RequestOrResponse {
             "Request timed out.",
             MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
         )),
+        deadline: request.deadline,
     }))
 }
 

@@ -21,6 +21,7 @@ use ic_types::{
     crypto::CryptoHash,
     messages::{
         CallbackId, Payload, RejectContext, Request, RequestMetadata, RequestOrResponse, Response,
+        NO_DEADLINE,
     },
     nominal_cycles::NominalCycles,
     xnet::StreamFlags,
@@ -259,6 +260,7 @@ fn canonical_encoding_subnet_metrics_v15_plus() {
 ///         method_name: "test".to_string(),
 ///         method_payload: vec![6],
 ///         metadata: None,
+///         deadline: NO_DEADLINE,
 ///     }
 /// )
 /// ```
@@ -302,6 +304,7 @@ fn canonical_encoding_request() {
             method_name: "test".to_string(),
             method_payload: vec![6],
             metadata: None,
+            deadline: NO_DEADLINE,
         }
         .into();
 
@@ -327,6 +330,7 @@ fn canonical_encoding_request() {
 ///             call_tree_depth: 13,
 ///             call_tree_start_time: Time::as_nanos_since_unix_epoch(101),
 ///         }),
+///         deadline: NO_DEADLINE,
 ///     }
 /// )
 /// ```
@@ -381,6 +385,7 @@ fn canonical_encoding_request_v14_plus() {
                 13,
                 Time::from_nanos_since_unix_epoch(101),
             )),
+            deadline: NO_DEADLINE,
         }
         .into();
 
@@ -403,6 +408,7 @@ fn canonical_encoding_request_v14_plus() {
 ///         method_name: "test".to_string(),
 ///         method_payload: vec![6],
 ///         metadata: None,
+///         deadline: NO_DEADLINE,
 ///     }
 /// )
 /// ```
@@ -448,6 +454,7 @@ fn canonical_encoding_request_with_u128_cycles() {
             method_name: "test".to_string(),
             method_payload: vec![6],
             metadata: None,
+            deadline: NO_DEADLINE,
         }
         .into();
 
@@ -468,6 +475,7 @@ fn canonical_encoding_request_with_u128_cycles() {
 ///         originator_reply_callback: CallbackId::from(3),
 ///         refund: Cycles::new(2),
 ///         response_payload: Payload::Data(vec![1]),
+///         deadline: NO_DEADLINE,
 ///     }
 /// )
 /// ```
@@ -508,6 +516,7 @@ fn canonical_encoding_response() {
             originator_reply_callback: CallbackId::from(3),
             refund: Cycles::new(2),
             response_payload: Payload::Data(vec![1]),
+            deadline: NO_DEADLINE,
         }
         .into();
 
@@ -529,6 +538,7 @@ fn canonical_encoding_response() {
 ///         originator_reply_callback: CallbackId::from(3),
 ///         refund: Funds::new(Cycles::new(123456789012345678901234567890)),
 ///         response_payload: Payload::Data(vec![1]),
+///         deadline: NO_DEADLINE,
 ///     }
 /// )
 /// ```
@@ -571,6 +581,7 @@ fn canonical_encoding_response_with_u128_cycles() {
             originator_reply_callback: CallbackId::from(3),
             refund: Cycles::new(123456789012345678901234567890),
             response_payload: Payload::Data(vec![1]),
+            deadline: NO_DEADLINE,
         }
         .into();
 
@@ -594,6 +605,7 @@ fn canonical_encoding_response_with_u128_cycles() {
 ///             code: RejectCode::SysFatal,
 ///             message: "Oops".into(),
 ///         }),
+///         deadline: NO_DEADLINE,
 ///     }
 /// )
 /// ```
@@ -638,6 +650,7 @@ fn canonical_encoding_reject_response() {
             originator_reply_callback: CallbackId::from(4),
             refund: Cycles::new(3),
             response_payload: Payload::Reject(reject_context()),
+            deadline: NO_DEADLINE,
         }
         .into();
 
@@ -1251,6 +1264,7 @@ fn request(certification_version: CertificationVersion) -> Request {
         metadata: (certification_version >= CertificationVersion::V14).then_some(
             RequestMetadata::new(13, Time::from_nanos_since_unix_epoch(101)),
         ),
+        deadline: NO_DEADLINE,
     }
 }
 
@@ -1261,6 +1275,7 @@ fn response() -> Response {
         originator_reply_callback: CallbackId::from(4),
         refund: cycles(),
         response_payload: data_payload(),
+        deadline: NO_DEADLINE,
     }
 }
 

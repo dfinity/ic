@@ -13,7 +13,7 @@
 use crate::CertificationVersion;
 use ic_error_types::TryFromError;
 use ic_protobuf::proxy::ProxyDecodeError;
-use ic_types::{xnet::StreamIndex, Time};
+use ic_types::{messages::NO_DEADLINE, xnet::StreamIndex, Time};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::VecDeque,
@@ -366,6 +366,7 @@ impl TryFrom<Request> for ic_types::messages::Request {
             method_name: request.method_name,
             method_payload: request.method_payload,
             metadata: request.metadata.map(From::from),
+            deadline: NO_DEADLINE,
         })
     }
 }
@@ -409,6 +410,7 @@ impl TryFrom<Response> for ic_types::messages::Response {
             originator_reply_callback: response.originator_reply_callback.into(),
             refund,
             response_payload: response.response_payload.try_into()?,
+            deadline: NO_DEADLINE,
         })
     }
 }

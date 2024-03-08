@@ -64,7 +64,7 @@ use ic_test_utilities_execution_environment::{
 };
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
-    messages::{CallbackId, CanisterCall, StopCanisterCallId, StopCanisterContext},
+    messages::{CallbackId, CanisterCall, StopCanisterCallId, StopCanisterContext, NO_DEADLINE},
     nominal_cycles::NominalCycles,
     time::UNIX_EPOCH,
     CanisterId, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
@@ -1716,6 +1716,7 @@ fn stop_a_running_canister() {
             reply_callback: CallbackId::new(0),
             call_id: Some(StopCanisterCallId::new(0)),
             cycles: Cycles::zero(),
+            deadline: NO_DEADLINE,
         };
         assert_eq!(
             canister_manager.stop_canister(canister_id, stop_context.clone(), &mut state),
@@ -1798,6 +1799,7 @@ fn stop_a_stopped_canister_from_another_canister() {
             reply_callback: CallbackId::from(0),
             call_id: Some(StopCanisterCallId::new(0)),
             cycles: Cycles::from(cycles),
+            deadline: NO_DEADLINE,
         };
         assert_eq!(
             canister_manager.stop_canister(canister_id, stop_context, &mut state),

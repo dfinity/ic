@@ -71,6 +71,9 @@ pub(crate) fn update_signature_agreements(
                 }
                 .encode(),
             ),
+            // Not relevant, the consensus queue is flushed every round by the
+            // scheduler, which uses only the payload and originator callback.
+            deadline: context.request.deadline,
         };
 
         completed.insert(
@@ -131,6 +134,9 @@ fn reject_response(
         originator_reply_callback: callback_id,
         refund: context.request.payment,
         response_payload: ic_types::messages::Payload::Reject(RejectContext::new(code, message)),
+        // Not relevant, the consensus queue is flushed every round by the
+        // scheduler, which uses only the payload and originator callback.
+        deadline: context.request.deadline,
     }
 }
 
@@ -262,6 +268,9 @@ pub(crate) fn update_signature_agreements_improved_latency(
                 }
                 .encode(),
             ),
+            // Not relevant, the consensus queue is flushed every round by the
+            // scheduler, which uses only the payload and originator callback.
+            deadline: context.request.deadline,
         };
         payload.signature_agreements.insert(
             context.pseudo_random_id,

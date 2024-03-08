@@ -33,6 +33,9 @@ pub mod call_context {
         pub canister_id: ::core::option::Option<super::super::super::super::types::v1::CanisterId>,
         #[prost(uint64, tag = "2")]
         pub callback_id: u64,
+        /// If non-zero, this originates from a best-effort canister update call.
+        #[prost(uint32, tag = "3")]
+        pub deadline_seconds: u32,
     }
     /// System task is either a Heartbeat or a GlobalTimer.
     #[allow(clippy::derive_partial_eq_without_eq)]
@@ -91,6 +94,9 @@ pub struct Callback {
     #[prost(message, optional, tag = "9")]
     pub prepayment_for_response_transmission:
         ::core::option::Option<super::super::queues::v1::Cycles>,
+    /// If non-zero, this is a best-effort call.
+    #[prost(uint32, tag = "10")]
+    pub deadline_seconds: u32,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -271,6 +277,9 @@ pub mod stop_canister_context {
         pub cycles: ::core::option::Option<super::super::super::queues::v1::Cycles>,
         #[prost(uint64, optional, tag = "5")]
         pub call_id: ::core::option::Option<u64>,
+        /// If non-zero, this is a best-effort canister update call.
+        #[prost(uint32, tag = "6")]
+        pub deadline_seconds: u32,
     }
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]

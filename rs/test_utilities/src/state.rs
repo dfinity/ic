@@ -26,11 +26,11 @@ use ic_replicated_state::{
     CallContext, CallOrigin, CanisterState, CanisterStatus, ExecutionState, ExportedFunctions,
     InputQueueType, Memory, NumWasmPages, ReplicatedState, SchedulerState, SystemState,
 };
+use ic_types::batch::RawQueryStats;
 use ic_types::methods::{Callback, WasmClosure};
-use ic_types::time::UNIX_EPOCH;
-use ic_types::{batch::RawQueryStats, messages::CallbackId};
+use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::{
-    messages::{Ingress, Request, RequestMetadata, RequestOrResponse},
+    messages::{CallbackId, Ingress, Request, RequestMetadata, RequestOrResponse},
     nominal_cycles::NominalCycles,
     xnet::{StreamFlags, StreamHeader, StreamIndex, StreamIndexedQueue},
     CanisterId, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation, NumBytes, PrincipalId,
@@ -738,13 +738,14 @@ pub fn register_callback(
     originator: CanisterId,
     respondent: CanisterId,
     callback_id: CallbackId,
+    deadline: CoarseTime,
 ) {
     let call_context_manager = canister_state
         .system_state
         .call_context_manager_mut()
         .unwrap();
     let call_context_id = call_context_manager.new_call_context(
-        CallOrigin::CanisterUpdate(originator, callback_id),
+        CallOrigin::CanisterUpdate(originator, callback_id, deadline),
         Cycles::zero(),
         Time::from_nanos_since_unix_epoch(0),
         RequestMetadata::new(0, UNIX_EPOCH),
@@ -760,6 +761,7 @@ pub fn register_callback(
         WasmClosure::new(0, 2),
         WasmClosure::new(0, 2),
         None,
+        deadline,
     ));
 }
 
@@ -802,12 +804,14 @@ prop_compose! {
 
 prop_compose! {
     /// Produces a strategy that generates a stream with between
-    /// `[min_size, max_size]` messages and between `[min_signal_count, max_signal_count]`
-    /// reject signals.
-    pub fn arb_stream(min_size: usize, max_size: usize, min_signal_count: usize, max_signal_count: usize)(
+    /// `[min_size, max_size]` messages; between `[min_signal_count, max_signal_count]`
+    /// reject signals; and with or without request metadata and/or message deadlines.
+    pub fn arb_stream_with_config(min_size: usize, max_size: usize, min_signal_count: usize, max_signal_count: usize, populate_request_metadata: bool, populate_deadline: bool)(
         msg_start in 0..10000u64,
         msgs in prop::collection::vec(
-            arbitrary::request_or_response(),
+            // TODO(MR-549) Use `request_or_response()` once the canonical state can encode
+            // message deadlines.
+            arbitrary::request_or_response_with_config(populate_request_metadata, populate_deadline),
             min_size..=max_size
         ),
         (signals_end, reject_signals) in arb_reject_signals(min_signal_count, max_signal_count),
@@ -822,6 +826,17 @@ prop_compose! {
         stream.set_reverse_stream_flags(StreamFlags {
             responses_only: responses_only_flag,
         });
+        stream
+    }
+}
+
+prop_compose! {
+    /// Produces a strategy that generates a stream with between
+    /// `[min_size, max_size]` messages and between `[min_signal_count, max_signal_count]`
+    /// reject signals.
+    pub fn arb_stream(min_size: usize, max_size: usize, min_signal_count: usize, max_signal_count: usize)(
+        stream in arb_stream_with_config(min_size, max_size, min_signal_count, max_signal_count, true, true)
+    ) -> Stream {
         stream
     }
 }

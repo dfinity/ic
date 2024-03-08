@@ -16,6 +16,8 @@ message CallContext {
   message CanisterUpdateOrQuery {
     types.v1.CanisterId canister_id = 1;
     uint64 callback_id = 2;
+    // If non-zero, this originates from a best-effort canister update call.
+    uint32 deadline_seconds = 3;
   }
   // System task is either a Heartbeat or a GlobalTimer.
   message SystemTask {}
@@ -55,6 +57,8 @@ message Callback {
   types.v1.CanisterId respondent = 7;
   state.queues.v1.Cycles prepayment_for_response_execution = 8;
   state.queues.v1.Cycles prepayment_for_response_transmission = 9;
+  // If non-zero, this is a best-effort call.
+  uint32 deadline_seconds = 10;
 }
 
 message CallbackEntry {
@@ -151,6 +155,8 @@ message StopCanisterContext {
     state.queues.v1.Funds funds = 3;
     state.queues.v1.Cycles cycles = 4;
     optional uint64 call_id = 5;
+    // If non-zero, this is a best-effort canister update call.
+    uint32 deadline_seconds = 6;
   }
 
   oneof context {

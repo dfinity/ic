@@ -15,7 +15,7 @@ use ic_test_utilities::{
     },
 };
 use ic_types::{
-    messages::{CallbackId, CanisterMessage},
+    messages::{CallbackId, CanisterMessage, NO_DEADLINE},
     time::expiry_time_from_now,
     time::UNIX_EPOCH,
 };
@@ -1811,6 +1811,7 @@ fn time_out_requests_pushes_correct_reject_responses() {
                     method_name: "No-Op".to_string(),
                     method_payload: vec![],
                     metadata: None,
+                    deadline: NO_DEADLINE,
                 }),
                 deadline,
             )
@@ -1866,7 +1867,8 @@ fn time_out_requests_pushes_correct_reject_responses() {
                     RejectCode::SysTransient,
                     "Request timed out.",
                     MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN
-                ))
+                )),
+                deadline: NO_DEADLINE,
             }),
             *reject_response,
         );

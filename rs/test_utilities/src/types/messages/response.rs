@@ -1,6 +1,7 @@
 use crate::types::ids::canister_test_id;
 use ic_types::{
-    messages::{CallbackId, Payload, Response},
+    messages::{CallbackId, Payload, Response, NO_DEADLINE},
+    time::CoarseTime,
     CanisterId, Cycles,
 };
 
@@ -19,6 +20,7 @@ impl Default for ResponseBuilder {
                 originator_reply_callback: CallbackId::from(0),
                 refund: Cycles::zero(),
                 response_payload: rpb.build(),
+                deadline: NO_DEADLINE,
             },
         }
     }
@@ -57,6 +59,12 @@ impl ResponseBuilder {
     /// Sets the `response_payload` field.
     pub fn response_payload(mut self, response_payload: Payload) -> Self {
         self.response.response_payload = response_payload;
+        self
+    }
+
+    /// Sets the `deadline` field.
+    pub fn deadline(mut self, deadline: CoarseTime) -> Self {
+        self.response.deadline = deadline;
         self
     }
 

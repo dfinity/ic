@@ -7,7 +7,7 @@ use ic_test_utilities::{
     types::messages::{RequestBuilder, ResponseBuilder},
 };
 use ic_types::{
-    messages::{CallbackId, Request, RequestOrResponse},
+    messages::{CallbackId, Request, RequestOrResponse, NO_DEADLINE},
     time::UNIX_EPOCH,
     xnet::QueueId,
 };
@@ -79,6 +79,7 @@ impl CanisterFixture {
             CANISTER_ID,
             OTHER_CANISTER_ID,
             CallbackId::from(CALLBACK_ID_RAW),
+            NO_DEADLINE,
         );
     }
 
@@ -208,6 +209,7 @@ fn validate_responses_against_callback_details() {
         CANISTER_ID,
         canister_b_id,
         callback_id_1,
+        NO_DEADLINE,
     );
 
     // Creating the CallContext and registering the callback for a request from this canister -> canister C.
@@ -217,6 +219,7 @@ fn validate_responses_against_callback_details() {
         CANISTER_ID,
         canister_c_id,
         callback_id_2,
+        NO_DEADLINE,
     );
 
     // Reserving slots in the input queue for the corresponding responses.

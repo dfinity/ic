@@ -3,8 +3,9 @@ use ic_types::{
     crypto::{AlgorithmId, KeyPurpose, UserPublicKey},
     messages::{
         CallbackId, Payload, RejectContext, Request, RequestMetadata, RequestOrResponse, Response,
+        NO_DEADLINE,
     },
-    time::UNIX_EPOCH,
+    time::{CoarseTime, UNIX_EPOCH},
     xnet::StreamIndex,
     CanisterId, Cycles, Height, NodeId, RegistryVersion, SubnetId, Time, UserId,
 };
@@ -108,8 +109,22 @@ prop_compose! {
 }
 
 prop_compose! {
-    /// Generates an arbitrary [`Request`], with or without a populated `metadata` field`.
-    pub fn request_with_config(with_metadata: bool)(
+    /// Returns an arbitrary deadline that is equal to `NO_DEADLINE` half the time.
+    pub fn deadline() (
+      deadline in any::<u32>(),
+    ) -> CoarseTime {
+        if deadline % 2 == 1 {
+            NO_DEADLINE
+        } else {
+            CoarseTime::from_secs_since_unix_epoch(deadline)
+        }
+    }
+}
+
+prop_compose! {
+    /// Generates an arbitrary [`Request`], with or without populated `metadata` and
+    /// `deadline` fields.
+    pub fn request_with_config(populate_metadata: bool, populate_deadline: bool)(
         receiver in canister_id(),
         sender in canister_id(),
         cycles_payment in any::<u64>(),
@@ -117,6 +132,7 @@ prop_compose! {
         callback in any::<u64>(),
         method_payload in prop::collection::vec(any::<u8>(), 0..16),
         metadata in proptest::option::of(request_metadata()),
+        deadline in deadline(),
     ) -> Request {
         Request {
             receiver,
@@ -125,7 +141,8 @@ prop_compose! {
             payment: Cycles::from(cycles_payment),
             method_name,
             method_payload,
-            metadata: if with_metadata { metadata } else { None },
+            metadata: if populate_metadata { metadata } else { None },
+            deadline: if populate_deadline { deadline } else { NO_DEADLINE },
         }
     }
 }
@@ -140,7 +157,7 @@ prop_compose! {
         // Always populate all fields, regardless of e.g. current certification version.
         // `ic_canonical_state` should not be using this generator; and all other crates /
         // proptests should be able to deal with all fields being populated.
-        request in request_with_config(true),
+        request in request_with_config(true, true),
     ) -> Request {
         request
     }
@@ -159,32 +176,49 @@ pub fn response_payload() -> impl Strategy<Value = Payload> {
 }
 
 prop_compose! {
-    /// Returns an arbitrary [`Response`].
-    pub fn response()(
+    /// Returns an arbitrary [`Response`], with or without a populated `deadline` field.
+    pub fn response_with_config(populate_deadline: bool)(
         originator in canister_id(),
         respondent in canister_id(),
         callback in any::<u64>(),
         cycles_refund in any::<u64>(),
         response_payload in response_payload(),
+        deadline in deadline(),
     ) -> Response {
         Response {
             originator,
             respondent,
             originator_reply_callback: CallbackId::from(callback),
             refund: Cycles::from(cycles_refund),
-            response_payload
+            response_payload,
+            deadline: if populate_deadline { deadline } else { NO_DEADLINE },
         }
+    }
+}
+
+prop_compose! {
+    /// Returns an arbitrary [`Response`].
+    ///
+    /// This is what should be used for generating arbitrary requests almost everywhere;
+    /// the only exception is when specifically testing for a certain certification version,
+    /// in which case `request_with_config()` should be used.
+    pub fn response()(
+        response in response_with_config(true),
+    ) -> Response {
+        response
     }
 }
 
 /// Produces an arbitrary [`RequestOrResponse`], with the respective fields
 /// populated or not.
 pub fn request_or_response_with_config(
-    request_with_metadata: bool,
+    populate_request_metadata: bool,
+    populate_deadline: bool,
 ) -> impl Strategy<Value = RequestOrResponse> {
     prop_oneof![
-        request_with_config(request_with_metadata).prop_flat_map(|req| Just(req.into())),
-        response().prop_flat_map(|rep| Just(rep.into())),
+        request_with_config(populate_request_metadata, populate_deadline)
+            .prop_flat_map(|req| Just(req.into())),
+        response_with_config(populate_deadline).prop_flat_map(|rep| Just(rep.into())),
     ]
 }
 

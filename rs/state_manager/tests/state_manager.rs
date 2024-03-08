@@ -42,7 +42,7 @@ use ic_sys::PAGE_SIZE;
 use ic_test_utilities::{
     consensus::fake::FakeVerifier,
     io::{make_mutable, make_readonly, write_all_at},
-    state::{arb_stream, arb_stream_slice, canister_ids},
+    state::{arb_stream, arb_stream_slice, arb_stream_with_config, canister_ids},
     types::{
         ids::{canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id},
         messages::RequestBuilder,
@@ -5548,8 +5548,10 @@ fn can_upgrade_to_lsmt() {
 }
 
 proptest! {
+    // TODO(MR-549) Go back to using plain `arb_stream()` once the canonical state
+    // encodes deadlines.
     #[test]
-    fn stream_store_encode_decode(stream in arb_stream(0, 10, 0, 10), size_limit in 0..20usize) {
+    fn stream_store_encode_decode(stream in arb_stream_with_config(0, 10, 0, 10, true, false), size_limit in 0..20usize) {
         encode_decode_stream_test(
             /* stream to be used */
             stream,

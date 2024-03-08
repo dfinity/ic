@@ -927,9 +927,9 @@ pub fn execute_response(
     };
 
     let func_ref = match original.call_origin {
-        CallOrigin::Ingress(_, _) | CallOrigin::CanisterUpdate(_, _) | CallOrigin::SystemTask => {
-            FuncRef::UpdateClosure(closure)
-        }
+        CallOrigin::Ingress(_, _)
+        | CallOrigin::CanisterUpdate(_, _, _)
+        | CallOrigin::SystemTask => FuncRef::UpdateClosure(closure),
         CallOrigin::CanisterQuery(_, _) | CallOrigin::Query(_) => FuncRef::QueryClosure(closure),
     };
 
@@ -1017,9 +1017,9 @@ fn execute_response_cleanup(
         .instruction_limits
         .update(instructions_left);
     let func_ref = match original.call_origin {
-        CallOrigin::Ingress(_, _) | CallOrigin::CanisterUpdate(_, _) | CallOrigin::SystemTask => {
-            FuncRef::UpdateClosure(cleanup_closure)
-        }
+        CallOrigin::Ingress(_, _)
+        | CallOrigin::CanisterUpdate(_, _, _)
+        | CallOrigin::SystemTask => FuncRef::UpdateClosure(cleanup_closure),
         CallOrigin::CanisterQuery(_, _) | CallOrigin::Query(_) => {
             FuncRef::QueryClosure(cleanup_closure)
         }

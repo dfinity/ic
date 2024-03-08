@@ -52,7 +52,9 @@ use ic_types::{
     consensus::ecdsa::QuadrupleId,
     crypto::{canister_threshold_sig::MasterEcdsaPublicKey, AlgorithmId},
     ingress::{IngressState, IngressStatus},
-    messages::{CallContextId, Ingress, MessageId, Request, RequestOrResponse, Response},
+    messages::{
+        CallContextId, Ingress, MessageId, Request, RequestOrResponse, Response, NO_DEADLINE,
+    },
     methods::{Callback, FuncRef, SystemMethod, WasmClosure, WasmMethod},
     CanisterTimer, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation, NumInstructions,
     Randomness, Time, UserId,
@@ -1213,6 +1215,7 @@ impl TestWasmExecutorCore {
         let prepayment_for_response_transmission = self
             .cycles_account_manager
             .prepayment_for_response_transmission(self.subnet_size);
+        let deadline = NO_DEADLINE;
         let callback = system_state
             .register_callback(Callback {
                 call_context_id,
@@ -1224,6 +1227,7 @@ impl TestWasmExecutorCore {
                 on_reply: closure.clone(),
                 on_reject: closure,
                 on_cleanup: None,
+                deadline,
             })
             .map_err(|err| err.to_string())?;
         let request = Request {
@@ -1234,6 +1238,7 @@ impl TestWasmExecutorCore {
             method_name: "update".into(),
             method_payload: encode_message_id_as_payload(call_message_id),
             metadata: None,
+            deadline,
         };
         if let Err(req) = system_state.push_output_request(
             canister_current_memory_usage,

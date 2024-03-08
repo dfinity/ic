@@ -36,7 +36,7 @@ use ic_types::{
     },
     consensus::Committee,
     crypto::Signed,
-    messages::{CallbackId, Payload, RejectContext, Response},
+    messages::{CallbackId, Payload, RejectContext, Response, NO_DEADLINE},
     registry::RegistryClientError,
     signature::BasicSignature,
     CanisterId, CountBytes, Cycles, Height, NodeId, NumBytes, RegistryVersion, SubnetId,
@@ -703,6 +703,9 @@ impl IntoMessages<(Vec<Response>, CanisterHttpBatchStats)> for CanisterHttpPaylo
                 originator_reply_callback: id,
                 refund: Cycles::zero(),
                 response_payload: response,
+                // Not relevant, the consensus queue is flushed every round by the
+                // scheduler, which uses only the payload and originator callback.
+                deadline: NO_DEADLINE,
             })
             .collect();
 

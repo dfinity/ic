@@ -27,7 +27,7 @@ use ic_test_utilities::types::{
 use ic_types::{
     messages::{
         CallContextId, CallbackId, CanisterCall, RequestMetadata, StopCanisterCallId,
-        StopCanisterContext, MAX_RESPONSE_COUNT_BYTES,
+        StopCanisterContext, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE,
     },
     methods::{Callback, WasmClosure},
     nominal_cycles::NominalCycles,
@@ -97,7 +97,7 @@ impl CanisterStateFixture {
             .call_context_manager_mut()
             .unwrap()
             .new_call_context(
-                CallOrigin::CanisterUpdate(CANISTER_ID, CallbackId::from(1)),
+                CallOrigin::CanisterUpdate(CANISTER_ID, CallbackId::from(1), NO_DEADLINE),
                 Cycles::zero(),
                 Time::from_nanos_since_unix_epoch(0),
                 RequestMetadata::new(0, UNIX_EPOCH),
@@ -116,6 +116,7 @@ impl CanisterStateFixture {
                 WasmClosure::new(0, 2),
                 WasmClosure::new(0, 2),
                 None,
+                NO_DEADLINE,
             ))
     }
 
@@ -558,23 +559,37 @@ fn update_balance_and_consumed_cycles_by_use_case_correctly() {
 fn canister_state_callback_round_trip() {
     use ic_protobuf::state::canister_state_bits::v1 as pb;
 
-    let callback = Callback::new(
+    let minimal_callback = Callback::new(
         CallContextId::new(1),
         CANISTER_ID,
         OTHER_CANISTER_ID,
         Cycles::zero(),
-        Cycles::new(42),
-        Cycles::new(84),
+        Cycles::zero(),
+        Cycles::zero(),
         WasmClosure::new(0, 2),
         WasmClosure::new(0, 2),
         None,
+        NO_DEADLINE,
+    );
+    let maximal_callback = Callback::new(
+        CallContextId::new(1),
+        CANISTER_ID,
+        OTHER_CANISTER_ID,
+        Cycles::new(21),
+        Cycles::new(42),
+        Cycles::new(84),
+        WasmClosure::new(0, 2),
+        WasmClosure::new(1, 2),
+        Some(WasmClosure::new(2, 2)),
+        ic_types::time::CoarseTime::from_secs_since_unix_epoch(329),
     );
 
-    let pb_callback = pb::Callback::from(&callback);
+    for callback in [minimal_callback, maximal_callback] {
+        let pb_callback = pb::Callback::from(&callback);
+        let round_trip = Callback::try_from(pb_callback).unwrap();
 
-    let round_trip = Callback::try_from(pb_callback).unwrap();
-
-    assert_eq!(callback, round_trip);
+        assert_eq!(callback, round_trip);
+    }
 }
 
 #[test]

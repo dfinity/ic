@@ -252,7 +252,7 @@ mod tests {
     };
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_types::consensus::{HasHeight, HashedBlock};
-    use ic_types::messages::Payload;
+    use ic_types::messages::{Payload, NO_DEADLINE};
     use ic_types::{
         crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet},
         messages::{CallbackId, Request},
@@ -483,6 +483,7 @@ mod tests {
                     method_name: "".to_string(),
                     method_payload: vec![],
                     metadata: None,
+                    deadline: NO_DEADLINE,
                 },
                 nodes_in_target_subnet: BTreeSet::new(),
                 target_id: TARGET_ID,
