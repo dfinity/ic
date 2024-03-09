@@ -558,7 +558,7 @@ mod tests {
                     E::StartSubtree,
                 ]),
                 (certification_version >= V11)
-                    .then_some(vec![edge("error_code"), E::VisitBlob(b"IC0516".to_vec())]),
+                    .then_some(vec![edge("error_code"), E::VisitBlob(b"IC0406".to_vec())]),
                 Some(vec![
                     edge("reject_code"),
                     leb_num(4),
