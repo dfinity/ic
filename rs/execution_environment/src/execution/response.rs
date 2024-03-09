@@ -385,11 +385,10 @@ impl ResponseHelper {
                     self.canister.canister_id(),
                     err,
                 );
-                let err = HypervisorError::InsufficientCyclesBalance(err);
                 // Return total instructions: wasm executor leftovers + cleanup reservation.
                 return Err((
                     self,
-                    err,
+                    HypervisorError::InsufficientCyclesBalance(err),
                     output.num_instructions_left + reserved_cleanup_instructions,
                 ));
             }
