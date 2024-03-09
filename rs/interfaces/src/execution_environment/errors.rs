@@ -267,7 +267,7 @@ impl HypervisorError {
                 format!("Canister {} provided invalid principal id", canister_id),
             ),
             Self::InsufficientCyclesBalance(err) => {
-                UserError::new(E::CanisterOutOfCycles, err.to_string())
+                UserError::new(E::CanisterContractViolation, err.to_string())
             }
             Self::Cleanup {
                 callback_err,

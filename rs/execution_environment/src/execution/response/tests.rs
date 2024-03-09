@@ -1448,7 +1448,7 @@ fn dts_response_concurrent_cycles_change_fails() {
     );
 
     let err = check_ingress_status(test.ingress_status(&ingress_id)).unwrap_err();
-    assert_eq!(err.code(), ErrorCode::CanisterOutOfCycles);
+    assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
 
     assert_eq!(
         err.description(),
@@ -1594,7 +1594,7 @@ fn dts_response_with_cleanup_concurrent_cycles_change_fails() {
     }
 
     let err = check_ingress_status(test.ingress_status(&ingress_id)).unwrap_err();
-    assert_eq!(err.code(), ErrorCode::CanisterOutOfCycles);
+    assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
 
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),

@@ -2233,7 +2233,7 @@ icTests my_sub other_sub =
                                                                                                  cid <- create noop
                                                                                                  cycles <- queryBalance cid
                                                                                                  call' cid (inter_call cid cid defArgs {cycles = cycles + 1000_000})
-                                                                                                   >>= isReject [2],
+                                                                                                   >>= isReject [5],
                                                                                                testCase "relay cycles before accept traps" $ do
                                                                                                  cid1 <- create noop
                                                                                                  cid2 <- create noop
