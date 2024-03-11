@@ -459,6 +459,14 @@ impl RequestOrResponse {
             RequestOrResponse::Response(resp) => resp.refund,
         }
     }
+
+    /// Returns the deadline of this message, `NO_DEADLINE` if not set.
+    pub fn deadline(&self) -> CoarseTime {
+        match self {
+            RequestOrResponse::Request(req) => req.deadline,
+            RequestOrResponse::Response(resp) => resp.deadline,
+        }
+    }
 }
 
 /// Convenience `CountBytes` implementation that returns the same value as
