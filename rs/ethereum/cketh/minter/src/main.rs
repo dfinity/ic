@@ -1,4 +1,3 @@
-use candid::Nat;
 use ic_canister_log::log;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
@@ -14,8 +13,9 @@ use ic_cketh_minter::endpoints::{
 use ic_cketh_minter::erc20::CkErc20Token;
 use ic_cketh_minter::eth_logs::{EventSource, ReceivedErc20Event, ReceivedEthEvent};
 use ic_cketh_minter::guard::retrieve_eth_guard;
+use ic_cketh_minter::ledger_client::LedgerClient;
 use ic_cketh_minter::lifecycle::MinterArg;
-use ic_cketh_minter::logs::{DEBUG, INFO};
+use ic_cketh_minter::logs::INFO;
 use ic_cketh_minter::memo::BurnMemo;
 use ic_cketh_minter::numeric::{LedgerBurnIndex, Wei};
 use ic_cketh_minter::state::audit::{process_event, Event, EventType};
@@ -29,10 +29,6 @@ use ic_cketh_minter::{
     SCRAPPING_ETH_LOGS_INTERVAL,
 };
 use ic_ethereum_types::Address;
-use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};
-use icrc_ledger_types::icrc1::transfer::Memo;
-use icrc_ledger_types::icrc2::transfer_from::TransferFromArgs;
-use num_traits::cast::ToPrimitive;
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -191,33 +187,20 @@ async fn withdraw_eth(
         });
     }
 
-    let ledger_canister_id = read_state(|s| s.ledger_id);
-    let client = ICRC1Client {
-        runtime: CdkRuntime,
-        ledger_canister_id,
-    };
-
+    let client = read_state(LedgerClient::cketh_ledger_from_state);
     let now = ic_cdk::api::time();
-
     log!(INFO, "[withdraw]: burning {:?}", amount);
     match client
-        .transfer_from(TransferFromArgs {
-            spender_subaccount: None,
-            from: caller.into(),
-            to: ic_cdk::id().into(),
-            amount: Nat::from(amount),
-            fee: None,
-            memo: Some(Memo::from(BurnMemo::Convert {
+        .burn(
+            caller.into(),
+            amount,
+            BurnMemo::Convert {
                 to_address: destination,
-            })),
-            created_at_time: None, // We don't set this field to disable transaction deduplication
-                                   // which is unnecessary in canister-to-canister calls.
-        })
+            },
+        )
         .await
     {
-        Ok(Ok(block_index)) => {
-            let ledger_burn_index =
-                LedgerBurnIndex::new(block_index.0.to_u64().expect("nat does not fit into u64"));
+        Ok(ledger_burn_index) => {
             let withdrawal_request = EthWithdrawalRequest {
                 withdrawal_amount: amount,
                 destination,
@@ -241,23 +224,7 @@ async fn withdraw_eth(
             });
             Ok(RetrieveEthRequest::from(withdrawal_request))
         }
-        Ok(Err(error)) => {
-            log!(
-                DEBUG,
-                "[withdraw]: failed to transfer_from with error: {error:?}"
-            );
-            Err(WithdrawalError::from(error))
-        }
-        Err((error_code, message)) => {
-            log!(
-                DEBUG,
-                "[withdraw]: failed to call ledger with error_code: {error_code} and message: {message}",
-            );
-            Err(WithdrawalError::TemporarilyUnavailable(
-                "failed to call ledger with error_code: {error_code} and message: {message}"
-                    .to_string(),
-            ))
-        }
+        Err(e) => Err(WithdrawalError::from(e)),
     }
 }
 

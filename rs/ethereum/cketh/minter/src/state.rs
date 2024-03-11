@@ -167,6 +167,12 @@ impl State {
         !self.events_to_mint.is_empty()
     }
 
+    pub fn find_ck_erc20_ledger(&self, symbol: &CkTokenSymbol) -> Option<Principal> {
+        self.ckerc20_tokens
+            .get_entry(symbol)
+            .map(|(_, ledger_id)| *ledger_id)
+    }
+
     fn record_invalid_deposit(&mut self, source: EventSource, error: String) -> bool {
         assert!(
             !self.events_to_mint.contains_key(&source),
