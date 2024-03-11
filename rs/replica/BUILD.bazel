@@ -20,6 +20,7 @@ DEPENDENCIES = [
     "//rs/https_outcalls/client",
     "//rs/interfaces",
     "//rs/interfaces/certified_stream_store",
+    "//rs/interfaces/state_manager",
     "//rs/interfaces/registry",
     "//rs/messaging",
     "//rs/monitoring/logger",
