@@ -49,7 +49,7 @@ LIB_DEPENDENCIES = [
 
 TEST_DEPENDENCIES = [
     "//packages/pocket-ic:pocket-ic",
-    "//rs/tests",
+    "//rs/tests/testing_verification/spec_compliance",
     "//rs/types/types",
     "//rs/registry/subnet_type",
     "//rs/registry/routing_table",

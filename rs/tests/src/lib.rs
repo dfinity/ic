@@ -30,7 +30,6 @@ pub mod orchestrator;
 pub mod rosetta_test;
 pub mod rosetta_tests;
 pub mod sns_client;
-pub mod spec_compliance;
 pub mod tecdsa;
 pub mod types;
 pub mod util;
