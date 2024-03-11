@@ -1,7 +1,6 @@
 use candid::Principal;
 use ic_registry_routing_table::{canister_id_into_u64, CanisterIdRange};
 use ic_registry_subnet_type::SubnetType;
-use ic_tests::spec_compliance::run_ic_ref_test;
 use ic_types::PrincipalId;
 use pocket_ic::common::rest::{
     CanisterIdRange as RawCanisterIdRange, CreateInstanceResponse, RawTime, SubnetConfigSet,
@@ -9,6 +8,7 @@ use pocket_ic::common::rest::{
 };
 use reqwest::blocking::Client;
 use reqwest::{StatusCode, Url};
+use spec_compliance::run_ic_ref_test;
 use std::path::PathBuf;
 use std::process::Command;
 use std::time::{Duration, Instant, SystemTime};
