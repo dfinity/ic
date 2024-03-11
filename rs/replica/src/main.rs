@@ -5,13 +5,14 @@ use ic_config::Config;
 use ic_crypto_sha2::Sha256;
 use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
-use ic_interfaces::time_source::SysTimeSource;
 use ic_logger::{info, new_replica_logger_from_config};
 use ic_metrics::MetricsRegistry;
 use ic_replica::setup;
 use ic_sys::PAGE_SIZE;
-use ic_types::consensus::CatchUpPackage;
-use ic_types::{replica_version::REPLICA_BINARY_HASH, PrincipalId, ReplicaVersion, SubnetId};
+use ic_types::{
+    consensus::CatchUpPackage, replica_version::REPLICA_BINARY_HASH, PrincipalId, ReplicaVersion,
+    SubnetId,
+};
 use nix::unistd::{setpgid, Pid};
 use std::{env, fs, io, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
 use tokio::signal::unix::{signal, SignalKind};
@@ -247,9 +248,8 @@ fn main() -> io::Result<()> {
         &logger.inner_logger.root,
     );
 
-    let time_source = Arc::new(SysTimeSource::new());
     info!(logger, "Constructing IC stack");
-    let (_, _, _p2p_thread_joiner, _, _xnet_endpoint) =
+    let (_, _, _, _p2p_thread_joiner, _xnet_endpoint) =
         ic_replica::setup_ic_stack::construct_ic_stack(
             &logger,
             &metrics_registry,
@@ -263,7 +263,6 @@ fn main() -> io::Result<()> {
             registry,
             crypto,
             cup_proto,
-            time_source,
         )?;
 
     info!(logger, "Constructed IC stack");

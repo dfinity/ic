@@ -10264,6 +10264,7 @@ dependencies = [
  "ic-interfaces-certified-stream-store",
  "ic-interfaces-registry",
  "ic-interfaces-registry-mocks",
+ "ic-interfaces-state-manager",
  "ic-logger",
  "ic-management-canister-types",
  "ic-messaging",
