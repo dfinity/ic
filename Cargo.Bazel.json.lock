@@ -1,5 +1,5 @@
 {
-  "checksum": "d9f87efd05d38c9f27dae246da913484ff1f55bae48ed2e5a37328b0265056fb",
+  "checksum": "bff7fa7532d4e3a269ebb6cf2a2960098e884fdef00243c0922a82bc9ab45bc8",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -14514,12 +14514,12 @@
             },
             {
               "id": "clap 3.2.25",
-              "target": "clap"
+              "target": "clap",
+              "alias": "clap_3_2_25"
             },
             {
               "id": "clap 4.4.8",
-              "target": "clap",
-              "alias": "clap_4_0_0"
+              "target": "clap"
             },
             {
               "id": "cloudflare 0.9.1",

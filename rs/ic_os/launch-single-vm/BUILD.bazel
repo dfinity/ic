@@ -3,7 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_binary")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
-    "@crate_index//:clap",
+    "@crate_index//:clap_3_2_25",
     "@crate_index//:reqwest",
     "@crate_index//:serde",
     "@crate_index//:slog-async",

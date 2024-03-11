@@ -8,7 +8,7 @@ DEPENDENCIES = [
     "@crate_index//:axum",
     "@crate_index//:bytes",
     "@crate_index//:candid",
-    "@crate_index//:clap_4_0_0",
+    "@crate_index//:clap",
     "@crate_index//:form_urlencoded",
     "@crate_index//:futures",
     "@crate_index//:http",

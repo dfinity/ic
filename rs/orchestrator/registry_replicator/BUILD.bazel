@@ -18,7 +18,7 @@ DEPENDENCIES = [
     "//rs/registry/nns_data_provider",
     "//rs/registry/routing_table",
     "//rs/types/types",
-    "@crate_index//:clap",
+    "@crate_index//:clap_3_2_25",
     "@crate_index//:prometheus",
     "@crate_index//:prost",
     "@crate_index//:slog",

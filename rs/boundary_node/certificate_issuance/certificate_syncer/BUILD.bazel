@@ -6,7 +6,7 @@ DEPENDENCIES = [
     "@crate_index//:anyhow",
     "@crate_index//:axum",
     "@crate_index//:candid",
-    "@crate_index//:clap_4_0_0",
+    "@crate_index//:clap",
     "@crate_index//:futures",
     "@crate_index//:hyper-rustls",
     "@crate_index//:hyper",

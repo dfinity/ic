@@ -21,7 +21,7 @@ DEPENDENCIES = [
     "@crate_index//:serde_with",
     "@crate_index//:axum",
     "@crate_index//:tempfile",
-    "@crate_index//:clap_4_0_0",  # no clap because feature derive
+    "@crate_index//:clap",  # no clap because feature derive
     "@crate_index//:tokio",
     "@crate_index//:proptest",
     "@crate_index//:hex",
