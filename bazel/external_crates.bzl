@@ -141,9 +141,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "async-socks5": crate.spec(
                 version = "^0.5.1",
             ),
-            "async-std": crate.spec(
-                version = "^1.12.0",
-            ),
             "async-stream": crate.spec(
                 version = "^0.3.5",
             ),
@@ -416,9 +413,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
                 default_features = False,
             ),
-            "fix-hidden-lifetime-bug": crate.spec(
-                version = "^0.2.4",
-            ),
             "flate2": crate.spec(
                 version = "^1.0.22",
             ),
@@ -442,12 +436,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 features = [
                     "custom",
                 ],
-            ),
-            "gflags": crate.spec(
-                version = "^0.3.7",
-            ),
-            "gflags-derive": crate.spec(
-                version = "^0.1",
             ),
             "glob": crate.spec(
                 version = "^0.3.0",
@@ -488,17 +476,11 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "http-serde": crate.spec(
                 version = "^2.0.0",
             ),
-            "httparse": crate.spec(
-                version = "^1.5.1",
-            ),
             "httptest": crate.spec(
                 version = "^0.15.4",
             ),
             "humantime": crate.spec(
                 version = "^2.1.0",
-            ),
-            "humantime-serde": crate.spec(
-                version = "^1.0",
             ),
             "hyper": crate.spec(
                 version = "^0.14.27",
@@ -786,9 +768,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "num-bigint-dig": crate.spec(
                 version = "^0.8",
                 features = ["prime"],
-            ),
-            "num-derive": crate.spec(
-                version = "^0.3",
             ),
             "num-integer": crate.spec(
                 version = "^0.1.41",
