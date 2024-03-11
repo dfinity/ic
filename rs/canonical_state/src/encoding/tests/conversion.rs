@@ -97,6 +97,7 @@ fn convert_stream_header_with_unsupported_flags() {
 fn roundtrip_conversion_request() {
     for certification_version in all_supported_versions() {
         let request = request(certification_version);
+
         assert_eq!(
             request,
             types::RequestOrResponse::from((&request, certification_version))
@@ -108,9 +109,9 @@ fn roundtrip_conversion_request() {
 
 #[test]
 fn roundtrip_conversion_response() {
-    let response = response();
-
     for certification_version in all_supported_versions() {
+        let response = response(certification_version);
+
         assert_eq!(
             response,
             types::RequestOrResponse::from((&response, certification_version))
@@ -122,9 +123,9 @@ fn roundtrip_conversion_response() {
 
 #[test]
 fn roundtrip_conversion_reject_response() {
-    let response = reject_response();
-
     for certification_version in all_supported_versions() {
+        let response = reject_response(certification_version);
+
         assert_eq!(
             response,
             types::RequestOrResponse::from((&response, certification_version))

@@ -845,7 +845,9 @@ prop_compose! {
     /// Produces a strategy consisting of an arbitrary stream and valid slice begin and message
     /// count values for extracting a slice from the stream.
     pub fn arb_stream_slice(min_size: usize, max_size: usize, min_signal_count: usize, max_signal_count: usize)(
-        stream in arb_stream(min_size, max_size, min_signal_count, max_signal_count),
+        // TODO(MR-549) Use `arb_stream()` once the canonical state can encode
+        // message deadlines.
+        stream in arb_stream_with_config(min_size, max_size, min_signal_count, max_signal_count, true, false),
         from_percent in -20..120i64,
         percent_above_min_size in 0..120i64,
     ) ->  (Stream, StreamIndex, usize) {
