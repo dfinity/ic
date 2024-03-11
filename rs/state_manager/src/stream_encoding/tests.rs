@@ -16,7 +16,7 @@ proptest! {
     // TODO(MR-549) Go back to using plain `arb_stream()` once the canonical state
     // encodes deadlines.
     #[test]
-    fn stream_encode_decode_roundtrip(stream in arb_stream_with_config(0, 10, 0, 10, true, false)) {
+    fn stream_encode_decode_roundtrip(stream in arb_stream_with_config(0, 10, 0, 10, true, true)) {
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
 
         let subnet = subnet_test_id(42);
