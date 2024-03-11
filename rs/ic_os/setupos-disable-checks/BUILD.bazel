@@ -4,7 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "@crate_index//:anyhow",
-    "@crate_index//:clap_4_0_0",
+    "@crate_index//:clap",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
     "//rs/ic_os/partition_tools",

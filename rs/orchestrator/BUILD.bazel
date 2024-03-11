@@ -45,7 +45,7 @@ rust_library(
         "//rs/types/management_canister_types",
         "//rs/types/types",
         "@crate_index//:candid",
-        "@crate_index//:clap",
+        "@crate_index//:clap_3_2_25",
         "@crate_index//:exec",
         "@crate_index//:get_if_addrs",
         "@crate_index//:hex",
@@ -71,7 +71,7 @@ rust_binary(
     deps = [
         ":lib",
         "//rs/async_utils",
-        "@crate_index//:clap",
+        "@crate_index//:clap_3_2_25",
         "@crate_index//:tokio",
     ],
 )

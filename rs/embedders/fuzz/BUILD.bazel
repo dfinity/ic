@@ -117,7 +117,7 @@ rust_binary(
         "//rs/test_utilities",
         "//rs/types/types",
         "@crate_index//:arbitrary",
-        "@crate_index//:clap",
+        "@crate_index//:clap_3_2_25",
         "@crate_index//:wasm-encoder",
         "@crate_index//:wasm-smith",
         "@crate_index//:wasmparser",

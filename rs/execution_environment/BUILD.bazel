@@ -273,7 +273,7 @@ rust_binary(
         "//rs/system_api",
         "//rs/types/types",
         "@crate_index//:candid",
-        "@crate_index//:clap",
+        "@crate_index//:clap_3_2_25",
         "@crate_index//:eyre",
         "@crate_index//:ic-agent",
         "@crate_index//:serde_json",

@@ -6,7 +6,7 @@ DEPENDENCIES = [
     "@crate_index//:anyhow",
     "@crate_index//:axum_0_7_0",
     "@crate_index//:candid",
-    "@crate_index//:clap",
+    "@crate_index//:clap_3_2_25",
     "@crate_index//:futures",
     "@crate_index//:glob",
     "@crate_index//:humantime",

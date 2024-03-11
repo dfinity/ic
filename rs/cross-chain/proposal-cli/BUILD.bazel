@@ -4,7 +4,7 @@ DEPENDENCIES = [
     "@crate_index//:askama",
     "@crate_index//:candid",
     "@crate_index//:candid_parser",
-    "@crate_index//:clap_4_0_0",
+    "@crate_index//:clap",
     "@crate_index//:hex",
     "@crate_index//:serde_json",
     "@crate_index//:strum",
