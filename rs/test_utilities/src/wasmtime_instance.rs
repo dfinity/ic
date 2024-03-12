@@ -14,17 +14,14 @@ use ic_system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ExecutionParameters, InstructionLimits,
     ModificationTracking, SystemApiImpl,
 };
+use ic_test_utilities_types::ids::{canister_test_id, user_test_id};
 use ic_types::{
     messages::RequestMetadata, time::UNIX_EPOCH, ComputeAllocation, MemoryAllocation,
     NumInstructions,
 };
 use ic_wasm_types::BinaryEncodedWasm;
 
-use crate::{
-    cycles_account_manager::CyclesAccountManagerBuilder,
-    state::SystemStateBuilder,
-    types::ids::{canister_test_id, user_test_id},
-};
+use crate::{cycles_account_manager::CyclesAccountManagerBuilder, state::SystemStateBuilder};
 
 pub const DEFAULT_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(5_000_000_000);
 

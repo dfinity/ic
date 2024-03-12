@@ -25,9 +25,8 @@ use ic_sns_wasm::{
     },
     sns_wasm::SNS_CANISTER_COUNT_AT_INSTALL,
 };
-use ic_test_utilities::{
-    types::ids::canister_test_id, universal_canister::UNIVERSAL_CANISTER_WASM,
-};
+use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
+use ic_test_utilities_types::ids::canister_test_id;
 
 pub mod common;
 

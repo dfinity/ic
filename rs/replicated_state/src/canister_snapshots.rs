@@ -226,7 +226,7 @@ pub enum SnapshotOperation {
 mod tests {
     use super::*;
     use super::{CanisterSnapshot, CanisterSnapshots, PageMap};
-    use ic_test_utilities::types::ids::canister_test_id;
+    use ic_test_utilities_types::ids::canister_test_id;
     use ic_types::time::UNIX_EPOCH;
     use ic_types::NumBytes;
     #[test]

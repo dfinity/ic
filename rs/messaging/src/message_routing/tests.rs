@@ -23,14 +23,14 @@ use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities::{
     notification::{Notification, WaitResult},
     state::CanisterStateBuilder,
-    types::{
-        batch::BatchBuilder,
-        ids::{canister_test_id, node_test_id, subnet_test_id},
-    },
 };
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{fetch_int_counter_vec, metric_vec};
 use ic_test_utilities_registry::SubnetRecordBuilder;
+use ic_test_utilities_types::{
+    batch::BatchBuilder,
+    ids::{canister_test_id, node_test_id, subnet_test_id},
+};
 use ic_types::batch::BlockmakerMetrics;
 use ic_types::{
     batch::{Batch, BatchMessages},

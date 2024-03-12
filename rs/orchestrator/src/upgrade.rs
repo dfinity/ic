@@ -811,11 +811,9 @@ mod tests {
     use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
     use ic_management_canister_types::EcdsaCurve;
     use ic_metrics::MetricsRegistry;
-    use ic_test_utilities::{
-        consensus::fake::{Fake, FakeContent},
-        types::ids::subnet_test_id,
-    };
+    use ic_test_utilities::consensus::fake::{Fake, FakeContent};
     use ic_test_utilities_logger::with_test_replica_logger;
+    use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
         batch::ValidationContext,
         consensus::{

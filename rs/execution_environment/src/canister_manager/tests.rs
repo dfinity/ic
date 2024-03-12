@@ -52,15 +52,15 @@ use ic_test_utilities::{
         get_stopping_canister_with_controller, CallContextBuilder, CanisterStateBuilder,
         ReplicatedStateBuilder,
     },
-    types::{
-        ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id},
-        messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder},
-    },
     universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM},
 };
 use ic_test_utilities_execution_environment::{
     assert_delta, get_reply, get_routing_table_with_specified_ids_allocation_range,
     wasm_compilation_cost, wat_compilation_cost, ExecutionTest, ExecutionTestBuilder,
+};
+use ic_test_utilities_types::{
+    ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id},
+    messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder},
 };
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},

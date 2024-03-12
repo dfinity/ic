@@ -73,6 +73,7 @@ DEV_DEPENDENCIES = [
     "//rs/registry/proto_data_provider",
     "//rs/test_utilities",
     "//rs/test_utilities/compare_dirs",
+    "//rs/test_utilities/types",
     "//rs/types/types_test_utils",
 ]
 

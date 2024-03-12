@@ -1245,7 +1245,7 @@ mod tests {
 
     use ic_base_types::NumSeconds;
     use ic_replicated_state::{canister_state::system_state::CyclesUseCase, SystemState};
-    use ic_test_utilities::types::ids::{canister_test_id, user_test_id};
+    use ic_test_utilities_types::ids::{canister_test_id, user_test_id};
     use ic_types::Cycles;
 
     use crate::{

@@ -27,8 +27,8 @@ use ic_registry_keys::{
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable as RoutingTableIC};
-use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
 use ic_test_utilities_registry::test_subnet_record;
+use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::{
     crypto::threshold_sig::ThresholdSigPublicKey, CanisterId, RegistryVersion, SubnetId,
 };

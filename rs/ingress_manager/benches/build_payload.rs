@@ -33,11 +33,13 @@ use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
     history::MockIngressHistory,
     state::{CanisterStateBuilder, ReplicatedStateBuilder},
-    types::ids::{node_test_id, subnet_test_id},
-    types::messages::SignedIngressBuilder,
 };
 use ic_test_utilities_registry::test_subnet_record;
 use ic_test_utilities_time::FastForwardTimeSource;
+use ic_test_utilities_types::{
+    ids::{node_test_id, subnet_test_id},
+    messages::SignedIngressBuilder,
+};
 use ic_types::{
     artifact::IngressMessageId, batch::ValidationContext, ingress::IngressStatus,
     malicious_flags::MaliciousFlags, CanisterId, Cycles, Height, NumBytes, PrincipalId,

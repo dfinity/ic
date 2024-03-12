@@ -15,7 +15,7 @@ use ic_protobuf::registry::{
 use ic_registry_keys::{
     make_blessed_replica_versions_key, make_replica_version_key, make_subnet_record_key,
 };
-use ic_test_utilities::types::ids::subnet_test_id;
+use ic_test_utilities_types::ids::subnet_test_id;
 
 use assert_matches::assert_matches;
 use ic_types::ReplicaVersion;

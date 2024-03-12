@@ -5,11 +5,9 @@ use ic_config::execution_environment::INSTRUCTION_OVERHEAD_PER_QUERY_CALL;
 use ic_error_types::{ErrorCode, UserError};
 use ic_management_canister_types::{BitcoinGetBalanceArgs, BitcoinGetUtxosArgs, Payload};
 use ic_registry_subnet_type::SubnetType;
-use ic_test_utilities::{
-    types::ids::user_test_id,
-    universal_canister::{call_args, wasm},
-};
+use ic_test_utilities::universal_canister::{call_args, wasm};
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
+use ic_test_utilities_types::ids::user_test_id;
 use ic_types::{ingress::WasmResult, messages::UserQuery, Cycles, NumInstructions};
 use std::sync::Arc;
 

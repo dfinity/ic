@@ -197,9 +197,9 @@ mod tests {
     use ic_test_utilities::{
         consensus::fake::{FakeContentSigner, FakeSigner},
         message_routing::FakeMessageRouting,
-        types::ids::{node_test_id, subnet_test_id},
     };
     use ic_test_utilities_registry::SubnetRecordBuilder;
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
         consensus::{
             ecdsa::ECDSA_IMPROVED_LATENCY, CatchUpPackage, CatchUpPackageShare,

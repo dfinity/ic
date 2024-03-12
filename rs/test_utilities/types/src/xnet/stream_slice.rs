@@ -1,4 +1,4 @@
-use crate::types::messages::RequestBuilder;
+use crate::messages::RequestBuilder;
 use ic_types::{
     messages::{Request, RequestOrResponse},
     xnet::{StreamHeader, StreamIndex, StreamIndexedQueue, StreamSlice},

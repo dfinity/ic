@@ -19,7 +19,7 @@ rust_test(
     name = "routing_table_test",
     crate = ":routing_table",
     deps = [
-        "//rs/test_utilities",
+        "//rs/test_utilities/types",
         "@crate_index//:assert_matches",
     ],
 )

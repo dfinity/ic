@@ -78,13 +78,11 @@ mod tests {
         testing::ReplicatedStateTesting,
         ExecutionState, ExportedFunctions, Global, Memory, NumWasmPages, PageMap, ReplicatedState,
     };
-    use ic_test_utilities::{
-        state::new_canister_state,
-        types::ids::{
-            canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id,
-        },
-        types::messages::{RequestBuilder, ResponseBuilder},
+    use ic_test_utilities::state::new_canister_state;
+    use ic_test_utilities_types::ids::{
+        canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id,
     };
+    use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
     use ic_types::{
         crypto::CryptoHash,
         ingress::{IngressState, IngressStatus},

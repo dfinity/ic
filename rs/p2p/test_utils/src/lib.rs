@@ -23,8 +23,8 @@ use ic_registry_keys::make_node_record_key;
 use ic_registry_local_registry::LocalRegistry;
 use ic_registry_local_store::{compact_delta_to_changelog, LocalStoreImpl, LocalStoreWriter};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_test_utilities::types::ids::subnet_test_id;
 use ic_test_utilities_registry::add_subnet_record;
+use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types_test_utils::ids::SUBNET_1;
 use std::{
     collections::{HashMap, HashSet},

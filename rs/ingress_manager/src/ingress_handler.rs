@@ -160,13 +160,12 @@ mod tests {
     };
     use ic_interfaces_mocks::consensus_pool::MockConsensusTime;
     use ic_interfaces_state_manager::StateManager;
-    use ic_test_utilities::{
-        history::MockIngressHistory,
-        state_manager::FakeStateManager,
-        types::ids::{canister_test_id, node_test_id, user_test_id},
-        types::messages::SignedIngressBuilder,
-    };
+    use ic_test_utilities::{history::MockIngressHistory, state_manager::FakeStateManager};
     use ic_test_utilities_time::FastForwardTimeSource;
+    use ic_test_utilities_types::{
+        ids::{canister_test_id, node_test_id, user_test_id},
+        messages::SignedIngressBuilder,
+    };
     use ic_types::ingress::{IngressState, IngressStatus};
     use ic_types::time::UNIX_EPOCH;
     use std::sync::Arc;

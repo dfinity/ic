@@ -1,9 +1,9 @@
-use crate::types::ids::{node_test_id, subnet_test_id};
 use ic_interfaces::{
     certification::{Verifier, VerifierError},
     validation::ValidationResult,
 };
 use ic_test_utilities_registry::{setup_registry, SubnetRecordBuilder};
+use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::{
     batch::*,
     consensus::certification::*,

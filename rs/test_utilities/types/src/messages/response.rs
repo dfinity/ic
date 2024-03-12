@@ -1,4 +1,4 @@
-use crate::types::ids::canister_test_id;
+use crate::ids::canister_test_id;
 use ic_types::{
     messages::{CallbackId, Payload, Response, NO_DEADLINE},
     time::CoarseTime,

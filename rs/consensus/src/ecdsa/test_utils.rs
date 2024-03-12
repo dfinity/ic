@@ -25,8 +25,8 @@ use ic_replicated_state::ReplicatedState;
 use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
 use ic_test_utilities::consensus::{fake::*, EcdsaStatsNoOp};
 use ic_test_utilities::state::ReplicatedStateBuilder;
-use ic_test_utilities::types::ids::{node_test_id, NODE_1, NODE_2};
-use ic_test_utilities::types::messages::RequestBuilder;
+use ic_test_utilities_types::ids::{node_test_id, NODE_1, NODE_2};
+use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::artifact::EcdsaMessageId;
 use ic_types::consensus::certification::Certification;
 use ic_types::consensus::ecdsa::{

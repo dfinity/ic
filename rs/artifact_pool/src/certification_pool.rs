@@ -446,7 +446,7 @@ mod tests {
     use ic_interfaces::certification::CertificationPool;
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::consensus::fake::{Fake, FakeSigner};
-    use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::time::UNIX_EPOCH;
     use ic_types::{
         consensus::certification::{

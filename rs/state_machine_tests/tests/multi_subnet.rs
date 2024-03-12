@@ -5,7 +5,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
     finalize_registry, StateMachine, StateMachineBuilder, StateMachineConfig,
 };
-use ic_test_utilities::types::ids::user_test_id;
+use ic_test_utilities_types::ids::user_test_id;
 use ic_types::{
     ingress::{IngressStatus, WasmResult},
     CanisterId, Cycles, SubnetId,

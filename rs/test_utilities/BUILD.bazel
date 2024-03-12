@@ -48,6 +48,7 @@ rust_library(
         "//rs/test_utilities/logger",
         "//rs/test_utilities/registry",
         "//rs/test_utilities/time",
+        "//rs/test_utilities/types",
         "//rs/types/base_types",
         "//rs/types/management_canister_types",
         "//rs/types/types",
@@ -55,7 +56,6 @@ rust_library(
         "//rs/types/wasm_types",
         "//rs/universal_canister/lib",
         "@crate_index//:bincode",
-        "@crate_index//:ed25519-consensus",
         "@crate_index//:hex-literal",
         "@crate_index//:lazy_static",
         "@crate_index//:mockall",
@@ -82,7 +82,6 @@ rust_test(
     crate = ":test_utilities",
     deps = [
         "//rs/artifact_pool",
-        "@crate_index//:assert_matches",
         "@crate_index//:rusty-fork",
         "@crate_index//:wasmprinter",
     ],
@@ -95,7 +94,6 @@ rust_doc_test(
     crate = ":test_utilities",
     deps = [
         "//rs/artifact_pool",
-        "@crate_index//:assert_matches",
         "@crate_index//:rusty-fork",
     ],
 )

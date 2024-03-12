@@ -54,13 +54,13 @@ pub fn with_test_pool_configs<T>(num: usize, run: impl FnOnce(Vec<ArtifactPoolCo
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::ids::node_test_id;
-    use crate::types::messages::SignedIngressBuilder;
     use ic_artifact_pool::ingress_pool::IngressPoolImpl;
     use ic_interfaces::ingress_pool::IngressPool;
     use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities_logger::with_test_replica_logger;
+    use ic_test_utilities_types::ids::node_test_id;
+    use ic_test_utilities_types::messages::SignedIngressBuilder;
     use ic_types::time::UNIX_EPOCH;
 
     #[test]

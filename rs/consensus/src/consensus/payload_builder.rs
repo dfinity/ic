@@ -247,11 +247,13 @@ pub(crate) mod test {
         consensus::{batch::MockBatchPayloadBuilder, fake::Fake},
         ingress_selector::FakeIngressSelector,
         self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
-        types::ids::{node_test_id, subnet_test_id},
-        types::messages::SignedIngressBuilder,
         xnet_payload_builder::FakeXNetPayloadBuilder,
     };
     use ic_test_utilities_registry::SubnetRecordBuilder;
+    use ic_test_utilities_types::{
+        ids::{node_test_id, subnet_test_id},
+        messages::SignedIngressBuilder,
+    };
     use ic_types::{
         canister_http::CanisterHttpResponseWithConsensus,
         consensus::certification::{Certification, CertificationContent},

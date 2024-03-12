@@ -15,12 +15,10 @@ use ic_replicated_state::{
 };
 use ic_state_manager::labeled_tree_visitor::LabeledTreeVisitor;
 use ic_state_manager::{stream_encoding::encode_stream_slice, tree_hash::hash_state};
-use ic_test_utilities::{
-    state::{get_initial_state, get_running_canister},
-    types::{
-        ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id},
-        messages::{RequestBuilder, ResponseBuilder},
-    },
+use ic_test_utilities::state::{get_initial_state, get_running_canister};
+use ic_test_utilities_types::{
+    ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id},
+    messages::{RequestBuilder, ResponseBuilder},
 };
 use ic_types::{
     messages::{CallbackId, Payload},

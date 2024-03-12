@@ -627,7 +627,8 @@ impl BackupArtifact {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_test_utilities::{consensus::fake::*, types::ids::node_test_id};
+    use ic_test_utilities::consensus::fake::*;
+    use ic_test_utilities_types::ids::node_test_id;
     use ic_types::{
         batch::*,
         consensus::*,

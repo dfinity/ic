@@ -113,8 +113,8 @@ mod tests {
     use ic_test_utilities::{
         p2p::{p2p_test_setup_logger, test_group_set_registry, P2P_SUBNET_ID_DEFAULT},
         port_allocation::allocate_ports,
-        types::ids::subnet_test_id,
     };
+    use ic_test_utilities_types::ids::subnet_test_id;
     use std::sync::Arc;
 
     #[test]

@@ -395,7 +395,7 @@ mod tests {
         ComputeInitialEcdsaDealingsArgs, DerivationPath, EcdsaCurve, EcdsaKeyId, SignWithECDSAArgs,
     };
     use ic_replicated_state::SubnetTopology;
-    use ic_test_utilities::types::ids::{canister_test_id, node_test_id, subnet_test_id};
+    use ic_test_utilities_types::ids::{canister_test_id, node_test_id, subnet_test_id};
     use maplit::btreemap;
     use serde_bytes::ByteBuf;
 

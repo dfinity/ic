@@ -40,6 +40,7 @@ DEPENDENCIES = [
     "//rs/test_utilities/metrics",
     "//rs/test_utilities/registry",
     "//rs/test_utilities/time",
+    "//rs/test_utilities/types",
     "//rs/types/error_types",
     "//rs/types/management_canister_types",
     "//rs/types/types",

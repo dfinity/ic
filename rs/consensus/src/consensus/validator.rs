@@ -1657,15 +1657,12 @@ pub mod test {
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
     use ic_test_utilities::{
-        assert_changeset_matches_pattern,
-        consensus::fake::*,
-        crypto::CryptoReturningOk,
-        matches_pattern,
-        state_manager::RefMockStateManager,
-        types::ids::{node_test_id, subnet_test_id},
+        assert_changeset_matches_pattern, consensus::fake::*, crypto::CryptoReturningOk,
+        matches_pattern, state_manager::RefMockStateManager,
     };
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_test_utilities_time::FastForwardTimeSource;
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
         consensus::{
             ecdsa::QuadrupleId, BlockPayload, CatchUpPackageShare, Finalization, FinalizationShare,

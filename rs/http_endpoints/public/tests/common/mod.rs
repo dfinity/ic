@@ -42,8 +42,8 @@ use ic_replicated_state::{
 use ic_test_utilities::{
     crypto::{temp_crypto_component_with_fake_registry, CryptoReturningOk},
     state::ReplicatedStateBuilder,
-    types::ids::{node_test_id, subnet_test_id},
 };
+use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
     artifact_kind::IngressArtifact,

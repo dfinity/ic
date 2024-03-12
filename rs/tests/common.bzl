@@ -91,6 +91,7 @@ DEPENDENCIES = [
     "//rs/test_utilities",
     "//rs/test_utilities/identity",
     "//rs/test_utilities/time",
+    "//rs/test_utilities/types",
     "//rs/tests/test_canisters/message:lib",
     "//rs/tree_deserializer",
     "//rs/types/base_types",

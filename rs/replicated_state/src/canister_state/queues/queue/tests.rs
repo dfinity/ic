@@ -1,5 +1,5 @@
 use super::*;
-use ic_test_utilities::types::{
+use ic_test_utilities_types::{
     arbitrary,
     ids::{canister_test_id, message_test_id, user_test_id},
     messages::{IngressBuilder, RequestBuilder, ResponseBuilder},

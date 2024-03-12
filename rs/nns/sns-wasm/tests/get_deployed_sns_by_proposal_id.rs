@@ -11,7 +11,7 @@ use ic_sns_wasm::pb::v1::{
     DappCanistersTransferResult, DeployNewSnsResponse, GetDeployedSnsByProposalIdResponse,
     SnsCanisterIds,
 };
-use ic_test_utilities::types::ids::canister_test_id;
+use ic_test_utilities_types::ids::canister_test_id;
 
 pub mod common;
 

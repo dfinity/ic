@@ -25,5 +25,6 @@ hex = "0.4.2"
 ic-crypto-test-utils-reproducible-rng = { path = "../crypto/test_utils/reproducible_rng" }
 ic-crypto-test-utils-root-of-trust = { path = "../crypto/test_utils/root_of_trust" }
 ic-test-utilities = { path = "../test_utilities" }
+ic-test-utilities-types = { path = "../test_utilities/types" }
 mockall = "0.11.4"
 rand = "0.8"

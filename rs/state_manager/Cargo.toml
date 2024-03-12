@@ -67,6 +67,7 @@ ic-test-utilities-logger = { path = "../test_utilities/logger" }
 ic-test-utilities-metrics = { path = "../test_utilities/metrics" }
 ic-test-utilities-time = { path = "../test_utilities/time" }
 ic-test-utilities-tmpdir = { path = "../test_utilities/tmpdir" }
+ic-test-utilities-types = { path = "../test_utilities/types" }
 ic-wasm-types = { path = "../types/wasm_types" }
 maplit = "1.0.2"
 proptest = "1.0"

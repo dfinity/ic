@@ -1847,7 +1847,7 @@ mod test {
         SpyNnsRootCanisterClient, SpyNnsRootCanisterClientCall, SpyNnsRootCanisterClientReply,
     };
     use ic_sns_init::pb::v1::{DappCanisters, SnsInitPayload};
-    use ic_test_utilities::types::ids::{canister_test_id, subnet_test_id};
+    use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id};
     use pretty_assertions::assert_eq;
     use std::{
         sync::{Arc, Mutex},

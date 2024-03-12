@@ -47,14 +47,13 @@ impl PayloadBuilder {
 mod tests {
     use ic_types::{
         batch::{BatchPayload, IngressPayload},
+        consensus::dkg::Dealings,
         consensus::{BlockPayload, DataPayload},
     };
 
-    use crate::consensus::fake::Fake;
-
     #[test]
     fn batch_payload_serialize_then_deserialize() {
-        let ingress_0 = crate::types::messages::SignedIngressBuilder::new()
+        let ingress_0 = crate::messages::SignedIngressBuilder::new()
             .nonce(0)
             .build();
         let batch_payload_0 = BatchPayload {
@@ -77,7 +76,11 @@ mod tests {
         // Test default empty payload
         let payload_0 = Payload::new(
             ic_types::crypto::crypto_hash,
-            BlockPayload::Data(DataPayload::fake()),
+            BlockPayload::Data(DataPayload {
+                batch: BatchPayload::default(),
+                dealings: Dealings::new_empty(Height::from(0)),
+                ecdsa: None,
+            }),
         );
         let vec = serde_cbor::ser::to_vec(&payload_0).unwrap();
         let payload_1: Payload = serde_cbor::de::from_slice(&vec).unwrap();
@@ -90,7 +93,7 @@ mod tests {
         );
 
         // Test with a ingress message
-        let ingress_0 = crate::types::messages::SignedIngressBuilder::new()
+        let ingress_0 = crate::messages::SignedIngressBuilder::new()
             .nonce(0)
             .build();
         let batch_payload_0 = BatchPayload {

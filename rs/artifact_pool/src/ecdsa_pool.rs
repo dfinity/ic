@@ -428,7 +428,7 @@ impl MutablePool<EcdsaArtifact> for EcdsaPoolImpl {
                     } else {
                         warn!(
                             self.log,
-                            "HandleInvalid:: artifact was not found: msg_id = {msg_id:?}, msg = {msg}" 
+                            "HandleInvalid:: artifact was not found: msg_id = {msg_id:?}, msg = {msg}"
                         );
                     }
                 }
@@ -468,8 +468,8 @@ mod tests {
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities::consensus::fake::*;
     use ic_test_utilities::consensus::EcdsaStatsNoOp;
-    use ic_test_utilities::types::ids::{NODE_1, NODE_2, NODE_3, NODE_4, NODE_5, NODE_6};
     use ic_test_utilities_logger::with_test_replica_logger;
+    use ic_test_utilities_types::ids::{NODE_1, NODE_2, NODE_3, NODE_4, NODE_5, NODE_6};
     use ic_types::consensus::ecdsa::{dealing_support_prefix, EcdsaObject};
     use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
     use ic_types::crypto::{CryptoHash, CryptoHashOf};

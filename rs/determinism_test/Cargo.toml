@@ -25,8 +25,8 @@ ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-state-manager = { path = "../state_manager" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-registry = { path = "../test_utilities/registry" }
+ic-test-utilities-types = { path = "../test_utilities/types" }
 ic-types = { path = "../types/types" }
 slog = { workspace = true }
 tokio = { workspace = true }
 wat = "1.0.52"
-
