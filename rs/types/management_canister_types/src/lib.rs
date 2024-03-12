@@ -6,7 +6,7 @@ mod provisional;
 #[cfg(feature = "fuzzing_code")]
 use arbitrary::{Arbitrary, Result as ArbitraryResult, Unstructured};
 pub use bounded_vec::*;
-use candid::{CandidType, Decode, Deserialize, Encode};
+use candid::{CandidType, Decode, DecoderConfig, Deserialize, Encode};
 pub use http::{
     BoundedHttpHeaders, CanisterHttpRequestArgs, CanisterHttpResponsePayload, HttpHeader,
     HttpMethod, TransformArgs, TransformContext, TransformFunc,
@@ -51,6 +51,17 @@ const WASM_HASH_LENGTH: usize = 32;
 /// See https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki#serialization-format
 /// for details
 const MAXIMUM_DERIVATION_PATH_LENGTH: usize = 255;
+
+/// Limit the amount of work for skipping unneeded data on the wire when parsing Candid.
+/// The value of 10_000 follows the Candid recommendation.
+const DEFAULT_SKIPPING_QUOTA: usize = 10_000;
+
+fn decoder_config() -> DecoderConfig {
+    let mut config = DecoderConfig::new();
+    config.set_skipping_quota(DEFAULT_SKIPPING_QUOTA);
+    config.set_full_error_message(false);
+    config
+}
 
 /// Methods exported by ic:00.
 #[derive(Debug, EnumString, EnumIter, Display, Copy, Clone, PartialEq, Eq)]
@@ -121,7 +132,7 @@ pub trait Payload<'a>: Sized + CandidType + Deserialize<'a> {
     }
 
     fn decode(blob: &'a [u8]) -> Result<Self, UserError> {
-        Decode!(blob, Self).map_err(candid_error_to_user_error)
+        Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error)
     }
 }
 
@@ -1439,7 +1450,7 @@ impl<'a> Payload<'a> for EmptyBlob {
     }
 
     fn decode(blob: &'a [u8]) -> Result<EmptyBlob, UserError> {
-        Decode!(blob)
+        Decode!([decoder_config()]; blob)
             .map(|_| EmptyBlob)
             .map_err(candid_error_to_user_error)
     }
@@ -1705,7 +1716,7 @@ impl CreateCanisterArgs {
 
 impl<'a> Payload<'a> for CreateCanisterArgs {
     fn decode(blob: &'a [u8]) -> Result<Self, UserError> {
-        match Decode!(blob, Self) {
+        match Decode!([decoder_config()]; blob, Self) {
             Err(err) => {
                 // First check if deserialization failed due to exceeding the maximum allowed limit.
                 if format!("{err:?}").contains("The number of elements exceeds maximum allowed") {
@@ -1845,7 +1856,7 @@ impl SetupInitialDKGResponse {
 
     pub fn decode(blob: &[u8]) -> Result<Self, UserError> {
         let serde_encoded_transcript_records =
-            Decode!(blob, Vec<u8>).map_err(candid_error_to_user_error)?;
+            Decode!([decoder_config()]; blob, Vec<u8>).map_err(candid_error_to_user_error)?;
         match serde_cbor::from_slice::<(
             InitialNiDkgTranscriptRecord,
             InitialNiDkgTranscriptRecord,
@@ -2252,7 +2263,7 @@ impl ComputeInitialEcdsaDealingsResponse {
 
     pub fn decode(blob: &[u8]) -> Result<Self, UserError> {
         let serde_encoded_transcript_records =
-            Decode!(blob, Vec<u8>).map_err(candid_error_to_user_error)?;
+            Decode!([decoder_config()]; blob, Vec<u8>).map_err(candid_error_to_user_error)?;
         match serde_cbor::from_slice::<(InitialIDkgDealings,)>(&serde_encoded_transcript_records) {
             Err(err) => Err(UserError::new(
                 ErrorCode::CanisterContractViolation,
