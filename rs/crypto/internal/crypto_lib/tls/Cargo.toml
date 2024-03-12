@@ -24,4 +24,4 @@ ic-protobuf = { path = "../../../../protobuf" }
 rand_chacha = "0.3"
 serde_cbor = { workspace = true }
 hex = "0.4"
-x509-parser = { version = "0.15.1" }
+x509-parser = { workspace = true }

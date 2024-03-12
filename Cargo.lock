@@ -1897,7 +1897,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
- "x509-parser 0.15.1",
+ "x509-parser",
 ]
 
 [[package]]
@@ -5363,7 +5363,7 @@ dependencies = [
  "tracing-subscriber",
  "url",
  "wiremock",
- "x509-parser 0.15.1",
+ "x509-parser",
 ]
 
 [[package]]
@@ -6669,7 +6669,7 @@ dependencies = [
  "tokio-util",
  "tracing",
  "tracing-subscriber",
- "x509-parser 0.15.1",
+ "x509-parser",
  "zeroize",
 ]
 
@@ -6882,7 +6882,7 @@ dependencies = [
  "serde",
  "serde_cbor",
  "time",
- "x509-parser 0.15.1",
+ "x509-parser",
  "zeroize",
 ]
 
@@ -7281,7 +7281,7 @@ dependencies = [
  "ic-protobuf",
  "ic-types",
  "serde",
- "x509-parser 0.14.0",
+ "x509-parser",
 ]
 
 [[package]]
@@ -7300,7 +7300,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tokio-rustls",
- "x509-parser 0.15.1",
+ "x509-parser",
 ]
 
 [[package]]
@@ -7410,7 +7410,7 @@ dependencies = [
  "ic-base-types",
  "ic-crypto-tls-interfaces",
  "tokio-rustls",
- "x509-parser 0.15.1",
+ "x509-parser",
 ]
 
 [[package]]
@@ -20150,24 +20150,6 @@ dependencies = [
 
 [[package]]
 name = "x509-parser"
-version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e0ecbeb7b67ce215e40e3cc7f2ff902f94a223acf44995934763467e7b1febc8"
-dependencies = [
- "asn1-rs",
- "base64 0.13.1",
- "data-encoding",
- "der-parser",
- "lazy_static",
- "nom",
- "oid-registry",
- "rusticata-macros",
- "thiserror",
- "time",
-]
-
-[[package]]
-name = "x509-parser"
 version = "0.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7069fba5b66b9193bd2c5d3d4ff12b839118f6bcbef5328efafafb5395cf63da"
@@ -20178,7 +20160,6 @@ dependencies = [
  "lazy_static",
  "nom",
  "oid-registry",
- "ring 0.16.20",
  "rusticata-macros",
  "thiserror",
  "time",

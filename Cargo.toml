@@ -539,3 +539,4 @@ tracing-subscriber = { version = "0.3.18", features = [
 ] }
 turmoil = "0.6.0"
 x509-cert = { version = "0.2.4", features = ["builder", "hazmat"] }
+x509-parser = { version = "0.15.1" }
