@@ -19,7 +19,7 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgUnmaskedTranscriptOrigin, SignedIDkgDealing,
 };
 use ic_types::crypto::canister_threshold_sig::{
-    ExtendedDerivationPath, PreSignatureQuadruple, ThresholdEcdsaSigShare,
+    EcdsaPreSignatureQuadruple, ExtendedDerivationPath, ThresholdEcdsaSigShare,
 };
 use ic_types::crypto::canister_threshold_sig::{
     ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs,
@@ -213,7 +213,7 @@ pub fn generate_key_transcript<R: RngCore + CryptoRng>(
         .run_idkg_and_create_and_verify_transcript(&unmasked_key_params, rng)
 }
 
-pub fn generate_presig_quadruple<R: RngCore + CryptoRng>(
+pub fn generate_ecdsa_presig_quadruple<R: RngCore + CryptoRng>(
     env: &CanisterThresholdSigTestEnvironment,
     dealers: &IDkgDealers,
     receivers: &IDkgReceivers,
@@ -221,7 +221,7 @@ pub fn generate_presig_quadruple<R: RngCore + CryptoRng>(
     key_transcript: &IDkgTranscript,
     random_unmasked_kappa: bool,
     rng: &mut R,
-) -> PreSignatureQuadruple {
+) -> EcdsaPreSignatureQuadruple {
     let lambda_params = setup_masked_random_params(env, alg, dealers, receivers, rng);
     let lambda_transcript = env
         .nodes
@@ -276,7 +276,7 @@ pub fn generate_presig_quadruple<R: RngCore + CryptoRng>(
             .run_idkg_and_create_and_verify_transcript(&key_times_lambda_params, rng)
     };
 
-    PreSignatureQuadruple::new(
+    EcdsaPreSignatureQuadruple::new(
         kappa_transcript,
         lambda_transcript,
         kappa_times_lambda_transcript,
@@ -1840,7 +1840,7 @@ pub fn generate_tecdsa_protocol_inputs<R: RngCore + CryptoRng>(
     random_unmasked_kappa: bool,
     rng: &mut R,
 ) -> ThresholdEcdsaSigInputs {
-    let quadruple = generate_presig_quadruple(
+    let quadruple = generate_ecdsa_presig_quadruple(
         env,
         dealers,
         receivers,
@@ -2268,7 +2268,7 @@ pub struct ThresholdEcdsaSigInputsBuilder {
     derivation_path: ExtendedDerivationPath,
     hashed_message: Vec<u8>,
     nonce: Randomness,
-    presig_quadruple: PreSignatureQuadruple,
+    presig_quadruple: EcdsaPreSignatureQuadruple,
     key_transcript: IDkgTranscript,
 }
 

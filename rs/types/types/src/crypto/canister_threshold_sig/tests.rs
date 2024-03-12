@@ -1,6 +1,6 @@
 use super::*;
 use crate::crypto::canister_threshold_sig::error::{
-    PresignatureQuadrupleCreationError, ThresholdEcdsaSigInputsCreationError,
+    EcdsaPresignatureQuadrupleCreationError, ThresholdEcdsaSigInputsCreationError,
 };
 use crate::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
 use crate::{Height, NodeId, RegistryVersion, SubnetId};
@@ -27,7 +27,7 @@ fn should_create_quadruples_correctly() {
     for kappa_unmasked_type in kappa_unmasked_supported_types {
         kappa_unmasked.transcript_type = kappa_unmasked_type;
 
-        let result = PreSignatureQuadruple::new(
+        let result = EcdsaPreSignatureQuadruple::new(
             kappa_unmasked.clone(),
             lambda_masked.clone(),
             kappa_times_lambda.clone(),
@@ -54,7 +54,7 @@ fn should_not_create_quadruples_with_inconsistent_algorithms() {
     kappa_unmasked.algorithm_id = wrong_algorithm_id;
     assert_ne!(kappa_unmasked.algorithm_id, lambda_masked.algorithm_id);
 
-    let quadruple = PreSignatureQuadruple::new(
+    let quadruple = EcdsaPreSignatureQuadruple::new(
         kappa_unmasked,
         lambda_masked,
         kappa_times_lambda,
@@ -62,7 +62,7 @@ fn should_not_create_quadruples_with_inconsistent_algorithms() {
     );
     assert_matches!(
         quadruple,
-        Err(PresignatureQuadrupleCreationError::InconsistentAlgorithmIds)
+        Err(EcdsaPresignatureQuadrupleCreationError::InconsistentAlgorithmIds)
     );
 }
 
@@ -77,7 +77,7 @@ fn should_not_create_quadruples_with_inconsistent_receivers() {
     kappa_unmasked.receivers = IDkgReceivers::new(wrong_receivers).unwrap();
     assert_ne!(kappa_unmasked.receivers, lambda_masked.receivers);
 
-    let quadruple = PreSignatureQuadruple::new(
+    let quadruple = EcdsaPreSignatureQuadruple::new(
         kappa_unmasked,
         lambda_masked,
         kappa_times_lambda,
@@ -85,7 +85,7 @@ fn should_not_create_quadruples_with_inconsistent_receivers() {
     );
     assert_matches!(
         quadruple,
-        Err(PresignatureQuadrupleCreationError::InconsistentReceivers)
+        Err(EcdsaPresignatureQuadrupleCreationError::InconsistentReceivers)
     );
 }
 
@@ -110,13 +110,13 @@ fn should_not_create_quadruples_for_kappa_with_wrong_type() {
         assert_ne!(kappa_unmasked.transcript_type, wrong_kappa_unmasked_type);
         kappa_unmasked.transcript_type = wrong_kappa_unmasked_type;
 
-        let quadruple = PreSignatureQuadruple::new(
+        let quadruple = EcdsaPreSignatureQuadruple::new(
             kappa_unmasked.clone(),
             lambda_masked,
             kappa_times_lambda,
             key_times_lambda,
         );
-        assert_matches!(quadruple, Err(PresignatureQuadrupleCreationError::InvalidTranscriptOrigin(error))
+        assert_matches!(quadruple, Err(EcdsaPresignatureQuadrupleCreationError::InvalidTranscriptOrigin(error))
             if error == format!("`kappa_unmasked` transcript expected to have type `Unmasked` with `ReshareMasked` or `Random` origin, but found transcript of type {:?}",kappa_unmasked.transcript_type)
         );
     }
@@ -135,13 +135,13 @@ fn should_not_create_quadruples_for_lambda_with_wrong_type() {
     assert_ne!(lambda_masked.transcript_type, wrong_lambda_masked_type);
     lambda_masked.transcript_type = wrong_lambda_masked_type;
 
-    let quadruple = PreSignatureQuadruple::new(
+    let quadruple = EcdsaPreSignatureQuadruple::new(
         kappa_unmasked,
         lambda_masked.clone(),
         kappa_times_lambda,
         key_times_lambda,
     );
-    assert_matches!(quadruple, Err(PresignatureQuadrupleCreationError::InvalidTranscriptOrigin(error))
+    assert_matches!(quadruple, Err(EcdsaPresignatureQuadrupleCreationError::InvalidTranscriptOrigin(error))
         if error == format!("`lambda_masked` transcript expected to have type `Masked` with `Random` origin, but found transcript of type {:?}",lambda_masked.transcript_type)
     );
 }
@@ -164,13 +164,13 @@ fn should_not_create_quadruples_for_kappa_times_lambda_with_wrong_origin() {
     );
     kappa_times_lambda.transcript_type = wrong_kappa_times_lambda_type.clone();
 
-    let quadruple = PreSignatureQuadruple::new(
+    let quadruple = EcdsaPreSignatureQuadruple::new(
         kappa_unmasked.clone(),
         lambda_masked.clone(),
         kappa_times_lambda,
         key_times_lambda,
     );
-    assert_matches!(quadruple, Err(PresignatureQuadrupleCreationError::InvalidTranscriptOrigin(error))
+    assert_matches!(quadruple, Err(EcdsaPresignatureQuadrupleCreationError::InvalidTranscriptOrigin(error))
           if error == format!("`kappa_times_lambda` transcript expected to have type `Masked` with origin of type `UnmaskedTimesMasked({:?},{:?})`, but found transcript of type {:?}", kappa_unmasked.transcript_id, lambda_masked.transcript_id, wrong_kappa_times_lambda_type)
     );
 }
@@ -190,13 +190,13 @@ fn should_not_create_quadruples_for_kappa_times_lambda_of_wrong_type() {
     );
     kappa_times_lambda.transcript_type = wrong_kappa_times_lambda_type.clone();
 
-    let quadruple = PreSignatureQuadruple::new(
+    let quadruple = EcdsaPreSignatureQuadruple::new(
         kappa_unmasked.clone(),
         lambda_masked.clone(),
         kappa_times_lambda,
         key_times_lambda,
     );
-    assert_matches!(quadruple, Err(PresignatureQuadrupleCreationError::InvalidTranscriptOrigin(error))
+    assert_matches!(quadruple, Err(EcdsaPresignatureQuadrupleCreationError::InvalidTranscriptOrigin(error))
         if error == format!("`kappa_times_lambda` transcript expected to have type `Masked` with origin of type `UnmaskedTimesMasked({:?},{:?})`, but found transcript of type {:?}", kappa_unmasked.transcript_id, lambda_masked.transcript_id, wrong_kappa_times_lambda_type)
     );
 }
@@ -219,13 +219,13 @@ fn should_not_create_quadruples_for_key_times_lambda_with_wrong_origin() {
     );
     key_times_lambda.transcript_type = wrong_key_times_lambda_type.clone();
 
-    let quadruple = PreSignatureQuadruple::new(
+    let quadruple = EcdsaPreSignatureQuadruple::new(
         kappa_unmasked,
         lambda_masked.clone(),
         kappa_times_lambda,
         key_times_lambda,
     );
-    assert_matches!(quadruple, Err(PresignatureQuadrupleCreationError::InvalidTranscriptOrigin(error))
+    assert_matches!(quadruple, Err(EcdsaPresignatureQuadrupleCreationError::InvalidTranscriptOrigin(error))
         if error == format!("`key_times_lambda` transcript expected to have type `Masked` with origin of type `UnmaskedTimesMasked(_,{:?})`, but found transcript of type {:?}", lambda_masked.transcript_id, wrong_key_times_lambda_type)
     );
 }
@@ -245,13 +245,13 @@ fn should_not_create_quadruples_for_key_times_lambda_with_wrong_type() {
     );
     key_times_lambda.transcript_type = wrong_key_times_lambda_type.clone();
 
-    let quadruple = PreSignatureQuadruple::new(
+    let quadruple = EcdsaPreSignatureQuadruple::new(
         kappa_unmasked,
         lambda_masked.clone(),
         kappa_times_lambda,
         key_times_lambda,
     );
-    assert_matches!(quadruple, Err(PresignatureQuadrupleCreationError::InvalidTranscriptOrigin(error))
+    assert_matches!(quadruple, Err(EcdsaPresignatureQuadrupleCreationError::InvalidTranscriptOrigin(error))
         if error == format!("`key_times_lambda` transcript expected to have type `Masked` with origin of type `UnmaskedTimesMasked(_,{:?})`, but found transcript of type {:?}", lambda_masked.transcript_id, wrong_key_times_lambda_type)
     );
 }
@@ -263,7 +263,7 @@ fn should_create_ecdsa_inputs_correctly() {
     let (kappa_unmasked, lambda_masked, kappa_times_lambda, key_times_lambda, key_transcript) =
         transcripts_for_ecdsa_inputs(common_receivers, rng);
 
-    let quadruple = PreSignatureQuadruple::new(
+    let quadruple = EcdsaPreSignatureQuadruple::new(
         kappa_unmasked,
         lambda_masked,
         kappa_times_lambda,
@@ -310,7 +310,7 @@ fn should_not_create_ecdsa_inputs_with_inconsistent_algorithm() {
 
     key_transcript.algorithm_id = wrong_algorithm;
 
-    let quadruple = PreSignatureQuadruple::new(
+    let quadruple = EcdsaPreSignatureQuadruple::new(
         kappa_unmasked,
         lambda_masked,
         kappa_times_lambda,
@@ -353,7 +353,7 @@ fn should_not_create_ecdsa_inputs_with_unsupported_algorithm() {
     key_times_lambda.algorithm_id = wrong_algorithm;
     key_transcript.algorithm_id = wrong_algorithm;
 
-    let quadruple = PreSignatureQuadruple::new(
+    let quadruple = EcdsaPreSignatureQuadruple::new(
         kappa_unmasked,
         lambda_masked,
         kappa_times_lambda,
@@ -382,7 +382,7 @@ fn should_not_create_ecdsa_inputs_with_invalid_hash_length() {
     let (kappa_unmasked, lambda_masked, kappa_times_lambda, key_times_lambda, key_transcript) =
         transcripts_for_ecdsa_inputs(common_receivers, rng);
 
-    let quadruple = PreSignatureQuadruple::new(
+    let quadruple = EcdsaPreSignatureQuadruple::new(
         kappa_unmasked,
         lambda_masked,
         kappa_times_lambda,
@@ -416,7 +416,7 @@ fn should_not_create_ecdsa_inputs_with_distinct_receivers() {
 
     key_transcript.receivers = wrong_receivers;
 
-    let quadruple = PreSignatureQuadruple::new(
+    let quadruple = EcdsaPreSignatureQuadruple::new(
         kappa_unmasked,
         lambda_masked,
         kappa_times_lambda,
@@ -450,7 +450,7 @@ fn should_not_create_ecdsa_inputs_for_quadruple_with_wrong_origin() {
 
     key_transcript.transcript_id = wrong_key_transcript_id;
 
-    let quadruple = PreSignatureQuadruple::new(
+    let quadruple = EcdsaPreSignatureQuadruple::new(
         kappa_unmasked,
         lambda_masked,
         kappa_times_lambda,
@@ -513,7 +513,7 @@ fn should_return_correct_index_for_signer_id_from_threshold_ecdsa_sig_inputs() {
     let (kappa_unmasked, lambda_masked, kappa_times_lambda, key_times_lambda, key_transcript) =
         transcripts_for_ecdsa_inputs(common_receivers, rng);
 
-    let quadruple = PreSignatureQuadruple::new(
+    let quadruple = EcdsaPreSignatureQuadruple::new(
         kappa_unmasked,
         lambda_masked,
         kappa_times_lambda,

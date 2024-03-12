@@ -68,7 +68,7 @@ impl fmt::Debug for ThresholdEcdsaCombinedSignature {
     }
 }
 
-/// Quadruple of IDKG transcripts consumed by a canister-requested threshold signature.
+/// Quadruple of IDKG transcripts consumed by a canister-requested threshold ECDSA signature.
 /// Each quadruple MUST be used *at most once* for a signature. Otherwise, the private key may be
 /// leaked!
 ///
@@ -80,20 +80,20 @@ impl fmt::Debug for ThresholdEcdsaCombinedSignature {
 /// * a masked transcript for sharing the value `kappa * lambda`
 /// * a masked transcript for sharing the value `private_key * lambda`
 #[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct PreSignatureQuadruple {
+pub struct EcdsaPreSignatureQuadruple {
     kappa_unmasked: IDkgTranscript,
     lambda_masked: IDkgTranscript,
     kappa_times_lambda: IDkgTranscript,
     key_times_lambda: IDkgTranscript,
 }
 
-impl Display for PreSignatureQuadruple {
+impl Display for EcdsaPreSignatureQuadruple {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self)
     }
 }
 
-impl fmt::Debug for PreSignatureQuadruple {
+impl fmt::Debug for EcdsaPreSignatureQuadruple {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "PreSignatureQuadruple {{ ")?;
         write!(f, "kappa_unmasked: {:?}", self.kappa_unmasked.transcript_id)?;
@@ -113,11 +113,11 @@ impl fmt::Debug for PreSignatureQuadruple {
     }
 }
 
-impl PreSignatureQuadruple {
-    /// Creates a `PreSignatureQuadruple` which is a collection of four transcripts
+impl EcdsaPreSignatureQuadruple {
+    /// Creates an `EcdsaPreSignatureQuadruple` which is a collection of four transcripts
     /// that can be used in the threshold ECDSA protocol.
     ///
-    /// A `PreSignatureQuadruple` can only be created if the following invariants hold:
+    /// An `EcdsaPreSignatureQuadruple` can only be created if the following invariants hold:
     /// * All transcripts use the same algorithm ID (error: `InconsistentAlgorithms`)
     /// * All transcripts have the same receiver set (error: `InconsistentReceivers`)
     /// * The `kappa_unmasked` transcript is of type `Unmasked` with origin
@@ -136,7 +136,7 @@ impl PreSignatureQuadruple {
         lambda_masked: IDkgTranscript,
         kappa_times_lambda: IDkgTranscript,
         key_times_lambda: IDkgTranscript,
-    ) -> Result<Self, error::PresignatureQuadrupleCreationError> {
+    ) -> Result<Self, error::EcdsaPresignatureQuadrupleCreationError> {
         Self::check_algorithm_ids(
             &kappa_unmasked,
             &lambda_masked,
@@ -185,14 +185,14 @@ impl PreSignatureQuadruple {
         lambda_masked: &IDkgTranscript,
         kappa_times_lambda: &IDkgTranscript,
         key_times_lambda: &IDkgTranscript,
-    ) -> Result<(), error::PresignatureQuadrupleCreationError> {
+    ) -> Result<(), error::EcdsaPresignatureQuadrupleCreationError> {
         if kappa_unmasked.algorithm_id == lambda_masked.algorithm_id
             && lambda_masked.algorithm_id == kappa_times_lambda.algorithm_id
             && kappa_times_lambda.algorithm_id == key_times_lambda.algorithm_id
         {
             Ok(())
         } else {
-            Err(error::PresignatureQuadrupleCreationError::InconsistentAlgorithmIds)
+            Err(error::EcdsaPresignatureQuadrupleCreationError::InconsistentAlgorithmIds)
         }
     }
 
@@ -201,14 +201,14 @@ impl PreSignatureQuadruple {
         lambda_masked: &IDkgTranscript,
         kappa_times_lambda: &IDkgTranscript,
         key_times_lambda: &IDkgTranscript,
-    ) -> Result<(), error::PresignatureQuadrupleCreationError> {
+    ) -> Result<(), error::EcdsaPresignatureQuadrupleCreationError> {
         if kappa_unmasked.receivers == lambda_masked.receivers
             && lambda_masked.receivers == kappa_times_lambda.receivers
             && kappa_times_lambda.receivers == key_times_lambda.receivers
         {
             Ok(())
         } else {
-            Err(error::PresignatureQuadrupleCreationError::InconsistentReceivers)
+            Err(error::EcdsaPresignatureQuadrupleCreationError::InconsistentReceivers)
         }
     }
 
@@ -217,7 +217,7 @@ impl PreSignatureQuadruple {
         lambda_masked: &IDkgTranscript,
         kappa_times_lambda: &IDkgTranscript,
         key_times_lambda: &IDkgTranscript,
-    ) -> Result<(), error::PresignatureQuadrupleCreationError> {
+    ) -> Result<(), error::EcdsaPresignatureQuadrupleCreationError> {
         Self::check_kappa_unmasked_origin(kappa_unmasked)?;
         Self::check_lambda_masked_origin(lambda_masked)?;
         Self::check_kappa_times_lambda_origin(kappa_unmasked, lambda_masked, kappa_times_lambda)?;
@@ -227,11 +227,11 @@ impl PreSignatureQuadruple {
 
     fn check_kappa_unmasked_origin(
         kappa_unmasked: &IDkgTranscript,
-    ) -> Result<(), error::PresignatureQuadrupleCreationError> {
+    ) -> Result<(), error::EcdsaPresignatureQuadrupleCreationError> {
         match &kappa_unmasked.transcript_type {
             IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareMasked(_)) |
              IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::Random) => Ok(()),
-            _ => Err(error::PresignatureQuadrupleCreationError::InvalidTranscriptOrigin(
+            _ => Err(error::EcdsaPresignatureQuadrupleCreationError::InvalidTranscriptOrigin(
                 format!("`kappa_unmasked` transcript expected to have type `Unmasked` with `ReshareMasked` or `Random` origin, but found transcript of type {:?}", kappa_unmasked.transcript_type))
             ),
         }
@@ -239,10 +239,10 @@ impl PreSignatureQuadruple {
 
     fn check_lambda_masked_origin(
         lambda_masked: &IDkgTranscript,
-    ) -> Result<(), error::PresignatureQuadrupleCreationError> {
+    ) -> Result<(), error::EcdsaPresignatureQuadrupleCreationError> {
         match &lambda_masked.transcript_type {
             IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random) => Ok(()),
-            _ => Err(error::PresignatureQuadrupleCreationError::InvalidTranscriptOrigin(
+            _ => Err(error::EcdsaPresignatureQuadrupleCreationError::InvalidTranscriptOrigin(
                 format!("`lambda_masked` transcript expected to have type `Masked` with `Random` origin, but found transcript of type {:?}", lambda_masked.transcript_type))
             ),
         }
@@ -252,14 +252,14 @@ impl PreSignatureQuadruple {
         kappa_unmasked: &IDkgTranscript,
         lambda_masked: &IDkgTranscript,
         kappa_times_lambda: &IDkgTranscript,
-    ) -> Result<(), error::PresignatureQuadrupleCreationError> {
+    ) -> Result<(), error::EcdsaPresignatureQuadrupleCreationError> {
         match &kappa_times_lambda.transcript_type {
             IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::UnmaskedTimesMasked(id_l, id_r))
             if *id_l == kappa_unmasked.transcript_id && *id_r == lambda_masked.transcript_id
             => {
                 Ok(())
             }
-            _ => Err(error::PresignatureQuadrupleCreationError::InvalidTranscriptOrigin(
+            _ => Err(error::EcdsaPresignatureQuadrupleCreationError::InvalidTranscriptOrigin(
                 format!("`kappa_times_lambda` transcript expected to have type `Masked` with origin of type `UnmaskedTimesMasked({:?},{:?})`, but found transcript of type {:?}", kappa_unmasked.transcript_id, lambda_masked.transcript_id, kappa_times_lambda.transcript_type))
             ),
         }
@@ -268,13 +268,13 @@ impl PreSignatureQuadruple {
     fn check_key_times_lambda_origin(
         lambda_masked: &IDkgTranscript,
         key_times_lambda: &IDkgTranscript,
-    ) -> Result<(), error::PresignatureQuadrupleCreationError> {
+    ) -> Result<(), error::EcdsaPresignatureQuadrupleCreationError> {
         match &key_times_lambda.transcript_type {
             IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::UnmaskedTimesMasked(_, id_r, ))
             if *id_r == lambda_masked.transcript_id => {
                 Ok(())
             }
-            _ => Err(error::PresignatureQuadrupleCreationError::InvalidTranscriptOrigin(
+            _ => Err(error::EcdsaPresignatureQuadrupleCreationError::InvalidTranscriptOrigin(
                 format!("`key_times_lambda` transcript expected to have type `Masked` with origin of type `UnmaskedTimesMasked(_,{:?})`, but found transcript of type {:?}", lambda_masked.transcript_id, key_times_lambda.transcript_type))
             ),
         }
@@ -316,7 +316,7 @@ pub struct ThresholdEcdsaSigInputs {
     #[serde(with = "serde_bytes")]
     hashed_message: Vec<u8>,
     nonce: Randomness,
-    presig_quadruple: PreSignatureQuadruple,
+    presig_quadruple: EcdsaPreSignatureQuadruple,
     key_transcript: IDkgTranscript,
 }
 
@@ -372,7 +372,7 @@ impl ThresholdEcdsaSigInputs {
         derivation_path: &ExtendedDerivationPath,
         hashed_message: &[u8],
         nonce: Randomness,
-        presig_quadruple: PreSignatureQuadruple,
+        presig_quadruple: EcdsaPreSignatureQuadruple,
         key_transcript: IDkgTranscript,
     ) -> Result<Self, error::ThresholdEcdsaSigInputsCreationError> {
         Self::check_algorithm_ids(&presig_quadruple, &key_transcript)?;
@@ -401,7 +401,7 @@ impl ThresholdEcdsaSigInputs {
         &self.nonce
     }
 
-    pub fn presig_quadruple(&self) -> &PreSignatureQuadruple {
+    pub fn presig_quadruple(&self) -> &EcdsaPreSignatureQuadruple {
         &self.presig_quadruple
     }
 
@@ -426,7 +426,7 @@ impl ThresholdEcdsaSigInputs {
     }
 
     fn check_algorithm_ids(
-        presig_quadruple: &PreSignatureQuadruple,
+        presig_quadruple: &EcdsaPreSignatureQuadruple,
         key_transcript: &IDkgTranscript,
     ) -> Result<(), error::ThresholdEcdsaSigInputsCreationError> {
         // The quadruple was already checked to have a consistent algorithm ID
@@ -459,7 +459,7 @@ impl ThresholdEcdsaSigInputs {
     }
 
     fn check_receivers_are_equal(
-        presig_quadruple: &PreSignatureQuadruple,
+        presig_quadruple: &EcdsaPreSignatureQuadruple,
         key_transcript: &IDkgTranscript,
     ) -> Result<(), error::ThresholdEcdsaSigInputsCreationError> {
         // The quadruple was already checked to have a consistent receiver set
@@ -471,7 +471,7 @@ impl ThresholdEcdsaSigInputs {
     }
 
     fn check_quadruple_origin(
-        presig_quadruple: &PreSignatureQuadruple,
+        presig_quadruple: &EcdsaPreSignatureQuadruple,
         key_transcript: &IDkgTranscript,
     ) -> Result<(), error::ThresholdEcdsaSigInputsCreationError> {
         match &presig_quadruple.key_times_lambda.transcript_type {
