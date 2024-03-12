@@ -47,6 +47,7 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
+    canister_snapshots::SnapshotId,
     canister_state::system_state::PausedExecutionId,
     canister_state::{system_state::CyclesUseCase, NextExecution},
     metadata_state::subnet_call_context_manager::{
@@ -1245,16 +1246,15 @@ impl ExecutionEnvironment {
 
             Ok(Ic00Method::TakeCanisterSnapshot) => match self.config.canister_snapshots {
                 FlagStatus::Enabled => {
-                    let res = match TakeCanisterSnapshotArgs::decode(payload) {
-                        Err(err) => Err(err),
-                        Ok(_) => {
-                            // TODO(EXC-1529): Implement take_canister_snapshot.
-                            Err(UserError::new(
-                                ErrorCode::CanisterRejectedMessage,
-                                "Canister snapshotting API is not yet implemented.",
-                            ))
-                        }
-                    };
+                    let res = TakeCanisterSnapshotArgs::decode(payload).and_then(|args| {
+                        self.take_canister_snapshot(
+                            *msg.sender(),
+                            &mut state,
+                            args,
+                            registry_settings.subnet_size,
+                            round_limits,
+                        )
+                    });
                     ExecuteSubnetMessageResult::Finished {
                         response: res,
                         refund: msg.take_cycles(),
@@ -1882,6 +1882,51 @@ impl ExecutionEnvironment {
             .stored_chunks(sender, canister)
             .map(|reply| reply.encode())
             .map_err(|err| err.into())
+    }
+
+    /// Creates a new canister snapshot and inserts it into `ReplicatedState`.
+    fn take_canister_snapshot(
+        &self,
+        sender: PrincipalId,
+        state: &mut ReplicatedState,
+        args: TakeCanisterSnapshotArgs,
+        subnet_size: usize,
+        round_limits: &mut RoundLimits,
+    ) -> Result<Vec<u8>, UserError> {
+        let canister_id = args.get_canister_id();
+        // Take canister out.
+        let mut canister = match state.take_canister_state(&canister_id) {
+            None => {
+                return Err(UserError::new(
+                    ErrorCode::CanisterNotFound,
+                    format!("Canister {} not found.", &canister_id),
+                ))
+            }
+            Some(canister) => canister,
+        };
+
+        let resource_saturation =
+            self.subnet_memory_saturation(&round_limits.subnet_available_memory);
+        let replace_snapshot = args.replace_snapshot().map(SnapshotId::new);
+        let result = self
+            .canister_manager
+            .take_canister_snapshot(
+                subnet_size,
+                sender,
+                &mut canister,
+                replace_snapshot,
+                state,
+                round_limits,
+                &resource_saturation,
+            )
+            .map(|response| {
+                state.metadata.heap_delta_estimate += NumBytes::from(response.total_size());
+                response.encode()
+            })
+            .map_err(|err| err.into());
+        // Put canister back.
+        state.put_canister_state(canister);
+        result
     }
 
     fn node_metrics_history(
