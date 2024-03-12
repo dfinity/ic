@@ -585,7 +585,7 @@ impl InstallCodeHelper {
     }
 
     /// Tests whether the canister uses enhanced orthogonal persistence.
-    /// Used for checking that the `keep_main_memory` upgrade option is not omitted in error.
+    /// Used for checking that the `wasm_memory_persistence` upgrade option is not omitted in error.
     pub fn expects_orthogonal_persistence(&self) -> bool {
         match &self.canister.execution_state {
             Some(old_state) => old_state

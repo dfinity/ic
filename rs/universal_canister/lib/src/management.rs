@@ -72,6 +72,7 @@ pub fn create_canister(cycles: (u64, u64)) -> CandidCallBuilder<CreateCanisterAr
 ///   management::install_code(canister_id, wasm_module)
 ///      .with_mode(management::InstallMode::Upgrade(Some(management::CanisterUpgradeOptions {
 ///         skip_pre_upgrade: Some(false),
+///         wasm_memory_persistence: None,
 ///       })))
 ///      .on_reply(wasm().noop()) // custom on_reply
 ///      .on_reject(wasm().noop()) // custom on_reject
@@ -287,9 +288,15 @@ impl<Args: CandidType> From<CandidCallBuilder<Args>> for Call {
 }
 
 #[derive(CandidType, Deserialize)]
+pub enum WasmMemoryPersistence {
+    Keep,
+    Drop,
+}
+
+#[derive(CandidType, Deserialize)]
 pub struct CanisterUpgradeOptions {
     pub skip_pre_upgrade: Option<bool>,
-    pub keep_main_memory: Option<bool>,
+    pub wasm_memory_persistence: Option<WasmMemoryPersistence>,
 }
 
 #[derive(CandidType, Deserialize)]

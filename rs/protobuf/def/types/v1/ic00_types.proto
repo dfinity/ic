@@ -9,9 +9,15 @@ enum CanisterInstallMode {
   CANISTER_INSTALL_MODE_UPGRADE = 3;
 }
 
+enum WasmMemoryPersistence {
+  WASM_MEMORY_PERSISTENCE_UNSPECIFIED = 0;
+  WASM_MEMORY_PERSISTENCE_KEEP = 1;
+  WASM_MEMORY_PERSISTENCE_DROP = 2;
+}
+
 message CanisterUpgradeOptions {
   optional bool skip_pre_upgrade = 1;
-  optional bool keep_main_memory = 2;
+  optional WasmMemoryPersistence wasm_memory_persistence = 2;
 }
 
 message CanisterInstallModeV2 {

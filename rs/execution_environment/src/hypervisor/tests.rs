@@ -6309,7 +6309,7 @@ fn upgrade_with_skip_pre_upgrade_preserves_stable_memory() {
         wat::parse_str(wat.clone()).unwrap(),
         CanisterUpgradeOptions {
             skip_pre_upgrade: Some(true),
-            keep_main_memory: None,
+            wasm_memory_persistence: None,
         },
     )
     .unwrap();
@@ -6321,7 +6321,7 @@ fn upgrade_with_skip_pre_upgrade_preserves_stable_memory() {
             wat::parse_str(wat).unwrap(),
             CanisterUpgradeOptions {
                 skip_pre_upgrade: Some(false),
-                keep_main_memory: None,
+                wasm_memory_persistence: None,
             },
         )
         .unwrap_err();
