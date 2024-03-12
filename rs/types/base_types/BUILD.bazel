@@ -18,7 +18,6 @@ COMMON_DEPS = [
     "@crate_index//:candid",
     "@crate_index//:prost",
     "@crate_index//:serde",
-    "@crate_index//:ic-stable-structures",
     "@crate_index//:comparable",
 ]
 

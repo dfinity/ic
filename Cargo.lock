@@ -5238,7 +5238,6 @@ dependencies = [
  "ic-base-types-protobuf-generator",
  "ic-crypto-sha2",
  "ic-protobuf",
- "ic-stable-structures",
  "ic-test-utilities-compare-dirs",
  "phantom_newtype",
  "proptest",
@@ -9003,6 +9002,7 @@ version = "0.0.1"
 dependencies = [
  "ic-base-types",
  "ic-stable-structures",
+ "ic_principal",
  "maplit",
  "num-traits",
 ]

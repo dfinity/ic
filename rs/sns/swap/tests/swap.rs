@@ -4655,7 +4655,7 @@ fn test_rebuild_indexes_ignores_existing_index() {
     assert_eq!(participants.len(), 2);
 
     // Grab a snapshot of the index to compare to later
-    let buyer_list_index_length_before: Vec<PrincipalId> =
+    let buyer_list_index_length_before: Vec<Principal> =
         memory::BUYERS_LIST_INDEX.with(|list| list.borrow().iter().collect());
     assert_eq!(buyer_list_index_length_before.len(), 2);
 
@@ -4670,7 +4670,7 @@ fn test_rebuild_indexes_ignores_existing_index() {
     assert_eq!(participants.len(), 2);
 
     // The actual BUYERS_LIST_INDEX should not have been rebuilt
-    let buyer_list_index_length_after: Vec<PrincipalId> =
+    let buyer_list_index_length_after: Vec<Principal> =
         memory::BUYERS_LIST_INDEX.with(|list| list.borrow().iter().collect());
     assert_eq!(buyer_list_index_length_after.len(), 2);
 

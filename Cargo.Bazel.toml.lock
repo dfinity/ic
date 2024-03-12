@@ -2948,6 +2948,7 @@ dependencies = [
  "ic-xrc-types",
  "ic0 0.18.11",
  "ic_bls12_381",
+ "ic_principal",
  "icrc1-test-env",
  "icrc1-test-suite",
  "idna 0.3.0",
