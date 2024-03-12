@@ -33,7 +33,7 @@ ic-state-manager = { path = "../state_manager" }
 # messages that are delivered to Message Routing. `drun` is a tool that
 # is meant to be used mostly for testing anyway, so this dependency
 # should be fine.
-ic-test-utilities = { path = "../test_utilities" }
+ic-test-utilities-consensus = { path = "../test_utilities/consensus" }
 ic-test-utilities-registry = { path = "../test_utilities/registry" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
 ic-types = { path = "../types/types" }

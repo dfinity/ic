@@ -191,7 +191,8 @@ mod tests {
     use ic_interfaces::p2p::consensus::MutablePool;
     use ic_interfaces::time_source::TimeSource;
     use ic_logger::replica_logger::no_op_logger;
-    use ic_test_utilities::{consensus::fake::*, message_routing::FakeMessageRouting};
+    use ic_test_utilities::message_routing::FakeMessageRouting;
+    use ic_test_utilities_consensus::fake::*;
     use ic_types::consensus::{ConsensusMessage, HasHeight};
 
     // Returns the vector of heights for which `changes` contains a ChangeAction

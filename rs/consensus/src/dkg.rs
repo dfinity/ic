@@ -1629,10 +1629,8 @@ mod tests {
         SetupInitialDkgContext, SubnetCallContext,
     };
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
-    use ic_test_utilities::{
-        consensus::fake::FakeContentSigner, crypto::CryptoReturningOk,
-        state_manager::RefMockStateManager,
-    };
+    use ic_test_utilities::{crypto::CryptoReturningOk, state_manager::RefMockStateManager};
+    use ic_test_utilities_consensus::fake::FakeContentSigner;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_test_utilities_types::{

@@ -22,7 +22,7 @@ use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_client_helpers::crypto::CryptoRegistry;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_subnet_features::EcdsaConfig;
-use ic_test_utilities::consensus::make_genesis;
+use ic_test_utilities_consensus::make_genesis;
 use ic_test_utilities_registry::SubnetRecordBuilder;
 use ic_types::{
     consensus::CatchUpPackage,

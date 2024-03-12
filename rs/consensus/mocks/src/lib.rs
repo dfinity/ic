@@ -14,9 +14,8 @@ use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::ROOT_SUBNET_ID_KEY;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
-use ic_test_utilities::{
-    consensus::EcdsaStatsNoOp, crypto::CryptoReturningOk, state_manager::RefMockStateManager,
-};
+use ic_test_utilities::{crypto::CryptoReturningOk, state_manager::RefMockStateManager};
+use ic_test_utilities_consensus::EcdsaStatsNoOp;
 use ic_test_utilities_registry::{setup_registry_non_final, SubnetRecordBuilder};
 use ic_test_utilities_time::FastForwardTimeSource;
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};

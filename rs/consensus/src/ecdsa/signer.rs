@@ -902,7 +902,7 @@ mod tests {
     };
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
-    use ic_test_utilities::consensus::EcdsaStatsNoOp;
+    use ic_test_utilities_consensus::EcdsaStatsNoOp;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::ids::{
         canister_test_id, subnet_test_id, user_test_id, NODE_1, NODE_2, NODE_3,

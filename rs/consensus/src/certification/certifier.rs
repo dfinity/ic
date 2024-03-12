@@ -621,7 +621,7 @@ mod tests {
     use ic_consensus_mocks::{dependencies, Dependencies};
     use ic_interfaces::certification::CertificationPool;
     use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
-    use ic_test_utilities::consensus::fake::*;
+    use ic_test_utilities_consensus::fake::*;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::artifact::CertificationMessageId;

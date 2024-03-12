@@ -194,10 +194,8 @@ mod tests {
     use ic_consensus_mocks::{dependencies, dependencies_with_subnet_params, Dependencies};
     use ic_interfaces::consensus_pool::ConsensusPool;
     use ic_logger::replica_logger::no_op_logger;
-    use ic_test_utilities::{
-        consensus::fake::{FakeContentSigner, FakeSigner},
-        message_routing::FakeMessageRouting,
-    };
+    use ic_test_utilities::message_routing::FakeMessageRouting;
+    use ic_test_utilities_consensus::fake::{FakeContentSigner, FakeSigner};
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{

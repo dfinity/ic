@@ -10,14 +10,14 @@ use ic_interfaces_state_manager::Labeled;
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
-use ic_test_utilities::consensus::batch::MockBatchPayloadBuilder;
-use ic_test_utilities::consensus::EcdsaStatsNoOp;
 use ic_test_utilities::{
-    consensus::make_genesis, crypto::CryptoReturningOk, ingress_selector::FakeIngressSelector,
+    crypto::CryptoReturningOk, ingress_selector::FakeIngressSelector,
     message_routing::FakeMessageRouting,
     self_validating_payload_builder::FakeSelfValidatingPayloadBuilder, state::get_initial_state,
     xnet_payload_builder::FakeXNetPayloadBuilder,
 };
+use ic_test_utilities_consensus::batch::MockBatchPayloadBuilder;
+use ic_test_utilities_consensus::{make_genesis, EcdsaStatsNoOp};
 use ic_test_utilities_registry::{
     setup_registry, FakeLocalStoreCertifiedTimeReader, SubnetRecordBuilder,
 };

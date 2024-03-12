@@ -1186,7 +1186,7 @@ impl<Message: CertificationType + PerTypeCFInfo + 'static> HeightIndexedPool<Mes
 mod tests {
     use super::*;
     use crate::test_utils::*;
-    use ic_test_utilities::consensus::make_genesis;
+    use ic_test_utilities_consensus::make_genesis;
     use slog::Drain;
     use std::panic;
 

@@ -1,7 +1,7 @@
 use crate::consensus::payload_builder::test::make_test_payload_impl;
 use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
 use ic_interfaces::{batch_payload::ProposalContext, consensus::PayloadBuilder};
-use ic_test_utilities::consensus::fake::Fake;
+use ic_test_utilities_consensus::fake::Fake;
 use ic_test_utilities_registry::SubnetRecordBuilder;
 use ic_test_utilities_types::{
     ids::{node_test_id, subnet_test_id},

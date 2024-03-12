@@ -28,13 +28,11 @@ use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_test_artifact_pool::ingress_pool::TestIngressPool;
 use ic_test_utilities::{
-    consensus::{batch::MockBatchPayloadBuilder, EcdsaStatsNoOp},
-    ingress_selector::FakeIngressSelector,
-    message_routing::FakeMessageRouting,
+    ingress_selector::FakeIngressSelector, message_routing::FakeMessageRouting,
     self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
-    state_manager::FakeStateManager,
-    xnet_payload_builder::FakeXNetPayloadBuilder,
+    state_manager::FakeStateManager, xnet_payload_builder::FakeXNetPayloadBuilder,
 };
+use ic_test_utilities_consensus::{batch::MockBatchPayloadBuilder, EcdsaStatsNoOp};
 use ic_types::{
     artifact::{ArtifactKind, Priority, PriorityFn},
     artifact_kind::ConsensusArtifact,

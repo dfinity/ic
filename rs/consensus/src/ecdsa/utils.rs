@@ -530,7 +530,7 @@ mod tests {
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_keys::make_ecdsa_signing_subnet_list_key;
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-    use ic_test_utilities::consensus::fake::Fake;
+    use ic_test_utilities_consensus::fake::Fake;
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
