@@ -24,14 +24,6 @@ pub mod test_functions;
 
 pub(crate) const LOG_PREFIX: &str = "[Neurons' Fund] ";
 
-/// This is a theoretical limit which should be smaller than any realistic amount of maturity
-/// that practically needs to be reserved from the Neurons' Fund for a given SNS swap.
-pub const MAX_THEORETICAL_NEURONS_FUND_PARTICIPATION_AMOUNT_ICP_E8S: u64 = 333_000 * E8;
-
-const NEURONS_FUND_PARTICIPATION_MILESTONE_THRESHOLD_1_ICP: Decimal = dec!(33_000);
-const NEURONS_FUND_PARTICIPATION_MILESTONE_THRESHOLD_2_ICP: Decimal = dec!(100_000);
-const NEURONS_FUND_PARTICIPATION_MILESTONE_THRESHOLD_3_ICP: Decimal = dec!(167_000);
-
 // The maximum number of bytes that a serialized representation of an ideal matching function
 // `IdealMatchedParticipationFunction` may have.
 pub const MAX_MATCHING_FUNCTION_SERIALIZED_REPRESENTATION_SIZE_BYTES: usize = 1_000;
@@ -722,6 +714,32 @@ struct PolynomialMatchingFunctionPersistentData {
     pub cap: Decimal,
 }
 
+impl PolynomialMatchingFunctionPersistentData {
+    pub fn log_unreachable_milestones(&self, human_readable_cap_formula: String) {
+        if self.t_4 < self.t_1 {
+            println!(
+                "{}WARNING: This PolynomialMatchingFunction returns zero for all direct \
+                participation amounts, as (2 * {}) ({}) is less than t_1 ({})",
+                LOG_PREFIX, human_readable_cap_formula, self.t_4, self.t_1,
+            );
+        } else if self.t_4 < self.t_2 {
+            println!(
+                "{}INFO: This PolynomialMatchingFunction returns less than 1/3 of the overall \
+                participation amount (for all amounts of direct participation), because \
+                (2 * {}) ({}) is less than t_2 ({})",
+                LOG_PREFIX, human_readable_cap_formula, self.t_4, self.t_3,
+            );
+        } else if self.t_4 < self.t_3 {
+            println!(
+                "{}INFO: This PolynomialMatchingFunction returns less than 1/2 of the overall \
+                participation amount (for all amounts of direct participation), because \
+                (2 * {}) ({}) is less than t_3 ({})",
+                LOG_PREFIX, human_readable_cap_formula, self.t_4, self.t_3,
+            );
+        }
+    }
+}
+
 impl PolynomialMatchingFunctionCache {
     fn from_persistent_data(
         data: &PolynomialMatchingFunctionPersistentData,
@@ -796,6 +814,18 @@ impl SerializableFunction for PolynomialMatchingFunction {
     }
 }
 
+/// Absolute constraints applicable to all swaps needed in Matched Funding computations. These
+/// values are defined in NetowrkEconomics (in XDR) and converted to ICP using the rate from CMC.
+///
+/// This is an internal representation for `NeuronsFundMatchedFundingCurveCoefficientsPb`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct NeuronsFundParticipationLimits {
+    pub max_theoretical_neurons_fund_participation_amount_icp: Decimal,
+    pub contribution_threshold_icp: Decimal,
+    pub one_third_participation_milestone_icp: Decimal,
+    pub full_participation_milestone_icp: Decimal,
+}
+
 impl PolynomialMatchingFunction {
     /// Attempts to create an instance of `Self` from `persistent_data`. This might fail, e.g.,
     /// if there is an overflow or division by zero during the computation of the polynomial
@@ -811,39 +841,48 @@ impl PolynomialMatchingFunction {
     }
 
     /// Creates a monotonically non-decreasing polynomial function for Neurons' Fund Matched Funding.
-    pub fn new(total_maturity_equivalent_icp_e8s: u64) -> Result<Self, String> {
+    pub fn new(
+        total_maturity_equivalent_icp_e8s: u64,
+        neurons_fund_participation_limits: NeuronsFundParticipationLimits,
+    ) -> Result<Self, String> {
         // Computations defined in ICP rather than ICP e8s to avoid multiplication overflows for
         // the `Decimal` type for the range of values that this type is expected to operate on.
         let global_cap_icp =
-            rescale_to_icp(MAX_THEORETICAL_NEURONS_FUND_PARTICIPATION_AMOUNT_ICP_E8S)?;
+            neurons_fund_participation_limits.max_theoretical_neurons_fund_participation_amount_icp;
+
         let total_maturity_equivalent_icp = rescale_to_icp(total_maturity_equivalent_icp_e8s)?;
-        let cap = global_cap_icp.min(
-            dec!(0.1) * total_maturity_equivalent_icp, // 10%
-        );
+
+        let one_tenth_maturity_equivalent_icp = dec!(0.1) * total_maturity_equivalent_icp;
+
+        let (cap, human_readable_cap_formula) =
+            if global_cap_icp <= one_tenth_maturity_equivalent_icp {
+                (
+                    global_cap_icp,
+                    format!(
+                        "max_theoretical_neurons_fund_participation_amount_icp ({})",
+                        global_cap_icp,
+                    ),
+                )
+            } else {
+                (
+                    one_tenth_maturity_equivalent_icp,
+                    format!(
+                        "(0.1 * total_maturity_equivalent_icp ({})) ({})",
+                        total_maturity_equivalent_icp, one_tenth_maturity_equivalent_icp,
+                    ),
+                )
+            };
+
         let persistent_data = PolynomialMatchingFunctionPersistentData {
-            t_1: NEURONS_FUND_PARTICIPATION_MILESTONE_THRESHOLD_1_ICP,
-            t_2: NEURONS_FUND_PARTICIPATION_MILESTONE_THRESHOLD_2_ICP,
-            t_3: NEURONS_FUND_PARTICIPATION_MILESTONE_THRESHOLD_3_ICP,
+            t_1: neurons_fund_participation_limits.contribution_threshold_icp,
+            t_2: neurons_fund_participation_limits.one_third_participation_milestone_icp,
+            t_3: neurons_fund_participation_limits.full_participation_milestone_icp,
             t_4: dec!(2.0) * cap, // 200%
             cap,
         };
-        if persistent_data.t_4 < persistent_data.t_3 {
-            if persistent_data.t_4 < persistent_data.t_1 {
-                println!(
-                    "{}WARNING: total_maturity_equivalent_icp_e8s ({}) is too low for this \
-                    PolynomialMatchingFunction instance to have a non-zero value for any direct \
-                    participation amount: {:?}.",
-                    LOG_PREFIX, total_maturity_equivalent_icp_e8s, persistent_data,
-                );
-            } else {
-                println!(
-                    "{}INFO: total_maturity_equivalent_icp_e8s ({}) is too low for some \
-                    Matched Funding milestones to be achievable for any direct participation \
-                    amount: {:?}.",
-                    LOG_PREFIX, total_maturity_equivalent_icp_e8s, persistent_data,
-                );
-            }
-        }
+
+        persistent_data.log_unreachable_milestones(human_readable_cap_formula);
+
         Self::from_persistent_data(persistent_data)
     }
 }
@@ -975,10 +1014,7 @@ where
         // Special case B: direct_participation_icp_e8s is greated than or equal to the last
         // interval's upper bound.
         if last_interval.to_direct_participation_icp_e8s <= direct_participation_icp_e8s {
-            return Ok(u64::min(
-                self.max_neurons_fund_participation_icp_e8s,
-                MAX_THEORETICAL_NEURONS_FUND_PARTICIPATION_AMOUNT_ICP_E8S,
-            ));
+            return Ok(self.max_neurons_fund_participation_icp_e8s);
         }
 
         // Otherwise, direct_participation_icp_e8s must fall into one of the intervals.
@@ -998,31 +1034,19 @@ where
             let intercept_icp = rescale_to_icp(*intercept_icp_e8s)?;
             let slope_numerator = u64_to_dec(*slope_numerator)?;
             let slope_denominator = u64_to_dec(*slope_denominator)?;
-
-            // Normally, `self.max_neurons_fund_participation_icp_e8s` should be set to a
-            // *reasonable* value. Since this value is computed based on the overall amount of
-            // maturity in the Neurons' Fund (at the time when the swap is being opened), in theory
-            // it could grow indefinitely. To safeguard against overly massive Neurons' Fund
-            // participation to a single SNS swap, the NNS Governance (which manages the
-            // Neurons' Fund) should limit the Neurons' Fund maximal theoretically possible amount
-            // of participation also by `MAX_THEORETICAL_NEURONS_FUND_PARTICIPATION_AMOUNT_ICP_E8S`.
-            // Here, we apply this threshold again for making it more explicit.
-            let hard_cap = u64_to_dec(u64::min(
-                self.max_neurons_fund_participation_icp_e8s,
-                MAX_THEORETICAL_NEURONS_FUND_PARTICIPATION_AMOUNT_ICP_E8S,
-            ))?;
+            let hard_cap_icp = rescale_to_icp(self.max_neurons_fund_participation_icp_e8s)?;
 
             // This value is how much of Neurons' Fund maturity can "effectively" be allocated.
             // This value may be less than or equal to the `ideal_icp` value above, due to:
-            // (1) Some Neurons' fund neurons being too small to participate at all (at this direct
+            // (1) Some Neurons' Fund neurons being too small to participate at all (at this direct
             //     participation amount, `direct_participation_icp_e8s`). This is taken into account
             //     via the `(slope_numerator / slope_denominator)` factor.
             // (2) Some Neurons' fund neurons being too big to fully participate (at this direct
             //     participation amount, `direct_participation_icp_e8s`). This is taken into account
             //     via the `intercept_icp` component.
-            // (3) The computed overall participation amount (unexpectedly) exceeded `hard_cap`; so
-            //     we enforce the limited at `hard_cap`.
-            let effective_icp = hard_cap.min(intercept_icp.saturating_add(
+            // (3) The computed overall participation amount (unexpectedly) exceeded `hard_cap_icp`;
+            //     so we enforce the limited at `hard_cap_icp`.
+            let effective_icp = hard_cap_icp.min(intercept_icp.saturating_add(
                 // `slope_denominator` cannot be zero as it has been validated.
                 // See `LinearScalingCoefficientValidationError::DenominatorIsZero`.
                 // `slope_numerator / slope_denominator` is between 0.0 and 1.0.

@@ -356,6 +356,17 @@ fn canister_post_upgrade() {
              CANISTER MIGHT HAVE BROKEN STATE!!!!.",
     );
 
+    // The following mutation migrates the Neurons' Fund from statically encoded limits to dynamic
+    // data stored in the `economics.neurons_fund_economics` field of NNS Governance.
+    //
+    // TODO[NNS1-2925]: Remove this statement.
+    if let Some(ref mut economics) = restored_state.economics {
+        if economics.neurons_fund_economics.is_none() {
+            economics.neurons_fund_economics =
+                Some(ic_nns_governance::pb::v1::NeuronsFundEconomics::with_default_values())
+        }
+    };
+
     // The following mutation migrates the Governance canister to a state starting from which
     // the field `xdr_conversion_rate` should alwasys be specified.
     //

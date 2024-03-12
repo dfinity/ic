@@ -44,9 +44,18 @@ fn known_values_test() {
 
 #[test]
 fn polynomial_matching_function_viability_test() {
+    let neurons_fund_participation_limits = NeuronsFundParticipationLimits {
+        max_theoretical_neurons_fund_participation_amount_icp: dec!(333_000.0),
+        contribution_threshold_icp: dec!(75_000.0),
+        one_third_participation_milestone_icp: dec!(225_000.0),
+        full_participation_milestone_icp: dec!(375_000.0),
+    };
     for total_maturity_equivalent_icp_e8s in &*WIDE_RANGE_OF_U64_VALUES {
         // Check that the function can be created.
-        let f = assert_matches!(PolynomialMatchingFunction::new(*total_maturity_equivalent_icp_e8s), Ok(f) => f);
+        let f = assert_matches!(PolynomialMatchingFunction::new(
+            *total_maturity_equivalent_icp_e8s,
+            neurons_fund_participation_limits,
+        ), Ok(f) => f);
         // Check that the function can be serialized / deserialized.
         let f1: Box<PolynomialMatchingFunction> = assert_matches!(
             DeserializableFunction::from_repr(&f.serialize()),

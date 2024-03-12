@@ -12,7 +12,7 @@ use ic_nns_constants::{
 };
 use ic_nns_governance::{
     init::GovernanceCanisterInitPayloadBuilder,
-    pb::v1::{Governance, Neuron},
+    pb::v1::{Governance, NetworkEconomics, Neuron},
 };
 use ic_nns_gtc::{init::GenesisTokenCanisterInitPayloadBuilder, pb::v1::Gtc};
 use ic_nns_gtc_accounts::{ECT_ACCOUNTS, SEED_ROUND_ACCOUNTS};
@@ -226,6 +226,11 @@ impl NnsInitPayloadsBuilder {
             );
         }
 
+        self
+    }
+
+    pub fn with_network_economics(&mut self, network_economics: NetworkEconomics) -> &mut Self {
+        self.governance.with_network_economics(network_economics);
         self
     }
 

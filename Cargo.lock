@@ -10966,6 +10966,7 @@ dependencies = [
  "proptest",
  "prost",
  "rust_decimal",
+ "rust_decimal_macros",
  "serde",
  "tempfile",
  "tokio",
