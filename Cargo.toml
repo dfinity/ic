@@ -127,6 +127,7 @@ members = [
   "rs/http_utils",
   "rs/ic_os/deterministic_ips",
   "rs/ic_os/config",
+  "rs/ic_os/fstrim_tool",
   "rs/ic_os/guestos_tool",
   "rs/ic_os/hostos_tool",
   "rs/ic_os/launch-single-vm",

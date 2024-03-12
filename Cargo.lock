@@ -7699,6 +7699,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-fstrim-tool"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "assert_cmd",
+ "assert_matches",
+ "clap 4.4.6",
+ "ic-crypto-test-utils-reproducible-rng",
+ "ic-sys",
+ "maplit",
+ "predicates 3.0.4",
+ "rand 0.8.5",
+ "tempfile",
+]
+
+[[package]]
 name = "ic-http-certification"
 version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -18153,6 +18169,7 @@ dependencies = [
  "ic-crypto-utils-threshold-sig-der",
  "ic-cup-explorer",
  "ic-cycles-account-manager",
+ "ic-fstrim-tool",
  "ic-http-utils",
  "ic-icrc1",
  "ic-icrc1-index-ng",
