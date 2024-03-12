@@ -21,9 +21,9 @@ use ic_execution_environment::{
 };
 use ic_ic00_types::{
     CanisterIdRecord, CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgs,
-    CanisterSettingsArgsBuilder, CanisterStatusType, EcdsaKeyId, EmptyBlob, InstallCodeArgs,
-    InstallCodeArgsV2, Method, Payload, ProvisionalCreateCanisterWithCyclesArgs,
-    UpdateSettingsArgs, UpgradeOptions,
+    CanisterSettingsArgsBuilder, CanisterStatusType, CanisterUpgradeOptions, EcdsaKeyId, EmptyBlob,
+    InstallCodeArgs, InstallCodeArgsV2, Method, Payload, ProvisionalCreateCanisterWithCyclesArgs,
+    UpdateSettingsArgs,
 };
 use ic_interfaces::execution_environment::{
     ExecutionMode, IngressHistoryWriter, QueryHandler, RegistryExecutionSettings,
