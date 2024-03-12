@@ -238,6 +238,9 @@ system_test(
     name = "ssh_access_to_nodes_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "k8s",
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
@@ -248,6 +251,7 @@ system_test(
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
+        "k8s",
         "system_test_hourly",
         "system_test_nightly",
     ],
@@ -343,6 +347,7 @@ system_test(
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
+        "k8s",
         "system_test_hourly",
         "system_test_nightly",
     ],
