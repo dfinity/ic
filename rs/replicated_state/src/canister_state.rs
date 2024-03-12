@@ -425,6 +425,20 @@ impl CanisterState {
         self.system_state.wasm_chunk_store.memory_usage()
     }
 
+    /// Returns the memory usage of a snapshot created based on the current canister's state.
+    pub fn snapshot_memory_usage(&self) -> NumBytes {
+        let execution_usage = self
+            .execution_state
+            .as_ref()
+            .map_or(NumBytes::new(0), |execution_snapshot| {
+                execution_snapshot.memory_usage()
+            });
+
+        execution_usage
+            + self.wasm_chunk_store_memory_usage()
+            + NumBytes::from(self.system_state.certified_data.len() as u64)
+    }
+
     /// Sets the (transient) size in bytes of responses from this canister
     /// routed into streams and not yet garbage collected.
     pub(super) fn set_stream_responses_size_bytes(&mut self, size_bytes: usize) {

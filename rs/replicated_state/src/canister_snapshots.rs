@@ -54,11 +54,16 @@ impl CanisterSnapshots {
         let snapshot_id = self.next_snapshot_id;
         self.next_snapshot_id = SnapshotId::new(self.next_snapshot_id.get() + 1);
         self.unflushed_changes.push(SnapshotOperation::Backup(
-            *snapshot.canister_id(),
+            snapshot.canister_id(),
             snapshot_id,
         ));
         self.snapshots.insert(snapshot_id, snapshot);
         snapshot_id
+    }
+
+    /// Returns a reference of the canister snapshot identified by `snapshot_id`.
+    pub fn get(&self, snapshot_id: SnapshotId) -> Option<&Arc<CanisterSnapshot>> {
+        self.snapshots.get(&snapshot_id)
     }
 
     /// Remove snapshot identified by `snapshot_id` from the collection of snapshots.
@@ -78,6 +83,11 @@ impl CanisterSnapshots {
                 None
             }
         }
+    }
+
+    /// Returns true if snapshot ID can be found in the collection.
+    pub fn contains(&self, snapshot_id: &SnapshotId) -> bool {
+        self.snapshots.contains_key(snapshot_id)
     }
 
     /// Take the unflushed changes.
@@ -179,8 +189,8 @@ impl CanisterSnapshot {
         }
     }
 
-    pub fn canister_id(&self) -> &CanisterId {
-        &self.canister_id
+    pub fn canister_id(&self) -> CanisterId {
+        self.canister_id
     }
 
     pub fn canister_version(&self) -> u64 {

@@ -242,8 +242,10 @@ fn dashboard_label_value_from(code: ErrorCode) -> &'static str {
             "Canister is rate limited because it executed too many instructions \
                 in the previous install_code messages"
         }
+        CanisterHeapDeltaRateLimited => "Canister Heap Delta Rate Limited",
         // 3xx -- `RejectCode::DestinationInvalid`
         CanisterNotFound => "Canister Not Found",
+        CanisterSnapshotNotFound => "Canister Snapshot Not Found",
         // 4xx -- `RejectCode::CanisterReject`
         InsufficientMemoryAllocation => "Insufficient memory allocation given to canister",
         InsufficientCyclesForCreateCanister => "Insufficient Cycles for Create Canister Request",

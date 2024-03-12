@@ -2711,12 +2711,20 @@ pub struct TakeCanisterSnapshotResponse {
 impl Payload<'_> for TakeCanisterSnapshotResponse {}
 
 impl TakeCanisterSnapshotResponse {
-    pub fn new(snapshot_id: u64, taken_at_timestamp: u64, total_size: u64) -> Self {
+    pub fn new(snapshot_id: u64, taken_at_timestamp: u64, total_size: NumBytes) -> Self {
         Self {
             snapshot_id: candid::Nat::from(snapshot_id),
             taken_at_timestamp,
-            total_size: candid::Nat::from(total_size),
+            total_size: candid::Nat::from(total_size.get()),
         }
+    }
+
+    pub fn snapshot_id(&self) -> u64 {
+        self.snapshot_id.0.to_u64().unwrap()
+    }
+
+    pub fn total_size(&self) -> u64 {
+        self.total_size.0.to_u64().unwrap()
     }
 }
 

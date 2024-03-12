@@ -118,6 +118,8 @@ impl From<ErrorCode> for RejectCode {
             CanisterMethodNotFound => CanisterError,
             CanisterWasmModuleNotFound => CanisterError,
             CanisterAlreadyInstalled => CanisterError,
+            CanisterSnapshotNotFound => DestinationInvalid,
+            CanisterHeapDeltaRateLimited => SysTransient,
         }
     }
 }
@@ -145,11 +147,13 @@ pub enum ErrorCode {
     CanisterOutOfCycles = 207,
     CertifiedStateUnavailable = 208,
     CanisterInstallCodeRateLimited = 209,
+    CanisterHeapDeltaRateLimited = 210,
     // 3xx -- `RejectCode::DestinationInvalid`
     CanisterNotFound = 301,
     // 302 (previously `CanisterMethodNotFound`)
     // 303 (previously `CanisterAlreadyInstalled`)
     // 304 (previously `CanisterWasmModuleNotFound`)
+    CanisterSnapshotNotFound = 305,
     // 4xx -- `RejectCode::CanisterReject`
     // 401
     InsufficientMemoryAllocation = 402,
@@ -217,11 +221,13 @@ impl TryFrom<u64> for ErrorCode {
             207 => Ok(ErrorCode::CanisterOutOfCycles),
             208 => Ok(ErrorCode::CertifiedStateUnavailable),
             209 => Ok(ErrorCode::CanisterInstallCodeRateLimited),
+            210 => Ok(ErrorCode::CanisterHeapDeltaRateLimited),
             // 3xx -- `RejectCode::DestinationInvalid`
             301 => Ok(ErrorCode::CanisterNotFound),
             // 302 (previously `CanisterMethodNotFound`)
             // 303 (previously `CanisterAlreadyInstalled`)
             // 304 (previously `CanisterWasmModuleNotFound`)
+            305 => Ok(ErrorCode::CanisterSnapshotNotFound),
             // 4xx -- `RejectCode::CanisterReject`
             // 401
             402 => Ok(ErrorCode::InsufficientMemoryAllocation),
@@ -387,7 +393,9 @@ impl UserError {
             | ErrorCode::InsufficientCyclesInMemoryGrow
             | ErrorCode::ReservedCyclesLimitExceededInMemoryAllocation
             | ErrorCode::ReservedCyclesLimitExceededInMemoryGrow
-            | ErrorCode::InsufficientCyclesInMessageMemoryGrow => false,
+            | ErrorCode::InsufficientCyclesInMessageMemoryGrow
+            | ErrorCode::CanisterSnapshotNotFound
+            | ErrorCode::CanisterHeapDeltaRateLimited => false,
         }
     }
 
