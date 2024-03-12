@@ -1414,7 +1414,7 @@ fn get_state_hash<T>(
 #[cfg(test)]
 mod tests {
     use ic_logger::replica_logger::no_op_logger;
-    use ic_test_utilities::consensus::fake::FakeSigner;
+    use ic_test_utilities_consensus::fake::FakeSigner;
     use ic_test_utilities_types::ids::node_test_id;
     use ic_types::{
         consensus::certification::{

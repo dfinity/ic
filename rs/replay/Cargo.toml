@@ -55,7 +55,7 @@ tower = { workspace = true }
 url = { version = "2.1.1", features = ["serde"] }
 
 [dev-dependencies]
-ic-test-utilities = { path = "../test_utilities" }
+ic-test-utilities-consensus = { path = "../test_utilities/consensus" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
 
 [[bin]]

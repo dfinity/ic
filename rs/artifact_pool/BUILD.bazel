@@ -43,6 +43,7 @@ DEV_DEPENDENCIES = [
     "//rs/crypto/test_utils/canister_threshold_sigs",
     "//rs/test_utilities",
     "//rs/test_utilities/artifact_pool",
+    "//rs/test_utilities/consensus",
     "//rs/test_utilities/logger",
     "//rs/test_utilities/registry",
     "//rs/test_utilities/time",

@@ -10,7 +10,7 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{testing::ReplicatedStateTesting, Stream};
 use ic_state_manager::StateManagerImpl;
-use ic_test_utilities::consensus::fake::{Fake, FakeVerifier};
+use ic_test_utilities_consensus::fake::{Fake, FakeVerifier};
 use ic_test_utilities_metrics::{
     fetch_gauge, fetch_histogram_stats, fetch_int_counter_vec, HistogramStats, MetricVec,
 };

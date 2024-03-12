@@ -468,9 +468,8 @@ mod test {
     use crate::test_utils::fake_block_proposal;
     use ic_interfaces::consensus_pool::{ValidatedConsensusArtifact, HEIGHT_CONSIDERED_BEHIND};
     use ic_test_artifact_pool::consensus_pool::{Round, TestConsensusPool};
-    use ic_test_utilities::{
-        consensus::fake::*, crypto::CryptoReturningOk, state_manager::FakeStateManager,
-    };
+    use ic_test_utilities::{crypto::CryptoReturningOk, state_manager::FakeStateManager};
+    use ic_test_utilities_consensus::fake::*;
     use ic_test_utilities_registry::{setup_registry, SubnetRecordBuilder};
     use ic_test_utilities_time::FastForwardTimeSource;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};

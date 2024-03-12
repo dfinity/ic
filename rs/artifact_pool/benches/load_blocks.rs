@@ -9,7 +9,7 @@ use ic_interfaces::consensus_pool::{
 use ic_interfaces::p2p::consensus::MutablePool;
 use ic_interfaces::time_source::SysTimeSource;
 use ic_logger::replica_logger::no_op_logger;
-use ic_test_utilities::consensus::{fake::*, make_genesis};
+use ic_test_utilities_consensus::{fake::*, make_genesis};
 use ic_test_utilities_types::{
     ids::{node_test_id, subnet_test_id},
     messages::SignedIngressBuilder,

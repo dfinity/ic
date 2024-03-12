@@ -244,11 +244,11 @@ pub(crate) mod test {
     use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::{
-        consensus::{batch::MockBatchPayloadBuilder, fake::Fake},
         ingress_selector::FakeIngressSelector,
         self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
         xnet_payload_builder::FakeXNetPayloadBuilder,
     };
+    use ic_test_utilities_consensus::{batch::MockBatchPayloadBuilder, fake::Fake};
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_types::{
         ids::{node_test_id, subnet_test_id},

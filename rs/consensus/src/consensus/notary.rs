@@ -199,7 +199,7 @@ mod tests {
     use ic_interfaces::time_source::TimeSource;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
-    use ic_test_utilities::consensus::fake::*;
+    use ic_test_utilities_consensus::fake::*;
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use std::sync::Arc;

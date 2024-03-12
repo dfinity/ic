@@ -12,7 +12,7 @@ use ic_interfaces::consensus_pool::{
     HeightIndexedPool, HeightRange, PoolSection, PurgeableArtifactType, ValidatedConsensusArtifact,
 };
 use ic_logger::ReplicaLogger;
-use ic_test_utilities::consensus::{fake::*, make_genesis};
+use ic_test_utilities_consensus::{fake::*, make_genesis};
 use ic_test_utilities_types::ids::node_test_id;
 use ic_types::{
     artifact::ConsensusMessageId,

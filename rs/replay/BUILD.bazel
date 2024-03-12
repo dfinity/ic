@@ -53,7 +53,7 @@ DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
-    "//rs/test_utilities",
+    "//rs/test_utilities/consensus",
     "//rs/test_utilities/types",
 ]
 

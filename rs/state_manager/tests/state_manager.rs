@@ -40,10 +40,10 @@ use ic_state_manager::{
 };
 use ic_sys::PAGE_SIZE;
 use ic_test_utilities::{
-    consensus::fake::FakeVerifier,
     io::{make_mutable, make_readonly, write_all_at},
     state::{arb_stream, arb_stream_slice, arb_stream_with_config, canister_ids},
 };
+use ic_test_utilities_consensus::fake::FakeVerifier;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{fetch_int_counter_vec, fetch_int_gauge, Labels};
 use ic_test_utilities_tmpdir::tmpdir;

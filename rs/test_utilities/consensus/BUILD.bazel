@@ -1,0 +1,34 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "//rs/types/base_types",
+    "//rs/consensus",
+    "//rs/interfaces",
+    "//rs/interfaces/registry",
+    "//rs/phantom_newtype",
+    "//rs/protobuf",
+    "//rs/registry/helpers",
+    "//rs/test_utilities",
+    "//rs/test_utilities/registry",
+    "//rs/test_utilities/types",
+    "//rs/types/types",
+    "@crate_index//:bincode",
+    "@crate_index//:mockall",
+    "@crate_index//:prost",
+    "@crate_index//:serde",
+]
+
+rust_library(
+    name = "consensus",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_test_utilities_consensus",
+    version = "0.9.0",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "consensus_test",
+    crate = ":consensus",
+)

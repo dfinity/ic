@@ -2,7 +2,6 @@
 pub mod batch;
 pub mod fake;
 
-use crate::crypto::empty_ni_dkg_transcripts_with_committee;
 use ic_interfaces::{
     consensus_pool::{ChangeAction, ConsensusPoolCache, ConsensusTime},
     validation::*,
@@ -10,27 +9,24 @@ use ic_interfaces::{
 use ic_interfaces_registry::RegistryClient;
 use ic_protobuf::types::v1 as pb;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
+use ic_test_utilities::crypto::empty_ni_dkg_transcripts_with_committee;
 use ic_types::{
     batch::ValidationContext,
+    consensus::ecdsa::{EcdsaBlockReader, EcdsaStats, RequestId},
     consensus::{
         dkg, Block, BlockPayload, CatchUpContent, CatchUpPackage, ConsensusMessageHashable,
         HasHeight, HashedBlock, HashedRandomBeacon, Payload, RandomBeaconContent, Rank,
         SummaryPayload,
     },
     crypto::{
-        threshold_sig::ni_dkg::NiDkgTag, CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash,
-        Signed,
+        canister_threshold_sig::idkg::{IDkgDealingSupport, IDkgTranscriptParams},
+        crypto_hash,
+        threshold_sig::ni_dkg::NiDkgTag,
+        CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, Signed,
     },
     signature::ThresholdSignature,
     time::UNIX_EPOCH,
     Height, SubnetId, Time,
-};
-use ic_types::{
-    consensus::ecdsa::{EcdsaBlockReader, EcdsaStats, RequestId},
-    crypto::{
-        canister_threshold_sig::idkg::{IDkgDealingSupport, IDkgTranscriptParams},
-        crypto_hash,
-    },
 };
 use phantom_newtype::Id;
 use std::{
