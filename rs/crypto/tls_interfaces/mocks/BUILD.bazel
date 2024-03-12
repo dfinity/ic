@@ -16,5 +16,6 @@ rust_library(
         "//rs/types/base_types",
         "@crate_index//:mockall",
         "@crate_index//:tokio",
+        "@crate_index//:tokio-rustls",
     ],
 )
