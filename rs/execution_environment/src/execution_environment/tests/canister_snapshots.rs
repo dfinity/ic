@@ -3,8 +3,8 @@ use candid::Encode;
 use ic_config::flag_status::FlagStatus;
 use ic_error_types::RejectCode;
 use ic_management_canister_types::{
-    self as ic00, Method, Payload as Ic00Payload, TakeCanisterSnapshotArgs,
-    TakeCanisterSnapshotResponse,
+    self as ic00, DeleteCanisterSnapshotArgs, Method, Payload as Ic00Payload,
+    TakeCanisterSnapshotArgs, TakeCanisterSnapshotResponse,
 };
 use ic_replicated_state::canister_snapshots::SnapshotId;
 use ic_test_utilities_execution_environment::{get_output_messages, ExecutionTestBuilder};
@@ -167,4 +167,15 @@ fn test_ingress_snapshot_rejected_because_feature_is_disabled() {
         let expected_result = WasmResult::Reject(format!("Unable to route management canister request {}: UserError(UserError {{ code: CanisterRejectedMessage, description: {} }})", method, "\"Snapshotting API is not yet implemented\""));
         assert_eq!(result, expected_result);
     }
+}
+
+#[test]
+fn test_delete_canister_snapshot_decode_round_trip() {
+    let snapshot_id = SnapshotId::new(6);
+    let args = ic00::DeleteCanisterSnapshotArgs::new(canister_test_id(4), snapshot_id.get());
+    let encoded_args = args.encode();
+    assert_eq!(
+        args,
+        DeleteCanisterSnapshotArgs::decode(encoded_args.as_slice()).unwrap()
+    );
 }

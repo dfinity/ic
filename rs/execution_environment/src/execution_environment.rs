@@ -36,9 +36,9 @@ use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_management_canister_types::{
     CanisterChangeOrigin, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInfoRequest,
     CanisterInfoResponse, CanisterSettingsArgs, CanisterStatusType, ClearChunkStoreArgs,
-    ComputeInitialEcdsaDealingsArgs, CreateCanisterArgs, ECDSAPublicKeyArgs,
-    ECDSAPublicKeyResponse, EcdsaKeyId, EmptyBlob, InstallChunkedCodeArgs, InstallCodeArgsV2,
-    Method as Ic00Method, NodeMetricsHistoryArgs, Payload as Ic00Payload,
+    ComputeInitialEcdsaDealingsArgs, CreateCanisterArgs, DeleteCanisterSnapshotArgs,
+    ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaKeyId, EmptyBlob, InstallChunkedCodeArgs,
+    InstallCodeArgsV2, Method as Ic00Method, NodeMetricsHistoryArgs, Payload as Ic00Payload,
     ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs, SetupInitialDKGArgs,
     SignWithECDSAArgs, StoredChunksArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs,
     UpdateSettingsArgs, UploadChunkArgs, IC_00,
@@ -1320,12 +1320,18 @@ impl ExecutionEnvironment {
 
             Ok(Ic00Method::DeleteCanisterSnapshot) => match self.config.canister_snapshots {
                 FlagStatus::Enabled => {
-                    // TODO(EXC-1532): Implement delete_canister_snapshot.
+                    let res = match DeleteCanisterSnapshotArgs::decode(payload) {
+                        Err(err) => Err(err),
+                        Ok(_) => {
+                            // TODO(EXC-1532): Implement delete_canister_snapshot.
+                            Err(UserError::new(
+                                ErrorCode::CanisterRejectedMessage,
+                                "Canister snapshotting API is not yet implemented.",
+                            ))
+                        }
+                    };
                     ExecuteSubnetMessageResult::Finished {
-                        response: Err(UserError::new(
-                            ErrorCode::CanisterRejectedMessage,
-                            "Canister snapshotting API is not yet implemented.",
-                        )),
+                        response: res,
                         refund: msg.take_cycles(),
                     }
                 }
