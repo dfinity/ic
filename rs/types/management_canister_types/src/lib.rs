@@ -2719,3 +2719,33 @@ impl TakeCanisterSnapshotResponse {
         }
     }
 }
+
+/// Struct used for encoding/decoding
+/// `(record {
+///     canister_id: principal;
+///     snapshot_id: nat;
+/// })`
+#[derive(Default, Clone, CandidType, Deserialize, Debug, PartialEq, Eq)]
+pub struct DeleteCanisterSnapshotArgs {
+    pub canister_id: PrincipalId,
+    pub snapshot_id: candid::Nat,
+}
+
+impl Payload<'_> for DeleteCanisterSnapshotArgs {}
+
+impl DeleteCanisterSnapshotArgs {
+    pub fn new(canister_id: CanisterId, snapshot_id: u64) -> Self {
+        Self {
+            canister_id: canister_id.get(),
+            snapshot_id: candid::Nat::from(snapshot_id),
+        }
+    }
+
+    pub fn get_canister_id(&self) -> CanisterId {
+        CanisterId::unchecked_from_principal(self.canister_id)
+    }
+
+    pub fn get_snapshot_id(&self) -> u64 {
+        self.snapshot_id.0.to_u64().unwrap()
+    }
+}
