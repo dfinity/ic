@@ -15,6 +15,110 @@ pub struct Scalar {
     s: k256::Scalar,
 }
 
+// The secp256k1 parameters are defined in SEC2
+// [https://www.secg.org/sec2-v2.pdf] section 2.4.1
+//
+// The SSWU parameters are defined in RFC 9380
+// https://www.rfc-editor.org/rfc/rfc9380.html#name-suites-for-secp256k1
+fe_derive::derive_field_element!(
+    FieldElement,
+    Modulus = "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F",
+    A = "0",
+    B = "7",
+    SSWU_A = "0x3F8731ABDD661ADCA08A5558F0F5D272E953D363CB6F0E5D405447C01A444533",
+    SSWU_B = "1771",
+    SSWU_Z = "-11",
+);
+
+lazy_static::lazy_static! {
+
+    /// The constants that define the isogeny mapping for secp256k1
+    static ref K256_C : [FieldElement; 13] = {
+        let fb = |bs| FieldElement::from_bytes(bs).expect("Constant was invalid");
+        [fb(&hex!("8E38E38E38E38E38E38E38E38E38E38E38E38E38E38E38E38E38E38DAAAAA88C")),
+         fb(&hex!("534C328D23F234E6E2A413DECA25CAECE4506144037C40314ECBD0B53D9DD262")),
+         fb(&hex!("07D3D4C80BC321D5B9F315CEA7FD44C5D595D2FC0BF63B92DFFF1044F17C6581")),
+         fb(&hex!("8E38E38E38E38E38E38E38E38E38E38E38E38E38E38E38E38E38E38DAAAAA8C7")),
+         fb(&hex!("EDADC6F64383DC1DF7C4B2D51B54225406D36B641F5E41BBC52A56612A8C6D14")),
+         fb(&hex!("D35771193D94918A9CA34CCBB7B640DD86CD409542F8487D9FE6B745781EB49B")),
+         fb(&hex!("2F684BDA12F684BDA12F684BDA12F684BDA12F684BDA12F684BDA12F38E38D84")),
+         fb(&hex!("29A6194691F91A73715209EF6512E576722830A201BE2018A765E85A9ECEE931")),
+         fb(&hex!("C75E0C32D5CB7C0FA9D0A54B12A0A6D5647AB046D686DA6FDFFC90FC201D71A3")),
+         fb(&hex!("4BDA12F684BDA12F684BDA12F684BDA12F684BDA12F684BDA12F684B8E38E23C")),
+         fb(&hex!("6484AA716545CA2CF3A70C3FA8FE337E0A3D21162F0D6299A7BF8192BFD2A76F")),
+         fb(&hex!("7A06534BB8BDB49FD5E9E6632722C2989467C1BFC8E8D978DFB425D2685C2573")),
+         fb(&hex!("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFF93B")),
+        ]
+    };
+}
+
+/// Computes (x,y) where:
+/// * x = x_num / x_den, where
+///     * x_num = C0 * x'^3 + C1 * x'^2 + C2 * x' + C3
+///     * x_den = x'^2 + C4 * x' + C5
+/// * y = y' * y_num / y_den, where
+///    * y_num = C6 * x'^3 + C7 * x'^2 + C8 * x' + C9
+///    * y_den = x'^3 + C10 * x'^2 + C11 * x' + C12
+///
+/// where Ci refers to the constants in the variable K256_C[i]
+fn from_fe((x, y): &(FieldElement, FieldElement)) -> Point {
+    /// Return x**2 + x*c1 + c2
+    fn x2_xc1_c2(x: &FieldElement, c1: &FieldElement, c2: &FieldElement) -> FieldElement {
+        x.mul(&x.add(c1)).add(c2)
+    }
+
+    fn x3_x2c1_xc2_c3(
+        x: &FieldElement,
+        c1: &FieldElement,
+        c2: &FieldElement,
+        c3: &FieldElement,
+    ) -> FieldElement {
+        x.mul(&x2_xc1_c2(x, c1, c2)).add(c3)
+    }
+
+    /// Return x**3 * c1 + x**2 * c2 + x * c3 + c4
+    fn x3c1_x2c2_xc3_c4(
+        x: &FieldElement,
+        c1: &FieldElement,
+        c2: &FieldElement,
+        c3: &FieldElement,
+        c4: &FieldElement,
+    ) -> FieldElement {
+        x.mul(&x.mul(&x.mul(c1).add(c2)).add(c3)).add(c4)
+    }
+
+    let xnum = x3c1_x2c2_xc3_c4(x, &K256_C[0], &K256_C[1], &K256_C[2], &K256_C[3]);
+
+    let xden = x2_xc1_c2(x, &K256_C[4], &K256_C[5]);
+
+    let ynum = x3c1_x2c2_xc3_c4(x, &K256_C[6], &K256_C[7], &K256_C[8], &K256_C[9]);
+
+    let yden = x3_x2c1_xc2_c3(x, &K256_C[10], &K256_C[11], &K256_C[12]);
+
+    // We can perform both inversions in one step, using what is
+    // usually called Montgomery's trick:
+    //
+    //   To compute x^-1 and y^-1 compute z=(x*y)^-1
+    //   Then z*y = x^-1 and z*x = y^-1
+    let inv = xden.mul(&yden).invert();
+
+    let x = xnum.mul(&inv.mul(&yden));
+    let y = y.mul(&ynum.mul(&inv.mul(&xden)));
+
+    let mut buf = Vec::with_capacity(1 + 2 * FieldElement::BYTES);
+    buf.push(0x04);
+    buf.extend_from_slice(&x.as_bytes());
+    buf.extend_from_slice(&y.as_bytes());
+    Point::deserialize(&buf).expect("hash2curve produced invalid point")
+}
+
+super::algos::declare_sswu_p_3_mod_4_map_to_curve_impl!(
+    h2c_secp256k1,
+    FieldElement,
+    Point,
+    from_fe
+);
+
 impl Scalar {
     pub const BYTES: usize = 32;
     pub const BITS: usize = 256;
@@ -277,5 +381,10 @@ impl Point {
         Self {
             p: k256::ProjectivePoint::conditional_select(&a.p, &b.p, choice),
         }
+    }
+
+    /// Hash to curve (random oracle variant)
+    pub fn hash2curve(input: &[u8], domain_sep: &[u8]) -> Self {
+        h2c_secp256k1(input, domain_sep)
     }
 }

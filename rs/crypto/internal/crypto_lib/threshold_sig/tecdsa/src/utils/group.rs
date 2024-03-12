@@ -1,4 +1,3 @@
-use super::fe::EccFieldElement;
 use crate::*;
 use ic_types::NodeIndex;
 use rand::{CryptoRng, RngCore};
@@ -215,7 +214,7 @@ impl EccScalar {
         input: &[u8],
         domain_separator: &[u8],
     ) -> ThresholdEcdsaResult<Self> {
-        let h = super::hash2curve::hash_to_scalar(1, curve, input, domain_separator)?;
+        let h = Self::hash_to_several_scalars(curve, 1, input, domain_separator)?;
         Ok(h[0].clone())
     }
 
@@ -226,7 +225,29 @@ impl EccScalar {
         input: &[u8],
         domain_separator: &[u8],
     ) -> ThresholdEcdsaResult<Vec<Self>> {
-        super::hash2curve::hash_to_scalar(count, curve, input, domain_separator)
+        let s_bits = curve.scalar_bits();
+        let security_level = curve.security_level();
+
+        let field_len = (s_bits + security_level + 7) / 8; // "L" in spec
+        let len_in_bytes = count * field_len;
+
+        let uniform_bytes = ic_crypto_internal_seed::xmd::expand_message_xmd(
+            input,
+            domain_separator,
+            len_in_bytes,
+        )?;
+
+        let mut out = Vec::with_capacity(count);
+
+        for i in 0..count {
+            let s = EccScalar::from_bytes_wide(
+                curve,
+                &uniform_bytes[i * field_len..(i + 1) * field_len],
+            )?;
+            out.push(s);
+        }
+
+        Ok(out)
     }
 
     /// Deserialize a SEC1 formatted scalar value (with tag)
@@ -538,30 +559,12 @@ impl EccPoint {
     pub fn hash_to_point(
         curve: EccCurveType,
         input: &[u8],
-        domain_separator: &[u8],
+        dst: &[u8],
     ) -> ThresholdEcdsaResult<Self> {
-        super::hash2curve::hash2curve_ro(curve, input, domain_separator)
-    }
-
-    /// Create a point from two field elements
-    ///
-    /// The (x,y) pair must satisfy the curve equation
-    pub fn from_field_elems(
-        x: &EccFieldElement,
-        y: &EccFieldElement,
-    ) -> ThresholdEcdsaResult<Self> {
-        if x.curve_type() != y.curve_type() {
-            return Err(ThresholdEcdsaError::CurveMismatch);
+        match curve {
+            EccCurveType::P256 => Ok(Self::from(secp256r1::Point::hash2curve(input, dst))),
+            EccCurveType::K256 => Ok(Self::from(secp256k1::Point::hash2curve(input, dst))),
         }
-
-        let curve = x.curve_type();
-        let x_bytes = x.as_bytes();
-        let y_bytes = y.as_bytes();
-        let mut encoded = Vec::with_capacity(1 + x_bytes.len() + y_bytes.len());
-        encoded.push(0x04); // uncompressed
-        encoded.extend_from_slice(&x_bytes);
-        encoded.extend_from_slice(&y_bytes);
-        Self::deserialize_any_format(curve, &encoded)
     }
 
     /// Add two elliptic curve points
@@ -1038,20 +1041,10 @@ impl EccPoint {
         }
     }
 
-    /// Return the affine X coordinate of this point
-    pub fn affine_x(&self) -> ThresholdEcdsaResult<EccFieldElement> {
-        let curve_type = self.curve_type();
-        let field_bytes = curve_type.field_bytes();
-        let z = self.serialize_uncompressed();
-        EccFieldElement::from_bytes(curve_type, &z[1..field_bytes + 1])
-    }
-
-    /// Return the affine Y coordinate of this point
-    pub fn affine_y(&self) -> ThresholdEcdsaResult<EccFieldElement> {
-        let curve_type = self.curve_type();
-        let field_bytes = curve_type.field_bytes();
-        let z = self.serialize_uncompressed();
-        EccFieldElement::from_bytes(curve_type, &z[1 + field_bytes..])
+    /// Return the binary encoding of the affine X coordinate of this point
+    pub fn affine_x_bytes(&self) -> ThresholdEcdsaResult<Vec<u8>> {
+        // We can just strip off the SEC1 header to get the encoding of x
+        Ok(self.serialize()[1..].to_vec())
     }
 
     /// Return if the affine Y coordinate of this point is even
@@ -1219,7 +1212,7 @@ impl<const WINDOW_SIZE: usize> WindowInfo<WINDOW_SIZE> {
 
     /// Returns the number of windows if scalar_bits bits are used
     #[inline(always)]
-    pub(crate) fn number_of_windows_for_bits(scalar_bits: usize) -> usize {
+    pub(crate) const fn number_of_windows_for_bits(scalar_bits: usize) -> usize {
         (scalar_bits + WINDOW_SIZE - 1) / WINDOW_SIZE
     }
 

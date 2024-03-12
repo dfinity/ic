@@ -40,10 +40,6 @@ num-traits = { version = "0.2.15" }
 strum = "0.25"
 
 [[bench]]
-name = "field_ops"
-harness = false
-
-[[bench]]
 name = "poly"
 harness = false
 

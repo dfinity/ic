@@ -6,8 +6,7 @@ use ic_types::crypto::canister_threshold_sig::MasterEcdsaPublicKey;
 // x-coordinate of a point reduced modulo the modulus of the scalar
 // field.
 pub(crate) fn ecdsa_conversion_function(pt: &EccPoint) -> ThresholdEcdsaResult<EccScalar> {
-    let x = pt.affine_x()?;
-    let x_bytes = x.as_bytes();
+    let x_bytes = pt.affine_x_bytes()?;
     EccScalar::from_bytes_wide(pt.curve_type(), &x_bytes)
 }
 
@@ -413,7 +412,7 @@ impl ThresholdEcdsaCombinedSigInternal {
         we only check the x coordinate.
         */
 
-        if rp.affine_x()? != pre_sig.affine_x()? {
+        if rp.affine_x_bytes()? != pre_sig.affine_x_bytes()? {
             return Err(ThresholdEcdsaError::InvalidSignature);
         }
 

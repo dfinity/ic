@@ -15,6 +15,36 @@ pub struct Scalar {
     s: p256::Scalar,
 }
 
+// The secp256r1 parameters are defined in FIPS 186-4, section D.1.2
+// [https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.186-4.pdf]
+//
+// The SSWU parameters are defined in
+// https://www.rfc-editor.org/rfc/rfc9380.html#name-suites-for-nist-p-256
+fe_derive::derive_field_element!(
+    FieldElement,
+    Modulus = "0xFFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFF",
+    A = "-3",
+    B = "0x5AC635D8AA3A93E7B3EBBD55769886BC651D06B0CC53B0F63BCE3C3E27D2604B",
+    SSWU_A = "A",
+    SSWU_B = "B",
+    SSWU_Z = "-10",
+);
+
+fn from_fe((x, y): &(FieldElement, FieldElement)) -> Point {
+    let mut buf = Vec::with_capacity(1 + 2 * FieldElement::BYTES);
+    buf.push(0x04);
+    buf.extend_from_slice(&x.as_bytes());
+    buf.extend_from_slice(&y.as_bytes());
+    Point::deserialize(&buf).expect("hash2curve produced invalid point")
+}
+
+super::algos::declare_sswu_p_3_mod_4_map_to_curve_impl!(
+    h2c_secp256r1,
+    FieldElement,
+    Point,
+    from_fe
+);
+
 impl Scalar {
     pub const BYTES: usize = 32;
     pub const BITS: usize = 256;
@@ -303,5 +333,10 @@ impl Point {
         }
 
         result
+    }
+
+    /// Hash to curve (random oracle variant)
+    pub fn hash2curve(input: &[u8], domain_sep: &[u8]) -> Self {
+        h2c_secp256r1(input, domain_sep)
     }
 }
