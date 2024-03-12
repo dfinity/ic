@@ -6340,6 +6340,7 @@ dependencies = [
  "ed25519-dalek",
  "hex",
  "hex-literal",
+ "pem 1.1.1",
  "rand 0.8.5",
  "wycheproof",
  "zeroize",

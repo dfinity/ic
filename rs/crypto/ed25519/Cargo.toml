@@ -11,6 +11,7 @@ ed25519-dalek = { version = "2.1.1", features = ["std", "zeroize", "digest", "ba
 curve25519-dalek = { version = "3" }
 rand = "0.8"
 zeroize = { version = "1.5", features = ["zeroize_derive"] }
+pem = "1"
 
 [dev-dependencies]
 hex = "0.4"

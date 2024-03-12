@@ -5,30 +5,38 @@ use rand::Rng;
 #[test]
 fn secret_key_serialization_round_trips() {
     let mut rng = &mut rand::thread_rng();
+
+    let pkcs8_formats = [
+        PrivateKeyFormat::Pkcs8v1,
+        PrivateKeyFormat::Pkcs8v2,
+        PrivateKeyFormat::Pkcs8v2WithRingBug,
+    ];
+
     for _ in 0..100 {
         let key = PrivateKey::generate_using_rng(&mut rng);
 
         let via_raw = PrivateKey::deserialize_raw(&key.serialize_raw()).unwrap();
         assert_eq!(key, via_raw);
 
-        let via_pkcs8 = PrivateKey::deserialize_pkcs8(&key.serialize_pkcs8()).unwrap();
-        assert_eq!(key, via_pkcs8);
+        for format in pkcs8_formats {
+            let via_pkcs8_der =
+                PrivateKey::deserialize_pkcs8(&key.serialize_pkcs8(format)).unwrap();
+            assert_eq!(key, via_pkcs8_der);
 
-        let via_pkcs8v1 = PrivateKey::deserialize_pkcs8(&key.serialize_pkcs8_v1()).unwrap();
-        assert_eq!(key, via_pkcs8v1);
-
-        let via_pem = PrivateKey::deserialize_pkcs8_pem(&key.serialize_pkcs8_pem()).unwrap();
-        assert_eq!(key, via_pem);
+            let via_pkcs8_pem =
+                PrivateKey::deserialize_pkcs8_pem(&key.serialize_pkcs8_pem(format)).unwrap();
+            assert_eq!(key, via_pkcs8_pem);
+        }
     }
 }
 
 #[test]
-fn pkcs8_rep_includes_the_public_key() {
+fn pkcs8_v2_rep_includes_the_public_key() {
     let mut rng = &mut rand::thread_rng();
     let sk = PrivateKey::generate_using_rng(&mut rng);
     let pk = sk.public_key().serialize_raw();
 
-    let sk_pkcs8 = sk.serialize_pkcs8();
+    let sk_pkcs8 = sk.serialize_pkcs8(PrivateKeyFormat::Pkcs8v2);
 
     let pk_offset = sk_pkcs8.len() - pk.len();
 
@@ -175,6 +183,22 @@ fn can_parse_pkcs8_v1_der_secret_key() {
     assert_eq!(
         hex::encode(sk.serialize_raw()),
         "d4ee72dbf913584ad5b6d8f1f769f8ad3afe7c28cbf1d4fbe097a88f44755842"
+    );
+}
+
+#[test]
+fn can_parse_pkcs8_v2_ring_variant_secret_key() {
+    let pkcs8 = r"-----BEGIN PRIVATE KEY-----
+MFMCAQEwBQYDK2VwBCIEIEzXNIZbPBAnqbrgkeDI3ox3e8rZkADmGkc0bYsj
+cj1BoSMDIQD1+si816/7QQVbbOqgIFv+zizVvGq1QOMLg20pABvT8Q==
+-----END PRIVATE KEY-----";
+
+    let sk = PrivateKey::deserialize_pkcs8_pem(pkcs8).unwrap();
+
+    assert_eq!(
+        sk.serialize_pkcs8_pem(PrivateKeyFormat::Pkcs8v2WithRingBug)
+            .replace("\r\n", ""),
+        pkcs8.replace('\n', ""),
     );
 }
 

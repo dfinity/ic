@@ -13,6 +13,10 @@ use zeroize::ZeroizeOnDrop;
 /// An error if a private key cannot be decoded
 #[derive(Clone, Debug)]
 pub enum PrivateKeyDecodingError {
+    /// The outer PEM encoding is invalid
+    InvalidPemEncoding(String),
+    /// The PEM label was not the expected value
+    UnexpectedPemLabel(String),
     /// The private key seems invalid in some way; the string contains details
     InvalidKeyEncoding(String),
 }
@@ -29,6 +33,56 @@ impl std::fmt::Debug for PrivateKey {
             .field("public_key", &self.public_key().serialize_raw())
             .finish_non_exhaustive() // avoids printing secret information
     }
+}
+
+/*
+The ring crate, in versions prior to 0.17 has an unfortunate bug that
+it both requires that Ed25519 private keys be conveyed using the PKCS8 V2
+encoding AND it has a bug such that it does not accept the actual (correct)
+PKCS8 V2 encoding.
+*/
+
+const BUGGY_RING_V2_DER_PREFIX: [u8; 16] = [
+    48, 83, // A sequence of 83 bytes follows.
+    2, 1, // An integer denoting version
+    1, // 0 if secret key only, 1 if public key is also present
+    48, 5, // An element of 5 bytes follows
+    6, 3, 43, 101, 112, // The OID
+    4, 34, // An octet string of 34 bytes follows.
+    4, 32, // An octet string of 32 bytes follows.
+];
+
+const BUGGY_RING_V2_DER_PK_PREFIX: [u8; 5] = [
+    161, 35, // An explicitly tagged with 35 bytes.
+    3, 33, // A bitstring of 33 bytes follows.
+    0,  // The bitstring (32 bytes) is divisible by 8
+];
+
+const BUGGY_RING_V2_LEN: usize = BUGGY_RING_V2_DER_PREFIX.len()
+    + PrivateKey::BYTES
+    + BUGGY_RING_V2_DER_PK_PREFIX.len()
+    + PublicKey::BYTES;
+
+/// Specifies a private key encoding format
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum PrivateKeyFormat {
+    /// PKCS #8 v1: most common version, implemented by for example OpenSSL
+    Pkcs8v1,
+    /// PKCS #8 v2: newer format which includes the public key.
+    ///
+    /// # Warning
+    ///
+    /// Many libraries including OpenSSL cannot parse PKCS8 v2 formatting
+    Pkcs8v2,
+    /// PKCS #8 v2 emulating a bug that makes it compatible with
+    /// versions of the ring cryptography library prior to 0.17
+    ///
+    /// # Warning
+    ///
+    /// The only libraries that can parse this format are ring,
+    /// or libraries (such as this crate) that go out of their way
+    /// to be compatible with ring's buggy format.
+    Pkcs8v2WithRingBug,
 }
 
 impl PrivateKey {
@@ -87,78 +141,85 @@ impl PrivateKey {
         Ok(Self { sk })
     }
 
-    /// Serialize the Ed25519 secret key in PKCS8 v2 format
+    /// Serialize the Ed25519 secret key in PKCS8 format
     ///
-    /// This is the v2 PKCS8 format, which includes the public key
-    ///
-    /// # Warning
-    ///
-    /// Some software, notably OpenSSL, does not understand the v2 PKCS8 format.
-    pub fn serialize_pkcs8(&self) -> Vec<u8> {
-        let pkcs8 = self.sk.to_pkcs8_der();
+    /// The details of the formatting are specified using the argument
+    pub fn serialize_pkcs8(&self, format: PrivateKeyFormat) -> Vec<u8> {
+        let sk_bytes = self.serialize_raw();
+        let pk_bytes = self.public_key().serialize_raw();
 
-        // Key encoding with the pkcs8 crate can fail, largely to allow for
-        // falliable encoding on the part of the algorithm specific code.  But
-        // logically speaking, as long as the key is valid (which we've already
-        // checked) then there is no reason for encoding to ever fail outside of
-        // memory allocation errors. None of the error types that to_pkcs8_der
-        // can return have any relevance to encoding. And the dalek encoding
-        // functions themselves do not have any error cases.
-        pkcs8
-            .expect("Failed to encode key as PKCS8")
-            .to_bytes()
-            .to_vec()
-    }
+        fn to_pkcs8<T: EncodePrivateKey>(v: &T) -> Vec<u8> {
+            let pkcs8 = v.to_pkcs8_der();
 
-    /// Serialize the Ed25519 secret key in PKCS8 v1 format
-    ///
-    /// This is the v1 PKCS8 format, which omits the public key
-    ///
-    /// Use this only if required to interop with software which does
-    /// not understand the v2 PKCS8 format
-    pub fn serialize_pkcs8_v1(&self) -> Vec<u8> {
-        const DER_PREFIX: [u8; 16] = [
-            48, 46, // A sequence of 46 bytes follows.
-            2, 1, // An integer denoting version
-            0, // 0 if secret key only, 1 if public key is also present
-            48, 5, // An element of 5 bytes follows
-            6, 3, 43, 101, 112, // Object ID (6), length 3, value 1.3.101.112
-            4, 34, // An octet string of 34 bytes follows.
-            4, 32, // An octet string of 32 bytes follows.
-        ];
+            // Key encoding with the pkcs8 crate can fail, largely to allow for
+            // fallible encoding on the part of the algorithm specific code.  But
+            // logically speaking, as long as the key is valid (which we've already
+            // checked) then there is no reason for encoding to ever fail outside of
+            // memory allocation errors. None of the error types that to_pkcs8_der
+            // can return have any relevance to encoding. And the dalek encoding
+            // functions themselves do not have any error cases.
 
-        let mut pkcs8v1 = Vec::with_capacity(DER_PREFIX.len() + Self::BYTES);
+            pkcs8.expect("PKCS8 encoding failed").to_bytes().to_vec()
+        }
 
-        pkcs8v1.extend_from_slice(&DER_PREFIX);
-        pkcs8v1.extend_from_slice(&self.serialize_raw());
+        match format {
+            PrivateKeyFormat::Pkcs8v1 => {
+                let kp = ed25519_dalek::pkcs8::KeypairBytes {
+                    secret_key: sk_bytes,
+                    public_key: None,
+                };
 
-        pkcs8v1
+                to_pkcs8(&kp)
+            }
+            PrivateKeyFormat::Pkcs8v2 => {
+                let kp = ed25519_dalek::pkcs8::KeypairBytes {
+                    secret_key: sk_bytes,
+                    public_key: Some(ed25519_dalek::pkcs8::PublicKeyBytes(pk_bytes)),
+                };
+
+                to_pkcs8(&kp)
+            }
+            PrivateKeyFormat::Pkcs8v2WithRingBug => {
+                let mut ringv2 = Vec::with_capacity(BUGGY_RING_V2_LEN);
+
+                ringv2.extend_from_slice(&BUGGY_RING_V2_DER_PREFIX);
+                ringv2.extend_from_slice(&sk_bytes);
+                ringv2.extend_from_slice(&BUGGY_RING_V2_DER_PK_PREFIX);
+                ringv2.extend_from_slice(&pk_bytes);
+
+                ringv2
+            }
+        }
     }
 
     /// Deserialize an Ed25519 private key from PKCS8 format
     ///
     /// Both v1 and v2 PKCS8 encodings are accepted. The only difference is
-    /// that v2 includes the public key as well.
+    /// that v2 includes the public key as well. This also accepts the buggy
+    /// format used by ring 0.16.
     ///
     /// This corresponds with the format used by PrivateKey::serialize_pkcs8
     pub fn deserialize_pkcs8(bytes: &[u8]) -> Result<Self, PrivateKeyDecodingError> {
-        let sk = SigningKey::from_pkcs8_der(bytes)
-            .map_err(|e| PrivateKeyDecodingError::InvalidKeyEncoding(format!("{:?}", e)))?;
-        Ok(Self { sk })
+        if bytes.len() == BUGGY_RING_V2_LEN && bytes.starts_with(&BUGGY_RING_V2_DER_PREFIX) {
+            let sk_offset = BUGGY_RING_V2_DER_PREFIX.len();
+            Self::deserialize_raw(&bytes[sk_offset..sk_offset + Self::BYTES])
+        } else {
+            let sk = SigningKey::from_pkcs8_der(bytes)
+                .map_err(|e| PrivateKeyDecodingError::InvalidKeyEncoding(format!("{:?}", e)))?;
+            Ok(Self { sk })
+        }
     }
 
     /// Serialize the Ed25519 secret key in PKCS8 v2 format with PEM encoding
     ///
-    /// This is the v2 PKCS8 format which includes the public key
-    ///
-    /// # Warning
-    ///
-    /// Some software, notably OpenSSL, does not understand the v2 PKCS8 format.
-    pub fn serialize_pkcs8_pem(&self) -> String {
-        let pkcs8 = self.sk.to_pkcs8_pem(Default::default());
+    /// The details of the formatting are specified using the argument
+    pub fn serialize_pkcs8_pem(&self, format: PrivateKeyFormat) -> String {
+        let pkcs8 = self.serialize_pkcs8(format);
 
-        // See comment in serialize_pkcs8 regarding this expect
-        pkcs8.expect("Failed to encode key as PKCS8").to_string()
+        pem::encode(&pem::Pem {
+            tag: "PRIVATE KEY".to_string(),
+            contents: pkcs8,
+        })
     }
 
     /// Deserialize an Ed25519 private key from PKCS8 PEM format
@@ -167,9 +228,13 @@ impl PrivateKey {
     ///
     /// This corresponds with the format used by PrivateKey::serialize_pkcs8_pem
     pub fn deserialize_pkcs8_pem(pem: &str) -> Result<Self, PrivateKeyDecodingError> {
-        let sk = SigningKey::from_pkcs8_pem(pem)
-            .map_err(|e| PrivateKeyDecodingError::InvalidKeyEncoding(format!("{:?}", e)))?;
-        Ok(Self { sk })
+        let der = pem::parse(pem)
+            .map_err(|e| PrivateKeyDecodingError::InvalidPemEncoding(format!("{:?}", e)))?;
+        if der.tag != "PRIVATE KEY" {
+            return Err(PrivateKeyDecodingError::UnexpectedPemLabel(der.tag));
+        }
+
+        Self::deserialize_pkcs8(&der.contents)
     }
 }
 
