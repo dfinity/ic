@@ -152,25 +152,6 @@
 //! derivation function is used elsewhere, namely in [`Seed`] and the
 //! [random oracle](#utility-functions-random-oracle).
 //!
-//! ## Utility Functions: Field Arithmetic
-//!
-//! Files: `fe.rs` and in `fe-derive` crate
-//!
-//! Implementing hash2curve requires arithmetic over the field modulo
-//! the prime (for secp256k1, this is 2**256 - 0x1000003d1). This is
-//! not supported by available Rust libraries so it is included here.
-//!
-//! `fe.rs` provides a wrapper, [`EccFieldElement`], that handles arithmetic
-//! for multiple curves. It is simply an enum which dispatches to the
-//! relevant implementation.
-//!
-//! The implementation of the arithmetic itself is crated via a Rust proc
-//! macro in the associated `fe-derive` crate. It uses a simple packed
-//! `u64` representation with all arithmetic done in Montgomery form. The
-//! Montgomery parameters are computed at compile time by the proc macro.
-//! These are instantiated by the calls to
-//! [`fe_derive::derive_field_element!`] in `fe.rs`.
-//!
 //! ## Utility Functions: Seed
 //!
 //! File: `lib.rs` in `seed` crate
@@ -265,7 +246,6 @@ pub use crate::idkg::dealings::*;
 pub use crate::idkg::transcript::*;
 pub use crate::idkg::zk;
 
-pub use crate::utils::fe::*;
 pub use crate::utils::group::*;
 pub use crate::utils::poly::*;
 

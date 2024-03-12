@@ -93,16 +93,6 @@ rust_bench(
 )
 
 rust_bench(
-    name = "field_ops_bench",
-    testonly = True,
-    srcs = ["benches/field_ops.rs"],
-    deps = [
-        ":tecdsa",
-        "@crate_index//:criterion",
-    ],
-)
-
-rust_bench(
     name = "group_ops_bench",
     testonly = True,
     srcs = ["benches/group_ops.rs"],
