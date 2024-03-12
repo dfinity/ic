@@ -9,7 +9,6 @@ pub mod history;
 pub mod ingress_selector;
 pub mod io;
 pub mod message_routing;
-pub mod notification;
 pub mod p2p;
 pub mod port_allocation;
 pub mod self_validating_payload_builder;
