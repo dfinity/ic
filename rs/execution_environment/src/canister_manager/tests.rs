@@ -23,9 +23,9 @@ use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterIdRecord,
     CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgsBuilder,
-    CanisterStatusResultV2, CanisterStatusType, ClearChunkStoreArgs, CreateCanisterArgs, EmptyBlob,
-    InstallCodeArgsV2, Method, Payload, StoredChunksArgs, StoredChunksReply, UpdateSettingsArgs,
-    CanisterUpgradeOptions, UploadChunkArgs, UploadChunkReply,
+    CanisterStatusResultV2, CanisterStatusType, CanisterUpgradeOptions, ClearChunkStoreArgs,
+    CreateCanisterArgs, EmptyBlob, InstallCodeArgsV2, Method, Payload, StoredChunksArgs,
+    StoredChunksReply, UpdateSettingsArgs, UploadChunkArgs, UploadChunkReply,
 };
 use ic_interfaces::execution_environment::{ExecutionMode, HypervisorError, SubnetAvailableMemory};
 use ic_logger::replica_logger::no_op_logger;
