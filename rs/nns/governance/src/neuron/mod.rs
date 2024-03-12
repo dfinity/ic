@@ -4,6 +4,7 @@ use crate::{
         DEPRECATED_TOPICS, LOG_PREFIX, MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS,
         MAX_NEURON_RECENT_BALLOTS, MAX_NUM_HOT_KEYS_PER_NEURON,
     },
+    neuron::types::{DissolveStateAndAge, StoredDissolvedStateAndAge},
     pb::v1::{
         governance_error::ErrorType, manage_neuron, neuron::DissolveState, Ballot, BallotInfo,
         GovernanceError, Neuron, NeuronInfo, NeuronState, NeuronType, Topic, Vote,
@@ -19,6 +20,8 @@ use std::{
     collections::{BTreeSet, HashMap},
     ops::RangeBounds,
 };
+
+pub mod types;
 
 impl Neuron {
     // --- Utility methods on neurons: mostly not for public consumption.
@@ -836,6 +839,21 @@ impl Neuron {
         }
         self
     }
+
+    /// Returns an enum representing the dissolve state and age of a neuron.
+    pub fn dissolve_state_and_age(&self) -> DissolveStateAndAge {
+        DissolveStateAndAge::from(StoredDissolvedStateAndAge {
+            dissolve_state: self.dissolve_state.clone(),
+            aging_since_timestamp_seconds: self.aging_since_timestamp_seconds,
+        })
+    }
+
+    /// Sets a neuron's dissolve state and age.
+    pub fn set_dissolve_state_and_age(&mut self, state_and_age: DissolveStateAndAge) {
+        let stored = StoredDissolvedStateAndAge::from(state_and_age);
+        self.dissolve_state = stored.dissolve_state;
+        self.aging_since_timestamp_seconds = stored.aging_since_timestamp_seconds;
+    }
 }
 
 /// Convert a RangeBounds<NeuronId> to RangeBounds<u64> which is useful for methods
@@ -866,8 +884,8 @@ impl NeuronInfo {
 
 #[cfg(test)]
 mod tests {
-    use crate::pb::v1::{neuron::DissolveState, Neuron, NeuronState};
-    use ic_nervous_system_common::{E8, SECONDS_PER_DAY};
+    use super::*;
+    use ic_nervous_system_common::E8;
 
     const NOW: u64 = 123_456_789;
 
@@ -1166,5 +1184,36 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn test_neuron_state_and_age() {
+        let mut neuron = Neuron {
+            aging_since_timestamp_seconds: 123456789,
+            dissolve_state: Some(DissolveState::DissolveDelaySeconds(23456)),
+            ..Default::default()
+        };
+        assert_eq!(
+            neuron.dissolve_state_and_age(),
+            DissolveStateAndAge::NotDissolving {
+                dissolve_delay_seconds: 23456,
+                aging_since_timestamp_seconds: 123456789
+            }
+        );
+
+        neuron.set_dissolve_state_and_age(DissolveStateAndAge::DissolvingOrDissolved {
+            when_dissolved_timestamp_seconds: 234567890,
+        });
+        assert_eq!(
+            neuron.dissolve_state_and_age(),
+            DissolveStateAndAge::DissolvingOrDissolved {
+                when_dissolved_timestamp_seconds: 234567890,
+            }
+        );
+        assert_eq!(
+            neuron.dissolve_state,
+            Some(DissolveState::WhenDissolvedTimestampSeconds(234567890))
+        );
+        assert_eq!(neuron.aging_since_timestamp_seconds, u64::MAX);
     }
 }
