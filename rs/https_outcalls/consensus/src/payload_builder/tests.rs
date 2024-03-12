@@ -21,14 +21,12 @@ use ic_interfaces::{
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_features::SubnetFeatures;
-use ic_test_utilities::{
-    state_manager::RefMockStateManager,
-    types::{
-        ids::{canister_test_id, node_test_id, subnet_test_id},
-        messages::RequestBuilder,
-    },
-};
+use ic_test_utilities::state_manager::RefMockStateManager;
 use ic_test_utilities_registry::SubnetRecordBuilder;
+use ic_test_utilities_types::{
+    ids::{canister_test_id, node_test_id, subnet_test_id},
+    messages::RequestBuilder,
+};
 use ic_types::{
     artifact_kind::CanisterHttpArtifact,
     batch::{CanisterHttpPayload, ValidationContext},

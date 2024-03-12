@@ -6,13 +6,11 @@ use super::{
 use crate::{CanisterState, SchedulerState, SystemState};
 use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
-use ic_test_utilities::{
-    state::arb_num_receivers,
-    types::{
-        arbitrary,
-        ids::{canister_test_id, message_test_id, user_test_id},
-        messages::{IngressBuilder, RequestBuilder, ResponseBuilder},
-    },
+use ic_test_utilities::state::arb_num_receivers;
+use ic_test_utilities_types::{
+    arbitrary,
+    ids::{canister_test_id, message_test_id, user_test_id},
+    messages::{IngressBuilder, RequestBuilder, ResponseBuilder},
 };
 use ic_types::{
     messages::{CallbackId, CanisterMessage, NO_DEADLINE},

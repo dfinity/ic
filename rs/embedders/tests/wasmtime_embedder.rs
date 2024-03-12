@@ -4,10 +4,8 @@ use ic_embedders::{
 };
 use ic_interfaces::execution_environment::{HypervisorError, SystemApi, TrapCode};
 use ic_replicated_state::{canister_state::WASM_PAGE_SIZE_IN_BYTES, Global};
-use ic_test_utilities::{
-    types::ids::user_test_id,
-    wasmtime_instance::{WasmtimeInstanceBuilder, DEFAULT_NUM_INSTRUCTIONS},
-};
+use ic_test_utilities::wasmtime_instance::{WasmtimeInstanceBuilder, DEFAULT_NUM_INSTRUCTIONS};
+use ic_test_utilities_types::ids::user_test_id;
 use ic_types::{
     methods::{FuncRef, WasmClosure, WasmMethod},
     time::UNIX_EPOCH,
@@ -207,7 +205,7 @@ fn correctly_report_performance_counter() {
                             (drop (i32.const 0))
                             (call $ic0_performance_counter (i32.const 0))
                             (global.set $performance_counter1)
-                            
+
                             ;; do one more system call and a bit more instructions
                             (drop (i32.const 0))
                             (drop (i32.const 0))
@@ -1510,7 +1508,7 @@ fn passive_data_segment() {
                 i32.const 0     ;; data segment offset
                 i32.const 4     ;; byte length
                 memory.init 0   ;; load passive data segment by index
-    
+
                 i32.const 1024
                 i32.load
                 i32.const 0x04030201 ;; little endian

@@ -392,7 +392,8 @@ pub mod tests {
     use ic_interfaces::ingress_pool::IngressPoolThrottler;
     use ic_interfaces_transport::TransportPayload;
     use ic_metrics::MetricsRegistry;
-    use ic_test_utilities::{p2p::p2p_test_setup_logger, types::ids::node_test_id};
+    use ic_test_utilities::p2p::p2p_test_setup_logger;
+    use ic_test_utilities_types::ids::node_test_id;
     use tokio::time::{sleep, Duration};
 
     struct TestThrottle();

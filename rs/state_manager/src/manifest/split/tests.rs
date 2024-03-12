@@ -2,7 +2,7 @@ use assert_matches::assert_matches;
 use ic_base_types::CanisterId;
 use ic_registry_routing_table::{CanisterIdRange, CanisterIdRanges};
 use ic_state_layout::{CANISTER_FILE, CANISTER_STATES_DIR};
-use ic_test_utilities::types::ids::{SUBNET_0, SUBNET_1};
+use ic_test_utilities_types::ids::{SUBNET_0, SUBNET_1};
 use ic_types::state_sync::CURRENT_STATE_SYNC_VERSION;
 
 use super::*;

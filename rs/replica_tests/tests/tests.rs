@@ -7,8 +7,8 @@ use ic_replica_tests::{assert_reply, install_universal_canister};
 use ic_replicated_state::{PageIndex, PageMap};
 use ic_state_machine_tests::StateMachine;
 use ic_sys::PAGE_SIZE;
-use ic_test_utilities::types::ids::canister_test_id;
 use ic_test_utilities::universal_canister::{call_args, wasm};
+use ic_test_utilities_types::ids::canister_test_id;
 use ic_types::{
     ingress::WasmResult, messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, time::expiry_time_from_now,
     CanisterId, NumBytes, RegistryVersion,
@@ -1080,7 +1080,7 @@ fn test_inter_canister_messaging_full_queues() {
                     )
                     (call $ic0_call_data_append
                         (i32.const 10) (i32.const 1)    ;; refers to byte copied from the payload
-                    ) 
+                    )
                     (i32.store
                       (i32.const 30)
                       (call $ic0_call_perform)

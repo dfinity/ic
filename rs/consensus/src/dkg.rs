@@ -1630,14 +1630,15 @@ mod tests {
     };
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
     use ic_test_utilities::{
-        consensus::fake::FakeContentSigner,
-        crypto::CryptoReturningOk,
+        consensus::fake::FakeContentSigner, crypto::CryptoReturningOk,
         state_manager::RefMockStateManager,
-        types::ids::{node_test_id, subnet_test_id},
-        types::messages::RequestBuilder,
     };
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
+    use ic_test_utilities_types::{
+        ids::{node_test_id, subnet_test_id},
+        messages::RequestBuilder,
+    };
     use ic_types::{
         batch::BatchPayload,
         consensus::{ecdsa, DataPayload, HasVersion},

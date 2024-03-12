@@ -83,7 +83,8 @@ mod tests {
     use ic_replicated_state::{
         canister_snapshots::CanisterSnapshots, CanisterQueues, ReplicatedState, SystemMetadata,
     };
-    use ic_test_utilities::{state::ReplicatedStateBuilder, types::ids::subnet_test_id};
+    use ic_test_utilities::state::ReplicatedStateBuilder;
+    use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
         batch::RawQueryStats,
         consensus::certification::{Certification, CertificationContent},

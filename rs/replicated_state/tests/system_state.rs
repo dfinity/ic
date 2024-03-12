@@ -5,7 +5,7 @@ use ic_replicated_state::{
     testing::{CanisterQueuesTesting, SystemStateTesting},
     InputQueueType, StateError, SystemState,
 };
-use ic_test_utilities::types::{
+use ic_test_utilities_types::{
     ids::{canister_test_id, user_test_id},
     messages::{RequestBuilder, ResponseBuilder},
 };

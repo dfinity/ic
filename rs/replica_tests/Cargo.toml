@@ -33,6 +33,7 @@ ic-replicated-state = { path = "../replicated_state" }
 ic-state-machine-tests = { path = "../state_machine_tests" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }
+ic-test-utilities-types = { path = "../test_utilities/types" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 ic-base-types = { path = "../types/base_types" }

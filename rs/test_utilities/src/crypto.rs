@@ -4,7 +4,6 @@ pub use ic_crypto_test_utils::files as temp_dir;
 use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsConfig, TlsConfigError};
 use tokio_rustls::rustls::{ClientConfig, PrivateKey, RootCertStore, ServerConfig};
 
-use crate::types::ids::node_test_id;
 use ic_crypto_interfaces_sig_verification::{BasicSigVerifierByPublicKey, CanisterSigVerifier};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspNiDkgDealing;
 use ic_crypto_temp_crypto::TempCryptoComponent;
@@ -20,6 +19,7 @@ use ic_interfaces::crypto::{MultiSigVerifier, MultiSigner};
 use ic_interfaces_registry::RegistryClient;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+use ic_test_utilities_types::ids::node_test_id;
 use ic_types::crypto::canister_threshold_sig::error::*;
 use ic_types::crypto::canister_threshold_sig::idkg::*;
 use ic_types::crypto::canister_threshold_sig::*;

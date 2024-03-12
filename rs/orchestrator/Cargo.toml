@@ -65,4 +65,5 @@ ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-in-memory-logger = { path = "../test_utilities/in_memory_logger" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }
 ic-test-utilities-time = { path = "../test_utilities/time" }
+ic-test-utilities-types = { path = "../test_utilities/types" }
 mockall = { workspace = true }

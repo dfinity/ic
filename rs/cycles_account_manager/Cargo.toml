@@ -25,4 +25,5 @@ candid = { workspace = true }
 ic-constants = { path = "../constants" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }
+ic-test-utilities-types = { path = "../test_utilities/types" }
 ic-wasm-types = { path = "../types/wasm_types" }

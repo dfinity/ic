@@ -158,7 +158,7 @@ mod tests {
         sandbox_safe_system_state::{CanisterStatusView, SandboxSafeSystemState},
         ApiType, ExecutionParameters, InstructionLimits,
     };
-    use ic_test_utilities::types::ids::{canister_test_id, subnet_test_id, user_test_id};
+    use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
     use ic_types::{
         ingress::WasmResult,
         messages::{CallContextId, RequestMetadata},

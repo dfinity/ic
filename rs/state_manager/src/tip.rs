@@ -1268,9 +1268,9 @@ mod test {
     use super::*;
     use ic_config::state_manager::lsmt_config_default;
     use ic_metrics::MetricsRegistry;
-    use ic_test_utilities::types::ids::canister_test_id;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_tmpdir::tmpdir;
+    use ic_test_utilities_types::ids::canister_test_id;
 
     #[test]
     fn dont_crash_or_hang() {

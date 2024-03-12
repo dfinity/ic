@@ -76,7 +76,7 @@ mod tests {
     };
     use ic_crypto_standalone_sig_verifier::user_public_key_from_bytes;
     use ic_test_utilities::crypto::temp_crypto_component_with_fake_registry;
-    use ic_test_utilities::types::ids::{message_test_id, node_test_id};
+    use ic_test_utilities_types::ids::{message_test_id, node_test_id};
     use ic_types::{
         crypto::SignableMock,
         messages::{Blob, Delegation},

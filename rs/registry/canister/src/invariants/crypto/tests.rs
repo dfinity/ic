@@ -604,7 +604,7 @@ mod ecdsa_signing_subnet_lists {
     use ic_protobuf::registry::crypto::v1::EcdsaSigningSubnetList;
     use ic_protobuf::registry::subnet::v1::{EcdsaConfig, SubnetRecord};
     use ic_registry_transport::pb::v1::RegistryMutation;
-    use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use rand::Rng;
 
     #[test]

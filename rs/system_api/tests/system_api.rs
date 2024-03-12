@@ -19,12 +19,11 @@ use ic_system_api::{
     NonReplicatedQueryKind, SystemApiImpl,
 };
 use ic_test_utilities::{
-    cycles_account_manager::CyclesAccountManagerBuilder,
-    state::SystemStateBuilder,
-    types::{
-        ids::{call_context_test_id, canister_test_id, subnet_test_id, user_test_id},
-        messages::RequestBuilder,
-    },
+    cycles_account_manager::CyclesAccountManagerBuilder, state::SystemStateBuilder,
+};
+use ic_test_utilities_types::{
+    ids::{call_context_test_id, canister_test_id, subnet_test_id, user_test_id},
+    messages::RequestBuilder,
 };
 use ic_types::{
     messages::{

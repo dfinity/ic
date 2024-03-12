@@ -31,6 +31,7 @@ DEV_DEPENDENCIES = [
     "//rs/sys",
     "//rs/test_utilities",
     "//rs/test_utilities/time",
+    "//rs/test_utilities/types",
     "//rs/types/wasm_types",
     "//rs/utils",
     "@crate_index//:assert_matches",

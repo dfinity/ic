@@ -398,8 +398,8 @@ pub mod test {
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_registry_subnet_type::SubnetType;
-    use ic_test_utilities::types::ids::subnet_test_id;
     use ic_test_utilities_logger::with_test_replica_logger;
+    use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
         crypto::{CryptoHash, CryptoHashOf},
         messages::CallbackId,
@@ -464,7 +464,7 @@ pub mod test {
                     Arc::new(Mutex::new(Box::new(shim_mock)));
 
                 let request = CanisterHttpRequestContext {
-                    request: ic_test_utilities::types::messages::RequestBuilder::new().build(),
+                    request: ic_test_utilities_types::messages::RequestBuilder::new().build(),
                     url: "".to_string(),
                     max_response_bytes: None,
                     headers: vec![],
@@ -612,7 +612,7 @@ pub mod test {
                     .return_const(Err(TryReceiveError::Empty));
 
                 let request = CanisterHttpRequestContext {
-                    request: ic_test_utilities::types::messages::RequestBuilder::new().build(),
+                    request: ic_test_utilities_types::messages::RequestBuilder::new().build(),
                     url: "".to_string(),
                     max_response_bytes: None,
                     headers: vec![],

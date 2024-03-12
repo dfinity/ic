@@ -997,9 +997,9 @@ pub mod tests {
         consensus::{fake::*, make_genesis},
         p2p::*,
         thread_transport::*,
-        types::ids::{node_test_id, subnet_test_id},
     };
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::consensus::dkg::{DealingContent, DkgMessageId, Message as DkgMessage};
     use ic_types::crypto::{
         threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetSubnet},

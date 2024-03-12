@@ -11,7 +11,7 @@ use ic_management_canister_types::{
 };
 use ic_messaging::MessageRoutingImpl;
 use ic_state_manager::StateManagerImpl;
-use ic_test_utilities::types::messages::SignedIngressBuilder;
+use ic_test_utilities_types::messages::SignedIngressBuilder;
 use ic_types::{
     batch::{Batch, BatchMessages, BlockmakerMetrics},
     ingress::{IngressState, IngressStatus, WasmResult},

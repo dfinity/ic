@@ -12,12 +12,12 @@ use ic_replicated_state::{
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
     state::{new_canister_state, SystemStateBuilder},
-    types::{
-        ids::{canister_test_id, subnet_test_id, user_test_id},
-        messages::SignedIngressBuilder,
-    },
 };
 use ic_test_utilities_logger::with_test_replica_logger;
+use ic_test_utilities_types::{
+    ids::{canister_test_id, subnet_test_id, user_test_id},
+    messages::SignedIngressBuilder,
+};
 use ic_types::{
     messages::{extract_effective_canister_id, SignedIngressContent},
     nominal_cycles::NominalCycles,

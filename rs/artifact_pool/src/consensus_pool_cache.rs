@@ -469,13 +469,11 @@ mod test {
     use ic_interfaces::consensus_pool::{ValidatedConsensusArtifact, HEIGHT_CONSIDERED_BEHIND};
     use ic_test_artifact_pool::consensus_pool::{Round, TestConsensusPool};
     use ic_test_utilities::{
-        consensus::fake::*,
-        crypto::CryptoReturningOk,
-        state_manager::FakeStateManager,
-        types::ids::{node_test_id, subnet_test_id},
+        consensus::fake::*, crypto::CryptoReturningOk, state_manager::FakeStateManager,
     };
     use ic_test_utilities_registry::{setup_registry, SubnetRecordBuilder};
     use ic_test_utilities_time::FastForwardTimeSource;
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::consensus::*;
     use ic_types::time::UNIX_EPOCH;
     use std::sync::Arc;

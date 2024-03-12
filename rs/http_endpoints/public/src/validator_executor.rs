@@ -111,12 +111,10 @@ mod tests {
     use ic_interfaces_registry_mocks::MockRegistryClient;
     use ic_logger::replica_logger::no_op_logger;
     use ic_registry_client_helpers::crypto::root_of_trust::RegistryRootOfTrustProvider;
-    use ic_test_utilities::{
-        crypto::temp_crypto_component_with_fake_registry,
-        types::{
-            ids::{canister_test_id, node_test_id},
-            messages::SignedIngressBuilder,
-        },
+    use ic_test_utilities::crypto::temp_crypto_component_with_fake_registry;
+    use ic_test_utilities_types::{
+        ids::{canister_test_id, node_test_id},
+        messages::SignedIngressBuilder,
     };
     use ic_types::time::current_time;
     use ic_types::RegistryVersion;

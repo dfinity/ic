@@ -192,10 +192,8 @@ mod test {
     use super::*;
     use ic_interfaces::dkg::DkgPool;
     use ic_logger::replica_logger::no_op_logger;
-    use ic_test_utilities::{
-        consensus::fake::FakeSigner,
-        types::ids::{node_test_id, subnet_test_id},
-    };
+    use ic_test_utilities::consensus::fake::FakeSigner;
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
         crypto::threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetSubnet},
         signature::BasicSignature,

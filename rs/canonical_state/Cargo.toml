@@ -31,6 +31,7 @@ ic-canonical-state-tree-hash-test-utils = { path = "tree_hash/test_utils" }
 ic-registry-subnet-features = { path = "../registry/subnet_features" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-time = { path = "../test_utilities/time" }
+ic-test-utilities-types = { path = "../test_utilities/types" }
 ic-utils = { path = "../utils" }
 ic-wasm-types = { path = "../types/wasm_types" }
 ic-sys = { path = "../sys" }

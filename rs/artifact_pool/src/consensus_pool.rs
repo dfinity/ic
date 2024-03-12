@@ -991,10 +991,10 @@ mod tests {
         consensus::{fake::*, make_genesis},
         crypto::CryptoReturningOk,
         state_manager::FakeStateManager,
-        types::ids::{node_test_id, subnet_test_id},
     };
     use ic_test_utilities_registry::{setup_registry, SubnetRecordBuilder};
     use ic_test_utilities_time::FastForwardTimeSource;
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
         batch::ValidationContext,
         consensus::{BlockProposal, RandomBeacon},

@@ -1152,7 +1152,7 @@ mod tests {
     use super::*;
     use candid::Encode;
     use ic_management_canister_types::{CanisterSettingsArgsBuilder, UpdateSettingsArgs};
-    use ic_test_utilities::types::ids::subnet_test_id;
+    use ic_test_utilities_types::ids::subnet_test_id;
 
     fn create_cycles_account_manager(reference_subnet_size: usize) -> CyclesAccountManager {
         let mut config = CyclesAccountManagerConfig::application_subnet();

@@ -229,8 +229,8 @@ impl SandboxedExecutionMetrics {
                 decimal_buckets_with_zero(-4, 1),
             ),
             sandboxed_execution_replica_cache_lookups: metrics_registry.int_counter_vec(
-                "sandboxed_execution_replica_cache_lookups", 
-                "Results from looking up a wasm module in the embedder cache or compilation cache", 
+                "sandboxed_execution_replica_cache_lookups",
+                "Results from looking up a wasm module in the embedder cache or compilation cache",
                 &["lookup_result"]),
             sandboxed_execution_wasm_imports_call_cycles_add: metrics_registry.int_counter(
                 "sandboxed_execution_wasm_imports_call_cycles_add",
@@ -2036,7 +2036,7 @@ mod tests {
         execution_environment::MAX_COMPILATION_CACHE_SIZE, logger::Config as LoggerConfig,
     };
     use ic_logger::{new_replica_logger, replica_logger::no_op_logger};
-    use ic_test_utilities::types::ids::canister_test_id;
+    use ic_test_utilities_types::ids::canister_test_id;
     use libc::kill;
     use slog::{o, Drain};
 

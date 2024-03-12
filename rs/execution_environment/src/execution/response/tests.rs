@@ -6,11 +6,11 @@ use ic_management_canister_types::CanisterStatusType;
 use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::testing::SystemStateTesting;
 use ic_replicated_state::NumWasmPages;
-use ic_test_utilities::types::messages::ResponseBuilder;
 use ic_test_utilities_execution_environment::{
     check_ingress_status, ExecutionResponse, ExecutionTest, ExecutionTestBuilder,
 };
 use ic_test_utilities_metrics::fetch_int_counter;
+use ic_test_utilities_types::messages::ResponseBuilder;
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{CallbackId, MessageId},

@@ -327,7 +327,7 @@ mod tests {
         canister_http_service_server::{CanisterHttpService, CanisterHttpServiceServer},
         CanisterHttpSendRequest, CanisterHttpSendResponse,
     };
-    use ic_test_utilities::types::messages::RequestBuilder;
+    use ic_test_utilities_types::messages::RequestBuilder;
     use ic_types::canister_http::Transform;
     use ic_types::{
         canister_http::CanisterHttpMethod,
@@ -495,7 +495,7 @@ mod tests {
         (BoxCloneService::new(infallible_service), handle)
     }
 
-    /// Test canister http client send/receive without transform.  
+    /// Test canister http client send/receive without transform.
     #[tokio::test]
     async fn test_client_happy_path() {
         // Define response from adapter. This should also be returned by the client.
@@ -683,7 +683,7 @@ mod tests {
     }
 
     /// Test case where adapter encounters an INVALID_ARGUMENT  error in executing the http request.
-    /// This should be reported as a fatal error.    
+    /// This should be reported as a fatal error.
     #[tokio::test]
     async fn test_client_invalid_argument_adapter_response() {
         // Adapter mock setup. Return an INVALID_ARGUMENT error.

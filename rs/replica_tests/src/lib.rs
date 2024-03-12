@@ -27,11 +27,11 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replica::setup::setup_crypto_provider;
 use ic_replicated_state::{CanisterState, ReplicatedState};
 use ic_state_machine_tests::StateMachine;
-use ic_test_utilities::{
-    types::ids::node_test_id, types::ids::user_anonymous_id, types::messages::SignedIngressBuilder,
-    universal_canister::UNIVERSAL_CANISTER_WASM,
-};
+use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
 use ic_test_utilities_logger::with_test_replica_logger;
+use ic_test_utilities_types::{
+    ids::node_test_id, ids::user_anonymous_id, messages::SignedIngressBuilder,
+};
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
     artifact_kind::IngressArtifact,

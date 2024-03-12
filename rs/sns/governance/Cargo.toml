@@ -92,8 +92,8 @@ ic-nervous-system-common-test-utils = { path = "../../nervous_system/common/test
 ic-sns-governance = { path = ".", features = ["test"] }
 ic-sns-governance-protobuf-generator = { path = "./protobuf_generator" }
 ic-sns-test-utils = { path = "../test_utils" }
-ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
+ic-test-utilities-types = { path = "../../test_utilities/types" }
 lazy_static = "1.4.0"
 pretty_assertions = { workspace = true }
 proptest = "1.0"

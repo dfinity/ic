@@ -41,7 +41,7 @@ use ic_registry_transport::{
     },
     serialize_get_value_request, Error,
 };
-use ic_test_utilities::types::ids::{subnet_test_id, user_test_id};
+use ic_test_utilities_types::ids::{subnet_test_id, user_test_id};
 use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTargetId, NiDkgTranscript};
 use ic_types::{
     crypto::{CurrentNodePublicKeys, KeyPurpose},

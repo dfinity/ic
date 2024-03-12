@@ -246,11 +246,10 @@ mod tests {
         metadata_state::subnet_call_context_manager::SetupInitialDkgContext, SystemMetadata,
     };
     use ic_test_utilities::{
-        ingress_selector::FakeIngressSelector,
-        message_routing::FakeMessageRouting,
-        types::ids::{node_test_id, subnet_test_id},
+        ingress_selector::FakeIngressSelector, message_routing::FakeMessageRouting,
     };
     use ic_test_utilities_registry::SubnetRecordBuilder;
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::consensus::{HasHeight, HashedBlock};
     use ic_types::messages::{Payload, NO_DEADLINE};
     use ic_types::{

@@ -48,4 +48,5 @@ ic-replica-setup-ic-network = { path = "../replica/setup_ic_network" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-metrics = { path = "../test_utilities/metrics" }
 ic-test-utilities-registry = { path = "../test_utilities/registry" }
+ic-test-utilities-types = { path = "../test_utilities/types" }
 tempfile = "3.1.0"

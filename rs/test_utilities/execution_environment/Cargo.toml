@@ -28,6 +28,7 @@ ic-replicated-state = { path = "../../replicated_state" }
 ic-system-api = { path = "../../system_api" }
 ic-test-utilities = { path = ".." }
 ic-test-utilities-time = { path = "../time" }
+ic-test-utilities-types = { path = "../types" }
 ic-types = { path = "../../types/types" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
 ic-universal-canister = { path = "../../universal_canister/lib" }

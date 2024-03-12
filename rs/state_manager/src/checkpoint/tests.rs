@@ -16,15 +16,13 @@ use ic_state_layout::{
     StateLayout, CANISTER_FILE, CANISTER_STATES_DIR, CHECKPOINTS_DIR, SYSTEM_METADATA_FILE,
 };
 use ic_sys::PAGE_SIZE;
-use ic_test_utilities::{
-    state::{canister_ids, new_canister_state},
-    types::{
-        ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id},
-        messages::IngressBuilder,
-    },
-};
+use ic_test_utilities::state::{canister_ids, new_canister_state};
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_tmpdir::tmpdir;
+use ic_test_utilities_types::{
+    ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id},
+    messages::IngressBuilder,
+};
 use ic_types::{
     malicious_flags::MaliciousFlags,
     messages::{StopCanisterCallId, StopCanisterContext},

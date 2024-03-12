@@ -1,6 +1,6 @@
 use super::*;
 use assert_matches::assert_matches;
-use ic_test_utilities::types::ids::subnet_test_id;
+use ic_test_utilities_types::ids::subnet_test_id;
 
 fn new_canister_id_ranges(ranges: Vec<(u64, u64)>) -> CanisterIdRanges {
     let ranges = ranges

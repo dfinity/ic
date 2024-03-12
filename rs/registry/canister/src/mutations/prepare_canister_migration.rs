@@ -245,7 +245,7 @@ mod tests {
     use ic_base_types::CanisterId;
     use ic_registry_routing_table::RoutingTable;
     use ic_registry_transport::pb::v1::registry_mutation;
-    use ic_test_utilities::types::ids::subnet_test_id;
+    use ic_test_utilities_types::ids::subnet_test_id;
 
     use crate::{
         common::test_helpers::{

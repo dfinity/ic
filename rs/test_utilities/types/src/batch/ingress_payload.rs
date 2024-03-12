@@ -40,7 +40,7 @@ impl IngressPayloadBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::messages::SignedIngressBuilder;
+    use crate::messages::SignedIngressBuilder;
     use assert_matches::assert_matches;
     use ic_types::{batch::IngressPayloadError, time::expiry_time_from_now};
     use std::convert::TryFrom;

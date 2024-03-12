@@ -20,7 +20,7 @@ use ic_protobuf::registry::{
 use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{insert, pb::v1::RegistryAtomicMutateRequest, update};
-use ic_test_utilities::types::ids::user_test_id;
+use ic_test_utilities_types::ids::user_test_id;
 use ic_types::{p2p::build_default_gossip_config, ReplicaVersion};
 use maplit::btreemap;
 use registry_canister::mutations::node_management::common::make_add_node_registry_mutations;

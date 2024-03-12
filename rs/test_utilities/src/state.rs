@@ -1,8 +1,3 @@
-use crate::types::{
-    arbitrary,
-    ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id},
-    messages::{RequestBuilder, SignedIngressBuilder},
-};
 use ic_base_types::NumSeconds;
 use ic_btc_types_internal::BitcoinAdapterRequestWrapper;
 use ic_management_canister_types::{CanisterStatusType, LogVisibility};
@@ -25,6 +20,11 @@ use ic_replicated_state::{
     testing::{CanisterQueuesTesting, ReplicatedStateTesting, SystemStateTesting},
     CallContext, CallOrigin, CanisterState, CanisterStatus, ExecutionState, ExportedFunctions,
     InputQueueType, Memory, NumWasmPages, ReplicatedState, SchedulerState, SystemState,
+};
+use ic_test_utilities_types::{
+    arbitrary,
+    ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id},
+    messages::{RequestBuilder, SignedIngressBuilder},
 };
 use ic_types::batch::RawQueryStats;
 use ic_types::methods::{Callback, WasmClosure};

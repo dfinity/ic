@@ -17,6 +17,5 @@ pub mod stable_memory_reader;
 pub mod state;
 pub mod state_manager;
 pub mod thread_transport;
-pub mod types;
 pub mod wasmtime_instance;
 pub mod xnet_payload_builder;

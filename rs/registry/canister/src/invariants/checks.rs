@@ -170,7 +170,7 @@ mod tests {
         delete, insert,
         pb::v1::{RegistryAtomicMutateRequest, RegistryMutation},
     };
-    use ic_test_utilities::types::ids::subnet_test_id;
+    use ic_test_utilities_types::ids::subnet_test_id;
     use maplit::btreemap;
     use std::collections::BTreeMap;
     use std::convert::TryFrom;

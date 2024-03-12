@@ -7,8 +7,8 @@ use ic_management_canister_types::{
     TakeCanisterSnapshotResponse,
 };
 use ic_replicated_state::canister_snapshots::SnapshotId;
-use ic_test_utilities::types::ids::{canister_test_id, subnet_test_id};
 use ic_test_utilities_execution_environment::{get_output_messages, ExecutionTestBuilder};
+use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id};
 use ic_types::{
     ingress::WasmResult,
     messages::{Payload, RejectContext, RequestOrResponse},

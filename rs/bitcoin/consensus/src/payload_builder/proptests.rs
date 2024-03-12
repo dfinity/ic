@@ -8,7 +8,7 @@ use ic_btc_types_internal::{
 use ic_interfaces::batch_payload::BatchPayloadBuilder;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
-use ic_test_utilities::types::ids::subnet_test_id;
+use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types::{batch::ValidationContext, Height, NumBytes};
 use proptest::{prelude::*, proptest};
 

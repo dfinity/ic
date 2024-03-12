@@ -292,7 +292,7 @@ mod test {
     use ic_protobuf::registry::subnet::v1::SubnetRecord;
     use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
     use ic_registry_transport::{delete, upsert};
-    use ic_test_utilities::types::ids::subnet_test_id;
+    use ic_test_utilities_types::ids::subnet_test_id;
 
     fn get_default_recover_subnet_payload(subnet_id: SubnetId) -> RecoverSubnetPayload {
         RecoverSubnetPayload {

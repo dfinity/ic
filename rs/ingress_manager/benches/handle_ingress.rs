@@ -37,14 +37,15 @@ use ic_replicated_state::{
 };
 use ic_test_utilities::{
     crypto::temp_crypto_component_with_fake_registry,
-    cycles_account_manager::CyclesAccountManagerBuilder,
-    history::MockIngressHistory,
+    cycles_account_manager::CyclesAccountManagerBuilder, history::MockIngressHistory,
     state::ReplicatedStateBuilder,
-    types::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id},
-    types::messages::SignedIngressBuilder,
 };
 use ic_test_utilities_registry::test_subnet_record;
 use ic_test_utilities_time::FastForwardTimeSource;
+use ic_test_utilities_types::{
+    ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id},
+    messages::SignedIngressBuilder,
+};
 use ic_types::{
     batch::RawQueryStats,
     ingress::{IngressState, IngressStatus},

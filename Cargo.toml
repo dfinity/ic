@@ -333,6 +333,7 @@ members = [
   "rs/test_utilities/metrics",
   "rs/test_utilities/serialization",
   "rs/test_utilities/time",
+  "rs/test_utilities/types",
   "rs/test_utilities/tmpdir",
   "rs/tests",
   "rs/tests/httpbin-rs",

@@ -100,7 +100,7 @@ fn match_quadruples_by_key_id(
 mod tests {
     use super::*;
     use crate::scheduler::tests::make_key_id;
-    use ic_test_utilities::types::messages::RequestBuilder;
+    use ic_test_utilities_types::messages::RequestBuilder;
     use ic_types::time::UNIX_EPOCH;
 
     fn fake_context(

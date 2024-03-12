@@ -21,15 +21,13 @@ use ic_state_layout::{
     ProtoFileWith, StateLayout, CANISTER_FILE, CANISTER_STATES_DIR, CHECKPOINTS_DIR,
     INGRESS_HISTORY_FILE, SPLIT_MARKER_FILE, SUBNET_QUEUES_FILE, SYSTEM_METADATA_FILE,
 };
-use ic_test_utilities::{
-    state::new_canister_state,
-    types::{
-        ids::{user_test_id, SUBNET_1, SUBNET_2},
-        messages::RequestBuilder,
-    },
-};
+use ic_test_utilities::state::new_canister_state;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_tmpdir::tmpdir;
+use ic_test_utilities_types::{
+    ids::{user_test_id, SUBNET_1, SUBNET_2},
+    messages::RequestBuilder,
+};
 use ic_types::state_sync::CURRENT_STATE_SYNC_VERSION;
 use ic_types::{
     ingress::{IngressState, IngressStatus},

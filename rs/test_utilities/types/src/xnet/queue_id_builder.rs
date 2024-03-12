@@ -1,4 +1,4 @@
-use crate::types::ids::canister_test_id;
+use crate::ids::canister_test_id;
 use ic_types::xnet::{QueueId, SessionId};
 use ic_types::CanisterId;
 

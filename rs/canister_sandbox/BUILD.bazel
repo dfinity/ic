@@ -41,7 +41,7 @@ DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     "//rs/registry/routing_table",
-    "//rs/test_utilities",
+    "//rs/test_utilities/types",
     "@crate_index//:mockall",
     "@crate_index//:slog-async",
     "@crate_index//:slog-term",

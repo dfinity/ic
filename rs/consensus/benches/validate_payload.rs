@@ -42,12 +42,14 @@ use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
     self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
     state::ReplicatedStateBuilder,
-    types::ids::{canister_test_id, node_test_id, subnet_test_id},
-    types::messages::SignedIngressBuilder,
     xnet_payload_builder::FakeXNetPayloadBuilder,
 };
 use ic_test_utilities_registry::{setup_registry, SubnetRecordBuilder};
 use ic_test_utilities_time::FastForwardTimeSource;
+use ic_test_utilities_types::{
+    ids::{canister_test_id, node_test_id, subnet_test_id},
+    messages::SignedIngressBuilder,
+};
 use ic_types::{
     batch::{BatchPayload, IngressPayload, ValidationContext},
     consensus::certification::*,

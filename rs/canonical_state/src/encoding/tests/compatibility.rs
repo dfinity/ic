@@ -16,7 +16,7 @@ use ic_replicated_state::{
     canister_state::system_state::CyclesUseCase,
     metadata_state::{SubnetMetrics, SystemMetadata},
 };
-use ic_test_utilities::types::ids::{canister_test_id, subnet_test_id};
+use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id};
 use ic_types::{
     crypto::CryptoHash,
     messages::{

@@ -24,6 +24,7 @@ DEPENDENCIES = [
     "//rs/state_manager",
     "//rs/test_utilities",
     "//rs/test_utilities/registry",
+    "//rs/test_utilities/types",
     "//rs/types/error_types",
     "//rs/types/management_canister_types",
     "//rs/types/types",

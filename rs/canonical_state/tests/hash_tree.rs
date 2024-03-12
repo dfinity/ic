@@ -4,9 +4,9 @@ use ic_canonical_state_tree_hash::hash_tree::hash_lazy_tree;
 use ic_canonical_state_tree_hash_test_utils::crypto_hash_lazy_tree;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
-use ic_test_utilities::{
-    state::insert_dummy_canister,
-    types::ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id},
+use ic_test_utilities::state::insert_dummy_canister;
+use ic_test_utilities_types::ids::{
+    canister_test_id, message_test_id, subnet_test_id, user_test_id,
 };
 use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
 use ic_types::time::UNIX_EPOCH;

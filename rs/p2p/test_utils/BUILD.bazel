@@ -27,6 +27,7 @@ DEPENDENCIES = [
     "//rs/state_manager",
     "//rs/test_utilities",
     "//rs/test_utilities/registry",
+    "//rs/test_utilities/types",
     "//rs/types/base_types",
     "//rs/types/types",
     "//rs/types/types_test_utils",

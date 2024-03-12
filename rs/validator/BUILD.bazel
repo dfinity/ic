@@ -19,6 +19,7 @@ DEV_DEPENDENCIES = [
     "//rs/crypto/test_utils/reproducible_rng",
     "//rs/crypto/test_utils/root_of_trust",
     "//rs/test_utilities",
+    "//rs/test_utilities/types",
     "@crate_index//:assert_matches",
     "@crate_index//:base64",
     "@crate_index//:mockall",

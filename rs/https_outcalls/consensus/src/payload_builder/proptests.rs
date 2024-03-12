@@ -4,7 +4,7 @@ use crate::payload_builder::tests::{
 };
 use ic_error_types::RejectCode;
 use ic_interfaces::batch_payload::{BatchPayloadBuilder, PastPayload};
-use ic_test_utilities::types::ids::canister_test_id;
+use ic_test_utilities_types::ids::canister_test_id;
 use ic_types::{
     canister_http::{
         CanisterHttpReject, CanisterHttpResponse, CanisterHttpResponseContent,
