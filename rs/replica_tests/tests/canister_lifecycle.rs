@@ -401,7 +401,7 @@ fn provisional_create_canister_with_cycles_respects_whitelist() {
                     ),
                 ),
             ),
-            RejectCode::DestinationInvalid,
+            RejectCode::CanisterError,
         );
     });
 }
@@ -481,7 +481,7 @@ fn provisional_top_up_canister_respects_whitelist() {
                     ),
                 ),
             ),
-            RejectCode::DestinationInvalid,
+            RejectCode::CanisterError,
         );
     });
 }

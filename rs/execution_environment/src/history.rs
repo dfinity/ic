@@ -244,9 +244,6 @@ fn dashboard_label_value_from(code: ErrorCode) -> &'static str {
         }
         // 3xx -- `RejectCode::DestinationInvalid`
         CanisterNotFound => "Canister Not Found",
-        CanisterMethodNotFound => "Canister Method Not Found",
-        CanisterAlreadyInstalled => "Canister Already Installed",
-        CanisterWasmModuleNotFound => "Canister WASM Module Not Found",
         // 4xx -- `RejectCode::CanisterReject`
         InsufficientMemoryAllocation => "Insufficient memory allocation given to canister",
         InsufficientCyclesForCreateCanister => "Insufficient Cycles for Create Canister Request",
@@ -305,5 +302,8 @@ fn dashboard_label_value_from(code: ErrorCode) -> &'static str {
         InsufficientCyclesInMessageMemoryGrow => {
             "Canister does not have enough cycles to grow message memory"
         }
+        CanisterMethodNotFound => "Canister Method Not Found",
+        CanisterWasmModuleNotFound => "Canister WASM Module Not Found",
+        CanisterAlreadyInstalled => "Canister Already Installed",
     }
 }

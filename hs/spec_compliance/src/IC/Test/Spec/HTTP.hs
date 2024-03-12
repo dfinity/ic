@@ -313,7 +313,7 @@ canister_http_calls sub =
             testCase "non-existent transform function" $ do
               let s = "hello_world"
               cid <- install ecid noop
-              ic_http_get_request' (ic00viaWithCyclesRefund 0 cid) sub "https://" ("ascii/" ++ s) Nothing (Just ("nonExistent", "")) cid >>= isReject [3],
+              ic_http_get_request' (ic00viaWithCyclesRefund 0 cid) sub "https://" ("ascii/" ++ s) Nothing (Just ("nonExistent", "")) cid >>= isReject [5],
             testCase "reference to a transform function exposed by another canister" $ do
               let s = "hello_world"
               cid <- install ecid noop
