@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use ic_error_types::ErrorCode;
-use ic_ic00_types::{EmptyBlob, Payload, UpgradeOptions};
+use ic_ic00_types::{EmptyBlob, Payload, CanisterUpgradeOptions};
 use ic_logger::replica_logger::LogEntryLogger;
 use ic_replicated_state::{canister_state::NextExecution, CanisterState};
 use ic_state_machine_tests::{IngressState, WasmResult};
@@ -367,7 +367,7 @@ fn test_pre_upgrade_execution_with_canister_install_mode_v2() {
             },
         );
 
-        if upgrade_options.skip_pre_upgrade.unwrap_or(false) {
+        if skip_pre_upgrade.unwrap_or(false) {
             assert_eq!(result, Ok(()));
             assert_canister_state_after_ok(
                 &canister_state_before,
