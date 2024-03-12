@@ -74,7 +74,7 @@ impl TryFrom<InitArg> for State {
             ecdsa_key_name,
             eth_helper_contract_address,
             erc20_helper_contract_address: None,
-            retrieve_eth_principals: Default::default(),
+            pending_withdrawal_principals: Default::default(),
             eth_transactions: EthTransactions::new(initial_nonce),
             ledger_id,
             minimum_withdrawal_amount,

@@ -5,6 +5,8 @@ use candid::{CandidType, Deserialize, Nat, Principal};
 use minicbor::{Decode, Encode};
 use std::fmt::{Display, Formatter};
 
+pub mod ckerc20;
+
 #[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
 pub struct Eip1559TransactionPrice {
     pub gas_limit: Nat,
@@ -309,6 +311,17 @@ pub mod events {
             address: String,
             ckerc20_token_symbol: String,
             ckerc20_ledger_id: Principal,
+        },
+        AcceptedErc20WithdrawalRequest {
+            max_transaction_fee: Nat,
+            withdrawal_amount: Nat,
+            ckerc20_token_symbol: String,
+            destination: String,
+            cketh_ledger_burn_index: Nat,
+            ckerc20_ledger_burn_index: Nat,
+            from: Principal,
+            from_subaccount: Option<[u8; 32]>,
+            created_at: u64,
         },
     }
 }

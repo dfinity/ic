@@ -2,7 +2,7 @@ use crate::numeric::wei_from_milli_ether;
 
 mod retrieve_eth_guard {
     use crate::guard::tests::init_state;
-    use crate::guard::{retrieve_eth_guard, GuardError, MAX_CONCURRENT, MAX_PENDING};
+    use crate::guard::{retrieve_withdraw_guard, GuardError, MAX_CONCURRENT, MAX_PENDING};
     use crate::numeric::{LedgerBurnIndex, Wei};
     use crate::state::mutate_state;
     use crate::state::transactions::EthWithdrawalRequest;
@@ -13,10 +13,10 @@ mod retrieve_eth_guard {
     fn should_error_on_reentrant_principal() {
         init_state();
         let principal = principal_with_id(1);
-        let _guard = retrieve_eth_guard(principal).unwrap();
+        let _guard = retrieve_withdraw_guard(principal).unwrap();
 
         assert_eq!(
-            retrieve_eth_guard(principal),
+            retrieve_withdraw_guard(principal),
             Err(GuardError::AlreadyProcessing)
         )
     }
@@ -26,22 +26,22 @@ mod retrieve_eth_guard {
         init_state();
         let principal = principal_with_id(1);
         {
-            let _guard = retrieve_eth_guard(principal).unwrap();
+            let _guard = retrieve_withdraw_guard(principal).unwrap();
         }
 
-        assert!(retrieve_eth_guard(principal).is_ok());
+        assert!(retrieve_withdraw_guard(principal).is_ok());
     }
 
     #[test]
     fn should_allow_limited_number_of_principals() {
         init_state();
         let mut guards: Vec<_> = (0..MAX_CONCURRENT)
-            .map(|i| retrieve_eth_guard(principal_with_id(i as u64)).unwrap())
+            .map(|i| retrieve_withdraw_guard(principal_with_id(i as u64)).unwrap())
             .collect();
 
         for additional_principal in MAX_CONCURRENT..2 * MAX_CONCURRENT {
             assert_eq!(
-                retrieve_eth_guard(principal_with_id(additional_principal as u64)),
+                retrieve_withdraw_guard(principal_with_id(additional_principal as u64)),
                 Err(GuardError::TooManyConcurrentRequests)
             );
         }
@@ -49,20 +49,20 @@ mod retrieve_eth_guard {
         {
             let _guard = guards.pop().expect("should have at least one guard");
         }
-        assert!(retrieve_eth_guard(principal_with_id(MAX_CONCURRENT as u64)).is_ok());
+        assert!(retrieve_withdraw_guard(principal_with_id(MAX_CONCURRENT as u64)).is_ok());
     }
 
     #[test]
     fn should_allow_limited_number_of_pending_requests() {
         init_state();
         for i in 0..MAX_PENDING {
-            let _guard = retrieve_eth_guard(principal_with_id(i as u64)).unwrap();
+            let _guard = retrieve_withdraw_guard(principal_with_id(i as u64)).unwrap();
             record_withdrawal_request(LedgerBurnIndex::new(i as u64));
         }
 
         for additional_principal in MAX_PENDING..2 * MAX_PENDING {
             assert_eq!(
-                retrieve_eth_guard(principal_with_id(additional_principal as u64)),
+                retrieve_withdraw_guard(principal_with_id(additional_principal as u64)),
                 Err(GuardError::TooManyPendingRequests)
             );
         }
