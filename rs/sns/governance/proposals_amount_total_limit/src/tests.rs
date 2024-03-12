@@ -25,7 +25,7 @@ lazy_static! {
 }
 
 #[test]
-fn test_small_treasury_transfer_total_upper_bound_in_tokens() {
+fn test_small_valuation_upper_bound() {
     // In XDR, this is is well under 100_000; thus, a treasury like this would be considered
     // "small" for the purposes of treasury transfer limits.
     let valuation = {
@@ -34,17 +34,17 @@ fn test_small_treasury_transfer_total_upper_bound_in_tokens() {
         valuation
     };
 
-    let observed_treasury_transfer_total_upper_bound_tokens =
-        TreasuryTransferTotalUpperBound::in_tokens(&valuation).unwrap();
+    let observed_treasury_upper_bound_tokens =
+        transfer_sns_treasury_funds_7_day_total_upper_bound_tokens(&valuation).unwrap();
+    let observed_minting_upper_bound_tokens =
+        mint_sns_tokens_7_day_total_upper_bound_tokens(&valuation).unwrap();
 
-    assert_eq!(
-        observed_treasury_transfer_total_upper_bound_tokens,
-        Decimal::from(42),
-    );
+    assert_eq!(observed_treasury_upper_bound_tokens, Decimal::from(42),);
+    assert_eq!(observed_minting_upper_bound_tokens, Decimal::from(42),);
 }
 
 #[test]
-fn test_medium_treasury_transfer_total_upper_bound_in_tokens() {
+fn test_medium_valuation_upper_bound() {
     // In XDR, this is is approximately 500_000; thus, a treasury like this would be considered
     // "medium" for the purposes of treasury transfer limits.
     let valuation = {
@@ -53,17 +53,23 @@ fn test_medium_treasury_transfer_total_upper_bound_in_tokens() {
         valuation
     };
 
-    let observed_treasury_transfer_total_upper_bound_tokens =
-        TreasuryTransferTotalUpperBound::in_tokens(&valuation).unwrap();
+    let observed_treasury_upper_bound_tokens =
+        transfer_sns_treasury_funds_7_day_total_upper_bound_tokens(&valuation).unwrap();
+    let observed_minting_upper_bound_tokens =
+        mint_sns_tokens_7_day_total_upper_bound_tokens(&valuation).unwrap();
 
     assert_eq!(
-        observed_treasury_transfer_total_upper_bound_tokens,
+        observed_treasury_upper_bound_tokens,
+        Decimal::from(50_000 / 4),
+    );
+    assert_eq!(
+        observed_minting_upper_bound_tokens,
         Decimal::from(50_000 / 4),
     );
 }
 
 #[test]
-fn test_large_treasury_transfer_total_upper_bound_in_tokens() {
+fn test_large_valuation_upper_bound() {
     // In XDR, this is is approximately 3_000_000, a treasury like this would be considered
     // "large" for the purposes of treasury transfer limits.
     let valuation = {
@@ -72,26 +78,36 @@ fn test_large_treasury_transfer_total_upper_bound_in_tokens() {
         valuation
     };
 
-    let observed_treasury_transfer_total_upper_bound_tokens =
-        TreasuryTransferTotalUpperBound::in_tokens(&valuation).unwrap();
+    let observed_treasury_upper_bound_tokens =
+        transfer_sns_treasury_funds_7_day_total_upper_bound_tokens(&valuation).unwrap();
+    let observed_minting_upper_bound_tokens =
+        mint_sns_tokens_7_day_total_upper_bound_tokens(&valuation).unwrap();
 
     let xdrs_per_token = Decimal::from_f64_retain(1.95 * 5.05).unwrap();
     let tokens_per_xdr = xdrs_per_token.inv();
-    let expected_treasury_transfer_total_upper_bound_tokens =
-        Decimal::from(300_000) * tokens_per_xdr;
-    let relative_error = {
-        let observed = observed_treasury_transfer_total_upper_bound_tokens;
-        let expected = expected_treasury_transfer_total_upper_bound_tokens;
-        (observed - expected) / expected
-    };
+    let expected_tokens = Decimal::from(300_000) * tokens_per_xdr;
+
+    let relative_error = (observed_treasury_upper_bound_tokens - expected_tokens) / expected_tokens;
     assert!(
         relative_error < Decimal::from_f64_retain(1e-9).unwrap(),
         "observed: {}\n\
          vs.\n\
          expected: {}\n\
          (relative error = {}%)",
-        observed_treasury_transfer_total_upper_bound_tokens,
-        expected_treasury_transfer_total_upper_bound_tokens,
+        observed_treasury_upper_bound_tokens,
+        expected_tokens,
+        relative_error * Decimal::from(100),
+    );
+
+    let relative_error = (observed_minting_upper_bound_tokens - expected_tokens) / expected_tokens;
+    assert!(
+        relative_error < Decimal::from_f64_retain(1e-9).unwrap(),
+        "observed: {}\n\
+         vs.\n\
+         expected: {}\n\
+         (relative error = {}%)",
+        observed_minting_upper_bound_tokens,
+        expected_tokens,
         relative_error * Decimal::from(100),
     );
 }

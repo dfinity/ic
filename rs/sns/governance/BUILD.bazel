@@ -34,7 +34,7 @@ DEPENDENCIES = [
     "//rs/rust_canisters/http_types",
     "//rs/sns/governance/proposal_criticality",
     "//rs/sns/governance/token_valuation",
-    "//rs/sns/governance/treasury_transfer_limit",
+    "//rs/sns/governance/proposals_amount_total_limit",
     "//rs/types/base_types",
     "//rs/types/management_canister_types",
     "@crate_index//:base64",

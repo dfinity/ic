@@ -30,18 +30,18 @@ LIB_SRCS = glob(
 )
 
 rust_library(
-    name = "treasury_transfer_limit",
+    name = "proposals_amount_total_limit",
     srcs = LIB_SRCS,
-    crate_name = "ic_sns_governance_treasury_transfer_limit",
+    crate_name = "ic_sns_governance_proposals_amount_total_limit",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.0.1",
     deps = DEPENDENCIES,
 )
 
 rust_test(
-    name = "treasury_transfer_limit_test",
+    name = "proposals_amount_total_limit_test",
     srcs = glob(["src/**"]),
-    crate = ":treasury_transfer_limit",
+    crate = ":proposals_amount_total_limit",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

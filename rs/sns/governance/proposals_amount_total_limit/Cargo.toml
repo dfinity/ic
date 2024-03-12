@@ -1,5 +1,5 @@
 [package]
-name = "ic-sns-governance-treasury-transfer-limit"
+name = "ic-sns-governance-proposals-amount-total-limit"
 version = "0.0.1"
 edition = "2021"
 

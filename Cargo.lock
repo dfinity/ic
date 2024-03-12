@@ -10706,9 +10706,9 @@ dependencies = [
  "ic-protobuf",
  "ic-sns-governance",
  "ic-sns-governance-proposal-criticality",
+ "ic-sns-governance-proposals-amount-total-limit",
  "ic-sns-governance-protobuf-generator",
  "ic-sns-governance-token-valuation",
- "ic-sns-governance-treasury-transfer-limit",
  "ic-sns-test-utils",
  "ic-test-utilities-compare-dirs",
  "ic-test-utilities-types",
@@ -10743,6 +10743,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-sns-governance-proposals-amount-total-limit"
+version = "0.0.1"
+dependencies = [
+ "candid",
+ "ic-base-types",
+ "ic-sns-governance-token-valuation",
+ "icrc-ledger-types",
+ "lazy_static",
+ "num-traits",
+ "rust_decimal",
+ "rust_decimal_macros",
+]
+
+[[package]]
 name = "ic-sns-governance-protobuf-generator"
 version = "0.9.0"
 dependencies = [
@@ -10771,20 +10785,6 @@ dependencies = [
  "mockall",
  "rust_decimal",
  "tokio",
-]
-
-[[package]]
-name = "ic-sns-governance-treasury-transfer-limit"
-version = "0.0.1"
-dependencies = [
- "candid",
- "ic-base-types",
- "ic-sns-governance-token-valuation",
- "icrc-ledger-types",
- "lazy_static",
- "num-traits",
- "rust_decimal",
- "rust_decimal_macros",
 ]
 
 [[package]]
