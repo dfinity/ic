@@ -88,6 +88,11 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
         EventType::AddedCkErc20Token(ckerc20_token) => {
             state.record_add_ckerc20_token(ckerc20_token.clone());
         }
+        EventType::AcceptedErc20WithdrawalRequest(request) => {
+            state
+                .eth_transactions
+                .record_erc20_withdrawal_request(request.clone());
+        }
     }
 }
 

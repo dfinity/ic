@@ -48,7 +48,7 @@ impl From<MintMemo> for Memo {
     }
 }
 
-#[derive(Decode, Encode, Debug, Eq, PartialEq)]
+#[derive(Decode, Encode, Debug, Eq, PartialEq, Clone)]
 pub enum BurnMemo {
     #[n(0)]
     /// The minter processed a withdrawal request.

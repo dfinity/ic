@@ -2,12 +2,15 @@
 mod tests;
 
 use crate::endpoints::{EthTransaction, RetrieveEthStatus, TxFinalizedStatus};
+use crate::erc20::CkTokenSymbol;
 use crate::eth_rpc::Hash;
 use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::eth_rpc_client::responses::TransactionStatus;
 use crate::lifecycle::EthereumNetwork;
 use crate::map::MultiKeyMap;
-use crate::numeric::{LedgerBurnIndex, LedgerMintIndex, TransactionCount, TransactionNonce, Wei};
+use crate::numeric::{
+    Erc20Value, LedgerBurnIndex, LedgerMintIndex, TransactionCount, TransactionNonce, Wei,
+};
 use crate::tx::{
     Eip1559TransactionRequest, FinalizedEip1559Transaction, SignedEip1559TransactionRequest,
     TransactionPrice,
@@ -40,6 +43,38 @@ pub struct EthWithdrawalRequest {
     /// The IC time at which the withdrawal request arrived.
     #[n(5)]
     pub created_at: Option<u64>,
+}
+
+/// ERC-20 withdrawal request issued by the user.
+#[derive(Clone, Eq, PartialEq, Encode, Decode)]
+pub struct Erc20WithdrawalRequest {
+    /// Amount of burn ckETH that can be used to pay for the Ethereum transaction fees.
+    #[n(0)]
+    pub max_transaction_fee: Wei,
+    /// The ERC-20 amount that the receiver will get, not accounting for the Ethereum transaction fees.
+    #[n(1)]
+    pub withdrawal_amount: Erc20Value,
+    /// The address to which the minter will send the ERC20 token.
+    #[n(2)]
+    pub destination: Address,
+    /// The transaction ID of the ckETH burn operation.
+    #[cbor(n(3), with = "crate::cbor::id")]
+    pub cketh_ledger_burn_index: LedgerBurnIndex,
+    /// The symbol of the withdrawn ckERC20 token. e.g., "ckUSDT".
+    #[n(4)]
+    pub ckerc20_token_symbol: CkTokenSymbol,
+    /// The transaction ID of the ckERC20 burn operation.
+    #[cbor(n(5), with = "crate::cbor::id")]
+    pub ckerc20_ledger_burn_index: LedgerBurnIndex,
+    /// The owner of the account from which the minter burned ckETH.
+    #[cbor(n(6), with = "crate::cbor::principal")]
+    pub from: Principal,
+    /// The subaccount from which the minter burned ckETH.
+    #[n(7)]
+    pub from_subaccount: Option<Subaccount>,
+    /// The IC time at which the withdrawal request arrived.
+    #[n(8)]
+    pub created_at: u64,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
@@ -95,6 +130,24 @@ impl fmt::Debug for EthWithdrawalRequest {
             .field("withdrawal_amount", &self.withdrawal_amount)
             .field("destination", &self.destination)
             .field("ledger_burn_index", &self.ledger_burn_index)
+            .field("from", &DebugPrincipal(&self.from))
+            .field("from_subaccount", &self.from_subaccount)
+            .finish()
+    }
+}
+
+impl fmt::Debug for Erc20WithdrawalRequest {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
+        f.debug_struct("Erc20WithdrawalRequest")
+            .field("max_transaction_fee", &self.max_transaction_fee)
+            .field("withdrawal_amount", &self.withdrawal_amount)
+            .field(
+                "ckerc20_token_symbol",
+                &format_args!("{}", &self.ckerc20_token_symbol),
+            )
+            .field("destination", &self.destination)
+            .field("cketh_ledger_burn_index", &self.cketh_ledger_burn_index)
+            .field("ckerc20_ledger_burn_index", &self.ckerc20_ledger_burn_index)
             .field("from", &DebugPrincipal(&self.from))
             .field("from_subaccount", &self.from_subaccount)
             .finish()
@@ -193,6 +246,10 @@ impl EthTransactions {
             panic!("BUG: duplicate ledger burn index {burn_index}");
         }
         self.withdrawal_requests.push_back(request);
+    }
+
+    pub fn record_erc20_withdrawal_request(&mut self, _request: Erc20WithdrawalRequest) {
+        unimplemented!("TODO XC-59")
     }
 
     /// Move an existing withdrawal request to the back of the queue.

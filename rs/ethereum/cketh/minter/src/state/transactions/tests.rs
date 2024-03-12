@@ -1,9 +1,11 @@
 use crate::eth_rpc::Hash;
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::lifecycle::EthereumNetwork;
-use crate::numeric::{BlockNumber, GasAmount, LedgerBurnIndex, TransactionNonce, Wei, WeiPerGas};
+use crate::numeric::{
+    BlockNumber, Erc20Value, GasAmount, LedgerBurnIndex, TransactionNonce, Wei, WeiPerGas,
+};
 use crate::state::transactions::{
-    create_transaction, EthTransactions, EthWithdrawalRequest, Subaccount,
+    create_transaction, Erc20WithdrawalRequest, EthTransactions, EthWithdrawalRequest, Subaccount,
 };
 use crate::tx::{
     AccessList, Eip1559Signature, Eip1559TransactionRequest, SignedEip1559TransactionRequest,
@@ -16,6 +18,9 @@ const DEFAULT_PRINCIPAL: &str = "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs
 const DEFAULT_SUBACCOUNT: [u8; 32] = [0x11; 32];
 const DEFAULT_RECIPIENT_ADDRESS: &str = "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34";
 const DEFAULT_CREATED_AT: u64 = 1699527697000000000;
+
+const DEFAULT_MAX_TRANSACTION_FEE: u128 = 30_000_000_000_000_000;
+const DEFAULT_CKERC20_TOKEN_SYMBOL: &str = "ckUSD";
 
 mod eth_transactions {
     use crate::numeric::{LedgerBurnIndex, TransactionNonce};
@@ -1579,6 +1584,19 @@ mod eth_withdrawal_request {
     }
 }
 
+mod erc_20_withdrawal_request {
+    use crate::numeric::LedgerBurnIndex;
+    use crate::state::transactions::tests::erc20_withdrawal_request_with_index;
+
+    #[test]
+    fn should_have_readable_debug_representation() {
+        let request =
+            erc20_withdrawal_request_with_index(LedgerBurnIndex::new(131), LedgerBurnIndex::new(2));
+        let expected_debug = "Erc20WithdrawalRequest { max_transaction_fee: 30_000_000_000_000_000, withdrawal_amount: 1_100_000_000_000_000, ckerc20_token_symbol: ckUSD, destination: 0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34, cketh_ledger_burn_index: 131, ckerc20_ledger_burn_index: 2, from: k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae, from_subaccount: Some(1111111111111111111111111111111111111111111111111111111111111111) }";
+        assert_eq!(format!("{:?}", request), expected_debug);
+    }
+}
+
 mod create_transaction {
     use crate::lifecycle::EthereumNetwork;
     use crate::numeric::{LedgerBurnIndex, TransactionNonce, Wei};
@@ -1867,6 +1885,24 @@ fn withdrawal_request_with_index(ledger_burn_index: LedgerBurnIndex) -> EthWithd
         from: candid::Principal::from_str(DEFAULT_PRINCIPAL).unwrap(),
         from_subaccount: Some(Subaccount(DEFAULT_SUBACCOUNT)),
         created_at: Some(DEFAULT_CREATED_AT),
+    }
+}
+
+fn erc20_withdrawal_request_with_index(
+    cketh_ledger_burn_index: LedgerBurnIndex,
+    ckerc20_ledger_burn_index: LedgerBurnIndex,
+) -> Erc20WithdrawalRequest {
+    use std::str::FromStr;
+    Erc20WithdrawalRequest {
+        max_transaction_fee: Wei::new(DEFAULT_MAX_TRANSACTION_FEE),
+        destination: Address::from_str(DEFAULT_RECIPIENT_ADDRESS).unwrap(),
+        cketh_ledger_burn_index,
+        ckerc20_token_symbol: DEFAULT_CKERC20_TOKEN_SYMBOL.parse().unwrap(),
+        ckerc20_ledger_burn_index,
+        withdrawal_amount: Erc20Value::new(DEFAULT_WITHDRAWAL_AMOUNT),
+        from: candid::Principal::from_str(DEFAULT_PRINCIPAL).unwrap(),
+        from_subaccount: Some(Subaccount(DEFAULT_SUBACCOUNT)),
+        created_at: DEFAULT_CREATED_AT,
     }
 }
 

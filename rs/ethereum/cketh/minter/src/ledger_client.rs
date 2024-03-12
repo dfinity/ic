@@ -18,8 +18,8 @@ pub struct LedgerClient {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CkLedger {
-    token_symbol: CkTokenSymbol,
-    id: Principal,
+    pub token_symbol: CkTokenSymbol,
+    pub id: Principal,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -63,7 +63,7 @@ impl LedgerClient {
             })
     }
 
-    pub async fn burn<A: Into<Nat>>(
+    pub async fn burn_from<A: Into<Nat>>(
         &self,
         from: Account,
         amount: A,

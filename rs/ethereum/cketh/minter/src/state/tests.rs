@@ -927,7 +927,7 @@ fn state_equivalence() {
             source("0x05c6ec45699c9a6a4b1a4ea2058b0cee852ea2f19b18fb8313c04bf8156efde4", 11) => "failed to decode principal from bytes 0x00333c125dc9f41abaf2b8b85d49fdc7ff75b2a4000000000000000000000000".to_string(),
         },
         eth_transactions: eth_transactions.clone(),
-        retrieve_eth_principals: Default::default(),
+        pending_withdrawal_principals: Default::default(),
         active_tasks: Default::default(),
         http_request_counter: 100,
         eth_balance: Default::default(),

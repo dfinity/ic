@@ -509,6 +509,10 @@ impl CkEthSetup {
     }
 }
 
+pub fn format_ethereum_address_to_eip_55(address: &str) -> String {
+    Address::from_str(address).unwrap().to_string()
+}
+
 fn new_state_machine() -> StateMachine {
     StateMachineBuilder::new()
         .with_default_canister_range()
