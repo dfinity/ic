@@ -1092,9 +1092,9 @@ pub enum ErrorCode {
     CanisterInstallCodeRateLimited = 209,
     // 3xx -- `RejectCode::DestinationInvalid`
     CanisterNotFound = 301,
-    CanisterMethodNotFound = 302,
-    CanisterAlreadyInstalled = 303,
-    CanisterWasmModuleNotFound = 304,
+    // 302 (previously `CanisterMethodNotFound`)
+    // 303 (previously `CanisterAlreadyInstalled`)
+    // 304 (previously `CanisterWasmModuleNotFound`)
     // 4xx -- `RejectCode::CanisterReject`
     // 401
     InsufficientMemoryAllocation = 402,
@@ -1140,6 +1140,9 @@ pub enum ErrorCode {
     ReservedCyclesLimitExceededInMemoryAllocation = 533,
     ReservedCyclesLimitExceededInMemoryGrow = 534,
     InsufficientCyclesInMessageMemoryGrow = 535,
+    CanisterMethodNotFound = 536,
+    CanisterWasmModuleNotFound = 537,
+    CanisterAlreadyInstalled = 538,
 }
 
 impl TryFrom<u64> for ErrorCode {
@@ -1161,9 +1164,9 @@ impl TryFrom<u64> for ErrorCode {
             209 => Ok(ErrorCode::CanisterInstallCodeRateLimited),
             // 3xx -- `RejectCode::DestinationInvalid`
             301 => Ok(ErrorCode::CanisterNotFound),
-            302 => Ok(ErrorCode::CanisterMethodNotFound),
-            303 => Ok(ErrorCode::CanisterAlreadyInstalled),
-            304 => Ok(ErrorCode::CanisterWasmModuleNotFound),
+            // 302 (previously `CanisterMethodNotFound`)
+            // 303 (previously `CanisterAlreadyInstalled`)
+            // 304 (previously `CanisterWasmModuleNotFound`)
             // 4xx -- `RejectCode::CanisterReject`
             // 401
             402 => Ok(ErrorCode::InsufficientMemoryAllocation),
@@ -1209,6 +1212,9 @@ impl TryFrom<u64> for ErrorCode {
             533 => Ok(ErrorCode::ReservedCyclesLimitExceededInMemoryAllocation),
             534 => Ok(ErrorCode::ReservedCyclesLimitExceededInMemoryGrow),
             535 => Ok(ErrorCode::InsufficientCyclesInMessageMemoryGrow),
+            536 => Ok(ErrorCode::CanisterMethodNotFound),
+            537 => Ok(ErrorCode::CanisterWasmModuleNotFound),
+            538 => Ok(ErrorCode::CanisterAlreadyInstalled),
             _ => Err(TryFromError::ValueOutOfRange(err)),
         }
     }

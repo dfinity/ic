@@ -722,7 +722,7 @@ fn wrong_method_name_ic00() {
     failing_mgmt_canister_call_ic00(
         "start",
         arg.encode(),
-        "IC0302: Management canister has no method 'start'".to_string(),
+        "IC0536: Management canister has no method 'start'".to_string(),
     );
 }
 
@@ -732,6 +732,6 @@ fn wrong_method_name_subnet_message() {
     failing_mgmt_canister_call_subnet_message(
         "start",
         arg.encode(),
-        "IC0302: Management canister has no method 'start'".to_string(),
+        "IC0536: Management canister has no method 'start'".to_string(),
     );
 }

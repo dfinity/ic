@@ -1317,7 +1317,7 @@ fn subnet_canister_request_unknown_method() {
         .build();
     assert_eq!(
         test.ingress(canister, "update", run).unwrap(),
-        WasmResult::Reject("IC0302: Management canister has no method 'unknown'".to_string())
+        WasmResult::Reject("IC0536: Management canister has no method 'unknown'".to_string())
     );
 }
 

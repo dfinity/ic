@@ -339,7 +339,7 @@ pub fn test(env: TestEnv) {
                     },
                     cycles: 500_000_000_000,
                 },
-                |response| matches!(response, Err((RejectionCode::DestinationInvalid, _))),
+                |response| matches!(response, Err((RejectionCode::CanisterError, _))),
             )
             .await,
         );

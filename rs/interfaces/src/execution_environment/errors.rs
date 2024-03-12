@@ -179,22 +179,11 @@ impl HypervisorError {
         use ic_error_types::ErrorCode as E;
 
         match self {
-            Self::MessageRejected => UserError::new(
-                E::CanisterRejectedMessage,
-                format!("Canister {} rejected the message", canister_id),
-            ),
             Self::FunctionNotFound(table_idx, func_idx) => UserError::new(
                 E::CanisterFunctionNotFound,
                 format!(
                     "Canister {} requested to invoke a non-existent Wasm function {} from table {}",
                     canister_id, func_idx, table_idx
-                ),
-            ),
-            Self::WasmModuleNotFound => UserError::new(
-                E::CanisterWasmModuleNotFound,
-                format!(
-                    "Attempt to execute a message on canister {} which contains no Wasm module",
-                    canister_id,
                 ),
             ),
             Self::MethodNotFound(wasm_method) => {
@@ -251,6 +240,13 @@ impl HypervisorError {
                 E::CanisterCalledTrap,
                 format!("Canister {} trapped explicitly: {}", canister_id, msg),
             ),
+            Self::WasmModuleNotFound => UserError::new(
+                E::CanisterWasmModuleNotFound,
+                format!(
+                    "Attempt to execute a message on canister {} which contains no Wasm module",
+                    canister_id,
+                ),
+            ),
             Self::OutOfMemory => UserError::new(
                 E::CanisterOutOfMemory,
                 format!(
@@ -258,13 +254,14 @@ impl HypervisorError {
                     canister_id
                 ),
             ),
-            Self::WasmReservedPages => UserError::new(
-                E::CanisterOutOfMemory,
-                format!("Canister {} ran out of available Wasm memory.", canister_id),
-            ),
             Self::InvalidPrincipalId(_) => UserError::new(
-                E::CanisterTrapped,
+                E::CanisterContractViolation,
                 format!("Canister {} provided invalid principal id", canister_id),
+            ),
+            // `CANISTER_REJECT` reject code.
+            Self::MessageRejected => UserError::new(
+                E::CanisterRejectedMessage,
+                format!("Canister {} rejected the message", canister_id),
             ),
             Self::InsufficientCyclesBalance(err) => {
                 UserError::new(E::CanisterContractViolation, err.to_string())
@@ -291,6 +288,10 @@ impl HypervisorError {
                     "Canister {} encountered a Wasm engine error: {}",
                     canister_id, err
                 ),
+            ),
+            Self::WasmReservedPages => UserError::new(
+                E::CanisterOutOfMemory,
+                format!("Canister {} ran out of available Wasm memory.", canister_id),
             ),
             Self::Aborted => {
                 unreachable!("Aborted execution should not be visible to the user.");
