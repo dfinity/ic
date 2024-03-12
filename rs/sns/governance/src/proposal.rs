@@ -36,10 +36,10 @@ use ic_nervous_system_common::{
     SECONDS_PER_DAY,
 };
 use ic_nervous_system_proto::pb::v1::Percentage;
+use ic_sns_governance_proposals_amount_total_limit::transfer_sns_treasury_funds_7_day_total_upper_bound_tokens;
 use ic_sns_governance_token_valuation::{
     try_get_icp_balance_valuation, try_get_sns_token_balance_valuation, Valuation,
 };
-use ic_sns_governance_treasury_transfer_limit::TreasuryTransferTotalUpperBound;
 use icp_ledger::DEFAULT_TRANSFER_FEE as NNS_DEFAULT_TRANSFER_FEE;
 use icrc_ledger_types::icrc1::account::Account;
 use rust_decimal::Decimal;
@@ -651,7 +651,7 @@ async fn check_transfer_sns_treasury_funds_amount_is_within_limits_or_err(
     .map_err(|valuation_error| format!("Unable to validate amount: {:?}", valuation_error,))?;
 
     // From valuation, determine limit on the total from the past 7 days.
-    let max_tokens = TreasuryTransferTotalUpperBound::in_tokens(&valuation)
+    let max_tokens = transfer_sns_treasury_funds_7_day_total_upper_bound_tokens(&valuation)
         // Err is most likely a bug.
         .map_err(|treasury_limit_error| {
             format!("Unable to validate amount: {:?}", treasury_limit_error,)
@@ -1880,21 +1880,19 @@ pub(crate) fn transfer_sns_treasury_funds_amount_is_small_enough_at_execution_ti
     proposals: impl Iterator<Item = &'a ProposalData>,
     now_timestamp_seconds: u64,
 ) -> Result<(), GovernanceError> {
-    let allowance_tokens = match TreasuryTransferTotalUpperBound::in_tokens(valuation) {
-        Ok(ok) => ok,
-        // This should not be possible, because valuation was already used the same way during
-        // proposal submission/creation/validation.
-        Err(err) => {
-            return Err(GovernanceError::new_with_message(
+    let allowance_tokens = transfer_sns_treasury_funds_7_day_total_upper_bound_tokens(valuation)
+        .map_err(|err| {
+            // This should not be possible, because valuation was already used the same way during
+            // proposal submission/creation/validation.
+            GovernanceError::new_with_message(
                 ErrorType::InconsistentInternalData,
                 format!(
                     "Unable to determined upper bound on the amount of \
                      TransferSnsTreasuryFunds proposals: {:?}\nvaluation:{:?}",
                     err, valuation,
                 ),
-            ));
-        }
-    };
+            )
+        })?;
 
     // The total calculated here _could_ be different from what was calculated at proposal
     // submission/creation time. A difference would result from the execution of (another)

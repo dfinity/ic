@@ -308,7 +308,7 @@ members = [
   "rs/sns/governance/proposal_criticality",
   "rs/sns/governance/protobuf_generator",
   "rs/sns/governance/token_valuation",
-  "rs/sns/governance/treasury_transfer_limit",
+  "rs/sns/governance/proposals_amount_total_limit",
   "rs/sns/init",
   "rs/sns/init/protobuf_generator",
   "rs/sns/integration_tests",
