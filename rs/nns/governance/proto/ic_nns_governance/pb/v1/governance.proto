@@ -1705,7 +1705,7 @@ message NetworkEconomics {
   optional NeuronsFundEconomics neurons_fund_economics = 11;
 }
 
-// The thresholds specify the shape of the matching function used by the Neurons' Fund to
+// The thresholds specify the shape of the ideal matching function used by the Neurons' Fund to
 // determine how much to contribute for a given direct participation amount. Note that the actual
 // swap participation is in ICP, whereas these thresholds are specifid in XDR; the conversion rate
 // is determined at the time of execution of the CreateServiceNervousSystem proposal.
@@ -1713,11 +1713,16 @@ message NeuronsFundMatchedFundingCurveCoefficients {
   // Up to this amount of direct participation, the Neurons' Fund does not contribute to this SNS.
   optional ic_nervous_system.pb.v1.Decimal contribution_threshold_xdr = 1;
 
-  // At this amount of direct participation, the Neurons' Fund contributes 50% of that amount.
+  // Say the direct participation amount is `x_icp`. When `x_icp` equals the equavalent of
+  // `one_third_participation_milestone_xdr` in ICP (we use ICP/XDR conversion data from the CMC),
+  // the Neurons' Fund contributes 50% on top of that amount, so the overall contributions would
+  // be `1.5 * x_icp` of which 1/3 comes from the Neurons' Fund.
   optional ic_nervous_system.pb.v1.Decimal one_third_participation_milestone_xdr = 2;
 
-  // At this amount of direct participation, the Neurons' Fund contributes 100% of that amount.
-  // This is the maximum participation rate of the Neurons' Fund.
+  // Say the direct participation amount is `x_icp`. When `x_icp` equals the equavalent of
+  // `full_participation_milestone_xdr` in ICP (we use ICP/XDR conversion data from the CMC),
+  // the Neurons' Fund contributes 100% on top of that amount, so the overall contributions would
+  // be `2.0 * x_icp` of which a half comes from the Neurons' Fund.
   optional ic_nervous_system.pb.v1.Decimal full_participation_milestone_xdr = 3;
 }
 

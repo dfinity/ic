@@ -30,7 +30,9 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nervous_system_common_test_utils::{LedgerReply, SpyLedger};
 use ic_nervous_system_proto::pb::v1::{Duration, GlobalTimeOfDay, Image};
-use ic_neurons_fund::{PolynomialMatchingFunction, SerializableFunction};
+use ic_neurons_fund::{
+    NeuronsFundParticipationLimits, PolynomialMatchingFunction, SerializableFunction,
+};
 use ic_nns_common::{
     pb::v1::{NeuronId, ProposalId},
     types::UpdateIcpXdrConversionRatePayload,
@@ -110,6 +112,7 @@ use pretty_assertions::{assert_eq, assert_ne};
 use proptest::prelude::proptest;
 use rand::{prelude::IteratorRandom, rngs::StdRng, Rng, SeedableRng};
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
+use rust_decimal_macros::dec;
 use std::{
     cmp::Ordering,
     collections::{BTreeMap, HashSet, VecDeque},
@@ -2843,10 +2846,12 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
 #[tokio::test]
 async fn test_restricted_proposals_are_not_eligible_for_voting_rewards() {
     let genesis_timestamp_seconds = 3;
+
     let mut fake_driver = fake::FakeDriver::default()
         .at(genesis_timestamp_seconds)
         // We need a positive supply to ensure that there can be voting rewards
         .with_supply(Tokens::from_e8s(1_234_567_890));
+
     let mut fixture = fixture_for_manage_neuron();
     // Proposals last one second
     let proposal_expiration_seconds = 1;
@@ -11124,6 +11129,7 @@ fn test_wfq_constant_flipping() {
 #[tokio::test]
 async fn test_known_neurons() {
     let mut driver = fake::FakeDriver::default();
+
     let neurons = btreemap! {
         1 => Neuron {
             id: Some(NeuronId { id: 1 }),
@@ -11150,11 +11156,13 @@ async fn test_known_neurons() {
             ..Default::default()
         }
     };
+
     let governance_proto = GovernanceProto {
         economics: Some(NetworkEconomics::with_default_values()),
         neurons,
         ..Default::default()
     };
+
     let mut gov = Governance::new(
         governance_proto,
         driver.get_fake_env(),
@@ -11522,21 +11530,21 @@ lazy_static! {
             1 => Neuron {
                 id: Some(NeuronId { id: 1 }),
                 controller: Some(principal(1)),
-                maturity_e8s_equivalent: 600_000 * E8,
+                maturity_e8s_equivalent: 1_200_000 * E8,
                 joined_community_fund_timestamp_seconds: Some(1),
                 ..neuron_base.clone()
             },
             2 => Neuron {
                 id: Some(NeuronId { id: 2 }),
                 controller: Some(principal(1)),
-                maturity_e8s_equivalent: 100_000 * E8,
+                maturity_e8s_equivalent: 200_000 * E8,
                 joined_community_fund_timestamp_seconds: Some(1),
                 ..neuron_base.clone()
             },
             3 => Neuron {
                 id: Some(NeuronId { id: 3 }),
                 controller: Some(principal(2)),
-                maturity_e8s_equivalent: 300_000 * E8,
+                maturity_e8s_equivalent: 600_000 * E8,
                 joined_community_fund_timestamp_seconds: Some(1),
                 ..neuron_base.clone()
             },
@@ -11578,8 +11586,15 @@ lazy_static! {
         result
     };
 
+    static ref NEURONS_FUND_PARTICIPATION_LIMITS: NeuronsFundParticipationLimits = NeuronsFundParticipationLimits {
+        max_theoretical_neurons_fund_participation_amount_icp: dec!(333_000.0),
+        contribution_threshold_icp: dec!(75_000.0),
+        one_third_participation_milestone_icp: dec!(225_000.0),
+        full_participation_milestone_icp: dec!(375_000.0),
+    };
+
     static ref SERIALIZED_IDEAL_MATCHING_FUNCTION_REPR: Option<String> = Some(
-        PolynomialMatchingFunction::new(1_000_000 * E8).unwrap().serialize()
+        PolynomialMatchingFunction::new(2_000_000 * E8, *NEURONS_FUND_PARTICIPATION_LIMITS).unwrap().serialize()
     );
 
     static ref INITIAL_NEURONS_FUND_PARTICIPATION: Option<NeuronsFundParticipation> = Some(NeuronsFundParticipation {
@@ -11598,27 +11613,10 @@ lazy_static! {
                             },
                         ),
                         amount_icp_e8s: Some(
-                            42515867976,
+                            27000000000,
                         ),
                         maturity_equivalent_icp_e8s: Some(
-                            600_000 * E8,
-                        ),
-                        hotkey_principal: Some(principal(1)),
-                        is_capped: Some(
-                            false,
-                        ),
-                    },
-                    NeuronsFundNeuronPortion {
-                        nns_neuron_id: Some(
-                            NeuronId {
-                                id: 2,
-                            },
-                        ),
-                        amount_icp_e8s: Some(
-                            7085977996,
-                        ),
-                        maturity_equivalent_icp_e8s: Some(
-                            100_000 * E8,
+                            1_200_000 * E8,
                         ),
                         hotkey_principal: Some(principal(1)),
                         is_capped: Some(
@@ -11632,10 +11630,10 @@ lazy_static! {
                             },
                         ),
                         amount_icp_e8s: Some(
-                            21257933988,
+                            13500000000,
                         ),
                         maturity_equivalent_icp_e8s: Some(
-                            300_000 * E8,
+                            600_000 * E8,
                         ),
                         hotkey_principal: Some(principal(2)),
                         is_capped: Some(
@@ -11651,7 +11649,7 @@ lazy_static! {
                     36_000 * E8,
                 ),
                 max_direct_participation_icp_e8s: Some(
-                    4500000000000,
+                    9000000000000,
                 ),
                 min_participant_icp_e8s: Some(
                     50 * E8,
@@ -11662,19 +11660,19 @@ lazy_static! {
             },
         ),
         direct_participation_icp_e8s: Some(
-            4500000000000,
+            9000000000000,
         ),
         total_maturity_equivalent_icp_e8s: Some(
-            1_000_000 * E8,
+            2_000_000 * E8,
         ),
         max_neurons_fund_swap_participation_icp_e8s: Some(
-            70859779960,
+            45000000000,
         ),
         intended_neurons_fund_participation_icp_e8s: Some(
-            70859779960,
+            45000000000,
         ),
         allocated_neurons_fund_participation_icp_e8s: Some(
-            70859779960,
+            40500000000,
         ),
     });
 
@@ -11695,7 +11693,7 @@ lazy_static! {
                     3600000000000,
                 ),
                 max_direct_participation_icp_e8s: Some(
-                    4500000000000,
+                    9000000000000,
                 ),
                 min_participant_icp_e8s: Some(
                     5000000000,
@@ -11709,10 +11707,10 @@ lazy_static! {
             0,
         ),
         total_maturity_equivalent_icp_e8s: Some(
-            100000000000000,
+            2_000_000 * E8,
         ),
         max_neurons_fund_swap_participation_icp_e8s: Some(
-            70859779960,
+            45000000000,
         ),
         intended_neurons_fund_participation_icp_e8s: Some(
             0,
@@ -11738,10 +11736,10 @@ lazy_static! {
                             },
                         ),
                         amount_icp_e8s: Some(
-                            12805431519,
+                            11333333333,
                         ),
                         maturity_equivalent_icp_e8s: Some(
-                            60000000000000,
+                            120000000000000,
                         ),
                         hotkey_principal: Some(principal(1)),
                         is_capped: Some(
@@ -11755,10 +11753,10 @@ lazy_static! {
                             },
                         ),
                         amount_icp_e8s: Some(
-                            6402715760,
+                            5666666667,
                         ),
                         maturity_equivalent_icp_e8s: Some(
-                            30000000000000,
+                            60000000000000,
                         ),
                         hotkey_principal: Some(principal(2)),
                         is_capped: Some(
@@ -11774,7 +11772,7 @@ lazy_static! {
                     3600000000000,
                 ),
                 max_direct_participation_icp_e8s: Some(
-                    4500000000000,
+                    9000000000000,
                 ),
                 min_participant_icp_e8s: Some(
                     5000000000,
@@ -11785,19 +11783,19 @@ lazy_static! {
             },
         ),
         direct_participation_icp_e8s: Some(
-            4000000000000,
+            8500000000000,
         ),
         total_maturity_equivalent_icp_e8s: Some(
-            100000000000000,
+            2_000_000 * E8,
         ),
         max_neurons_fund_swap_participation_icp_e8s: Some(
-            70859779960,
+            45000000000,
         ),
         intended_neurons_fund_participation_icp_e8s: Some(
-            21342385865,
+            18888888889,
         ),
         allocated_neurons_fund_participation_icp_e8s: Some(
-            19208147278,
+            17000000000,
         ),
     });
 
@@ -11810,27 +11808,10 @@ lazy_static! {
                     },
                 ),
                 amount_icp_e8s: Some(
-                    42515867976,
+                    27000000000,
                 ),
                 maturity_equivalent_icp_e8s: Some(
-                    60000000000000,
-                ),
-                hotkey_principal: Some(principal(1)),
-                is_capped: Some(
-                    false,
-                ),
-            },
-            NeuronsFundNeuronPortion {
-                nns_neuron_id: Some(
-                    NeuronId {
-                        id: 2,
-                    },
-                ),
-                amount_icp_e8s: Some(
-                    7085977996,
-                ),
-                maturity_equivalent_icp_e8s: Some(
-                    10000000000000,
+                    120000000000000,
                 ),
                 hotkey_principal: Some(principal(1)),
                 is_capped: Some(
@@ -11844,10 +11825,10 @@ lazy_static! {
                     },
                 ),
                 amount_icp_e8s: Some(
-                    21257933988,
+                    13500000000,
                 ),
                 maturity_equivalent_icp_e8s: Some(
-                    30000000000000,
+                    60000000000000,
                 ),
                 hotkey_principal: Some(principal(2)),
                 is_capped: Some(
@@ -11866,27 +11847,10 @@ lazy_static! {
                     },
                 ),
                 amount_icp_e8s: Some(
-                    29710436457,
+                    15666666667,
                 ),
                 maturity_equivalent_icp_e8s: Some(
-                    60000000000000,
-                ),
-                hotkey_principal: Some(principal(1)),
-                is_capped: Some(
-                    false,
-                ),
-            },
-            NeuronsFundNeuronPortion {
-                nns_neuron_id: Some(
-                    NeuronId {
-                        id: 2,
-                    },
-                ),
-                amount_icp_e8s: Some(
-                    7085977996,
-                ),
-                maturity_equivalent_icp_e8s: Some(
-                    10000000000000,
+                    120000000000000,
                 ),
                 hotkey_principal: Some(principal(1)),
                 is_capped: Some(
@@ -11900,10 +11864,10 @@ lazy_static! {
                     },
                 ),
                 amount_icp_e8s: Some(
-                    14855218228,
+                    7833333333,
                 ),
                 maturity_equivalent_icp_e8s: Some(
-                    30000000000000,
+                    60000000000000,
                 ),
                 hotkey_principal: Some(principal(2)),
                 is_capped: Some(
@@ -11938,38 +11902,29 @@ lazy_static! {
     });
 
     static ref NEURONS_FUND_PARTICIPATION_CONSTRAINTS: Option<NeuronsFundParticipationConstraints> = Some(
-        // Will need to be fixed after NNS1-2591 is resolved. See
-        // `NeuronsFundParticipation::compute_constraints` in rs/nns/governance/src/neurons_fund.rs
         NeuronsFundParticipationConstraints {
             min_direct_participation_threshold_icp_e8s: Some(36_000 * E8),
-            max_neurons_fund_participation_icp_e8s: Some(70859779960),
+            max_neurons_fund_participation_icp_e8s: Some(40500000000),
             coefficient_intervals: vec![
                 LinearScalingCoefficient {
                     from_direct_participation_icp_e8s: Some(0),
-                    to_direct_participation_icp_e8s: Some(3752190620030),
+                    to_direct_participation_icp_e8s: Some(8177194571439),
                     slope_numerator: Some(0),
-                    slope_denominator: Some(100000000000000),
+                    slope_denominator: Some(200000000000000),
                     intercept_icp_e8s: Some(0),
                 },
                 LinearScalingCoefficient {
-                    from_direct_participation_icp_e8s: Some(3752190620030),
-                    to_direct_participation_icp_e8s: Some(3924720277787),
-                    slope_numerator: Some(60000000000000),
-                    slope_denominator: Some(100000000000000),
+                    from_direct_participation_icp_e8s: Some(8177194571439),
+                    to_direct_participation_icp_e8s: Some(8442528238562),
+                    slope_numerator: Some(120000000000000),
+                    slope_denominator: Some(200000000000000),
                     intercept_icp_e8s: Some(0),
                 },
                 LinearScalingCoefficient {
-                    from_direct_participation_icp_e8s: Some(3924720277787),
-                    to_direct_participation_icp_e8s: Some(4328479872989),
-                    slope_numerator: Some(90000000000000),
-                    slope_denominator: Some(100000000000000),
-                    intercept_icp_e8s: Some(0),
-                },
-                LinearScalingCoefficient {
-                    from_direct_participation_icp_e8s: Some(4328479872989),
+                    from_direct_participation_icp_e8s: Some(8442528238562),
                     to_direct_participation_icp_e8s: Some(u64::MAX),
-                    slope_numerator: Some(100000000000000),
-                    slope_denominator: Some(100000000000000),
+                    slope_numerator: Some(180000000000000),
+                    slope_denominator: Some(200000000000000),
                     intercept_icp_e8s: Some(0),
                 },
             ],
@@ -12369,7 +12324,7 @@ async fn test_settle_neurons_fund_participation_restores_lifecycle_on_ledger_fai
                 nns_proposal_id: Some(proposal.id.unwrap().id),
                 result: Some(Result::Committed(Committed {
                     sns_governance_canister_id: Some(*SNS_GOVERNANCE_CANISTER_ID),
-                    total_direct_participation_icp_e8s: Some(45_000 * E8),
+                    total_direct_participation_icp_e8s: Some(85_000 * E8),
                     total_neurons_fund_participation_icp_e8s: Some(50_000 * E8),
                 })),
             },
@@ -12630,7 +12585,7 @@ async fn test_create_service_nervous_system_settles_neurons_fund_commit() {
                     result: Some(Result::Committed(Committed {
                         sns_governance_canister_id: Some(*SNS_GOVERNANCE_CANISTER_ID),
                         // This amount should result in some NF funds and some refunds.
-                        total_direct_participation_icp_e8s: Some(40_000 * E8),
+                        total_direct_participation_icp_e8s: Some(85_000 * E8),
                         total_neurons_fund_participation_icp_e8s: Some(69_439_371_803),
                     })),
                 },
@@ -12991,7 +12946,7 @@ async fn test_settle_neurons_fund_is_idempotent_for_create_service_nervous_syste
                 result: Some(Result::Committed(Committed {
                     sns_governance_canister_id: Some(*SNS_GOVERNANCE_CANISTER_ID),
                     // This amount should result in some NF funds and some refunds.
-                    total_direct_participation_icp_e8s: Some(40_000 * E8),
+                    total_direct_participation_icp_e8s: Some(85_000 * E8),
                     total_neurons_fund_participation_icp_e8s: Some(69_439_371_803),
                 })),
             },

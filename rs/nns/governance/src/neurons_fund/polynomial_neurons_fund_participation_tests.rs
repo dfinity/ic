@@ -265,17 +265,19 @@ fn assert_remainder_plus_refund_equals_initial_maturity(
     }
 }
 
-#[test]
-fn test() {
+fn run_test(neurons_fund_participation_limits: NeuronsFundParticipationLimits) {
     for neurons in get_neuron_sets_for_tests() {
         for swap_participation_limits in get_swap_participation_limits_for_tests() {
             let initial_participation_fn =
                 || -> Result<PolynomialNeuronsFundParticipation, String> {
                     let swap_participation_limits = swap_participation_limits.clone();
                     let neurons = neurons.clone();
-                    let initial_participation =
-                        PolynomialNeuronsFundParticipation::new(swap_participation_limits, neurons)
-                            .unwrap();
+                    let initial_participation = PolynomialNeuronsFundParticipation::new(
+                        neurons_fund_participation_limits,
+                        swap_participation_limits,
+                        neurons,
+                    )
+                    .unwrap();
                     NeuronsFundParticipationPb::from(initial_participation)
                         .validate()
                         .map_err(|err| err.to_string())
@@ -360,4 +362,74 @@ fn test() {
             }
         }
     }
+}
+
+fn get_neurons_fund_participation_limits_for_tests(
+    xdr_icp_rate: Decimal,
+) -> NeuronsFundParticipationLimits {
+    let network_economics = NeuronsFundEconomicsPb::with_default_values();
+
+    Governance::try_derive_neurons_fund_participation_limits_impl(&network_economics, xdr_icp_rate)
+        .unwrap()
+}
+
+#[test]
+fn test_with_xdr_icp_rate_1() {
+    let neurons_fund_participation_limits =
+        get_neurons_fund_participation_limits_for_tests(dec!(1.0));
+    run_test(neurons_fund_participation_limits);
+}
+
+#[test]
+fn test_with_xdr_icp_rate_2() {
+    let neurons_fund_participation_limits =
+        get_neurons_fund_participation_limits_for_tests(dec!(2.0));
+    run_test(neurons_fund_participation_limits);
+}
+
+#[test]
+fn test_with_xdr_icp_rate_5() {
+    let neurons_fund_participation_limits =
+        get_neurons_fund_participation_limits_for_tests(dec!(5.0));
+    run_test(neurons_fund_participation_limits);
+}
+
+#[test]
+fn test_with_xdr_icp_rate_10() {
+    let neurons_fund_participation_limits =
+        get_neurons_fund_participation_limits_for_tests(dec!(10.0));
+    run_test(neurons_fund_participation_limits);
+}
+
+#[test]
+fn test_with_xdr_icp_rate_20() {
+    let neurons_fund_participation_limits =
+        get_neurons_fund_participation_limits_for_tests(dec!(20.0));
+    run_test(neurons_fund_participation_limits);
+}
+
+#[test]
+fn test_with_xdr_icp_rate_50() {
+    let neurons_fund_participation_limits =
+        get_neurons_fund_participation_limits_for_tests(dec!(50.0));
+    run_test(neurons_fund_participation_limits);
+}
+
+#[test]
+fn test_with_xdr_icp_rate_100() {
+    let neurons_fund_participation_limits =
+        get_neurons_fund_participation_limits_for_tests(dec!(100.0));
+    run_test(neurons_fund_participation_limits);
+}
+
+#[test]
+fn test_with_old_values() {
+    // These values were used before XDR-based limits were introduced for the Neurons' Fund.
+    let neurons_fund_participation_limits = NeuronsFundParticipationLimits {
+        max_theoretical_neurons_fund_participation_amount_icp: dec!(333_000.0),
+        contribution_threshold_icp: dec!(33_000.0),
+        one_third_participation_milestone_icp: dec!(100_000.0),
+        full_participation_milestone_icp: dec!(167_000.0),
+    };
+    run_test(neurons_fund_participation_limits);
 }

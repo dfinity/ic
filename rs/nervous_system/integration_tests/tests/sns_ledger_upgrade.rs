@@ -1,3 +1,4 @@
+use assert_matches::assert_matches;
 use candid::Nat;
 use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId};
@@ -73,10 +74,34 @@ fn test_deploy_fresh_sns() {
     };
 
     // Step 1. Upgrade NNS Governance and SNS-W to the latest version.
+
+    // Precondition: The mainnet verison of the NNS Governance canister is not aware of the new
+    // `NetworkEconomics.neurons_fund_economics` field yet.
+    //
+    // TODO[NNS1-2925]: Remove this block.
+    {
+        let economics = nns::governance::get_network_economics_parameters(&pocket_ic);
+        assert_eq!(economics.neurons_fund_economics, None);
+    }
     upgrade_root_controlled_nns_canister_to_tip_of_master_or_panic(
         &pocket_ic,
         GOVERNANCE_CANISTER_ID,
     );
+
+    // The new version of NNS Governance canister should be aware of the new
+    // `NetworkEconomics.neurons_fund_economics` field, so we should be able to set it.
+    //
+    // TODO[NNS1-2925]: Remove this block.
+    {
+        let economics = nns::governance::get_network_economics_parameters(&pocket_ic);
+        assert_matches!(
+            economics.neurons_fund_economics,
+            Some(_),
+            "{:#?}",
+            economics
+        );
+    }
+
     upgrade_root_controlled_nns_canister_to_tip_of_master_or_panic(
         &pocket_ic,
         SNS_WASM_CANISTER_ID,
