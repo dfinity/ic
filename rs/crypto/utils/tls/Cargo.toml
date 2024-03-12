@@ -10,4 +10,4 @@ documentation.workspace = true
 ic-base-types = { path = "../../../types/base_types" }
 ic-crypto-tls-interfaces = { path = "../../tls_interfaces" }
 tokio-rustls = { workspace = true }
-x509-parser = { version = "0.15.1" }
+x509-parser = { workspace = true }

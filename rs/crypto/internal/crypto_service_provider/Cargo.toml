@@ -57,7 +57,7 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-serde = { version = "0.8", features = ["json", "bincode"] }
 tokio-util = { workspace = true }
-x509-parser = { version = "0.15.1", features = ["verify"] }
+x509-parser = { workspace = true }
 zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
 
 [dev-dependencies]
