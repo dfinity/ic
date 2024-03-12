@@ -142,6 +142,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/https_outcalls/                                     @dfinity-lab/teams/networking-team
 /rs/https_outcalls/consensus/                           @dfinity-lab/teams/consensus-owners
 /rs/ic_os/                                              @dfinity-lab/teams/node-team
+/rs/ic_os/fstrim_tool/                                  @dfinity-lab/teams/node-team @dfinity-lab/teams/crypto-owners
 /rs/ingress_manager/                                    @dfinity-lab/teams/consensus-owners
 /rs/interfaces/                                         @dfinity-lab/teams/interface-owners
 /rs/interfaces/adapter_client/                          @dfinity-lab/teams/networking-team

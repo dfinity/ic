@@ -1,0 +1,58 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test", "rust_test_suite")
+
+DEPENDENCIES = [
+    "//rs/sys",
+    "@crate_index//:anyhow",
+    "@crate_index//:clap",
+    "@crate_index//:maplit",
+]
+
+DEV_DEPENDENCIES = [
+    "//rs/crypto/test_utils/reproducible_rng",
+    "@crate_index//:assert_cmd",
+    "@crate_index//:assert_matches",
+    "@crate_index//:predicates",
+    "@crate_index//:rand",
+    "@crate_index//:tempfile",
+]
+
+MACRO_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_library(
+    name = "fstrim_tool",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/main.rs"],
+    ),
+    aliases = ALIASES,
+    crate_name = "ic_fstrim_tool",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    visibility = ["//visibility:public"],
+    deps = DEPENDENCIES,
+)
+
+rust_binary(
+    name = "fstrim_tool_bin",
+    srcs = ["src/main.rs"],
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    visibility = ["//visibility:public"],
+    deps = DEPENDENCIES + [":fstrim_tool"],
+)
+
+rust_test(
+    name = "fstrim_tool_test",
+    crate = ":fstrim_tool",
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test_suite(
+    name = "fstrim_tool_integration",
+    srcs = glob(["tests/**/*.rs"]),
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
+    deps = [":fstrim_tool_bin"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)
