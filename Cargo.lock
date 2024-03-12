@@ -7315,6 +7315,7 @@ dependencies = [
  "ic-crypto-tls-interfaces",
  "mockall",
  "tokio",
+ "tokio-rustls",
 ]
 
 [[package]]
@@ -7795,15 +7796,18 @@ dependencies = [
  "proptest",
  "prost",
  "rand 0.8.5",
+ "reqwest",
  "serde",
  "serde_bytes",
  "serde_cbor",
  "slog",
  "strum 0.25.0",
  "tempfile",
+ "thiserror",
  "threadpool",
  "tokio",
  "tokio-io-timeout",
+ "tokio-rustls",
  "tower",
  "tower-http 0.5.1",
  "tower-test",

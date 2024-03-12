@@ -919,3 +919,68 @@ fn subnet_metrics_not_supported_via_canister_read_state() {
     let response = request(body.as_ref().to_vec());
     assert_eq!(StatusCode::NOT_FOUND, response.status());
 }
+
+/// Assert that the endpoint accepts HTTP/2 requests.
+#[test]
+fn test_http_2_requests_are_accepted() {
+    let rt = Runtime::new().unwrap();
+    let addr = get_free_localhost_socket_addr();
+    let config = Config {
+        listen_addr: addr,
+        ..Default::default()
+    };
+
+    HttpEndpointBuilder::new(rt.handle().clone(), config).run();
+
+    let client = reqwest::ClientBuilder::new()
+        .http2_prior_knowledge()
+        .build()
+        .unwrap();
+
+    let response = rt.block_on(async move {
+        client
+            .get(format!("http://{}/api/v2/status", addr))
+            .header("Content-Type", "application/cbor")
+            .send()
+            .await
+            .unwrap()
+    });
+
+    assert!(
+        response.status().is_success(),
+        "Response was not successful: {:?}.",
+        response
+    );
+    assert_eq!(response.version(), reqwest::Version::HTTP_2);
+}
+
+/// Assert that the endpoint accepts HTTP/1.1 requests.
+#[test]
+fn test_http_1_requests_are_accepted() {
+    let rt = Runtime::new().unwrap();
+    let addr = get_free_localhost_socket_addr();
+    let config = Config {
+        listen_addr: addr,
+        ..Default::default()
+    };
+
+    HttpEndpointBuilder::new(rt.handle().clone(), config).run();
+
+    let client = reqwest::ClientBuilder::new().http1_only().build().unwrap();
+
+    let response = rt.block_on(async move {
+        client
+            .get(format!("http://{}/api/v2/status", addr))
+            .header("Content-Type", "application/cbor")
+            .send()
+            .await
+            .unwrap()
+    });
+
+    assert!(
+        response.status().is_success(),
+        "Response was not successful: {:?}.",
+        response
+    );
+    assert_eq!(response.version(), reqwest::Version::HTTP_11);
+}

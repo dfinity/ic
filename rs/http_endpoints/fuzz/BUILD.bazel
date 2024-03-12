@@ -42,6 +42,7 @@ DEV_DEPENDENCIES = [
     "//rs/monitoring/metrics",
     "//rs/certification/test-utils",
     "//rs/crypto/tree_hash",
+    "//rs/crypto/tls_interfaces",
     "//rs/crypto/tls_interfaces/mocks",
     "//rs/interfaces/mocks",
     "//rs/interfaces/state_manager",
