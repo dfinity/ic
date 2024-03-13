@@ -128,6 +128,38 @@ fn test_blob_store_wrong_encoding() {
         .contains("bad encoding"));
 }
 
+#[test]
+fn test_port_file() {
+    let bin_path = std::env::var_os("POCKET_IC_BIN").expect("Missing PocketIC binary");
+    let port_file_path = std::env::temp_dir().join("pocket_ic.port");
+    Command::new(PathBuf::from(bin_path))
+        .arg("--port-file")
+        .arg(
+            port_file_path
+                .clone()
+                .into_os_string()
+                .into_string()
+                .unwrap(),
+        )
+        .spawn()
+        .expect("Failed to start PocketIC binary");
+    let start = Instant::now();
+    loop {
+        if let Ok(port_string) = std::fs::read_to_string(port_file_path.clone()) {
+            if !port_string.is_empty() {
+                port_string
+                    .parse::<u16>()
+                    .expect("Failed to parse port to number");
+                break;
+            }
+        }
+        std::thread::sleep(Duration::from_millis(20));
+        if start.elapsed() > Duration::from_secs(5) {
+            panic!("Failed to start PocketIC service in time");
+        }
+    }
+}
+
 const EXCLUDED: &[&str] = &[
     // blocked on canister https outcalls in PocketIC
     "$0 ~ /canister http outcalls/",

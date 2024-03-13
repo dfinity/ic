@@ -28,6 +28,7 @@ use pocket_ic_server::BlobStore;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
 use tokio::sync::RwLock;
@@ -56,6 +57,9 @@ struct Args {
     /// The port under which the PocketIC server should be started
     #[clap(long, short, default_value_t = 0)]
     port: u16,
+    /// The file to which the PocketIC server port should be written
+    #[clap(long)]
+    port_file: Option<PathBuf>,
     /// The time-to-live of the PocketIC server in seconds
     #[clap(long, default_value_t = TTL_SEC)]
     ttl: u64,
@@ -79,15 +83,21 @@ async fn start(runtime: Arc<Runtime>) {
     // If PocketIC was started with the `--pid` flag, create a port file to communicate the port back to
     // the parent process (e.g., the `cargo test` invocation). Other tests can then see this port file
     // and reuse the same PocketIC server.
-    let use_port_file = args.pid.is_some();
+    let use_port_file = args.pid.is_some() || args.port_file.is_some();
     let mut port_file_path = None;
-    let mut ready_file_path = None;
     let mut port_file = None;
+    let use_ready_file = args.pid.is_some();
+    let mut ready_file_path = None;
     if use_port_file {
-        port_file_path =
-            Some(std::env::temp_dir().join(format!("pocket_ic_{}.port", args.pid.unwrap())));
-        ready_file_path =
-            Some(std::env::temp_dir().join(format!("pocket_ic_{}.ready", args.pid.unwrap())));
+        if let Some(ref port_file) = args.port_file {
+            // Clean up port file.
+            let _ = std::fs::remove_file(port_file);
+        }
+        port_file_path = if args.port_file.is_some() {
+            args.port_file
+        } else {
+            Some(std::env::temp_dir().join(format!("pocket_ic_{}.port", args.pid.unwrap())))
+        };
         port_file = match create_file_atomically(port_file_path.clone().unwrap()) {
             Ok(f) => Some(f),
             Err(_) => {
@@ -95,6 +105,10 @@ async fn start(runtime: Arc<Runtime>) {
                 return;
             }
         };
+    }
+    if use_ready_file {
+        ready_file_path =
+            Some(std::env::temp_dir().join(format!("pocket_ic_{}.ready", args.pid.unwrap())));
     }
 
     let _guard = setup_tracing(args.pid);
@@ -165,6 +179,8 @@ async fn start(runtime: Arc<Runtime>) {
             .unwrap()
             .write_all(real_port.to_string().as_bytes());
         let _ = port_file.unwrap().flush();
+    }
+    if use_ready_file {
         // Signal that the port file can safely be read by other clients.
         let ready_file = create_file_atomically(ready_file_path.clone().unwrap());
         if ready_file.is_err() {
@@ -186,9 +202,12 @@ async fn start(runtime: Arc<Runtime>) {
         }
         info!("The PocketIC server will terminate");
         if use_port_file {
-            // Clean up port files.
-            let _ = std::fs::remove_file(ready_file_path.unwrap());
+            // Clean up port file.
             let _ = std::fs::remove_file(port_file_path.unwrap());
+        }
+        if use_ready_file {
+            // Clean up ready file.
+            let _ = std::fs::remove_file(ready_file_path.unwrap());
         }
     };
     axum::serve(listener, router)
