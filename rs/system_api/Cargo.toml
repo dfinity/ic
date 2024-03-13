@@ -36,6 +36,7 @@ slog = { workspace = true }
 assert_matches = "1.0.0"
 ic-registry-subnet-features = { path = "../registry/subnet_features" }
 ic-test-utilities = { path = "../test_utilities" }
+ic-test-utilities-embedders = { path = "../test_utilities/embedders" }
 ic-test-utilities-state = { path = "../test_utilities/state" }
 ic-test-utilities-time = { path = "../test_utilities/time" }
 ic-test-utilities-types = { path = "../test_utilities/types" }

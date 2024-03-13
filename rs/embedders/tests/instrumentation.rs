@@ -17,7 +17,7 @@ use ic_embedders::wasmtime_embedder::{system_api_complexity, WasmtimeInstance};
 use ic_interfaces::execution_environment::HypervisorError;
 use ic_interfaces::execution_environment::SystemApi;
 use ic_replicated_state::Global;
-use ic_test_utilities::wasmtime_instance::WasmtimeInstanceBuilder;
+use ic_test_utilities_embedders::WasmtimeInstanceBuilder;
 use ic_types::{
     methods::{FuncRef, WasmMethod},
     NumBytes, NumInstructions,

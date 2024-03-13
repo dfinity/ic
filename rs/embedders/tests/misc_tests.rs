@@ -7,7 +7,7 @@ use ic_embedders::{
 };
 use ic_interfaces::execution_environment::HypervisorError;
 use ic_logger::replica_logger::no_op_logger;
-use ic_test_utilities::wasmtime_instance::WasmtimeInstanceBuilder;
+use ic_test_utilities_embedders::WasmtimeInstanceBuilder;
 use ic_types::{
     methods::{FuncRef, WasmMethod},
     time::UNIX_EPOCH,
@@ -48,7 +48,7 @@ fn test_instrument_module_rename_memory_table() {
                         (module
                             (memory (export "mem") 1 2)
                             (table (export "tab") 2 2 anyfunc)
-                            (func $run (export "run") 
+                            (func $run (export "run")
                                 (drop (i32.const 123))
                             )
                         )
@@ -80,7 +80,7 @@ fn test_instrument_module_export_memory_table() {
                         (module
                             (memory 1 2)
                             (table 2 2 anyfunc)
-                            (func $run (export "run") 
+                            (func $run (export "run")
                                 (drop (i32.const 123))
                             )
                         )

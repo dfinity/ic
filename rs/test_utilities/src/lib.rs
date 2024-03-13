@@ -13,5 +13,4 @@ pub mod self_validating_payload_builder;
 pub mod stable_memory_reader;
 pub mod state_manager;
 pub mod thread_transport;
-pub mod wasmtime_instance;
 pub mod xnet_payload_builder;

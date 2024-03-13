@@ -1,7 +1,7 @@
 //! Test to validate that all existing function references are properly updated
 //! after instrumentation.
 
-use ic_test_utilities::wasmtime_instance::WasmtimeInstanceBuilder;
+use ic_test_utilities_embedders::WasmtimeInstanceBuilder;
 use ic_types::{
     methods::{FuncRef, WasmMethod},
     time::UNIX_EPOCH,
