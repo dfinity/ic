@@ -7,6 +7,8 @@ server {
     ssl_certificate     {ssl_certificate_path};
     ssl_certificate_key {ssl_certificate_key_path};
 
+    include "includes/error_pages.conf";
+
     # Match all requests to /sw.js that also have the header 'Service-Worker: script' and deliver the service worker uninstall script instead.
     location /sw.js {
         if ($http_service_worker = "script") {
