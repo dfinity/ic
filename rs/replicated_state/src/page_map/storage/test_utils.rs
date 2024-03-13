@@ -31,7 +31,6 @@ pub struct ShardedTestStorageLayout {
     pub base: PathBuf,
     pub dir_path: PathBuf,
     pub overlay_suffix: String,
-    pub existing_overlays: Vec<PathBuf>,
 }
 
 impl StorageLayout for ShardedTestStorageLayout {
@@ -47,7 +46,7 @@ impl StorageLayout for ShardedTestStorageLayout {
         ))
     }
     fn existing_overlays(&self) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
-        Ok(std::fs::read_dir(&self.dir_path)
+        let mut result: Vec<_> = std::fs::read_dir(&self.dir_path)
             .unwrap()
             .filter(|entry| {
                 entry
@@ -61,7 +60,9 @@ impl StorageLayout for ShardedTestStorageLayout {
                     .ends_with(&self.overlay_suffix)
             })
             .map(|entry| entry.unwrap().path())
-            .collect())
+            .collect();
+        result.sort_unstable();
+        Ok(result)
     }
     fn overlay_height(&self, path: &Path) -> Result<Height, Box<dyn std::error::Error>> {
         let file = path.file_name().unwrap();
