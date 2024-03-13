@@ -259,9 +259,12 @@ system_test(
 
 system_test(
     name = "upgrade_downgrade_app_subnet_test",
-    flaky = True,
+    colocated_test_driver_vm_resources = {
+        "vcpus": 24,
+    },
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
+        "experimental_system_test_colocation",
         "system_test_hourly",
         "system_test_nightly",
     ],
