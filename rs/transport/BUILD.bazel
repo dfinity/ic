@@ -12,7 +12,6 @@ DEPENDENCIES = [
     "//rs/async_utils",
     "//rs/config",
     "//rs/crypto/tls_interfaces",
-    "//rs/ic_os/sev",
     "//rs/interfaces/transport",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",

@@ -8,8 +8,7 @@ use futures::{ready, Stream};
 use h2::{Reason, RecvStream, SendStream};
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_config::transport::TransportConfig;
-use ic_crypto_tls_interfaces::{TlsHandshake, TlsStream};
-use ic_icos_sev::ValidateAttestedStream;
+use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_interfaces_transport::{TransportChannelId, TransportEventHandler, TransportPayload};
 use ic_logger::{warn, ReplicaLogger};
 use std::{
@@ -99,8 +98,6 @@ pub(crate) struct TransportImpl {
     pub earliest_registry_version: RwLock<RegistryVersion>,
     /// Reference to the crypto component
     pub crypto: Arc<dyn TlsHandshake + Send + Sync>,
-    /// Reference to the SEV component
-    pub sev_handshake: Arc<dyn ValidateAttestedStream<Box<dyn TlsStream>> + Send + Sync>,
 
     /// Data plane metrics
     pub data_plane_metrics: DataPlaneMetrics,

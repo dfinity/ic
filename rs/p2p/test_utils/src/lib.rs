@@ -8,7 +8,6 @@ use futures::{
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
 use ic_crypto_tls_interfaces::TlsConfig;
-use ic_icos_sev::Sev;
 use ic_interfaces_mocks::consensus_pool::MockConsensusPoolCache;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
@@ -25,7 +24,6 @@ use ic_registry_local_store::{compact_delta_to_changelog, LocalStoreImpl, LocalS
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_utilities_registry::add_subnet_record;
 use ic_test_utilities_types::ids::subnet_test_id;
-use ic_types_test_utils::ids::SUBNET_1;
 use std::{
     collections::{HashMap, HashSet},
     net::SocketAddr,
@@ -196,12 +194,6 @@ pub fn fully_connected_localhost_subnet(
         create_peer_manager_and_registry_handle(rt, log.clone());
     for (i, (node, router)) in router.into_iter().enumerate() {
         let node_crypto = temp_crypto_component_with_tls_keys(&registry_handler, node);
-        let sev_handshake = Arc::new(Sev::new(
-            node,
-            SUBNET_1,
-            registry_handler.registry_client.clone(),
-            log.clone(),
-        ));
         registry_handler.registry_client.update_to_latest_version();
         registry_handler.registry_client.reload();
 
@@ -213,7 +205,6 @@ pub fn fully_connected_localhost_subnet(
             rt,
             node_crypto,
             registry_handler.registry_client.clone(),
-            sev_handshake,
             node,
             topology_watcher.clone(),
             Either::Left::<_, DummyUdpSocket>(socket),
