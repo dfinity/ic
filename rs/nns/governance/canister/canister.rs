@@ -31,7 +31,7 @@ use ic_nns_common::{
 };
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::{
-    encode_metrics,
+    decoder_config, encode_metrics,
     governance::{
         BitcoinNetwork, BitcoinSetConfigProposal, Environment, Governance, HeapGrowthPotential,
         TimeWarp,
@@ -964,7 +964,7 @@ fn get_effective_payload(mt: NnsFunction, payload: &[u8]) -> Cow<[u8]> {
     match mt {
         NnsFunction::BitcoinSetConfig => {
             // Decode the payload to get the network.
-            let payload = Decode!(payload, BitcoinSetConfigProposal)
+            let payload = Decode!([decoder_config()]; payload, BitcoinSetConfigProposal)
                 .expect("payload must be a valid BitcoinSetConfigProposal.");
 
             // Convert it to a call canister payload.
