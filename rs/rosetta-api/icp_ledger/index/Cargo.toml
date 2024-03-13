@@ -20,7 +20,7 @@ ic-ledger-core = { path = "../../ledger_core" }
 ic-stable-structures = { workspace = true }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 icp-ledger = { path = "../" }
-num-traits = "0.2.14"
+num-traits = { workspace = true }
 scopeguard = "1.1.0"
 serde = { workspace = true }
 ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }

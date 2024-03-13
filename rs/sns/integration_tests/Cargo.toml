@@ -70,7 +70,7 @@ ic-test-utilities-load-wasm = { path = "../../test_utilities/load_wasm" }
 ic-types = { path = "../../types/types" }
 itertools = { workspace = true }
 lazy_static = "1.4.0"
-num-traits = "0.2.14"
+num-traits = { workspace = true }
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 pretty_assertions = { workspace = true }
 on_wire = { path = "../../rust_canisters/on_wire" }

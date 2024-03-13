@@ -478,6 +478,7 @@ mockito = "1.2.0"
 minicbor = { version = "0.19.1", features = ["alloc", "derive"] }
 minicbor-derive = "0.13.0"
 nix = "0.24.3"
+num-traits = { version = "0.2.14", features = ["libm"] }
 p256 = { version = "0.13", default_features = false, features = [
   "arithmetic",
   "ecdsa",

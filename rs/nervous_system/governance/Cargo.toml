@@ -8,4 +8,4 @@ edition = "2021"
 ic-base-types = { path = "../../types/base_types" }
 ic-stable-structures = { workspace = true }
 maplit = "1.0.2"
-num-traits = "0.2.12"
+num-traits = { workspace = true }

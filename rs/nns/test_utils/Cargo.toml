@@ -57,7 +57,7 @@ icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 lifeline = { path = "../handlers/lifeline/impl" }
 maplit = "1.0.2"
-num-traits = "0.2.14"
+num-traits = { workspace = true }
 on_wire = { path = "../../rust_canisters/on_wire" }
 prometheus-parse = "0.2.4"
 prost = { workspace = true }

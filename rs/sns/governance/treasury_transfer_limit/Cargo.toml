@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 ic-sns-governance-token-valuation = { path = "../token_valuation" }
-num-traits = "0.2.14"
+num-traits = { workspace = true }
 rust_decimal = "1.25"
 rust_decimal_macros = "1.25"
 

@@ -35,7 +35,7 @@ serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
 ic-icrc1 = { path = "../../icrc1" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
-num-traits = {version = "0.2.15"}
+num-traits = { workspace = true }
 
 
 [dev-dependencies]

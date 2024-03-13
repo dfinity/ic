@@ -35,7 +35,7 @@ icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 minicbor = { workspace = true }
 minicbor-derive = { workspace = true }
 num-bigint = "0.4.3"
-num-traits = "0.2.14"
+num-traits = { workspace = true }
 phantom_newtype = { path = "../../../phantom_newtype" }
 rlp = "0.5.2"
 serde = { workspace = true }

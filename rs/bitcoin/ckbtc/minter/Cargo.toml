@@ -39,7 +39,7 @@ icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 lazy_static = "1.4.0"
 minicbor = { workspace = true }
 minicbor-derive = { workspace = true }
-num-traits = "0.2.14"
+num-traits = { workspace = true }
 ripemd = "0.1.1"
 scopeguard = "1.1.0"
 serde = { workspace = true }
