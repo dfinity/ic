@@ -13,8 +13,8 @@ use ic_interfaces::{
         UnvalidatedIngressArtifact, ValidatedIngressArtifact,
     },
     p2p::consensus::{
-        ChangeResult, MutablePool, PriorityFnAndFilterProducer, UnvalidatedArtifact,
-        ValidatedPoolReader,
+        ArtifactWithOpt, ChangeResult, MutablePool, PriorityFnAndFilterProducer,
+        UnvalidatedArtifact, ValidatedPoolReader,
     },
     time_source::TimeSource,
 };
@@ -304,7 +304,7 @@ impl MutablePool<IngressArtifact> for IngressPoolImpl {
 
     /// Apply changeset to the Ingress Pool
     fn apply_changes(&mut self, change_set: ChangeSet) -> ChangeResult<IngressArtifact> {
-        let mut adverts = Vec::new();
+        let mut artifacts_with_opt = Vec::new();
         let mut purged = Vec::new();
         for change_action in change_set {
             match change_action {
@@ -316,11 +316,14 @@ impl MutablePool<IngressArtifact> for IngressPoolImpl {
                     integrity_hash,
                 )) => {
                     if source_node_id == self.node_id {
-                        adverts.push(Advert {
-                            size,
-                            id: message_id.clone(),
-                            attribute: (),
-                            integrity_hash: integrity_hash.clone(),
+                        artifacts_with_opt.push(ArtifactWithOpt {
+                            advert: Advert {
+                                size,
+                                id: message_id.clone(),
+                                attribute: (),
+                                integrity_hash: integrity_hash.clone(),
+                            },
+                            is_latency_sensitive: false,
                         });
                     }
                     // remove it from unvalidated pool and remove it from peer_index, move it
@@ -395,7 +398,7 @@ impl MutablePool<IngressArtifact> for IngressPoolImpl {
         }
         ChangeResult {
             purged,
-            adverts,
+            artifacts_with_opt,
             poll_immediately: false,
         }
     }
@@ -682,8 +685,8 @@ mod tests {
 
                 // Check moved message is returned as an advert
                 assert!(result.purged.is_empty());
-                assert_eq!(result.adverts.len(), 1);
-                assert_eq!(result.adverts[0].id, message_id0);
+                assert_eq!(result.artifacts_with_opt.len(), 1);
+                assert_eq!(result.artifacts_with_opt[0].advert.id, message_id0);
                 assert!(!result.poll_immediately);
                 // Check timestamp is carried over for msg_0.
                 assert_eq!(ingress_pool.unvalidated.get_timestamp(&message_id0), None);
@@ -745,15 +748,15 @@ mod tests {
                 assert_eq!(ingress_pool.unvalidated().size(), initial_count);
                 let result = ingress_pool.apply_changes(changeset);
                 assert!(result.purged.is_empty());
-                // adverts are only created for own node id
-                assert_eq!(result.adverts.len(), initial_count / nodes);
+                // artifacts_with_opt are only created for own node id
+                assert_eq!(result.artifacts_with_opt.len(), initial_count / nodes);
                 assert!(!result.poll_immediately);
                 assert_eq!(ingress_pool.unvalidated().size(), 0);
                 assert_eq!(ingress_pool.validated().size(), initial_count);
 
                 let changeset = vec![ChangeAction::PurgeBelowExpiry(cutoff_time)];
                 let result = ingress_pool.apply_changes(changeset);
-                assert!(result.adverts.is_empty());
+                assert!(result.artifacts_with_opt.is_empty());
                 assert_eq!(result.purged.len(), initial_count - non_expired_count);
                 assert!(!result.poll_immediately);
                 assert_eq!(ingress_pool.validated().size(), non_expired_count);

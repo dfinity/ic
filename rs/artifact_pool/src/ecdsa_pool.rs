@@ -17,7 +17,7 @@ use ic_interfaces::ecdsa::{
     EcdsaPoolSectionOps, MutableEcdsaPoolSection,
 };
 use ic_interfaces::p2p::consensus::{
-    ChangeResult, MutablePool, UnvalidatedArtifact, ValidatedPoolReader,
+    ArtifactWithOpt, ChangeResult, MutablePool, UnvalidatedArtifact, ValidatedPoolReader,
 };
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -392,12 +392,15 @@ impl MutablePool<EcdsaArtifact> for EcdsaPoolImpl {
         let mut unvalidated_ops = EcdsaPoolSectionOps::new();
         let mut validated_ops = EcdsaPoolSectionOps::new();
         let changed = !change_set.is_empty();
-        let mut adverts = Vec::new();
+        let mut artifacts_with_opt = Vec::new();
         let mut purged = Vec::new();
         for action in change_set {
             match action {
                 EcdsaChangeAction::AddToValidated(message) => {
-                    adverts.push(EcdsaArtifact::message_to_advert(&message));
+                    artifacts_with_opt.push(ArtifactWithOpt {
+                        advert: EcdsaArtifact::message_to_advert(&message),
+                        is_latency_sensitive: true,
+                    });
                     validated_ops.insert(message);
                 }
                 EcdsaChangeAction::MoveToValidated(message) => {
@@ -405,7 +408,11 @@ impl MutablePool<EcdsaArtifact> for EcdsaPoolImpl {
                         EcdsaMessage::EcdsaDealingSupport(_)
                         | EcdsaMessage::EcdsaSigShare(_)
                         | EcdsaMessage::EcdsaSignedDealing(_) => (),
-                        _ => adverts.push(EcdsaArtifact::message_to_advert(&message)),
+                        _ => artifacts_with_opt.push(ArtifactWithOpt {
+                            advert: EcdsaArtifact::message_to_advert(&message),
+                            // relayed
+                            is_latency_sensitive: false,
+                        }),
                     }
                     unvalidated_ops.remove(EcdsaArtifactId::from(&message));
                     validated_ops.insert(message);
@@ -439,7 +446,7 @@ impl MutablePool<EcdsaArtifact> for EcdsaPoolImpl {
         self.validated.mutate(validated_ops);
         ChangeResult {
             purged,
-            adverts,
+            artifacts_with_opt,
             poll_immediately: changed,
         }
     }
@@ -601,7 +608,7 @@ mod tests {
                 )];
                 let result = ecdsa_pool.apply_changes(change_set);
                 assert!(result.purged.is_empty());
-                assert_eq!(result.adverts[0].id, support.message_id());
+                assert_eq!(result.artifacts_with_opt[0].advert.id, support.message_id());
                 assert!(result.poll_immediately);
             }
         }
@@ -881,8 +888,8 @@ mod tests {
                     EcdsaChangeAction::MoveToValidated(msg_3),
                 ]);
                 assert!(result.purged.is_empty());
-                // No adverts are created for moved dealings and dealing support
-                assert!(result.adverts.is_empty());
+                // No artifacts_with_opt are created for moved dealings and dealing support
+                assert!(result.artifacts_with_opt.is_empty());
                 assert!(result.poll_immediately);
                 check_state(&ecdsa_pool, &[], &[msg_id_1, msg_id_2]);
             })
@@ -933,14 +940,14 @@ mod tests {
 
                 let result = ecdsa_pool
                     .apply_changes(vec![EcdsaChangeAction::RemoveValidated(msg_id_1.clone())]);
-                assert!(result.adverts.is_empty());
+                assert!(result.artifacts_with_opt.is_empty());
                 assert_eq!(result.purged, vec![msg_id_1]);
                 assert!(result.poll_immediately);
                 check_state(&ecdsa_pool, &[msg_id_3.clone()], &[msg_id_2.clone()]);
 
                 let result = ecdsa_pool
                     .apply_changes(vec![EcdsaChangeAction::RemoveValidated(msg_id_2.clone())]);
-                assert!(result.adverts.is_empty());
+                assert!(result.artifacts_with_opt.is_empty());
                 assert_eq!(result.purged, vec![msg_id_2]);
                 assert!(result.poll_immediately);
                 check_state(&ecdsa_pool, &[msg_id_3], &[]);
@@ -972,7 +979,7 @@ mod tests {
                 let result =
                     ecdsa_pool.apply_changes(vec![EcdsaChangeAction::RemoveUnvalidated(msg_id)]);
                 assert!(result.purged.is_empty());
-                assert!(result.adverts.is_empty());
+                assert!(result.artifacts_with_opt.is_empty());
                 assert!(result.poll_immediately);
                 check_state(&ecdsa_pool, &[], &[]);
             })

@@ -9,6 +9,7 @@ use crate::{
     metrics::{LABEL_POOL_TYPE, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED},
 };
 use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
+use ic_interfaces::p2p::consensus::ArtifactWithOpt;
 use ic_interfaces::{
     consensus_pool::{
         ChangeAction, ChangeSet, ConsensusBlockCache, ConsensusBlockChain, ConsensusPool,
@@ -685,7 +686,7 @@ impl MutablePool<ConsensusArtifact> for ConsensusPoolImpl {
         let updates = self.cache.prepare(&change_set);
         let mut unvalidated_ops = PoolSectionOps::new();
         let mut validated_ops = PoolSectionOps::new();
-        let mut adverts = Vec::new();
+        let mut artifacts_with_opt = Vec::new();
         // DO NOT Add a default nop. Explicitly mention all cases.
         // This helps with keeping this readable and obvious what
         // change is causing tests to break.
@@ -693,7 +694,10 @@ impl MutablePool<ConsensusArtifact> for ConsensusPoolImpl {
             match change_action {
                 ChangeAction::AddToValidated(to_add) => {
                     self.record_instant(&to_add.msg);
-                    adverts.push(ConsensusArtifact::message_to_advert(&to_add.msg));
+                    artifacts_with_opt.push(ArtifactWithOpt {
+                        advert: ConsensusArtifact::message_to_advert(&to_add.msg),
+                        is_latency_sensitive: is_latency_sensitive(&to_add.msg),
+                    });
                     validated_ops.insert(to_add);
                 }
                 ChangeAction::RemoveFromValidated(to_remove) => {
@@ -701,7 +705,10 @@ impl MutablePool<ConsensusArtifact> for ConsensusPoolImpl {
                 }
                 ChangeAction::MoveToValidated(to_move) => {
                     if !to_move.is_share() {
-                        adverts.push(ConsensusArtifact::message_to_advert(&to_move));
+                        artifacts_with_opt.push(ArtifactWithOpt {
+                            advert: ConsensusArtifact::message_to_advert(&to_move),
+                            is_latency_sensitive: false,
+                        });
                     }
                     let msg_id = to_move.get_id();
                     let timestamp = self.unvalidated.get_timestamp(&msg_id).unwrap_or_else(|| {
@@ -773,9 +780,26 @@ impl MutablePool<ConsensusArtifact> for ConsensusPoolImpl {
 
         ChangeResult {
             purged,
-            adverts,
+            artifacts_with_opt,
             poll_immediately: changed,
         }
+    }
+}
+
+fn is_latency_sensitive(msg: &ConsensusMessage) -> bool {
+    match msg {
+        ConsensusMessage::Finalization(_) => true,
+        ConsensusMessage::Notarization(_) => true,
+        ConsensusMessage::RandomBeacon(_) => true,
+        ConsensusMessage::RandomTape(_) => true,
+        ConsensusMessage::FinalizationShare(_) => true,
+        ConsensusMessage::NotarizationShare(_) => true,
+        ConsensusMessage::RandomBeaconShare(_) => true,
+        ConsensusMessage::RandomTapeShare(_) => true,
+        // Might be big and is relayed and can cause excessive BW usage.
+        ConsensusMessage::CatchUpPackage(_) => false,
+        ConsensusMessage::CatchUpPackageShare(_) => true,
+        ConsensusMessage::BlockProposal(prop) => prop.rank() == Rank(0),
     }
 }
 
@@ -1083,7 +1107,7 @@ mod tests {
     }
 
     #[test]
-    fn test_adverts_are_created_for_aggregates() {
+    fn test_artifacts_with_opt_are_created_for_aggregates() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let time_source = FastForwardTimeSource::new();
             let mut pool = new_from_cup_without_bytes(
@@ -1135,14 +1159,20 @@ mod tests {
             ];
             let result = pool.apply_changes(changeset);
             assert!(result.purged.is_empty());
-            assert_eq!(result.adverts.len(), 2);
+            assert_eq!(result.artifacts_with_opt.len(), 2);
             assert!(result.poll_immediately);
-            assert_eq!(result.adverts[0].id, random_beacon_2.get_id());
-            assert_eq!(result.adverts[1].id, random_beacon_3.get_id());
+            assert_eq!(
+                result.artifacts_with_opt[0].advert.id,
+                random_beacon_2.get_id()
+            );
+            assert_eq!(
+                result.artifacts_with_opt[1].advert.id,
+                random_beacon_3.get_id()
+            );
 
             let result =
                 pool.apply_changes(vec![ChangeAction::PurgeValidatedBelow(Height::from(3))]);
-            assert!(result.adverts.is_empty());
+            assert!(result.artifacts_with_opt.is_empty());
             // purging genesis CUP & beacon + validated beacon at height 2
             assert_eq!(result.purged.len(), 3);
             assert!(result.purged.contains(&random_beacon_2.get_id()));
@@ -1150,7 +1180,7 @@ mod tests {
 
             let result =
                 pool.apply_changes(vec![ChangeAction::PurgeUnvalidatedBelow(Height::from(3))]);
-            assert!(result.adverts.is_empty());
+            assert!(result.artifacts_with_opt.is_empty());
             assert!(result.purged.is_empty());
             assert!(result.poll_immediately);
 
@@ -1211,13 +1241,16 @@ mod tests {
             // share 2 should be moved to the validated pool and not create an advert
             // share 1 should remain in the unvalidated pool
             assert!(result.purged.is_empty());
-            assert_eq!(result.adverts.len(), 1);
+            assert_eq!(result.artifacts_with_opt.len(), 1);
             assert!(result.poll_immediately);
-            assert_eq!(result.adverts[0].id, random_beacon_share_3.get_id());
+            assert_eq!(
+                result.artifacts_with_opt[0].advert.id,
+                random_beacon_share_3.get_id()
+            );
 
             let result =
                 pool.apply_changes(vec![ChangeAction::PurgeValidatedBelow(Height::from(3))]);
-            assert!(result.adverts.is_empty());
+            assert!(result.artifacts_with_opt.is_empty());
             // purging genesis CUP & beacon + 2 validated beacon shares
             assert_eq!(result.purged.len(), 4);
             assert!(result.purged.contains(&random_beacon_share_2.get_id()));

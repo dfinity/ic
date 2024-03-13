@@ -552,8 +552,8 @@ fn start_consensus(
                 let advert_tx = advert_tx.clone();
 
                 Box::new(move |req| {
-                    if let ArtifactProcessorEvent::Advert(advert) = req {
-                        let _ = advert_tx.send(advert.into());
+                    if let ArtifactProcessorEvent::Artifact(advert) = req {
+                        let _ = advert_tx.send(advert.advert.into());
                     }
                 })
             }
@@ -599,8 +599,8 @@ fn start_consensus(
                 let advert_tx = advert_tx.clone();
 
                 Box::new(move |req| {
-                    if let ArtifactProcessorEvent::Advert(advert) = req {
-                        let _ = advert_tx.send(advert.into());
+                    if let ArtifactProcessorEvent::Artifact(advert) = req {
+                        let _ = advert_tx.send(advert.advert.into());
                     }
                 })
             }
@@ -644,8 +644,8 @@ fn start_consensus(
                 let advert_tx = advert_tx.clone();
 
                 Box::new(move |req| {
-                    if let ArtifactProcessorEvent::Advert(advert) = req {
-                        let _ = advert_tx.send(advert.into());
+                    if let ArtifactProcessorEvent::Artifact(advert) = req {
+                        let _ = advert_tx.send(advert.advert.into());
                     }
                 })
             }
@@ -698,8 +698,8 @@ fn start_consensus(
                 let advert_tx = advert_tx.clone();
 
                 Box::new(move |req| {
-                    if let ArtifactProcessorEvent::Advert(advert) = req {
-                        let _ = advert_tx.send(advert.into());
+                    if let ArtifactProcessorEvent::Artifact(advert) = req {
+                        let _ = advert_tx.send(advert.advert.into());
                     }
                 })
             }
@@ -761,8 +761,8 @@ fn start_consensus(
             } => {
                 let advert_tx = advert_tx.clone();
                 Box::new(move |req| {
-                    if let ArtifactProcessorEvent::Advert(advert) = req {
-                        let _ = advert_tx.send(advert.into());
+                    if let ArtifactProcessorEvent::Artifact(advert) = req {
+                        let _ = advert_tx.send(advert.advert.into());
                     }
                 })
             }
@@ -818,8 +818,8 @@ fn start_consensus(
             } => {
                 let advert_tx = advert_tx.clone();
                 Box::new(move |req| {
-                    if let ArtifactProcessorEvent::Advert(advert) = req {
-                        let _ = advert_tx.send(advert.into());
+                    if let ArtifactProcessorEvent::Artifact(advert) = req {
+                        let _ = advert_tx.send(advert.advert.into());
                     }
                 })
             }

@@ -316,14 +316,16 @@ fn process_messages<
             }
         };
         let ChangeResult {
-            adverts,
+            artifacts_with_opt,
             purged,
             poll_immediately,
         } = metrics
             .with_metrics(|| client.process_changes(time_source.as_ref(), batched_artifact_events));
-        for advert in adverts {
-            metrics.outbound_artifact_bytes.observe(advert.size as f64);
-            send_advert(ArtifactProcessorEvent::Advert(advert));
+        for artifact_with_opt in artifacts_with_opt {
+            metrics
+                .outbound_artifact_bytes
+                .observe(artifact_with_opt.advert.size as f64);
+            send_advert(ArtifactProcessorEvent::Artifact(artifact_with_opt));
         }
 
         for advert in purged {
