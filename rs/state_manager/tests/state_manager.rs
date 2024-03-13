@@ -326,7 +326,7 @@ fn merge_overhead() {
     }
 
     let env = StateMachineBuilder::new()
-        .with_lsmt_override(Some(lsmt_without_sharding()))
+        .with_lsmt_override(Some(lsmt_with_sharding()))
         .build();
 
     let canister_ids = (0..10)
@@ -5342,7 +5342,7 @@ fn checkpoints_are_readonly() {
 #[test]
 fn can_downgrade_from_lsmt() {
     state_manager_restart_test_with_lsmt(
-        lsmt_without_sharding(),
+        lsmt_with_sharding(),
         |metrics, state_manager, restart_fn| {
             let (_height, mut state) = state_manager.take_tip();
 
@@ -5378,10 +5378,7 @@ fn can_downgrade_from_lsmt() {
                 &canister_test_id(1),
                 height(1)
             ));
-            assert_eq!(
-                vmemory0_num_overlays(&state_manager, &canister_test_id(1), height(1)),
-                1
-            );
+            assert!(vmemory0_num_overlays(&state_manager, &canister_test_id(1), height(1)) > 0);
 
             let (_height, mut state) = state_manager.take_tip();
             let canister_state = state.canister_state_mut(&canister_test_id(1)).unwrap();
@@ -5498,7 +5495,7 @@ fn can_upgrade_to_lsmt() {
         assert_error_counters(metrics);
 
         // restart the state_manager
-        let (metrics, state_manager) = restart_fn(state_manager, None, lsmt_without_sharding());
+        let (metrics, state_manager) = restart_fn(state_manager, None, lsmt_with_sharding());
 
         let (_height, mut state) = state_manager.take_tip();
         let canister_state = state.canister_state_mut(&canister_test_id(1)).unwrap();
@@ -5533,10 +5530,7 @@ fn can_upgrade_to_lsmt() {
             &canister_test_id(1),
             height(3)
         ));
-        assert_eq!(
-            vmemory0_num_overlays(&state_manager, &canister_test_id(1), height(3)),
-            1
-        );
+        assert!(vmemory0_num_overlays(&state_manager, &canister_test_id(1), height(3)) > 0);
 
         state_manager.commit_and_certify(state, height(4), CertificationScope::Full);
         wait_for_checkpoint(&state_manager, height(4));
@@ -6012,7 +6006,7 @@ fn arbitrary_test_canister_op() -> impl Strategy<Value = TestCanisterOp> {
         Just(TestCanisterOp::CanisterUpgrade),
         Just(TestCanisterOp::CanisterReinstall),
         Just(TestCanisterOp::Checkpoint),
-        Just(TestCanisterOp::RestartWithLSMT(lsmt_without_sharding())),
+        Just(TestCanisterOp::RestartWithLSMT(lsmt_with_sharding())),
         Just(TestCanisterOp::RestartWithLSMT(lsmt_disabled())),
     }
 }
@@ -6066,7 +6060,7 @@ fn random_canister_input_lsmt(ops in proptest::collection::vec(arbitrary_test_ca
 
     // Setup two state machines with a single TEST_CANISTER installed.
     let mut lsmt_env = StateMachineBuilder::new()
-        .with_lsmt_override(Some(lsmt_without_sharding()))
+        .with_lsmt_override(Some(lsmt_with_sharding()))
         .build();
     let mut base_env = StateMachineBuilder::new()
         .with_lsmt_override(Some(lsmt_disabled()))

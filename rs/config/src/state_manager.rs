@@ -48,6 +48,9 @@ fn file_backed_memory_allocator_default() -> FlagStatus {
 pub fn lsmt_config_default() -> LsmtConfig {
     LsmtConfig {
         lsmt_status: FlagStatus::Disabled,
-        shard_num_pages: u64::MAX,
+        // 40GiB
+        // DO NOT CHANGE after LSMT is enabled, as it would crash the new replica trying to merge
+        // old data.
+        shard_num_pages: 10 * 1024 * 1024,
     }
 }
