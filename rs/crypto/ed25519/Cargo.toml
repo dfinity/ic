@@ -8,7 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 ed25519-dalek = { version = "2.1.1", features = ["std", "zeroize", "digest", "batch", "pkcs8", "pem"] }
-curve25519-dalek = { version = "3" }
+curve25519-dalek = { workspace = true }
 rand = "0.8"
 zeroize = { version = "1.5", features = ["zeroize_derive"] }
 pem = "1"

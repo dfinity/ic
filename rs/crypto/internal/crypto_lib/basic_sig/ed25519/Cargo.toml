@@ -8,7 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 base64 = { workspace = true }
-curve25519-dalek = "3.0.2"
+curve25519-dalek = { workspace = true }
 ed25519-consensus = "2.0.1"
 hex = "0.4.2"
 ic-crypto-secrets-containers = { path = "../../../../secrets_containers" }
