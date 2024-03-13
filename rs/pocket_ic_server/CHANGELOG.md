@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New endpoints `/instances/<instance_id>/api/v2/...` supporting the HTTP interface of the IC as described
   by the [Interface Specification](https://internetcomputer.org/docs/current/references/ic-interface-spec).
 - New subnet specification allowing to set very high instruction limits for (asymptotic) benchmarking canister code.
+- New CLI option `--port-file` to specify a file to which the PocketIC server port should be written.
 
 ### Fixed
 
