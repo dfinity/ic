@@ -30,7 +30,6 @@ use ic_https_outcalls_consensus::{
     gossip::CanisterHttpGossipImpl, payload_builder::CanisterHttpPayloadBuilderImpl,
     pool_manager::CanisterHttpPoolManagerImpl,
 };
-use ic_icos_sev::Sev;
 use ic_ingress_manager::{CustomRandomState, IngressManager};
 use ic_interfaces::{
     batch_payload::BatchPayloadBuilder,
@@ -350,12 +349,6 @@ pub fn setup_consensus_and_p2p(
         metrics_registry,
     );
     p2p_router = Some(state_sync_router.merge(p2p_router.unwrap_or_default()));
-    let sev_handshake = Arc::new(Sev::new(
-        node_id,
-        subnet_id,
-        registry_client.clone(),
-        log.clone(),
-    ));
 
     // Quic transport
     let (_, topology_watcher) = ic_peer_manager::start_peer_manager(
@@ -378,7 +371,6 @@ pub fn setup_consensus_and_p2p(
         rt_handle,
         tls_config,
         registry_client.clone(),
-        sev_handshake.clone(),
         node_id,
         topology_watcher.clone(),
         Either::<_, DummyUdpSocket>::Left(transport_addr),
@@ -419,7 +411,6 @@ pub fn setup_consensus_and_p2p(
             artifact_manager,
             advert_rx,
             tls_handshake,
-            sev_handshake,
         ));
     }
     (ingress_pool, ingress_sender, join_handles)

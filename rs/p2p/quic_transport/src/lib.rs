@@ -45,8 +45,7 @@ use axum::{
 use bytes::Bytes;
 use either::Either;
 use ic_base_types::{NodeId, RegistryVersion};
-use ic_crypto_tls_interfaces::{TlsConfig, TlsStream};
-use ic_icos_sev::ValidateAttestedStream;
+use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -125,7 +124,6 @@ impl QuicTransport {
         rt: &tokio::runtime::Handle,
         tls_config: Arc<dyn TlsConfig + Send + Sync>,
         registry_client: Arc<dyn RegistryClient>,
-        sev_handshake: Arc<dyn ValidateAttestedStream<Box<dyn TlsStream>> + Send + Sync>,
         node_id: NodeId,
         // The receiver is passed here mainly to be consistent with other managers that also
         // require receivers on construction.
@@ -144,7 +142,6 @@ impl QuicTransport {
             rt,
             tls_config.clone(),
             registry_client,
-            sev_handshake,
             node_id,
             conn_handles.clone(),
             topology_watcher,

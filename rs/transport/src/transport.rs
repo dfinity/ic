@@ -70,8 +70,7 @@ use crate::metrics::{ControlPlaneMetrics, DataPlaneMetrics, SendQueueMetrics};
 use crate::types::TransportImpl;
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_config::transport::TransportConfig;
-use ic_crypto_tls_interfaces::{TlsHandshake, TlsStream};
-use ic_icos_sev::ValidateAttestedStream;
+use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_interfaces_transport::{
     Transport, TransportChannelId, TransportError, TransportEventHandler, TransportPayload,
 };
@@ -96,7 +95,6 @@ impl TransportImpl {
         earliest_registry_version: RegistryVersion,
         metrics_registry: MetricsRegistry,
         crypto: Arc<dyn TlsHandshake + Send + Sync>,
-        sev_handshake: Arc<dyn ValidateAttestedStream<Box<dyn TlsStream>> + Send + Sync>,
         rt_handle: Handle,
         log: ReplicaLogger,
         use_h2: bool,
@@ -109,7 +107,6 @@ impl TransportImpl {
             config,
             allowed_clients: RwLock::new(BTreeSet::<NodeId>::new()),
             crypto,
-            sev_handshake,
             latest_registry_version: RwLock::new(latest_registry_version),
             earliest_registry_version: RwLock::new(earliest_registry_version),
             rt_handle,
@@ -136,7 +133,6 @@ pub fn create_transport(
     earliest_registry_version: RegistryVersion,
     metrics_registry: MetricsRegistry,
     crypto: Arc<dyn TlsHandshake + Send + Sync>,
-    sev_handshake: Arc<dyn ValidateAttestedStream<Box<dyn TlsStream>> + Send + Sync>,
     rt_handle: Handle,
     log: ReplicaLogger,
     use_h2: bool,
@@ -148,7 +144,6 @@ pub fn create_transport(
         earliest_registry_version,
         metrics_registry,
         crypto,
-        sev_handshake,
         rt_handle,
         log,
         use_h2,

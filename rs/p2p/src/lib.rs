@@ -98,8 +98,6 @@ use crossbeam_channel::{select, tick, Receiver as CrossbeamReceiver, RecvError};
 use event_handler::GossipArc;
 use ic_config::transport::TransportConfig;
 use ic_crypto_tls_interfaces::TlsHandshake;
-use ic_crypto_tls_interfaces::TlsStream;
-use ic_icos_sev::ValidateAttestedStream;
 use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
     p2p::artifact_manager::{ArtifactManager, JoinGuard},
@@ -177,7 +175,6 @@ pub fn start_p2p(
     artifact_manager: Arc<dyn ArtifactManager>,
     advert_receiver: CrossbeamReceiver<GossipAdvert>,
     tls_handshake: Arc<dyn TlsHandshake + Send + Sync>,
-    sev_handshake: Arc<dyn ValidateAttestedStream<Box<dyn TlsStream>> + Send + Sync>,
 ) -> Box<dyn JoinGuard> {
     // Tcp transport
     let oldest_registry_version_in_use = consensus_pool_cache.get_oldest_registry_version_in_use();
@@ -188,7 +185,6 @@ pub fn start_p2p(
         oldest_registry_version_in_use,
         metrics_registry.clone(),
         tls_handshake,
-        sev_handshake,
         rt_handle.clone(),
         log.clone(),
         false,

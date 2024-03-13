@@ -17,7 +17,6 @@ ic-consensus-manager = { path = "../consensus_manager" }
 ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
-ic-icos-sev = { path = "../../ic_os/sev" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-mocks = { path = "../../interfaces/mocks" }
 ic-peer-manager = { path = "../peer_manager" }
