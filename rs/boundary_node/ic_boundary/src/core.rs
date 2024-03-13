@@ -19,6 +19,7 @@ use axum::{
 };
 use axum_extra::middleware::option_layer;
 use axum_server::{accept::DefaultAcceptor, Server};
+use candid::DecoderConfig;
 use futures::TryFutureExt;
 use ic_interfaces_registry::ZERO_REGISTRY_VERSION;
 use ic_registry_client::client::RegistryClientImpl;
@@ -74,6 +75,17 @@ pub const MAX_REQUEST_BODY_SIZE: usize = 4 * MB;
 const METRICS_CACHE_CAPACITY: usize = 15 * MB;
 
 pub const MANAGEMENT_CANISTER_ID_PRINCIPAL: CanisterId = CanisterId::ic_00();
+
+/// Limit the amount of work for skipping unneeded data on the wire when parsing Candid.
+/// The value of 10_000 follows the Candid recommendation.
+const DEFAULT_SKIPPING_QUOTA: usize = 10_000;
+
+pub fn decoder_config() -> DecoderConfig {
+    let mut config = DecoderConfig::new();
+    config.set_skipping_quota(DEFAULT_SKIPPING_QUOTA);
+    config.set_full_error_message(false);
+    config
+}
 
 pub async fn main(cli: Cli) -> Result<(), Error> {
     if cli.listen.http_timeout_connect > cli.health.check_timeout {

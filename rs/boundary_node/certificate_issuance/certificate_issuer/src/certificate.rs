@@ -10,6 +10,7 @@ use mockall::automock;
 use serde::Serialize;
 
 use crate::{
+    decoder_config,
     encode::{Decode, Encode},
     verification::Verify,
 };
@@ -102,7 +103,8 @@ impl GetCert for CanisterCertGetter {
             .await
             .context("failed to query canister")?;
 
-        let resp = Decode!(&resp, Response).context("failed to decode canister response")?;
+        let resp = Decode!([decoder_config()]; &resp, Response)
+            .context("failed to decode canister response")?;
 
         match resp {
             Response::Ok(enc_pair) => Ok(Pair(
@@ -154,7 +156,8 @@ impl Upload for CanisterUploader {
             .await
             .context("failed to query canister")?;
 
-        let resp = Decode!(&resp, Response).context("failed to decode canister response")?;
+        let resp = Decode!([decoder_config()]; &resp, Response)
+            .context("failed to decode canister response")?;
 
         match resp {
             Response::Ok(()) => Ok(()),
@@ -199,7 +202,8 @@ impl Export for CanisterExporter {
             .await
             .context("failed to query canister")?;
 
-        let resp = Decode!(&resp, Response).context("failed to decode canister response")?;
+        let resp = Decode!([decoder_config()]; &resp, Response)
+            .context("failed to decode canister response")?;
 
         match resp {
             Response::Ok((pkgs, iccert)) => Ok((
