@@ -16,7 +16,7 @@ candid = { workspace = true }
 crc32fast = "1.2.0"
 hex = "0.4.2"
 num-bigint = "0.4"
-num-traits = "0.2.12"
+num-traits = { workspace = true }
 serde_bytes = { workspace = true }
 serde = { workspace = true }
 sha2 = "0.10"

@@ -13,4 +13,4 @@ ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
 ic-ckbtc-minter = { path = "../minter" }
 ic-icrc1 = { path = "../../../rosetta-api/icrc1" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
-num-traits = "0.2.15"
+num-traits = { workspace = true }

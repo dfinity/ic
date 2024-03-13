@@ -16,7 +16,7 @@ ic-nervous-system-proxied-canister-calls-tracker = { path = "../proxied_canister
 ic-nervous-system-runtime = { path = "../runtime" }
 ic-error-types = { path = "../../types/error_types" }
 ic-management-canister-types = { path = "../../types/management_canister_types" }
-num-traits = "0.2.15"
+num-traits = { workspace = true }
 serde = { workspace = true }
 
 [dev-dependencies]

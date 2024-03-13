@@ -24,7 +24,7 @@ ic-state-machine-tests = { path = "../../../../state_machine_tests" }
 ic-universal-canister = { path = "../../../../universal_canister/lib" }
 icrc-ledger-types = { path = "../../../../../packages/icrc-ledger-types" }
 ic-ledger-hash-of = { path = "../../../../../packages/ic-ledger-hash-of" }
-num-traits = "0.2.14"
+num-traits = { workspace = true }
 proptest = "1.0"
 cddl = "0.9.4"
 hex = "0.4.2"

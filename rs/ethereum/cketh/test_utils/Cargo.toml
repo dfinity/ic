@@ -22,7 +22,7 @@ ic-ledger-suite-orchestrator-test-utils = { path = "../../ledger-suite-orchestra
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
-num-traits = "0.2.14"
+num-traits = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_json = { workspace = true }
