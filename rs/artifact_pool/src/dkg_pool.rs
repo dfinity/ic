@@ -4,7 +4,9 @@ use crate::{
 };
 use ic_interfaces::{
     dkg::{ChangeAction, ChangeSet, DkgPool},
-    p2p::consensus::{ChangeResult, MutablePool, UnvalidatedArtifact, ValidatedPoolReader},
+    p2p::consensus::{
+        ArtifactWithOpt, ChangeResult, MutablePool, UnvalidatedArtifact, ValidatedPoolReader,
+    },
 };
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -101,7 +103,7 @@ impl MutablePool<DkgArtifact> for DkgPoolImpl {
     /// section.
     fn apply_changes(&mut self, change_set: ChangeSet) -> ChangeResult<DkgArtifact> {
         let changed = !change_set.is_empty();
-        let mut adverts = Vec::new();
+        let mut artifacts_with_opt = Vec::new();
         let mut purged = Vec::new();
         for action in change_set {
             match action {
@@ -111,11 +113,18 @@ impl MutablePool<DkgArtifact> for DkgPoolImpl {
                     self.unvalidated.remove(&id);
                 }
                 ChangeAction::AddToValidated(message) => {
-                    adverts.push(DkgArtifact::message_to_advert(&message));
+                    artifacts_with_opt.push(ArtifactWithOpt {
+                        advert: DkgArtifact::message_to_advert(&message),
+                        is_latency_sensitive: true,
+                    });
                     self.validated.insert(DkgMessageId::from(&message), message);
                 }
                 ChangeAction::MoveToValidated(message) => {
-                    adverts.push(DkgArtifact::message_to_advert(&message));
+                    artifacts_with_opt.push(ArtifactWithOpt {
+                        advert: DkgArtifact::message_to_advert(&message),
+                        // relayed
+                        is_latency_sensitive: false,
+                    });
                     let id = DkgMessageId::from(&message);
                     self.unvalidated
                         .remove(&id)
@@ -133,7 +142,7 @@ impl MutablePool<DkgArtifact> for DkgPoolImpl {
         }
         ChangeResult {
             purged,
-            adverts,
+            artifacts_with_opt,
             poll_immediately: changed,
         }
     }
@@ -262,7 +271,7 @@ mod test {
             timestamp: UNIX_EPOCH,
         });
         // ensure we have 2 validated and 2 unvalidated artifacts
-        assert_eq!(result.adverts.len(), 2);
+        assert_eq!(result.artifacts_with_opt.len(), 2);
         assert!(result.purged.is_empty());
         assert!(result.poll_immediately);
         assert_eq!(pool.get_validated().count(), 2);
@@ -272,7 +281,7 @@ mod test {
         // are purged from the validated and unvalidated sections
         let result = pool.apply_changes(vec![ChangeAction::Purge(current_dkg_id_start_height)]);
         assert_eq!(result.purged.len(), 1);
-        assert!(result.adverts.is_empty());
+        assert!(result.artifacts_with_opt.is_empty());
         assert!(result.poll_immediately);
         assert_eq!(pool.get_validated().count(), 1);
         assert_eq!(pool.get_unvalidated().count(), 1);
@@ -282,7 +291,7 @@ mod test {
             current_dkg_id_start_height.increment(),
         )]);
         assert_eq!(result.purged.len(), 1);
-        assert!(result.adverts.is_empty());
+        assert!(result.artifacts_with_opt.is_empty());
         assert!(result.poll_immediately);
         assert_eq!(pool.get_validated().count(), 0);
         assert_eq!(pool.get_unvalidated().count(), 0);

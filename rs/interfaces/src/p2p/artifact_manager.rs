@@ -3,9 +3,11 @@ use crate::p2p::consensus::ChangeResult;
 use crate::time_source::TimeSource;
 use derive_more::From;
 use ic_types::artifact::{
-    Advert, ArtifactKind, ArtifactPriorityFn, PriorityFn, UnvalidatedArtifactMutation,
+    ArtifactKind, ArtifactPriorityFn, PriorityFn, UnvalidatedArtifactMutation,
 };
 use ic_types::{artifact, p2p, single_chunked, NodeId};
+
+use super::consensus::ArtifactWithOpt;
 
 /// Event loops/actors that implement a graceful shutdown on destruction implement this trait.
 /// This is useful when the the event loop/actor has multiple handles and a separate object
@@ -21,7 +23,7 @@ pub enum OnArtifactError {
 }
 
 pub enum ArtifactProcessorEvent<Artifact: ArtifactKind> {
-    Advert(Advert<Artifact>),
+    Artifact(ArtifactWithOpt<Artifact>),
     Purge(Artifact::Id),
 }
 

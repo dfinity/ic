@@ -6,7 +6,9 @@ use crate::{
 };
 use ic_interfaces::{
     canister_http::{CanisterHttpChangeAction, CanisterHttpChangeSet, CanisterHttpPool},
-    p2p::consensus::{ChangeResult, MutablePool, UnvalidatedArtifact, ValidatedPoolReader},
+    p2p::consensus::{
+        ArtifactWithOpt, ChangeResult, MutablePool, UnvalidatedArtifact, ValidatedPoolReader,
+    },
 };
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -113,12 +115,15 @@ impl MutablePool<CanisterHttpArtifact> for CanisterHttpPoolImpl {
         change_set: CanisterHttpChangeSet,
     ) -> ChangeResult<CanisterHttpArtifact> {
         let changed = !change_set.is_empty();
-        let mut adverts = Vec::new();
+        let mut artifacts_with_opt = Vec::new();
         let mut purged = Vec::new();
         for action in change_set {
             match action {
                 CanisterHttpChangeAction::AddToValidated(share, content) => {
-                    adverts.push(CanisterHttpArtifact::message_to_advert(&share));
+                    artifacts_with_opt.push(ArtifactWithOpt {
+                        advert: CanisterHttpArtifact::message_to_advert(&share),
+                        is_latency_sensitive: true,
+                    });
                     self.validated.insert(share, ());
                     self.content
                         .insert(ic_types::crypto::crypto_hash(&content), content);
@@ -151,7 +156,7 @@ impl MutablePool<CanisterHttpArtifact> for CanisterHttpPoolImpl {
         }
         ChangeResult {
             purged,
-            adverts,
+            artifacts_with_opt,
             poll_immediately: changed,
         }
     }
@@ -259,7 +264,7 @@ mod tests {
         ]);
 
         assert!(pool.contains(&id));
-        assert_eq!(result.adverts[0].id, id);
+        assert_eq!(result.artifacts_with_opt[0].advert.id, id);
         assert!(result.poll_immediately);
         assert!(result.purged.is_empty());
         assert_eq!(share, pool.lookup_validated(&id).unwrap());
@@ -275,7 +280,7 @@ mod tests {
         ]);
 
         assert!(!pool.contains(&id));
-        assert!(result.adverts.is_empty());
+        assert!(result.artifacts_with_opt.is_empty());
         assert!(result.poll_immediately);
         assert_eq!(result.purged[0], id);
         assert!(pool.lookup_validated(&id).is_none());
@@ -322,7 +327,7 @@ mod tests {
         assert!(!pool.contains(&id));
         assert!(result.poll_immediately);
         assert!(result.purged.is_empty());
-        assert!(result.adverts.is_empty());
+        assert!(result.artifacts_with_opt.is_empty());
     }
 
     #[test]
@@ -342,6 +347,6 @@ mod tests {
         assert!(!pool.contains(&id));
         assert!(result.poll_immediately);
         assert!(result.purged.is_empty());
-        assert!(result.adverts.is_empty());
+        assert!(result.artifacts_with_opt.is_empty());
     }
 }

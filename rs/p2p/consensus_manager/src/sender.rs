@@ -12,7 +12,8 @@ use backoff::{backoff::Backoff, ExponentialBackoffBuilder};
 use bytes::Bytes;
 use ic_base_types::NodeId;
 use ic_interfaces::p2p::{
-    artifact_manager::ArtifactProcessorEvent, consensus::ValidatedPoolReader,
+    artifact_manager::ArtifactProcessorEvent,
+    consensus::{ArtifactWithOpt, ValidatedPoolReader},
 };
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy};
@@ -112,7 +113,10 @@ impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
 
         for artifact in artifacts_in_validated_pool {
             let advert = Artifact::message_to_advert(&artifact);
-            self.handle_send_advert(advert);
+            self.handle_send_advert(ArtifactWithOpt {
+                advert,
+                is_latency_sensitive: false,
+            });
         }
 
         loop {
@@ -127,7 +131,7 @@ impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
                 }
                 Some(advert) = self.adverts_to_send.recv() => {
                     match advert {
-                        ArtifactProcessorEvent::Advert(advert) => self.handle_send_advert(advert),
+                        ArtifactProcessorEvent::Artifact(new_artifact) => self.handle_send_advert(new_artifact),
                         ArtifactProcessorEvent::Purge(id) => self.handle_purge_advert(&id),
                     }
 
@@ -177,8 +181,8 @@ impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
         }
     }
 
-    fn handle_send_advert(&mut self, advert: Advert<Artifact>) {
-        let entry = self.active_adverts.entry(advert.id.clone());
+    fn handle_send_advert(&mut self, new_artifact: ArtifactWithOpt<Artifact>) {
+        let entry = self.active_adverts.entry(new_artifact.advert.id.clone());
 
         if let Entry::Vacant(entry) = entry {
             self.metrics.send_view_consensus_new_adverts_total.inc();
@@ -195,7 +199,7 @@ impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
                 self.transport.clone(),
                 self.current_commit_id,
                 slot,
-                advert,
+                new_artifact,
                 self.pool_reader.clone(),
                 child_token_clone,
             );
@@ -215,19 +219,21 @@ impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
         transport: Arc<dyn Transport>,
         commit_id: CommitId,
         slot_number: SlotNumber,
-        Advert {
-            id,
-            attribute,
-            size,
-            ..
-        }: Advert<Artifact>,
+        ArtifactWithOpt {
+            advert:
+                Advert {
+                    id,
+                    attribute,
+                    size,
+                    ..
+                },
+            is_latency_sensitive,
+        }: ArtifactWithOpt<Artifact>,
         pool_reader: Arc<RwLock<dyn ValidatedPoolReader<Artifact> + Send + Sync>>,
         cancellation_token: CancellationToken,
     ) {
-        // Try to push artifact if size below threshold && the artifact is not a relay.
-        let push_artifact = size < ARTIFACT_PUSH_THRESHOLD_BYTES;
-
-        let artifact = if push_artifact {
+        // Try to push artifact if size below threshold or it is latency sensitive.
+        let artifact = if size < ARTIFACT_PUSH_THRESHOLD_BYTES || is_latency_sensitive {
             let id = id.clone();
             let artifact = tokio::task::spawn_blocking(move || {
                 pool_reader.read().unwrap().get_validated_by_identifier(&id)
@@ -505,9 +511,10 @@ mod tests {
             )
         });
 
-        tx.send(ArtifactProcessorEvent::Advert(
-            U64Artifact::message_to_advert(&1),
-        ))
+        tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
+            advert: U64Artifact::message_to_advert(&1),
+            is_latency_sensitive: false,
+        }))
         .await
         .unwrap();
 
@@ -578,9 +585,10 @@ mod tests {
             )
         });
 
-        tx.send(ArtifactProcessorEvent::Advert(
-            U64Artifact::message_to_advert(&1),
-        ))
+        tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
+            advert: U64Artifact::message_to_advert(&1),
+            is_latency_sensitive: false,
+        }))
         .await
         .unwrap();
 
@@ -646,9 +654,10 @@ mod tests {
                 cancel_token_clone,
             )
         });
-        tx.send(ArtifactProcessorEvent::Advert(
-            U64Artifact::message_to_advert(&1),
-        ))
+        tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
+            advert: U64Artifact::message_to_advert(&1),
+            is_latency_sensitive: false,
+        }))
         .await
         .unwrap();
         // Verify that we successfully retried.
@@ -703,25 +712,28 @@ mod tests {
             )
         });
         // Send advert and verify commit it.
-        tx.send(ArtifactProcessorEvent::Advert(
-            U64Artifact::message_to_advert(&1),
-        ))
+        tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
+            advert: U64Artifact::message_to_advert(&1),
+            is_latency_sensitive: false,
+        }))
         .await
         .unwrap();
         assert_eq!(commit_id_rx.recv().await.unwrap().get(), 0);
 
         // Send second advert and observe commit id bump.
-        tx.send(ArtifactProcessorEvent::Advert(
-            U64Artifact::message_to_advert(&2),
-        ))
+        tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
+            advert: U64Artifact::message_to_advert(&2),
+            is_latency_sensitive: false,
+        }))
         .await
         .unwrap();
         assert_eq!(commit_id_rx.recv().await.unwrap().get(), 1);
         // Send purge and new advert and observe commit id increase by 2.
         tx.send(ArtifactProcessorEvent::Purge(2)).await.unwrap();
-        tx.send(ArtifactProcessorEvent::Advert(
-            U64Artifact::message_to_advert(&3),
-        ))
+        tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
+            advert: U64Artifact::message_to_advert(&3),
+            is_latency_sensitive: false,
+        }))
         .await
         .unwrap();
 
@@ -776,24 +788,27 @@ mod tests {
             )
         });
         // Send advert and verify commit id.
-        tx.send(ArtifactProcessorEvent::Advert(
-            U64Artifact::message_to_advert(&1),
-        ))
+        tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
+            advert: U64Artifact::message_to_advert(&1),
+            is_latency_sensitive: false,
+        }))
         .await
         .unwrap();
         assert_eq!(commit_id_rx.recv().await.unwrap().get(), 0);
 
         // Send same advert again. This should be noop.
-        tx.send(ArtifactProcessorEvent::Advert(
-            U64Artifact::message_to_advert(&1),
-        ))
+        tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
+            advert: U64Artifact::message_to_advert(&1),
+            is_latency_sensitive: false,
+        }))
         .await
         .unwrap();
 
         // Check that new advert is advertised with correct commit id.
-        tx.send(ArtifactProcessorEvent::Advert(
-            U64Artifact::message_to_advert(&2),
-        ))
+        tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
+            advert: U64Artifact::message_to_advert(&2),
+            is_latency_sensitive: false,
+        }))
         .await
         .unwrap();
 
@@ -851,9 +866,10 @@ mod tests {
             )
         });
 
-        tx.send(ArtifactProcessorEvent::Advert(
-            U64Artifact::message_to_advert(&1),
-        ))
+        tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
+            advert: U64Artifact::message_to_advert(&1),
+            is_latency_sensitive: false,
+        }))
         .await
         .unwrap();
 
