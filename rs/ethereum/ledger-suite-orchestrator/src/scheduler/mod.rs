@@ -4,6 +4,7 @@ pub mod test_fixtures;
 mod tests;
 
 use crate::candid::{AddCkErc20Token, AddErc20Arg, LedgerInitArg, UpgradeArg};
+use crate::logs::DEBUG;
 use crate::logs::INFO;
 use crate::management::{CallError, CanisterRuntime, Reason};
 use crate::state::{
@@ -15,6 +16,7 @@ use crate::storage::{
     WasmStore, WasmStoreError,
 };
 use candid::{CandidType, Encode, Nat, Principal};
+use futures::future;
 use ic_base_types::PrincipalId;
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
@@ -25,7 +27,14 @@ use std::collections::VecDeque;
 use std::fmt::Debug;
 use std::str::FromStr;
 
-const HUNDRED_TRILLIONS: u64 = 100_000_000_000_000;
+pub const TEN_TRILLIONS: u64 = 10_000_000_000_000; // 10 TC
+pub const HUNDRED_TRILLIONS: u64 = 100_000_000_000_000; // 100 TC
+
+// We need at least 220 TC to be able to spawn ledger suite (200 TC).
+pub const MINIMUM_ORCHESTRATOR_CYCLES: u64 = 220_000_000_000_000;
+// We need at least 110 TC for ledger to spawn archive.
+pub const MINIMUM_MONITORED_CANISTER_CYCLES: u64 = 110_000_000_000_000;
+
 const THREE_GIGA_BYTES: u64 = 3_221_225_472;
 
 /// A list of *independent* tasks to be executed in order.
@@ -43,6 +52,10 @@ impl Tasks {
 
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
+    }
+
+    pub fn contains(&self, task: Task) -> bool {
+        self.0.contains(&task)
     }
 }
 
@@ -76,6 +89,7 @@ impl Tasks {
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub enum Task {
     InstallLedgerSuite(InstallLedgerSuiteArgs),
+    MaybeTopUp,
     NotifyErc20Added {
         erc20_token: Erc20Token,
         minter_id: Principal,
@@ -171,6 +185,7 @@ impl InstallLedgerSuiteArgs {
 pub enum TaskError {
     CanisterCreationError(CallError),
     InstallCodeError(CallError),
+    CanisterStatusError(CallError),
     WasmHashNotFound(WasmHash),
     WasmStoreError(WasmStoreError),
     LedgerNotFound(Erc20Token),
@@ -184,6 +199,7 @@ impl TaskError {
         match self {
             TaskError::CanisterCreationError(_) => true,
             TaskError::InstallCodeError(_) => true,
+            TaskError::CanisterStatusError(_) => true,
             TaskError::WasmHashNotFound(_) => false,
             TaskError::WasmStoreError(_) => false,
             TaskError::LedgerNotFound(_) => true, //ledger may not yet be created
@@ -202,12 +218,80 @@ impl Task {
     pub async fn execute<R: CanisterRuntime>(&self, runtime: &R) -> Result<(), TaskError> {
         match self {
             Task::InstallLedgerSuite(args) => install_ledger_suite(args, runtime).await,
+            Task::MaybeTopUp => maybe_top_up(runtime).await,
             Task::NotifyErc20Added {
                 erc20_token,
                 minter_id,
             } => notify_erc20_added(erc20_token, minter_id, runtime).await,
         }
     }
+}
+
+async fn maybe_top_up<R: CanisterRuntime>(runtime: &R) -> Result<(), TaskError> {
+    let mut principals: Vec<Principal> = read_state(|s| {
+        s.managed_canisters_iter()
+            .flat_map(|(_, canisters)| canisters.collect_principals())
+            .chain(std::iter::once(runtime.id()))
+            .collect()
+    });
+
+    let mut results =
+        future::join_all(principals.iter().map(|p| runtime.canister_cycles(*p))).await;
+    assert!(!results.is_empty());
+
+    let mut orchestrator_cycle_balance = match results
+        .pop()
+        .expect("BUG: should at least fetch the orchestrator balance")
+    {
+        Ok(balance) => balance,
+        Err(e) => {
+            log!(
+                INFO,
+                "[maybe_top_up] failed to get orchestrator status, with error: {:?}",
+                e
+            );
+            return Err(TaskError::CanisterStatusError(e));
+        }
+    };
+    principals.pop();
+
+    for (canister_id, cycles_result) in principals.iter().zip(results) {
+        match cycles_result {
+            Ok(balance) => {
+                if balance < MINIMUM_MONITORED_CANISTER_CYCLES as u128
+                    && orchestrator_cycle_balance > MINIMUM_ORCHESTRATOR_CYCLES as u128
+                {
+                    match runtime.send_cycles(*canister_id, TEN_TRILLIONS.into()) {
+                        Ok(()) => {
+                            orchestrator_cycle_balance -= TEN_TRILLIONS as u128;
+                            log!(
+                                DEBUG,
+                                "[maybe_top_up] topped up canister {canister_id} with previous balance {balance}"
+                            );
+                        }
+                        Err(e) => {
+                            log!(
+                                INFO,
+                                "[maybe_top_up] failed to send cycles to {}, with error: {:?}",
+                                canister_id,
+                                e
+                            );
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                log!(
+                    INFO,
+                    "[maybe_top_up] failed to get canister status of {}, with error: {:?}",
+                    canister_id,
+                    e
+                );
+            }
+        }
+    }
+
+    Ok(())
 }
 
 async fn install_ledger_suite<R: CanisterRuntime>(

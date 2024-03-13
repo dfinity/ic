@@ -2,7 +2,10 @@ use crate::candid::{AddCkErc20Token, InitArg, LedgerInitArg};
 use crate::management::{CallError, Reason};
 use crate::scheduler::test_fixtures::{usdc, usdc_metadata};
 use crate::scheduler::tests::mock::MockCanisterRuntime;
-use crate::scheduler::{InstallLedgerSuiteArgs, Task, TaskError, Tasks};
+use crate::scheduler::{
+    InstallLedgerSuiteArgs, Task, TaskError, Tasks, MINIMUM_MONITORED_CANISTER_CYCLES,
+    MINIMUM_ORCHESTRATOR_CYCLES,
+};
 use crate::state::test_fixtures::new_state;
 use crate::state::{
     read_state, Canisters, GitCommitHash, IndexCanister, LedgerCanister, ManagedCanisterStatus,
@@ -48,6 +51,82 @@ async fn should_install_ledger_suite() {
             metadata: usdc_metadata(),
         })
     );
+}
+
+#[tokio::test]
+async fn should_top_up_canister() {
+    use mockall::Sequence;
+    init_state();
+    let mut tasks = Tasks::default();
+    tasks.add_task(Task::InstallLedgerSuite(usdc_install_args()));
+    let mut runtime = MockCanisterRuntime::new();
+
+    runtime.expect_id().return_const(ORCHESTRATOR_PRINCIPAL);
+    expect_create_canister_returning(
+        &mut runtime,
+        vec![ORCHESTRATOR_PRINCIPAL],
+        vec![Ok(LEDGER_PRINCIPAL), Ok(INDEX_PRINCIPAL)],
+    );
+    runtime.expect_install_code().times(2).return_const(Ok(()));
+
+    assert_eq!(tasks.execute(&runtime).await, Ok(()));
+
+    tasks.add_task(Task::MaybeTopUp);
+    let mut seq = Sequence::new();
+    runtime
+        .expect_canister_cycles()
+        .times(2)
+        .in_sequence(&mut seq)
+        .return_const(Ok(MINIMUM_MONITORED_CANISTER_CYCLES as u128 / 2));
+    runtime
+        .expect_canister_cycles()
+        .times(1)
+        .in_sequence(&mut seq)
+        .return_const(Ok(MINIMUM_ORCHESTRATOR_CYCLES as u128 * 2));
+
+    runtime
+        .expect_send_cycles()
+        .withf(move |&canister_id, _args: &u128| {
+            canister_id == LEDGER_PRINCIPAL || canister_id == INDEX_PRINCIPAL
+        })
+        .times(2)
+        .return_const(Ok(()));
+    assert_eq!(tasks.execute(&runtime).await, Ok(()));
+
+    tasks.add_task(Task::MaybeTopUp);
+
+    let mut seq = Sequence::new();
+    runtime
+        .expect_canister_cycles()
+        .times(2)
+        .in_sequence(&mut seq)
+        .return_const(Ok(MINIMUM_MONITORED_CANISTER_CYCLES as u128 / 2));
+    runtime
+        .expect_canister_cycles()
+        .times(1)
+        .in_sequence(&mut seq)
+        .return_const(Ok(MINIMUM_ORCHESTRATOR_CYCLES as u128 * 2));
+
+    runtime
+        .expect_send_cycles()
+        .times(1)
+        .return_const(Err(CallError {
+            method: "send_cycles".to_string(),
+            reason: Reason::OutOfCycles,
+        }));
+    runtime.expect_send_cycles().times(1).return_const(Ok(()));
+
+    assert_eq!(tasks.execute(&runtime).await, Ok(()));
+
+    tasks.add_task(Task::MaybeTopUp);
+
+    runtime
+        .expect_canister_cycles()
+        .times(3)
+        .return_const(Ok(MINIMUM_MONITORED_CANISTER_CYCLES as u128));
+    runtime.expect_send_cycles().never();
+
+    assert_eq!(tasks.execute(&runtime).await, Ok(()));
 }
 
 #[tokio::test]
@@ -583,6 +662,17 @@ mod mock {
                 canister_id: Principal,
                 wasm_module:Vec<u8>,
                 arg: Vec<u8>,
+            ) -> Result<(), CallError>;
+
+            async fn canister_cycles(
+                &self,
+                canister_id: Principal,
+            ) -> Result<u128, CallError>;
+
+            fn send_cycles(
+                &self,
+                canister_id: Principal,
+                cycles: u128
             ) -> Result<(), CallError>;
 
             async fn call_canister<I, O>(

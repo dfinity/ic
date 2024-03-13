@@ -250,6 +250,18 @@ impl Canisters {
     pub fn archive_canister_ids(&self) -> &[Principal] {
         &self.archives
     }
+
+    pub fn collect_principals(&self) -> Vec<Principal> {
+        let mut result: Vec<Principal> = vec![];
+        if let Some(ledger_principal) = self.ledger_canister_id() {
+            result.push(*ledger_principal);
+        }
+        if let Some(index_principal) = self.index_canister_id() {
+            result.push(*index_principal);
+        }
+        result.extend(self.archives.clone());
+        result
+    }
 }
 
 #[derive(Debug)]

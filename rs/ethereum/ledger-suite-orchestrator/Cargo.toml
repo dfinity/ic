@@ -12,6 +12,7 @@ askama = { workspace = true }
 async-trait = "0.1.73"
 candid = { workspace = true }
 ciborium = { workspace = true }
+futures = { workspace = true }
 hex = "0.4"
 ic-canister-log = "0.2.0"
 ic-base-types = { path = "../../types/base_types" }
