@@ -127,6 +127,7 @@ impl BoundaryNodeManager {
             format!("--acme-credentials-path=/var/lib/ic/data/ic-boundary-acme.json"),
             format!("--disable-registry-replicator"),
             format!("--local-store-path=/var/lib/ic/data/ic_registry_local_store"),
+            format!("--log-journald"),
             format!("--metrics-addr=[::]:9324"),
         ];
 

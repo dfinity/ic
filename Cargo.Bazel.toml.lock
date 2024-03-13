@@ -3109,6 +3109,8 @@ dependencies = [
  "tower_governor",
  "tracing",
  "tracing-appender",
+ "tracing-core",
+ "tracing-serde",
  "tracing-slog",
  "tracing-subscriber",
  "trust-dns-resolver",

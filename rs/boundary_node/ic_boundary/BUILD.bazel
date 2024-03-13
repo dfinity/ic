@@ -76,6 +76,8 @@ DEPENDENCIES = [
     "@crate_index//:tower",
     "@crate_index//:tower_governor",
     "@crate_index//:tower-http",
+    "@crate_index//:tracing-core",
+    "@crate_index//:tracing-serde",
     "@crate_index//:tracing-slog",
     "@crate_index//:tracing-subscriber",
     "@crate_index//:tracing",
