@@ -7545,6 +7545,7 @@ dependencies = [
  "ic-sys",
  "ic-system-api",
  "ic-test-utilities",
+ "ic-test-utilities-embedders",
  "ic-test-utilities-execution-environment",
  "ic-test-utilities-logger",
  "ic-test-utilities-state",
@@ -11451,6 +11452,7 @@ dependencies = [
  "ic-replicated-state",
  "ic-sys",
  "ic-test-utilities",
+ "ic-test-utilities-embedders",
  "ic-test-utilities-state",
  "ic-test-utilities-time",
  "ic-test-utilities-types",
@@ -11518,7 +11520,6 @@ dependencies = [
  "async-trait",
  "hex-literal",
  "ic-artifact-pool",
- "ic-base-types",
  "ic-btc-types-internal",
  "ic-config",
  "ic-crypto-interfaces-sig-verification",
@@ -11531,7 +11532,6 @@ dependencies = [
  "ic-crypto-tls-interfaces",
  "ic-crypto-tree-hash",
  "ic-cycles-account-manager",
- "ic-embedders",
  "ic-interfaces",
  "ic-interfaces-certified-stream-store",
  "ic-interfaces-registry",
@@ -11546,16 +11546,12 @@ dependencies = [
  "ic-registry-proto-data-provider",
  "ic-registry-subnet-type",
  "ic-replicated-state",
- "ic-system-api",
  "ic-test-utilities-logger",
  "ic-test-utilities-registry",
- "ic-test-utilities-state",
- "ic-test-utilities-time",
  "ic-test-utilities-types",
  "ic-types",
  "ic-types-test-utils",
  "ic-universal-canister",
- "ic-wasm-types",
  "lazy_static",
  "nix 0.24.3",
  "parking_lot 0.12.1",
@@ -11596,6 +11592,27 @@ dependencies = [
  "phantom_newtype",
  "prost",
  "serde",
+]
+
+[[package]]
+name = "ic-test-utilities-embedders"
+version = "0.9.0"
+dependencies = [
+ "ic-base-types",
+ "ic-config",
+ "ic-cycles-account-manager",
+ "ic-embedders",
+ "ic-interfaces",
+ "ic-logger",
+ "ic-registry-subnet-type",
+ "ic-replicated-state",
+ "ic-system-api",
+ "ic-test-utilities",
+ "ic-test-utilities-state",
+ "ic-test-utilities-types",
+ "ic-types",
+ "ic-wasm-types",
+ "wat",
 ]
 
 [[package]]

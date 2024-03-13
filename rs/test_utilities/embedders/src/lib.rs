@@ -14,6 +14,7 @@ use ic_system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ExecutionParameters, InstructionLimits,
     ModificationTracking, SystemApiImpl,
 };
+use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_state::SystemStateBuilder;
 use ic_test_utilities_types::ids::{canister_test_id, user_test_id};
 use ic_types::{
@@ -21,8 +22,6 @@ use ic_types::{
     NumInstructions,
 };
 use ic_wasm_types::BinaryEncodedWasm;
-
-use crate::cycles_account_manager::CyclesAccountManagerBuilder;
 
 pub const DEFAULT_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(5_000_000_000);
 

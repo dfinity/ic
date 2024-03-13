@@ -8,8 +8,9 @@ MACRO_DEPENDENCIES = []
 WASMTIME_FUZZER_DEPENDENCIES = [
     "//rs/config",
     "//rs/embedders",
-    "//rs/test_utilities",
     "//rs/replicated_state",
+    "//rs/test_utilities",
+    "//rs/test_utilities/embedders",
     "//rs/types/types",
     "@crate_index//:libfuzzer-sys",
     "@crate_index//:arbitrary",
@@ -49,6 +50,7 @@ WASM_EXECUTOR_FUZZER_DEPENDENCIES = [
     "//rs/monitoring/metrics",
     "//rs/replicated_state",
     "//rs/test_utilities",
+    "//rs/test_utilities/embedders",
     "//rs/test_utilities/state",
     "//rs/test_utilities/time",
     "//rs/test_utilities/types",
