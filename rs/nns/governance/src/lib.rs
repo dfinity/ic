@@ -124,6 +124,7 @@ use crate::{
     governance::{Governance, TimeWarp},
     pb::v1::{governance::GovernanceCachedMetrics, ProposalStatus},
 };
+use candid::DecoderConfig;
 use mockall::automock;
 use std::{
     collections::{BTreeMap, HashMap},
@@ -159,6 +160,17 @@ pub mod proposals;
 mod reward;
 pub mod storage;
 mod subaccount_index;
+
+/// Limit the amount of work for skipping unneeded data on the wire when parsing Candid.
+/// The value of 10_000 follows the Candid recommendation.
+const DEFAULT_SKIPPING_QUOTA: usize = 10_000;
+
+pub fn decoder_config() -> DecoderConfig {
+    let mut config = DecoderConfig::new();
+    config.set_skipping_quota(DEFAULT_SKIPPING_QUOTA);
+    config.set_full_error_message(false);
+    config
+}
 
 #[automock]
 trait Clock {

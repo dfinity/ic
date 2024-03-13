@@ -1,4 +1,5 @@
 use crate::{
+    decoder_config,
     governance::manage_neuron_request::{
         execute_manage_neuron, simulate_manage_neuron, ManageNeuronRequest,
     },
@@ -4688,7 +4689,7 @@ impl Governance {
                     update.payload.len(),
                 )
             } else if update.nns_function == NnsFunction::IcpXdrConversionRate as i32 {
-                match Decode!(&update.payload, UpdateIcpXdrConversionRatePayload) {
+                match Decode!([decoder_config()]; &update.payload, UpdateIcpXdrConversionRatePayload) {
                     Ok(payload) => {
                         if payload.xdr_permyriad_per_icp
                             < self.heap_data
@@ -4711,7 +4712,7 @@ impl Governance {
                     ),
                 }
             } else if update.nns_function == NnsFunction::AssignNoid as i32 {
-                match Decode!(&update.payload, AddNodeOperatorPayload) {
+                match Decode!([decoder_config()]; &update.payload, AddNodeOperatorPayload) {
                     Ok(payload) => match payload.node_provider_principal_id {
                         Some(id) => {
                             let is_registered = self
@@ -4735,7 +4736,7 @@ impl Governance {
                     ),
                 }
             } else if update.nns_function == NnsFunction::AddOrRemoveDataCenters as i32 {
-                match Decode!(&update.payload, AddOrRemoveDataCentersProposalPayload) {
+                match Decode!([decoder_config()]; &update.payload, AddOrRemoveDataCentersProposalPayload) {
                     Ok(payload) => match payload.validate() {
                         Ok(_) => {
                             return Ok(());

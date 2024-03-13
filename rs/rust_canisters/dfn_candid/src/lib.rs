@@ -1,14 +1,25 @@
 use candid::de::IDLDeserialize;
-use candid::CandidType;
 pub use candid::{
-    decode_args, encode_args, encode_one,
+    decode_args_with_config, encode_args, encode_one,
     utils::{ArgumentDecoder, ArgumentEncoder},
 };
+use candid::{CandidType, DecoderConfig};
 use on_wire::witness;
 use on_wire::{FromWire, IntoWire, NewType};
 use serde::de::DeserializeOwned;
 
 pub struct Candid<T>(pub T);
+
+/// Limit the amount of work for skipping unneeded data on the wire when parsing Candid.
+/// The value of 10_000 follows the Candid recommendation.
+const DEFAULT_SKIPPING_QUOTA: usize = 10_000;
+
+fn decoder_config() -> DecoderConfig {
+    let mut config = DecoderConfig::new();
+    config.set_skipping_quota(DEFAULT_SKIPPING_QUOTA);
+    config.set_full_error_message(false);
+    config
+}
 
 impl<T> NewType for Candid<T> {
     type Inner = T;
@@ -28,7 +39,7 @@ impl<Tuple: ArgumentEncoder> IntoWire for Candid<Tuple> {
 
 impl<Tuple: for<'a> ArgumentDecoder<'a>> FromWire for Candid<Tuple> {
     fn from_bytes(bytes: Vec<u8>) -> Result<Self, String> {
-        let res = decode_args(&bytes).map_err(|e| e.to_string())?;
+        let res = decode_args_with_config(&bytes, &decoder_config()).map_err(|e| e.to_string())?;
         Ok(Candid(res))
     }
 }
@@ -53,7 +64,8 @@ impl<T: CandidType> IntoWire for CandidOne<T> {
 
 impl<A1: DeserializeOwned + CandidType> FromWire for CandidOne<A1> {
     fn from_bytes(bytes: Vec<u8>) -> Result<Self, String> {
-        let mut de = IDLDeserialize::new(&bytes[..]).map_err(|e| e.to_string())?;
+        let mut de = IDLDeserialize::new_with_config(&bytes[..], &decoder_config())
+            .map_err(|e| e.to_string())?;
         let res = de.get_value().map_err(|e| e.to_string())?;
         Ok(CandidOne(res))
     }
