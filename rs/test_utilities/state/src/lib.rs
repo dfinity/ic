@@ -44,6 +44,9 @@ use std::{
     sync::Arc,
 };
 
+mod history;
+pub use history::MockIngressHistory;
+
 const WASM_PAGE_SIZE_BYTES: usize = 65536;
 const DEFAULT_FREEZE_THRESHOLD: NumSeconds = NumSeconds::new(1 << 30);
 const INITIAL_CYCLES: Cycles = Cycles::new(5_000_000_000_000);

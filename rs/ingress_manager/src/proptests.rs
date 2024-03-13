@@ -21,7 +21,7 @@ use ic_interfaces::{
     p2p::consensus::{MutablePool, UnvalidatedArtifact, ValidatedPoolReader},
     time_source::TimeSource,
 };
-use ic_test_utilities::state::{CanisterStateBuilder, ReplicatedStateBuilder};
+use ic_test_utilities_state::{CanisterStateBuilder, ReplicatedStateBuilder};
 use ic_test_utilities_time::FastForwardTimeSource;
 use ic_test_utilities_types::{
     ids::{canister_test_id, node_test_id},

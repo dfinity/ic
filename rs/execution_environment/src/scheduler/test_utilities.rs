@@ -40,8 +40,8 @@ use ic_system_api::{
     sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateChanges},
     ApiType, ExecutionParameters,
 };
-use ic_test_utilities::state::CanisterStateBuilder;
 use ic_test_utilities_execution_environment::{generate_subnets, test_registry_settings};
+use ic_test_utilities_state::CanisterStateBuilder;
 use ic_test_utilities_types::{
     ids::{canister_test_id, subnet_test_id, user_test_id},
     messages::{RequestBuilder, SignedIngressBuilder},

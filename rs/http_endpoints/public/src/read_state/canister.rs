@@ -416,7 +416,7 @@ mod test {
     use ic_replicated_state::{
         canister_snapshots::CanisterSnapshots, CanisterQueues, ReplicatedState, SystemMetadata,
     };
-    use ic_test_utilities::state::insert_dummy_canister;
+    use ic_test_utilities_state::insert_dummy_canister;
     use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
     use ic_types::{batch::RawQueryStats, time::UNIX_EPOCH};
     use ic_validator::CanisterIdSet;

@@ -1,7 +1,7 @@
 use ic_base_types::CanisterId;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{CanisterState, InputQueueType, StateError};
-use ic_test_utilities::state::{
+use ic_test_utilities_state::{
     get_running_canister, get_stopped_canister, get_stopping_canister, register_callback,
 };
 use ic_test_utilities_types::{

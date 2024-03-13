@@ -294,7 +294,7 @@ fn multiple_share_same_source_test() {
 fn timeout_priority() {
     // the time used for the validation context.
     let context_time = UNIX_EPOCH + CANISTER_HTTP_TIMEOUT_INTERVAL + Duration::from_secs(1);
-    let mut init_state = ic_test_utilities::state::get_initial_state(0, 0);
+    let mut init_state = ic_test_utilities_state::get_initial_state(0, 0);
 
     let response_count = 10;
     let timeout_count = 100;

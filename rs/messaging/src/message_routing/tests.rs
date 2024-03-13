@@ -19,11 +19,11 @@ use ic_registry_local_store::{compact_delta_to_changelog, LocalStoreImpl, LocalS
 use ic_registry_proto_data_provider::{ProtoRegistryDataProvider, ProtoRegistryDataProviderError};
 use ic_registry_routing_table::{routing_table_insert_subnet, CanisterMigrations, RoutingTable};
 use ic_registry_subnet_features::EcdsaConfig;
-use ic_test_utilities::state::CanisterStateBuilder;
 use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{fetch_int_counter_vec, metric_vec};
 use ic_test_utilities_registry::SubnetRecordBuilder;
+use ic_test_utilities_state::CanisterStateBuilder;
 use ic_test_utilities_types::{
     batch::BatchBuilder,
     ids::{canister_test_id, node_test_id, subnet_test_id},

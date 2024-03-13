@@ -13,7 +13,7 @@ use ic_metrics::MetricsRegistry;
 use ic_test_utilities::{
     crypto::CryptoReturningOk, ingress_selector::FakeIngressSelector,
     message_routing::FakeMessageRouting,
-    self_validating_payload_builder::FakeSelfValidatingPayloadBuilder, state::get_initial_state,
+    self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
     xnet_payload_builder::FakeXNetPayloadBuilder,
 };
 use ic_test_utilities_consensus::batch::MockBatchPayloadBuilder;
@@ -21,6 +21,7 @@ use ic_test_utilities_consensus::{make_genesis, EcdsaStatsNoOp};
 use ic_test_utilities_registry::{
     setup_registry, FakeLocalStoreCertifiedTimeReader, SubnetRecordBuilder,
 };
+use ic_test_utilities_state::get_initial_state;
 use ic_test_utilities_time::FastForwardTimeSource;
 use ic_test_utilities_types::{
     ids::{node_test_id, subnet_test_id},

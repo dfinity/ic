@@ -14,12 +14,12 @@ use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::metadata_state::Stream;
 use ic_state_manager::StateManagerImpl;
-use ic_test_utilities::state::{arb_stream_slice, arb_stream_with_config};
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
     fetch_histogram_stats, fetch_histogram_vec_count, metric_vec, HistogramStats, MetricVec,
 };
 use ic_test_utilities_registry::SubnetRecordBuilder;
+use ic_test_utilities_state::{arb_stream_slice, arb_stream_with_config};
 use ic_test_utilities_types::ids::{
     NODE_1, NODE_2, NODE_3, NODE_4, NODE_42, NODE_5, SUBNET_1, SUBNET_2, SUBNET_3, SUBNET_4,
     SUBNET_5,

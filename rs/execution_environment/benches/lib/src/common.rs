@@ -23,8 +23,8 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::page_map::TestPageAllocatorFileDescriptorImpl;
 use ic_replicated_state::{CallOrigin, CanisterState, NetworkTopology, ReplicatedState};
 use ic_system_api::{ExecutionParameters, InstructionLimits};
-use ic_test_utilities::state::canister_from_exec_state;
 use ic_test_utilities_execution_environment::generate_network_topology;
+use ic_test_utilities_state::canister_from_exec_state;
 use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
 use ic_test_utilities_types::messages::IngressBuilder;
 use ic_types::{

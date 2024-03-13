@@ -581,8 +581,8 @@ mod tests {
     use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
     use ic_management_canister_types::EcdsaKeyId;
     use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithEcdsaContext;
-    use ic_test_utilities::state::ReplicatedStateBuilder;
     use ic_test_utilities_registry::SubnetRecordBuilder;
+    use ic_test_utilities_state::ReplicatedStateBuilder;
     use ic_test_utilities_types::{
         ids::{node_test_id, subnet_test_id},
         messages::RequestBuilder,
