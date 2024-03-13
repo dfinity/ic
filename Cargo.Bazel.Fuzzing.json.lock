@@ -1,5 +1,5 @@
 {
-  "checksum": "a51123779587bb60685aec4a8450b447c937479dc03d75874f00a63bf64146ae",
+  "checksum": "36c840df4fbbfbbeff2ef46a46b1ec5a42cfaa6a8ac87814251b71137f0754c4",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -12665,77 +12665,13 @@
       },
       "license": "Unlicense/MIT"
     },
-    "curve25519-dalek 3.2.0": {
+    "curve25519-dalek 4.1.1": {
       "name": "curve25519-dalek",
-      "version": "3.2.0",
+      "version": "4.1.1",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/curve25519-dalek/3.2.0/download",
-          "sha256": "0b9fdf9972b2bd6af2d913799d9ebc165ea4d2e65878e329d9c6b372c4491b61"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "curve25519_dalek",
-            "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        }
-      ],
-      "library_target_name": "curve25519_dalek",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "alloc",
-            "default",
-            "std",
-            "u64_backend"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "byteorder 1.5.0",
-              "target": "byteorder"
-            },
-            {
-              "id": "digest 0.9.0",
-              "target": "digest"
-            },
-            {
-              "id": "rand_core 0.5.1",
-              "target": "rand_core"
-            },
-            {
-              "id": "subtle 2.5.0",
-              "target": "subtle"
-            },
-            {
-              "id": "zeroize 1.7.0",
-              "target": "zeroize"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2015",
-        "version": "3.2.0"
-      },
-      "license": "BSD-3-Clause"
-    },
-    "curve25519-dalek 4.1.2": {
-      "name": "curve25519-dalek",
-      "version": "4.1.2",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/curve25519-dalek/4.1.2/download",
-          "sha256": "0a677b8922c94e01bdbb12126b0bc852f00447528dee1782229af9c720c3f348"
+          "url": "https://static.crates.io/crates/curve25519-dalek/4.1.1/download",
+          "sha256": "e89b8c6a2e4b1f45971ad09761aafb85514a84744b67a95e32c3cc1352d1f65c"
         }
       },
       "targets": [
@@ -12766,6 +12702,7 @@
         "crate_features": {
           "common": [
             "alloc",
+            "default",
             "digest",
             "precomputed-tables",
             "zeroize"
@@ -12779,7 +12716,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "curve25519-dalek 4.1.2",
+              "id": "curve25519-dalek 4.1.1",
               "target": "build_script_build"
             },
             {
@@ -12822,7 +12759,7 @@
             ]
           }
         },
-        "version": "4.1.2"
+        "version": "4.1.1"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -14686,7 +14623,7 @@
               "target": "csv"
             },
             {
-              "id": "curve25519-dalek 3.2.0",
+              "id": "curve25519-dalek 4.1.1",
               "target": "curve25519_dalek"
             },
             {
@@ -16654,7 +16591,7 @@
         "deps": {
           "common": [
             {
-              "id": "curve25519-dalek 4.1.2",
+              "id": "curve25519-dalek 4.1.1",
               "target": "curve25519_dalek"
             },
             {

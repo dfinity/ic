@@ -2717,22 +2717,9 @@ dependencies = [
 
 [[package]]
 name = "curve25519-dalek"
-version = "3.2.0"
+version = "4.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b9fdf9972b2bd6af2d913799d9ebc165ea4d2e65878e329d9c6b372c4491b61"
-dependencies = [
- "byteorder",
- "digest 0.9.0",
- "rand_core 0.5.1",
- "subtle",
- "zeroize",
-]
-
-[[package]]
-name = "curve25519-dalek"
-version = "4.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0a677b8922c94e01bdbb12126b0bc852f00447528dee1782229af9c720c3f348"
+checksum = "e89b8c6a2e4b1f45971ad09761aafb85514a84744b67a95e32c3cc1352d1f65c"
 dependencies = [
  "cfg-if 1.0.0",
  "cpufeatures",
@@ -3455,7 +3442,7 @@ version = "2.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4a3daa8e81a3963a60642bcc1f90a670680bd4a77535faa384e9d1c79d620871"
 dependencies = [
- "curve25519-dalek 4.1.2",
+ "curve25519-dalek",
  "ed25519",
  "merlin",
  "rand_core 0.6.4",
@@ -6346,7 +6333,7 @@ dependencies = [
 name = "ic-crypto-ed25519"
 version = "0.9.0"
 dependencies = [
- "curve25519-dalek 3.2.0",
+ "curve25519-dalek",
  "ed25519-dalek",
  "hex",
  "hex-literal",
@@ -6478,7 +6465,7 @@ version = "0.9.0"
 dependencies = [
  "assert_matches",
  "base64 0.13.1",
- "curve25519-dalek 3.2.0",
+ "curve25519-dalek",
  "ed25519-consensus",
  "hex",
  "ic-crypto-internal-basic-sig-der-utils",
@@ -6943,7 +6930,7 @@ name = "ic-crypto-node-key-validation"
 version = "0.9.0"
 dependencies = [
  "assert_matches",
- "curve25519-dalek 3.2.0",
+ "curve25519-dalek",
  "hex",
  "ic-base-types",
  "ic-crypto-internal-basic-sig-ed25519",
@@ -7274,7 +7261,7 @@ name = "ic-crypto-tls-cert-validation"
 version = "0.9.0"
 dependencies = [
  "assert_matches",
- "curve25519-dalek 3.2.0",
+ "curve25519-dalek",
  "hex",
  "ic-crypto-internal-basic-sig-ed25519",
  "ic-crypto-test-utils-keys",

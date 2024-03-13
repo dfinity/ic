@@ -352,7 +352,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.1",
             ),
             "curve25519-dalek": crate.spec(
-                version = "^3.0.2",
+                version = "=4.1.1",
             ),
             "cvt": crate.spec(
                 version = "^0.1.1",

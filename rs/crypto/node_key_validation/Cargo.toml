@@ -25,7 +25,7 @@ serde = { workspace = true }
 
 [dev-dependencies]
 assert_matches = "1.5.0"
-curve25519-dalek = "3.0.2"
+curve25519-dalek = { workspace = true }
 ic-crypto-test-utils-keys = { path = "../test_utils/keys" }
 ic-crypto-utils-basic-sig = { path = "../utils/basic_sig" }
 ic-test-utilities = { path = "../../test_utilities" }
