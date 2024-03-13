@@ -1,5 +1,5 @@
 {
-  "checksum": "36c840df4fbbfbbeff2ef46a46b1ec5a42cfaa6a8ac87814251b71137f0754c4",
+  "checksum": "7949b94ed62c06d13052cb27c065887c4b4bb0c81052a4efcf179b64e3a5deb8",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -15527,6 +15527,14 @@
             {
               "id": "tracing-appender 0.2.3",
               "target": "tracing_appender"
+            },
+            {
+              "id": "tracing-core 0.1.32",
+              "target": "tracing_core"
+            },
+            {
+              "id": "tracing-serde 0.1.3",
+              "target": "tracing_serde"
             },
             {
               "id": "tracing-slog 0.2.0",

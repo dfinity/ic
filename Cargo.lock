@@ -5346,6 +5346,8 @@ dependencies = [
  "tower-http 0.4.4",
  "tower_governor",
  "tracing",
+ "tracing-core",
+ "tracing-serde",
  "tracing-slog",
  "tracing-subscriber",
  "url",

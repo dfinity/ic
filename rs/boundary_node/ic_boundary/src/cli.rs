@@ -194,6 +194,12 @@ pub struct MonitoringConfig {
     /// Log only failed (non-2xx status code or other problems) requests
     #[clap(long)]
     pub log_failed_requests_only: bool,
+    /// Enables logging to stdout
+    #[clap(long)]
+    pub log_stdout: bool,
+    /// Enables logging to Journald
+    #[clap(long)]
+    pub log_journald: bool,
     /// Path to a GeoIP country database file
     #[clap(long)]
     pub geoip_db: Option<PathBuf>,

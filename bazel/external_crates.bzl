@@ -1288,6 +1288,12 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "tracing-appender": crate.spec(
                 version = "^0.2.3",
             ),
+            "tracing-core": crate.spec(
+                version = "^0.1.32",
+            ),
+            "tracing-serde": crate.spec(
+                version = "^0.1.3",
+            ),
             "tracing-slog": crate.spec(
                 version = "^0.2",
             ),
