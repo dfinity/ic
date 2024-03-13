@@ -1,11 +1,12 @@
 use assert_matches::assert_matches;
 use candid::{Encode, Principal};
-use ic_base_types::PrincipalId;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_canisters_http_types::HttpRequest;
 use ic_icrc1_ledger::FeatureFlags as LedgerFeatureFlags;
 use ic_ledger_suite_orchestrator::candid::{
     AddErc20Arg, LedgerInitArg, OrchestratorArg, UpgradeArg,
 };
+use ic_ledger_suite_orchestrator::scheduler::TEN_TRILLIONS;
 use ic_ledger_suite_orchestrator_test_utils::arbitrary::arb_init_arg;
 use ic_ledger_suite_orchestrator_test_utils::{
     new_state_machine, supported_erc20_tokens, usdc, usdc_erc20_contract, LedgerSuiteOrchestrator,
@@ -140,6 +141,51 @@ fn should_reject_adding_an_already_managed_erc20_token() {
         orchestrator.upgrade_ledger_suite_orchestrator(&OrchestratorArg::AddErc20Arg(usdc));
 
     assert_matches!(result, Err(e) if e.code() == ErrorCode::CanisterCalledTrap && e.description().contains("Erc20ContractAlreadyManaged"));
+}
+
+#[test]
+fn should_top_up_spawned_canisters() {
+    let orchestrator = LedgerSuiteOrchestrator::default();
+    let embedded_ledger_wasm_hash = orchestrator.embedded_ledger_wasm_hash.clone();
+    let embedded_index_wasm_hash = orchestrator.embedded_index_wasm_hash.clone();
+    let usdc = usdc(embedded_ledger_wasm_hash, embedded_index_wasm_hash);
+    let orchestrator = orchestrator
+        .add_erc20_token(usdc.clone())
+        .expect_new_ledger_and_index_canisters()
+        .setup;
+
+    let canisters = orchestrator
+        .call_orchestrator_canister_ids(&usdc_erc20_contract())
+        .unwrap();
+
+    let ledger_canister_id =
+        CanisterId::unchecked_from_principal(PrincipalId::from(canisters.ledger.unwrap()));
+
+    let index_canister_id =
+        CanisterId::unchecked_from_principal(PrincipalId::from(canisters.index.unwrap()));
+
+    let pre_top_up_balance_ledger = orchestrator.canister_status_of(ledger_canister_id).cycles();
+    let pre_top_up_balance_index = orchestrator.canister_status_of(index_canister_id).cycles();
+
+    orchestrator
+        .env
+        .advance_time(std::time::Duration::from_secs(60 * 60));
+    orchestrator.env.tick();
+    orchestrator.env.tick();
+    orchestrator.env.tick();
+    orchestrator.env.tick();
+
+    let post_top_up_balance_ledger = orchestrator.canister_status_of(ledger_canister_id).cycles();
+    let post_top_up_balance_index = orchestrator.canister_status_of(index_canister_id).cycles();
+
+    assert_eq!(
+        post_top_up_balance_index - pre_top_up_balance_index,
+        TEN_TRILLIONS as u128
+    );
+    assert_eq!(
+        post_top_up_balance_ledger - pre_top_up_balance_ledger,
+        TEN_TRILLIONS as u128
+    );
 }
 
 #[test]

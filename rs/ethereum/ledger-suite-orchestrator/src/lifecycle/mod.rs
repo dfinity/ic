@@ -20,7 +20,7 @@ pub fn init(init_arg: InitArg) {
     init_state(
         State::try_from(init_arg).expect("ERROR: failed to initialize ledger suite orchestrator"),
     );
-    setup_timers()
+    setup_tasks_and_timers()
 }
 
 pub fn post_upgrade(upgrade_arg: Option<UpgradeArg>) {
@@ -51,7 +51,7 @@ pub fn post_upgrade(upgrade_arg: Option<UpgradeArg>) {
         }
     }
     read_state(|s| s.validate_config().expect("ERROR: invalid state"));
-    setup_timers()
+    setup_tasks_and_timers()
 }
 
 pub fn add_erc20(token: AddErc20Arg) {
@@ -83,11 +83,13 @@ pub fn add_erc20(token: AddErc20Arg) {
         }
     }
     read_state(|s| s.validate_config().expect("ERROR: invalid state"));
-    setup_timers()
+    setup_tasks_and_timers()
 }
 
-pub fn setup_timers() {
-    ic_cdk_timers::set_timer_interval(Duration::from_secs(1), || ic_cdk::spawn(execute_tasks()));
+pub fn setup_tasks_and_timers() {
+    ic_cdk_timers::set_timer_interval(Duration::from_secs(60 * 60), || {
+        ic_cdk::spawn(execute_tasks())
+    });
 }
 
 async fn execute_tasks() {
@@ -97,6 +99,10 @@ async fn execute_tasks() {
     };
 
     let mut tasks = read_state(|s| s.tasks().clone());
+    if !tasks.contains(Task::MaybeTopUp) {
+        tasks.add_task(Task::MaybeTopUp);
+    }
+    assert!(tasks.contains(Task::MaybeTopUp));
     let _result = tasks.execute(&IC_CANISTER_RUNTIME).await;
     // TODO: just resettting the tasks is for sure wrong (tasks could have come in between)
     mutate_state(|s| s.set_tasks(tasks));
