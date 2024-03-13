@@ -15,6 +15,7 @@ use crate::{
     acme::{self, FinalizeError},
     certificate::{self, GetCert, GetCertError, Pair},
     check::Check,
+    decoder_config,
     dns::{self, Resolve},
     registration::{Id, Registration, State},
     TASK_DELAY_SEC, TASK_ERROR_DELAY_SEC,
@@ -152,7 +153,8 @@ impl Queue for CanisterQueuer {
             .await
             .context("failed to query canister")?;
 
-        let resp = Decode!(&resp, Response).context("failed to decode canister response")?;
+        let resp = Decode!([decoder_config()]; &resp, Response)
+            .context("failed to decode canister response")?;
 
         match resp {
             Response::Ok(()) => Ok(()),
@@ -182,7 +184,8 @@ impl Peek for CanisterPeeker {
             .await
             .context("failed to query canister")?;
 
-        let resp = Decode!(&resp, Response).context("failed to decode canister response")?;
+        let resp = Decode!([decoder_config()]; &resp, Response)
+            .context("failed to decode canister response")?;
 
         match resp {
             Response::Ok(id) => Ok(id),
@@ -213,7 +216,8 @@ impl Dispense for CanisterDispenser {
                 .await
                 .context("failed to query canister")?;
 
-            let resp = Decode!(&resp, Response).context("failed to decode canister response")?;
+            let resp = Decode!([decoder_config()]; &resp, Response)
+                .context("failed to decode canister response")?;
 
             match resp {
                 Response::Ok(id) => Ok(id),
@@ -238,7 +242,8 @@ impl Dispense for CanisterDispenser {
                 .await
                 .context("failed to query canister")?;
 
-            let resp = Decode!(&resp, Response).context("failed to decode canister response")?;
+            let resp = Decode!([decoder_config()]; &resp, Response)
+                .context("failed to decode canister response")?;
 
             match resp {
                 Response::Ok(reg) => Ok(reg.into()),
