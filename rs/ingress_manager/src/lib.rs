@@ -254,11 +254,11 @@ pub(crate) mod tests {
     use ic_test_utilities::{
         artifact_pool_config::with_test_pool_config,
         crypto::temp_crypto_component_with_fake_registry,
-        cycles_account_manager::CyclesAccountManagerBuilder, history::MockIngressHistory,
-        state::ReplicatedStateBuilder,
+        cycles_account_manager::CyclesAccountManagerBuilder,
     };
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::test_subnet_record;
+    use ic_test_utilities_state::{MockIngressHistory, ReplicatedStateBuilder};
     use ic_test_utilities_time::FastForwardTimeSource;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{ingress::IngressStatus, Height, RegistryVersion, SubnetId};

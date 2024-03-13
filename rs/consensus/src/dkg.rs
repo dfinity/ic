@@ -2259,7 +2259,7 @@ mod tests {
         times: Option<usize>,
         target: Option<NiDkgTargetId>,
     ) {
-        let mut state = ic_test_utilities::state::get_initial_state(0, 0);
+        let mut state = ic_test_utilities_state::get_initial_state(0, 0);
 
         // Add the context into state_manager.
         let nodes_in_target_subnet = node_ids.into_iter().map(node_test_id).collect();

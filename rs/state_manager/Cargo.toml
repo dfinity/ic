@@ -66,6 +66,7 @@ ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-consensus = { path = "../test_utilities/consensus" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }
 ic-test-utilities-metrics = { path = "../test_utilities/metrics" }
+ic-test-utilities-state = { path = "../test_utilities/state" }
 ic-test-utilities-time = { path = "../test_utilities/time" }
 ic-test-utilities-tmpdir = { path = "../test_utilities/tmpdir" }
 ic-test-utilities-types = { path = "../test_utilities/types" }

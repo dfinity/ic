@@ -17,12 +17,12 @@ use ic_replicated_state::{
     testing::ReplicatedStateTesting,
     CanisterState, ReplicatedState, Stream,
 };
-use ic_test_utilities::state::{new_canister_state, register_callback};
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
     fetch_histogram_stats, fetch_histogram_vec_count, fetch_int_counter, fetch_int_counter_vec,
     fetch_int_gauge_vec, metric_vec, nonzero_values, HistogramStats, MetricVec,
 };
+use ic_test_utilities_state::{new_canister_state, register_callback};
 use ic_test_utilities_types::ids::{user_test_id, SUBNET_12, SUBNET_23, SUBNET_27};
 use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
 use ic_test_utilities_types::xnet::{StreamHeaderBuilder, StreamSliceBuilder};

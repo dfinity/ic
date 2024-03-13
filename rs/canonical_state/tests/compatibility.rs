@@ -15,7 +15,7 @@ use ic_canonical_state::{
 };
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_replicated_state::{metadata_state::SubnetMetrics, SystemMetadata};
-use ic_test_utilities::state::{arb_stream_header, arb_subnet_metrics};
+use ic_test_utilities_state::{arb_stream_header, arb_subnet_metrics};
 use ic_test_utilities_types::arbitrary;
 use ic_types::{
     crypto::CryptoHash, messages::RequestOrResponse, xnet::StreamHeader, CryptoHashOfPartialState,

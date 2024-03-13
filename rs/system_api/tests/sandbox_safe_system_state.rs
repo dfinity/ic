@@ -13,9 +13,8 @@ use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_replicated_state::testing::SystemStateTesting;
 use ic_replicated_state::{NetworkTopology, SystemState};
 use ic_system_api::sandbox_safe_system_state::SandboxSafeSystemState;
-use ic_test_utilities::{
-    cycles_account_manager::CyclesAccountManagerBuilder, state::SystemStateBuilder,
-};
+use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
+use ic_test_utilities_state::SystemStateBuilder;
 use ic_test_utilities_types::{
     ids::{canister_test_id, subnet_test_id, user_test_id},
     messages::{RequestBuilder, ResponseBuilder},

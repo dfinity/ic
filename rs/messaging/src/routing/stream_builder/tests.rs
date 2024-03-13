@@ -9,12 +9,12 @@ use ic_replicated_state::{
     testing::{CanisterQueuesTesting, ReplicatedStateTesting, SystemStateTesting},
     CanisterState, InputQueueType, ReplicatedState, Stream,
 };
-use ic_test_utilities::state::{new_canister_state, register_callback};
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
     fetch_histogram_stats, fetch_int_counter_vec, fetch_int_gauge_vec, metric_vec, nonzero_values,
     MetricVec,
 };
+use ic_test_utilities_state::{new_canister_state, register_callback};
 use ic_test_utilities_types::{
     ids::{canister_test_id, user_test_id, SUBNET_27, SUBNET_42},
     messages::RequestBuilder,

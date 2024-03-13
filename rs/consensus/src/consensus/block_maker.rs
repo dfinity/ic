@@ -772,7 +772,7 @@ mod tests {
                 .expect_get_state_at()
                 .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
                     Height::new(0),
-                    Arc::new(ic_test_utilities::state::get_initial_state(0, 0)),
+                    Arc::new(ic_test_utilities_state::get_initial_state(0, 0)),
                 )));
 
             let mut payload_builder = MockPayloadBuilder::new();

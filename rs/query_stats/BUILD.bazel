@@ -18,6 +18,7 @@ DEPENDENCIES = [
 DEV_DEPENDENCIES = [
     "//rs/interfaces/state_manager/mocks",
     "//rs/test_utilities",
+    "//rs/test_utilities/state",
     "//rs/test_utilities/time",
     "//rs/types/types_test_utils",
 ]

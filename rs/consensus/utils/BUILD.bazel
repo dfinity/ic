@@ -24,6 +24,7 @@ DEV_DEPENDENCIES = [
     "//rs/consensus/mocks",
     "//rs/test_utilities",
     "//rs/test_utilities/registry",
+    "//rs/test_utilities/state",
     "//rs/test_utilities/time",
     "//rs/test_utilities/types",
     "//rs/types/management_canister_types",

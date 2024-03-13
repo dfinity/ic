@@ -40,10 +40,11 @@ use ic_test_utilities::{
     crypto::temp_crypto_component_with_fake_registry,
     cycles_account_manager::CyclesAccountManagerBuilder,
     self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
-    state::ReplicatedStateBuilder, xnet_payload_builder::FakeXNetPayloadBuilder,
+    xnet_payload_builder::FakeXNetPayloadBuilder,
 };
 use ic_test_utilities_consensus::{batch::MockBatchPayloadBuilder, fake::*, make_genesis};
 use ic_test_utilities_registry::{setup_registry, SubnetRecordBuilder};
+use ic_test_utilities_state::ReplicatedStateBuilder;
 use ic_test_utilities_time::FastForwardTimeSource;
 use ic_test_utilities_types::{
     ids::{canister_test_id, node_test_id, subnet_test_id},

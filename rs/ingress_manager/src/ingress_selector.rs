@@ -648,10 +648,9 @@ mod tests {
     };
     use ic_management_canister_types::{CanisterIdRecord, Payload, IC_00};
     use ic_replicated_state::CanisterState;
-    use ic_test_utilities::{
-        cycles_account_manager::CyclesAccountManagerBuilder,
-        history::MockIngressHistory,
-        state::{CanisterStateBuilder, ReplicatedStateBuilder},
+    use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
+    use ic_test_utilities_state::{
+        CanisterStateBuilder, MockIngressHistory, ReplicatedStateBuilder,
     };
     use ic_test_utilities_time::FastForwardTimeSource;
     use ic_test_utilities_types::{
