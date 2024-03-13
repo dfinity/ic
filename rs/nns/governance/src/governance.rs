@@ -2616,6 +2616,19 @@ impl Governance {
         caller: &PrincipalId,
         merge: &manage_neuron::Merge,
     ) -> Result<ManageNeuronResponse, GovernanceError> {
+        if crate::should_use_new_merge_neurons_flow() {
+            self.merge_neurons_new(id, caller, merge).await
+        } else {
+            self.merge_neurons_old(id, caller, merge).await
+        }
+    }
+
+    async fn merge_neurons_old(
+        &mut self,
+        id: &NeuronId,
+        caller: &PrincipalId,
+        merge: &manage_neuron::Merge,
+    ) -> Result<ManageNeuronResponse, GovernanceError> {
         let source_neuron_id = merge.source_neuron_id.as_ref().ok_or_else(|| {
             GovernanceError::new_with_message(
                 ErrorType::InvalidCommand,
@@ -2638,6 +2651,15 @@ impl Governance {
         execute_manage_neuron(self, action).await
     }
 
+    async fn merge_neurons_new(
+        &mut self,
+        _id: &NeuronId,
+        _caller: &PrincipalId,
+        _merge: &manage_neuron::Merge,
+    ) -> Result<ManageNeuronResponse, GovernanceError> {
+        todo!()
+    }
+
     pub async fn simulate_manage_neuron(
         &self,
         caller: &PrincipalId,
@@ -2648,24 +2670,52 @@ impl Governance {
             Err(e) => return ManageNeuronResponse::error(e),
         };
 
-        let action = match manage_neuron.command {
-            Some(Command::Merge(merge)) => ManageNeuronRequest::new(merge, id, *caller),
-            Some(_) => {
-                return ManageNeuronResponse::error(GovernanceError::new_with_message(
-                    ErrorType::InvalidCommand,
-                    "Simulating manage_neuron is not supported for this request type",
-                ));
-            }
-            None => {
-                return ManageNeuronResponse::error(GovernanceError::new_with_message(
-                    ErrorType::InvalidCommand,
-                    "No Command given in simulate_manage_neuron request",
-                ));
-            }
-        };
-        simulate_manage_neuron(self, action)
-            .await
-            .unwrap_or_else(ManageNeuronResponse::error)
+        match manage_neuron.command {
+            Some(Command::Merge(merge)) => self
+                .simulate_merge_neurons(&id, caller, merge)
+                .await
+                .unwrap_or_else(ManageNeuronResponse::error),
+            Some(_) => ManageNeuronResponse::error(GovernanceError::new_with_message(
+                ErrorType::InvalidCommand,
+                "Simulating manage_neuron is not supported for this request type",
+            )),
+            None => ManageNeuronResponse::error(GovernanceError::new_with_message(
+                ErrorType::InvalidCommand,
+                "No Command given in simulate_manage_neuron request",
+            )),
+        }
+    }
+
+    async fn simulate_merge_neurons(
+        &self,
+        id: &NeuronId,
+        caller: &PrincipalId,
+        merge: manage_neuron::Merge,
+    ) -> Result<ManageNeuronResponse, GovernanceError> {
+        if crate::should_use_new_merge_neurons_flow() {
+            self.simulate_merge_neurons_new(id, caller, merge)
+        } else {
+            self.simulate_merge_neurons_old(id, caller, merge).await
+        }
+    }
+
+    async fn simulate_merge_neurons_old(
+        &self,
+        id: &NeuronId,
+        caller: &PrincipalId,
+        merge: manage_neuron::Merge,
+    ) -> Result<ManageNeuronResponse, GovernanceError> {
+        let request = ManageNeuronRequest::new(merge, *id, *caller);
+        simulate_manage_neuron(self, request).await
+    }
+
+    fn simulate_merge_neurons_new(
+        &self,
+        _id: &NeuronId,
+        _caller: &PrincipalId,
+        _merge: manage_neuron::Merge,
+    ) -> Result<ManageNeuronResponse, GovernanceError> {
+        todo!()
     }
 
     /// Spawn an neuron from an existing neuron's maturity.
