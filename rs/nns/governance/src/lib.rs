@@ -691,3 +691,8 @@ pub fn encode_metrics(
 
     Ok(())
 }
+
+/// Whether we should switch to new merge neurons flow.
+fn should_use_new_merge_neurons_flow() -> bool {
+    false
+}
