@@ -5539,6 +5539,13 @@ fn can_upgrade_to_lsmt() {
     });
 }
 
+#[test]
+fn lsmt_shard_size_is_stable() {
+    // Changing shard after LSMT launch is dangerous as it would crash merging older sharded files.
+    // Change the config with care.
+    assert_eq!(lsmt_config_default().shard_num_pages, 10 * 1024 * 1024);
+}
+
 proptest! {
     // TODO(MR-549) Go back to using plain `arb_stream()` once the canonical state
     // encodes deadlines.
