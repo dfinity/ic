@@ -169,9 +169,11 @@ fn load_configuration_and_validate_or_exit(
 ) -> Proposal {
     // Read the file.
     let init_config_file = std::fs::read_to_string(configuration_file_path).unwrap_or_else(|err| {
+        let current_dir = std::env::current_dir().expect("cannot read env::current_dir");
         eprintln!(
-            "Unable to read the SNS configuration file ({:?}):\n{}",
-            configuration_file_path, err,
+            "Unable to read the SNS configuration file {:?}:\n{}",
+            current_dir.join(configuration_file_path),
+            err,
         );
         std::process::exit(1);
     });
