@@ -4,7 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "//rs/ic_os/vsock/vsock_lib:vsock_lib",
-    "@crate_index//:clap",
+    "@crate_index//:clap_3_2_25",
 ]
 
 MACRO_DEPENDENCIES = []

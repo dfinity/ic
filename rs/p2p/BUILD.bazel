@@ -49,8 +49,10 @@ DEV_DEPENDENCIES = [
     "//rs/registry/nns_data_provider",
     "//rs/replica/setup_ic_network",
     "//rs/test_utilities",
+    "//rs/test_utilities/consensus",
     "//rs/test_utilities/metrics",
     "//rs/test_utilities/registry",
+    "//rs/test_utilities/types",
     "@crate_index//:tempfile",
 ]
 

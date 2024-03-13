@@ -59,7 +59,7 @@ pub(crate) fn evict(
 mod tests {
     use std::time::{Duration, Instant};
 
-    use ic_test_utilities::types::ids::canister_test_id;
+    use ic_test_utilities_types::ids::canister_test_id;
 
     use super::{evict, EvictionCandidate};
 

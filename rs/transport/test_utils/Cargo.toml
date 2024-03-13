@@ -12,7 +12,6 @@ ic-base-types = { path = "../../types/base_types" }
 ic-config = { path = "../../config" }
 ic-crypto-temp-crypto = { path = "../../crypto/temp_crypto" }
 ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
-ic-icos-sev = { path = "../../ic_os/sev" }
 ic-interfaces-transport = { path = "../../interfaces/transport" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }

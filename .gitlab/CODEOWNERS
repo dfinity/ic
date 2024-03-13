@@ -142,6 +142,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/https_outcalls/                                     @dfinity-lab/teams/networking-team
 /rs/https_outcalls/consensus/                           @dfinity-lab/teams/consensus-owners
 /rs/ic_os/                                              @dfinity-lab/teams/node-team
+/rs/ic_os/fstrim_tool/                                  @dfinity-lab/teams/node-team @dfinity-lab/teams/crypto-owners
 /rs/ingress_manager/                                    @dfinity-lab/teams/consensus-owners
 /rs/interfaces/                                         @dfinity-lab/teams/interface-owners
 /rs/interfaces/adapter_client/                          @dfinity-lab/teams/networking-team
@@ -234,15 +235,14 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/state_tool/                                         @dfinity-lab/teams/message-routing-owners
 /rs/system_api/                                         @dfinity-lab/teams/execution-owners
 /rs/test_utilities/artifact_pool/                       @dfinity-lab/teams/consensus-owners
+/rs/test_utilities/consensus/                           @dfinity-lab/teams/consensus-owners
+/rs/test_utilities/embedders/                           @dfinity-lab/teams/runtime-owners
 /rs/test_utilities/execution_environment/               @dfinity-lab/teams/execution-owners @dfinity-lab/teams/runtime-owners
 /rs/test_utilities/in_memory_logger/                    @dfinity-lab/teams/crypto-owners
-/rs/test_utilities/src/consensus.rs                     @dfinity-lab/teams/consensus-owners
-/rs/test_utilities/src/consensus/                       @dfinity-lab/teams/consensus-owners
 /rs/test_utilities/src/crypto.rs                        @dfinity-lab/teams/crypto-owners
 /rs/test_utilities/src/crypto/                          @dfinity-lab/teams/crypto-owners
 /rs/test_utilities/src/cycles_account_manager.rs        @dfinity-lab/teams/execution-owners
-/rs/test_utilities/src/types/batch/                     @dfinity-lab/teams/consensus-owners
-/rs/test_utilities/src/wasmtime_instance.rs             @dfinity-lab/teams/runtime-owners
+/rs/test_utilities/types/src/batch/                     @dfinity-lab/teams/consensus-owners
 /rs/tests/                                              @dfinity-lab/teams/idx @dfinity-lab/teams/ic-testing-verification
 /rs/tests/boundary_nodes/                               @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/boundarynode-team @dfinity-lab/teams/idx
 /rs/tests/consensus/                                    @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/consensus-owners @dfinity-lab/teams/idx

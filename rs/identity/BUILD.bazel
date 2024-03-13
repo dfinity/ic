@@ -6,7 +6,7 @@ DEPENDENCIES = [
     "//rs/crypto/internal/crypto_lib/types",
     "//rs/crypto/utils/basic_sig",
     "@crate_index//:anyhow",
-    "@crate_index//:clap",
+    "@crate_index//:clap_3_2_25",
     "@crate_index//:ed25519-consensus",
     "@crate_index//:rand",
 ]

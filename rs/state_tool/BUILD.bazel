@@ -15,7 +15,7 @@ DEPENDENCIES = [
     "//rs/sys",
     "//rs/types/types",
     "//rs/utils",
-    "@crate_index//:clap",
+    "@crate_index//:clap_3_2_25",
     "@crate_index//:hex",
     "@crate_index//:prost",
     "@crate_index//:slog",

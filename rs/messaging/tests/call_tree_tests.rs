@@ -6,8 +6,8 @@ use ic_base_types::PrincipalId;
 use ic_registry_routing_table::{routing_table_insert_subnet, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, WasmResult};
-use ic_test_utilities::types::ids::subnet_test_id;
 use ic_test_utilities_metrics::fetch_histogram_stats;
+use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types::Cycles;
 use std::collections::VecDeque;
 

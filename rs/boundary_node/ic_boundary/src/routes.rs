@@ -36,7 +36,7 @@ use url::Url;
 
 use crate::{
     cache::CacheStatus,
-    core::MAX_REQUEST_BODY_SIZE,
+    core::{decoder_config, MAX_REQUEST_BODY_SIZE},
     http::{read_streaming_body, reqwest_error_infer, HttpClient},
     persist::{RouteSubnet, Routes},
     retry::RetryResult,
@@ -579,11 +579,12 @@ pub async fn preprocess_request(
     let (arg, http_request) = match (&content.method_name, content.arg) {
         (Some(method), Some(arg)) => {
             if request_type == RequestType::Query && method == METHOD_HTTP {
-                let mut req: HttpRequest = Decode!(&arg.0, HttpRequest).map_err(|err| {
-                    ErrorCause::UnableToParseHTTPArg(format!(
-                        "unable to decode arg as HttpRequest: {err}"
-                    ))
-                })?;
+                let mut req: HttpRequest = Decode!([decoder_config()]; &arg.0, HttpRequest)
+                    .map_err(|err| {
+                        ErrorCause::UnableToParseHTTPArg(format!(
+                            "unable to decode arg as HttpRequest: {err}"
+                        ))
+                    })?;
 
                 // Remove specific headers
                 req.headers

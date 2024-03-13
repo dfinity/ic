@@ -32,7 +32,7 @@ use ic_registry_keys::{
     make_subnet_record_key,
 };
 use ic_registry_transport::{insert, pb::v1::RegistryAtomicMutateRequest};
-use ic_test_utilities::types::ids::{node_test_id, user_test_id};
+use ic_test_utilities_types::ids::{node_test_id, user_test_id};
 use ic_types::crypto::KeyPurpose;
 use ic_types::NodeId;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;

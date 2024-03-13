@@ -25,17 +25,12 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::PausedExecutionId;
 use ic_replicated_state::testing::{CanisterQueuesTesting, SystemStateTesting};
 use ic_state_machine_tests::{PayloadBuilder, StateMachineBuilder};
-use ic_test_utilities::{
-    state::{get_running_canister, get_stopped_canister, get_stopping_canister},
-    types::{
-        ids::{canister_test_id, message_test_id, subnet_test_id},
-        messages::RequestBuilder,
-    },
-};
 use ic_test_utilities_metrics::{
     fetch_counter, fetch_gauge, fetch_gauge_vec, fetch_histogram_stats, fetch_int_gauge,
     fetch_int_gauge_vec, metric_vec, HistogramStats,
 };
+use ic_test_utilities_state::{get_running_canister, get_stopped_canister, get_stopping_canister};
+use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::{
     messages::{
         CallbackId, Payload, RejectContext, Response, StopCanisterCallId, MAX_RESPONSE_COUNT_BYTES,
@@ -45,7 +40,7 @@ use ic_types::{
     time::{expiry_time_from_now, UNIX_EPOCH},
     ComputeAllocation, Cycles, Height, NumBytes,
 };
-use ic_types_test_utils::ids::user_test_id;
+use ic_types_test_utils::ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use proptest::prelude::*;
 use std::collections::HashMap;

@@ -36,7 +36,7 @@ use std::{collections::BTreeMap, collections::HashMap, sync::Arc};
 ///
 /// Strong inclusion rule:
 ///       The quota is a hard limit, with the exception of a canister's *first* message.
-///                               
+///
 /// Weak inclusion rule:
 ///       The quota is a hard limit, with the exception of a canister's first *n*
 ///       messages, where n is the current round-robin iteration count.
@@ -648,16 +648,15 @@ mod tests {
     };
     use ic_management_canister_types::{CanisterIdRecord, Payload, IC_00};
     use ic_replicated_state::CanisterState;
-    use ic_test_utilities::{
-        cycles_account_manager::CyclesAccountManagerBuilder,
-        history::MockIngressHistory,
-        state::{CanisterStateBuilder, ReplicatedStateBuilder},
-        types::{
-            ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id},
-            messages::SignedIngressBuilder,
-        },
+    use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
+    use ic_test_utilities_state::{
+        CanisterStateBuilder, MockIngressHistory, ReplicatedStateBuilder,
     };
     use ic_test_utilities_time::FastForwardTimeSource;
+    use ic_test_utilities_types::{
+        ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id},
+        messages::SignedIngressBuilder,
+    };
     use ic_types::crypto::crypto_hash;
     use ic_types::{
         artifact::IngressMessageId,

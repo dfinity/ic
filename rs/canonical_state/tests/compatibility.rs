@@ -2,11 +2,11 @@ use ic_base_types::PrincipalId;
 use ic_canonical_state::{
     encoding::{
         old_types::{
-            RequestOrResponseV13, RequestOrResponseV3, StreamHeaderV16, StreamHeaderV6,
-            SystemMetadataV9,
+            RequestOrResponseV13, RequestOrResponseV17, RequestOrResponseV3, StreamHeaderV16,
+            StreamHeaderV6, SystemMetadataV9,
         },
         types::{
-            RequestOrResponse as RequestOrResponseV14, StreamHeader as StreamHeaderV17,
+            RequestOrResponse as RequestOrResponseV18, StreamHeader as StreamHeaderV17,
             SubnetMetrics as SubnetMetricsV15, SystemMetadata as SystemMetadataV10,
         },
         CborProxyDecoder, CborProxyEncoder,
@@ -15,10 +15,8 @@ use ic_canonical_state::{
 };
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_replicated_state::{metadata_state::SubnetMetrics, SystemMetadata};
-use ic_test_utilities::{
-    state::{arb_stream_header, arb_subnet_metrics},
-    types::arbitrary,
-};
+use ic_test_utilities_state::{arb_stream_header, arb_subnet_metrics};
+use ic_test_utilities_types::arbitrary;
 use ic_types::{
     crypto::CryptoHash, messages::RequestOrResponse, xnet::StreamHeader, CryptoHashOfPartialState,
 };
@@ -244,6 +242,11 @@ pub(crate) fn arb_valid_versioned_message(
             arbitrary::request_or_response_with_config(true, false),
             Just(CertificationVersion::V14..=MAX_SUPPORTED_CERTIFICATION_VERSION)
         ),
+        (
+            // Optionally populate `deadline` from version 18 on.
+            arbitrary::request_or_response_with_config(true, true),
+            Just(CertificationVersion::V18..=MAX_SUPPORTED_CERTIFICATION_VERSION)
+        ),
     ]
 }
 
@@ -267,10 +270,17 @@ lazy_static! {
         ),
         #[allow(clippy::redundant_closure)]
         VersionedEncoding::new(
+            CertificationVersion::V0..=CertificationVersion::V17,
+            "RequestOrResponseV17",
+            |v| RequestOrResponseV17::proxy_encode(v),
+            |v| RequestOrResponseV17::proxy_decode(v),
+        ),
+        #[allow(clippy::redundant_closure)]
+        VersionedEncoding::new(
             CertificationVersion::V0..=MAX_SUPPORTED_CERTIFICATION_VERSION,
             "RequestOrResponse",
-            |v| RequestOrResponseV14::proxy_encode(v),
-            |v| RequestOrResponseV14::proxy_decode(v),
+            |v| RequestOrResponseV18::proxy_encode(v),
+            |v| RequestOrResponseV18::proxy_decode(v),
         ),
     ];
 }

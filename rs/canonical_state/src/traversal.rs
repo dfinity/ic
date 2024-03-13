@@ -63,9 +63,9 @@ mod tests {
         testing::ReplicatedStateTesting,
         Memory,
     };
-    use ic_test_utilities::{
-        state::new_canister_state,
-        types::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id},
+    use ic_test_utilities_state::new_canister_state;
+    use ic_test_utilities_types::ids::{
+        canister_test_id, node_test_id, subnet_test_id, user_test_id,
     };
     use ic_types::{
         xnet::{StreamFlags, StreamHeader},
@@ -426,7 +426,7 @@ mod tests {
     fn test_traverse_ingress_history() {
         use crate::subtree_visitor::{Pattern, SubtreeVisitor};
         use ic_error_types::{ErrorCode, UserError};
-        use ic_test_utilities::types::ids::{message_test_id, subnet_test_id, user_test_id};
+        use ic_test_utilities_types::ids::{message_test_id, subnet_test_id, user_test_id};
         use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
         use ic_types::time::UNIX_EPOCH;
 

@@ -199,6 +199,13 @@ impl GovernanceCanisterInitPayloadBuilder {
         self
     }
 
+    /// Initializes the governance canister with the given network economics.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn with_network_economics(&mut self, network_economics: NetworkEconomics) -> &mut Self {
+        self.proto.economics = Some(network_economics);
+        self
+    }
+
     /// Adds all the neurons from the specified CSV file.
     ///
     /// This obviously can only work when compiled to x86 so the wasm

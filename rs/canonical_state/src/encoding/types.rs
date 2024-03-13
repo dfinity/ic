@@ -13,7 +13,7 @@
 use crate::CertificationVersion;
 use ic_error_types::TryFromError;
 use ic_protobuf::proxy::ProxyDecodeError;
-use ic_types::{messages::NO_DEADLINE, xnet::StreamIndex, Time};
+use ic_types::{messages::NO_DEADLINE, time::CoarseTime, xnet::StreamIndex, Time};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::VecDeque,
@@ -81,6 +81,8 @@ pub struct Request {
     pub cycles_payment: Option<Cycles>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<RequestMetadata>,
+    #[serde(skip_serializing_if = "is_zero", default)]
+    pub deadline: u32,
 }
 
 /// Canonical representation of `ic_types::messages::Response`.
@@ -96,6 +98,8 @@ pub struct Response {
     pub response_payload: Payload,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cycles_refund: Option<Cycles>,
+    #[serde(skip_serializing_if = "is_zero", default)]
+    pub deadline: u32,
 }
 
 /// Canonical representation of `ic_types::funds::Cycles`.
@@ -117,8 +121,11 @@ pub struct Funds {
     pub icp: u64,
 }
 
-pub fn is_zero(v: &u64) -> bool {
-    *v == 0
+pub fn is_zero<T>(v: &T) -> bool
+where
+    T: Into<u64> + Copy,
+{
+    (*v).into() == 0
 }
 
 /// Canonical representation of `ic_types::messages::Payload`.
@@ -324,6 +331,11 @@ impl From<(&ic_types::messages::Request, CertificationVersion)> for Request {
     fn from(
         (request, certification_version): (&ic_types::messages::Request, CertificationVersion),
     ) -> Self {
+        // Replicas with certification version < 18 should not apply request deadlines.
+        debug_assert!(
+            request.deadline == NO_DEADLINE || certification_version >= CertificationVersion::V18
+        );
+
         let funds = Funds {
             cycles: (&request.payment, certification_version).into(),
             icp: 0,
@@ -340,6 +352,7 @@ impl From<(&ic_types::messages::Request, CertificationVersion)> for Request {
             metadata: request.metadata.as_ref().and_then(|metadata| {
                 (certification_version >= CertificationVersion::V14).then_some(metadata.into())
             }),
+            deadline: request.deadline.as_secs_since_unix_epoch(),
         }
     }
 }
@@ -366,7 +379,7 @@ impl TryFrom<Request> for ic_types::messages::Request {
             method_name: request.method_name,
             method_payload: request.method_payload,
             metadata: request.metadata.map(From::from),
-            deadline: NO_DEADLINE,
+            deadline: CoarseTime::from_secs_since_unix_epoch(request.deadline),
         })
     }
 }
@@ -375,10 +388,16 @@ impl From<(&ic_types::messages::Response, CertificationVersion)> for Response {
     fn from(
         (response, certification_version): (&ic_types::messages::Response, CertificationVersion),
     ) -> Self {
+        // Replicas with certification version < 18 should not apply response deadlines.
+        debug_assert!(
+            response.deadline == NO_DEADLINE || certification_version >= CertificationVersion::V18
+        );
+
         let funds = Funds {
             cycles: (&response.refund, certification_version).into(),
             icp: 0,
         };
+
         Self {
             originator: response.originator.get().to_vec(),
             respondent: response.respondent.get().to_vec(),
@@ -386,6 +405,7 @@ impl From<(&ic_types::messages::Response, CertificationVersion)> for Response {
             refund: funds,
             response_payload: (&response.response_payload, certification_version).into(),
             cycles_refund: None,
+            deadline: response.deadline.as_secs_since_unix_epoch(),
         }
     }
 }
@@ -410,7 +430,7 @@ impl TryFrom<Response> for ic_types::messages::Response {
             originator_reply_callback: response.originator_reply_callback.into(),
             refund,
             response_payload: response.response_payload.try_into()?,
-            deadline: NO_DEADLINE,
+            deadline: CoarseTime::from_secs_since_unix_epoch(response.deadline),
         })
     }
 }

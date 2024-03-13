@@ -4598,7 +4598,7 @@ fn cycles_are_refunded_if_callee_is_uninstalled_during_a_self_call() {
 
     // The reject message from method #2 of B to method #1.
     let reject_message_b_2_to_1 = format!(
-        "IC0304: Attempt to execute a message on canister {} which contains no Wasm module",
+        "IC0537: Attempt to execute a message on canister {} which contains no Wasm module",
         b_id
     );
 

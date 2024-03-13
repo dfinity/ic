@@ -32,7 +32,7 @@ use ic_management_canister_types::{
     TransformFunc,
 };
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
-use ic_test_utilities::types::messages::RequestBuilder;
+use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::canister_http::{CanisterHttpRequestContext, MAX_CANISTER_HTTP_REQUEST_BYTES};
 use ic_types::time::UNIX_EPOCH;
 use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
@@ -339,7 +339,7 @@ pub fn test(env: TestEnv) {
                     },
                     cycles: 500_000_000_000,
                 },
-                |response| matches!(response, Err((RejectionCode::DestinationInvalid, _))),
+                |response| matches!(response, Err((RejectionCode::CanisterError, _))),
             )
             .await,
         );

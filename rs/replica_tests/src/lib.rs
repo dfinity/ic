@@ -8,7 +8,6 @@ use ic_execution_environment::IngressHistoryReaderImpl;
 use ic_interfaces::execution_environment::{
     IngressHistoryReader, QueryExecutionError, QueryExecutionService,
 };
-use ic_interfaces::time_source::SysTimeSource;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_management_canister_types::CanisterInstallMode;
@@ -28,11 +27,11 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replica::setup::setup_crypto_provider;
 use ic_replicated_state::{CanisterState, ReplicatedState};
 use ic_state_machine_tests::StateMachine;
-use ic_test_utilities::{
-    types::ids::node_test_id, types::ids::user_anonymous_id, types::messages::SignedIngressBuilder,
-    universal_canister::UNIVERSAL_CANISTER_WASM,
-};
+use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
 use ic_test_utilities_logger::with_test_replica_logger;
+use ic_test_utilities_types::{
+    ids::node_test_id, ids::user_anonymous_id, messages::SignedIngressBuilder,
+};
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
     artifact_kind::IngressArtifact,
@@ -285,7 +284,6 @@ where
         let rt = tokio::runtime::Runtime::new().unwrap();
         let _rt_guard = rt.enter();
 
-        let time_source = Arc::new(SysTimeSource::new());
         let metrics_registry = MetricsRegistry::new();
 
         let init_ic = ic_config.initialize().expect("can't fail");
@@ -335,7 +333,7 @@ where
             ..Default::default()
         };
         let temp_node = node_id;
-        let (state_manager, query_handler, _p2p_thread_joiner, ingress_tx, _) =
+        let (state_reader, query_handler, ingress_tx, _p2p_thread_joiner, _) =
             ic_replica::setup_ic_stack::construct_ic_stack(
                 &logger,
                 &metrics_registry,
@@ -349,12 +347,11 @@ where
                 registry.clone(),
                 crypto,
                 None,
-                time_source,
             )
             .expect("Failed to setup p2p");
 
         let ingress_history_reader =
-            IngressHistoryReaderImpl::new(Arc::clone(&state_manager) as Arc<_>);
+            IngressHistoryReaderImpl::new(Arc::clone(&state_reader) as Arc<_>);
 
         std::thread::sleep(std::time::Duration::from_millis(1000));
         // Before height 1 the replica hasn't figured out what
@@ -363,7 +360,7 @@ where
         // before height 1 and after height 1 or above.
         //
         // So, loop until we're at height 1 or above.
-        while state_manager.get_latest_state().height().get() < 1 {
+        while state_reader.get_latest_state().height().get() < 1 {
             // either this requires only few iterations, so
             // waiting a bit is not an issue. Or, it requires
             // a lot of iterations and then we don't want to
@@ -378,7 +375,7 @@ where
                 .block_on(async { TowerBuffer::new(query_handler, 1) }),
             ingress_sender: ingress_tx,
             ingress_history_reader: Arc::new(ingress_history_reader),
-            state_reader: state_manager,
+            state_reader,
             node_id,
             nonce: Mutex::new(0),
             ingress_time_limit: Duration::from_secs(300),

@@ -62,7 +62,7 @@ use ic_async_utils::start_tcp_listener;
 use ic_certification::validate_subnet_delegation_certificate;
 use ic_config::http_handler::Config;
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
-use ic_crypto_tls_interfaces::{TlsHandshake, TlsStream};
+use ic_crypto_tls_interfaces::{TlsConfig, TlsHandshake};
 use ic_crypto_tree_hash::{lookup_path, LabeledTree, Path};
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
 use ic_interfaces::{
@@ -109,6 +109,7 @@ use std::{
 };
 use strum::{Display, IntoStaticStr};
 use tempfile::NamedTempFile;
+use thiserror::Error;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpStream,
@@ -116,6 +117,7 @@ use tokio::{
     time::{sleep, timeout, Instant},
 };
 use tokio_io_timeout::TimeoutStream;
+use tokio_rustls::server::TlsStream;
 use tower::{
     limit::GlobalConcurrencyLimitLayer, service_fn, util::BoxCloneService, BoxError, Service,
     ServiceBuilder, ServiceExt,
@@ -124,6 +126,14 @@ use tower_http::limit::RequestBodyLimitLayer;
 
 const HTTP_DASHBOARD_URL_PATH: &str = "/_/dashboard";
 const CONTENT_TYPE_CBOR: &str = "application/cbor";
+
+/// [TLS Application-Layer Protocol Negotiation (ALPN) Protocol `HTTP/2 over TLS` ID][spec]
+/// [spec]: https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml#alpn-protocol-ids)
+const ALPN_HTTP2: &[u8; 2] = b"h2";
+
+/// [TLS Application-Layer Protocol Negotiation (ALPN) Protocol `HTTP/1.1` ID][spec]
+/// [spec]: https://www.iana.org/assignments/tls-extensiontype-values/tls-extensiontype-values.xhtml#alpn-protocol-ids)
+const ALPN_HTTP1_1: &[u8; 8] = b"http/1.1";
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct HttpError {
@@ -272,6 +282,7 @@ pub fn start_server(
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     query_signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
+    tls_config: Arc<dyn TlsConfig + Send + Sync>,
     tls_handshake: Arc<dyn TlsHandshake + Send + Sync>,
     ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
     node_id: NodeId,
@@ -432,7 +443,7 @@ pub fn start_server(
             config.clone(),
             main_service.clone(),
             tcp_stream,
-            tls_handshake.clone(),
+            tls_config.clone(),
             registry_client.clone(),
             metrics_cl.clone(),
         )
@@ -495,7 +506,7 @@ async fn handshake_and_serve_connection(
     config: Config,
     service: BoxCloneService<Request<Incoming>, Response<Body>, Infallible>,
     tcp_stream: TcpStream,
-    tls_handshake: Arc<dyn TlsHandshake + Send + Sync>,
+    tls_config: Arc<dyn TlsConfig + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
     metrics: HttpHandlerMetrics,
 ) -> Result<(), Infallible> {
@@ -505,7 +516,7 @@ async fn handshake_and_serve_connection(
         &log,
         config.connection_read_timeout_seconds,
         tcp_stream,
-        tls_handshake,
+        tls_config,
         registry_client,
     )
     .await;
@@ -574,17 +585,20 @@ async fn handshake_and_serve_connection(
 #[strum(serialize_all = "snake_case")]
 enum ConnType {
     #[strum(serialize = "secure")]
-    Secure(Box<dyn TlsStream>),
+    Secure(TlsStream<TcpStream>),
     #[strum(serialize = "insecure")]
     Insecure(TcpStream),
 }
 
-#[derive(IntoStaticStr, Debug)]
+#[derive(Error, Debug, IntoStaticStr)]
 #[strum(serialize_all = "snake_case")]
 pub(crate) enum ConnError {
-    #[strum(serialize = "tls_handshake")]
-    TlsHandshake,
+    #[strum(serialize = "tls_handshake_failed")]
+    #[error("TLS Handshake failed: {0}")]
+    TlsHandshakeFailed(std::io::Error),
+    #[error("IO error.")]
     Io,
+    #[error("Timeout while trying to connect.")]
     Timeout,
 }
 
@@ -592,9 +606,11 @@ async fn stream_after_handshake(
     log: &ReplicaLogger,
     connection_read_timeout_seconds: u64,
     tcp_stream: TcpStream,
-    tls_handshake: Arc<dyn TlsHandshake + Send + Sync>,
+    tls_config: Arc<dyn TlsConfig + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
 ) -> Result<ConnType, ConnError> {
+    use tokio_rustls::TlsAcceptor;
+
     let mut b = [0_u8; 1];
     match timeout(
         Duration::from_secs(connection_read_timeout_seconds),
@@ -605,19 +621,17 @@ async fn stream_after_handshake(
         // The peek operation was successful within the timeout.
         Ok(Ok(_)) => {
             if b[0] == 22 {
-                match tls_handshake
-                    .perform_tls_server_handshake_without_client_auth(
-                        tcp_stream,
-                        registry_client.get_latest_version(),
-                    )
+                let mut config = tls_config
+                    .server_config_without_client_auth(registry_client.get_latest_version())
+                    .unwrap();
+
+                config.alpn_protocols = vec![ALPN_HTTP2.to_vec(), ALPN_HTTP1_1.to_vec()];
+
+                TlsAcceptor::from(Arc::new(config))
+                    .accept(tcp_stream)
                     .await
-                {
-                    Err(err) => {
-                        warn!(log, "TLS handshaked failed with: {:?}", err);
-                        Err(ConnError::TlsHandshake)
-                    }
-                    Ok(tls_stream) => Ok(ConnType::Secure(tls_stream)),
-                }
+                    .map(ConnType::Secure)
+                    .map_err(ConnError::TlsHandshakeFailed)
             } else {
                 Ok(ConnType::Insecure(tcp_stream))
             }

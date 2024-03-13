@@ -1,7 +1,7 @@
-use crate::types::ids::subnet_test_id;
 use ic_config::subnet_config::{CyclesAccountManagerConfig, SubnetConfig};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_registry_subnet_type::SubnetType;
+use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types::{Cycles, NumInstructions, SubnetId};
 
 pub struct CyclesAccountManagerBuilder {

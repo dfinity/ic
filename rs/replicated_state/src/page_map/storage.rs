@@ -20,7 +20,7 @@ use bit_vec::BitVec;
 use ic_config::state_manager::LsmtConfig;
 use ic_sys::{PageBytes, PageIndex, PAGE_SIZE};
 use ic_types::Height;
-use itertools::Itertools;
+use itertools::{izip, Itertools};
 use phantom_newtype::{AmountOf, Id};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
@@ -316,9 +316,7 @@ impl OverlayFile {
             return Ok(());
         }
         let max_index = delta.max_page_index().unwrap().get();
-        // We actually need a division with rounding up, but we skip empty shards anyway so simple +1
-        // works.
-        let num_shards = 1 + max_index / lsmt_config.shard_num_pages;
+        let num_shards = num_shards(max_index + 1, lsmt_config);
         let mut page_data: Vec<Vec<&[u8]>> = vec![Vec::new(); num_shards as usize];
         let mut page_indices: Vec<Vec<PageIndex>> = vec![Vec::new(); num_shards as usize];
 
@@ -398,6 +396,7 @@ impl OverlayFile {
     }
 
     /// Number of pages in this overlay file containing data.
+    #[allow(dead_code)]
     fn num_pages(&self) -> usize {
         num_pages(&self.mapping)
     }
@@ -756,6 +755,8 @@ fn check_mapping_correctness(mapping: &Mapping, path: &Path) -> Result<(), Persi
 /// 50GiB only contains the last page, we would have only the shard number 7.
 pub struct ShardTag {}
 pub type Shard = AmountOf<ShardTag, u64>;
+pub type StorageResult<T> = Result<T, Box<dyn std::error::Error>>;
+
 /// Provide information from `StateLayout` about paths of a specific `PageMap`.
 pub trait StorageLayout {
     /// Base file path.
@@ -765,7 +766,7 @@ pub trait StorageLayout {
     fn overlay(&self, height: Height, shard: Shard) -> PathBuf;
 
     /// All existing overlay files.
-    fn existing_overlays(&self) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>>;
+    fn existing_overlays(&self) -> StorageResult<Vec<PathBuf>>;
 
     /// Get the height of an existing overlay path.
     fn overlay_height(&self, overlay: &Path) -> Result<Height, Box<dyn std::error::Error>>;
@@ -774,11 +775,63 @@ pub trait StorageLayout {
     fn overlay_shard(&self, overlay: &Path) -> Result<Shard, Box<dyn std::error::Error>>;
 }
 
+impl dyn StorageLayout + '_ {
+    pub fn storage_size(&self) -> StorageResult<u64> {
+        let mut result = 0;
+        for path in self.existing_files()? {
+            result += std::fs::metadata(&path)
+                .map_err(|err: _| PersistenceError::FileSystemError {
+                    path: path.display().to_string(),
+                    context: format!("Failed get existing file length: {}", path.display()),
+                    internal_error: err.to_string(),
+                })?
+                .len();
+        }
+        Ok(result)
+    }
+
+    fn existing_base(&self) -> Option<PathBuf> {
+        if self.base().exists() {
+            Some(self.base().to_path_buf())
+        } else {
+            None
+        }
+    }
+
+    // Base if any; then overlays old to new.
+    fn existing_files(&self) -> StorageResult<Vec<PathBuf>> {
+        Ok(self
+            .existing_base()
+            .into_iter()
+            .chain(self.existing_overlays()?)
+            .collect())
+    }
+
+    // Base if any; then relevant overlays old to new.
+    fn existing_files_with_shard(&self, shard: Shard) -> StorageResult<Vec<PathBuf>> {
+        let mut result: Vec<_> = self.existing_base().into_iter().collect();
+        for overlay in self.existing_overlays()?.into_iter() {
+            if self.overlay_shard(&overlay)? == shard {
+                result.push(overlay)
+            }
+        }
+        Ok(result)
+    }
+}
+
 /// Whether to merge into a base file or an overlay.
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum MergeDestination {
+    /// Serialize as a base file.
     BaseFile(PathBuf),
-    OverlayFile(PathBuf),
+    /// Serialize and split into shards of specified length. The `shard_paths` provide paths for each
+    /// possible shard from 0 to `num_shards(page_map_size, shard_num_pages)`.
+    MultiShardOverlay {
+        shard_paths: Vec<PathBuf>,
+        shard_num_pages: u64,
+    },
+    /// Serialize as a single overlay file.
+    SingleShardOverlay(PathBuf),
 }
 
 /// `MergeCandidate` shows which files to merge into a single `PageMap`.
@@ -792,10 +845,78 @@ pub struct MergeCandidate {
     /// `Overlay`.
     /// We merge all the data from `overlays` and `base` into it, and remove old files.
     dst: MergeDestination,
-    is_full: bool,
+    /// Range of pages covered by this MergeCandidate.
+    start_page: PageIndex,
+    end_page: PageIndex,
+
+    /// Number of overlays for this shard. Can be larger then `overlays.len() + base.len()` for a
+    /// parital merge.
+    num_files_before: u64,
+    /// Size of shards related to this merge on disk. For a partial merge larger than
+    /// `input_size_bytes`.
+    storage_size_bytes_before: u64,
+    /// Size of input files, i.e. size to read from disk during merge.
+    input_size_bytes: u64,
+}
+
+/// Number of shards to serialize `num_pages` worth of data.
+fn num_shards(num_pages: u64, lsmt_config: &LsmtConfig) -> u64 {
+    num_pages / lsmt_config.shard_num_pages
+        + if num_pages % lsmt_config.shard_num_pages == 0 {
+            0
+        } else {
+            1
+        }
 }
 
 impl MergeCandidate {
+    /// Size of page map covered by all the input files related to the shard; total size of
+    /// page_map for `split_to_shards`
+    pub fn page_map_size_bytes(&self) -> u64 {
+        (self.end_page.get() - self.start_page.get()) * PAGE_SIZE as u64
+    }
+
+    /// Size of all the input files related to the shard.
+    pub fn storage_size_bytes_before(&self) -> u64 {
+        self.storage_size_bytes_before
+    }
+
+    /// Number of all the input files related to the shard.
+    pub fn num_files_before(&self) -> u64 {
+        self.num_files_before
+    }
+
+    /// Estimate for the shard size on disk after the merge.
+    pub fn storage_size_bytes_after(&self) -> u64 {
+        if self.is_full_merge() {
+            // For a full merge we just serialize data to a single file.
+            // We ignore index and version size here.
+            self.page_map_size_bytes()
+        } else {
+            // For a partial merge all the overlays may have non-overlapping pages, in which case
+            // we don't save any space.
+            self.storage_size_bytes_before
+        }
+    }
+
+    /// Estimate of disk write needed to apply the merge.
+    pub fn write_size_bytes(&self) -> u64 {
+        if self.is_full_merge() {
+            // For a full merge we expand missing pages with zeroes, so we write all the pages.
+            self.page_map_size_bytes()
+        } else {
+            // For a partial merge we don't expand with zeroes. If pages in input overlays don't
+            // overlap we write all of them; there can be at most `page_map_size_bytes()` worth of
+            // non-overlapping pages.
+            std::cmp::min(self.page_map_size_bytes(), self.input_size_bytes)
+        }
+    }
+
+    /// Is it a full merge down to the ground level.
+    pub fn is_full_merge(&self) -> bool {
+        self.num_files_before as usize == self.base.iter().len() + self.overlays.iter().len()
+    }
+
     /// Create a `MergeCandidate` for the given overlays and base. The `MergeCandidate` has as dst
     /// either `dst_base` or `dst_overlay` depending on if we decided to make a partial (overlay) or a
     /// full (base) merge.
@@ -808,64 +929,27 @@ impl MergeCandidate {
     pub fn new(
         layout: &dyn StorageLayout,
         height: Height,
-    ) -> Result<Option<MergeCandidate>, Box<dyn std::error::Error>> {
-        let existing_base = if layout.base().exists() {
-            Some(layout.base().to_path_buf())
+        num_pages: u64,
+        lsmt_config: &LsmtConfig,
+    ) -> Result<Vec<MergeCandidate>, Box<dyn std::error::Error>> {
+        if layout.base().exists() && num_pages > lsmt_config.shard_num_pages {
+            Self::split_to_shards(layout, height, num_pages, lsmt_config)
         } else {
-            None
-        };
-
-        let existing_overlays = layout.existing_overlays()?;
-        // base if any; then overlays old to new.
-        let existing_files = existing_base.iter().chain(existing_overlays.iter());
-
-        let file_lengths: Vec<usize> = existing_files
-            .map(|path| {
-                Ok(std::fs::metadata(path)
-                    .map_err(|err: _| PersistenceError::FileSystemError {
-                        path: path.display().to_string(),
-                        context: format!("Failed get existing file length: {}", path.display()),
-                        internal_error: err.to_string(),
-                    })?
-                    .len() as usize)
-            })
-            .collect::<Result<_, PersistenceError>>()?;
-
-        let Some(num_files_to_merge) = Self::num_files_to_merge(&file_lengths) else {
-            return Ok(None);
-        };
-
-        // If we merge all including base, `num_files_to_merge` is larger than the length of
-        // `existing_overlays`, `saturating_sub` returns zero, and we merge all overlays without
-        // skipping.
-        let overlays: Vec<PathBuf> = existing_overlays
-            .iter()
-            .skip(existing_overlays.len().saturating_sub(num_files_to_merge))
-            .cloned()
-            .collect();
-
-        // Merge all existing files and put all the data into a single base file.
-        // Otherwise we create an overlay file.
-        let is_full = num_files_to_merge == file_lengths.len();
-        let base = if is_full { existing_base.clone() } else { None };
-
-        Ok(Some(MergeCandidate {
-            overlays,
-            base,
-            dst: MergeDestination::OverlayFile(layout.overlay(height, Shard::new(0)).to_path_buf()),
-            is_full,
-        }))
+            Self::merge_by_shard(layout, height, num_pages, lsmt_config)
+        }
     }
 
     /// Merge all overlays to a single base file.
     pub fn merge_to_base(
         layout: &dyn StorageLayout,
+        num_pages: u64,
     ) -> Result<Option<MergeCandidate>, Box<dyn std::error::Error>> {
         let existing_overlays = layout.existing_overlays()?;
         let base_path = layout.base();
         if existing_overlays.is_empty() {
             Ok(None)
         } else {
+            let storage_size = layout.storage_size()?;
             Ok(Some(MergeCandidate {
                 overlays: existing_overlays.to_vec(),
                 base: if base_path.exists() {
@@ -874,7 +958,11 @@ impl MergeCandidate {
                     None
                 },
                 dst: MergeDestination::BaseFile(base_path),
-                is_full: true,
+                start_page: PageIndex::new(0),
+                end_page: PageIndex::new(num_pages),
+                num_files_before: layout.existing_files()?.len() as u64,
+                storage_size_bytes_before: storage_size,
+                input_size_bytes: storage_size,
             }))
         }
     }
@@ -913,39 +1001,170 @@ impl MergeCandidate {
                 internal_error: io_err.to_string(),
             })?;
         }
-        Self::merge_impl(&self.dst, base, &overlays, self.is_full, metrics)
-    }
+        let pages_with_indices = Self::merge_data(&base, &overlays);
 
-    pub fn is_full_merge(&self) -> bool {
-        self.is_full
-    }
-
-    pub fn input_size_bytes(&self) -> Result<u64, PersistenceError> {
-        let mut sum = 0;
-        for f in self.base.iter().chain(self.overlays.iter()) {
-            match std::fs::metadata(f) {
-                Err(err) => {
-                    return Err(PersistenceError::FileSystemError {
-                        path: f.display().to_string(),
-                        context: "Failed to retrieve file metadata".to_string(),
-                        internal_error: err.to_string(),
-                    })
-                }
-                Ok(metadata) => sum += metadata.len(),
-            }
+        let (num_output_shards, shard_num_pages) = match &self.dst {
+            MergeDestination::MultiShardOverlay {
+                shard_paths,
+                shard_num_pages,
+            } => (shard_paths.len(), *shard_num_pages),
+            MergeDestination::BaseFile(_) => (1, u64::MAX),
+            MergeDestination::SingleShardOverlay(_) => (1, u64::MAX),
+        };
+        let mut page_data: Vec<Vec<&[u8]>> = vec![Vec::new(); num_output_shards];
+        let mut page_indices: Vec<Vec<PageIndex>> = vec![Vec::new(); num_output_shards];
+        // Group sorted `merged_iterator` by `page_index`. Elements within group are sorted by
+        // priority; we need only the first element of each group.
+        for (index, data) in pages_with_indices.into_iter() {
+            assert!(index >= self.start_page);
+            assert!(index < self.end_page);
+            let shard = if num_output_shards > 1 {
+                index.get() as usize / shard_num_pages as usize
+            } else {
+                0
+            };
+            page_indices[shard].push(index);
+            page_data[shard].push(data);
         }
-        Ok(sum)
+
+        match &self.dst {
+            MergeDestination::MultiShardOverlay { shard_paths, .. } => {
+                assert!(shard_paths.len() >= num_output_shards);
+                for (page_indices, page_data, path) in
+                    izip!(page_indices.into_iter(), page_data.into_iter(), shard_paths)
+                {
+                    let (page_data, page_indices) = if self.is_full_merge() {
+                        expand_with_zeroes(&page_data, &page_indices, ExpandBeforeStart::No)
+                    } else {
+                        (page_data, page_indices)
+                    };
+                    write_overlay(&page_data, &page_indices, path, metrics, LABEL_OP_MERGE)?
+                }
+                Ok(())
+            }
+            MergeDestination::SingleShardOverlay(path) => {
+                let (page_data, page_indices) = if self.is_full_merge() {
+                    expand_with_zeroes(&page_data[0], &page_indices[0], ExpandBeforeStart::No)
+                } else {
+                    (page_data[0].clone(), page_indices[0].clone())
+                };
+                write_overlay(&page_data, &page_indices, path, metrics, LABEL_OP_MERGE)
+            }
+            MergeDestination::BaseFile(path) => write_base(
+                &page_data[0],
+                &page_indices[0],
+                path,
+                metrics,
+                LABEL_OP_MERGE,
+            ),
+        }
     }
 
-    fn merge_impl(
-        dst: &MergeDestination,
-        existing_base: Option<Checkpoint>,
-        existing: &[OverlayFile],
-        is_full: bool,
-        metrics: &StorageMetrics,
-    ) -> Result<(), PersistenceError> {
-        let max_size = existing.iter().map(|f| f.num_pages()).sum::<usize>()
-            + existing_base.as_ref().map_or(0, |base| base.num_pages());
+    /// Take all the data, merge and split into shards.
+    fn split_to_shards(
+        layout: &dyn StorageLayout,
+        height: Height,
+        num_pages: u64,
+        lsmt_config: &LsmtConfig,
+    ) -> Result<Vec<MergeCandidate>, Box<dyn std::error::Error>> {
+        let dst_overlays = (0..num_shards(num_pages, lsmt_config))
+            .map(|shard| layout.overlay(height, Shard::new(shard)).to_path_buf())
+            .collect();
+
+        let base = if layout.base().exists() {
+            Some(layout.base().to_path_buf())
+        } else {
+            None
+        };
+        let storage_size = layout.storage_size()?;
+        Ok(vec![MergeCandidate {
+            overlays: layout.existing_overlays()?,
+            base,
+            dst: MergeDestination::MultiShardOverlay {
+                shard_paths: dst_overlays,
+                shard_num_pages: lsmt_config.shard_num_pages,
+            },
+            start_page: PageIndex::new(0),
+            end_page: PageIndex::new(num_pages),
+            num_files_before: layout.existing_files()?.len() as u64,
+            storage_size_bytes_before: storage_size,
+            input_size_bytes: storage_size,
+        }])
+    }
+
+    /// Merge each shard individually. If whole pagemap fits into a single shard, also handle base
+    /// as belonging to the zero shard; crash if base is shared by multiple shards.
+    fn merge_by_shard(
+        layout: &dyn StorageLayout,
+        height: Height,
+        num_pages: u64,
+        lsmt_config: &LsmtConfig,
+    ) -> Result<Vec<MergeCandidate>, Box<dyn std::error::Error>> {
+        let existing_base = layout.existing_base();
+
+        let mut result = Vec::new();
+        let num_shards = num_shards(num_pages, lsmt_config);
+        if existing_base.is_some() {
+            assert!(num_shards <= 1);
+        }
+        for shard in 0..num_shards {
+            let shard = Shard::new(shard);
+            let existing_files = layout.existing_files_with_shard(shard)?;
+            let file_lengths: Vec<u64> = existing_files
+                .iter()
+                .map(|path| {
+                    Ok(std::fs::metadata(path)
+                        .map_err(|err: _| PersistenceError::FileSystemError {
+                            path: path.display().to_string(),
+                            context: format!("Failed get existing file length: {}", path.display()),
+                            internal_error: err.to_string(),
+                        })?
+                        .len())
+                })
+                .collect::<Result<_, PersistenceError>>()?;
+            let existing_overlays = &existing_files[existing_base.iter().len()..];
+
+            let Some(num_files_to_merge) = Self::num_files_to_merge(&file_lengths) else {
+                continue;
+            };
+            let input_size_bytes = file_lengths.iter().rev().take(num_files_to_merge).sum();
+
+            // If we merge all including base, `num_files_to_merge` is larger than the length of
+            // `existing_overlays`, `saturating_sub` returns zero, and we merge all overlays without
+            // skipping.
+            let overlays: Vec<PathBuf> = existing_overlays
+                .iter()
+                .skip(existing_overlays.len().saturating_sub(num_files_to_merge))
+                .cloned()
+                .collect();
+
+            // Merge all existing files and put all the data into a single base file.
+            // Otherwise we create an overlay file.
+            let base = if num_files_to_merge == file_lengths.len() {
+                existing_base.clone()
+            } else {
+                None
+            };
+            result.push(MergeCandidate {
+                overlays,
+                base,
+                dst: MergeDestination::SingleShardOverlay(layout.overlay(height, shard)),
+                start_page: PageIndex::new(shard.get() * lsmt_config.shard_num_pages),
+                end_page: PageIndex::new(
+                    num_pages.min((shard.get() + 1) * lsmt_config.shard_num_pages),
+                ),
+                num_files_before: existing_files.len() as u64,
+                storage_size_bytes_before: file_lengths.iter().sum(),
+                input_size_bytes,
+            })
+        }
+        Ok(result)
+    }
+
+    fn merge_data<'a>(
+        existing_base: &'a Option<Checkpoint>,
+        existing: &'a [OverlayFile],
+    ) -> Vec<(PageIndex, &'a [u8])> {
         struct PageWithPriority<'a> {
             // Page index in the `PageMap`.
             page_index: PageIndex,
@@ -970,7 +1189,7 @@ impl MergeCandidate {
                 ) as Box<dyn Iterator<Item = PageWithPriority>>
             })
             .chain(existing_base.as_ref().map(|checkpoint| {
-                Box::new((0..checkpoint.num_pages()).map(|index| {
+                Box::new((0..checkpoint.num_pages()).map(move |index| {
                     let page_index = PageIndex::new(index as u64);
                     PageWithPriority {
                         page_index,
@@ -987,38 +1206,25 @@ impl MergeCandidate {
         let merged_iterator = iterators_with_priority
             .into_iter()
             .kmerge_by(|a, b| (a.page_index, a.priority) < (b.page_index, b.priority));
-        let mut pages_data: Vec<&[u8]> = Vec::with_capacity(max_size);
-        let mut pages_indices: Vec<PageIndex> = Vec::with_capacity(max_size);
+
         // Group sorted `merged_iterator` by `page_index`. Elements within group are sorted by
         // priority; we need only the first element of each group.
-        for (_, mut group) in
-            &merged_iterator.group_by(|page_with_priority| page_with_priority.page_index)
-        {
-            let page_with_priority = group
-                .next()
-                .expect("group_by is expected to create non-empty groups");
-            pages_data.push(page_with_priority.page_data);
-            pages_indices.push(page_with_priority.page_index);
-        }
-        if is_full {
-            (pages_data, pages_indices) =
-                expand_with_zeroes(&pages_data, &pages_indices, ExpandBeforeStart::No);
-        }
-
-        match dst {
-            MergeDestination::OverlayFile(path) => {
-                write_overlay(&pages_data, &pages_indices, path, metrics, LABEL_OP_MERGE)
-            }
-            MergeDestination::BaseFile(path) => {
-                write_base(&pages_data, &pages_indices, path, metrics, LABEL_OP_MERGE)
-            }
-        }
+        merged_iterator
+            .group_by(|page_with_priority| page_with_priority.page_index)
+            .into_iter()
+            .map(move |(_, mut group)| {
+                let page_with_priority = group
+                    .next()
+                    .expect("group_by is expected to create non-empty groups");
+                (page_with_priority.page_index, page_with_priority.page_data)
+            })
+            .collect()
     }
 
     /// Number of files to merge to achieve the `MergeCandidate` criteria (see `MergeCandidate::new`
     /// documentation).
     /// If no merge is required, return `None`.
-    fn num_files_to_merge(existing_lengths: &[usize]) -> Option<usize> {
+    fn num_files_to_merge(existing_lengths: &[u64]) -> Option<usize> {
         let mut merge_to_get_pyramid = 0;
         let mut sum = 0;
         for (i, len) in existing_lengths.iter().rev().enumerate() {

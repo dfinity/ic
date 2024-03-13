@@ -1,5 +1,5 @@
 #![no_main]
-use ic_test_utilities::wasmtime_instance::WasmtimeInstanceBuilder;
+use ic_test_utilities_embedders::WasmtimeInstanceBuilder;
 use ic_types::methods::{FuncRef, WasmMethod};
 use libfuzzer_sys::{fuzz_target, Corpus};
 mod ic_wasm;

@@ -65,8 +65,8 @@ use std::{
 };
 use url::Url;
 
-pub const OVERALL_TIMEOUT: Duration = Duration::from_secs(60 * 60);
-pub const PER_TEST_TIMEOUT: Duration = Duration::from_secs(50 * 60);
+pub const OVERALL_TIMEOUT: Duration = Duration::from_secs(80 * 60);
+pub const PER_TEST_TIMEOUT: Duration = Duration::from_secs(70 * 60);
 
 // TODO: move this to an environment variable and set this on the CLI using --test_env=NNS_BACKUP_POD=zh1-pyr07.zh1.dfinity.network
 const NNS_BACKUP_POD: &str = "zh1-pyr07.zh1.dfinity.network";

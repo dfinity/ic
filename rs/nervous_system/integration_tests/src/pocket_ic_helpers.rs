@@ -15,8 +15,8 @@ use ic_nns_governance::{
     pb::v1::{
         manage_neuron, manage_neuron_response, proposal, CreateServiceNervousSystem,
         ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
-        ListNeurons, ListNeuronsResponse, ManageNeuron, ManageNeuronResponse, NnsFunction,
-        Proposal, ProposalInfo,
+        ListNeurons, ListNeuronsResponse, ManageNeuron, ManageNeuronResponse, NetworkEconomics,
+        NnsFunction, Proposal, ProposalInfo, Topic,
     },
 };
 use ic_nns_test_utils::{
@@ -138,6 +138,19 @@ pub fn add_wasm_via_nns_proposal(
     nns::governance::propose_and_wait(pocket_ic, proposal)
 }
 
+pub fn propose_to_set_network_economics_and_wait(
+    pocket_ic: &PocketIc,
+    network_economics: NetworkEconomics,
+) -> Result<ProposalInfo, String> {
+    let proposal = Proposal {
+        title: Some("Set NetworkEconomics.neurons_fund_economics {}".to_string()),
+        summary: "summary".to_string(),
+        url: "".to_string(),
+        action: Some(proposal::Action::ManageNetworkEconomics(network_economics)),
+    };
+    nns::governance::propose_and_wait(pocket_ic, proposal)
+}
+
 pub fn add_wasms_to_sns_wasm(
     pocket_ic: &PocketIc,
     with_mainnet_ledger_wasms: bool,
@@ -220,6 +233,9 @@ pub fn install_nns_canisters(
             test_user_icp_ledger_initial_balance,
         );
     }
+
+    let nns_init_payload = nns_init_payload_builder.build();
+
     let (ledger_wasm, root_wasm, governance_wasm, sns_wasm_wasm) =
         if with_mainnet_nns_canister_versions {
             (
@@ -236,7 +252,7 @@ pub fn install_nns_canisters(
                 build_sns_wasms_wasm(),
             )
         };
-    let nns_init_payload = nns_init_payload_builder.build();
+
     install_canister(
         pocket_ic,
         "ICP Ledger",
@@ -385,7 +401,7 @@ pub mod nns {
                 WasmResult::Reply(reply) => reply,
                 WasmResult::Reject(reject) => {
                     panic!(
-                        "list_neurons was rejected by the SNS governance canister: {:#?}",
+                        "list_neurons was rejected by the NNS governance canister: {:#?}",
                         reject
                     )
                 }
@@ -510,8 +526,15 @@ pub mod nns {
                     return Ok(proposal_info);
                 }
                 assert_eq!(
-                    proposal_info.failure_reason, None,
-                    "Proposal execution failed: {:#?}",
+                    proposal_info.failure_reason,
+                    None,
+                    "Execution failed for {:?} proposal '{}': {:#?}",
+                    Topic::try_from(proposal_info.topic).unwrap(),
+                    proposal_info
+                        .proposal
+                        .unwrap()
+                        .title
+                        .unwrap_or("<no-title>".to_string()),
                     proposal_info.failure_reason
                 );
                 last_proposal_info = Some(proposal_info);
@@ -574,6 +597,28 @@ pub mod nns {
                 );
             };
             (deployed_sns, nns_proposal_id)
+        }
+
+        pub fn get_network_economics_parameters(pocket_ic: &PocketIc) -> NetworkEconomics {
+            let result = pocket_ic
+                .query_call(
+                    GOVERNANCE_CANISTER_ID.into(),
+                    Principal::anonymous(),
+                    "get_network_economics_parameters",
+                    Encode!().unwrap(),
+                )
+                .unwrap();
+            let result = match result {
+                WasmResult::Reply(reply) => reply,
+                WasmResult::Reject(reject) => {
+                    panic!(
+                        "get_network_economics_parameters was rejected by the NNS governance \
+                        canister: {:#?}",
+                        reject
+                    )
+                }
+            };
+            Decode!(&result, NetworkEconomics).unwrap()
         }
     }
 

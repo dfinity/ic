@@ -1,5 +1,5 @@
 use super::*;
-use ic_test_utilities::types::ids::{canister_test_id, message_test_id, user_test_id};
+use ic_test_utilities_types::ids::{canister_test_id, message_test_id, user_test_id};
 use ic_types::{messages::RequestMetadata, methods::WasmClosure, time::UNIX_EPOCH};
 
 #[test]

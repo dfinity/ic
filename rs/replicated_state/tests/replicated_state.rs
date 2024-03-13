@@ -20,9 +20,9 @@ use ic_replicated_state::{
     replicated_state::{MemoryTaken, PeekableOutputIterator, ReplicatedStateMessageRouting},
     CanisterState, IngressHistoryState, ReplicatedState, SchedulerState, StateError, SystemState,
 };
-use ic_test_utilities::state::{arb_replicated_state_with_queues, ExecutionStateBuilder};
-use ic_test_utilities::types::ids::{canister_test_id, message_test_id, user_test_id, SUBNET_1};
-use ic_test_utilities::types::messages::{RequestBuilder, ResponseBuilder};
+use ic_test_utilities_state::{arb_replicated_state_with_queues, ExecutionStateBuilder};
+use ic_test_utilities_types::ids::{canister_test_id, message_test_id, user_test_id, SUBNET_1};
+use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::messages::RejectContext;
 use ic_types::{

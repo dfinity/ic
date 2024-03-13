@@ -20,7 +20,7 @@ use axum::{
     routing::{delete, get, post, put},
     Extension, Router, Server,
 };
-use candid::Principal;
+use candid::{DecoderConfig, Principal};
 use chacha20poly1305::{KeyInit, XChaCha20Poly1305};
 use clap::Parser;
 use futures::future::TryFutureExt;
@@ -81,6 +81,17 @@ const SERVICE_NAME: &str = "certificate-issuer";
 
 pub(crate) static TASK_DELAY_SEC: AtomicU64 = AtomicU64::new(60);
 pub(crate) static TASK_ERROR_DELAY_SEC: AtomicU64 = AtomicU64::new(10 * 60);
+
+/// Limit the amount of work for skipping unneeded data on the wire when parsing Candid.
+/// The value of 10_000 follows the Candid recommendation.
+const DEFAULT_SKIPPING_QUOTA: usize = 10_000;
+
+pub(crate) fn decoder_config() -> DecoderConfig {
+    let mut config = DecoderConfig::new();
+    config.set_skipping_quota(DEFAULT_SKIPPING_QUOTA);
+    config.set_full_error_message(false);
+    config
+}
 
 #[derive(Parser)]
 #[command(name = SERVICE_NAME)]

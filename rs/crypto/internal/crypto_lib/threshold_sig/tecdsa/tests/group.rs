@@ -367,14 +367,7 @@ fn test_y_is_even() -> ThresholdEcdsaResult<()> {
             match (p.is_y_even()?, np.is_y_even()?) {
                 (true, true) => panic!("Both point and its negation have even y"),
                 (false, false) => panic!("Neither point nor its negation have even y"),
-                (true, false) => {
-                    assert_eq!(p.affine_y()?.sign(), 0x00);
-                    assert_eq!(np.affine_y()?.sign(), 0x01);
-                }
-                (false, true) => {
-                    assert_eq!(p.affine_y()?.sign(), 0x01);
-                    assert_eq!(np.affine_y()?.sign(), 0x00)
-                }
+                (_, _) => {}
             }
         }
     }

@@ -12,9 +12,10 @@ use axum::{
 use hyper::Uri;
 use ic_protobuf::messaging::xnet::v1 as pb;
 use ic_protobuf::proxy::ProxyDecodeError;
-use ic_test_utilities::{crypto::fake_tls_handshake::FakeTlsHandshake, types::ids::SUBNET_6};
+use ic_test_utilities::crypto::fake_tls_handshake::FakeTlsHandshake;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{fetch_histogram_vec_count, metric_vec, MetricVec};
+use ic_test_utilities_types::ids::SUBNET_6;
 use ic_types::{xnet::CertifiedStreamSlice, SubnetId};
 use std::{net::SocketAddr, sync::Arc};
 

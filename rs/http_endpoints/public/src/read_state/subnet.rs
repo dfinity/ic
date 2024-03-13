@@ -213,7 +213,7 @@ fn verify_paths(paths: &[Path], effective_principal_id: PrincipalId) -> Result<(
 mod test {
     use super::*;
     use ic_crypto_tree_hash::{Label, Path};
-    use ic_test_utilities::types::ids::{canister_test_id, subnet_test_id};
+    use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id};
     use serde_bytes::ByteBuf;
 
     #[test]

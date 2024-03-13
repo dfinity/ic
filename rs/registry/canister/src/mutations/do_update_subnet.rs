@@ -399,7 +399,7 @@ mod tests {
     use ic_protobuf::registry::subnet::v1::{GossipConfig, SubnetRecord};
     use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
     use ic_registry_subnet_type::SubnetType;
-    use ic_test_utilities::types::ids::subnet_test_id;
+    use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
         p2p::{
             MAX_ARTIFACT_STREAMS_PER_PEER, MAX_CHUNK_WAIT_MS, MAX_DUPLICITY,

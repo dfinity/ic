@@ -22,10 +22,10 @@ use ic_system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ApiType, ExecutionParameters,
     InstructionLimits,
 };
-use ic_test_utilities::{
-    cycles_account_manager::CyclesAccountManagerBuilder, state::SystemStateBuilder,
-    types::ids::user_test_id, wasmtime_instance::DEFAULT_NUM_INSTRUCTIONS,
-};
+use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
+use ic_test_utilities_embedders::DEFAULT_NUM_INSTRUCTIONS;
+use ic_test_utilities_state::SystemStateBuilder;
+use ic_test_utilities_types::ids::user_test_id;
 use ic_types::{
     messages::RequestMetadata,
     methods::{FuncRef, WasmMethod},

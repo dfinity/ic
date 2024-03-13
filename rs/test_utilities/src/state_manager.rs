@@ -1,4 +1,3 @@
-use crate::types::ids::subnet_test_id;
 use ic_crypto_sha2::Sha256;
 use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
 use ic_interfaces_certified_stream_store::{
@@ -13,6 +12,7 @@ use ic_interfaces_state_manager::{
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
+use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types::{
     consensus::certification::Certification,
     crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},

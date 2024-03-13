@@ -300,7 +300,12 @@ pub fn paginate_participants(swap: &Swap, limit: usize) -> Vec<Participant> {
 }
 
 pub fn get_snapshot_of_buyers_index_list() -> Vec<PrincipalId> {
-    memory::BUYERS_LIST_INDEX.with(|m| m.borrow().iter().collect())
+    memory::BUYERS_LIST_INDEX.with(|m| {
+        m.borrow()
+            .iter()
+            .map(|principal| principal.into())
+            .collect()
+    })
 }
 
 pub async fn buy_token(swap: &mut Swap, user: &PrincipalId, amount: &u64, ledger: &MockLedger) {

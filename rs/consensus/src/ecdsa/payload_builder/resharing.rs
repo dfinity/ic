@@ -177,7 +177,7 @@ pub(super) fn get_reshare_requests(
 #[cfg(test)]
 pub mod test_utils {
     use ic_management_canister_types::EcdsaKeyId;
-    use ic_test_utilities::types::ids::node_test_id;
+    use ic_test_utilities_types::ids::node_test_id;
     use ic_types::RegistryVersion;
 
     use super::*;
@@ -207,7 +207,7 @@ mod tests {
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_logger::replica_logger::no_op_logger;
     use ic_management_canister_types::EcdsaKeyId;
-    use ic_test_utilities::types::ids::subnet_test_id;
+    use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::consensus::ecdsa::EcdsaPayload;
 
     use crate::ecdsa::test_utils::{

@@ -28,10 +28,10 @@ MACRO_DEPENDENCIES = []
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/interfaces",
-    "//rs/test_utilities",
     "//rs/test_utilities/logger",
     "//rs/test_utilities/time",
     "//rs/test_utilities/tmpdir",
+    "//rs/test_utilities/types",
     "@crate_index//:itertools",
     "@crate_index//:proptest",
 ]

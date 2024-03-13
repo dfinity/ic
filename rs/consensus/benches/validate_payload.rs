@@ -37,17 +37,19 @@ use ic_protobuf::types::v1 as pb;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_manager::StateManagerImpl;
 use ic_test_utilities::{
-    consensus::{batch::MockBatchPayloadBuilder, fake::*, make_genesis},
     crypto::temp_crypto_component_with_fake_registry,
     cycles_account_manager::CyclesAccountManagerBuilder,
     self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
-    state::ReplicatedStateBuilder,
-    types::ids::{canister_test_id, node_test_id, subnet_test_id},
-    types::messages::SignedIngressBuilder,
     xnet_payload_builder::FakeXNetPayloadBuilder,
 };
+use ic_test_utilities_consensus::{batch::MockBatchPayloadBuilder, fake::*, make_genesis};
 use ic_test_utilities_registry::{setup_registry, SubnetRecordBuilder};
+use ic_test_utilities_state::ReplicatedStateBuilder;
 use ic_test_utilities_time::FastForwardTimeSource;
+use ic_test_utilities_types::{
+    ids::{canister_test_id, node_test_id, subnet_test_id},
+    messages::SignedIngressBuilder,
+};
 use ic_types::{
     batch::{BatchPayload, IngressPayload, ValidationContext},
     consensus::certification::*,

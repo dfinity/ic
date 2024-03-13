@@ -69,7 +69,9 @@ ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-execution-environment = { path = "../test_utilities/execution_environment" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }
 ic-test-utilities-metrics = { path = "../test_utilities/metrics" }
+ic-test-utilities-state = { path = "../test_utilities/state" }
 ic-test-utilities-time = { path = "../test_utilities/time" }
+ic-test-utilities-types = { path = "../test_utilities/types" }
 ic-types-test-utils = { path = "../types/types_test_utils" }
 ic-universal-canister = { path = "../universal_canister/lib" }
 ic-wasm-types = { path = "../types/wasm_types" }

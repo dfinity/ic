@@ -89,6 +89,8 @@ use mockall::automock;
 use registry_canister::{
     mutations::do_add_node_operator::AddNodeOperatorPayload, pb::v1::NodeProvidersMonthlyXdrRewards,
 };
+use rust_decimal::Decimal;
+use rust_decimal_macros::dec;
 use std::{
     borrow::Cow,
     cmp::{max, Ordering},
@@ -4163,6 +4165,9 @@ impl Governance {
                         economics.max_proposals_to_keep_per_topic =
                             ne.max_proposals_to_keep_per_topic
                     }
+                    if ne.neurons_fund_economics.is_some() {
+                        economics.neurons_fund_economics = ne.neurons_fund_economics
+                    }
                 } else {
                     // If for some reason, we don't have an
                     // 'economics' proto, use the proposed one.
@@ -6049,6 +6054,8 @@ impl Governance {
         } else if self.can_spawn_neurons() {
             self.spawn_neurons().await;
         } else {
+            // This is the lowest-priority async task. All other tasks should have their own
+            // `else if`, like the ones above.
             let refresh_xdr_rate_result = self.maybe_refresh_xdr_rate().await;
             if let Err(err) = refresh_xdr_rate_result {
                 println!(
@@ -6129,6 +6136,15 @@ impl Governance {
         };
 
         Ok(())
+    }
+
+    /// Returns the 30-day average of the ICP/XDR conversion rate.
+    ///
+    /// Returns `None` if the data has not been fetched from the CMC canister yet.
+    pub fn icp_xdr_rate(&self) -> Decimal {
+        let xdr_permyriad_per_icp = self.heap_data.xdr_conversion_rate.xdr_permyriad_per_icp;
+        let xdr_permyriad_per_icp = Decimal::from(xdr_permyriad_per_icp);
+        xdr_permyriad_per_icp / dec!(10_000)
     }
 
     /// When a neuron is finally dissolved, if there is any staked maturity it is moved to regular maturity
@@ -7075,9 +7091,14 @@ impl Governance {
             })?;
         let swap_participation_limits =
             SwapParticipationLimits::try_from_swap_parameters(swap_participation_limits)?;
+        let neurons_fund_participation_limits =
+            self.try_derive_neurons_fund_participation_limits()?;
         let neurons_fund = self.neuron_store.list_active_neurons_fund_neurons();
-        let initial_neurons_fund_participation =
-            PolynomialNeuronsFundParticipation::new(swap_participation_limits, neurons_fund)?;
+        let initial_neurons_fund_participation = PolynomialNeuronsFundParticipation::new(
+            neurons_fund_participation_limits,
+            swap_participation_limits,
+            neurons_fund,
+        )?;
         let constraints = initial_neurons_fund_participation.compute_constraints()?;
         let initial_neurons_fund_participation_snapshot =
             initial_neurons_fund_participation.snapshot_cloned();

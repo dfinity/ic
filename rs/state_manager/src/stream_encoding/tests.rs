@@ -3,10 +3,8 @@ use ic_base_types::NumSeconds;
 use ic_canonical_state::MAX_SUPPORTED_CERTIFICATION_VERSION;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{testing::ReplicatedStateTesting, ReplicatedState};
-use ic_test_utilities::{
-    state::{arb_stream, arb_stream_with_config, new_canister_state},
-    types::ids::{canister_test_id, subnet_test_id, user_test_id},
-};
+use ic_test_utilities_state::{arb_stream, arb_stream_with_config, new_canister_state};
+use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
 use ic_types::{xnet::StreamSlice, Cycles};
 use proptest::prelude::*;
 
@@ -16,7 +14,7 @@ proptest! {
     // TODO(MR-549) Go back to using plain `arb_stream()` once the canonical state
     // encodes deadlines.
     #[test]
-    fn stream_encode_decode_roundtrip(stream in arb_stream_with_config(0, 10, 0, 10, true, false)) {
+    fn stream_encode_decode_roundtrip(stream in arb_stream_with_config(0, 10, 0, 10, true, true)) {
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
 
         let subnet = subnet_test_id(42);

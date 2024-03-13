@@ -4,8 +4,7 @@ use ic_cketh_minter::endpoints::events::EventPayload;
 use ic_cketh_minter::endpoints::AddCkErc20Token;
 use ic_cketh_test_utils::ckerc20::CkErc20Setup;
 use ic_cketh_test_utils::flow::DepositParams;
-use ic_cketh_test_utils::CkEthSetup;
-use ic_ethereum_types::Address;
+use ic_cketh_test_utils::{format_ethereum_address_to_eip_55, CkEthSetup};
 use ic_ledger_suite_orchestrator_test_utils::supported_erc20_tokens;
 use ic_state_machine_tests::ErrorCode;
 
@@ -69,7 +68,183 @@ fn should_mint_with_ckerc20_setup() {
         .expect_mint();
 }
 
-fn format_ethereum_address_to_eip_55(address: &str) -> String {
-    use std::str::FromStr;
-    Address::from_str(address).unwrap().to_string()
+mod withdraw_erc20 {
+    use super::*;
+    use ic_cketh_minter::endpoints::ckerc20::WithdrawErc20Error;
+    use ic_cketh_test_utils::ckerc20::{DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS, ONE_USDC};
+    use ic_cketh_test_utils::flow::DepositParams;
+    use ic_cketh_test_utils::CKETH_TRANSFER_FEE;
+    use ic_ledger_suite_orchestrator_test_utils::{new_state_machine, usdc_erc20_contract};
+    use num_bigint::BigUint;
+    use std::sync::Arc;
+
+    #[test]
+    fn should_trap_when_ckerc20_feature_not_active() {
+        CkErc20Setup::new_without_ckerc20_active(Arc::new(new_state_machine()))
+            .call_minter_withdraw_erc20(
+                Principal::anonymous(),
+                0_u8,
+                "ckUSDC",
+                DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS,
+            )
+            .expect_trap("disabled");
+    }
+
+    #[test]
+    fn should_trap_when_called_from_anonymous_principal() {
+        CkErc20Setup::default()
+            .call_minter_withdraw_erc20(
+                Principal::anonymous(),
+                0_u8,
+                "ckUSDC",
+                DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS,
+            )
+            .expect_trap("anonymous");
+    }
+
+    #[test]
+    fn should_trap_when_destination_invalid() {
+        let ckerc20 = CkErc20Setup::default();
+        let caller = ckerc20.caller();
+        ckerc20
+            .call_minter_withdraw_erc20(caller, 0_u8, "ckUSDC", "0xinvalid-address")
+            .expect_trap("address");
+    }
+
+    #[test]
+    fn should_error_when_address_blocked() {
+        let blocked_address = "0x01e2919679362dFBC9ee1644Ba9C6da6D6245BB1";
+        let ckerc20 = CkErc20Setup::default();
+        let caller = ckerc20.caller();
+        ckerc20
+            .call_minter_withdraw_erc20(caller, 0_u8, "ckUSDC", blocked_address)
+            .expect_error(WithdrawErc20Error::RecipientAddressBlocked {
+                address: blocked_address.to_string(),
+            });
+    }
+
+    #[test]
+    fn should_trap_when_amount_overflow_u256() {
+        let ridiculously_large_amount = Nat(BigUint::parse_bytes(
+            b"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF1",
+            16,
+        )
+        .unwrap());
+
+        let ckerc20 = CkErc20Setup::default();
+        let caller = ckerc20.caller();
+        ckerc20
+            .call_minter_withdraw_erc20(
+                caller,
+                ridiculously_large_amount,
+                "ckUSDC",
+                DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS,
+            )
+            .expect_trap("u256");
+    }
+
+    #[test]
+    fn should_trap_when_token_invalid() {
+        let ckerc20 = CkErc20Setup::default();
+        let caller = ckerc20.caller();
+        ckerc20
+            .call_minter_withdraw_erc20(
+                caller,
+                0_u8,
+                "USDC",
+                DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS,
+            )
+            .expect_trap("token symbol");
+    }
+
+    #[test]
+    fn should_error_when_token_unknown() {
+        let ckerc20 = CkErc20Setup::default();
+        let caller = ckerc20.caller();
+        ckerc20
+            .add_supported_erc20_tokens()
+            .call_minter_withdraw_erc20(
+                caller,
+                0_u8,
+                "ckusdc",
+                DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS,
+            )
+            .expect_error(WithdrawErc20Error::TokenNotSupported {
+                supported_tokens: vec!["ckUSDC".to_string(), "ckUSDT".to_string()],
+            });
+    }
+
+    #[test]
+    fn should_error_when_minter_not_allowed_to_burn_cketh() {
+        let ckerc20 = CkErc20Setup::default();
+        let caller = ckerc20.caller();
+        let cketh_ledger = ckerc20.cketh_ledger_id();
+        ckerc20
+            .add_supported_erc20_tokens()
+            .call_minter_withdraw_erc20(
+                caller,
+                0_u8,
+                "ckUSDC",
+                DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS,
+            )
+            .expect_error(WithdrawErc20Error::InsufficientAllowance {
+                allowance: Nat::from(0_u8),
+                failed_burn_amount: Nat::from(CKETH_TRANSFER_FEE),
+                token_symbol: "ckETH".to_string(),
+                ledger_id: cketh_ledger,
+            });
+    }
+
+    #[test]
+    fn should_error_when_not_enough_cketh() {
+        let ckerc20 = CkErc20Setup::default();
+        let caller = ckerc20.caller();
+        let cketh_ledger = ckerc20.cketh_ledger_id();
+        ckerc20
+            .add_supported_erc20_tokens()
+            .deposit_cketh(DepositParams {
+                amount: 10,
+                ..DepositParams::default()
+            })
+            .call_cketh_ledger_approve_minter(caller, 100, None)
+            .call_minter_withdraw_erc20(
+                caller,
+                0_u8,
+                "ckUSDC",
+                DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS,
+            )
+            .expect_error(WithdrawErc20Error::InsufficientFunds {
+                balance: Nat::from(0_u8),
+                failed_burn_amount: Nat::from(CKETH_TRANSFER_FEE),
+                token_symbol: "ckETH".to_string(),
+                ledger_id: cketh_ledger,
+            });
+    }
+
+    #[test]
+    fn should_error_when_minter_not_allowed_to_burn_ckerc20() {
+        let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
+        let caller = ckerc20.caller();
+        let ckusdc_ledger = ckerc20
+            .orchestrator
+            .call_orchestrator_canister_ids(&usdc_erc20_contract())
+            .expect("BUG: missing ckUSDC ledger suite")
+            .ledger
+            .unwrap();
+        ckerc20
+            .deposit_cketh(DepositParams::default())
+            .call_cketh_ledger_approve_minter(caller, 100, None)
+            .call_minter_withdraw_erc20(
+                caller,
+                ONE_USDC,
+                "ckUSDC",
+                DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS,
+            )
+            .expect_error(WithdrawErc20Error::InsufficientAllowance {
+                allowance: Nat::from(0_u8),
+                failed_burn_amount: ONE_USDC.into(),
+                token_symbol: "ckUSDC".to_string(),
+                ledger_id: ckusdc_ledger,
+            });
+    }
 }

@@ -1,7 +1,6 @@
 use candid::Principal;
 use ic_registry_routing_table::{canister_id_into_u64, CanisterIdRange};
 use ic_registry_subnet_type::SubnetType;
-use ic_tests::spec_compliance::run_ic_ref_test;
 use ic_types::PrincipalId;
 use pocket_ic::common::rest::{
     CanisterIdRange as RawCanisterIdRange, CreateInstanceResponse, RawTime, SubnetConfigSet,
@@ -9,6 +8,7 @@ use pocket_ic::common::rest::{
 };
 use reqwest::blocking::Client;
 use reqwest::{StatusCode, Url};
+use spec_compliance::run_ic_ref_test;
 use std::path::PathBuf;
 use std::process::Command;
 use std::time::{Duration, Instant, SystemTime};
@@ -126,6 +126,38 @@ fn test_blob_store_wrong_encoding() {
         .unwrap()
         .to_lowercase()
         .contains("bad encoding"));
+}
+
+#[test]
+fn test_port_file() {
+    let bin_path = std::env::var_os("POCKET_IC_BIN").expect("Missing PocketIC binary");
+    let port_file_path = std::env::temp_dir().join("pocket_ic.port");
+    Command::new(PathBuf::from(bin_path))
+        .arg("--port-file")
+        .arg(
+            port_file_path
+                .clone()
+                .into_os_string()
+                .into_string()
+                .unwrap(),
+        )
+        .spawn()
+        .expect("Failed to start PocketIC binary");
+    let start = Instant::now();
+    loop {
+        if let Ok(port_string) = std::fs::read_to_string(port_file_path.clone()) {
+            if !port_string.is_empty() {
+                port_string
+                    .parse::<u16>()
+                    .expect("Failed to parse port to number");
+                break;
+            }
+        }
+        std::thread::sleep(Duration::from_millis(20));
+        if start.elapsed() > Duration::from_secs(5) {
+            panic!("Failed to start PocketIC service in time");
+        }
+    }
 }
 
 const EXCLUDED: &[&str] = &[

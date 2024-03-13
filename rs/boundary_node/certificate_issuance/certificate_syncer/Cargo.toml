@@ -27,4 +27,4 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-x509-parser = "0.15.1"
+x509-parser = { workspace = true }

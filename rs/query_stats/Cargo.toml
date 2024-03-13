@@ -22,5 +22,6 @@ slog = { workspace = true }
 [dev-dependencies]
 ic-interfaces-state-manager-mocks = { path = "../interfaces/state_manager/mocks" }
 ic-test-utilities = { path = "../test_utilities" }
+ic-test-utilities-state = { path = "../test_utilities/state" }
 ic-test-utilities-time = { path = "../test_utilities/time" }
 ic-types-test-utils = { path = "../types/types_test_utils" }

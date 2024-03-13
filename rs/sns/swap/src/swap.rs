@@ -3155,6 +3155,7 @@ impl Swap {
                     .iter()
                     .skip(offset)
                     .take(limit)
+                    .map(|principal| principal.into())
                     .collect()
             });
 
@@ -3634,7 +3635,8 @@ impl NewSaleTicketResponse {
 }
 
 fn insert_buyer_into_buyers_list_index(buyer_principal_id: PrincipalId) -> Result<(), GrowFailed> {
-    memory::BUYERS_LIST_INDEX.with(|buyer_list| buyer_list.borrow_mut().push(&buyer_principal_id))
+    memory::BUYERS_LIST_INDEX
+        .with(|buyer_list| buyer_list.borrow_mut().push(&buyer_principal_id.into()))
 }
 
 /// A version of Swap that implements a shorter version of Debug, suitable for

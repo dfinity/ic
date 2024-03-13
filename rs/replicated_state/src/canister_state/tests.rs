@@ -18,7 +18,7 @@ use ic_management_canister_types::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterLogRecord, LogVisibility,
 };
 use ic_metrics::MetricsRegistry;
-use ic_test_utilities::types::{
+use ic_test_utilities_types::{
     ids::canister_test_id,
     ids::message_test_id,
     ids::user_test_id,

@@ -78,18 +78,17 @@ mod tests {
         testing::ReplicatedStateTesting,
         ExecutionState, ExportedFunctions, Global, Memory, NumWasmPages, PageMap, ReplicatedState,
     };
-    use ic_test_utilities::{
-        state::new_canister_state,
-        types::ids::{
-            canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id,
-        },
-        types::messages::{RequestBuilder, ResponseBuilder},
+    use ic_test_utilities_state::new_canister_state;
+    use ic_test_utilities_types::ids::{
+        canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id,
     };
+    use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
     use ic_types::{
         crypto::CryptoHash,
         ingress::{IngressState, IngressStatus},
-        messages::RequestMetadata,
+        messages::{RequestMetadata, NO_DEADLINE},
         nominal_cycles::NominalCycles,
+        time::CoarseTime,
         xnet::{StreamFlags, StreamIndex, StreamIndexedQueue},
         CryptoHashOfPartialState, Cycles, ExecutionRound, Time,
     };
@@ -202,8 +201,20 @@ mod tests {
                 StreamIndexedQueue::with_begin(StreamIndex::from(4)),
                 StreamIndex::new(10),
             );
-            for _ in 1..6 {
-                stream.push(ResponseBuilder::new().build().into());
+            let maybe_deadline = |i: u64| {
+                if certification_version >= CertificationVersion::V18 && i % 2 != 0 {
+                    CoarseTime::from_secs_since_unix_epoch(i as u32)
+                } else {
+                    NO_DEADLINE
+                }
+            };
+            for i in 1..6 {
+                stream.push(
+                    ResponseBuilder::new()
+                        .deadline(maybe_deadline(i))
+                        .build()
+                        .into(),
+                );
             }
             for i in 1..6 {
                 stream.push(
@@ -215,6 +226,7 @@ mod tests {
                                     Time::from_nanos_since_unix_epoch(i % 2),
                                 )),
                         )
+                        .deadline(maybe_deadline(i))
                         .build()
                         .into(),
                 );
@@ -357,6 +369,7 @@ mod tests {
             "EA3B53B72150E3982CB0E6773F86634685EE7B153DCFE10D86D9927778409D97",
             "D13F75C42D3E2BDA2F742510029088A9ADB119E30241AC969DE24936489168B5",
             "D13F75C42D3E2BDA2F742510029088A9ADB119E30241AC969DE24936489168B5",
+            "E739B8EA1585E9BB97988C80ED0C0CDFDF064D4BC5A2B6B06EB414BFF6139CCE",
         ];
 
         for certification_version in CertificationVersion::iter() {

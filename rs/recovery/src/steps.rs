@@ -1031,10 +1031,8 @@ impl Step for UploadAndHostTarStep {
 
 #[cfg(test)]
 mod tests {
-    use ic_test_utilities::{
-        consensus::fake::{Fake, FakeSigner},
-        types::ids::node_test_id,
-    };
+    use ic_test_utilities_consensus::fake::{Fake, FakeSigner};
+    use ic_test_utilities_types::ids::node_test_id;
     use ic_types::{
         consensus::certification::{Certification, CertificationContent, CertificationShare},
         crypto::{CryptoHash, Signed},

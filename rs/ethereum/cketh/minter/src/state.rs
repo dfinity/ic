@@ -65,8 +65,9 @@ pub struct State {
     /// Current balance of ETH held by minter.
     /// Computed based on audit events.
     pub eth_balance: EthBalance,
-    /// Per-principal lock for pending_retrieve_eth_requests
-    pub retrieve_eth_principals: BTreeSet<Principal>,
+
+    /// Per-principal lock for pending withdrawals
+    pub pending_withdrawal_principals: BTreeSet<Principal>,
 
     /// Locks preventing concurrent execution timer tasks
     pub active_tasks: HashSet<TaskType>,
@@ -135,6 +136,10 @@ impl State {
         Some(ecdsa_public_key_to_address(&pubkey))
     }
 
+    pub fn is_ckerc20_feature_active(&self) -> bool {
+        self.ledger_suite_orchestrator_id.is_some()
+    }
+
     pub fn eth_events_to_mint(&self) -> Vec<ReceivedEthEvent> {
         self.events_to_mint
             .values()
@@ -165,6 +170,16 @@ impl State {
 
     pub fn has_events_to_mint(&self) -> bool {
         !self.events_to_mint.is_empty()
+    }
+
+    pub fn find_ck_erc20_ledger(&self, symbol: &CkTokenSymbol) -> Option<Principal> {
+        self.ckerc20_tokens
+            .get_entry(symbol)
+            .map(|(_, ledger_id)| *ledger_id)
+    }
+
+    pub fn supported_ck_erc20_token_symbols(&self) -> impl Iterator<Item = &CkTokenSymbol> {
+        self.ckerc20_tokens.keys()
     }
 
     fn record_invalid_deposit(&mut self, source: EventSource, error: String) -> bool {

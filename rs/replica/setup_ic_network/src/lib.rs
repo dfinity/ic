@@ -30,7 +30,6 @@ use ic_https_outcalls_consensus::{
     gossip::CanisterHttpGossipImpl, payload_builder::CanisterHttpPayloadBuilderImpl,
     pool_manager::CanisterHttpPoolManagerImpl,
 };
-use ic_icos_sev::Sev;
 use ic_ingress_manager::{CustomRandomState, IngressManager};
 use ic_interfaces::{
     batch_payload::BatchPayloadBuilder,
@@ -40,7 +39,7 @@ use ic_interfaces::{
     p2p::consensus::PriorityFnAndFilterProducer,
     p2p::state_sync::StateSyncClient,
     self_validating_payload::SelfValidatingPayloadBuilder,
-    time_source::SysTimeSource,
+    time_source::{SysTimeSource, TimeSource},
 };
 use ic_interfaces_adapter_client::NonBlockingChannel;
 use ic_interfaces_registry::{LocalStoreCertifiedTimeReader, RegistryClient};
@@ -350,12 +349,6 @@ pub fn setup_consensus_and_p2p(
         metrics_registry,
     );
     p2p_router = Some(state_sync_router.merge(p2p_router.unwrap_or_default()));
-    let sev_handshake = Arc::new(Sev::new(
-        node_id,
-        subnet_id,
-        registry_client.clone(),
-        log.clone(),
-    ));
 
     // Quic transport
     let (_, topology_watcher) = ic_peer_manager::start_peer_manager(
@@ -378,7 +371,6 @@ pub fn setup_consensus_and_p2p(
         rt_handle,
         tls_config,
         registry_client.clone(),
-        sev_handshake.clone(),
         node_id,
         topology_watcher.clone(),
         Either::<_, DummyUdpSocket>::Left(transport_addr),
@@ -419,7 +411,6 @@ pub fn setup_consensus_and_p2p(
             artifact_manager,
             advert_rx,
             tls_handshake,
-            sev_handshake,
         ));
     }
     (ingress_pool, ingress_sender, join_handles)
@@ -455,13 +446,13 @@ fn start_consensus(
     registry_poll_delay_duration_ms: u64,
     advert_tx: P2PSenders,
     canister_http_adapter_client: CanisterHttpAdapterClient,
-    time_source: Arc<SysTimeSource>,
+    time_source: Arc<dyn TimeSource>,
 ) -> (P2PClients, Vec<Box<dyn JoinGuard>>, ArtifactPools) {
     let artifact_pools = init_artifact_pools(
         node_id,
         artifact_pool_config,
-        metrics_registry.clone(),
-        log.clone(),
+        metrics_registry,
+        log,
         catch_up_package,
     );
 
@@ -490,6 +481,7 @@ fn start_consensus(
         Arc::clone(&state_reader),
         cycles_account_manager,
         malicious_flags.clone(),
+        // todo: use a builder pattern and remove this from the constructor.
         CustomRandomState::default(),
     ));
 
@@ -537,7 +529,6 @@ fn start_consensus(
         );
 
         let consensus_gossip = Arc::new(consensus_gossip);
-        let time_source = Arc::clone(&time_source) as Arc<_>;
         let consensus_pool = Arc::clone(&consensus_pool);
 
         // Create the consensus client.
@@ -572,7 +563,7 @@ fn start_consensus(
             send_advert,
             consensus_setup,
             consensus_gossip.clone(),
-            time_source,
+            time_source.clone(),
             consensus_pool,
             metrics_registry.clone(),
         );
@@ -880,22 +871,22 @@ fn start_consensus(
 fn init_artifact_pools(
     node_id: NodeId,
     config: ArtifactPoolConfig,
-    registry: MetricsRegistry,
-    log: ReplicaLogger,
+    metrics_registry: &MetricsRegistry,
+    log: &ReplicaLogger,
     catch_up_package: CatchUpPackage,
 ) -> ArtifactPools {
     let ingress_pool = Arc::new(RwLock::new(IngressPoolImpl::new(
         node_id,
         config.clone(),
-        registry.clone(),
+        metrics_registry.clone(),
         log.clone(),
     )));
 
     let mut ecdsa_pool = EcdsaPoolImpl::new(
         config.clone(),
         log.clone(),
-        registry.clone(),
-        Box::new(ecdsa::EcdsaStatsImpl::new(registry.clone())),
+        metrics_registry.clone(),
+        Box::new(ecdsa::EcdsaStatsImpl::new(metrics_registry.clone())),
     );
     ecdsa_pool.add_initial_dealings(&catch_up_package);
     let ecdsa_pool = Arc::new(RwLock::new(ecdsa_pool));
@@ -904,10 +895,16 @@ fn init_artifact_pools(
         node_id,
         config,
         log.clone(),
-        registry.clone(),
+        metrics_registry.clone(),
     )));
-    let dkg_pool = Arc::new(RwLock::new(DkgPoolImpl::new(registry.clone(), log.clone())));
-    let canister_http_pool = Arc::new(RwLock::new(CanisterHttpPoolImpl::new(registry, log)));
+    let dkg_pool = Arc::new(RwLock::new(DkgPoolImpl::new(
+        metrics_registry.clone(),
+        log.clone(),
+    )));
+    let canister_http_pool = Arc::new(RwLock::new(CanisterHttpPoolImpl::new(
+        metrics_registry.clone(),
+        log.clone(),
+    )));
     ArtifactPools {
         ingress_pool,
         certification_pool,

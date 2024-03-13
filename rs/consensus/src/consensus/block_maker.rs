@@ -522,8 +522,8 @@ mod tests {
     use ic_interfaces::consensus_pool::ConsensusPool;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
-    use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
         consensus::{dkg, HasHeight, HasVersion},
         crypto::CryptoHash,
@@ -772,7 +772,7 @@ mod tests {
                 .expect_get_state_at()
                 .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
                     Height::new(0),
-                    Arc::new(ic_test_utilities::state::get_initial_state(0, 0)),
+                    Arc::new(ic_test_utilities_state::get_initial_state(0, 0)),
                 )));
 
             let mut payload_builder = MockPayloadBuilder::new();

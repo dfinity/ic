@@ -46,6 +46,8 @@ ic-registry-nns-data-provider = { path = "../registry/nns_data_provider" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-replica-setup-ic-network = { path = "../replica/setup_ic_network" }
 ic-test-utilities = { path = "../test_utilities" }
+ic-test-utilities-consensus = { path = "../test_utilities/consensus" }
 ic-test-utilities-metrics = { path = "../test_utilities/metrics" }
 ic-test-utilities-registry = { path = "../test_utilities/registry" }
+ic-test-utilities-types = { path = "../test_utilities/types" }
 tempfile = "3.1.0"

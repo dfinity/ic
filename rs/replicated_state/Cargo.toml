@@ -54,7 +54,9 @@ criterion-time = { path = "../criterion_time" }
 ic-btc-test-utils = { git = "https://github.com/dfinity/bitcoin-canister", rev = "b1693619e3d4dbc00d8c79e9b6886e1db48b21f7" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-metrics = { path = "../test_utilities/metrics" }
+ic-test-utilities-state = { path = "../test_utilities/state" }
 ic-test-utilities-time = { path = "../test_utilities/time" }
+ic-test-utilities-types = { path = "../test_utilities/types" }
 maplit = "1.0.2"
 serde_cbor = { workspace = true }
 proptest = "1.0"

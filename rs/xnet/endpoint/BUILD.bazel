@@ -33,6 +33,7 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities",
     "//rs/test_utilities/logger",
     "//rs/test_utilities/metrics",
+    "//rs/test_utilities/types",
     "@crate_index//:bytes",
     "@crate_index//:maplit",
     "@crate_index//:prost",

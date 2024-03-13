@@ -372,7 +372,7 @@ mod tests {
     use ic_interfaces::messaging::XNetPayloadValidationError;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
-    use ic_test_utilities::types::ids::node_test_id;
+    use ic_test_utilities_types::ids::node_test_id;
     use ic_types::{batch::ValidationContext, time::UNIX_EPOCH, RegistryVersion};
 
     struct TestXNetPayloadBuilder {

@@ -12,10 +12,11 @@ use ic_execution_environment::ExecutionServices;
 use ic_https_outcalls_adapter_client::setup_canister_http_client;
 use ic_interfaces::{
     execution_environment::QueryExecutionService, p2p::artifact_manager::JoinGuard,
-    time_source::TimeSource,
+    time_source::SysTimeSource,
 };
 use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_registry::{LocalStoreCertifiedTimeReader, RegistryClient};
+use ic_interfaces_state_manager::StateReader;
 use ic_logger::{info, ReplicaLogger};
 use ic_messaging::MessageRoutingImpl;
 use ic_metrics::MetricsRegistry;
@@ -24,6 +25,7 @@ use ic_protobuf::types::v1 as pb;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_local_store::LocalStoreImpl;
 use ic_replica_setup_ic_network::setup_consensus_and_p2p;
+use ic_replicated_state::ReplicatedState;
 use ic_state_manager::{state_sync::StateSync, StateManagerImpl};
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
@@ -61,15 +63,12 @@ pub fn construct_ic_stack(
     registry: Arc<dyn RegistryClient + Send + Sync>,
     crypto: Arc<CryptoComponent>,
     catch_up_package: Option<pb::CatchUpPackage>,
-    time_source: Arc<dyn TimeSource>,
 ) -> std::io::Result<(
-    // TODO: remove this return value since it is used only in tests
-    Arc<StateManagerImpl>,
-    // TODO: remove this return value since it is used only in tests
+    // TODO: remove next three return values since they are used only in tests
+    Arc<dyn StateReader<State = ReplicatedState>>,
     QueryExecutionService,
-    Vec<Box<dyn JoinGuard>>,
-    // TODO: remove this return value since it is used only in tests
     UnboundedSender<UnvalidatedArtifactMutation<IngressArtifact>>,
+    Vec<Box<dyn JoinGuard>>,
     XNetEndpoint,
 )> {
     // Determine the correct catch-up package.
@@ -149,7 +148,8 @@ pub fn construct_ic_stack(
         artifact_pool_config.clone(),
         metrics_registry.clone(),
         log.clone(),
-        time_source,
+        // TODO: use a builder pattern and remove the time source implementation from the constructor.
+        Arc::new(SysTimeSource::new()),
     )));
 
     // ---------- REPLICATED STATE DEPS FOLLOW ----------
@@ -324,6 +324,7 @@ pub fn construct_ic_stack(
         registry,
         Arc::clone(&crypto) as Arc<_>,
         Arc::clone(&crypto) as Arc<_>,
+        Arc::clone(&crypto) as Arc<_>,
         node_id,
         subnet_id,
         root_subnet_id,
@@ -338,8 +339,8 @@ pub fn construct_ic_stack(
     Ok((
         state_manager,
         execution_services.query_execution_service,
-        p2p_runner,
         ingress_tx,
+        p2p_runner,
         xnet_endpoint,
     ))
 }

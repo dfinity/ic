@@ -489,7 +489,7 @@ pub(super) mod tests {
     };
     use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
     use ic_logger::replica_logger::no_op_logger;
-    use ic_test_utilities::types::ids::subnet_test_id;
+    use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
         consensus::ecdsa::{EcdsaPayload, UnmaskedTranscript},
         crypto::canister_threshold_sig::idkg::IDkgTranscriptId,

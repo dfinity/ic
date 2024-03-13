@@ -3,7 +3,6 @@ use ic_base_types::{NodeId, RegistryVersion, SubnetId};
 use ic_config::transport::TransportConfig;
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
 use ic_crypto_tls_interfaces::TlsHandshake;
-use ic_icos_sev::Sev;
 use ic_interfaces_transport::{
     Transport, TransportChannelId, TransportError, TransportEvent, TransportEventHandler,
     TransportPayload,
@@ -135,12 +134,6 @@ where
         send_queue_size: 10,
         ..Default::default()
     };
-    let sev_handshake = Arc::new(Sev::new(
-        node_id,
-        SUBNET_ID_1,
-        registry_and_data.registry.clone(),
-        log.clone(),
-    ));
 
     let peer = create_transport(
         node_id,
@@ -149,7 +142,6 @@ where
         registry_version,
         MetricsRegistry::new(),
         crypto,
-        sev_handshake,
         rt_handle,
         log,
         use_h2,
@@ -267,12 +259,6 @@ impl TestPeerBuilder {
             send_queue_size: self.send_queue_size,
             ..Default::default()
         };
-        let sev_handshake = Arc::new(Sev::new(
-            self.node_id,
-            SUBNET_ID_1,
-            self.registry_data.registry.clone(),
-            self.log.clone(),
-        ));
 
         let transport = create_transport(
             self.node_id,
@@ -281,7 +267,6 @@ impl TestPeerBuilder {
             self.registry_version,
             MetricsRegistry::new(),
             crypto,
-            sev_handshake,
             self.rt_handle,
             self.log,
             self.h2,
@@ -425,12 +410,6 @@ pub fn start_connection_between_two_peers(
         send_queue_size,
         ..Default::default()
     };
-    let sev_handshake = Arc::new(Sev::new(
-        node_1,
-        SUBNET_ID_1,
-        registry_and_data.registry.clone(),
-        logger.clone(),
-    ));
 
     let peer_a = create_transport(
         node_1,
@@ -439,7 +418,6 @@ pub fn start_connection_between_two_peers(
         registry_version,
         MetricsRegistry::new(),
         Arc::new(crypto_1),
-        sev_handshake,
         rt_handle.clone(),
         logger.clone(),
         use_h2,
@@ -454,12 +432,6 @@ pub fn start_connection_between_two_peers(
         send_queue_size,
         ..Default::default()
     };
-    let sev_handshake = Arc::new(Sev::new(
-        node_2,
-        SUBNET_ID_1,
-        registry_and_data.registry,
-        logger.clone(),
-    ));
 
     let peer_b = create_transport(
         node_2,
@@ -468,7 +440,6 @@ pub fn start_connection_between_two_peers(
         registry_version,
         MetricsRegistry::new(),
         Arc::new(crypto_2),
-        sev_handshake,
         rt_handle,
         logger,
         use_h2,

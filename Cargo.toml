@@ -127,6 +127,7 @@ members = [
   "rs/http_utils",
   "rs/ic_os/deterministic_ips",
   "rs/ic_os/config",
+  "rs/ic_os/fstrim_tool",
   "rs/ic_os/guestos_tool",
   "rs/ic_os/hostos_tool",
   "rs/ic_os/launch-single-vm",
@@ -308,7 +309,7 @@ members = [
   "rs/sns/governance/proposal_criticality",
   "rs/sns/governance/protobuf_generator",
   "rs/sns/governance/token_valuation",
-  "rs/sns/governance/treasury_transfer_limit",
+  "rs/sns/governance/proposals_amount_total_limit",
   "rs/sns/init",
   "rs/sns/init/protobuf_generator",
   "rs/sns/integration_tests",
@@ -326,13 +327,16 @@ members = [
   "rs/system_api",
   "rs/test_utilities",
   "rs/test_utilities/artifact_pool",
+  "rs/test_utilities/consensus",
   "rs/test_utilities/execution_environment",
   "rs/test_utilities/load_wasm",
   "rs/test_utilities/compare_dirs",
   "rs/test_utilities/logger",
   "rs/test_utilities/metrics",
   "rs/test_utilities/serialization",
+  "rs/test_utilities/state",
   "rs/test_utilities/time",
+  "rs/test_utilities/types",
   "rs/test_utilities/tmpdir",
   "rs/tests",
   "rs/tests/httpbin-rs",
@@ -341,7 +345,9 @@ members = [
   "rs/tests/test_canisters/http_counter",
   "rs/tests/test_canisters/kv_store",
   "rs/tests/test_canisters/message",
+  "rs/tests/testing_verification",
   "rs/tests/testing_verification/wabt-tests",
+  "rs/tests/testing_verification/spec_compliance",
   "rs/tests/testing_verification/testnets",
   "rs/transport",
   "rs/transport/test_utils",
@@ -429,7 +435,7 @@ base64 = { version = "0.13.1" }
 build-info = { git = "https://github.com/dfinity-lab/build-info", rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7" }
 build-info-build = { git = "https://github.com/dfinity-lab/build-info", rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7", default_features = false }
 bytes = "1.5.0"
-candid = { version = "0.10.2" }
+candid = { version = "0.10.5" }
 candid_parser = { version = "0.1.2" }
 chrono = { version = "0.4.31", default-features = false, features = [
   "alloc",
@@ -442,6 +448,7 @@ cloudflare = { version = "0.9.1", default_features = false, features = [
   "rustls-tls",
 ] }
 crossbeam-channel = "0.5.11"
+curve25519-dalek = "=4.1.1"
 ethnum = { version = "1.3.2", features = ["serde"] }
 flate2 = "1.0.28"
 futures = "0.3.28"
@@ -450,9 +457,10 @@ hyper-socks2 = { version = "0.8.0", default_features = false, features = [
   "rustls",
 ] }
 ic-agent = { version = "0.33.0", features = ["hyper"] }
-ic-cdk = "0.12.0"
-ic-cdk-macros = "0.8.3"
-ic-cdk-timers = "0.6.0"
+ic-cdk = "0.13.1"
+ic-cdk-macros = "0.9.0"
+ic-cdk-timers = "0.7.0"
+ic_principal = { version = "0.1.1", default-features = false }
 ic-response-verification = "2.3.0"
 ic-http-certification = "2.3.0"
 ic-certification = "2.3.0"
@@ -536,3 +544,4 @@ tracing-subscriber = { version = "0.3.18", features = [
 ] }
 turmoil = "0.6.0"
 x509-cert = { version = "0.2.4", features = ["builder", "hazmat"] }
+x509-parser = { version = "0.15.1" }

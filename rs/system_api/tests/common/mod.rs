@@ -16,9 +16,9 @@ use ic_system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ApiType, DefaultOutOfInstructionsHandler,
     ExecutionParameters, InstructionLimits, SystemApiImpl,
 };
-use ic_test_utilities::{
-    state::SystemStateBuilder,
-    types::ids::{call_context_test_id, canister_test_id, subnet_test_id, user_test_id},
+use ic_test_utilities_state::SystemStateBuilder;
+use ic_test_utilities_types::ids::{
+    call_context_test_id, canister_test_id, subnet_test_id, user_test_id,
 };
 use ic_types::{
     messages::{CallContextId, CallbackId, RejectContext, RequestMetadata, NO_DEADLINE},

@@ -1,9 +1,11 @@
+use crate::ledger_client::LedgerBurnError;
 use crate::state::transactions::EthWithdrawalRequest;
 use crate::tx::{SignedEip1559TransactionRequest, TransactionPrice};
 use candid::{CandidType, Deserialize, Nat, Principal};
-use icrc_ledger_types::icrc2::transfer_from::TransferFromError;
 use minicbor::{Decode, Encode};
 use std::fmt::{Display, Formatter};
+
+pub mod ckerc20;
 
 #[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
 pub struct Eip1559TransactionPrice {
@@ -150,38 +152,18 @@ pub enum WithdrawalError {
     TemporarilyUnavailable(String),
 }
 
-impl From<TransferFromError> for WithdrawalError {
-    fn from(transfer_from_error: TransferFromError) -> Self {
-        match transfer_from_error {
-            TransferFromError::BadFee { expected_fee } => {
-                panic!("bug: bad fee, expected fee: {expected_fee}")
+impl From<LedgerBurnError> for WithdrawalError {
+    fn from(error: LedgerBurnError) -> Self {
+        match error {
+            LedgerBurnError::TemporarilyUnavailable { message, .. } => {
+                Self::TemporarilyUnavailable(message)
             }
-            TransferFromError::BadBurn { min_burn_amount } => {
-                panic!("bug: bad burn, minimum burn amount: {min_burn_amount}")
+            LedgerBurnError::InsufficientFunds { balance, .. } => {
+                Self::InsufficientFunds { balance }
             }
-            TransferFromError::InsufficientFunds { balance } => Self::InsufficientFunds { balance },
-            TransferFromError::InsufficientAllowance { allowance } => {
+            LedgerBurnError::InsufficientAllowance { allowance, .. } => {
                 Self::InsufficientAllowance { allowance }
             }
-            TransferFromError::TooOld => panic!("bug: transfer too old"),
-            TransferFromError::CreatedInFuture { ledger_time } => {
-                panic!("bug: created in future, ledger time: {ledger_time}")
-            }
-            TransferFromError::Duplicate { duplicate_of } => {
-                panic!("bug: duplicate transfer of: {duplicate_of}")
-            }
-            TransferFromError::TemporarilyUnavailable => Self::TemporarilyUnavailable(
-                "ckETH ledger temporarily unavailable, try again".to_string(),
-            ),
-            TransferFromError::GenericError {
-                error_code,
-                message,
-            } => Self::TemporarilyUnavailable(
-                format!(
-                    "ckETH ledger unreachable, error code: {error_code}, with message: {message}"
-                )
-                .to_string(),
-            ),
         }
     }
 }
@@ -329,6 +311,17 @@ pub mod events {
             address: String,
             ckerc20_token_symbol: String,
             ckerc20_ledger_id: Principal,
+        },
+        AcceptedErc20WithdrawalRequest {
+            max_transaction_fee: Nat,
+            withdrawal_amount: Nat,
+            ckerc20_token_symbol: String,
+            destination: String,
+            cketh_ledger_burn_index: Nat,
+            ckerc20_ledger_burn_index: Nat,
+            from: Principal,
+            from_subaccount: Option<[u8; 32]>,
+            created_at: u64,
         },
     }
 }

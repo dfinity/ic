@@ -1629,15 +1629,14 @@ mod tests {
         SetupInitialDkgContext, SubnetCallContext,
     };
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
-    use ic_test_utilities::{
-        consensus::fake::FakeContentSigner,
-        crypto::CryptoReturningOk,
-        state_manager::RefMockStateManager,
-        types::ids::{node_test_id, subnet_test_id},
-        types::messages::RequestBuilder,
-    };
+    use ic_test_utilities::{crypto::CryptoReturningOk, state_manager::RefMockStateManager};
+    use ic_test_utilities_consensus::fake::FakeContentSigner;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
+    use ic_test_utilities_types::{
+        ids::{node_test_id, subnet_test_id},
+        messages::RequestBuilder,
+    };
     use ic_types::{
         batch::BatchPayload,
         consensus::{ecdsa, DataPayload, HasVersion},
@@ -2260,7 +2259,7 @@ mod tests {
         times: Option<usize>,
         target: Option<NiDkgTargetId>,
     ) {
-        let mut state = ic_test_utilities::state::get_initial_state(0, 0);
+        let mut state = ic_test_utilities_state::get_initial_state(0, 0);
 
         // Add the context into state_manager.
         let nodes_in_target_subnet = node_ids.into_iter().map(node_test_id).collect();

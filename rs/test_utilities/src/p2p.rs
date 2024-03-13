@@ -1,6 +1,5 @@
 //! This file contains the helper functions required to setup testing framework.
 
-use crate::types::ids::node_test_id;
 use ic_config::logger::{default_logtarget, Config as LoggerConfig, LogFormat};
 use ic_interfaces::p2p::artifact_manager::JoinGuard;
 use ic_logger::*;
@@ -9,6 +8,7 @@ use ic_protobuf::registry::node::v1::{ConnectionEndpoint, NodeRecord};
 use ic_registry_keys::make_node_record_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_utilities_registry::{setup_registry_non_final, SubnetRecordBuilder};
+use ic_test_utilities_types::ids::node_test_id;
 use ic_types::{NodeId, RegistryVersion, SubnetId};
 use std::collections::HashMap;
 use std::{fs, fs::File, sync::Arc, thread::sleep, time::Duration};

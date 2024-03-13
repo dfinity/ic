@@ -1875,7 +1875,7 @@ pub struct NetworkEconomics {
     #[prost(message, optional, tag = "11")]
     pub neurons_fund_economics: ::core::option::Option<NeuronsFundEconomics>,
 }
-/// The thresholds specify the shape of the matching function used by the Neurons' Fund to
+/// The thresholds specify the shape of the ideal matching function used by the Neurons' Fund to
 /// determine how much to contribute for a given direct participation amount. Note that the actual
 /// swap participation is in ICP, whereas these thresholds are specifid in XDR; the conversion rate
 /// is determined at the time of execution of the CreateServiceNervousSystem proposal.
@@ -1887,12 +1887,17 @@ pub struct NeuronsFundMatchedFundingCurveCoefficients {
     #[prost(message, optional, tag = "1")]
     pub contribution_threshold_xdr:
         ::core::option::Option<::ic_nervous_system_proto::pb::v1::Decimal>,
-    /// At this amount of direct participation, the Neurons' Fund contributes 50% of that amount.
+    /// Say the direct participation amount is `x_icp`. When `x_icp` equals the equavalent of
+    /// `one_third_participation_milestone_xdr` in ICP (we use ICP/XDR conversion data from the CMC),
+    /// the Neurons' Fund contributes 50% on top of that amount, so the overall contributions would
+    /// be `1.5 * x_icp` of which 1/3 comes from the Neurons' Fund.
     #[prost(message, optional, tag = "2")]
     pub one_third_participation_milestone_xdr:
         ::core::option::Option<::ic_nervous_system_proto::pb::v1::Decimal>,
-    /// At this amount of direct participation, the Neurons' Fund contributes 100% of that amount.
-    /// This is the maximum participation rate of the Neurons' Fund.
+    /// Say the direct participation amount is `x_icp`. When `x_icp` equals the equavalent of
+    /// `full_participation_milestone_xdr` in ICP (we use ICP/XDR conversion data from the CMC),
+    /// the Neurons' Fund contributes 100% on top of that amount, so the overall contributions would
+    /// be `2.0 * x_icp` of which a half comes from the Neurons' Fund.
     #[prost(message, optional, tag = "3")]
     pub full_participation_milestone_xdr:
         ::core::option::Option<::ic_nervous_system_proto::pb::v1::Decimal>,

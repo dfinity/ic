@@ -20,8 +20,11 @@ ic-registry-keys = { path = "../../registry/keys" }
 ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
 ic-test-artifact-pool = { path = "../../test_utilities/artifact_pool" }
 ic-test-utilities = { path = "../../test_utilities" }
+ic-test-utilities-consensus = { path = "../../test_utilities/consensus" }
 ic-test-utilities-registry = { path = "../../test_utilities/registry" }
+ic-test-utilities-state = { path = "../../test_utilities/state" }
 ic-test-utilities-time = { path = "../../test_utilities/time" }
+ic-test-utilities-types = { path = "../../test_utilities/types" }
 ic-types = { path = "../../types/types" }
 mockall = { workspace = true }
 slog = { workspace = true }

@@ -45,7 +45,7 @@ rust_library(
         "//rs/types/management_canister_types",
         "//rs/types/types",
         "@crate_index//:candid",
-        "@crate_index//:clap",
+        "@crate_index//:clap_3_2_25",
         "@crate_index//:exec",
         "@crate_index//:get_if_addrs",
         "@crate_index//:hex",
@@ -71,7 +71,7 @@ rust_binary(
     deps = [
         ":lib",
         "//rs/async_utils",
-        "@crate_index//:clap",
+        "@crate_index//:clap_3_2_25",
         "@crate_index//:tokio",
     ],
 )
@@ -84,10 +84,11 @@ rust_test(
         "//rs/crypto/test_utils/canister_threshold_sigs",
         "//rs/crypto/test_utils/reproducible_rng",
         "//rs/registry/fake",
-        "//rs/test_utilities",
+        "//rs/test_utilities/consensus",
         "//rs/test_utilities/in_memory_logger",
         "//rs/test_utilities/logger",
         "//rs/test_utilities/time",
+        "//rs/test_utilities/types",
         "@crate_index//:mockall",
     ],
 )

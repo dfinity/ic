@@ -395,7 +395,7 @@ mod tests {
     use super::*;
     use ic_interfaces_state_manager_mocks::MockStateManager;
     use ic_logger::replica_logger::no_op_logger;
-    use ic_test_utilities::state::ReplicatedStateBuilder;
+    use ic_test_utilities_state::ReplicatedStateBuilder;
     use ic_types::{
         batch::{CanisterQueryStats, QueryStats, RawQueryStats},
         crypto::{CryptoHash, CryptoHashOf},
@@ -409,7 +409,7 @@ mod tests {
 
     /// Test simple inclusion of a stat
     ///
-    /// - Put statistics of one canister into `current_stats`  
+    /// - Put statistics of one canister into `current_stats`
     /// - Build a payload
     /// - Check that the statistic is in the build payload
     #[test]

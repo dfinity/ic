@@ -17,7 +17,7 @@ DEPENDENCIES = [
     "@crate_index//:byte-unit",
     "@crate_index//:candid",
     "@crate_index//:chrono",
-    "@crate_index//:clap",
+    "@crate_index//:clap_3_2_25",
     "@crate_index//:console",
     "@crate_index//:futures",
     "@crate_index//:hex",

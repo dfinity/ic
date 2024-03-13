@@ -23,7 +23,7 @@ use ic_registry_keys::{
 use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
 use ic_registry_transport::{insert, pb::v1::RegistryAtomicMutateRequest, upsert};
 use ic_replica_tests::{canister_test_with_config_async, get_ic_config};
-use ic_test_utilities::types::ids::subnet_test_id;
+use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types::ReplicaVersion;
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder,

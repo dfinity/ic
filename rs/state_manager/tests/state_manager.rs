@@ -39,18 +39,16 @@ use ic_state_manager::{
     DirtyPageMap, PageMapType, StateManagerImpl,
 };
 use ic_sys::PAGE_SIZE;
-use ic_test_utilities::{
-    consensus::fake::FakeVerifier,
-    io::{make_mutable, make_readonly, write_all_at},
-    state::{arb_stream, arb_stream_slice, arb_stream_with_config, canister_ids},
-    types::{
-        ids::{canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id},
-        messages::RequestBuilder,
-    },
-};
+use ic_test_utilities::io::{make_mutable, make_readonly, write_all_at};
+use ic_test_utilities_consensus::fake::FakeVerifier;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{fetch_int_counter_vec, fetch_int_gauge, Labels};
+use ic_test_utilities_state::{arb_stream, arb_stream_slice, arb_stream_with_config, canister_ids};
 use ic_test_utilities_tmpdir::tmpdir;
+use ic_test_utilities_types::{
+    ids::{canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id},
+    messages::RequestBuilder,
+};
 use ic_types::batch::{
     CanisterQueryStats, QueryStats, QueryStatsPayload, RawQueryStats, TotalQueryStats,
 };
@@ -328,7 +326,7 @@ fn merge_overhead() {
     }
 
     let env = StateMachineBuilder::new()
-        .with_lsmt_override(Some(lsmt_without_sharding()))
+        .with_lsmt_override(Some(lsmt_with_sharding()))
         .build();
 
     let canister_ids = (0..10)
@@ -5344,7 +5342,7 @@ fn checkpoints_are_readonly() {
 #[test]
 fn can_downgrade_from_lsmt() {
     state_manager_restart_test_with_lsmt(
-        lsmt_without_sharding(),
+        lsmt_with_sharding(),
         |metrics, state_manager, restart_fn| {
             let (_height, mut state) = state_manager.take_tip();
 
@@ -5380,10 +5378,7 @@ fn can_downgrade_from_lsmt() {
                 &canister_test_id(1),
                 height(1)
             ));
-            assert_eq!(
-                vmemory0_num_overlays(&state_manager, &canister_test_id(1), height(1)),
-                1
-            );
+            assert!(vmemory0_num_overlays(&state_manager, &canister_test_id(1), height(1)) > 0);
 
             let (_height, mut state) = state_manager.take_tip();
             let canister_state = state.canister_state_mut(&canister_test_id(1)).unwrap();
@@ -5500,7 +5495,7 @@ fn can_upgrade_to_lsmt() {
         assert_error_counters(metrics);
 
         // restart the state_manager
-        let (metrics, state_manager) = restart_fn(state_manager, None, lsmt_without_sharding());
+        let (metrics, state_manager) = restart_fn(state_manager, None, lsmt_with_sharding());
 
         let (_height, mut state) = state_manager.take_tip();
         let canister_state = state.canister_state_mut(&canister_test_id(1)).unwrap();
@@ -5535,10 +5530,7 @@ fn can_upgrade_to_lsmt() {
             &canister_test_id(1),
             height(3)
         ));
-        assert_eq!(
-            vmemory0_num_overlays(&state_manager, &canister_test_id(1), height(3)),
-            1
-        );
+        assert!(vmemory0_num_overlays(&state_manager, &canister_test_id(1), height(3)) > 0);
 
         state_manager.commit_and_certify(state, height(4), CertificationScope::Full);
         wait_for_checkpoint(&state_manager, height(4));
@@ -6014,7 +6006,7 @@ fn arbitrary_test_canister_op() -> impl Strategy<Value = TestCanisterOp> {
         Just(TestCanisterOp::CanisterUpgrade),
         Just(TestCanisterOp::CanisterReinstall),
         Just(TestCanisterOp::Checkpoint),
-        Just(TestCanisterOp::RestartWithLSMT(lsmt_without_sharding())),
+        Just(TestCanisterOp::RestartWithLSMT(lsmt_with_sharding())),
         Just(TestCanisterOp::RestartWithLSMT(lsmt_disabled())),
     }
 }
@@ -6068,7 +6060,7 @@ fn random_canister_input_lsmt(ops in proptest::collection::vec(arbitrary_test_ca
 
     // Setup two state machines with a single TEST_CANISTER installed.
     let mut lsmt_env = StateMachineBuilder::new()
-        .with_lsmt_override(Some(lsmt_without_sharding()))
+        .with_lsmt_override(Some(lsmt_with_sharding()))
         .build();
     let mut base_env = StateMachineBuilder::new()
         .with_lsmt_override(Some(lsmt_disabled()))

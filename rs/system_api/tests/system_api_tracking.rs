@@ -1,7 +1,7 @@
 use ic_interfaces::execution_environment::SystemApiCallCounters;
 use ic_system_api::NonReplicatedQueryKind;
-use ic_test_utilities::types::ids::subnet_test_id;
-use ic_test_utilities::{types::ids::user_test_id, wasmtime_instance::WasmtimeInstanceBuilder};
+use ic_test_utilities_embedders::WasmtimeInstanceBuilder;
+use ic_test_utilities_types::ids::{subnet_test_id, user_test_id};
 use ic_types::time::UNIX_EPOCH;
 
 fn call_counters_on_ok_call(wat: &str) -> SystemApiCallCounters {

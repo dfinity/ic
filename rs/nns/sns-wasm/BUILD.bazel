@@ -67,6 +67,7 @@ DEV_DEPENDENCIES = [
     "//rs/state_machine_tests",
     "//rs/test_utilities",
     "//rs/test_utilities/compare_dirs",
+    "//rs/test_utilities/types",
     "@crate_index//:candid_parser",
     "@crate_index//:pretty_assertions",
     "@crate_index//:tempfile",

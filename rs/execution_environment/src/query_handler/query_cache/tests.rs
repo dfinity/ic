@@ -9,8 +9,9 @@ use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{SystemApiCallCounters, SystemApiCallId};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
-use ic_test_utilities::{types::ids::user_test_id, universal_canister::wasm};
+use ic_test_utilities::universal_canister::wasm;
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
+use ic_test_utilities_types::ids::user_test_id;
 use ic_types::{
     batch::QueryStats,
     ingress::WasmResult,

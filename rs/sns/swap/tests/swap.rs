@@ -34,7 +34,8 @@ use ic_nervous_system_common_test_utils::{
 };
 use ic_nervous_system_proto::pb::v1::Countries;
 use ic_neurons_fund::{
-    InvertibleFunction, MatchingFunction, PolynomialMatchingFunction, SerializableFunction,
+    InvertibleFunction, MatchingFunction, NeuronsFundParticipationLimits,
+    PolynomialMatchingFunction, SerializableFunction,
 };
 use ic_sns_governance::{
     pb::v1::{
@@ -63,6 +64,7 @@ use ic_sns_swap::{
 use icp_ledger::DEFAULT_TRANSFER_FEE;
 use icrc_ledger_types::icrc1::account::Account;
 use maplit::btreemap;
+use rust_decimal_macros::dec;
 use std::{
     collections::{BTreeMap, HashSet},
     pin::Pin,
@@ -90,6 +92,15 @@ const OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID: u64 = 746114;
 
 const START_TIMESTAMP_SECONDS: u64 = START_OF_2022_TIMESTAMP_SECONDS + 42 * SECONDS_PER_DAY;
 const END_TIMESTAMP_SECONDS: u64 = START_TIMESTAMP_SECONDS + 7 * SECONDS_PER_DAY;
+
+fn neurons_fund_participation_limits() -> NeuronsFundParticipationLimits {
+    NeuronsFundParticipationLimits {
+        max_theoretical_neurons_fund_participation_amount_icp: dec!(333_000.0),
+        contribution_threshold_icp: dec!(75_000.0),
+        one_third_participation_milestone_icp: dec!(225_000.0),
+        full_participation_milestone_icp: dec!(375_000.0),
+    }
+}
 
 /// Returns a valid Init.
 fn init_with_confirmation_text(confirmation_text: Option<String>) -> Init {
@@ -3294,7 +3305,9 @@ async fn test_restore_dapp_controllers_handles_internal_root_failures() {
 #[test]
 fn test_derived_state() {
     let total_nf_maturity = 1_000_000 * E8;
-    let nf_matching_fn = PolynomialMatchingFunction::new(total_nf_maturity).unwrap();
+    let nf_matching_fn =
+        PolynomialMatchingFunction::new(total_nf_maturity, neurons_fund_participation_limits())
+            .unwrap();
     println!("{}", nf_matching_fn.dbg_plot());
     let mut swap = Swap {
         init: Some(Init {
@@ -4642,7 +4655,7 @@ fn test_rebuild_indexes_ignores_existing_index() {
     assert_eq!(participants.len(), 2);
 
     // Grab a snapshot of the index to compare to later
-    let buyer_list_index_length_before: Vec<PrincipalId> =
+    let buyer_list_index_length_before: Vec<Principal> =
         memory::BUYERS_LIST_INDEX.with(|list| list.borrow().iter().collect());
     assert_eq!(buyer_list_index_length_before.len(), 2);
 
@@ -4657,7 +4670,7 @@ fn test_rebuild_indexes_ignores_existing_index() {
     assert_eq!(participants.len(), 2);
 
     // The actual BUYERS_LIST_INDEX should not have been rebuilt
-    let buyer_list_index_length_after: Vec<PrincipalId> =
+    let buyer_list_index_length_after: Vec<Principal> =
         memory::BUYERS_LIST_INDEX.with(|list| list.borrow().iter().collect());
     assert_eq!(buyer_list_index_length_after.len(), 2);
 
@@ -5259,8 +5272,11 @@ fn test_refresh_buyer_tokens_with_neurons_fund_matched_funding() {
             ],
             ideal_matched_participation_function: Some(IdealMatchedParticipationFunction {
                 serialized_representation: Some(
-                    (PolynomialMatchingFunction::new(total_nf_maturity_equivalent_icp_e8s)
-                        .unwrap())
+                    (PolynomialMatchingFunction::new(
+                        total_nf_maturity_equivalent_icp_e8s,
+                        neurons_fund_participation_limits(),
+                    )
+                    .unwrap())
                     .serialize(),
                 ),
             }),
@@ -5442,8 +5458,11 @@ fn test_refresh_buyer_tokens_without_neurons_fund_matched_funding() {
             }],
             ideal_matched_participation_function: Some(IdealMatchedParticipationFunction {
                 serialized_representation: Some(
-                    (PolynomialMatchingFunction::new(total_nf_maturity_equivalent_icp_e8s)
-                        .unwrap())
+                    (PolynomialMatchingFunction::new(
+                        total_nf_maturity_equivalent_icp_e8s,
+                        neurons_fund_participation_limits(),
+                    )
+                    .unwrap())
                     .serialize(),
                 ),
             }),
@@ -5698,8 +5717,11 @@ fn test_swap_cannot_finalize_via_new_participation_if_remaining_lt_minimal_parti
             }],
             ideal_matched_participation_function: Some(IdealMatchedParticipationFunction {
                 serialized_representation: Some(
-                    (PolynomialMatchingFunction::new(total_nf_maturity_equivalent_icp_e8s)
-                        .unwrap())
+                    PolynomialMatchingFunction::new(
+                        total_nf_maturity_equivalent_icp_e8s,
+                        neurons_fund_participation_limits(),
+                    )
+                    .unwrap()
                     .serialize(),
                 ),
             }),

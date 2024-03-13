@@ -16,8 +16,8 @@ use anyhow::Result;
 use ic_registry_subnet_type::SubnetType;
 use ic_tests::driver::group::SystemTestGroup;
 use ic_tests::driver::test_env::TestEnv;
-use ic_tests::spec_compliance::{config_impl, test_subnet};
 use ic_tests::systest;
+use spec_compliance::{config_impl, test_subnet};
 
 pub fn config(env: TestEnv) {
     config_impl(env, false, false);

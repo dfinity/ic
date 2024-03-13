@@ -141,9 +141,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "async-socks5": crate.spec(
                 version = "^0.5.1",
             ),
-            "async-std": crate.spec(
-                version = "^1.12.0",
-            ),
             "async-stream": crate.spec(
                 version = "^0.3.5",
             ),
@@ -266,7 +263,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 default_features = False,
             ),
             "candid": crate.spec(
-                version = "^0.10.2",
+                version = "^0.10.5",
             ),
             "cargo_metadata": crate.spec(
                 version = "^0.14.2",
@@ -299,14 +296,14 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "cidr": crate.spec(
                 version = "^0.2.2",
             ),
-            "clap": crate.spec(
+            "clap_3_2_25": crate.spec(
+                package = "clap",
                 version = "^3.2.25",
                 features = [
                     "derive",
                 ],
             ),
-            "clap_4_0_0": crate.spec(
-                package = "clap",
+            "clap": crate.spec(
                 version = "^4.0.0",
                 features = [
                     "derive",
@@ -355,7 +352,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.1",
             ),
             "curve25519-dalek": crate.spec(
-                version = "^3.0.2",
+                version = "=4.1.1",
             ),
             "cvt": crate.spec(
                 version = "^0.1.1",
@@ -416,9 +413,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
                 default_features = False,
             ),
-            "fix-hidden-lifetime-bug": crate.spec(
-                version = "^0.2.4",
-            ),
             "flate2": crate.spec(
                 version = "^1.0.22",
             ),
@@ -442,12 +436,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 features = [
                     "custom",
                 ],
-            ),
-            "gflags": crate.spec(
-                version = "^0.3.7",
-            ),
-            "gflags-derive": crate.spec(
-                version = "^0.1",
             ),
             "glob": crate.spec(
                 version = "^0.3.0",
@@ -488,17 +476,11 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "http-serde": crate.spec(
                 version = "^2.0.0",
             ),
-            "httparse": crate.spec(
-                version = "^1.5.1",
-            ),
             "httptest": crate.spec(
                 version = "^0.15.4",
             ),
             "humantime": crate.spec(
                 version = "^2.1.0",
-            ),
-            "humantime-serde": crate.spec(
-                version = "^1.0",
             ),
             "hyper": crate.spec(
                 version = "^0.14.27",
@@ -578,13 +560,13 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "2.3.0",
             ),
             "ic-cdk": crate.spec(
-                version = "^0.12.0",
+                version = "^0.13.1",
             ),
             "ic-cdk-timers": crate.spec(
-                version = "^0.6.0",
+                version = "^0.7.0",
             ),
             "ic-cdk-macros": crate.spec(
-                version = "^0.8.3",
+                version = "^0.9.0",
             ),
             "ic-certified-map": crate.spec(
                 version = "^0.3.1",
@@ -597,6 +579,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "ic-metrics-encoder": crate.spec(
                 version = "^1.1.1",
+            ),
+            "ic_principal": crate.spec(
+                version = "^0.1.1",
+                default_features = False,
             ),
             "ic-stable-structures": crate.spec(
                 version = "^0.6.0",
@@ -786,9 +772,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "num-bigint-dig": crate.spec(
                 version = "^0.8",
                 features = ["prime"],
-            ),
-            "num-derive": crate.spec(
-                version = "^0.3",
             ),
             "num-integer": crate.spec(
                 version = "^0.1.41",

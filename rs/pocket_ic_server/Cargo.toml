@@ -45,8 +45,8 @@ base64 = { workspace = true }
 wat = "1.0.52"
 flate2 = "1.0.27"
 aide = { version = "^0.13.0", features = ["axum"] }
-serde_cbor = { workspace = true}
+serde_cbor = { workspace = true }
 
 [dev-dependencies]
 reqwest = { workspace = true }
-tests = { path = "../tests" }
+spec-compliance = { path = "../tests/testing_verification/spec_compliance" }

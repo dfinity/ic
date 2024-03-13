@@ -13,17 +13,15 @@ use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_replicated_state::{
     metadata_state::StreamMap, testing::ReplicatedStateTesting, ReplicatedState, Stream,
 };
-use ic_test_utilities::{
-    state_manager::FakeStateManager,
-    types::{
-        ids::{
-            canister_test_id, node_test_id, subnet_test_id, NODE_1, NODE_2, NODE_3, NODE_4,
-            SUBNET_0, SUBNET_1, SUBNET_2, SUBNET_3, SUBNET_4, SUBNET_5,
-        },
-        messages::RequestBuilder,
-    },
-};
+use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_registry::test_subnet_record;
+use ic_test_utilities_types::{
+    ids::{
+        canister_test_id, node_test_id, subnet_test_id, NODE_1, NODE_2, NODE_3, NODE_4, SUBNET_0,
+        SUBNET_1, SUBNET_2, SUBNET_3, SUBNET_4, SUBNET_5,
+    },
+    messages::RequestBuilder,
+};
 use ic_types::{
     messages::CallbackId,
     time::UNIX_EPOCH,

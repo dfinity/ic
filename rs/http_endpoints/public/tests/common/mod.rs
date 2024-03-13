@@ -6,7 +6,8 @@ use hyper::{
 use hyper_util::rt::TokioIo;
 use ic_agent::Agent;
 use ic_config::http_handler::Config;
-use ic_crypto_tls_interfaces_mocks::MockTlsHandshake;
+use ic_crypto_tls_interfaces::TlsConfig;
+use ic_crypto_tls_interfaces_mocks::{MockTlsConfig, MockTlsHandshake};
 use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
 use ic_error_types::UserError;
 use ic_http_endpoints_public::start_server;
@@ -39,11 +40,9 @@ use ic_replicated_state::{
     canister_snapshots::CanisterSnapshots, CanisterQueues, NetworkTopology, ReplicatedState,
     SystemMetadata,
 };
-use ic_test_utilities::{
-    crypto::{temp_crypto_component_with_fake_registry, CryptoReturningOk},
-    state::ReplicatedStateBuilder,
-    types::ids::{node_test_id, subnet_test_id},
-};
+use ic_test_utilities::crypto::{temp_crypto_component_with_fake_registry, CryptoReturningOk};
+use ic_test_utilities_state::ReplicatedStateBuilder;
+use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
     artifact_kind::IngressArtifact,
@@ -389,6 +388,7 @@ pub struct HttpEndpointBuilder {
     registry_client: Arc<dyn RegistryClient>,
     delegation_from_nns: Option<CertificateDelegation>,
     pprof_collector: Arc<dyn PprofCollector>,
+    tls_config: Arc<dyn TlsConfig + Send + Sync>,
 }
 
 impl HttpEndpointBuilder {
@@ -401,6 +401,7 @@ impl HttpEndpointBuilder {
             registry_client: Arc::new(basic_registry_client()),
             delegation_from_nns: None,
             pprof_collector: Arc::new(Pprof),
+            tls_config: Arc::new(MockTlsConfig::new()),
         }
     }
 
@@ -432,6 +433,11 @@ impl HttpEndpointBuilder {
 
     pub fn with_pprof_collector(mut self, pprof_collector: impl PprofCollector + 'static) -> Self {
         self.pprof_collector = Arc::new(pprof_collector);
+        self
+    }
+
+    pub fn with_tls_config(mut self, tls_config: impl TlsConfig + Send + Sync + 'static) -> Self {
+        self.tls_config = Arc::new(tls_config);
         self
     }
 
@@ -472,6 +478,7 @@ impl HttpEndpointBuilder {
             self.state_manager,
             crypto as Arc<_>,
             self.registry_client,
+            self.tls_config,
             tls_handshake,
             sig_verifier,
             node_id,

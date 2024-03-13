@@ -50,6 +50,7 @@ candid_parser = { workspace = true }
 ic-sns-wasm-protobuf-generator = { path = "./protobuf_generator" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
+ic-test-utilities-types = { path = "../../test_utilities/types" }
 tempfile = "3.1.0"
 tokio = { workspace = true }
 ic-state-machine-tests = { path = "../../state_machine_tests" }

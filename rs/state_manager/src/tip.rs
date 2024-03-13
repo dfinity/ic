@@ -15,7 +15,9 @@ use ic_protobuf::state::{
     stats::v1::Stats,
     system_metadata::v1::{SplitFrom, SystemMetadata},
 };
-use ic_replicated_state::page_map::{MergeCandidate, StorageMetrics, MAX_NUMBER_OF_FILES};
+use ic_replicated_state::page_map::{
+    MergeCandidate, StorageMetrics, StorageResult, MAX_NUMBER_OF_FILES,
+};
 #[allow(unused)]
 use ic_replicated_state::{
     canister_state::execution_state::SandboxMemory,
@@ -414,6 +416,7 @@ pub(crate) fn spawn_tip_thread(
                                     height,
                                     &mut thread_pool,
                                     &log,
+                                    &lsmt_config,
                                     &metrics,
                                 ),
                                 FlagStatus::Disabled => {
@@ -499,76 +502,36 @@ pub(crate) fn spawn_tip_thread(
     (tip_handle, tip_sender)
 }
 
-#[derive(Clone, Debug)]
-struct MergeCandidateAndMetrics {
-    // Merge candidate if any merge is applicable.
-    merge_candidate: Option<MergeCandidate>,
-
-    // Number of files for the page map currently (before merge).
-    num_files_before: usize,
-
-    // Storage size on disk currently (before merge) and an estimate of it for after the merge.
-    storage_size_bytes_before: usize,
-    storage_size_bytes_after: usize,
-
-    // Page map size in RAM.
-    page_map_size_bytes: usize,
-
-    // Estimate how much is necessary to flush to disk to apply the merge.
-    write_size_bytes: usize,
+struct StorageInfo {
+    disk_size: u64,
+    mem_size: u64,
 }
 
-impl MergeCandidateAndMetrics {
-    fn new(
-        layout: &dyn StorageLayout,
-        height: Height,
-        page_map_num_pages: usize,
-    ) -> Result<Self, Box<dyn std::error::Error>> {
-        let merge_candidate = MergeCandidate::new(layout, height)?;
-        let base_path = layout.base();
-        let existing_overlays = layout.existing_overlays()?;
-        let merge_all = merge_candidate
-            .as_ref()
-            .map_or(false, |m| m.is_full_merge());
-        let existing_base = if base_path.exists() {
-            Some(base_path.to_path_buf())
-        } else {
-            None
+fn merge_candidates_and_storage_info(
+    tip_handler: &mut TipHandler,
+    pagemaptypes_with_num_pages: &[(PageMapType, usize)],
+    height: Height,
+    lsmt_config: &LsmtConfig,
+) -> StorageResult<(Vec<MergeCandidate>, StorageInfo)> {
+    let layout = &tip_handler.tip(height)?;
+    let mut merge_candidates = Vec::new();
+    let mut storage_info = StorageInfo {
+        disk_size: 0,
+        mem_size: 0,
+    };
+    for (page_map_type, num_pages) in pagemaptypes_with_num_pages {
+        let canister_layout = layout.canister(&page_map_type.id())?;
+        let pm_layout = PageMapLayout {
+            page_map_type: *page_map_type,
+            layout: &canister_layout,
         };
-        let existing_files = existing_base.iter().chain(existing_overlays.iter());
-        let existing_files_lengths: Vec<u64> = existing_files
-            .map(|f| std::fs::metadata(f).map(|m| m.len()))
-            .collect::<Result<Vec<_>, _>>()?;
-        let num_files_before = existing_files_lengths.len();
-
-        let page_map_size_bytes = page_map_num_pages * PAGE_SIZE;
-        let storage_size_bytes_before = existing_files_lengths.iter().sum::<u64>() as usize;
-        // If we do partial merges, in the worst case scenario all the overlays contain
-        // non-overlapping pages and we don't save space. We do these merges to maintain a pyramid
-        // shape of file sizes and to cap number of files.
-        let storage_size_bytes_after = if merge_all {
-            page_map_size_bytes
-        } else {
-            storage_size_bytes_before
-        };
-        let merge_input_bytes = match merge_candidate.as_ref() {
-            None => 0,
-            Some(m) => m.input_size_bytes()?,
-        };
-        let write_size_bytes = if merge_all {
-            page_map_size_bytes
-        } else {
-            std::cmp::min(page_map_size_bytes, merge_input_bytes as usize)
-        };
-        Ok(MergeCandidateAndMetrics {
-            merge_candidate,
-            num_files_before,
-            storage_size_bytes_before,
-            storage_size_bytes_after,
-            page_map_size_bytes,
-            write_size_bytes,
-        })
+        storage_info.disk_size += (&pm_layout as &dyn StorageLayout).storage_size()?;
+        storage_info.mem_size += (num_pages * PAGE_SIZE) as u64;
+        for m in MergeCandidate::new(&pm_layout, height, *num_pages as u64, lsmt_config)? {
+            merge_candidates.push(m)
+        }
     }
+    Ok((merge_candidates, storage_info))
 }
 
 /// Merge excessive overlays.
@@ -628,68 +591,37 @@ fn merge(
     height: Height,
     thread_pool: &mut scoped_threadpool::Pool,
     log: &ReplicaLogger,
+    lsmt_config: &LsmtConfig,
     metrics: &StateManagerMetrics,
 ) {
-    let layout = &tip_handler.tip(height).unwrap_or_else(|err| {
-        fatal!(log, "Failed to get layout for {}: {}", height, err);
+    // We have a merge candidate for each shard, unless no merge is needed, i. e.
+    //   1) Shard forms a pyramid (hence overhead < 2.0)
+    //   and
+    //   2) number of files is <= MAX_NUMBER_OF_FILES
+    let (mut merge_candidates, storage_info) = merge_candidates_and_storage_info(
+        tip_handler,
+        pagemaptypes_with_num_pages,
+        height,
+        lsmt_config,
+    )
+    .unwrap_or_else(|err| {
+        fatal!(log, "Failed to get MergeCandidateAndMetrics: {}", err);
     });
-    let merges_with_metrics: Vec<_> = parallel_map(
-        thread_pool,
-        pagemaptypes_with_num_pages
-            .iter()
-            .map(|(page_map_type, num_pages)| {
-                (
-                    layout.canister(&page_map_type.id()).unwrap_or_else(|err| {
-                        fatal!(log, "Failed to get layout for {:?}: {}", page_map_type, err);
-                    }),
-                    *page_map_type,
-                    *num_pages,
-                )
-            }),
-        |(canister_layout, page_map_type, num_pages)| {
-            let pm_layout = PageMapLayout {
-                page_map_type: *page_map_type,
-                layout: canister_layout,
-            };
-            MergeCandidateAndMetrics::new(&pm_layout, height, *num_pages).unwrap_or_else(|err| {
-                fatal!(
-                    log,
-                    "Failed to get MergeCandidateAndMetrics for {:?}: {}",
-                    pm_layout.page_map_type,
-                    err
-                );
-            })
-        },
-    );
 
-    let pm_size: usize = merges_with_metrics
-        .iter()
-        .map(|m| m.page_map_size_bytes)
-        .sum();
-    let storage_size: usize = merges_with_metrics
-        .iter()
-        .map(|m| m.storage_size_bytes_before)
-        .sum();
     // Max 2.5 overhead
-    let max_storage = pm_size * 2 + pm_size / 2;
+    let max_storage = storage_info.mem_size * 2 + storage_info.mem_size / 2;
 
-    // Discard ones where no merge is applicable.
-    // These have number of files less or equal to Storage::MAX_NUMBER_OF_FILES and at most 2.0
-    // overhead.
-    let mut merges_with_metrics: Vec<MergeCandidateAndMetrics> = merges_with_metrics
-        .into_iter()
-        .filter(|m| m.merge_candidate.is_some())
-        .collect();
-
-    merges_with_metrics.sort_by_key(|m| -(m.num_files_before as i64));
-    let storage_to_merge_for_filenum = pm_size / 4;
-    let merges_by_filenum = merges_with_metrics
+    merge_candidates.sort_by_key(|m| -(m.num_files_before() as i64));
+    let storage_to_merge_for_filenum = storage_info.mem_size / 4;
+    let merges_by_filenum = merge_candidates
         .iter()
         .scan(0, |state, m| {
-            if *state >= storage_to_merge_for_filenum || m.num_files_before < MAX_NUMBER_OF_FILES {
+            if *state >= storage_to_merge_for_filenum
+                || m.num_files_before() <= MAX_NUMBER_OF_FILES as u64
+            {
                 None
             } else {
-                *state += m.page_map_size_bytes;
+                *state += m.page_map_size_bytes();
                 Some(())
             }
         })
@@ -697,54 +629,51 @@ fn merge(
 
     // [0; merges_by_filenum) are already scheduled, some of the rest may be necessary to achieve
     // low enough overhead.
-    let mut scheduled_merges = merges_with_metrics;
-    let mut merges_with_metrics = scheduled_merges.split_off(merges_by_filenum);
+    let mut scheduled_merges = merge_candidates;
+    let mut merge_candidates = scheduled_merges.split_off(merges_by_filenum);
 
     // Sort by ratio of saved bytes to write size.
-    merges_with_metrics.sort_by_key(|m| {
-        if m.write_size_bytes != 0 {
+    merge_candidates.sort_by_key(|m| {
+        if m.write_size_bytes() != 0 {
             // Fixed point to compute overhead ratio for sort.
-            -1000i64 * (m.storage_size_bytes_before as i64 - m.storage_size_bytes_after as i64)
-                / m.write_size_bytes as i64
+            -1000i64 * (m.storage_size_bytes_before() as i64 - m.storage_size_bytes_after() as i64)
+                / m.write_size_bytes() as i64
         } else {
             0
         }
     });
-    let storage_to_save = storage_size as i64 - max_storage as i64;
+    let storage_to_save = storage_info.disk_size as i64 - max_storage as i64;
     // For a full merge the resulting base file can be larger than sum of the overlays,
     // so we need a signed accumulator.
     let mut storage_saved: i64 = scheduled_merges
         .iter()
-        .map(|m| m.storage_size_bytes_before as i64 - m.storage_size_bytes_after as i64)
+        .map(|m| m.storage_size_bytes_before() as i64 - m.storage_size_bytes_after() as i64)
         .sum();
-    for m in merges_with_metrics.into_iter() {
+    for m in merge_candidates.into_iter() {
         if storage_saved >= storage_to_save {
             break;
         }
 
-        storage_saved += m.storage_size_bytes_before as i64 - m.storage_size_bytes_after as i64;
+        storage_saved += m.storage_size_bytes_before() as i64 - m.storage_size_bytes_after() as i64;
         // Only full merges reduce overhead, and there should be enough of them to reach
         // `storage_to_save` before tapping into partial merges.
-        debug_assert!(m.merge_candidate.as_ref().unwrap().is_full_merge());
+        debug_assert!(m.is_full_merge());
         scheduled_merges.push(m);
     }
     info!(
         log,
-        "Merging {} files out of {}; pm_size: {}; storage_size: {}; max_storage: {}, storage_saves: {}, merges_by_filenum: {}",
+        "Merging {} PageMaps out of {}; mem_size: {}; disk_size: {}; max_storage: {}, storage_saves: {}, merges_by_filenum: {}",
         scheduled_merges.len(),
         pagemaptypes_with_num_pages.len(),
-        pm_size,
-        storage_size,
+        storage_info.mem_size,
+        storage_info.disk_size,
         max_storage,
         storage_saved,
         merges_by_filenum,
     );
 
     parallel_map(thread_pool, scheduled_merges.iter(), |m| {
-        m.merge_candidate
-            .as_ref()
-            .unwrap()
-            .apply(&metrics.storage_metrics)
+        m.apply(&metrics.storage_metrics)
     });
 }
 
@@ -765,20 +694,21 @@ fn merge_to_base(
         thread_pool,
         pagemaptypes_with_num_pages
             .iter()
-            .map(|(page_map_type, _)| {
+            .map(|(page_map_type, num_pages)| {
                 (
                     layout.canister(&page_map_type.id()).unwrap_or_else(|err| {
                         fatal!(log, "Failed to get layout for {:?}: {}", page_map_type, err);
                     }),
                     *page_map_type,
+                    *num_pages,
                 )
             }),
-        |(canister_layout, page_map_type)| {
+        |(canister_layout, page_map_type, num_pages)| {
             let pm_layout = PageMapLayout {
                 page_map_type: *page_map_type,
                 layout: canister_layout,
             };
-            let merge_candidate = MergeCandidate::merge_to_base(&pm_layout)
+            let merge_candidate = MergeCandidate::merge_to_base(&pm_layout, *num_pages as u64)
                 .unwrap_or_else(|err| fatal!(log, "Failed to merge page map: {}", err));
             if let Some(m) = merge_candidate.as_ref() {
                 m.apply(&metrics.storage_metrics).unwrap_or_else(|err| {
@@ -1268,9 +1198,9 @@ mod test {
     use super::*;
     use ic_config::state_manager::lsmt_config_default;
     use ic_metrics::MetricsRegistry;
-    use ic_test_utilities::types::ids::canister_test_id;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_tmpdir::tmpdir;
+    use ic_test_utilities_types::ids::canister_test_id;
 
     #[test]
     fn dont_crash_or_hang() {

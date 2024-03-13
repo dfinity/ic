@@ -1,0 +1,24 @@
+[package]
+name = "ic-test-utilities-consensus"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+bincode = "1.2.1"
+ic-base-types = { path = "../../types/base_types" }
+ic-consensus = { path = "../../consensus" }
+ic-interfaces = { path = "../../interfaces" }
+ic-interfaces-registry = { path = "../../interfaces/registry" }
+ic-protobuf = { path = "../../protobuf" }
+ic-registry-client-helpers = { path = "../../registry/helpers" }
+ic-test-utilities = { path = ".." }
+ic-test-utilities-registry = { path = "../registry" }
+ic-test-utilities-types = { path = "../types" }
+ic-types = { path = "../../types/types" }
+mockall = { workspace = true }
+phantom_newtype = { path = "../../phantom_newtype" }
+prost = { workspace = true }
+serde = { workspace = true }

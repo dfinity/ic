@@ -1,4 +1,5 @@
 use ic_base_types::PrincipalId;
+use ic_principal::Principal;
 use ic_stable_structures::{Memory, StableBTreeMap, Storable};
 use num_traits::bounds::LowerBounded;
 use std::{
@@ -131,7 +132,7 @@ where
     NeuronId: Storable + Default + Clone + Ord,
     M: Memory,
 {
-    principal_id_and_neuron_id_set: StableBTreeMap<(PrincipalId, NeuronId), (), M>,
+    principal_and_neuron_id_set: StableBTreeMap<(Principal, NeuronId), (), M>,
 }
 
 impl<NeuronId, M> StableNeuronPrincipalIndex<NeuronId, M>
@@ -141,28 +142,28 @@ where
 {
     pub fn new(memory: M) -> Self {
         Self {
-            principal_id_and_neuron_id_set: StableBTreeMap::init(memory),
+            principal_and_neuron_id_set: StableBTreeMap::init(memory),
         }
     }
 
-    /// Returns the number of entries (principal_id, neuron_id) in the index. This is for validation
+    /// Returns the number of entries (principal, neuron_id) in the index. This is for validation
     /// purpose: this should be equal to the number of neurons (controller) plus the size of the hot
     /// key collection within primary storage.
     pub fn num_entries(&self) -> usize {
-        self.principal_id_and_neuron_id_set.len() as usize
+        self.principal_and_neuron_id_set.len() as usize
     }
 
     /// Returns whether the (principal_id, neuron_id) entry exists in the index. This is for
     /// validation purpose: each such pair in the primary storage should exist in the index.
     pub fn contains_entry(&self, neuron_id: &NeuronId, principal_id: PrincipalId) -> bool {
-        let key = (principal_id, neuron_id.clone());
-        self.principal_id_and_neuron_id_set.contains_key(&key)
+        let key = (principal_id.0, neuron_id.clone());
+        self.principal_and_neuron_id_set.contains_key(&key)
     }
 
     /// Validates that some of the data in stable storage can be read, in order to prevent broken
     /// schema. Should only be called in post_upgrade.
     pub fn validate(&self) {
-        super::validate_stable_btree_map(&self.principal_id_and_neuron_id_set);
+        super::validate_stable_btree_map(&self.principal_and_neuron_id_set);
     }
 }
 
@@ -176,8 +177,8 @@ where
         neuron_id: &NeuronId,
         principal_id: PrincipalId,
     ) -> bool {
-        self.principal_id_and_neuron_id_set
-            .insert((principal_id, neuron_id.clone()), ())
+        self.principal_and_neuron_id_set
+            .insert((principal_id.into(), neuron_id.clone()), ())
             .is_none()
     }
 
@@ -186,15 +187,15 @@ where
         neuron_id: &NeuronId,
         principal_id: PrincipalId,
     ) -> bool {
-        self.principal_id_and_neuron_id_set
-            .remove(&(principal_id, neuron_id.clone()))
+        self.principal_and_neuron_id_set
+            .remove(&(principal_id.into(), neuron_id.clone()))
             .is_some()
     }
 
     fn get_neuron_ids(&self, principal_id: PrincipalId) -> HashSet<NeuronId> {
-        self.principal_id_and_neuron_id_set
-            .range((principal_id, NeuronId::min_value())..)
-            .take_while(|(k, _)| k.0 == principal_id)
+        self.principal_and_neuron_id_set
+            .range((principal_id.into(), NeuronId::min_value())..)
+            .take_while(|(k, _)| k.0 == principal_id.into())
             .map(|(k, _)| k.1)
             .collect()
     }

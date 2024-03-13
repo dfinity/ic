@@ -13,7 +13,7 @@ DEPENDENCIES = [
     "//rs/registry/local_store",
     "//rs/types/types",
     "@crate_index//:chrono",
-    "@crate_index//:clap",
+    "@crate_index//:clap_3_2_25",
     "@crate_index//:rand",
     "@crate_index//:reqwest",
     "@crate_index//:serde",

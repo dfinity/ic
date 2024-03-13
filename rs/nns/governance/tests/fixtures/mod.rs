@@ -22,6 +22,7 @@ use ic_nns_governance::{
     governance::{
         governance_minting_account, neuron_subaccount, Environment, Governance, HeapGrowthPotential,
     },
+    governance_proto_builder::GovernanceProtoBuilder,
     pb::v1::{
         manage_neuron,
         manage_neuron::{Command, Merge, MergeMaturity, NeuronIdOrSubaccount},
@@ -31,7 +32,7 @@ use ic_nns_governance::{
         neuron::DissolveState,
         proposal, ExecuteNnsFunction, Governance as GovernanceProto, GovernanceError, ManageNeuron,
         ManageNeuronResponse, Motion, NetworkEconomics, Neuron, NeuronType, NnsFunction, Proposal,
-        ProposalData, Topic, Vote,
+        ProposalData, RewardEvent, Topic, Vote, XdrConversionRate as XdrConversionRatePb,
     },
 };
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
@@ -1024,12 +1025,7 @@ impl Default for NNSBuilder {
         NNSBuilder {
             ledger_builder: LedgerBuilder::default(),
             environment_builder: Default::default(),
-            governance: GovernanceProto {
-                wait_for_quiet_threshold_seconds: 1,
-                short_voting_period_seconds: 30,
-                neuron_management_voting_period_seconds: Some(30),
-                ..Default::default()
-            },
+            governance: GovernanceProtoBuilder::new().build(),
             ledger_transforms: Vec::default(),
             environment_transforms: Vec::default(),
         }

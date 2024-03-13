@@ -1,11 +1,12 @@
 use async_trait::async_trait;
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_crypto_tls_interfaces::{
-    AuthenticatedPeer, SomeOrAllNodes, TlsClientHandshakeError, TlsHandshake,
-    TlsServerHandshakeError, TlsStream,
+    AuthenticatedPeer, SomeOrAllNodes, TlsClientHandshakeError, TlsConfig, TlsConfigError,
+    TlsHandshake, TlsServerHandshakeError, TlsStream,
 };
 use mockall::*;
 use tokio::net::TcpStream;
+use tokio_rustls::rustls::{ClientConfig, ServerConfig};
 
 mock! {
     pub TlsHandshake {}
@@ -31,5 +32,29 @@ mock! {
             server: NodeId,
             registry_version: RegistryVersion,
         ) -> Result<Box<dyn TlsStream>, TlsClientHandshakeError>;
+    }
+}
+
+mock! {
+
+    pub TlsConfig {}
+
+    impl TlsConfig for TlsConfig {
+        fn server_config(
+            &self,
+            allowed_clients: SomeOrAllNodes,
+            registry_version: RegistryVersion,
+        ) -> Result<ServerConfig, TlsConfigError>;
+
+        fn server_config_without_client_auth(
+            &self,
+            registry_version: RegistryVersion,
+        ) -> Result<ServerConfig, TlsConfigError>;
+
+        fn client_config(
+            &self,
+            server: NodeId,
+            registry_version: RegistryVersion,
+        ) -> Result<ClientConfig, TlsConfigError>;
     }
 }

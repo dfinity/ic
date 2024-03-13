@@ -5553,7 +5553,7 @@ mod tests {
     use ic_nns_constants::SNS_WASM_CANISTER_ID;
     use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
     use ic_sns_test_utils::itest_helpers::UserInfo;
-    use ic_test_utilities::types::ids::canister_test_id;
+    use ic_test_utilities_types::ids::canister_test_id;
     use maplit::{btreemap, btreeset};
     use pretty_assertions::assert_eq;
     use proptest::prelude::{prop_assert, proptest};

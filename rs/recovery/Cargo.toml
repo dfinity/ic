@@ -46,8 +46,9 @@ url = { version = "2.1.1", features = ["serde"] }
 
 [dev-dependencies]
 tempfile = "3.1.0"
-ic-test-utilities = { path = "../test_utilities" }
+ic-test-utilities-consensus = { path = "../test_utilities/consensus" }
 ic-test-utilities-tmpdir = { path = "../test_utilities/tmpdir" }
+ic-test-utilities-types = { path = "../test_utilities/types" }
 
 [[bin]]
 name = "ic-recovery"

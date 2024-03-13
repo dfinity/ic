@@ -13,7 +13,7 @@ DEPENDENCIES = [
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "@crate_index//:anyhow",
-    "@crate_index//:clap",
+    "@crate_index//:clap_3_2_25",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
     "@crate_index//:slog",

@@ -18,7 +18,7 @@ DEPENDENCIES = [
     "@crate_index//:serde",
     "@crate_index//:url",
     "@crate_index//:tokio",
-    "@crate_index//:clap_4_0_0",  # no clap because feature derive
+    "@crate_index//:clap",  # no clap because feature derive
 ]
 
 DEV_DEPENDENCIES = [
