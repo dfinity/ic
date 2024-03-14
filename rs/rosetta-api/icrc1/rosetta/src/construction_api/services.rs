@@ -123,13 +123,14 @@ pub fn construction_payloads(
     metadata: Option<ConstructionPayloadsRequestMetadata>,
     ledger_id: &Principal,
     public_keys: Vec<PublicKey>,
+    now: SystemTime,
 ) -> Result<ConstructionPayloadsResponse, Error> {
     // The interval between each ingress message
     // The permitted drift makes sure that intervals are overlapping and there are no edge cases when trying to submit to the IC
     let ingress_interval: u64 =
         (ic_constants::MAX_INGRESS_TTL - ic_constants::PERMITTED_DRIFT).as_nanos() as u64;
 
-    let now = SystemTime::now()
+    let now = now
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap()
         .as_nanos() as u64;
@@ -259,7 +260,6 @@ mod tests {
     use proptest::test_runner::Config as TestRunnerConfig;
     use proptest::test_runner::TestRunner;
     use rosetta_core::models::RosettaSupportedKeyPair;
-    use std::time::Duration;
 
     const NUM_TEST_CASES: u32 = 100;
     const NUM_BLOCKS: usize = 1;
@@ -287,11 +287,10 @@ mod tests {
         parse_response: ConstructionParseResponse,
         operations: Vec<Operation>,
         metadata: ConstructionPayloadsRequestMetadata,
-        now: Duration,
+        now: u64,
     ) {
         let received_metadata =
             ConstructionPayloadsRequestMetadata::try_from(parse_response.metadata).unwrap();
-        let now_u64 = now.as_nanos() as u64;
 
         parse_response.operations.into_iter().for_each(|operation| {
             assert!(
@@ -307,17 +306,17 @@ mod tests {
         if let Some(created_at_time) = metadata.created_at_time {
             assert_eq!(received_metadata.created_at_time.unwrap(), created_at_time);
         } else {
-            assert!(received_metadata.created_at_time.unwrap() >= now_u64);
+            assert!(received_metadata.created_at_time.unwrap() >= now);
         }
         assert_eq!(received_metadata.memo, metadata.memo);
 
         if let Some(ingress_start) = metadata.ingress_start {
             assert_eq!(received_metadata.ingress_start.unwrap(), ingress_start);
         } else {
-            assert!(received_metadata.ingress_start.unwrap() >= now_u64);
+            assert!(received_metadata.ingress_start.unwrap() >= now);
             assert!(
                 received_metadata.ingress_start.unwrap()
-                    <= now_u64
+                    <= now
                         + (ic_constants::MAX_INGRESS_TTL - ic_constants::PERMITTED_DRIFT).as_nanos()
                             as u64
             );
@@ -420,17 +419,23 @@ mod tests {
                                 .try_into()
                                 .unwrap();
 
-                        let now = SystemTime::now()
-                            .duration_since(SystemTime::UNIX_EPOCH)
-                            .unwrap();
+                        let now = SystemTime::now();
 
                         let construction_payloads_response = construction_payloads(
                             rosetta_core_operations.clone(),
                             Some(payloads_metadata.clone()),
                             &PrincipalId::new_anonymous().0,
                             vec![(&arg_with_caller.caller).into()],
+                            now,
                         );
 
+                        let now = now
+                            .duration_since(SystemTime::UNIX_EPOCH)
+                            .unwrap()
+                            .as_nanos() as u64;
+                        let ingress_interval = (ic_constants::MAX_INGRESS_TTL
+                            - ic_constants::PERMITTED_DRIFT)
+                            .as_nanos() as u64;
                         match (
                             payloads_metadata.ingress_end,
                             payloads_metadata.ingress_start,
@@ -440,30 +445,27 @@ mod tests {
                                     assert!(construction_payloads_response.is_err());
                                     continue;
                                 }
-                                if ingress_end
-                                    < (now + ic_constants::MAX_INGRESS_TTL).as_nanos() as u64
-                                {
+                                if ingress_end < now + ingress_interval {
                                     assert!(construction_payloads_response.is_err());
                                     continue;
                                 }
                             }
                             (Some(ingress_end), _) => {
-                                if ingress_end
-                                    < (now + ic_constants::MAX_INGRESS_TTL).as_nanos() as u64
-                                {
+                                if ingress_end < now + ingress_interval {
                                     assert!(construction_payloads_response.is_err());
                                     continue;
                                 }
                             }
                             (_, Some(ingress_start)) => {
-                                if ingress_start < now.as_nanos() as u64 {
+                                let ingress_end = ingress_start + ingress_interval;
+                                if ingress_end < now + ingress_interval {
                                     assert!(construction_payloads_response.is_err());
                                     continue;
                                 }
                             }
                             (_, _) => {}
                         }
-
+                        println!("{:?}", payloads_metadata);
                         let construction_parse_response = construction_parse(
                             construction_payloads_response
                                 .clone()
