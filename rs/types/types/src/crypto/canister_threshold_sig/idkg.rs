@@ -672,6 +672,7 @@ impl<'de> Deserialize<'de> for InitialIDkgDealings {
 /// When the transcript derives from earlier transcripts, these are included
 /// in this enum.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum IDkgMaskedTranscriptOrigin {
     Random,
     UnmaskedTimesMasked(IDkgTranscriptId, IDkgTranscriptId),
@@ -682,6 +683,7 @@ pub enum IDkgMaskedTranscriptOrigin {
 /// The earlier transcripts used to derive this transcript are included in this
 /// enum.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum IDkgUnmaskedTranscriptOrigin {
     ReshareMasked(IDkgTranscriptId),
     ReshareUnmasked(IDkgTranscriptId),
@@ -690,6 +692,7 @@ pub enum IDkgUnmaskedTranscriptOrigin {
 
 /// Type and origin of an IDkg transcript.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum IDkgTranscriptType {
     /// Masked transcripts contain dealings based on Pedersen verifiable secret sharing which
     /// perfectly hides the value shared in the dealing. This means that the commitment to the
@@ -713,6 +716,7 @@ pub enum IDkgTranscriptType {
 /// * [`Unmasked`][`IDkgTranscriptType::Unmasked`] if the commitment is not perfectly hiding and
 /// may reveal some information about the shared value.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct IDkgTranscript {
     pub transcript_id: IDkgTranscriptId,
     pub receivers: IDkgReceivers,
@@ -994,6 +998,7 @@ impl_display_using_debug!(IDkgTranscript);
 
 /// Dealing of an IDkg sharing.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct IDkgDealing {
     pub transcript_id: IDkgTranscriptId,
     #[serde(with = "serde_bytes")]

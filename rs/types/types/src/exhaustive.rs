@@ -1,26 +1,37 @@
 //! Implementations and serialization tests of the ExhaustiveSet trait
 
+use crate::consensus::ecdsa::{
+    CompletedReshareRequest, CompletedSignature, EcdsaReshareRequest, MaskedTranscript,
+    PreSignatureQuadrupleRef, PseudoRandomId, QuadrupleId, QuadrupleInCreation,
+    RandomTranscriptParams, RandomUnmaskedTranscriptParams, RequestId, ReshareOfMaskedParams,
+    ReshareOfUnmaskedParams, ThresholdEcdsaSigInputsRef, UnmaskedTimesMaskedParams,
+    UnmaskedTranscript,
+};
 use crate::consensus::hashed::Hashed;
-use crate::consensus::{ecdsa::IDkgTranscriptAttributes, BlockPayload};
-use crate::consensus::{CatchUpContent, HashedBlock, HashedRandomBeacon};
+use crate::consensus::{BlockPayload, ConsensusMessageHashable};
+use crate::consensus::{CatchUpContent, CatchUpPackage, HashedBlock, HashedRandomBeacon};
 use crate::crypto::canister_threshold_sig::idkg::{
-    IDkgDealing, IDkgReceivers, IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation,
-    IDkgTranscriptParams, IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin, InitialIDkgDealings,
-    SignedIDkgDealing,
+    BatchSignedIDkgDealing, IDkgDealers, IDkgDealing, IDkgReceivers, IDkgTranscript,
+    IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams, IDkgTranscriptType,
+    InitialIDkgDealings, SignedIDkgDealing,
 };
 use crate::crypto::threshold_sig::ni_dkg::{
     config::{tests::valid_dkg_config_data, NiDkgConfig},
-    NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet, NiDkgTranscript,
+    NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTranscript,
 };
 use crate::crypto::{
     crypto_hash, AlgorithmId, BasicSig, BasicSigOf, CombinedThresholdSig, CombinedThresholdSigOf,
     CryptoHash, CryptoHashOf, CryptoHashable, Signed,
 };
 use crate::signature::{BasicSignature, BasicSignatureBatch, ThresholdSignature};
-use crate::{CryptoHashOfState, Height, ReplicaVersion};
+use crate::xnet::CertifiedStreamSlice;
+use crate::{CryptoHashOfState, ReplicaVersion};
 use ic_base_types::{CanisterId, NodeId, PrincipalId, RegistryVersion, SubnetId};
-use ic_btc_types_internal::{BitcoinAdapterResponse, BitcoinAdapterResponseWrapper};
-use ic_crypto_test_utils_canister_threshold_sigs::random_node_id_excluding;
+use ic_btc_types_internal::{
+    BitcoinAdapterResponse, BitcoinAdapterResponseWrapper, BitcoinReject,
+    GetSuccessorsResponseComplete, SendTransactionResponse,
+};
+use ic_crypto_internal_types::NodeIndex;
 use ic_error_types::RejectCode;
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId};
@@ -136,7 +147,7 @@ impl<T: ExhaustiveSet> ExhaustiveSet for Vec<T> {
         for _ in 0..8 {
             set.append(&mut T::exhaustive_set(rng));
         }
-        vec![set]
+        vec![set, vec![]]
     }
 }
 
@@ -196,7 +207,7 @@ impl ExhaustiveSet for () {
 
 impl ExhaustiveSet for String {
     fn exhaustive_set<R: RngCore + CryptoRng>(_: &mut R) -> Vec<Self> {
-        vec!["0123abcd!@#$.,;()[]<>".to_string()]
+        vec!["0123abcd!@#$.,;()[]<>".to_string(), "".to_string()]
     }
 }
 
@@ -205,7 +216,7 @@ macro_rules! impl_for_integer {
         impl ExhaustiveSet for $t {
             fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
                 let val = rng.next_u64();
-                vec![<$t>::MAX, val as $t]
+                vec![<$t>::MAX, val as $t, 0]
             }
         }
     };
@@ -226,29 +237,29 @@ impl<T: ExhaustiveSet> ExhaustiveSet for std::sync::Arc<T> {
     }
 }
 
-impl<K: ExhaustiveSet + std::cmp::Ord, V: ExhaustiveSet> ExhaustiveSet for BTreeMap<K, V> {
+impl<K: ExhaustiveSet + std::cmp::Ord, V: ExhaustiveSet + HasId<K>> ExhaustiveSet
+    for BTreeMap<K, V>
+{
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
-        let k_set = K::exhaustive_set(rng);
-        let v_set = V::exhaustive_set(rng);
+        let (k_set, v_set): (Vec<_>, Vec<_>) = <(K, V)>::exhaustive_set(rng).into_iter().unzip();
+        let mut k_set = k_set.into_iter();
 
-        let mut result = Vec::new();
-        let mut i = 0;
-        let mut map = BTreeMap::new();
-        for v in v_set.into_iter() {
-            map.insert(k_set[i].clone(), v);
-            i += 1;
-            // if we've exceeded the available keys, we push the map to our result vector
-            // and start populating a new clean map. We can't use the cyclic iterator
-            // pattern because keys are deduplicated in maps.
-            if i % k_set.len() == 0 {
-                i = 0;
-                result.push(map.clone());
-                map.clear();
+        let mut result = vec![BTreeMap::new()];
+        for v in v_set {
+            let id = v.get_id().unwrap_or_else(|| k_set.next().unwrap());
+            let mut inserted = false;
+            for map in &mut result {
+                if !map.contains_key(&id) {
+                    map.insert(id.clone(), v.clone());
+                    inserted = true;
+                    break;
+                }
+            }
+            if !inserted {
+                result.push(BTreeMap::from([(id, v)]));
             }
         }
-        if !map.is_empty() {
-            result.push(map.clone());
-        }
+        result.push(BTreeMap::new());
         result
     }
 }
@@ -370,14 +381,61 @@ impl ExhaustiveSet for CatchUpContent {
  * if the other components also want to adopt this.
  */
 
+impl ExhaustiveSet for BitcoinReject {
+    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+        <(RejectCode, String)>::exhaustive_set(rng)
+            .into_iter()
+            .map(|(reject_code, message)| BitcoinReject {
+                reject_code,
+                message,
+            })
+            .collect()
+    }
+}
+
+impl ExhaustiveSet for BitcoinAdapterResponseWrapper {
+    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+        let blobs = <Vec<Vec<u8>>>::exhaustive_set(rng);
+        let successors = blobs.into_iter().map(|blob| {
+            BitcoinAdapterResponseWrapper::GetSuccessorsResponse(GetSuccessorsResponseComplete {
+                blocks: blob.clone(),
+                next: blob,
+            })
+        });
+        let transactions = std::iter::once(BitcoinAdapterResponseWrapper::SendTransactionResponse(
+            SendTransactionResponse {},
+        ));
+        let rejects = BitcoinReject::exhaustive_set(rng)
+            .into_iter()
+            .enumerate()
+            .map(|(i, reject)| {
+                if i % 2 == 0 {
+                    BitcoinAdapterResponseWrapper::GetSuccessorsReject(reject)
+                } else {
+                    BitcoinAdapterResponseWrapper::SendTransactionReject(reject)
+                }
+            });
+        let result: Vec<_> = successors.chain(transactions).chain(rejects).collect();
+        match &result[0] {
+            BitcoinAdapterResponseWrapper::GetSuccessorsResponse(_) => (),
+            BitcoinAdapterResponseWrapper::SendTransactionResponse(_) => (),
+            BitcoinAdapterResponseWrapper::GetSuccessorsReject(_) => (),
+            BitcoinAdapterResponseWrapper::SendTransactionReject(_) => (),
+            // Any new variants should be inserted to `result` above!
+        }
+        result
+    }
+}
+
 impl ExhaustiveSet for BitcoinAdapterResponse {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
-        vec![BitcoinAdapterResponse {
-            response: BitcoinAdapterResponseWrapper::SendTransactionResponse(
-                ic_btc_types_internal::SendTransactionResponse {},
-            ),
-            callback_id: rng.next_u32() as u64,
-        }]
+        <(BitcoinAdapterResponseWrapper, u64)>::exhaustive_set(rng)
+            .into_iter()
+            .map(|(response, callback_id)| BitcoinAdapterResponse {
+                response,
+                callback_id,
+            })
+            .collect()
     }
 }
 
@@ -391,14 +449,13 @@ impl ExhaustiveSet for CryptoHash {
 
 impl<T: ExhaustiveSet> ExhaustiveSet for Signed<T, BasicSignature<T>> {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
-        let node_id = NodeId::exhaustive_set(rng).pop().unwrap();
-        T::exhaustive_set(rng)
+        <(T, NodeId)>::exhaustive_set(rng)
             .into_iter()
-            .map(|t| Self {
-                content: t,
+            .map(|(content, signer)| Self {
+                content,
                 signature: BasicSignature {
                     signature: BasicSigOf::new(BasicSig(vec![1, 2, 3, 4, 5, 6])),
-                    signer: node_id,
+                    signer,
                 },
             })
             .collect()
@@ -413,8 +470,8 @@ impl<T: ExhaustiveSet> ExhaustiveSet for Signed<T, BasicSignatureBatch<T>> {
 
         T::exhaustive_set(rng)
             .into_iter()
-            .map(|t| Self {
-                content: t,
+            .map(|content| Self {
+                content,
                 signature: BasicSignatureBatch {
                     signatures_map: signatures_map.clone(),
                 },
@@ -425,27 +482,17 @@ impl<T: ExhaustiveSet> ExhaustiveSet for Signed<T, BasicSignatureBatch<T>> {
 
 impl<T: ExhaustiveSet> ExhaustiveSet for Signed<T, ThresholdSignature<T>> {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
-        let nidkg_id = NiDkgId::exhaustive_set(rng).pop().unwrap();
-        T::exhaustive_set(rng)
+        <(T, NiDkgId)>::exhaustive_set(rng)
             .into_iter()
-            .map(|t| Self {
-                content: t,
+            .map(|(content, signer)| Self {
+                content,
                 signature: ThresholdSignature {
                     signature: CombinedThresholdSigOf::new(CombinedThresholdSig(vec![
                         1, 2, 3, 4, 5, 6,
                     ])),
-                    signer: nidkg_id,
+                    signer,
                 },
             })
-            .collect()
-    }
-}
-
-impl ExhaustiveSet for NiDkgTargetId {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
-        <[u8; NiDkgTargetId::SIZE]>::exhaustive_set(rng)
-            .into_iter()
-            .map(NiDkgTargetId::new)
             .collect()
     }
 }
@@ -468,37 +515,29 @@ impl ExhaustiveSet for NiDkgTranscript {
     }
 }
 
-impl ExhaustiveSet for NiDkgTag {
-    fn exhaustive_set<R: RngCore + CryptoRng>(_: &mut R) -> Vec<Self> {
-        NiDkgTag::iter().collect()
-    }
-}
-
 impl ExhaustiveSet for NiDkgDealing {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
         vec![NiDkgDealing::dummy_dealing_for_tests(rng.next_u32() as u8)]
     }
 }
 
-impl ExhaustiveSet for NiDkgId {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
-        vec![NiDkgId {
-            start_block_height: Height::exhaustive_set(rng).pop().unwrap(),
-            dealer_subnet: SubnetId::exhaustive_set(rng).pop().unwrap(),
-            dkg_tag: crate::crypto::threshold_sig::ni_dkg::NiDkgTag::HighThreshold,
-            target_subnet: NiDkgTargetSubnet::Local,
-        }]
-    }
-}
-
 impl ExhaustiveSet for InitialIDkgDealings {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
         let dealers = BTreeSet::<NodeId>::exhaustive_set(rng);
-        let mut receivers = BTreeSet::<NodeId>::exhaustive_set(rng).pop().unwrap();
+        let mut receivers = BTreeSet::<NodeId>::exhaustive_set(rng)
+            .into_iter()
+            .find(|set| !set.is_empty())
+            .unwrap();
         while !receivers.is_disjoint(&dealers[0]) {
-            receivers = BTreeSet::<NodeId>::exhaustive_set(rng).pop().unwrap();
+            receivers = BTreeSet::<NodeId>::exhaustive_set(rng)
+                .into_iter()
+                .find(|set| !set.is_empty())
+                .unwrap();
         }
-        let mut previous_transcript = IDkgTranscript::exhaustive_set(rng).pop().unwrap();
+        let mut previous_transcript = IDkgTranscript::exhaustive_set(rng)
+            .into_iter()
+            .find(|t| matches!(t.transcript_type, IDkgTranscriptType::Unmasked(_)))
+            .unwrap();
         // Invariant: dealers need to be contained in previous receivers,
         // and the receivers need to be disjoint from the dealers (for XNet resharing, which is what
         // `InitialIdkgDealings::new` is used for).
@@ -517,37 +556,142 @@ impl ExhaustiveSet for InitialIDkgDealings {
     }
 }
 
-impl ExhaustiveSet for IDkgTranscriptAttributes {
+impl ExhaustiveSet for IDkgTranscriptParams {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
-        let tecdsa_algo = AlgorithmId::ThresholdEcdsaSecp256k1;
-        let node_ids: BTreeSet<_> = (0..10)
-            .map(|_| random_node_id_excluding(&BTreeSet::new(), rng))
-            .collect();
-        let registry_versions = RegistryVersion::exhaustive_set(rng);
-        let mut result = Vec::new();
-        for reg in registry_versions {
-            result.push(Self::new(node_ids.clone(), tecdsa_algo, reg));
-        }
-        result
+        <(IDkgTranscriptId, IDkgTranscriptOperation, RegistryVersion)>::exhaustive_set(rng)
+            .into_iter()
+            .enumerate()
+            .map(|(i, (id, transcript, version))| {
+                let node_ids = match &transcript {
+                    IDkgTranscriptOperation::ReshareOfMasked(t)
+                    | IDkgTranscriptOperation::ReshareOfUnmasked(t)
+                    | IDkgTranscriptOperation::UnmaskedTimesMasked(t, _) => {
+                        t.receivers.get().clone()
+                    }
+                    IDkgTranscriptOperation::Random | IDkgTranscriptOperation::RandomUnmasked => {
+                        BTreeSet::<NodeId>::exhaustive_set(rng).pop().unwrap()
+                    }
+                };
+                let algorithm = if i % 2 == 0 {
+                    AlgorithmId::ThresholdEcdsaSecp256k1
+                } else {
+                    AlgorithmId::ThresholdEcdsaSecp256r1
+                };
+                Self::new(
+                    id,
+                    node_ids.clone(),
+                    node_ids.clone(),
+                    version,
+                    algorithm,
+                    transcript,
+                )
+                .unwrap()
+            })
+            .collect()
     }
 }
 
-impl ExhaustiveSet for IDkgTranscript {
+impl ExhaustiveSet for IDkgDealers {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
-        let idkg_id = IDkgTranscriptId::exhaustive_set(rng);
-        let t = IDkgTranscript {
-            transcript_id: idkg_id[0],
-            receivers: IDkgReceivers::new(BTreeSet::<NodeId>::exhaustive_set(rng).pop().unwrap())
-                .unwrap(),
-            registry_version: RegistryVersion::exhaustive_set(rng)[1],
-            verified_dealings: BTreeMap::new(),
-            transcript_type: IDkgTranscriptType::Unmasked(
-                IDkgUnmaskedTranscriptOrigin::ReshareMasked(idkg_id[1]),
-            ),
-            algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
-            internal_transcript_raw: Vec::<u8>::exhaustive_set(rng).pop().unwrap(),
+        let node_ids = BTreeSet::from(<[NodeId; 8]>::exhaustive_set(rng)[0]);
+        vec![IDkgDealers::new(node_ids).unwrap()]
+    }
+}
+
+impl ExhaustiveSet for IDkgReceivers {
+    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+        let node_ids = BTreeSet::from(<[NodeId; 8]>::exhaustive_set(rng)[0]);
+        vec![IDkgReceivers::new(node_ids).unwrap()]
+    }
+}
+
+impl ExhaustiveSet for IDkgTranscriptOperation {
+    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+        let transcripts = IDkgTranscript::exhaustive_set(rng);
+
+        let mut masked = transcripts
+            .iter()
+            .find(|t| matches!(t.transcript_type, IDkgTranscriptType::Masked(_)))
+            .unwrap()
+            .clone();
+        let unmasked = transcripts
+            .iter()
+            .find(|t| matches!(t.transcript_type, IDkgTranscriptType::Unmasked(_)))
+            .unwrap()
+            .clone();
+        masked.receivers = unmasked.receivers.clone();
+
+        let mut operations = transcripts
+            .into_iter()
+            .map(|t| match t.transcript_type {
+                IDkgTranscriptType::Masked(_) => IDkgTranscriptOperation::ReshareOfMasked(t),
+                IDkgTranscriptType::Unmasked(_) => IDkgTranscriptOperation::ReshareOfUnmasked(t),
+            })
+            .collect::<Vec<_>>();
+
+        operations.append(&mut vec![
+            IDkgTranscriptOperation::Random,
+            IDkgTranscriptOperation::RandomUnmasked,
+            IDkgTranscriptOperation::UnmaskedTimesMasked(unmasked, masked),
+        ]);
+
+        match &operations[0] {
+            IDkgTranscriptOperation::Random => (),
+            IDkgTranscriptOperation::ReshareOfMasked(_) => (),
+            IDkgTranscriptOperation::ReshareOfUnmasked(_) => (),
+            IDkgTranscriptOperation::UnmaskedTimesMasked(_, _) => (),
+            IDkgTranscriptOperation::RandomUnmasked => (),
+            // Any new variants should be inserted to `operations` above!
         };
-        vec![t]
+
+        operations
+    }
+}
+
+#[derive(Clone)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub struct DerivedQuadrupleInCreation {
+    pub random_config: RandomTranscriptParams,
+    pub random_unmasked_config: RandomUnmaskedTranscriptParams,
+    pub reshare_config: ReshareOfMaskedParams,
+    pub times_config: UnmaskedTimesMaskedParams,
+    pub unmasked: UnmaskedTranscript,
+    pub masked: MaskedTranscript,
+}
+
+impl ExhaustiveSet for QuadrupleInCreation {
+    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+        let mut result = DerivedQuadrupleInCreation::exhaustive_set(rng)
+            .into_iter()
+            .map(|q| QuadrupleInCreation {
+                kappa_masked_config: Some(q.random_config.clone()),
+                kappa_masked: Some(q.masked),
+                lambda_config: q.random_config.clone(),
+                lambda_masked: Some(q.masked),
+                kappa_unmasked_config: Some(q.random_unmasked_config.clone()),
+                unmask_kappa_config: Some(q.reshare_config.clone()),
+                kappa_unmasked: Some(q.unmasked),
+                key_times_lambda_config: Some(q.times_config.clone()),
+                key_times_lambda: Some(q.masked),
+                kappa_times_lambda_config: Some(q.times_config.clone()),
+                kappa_times_lambda: Some(q.masked),
+            })
+            .collect::<Vec<_>>();
+
+        result.push(QuadrupleInCreation {
+            kappa_masked_config: None,
+            kappa_masked: None,
+            lambda_config: RandomTranscriptParams::exhaustive_set(rng)[0].clone(),
+            lambda_masked: None,
+            kappa_unmasked_config: None,
+            unmask_kappa_config: None,
+            kappa_unmasked: None,
+            key_times_lambda_config: None,
+            key_times_lambda: None,
+            kappa_times_lambda_config: None,
+            kappa_times_lambda: None,
+        });
+        result
     }
 }
 
@@ -574,13 +718,45 @@ fn dummy_dealings(
     dealings
 }
 
+/// Some maps of the form Map<Id, (Id, Data)> are serialized as vectors of their values, throwing
+/// all keys away. During deserialization, the key is then re-extracted from the value. By default,
+/// `Exhaustive` will generate different keys independent of values, meaning a serialization round-
+/// trip will change the data. To avoid this, this trait allows generating the Id from the Value.
+trait HasId<T> {
+    fn get_id(&self) -> Option<T> {
+        None
+    }
+}
+
+impl HasId<NiDkgId> for NiDkgConfig {
+    fn get_id(&self) -> Option<NiDkgId> {
+        Some(self.dkg_id())
+    }
+}
+impl HasId<IDkgTranscriptId> for IDkgTranscript {
+    fn get_id(&self) -> Option<IDkgTranscriptId> {
+        Some(self.transcript_id)
+    }
+}
+impl HasId<EcdsaReshareRequest> for ReshareOfUnmaskedParams {}
+impl HasId<PseudoRandomId> for CompletedSignature {}
+impl HasId<EcdsaReshareRequest> for CompletedReshareRequest {}
+impl HasId<NodeIndex> for BatchSignedIDkgDealing {}
+impl HasId<SubnetId> for CertifiedStreamSlice {}
+impl HasId<NiDkgTag> for NiDkgTranscript {}
+impl HasId<NiDkgTargetId> for u32 {}
+impl HasId<RequestId> for ThresholdEcdsaSigInputsRef {}
+impl HasId<QuadrupleId> for QuadrupleInCreation {}
+impl HasId<QuadrupleId> for PreSignatureQuadrupleRef {}
+
 #[test]
-fn verify_exhaustive_cup_content() {
-    let set = CatchUpContent::exhaustive_set(&mut rand::thread_rng());
+fn verify_exhaustive_cup() {
+    let set = CatchUpPackage::exhaustive_set(&mut rand::thread_rng());
     println!("number of CUP content variants: {}", set.len());
-    for cup_content in &set {
+    for cup in &set {
+        assert!(cup.check_integrity());
         // serialize & encode the CUP content
-        let bytes = pb::CatchUpContent::from(cup_content).encode_to_vec();
+        let bytes = pb::CatchUpPackage::from(cup).encode_to_vec();
 
         // flip bits and check that conversion fails
         let tampered_bytes = bytes
@@ -588,15 +764,15 @@ fn verify_exhaustive_cup_content() {
             .enumerate()
             .map(|(idx, byte)| byte ^ (idx as u8))
             .collect::<Vec<_>>();
-        assert!(pb::CatchUpContent::decode(tampered_bytes.as_slice()).is_err());
+        assert!(pb::CatchUpPackage::decode(tampered_bytes.as_slice()).is_err());
 
         // decode the untampered bytes
-        let proto_cup_content = pb::CatchUpContent::decode(bytes.as_slice()).unwrap();
+        let proto_cup = pb::CatchUpPackage::decode(bytes.as_slice()).unwrap();
         // deserialize the CUP content
-        let new_cup_content = CatchUpContent::try_from(proto_cup_content).unwrap();
-
+        let new_cup = CatchUpPackage::try_from(&proto_cup).unwrap();
+        assert!(new_cup.check_integrity());
         assert_eq!(
-            cup_content, &new_cup_content,
+            cup, &new_cup,
             "deserialized block is different from original"
         );
     }
@@ -616,9 +792,19 @@ fn check_impl_btreemap() {
         Y,
         Z,
     }
+    impl HasId<Small> for Big {}
+    impl HasId<Big> for Small {}
     let set = BTreeMap::<Small, Big>::exhaustive_set(&mut rand::thread_rng());
-    assert_eq!(set.len(), 2);
+    assert_eq!(set.len(), 3);
     assert_eq!(set[0][&Small::A], Big::X);
     assert_eq!(set[0][&Small::B], Big::Y);
     assert_eq!(set[1][&Small::A], Big::Z);
+    assert!(set[2].is_empty());
+
+    let set = BTreeMap::<Big, Small>::exhaustive_set(&mut rand::thread_rng());
+    assert_eq!(set.len(), 2);
+    assert_eq!(set[0][&Big::X], Small::A);
+    assert_eq!(set[0][&Big::Y], Small::B);
+    assert_eq!(set[0][&Big::Z], Small::A);
+    assert!(set[1].is_empty());
 }
