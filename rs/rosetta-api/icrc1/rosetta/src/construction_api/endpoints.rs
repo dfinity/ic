@@ -6,6 +6,7 @@ use crate::{
 use axum::{extract::State, response::Result, Json};
 use rosetta_core::{request_types::*, response_types::*};
 use std::sync::Arc;
+use std::time::SystemTime;
 
 pub async fn construction_derive(
     State(state): State<Arc<AppState>>,
@@ -103,6 +104,7 @@ pub async fn construction_payloads(
             .transpose()?,
         &state.icrc1_agent.ledger_canister_id,
         request.public_keys.unwrap_or_else(Vec::new),
+        SystemTime::now(),
     )?))
 }
 
