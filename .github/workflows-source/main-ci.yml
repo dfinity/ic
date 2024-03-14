@@ -45,20 +45,21 @@ anchors:
       image: dfinity/ic-build:b4c69bc09c7128dc2b1ba13e9dc20e2839a31c9957580ff36f41a6b89f5e6af5
     timeout-minutes: 30
     if: ${{ vars.RUN_CI == 'true' }}
+  checkout: &checkout
+    name: Checkout
+    uses: actions/checkout@v3
 
 jobs:
   bazel-test-all: 
     name: Bazel-Test-All
     <<: *bazel-large-setup
     steps:
-      - name: Checkout PR
-        uses: actions/checkout@v3
+      - <<: *checkout
         if : ${{ github.event_name == 'pull_request' }}
         with:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.ref }}
-      - name: Checkout
-        uses: actions/checkout@v3
+      - <<: *checkout
         if : ${{ github.event_name != 'pull_request' }}
       - name: Run Bazel Test All
         id: bazel-test-all
@@ -93,8 +94,7 @@ jobs:
     name: Bazel-Build-Fuzzers
     <<: *bazel-small-setup
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
+      - <<: *checkout
       - name: Run Bazel Build Fuzzers
         id: bazel-build-fuzzers
         uses:  ./.github/actions/bazel-test-all/
@@ -108,8 +108,7 @@ jobs:
     name: Bazel-Build-Fuzzers-AFL
     <<: *bazel-small-setup
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
+      - <<: *checkout
       - name: Run Bazel Build Fuzzers AFL
         id: bazel-build-fuzzers-afl
         uses:  ./.github/actions/bazel-test-all/
@@ -125,8 +124,7 @@ jobs:
     <<: *bazel-small-setup
     timeout-minutes: 60
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
+      - <<: *checkout
       - uses: dorny/paths-filter@v2
         id: filter
         with:
