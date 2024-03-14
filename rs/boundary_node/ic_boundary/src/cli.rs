@@ -88,7 +88,7 @@ pub struct ListenConfig {
 
     /// Timeout for the HTTP connect phase in milliseconds.
     /// This is applied to both normal and health check requests.
-    #[clap(long, default_value = "1500")]
+    #[clap(long, default_value = "4000")]
     pub http_timeout_connect: u64,
 
     /// Max number of in-flight requests that can be served in parallel.
@@ -133,7 +133,7 @@ pub struct HealthChecksConfig {
     /// Timeout for the check request in milliseconds.
     /// This includes connection phase and the actual HTTP request.
     /// Should be longer than --http-timeout-connect
-    #[clap(long, default_value = "3000")]
+    #[clap(long, default_value = "5000")]
     pub check_timeout: u64,
 
     /// Maximum block height lag for a replica to be included in the routing table
