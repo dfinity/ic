@@ -3,7 +3,7 @@ repos:
   hooks:
   - id: bazel_buildifier
     name: Auto format Bazel build files.
-    stages: [commit, manual]
+    stages: [commit]
     entry: bazel run //:buildifier
     files: \.bazel|\.bzl$
     language: system
