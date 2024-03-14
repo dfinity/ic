@@ -186,8 +186,10 @@ fn verify_paths(paths: &[Path], effective_principal_id: PrincipalId) -> Result<(
 
     for path in paths {
         match path.as_slice() {
-            [b"time"] | [b"subnet"] => {}
-            [b"subnet", subnet_id, b"public_key" | b"canister_ranges" | b"metrics"] => {
+            [b"time"] => {}
+            [b"subnet"] => {}
+            [b"subnet", subnet_id]
+            | [b"subnet", subnet_id, b"public_key" | b"canister_ranges" | b"node" | b"metrics"] => {
                 let principal_id = parse_principal_id(subnet_id)?;
                 verify_principal_ids(&principal_id, &effective_principal_id)?;
             }
