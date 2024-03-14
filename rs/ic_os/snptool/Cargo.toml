@@ -13,6 +13,6 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = { workspace = true }
-clap = { workspace = true }
+clap = { version = "3.2.25", features = ["derive"] }
 [target.'cfg(all(target_os = "linux", target_arch = "x86_64"))'.dependencies]
 sev = { version = "2.0.2" }

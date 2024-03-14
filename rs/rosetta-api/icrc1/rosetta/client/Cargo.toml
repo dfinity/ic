@@ -25,7 +25,7 @@ hex = "^0.4.2"
 icrc-ledger-types = { path = "../../../../../packages/icrc-ledger-types" }
 candid = { workspace = true }
 tokio = { workspace = true }
-clap = { version = "4.0.29", features = ["derive"] }
+clap = { workspace = true }
 ic-crypto-ecdsa-secp256k1 = { path = "../../../../crypto/ecdsa_secp256k1" }
 ic-crypto-ed25519 = { path = "../../../../crypto/ed25519" }
 ic-agent = { workspace = true }

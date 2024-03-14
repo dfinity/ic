@@ -23,7 +23,7 @@ async-trait = "0.1"
 axum = "0.6.1"
 bytes = { workspace = true }
 candid = { workspace = true }
-clap = { version = "4", features = ["cargo", "derive"] }
+clap = { workspace = true }
 form_urlencoded = "1"
 futures = { workspace = true }
 http = "0.2.6"

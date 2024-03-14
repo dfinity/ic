@@ -11,7 +11,7 @@ documentation.workspace = true
 [dependencies]
 candid = { workspace = true }
 ciborium = { workspace = true }
-clap = { workspace = true }
+clap = { version = "3.2.25", features = ["derive"] }
 ed25519-consensus = "2.0.1"
 hex = "0.4.2"
 ic-config = { path = "../config" }

@@ -25,7 +25,7 @@ canister-test = { path = "../rust_canisters/canister_test" }
 certificate_orchestrator_interface = { path = "../boundary_node/certificate_issuance/certificate_orchestrator_interface" }
 chrono = { workspace = true }
 cidr = "0.2.2"
-clap = { workspace = true }
+clap = { version = "3.2.25", features = ["derive"] }
 crossbeam-channel = { workspace = true }
 cycles-minting-canister = { path = "../nns/cmc" }
 dfn_candid = { path = "../rust_canisters/dfn_candid" }

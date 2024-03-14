@@ -15,7 +15,7 @@ anyhow = { workspace = true }
 async-trait = "0.1.53"
 axum = "0.6.1"
 candid = { workspace = true }
-clap = { workspace = true }
+clap = { version = "3.2.25", features = ["derive"] }
 dashmap = "5.3.4"
 futures = { workspace = true }
 humantime = "2.1.0"

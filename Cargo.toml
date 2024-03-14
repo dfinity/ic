@@ -443,7 +443,7 @@ chrono = { version = "0.4.31", default-features = false, features = [
   "serde",
 ] }
 ciborium = "0.2.1"
-clap = { version = "3.2.25", features = ["derive"] }
+clap = { version = "4.4.6", features = ["derive", "string"] }
 cloudflare = { version = "0.9.1", default_features = false, features = [
   "rustls-tls",
 ] }

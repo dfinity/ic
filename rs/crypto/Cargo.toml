@@ -9,7 +9,7 @@ documentation.workspace = true
 [dependencies]
 async-trait = "0.1.41"
 bincode = "1.2.1"
-clap = { workspace = true }
+clap = { version = "3.2.25", features = ["derive"] }
 ed25519-consensus = "2.0.1"
 hex = "0.4.2"
 ic-adapter-metrics-server = { path = "../monitoring/adapter_metrics_server" }
