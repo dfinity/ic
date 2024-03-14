@@ -25,6 +25,7 @@ use ic_config::flag_status::FlagStatus;
 use ic_crypto_sha2::Sha256;
 use ic_logger::{error, fatal, replica_logger::no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
+use ic_replicated_state::page_map::StorageLayout;
 use ic_replicated_state::PageIndex;
 use ic_state_layout::{CheckpointLayout, ReadOnly, CANISTER_FILE};
 use ic_sys::{mmap::ScopedMmap, PAGE_SIZE};
@@ -799,7 +800,10 @@ fn dirty_pages_to_dirty_chunks(
                 continue;
             }
 
-            let path = dirty_page.page_type.base(checkpoint);
+            let path = dirty_page
+                .page_type
+                .layout(checkpoint)
+                .map(|layout| layout.base());
 
             if let Ok(path) = path {
                 let relative_path = path

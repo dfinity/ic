@@ -25,8 +25,8 @@ use ic_replicated_state::{
     CanisterState, NumWasmPages, PageMap, ReplicatedState,
 };
 use ic_state_layout::{
-    error::LayoutError, AccessPolicy, CanisterLayout, CanisterStateBits, CheckpointLayout,
-    ExecutionStateBits, ReadOnly, RwPolicy, StateLayout, TipHandler,
+    error::LayoutError, CanisterStateBits, CheckpointLayout, ExecutionStateBits, ReadOnly,
+    RwPolicy, StateLayout, TipHandler,
 };
 use ic_sys::fs::defrag_file_partially;
 use ic_types::{malicious_flags::MaliciousFlags, CanisterId, Height};
@@ -38,7 +38,7 @@ use rand::{seq::IteratorRandom, Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
 use std::collections::BTreeSet;
 use std::os::unix::prelude::MetadataExt;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -128,51 +128,6 @@ fn request_timer(metrics: &StateManagerMetrics, name: &str) -> HistogramTimer {
         .tip_handler_request_duration
         .with_label_values(&[name])
         .start_timer()
-}
-
-struct PageMapLayout<'a, Access>
-where
-    Access: AccessPolicy,
-{
-    page_map_type: PageMapType,
-    layout: &'a CanisterLayout<Access>,
-}
-
-impl<'a, Access> StorageLayout for PageMapLayout<'a, Access>
-where
-    Access: AccessPolicy,
-{
-    fn base(&self) -> PathBuf {
-        match &self.page_map_type {
-            PageMapType::WasmMemory(_) => self.layout.vmemory_0(),
-            PageMapType::StableMemory(_) => self.layout.stable_memory_blob(),
-            PageMapType::WasmChunkStore(_) => self.layout.wasm_chunk_store(),
-        }
-    }
-
-    fn overlay(&self, height: Height, shard: Shard) -> PathBuf {
-        match &self.page_map_type {
-            PageMapType::WasmMemory(_) => self.layout.vmemory_0_overlay(height, shard),
-            PageMapType::StableMemory(_) => self.layout.stable_memory_overlay(height, shard),
-            PageMapType::WasmChunkStore(_) => self.layout.wasm_chunk_store_overlay(height, shard),
-        }
-    }
-
-    fn existing_overlays(&self) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
-        Ok(match &self.page_map_type {
-            PageMapType::WasmMemory(_) => self.layout.vmemory_0_overlays(),
-            PageMapType::StableMemory(_) => self.layout.stable_memory_overlays(),
-            PageMapType::WasmChunkStore(_) => self.layout.wasm_chunk_store_overlays(),
-        }?)
-    }
-
-    fn overlay_height(&self, overlay: &Path) -> Result<Height, Box<dyn std::error::Error>> {
-        Ok(ic_state_layout::overlay_height(overlay)?)
-    }
-
-    fn overlay_shard(&self, overlay: &Path) -> Result<Shard, Box<dyn std::error::Error>> {
-        Ok(ic_state_layout::overlay_shard(overlay)?)
-    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -288,51 +243,30 @@ pub(crate) fn spawn_tip_thread(
                             });
                             parallel_map(
                                 &mut thread_pool,
-                                pagemaps.into_iter().map(
-                                    |PageMapToFlush {
-                                         page_map_type,
-                                         truncate,
-                                         page_map,
-                                     }| {
-                                        (
-                                            layout.canister(&page_map_type.id()).unwrap_or_else(
-                                                |err| {
-                                                    fatal!(
-                                                        log,
-                                                        "Failed to get layout for {:?}: {}",
-                                                        page_map_type,
-                                                        err
-                                                    );
-                                                },
-                                            ),
-                                            truncate,
-                                            page_map,
-                                            page_map_type,
-                                        )
-                                    },
-                                ),
-                                |(canister_layout, truncate, page_map, page_map_type)| {
-                                    let page_map_layout = PageMapLayout {
-                                        page_map_type: *page_map_type,
-                                        layout: canister_layout,
-                                    };
+                                pagemaps.into_iter(),
+                                |PageMapToFlush {
+                                     page_map_type,
+                                     truncate,
+                                     page_map,
+                                 }| {
+                                    let page_map_layout =
+                                        page_map_type.layout(layout).unwrap_or_else(|err| {
+                                            fatal!(
+                                                log,
+                                                "Failed to get layout for {:?}: {}",
+                                                page_map_type,
+                                                err
+                                            );
+                                        });
                                     if *truncate {
-                                        let existing_overlays = page_map_layout
-                                            .existing_overlays()
-                                            .unwrap_or_else(|err| {
-                                                fatal!(
-                                                    log,
-                                                    "Failed to get existing overlays for {:#?}: {}",
-                                                    page_map_layout.page_map_type,
-                                                    err
-                                                )
-                                            });
-                                        let base_file_path = page_map_layout.base();
-                                        delete_pagemap_files(
-                                            &log,
-                                            &base_file_path,
-                                            &existing_overlays,
-                                        );
+                                        page_map_layout.delete_files().unwrap_or_else(|err| {
+                                            fatal!(
+                                                log,
+                                                "Failed to delete files for {:#?}: {}",
+                                                page_map_type,
+                                                err
+                                            )
+                                        });
                                     }
                                     if page_map.is_some()
                                         && !page_map.as_ref().unwrap().unflushed_delta_is_empty()
@@ -520,11 +454,7 @@ fn merge_candidates_and_storage_info(
         mem_size: 0,
     };
     for (page_map_type, num_pages) in pagemaptypes_with_num_pages {
-        let canister_layout = layout.canister(&page_map_type.id())?;
-        let pm_layout = PageMapLayout {
-            page_map_type: *page_map_type,
-            layout: &canister_layout,
-        };
+        let pm_layout = page_map_type.layout(layout)?;
         storage_info.disk_size += (&pm_layout as &dyn StorageLayout).storage_size()?;
         storage_info.mem_size += (num_pages * PAGE_SIZE) as u64;
         for m in MergeCandidate::new(&pm_layout, height, *num_pages as u64, lsmt_config)? {
@@ -692,22 +622,11 @@ fn merge_to_base(
     });
     let rewritten = parallel_map(
         thread_pool,
-        pagemaptypes_with_num_pages
-            .iter()
-            .map(|(page_map_type, num_pages)| {
-                (
-                    layout.canister(&page_map_type.id()).unwrap_or_else(|err| {
-                        fatal!(log, "Failed to get layout for {:?}: {}", page_map_type, err);
-                    }),
-                    *page_map_type,
-                    *num_pages,
-                )
-            }),
-        |(canister_layout, page_map_type, num_pages)| {
-            let pm_layout = PageMapLayout {
-                page_map_type: *page_map_type,
-                layout: canister_layout,
-            };
+        pagemaptypes_with_num_pages.iter(),
+        |(page_map_type, num_pages)| {
+            let pm_layout = page_map_type.layout(layout).unwrap_or_else(|err| {
+                fatal!(log, "Failed to get layout for {:?}: {}", page_map_type, err);
+            });
             let merge_candidate = MergeCandidate::merge_to_base(&pm_layout, *num_pages as u64)
                 .unwrap_or_else(|err| fatal!(log, "Failed to merge page map: {}", err));
             if let Some(m) = merge_candidate.as_ref() {
@@ -815,22 +734,14 @@ fn serialize_canister_to_tip(
                         .serialize(&execution_state.wasm_binary.binary)?;
                 }
             }
-            let memory_layout = PageMapLayout {
-                page_map_type: PageMapType::WasmMemory(canister_id),
-                layout: &canister_layout,
-            };
-            let stable_layout = PageMapLayout {
-                page_map_type: PageMapType::StableMemory(canister_id),
-                layout: &canister_layout,
-            };
             execution_state.wasm_memory.page_map.persist_delta(
-                &memory_layout,
+                &canister_layout.vmemory_0(),
                 tip.height(),
                 lsmt_config,
                 metrics,
             )?;
             execution_state.stable_memory.page_map.persist_delta(
-                &stable_layout,
+                &canister_layout.stable_memory(),
                 tip.height(),
                 lsmt_config,
                 metrics,
@@ -847,30 +758,23 @@ fn serialize_canister_to_tip(
             })
         }
         None => {
-            delete_pagemap_files(
-                log,
-                &canister_layout.vmemory_0(),
-                &canister_layout.vmemory_0_overlays()?,
-            );
-            delete_pagemap_files(
-                log,
-                &canister_layout.stable_memory_blob(),
-                &canister_layout.stable_memory_overlays()?,
-            );
+            canister_layout.vmemory_0().delete_files()?;
+            canister_layout.stable_memory().delete_files()?;
             canister_layout.wasm().try_delete_file()?;
             None
         }
     };
 
-    let wasm_chunk_store_layout = PageMapLayout {
-        page_map_type: PageMapType::WasmChunkStore(canister_id),
-        layout: &canister_layout,
-    };
     canister_state
         .system_state
         .wasm_chunk_store
         .page_map()
-        .persist_delta(&wasm_chunk_store_layout, tip.height(), lsmt_config, metrics)?;
+        .persist_delta(
+            &canister_layout.wasm_chunk_store(),
+            tip.height(),
+            lsmt_config,
+            metrics,
+        )?;
 
     // Priority credit must be zero at this point
     assert_eq!(canister_state.scheduler_state.priority_credit.get(), 0);
@@ -986,7 +890,7 @@ pub fn defrag_tip(
     let path_with_sizes: Vec<(PathBuf, u64)> = page_map_subset
         .iter()
         .filter_map(|entry| {
-            let path = entry.base(tip).ok()?;
+            let path = entry.layout(tip).ok()?.base();
             let size = path.metadata().ok()?.size();
             Some((path, size))
         })
@@ -1011,30 +915,6 @@ pub fn defrag_tip(
         })?;
     }
     Ok(())
-}
-
-fn delete_pagemap_files(log: &ReplicaLogger, base: &Path, overlays: &[PathBuf]) {
-    if base.exists() {
-        std::fs::remove_file(base).unwrap_or_else(|err| {
-            fatal!(
-                log,
-                "Failed to remove base file at {}: {}",
-                base.display(),
-                err
-            );
-        });
-    }
-
-    for overlay in overlays {
-        std::fs::remove_file(overlay).unwrap_or_else(|err| {
-            fatal!(
-                log,
-                "Failed to remove overlay file {}: {}",
-                overlay.display(),
-                err
-            );
-        });
-    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1242,7 +1122,7 @@ mod test {
 
             let paths: Vec<PathBuf> = page_maps
                 .iter()
-                .map(|page_map_type| page_map_type.base(&tip).unwrap())
+                .map(|page_map_type| page_map_type.layout(&tip).unwrap().base())
                 .collect();
 
             for path in &paths {
