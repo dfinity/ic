@@ -299,6 +299,7 @@ impl TranscriptAttributes for IDkgTranscriptParamsRef {
 
 /// Attributes of `IDkgTranscript`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct IDkgTranscriptAttributes {
     receivers: BTreeSet<NodeId>,
     algorithm_id: AlgorithmId,
@@ -649,7 +650,6 @@ impl TryFrom<&pb::UnmaskedTimesMaskedParams> for UnmaskedTimesMaskedParams {
 
 /// ECDSA Quadruple in creation.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct QuadrupleInCreation {
     pub kappa_masked_config: Option<RandomTranscriptParams>,
     pub kappa_masked: Option<MaskedTranscript>,
