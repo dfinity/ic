@@ -1196,13 +1196,14 @@ bazel-test-all-rebuild:
     when: always
   extends:
     - ".bazel-test-all"
-    - ".rules-post-master"
   needs: []
   rules:
     - allow_failure: true
       if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"
       when: manual
-    - if: $SCHEDULE_NAME == "run-all-master"
+    - allow_failure: true
+      if: $SCHEDULE_NAME == "run-all-master"
+      when: manual
   script:
     - "./gitlab-ci/src/bazel-ci/main.sh"
   tags:
