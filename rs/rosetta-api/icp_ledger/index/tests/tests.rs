@@ -2,7 +2,7 @@ use candid::{Decode, Encode, Nat};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icp_index::{
     GetAccountIdentifierTransactionsArgs, GetAccountIdentifierTransactionsResponse,
-    GetAccountIdentifierTransactionsResult, Status, TransactionWithId,
+    GetAccountIdentifierTransactionsResult, SettledTransaction, SettledTransactionWithId, Status,
 };
 use ic_icrc1_index_ng::GetAccountTransactionsArgs;
 use ic_ledger_canister_core::archive::ArchiveOptions;
@@ -13,7 +13,7 @@ use ic_state_machine_tests::StateMachine;
 use icp_ledger::{
     AccountIdentifier, GetBlocksArgs, QueryEncodedBlocksResponse, MAX_BLOCKS_PER_REQUEST,
 };
-use icp_ledger::{FeatureFlags, LedgerCanisterInitPayload, Memo, Operation, Transaction};
+use icp_ledger::{FeatureFlags, LedgerCanisterInitPayload, Memo, Operation};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferArg, TransferError};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
@@ -323,6 +323,8 @@ fn get_account_identifier_transactions(
     accountidentifier_txs
 }
 
+const SYNC_STEP_SECONDS: Duration = Duration::from_secs(60);
+
 // Helper function that calls tick on env until either
 // the index canister has synced all the blocks up to the
 // last one in the ledger or enough attempts passed and therefore
@@ -332,7 +334,7 @@ fn wait_until_sync_is_completed(env: &StateMachine, index_id: CanisterId, ledger
     let mut num_blocks_synced = u64::MAX;
     let mut chain_length = u64::MAX;
     for _i in 0..MAX_ATTEMPTS {
-        env.advance_time(Duration::from_secs(60));
+        env.advance_time(SYNC_STEP_SECONDS);
         env.tick();
         num_blocks_synced = status(env, index_id).num_blocks_synced;
         chain_length = icp_get_blocks(env, ledger_id).len() as u64;
@@ -344,22 +346,22 @@ fn wait_until_sync_is_completed(env: &StateMachine, index_id: CanisterId, ledger
 }
 
 #[track_caller]
-fn assert_tx_eq(tx1: &Transaction, tx2: &Transaction) {
+fn assert_tx_eq(tx1: &SettledTransaction, tx2: &SettledTransaction) {
     assert_eq!(tx1.operation, tx2.operation);
     assert_eq!(tx1.memo, tx2.memo);
-    assert_eq!(tx1.operation, tx2.operation);
-    assert_eq!(tx1.operation, tx2.operation);
+    assert_eq!(tx1.icrc1_memo, tx2.icrc1_memo);
+    assert_eq!(tx1.timestamp, tx2.timestamp);
 }
 
 // checks that two txs are equal minus the fields set by the ledger (e.g. timestamp)
 #[track_caller]
-fn assert_tx_with_id_eq(tx1: &TransactionWithId, tx2: &TransactionWithId) {
+fn assert_tx_with_id_eq(tx1: &SettledTransactionWithId, tx2: &SettledTransactionWithId) {
     assert_eq!(tx1.id, tx2.id, "id");
     assert_tx_eq(&tx1.transaction, &tx2.transaction);
 }
 
 #[track_caller]
-fn assert_txs_with_id_eq(txs1: Vec<TransactionWithId>, txs2: Vec<TransactionWithId>) {
+fn assert_txs_with_id_eq(txs1: Vec<SettledTransactionWithId>, txs2: Vec<SettledTransactionWithId>) {
     assert_eq!(
         txs1.len(),
         txs2.len(),
@@ -442,6 +444,18 @@ fn test_archive_indexing() {
     assert_ledger_index_parity(env, ledger_id, index_id);
 }
 
+fn expected_block_timestamp(phase: u32, start_time: SystemTime) -> TimeStamp {
+    TimeStamp::from(
+        start_time
+            .checked_add(
+                SYNC_STEP_SECONDS
+                    .checked_mul(phase)
+                    .expect("checked_mul should not overflow"),
+            )
+            .expect("checked_add should not overflow"),
+    )
+}
+
 #[test]
 fn test_get_account_identifier_transactions() {
     let mut initial_balances = HashMap::new();
@@ -454,10 +468,12 @@ fn test_get_account_identifier_transactions() {
     let index_id = install_index(env, ledger_id);
 
     // List of the transactions that the test is going to add. This exists to make
-    // the test easier to read
-    let tx0 = TransactionWithId {
+    // the test easier to read. The transactions are executed in separate phases, where the block
+    // timestamp is a function of the phase.
+    let mut phase = 0u32;
+    let tx0 = SettledTransactionWithId {
         id: 0u64,
-        transaction: Transaction {
+        transaction: SettledTransaction {
             operation: Operation::Mint {
                 to: account(1, 0).into(),
                 amount: Tokens::from_e8s(1_000_000_000_000_u64),
@@ -465,11 +481,13 @@ fn test_get_account_identifier_transactions() {
             memo: Memo(0),
             created_at_time: None,
             icrc1_memo: None,
+            timestamp: expected_block_timestamp(phase, env.time()),
         },
     };
-    let tx1 = TransactionWithId {
+    phase = 1;
+    let tx1 = SettledTransactionWithId {
         id: 1u64,
-        transaction: Transaction {
+        transaction: SettledTransaction {
             operation: Operation::Transfer {
                 to: account(2, 0).into(),
                 from: account(1, 0).into(),
@@ -480,11 +498,13 @@ fn test_get_account_identifier_transactions() {
             memo: Memo(0),
             created_at_time: None,
             icrc1_memo: None,
+            timestamp: expected_block_timestamp(phase, env.time()),
         },
     };
-    let tx2 = TransactionWithId {
+    phase = 2;
+    let tx2 = SettledTransactionWithId {
         id: 2u64,
-        transaction: Transaction {
+        transaction: SettledTransaction {
             operation: Operation::Transfer {
                 to: account(2, 0).into(),
                 from: account(1, 0).into(),
@@ -495,11 +515,12 @@ fn test_get_account_identifier_transactions() {
             memo: Memo(0),
             created_at_time: None,
             icrc1_memo: None,
+            timestamp: expected_block_timestamp(phase, env.time()),
         },
     };
-    let tx3 = TransactionWithId {
+    let tx3 = SettledTransactionWithId {
         id: 3u64,
-        transaction: Transaction {
+        transaction: SettledTransaction {
             operation: Operation::Transfer {
                 to: account(1, 1).into(),
                 from: account(2, 0).into(),
@@ -510,17 +531,19 @@ fn test_get_account_identifier_transactions() {
             memo: Memo(0),
             created_at_time: None,
             icrc1_memo: None,
+            timestamp: expected_block_timestamp(phase, env.time()),
         },
     };
+    phase = 3;
     let expires_at = env
         .time()
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap()
         .as_nanos() as u64
         + Duration::from_secs(3600).as_nanos() as u64;
-    let tx4 = TransactionWithId {
+    let tx4 = SettledTransactionWithId {
         id: 4u64,
-        transaction: Transaction {
+        transaction: SettledTransaction {
             operation: Operation::Approve {
                 from: account(1, 0).into(),
                 spender: account(4, 4).into(),
@@ -532,6 +555,7 @@ fn test_get_account_identifier_transactions() {
             memo: Memo(0),
             created_at_time: None,
             icrc1_memo: None,
+            timestamp: expected_block_timestamp(phase, env.time()),
         },
     };
 
@@ -643,9 +667,9 @@ fn test_get_account_transactions_start_length() {
         );
     }
     let expected_txs: Vec<_> = (0..10)
-        .map(|i| TransactionWithId {
+        .map(|i| SettledTransactionWithId {
             id: i,
-            transaction: Transaction {
+            transaction: SettledTransaction {
                 operation: Operation::Mint {
                     to: account(1, 0).into(),
                     amount: Tokens::from_e8s(i * 10_000),
@@ -653,6 +677,7 @@ fn test_get_account_transactions_start_length() {
                 memo: Memo(0),
                 created_at_time: None,
                 icrc1_memo: None,
+                timestamp: TimeStamp::from(env.time()),
             },
         })
         .collect();
@@ -731,7 +756,7 @@ fn test_get_account_identifier_transactions_pagination() {
         }
 
         let mut last_seen_txid = start;
-        for TransactionWithId { id, transaction } in &res.transactions {
+        for SettledTransactionWithId { id, transaction } in &res.transactions {
             // transactions ids must be unique and in descending order
             if let Some(last_seen_txid) = last_seen_txid {
                 assert!(*id < last_seen_txid);
@@ -740,7 +765,7 @@ fn test_get_account_identifier_transactions_pagination() {
 
             // check the transaction itself
             assert_tx_eq(
-                &Transaction {
+                &SettledTransaction {
                     operation: Operation::Mint {
                         to: account(1, 0).into(),
                         amount: Tokens::from_e8s(*id * 10_000),
@@ -748,6 +773,11 @@ fn test_get_account_identifier_transactions_pagination() {
                     memo: Memo(0),
                     created_at_time: None,
                     icrc1_memo: None,
+                    timestamp: TimeStamp::from(
+                        env.time()
+                            .checked_sub(SYNC_STEP_SECONDS)
+                            .expect("should not underflow"),
+                    ),
                 },
                 transaction,
             );
