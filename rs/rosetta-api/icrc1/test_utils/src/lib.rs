@@ -1073,20 +1073,62 @@ pub fn valid_construction_payloads_request_metadata() -> impl Strategy<Value = O
     let now = SystemTime::now();
     let now_u64 = now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
     let ingress_start_strategy = prop::option::of(Just(now_u64));
+    let ingress_end_strategy =
+        prop::option::of(now_u64..now_u64 + Duration::from_secs(60 * 60 * 24).as_nanos() as u64);
     let created_at_time = valid_created_at_time_strategy(now);
 
-    (memo_strategy, ingress_start_strategy, created_at_time).prop_map(
-        |(memo, ingress_start, created_at_time)| {
+    (
+        memo_strategy,
+        ingress_start_strategy,
+        ingress_end_strategy,
+        created_at_time,
+    )
+        .prop_map(|(memo, ingress_start, ingress_end, created_at_time)| {
             let mut map = ObjectMap::new();
             map.insert(
                 "memo".to_string(),
                 memo.map(|m| m.0.as_slice().to_vec()).into(),
             );
             map.insert("ingress_start".to_string(), ingress_start.into());
+            map.insert("ingress_end".to_string(), ingress_end.into());
             map.insert("created_at_time".to_string(), created_at_time.into());
             map
-        },
+        })
+}
+
+pub fn construction_payloads_request_metadata() -> impl Strategy<Value = ObjectMap> {
+    let memo_strategy = arb_memo();
+    let now = SystemTime::now();
+    // We select the last and next 48 hours as an interval in which the ingress boundaries are set
+    // They do not have to be valid
+    let ingress_interval_start =
+        now.duration_since(UNIX_EPOCH).unwrap() - Duration::from_secs(60 * 60 * 48);
+    let ingress_interval_end =
+        now.duration_since(UNIX_EPOCH).unwrap() + Duration::from_secs(60 * 60 * 48);
+    let ingress_start_strategy =
+        prop::option::of(ingress_interval_start.as_nanos()..ingress_interval_end.as_nanos());
+    let ingress_end_strategy =
+        prop::option::of(ingress_interval_start.as_nanos()..ingress_interval_end.as_nanos());
+    let created_at_time =
+        prop::option::of(ingress_interval_start.as_nanos()..ingress_interval_end.as_nanos());
+
+    (
+        memo_strategy,
+        ingress_start_strategy,
+        ingress_end_strategy,
+        created_at_time,
     )
+        .prop_map(|(memo, ingress_start, ingress_end, created_at_time)| {
+            let mut map = ObjectMap::new();
+            map.insert(
+                "memo".to_string(),
+                memo.map(|m| m.0.as_slice().to_vec()).into(),
+            );
+            map.insert("ingress_start".to_string(), ingress_start.into());
+            map.insert("ingress_end".to_string(), ingress_end.into());
+            map.insert("created_at_time".to_string(), created_at_time.into());
+            map
+        })
 }
 
 #[cfg(test)]

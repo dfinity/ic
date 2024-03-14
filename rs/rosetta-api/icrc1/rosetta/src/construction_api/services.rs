@@ -7,6 +7,7 @@ use super::utils::{
     handle_construction_hash, handle_construction_parse, handle_construction_payloads,
     handle_construction_submit,
 };
+use crate::common::constants::INGRESS_INTERVAL_OVERLAP;
 use crate::common::types::Error;
 use candid::Principal;
 use ic_base_types::{CanisterId, PrincipalId};
@@ -78,13 +79,24 @@ pub async fn construction_submit(
     signed_transaction: String,
     icrc1_ledger_id: CanisterId,
     icrc1_agent: Arc<Icrc1Agent>,
+    decimals: u8,
+    symbol: String,
 ) -> Result<ConstructionSubmitResponse, Error> {
     let signed_transaction = SignedTransaction::from_str(&signed_transaction)
         .map_err(|err| Error::parsing_unsuccessful(&err))?;
 
-    handle_construction_submit(signed_transaction, icrc1_ledger_id.into(), icrc1_agent)
-        .await
-        .map_err(|err| Error::processing_construction_failed(&err))
+    handle_construction_submit(
+        signed_transaction,
+        icrc1_ledger_id.into(),
+        icrc1_agent,
+        Currency {
+            symbol,
+            decimals: decimals as u32,
+            metadata: None,
+        },
+    )
+    .await
+    .map_err(|err| Error::processing_construction_failed(&err))
 }
 
 pub fn construction_hash(signed_transaction: String) -> Result<ConstructionHashResponse, Error> {
@@ -113,14 +125,16 @@ pub fn construction_payloads(
     public_keys: Vec<PublicKey>,
 ) -> Result<ConstructionPayloadsResponse, Error> {
     // The interval between each ingress message
-    let ingress_interval = ic_constants::MAX_INGRESS_TTL.as_nanos() as u64;
+    // The permitted drift makes sure that intervals are overlapping and there are no edge cases when trying to submit to the IC
+    let ingress_interval: u64 =
+        (ic_constants::MAX_INGRESS_TTL - ic_constants::PERMITTED_DRIFT).as_nanos() as u64;
 
     let now = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap()
         .as_nanos() as u64;
 
-    let ingress_start = metadata
+    let mut ingress_start = metadata
         .as_ref()
         .and_then(|meta| meta.ingress_start)
         .unwrap_or(now);
@@ -140,11 +154,26 @@ pub fn construction_payloads(
         .and_then(|meta| meta.memo.clone())
         .map(|memo| memo.into());
 
-    // TODO: Support longer intervals than a single interval
-    if ingress_end != ingress_start + ingress_interval {
-        return Err(Error::invalid_metadata(
-            &"ingress_end should be after 4 minutes from ingress_start",
+    if ingress_start >= ingress_end {
+        return Err(Error::processing_construction_failed(&format!(
+            "Ingress start should start before ingress end: Start: {}, End: {}",
+            ingress_start, ingress_end
+        )));
+    }
+
+    if ingress_end < now + ingress_interval {
+        return Err(Error::processing_construction_failed(
+            &format!("Ingress end should be at least one interval from the current time: Current time: {}, End: {}",now, ingress_end),
         ));
+    }
+
+    // Every ingress message sent to the IC has an expiry timestamp until which the signature associated with that message is valid
+    // To support a longer overall timeframe than one interval, we can send multiple ingress messages with two signable contents each
+    let mut ingress_expiries = vec![];
+    while ingress_start < ingress_end {
+        ingress_expiries.push(ingress_start + ingress_interval);
+        ingress_start +=
+            ingress_interval.saturating_sub(INGRESS_INTERVAL_OVERLAP.as_nanos() as u64);
     }
 
     // ICRC Rosetta only supports one transaction per request
@@ -167,9 +196,9 @@ pub fn construction_payloads(
         operations,
         created_at_time,
         memo,
-        ingress_end,
         *ledger_id,
         sender_public_key,
+        ingress_expiries,
     )
     .map_err(|err| Error::processing_construction_failed(&err))
 }
@@ -216,18 +245,21 @@ mod tests {
     use crate::common::utils::utils::icrc1_operation_to_rosetta_core_operations;
     use ic_agent::Identity;
     use ic_canister_client_sender::{Ed25519KeyPair, Secp256k1KeyPair};
+    use ic_icrc1_test_utils::construction_payloads_request_metadata;
     use ic_icrc1_test_utils::minter_identity;
-    use ic_icrc1_test_utils::valid_construction_payloads_request_metadata;
     use ic_icrc1_test_utils::valid_transactions_strategy;
     use ic_icrc1_test_utils::DEFAULT_TRANSFER_FEE;
     use ic_icrc1_tokens_u256::U256;
     use ic_icrc_rosetta_client::RosettaClient;
+    use ic_icrc_rosetta_runner::DEFAULT_DECIMAL_PLACES;
+    use ic_icrc_rosetta_runner::DEFAULT_TOKEN_SYMBOL;
     use proptest::prelude::any;
     use proptest::proptest;
     use proptest::strategy::Strategy;
     use proptest::test_runner::Config as TestRunnerConfig;
     use proptest::test_runner::TestRunner;
     use rosetta_core::models::RosettaSupportedKeyPair;
+    use std::time::Duration;
 
     const NUM_TEST_CASES: u32 = 100;
     const NUM_BLOCKS: usize = 1;
@@ -255,10 +287,11 @@ mod tests {
         parse_response: ConstructionParseResponse,
         operations: Vec<Operation>,
         metadata: ConstructionPayloadsRequestMetadata,
-        now: SystemTime,
+        now: Duration,
     ) {
         let received_metadata =
             ConstructionPayloadsRequestMetadata::try_from(parse_response.metadata).unwrap();
+        let now_u64 = now.as_nanos() as u64;
 
         parse_response.operations.into_iter().for_each(|operation| {
             assert!(
@@ -271,18 +304,47 @@ mod tests {
             )
         });
 
-        if let Some(_created_at_time) = metadata.created_at_time {
-            assert_eq!(received_metadata.created_at_time, metadata.created_at_time);
+        if let Some(created_at_time) = metadata.created_at_time {
+            assert_eq!(received_metadata.created_at_time.unwrap(), created_at_time);
         } else {
+            assert!(received_metadata.created_at_time.unwrap() >= now_u64);
+        }
+        assert_eq!(received_metadata.memo, metadata.memo);
+
+        if let Some(ingress_start) = metadata.ingress_start {
+            assert_eq!(received_metadata.ingress_start.unwrap(), ingress_start);
+        } else {
+            assert!(received_metadata.ingress_start.unwrap() >= now_u64);
             assert!(
-                received_metadata.created_at_time.unwrap()
-                    >= now
-                        .duration_since(SystemTime::UNIX_EPOCH)
-                        .unwrap()
+                received_metadata.ingress_start.unwrap()
+                    <= now_u64
+                        + (ic_constants::MAX_INGRESS_TTL - ic_constants::PERMITTED_DRIFT).as_nanos()
+                            as u64
+            );
+        }
+
+        if let Some(ingress_end) = metadata.ingress_end {
+            // Ingress end should be within an interval from the set ingress_end.
+            assert!(received_metadata.ingress_end.unwrap() >= ingress_end);
+            assert!(
+                received_metadata.ingress_end.unwrap()
+                    <= ingress_end
+                        + (ic_constants::MAX_INGRESS_TTL - ic_constants::PERMITTED_DRIFT).as_nanos()
+                            as u64
+            );
+        } else {
+            // If no ingress_end is set, it should be within an interval from the ingress start time.
+            assert!(
+                received_metadata.ingress_end.unwrap() >= received_metadata.ingress_start.unwrap()
+            );
+            assert_eq!(
+                received_metadata.ingress_end.unwrap(),
+                received_metadata.ingress_start.unwrap()
+                    + (ic_constants::MAX_INGRESS_TTL - ic_constants::PERMITTED_DRIFT
+                        + INGRESS_INTERVAL_OVERLAP)
                         .as_nanos() as u64
             );
         }
-        assert_eq!(received_metadata.memo, metadata.memo);
     }
 
     proptest! {
@@ -306,7 +368,6 @@ mod tests {
             cases: NUM_TEST_CASES,
             ..Default::default()
         });
-
         runner
             .run(
                 &(
@@ -317,16 +378,15 @@ mod tests {
                         SystemTime::now(),
                     )
                     .no_shrink(),
-                    valid_construction_payloads_request_metadata().no_shrink(),
+                    construction_payloads_request_metadata().no_shrink(),
                 ),
                 |(args_with_caller, construction_payloads_request_metadata)| {
                     for arg_with_caller in args_with_caller.into_iter() {
                         let currency = Currency {
-                            symbol: "ICP".to_string(),
-                            decimals: 8,
+                            symbol: DEFAULT_TOKEN_SYMBOL.to_owned(),
+                            decimals: DEFAULT_DECIMAL_PLACES as u32,
                             metadata: None,
                         };
-                        let now = SystemTime::now();
                         let icrc1_transaction: ic_icrc1::Transaction<U256> = arg_with_caller
                             .to_transaction(minter_identity().sender().unwrap().into());
                         let fee = match icrc1_transaction.operation {
@@ -354,21 +414,61 @@ mod tests {
                             .into()])
                         );
 
+                        let payloads_metadata: ConstructionPayloadsRequestMetadata =
+                            construction_payloads_request_metadata
+                                .clone()
+                                .try_into()
+                                .unwrap();
+
+                        let now = SystemTime::now()
+                            .duration_since(SystemTime::UNIX_EPOCH)
+                            .unwrap();
+
                         let construction_payloads_response = construction_payloads(
                             rosetta_core_operations.clone(),
-                            Some(
-                                construction_payloads_request_metadata
-                                    .clone()
-                                    .try_into()
-                                    .unwrap(),
-                            ),
+                            Some(payloads_metadata.clone()),
                             &PrincipalId::new_anonymous().0,
                             vec![(&arg_with_caller.caller).into()],
-                        )
-                        .unwrap();
+                        );
+
+                        match (
+                            payloads_metadata.ingress_end,
+                            payloads_metadata.ingress_start,
+                        ) {
+                            (Some(ingress_end), Some(ingress_start)) => {
+                                if ingress_start >= ingress_end {
+                                    assert!(construction_payloads_response.is_err());
+                                    continue;
+                                }
+                                if ingress_end
+                                    < (now + ic_constants::MAX_INGRESS_TTL).as_nanos() as u64
+                                {
+                                    assert!(construction_payloads_response.is_err());
+                                    continue;
+                                }
+                            }
+                            (Some(ingress_end), _) => {
+                                if ingress_end
+                                    < (now + ic_constants::MAX_INGRESS_TTL).as_nanos() as u64
+                                {
+                                    assert!(construction_payloads_response.is_err());
+                                    continue;
+                                }
+                            }
+                            (_, Some(ingress_start)) => {
+                                if ingress_start < now.as_nanos() as u64 {
+                                    assert!(construction_payloads_response.is_err());
+                                    continue;
+                                }
+                            }
+                            (_, _) => {}
+                        }
 
                         let construction_parse_response = construction_parse(
-                            construction_payloads_response.unsigned_transaction.clone(),
+                            construction_payloads_response
+                                .clone()
+                                .unwrap()
+                                .unsigned_transaction,
                             false,
                             currency.clone(),
                         )
@@ -377,22 +477,19 @@ mod tests {
                         assert_parse_response(
                             construction_parse_response.clone(),
                             rosetta_core_operations.clone(),
-                            construction_payloads_request_metadata
-                                .clone()
-                                .try_into()
-                                .unwrap(),
+                            payloads_metadata,
                             now,
                         );
 
                         let signatures = RosettaClient::sign_transaction(
                             &arg_with_caller.caller,
-                            construction_payloads_response.clone(),
+                            construction_payloads_response.clone().unwrap(),
                         )
                         .unwrap();
 
                         let ConstructionCombineResponse { signed_transaction } =
                             construction_combine(
-                                construction_payloads_response.unsigned_transaction,
+                                construction_payloads_response.unwrap().unsigned_transaction,
                                 signatures,
                             )
                             .unwrap();
