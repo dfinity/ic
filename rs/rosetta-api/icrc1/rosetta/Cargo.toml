@@ -37,7 +37,7 @@ proptest = "1.0"
 rand = "0.8.4"
 axum = "0.6.1"
 url = "2.2.1"
-clap = { version = "4.0.29", features = ["derive"] }
+clap = { workspace = true }
 tokio = { workspace = true }
 ic-agent = { workspace = true }
 icrc-ledger-agent = { path = "../../../../packages/icrc-ledger-agent" }

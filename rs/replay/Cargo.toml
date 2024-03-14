@@ -8,7 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 candid = { workspace = true }
-clap = { workspace = true }
+clap = { version = "3.2.25", features = ["derive"] }
 hex = "0.4.2"
 ic-artifact-pool = { path = "../artifact_pool" }
 ic-canister-client = { path = "../canister_client" }

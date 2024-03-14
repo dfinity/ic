@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 base64 = { workspace = true }
-clap = { workspace = true }
+clap = { version = "3.2.25", features = ["derive"] }
 futures = { workspace = true }
 hex = "0.4.2"
 ic-artifact-pool = { path = "../artifact_pool" }

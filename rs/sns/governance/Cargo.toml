@@ -31,7 +31,7 @@ build-info = { workspace = true }
 async-trait = "0.1.42"
 base64 = { workspace = true }
 candid = { workspace = true }
-clap = { workspace = true }
+clap = { version = "3.2.25", features = ["derive"] }
 comparable = { version = "0.5", features = ["derive"] }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_core = { path = "../../rust_canisters/dfn_core" }

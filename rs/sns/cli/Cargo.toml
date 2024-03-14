@@ -17,7 +17,7 @@ path = "src/lib.rs"
 anyhow = { workspace = true }
 base64 = { workspace = true }
 candid = { workspace = true }
-clap = { version = "^4.0.0" }
+clap = { workspace = true }
 hex = "0.4.3"
 ic-base-types = { path = "../../types/base_types" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }

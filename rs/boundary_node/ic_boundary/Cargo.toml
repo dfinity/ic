@@ -24,7 +24,7 @@ axum-extra = "0.9.0"
 axum-server = { version = "0.5.1", features = ["tls-rustls"] }
 bytes = { workspace = true }
 candid = { workspace = true }
-clap = { version = "4", features = ["derive"] }
+clap = { workspace = true }
 dashmap = "5.3.4"
 ethnum = { workspace = true }
 futures = { workspace = true }
