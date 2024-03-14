@@ -1,6 +1,6 @@
 use crate::address::ecdsa_public_key_to_address;
 use crate::erc20::{CkErc20Token, CkTokenSymbol};
-use crate::eth_logs::{EventSource, ReceivedEthEvent, ReceivedEvent};
+use crate::eth_logs::{EventSource, ReceivedEvent};
 use crate::eth_rpc::BlockTag;
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::lifecycle::upgrade::UpgradeArg;
@@ -34,6 +34,8 @@ thread_local! {
 pub struct MintedEvent {
     pub deposit_event: ReceivedEvent,
     pub mint_block_index: LedgerMintIndex,
+    pub token_symbol: String,
+    pub erc20_contract_address: Option<Address>,
 }
 
 impl MintedEvent {
@@ -95,8 +97,10 @@ pub enum InvalidStateError {
     InvalidEcdsaKeyName(String),
     InvalidLedgerId(String),
     InvalidEthereumContractAddress(String),
+    InvalidErc20HelperContractAddress(String),
     InvalidMinimumWithdrawalAmount(String),
     InvalidLastScrapedBlockNumber(String),
+    InvalidLastErc20ScrapedBlockNumber(String),
 }
 
 impl State {
@@ -140,18 +144,8 @@ impl State {
         self.ledger_suite_orchestrator_id.is_some()
     }
 
-    pub fn eth_events_to_mint(&self) -> Vec<ReceivedEthEvent> {
-        self.events_to_mint
-            .values()
-            .filter_map(|evt| {
-                if let ReceivedEvent::Eth(evt) = evt {
-                    Some(evt)
-                } else {
-                    None
-                }
-            })
-            .cloned()
-            .collect()
+    pub fn events_to_mint(&self) -> Vec<ReceivedEvent> {
+        self.events_to_mint.values().cloned().collect()
     }
 
     fn record_event_to_mint(&mut self, event: &ReceivedEvent) {
@@ -162,6 +156,14 @@ impl State {
         );
         assert!(!self.minted_events.contains_key(&event_source));
         assert!(!self.invalid_events.contains_key(&event_source));
+        if let ReceivedEvent::Erc20(event) = event {
+            assert!(
+                self.ckerc20_tokens
+                    .get_alt(&event.erc20_contract_address)
+                    .is_some(),
+                "Event {event:?} has an unsupported erc20_contract_address"
+            )
+        }
 
         self.events_to_mint.insert(event_source, event.clone());
 
@@ -201,7 +203,13 @@ impl State {
         }
     }
 
-    fn record_successful_mint(&mut self, source: EventSource, mint_block_index: LedgerMintIndex) {
+    fn record_successful_mint(
+        &mut self,
+        source: EventSource,
+        token_symbol: &str,
+        mint_block_index: LedgerMintIndex,
+        erc20_contract_address: Option<Address>,
+    ) {
         assert!(
             !self.invalid_events.contains_key(&source),
             "attempted to mint an event previously marked as invalid {source:?}"
@@ -210,13 +218,14 @@ impl State {
             Some(event) => event,
             None => panic!("attempted to mint ckETH for an unknown event {source:?}"),
         };
-
         assert_eq!(
             self.minted_events.insert(
                 source,
                 MintedEvent {
                     deposit_event,
                     mint_block_index,
+                    token_symbol: token_symbol.to_string(),
+                    erc20_contract_address,
                 },
             ),
             None,
@@ -332,6 +341,8 @@ impl State {
             ethereum_contract_address,
             ethereum_block_height,
             ledger_suite_orchestrator_id,
+            erc20_helper_contract_address,
+            last_erc20_scraped_block_number,
         } = upgrade_args;
         if let Some(nonce) = next_transaction_nonce {
             let nonce = TransactionNonce::try_from(nonce)
@@ -349,6 +360,18 @@ impl State {
                 InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {}", e))
             })?;
             self.eth_helper_contract_address = Some(eth_helper_contract_address);
+        }
+        if let Some(address) = erc20_helper_contract_address {
+            let erc20_helper_contract_address = Address::from_str(&address).map_err(|e| {
+                InvalidStateError::InvalidErc20HelperContractAddress(format!("ERROR: {}", e))
+            })?;
+            self.erc20_helper_contract_address = Some(erc20_helper_contract_address);
+        }
+        if let Some(block_number) = last_erc20_scraped_block_number {
+            self.last_erc20_scraped_block_number =
+                BlockNumber::try_from(block_number).map_err(|e| {
+                    InvalidStateError::InvalidLastErc20ScrapedBlockNumber(format!("ERROR: {}", e))
+                })?;
         }
         if let Some(block_height) = ethereum_block_height {
             self.ethereum_block_height = block_height.into();
@@ -551,8 +574,9 @@ impl EthBalance {
 
 #[derive(Debug, Hash, Copy, Clone, PartialEq, Eq, EnumIter)]
 pub enum TaskType {
-    MintCkEth,
+    Mint,
     RetrieveEth,
     ScrapEthLogs,
     Reimbursement,
+    MintCkErc20,
 }

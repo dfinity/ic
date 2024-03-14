@@ -29,9 +29,18 @@ impl From<TransactionPrice> for Eip1559TransactionPrice {
 }
 
 #[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
+pub struct CkErc20Token {
+    pub ckerc20_token_symbol: String,
+    pub erc20_contract_address: String,
+    pub ledger_canister_id: Principal,
+}
+
+#[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
 pub struct MinterInfo {
     pub minter_address: Option<String>,
-    pub smart_contract_address: Option<String>,
+    pub eth_helper_contract_address: Option<String>,
+    pub erc20_helper_contract_address: Option<String>,
+    pub supported_ckerc20_tokens: Vec<CkErc20Token>,
     pub minimum_withdrawal_amount: Option<Nat>,
     pub ethereum_block_height: Option<CandidBlockTag>,
     pub last_observed_block_number: Option<Nat>,
@@ -322,6 +331,12 @@ pub mod events {
             from: Principal,
             from_subaccount: Option<[u8; 32]>,
             created_at: u64,
+        },
+        MintedCkErc20 {
+            event_source: EventSource,
+            mint_block_index: Nat,
+            ckerc20_token_symbol: String,
+            erc20_contract_address: String,
         },
     }
 }

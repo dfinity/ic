@@ -1,7 +1,7 @@
 use crate::{
     DEFAULT_BLOCK_HASH, DEFAULT_BLOCK_NUMBER, DEFAULT_DEPOSIT_BLOCK_NUMBER,
     DEFAULT_DEPOSIT_LOG_INDEX, DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS, EFFECTIVE_GAS_PRICE,
-    HEADER_SIZE_LIMIT, MINTER_ADDRESS, RECEIVED_ETH_EVENT_TOPIC,
+    HEADER_SIZE_LIMIT, MINTER_ADDRESS, RECEIVED_ERC20_EVENT_TOPIC, RECEIVED_ETH_EVENT_TOPIC,
 };
 use ethers_core::abi::AbiDecode;
 use ethers_core::utils::rlp;
@@ -15,11 +15,29 @@ pub struct EthLogEntry {
     pub amount: u64,
     pub from_address: Address,
     pub transaction_hash: String,
+    pub token_contract_address: Option<Address>,
 }
 
 impl From<EthLogEntry> for ethers_core::types::Log {
     fn from(log_entry: EthLogEntry) -> Self {
         let amount_hex = format!("0x{:0>64x}", log_entry.amount);
+        let mut topics = vec![if log_entry.token_contract_address.is_some() {
+            RECEIVED_ERC20_EVENT_TOPIC.to_string()
+        } else {
+            RECEIVED_ETH_EVENT_TOPIC.to_string()
+        }];
+        if let Some(address) = log_entry.token_contract_address {
+            topics.push(format!(
+                "0x000000000000000000000000{}",
+                hex::encode(address.as_ref())
+            ))
+        };
+        topics.push(format!(
+            "0x000000000000000000000000{}",
+            hex::encode(log_entry.from_address.as_ref())
+        ));
+        topics.push(log_entry.encoded_principal);
+
         let json_value = json!({
             "address": "0xb44b5e756a894775fc32eddf3314bb1b1944dc34",
             "blockHash": "0x79cfe76d69337dae199e32c2b6b3d7c2668bfe71a05f303f95385e70031b9ef8",
@@ -27,11 +45,7 @@ impl From<EthLogEntry> for ethers_core::types::Log {
             "data": amount_hex,
             "logIndex": format!("0x{:x}", DEFAULT_DEPOSIT_LOG_INDEX),
             "removed": false,
-            "topics": [
-                RECEIVED_ETH_EVENT_TOPIC,
-                format!("0x000000000000000000000000{}", hex::encode(log_entry.from_address.as_ref())),
-                log_entry.encoded_principal
-            ],
+            "topics": topics,
             "transactionHash": log_entry.transaction_hash,
             "transactionIndex": "0x33"
         });

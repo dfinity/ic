@@ -36,7 +36,7 @@ proptest! {
         let embedded_index_wasm_hash = orchestrator.embedded_index_wasm_hash.clone();
         let controllers: Vec<_> = std::iter::once(orchestrator_principal).chain(more_controllers.into_iter()).collect();
 
-        for token in supported_erc20_tokens(embedded_ledger_wasm_hash, embedded_index_wasm_hash) {
+        for token in supported_erc20_tokens(Principal::anonymous(), embedded_ledger_wasm_hash, embedded_index_wasm_hash) {
             orchestrator = orchestrator
                 .add_erc20_token(token)
                 .expect_new_ledger_and_index_canisters()
@@ -131,7 +131,11 @@ fn should_reject_adding_an_already_managed_erc20_token() {
     let orchestrator = LedgerSuiteOrchestrator::default();
     let embedded_ledger_wasm_hash = orchestrator.embedded_ledger_wasm_hash.clone();
     let embedded_index_wasm_hash = orchestrator.embedded_index_wasm_hash.clone();
-    let usdc = usdc(embedded_ledger_wasm_hash, embedded_index_wasm_hash);
+    let usdc = usdc(
+        Principal::anonymous(),
+        embedded_ledger_wasm_hash,
+        embedded_index_wasm_hash,
+    );
     let orchestrator = orchestrator
         .add_erc20_token(usdc.clone())
         .expect_new_ledger_and_index_canisters()
@@ -148,7 +152,11 @@ fn should_top_up_spawned_canisters() {
     let orchestrator = LedgerSuiteOrchestrator::default();
     let embedded_ledger_wasm_hash = orchestrator.embedded_ledger_wasm_hash.clone();
     let embedded_index_wasm_hash = orchestrator.embedded_index_wasm_hash.clone();
-    let usdc = usdc(embedded_ledger_wasm_hash, embedded_index_wasm_hash);
+    let usdc = usdc(
+        Principal::anonymous(),
+        embedded_ledger_wasm_hash,
+        embedded_index_wasm_hash,
+    );
     let orchestrator = orchestrator
         .add_erc20_token(usdc.clone())
         .expect_new_ledger_and_index_canisters()
@@ -204,7 +212,11 @@ fn should_reject_upgrade_with_invalid_args() {
     let orchestrator = LedgerSuiteOrchestrator::default();
     let embedded_ledger_wasm_hash = orchestrator.embedded_ledger_wasm_hash.clone();
     let embedded_index_wasm_hash = orchestrator.embedded_index_wasm_hash.clone();
-    let usdc = usdc(embedded_ledger_wasm_hash.clone(), embedded_index_wasm_hash);
+    let usdc = usdc(
+        Principal::anonymous(),
+        embedded_ledger_wasm_hash.clone(),
+        embedded_index_wasm_hash,
+    );
 
     test_upgrade_with_invalid_args(
         &orchestrator,
