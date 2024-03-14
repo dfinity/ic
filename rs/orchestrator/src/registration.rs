@@ -135,6 +135,8 @@ impl NodeRegistration {
         let add_node_payload = self.assemble_add_node_message().await;
 
         while !self.is_node_registered().await {
+            warn!(self.log, "Node registration failed. Trying again.");
+            UtilityCommand::notify_host("Node registration failed. Trying again.", 1);
             match self.signer.get() {
                 Ok(signer) => {
                     let nns_url = self
@@ -543,9 +545,10 @@ impl NodeRegistration {
         {
             Ok(_) => true,
             Err(e) => {
-                warn!(
-                    self.log,
-                    "Node keys are not setup at version {}: {:?}", latest_version, e
+                warn!(self.log, "Node keys are not setup: {:?}", e);
+                UtilityCommand::notify_host(
+                    format!("Node keys are not setup: {:?}", e).as_str(),
+                    1,
                 );
                 false
             }
