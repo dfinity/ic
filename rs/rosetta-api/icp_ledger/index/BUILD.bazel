@@ -20,6 +20,7 @@ DEPENDENCIES = [
     "@crate_index//:serde",
     "@crate_index//:ic-stable-structures",
     "@crate_index//:ic-metrics-encoder",
+    "@crate_index//:serde_bytes",
     "@crate_index//:serde_json",
 ]
 
@@ -32,7 +33,6 @@ DEV_DEPENDENCIES = [
     "@crate_index//:assert_matches",
     "@crate_index//:candid_parser",
     "@crate_index//:proptest",
-    "@crate_index//:serde_bytes",
 ]
 
 MACRO_DEPENDENCIES = [
