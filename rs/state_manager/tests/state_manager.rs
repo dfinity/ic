@@ -22,7 +22,9 @@ use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::system_state::wasm_chunk_store::WasmChunkStore,
-    metadata_state::ApiBoundaryNodeEntry, page_map::PageIndex, testing::ReplicatedStateTesting,
+    metadata_state::ApiBoundaryNodeEntry,
+    page_map::{PageIndex, StorageLayout},
+    testing::ReplicatedStateTesting,
     Memory, NetworkTopology, NumWasmPages, PageMap, ReplicatedState, Stream, SubnetTopology,
 };
 use ic_state_layout::{CheckpointLayout, ReadOnly, StateLayout, SYSTEM_METADATA_FILE, WASM_FILE};
@@ -93,12 +95,13 @@ fn label<T: Into<Label>>(t: T) -> Label {
 /// Combined size of wasm memory including overlays.
 fn vmemory_size(canister_layout: &ic_state_layout::CanisterLayout<ReadOnly>) -> u64 {
     canister_layout
-        .vmemory_0_overlays()
+        .vmemory_0()
+        .existing_overlays()
         .unwrap()
         .into_iter()
         .map(|p| std::fs::metadata(p).unwrap().len())
         .sum::<u64>()
-        + std::fs::metadata(canister_layout.vmemory_0())
+        + std::fs::metadata(canister_layout.vmemory_0().base())
             .map(|metadata| metadata.len())
             .unwrap_or(0)
 }
@@ -106,12 +109,13 @@ fn vmemory_size(canister_layout: &ic_state_layout::CanisterLayout<ReadOnly>) -> 
 /// Combined size of stable memory including overlays.
 fn stable_memory_size(canister_layout: &ic_state_layout::CanisterLayout<ReadOnly>) -> u64 {
     canister_layout
-        .stable_memory_overlays()
+        .stable_memory()
+        .existing_overlays()
         .unwrap()
         .into_iter()
         .map(|p| std::fs::metadata(p).unwrap().len())
         .sum::<u64>()
-        + std::fs::metadata(canister_layout.stable_memory_blob())
+        + std::fs::metadata(canister_layout.stable_memory().base())
             .map(|metadata| metadata.len())
             .unwrap_or(0)
 }
@@ -120,16 +124,17 @@ fn stable_memory_size(canister_layout: &ic_state_layout::CanisterLayout<ReadOnly
 fn wasm_chunk_store_size(canister_layout: &ic_state_layout::CanisterLayout<ReadOnly>) -> u64 {
     if lsmt_config_default().lsmt_status == FlagStatus::Enabled {
         canister_layout
-            .wasm_chunk_store_overlays()
+            .wasm_chunk_store()
+            .existing_overlays()
             .unwrap()
             .into_iter()
             .map(|p| std::fs::metadata(p).unwrap().len())
             .sum::<u64>()
-            + std::fs::metadata(canister_layout.wasm_chunk_store())
+            + std::fs::metadata(canister_layout.wasm_chunk_store().base())
                 .map(|metadata| metadata.len())
                 .unwrap_or(0)
     } else {
-        std::fs::metadata(canister_layout.wasm_chunk_store())
+        std::fs::metadata(canister_layout.wasm_chunk_store().base())
             .unwrap()
             .len()
     }
@@ -148,6 +153,7 @@ fn vmemory0_base_exists(
         .canister(canister_id)
         .unwrap()
         .vmemory_0()
+        .base()
         .exists()
 }
 
@@ -163,7 +169,8 @@ fn vmemory0_num_overlays(
         .unwrap()
         .canister(canister_id)
         .unwrap()
-        .vmemory_0_overlays()
+        .vmemory_0()
+        .existing_overlays()
         .unwrap()
         .len()
 }
@@ -848,7 +855,7 @@ fn missing_stable_memory_file_is_handled() {
         .unwrap();
 
         let canister_layout = mutable_cp_layout.canister(&canister_test_id(100)).unwrap();
-        let canister_stable_memory = canister_layout.stable_memory_blob();
+        let canister_stable_memory = canister_layout.stable_memory().base();
         assert!(!canister_stable_memory.exists());
 
         let state_manager = restart_fn(state_manager, None);
@@ -887,11 +894,15 @@ fn missing_wasm_chunk_store_is_handled() {
         .unwrap();
 
         let canister_layout = mutable_cp_layout.canister(&canister_test_id(100)).unwrap();
-        let canister_wasm_chunk_store = canister_layout.wasm_chunk_store();
+        let canister_wasm_chunk_store = canister_layout.wasm_chunk_store().base();
         if canister_wasm_chunk_store.exists() {
             std::fs::remove_file(&canister_wasm_chunk_store).unwrap();
         }
-        for overlay in canister_layout.wasm_chunk_store_overlays().unwrap() {
+        for overlay in canister_layout
+            .wasm_chunk_store()
+            .existing_overlays()
+            .unwrap()
+        {
             std::fs::remove_file(&overlay).unwrap();
         }
 
@@ -3223,9 +3234,13 @@ fn can_recover_from_corruption_on_state_sync() {
 
             let canister_90_layout = mutable_cp_layout.canister(&canister_test_id(90)).unwrap();
             let canister_90_memory = if lsmt_config_default().lsmt_status == FlagStatus::Enabled {
-                canister_90_layout.vmemory_0_overlays().unwrap().remove(0)
+                canister_90_layout
+                    .vmemory_0()
+                    .existing_overlays()
+                    .unwrap()
+                    .remove(0)
             } else {
-                canister_90_layout.vmemory_0()
+                canister_90_layout.vmemory_0().base()
             };
             make_mutable(&canister_90_memory).unwrap();
             std::fs::write(&canister_90_memory, b"Garbage").unwrap();
@@ -3239,9 +3254,13 @@ fn can_recover_from_corruption_on_state_sync() {
             let canister_100_layout = mutable_cp_layout.canister(&canister_test_id(100)).unwrap();
 
             let canister_100_memory = if lsmt_config_default().lsmt_status == FlagStatus::Enabled {
-                canister_100_layout.vmemory_0_overlays().unwrap().remove(0)
+                canister_100_layout
+                    .vmemory_0()
+                    .existing_overlays()
+                    .unwrap()
+                    .remove(0)
             } else {
-                canister_100_layout.vmemory_0()
+                canister_100_layout.vmemory_0().base()
             };
             make_mutable(&canister_100_memory).unwrap();
             write_all_at(&canister_100_memory, &[3u8; PAGE_SIZE], 4).unwrap();
@@ -3250,11 +3269,12 @@ fn can_recover_from_corruption_on_state_sync() {
             let canister_100_stable_memory =
                 if lsmt_config_default().lsmt_status == FlagStatus::Enabled {
                     canister_100_layout
-                        .stable_memory_overlays()
+                        .stable_memory()
+                        .existing_overlays()
                         .unwrap()
                         .remove(0)
                 } else {
-                    canister_100_layout.stable_memory_blob()
+                    canister_100_layout.stable_memory().base()
                 };
             make_mutable(&canister_100_stable_memory).unwrap();
             write_all_at(
@@ -5208,12 +5228,12 @@ fn tip_is_initialized_correctly() {
         assert!(!canister_layout.queues().raw_path().exists());
         assert!(canister_layout.wasm().raw_path().exists());
         assert!(
-            canister_layout.vmemory_0().exists()
-                || canister_layout.vmemory_0_overlays().unwrap()[0].exists()
+            canister_layout.vmemory_0().base().exists()
+                || canister_layout.vmemory_0().existing_overlays().unwrap()[0].exists()
         );
         assert!(
-            canister_layout.stable_memory_blob().exists()
-                || canister_layout.stable_memory_overlays().unwrap()[0].exists()
+            canister_layout.stable_memory().base().exists()
+                || canister_layout.stable_memory().existing_overlays().unwrap()[0].exists()
         );
 
         let (_height, state) = state_manager.take_tip();
@@ -5232,12 +5252,12 @@ fn tip_is_initialized_correctly() {
         assert!(canister_layout.canister().raw_path().exists());
         assert!(canister_layout.wasm().raw_path().exists());
         assert!(
-            canister_layout.vmemory_0().exists()
-                || canister_layout.vmemory_0_overlays().unwrap()[0].exists()
+            canister_layout.vmemory_0().base().exists()
+                || canister_layout.vmemory_0().existing_overlays().unwrap()[0].exists()
         );
         assert!(
-            canister_layout.stable_memory_blob().exists()
-                || canister_layout.stable_memory_overlays().unwrap()[0].exists()
+            canister_layout.stable_memory().base().exists()
+                || canister_layout.stable_memory().existing_overlays().unwrap()[0].exists()
         );
     });
 }

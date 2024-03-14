@@ -20,7 +20,7 @@ use ic_replicated_state::{
         execution_state::{NextScheduledMethod, WasmMetadata},
         system_state::{wasm_chunk_store::WasmChunkStoreMetadata, CanisterHistory, CyclesUseCase},
     },
-    page_map::Shard,
+    page_map::{Shard, StorageLayout},
     CallContextManager, CanisterStatus, ExecutionTask, ExportedFunctions, Global, NumWasmPages,
 };
 use ic_sys::{fs::sync_path, mmap::ScopedMmap};
@@ -1395,65 +1395,161 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
     }
 }
 
-pub struct CanisterLayout<Permissions: AccessPolicy> {
+pub struct PageMapLayout<Permissions: AccessPolicy> {
     canister_root: PathBuf,
+    name_stem: String,
     permissions_tag: PhantomData<Permissions>,
 }
 
-/// Get overlay height as encoded in CanisterLayout.
-pub fn overlay_height(overlay: &Path) -> Result<Height, LayoutError> {
-    let file_name = overlay
-        .file_name()
-        .ok_or(LayoutError::CorruptedLayout {
-            path: overlay.to_path_buf(),
-            message: "No file name".to_owned(),
-        })?
-        .to_str()
-        .ok_or(LayoutError::CorruptedLayout {
-            path: overlay.to_path_buf(),
-            message: "Cannot convert file name to string".to_owned(),
-        })?;
-    let hex = file_name
-        .split('_')
-        .next()
-        .ok_or(LayoutError::CorruptedLayout {
-            path: overlay.to_path_buf(),
-            message: "Cannot parse file name".to_owned(),
-        })?;
-    u64::from_str_radix(hex, 16)
-        .map(Height::new)
-        .map_err(|err| LayoutError::CorruptedLayout {
-            path: overlay.to_path_buf(),
-            message: format!("failed to get height for overlay {}: {}", hex, err),
-        })
+impl<P> PageMapLayout<P>
+where
+    P: WritePolicy,
+{
+    /// Remove the base file and all overlay files.
+    pub fn delete_files(&self) -> Result<(), LayoutError> {
+        let base = self.base();
+        if base.exists() {
+            std::fs::remove_file(base.clone()).map_err(|err| LayoutError::IoError {
+                path: base,
+                message: "Failed to delete file".to_string(),
+                io_err: err,
+            })?;
+        }
+
+        for overlay in self.existing_overlays()? {
+            std::fs::remove_file(overlay.clone()).map_err(|err| LayoutError::IoError {
+                path: overlay,
+                message: "Failed to delete file".to_string(),
+                io_err: err,
+            })?;
+        }
+
+        Ok(())
+    }
 }
 
-/// Get overlay height as encoded in CanisterLayout.
-pub fn overlay_shard(overlay: &Path) -> Result<Shard, LayoutError> {
-    let file_name = overlay
-        .file_name()
-        .ok_or(LayoutError::CorruptedLayout {
-            path: overlay.to_path_buf(),
-            message: "No file name".to_owned(),
-        })?
-        .to_str()
-        .ok_or(LayoutError::CorruptedLayout {
-            path: overlay.to_path_buf(),
-            message: "Cannot convert file name to string".to_owned(),
-        })?;
-    let hex = file_name
-        .split('_')
-        .nth(1)
-        .ok_or(LayoutError::CorruptedLayout {
-            path: overlay.to_path_buf(),
-            message: "Cannot parse file name".to_owned(),
-        })?;
-    u64::from_str_radix(hex, 16)
-        .map(Shard::new)
-        .map_err(|err| LayoutError::CorruptedLayout {
-            path: overlay.to_path_buf(),
-            message: format!("failed to get shard for overlay {}: {}", hex, err),
+impl<Permissions: AccessPolicy> PageMapLayout<Permissions> {
+    /// List of overlay files on disk.
+    ///
+    /// All overlay files have the format {numbers}{name_stem}.overlay`, where `name_stem` distinguises
+    /// between wasm memory, stable memory etc, and the numbers impose an ordering of the
+    /// overlay files, with later alphabetically denoting a higher-priority overlay. The numbers are
+    /// typically the height when the overlay was written and a shard number.
+    ///
+    /// Note that this function returns a `LayoutError`. There is a function implementing the `StorageLayout` trait
+    /// with the same name, return a `Box<dyn Error>`. Calling `existing_overlays()` on a `PageMapLayout` will call
+    /// this function, calling it on a `dyn StorageLayout` will call the trait function. This simplifies error propagation.
+    pub fn existing_overlays(&self) -> Result<Vec<PathBuf>, LayoutError> {
+        let map_error = |err| LayoutError::IoError {
+            path: self.canister_root.clone(),
+            message: "Failed list overlays".to_string(),
+            io_err: err,
+        };
+
+        let name_end = format!("_{}.overlay", self.name_stem);
+
+        let files = std::fs::read_dir(&self.canister_root).map_err(map_error)?;
+        let mut result = Vec::default();
+        for file in files {
+            let path = file.map_err(map_error)?.path();
+            match path.to_str() {
+                Some(p) if p.ends_with(&name_end) => {
+                    result.push(path);
+                }
+                _ => (),
+            }
+        }
+        result.sort();
+
+        Ok(result)
+    }
+}
+
+impl<Permissions: AccessPolicy> StorageLayout for PageMapLayout<Permissions> {
+    // The path to the base file.
+    fn base(&self) -> PathBuf {
+        self.canister_root.join(format!("{}.bin", self.name_stem))
+    }
+
+    /// Overlay path encoding, consistent with `overlay_height()` and `overlay_shard()`
+    fn overlay(&self, height: Height, shard: Shard) -> PathBuf {
+        self.canister_root.join(format!(
+            "{:016x}_{:04x}_{}.overlay",
+            height.get(),
+            shard.get(),
+            self.name_stem,
+        ))
+    }
+
+    /// List of overlay files on disk.
+    fn existing_overlays(&self) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
+        Ok(self.existing_overlays()?)
+    }
+
+    /// Get overlay height as encoded in the file name.
+    fn overlay_height(&self, overlay: &Path) -> Result<Height, Box<dyn std::error::Error>> {
+        let file_name = overlay
+            .file_name()
+            .ok_or(LayoutError::CorruptedLayout {
+                path: overlay.to_path_buf(),
+                message: "No file name".to_owned(),
+            })?
+            .to_str()
+            .ok_or(LayoutError::CorruptedLayout {
+                path: overlay.to_path_buf(),
+                message: "Cannot convert file name to string".to_owned(),
+            })?;
+        let hex = file_name
+            .split('_')
+            .next()
+            .ok_or(LayoutError::CorruptedLayout {
+                path: overlay.to_path_buf(),
+                message: "Cannot parse file name".to_owned(),
+            })?;
+        u64::from_str_radix(hex, 16)
+            .map(Height::new)
+            .map_err(|err| {
+                LayoutError::CorruptedLayout {
+                    path: overlay.to_path_buf(),
+                    message: format!("failed to get height for overlay {}: {}", hex, err),
+                }
+                .into()
+            })
+    }
+
+    /// Get overlay shard as encoded in the file name.
+    fn overlay_shard(&self, overlay: &Path) -> Result<Shard, Box<dyn std::error::Error>> {
+        let file_name = overlay
+            .file_name()
+            .ok_or(LayoutError::CorruptedLayout {
+                path: overlay.to_path_buf(),
+                message: "No file name".to_owned(),
+            })?
+            .to_str()
+            .ok_or(LayoutError::CorruptedLayout {
+                path: overlay.to_path_buf(),
+                message: "Cannot convert file name to string".to_owned(),
+            })?;
+        let hex = file_name
+            .split('_')
+            .nth(1)
+            .ok_or(LayoutError::CorruptedLayout {
+                path: overlay.to_path_buf(),
+                message: "Cannot parse file name".to_owned(),
+            })?;
+        u64::from_str_radix(hex, 16).map(Shard::new).map_err(|err| {
+            LayoutError::CorruptedLayout {
+                path: overlay.to_path_buf(),
+                message: format!("failed to get shard for overlay {}: {}", hex, err),
+            }
+            .into()
         })
+    }
+}
+
+pub struct CanisterLayout<Permissions: AccessPolicy> {
+    canister_root: PathBuf,
+    permissions_tag: PhantomData<Permissions>,
 }
 
 impl<Permissions: AccessPolicy> CanisterLayout<Permissions> {
@@ -1483,91 +1579,28 @@ impl<Permissions: AccessPolicy> CanisterLayout<Permissions> {
         self.canister_root.join(CANISTER_FILE).into()
     }
 
-    /// Overlay path encoding, consistent with `overlay_height()` and `overlay_shard()`.
-    fn overlay_path(&self, name_end: &str, height: Height, shard: Shard) -> PathBuf {
-        self.canister_root.join(format!(
-            "{:016x}_{:04x}_{}",
-            height.get(),
-            shard.get(),
-            name_end,
-        ))
-    }
-
-    /// List all overlay files with a particular name ending.
-    ///
-    /// All overlay files have the format {number}{name_end}`, where `name_end` distinguises
-    /// between wasm memory, stable memory etc, and the number imposes an ordering of the
-    /// overlay files, with higher number denoting a higher-priority overlay. The number is
-    /// typically the height when the overlay was written.
-    fn overlays_impl(&self, name_end: &str) -> Result<Vec<PathBuf>, LayoutError> {
-        let map_error = |err| LayoutError::IoError {
-            path: self.canister_root.clone(),
-            message: "Failed list overlays".to_string(),
-            io_err: err,
-        };
-
-        let files = std::fs::read_dir(&self.canister_root).map_err(map_error)?;
-        let mut result = Vec::default();
-        for file in files {
-            let path = file.map_err(map_error)?.path();
-            match path.to_str() {
-                Some(p) if p.ends_with(name_end) => {
-                    result.push(path);
-                }
-                _ => (),
-            }
+    pub fn vmemory_0(&self) -> PageMapLayout<Permissions> {
+        PageMapLayout {
+            canister_root: self.canister_root.clone(),
+            name_stem: "vmemory_0".into(),
+            permissions_tag: PhantomData,
         }
-        result.sort();
-
-        Ok(result)
     }
 
-    /// Base file for wasm memory.
-    pub fn vmemory_0(&self) -> PathBuf {
-        self.canister_root.join("vmemory_0.bin")
+    pub fn stable_memory(&self) -> PageMapLayout<Permissions> {
+        PageMapLayout {
+            canister_root: self.canister_root.clone(),
+            name_stem: "stable_memory".into(),
+            permissions_tag: PhantomData,
+        }
     }
 
-    /// List of existing overlay files for wasm memory.
-    pub fn vmemory_0_overlays(&self) -> Result<Vec<PathBuf>, LayoutError> {
-        self.overlays_impl("_vmemory_0.overlay")
-    }
-
-    /// Name of a (potentially new) overlay file for the wasm memory written at `height` and shard
-    /// `shard`.
-    pub fn vmemory_0_overlay(&self, height: Height, shard: Shard) -> PathBuf {
-        self.overlay_path("vmemory_0.overlay", height, shard)
-    }
-
-    /// Base file for stable memory.
-    pub fn stable_memory_blob(&self) -> PathBuf {
-        self.canister_root.join("stable_memory.bin")
-    }
-
-    /// List of existing overlay files for stable memory.
-    pub fn stable_memory_overlays(&self) -> Result<Vec<PathBuf>, LayoutError> {
-        self.overlays_impl("_stable_memory.overlay")
-    }
-
-    /// Name of a (potentially new) overlay file for the stable memory written at `height` and shard
-    /// `shard`.
-    pub fn stable_memory_overlay(&self, height: Height, shard: Shard) -> PathBuf {
-        self.overlay_path("stable_memory.overlay", height, shard)
-    }
-
-    /// Base file for wasm chunk store.
-    pub fn wasm_chunk_store(&self) -> PathBuf {
-        self.canister_root.join("wasm_chunk_store.bin")
-    }
-
-    /// List of existing overlay files for wasm chunk store.
-    pub fn wasm_chunk_store_overlays(&self) -> Result<Vec<PathBuf>, LayoutError> {
-        self.overlays_impl("_wasm_chunk_store.overlay")
-    }
-
-    /// Name of a (potentially new) overlay file for the wasm chunk store written at `height` and
-    /// shard `shard`.
-    pub fn wasm_chunk_store_overlay(&self, height: Height, shard: Shard) -> PathBuf {
-        self.overlay_path("wasm_chunk_store.overlay", height, shard)
+    pub fn wasm_chunk_store(&self) -> PageMapLayout<Permissions> {
+        PageMapLayout {
+            canister_root: self.canister_root.clone(),
+            name_stem: "wasm_chunk_store".into(),
+            permissions_tag: PhantomData,
+        }
     }
 }
 

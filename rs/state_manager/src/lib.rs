@@ -47,7 +47,9 @@ use ic_replicated_state::{
     page_map::{PersistenceError, StorageMetrics},
     PageIndex, PageMap, ReplicatedState,
 };
-use ic_state_layout::{error::LayoutError, AccessPolicy, CheckpointLayout, ReadOnly, StateLayout};
+use ic_state_layout::{
+    error::LayoutError, AccessPolicy, CheckpointLayout, PageMapLayout, ReadOnly, StateLayout,
+};
 use ic_types::{
     consensus::certification::Certification,
     crypto::CryptoHash,
@@ -1043,22 +1045,17 @@ impl PageMapType {
         result
     }
 
-    fn id(&self) -> CanisterId {
-        match &self {
-            PageMapType::WasmMemory(id) => *id,
-            PageMapType::StableMemory(id) => *id,
-            PageMapType::WasmChunkStore(id) => *id,
-        }
-    }
-
-    /// Maps a PageMapType to its location in a checkpoint according to `layout`
-    fn base<Access>(&self, layout: &CheckpointLayout<Access>) -> Result<PathBuf, LayoutError>
+    /// The layout of the files on disk for this PageMap.
+    fn layout<Access>(
+        &self,
+        layout: &CheckpointLayout<Access>,
+    ) -> Result<PageMapLayout<Access>, LayoutError>
     where
         Access: AccessPolicy,
     {
         match &self {
             PageMapType::WasmMemory(id) => Ok(layout.canister(id)?.vmemory_0()),
-            PageMapType::StableMemory(id) => Ok(layout.canister(id)?.stable_memory_blob()),
+            PageMapType::StableMemory(id) => Ok(layout.canister(id)?.stable_memory()),
             PageMapType::WasmChunkStore(id) => Ok(layout.canister(id)?.wasm_chunk_store()),
         }
     }
