@@ -16,6 +16,7 @@ sh_test(
         "local",  # precludes the action or test from being remotely cached, remotely executed, or run inside the sandbox.
         "smoke",  # it should be run before committing code changes into the version control system.
     ],
+    visibility = ["//visibility:public"],
 )
 
 sh_binary(
