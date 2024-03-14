@@ -430,7 +430,8 @@ mod tests {
         let cancel_token_clone = cancel_token.clone();
 
         let consensus_sender_join_handle = with_test_replica_logger(move |log| {
-            let mut mock_reader = MockValidatedPoolReader::new();
+            let mut mock_reader: MockValidatedPoolReader<U64Artifact> =
+                MockValidatedPoolReader::new();
             let mut mock_transport = MockTransport::new();
             mock_transport
                 .expect_peers()
@@ -481,7 +482,8 @@ mod tests {
         let (tx, rx) = tokio::sync::mpsc::channel(100);
 
         let consensus_sender_join_handle = with_test_replica_logger(|log| {
-            let mut mock_reader = MockValidatedPoolReader::new();
+            let mut mock_reader: MockValidatedPoolReader<U64Artifact> =
+                MockValidatedPoolReader::new();
             let mut mock_transport = MockTransport::new();
             mock_transport
                 .expect_peers()
@@ -545,7 +547,8 @@ mod tests {
         let (tx, rx) = tokio::sync::mpsc::channel(100);
 
         let consensus_sender_join_handle = with_test_replica_logger(|log| {
-            let mut mock_reader = MockValidatedPoolReader::new();
+            let mut mock_reader: MockValidatedPoolReader<U64Artifact> =
+                MockValidatedPoolReader::new();
             let mut mock_transport = MockTransport::new();
             let mut seq = Sequence::new();
 
@@ -617,7 +620,8 @@ mod tests {
         let (tx, rx) = tokio::sync::mpsc::channel(100);
 
         let consensus_sender_join_handle = with_test_replica_logger(|log| {
-            let mut mock_reader = MockValidatedPoolReader::new();
+            let mut mock_reader: MockValidatedPoolReader<U64Artifact> =
+                MockValidatedPoolReader::new();
             let mut mock_transport = MockTransport::new();
             let mut seq = Sequence::new();
 
@@ -679,7 +683,8 @@ mod tests {
         let (tx, rx) = tokio::sync::mpsc::channel(100);
 
         let consensus_sender_join_handle = with_test_replica_logger(|log| {
-            let mut mock_reader = MockValidatedPoolReader::new();
+            let mut mock_reader: MockValidatedPoolReader<U64Artifact> =
+                MockValidatedPoolReader::new();
             let mut mock_transport = MockTransport::new();
 
             mock_transport
@@ -755,7 +760,8 @@ mod tests {
         let (tx, rx) = tokio::sync::mpsc::channel(100);
 
         let consensus_sender_join_handle = with_test_replica_logger(|log| {
-            let mut mock_reader = MockValidatedPoolReader::new();
+            let mut mock_reader: MockValidatedPoolReader<U64Artifact> =
+                MockValidatedPoolReader::new();
             let mut mock_transport = MockTransport::new();
 
             mock_transport

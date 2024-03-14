@@ -14,7 +14,7 @@ use crate::{
     uri_prefix, CommitId, SlotNumber, SlotUpdate, Update,
 };
 use axum::{
-    extract::State,
+    extract::{DefaultBodyLimit, State},
     http::{Request, StatusCode},
     routing::any,
     Extension, Router,
@@ -62,7 +62,9 @@ pub fn build_axum_router<Artifact: ArtifactKind>(
             &format!("/{}/update", uri_prefix::<Artifact>()),
             any(update_handler),
         )
-        .with_state((log, update_tx));
+        .with_state((log, update_tx))
+        // Disable request size limit since consensus might push artifacts larger than limit.
+        .layer(DefaultBodyLimit::disable());
 
     (router, update_rx)
 }
@@ -710,9 +712,9 @@ impl<T> SlotEntry<T> {
 
 #[cfg(test)]
 mod tests {
-    use std::{backtrace::Backtrace, sync::Mutex};
+    use std::{backtrace::Backtrace, convert::Infallible, sync::Mutex};
 
-    use axum::http::Response;
+    use axum::{body::Body, http::Response};
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_p2p_test_utils::{
@@ -720,10 +722,14 @@ mod tests {
         mocks::{MockPriorityFnAndFilterProducer, MockTransport, MockValidatedPoolReader},
     };
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_types::RegistryVersion;
+    use ic_types::{
+        artifact::{Advert, ArtifactTag},
+        RegistryVersion,
+    };
     use ic_types_test_utils::ids::{NODE_1, NODE_2};
     use mockall::Sequence;
     use tokio::{sync::mpsc::UnboundedReceiver, time::timeout};
+    use tower::util::ServiceExt;
 
     use super::*;
 
@@ -732,9 +738,9 @@ mod tests {
     struct ReceiverManagerBuilder {
         // Adverts received from peers
         adverts_received: Receiver<(SlotUpdate<U64Artifact>, NodeId, ConnId)>,
-        raw_pool: MockValidatedPoolReader,
+        raw_pool: MockValidatedPoolReader<U64Artifact>,
         priority_fn_producer:
-            Arc<dyn PriorityFnAndFilterProducer<U64Artifact, MockValidatedPoolReader>>,
+            Arc<dyn PriorityFnAndFilterProducer<U64Artifact, MockValidatedPoolReader<U64Artifact>>>,
         sender: UnboundedSender<UnvalidatedArtifactMutation<U64Artifact>>,
         transport: Arc<dyn Transport>,
         topology_watcher: watch::Receiver<SubnetTopology>,
@@ -744,7 +750,7 @@ mod tests {
 
     type ConsensusManagerReceiverForTest = ConsensusManagerReceiver<
         U64Artifact,
-        MockValidatedPoolReader,
+        MockValidatedPoolReader<U64Artifact>,
         (SlotUpdate<U64Artifact>, NodeId, ConnId),
     >;
 
@@ -780,7 +786,7 @@ mod tests {
         fn with_priority_fn_producer(
             mut self,
             priority_fn_producer: Arc<
-                dyn PriorityFnAndFilterProducer<U64Artifact, MockValidatedPoolReader>,
+                dyn PriorityFnAndFilterProducer<U64Artifact, MockValidatedPoolReader<U64Artifact>>,
             >,
         ) -> Self {
             self.priority_fn_producer = priority_fn_producer;
@@ -1742,7 +1748,7 @@ mod tests {
             assert_eq!(
                 ConsensusManagerReceiver::<
                     U64Artifact,
-                    MockValidatedPoolReader,
+                    MockValidatedPoolReader<U64Artifact>,
                     (SlotUpdate<U64Artifact>, NodeId, ConnId),
                 >::download_artifact(
                     no_op_logger(),
@@ -1758,5 +1764,62 @@ mod tests {
                 Ok((0, NODE_1))
             )
         });
+    }
+
+    #[tokio::test]
+    async fn large_artifact() {
+        use ic_protobuf::p2p::v1 as pb;
+
+        #[derive(PartialEq, Eq, Debug, Clone)]
+        pub struct BigArtifact;
+
+        impl ArtifactKind for BigArtifact {
+            // Does not matter
+            const TAG: ArtifactTag = ArtifactTag::ConsensusArtifact;
+            type PbMessage = Vec<u8>;
+            type PbIdError = Infallible;
+            type PbMessageError = Infallible;
+            type PbAttributeError = Infallible;
+            type PbFilterError = Infallible;
+            type Message = Vec<u8>;
+            type PbId = ();
+            type Id = ();
+            type PbAttribute = ();
+            type Attribute = ();
+            type PbFilter = ();
+            type Filter = ();
+
+            fn message_to_advert(_: &Self::Message) -> Advert<BigArtifact> {
+                todo!()
+            }
+        }
+
+        let (router, mut update_rx) = build_axum_router::<BigArtifact>(
+            no_op_logger(),
+            Arc::new(RwLock::new(MockValidatedPoolReader::default())),
+        );
+
+        let slot_update = SlotUpdate::<BigArtifact> {
+            slot_number: 0.into(),
+            commit_id: 0.into(),
+            update: Update::Artifact(vec![0; 100_000_000]),
+        };
+
+        let req_pb = pb::SlotUpdate::proxy_encode(slot_update);
+
+        let resp = router
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/{}/update", uri_prefix::<BigArtifact>()))
+                    .extension(NODE_1)
+                    .extension(ConnId::from(1))
+                    .body(Body::from(req_pb))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        update_rx.recv().await.unwrap();
     }
 }
