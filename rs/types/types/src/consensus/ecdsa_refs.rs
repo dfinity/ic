@@ -1,7 +1,7 @@
 //! Threshold ECDSA transcript references related defines.
 use crate::crypto::{
     canister_threshold_sig::error::{
-        IDkgParamsValidationError, PresignatureQuadrupleCreationError,
+        EcdsaPresignatureQuadrupleCreationError, IDkgParamsValidationError,
         ThresholdEcdsaSigInputsCreationError,
     },
     canister_threshold_sig::idkg::{
@@ -9,7 +9,7 @@ use crate::crypto::{
         IDkgTranscriptType,
     },
     canister_threshold_sig::{
-        ExtendedDerivationPath, PreSignatureQuadruple, ThresholdEcdsaSigInputs,
+        EcdsaPreSignatureQuadruple, ExtendedDerivationPath, ThresholdEcdsaSigInputs,
     },
     AlgorithmId,
 };
@@ -1327,7 +1327,7 @@ pub enum PreSignatureQuadrupleError {
     LambdaMasked(TranscriptLookupError),
     KappaTimesLambda(TranscriptLookupError),
     KeyTimesLambda(TranscriptLookupError),
-    Failed(PresignatureQuadrupleCreationError),
+    Failed(EcdsaPresignatureQuadrupleCreationError),
 }
 
 impl PreSignatureQuadrupleRef {
@@ -1351,7 +1351,7 @@ impl PreSignatureQuadrupleRef {
     pub fn translate(
         &self,
         resolver: &dyn EcdsaBlockReader,
-    ) -> Result<PreSignatureQuadruple, PreSignatureQuadrupleError> {
+    ) -> Result<EcdsaPreSignatureQuadruple, PreSignatureQuadrupleError> {
         let kappa_unmasked = resolver
             .transcript(self.kappa_unmasked_ref.as_ref())
             .map_err(PreSignatureQuadrupleError::KappaUnmasked)?;
@@ -1364,7 +1364,7 @@ impl PreSignatureQuadrupleRef {
         let key_times_lambda = resolver
             .transcript(self.key_times_lambda_ref.as_ref())
             .map_err(PreSignatureQuadrupleError::KeyTimesLambda)?;
-        PreSignatureQuadruple::new(
+        EcdsaPreSignatureQuadruple::new(
             kappa_unmasked,
             lambda_masked,
             kappa_times_lambda,

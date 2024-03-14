@@ -4,7 +4,7 @@ use criterion::{criterion_group, criterion_main, BenchmarkGroup, Criterion, Samp
 use ic_crypto_test_utils_canister_threshold_sigs::node::{Node, Nodes};
 use ic_crypto_test_utils_canister_threshold_sigs::{
     build_params_from_previous, create_transcript_or_panic,
-    generate_and_verify_openings_for_complaint, generate_presig_quadruple,
+    generate_and_verify_openings_for_complaint, generate_ecdsa_presig_quadruple,
     load_previous_transcripts_for_all_dealers, load_transcript_or_panic, random_transcript_id,
     run_idkg_without_complaint, setup_masked_random_params, CanisterThresholdSigTestEnvironment,
     IDkgMode, IDkgModeTestContext, IDkgParticipants, IDkgTestContextForComplaint,
@@ -15,7 +15,7 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgDealers, IDkgReceivers, IDkgTranscript, IDkgTranscriptOperation, IDkgTranscriptParams,
     InitialIDkgDealings, SignedIDkgDealing,
 };
-use ic_types::crypto::canister_threshold_sig::PreSignatureQuadruple;
+use ic_types::crypto::canister_threshold_sig::EcdsaPreSignatureQuadruple;
 use ic_types::crypto::AlgorithmId;
 use rand::{CryptoRng, RngCore};
 use std::cell::OnceCell;
@@ -446,8 +446,8 @@ fn bench_retain_active_transcripts<M: Measurement, R: RngCore + CryptoRng>(
                         receiver
                     });
                     for _ in 0..num_pre_sig_quadruples {
-                        let pre_sig_quadruple = {
-                            generate_presig_quadruple(
+                        let ecdsa_pre_sig_quadruple = {
+                            generate_ecdsa_presig_quadruple(
                                 env,
                                 dealers,
                                 receivers,
@@ -457,7 +457,7 @@ fn bench_retain_active_transcripts<M: Measurement, R: RngCore + CryptoRng>(
                                 rng,
                             )
                         };
-                        load_pre_signature_quadruple(receiver_ref, &pre_sig_quadruple);
+                        load_ecdsa_pre_signature_quadruple(receiver_ref, &ecdsa_pre_sig_quadruple);
                     }
                 },
                 |()| {
@@ -723,7 +723,7 @@ fn verify_transcript_or_panic(
         })
 }
 
-fn load_pre_signature_quadruple(receiver: &Node, quadruple: &PreSignatureQuadruple) {
+fn load_ecdsa_pre_signature_quadruple(receiver: &Node, quadruple: &EcdsaPreSignatureQuadruple) {
     assert_eq!(
         load_transcript_or_panic(receiver, quadruple.kappa_unmasked()),
         vec![]

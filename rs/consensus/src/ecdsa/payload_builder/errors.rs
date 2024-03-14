@@ -4,8 +4,8 @@ use ic_types::{
     consensus::ecdsa,
     crypto::canister_threshold_sig::{
         error::{
-            IDkgParamsValidationError, IDkgTranscriptIdError, PresignatureQuadrupleCreationError,
-            ThresholdEcdsaSigInputsCreationError,
+            EcdsaPresignatureQuadrupleCreationError, IDkgParamsValidationError,
+            IDkgTranscriptIdError, ThresholdEcdsaSigInputsCreationError,
         },
         idkg::InitialIDkgDealings,
     },
@@ -22,7 +22,7 @@ pub(crate) enum EcdsaPayloadError {
     ConsensusSummaryBlockNotFound(Height),
     StateManagerError(StateManagerError),
     SubnetWithNoNodes(SubnetId, RegistryVersion),
-    PreSignatureError(PresignatureQuadrupleCreationError),
+    PreSignatureError(EcdsaPresignatureQuadrupleCreationError),
     IDkgParamsValidationError(IDkgParamsValidationError),
     IDkgTranscriptIdError(IDkgTranscriptIdError),
     ThresholdEcdsaSigInputsCreationError(ThresholdEcdsaSigInputsCreationError),
@@ -50,8 +50,8 @@ impl From<StateManagerError> for EcdsaPayloadError {
     }
 }
 
-impl From<PresignatureQuadrupleCreationError> for EcdsaPayloadError {
-    fn from(err: PresignatureQuadrupleCreationError) -> Self {
+impl From<EcdsaPresignatureQuadrupleCreationError> for EcdsaPayloadError {
+    fn from(err: EcdsaPresignatureQuadrupleCreationError) -> Self {
         EcdsaPayloadError::PreSignatureError(err)
     }
 }

@@ -29,12 +29,12 @@ pub enum IDkgTranscriptIdError {
 impl_display_using_debug!(IDkgTranscriptIdError);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum PresignatureQuadrupleCreationError {
+pub enum EcdsaPresignatureQuadrupleCreationError {
     InconsistentAlgorithmIds,
     InconsistentReceivers,
     InvalidTranscriptOrigin(String),
 }
-impl_display_using_debug!(PresignatureQuadrupleCreationError);
+impl_display_using_debug!(EcdsaPresignatureQuadrupleCreationError);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ThresholdEcdsaSigInputsCreationError {

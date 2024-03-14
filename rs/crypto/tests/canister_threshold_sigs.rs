@@ -14,8 +14,8 @@ use ic_crypto_test_utils_canister_threshold_sigs::node::Nodes;
 use ic_crypto_test_utils_canister_threshold_sigs::{
     build_params_from_previous, copy_dealing_in_transcript,
     corrupt_dealings_and_generate_complaints_for_random_complainer,
-    corrupt_random_dealing_and_generate_complaint, generate_key_transcript,
-    generate_presig_quadruple, node_id, random_crypto_component_not_in_receivers, random_dealer_id,
+    corrupt_random_dealing_and_generate_complaint, generate_ecdsa_presig_quadruple,
+    generate_key_transcript, node_id, random_crypto_component_not_in_receivers, random_dealer_id,
     random_dealer_id_excluding, random_node_id_excluding, random_receiver_for_inputs,
     random_receiver_id, random_receiver_id_excluding, run_tecdsa_protocol,
     sig_share_from_each_receiver, swap_two_dealings_in_transcript,
@@ -189,7 +189,7 @@ mod create_dealing {
                 let unmasked_key_transcript = env
                     .nodes
                     .run_idkg_and_create_and_verify_transcript(&unmasked_key_params, rng);
-                let quadruple = generate_presig_quadruple(
+                let quadruple = generate_ecdsa_presig_quadruple(
                     &env,
                     &dealers,
                     &receivers,
@@ -458,7 +458,7 @@ mod create_dealing {
                 config.unmasked_key,
             );
 
-            let quadruple = generate_presig_quadruple(
+            let quadruple = generate_ecdsa_presig_quadruple(
                 &env,
                 &dealers,
                 &receivers,
@@ -1621,7 +1621,7 @@ mod verify_transcript {
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
             for use_random_unmasked_kappa in [false, true] {
                 let key_transcript = generate_key_transcript(&env, &dealers, &receivers, alg, rng);
-                generate_presig_quadruple(
+                generate_ecdsa_presig_quadruple(
                     &env,
                     &dealers,
                     &receivers,
@@ -2101,7 +2101,7 @@ mod sign_share {
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
             for use_random_unmasked_kappa in [false, true] {
                 let key_transcript = generate_key_transcript(&env, &dealers, &receivers, alg, rng);
-                let quadruple = generate_presig_quadruple(
+                let quadruple = generate_ecdsa_presig_quadruple(
                     &env,
                     &dealers,
                     &receivers,
@@ -2151,7 +2151,7 @@ mod sign_share {
                 .choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
 
             let key_transcript = generate_key_transcript(&env, &dealers, &receivers, alg, rng);
-            let quadruple = generate_presig_quadruple(
+            let quadruple = generate_ecdsa_presig_quadruple(
                 &env,
                 &dealers,
                 &receivers,
@@ -2204,7 +2204,7 @@ mod sign_share {
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
             for use_random_unmasked_kappa in [false, true] {
                 let key_transcript = generate_key_transcript(&env, &dealers, &receivers, alg, rng);
-                let quadruple = generate_presig_quadruple(
+                let quadruple = generate_ecdsa_presig_quadruple(
                     &env,
                     &dealers,
                     &receivers,
@@ -2372,7 +2372,7 @@ mod sign_share {
                             alg,
                             &mut inner_rng,
                         );
-                        let quadruple = generate_presig_quadruple(
+                        let quadruple = generate_ecdsa_presig_quadruple(
                             &env,
                             &dealers,
                             &receivers,
@@ -2922,7 +2922,7 @@ mod load_transcript_with_openings {
                 complainer
                     .load_transcript_with_openings(&key_transcript, &complaint_with_openings)
                     .expect("failed to load transcript with openings");
-                let quadruple = generate_presig_quadruple(
+                let quadruple = generate_ecdsa_presig_quadruple(
                     &env,
                     &dealers,
                     &receivers,
@@ -5149,7 +5149,7 @@ where
         env.choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
 
     let key_transcript = generate_key_transcript(&env, &dealers, &receivers, alg, rng);
-    let quadruple = generate_presig_quadruple(
+    let quadruple = generate_ecdsa_presig_quadruple(
         &env,
         &dealers,
         &receivers,
