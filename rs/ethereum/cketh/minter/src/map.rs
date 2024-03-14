@@ -104,6 +104,20 @@ impl<Key: Ord, AltKey: Ord, V> MultiKeyMap<Key, AltKey, V> {
             .and_then(|alt_key| self.by_alt_key.get(alt_key).map(|v| (alt_key, v)))
     }
 
+    pub fn get_entry_alt<Q: ?Sized>(&self, alt_key: &Q) -> Option<(&Key, &V)>
+    where
+        AltKey: Borrow<Q>,
+        Q: Ord,
+    {
+        self.iter().find_map(|(key, alt_key_, v)| {
+            if alt_key_.borrow() == alt_key {
+                Some((key, v))
+            } else {
+                None
+            }
+        })
+    }
+
     pub fn get_mut<Q: ?Sized>(&mut self, key: &Q) -> Option<&mut V>
     where
         Key: Borrow<Q>,
@@ -148,6 +162,10 @@ impl<Key: Ord, AltKey: Ord, V> MultiKeyMap<Key, AltKey, V> {
 
     pub fn keys(&self) -> impl Iterator<Item = &Key> {
         self.by_key.keys()
+    }
+
+    pub fn alt_keys(&self) -> impl Iterator<Item = &AltKey> {
+        self.by_alt_key.keys()
     }
 
     pub fn remove_entry<Q: ?Sized>(&mut self, key: &Q) -> Option<(Key, AltKey, V)>

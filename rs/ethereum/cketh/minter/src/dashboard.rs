@@ -4,7 +4,7 @@ mod tests;
 use askama::Template;
 use candid::Principal;
 use ic_cketh_minter::endpoints::{EthTransaction, RetrieveEthStatus};
-use ic_cketh_minter::eth_logs::{EventSource, ReceivedEthEvent};
+use ic_cketh_minter::eth_logs::{EventSource, ReceivedEthEvent, ReceivedEvent};
 use ic_cketh_minter::eth_rpc::Hash;
 use ic_cketh_minter::eth_rpc_client::responses::TransactionStatus;
 use ic_cketh_minter::lifecycle::EthereumNetwork;
@@ -75,8 +75,16 @@ impl DashboardTemplate {
     pub fn from_state(state: &State) -> Self {
         let mut minted_events: Vec<_> = state.minted_events.values().cloned().collect();
         minted_events.sort_unstable_by_key(|event| Reverse(event.mint_block_index));
-        let mut events_to_mint: Vec<_> = state.eth_events_to_mint();
-        events_to_mint.sort_unstable_by_key(|event| Reverse(event.block_number));
+        let (eth_events_to_mint, _erc20_events_to_mint): (Vec<_>, Vec<_>) = state
+            .events_to_mint()
+            .into_iter()
+            .map(|event| match event {
+                ReceivedEvent::Eth(event) => (Some(event), None),
+                ReceivedEvent::Erc20(event) => (None, Some(event)),
+            })
+            .unzip();
+        let mut eth_events_to_mint: Vec<_> = eth_events_to_mint.into_iter().flatten().collect();
+        eth_events_to_mint.sort_unstable_by_key(|event| Reverse(event.block_number));
 
         let mut withdrawal_requests: Vec<_> = state
             .eth_transactions
@@ -146,7 +154,7 @@ impl DashboardTemplate {
             last_synced_block: state.last_scraped_block_number,
             last_observed_block: state.last_observed_block_number,
             minted_events,
-            events_to_mint,
+            events_to_mint: eth_events_to_mint,
             rejected_deposits: state.invalid_events.clone(),
             withdrawal_requests,
             pending_transactions,

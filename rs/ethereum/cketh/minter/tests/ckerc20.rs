@@ -1,12 +1,23 @@
 use assert_matches::assert_matches;
 use candid::{Nat, Principal};
-use ic_cketh_minter::endpoints::events::EventPayload;
+use ic_base_types::PrincipalId;
+use ic_cketh_minter::endpoints::events::{EventPayload, EventSource};
 use ic_cketh_minter::endpoints::AddCkErc20Token;
+use ic_cketh_minter::memo::MintMemo;
 use ic_cketh_test_utils::ckerc20::CkErc20Setup;
 use ic_cketh_test_utils::flow::DepositParams;
-use ic_cketh_test_utils::{format_ethereum_address_to_eip_55, CkEthSetup};
+use ic_cketh_test_utils::response::EthLogEntry;
+use ic_cketh_test_utils::{
+    format_ethereum_address_to_eip_55, CkEthSetup, DEFAULT_DEPOSIT_FROM_ADDRESS,
+    DEFAULT_DEPOSIT_LOG_INDEX, DEFAULT_DEPOSIT_TRANSACTION_HASH, DEFAULT_PRINCIPAL_ID,
+};
+use ic_ethereum_types::Address;
 use ic_ledger_suite_orchestrator_test_utils::supported_erc20_tokens;
-use ic_state_machine_tests::ErrorCode;
+use ic_state_machine_tests::{CanisterId, ErrorCode};
+use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc1::transfer::Memo;
+use icrc_ledger_types::icrc3::transactions::Mint;
+use std::str::FromStr;
 
 #[test]
 fn should_refuse_to_add_ckerc20_token_from_unauthorized_principal() {
@@ -36,7 +47,11 @@ fn should_add_ckusdc_and_ckusdt_to_minter_via_orchestrator() {
     let embedded_ledger_wasm_hash = ckerc20.orchestrator.embedded_ledger_wasm_hash.clone();
     let embedded_index_wasm_hash = ckerc20.orchestrator.embedded_index_wasm_hash.clone();
 
-    for token in supported_erc20_tokens(embedded_ledger_wasm_hash, embedded_index_wasm_hash) {
+    for token in supported_erc20_tokens(
+        ckerc20.cketh.minter_id.into(),
+        embedded_ledger_wasm_hash,
+        embedded_index_wasm_hash,
+    ) {
         ckerc20.orchestrator = ckerc20
             .orchestrator
             .add_erc20_token(token.clone())
@@ -247,4 +262,102 @@ mod withdraw_erc20 {
                 ledger_id: ckusdc_ledger,
             });
     }
+}
+
+#[test]
+fn should_deposit() {
+    let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
+    let token = ckerc20.supported_erc20_tokens[0].clone();
+    let token_ledger_id = CanisterId::try_from(PrincipalId::from(
+        ckerc20
+            .orchestrator
+            .call_orchestrator_canister_ids(&token.contract)
+            .unwrap()
+            .ledger
+            .unwrap(),
+    ))
+    .unwrap();
+
+    let caller: Principal = ckerc20.cketh.caller.into();
+    let token_contract_address = Address::from_str(&token.contract.address).unwrap();
+    let expected_balance = 1_000_000_u64;
+    let ckerc20 = ckerc20
+        .deposit_ckerc20(
+            DepositParams::default().with_erc20_token(token_contract_address, expected_balance),
+        )
+        .expect_erc20_mint(token_contract_address, &token.ledger_init_arg.token_symbol)
+        .call_ledger_id_get_transaction(token_ledger_id, 0_u8)
+        .expect_mint(Mint {
+            amount: Nat::from(expected_balance),
+            to: Account {
+                owner: PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID).into(),
+                subaccount: None,
+            },
+            memo: Some(Memo::from(MintMemo::Convert {
+                from_address: DEFAULT_DEPOSIT_FROM_ADDRESS.parse().unwrap(),
+                tx_hash: DEFAULT_DEPOSIT_TRANSACTION_HASH.parse().unwrap(),
+                log_index: DEFAULT_DEPOSIT_LOG_INDEX.into(),
+            })),
+            created_at_time: None,
+        });
+
+    assert_eq!(
+        ckerc20.balance_of_ledger(token_ledger_id, caller),
+        Nat::from(expected_balance)
+    );
+}
+
+#[test]
+fn should_block_deposit_from_blocked_address() {
+    let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
+    let token = ckerc20.supported_erc20_tokens[0].clone();
+    let token_contract_address = Address::from_str(&token.contract.address).unwrap();
+    let from_address_blocked: Address = "0x01e2919679362dFBC9ee1644Ba9C6da6D6245BB1"
+        .parse()
+        .unwrap();
+
+    ckerc20
+        .deposit_ckerc20(
+            DepositParams {
+                from_address: from_address_blocked,
+                ..DepositParams::default()
+            }
+            .with_erc20_token(token_contract_address, 1_000_000_u64),
+        )
+        .expect_no_erc20_mint()
+        .assert_has_unique_events_in_order(&vec![EventPayload::InvalidDeposit {
+            event_source: EventSource {
+                transaction_hash: DEFAULT_DEPOSIT_TRANSACTION_HASH.to_string(),
+                log_index: Nat::from(DEFAULT_DEPOSIT_LOG_INDEX),
+            },
+            reason: format!("blocked address {from_address_blocked}"),
+        }]);
+}
+
+#[test]
+fn should_block_deposit_from_corrupted_principal() {
+    let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
+    let token = ckerc20.supported_erc20_tokens[0].clone();
+    let token_contract_address = Address::from_str(&token.contract.address).unwrap();
+
+    let invalid_principal = "0x0a01f79d0000000000fe01000000000000000000000000000000000000000001";
+    ckerc20
+        .deposit_ckerc20(
+            DepositParams {
+                override_eth_log_entry: Box::new(|mut entry: EthLogEntry| {
+                    entry.encoded_principal = invalid_principal.to_string();
+                    entry
+                }),
+                ..DepositParams::default()
+            }
+            .with_erc20_token(token_contract_address, 1_000_000_u64),
+        )
+        .expect_no_erc20_mint()
+        .assert_has_unique_events_in_order(&vec![EventPayload::InvalidDeposit {
+            event_source: EventSource {
+                transaction_hash: DEFAULT_DEPOSIT_TRANSACTION_HASH.to_string(),
+                log_index: Nat::from(DEFAULT_DEPOSIT_LOG_INDEX),
+            },
+            reason: format!("failed to decode principal from bytes {invalid_principal}"),
+        }]);
 }

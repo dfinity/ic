@@ -1,7 +1,8 @@
 use crate::cbor::tests::check_roundtrip;
+use crate::eth_logs::{ReceivedEthEvent, ReceivedEvent};
 use crate::eth_rpc::Hash;
+use crate::memo::Address;
 use crate::memo::BurnMemo;
-use crate::memo::{Address, ReceivedEthEvent};
 use crate::numeric::{BlockNumber, LedgerBurnIndex, LogIndex, Wei};
 use crate::state::transactions::ReimbursementRequest;
 use arbitrary::{arb_burn_memo, arb_mint_memo};
@@ -48,7 +49,7 @@ fn encode_mint_convert_memo_is_stable() {
         value: Wei::from(10_000_000_000_000_000_u128),
         principal: Principal::from_str("2chl6-4hpzw-vqaaa-aaaaa-c").unwrap(),
     };
-    let memo: Memo = event.into();
+    let memo: Memo = (&ReceivedEvent::from(event)).into();
 
     assert_eq!(
         memo.0,

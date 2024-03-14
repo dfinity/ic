@@ -10,10 +10,11 @@ use ic_cketh_minter::endpoints::events::{
     Event as CandidEvent, EventSource as CandidEventSource, GetEventsArg, GetEventsResult,
 };
 use ic_cketh_minter::endpoints::{
-    AddCkErc20Token, Eip1559TransactionPrice, GasFeeEstimate, MinterInfo, RetrieveEthRequest,
-    RetrieveEthStatus, WithdrawalArg, WithdrawalError,
+    AddCkErc20Token, CkErc20Token, Eip1559TransactionPrice, GasFeeEstimate, MinterInfo,
+    RetrieveEthRequest, RetrieveEthStatus, WithdrawalArg, WithdrawalError,
 };
-use ic_cketh_minter::erc20::{CkErc20Token, CkTokenSymbol};
+use ic_cketh_minter::erc20;
+use ic_cketh_minter::erc20::CkTokenSymbol;
 use ic_cketh_minter::eth_logs::{EventSource, ReceivedErc20Event, ReceivedEthEvent};
 use ic_cketh_minter::guard::retrieve_withdraw_guard;
 use ic_cketh_minter::ledger_client::LedgerClient;
@@ -154,7 +155,17 @@ async fn eip_1559_transaction_price() -> Eip1559TransactionPrice {
 async fn get_minter_info() -> MinterInfo {
     read_state(|s| MinterInfo {
         minter_address: s.minter_address().map(|a| a.to_string()),
-        smart_contract_address: s.eth_helper_contract_address.map(|a| a.to_string()),
+        eth_helper_contract_address: s.eth_helper_contract_address.map(|a| a.to_string()),
+        erc20_helper_contract_address: s.erc20_helper_contract_address.map(|a| a.to_string()),
+        supported_ckerc20_tokens: s
+            .ckerc20_tokens
+            .iter()
+            .map(|(addr, symbol, canister)| CkErc20Token {
+                ckerc20_token_symbol: symbol.to_string(),
+                erc20_contract_address: addr.to_string(),
+                ledger_canister_id: *canister,
+            })
+            .collect::<Vec<_>>(),
         minimum_withdrawal_amount: Some(s.minimum_withdrawal_amount.into()),
         ethereum_block_height: Some(s.ethereum_block_height.into()),
         last_observed_block_number: s.last_observed_block_number.map(|n| n.into()),
@@ -379,7 +390,7 @@ async fn add_ckerc20_token(erc20_token: AddCkErc20Token) {
             orchestrator_id
         ));
     }
-    let ckerc20_token = CkErc20Token::try_from(erc20_token)
+    let ckerc20_token = erc20::CkErc20Token::try_from(erc20_token)
         .unwrap_or_else(|e| ic_cdk::trap(&format!("ERROR: {}", e)));
     mutate_state(|s| process_event(s, EventType::AddedCkErc20Token(ckerc20_token)));
 }
@@ -600,6 +611,17 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     from,
                     from_subaccount: from_subaccount.map(|s| s.0),
                     created_at,
+                },
+                EventType::MintedCkErc20 {
+                    event_source,
+                    mint_block_index,
+                    ckerc20_token_symbol,
+                    erc20_contract_address,
+                } => EP::MintedCkErc20 {
+                    event_source: map_event_source(event_source),
+                    mint_block_index: mint_block_index.get().into(),
+                    ckerc20_token_symbol,
+                    erc20_contract_address: erc20_contract_address.to_string(),
                 },
             },
         }

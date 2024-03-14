@@ -82,7 +82,7 @@ type UpgradeArg = record {
     // Change the minimum amount in Wei that can be withdrawn.
     minimum_withdrawal_amount : opt nat;
 
-    // Change the helper smart contract address.
+    // Change the ETH helper smart contract address.
     ethereum_contract_address : opt text;
 
     // Change the ethereum block height observed by the minter.
@@ -91,6 +91,12 @@ type UpgradeArg = record {
     // The principal of the ledger suite orchestrator that handles the ICRC1 ledger suites
     // for all ckERC20 tokens.
     ledger_suite_orchestrator_id : opt principal;
+
+    // Change the ERC-20 helper smart contract address.
+    erc20_helper_contract_address : opt text;
+
+    // Change the last scraped block number of the ERC-20 helper smart contract.
+    last_erc20_scraped_block_number : opt nat;
 };
 
 type MinterArg = variant { UpgradeArg : UpgradeArg; InitArg : InitArg };
@@ -118,12 +124,24 @@ type Eip1559TransactionPrice = record {
     timestamp : opt nat64;
 };
 
+type CkErc20Token = record {
+  ckerc20_token_symbol: text;
+  erc20_contract_address: text;
+  ledger_canister_id: principal;
+};
+
 type MinterInfo = record {
     // Ethereum address controlled by the minter via threshold ECDSA.
     minter_address: opt text;
 
     // Address of the helper smart contract.
-    smart_contract_address: opt text;
+    eth_helper_contract_address: opt text;
+
+    // Address of the ERC20 helper smart contract
+    erc20_helper_contract_address: opt text;
+
+    // Information of supported ERC20 tokens.
+    supported_ckerc20_tokens: vec CkErc20Token;
 
     // Minimum amount in Wei that can be withdrawn when converting ckETH -> ETH.
     minimum_withdrawal_amount : opt nat;
@@ -361,6 +379,12 @@ type Event = record {
             from : principal;
             from_subaccount : opt blob;
             created_at: nat64;
+        };
+        MintedCkErc20 : record {
+            event_source : EventSource;
+            erc20_contract_address : text;
+            mint_block_index : nat;
+            ckerc20_token_symbol: text;
         };
     };
 };

@@ -19,8 +19,8 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
         EventType::AcceptedDeposit(eth_event) => {
             state.record_event_to_mint(&eth_event.clone().into());
         }
-        EventType::AcceptedErc20Deposit(eth_event) => {
-            state.record_event_to_mint(&eth_event.clone().into());
+        EventType::AcceptedErc20Deposit(erc20_event) => {
+            state.record_event_to_mint(&erc20_event.clone().into());
         }
         EventType::InvalidDeposit {
             event_source,
@@ -32,7 +32,20 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
             event_source,
             mint_block_index,
         } => {
-            state.record_successful_mint(*event_source, *mint_block_index);
+            state.record_successful_mint(*event_source, "ckETH", *mint_block_index, None);
+        }
+        EventType::MintedCkErc20 {
+            event_source,
+            mint_block_index,
+            ckerc20_token_symbol,
+            erc20_contract_address,
+        } => {
+            state.record_successful_mint(
+                *event_source,
+                ckerc20_token_symbol,
+                *mint_block_index,
+                Some(*erc20_contract_address),
+            );
         }
         EventType::SyncedToBlock { block_number } => {
             state.last_scraped_block_number = *block_number;

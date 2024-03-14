@@ -63,6 +63,7 @@ fn initial_state() -> State {
 
 mod mint_transaction {
     use crate::eth_logs::{EventSourceError, ReceivedEthEvent};
+    use crate::lifecycle::EthereumNetwork;
     use crate::numeric::{LedgerMintIndex, LogIndex};
     use crate::state::tests::{initial_state, received_erc20_event, received_eth_event};
     use crate::state::MintedEvent;
@@ -81,9 +82,49 @@ mod mint_transaction {
         let minted_event = MintedEvent {
             deposit_event: event.clone().into(),
             mint_block_index: block_index,
+            token_symbol: "ckETH".to_string(),
+            erc20_contract_address: None,
         };
 
-        state.record_successful_mint(event.source(), block_index);
+        state.record_successful_mint(event.source(), "ckETH", block_index, None);
+
+        assert!(!state.events_to_mint.contains_key(&event.source()));
+        assert_eq!(
+            state.minted_events.get(&event.source()),
+            Some(&minted_event)
+        );
+    }
+
+    #[test]
+    fn should_record_erc20_mint_task_from_event() {
+        let mut state = initial_state();
+        state.ethereum_network = EthereumNetwork::Sepolia;
+        let token = super::erc20::record_add_ckerc20_token::cksepolia_usdc();
+        state.record_add_ckerc20_token(token.clone());
+
+        let erc20_contract_address = token.erc20_contract_address;
+        let mut event = received_erc20_event();
+        event.erc20_contract_address = erc20_contract_address;
+
+        state.record_event_to_mint(&event.clone().into());
+
+        assert!(state.events_to_mint.contains_key(&event.source()));
+
+        let block_index = LedgerMintIndex::new(1u64);
+
+        let minted_event = MintedEvent {
+            deposit_event: event.clone().into(),
+            mint_block_index: block_index,
+            token_symbol: token.ckerc20_token_symbol.to_string(),
+            erc20_contract_address: Some(erc20_contract_address),
+        };
+
+        state.record_successful_mint(
+            event.source(),
+            &token.ckerc20_token_symbol.to_string(),
+            block_index,
+            Some(token.erc20_contract_address),
+        );
 
         assert!(!state.events_to_mint.contains_key(&event.source()));
         assert_eq!(
@@ -126,7 +167,7 @@ mod mint_transaction {
         let event = received_eth_event();
 
         assert!(!state.events_to_mint.contains_key(&event.source()));
-        state.record_successful_mint(event.source(), LedgerMintIndex::new(1));
+        state.record_successful_mint(event.source(), "ckETH", LedgerMintIndex::new(1), None);
     }
 
     #[test]
@@ -291,7 +332,7 @@ mod upgrade {
                 "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34".to_string(),
             ),
             ethereum_block_height: Some(CandidBlockTag::Safe),
-            ledger_suite_orchestrator_id: None,
+            ..Default::default()
         };
 
         state.upgrade(upgrade_arg).expect("valid upgrade args");
@@ -310,7 +351,7 @@ mod upgrade {
 }
 
 mod erc20 {
-    mod record_add_ckerc20_token {
+    pub mod record_add_ckerc20_token {
         use crate::erc20::CkErc20Token;
         use crate::lifecycle::EthereumNetwork;
         use crate::state::tests::initial_state;
@@ -411,7 +452,7 @@ mod erc20 {
             }
         }
 
-        fn cksepolia_usdc() -> CkErc20Token {
+        pub fn cksepolia_usdc() -> CkErc20Token {
             CkErc20Token {
                 erc20_ethereum_network: EthereumNetwork::Sepolia,
                 erc20_contract_address: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238"
@@ -521,13 +562,17 @@ prop_compose! {
         minimum_withdrawal_amount in proptest::option::of(arb_nat()),
         next_transaction_nonce in proptest::option::of(arb_nat()),
         ledger_suite_orchestrator_id in proptest::option::of(arb_principal()),
+        erc20_helper_contract_address in proptest::option::of(arb_address()),
+        last_erc20_scraped_block_number in proptest::option::of(arb_nat()),
     ) -> UpgradeArg {
         UpgradeArg {
             ethereum_contract_address: contract_address.map(|addr| addr.to_string()),
             ethereum_block_height,
             minimum_withdrawal_amount,
             next_transaction_nonce,
-            ledger_suite_orchestrator_id
+            ledger_suite_orchestrator_id,
+            erc20_helper_contract_address: erc20_helper_contract_address.map(|addr| addr.to_string()),
+            last_erc20_scraped_block_number
         }
     }
 }
@@ -921,6 +966,8 @@ fn state_equivalence() {
                     principal: "2chl6-4hpzw-vqaaa-aaaaa-c".parse().unwrap(),
                 }.into(),
                 mint_block_index: LedgerMintIndex::new(1),
+                erc20_contract_address: None,
+                token_symbol: "ckETH".to_string(),
             }
         },
         invalid_events: btreemap! {
