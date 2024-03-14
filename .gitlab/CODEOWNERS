@@ -19,6 +19,7 @@
 /bazel/                   @dfinity-lab/teams/idx
 /third_party/             @dfinity-lab/teams/idx
 /WORKSPACE.bazel          @dfinity-lab/teams/idx
+/mainnet-canisters.bzl    @dfinity-lab/teams/idx @dfinity-lab/teams/nns-team
 /BUILD.bazel              @dfinity-lab/teams/idx
 .bazelrc                  @dfinity-lab/teams/idx
 .bazelversion             @dfinity-lab/teams/idx
