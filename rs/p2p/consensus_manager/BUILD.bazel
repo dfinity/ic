@@ -31,6 +31,7 @@ DEV_DEPENDENCIES = [
     "@crate_index//:anyhow",
     "@crate_index//:futures",
     "@crate_index//:mockall",
+    "@crate_index//:tower",
     "@crate_index//:turmoil",
 ]
 
