@@ -4,12 +4,13 @@
 /// body. This has to be canonicalized into a PocketIc Operation before we can
 /// deterministically update the PocketIc state machine.
 ///
-use super::state::{ApiState, OpOut, PocketIcError, UpdateReply};
+use super::state::{ApiState, OpOut, PocketIcError, StateLabel, UpdateReply};
 use crate::pocket_ic::{
     AddCycles, CallRequest, ExecuteIngressMessage, GetCyclesBalance, GetStableMemory, GetSubnet,
     GetTime, PubKey, Query, QueryRequest, ReadStateRequest, SetStableMemory, SetTime,
     StatusRequest, Tick,
 };
+use crate::OpId;
 use crate::{pocket_ic::PocketIc, BlobStore, InstanceId, Operation};
 use aide::{
     axum::routing::{delete, get, post, ApiMethodRouter},
@@ -17,6 +18,7 @@ use aide::{
     NoApi,
 };
 
+use axum::response::IntoResponse;
 use axum::{
     body::{Body, Bytes},
     extract::{self, Path, State},
@@ -48,6 +50,7 @@ type PocketHttpResponse = (BTreeMap<String, Vec<u8>>, Vec<u8>);
 /// Name of a header that allows clients to specify for how long their are willing to wait for a
 /// response on a open http request.
 pub static TIMEOUT_HEADER_NAME: HeaderName = HeaderName::from_static("processing-timeout-ms");
+const RETRY_TIMEOUT_S: u64 = 300;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -150,7 +153,7 @@ where
         .with_initial_interval(Duration::from_millis(10))
         .with_max_interval(Duration::from_secs(1))
         .with_multiplier(2.0)
-        .with_max_elapsed_time(Some(Duration::from_secs(60 * 5)))
+        .with_max_elapsed_time(Some(Duration::from_secs(RETRY_TIMEOUT_S)))
         .build();
     loop {
         match api_state
@@ -172,10 +175,10 @@ where
                         break (
                             StatusCode::ACCEPTED,
                             ApiResponse::Started {
-                                state_label: format!("{:?}", state_label),
-                                op_id: format!("{:?}", op_id),
+                                state_label: base64::encode_config(state_label.0, base64::URL_SAFE),
+                                op_id: op_id.0.to_string(),
                             },
-                        )
+                        );
                     }
                     // Otherwise, the instance is busy with a different computation, so we retry (if appliacable) or return 409.
                     UpdateReply::Busy { state_label, op_id } => {
@@ -197,8 +200,11 @@ where
                             break (
                                 StatusCode::CONFLICT,
                                 ApiResponse::Busy {
-                                    state_label: format!("{:?}", state_label),
-                                    op_id: format!("{:?}", op_id),
+                                    state_label: base64::encode_config(
+                                        state_label.0,
+                                        base64::URL_SAFE,
+                                    ),
+                                    op_id: op_id.0.to_string(),
                                 },
                             );
                         }
@@ -210,74 +216,82 @@ where
     }
 }
 
-impl From<OpOut> for (StatusCode, ApiResponse<RawTime>) {
+#[derive(Debug, Copy, Clone)]
+pub struct OpConversionError;
+
+impl<T: TryFrom<OpOut>> From<OpOut> for (StatusCode, ApiResponse<T>) {
     fn from(value: OpOut) -> Self {
+        // match errors explicitly to make sure they have a 4xx status code
         match value {
-            OpOut::Time(time) => (
-                StatusCode::OK,
-                ApiResponse::Success(RawTime {
-                    nanos_since_epoch: time,
-                }),
-            ),
-            _ => (
-                StatusCode::INTERNAL_SERVER_ERROR,
+            OpOut::Error(e) => (
+                StatusCode::BAD_REQUEST,
                 ApiResponse::Error {
-                    message: "operation returned invalid type".into(),
+                    message: format!("{:?}", e),
                 },
             ),
+            val => {
+                if let Ok(t) = T::try_from(val) {
+                    (StatusCode::OK, ApiResponse::Success(t))
+                } else {
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        ApiResponse::Error {
+                            message: "operation returned invalid type".into(),
+                        },
+                    )
+                }
+            }
         }
     }
 }
 
-impl From<OpOut> for (StatusCode, ApiResponse<()>) {
-    fn from(value: OpOut) -> Self {
+impl TryFrom<OpOut> for RawTime {
+    type Error = OpConversionError;
+    fn try_from(value: OpOut) -> Result<Self, Self::Error> {
         match value {
-            OpOut::NoOutput => (StatusCode::OK, ApiResponse::Success(())),
-            _ => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                ApiResponse::Error {
-                    message: "operation returned invalid type".into(),
-                },
-            ),
+            OpOut::Time(time) => Ok(RawTime {
+                nanos_since_epoch: time,
+            }),
+            _ => Err(OpConversionError),
         }
     }
 }
 
-impl From<OpOut> for (StatusCode, ApiResponse<RawCycles>) {
-    fn from(value: OpOut) -> Self {
+impl TryFrom<OpOut> for () {
+    type Error = OpConversionError;
+    fn try_from(value: OpOut) -> Result<Self, Self::Error> {
         match value {
-            OpOut::Cycles(cycles) => (StatusCode::OK, ApiResponse::Success(RawCycles { cycles })),
-            _ => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                ApiResponse::Error {
-                    message: "operation returned invalid type".into(),
-                },
-            ),
+            OpOut::NoOutput => Ok(()),
+            _ => Err(OpConversionError),
         }
     }
 }
 
-impl From<OpOut> for (StatusCode, ApiResponse<RawStableMemory>) {
-    fn from(value: OpOut) -> Self {
+impl TryFrom<OpOut> for RawCycles {
+    type Error = OpConversionError;
+    fn try_from(value: OpOut) -> Result<Self, Self::Error> {
         match value {
-            OpOut::Bytes(stable_memory) => (
-                StatusCode::OK,
-                ApiResponse::Success(RawStableMemory {
-                    blob: stable_memory,
-                }),
-            ),
-            _ => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                ApiResponse::Error {
-                    message: "operation returned invalid type".into(),
-                },
-            ),
+            OpOut::Cycles(cycles) => Ok(RawCycles { cycles }),
+            _ => Err(OpConversionError),
         }
     }
 }
 
-impl From<OpOut> for (StatusCode, ApiResponse<RawCanisterResult>) {
-    fn from(value: OpOut) -> Self {
+impl TryFrom<OpOut> for RawStableMemory {
+    type Error = OpConversionError;
+    fn try_from(value: OpOut) -> Result<Self, Self::Error> {
+        match value {
+            OpOut::StableMemBytes(stable_memory) => Ok(RawStableMemory {
+                blob: stable_memory,
+            }),
+            _ => Err(OpConversionError),
+        }
+    }
+}
+
+impl TryFrom<OpOut> for RawCanisterResult {
+    type Error = OpConversionError;
+    fn try_from(value: OpOut) -> Result<Self, Self::Error> {
         match value {
             OpOut::CanisterResult(wasm_result) => {
                 let inner = match wasm_result {
@@ -289,104 +303,72 @@ impl From<OpOut> for (StatusCode, ApiResponse<RawCanisterResult>) {
                     }
                     Err(user_error) => RawCanisterResult::Err(user_error),
                 };
-                (StatusCode::OK, ApiResponse::Success(inner))
+                Ok(inner)
             }
-            OpOut::Error(e) => (
-                StatusCode::BAD_REQUEST,
-                ApiResponse::Error {
-                    message: format!("Canister call returned an error: {:?}", e),
-                },
-            ),
-            _ => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                ApiResponse::Error {
-                    message: "operation returned invalid type".into(),
-                },
-            ),
+            _ => Err(OpConversionError),
         }
     }
 }
 
-impl From<OpOut> for (StatusCode, ApiResponse<RawCanisterId>) {
-    fn from(value: OpOut) -> Self {
+impl TryFrom<OpOut> for PocketIcError {
+    type Error = OpConversionError;
+    fn try_from(value: OpOut) -> Result<Self, Self::Error> {
         match value {
-            OpOut::CanisterId(canister_id) => (
-                StatusCode::OK,
-                ApiResponse::Success(RawCanisterId {
-                    canister_id: canister_id.get().to_vec(),
-                }),
-            ),
-            _ => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                ApiResponse::Error {
-                    message: "operation returned invalid type".into(),
-                },
-            ),
+            OpOut::Error(e) => Ok(e),
+            _ => Err(OpConversionError),
         }
     }
 }
 
-impl From<OpOut> for (StatusCode, ApiResponse<Option<RawSubnetId>>) {
-    fn from(value: OpOut) -> Self {
+impl TryFrom<OpOut> for RawCanisterId {
+    type Error = OpConversionError;
+    fn try_from(value: OpOut) -> Result<Self, Self::Error> {
         match value {
-            OpOut::SubnetId(subnet_id) => (
-                StatusCode::OK,
-                ApiResponse::Success(Some(RawSubnetId {
+            OpOut::CanisterId(canister_id) => Ok(RawCanisterId {
+                canister_id: canister_id.get().to_vec(),
+            }),
+            _ => Err(OpConversionError),
+        }
+    }
+}
+
+impl TryFrom<OpOut> for Option<RawSubnetId> {
+    type Error = OpConversionError;
+    fn try_from(value: OpOut) -> Result<Self, Self::Error> {
+        match value {
+            OpOut::MaybeSubnetId(maybe_subnet_id) => {
+                Ok(maybe_subnet_id.map(|subnet_id| RawSubnetId {
                     subnet_id: subnet_id.get().to_vec(),
-                })),
-            ),
-            OpOut::Error(PocketIcError::CanisterNotFound(_)) => {
-                (StatusCode::OK, ApiResponse::Success(None))
+                }))
             }
-            _ => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                ApiResponse::Error {
-                    message: "operation returned invalid type".into(),
-                },
-            ),
+            _ => Err(OpConversionError),
         }
     }
 }
 
-impl From<OpOut> for (StatusCode, ApiResponse<Vec<u8>>) {
-    fn from(value: OpOut) -> Self {
+impl TryFrom<OpOut> for Vec<u8> {
+    type Error = OpConversionError;
+    fn try_from(value: OpOut) -> Result<Self, Self::Error> {
         match value {
-            OpOut::Bytes(bytes) => (StatusCode::OK, ApiResponse::Success(bytes)),
-            OpOut::Error(e) => (
-                StatusCode::BAD_REQUEST,
-                ApiResponse::Error {
-                    message: format!("Call returned an error: {:?}", e),
-                },
-            ),
-            _ => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                ApiResponse::Error {
-                    message: "operation returned invalid type".into(),
-                },
-            ),
+            OpOut::Bytes(bytes) => Ok(bytes),
+            _ => Err(OpConversionError),
         }
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 struct ApiV2Error(String);
 
-impl From<OpOut>
-    for (
-        StatusCode,
-        ApiResponse<Result<PocketHttpResponse, ApiV2Error>>,
-    )
-{
+impl From<OpOut> for (StatusCode, ApiResponse<PocketHttpResponse>) {
     fn from(value: OpOut) -> Self {
         match value {
             OpOut::ApiV2Response((status, headers, bytes)) => (
                 StatusCode::from_u16(status).unwrap(),
-                ApiResponse::Success(Ok((headers, bytes))),
+                ApiResponse::Success((headers, bytes)),
             ),
-            OpOut::Error(PocketIcError::RequestRoutingError(e)) => (
-                StatusCode::BAD_REQUEST,
-                ApiResponse::Success(Err(ApiV2Error(e))),
-            ),
+            OpOut::Error(PocketIcError::RequestRoutingError(e)) => {
+                (StatusCode::BAD_REQUEST, ApiResponse::Error { message: e })
+            }
             _ => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 ApiResponse::Error {
@@ -577,24 +559,143 @@ async fn handler_api_v2<T: Operation + Send + Sync + 'static>(
     instance_id: InstanceId,
     op: T,
 ) -> (StatusCode, NoApi<Response<Body>>) {
-    let (code, res): (
-        StatusCode,
-        ApiResponse<Result<PocketHttpResponse, ApiV2Error>>,
-    ) = run_operation(api_state, instance_id, None, op).await;
+    let (code, res): (StatusCode, ApiResponse<PocketHttpResponse>) =
+        run_operation(api_state, instance_id, None, op).await;
     let response = match res {
-        ApiResponse::Success(Ok((headers, bytes))) => {
+        ApiResponse::Success((headers, bytes)) => {
             let mut resp = Response::builder().status(code);
             for (name, value) in headers {
                 resp = resp.header(name, value);
             }
             resp.body(Body::from(bytes)).unwrap()
         }
-        ApiResponse::Success(Err(ApiV2Error(e))) => make_plaintext_response(code, e),
-        ApiResponse::Busy { .. } | ApiResponse::Started { .. } | ApiResponse::Error { .. } => {
+        ApiResponse::Error { message } => make_plaintext_response(code, message),
+        ApiResponse::Busy { .. } | ApiResponse::Started { .. } => {
             make_plaintext_response(code, format!("{:?}", res))
         }
     };
     (code, NoApi(response))
+}
+
+/// The result of a long running PocketIC operation is stored in a graph as an OpOut variant.
+/// When polling, the type (and therefore the variant) is no longer known. Therefore we need
+/// to try every variant and immediately convert to an axum::Response so that axum understands
+/// the return type.
+fn op_out_to_response(op_out: OpOut) -> Response {
+    match op_out {
+        OpOut::Pruned => (
+            StatusCode::GONE,
+            Json(ApiResponse::<()>::Error {
+                message: "Pruned".to_owned(),
+            })
+            .into_response(),
+        )
+            .into_response(),
+        OpOut::NoOutput => (
+            StatusCode::OK,
+            Json(ApiResponse::Success(())).into_response(),
+        )
+            .into_response(),
+        opout @ OpOut::Time(_) => (
+            StatusCode::OK,
+            Json(ApiResponse::Success(RawTime::try_from(opout).unwrap())),
+        )
+            .into_response(),
+        opout @ OpOut::CanisterResult(_) => (
+            StatusCode::OK,
+            Json(ApiResponse::Success(
+                RawCanisterResult::try_from(opout).unwrap(),
+            )),
+        )
+            .into_response(),
+        opout @ OpOut::CanisterId(_) => (
+            StatusCode::OK,
+            Json(ApiResponse::Success(
+                RawCanisterId::try_from(opout).unwrap(),
+            )),
+        )
+            .into_response(),
+        opout @ OpOut::Cycles(_) => (
+            StatusCode::OK,
+            Json(ApiResponse::Success(RawCycles::try_from(opout).unwrap())),
+        )
+            .into_response(),
+        opout @ OpOut::Bytes(_) => (
+            StatusCode::OK,
+            Json(ApiResponse::Success(Vec::<u8>::try_from(opout).unwrap())),
+        )
+            .into_response(),
+        opout @ OpOut::StableMemBytes(_) => (
+            StatusCode::OK,
+            Json(ApiResponse::Success(
+                RawStableMemory::try_from(opout).unwrap(),
+            )),
+        )
+            .into_response(),
+        opout @ OpOut::MaybeSubnetId(_) => (
+            StatusCode::OK,
+            Json(ApiResponse::Success(
+                Option::<RawSubnetId>::try_from(opout).unwrap(),
+            )),
+        )
+            .into_response(),
+        opout @ OpOut::Error(_) => (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<()>::Error {
+                message: format!("{:?}", PocketIcError::try_from(opout).unwrap()),
+            }),
+        )
+            .into_response(),
+        OpOut::ApiV2Response((status, headers, bytes)) => {
+            let code = StatusCode::from_u16(status).unwrap();
+            let mut resp = Response::builder().status(code);
+            for (name, value) in headers {
+                resp = resp.header(name, value);
+            }
+            resp.body(Body::from(bytes)).unwrap()
+        }
+    }
+}
+
+/// Read a node in the graph of computations. Needed for polling for a previous ApiResponse::Started reply.
+pub async fn handler_read_graph(
+    State(AppState { api_state, .. }): State<AppState>,
+    // TODO: type state label and op id correctly but such that axum can handle it
+    Path((state_label_str, op_id_str)): Path<(String, String)>,
+) -> Response {
+    let Ok(vec) = base64::decode_config(state_label_str.as_bytes(), base64::URL_SAFE) else {
+        return (StatusCode::BAD_REQUEST, "malformed state_label").into_response();
+    };
+    if let Ok(state_label) = StateLabel::try_from(vec) {
+        let op_id = OpId(op_id_str.clone());
+        // TODO: use new_state_label and return it to library
+        if let Some((_new_state_label, op_out)) =
+            ApiState::read_result(api_state.get_graph(), &state_label, &op_id)
+        {
+            op_out_to_response(op_out)
+        } else {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ApiResponse::<()>::Error {
+                    message: format!(
+                        "state_label / op_id not found: {} (base64: {}) / {}",
+                        state_label_str,
+                        base64::encode_config(state_label.0, base64::URL_SAFE),
+                        op_id_str,
+                    ),
+                }),
+            )
+                .into_response()
+        }
+    } else {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse::<()>::Error {
+                message: "Bad state_label".to_string(),
+            }),
+        )
+            .into_response()
+    }
 }
 
 // ----------------------------------------------------------------------------------------------------------------- //

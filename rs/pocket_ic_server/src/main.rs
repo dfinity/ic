@@ -19,7 +19,7 @@ use ic_crypto_iccsa::{public_key_bytes_from_der, types::SignatureBytes, verify};
 use ic_crypto_sha2::Sha256;
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
 use pocket_ic::common::rest::{BinaryBlob, BlobCompression, BlobId, RawVerifyCanisterSigArg};
-use pocket_ic_server::state_api::routes::timeout_or_default;
+use pocket_ic_server::state_api::routes::{handler_read_graph, timeout_or_default};
 use pocket_ic_server::state_api::{
     routes::{instances_routes, status, AppState, RouterExt},
     state::PocketIcApiStateBuilder,
@@ -140,6 +140,9 @@ async fn start(runtime: Arc<Runtime>) {
         //
         // Verify signature.
         .directory_route("/verify_signature", post(verify_signature))
+        //
+        // Read state: Poll a result based on a received Started{} reply.
+        .directory_route("/read_graph/:state_label/:op_id", get(handler_read_graph))
         //
         // All instance routes.
         .nest("/instances", instances_routes::<AppState>())

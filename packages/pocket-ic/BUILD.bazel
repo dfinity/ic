@@ -52,7 +52,7 @@ rust_test_suite(
         "COUNTER_WASM": "packages/pocket-ic/tests/counter.wasm",
         "LEDGER_WASM": "packages/pocket-ic/tests/icp_ledger.wasm",
     },
-    flaky = True,
+    flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = [":pocket-ic"] + DEPENDENCIES + TEST_DEPENDENCIES,
 )
