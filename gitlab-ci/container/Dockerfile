@@ -145,9 +145,9 @@ COPY ./gitlab-ci/container/files/entrypoint.sh /entrypoint.sh
 
 # Add mold linker
 ARG MOLD_BIN="/usr/local/bin/mold"
-ARG MOLD_VERSION=2.0.0
+ARG MOLD_VERSION=2.4.1
 RUN curl -sSL "https://github.com/rui314/mold/releases/download/v${MOLD_VERSION}/mold-${MOLD_VERSION}-$(uname -m)-linux.tar.gz" | tar -C /usr/local --strip-components=1 -xzf - && \
-    echo "4d17d89e0c6a7c4c08ba5e0d3bbe9fd9c01ba227212307e157722c910e9a88be  ${MOLD_BIN}" | shasum -a 256 -c - && \
+    echo "4d34b489a0810e71a937103f38e4b6c951abac36b5b60c58bc07b73efa7139cd  ${MOLD_BIN}" | shasum -a 256 -c - && \
     ln -sf "${MOLD_BIN}" "$(realpath /usr/bin/ld)"
 
 
