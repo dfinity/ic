@@ -93,7 +93,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /testnet/tests/pipeline/                                   @dfinity-lab/teams/ic-testing-verification
 /testnet/tests/scripts/                                    @dfinity-lab/teams/ic-testing-verification
 /testnet/tools/nns-tools/                                  @dfinity-lab/teams/nns-team
-/testnet/mainnet_revisions.json                            @dfinity-lab/teams/ic-testing-verification
+/testnet/mainnet_revisions.json                            @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/consensus-owners
 
 # [Rust]
 /rs/                                                    @dfinity-lab/teams/interface-owners
