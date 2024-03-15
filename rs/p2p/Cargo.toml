@@ -13,7 +13,6 @@ ic-crypto-tls-interfaces = { path = "../crypto/tls_interfaces" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-interfaces-transport = { path = "../interfaces/transport" }
-ic-icos-sev = { path = "../ic_os/sev" }
 ic-types = { path = "../types/types" }
 ic-protobuf = { path = "../protobuf" }
 ic-logger = { path = "../monitoring/logger" }

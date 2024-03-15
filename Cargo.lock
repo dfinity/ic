@@ -3505,7 +3505,6 @@ dependencies = [
  "ff 0.13.0",
  "generic-array",
  "group 0.13.0",
- "hkdf",
  "pem-rfc7468",
  "pkcs8",
  "rand_core 0.6.4",
@@ -4521,15 +4520,6 @@ name = "hexf-parse"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dfa686283ad6dd069f105e5ab091b04c62850d3e4cf5d67debad1933f55023df"
-
-[[package]]
-name = "hkdf"
-version = "0.12.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "791a029f6b9fc27657f6f188ec6e5e43f6911f6f878e0dc5501396e09809d437"
-dependencies = [
- "hmac 0.12.1",
-]
 
 [[package]]
 name = "hmac"
@@ -7949,28 +7939,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-icos-sev"
-version = "0.9.0"
-dependencies = [
- "anyhow",
- "assert_matches",
- "async-trait",
- "ic-base-types",
- "ic-interfaces-registry",
- "ic-logger",
- "ic-registry-client-helpers",
- "ic-types",
- "serde",
- "serde_cbor",
- "sev",
- "sha2 0.10.8",
- "slog",
- "tempfile",
- "thiserror",
- "tokio",
-]
-
-[[package]]
 name = "ic-icp-index"
 version = "0.9.0"
 dependencies = [
@@ -9659,7 +9627,6 @@ dependencies = [
  "ic-cycles-account-manager",
  "ic-execution-environment",
  "ic-https-outcalls-adapter-client",
- "ic-icos-sev",
  "ic-interfaces",
  "ic-interfaces-mocks",
  "ic-interfaces-registry",
@@ -14536,7 +14503,6 @@ dependencies = [
  "ic-dashboard",
  "ic-http-endpoints-metrics",
  "ic-http-utils",
- "ic-icos-sev",
  "ic-image-upgrader",
  "ic-interfaces",
  "ic-interfaces-registry",
@@ -14611,18 +14577,6 @@ name = "p256"
 version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c9863ad85fa8f4460f9c48cb909d38a0d689dba1f6f6988a5e3e0d31071bcd4b"
-dependencies = [
- "ecdsa",
- "elliptic-curve",
- "primeorder",
- "sha2 0.10.8",
-]
-
-[[package]]
-name = "p384"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "70786f51bcc69f6a4c0360e063a4cac5419ef7c5cd5b3c99ad70f3be5ba79209"
 dependencies = [
  "ecdsa",
  "elliptic-curve",
@@ -17255,15 +17209,11 @@ dependencies = [
  "iocuddle",
  "lazy_static",
  "libc",
- "p384",
- "rsa",
  "serde",
  "serde-big-array",
  "serde_bytes",
- "sha2 0.10.8",
  "static_assertions",
  "uuid 1.6.1",
- "x509-cert",
 ]
 
 [[package]]
