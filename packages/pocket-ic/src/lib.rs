@@ -7,15 +7,16 @@
 //! With PocketIC, testing canisters is as simple as calling rust functions. Here is a minimal example:
 //!
 //! ```rust,no_run
-//! use candid;
-//! use pocket_ic;
+//! use candid::encode_one;
+//! use pocket_ic::PocketIc;
 //!
 //!  #[test]
 //!  fn test_counter_canister() {
 //!     let pic = PocketIc::new();
-//!     // Create an empty canister as the anonymous principal.
-//!     let canister_id = pic.create_canister(None);
-//!     pic.add_cycles(canister_id, 2_000_000_000_000); // 2T cycles
+//!     // Create an empty canister as the anonymous principal and add cycles.
+//!     let canister_id = pic.create_canister();
+//!     pic.add_cycles(canister_id, 2_000_000_000_000);
+//!  
 //!     let wasm_bytes = load_counter_wasm(...);
 //!     pic.install_canister(canister_id, wasm_bytes, vec![], None);
 //!     // 'inc' is a counter canister method.
