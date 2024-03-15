@@ -16,6 +16,7 @@ impl Default for BatchBuilder {
         Self {
             batch: Batch {
                 batch_number: Height::from(0),
+                next_checkpoint_height: None,
                 requires_full_state_hash: false,
                 messages: BatchMessages::default(),
                 randomness: Randomness::from([0; 32]),
