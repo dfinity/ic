@@ -78,10 +78,6 @@ impl OrchestratorError {
     pub(crate) fn key_monitoring_error(msg: impl ToString) -> Self {
         OrchestratorError::ThresholdKeyMonitoringError(msg.to_string())
     }
-
-    pub(crate) fn snp_error(msg: impl ToString) -> Self {
-        OrchestratorError::SnpError(msg.to_string())
-    }
 }
 
 impl fmt::Display for OrchestratorError {

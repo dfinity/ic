@@ -24,7 +24,6 @@ ic-crypto-tls-interfaces = { path = "../crypto/tls_interfaces" }
 ic-dashboard = { path = "./dashboard" }
 ic-http-utils = { path = "../http_utils" }
 ic-management-canister-types = { path = "../types/management_canister_types" }
-ic-icos-sev = { path = "../ic_os/sev" }
 ic-image-upgrader = { path = "./image_upgrader" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
