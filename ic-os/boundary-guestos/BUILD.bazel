@@ -9,6 +9,7 @@ exports_files([
 filegroup(
     name = "rootfs-files",
     srcs = glob(["rootfs/**"]),
+    tags = ["manual"],
 )
 
 # All boundary-guest-os targets are named the same, just stay in different submodules.

@@ -18,6 +18,7 @@ def icos_build(
         upgrades = True,
         vuln_scan = True,
         visibility = None,
+        tags = None,
         build_local_base_image = False,
         ic_version = "//bazel:version.txt"):
     """
@@ -32,6 +33,7 @@ def icos_build(
       upgrades: if True, build upgrade images as well
       vuln_scan: if True, create targets for vulnerability scanning
       visibility: See Bazel documentation
+      tags: See Bazel documentation
       build_local_base_image: if True, build the base images from scratch. Do not download the docker.io base image.
       ic_version: the label pointing to the target that returns IC version
     """
@@ -166,14 +168,14 @@ def icos_build(
     # -------------------- Extract boot partition --------------------
 
     if "boot_args_template" not in image_deps:
-        native.alias(name = "partition-root.tar", actual = ":partition-root-unsigned.tar")
-        native.alias(name = "extra_boot_args", actual = image_deps["extra_boot_args"])
+        native.alias(name = "partition-root.tar", actual = ":partition-root-unsigned.tar", tags = ["manual"])
+        native.alias(name = "extra_boot_args", actual = image_deps["extra_boot_args"], tags = ["manual"])
 
         if upgrades:
-            native.alias(name = "partition-root-test.tar", actual = ":partition-root-test-unsigned.tar")
-            native.alias(name = "extra_boot_test_args", actual = image_deps["extra_boot_args"])
+            native.alias(name = "partition-root-test.tar", actual = ":partition-root-test-unsigned.tar", tags = ["manual"])
+            native.alias(name = "extra_boot_test_args", actual = image_deps["extra_boot_args"], tags = ["manual"])
     else:
-        native.alias(name = "extra_boot_args_template", actual = image_deps["boot_args_template"])
+        native.alias(name = "extra_boot_args_template", actual = image_deps["boot_args_template"], tags = ["manual"])
 
         native.genrule(
             name = "partition-root-sign",
@@ -594,7 +596,7 @@ EOF
             ":update-img-test.tar.gz",
         ] if upgrades else []),
         visibility = visibility,
-        tags = ["manual"] if build_local_base_image else [],
+        tags = tags,
     )
 
 # end def icos_build
@@ -638,7 +640,7 @@ def boundary_node_icos_build(
         tags = ["manual"],
     )
 
-    build_grub_partition("partition-grub.tar")
+    build_grub_partition("partition-grub.tar", tags = ["manual"])
 
     build_container_filesystem_config_file = Label(image_deps["build_container_filesystem_config_file"])
 
@@ -801,6 +803,7 @@ def boundary_node_icos_build(
         ],
         remote_subdir = "boundary-os/disk-img" + upload_suffix,
         visibility = visibility,
+        tags = ["manual"],
     )
 
     output_files(

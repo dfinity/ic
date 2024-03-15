@@ -1797,7 +1797,7 @@ build-determinism:
         TARGET: "//publish/canisters:upload"
       - PATH0: guest-os/update-img
         PATH1: build-ic/guest-os
-        TARGET: "//ic-os/guestos/envs/prod:upload_disk-img"
+        TARGET: "//ic-os/guestos/envs/prod:upload_update-img"
       - PATH0: host-os/update-img
         PATH1: build-ic/host-os
         TARGET: "//ic-os/hostos/envs/prod:upload_update-img"
