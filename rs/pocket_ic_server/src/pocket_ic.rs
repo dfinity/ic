@@ -1184,7 +1184,7 @@ pub struct GetStableMemory {
 
 impl Operation for GetStableMemory {
     fn compute(&self, pocket_ic: &mut PocketIc) -> OpOut {
-        OpOut::Bytes(
+        OpOut::StableMemBytes(
             pocket_ic
                 .try_route_canister(self.canister_id)
                 .unwrap()
@@ -1227,12 +1227,12 @@ impl Operation for GetSubnet {
         match sm {
             Some(sm) => {
                 if sm.canister_exists(self.canister_id) {
-                    OpOut::SubnetId(sm.get_subnet_id())
+                    OpOut::MaybeSubnetId(Some(sm.get_subnet_id()))
                 } else {
-                    OpOut::Error(PocketIcError::CanisterNotFound(self.canister_id))
+                    OpOut::MaybeSubnetId(None)
                 }
             }
-            None => OpOut::Error(PocketIcError::CanisterNotFound(self.canister_id)),
+            None => OpOut::MaybeSubnetId(None),
         }
     }
 

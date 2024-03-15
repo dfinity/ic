@@ -34,7 +34,7 @@ const POLL_TICK_STATUS_DELAY: Duration = Duration::from_millis(100);
 pub const STATE_LABEL_HASH_SIZE: usize = 32;
 
 /// Uniquely identifies a state.
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Default)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Default, Deserialize)]
 pub struct StateLabel(pub [u8; STATE_LABEL_HASH_SIZE]);
 
 // The only error condition is if the vector has the wrong size.
@@ -158,9 +158,11 @@ pub enum OpOut {
     CanisterId(CanisterId),
     Cycles(u128),
     Bytes(Vec<u8>),
-    SubnetId(SubnetId),
+    StableMemBytes(Vec<u8>),
+    MaybeSubnetId(Option<SubnetId>),
     Error(PocketIcError),
     ApiV2Response((u16, BTreeMap<String, Vec<u8>>, Vec<u8>)),
+    Pruned,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
@@ -227,7 +229,9 @@ impl std::fmt::Debug for OpOut {
                 write!(f, "RequestRoutingError({:?})", msg)
             }
             OpOut::Bytes(bytes) => write!(f, "Bytes({})", base64::encode(bytes)),
-            OpOut::SubnetId(subnet_id) => write!(f, "SubnetId({})", subnet_id),
+            OpOut::StableMemBytes(bytes) => write!(f, "StableMemory({})", base64::encode(bytes)),
+            OpOut::MaybeSubnetId(Some(subnet_id)) => write!(f, "SubnetId({})", subnet_id),
+            OpOut::MaybeSubnetId(None) => write!(f, "NoSubnetId"),
             OpOut::ApiV2Response((status, headers, bytes)) => {
                 write!(
                     f,
@@ -237,6 +241,7 @@ impl std::fmt::Debug for OpOut {
                     base64::encode(bytes)
                 )
             }
+            OpOut::Pruned => write!(f, "Pruned"),
         }
     }
 }
@@ -269,7 +274,7 @@ pub type UpdateResult = std::result::Result<UpdateReply, UpdateError>;
 /// are returned.
 /// If the result can be read from a cache, or if the computation is a fast read, an Output is
 /// returned directly.
-/// If the computation can be run and takes longer, a Busy variant is returned, containing the
+/// If the computation can be run and takes longer, a Started variant is returned, containing the
 /// requested op and the initial state.
 #[derive(Debug, PartialEq, Eq)]
 pub enum UpdateReply {
@@ -305,7 +310,7 @@ pub trait HasStateLabel {
 
 impl ApiState {
     /// For polling:
-    /// The client lib dispatches a long running operation and gets a Busy {state_label, op_id}.
+    /// The client lib dispatches a long running operation and gets a Started {state_label, op_id}.
     /// It then polls on that via this state tree api function.
     pub fn read_result(
         graph: Arc<RwLock<HashMap<StateLabel, Computations>>>,
@@ -318,6 +323,10 @@ impl ApiState {
         } else {
             None
         }
+    }
+
+    pub fn get_graph(&self) -> Arc<RwLock<HashMap<StateLabel, Computations>>> {
+        self.graph.clone()
     }
 
     pub async fn add_instance(&self, instance: PocketIc) -> InstanceId {
@@ -364,6 +373,7 @@ impl ApiState {
                     let cur_op = AdvanceTimeAndTick(advance_time);
                     let retry_immediately = match Self::update_instances_with_timeout(
                         instances.clone(),
+                        graph.clone(),
                         drop_sender.clone(),
                         cur_op.into(),
                         instance_id,
@@ -464,6 +474,7 @@ impl ApiState {
         let sync_wait_time = sync_wait_time.unwrap_or(self.sync_wait_time);
         Self::update_instances_with_timeout(
             self.instances.clone(),
+            self.graph.clone(),
             self.drop_sender.clone(),
             op,
             instance_id,
@@ -476,6 +487,7 @@ impl ApiState {
     /// cases when clients want to enforce a long-running blocking call.
     async fn update_instances_with_timeout<O>(
         instances: Arc<RwLock<Vec<Mutex<InstanceState>>>>,
+        graph: Arc<RwLock<HashMap<StateLabel, Computations>>>,
         drop_sender: mpsc::UnboundedSender<PocketIc>,
         op: Arc<O>,
         instance_id: InstanceId,
@@ -529,6 +541,7 @@ impl ApiState {
                         let old_state_label = state_label.clone();
                         let op_id = op_id.clone();
                         let drop_sender = drop_sender.clone();
+                        let graph = graph.clone();
                         move || {
                             trace!(
                                 "bg_task::start instance_id={} state_label={:?} op_id={}",
@@ -537,7 +550,15 @@ impl ApiState {
                                 op_id.0,
                             );
                             let result = op.compute(&mut pocket_ic);
+                            let new_state_label = pocket_ic.get_state_label();
+                            // add result to graph, but grab instance lock first!
                             let instances = instances.blocking_read();
+                            let mut graph_guard = graph.blocking_write();
+                            let cached_computations =
+                                graph_guard.entry(old_state_label.clone()).or_default();
+                            cached_computations
+                                .insert(op_id.clone(), (new_state_label, result.clone()));
+                            drop(graph_guard);
                             let mut instance_state = instances[instance_id].blocking_lock();
                             if let InstanceState::Deleted = &*instance_state {
                                 drop_sender.send(pocket_ic).unwrap();
@@ -545,7 +566,8 @@ impl ApiState {
                                 *instance_state = InstanceState::Available(pocket_ic);
                             }
                             trace!("bg_task::end instance_id={} op_id={}", instance_id, op_id.0);
-                            result
+                            // also return old_state_label so we can prune graph if we return quickly
+                            (result, old_state_label)
                         }
                     };
 
@@ -578,13 +600,20 @@ impl ApiState {
         // note: this assumes that cancelling the JoinHandle does not stop the execution of the
         // background task. This only works because the background thread, in this case, is a
         // kernel thread.
-        if let Ok(op_out) = time::timeout(sync_wait_time, bg_handle).await {
+        if let Ok(Ok((op_out, old_state_label))) = time::timeout(sync_wait_time, bg_handle).await {
             trace!(
                 "update_with_timeout::synchronous instance_id={} op_id={}",
                 instance_id,
                 op_id,
             );
-            return Ok(UpdateReply::Output(op_out.expect("join failed!")));
+            // prune this sync computation from graph, but only the value
+            let mut graph_guard = graph.write().await;
+            let cached_computations = graph_guard.entry(old_state_label.clone()).or_default();
+            let (new_state_label, _) = cached_computations.get(&OpId(op_id.clone())).unwrap();
+            cached_computations.insert(OpId(op_id), (new_state_label.clone(), OpOut::Pruned));
+            drop(graph_guard);
+
+            return Ok(UpdateReply::Output(op_out));
         }
 
         trace!(
