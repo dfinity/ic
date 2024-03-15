@@ -8,7 +8,7 @@ use std::str::FromStr;
 
 /// The network_identifier specifies which network a particular object is
 /// associated with.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct NetworkIdentifier {
     pub blockchain: String,

@@ -346,6 +346,7 @@ async fn main() -> Result<()> {
         .route("/block", post(block))
         .route("/account/balance", post(account_balance))
         .route("/block/transaction", post(block_transaction))
+        .route("/search/transactions", post(search_transactions))
         .route("/mempool", post(mempool))
         .route("/mempool/transaction", post(mempool_transaction))
         .route("/construction/derive", post(construction_derive))

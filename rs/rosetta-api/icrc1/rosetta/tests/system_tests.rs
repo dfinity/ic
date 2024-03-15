@@ -1166,3 +1166,86 @@ async fn test_rosetta_client_binary() {
         balance_before_approve - Nat::from(DEFAULT_TRANSFER_FEE)
     );
 }
+
+#[test]
+fn test_search_transactions() {
+    let mut runner = TestRunner::new(TestRunnerConfig {
+        max_shrink_iters: 0,
+        cases: *NUM_TEST_CASES,
+        ..Default::default()
+    });
+
+    runner
+        .run(
+            &(valid_transactions_strategy(
+                (*MINTING_IDENTITY).clone(),
+                DEFAULT_TRANSFER_FEE,
+                50,
+                SystemTime::now(),
+            )
+            .no_shrink()),
+            |args_with_caller| {
+                let rt = Runtime::new().unwrap();
+                let minting_account: Account = MINTING_IDENTITY.sender().unwrap().into();
+
+                rt.block_on(async {
+                    let env = RosettaTestingEnvironmentBuilder::new()
+                        .with_args_with_caller(args_with_caller.clone())
+                        .with_init_args_builder(
+                            local_replica::icrc_ledger_default_args_builder()
+                                .with_minting_account(minting_account),
+                        )
+                        .build()
+                        .await;
+
+                    if !args_with_caller.is_empty() {
+                        let rosetta_blocks = get_rosetta_blocks_from_icrc1_ledger(
+                            env.icrc1_agent,
+                            0,
+                            *MAX_BLOCKS_PER_REQUEST,
+                        )
+                        .await;
+
+                        let transaction_identifier = rosetta_blocks
+                            .first()
+                            .unwrap()
+                            .clone()
+                            .get_transaction_identifier();
+
+                        let search_transactions_request = SearchTransactionsRequest {
+                            network_identifier: env.network_identifier.clone(),
+                            transaction_identifier: Some(transaction_identifier.clone()),
+                            ..Default::default()
+                        };
+
+                        let search_transactions_response = env
+                            .rosetta_client
+                            .search_transactions(
+                                search_transactions_request.network_identifier,
+                                search_transactions_request.transaction_identifier,
+                                search_transactions_request.account_identifier,
+                                search_transactions_request.type_,
+                                search_transactions_request.max_block,
+                                search_transactions_request.limit,
+                                search_transactions_request.offset,
+                            )
+                            .await
+                            .expect("Unable to call search_transactions");
+
+                        search_transactions_response
+                            .transactions
+                            .iter()
+                            .for_each(|transaction| {
+                                assert_eq!(
+                                    transaction.transaction.transaction_identifier,
+                                    transaction_identifier
+                                );
+                            });
+                    }
+
+                    Ok(())
+                })
+            },
+        )
+        .unwrap()
+}

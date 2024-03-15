@@ -332,7 +332,7 @@ pub struct ConstructionHashRequest {
 /// SearchTransactionsRequest models a small subset of the /search/transactions
 /// endpoint. Currently we only support looking up a transaction given its hash;
 /// this functionality is desired by our crypto exchanges partners.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct SearchTransactionsRequest {
     #[serde(rename = "network_identifier")]
