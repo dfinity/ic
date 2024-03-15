@@ -102,3 +102,17 @@ pub async fn account_balance(
         state.metadata.symbol.clone(),
     )?))
 }
+
+pub async fn search_transactions(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<SearchTransactionsRequest>,
+) -> Result<Json<SearchTransactionsResponse>> {
+    verify_network_id(&request.network_identifier, &state)
+        .map_err(|err| Error::invalid_network_id(&format!("{:?}", err)))?;
+    Ok(Json(services::search_transactions(
+        &state.storage,
+        request,
+        state.metadata.symbol.clone(),
+        state.metadata.decimals,
+    )?))
+}

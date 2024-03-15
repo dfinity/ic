@@ -1,3 +1,8 @@
+use crate::common::constants::DEFAULT_BLOCKCHAIN;
+use crate::common::constants::MAX_TRANSACTIONS_PER_SEARCH_TRANSACTIONS_REQUEST;
+use crate::common::storage::types::IcrcOperation;
+use crate::common::storage::types::RosettaBlock;
+use crate::common::types::OperationType;
 use crate::common::{
     constants::{NODE_VERSION, ROSETTA_VERSION},
     storage::storage_client::StorageClient,
@@ -11,9 +16,10 @@ use crate::common::{
 use candid::Nat;
 use candid::Principal;
 use ic_ledger_core::tokens::Zero;
-use ic_rosetta_api::DEFAULT_BLOCKCHAIN;
 use icrc_ledger_types::icrc1::account::Account;
 use num_bigint::BigUint;
+use rosetta_core::request_types::SearchTransactionsRequest;
+use rosetta_core::response_types::SearchTransactionsResponse;
 use rosetta_core::{identifiers::*, miscellaneous::Version, objects::*, response_types::*};
 
 pub fn network_list(ledger_id: &Principal) -> NetworkListResponse {
@@ -173,6 +179,233 @@ pub fn account_balance(
     })
 }
 
+pub fn search_transactions(
+    storage_client: &StorageClient,
+    request: SearchTransactionsRequest,
+    symbol: String,
+    decimals: u8,
+) -> Result<SearchTransactionsResponse, Error> {
+    let currency = Currency {
+        symbol,
+        decimals: decimals as u32,
+        metadata: None,
+    };
+
+    if request.coin_identifier.is_some() {
+        return Err(Error::request_processing_error(
+            &"Coin identifier not supported in search/transactions endpoint".to_owned(),
+        ));
+    }
+
+    if request.status.is_some() {
+        return Err(Error::request_processing_error(
+            &"Status not supported in search/transactions endpoint".to_owned(),
+        ));
+    }
+
+    if request.operator.is_some() {
+        return Err(Error::request_processing_error(
+            &"Operator not supported in search/transactions endpoint".to_owned(),
+        ));
+    }
+
+    if request.address.is_some() {
+        return Err(Error::request_processing_error(
+            &"Address not supported in search/transactions endpoint".to_owned(),
+        ));
+    }
+
+    if request.success.is_some() {
+        return Err(Error::request_processing_error(
+            &"Successful only not supported in search/transactions endpoint".to_owned(),
+        ));
+    }
+
+    if request.currency.is_some() {
+        return Err(Error::request_processing_error(
+            &"Currency not supported in search/transactions endpoint".to_owned(),
+        ));
+    }
+
+    let rosetta_block_with_highest_block_index = storage_client
+        .get_block_with_highest_block_idx()
+        .map_err(|e| Error::unable_to_find_block(&e))?
+        .ok_or_else(|| {
+            Error::unable_to_find_block(&"There exist no blocks in the database".to_owned())
+        })?;
+
+    let max_block: u64 = request
+        .max_block
+        .unwrap_or(rosetta_block_with_highest_block_index.index as i64)
+        .try_into()
+        .map_err(|err| {
+            Error::request_processing_error(&format!("Max block has to be a valid u64: {}", err))
+        })?;
+
+    let limit: u64 = request
+        .limit
+        .unwrap_or(MAX_TRANSACTIONS_PER_SEARCH_TRANSACTIONS_REQUEST as i64)
+        .try_into()
+        .map_err(|err| {
+            Error::request_processing_error(&format!("Limit has to be a valid u64: {}", err))
+        })?;
+
+    let offset: u64 = request.offset.unwrap_or(0).try_into().map_err(|err| {
+        Error::request_processing_error(&format!("Offset has to be a valid u64: {}", err))
+    })?;
+
+    if max_block < offset {
+        return Err(Error::request_processing_error(
+            &"Max block has to be greater than or equal to offset".to_owned(),
+        ));
+    }
+
+    let operation_type = request
+        .type_
+        .map(|op| {
+            op.parse::<OperationType>().map_err(|err| {
+                Error::request_processing_error(&format!(
+                    "Operation type has to be a valid OperationType: {}",
+                    err
+                ))
+            })
+        })
+        .transpose()?;
+
+    let account = request
+        .account_identifier
+        .map(|acc| {
+            Account::try_from(acc).map_err(|err| {
+                Error::request_processing_error(&format!(
+                    "Account identifier has to be a valid AccountIdentifier: {}",
+                    err
+                ))
+            })
+        })
+        .transpose()?;
+
+    // A filter function that makes sure that any option the user provided is checked against
+    fn select_transaction(
+        rosetta_block: &RosettaBlock,
+        offset: u64,
+        max_block: u64,
+        account: Option<Account>,
+        operation_type: Option<OperationType>,
+        transaction_identifier: Option<TransactionIdentifier>,
+    ) -> bool {
+        // The offset is measured from the block with the highest index. Any block that comes after the block with the highest index minus the offset is filtered out.
+        if rosetta_block.index > max_block.saturating_sub(offset) {
+            return false;
+        }
+
+        // If the operation type is set, we only select transactions that match the operation type
+        if let Some(operation_type) = operation_type {
+            if operation_type.to_string().to_uppercase()
+                != match rosetta_block.block.transaction.operation {
+                    IcrcOperation::Transfer { .. } => "TRANSFER",
+                    IcrcOperation::Mint { .. } => "MINT",
+                    IcrcOperation::Burn { .. } => "BURN",
+                    IcrcOperation::Approve { .. } => "APPROVE",
+                }
+            {
+                return false;
+            }
+        }
+
+        // If the account is set and the transaction does not involve the account we filter it out
+        if let Some(account) = account {
+            if !match rosetta_block.block.transaction.operation {
+                IcrcOperation::Transfer {
+                    from, to, spender, ..
+                } => spender.map_or(vec![from, to], |spender| vec![from, to, spender]),
+
+                IcrcOperation::Mint { to, .. } => vec![to],
+
+                IcrcOperation::Burn { from, spender, .. } => {
+                    spender.map_or(vec![from], |spender| vec![from, spender])
+                }
+
+                IcrcOperation::Approve { from, spender, .. } => vec![from, spender],
+            }
+            .contains(&account)
+            {
+                return false;
+            }
+        }
+
+        // If the transaction identifier is set we only select transactions that match the transaction identifier
+        if let Some(transaction_identifier) = transaction_identifier {
+            if transaction_identifier != rosetta_block.clone().get_transaction_identifier() {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    let mut transactions = vec![];
+
+    let mut end = max_block.min(
+        rosetta_block_with_highest_block_index
+            .index
+            .saturating_sub(offset),
+    );
+
+    // We only want to iterate over limit number of blocks.
+    let mut start = end.saturating_sub(limit);
+    let mut last_traversed_block_index;
+
+    // We iterate over all transactions with a window of size limit at a time
+    // This guarantees that memory usage is kept low
+    'outer_loop: loop {
+        for rosetta_block in storage_client
+            .get_blocks_by_index_range(start, end)
+            .map_err(|err| Error::request_processing_error(&err))?
+            .into_iter()
+            // The transactions are supposed to be returned in reversed order, meaning from highest block index to lowest
+            .rev()
+        {
+            last_traversed_block_index = rosetta_block.index;
+            // If the transaction matches the filter function we add it to the list of transactions
+            if select_transaction(
+                &rosetta_block,
+                offset,
+                max_block,
+                account,
+                operation_type.clone(),
+                request.transaction_identifier.clone(),
+            ) {
+                transactions.push(BlockTransaction {
+                    block_identifier: rosetta_block.clone().get_block_identifier(),
+                    transaction: icrc1_rosetta_block_to_rosetta_core_transaction(
+                        rosetta_block,
+                        currency.clone(),
+                    )
+                    .map_err(|err| Error::parsing_unsuccessful(&err))?,
+                });
+            };
+
+            // If we have reached the limit or the last traversed block is the genesis block we can stop traversing
+            if transactions.len() == limit as usize || last_traversed_block_index == 0 {
+                break 'outer_loop;
+            }
+        }
+
+        end = start.saturating_sub(1);
+        start = start.saturating_sub(limit);
+    }
+
+    Ok(SearchTransactionsResponse {
+        total_count: transactions.len() as i64,
+        transactions,
+        // If the traversion of transactions has reached the genesis block we can stop traversing
+        next_offset: if last_traversed_block_index == 0 {
+            None
+        } else {
+            Some(max_block.saturating_sub(last_traversed_block_index.saturating_sub(1)) as i64)
+        },
+    })
+}
 #[cfg(test)]
 mod test {
     use super::*;
@@ -183,9 +416,11 @@ mod test {
     use ic_icrc1_tokens_u256::U256;
     use ic_ledger_core::block::BlockType;
     use proptest::prelude::*;
+    use proptest::test_runner::Config as TestRunnerConfig;
+    use proptest::test_runner::TestRunner;
     use std::sync::Arc;
 
-    const BLOCKHAIN_LENGTH: usize = 1000;
+    const BLOCKCHAIN_LENGTH: usize = 1000;
 
     fn compare_transaction(
         mut a: rosetta_core::objects::Transaction,
@@ -218,7 +453,7 @@ mod test {
             ..ProptestConfig::default()
         })]
                        #[test]
-                    fn test_network_status_service(blockchain in valid_blockchain_strategy::<U256>(BLOCKHAIN_LENGTH)){
+                    fn test_network_status_service(blockchain in valid_blockchain_strategy::<U256>(BLOCKCHAIN_LENGTH)){
                         let storage_client_memory = Arc::new(StorageClient::new_in_memory().unwrap());
                         let mut rosetta_blocks = vec![];
                         for (index,block) in blockchain.clone().into_iter().enumerate(){
@@ -248,7 +483,7 @@ mod test {
                     }
 
                     #[test]
-                    fn test_block_service(blockchain in valid_blockchain_strategy::<U256>(BLOCKHAIN_LENGTH)){
+                    fn test_block_service(blockchain in valid_blockchain_strategy::<U256>(BLOCKCHAIN_LENGTH)){
                         let storage_client_memory = Arc::new(StorageClient::new_in_memory().unwrap());
                         let invalid_block_hash = "0x1234".to_string();
                         let invalid_block_idx = blockchain.len() as u64 + 1;
@@ -363,7 +598,7 @@ mod test {
             }
 
             #[test]
-            fn test_block_transaction_service(blockchain in valid_blockchain_strategy::<U256>(BLOCKHAIN_LENGTH)){
+            fn test_block_transaction_service(blockchain in valid_blockchain_strategy::<U256>((MAX_TRANSACTIONS_PER_SEARCH_TRANSACTIONS_REQUEST*5).try_into().unwrap())){
                 let storage_client_memory = Arc::new(StorageClient::new_in_memory().unwrap());
                 let invalid_block_hash = "0x1234".to_string();
                 let invalid_block_idx = blockchain.len() as u64 + 1;
@@ -440,5 +675,359 @@ mod test {
                     assert!(block_transaction_res.unwrap_err().0.description.unwrap().contains(format!("Both index {} and hash {} were provided but they do not match the same block",valid_block_idx.clone(),invalid_block_hash.clone()).as_str()));
                 }
         }
+    }
+
+    #[test]
+    fn test_search_transactions() {
+        let mut runner = TestRunner::new(TestRunnerConfig {
+            max_shrink_iters: 0,
+            cases: 1,
+            ..Default::default()
+        });
+
+        runner
+            .run(
+                &(valid_blockchain_strategy::<U256>(BLOCKCHAIN_LENGTH).no_shrink()),
+                |blockchain| {
+                    let storage_client_memory = StorageClient::new_in_memory().unwrap();
+                    let mut rosetta_blocks = vec![];
+
+                    for (index, block) in blockchain.clone().into_iter().enumerate() {
+                        rosetta_blocks.push(
+                            RosettaBlock::from_generic_block(
+                                encoded_block_to_generic_block(&block.encode()),
+                                index as u64,
+                            )
+                            .unwrap(),
+                        );
+                    }
+
+                    storage_client_memory
+                        .store_blocks(rosetta_blocks.clone())
+                        .unwrap();
+                    let mut search_transactions_request = SearchTransactionsRequest {
+                        ..Default::default()
+                    };
+
+                    fn traverse_all_transactions(
+                        storage_client: &StorageClient,
+                        mut search_transactions_request: SearchTransactionsRequest,
+                    ) -> Vec<BlockTransaction> {
+                        let mut transactions = vec![];
+                        loop {
+                            let result = search_transactions(
+                                storage_client,
+                                search_transactions_request.clone(),
+                                "ICP".to_string(),
+                                8,
+                            )
+                            .unwrap();
+                            transactions.extend(result.clone().transactions);
+                            search_transactions_request.offset = result.next_offset;
+
+                            if search_transactions_request.offset.is_none() {
+                                break;
+                            }
+                        }
+
+                        transactions
+                    }
+
+                    if !blockchain.is_empty() {
+                        // The maximum number of transactions that can be returned is the minimum between the maximum number of transactions per request or the entire blockchain
+                        let maximum_number_returnable_transactions = rosetta_blocks
+                            .len()
+                            .min(MAX_TRANSACTIONS_PER_SEARCH_TRANSACTIONS_REQUEST as usize);
+
+                        // If no filters are provided the service should return all transactions or the maximum of transactions per request
+                        let result = search_transactions(
+                            &storage_client_memory,
+                            search_transactions_request.clone(),
+                            "ICP".to_string(),
+                            8,
+                        )
+                        .unwrap();
+                        assert_eq!(
+                            result.total_count,
+                            maximum_number_returnable_transactions as i64
+                        );
+                        assert_eq!(result.transactions.len() as i64, result.total_count);
+
+                        // We traverse through all the blocks and check if the transactions are returned correctly if the transaction identifier is provided
+                        for rosetta_block in rosetta_blocks.iter() {
+                            search_transactions_request.transaction_identifier =
+                                Some(rosetta_block.clone().get_transaction_identifier());
+                            let result = search_transactions(
+                                &storage_client_memory,
+                                search_transactions_request.clone(),
+                                "ICP".to_string(),
+                                8,
+                            )
+                            .unwrap();
+
+                            let num_of_transactions_with_hash = rosetta_blocks
+                                .iter()
+                                .filter(|block| {
+                                    (*block).clone().get_transaction_hash()
+                                        == rosetta_block.clone().get_transaction_hash()
+                                })
+                                .count();
+
+                            // The total count should be the number of transactions with the same transaction identifier
+                            assert_eq!(result.total_count, num_of_transactions_with_hash as i64);
+                            // If we provide a transaction identifier the service should return the transactions that match the transaction identifier
+                            compare_transaction(
+                                result.transactions[0].transaction.clone(),
+                                icrc1_rosetta_block_to_rosetta_core_transaction(
+                                    rosetta_block.clone(),
+                                    Currency {
+                                        symbol: "ICP".to_string(),
+                                        decimals: 8,
+                                        metadata: None,
+                                    },
+                                )
+                                .unwrap(),
+                            );
+                            // If the transaction identifier is provided the next offset should be None
+                            assert_eq!(result.next_offset, None);
+                        }
+
+                        search_transactions_request = SearchTransactionsRequest {
+                            ..Default::default()
+                        };
+
+                        // Let's check that setting the max_block option works as intended
+                        search_transactions_request.max_block =
+                            Some(rosetta_blocks.last().unwrap().index as i64);
+                        let result = search_transactions(
+                            &storage_client_memory,
+                            search_transactions_request.clone(),
+                            "ICP".to_string(),
+                            8,
+                        )
+                        .unwrap();
+                        assert_eq!(
+                            result.transactions.len(),
+                            maximum_number_returnable_transactions
+                        );
+
+                        // The transactiosn should be returned in descending order of block index
+                        assert_eq!(
+                            result.transactions.first().unwrap().block_identifier,
+                            rosetta_blocks
+                                .last()
+                                .unwrap()
+                                .clone()
+                                .get_block_identifier()
+                        );
+
+                        // If we set the limit to something below the maximum number of blocks we should only receive that number of blocks
+                        search_transactions_request.max_block = None;
+                        search_transactions_request.limit = Some(1);
+                        let result = search_transactions(
+                            &storage_client_memory,
+                            search_transactions_request.clone(),
+                            "ICP".to_string(),
+                            8,
+                        )
+                        .unwrap();
+                        assert_eq!(result.transactions.len(), 1);
+
+                        // The expected offset is the index of the highest block fetched minus the limit
+                        let expected_offset = 1;
+
+                        assert_eq!(
+                            result.next_offset,
+                            if rosetta_blocks.len() > 1 {
+                                Some(expected_offset)
+                            } else {
+                                None
+                            }
+                        );
+
+                        search_transactions_request.limit = None;
+
+                        // Setting the offset to greater than 0 only makes sense if the storage contains more than 1 block
+                        search_transactions_request.offset =
+                            Some(rosetta_blocks.len().saturating_sub(1).min(1) as i64);
+
+                        let result = search_transactions(
+                            &storage_client_memory,
+                            search_transactions_request.clone(),
+                            "ICP".to_string(),
+                            8,
+                        )
+                        .unwrap();
+                        assert_eq!(
+                            result.transactions.len(),
+                            if rosetta_blocks.len() == 1 {
+                                1
+                            } else {
+                                rosetta_blocks.len().saturating_sub(1)
+                            }
+                            .min(MAX_TRANSACTIONS_PER_SEARCH_TRANSACTIONS_REQUEST as usize)
+                        );
+
+                        search_transactions_request.offset = None;
+                        search_transactions_request.max_block = Some(10);
+                        let result = traverse_all_transactions(
+                            &storage_client_memory,
+                            search_transactions_request.clone(),
+                        );
+
+                        // The service should return the correct number of transactions if the max block is set, max block is an index so if the index is 10 there are 11 blocks/transactions to search through
+                        assert_eq!(result.len(), rosetta_blocks.len().min(10 + 1));
+
+                        search_transactions_request = SearchTransactionsRequest {
+                            ..Default::default()
+                        };
+
+                        // We make sure that the service returns the correct number of transactions for each operation type
+                        search_transactions_request.type_ = Some("TRANSFER".to_string());
+                        let num_of_transfer_transactions = rosetta_blocks
+                            .iter()
+                            .filter(|block| {
+                                matches!(
+                                    block.block.transaction.operation,
+                                    IcrcOperation::Transfer { .. }
+                                )
+                            })
+                            .count();
+                        let result = traverse_all_transactions(
+                            &storage_client_memory,
+                            search_transactions_request.clone(),
+                        );
+                        assert_eq!(result.len(), num_of_transfer_transactions);
+
+                        search_transactions_request.type_ = Some("BURN".to_string());
+                        let num_of_burn_transactions = rosetta_blocks
+                            .iter()
+                            .filter(|block| {
+                                matches!(
+                                    block.block.transaction.operation,
+                                    IcrcOperation::Burn { .. }
+                                )
+                            })
+                            .count();
+                        let result = traverse_all_transactions(
+                            &storage_client_memory,
+                            search_transactions_request.clone(),
+                        );
+                        assert_eq!(result.len(), num_of_burn_transactions);
+
+                        search_transactions_request.type_ = Some("MINT".to_string());
+                        let num_of_mint_transactions = rosetta_blocks
+                            .iter()
+                            .filter(|block| {
+                                matches!(
+                                    block.block.transaction.operation,
+                                    IcrcOperation::Mint { .. }
+                                )
+                            })
+                            .count();
+                        let result = traverse_all_transactions(
+                            &storage_client_memory,
+                            search_transactions_request.clone(),
+                        );
+                        assert_eq!(result.len(), num_of_mint_transactions);
+
+                        search_transactions_request.type_ = Some("APPROVE".to_string());
+                        let num_of_approve_transactions = rosetta_blocks
+                            .iter()
+                            .filter(|block| {
+                                matches!(
+                                    block.block.transaction.operation,
+                                    IcrcOperation::Approve { .. }
+                                )
+                            })
+                            .count();
+                        let result = traverse_all_transactions(
+                            &storage_client_memory,
+                            search_transactions_request.clone(),
+                        );
+                        assert_eq!(result.len(), num_of_approve_transactions);
+
+                        search_transactions_request = SearchTransactionsRequest {
+                            ..Default::default()
+                        };
+
+                        // We make sure that the service returns the correct number of transactions for each account
+                        search_transactions_request.account_identifier = Some(
+                            match rosetta_blocks[0].block.transaction.operation {
+                                IcrcOperation::Transfer { from, .. } => from,
+                                IcrcOperation::Mint { to, .. } => to,
+                                IcrcOperation::Burn { from, .. } => from,
+                                IcrcOperation::Approve { from, .. } => from,
+                            }
+                            .into(),
+                        );
+
+                        let num_of_transactions_with_account = rosetta_blocks
+                            .iter()
+                            .filter(|block| match block.block.transaction.operation {
+                                IcrcOperation::Transfer {
+                                    from, to, spender, ..
+                                } => spender
+                                    .map_or(vec![from, to], |spender| vec![from, to, spender])
+                                    .contains(
+                                        &search_transactions_request
+                                            .account_identifier
+                                            .clone()
+                                            .unwrap()
+                                            .try_into()
+                                            .unwrap(),
+                                    ),
+                                IcrcOperation::Mint { to, .. } => {
+                                    to == search_transactions_request
+                                        .account_identifier
+                                        .clone()
+                                        .unwrap()
+                                        .try_into()
+                                        .unwrap()
+                                }
+                                IcrcOperation::Burn { from, spender, .. } => spender
+                                    .map_or(vec![from], |spender| vec![from, spender])
+                                    .contains(
+                                        &search_transactions_request
+                                            .account_identifier
+                                            .clone()
+                                            .unwrap()
+                                            .try_into()
+                                            .unwrap(),
+                                    ),
+                                IcrcOperation::Approve { from, spender, .. } => [from, spender]
+                                    .contains(
+                                        &search_transactions_request
+                                            .account_identifier
+                                            .clone()
+                                            .unwrap()
+                                            .try_into()
+                                            .unwrap(),
+                                    ),
+                            })
+                            .count();
+
+                        let result = traverse_all_transactions(
+                            &storage_client_memory,
+                            search_transactions_request.clone(),
+                        );
+                        assert_eq!(result.len(), num_of_transactions_with_account);
+                        let involved_accounts = result[0]
+                            .transaction
+                            .operations
+                            .iter()
+                            .map(|op| op.account.clone().unwrap())
+                            .collect::<Vec<AccountIdentifier>>();
+                        assert!(involved_accounts.contains(
+                            &search_transactions_request
+                                .account_identifier
+                                .clone()
+                                .unwrap()
+                        ));
+                    }
+                    Ok(())
+                },
+            )
+            .unwrap()
     }
 }
