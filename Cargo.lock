@@ -11583,10 +11583,9 @@ version = "0.9.0"
 dependencies = [
  "bincode",
  "ic-base-types",
- "ic-consensus",
+ "ic-crypto-test-utils-ni-dkg",
  "ic-interfaces",
  "ic-protobuf",
- "ic-test-utilities-registry",
  "ic-test-utilities-types",
  "ic-types",
  "mockall",
