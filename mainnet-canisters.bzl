@@ -14,8 +14,8 @@ def mainnet_core_nns_canisters():
     http_file(
         name = "mainnet_nns_registry_canister",
         downloaded_file_path = "registry-canister.wasm.gz",
-        sha256 = "641b6607bff6cd979fcf8af028831fc66d5f7f2bacc6ca498861cf7a8df4ec2c",
-        url = "https://download.dfinity.systems/ic/87f48a595b6f666fbc7fe6ad4081aa98fd113d12/canisters/registry-canister.wasm.gz",
+        sha256 = "57050d34ce370dacd7d323bf1c3aea448ce7e9636fe658b822f8902fe0732188",
+        url = "https://download.dfinity.systems/ic/d747b2bac7fd99d84a012496151f0917d849fbf8/canisters/registry-canister.wasm.gz",
     )
 
     http_file(
@@ -28,8 +28,8 @@ def mainnet_core_nns_canisters():
     http_file(
         name = "mainnet_icp_ledger_canister",
         downloaded_file_path = "ledger-canister_notify-method.wasm.gz",
-        sha256 = "cb16acc20a8948b68cc40b7d7328a53ec36c3cf713b3111921b49d009b98c5a5",
-        url = "https://download.dfinity.systems/ic/c63b73baa88d65a45a60f4d7e0ec043f1fbf98be/canisters/ledger-canister_notify-method.wasm.gz",
+        sha256 = "aca61e669e737133b552d0f1ddafc40299f3260daf8f57e352774b17aa82bbc1",
+        url = "https://download.dfinity.systems/ic/98eb213581b239c3829eee7076bea74acad9937b/canisters/ledger-canister_notify-method.wasm.gz",
     )
 
     http_file(
@@ -42,15 +42,15 @@ def mainnet_core_nns_canisters():
     http_file(
         name = "mainnet_nns_root-canister",
         downloaded_file_path = "root-canister.wasm.gz",
-        sha256 = "25af9548c5594dc95ba48e6140f4eaa0b59ef0c51ba939a73b1da160bed450ae",
-        url = "https://download.dfinity.systems/ic/80261cb2fdf2e0b49c81040b97a7cac2dfec2251/canisters/root-canister.wasm.gz",
+        sha256 = "c18561e245a42b28add7e36d8fdd51affed75fc3e855f01d466354c9dd222f88",
+        url = "https://download.dfinity.systems/ic/7a3db052ed4c3306272ed372039d9775f189c0bc/canisters/root-canister.wasm.gz",
     )
 
     http_file(
         name = "mainnet_nns_lifeline_canister",
         downloaded_file_path = "lifeline-canister.wasm.gz",
         sha256 = "6d3029dcd359f80cd64bb68bbc8bd95b810b08bd29b9ef1054118a5285f2abc5",
-        url = "https://download.dfinity.systems/ic/87f48a595b6f666fbc7fe6ad4081aa98fd113d12/canisters/lifeline_canister.wasm.gz",
+        url = "https://download.dfinity.systems/ic/87f48a595b6f666fbc7fe6ad4081aa98fd113d12/canisters/lifeline-canister.wasm.gz",
     )
 
     http_file(
@@ -63,8 +63,8 @@ def mainnet_core_nns_canisters():
     http_file(
         name = "mainnet_nns_cycles-minting-canister",
         downloaded_file_path = "cycles-minting-canister.wasm.gz",
-        sha256 = "fc1655302a81cd1b7148a6f66479b2830bd0d567d04780720e7bdd6c5b124fb5",
-        url = "https://download.dfinity.systems/ic/e813c43a337a26c026c2f2ec19099bd2036e7280/canisters/cycles-minting-canister.wasm.gz",
+        sha256 = "1e73a3c6dd6468078d0836023bfb357da8a2a05840f2cd50f069a04f03da6530",
+        url = "https://download.dfinity.systems/ic/e7c7105a54fdf43892c46b5560d5dbee687dcba0/canisters/cycles-minting-canister.wasm.gz",
     )
 
     http_file(

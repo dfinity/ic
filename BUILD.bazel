@@ -12,6 +12,7 @@ exports_files([
     "clippy.toml",
     "rustfmt.toml",
     "WORKSPACE.bazel",
+    "mainnet-canisters.bzl",
 ])
 
 # bazel/workspace_status.sh will write the current timestamp to this file on every run to provade an input that always changes for some targets.
