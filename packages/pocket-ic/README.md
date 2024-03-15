@@ -51,6 +51,7 @@ Note that instances are shared among test cases there, which is not recommended 
 
 ## Documentation
 * [How to use this library](HOWTO.md)
+* [API documentation](https://docs.rs/pocket-ic/)
 * [PocketIC repo](https://github.com/dfinity/pocketic)
 * [Why PocketIC](https://github.com/dfinity/pocketic#why-pocketic)
 * [Changelog of PocketIC Rust](CHANGELOG.md)
