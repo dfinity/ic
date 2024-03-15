@@ -12,6 +12,7 @@ icos_build(
     name = "local-base-prod",
     build_local_base_image = True,
     image_deps_func = image_deps,
+    tags = ["manual"],
     upgrades = False,
     upload_prefix = None,  # Do not upload locally built base images
     vuln_scan = False,

@@ -17,6 +17,7 @@ exports_files([
 filegroup(
     name = "rootfs-files",
     srcs = glob(["rootfs/**"]),
+    tags = ["manual"],
 )
 
 # All setup-os targets are named the same, just stay in different submodules.
