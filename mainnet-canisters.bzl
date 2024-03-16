@@ -50,7 +50,7 @@ def mainnet_core_nns_canisters():
         name = "mainnet_nns_lifeline_canister",
         downloaded_file_path = "lifeline-canister.wasm.gz",
         sha256 = "6d3029dcd359f80cd64bb68bbc8bd95b810b08bd29b9ef1054118a5285f2abc5",
-        url = "https://download.dfinity.systems/ic/87f48a595b6f666fbc7fe6ad4081aa98fd113d12/canisters/lifeline-canister.wasm.gz",
+        url = "https://download.dfinity.systems/ic/87f48a595b6f666fbc7fe6ad4081aa98fd113d12/canisters/lifeline_canister.wasm.gz",
     )
 
     http_file(

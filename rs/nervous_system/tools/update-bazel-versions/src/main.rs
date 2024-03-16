@@ -37,7 +37,7 @@ pub const CORE_NNS_CANISTERS: [(&str, &str, CanisterId); 8] = [
     ),
     (
         "mainnet_nns_lifeline_canister",
-        "lifeline-canister.wasm.gz",
+        "lifeline_canister.wasm.gz",
         LIFELINE_CANISTER_ID,
     ),
     (
