@@ -5540,11 +5540,9 @@ dependencies = [
 name = "ic-canister-client-sender"
 version = "0.9.0"
 dependencies = [
- "ed25519-consensus",
  "ic-base-types",
  "ic-crypto-ecdsa-secp256k1",
- "ic-crypto-internal-types",
- "ic-crypto-utils-basic-sig",
+ "ic-crypto-ed25519",
  "ic-types",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
@@ -6406,10 +6404,8 @@ name = "ic-crypto-internal-basic-sig-der-utils"
 version = "0.9.0"
 dependencies = [
  "hex",
- "ic-crypto-internal-test-vectors",
  "ic-types",
  "simple_asn1",
- "zeroize",
 ]
 
 [[package]]
@@ -7340,15 +7336,10 @@ name = "ic-crypto-utils-basic-sig"
 version = "0.9.0"
 dependencies = [
  "assert_matches",
- "base64 0.13.1",
- "ed25519-consensus",
  "hex",
  "ic-base-types",
- "ic-crypto-internal-basic-sig-der-utils",
- "ic-crypto-internal-basic-sig-ed25519",
- "ic-crypto-internal-types",
+ "ic-crypto-ed25519",
  "ic-protobuf",
- "simple_asn1",
 ]
 
 [[package]]
@@ -8372,11 +8363,8 @@ name = "ic-identity"
 version = "0.9.0"
 dependencies = [
  "anyhow",
- "clap 3.2.25",
- "ed25519-consensus",
- "ic-crypto-internal-types",
- "ic-crypto-utils-basic-sig",
- "rand 0.8.5",
+ "clap 4.4.6",
+ "ic-crypto-ed25519",
 ]
 
 [[package]]
@@ -10589,8 +10577,7 @@ dependencies = [
  "futures",
  "ic-base-types",
  "ic-canister-client",
- "ic-crypto-internal-types",
- "ic-crypto-utils-basic-sig",
+ "ic-crypto-ed25519",
  "ic-crypto-utils-threshold-sig-der",
  "ic-metrics",
  "ic-protobuf",
@@ -11464,8 +11451,7 @@ name = "ic-test-identity"
 version = "0.9.0"
 dependencies = [
  "ic-canister-client-sender",
- "ic-crypto-internal-types",
- "ic-crypto-utils-basic-sig",
+ "ic-crypto-ed25519",
  "ic-types",
  "lazy_static",
  "rand 0.8.5",

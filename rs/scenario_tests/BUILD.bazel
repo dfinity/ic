@@ -4,8 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "//rs/canister_client",
-    "//rs/crypto/internal/crypto_lib/types",
-    "//rs/crypto/utils/basic_sig",
+    "//rs/crypto/ed25519",
     "//rs/crypto/utils/threshold_sig_der",
     "//rs/monitoring/metrics",
     "//rs/protobuf",

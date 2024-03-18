@@ -8,8 +8,5 @@ documentation.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
-clap = { version = "3.2.25", features = ["derive"] }
-ed25519-consensus = "2.0.1"
-rand = "0.8"
-ic-crypto-utils-basic-sig = { path = "../crypto/utils/basic_sig" }
-ic-crypto-internal-types = { path = "../crypto/internal/crypto_lib/types" }
+clap = { workspace = true }
+ic-crypto-ed25519 = { path = "../crypto/ed25519" }

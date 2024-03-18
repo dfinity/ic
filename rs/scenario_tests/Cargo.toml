@@ -31,8 +31,7 @@ tester = "0.7.0"
 tokio = { workspace = true }
 url = "2.1.1"
 xnet-test = { path = "../rust_canisters/xnet_test" }
-ic-crypto-internal-types = { path = "../crypto/internal/crypto_lib/types" }
-ic-crypto-utils-basic-sig = { path = "../crypto/utils/basic_sig" }
+ic-crypto-ed25519 = { path = "../crypto/ed25519" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 
 [[bin]]

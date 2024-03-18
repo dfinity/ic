@@ -80,7 +80,7 @@ fn public_key_deserialization_rejects_keys_of_incorrect_length() {
 
 #[test]
 fn batch_verification_works() {
-    fn batch_verifies(msg: &[[u8; 32]], sigs: &[Vec<u8>], keys: &[PublicKey]) -> bool {
+    fn batch_verifies(msg: &[[u8; 32]], sigs: &[[u8; 64]], keys: &[PublicKey]) -> bool {
         let msg_ref = msg.iter().map(|m| m.as_ref()).collect::<Vec<&[u8]>>();
         let sig_ref = sigs.iter().map(|s| s.as_ref()).collect::<Vec<&[u8]>>();
         PublicKey::batch_verify(&msg_ref, &sig_ref, keys).is_ok()
@@ -213,6 +213,65 @@ fn can_parse_pkcs8_v2_der_secret_key() {
         hex::encode(sk.serialize_raw()),
         "d4ee72dbf913584ad5b6d8f1f769f8ad3afe7c28cbf1d4fbe097a88f44755842"
     );
+}
+
+#[test]
+fn can_parse_dfx_created_private_key() {
+    let dfx_key: &str = "-----BEGIN PRIVATE KEY-----\nMFMCAQEwBQYDK2VwBCIEIPXo8WUQM26wS/cT6mmHO1ClYHixF46uhRoQlLmPfsQl\noSMDIQAY6M8L0Ocji3w8k2EBMTwhVJT0G6HI1ZZmWrPOzv8L1Q==\n-----END PRIVATE KEY-----\n";
+
+    match PrivateKey::deserialize_pkcs8_pem(dfx_key) {
+        Ok(_sk) => { /* success */ }
+        Err(e) => panic!("Unexpected error serializing DFX generated key {:?}", e),
+    }
+}
+
+#[test]
+fn can_pass_old_basic_sig_utils_parsing_tests() {
+    struct PublicKeyParsingTest {
+        raw: [u8; 32],
+        der: [u8; 44],
+        pem: String,
+    }
+
+    impl PublicKeyParsingTest {
+        fn new(raw: [u8; 32], der: [u8; 44], pem: &'static str) -> Self {
+            Self {
+                raw,
+                der,
+                pem: pem.to_string(),
+            }
+        }
+    }
+
+    let tests = [
+        PublicKeyParsingTest::new(hex!("B3997656BA51FF6DA37B61D8D549EC80717266ECF48FB5DA52B654412634844C"),
+                                  hex!("302A300506032B6570032100B3997656BA51FF6DA37B61D8D549EC80717266ECF48FB5DA52B654412634844C"),
+                                  "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAs5l2VrpR/22je2HY1UnsgHFyZuz0j7XaUrZUQSY0hEw=\n-----END PUBLIC KEY-----\n"
+        ),
+        PublicKeyParsingTest::new(hex!("A5AFB5FEB6DFB6DDF5DD6563856FFF5484F5FE304391D9ED06697861F220C610"),
+                                  hex!("302A300506032B6570032100A5AFB5FEB6DFB6DDF5DD6563856FFF5484F5FE304391D9ED06697861F220C610"),
+                                  "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEApa+1/rbftt313WVjhW//VIT1/jBDkdntBml4YfIgxhA=\n-----END PUBLIC KEY-----\n"
+        ),
+        PublicKeyParsingTest::new(hex!("C8413108F121CB794A10804D15F613E40ECC7C78A4EC567040DDF78467C71DFF"),
+                                  hex!("302A300506032B6570032100C8413108F121CB794A10804D15F613E40ECC7C78A4EC567040DDF78467C71DFF"),
+                                  "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAyEExCPEhy3lKEIBNFfYT5A7MfHik7FZwQN33hGfHHf8=\n-----END PUBLIC KEY-----\n"
+        ),
+    ];
+
+    for test in &tests {
+        let from_raw = PublicKey::deserialize_raw(&test.raw).expect("Invalid public key (raw)");
+        let from_der =
+            PublicKey::deserialize_rfc8410_der(&test.der).expect("Invalid public key (DER)");
+        let from_pem =
+            PublicKey::deserialize_rfc8410_pem(&test.pem).expect("Invalid public key (PEM)");
+
+        assert_eq!(from_raw, from_der);
+        assert_eq!(from_raw, from_pem);
+
+        assert_eq!(from_raw.serialize_raw(), test.raw);
+        assert_eq!(from_der.serialize_raw(), test.raw);
+        assert_eq!(from_pem.serialize_raw(), test.raw);
+    }
 }
 
 #[test]
