@@ -127,7 +127,7 @@ async fn main() -> anyhow::Result<()> {
                 .map_err(|e| anyhow::anyhow!("Failed to build approve operations: {:?}", e))?;
 
             rosetta_client
-                .make_and_submit_transaction(
+                .make_submit_and_wait_for_transaction(
                     &sender_keypair,
                     network_identifier.clone(),
                     operations,
@@ -163,7 +163,7 @@ async fn main() -> anyhow::Result<()> {
                 .map_err(|e| anyhow::anyhow!("Failed to build transfer operations: {:?}", e))?;
 
             rosetta_client
-                .make_and_submit_transaction(
+                .make_submit_and_wait_for_transaction(
                     &sender_keypair,
                     network_identifier.clone(),
                     operations,

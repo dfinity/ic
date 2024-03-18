@@ -1,15 +1,11 @@
 use crate::common::types::OperationType;
 use anyhow::anyhow;
 use anyhow::bail;
-use candid::{Decode, Nat};
 use ic_agent::agent::Envelope;
 use ic_agent::agent::EnvelopeContent;
-use icrc_ledger_types::icrc1::transfer::TransferError;
-use icrc_ledger_types::icrc2::approve::ApproveError;
 use rosetta_core::objects::*;
 use serde::Deserialize;
 use serde::Serialize;
-use std::cmp;
 use std::str::FromStr;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -37,22 +33,11 @@ impl TryFrom<Option<ObjectMap>> for ConstructionMetadataRequestOptions {
     }
 }
 
-// Every transaction that we want to send to the IC consists of two envelopes that we have to send to the IC,
-// the call with the content of our request and the read that fetches the result
-// Each Envelope contains a valid signature of the request to the IC and the content of the request.
-// For the Call request the content is the canister method call and for the State request the content is simply
-// that we want to known whether there exists a result for the Call request yet.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EnvelopePair<'a> {
-    pub call_envelope: Envelope<'a>,
-    pub read_state_envelope: Envelope<'a>,
-}
-
-// A signed transaction contains a list of envelope pairs. The list exists because we do not know when we create the envelope pairs which ingress interval is going to be used by the user
-// To support the 24h window of valid transactions a single signed transaction does not contain a single envelope pair but 24*3600/INGRESS_INTERVAL envelope pairs, one of every possible ingress interval.
+// A signed transaction contains a list of envelopes. The list exists because we do not know when we create the envelopes which ingress interval is going to be used by the user
+// To support the 24h window of valid transactions a single signed transaction does not contain a single envelope but 24*3600/INGRESS_INTERVAL envelopes, one for every possible ingress interval.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SignedTransaction<'a> {
-    pub envelope_pairs: Vec<EnvelopePair<'a>>,
+    pub envelopes: Vec<Envelope<'a>>,
 }
 
 impl<'a> ToString for SignedTransaction<'a> {
@@ -69,26 +54,16 @@ impl<'a> FromStr for SignedTransaction<'a> {
 }
 impl<'a> SignedTransaction<'a> {
     pub fn get_lowest_ingress_expiry(&self) -> Option<u64> {
-        self.envelope_pairs
+        self.envelopes
             .iter()
-            .map(|pair| {
-                cmp::min(
-                    pair.call_envelope.content.ingress_expiry(),
-                    pair.read_state_envelope.content.ingress_expiry(),
-                )
-            })
+            .map(|envelope| envelope.content.ingress_expiry())
             .min()
     }
 
     pub fn get_highest_ingress_expiry(&self) -> Option<u64> {
-        self.envelope_pairs
+        self.envelopes
             .iter()
-            .map(|pair| {
-                cmp::max(
-                    pair.call_envelope.content.ingress_expiry(),
-                    pair.read_state_envelope.content.ingress_expiry(),
-                )
-            })
+            .map(|envelope| envelope.content.ingress_expiry())
             .max()
     }
 }
@@ -237,103 +212,5 @@ impl TryFrom<Option<ObjectMap>> for ConstructionPayloadsRequestMetadata {
     fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default()))
             .map_err(|e| format!("Could not parse MetadataOptions from JSON object: {}", e))
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-#[serde(tag = "status", content = "response")]
-pub enum Status {
-    Successful,
-    Unsuccessful,
-}
-
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct IcrcLedgerResult {
-    pub status: Status,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub response: Option<Object>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct ConstructionSubmitResponseMetadata {
-    pub operations: Vec<Operation>,
-    pub result: IcrcLedgerResult,
-}
-
-impl ConstructionSubmitResponseMetadata {
-    pub fn new(operations: Vec<Operation>, bytes: Vec<u8>) -> anyhow::Result<Self> {
-        let canister_method_name: CanisterMethodName =
-            CanisterMethodName::new_from_rosetta_core_operations(&operations)?;
-        let response = match canister_method_name {
-            CanisterMethodName::Icrc1Transfer | CanisterMethodName::Icrc2TransferFrom => {
-                match Decode!(bytes.as_slice(), Result<Nat, TransferError>)? {
-                    Ok(nat) => IcrcLedgerResult {
-                        status: Status::Successful,
-                        response: Some(Object::from(serde_json::json!({
-                            "block_index": nat.to_string()
-                        }))),
-                    },
-                    Err(e) => IcrcLedgerResult {
-                        status: Status::Unsuccessful,
-                        response: Some(Object::from(serde_json::json!({
-                            "transfer_error": format!("{:?}", e)
-                        }))),
-                    },
-                }
-            }
-            CanisterMethodName::Icrc2Approve => {
-                match Decode!(bytes.as_slice(), Result<Nat, ApproveError>)? {
-                    Ok(nat) => IcrcLedgerResult {
-                        status: Status::Successful,
-                        response: Some(Object::from(serde_json::json!({
-                            "block_index": nat.to_string()
-                        }))),
-                    },
-                    Err(e) => IcrcLedgerResult {
-                        status: Status::Unsuccessful,
-                        response: Some(Object::from(serde_json::json!({
-                            "approve_error": format!("{:?}", e)
-                        }))),
-                    },
-                }
-            }
-        };
-
-        Ok(Self {
-            operations: operations.clone(),
-            result: response,
-        })
-    }
-}
-
-impl TryFrom<ConstructionSubmitResponseMetadata> for ObjectMap {
-    type Error = anyhow::Error;
-    fn try_from(d: ConstructionSubmitResponseMetadata) -> Result<ObjectMap, Self::Error> {
-        match serde_json::to_value(d) {
-            Ok(serde_json::Value::Object(o)) => Ok(o),
-            Ok(o) => bail!("Could not convert ConstructionSubmitResponseMetadata to ObjectMap. Expected type Object but received: {:?}",o),
-            Err(err) => bail!("Could not convert ConstructionSubmitResponseMetadata to ObjectMap: {:?}",err),
-        }
-    }
-}
-
-impl TryFrom<ObjectMap> for ConstructionSubmitResponseMetadata {
-    type Error = crate::common::types::Error;
-    fn try_from(o: ObjectMap) -> Result<Self, crate::common::types::Error> {
-        serde_json::from_value(serde_json::Value::Object(o))
-            .map_err(|e| crate::common::types::Error::invalid_metadata(&e))
-    }
-}
-
-impl TryFrom<Option<ObjectMap>> for ConstructionSubmitResponseMetadata {
-    type Error = String;
-    fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
-        serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
-            format!(
-                "Could not parse ConstructionSubmitResponseMetadata from JSON object: {}",
-                e
-            )
-        })
     }
 }

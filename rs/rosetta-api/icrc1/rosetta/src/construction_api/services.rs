@@ -79,24 +79,13 @@ pub async fn construction_submit(
     signed_transaction: String,
     icrc1_ledger_id: CanisterId,
     icrc1_agent: Arc<Icrc1Agent>,
-    decimals: u8,
-    symbol: String,
 ) -> Result<ConstructionSubmitResponse, Error> {
     let signed_transaction = SignedTransaction::from_str(&signed_transaction)
         .map_err(|err| Error::parsing_unsuccessful(&err))?;
 
-    handle_construction_submit(
-        signed_transaction,
-        icrc1_ledger_id.into(),
-        icrc1_agent,
-        Currency {
-            symbol,
-            decimals: decimals as u32,
-            metadata: None,
-        },
-    )
-    .await
-    .map_err(|err| Error::processing_construction_failed(&err))
+    handle_construction_submit(signed_transaction, icrc1_ledger_id.into(), icrc1_agent)
+        .await
+        .map_err(|err| Error::processing_construction_failed(&err))
 }
 
 pub fn construction_hash(signed_transaction: String) -> Result<ConstructionHashResponse, Error> {
@@ -216,9 +205,9 @@ pub fn construction_parse(
             signed_transaction.get_lowest_ingress_expiry(),
             signed_transaction.get_highest_ingress_expiry(),
             signed_transaction
-                .envelope_pairs
+                .envelopes
                 .into_iter()
-                .map(|envelope_pair| envelope_pair.call_envelope.content.into_owned())
+                .map(|envelope| envelope.content.into_owned())
                 .collect(),
         )
     } else {
@@ -400,7 +389,7 @@ mod tests {
                             _ => panic!("Invalid operation"),
                         };
                         let rosetta_core_operations = icrc1_operation_to_rosetta_core_operations(
-                            icrc1_transaction.operation.into(),
+                            icrc1_transaction.clone().operation.into(),
                             currency.clone(),
                             fee.map(|fee| fee.into()),
                         )
@@ -471,7 +460,6 @@ mod tests {
                             }
                             (_, _) => {}
                         }
-                        println!("{:?}", payloads_metadata);
                         let construction_parse_response = construction_parse(
                             construction_payloads_response
                                 .clone()
@@ -620,10 +608,9 @@ mod tests {
                                 &canister_method_name,
                                 &arg_with_caller.caller.sender().unwrap(),
                                 match signed_transaction
-                                    .envelope_pairs
+                                    .envelopes
                                     .first()
                                     .unwrap()
-                                    .call_envelope
                                     .content
                                     .clone()
                                     .into_owned()

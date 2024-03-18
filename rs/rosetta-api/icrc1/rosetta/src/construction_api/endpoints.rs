@@ -59,8 +59,6 @@ pub async fn construction_submit(
             request.signed_transaction,
             state.ledger_id,
             state.icrc1_agent.clone(),
-            state.metadata.decimals,
-            state.metadata.symbol.clone(),
         )
         .await?,
     ))
