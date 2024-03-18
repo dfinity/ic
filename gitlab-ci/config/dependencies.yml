@@ -11,18 +11,14 @@ dependencies-check:
   needs: []  # don't wait on other jobs
   variables:
     PYTHONPATH : "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
-    CARGO_AUDIT_VERSION : "0.18.3"
     SHELL_WRAPPER: "/usr/bin/time"
   script:
     - |
       set -euo pipefail
       pip3 install --ignore-installed -r requirements.txt
-      $SHELL_WRAPPER cargo install cargo-audit --version "${CARGO_AUDIT_VERSION}"
       cd "${CI_PROJECT_DIR}"/gitlab-ci/src/dependencies/
       $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_merge_job.py
-  # TODO(PSEC)
-  # Remove allow_failure : true after CI job issue is resolved
-  allow_failure: true
+  allow_failure: false
 
 dependency-scan-nightly:
   rules:
@@ -30,7 +26,6 @@ dependency-scan-nightly:
   needs: []  # don't wait on other jobs
   variables:
     PYTHONPATH : "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
-    CARGO_AUDIT_VERSION : "0.18.3"
     CARGO_WASMPACK_VERSION: "0.12.1"
     DEFAULT_NODE_VERSION : "20"
     SHELL_WRAPPER: "/usr/bin/time"
@@ -38,7 +33,6 @@ dependency-scan-nightly:
     - |
       set -euo pipefail
       pip3 install --ignore-installed -r requirements.txt
-      $SHELL_WRAPPER cargo install cargo-audit --version "${CARGO_AUDIT_VERSION}"
       $SHELL_WRAPPER cargo install wasm-pack --version "${CARGO_WASMPACK_VERSION}"
       # shellcheck disable=SC1090
       source "${NVM_DIR}/nvm.sh"
@@ -59,13 +53,11 @@ dependency-scan-release-cut:
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/'
   variables:
     PYTHONPATH : "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
-    CARGO_AUDIT_VERSION : "0.18.3"
     SHELL_WRAPPER: "/usr/bin/time"
   script:
     - |
       set -euo pipefail
       pip3 install --ignore-installed -r requirements.txt
-      $SHELL_WRAPPER cargo install cargo-audit --version "${CARGO_AUDIT_VERSION}"
       cd "${CI_PROJECT_DIR}"/gitlab-ci/src/dependencies
       $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_release_job.py
   allow_failure: false
