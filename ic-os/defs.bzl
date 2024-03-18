@@ -803,7 +803,6 @@ def boundary_node_icos_build(
         ],
         remote_subdir = "boundary-os/disk-img" + upload_suffix,
         visibility = visibility,
-        tags = ["manual"],
     )
 
     output_files(
