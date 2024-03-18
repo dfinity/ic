@@ -2461,9 +2461,21 @@ impl CanisterLog {
         &self.records
     }
 
+    /// Returns the maximum allowed size of a canister log buffer.
+    pub fn capacity(&self) -> usize {
+        MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE
+    }
+
+    /// Returns the remaining space in the canister log buffer.
+    pub fn remaining_space(&self) -> usize {
+        MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE.saturating_sub(self.records.data_size())
+    }
+
     /// Adds a new log record.
     pub fn add_record(&mut self, timestamp_nanos: u64, content: &[u8]) {
-        // Keep the new log record size within limit.
+        // LINT.IfChange
+        // Keep the new log record size within limit,
+        // this must be in sync with `logging_charge_bytes` in `system_api.rs`.
         let max_content_size =
             MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE - CanisterLogRecord::default().data_size();
         let size = content.len().min(max_content_size);
@@ -2472,6 +2484,7 @@ impl CanisterLog {
             timestamp_nanos,
             content: content[..size].to_vec(),
         });
+        // LINT.ThenChange(logging_charge_bytes_rule)
         // Update the next canister log record index.
         self.next_idx += 1;
         // Keep the total canister log records size within limit.
