@@ -1603,7 +1603,8 @@ impl Validator {
                         Some(timestamp) if now > timestamp + CATCH_UP_HOLD_OF_TIME => {
                             warn!(
                                 self.log,
-                                "Validating CUP after holding it back for {} seconds",
+                                "Validating CUP at height {} after holding it back for {} seconds",
+                                cup_height,
                                 CATCH_UP_HOLD_OF_TIME.as_secs()
                             );
                             Ok(())
