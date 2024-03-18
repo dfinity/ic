@@ -116,6 +116,10 @@ RUN curl --fail https://sh.rustup.rs -sSf \
     rustup target add wasm32-unknown-unknown && \
     rustup component add clippy
 
+# Add cargo-audit
+ARG CARGO_AUDIT_VERSION=0.20.0
+RUN cargo install cargo-audit --version ${CARGO_AUDIT_VERSION}
+
 # Add buf
 ARG BUF_BIN="/usr/local/bin/buf"
 ARG BUF_VERSION="1.28.1"

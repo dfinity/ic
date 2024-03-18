@@ -301,6 +301,7 @@
         - "**/*.lock"
         - "**/*.rs"
         - "**/*.toml"
+        - gitlab-ci/container/Dockerfile
       if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
     - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/
@@ -668,6 +669,7 @@ bazel-config-check-all-rebuild:
           - "**/*.lock"
           - "**/*.rs"
           - "**/*.toml"
+          - gitlab-ci/container/Dockerfile
         if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"
       - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
       - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/
@@ -1386,6 +1388,7 @@ bazel-test-macos:
           - "**/*.lock"
           - "**/*.rs"
           - "**/*.toml"
+          - gitlab-ci/container/Dockerfile
         if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"
       - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
       - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/
@@ -2510,7 +2513,7 @@ default:
     expire_in: 3 days
     when: always
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:b83993271dbb80cd1f4e3ab3286a2dc4b4c8f69e5326e40a623559312c68ad62
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:e95ed63e9addda1b335c50fde800a8d9f0aad91a0d0cbe7da2fa782dc6ac1d4c
   interruptible: true
   retry:
     max: 2
@@ -2559,7 +2562,7 @@ delegated-identity-bench:
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: cdslo
 dependencies-check:
-  allow_failure: true
+  allow_failure: false
   extends:
     - ".rules-master-pipeline-no-merge-train-rust-bazel-changed"
   needs: []
@@ -2572,6 +2575,7 @@ dependencies-check:
         - "**/*.lock"
         - "**/*.rs"
         - "**/*.toml"
+        - gitlab-ci/container/Dockerfile
       if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
     - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/
@@ -2579,11 +2583,9 @@ dependencies-check:
     - |
       set -euo pipefail
       pip3 install --ignore-installed -r requirements.txt
-      $SHELL_WRAPPER cargo install cargo-audit --version "${CARGO_AUDIT_VERSION}"
       cd "${CI_PROJECT_DIR}"/gitlab-ci/src/dependencies/
       $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_merge_job.py
   variables:
-    CARGO_AUDIT_VERSION: 0.18.3
     PYTHONPATH: "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
     SHELL_WRAPPER: "/usr/bin/time"
 dependency-scan-nightly:
@@ -2595,7 +2597,6 @@ dependency-scan-nightly:
     - |
       set -euo pipefail
       pip3 install --ignore-installed -r requirements.txt
-      $SHELL_WRAPPER cargo install cargo-audit --version "${CARGO_AUDIT_VERSION}"
       $SHELL_WRAPPER cargo install wasm-pack --version "${CARGO_WASMPACK_VERSION}"
       # shellcheck disable=SC1090
       source "${NVM_DIR}/nvm.sh"
@@ -2607,7 +2608,6 @@ dependency-scan-nightly:
       $SHELL_WRAPPER python3 job/npm_scanner_periodic_job.py
       $SHELL_WRAPPER python3 job/bazel_trivy_container_ic_scanner_periodic_job.py
   variables:
-    CARGO_AUDIT_VERSION: 0.18.3
     CARGO_WASMPACK_VERSION: 0.12.1
     DEFAULT_NODE_VERSION: '20'
     PYTHONPATH: "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
@@ -2621,11 +2621,9 @@ dependency-scan-release-cut:
     - |
       set -euo pipefail
       pip3 install --ignore-installed -r requirements.txt
-      $SHELL_WRAPPER cargo install cargo-audit --version "${CARGO_AUDIT_VERSION}"
       cd "${CI_PROJECT_DIR}"/gitlab-ci/src/dependencies
       $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_release_job.py
   variables:
-    CARGO_AUDIT_VERSION: 0.18.3
     PYTHONPATH: "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
     SHELL_WRAPPER: "/usr/bin/time"
 heavy-memory-update-performance-test-nightly:
