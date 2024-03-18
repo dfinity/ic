@@ -205,11 +205,11 @@ fn should_not_mint_when_logs_inconsistent() {
     let deposit_params = DepositParams::default();
     let (ankr_logs, public_node_logs) = {
         let ankr_log_entry = deposit_params.eth_log_entry();
-        let mut cloudflare_log_entry = ankr_log_entry.clone();
-        cloudflare_log_entry.amount += 1;
+        let mut llama_nodes_log_entry = ankr_log_entry.clone();
+        llama_nodes_log_entry.amount += 1;
         (
             vec![ethers_core::types::Log::from(ankr_log_entry)],
-            vec![ethers_core::types::Log::from(cloudflare_log_entry)],
+            vec![ethers_core::types::Log::from(llama_nodes_log_entry)],
         )
     };
     assert_ne!(ankr_logs, public_node_logs);
@@ -218,7 +218,7 @@ fn should_not_mint_when_logs_inconsistent() {
         .deposit(deposit_params.with_mock_eth_get_logs(move |mock| {
             mock.respond_with(JsonRpcProvider::Ankr, ankr_logs.clone())
                 .respond_with(JsonRpcProvider::PublicNode, public_node_logs.clone())
-                .respond_with(JsonRpcProvider::Cloudflare, ankr_logs.clone())
+                .respond_with(JsonRpcProvider::LlamaNodes, ankr_logs.clone())
         }))
         .expect_no_mint();
 }
@@ -374,7 +374,7 @@ fn should_not_send_eth_transaction_when_fee_history_inconsistent() {
                 },
             )
             .modify_response(
-                JsonRpcProvider::Cloudflare,
+                JsonRpcProvider::LlamaNodes,
                 &mut |response: &mut ethers_core::types::FeeHistory| {
                     response.oldest_block = 0x17740744_u64.into()
                 },
