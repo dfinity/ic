@@ -40,7 +40,7 @@ pub struct SettledTransaction {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub icrc1_memo: Option<ByteBuf>,
     /// The time the block with this transaction was created.
-    pub timestamp: TimeStamp,
+    pub timestamp: Option<TimeStamp>,
 }
 
 impl From<Block> for SettledTransaction {
@@ -50,7 +50,7 @@ impl From<Block> for SettledTransaction {
             memo: block.transaction.memo,
             created_at_time: block.transaction.created_at_time,
             icrc1_memo: block.transaction.icrc1_memo,
-            timestamp: block.timestamp,
+            timestamp: Some(block.timestamp),
         }
     }
 }

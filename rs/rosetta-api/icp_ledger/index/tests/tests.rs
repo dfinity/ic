@@ -444,8 +444,8 @@ fn test_archive_indexing() {
     assert_ledger_index_parity(env, ledger_id, index_id);
 }
 
-fn expected_block_timestamp(phase: u32, start_time: SystemTime) -> TimeStamp {
-    TimeStamp::from(
+fn expected_block_timestamp(phase: u32, start_time: SystemTime) -> Option<TimeStamp> {
+    Some(TimeStamp::from(
         start_time
             .checked_add(
                 SYNC_STEP_SECONDS
@@ -453,7 +453,7 @@ fn expected_block_timestamp(phase: u32, start_time: SystemTime) -> TimeStamp {
                     .expect("checked_mul should not overflow"),
             )
             .expect("checked_add should not overflow"),
-    )
+    ))
 }
 
 #[test]
@@ -677,7 +677,7 @@ fn test_get_account_transactions_start_length() {
                 memo: Memo(0),
                 created_at_time: None,
                 icrc1_memo: None,
-                timestamp: TimeStamp::from(env.time()),
+                timestamp: Some(TimeStamp::from(env.time())),
             },
         })
         .collect();
@@ -773,11 +773,11 @@ fn test_get_account_identifier_transactions_pagination() {
                     memo: Memo(0),
                     created_at_time: None,
                     icrc1_memo: None,
-                    timestamp: TimeStamp::from(
+                    timestamp: Some(TimeStamp::from(
                         env.time()
                             .checked_sub(SYNC_STEP_SECONDS)
                             .expect("should not underflow"),
-                    ),
+                    )),
                 },
                 transaction,
             );
