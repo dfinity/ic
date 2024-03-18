@@ -148,12 +148,16 @@ impl StateMachine for StateMachineImpl {
 
         let since = Instant::now();
         // Process messages from the induction pool through the Scheduler.
+        let next_checkpoint_round = batch
+            .next_checkpoint_height
+            .map(|h| ExecutionRound::from(h.get()));
         let state_after_execution = self.scheduler.execute_round(
             state_with_messages,
             batch.randomness,
             batch.ecdsa_subnet_public_keys,
             batch.ecdsa_quadruple_ids,
             ExecutionRound::from(batch.batch_number.get()),
+            next_checkpoint_round,
             execution_round_type,
             registry_settings,
         );
