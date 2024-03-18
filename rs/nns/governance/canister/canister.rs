@@ -54,7 +54,7 @@ use ic_nns_governance::{
         Neuron, NeuronInfo, NnsFunction, NodeProvider, Proposal, ProposalInfo, RewardEvent,
         RewardNodeProviders, SettleCommunityFundParticipation,
         SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse,
-        UpdateNodeProvider, Vote, XdrConversionRate as XdrConversionRatePb,
+        UpdateNodeProvider, Vote,
     },
     storage::{grow_upgrades_memory_to, validate_stable_storage, with_upgrades_memory},
 };
@@ -347,7 +347,7 @@ fn canister_post_upgrade() {
     dfn_core::printer::hook();
     println!("{}Executing post upgrade", LOG_PREFIX);
 
-    let mut restored_state = with_upgrades_memory(|memory| {
+    let restored_state = with_upgrades_memory(|memory| {
         let result: Result<GovernanceProto, _> = load_protobuf(memory);
         result
     })
@@ -355,30 +355,6 @@ fn canister_post_upgrade() {
         "Error deserializing canister state post-upgrade with MemoryManager memory segment. \
              CANISTER MIGHT HAVE BROKEN STATE!!!!.",
     );
-
-    // The following mutation migrates the Neurons' Fund from statically encoded limits to dynamic
-    // data stored in the `economics.neurons_fund_economics` field of NNS Governance.
-    //
-    // TODO[NNS1-2925]: Remove this statement.
-    if let Some(ref mut economics) = restored_state.economics {
-        if economics.neurons_fund_economics.is_none() {
-            economics.neurons_fund_economics =
-                Some(ic_nns_governance::pb::v1::NeuronsFundEconomics::with_default_values())
-        }
-    };
-
-    // The following mutation migrates the Governance canister to a state starting from which
-    // the field `xdr_conversion_rate` should alwasys be specified.
-    //
-    // TODO[NNS1-2925]: Remove this statement.
-    if restored_state.xdr_conversion_rate.is_none() {
-        let xdr_conversion_rate = XdrConversionRatePb::with_default_values();
-        println!(
-            "{}canister_post_upgrade: Initializing xdr_conversion_rate for the first time as {:?}",
-            LOG_PREFIX, xdr_conversion_rate,
-        );
-        restored_state.xdr_conversion_rate = Some(xdr_conversion_rate);
-    }
 
     grow_upgrades_memory_to(WASM_PAGES_RESERVED_FOR_UPGRADES_MEMORY);
 

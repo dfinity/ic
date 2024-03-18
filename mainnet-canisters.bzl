@@ -14,15 +14,15 @@ def mainnet_core_nns_canisters():
     http_file(
         name = "mainnet_nns_registry_canister",
         downloaded_file_path = "registry-canister.wasm.gz",
-        sha256 = "57050d34ce370dacd7d323bf1c3aea448ce7e9636fe658b822f8902fe0732188",
-        url = "https://download.dfinity.systems/ic/d747b2bac7fd99d84a012496151f0917d849fbf8/canisters/registry-canister.wasm.gz",
+        sha256 = "ed1dec0e543c01ae3c9974596d5440c19bc8d1485cac7ce35537b54b73070161",
+        url = "https://download.dfinity.systems/ic/d9e4d6e91c3675903d7b74b6e097d8f12f41ace3/canisters/registry-canister.wasm.gz",
     )
 
     http_file(
         name = "mainnet_nns_governance_canister",
         downloaded_file_path = "governance-canister.wasm.gz",
-        sha256 = "6bd26499d2091c794ba814ad8d729fdff3c741b9dc0560760aecd7dd8db19d95",
-        url = "https://download.dfinity.systems/ic/48e7e1f072c259810236488ff770c809f362fb63/canisters/governance-canister.wasm.gz",
+        sha256 = "7f2a63edf204ff9e8fbb263f927c893e6ddb0c1df6e783a1eaf0d78d63162f2f",
+        url = "https://download.dfinity.systems/ic/d9e4d6e91c3675903d7b74b6e097d8f12f41ace3/canisters/governance-canister.wasm.gz",
     )
 
     http_file(
@@ -63,15 +63,15 @@ def mainnet_core_nns_canisters():
     http_file(
         name = "mainnet_nns_cycles-minting-canister",
         downloaded_file_path = "cycles-minting-canister.wasm.gz",
-        sha256 = "1e73a3c6dd6468078d0836023bfb357da8a2a05840f2cd50f069a04f03da6530",
-        url = "https://download.dfinity.systems/ic/e7c7105a54fdf43892c46b5560d5dbee687dcba0/canisters/cycles-minting-canister.wasm.gz",
+        sha256 = "3e6362c49107d856752f7934101591b138d69dc938a90ce7447514dcbf369524",
+        url = "https://download.dfinity.systems/ic/d9e4d6e91c3675903d7b74b6e097d8f12f41ace3/canisters/cycles-minting-canister.wasm.gz",
     )
 
     http_file(
         name = "mainnet_nns_sns-wasm-canister",
         downloaded_file_path = "sns-wasm-canister.wasm.gz",
-        sha256 = "d31113c19ae571694a33b1689092b76d60c7e5722f27601291b67ef29b2ecee7",
-        url = "https://download.dfinity.systems/ic/48e7e1f072c259810236488ff770c809f362fb63/canisters/sns-wasm-canister.wasm.gz",
+        sha256 = "f8277aa817c4a14d821c909fd8c339fc361e5d60aa295a49056e56337c015cf6",
+        url = "https://download.dfinity.systems/ic/d9e4d6e91c3675903d7b74b6e097d8f12f41ace3/canisters/sns-wasm-canister.wasm.gz",
     )
 
 def mainnet_sns_canisters():
