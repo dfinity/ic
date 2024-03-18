@@ -244,16 +244,22 @@ pub fn construction_parse(
 mod tests {
     use super::*;
     use crate::common::utils::utils::icrc1_operation_to_rosetta_core_operations;
+    use crate::construction_api::types::CanisterMethodName;
+    use crate::construction_api::utils::build_icrc1_transaction_from_canister_method_args;
+    use candid::Encode;
+    use ic_agent::agent::EnvelopeContent;
     use ic_agent::Identity;
     use ic_canister_client_sender::{Ed25519KeyPair, Secp256k1KeyPair};
     use ic_icrc1_test_utils::construction_payloads_request_metadata;
     use ic_icrc1_test_utils::minter_identity;
     use ic_icrc1_test_utils::valid_transactions_strategy;
+    use ic_icrc1_test_utils::LedgerEndpointArg;
     use ic_icrc1_test_utils::DEFAULT_TRANSFER_FEE;
     use ic_icrc1_tokens_u256::U256;
     use ic_icrc_rosetta_client::RosettaClient;
     use ic_icrc_rosetta_runner::DEFAULT_DECIMAL_PLACES;
     use ic_icrc_rosetta_runner::DEFAULT_TOKEN_SYMBOL;
+    use ic_ledger_canister_core::ledger::LedgerTransaction;
     use proptest::prelude::any;
     use proptest::proptest;
     use proptest::strategy::Strategy;
@@ -507,6 +513,130 @@ mod tests {
                                 .try_into()
                                 .unwrap(),
                             now,
+                        );
+                    }
+                    Ok(())
+                },
+            )
+            .unwrap();
+    }
+
+    #[test]
+    fn test_construction_hash() {
+        let mut runner = TestRunner::new(TestRunnerConfig {
+            max_shrink_iters: 0,
+            cases: NUM_TEST_CASES,
+            ..Default::default()
+        });
+        runner
+            .run(
+                &(valid_transactions_strategy(
+                    minter_identity().into(),
+                    DEFAULT_TRANSFER_FEE,
+                    NUM_BLOCKS,
+                    SystemTime::now(),
+                )
+                .no_shrink(),),
+                |(args_with_caller,)| {
+                    for arg_with_caller in args_with_caller.into_iter() {
+                        let currency = Currency {
+                            symbol: DEFAULT_TOKEN_SYMBOL.to_owned(),
+                            decimals: DEFAULT_DECIMAL_PLACES as u32,
+                            metadata: None,
+                        };
+
+                        let ledger_transaction: ic_icrc1::Transaction<U256> = arg_with_caller
+                            .to_transaction(minter_identity().sender().unwrap().into());
+
+                        let canister_method_name = match ledger_transaction.operation {
+                            ic_icrc1::Operation::Transfer { .. } => {
+                                CanisterMethodName::Icrc1Transfer
+                            }
+                            ic_icrc1::Operation::Approve { .. } => CanisterMethodName::Icrc2Approve,
+                            ic_icrc1::Operation::Mint { .. } => CanisterMethodName::Icrc1Transfer,
+                            ic_icrc1::Operation::Burn { .. } => CanisterMethodName::Icrc1Transfer,
+                        };
+                        let args = match arg_with_caller.arg {
+                            LedgerEndpointArg::TransferArg(arg) => Encode!(&arg),
+                            LedgerEndpointArg::ApproveArg(arg) => Encode!(&arg),
+                        }
+                        .unwrap();
+
+                        let icrc1_transaction = build_icrc1_transaction_from_canister_method_args(
+                            &canister_method_name,
+                            &arg_with_caller.caller.sender().unwrap(),
+                            args,
+                        )
+                        .unwrap();
+
+                        assert_eq!(
+                            icrc1_transaction.hash(),
+                            ledger_transaction.clone().hash().as_slice()
+                        );
+
+                        let fee = match ledger_transaction.operation {
+                            ic_icrc1::Operation::Transfer { fee, .. } => fee,
+                            ic_icrc1::Operation::Approve { fee, .. } => fee,
+                            _ => panic!("Invalid operation"),
+                        };
+                        let rosetta_core_operations = icrc1_operation_to_rosetta_core_operations(
+                            ledger_transaction.clone().operation.into(),
+                            currency.clone(),
+                            fee.map(|fee| fee.into()),
+                        )
+                        .unwrap();
+
+                        let construction_payloads_response = construction_payloads(
+                            rosetta_core_operations.clone(),
+                            None,
+                            &PrincipalId::new_anonymous().0,
+                            vec![(&arg_with_caller.caller).into()],
+                            SystemTime::now(),
+                        );
+
+                        let signatures = RosettaClient::sign_transaction(
+                            &arg_with_caller.caller,
+                            construction_payloads_response.clone().unwrap(),
+                        )
+                        .unwrap();
+
+                        let ConstructionCombineResponse { signed_transaction } =
+                            construction_combine(
+                                construction_payloads_response.unwrap().unsigned_transaction,
+                                signatures,
+                            )
+                            .unwrap();
+
+                        let ConstructionHashResponse {
+                            transaction_identifier,
+                            ..
+                        } = construction_hash(signed_transaction.clone()).unwrap();
+
+                        let signed_transaction =
+                            SignedTransaction::from_str(&signed_transaction).unwrap();
+
+                        let ledger_icrc1_transaction =
+                            build_icrc1_transaction_from_canister_method_args(
+                                &canister_method_name,
+                                &arg_with_caller.caller.sender().unwrap(),
+                                match signed_transaction
+                                    .envelope_pairs
+                                    .first()
+                                    .unwrap()
+                                    .call_envelope
+                                    .content
+                                    .clone()
+                                    .into_owned()
+                                {
+                                    EnvelopeContent::Call { arg, .. } => arg.clone(),
+                                    _ => panic!("Invalid envelope content"),
+                                },
+                            )
+                            .unwrap();
+
+                        assert_eq!(
+                            hex::decode(transaction_identifier.hash).unwrap(),
+                            ledger_icrc1_transaction.hash().to_vec()
                         );
                     }
                     Ok(())

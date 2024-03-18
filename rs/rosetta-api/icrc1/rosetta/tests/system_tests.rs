@@ -11,8 +11,8 @@ use ic_base_types::PrincipalId;
 pub use ic_canister_client_sender::Ed25519KeyPair as EdKeypair;
 use ic_icrc1_ledger::{InitArgs, InitArgsBuilder};
 use ic_icrc1_test_utils::{
-    minter_identity, valid_construction_payloads_request_metadata, valid_transactions_strategy,
-    ArgWithCaller, LedgerEndpointArg, DEFAULT_TRANSFER_FEE,
+    minter_identity, valid_transactions_strategy, ArgWithCaller, LedgerEndpointArg,
+    DEFAULT_TRANSFER_FEE,
 };
 use ic_icrc1_tokens_u256::U256;
 
@@ -770,17 +770,14 @@ fn test_construction_submit() {
 
     runner
         .run(
-            &(
-                valid_transactions_strategy(
-                    MINTING_IDENTITY.clone(),
-                    DEFAULT_TRANSFER_FEE,
-                    50,
-                    SystemTime::now(),
-                )
-                .no_shrink(),
-                valid_construction_payloads_request_metadata().no_shrink(),
-            ),
-            |(args_with_caller, _construction_payloads_request_metadata)| {
+            &(valid_transactions_strategy(
+                MINTING_IDENTITY.clone(),
+                DEFAULT_TRANSFER_FEE,
+                50,
+                SystemTime::now(),
+            )
+            .no_shrink(),),
+            |(args_with_caller,)| {
                 let rt = Runtime::new().unwrap();
                 let minting_principal = MINTING_IDENTITY.sender().unwrap();
 

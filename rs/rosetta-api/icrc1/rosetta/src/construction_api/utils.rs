@@ -248,7 +248,7 @@ pub fn build_transaction_hash_from_envelope_content(
         candid_encoded_bytes,
     )?;
 
-    Ok(format!("{:?}", icrc1_transaction.hash().to_vec()))
+    Ok(hex::encode(icrc1_transaction.hash()))
 }
 
 pub fn build_icrc1_ledger_canister_method_args(
