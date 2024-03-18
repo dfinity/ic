@@ -163,20 +163,29 @@ pub fn get_adjusted_notary_delay(
         rank,
     ) {
         NotaryDelay::CanNotarizeAfter(duration) => Some(duration),
-        NotaryDelay::ReachedMaxNotarizationCertificationGap => {
+        NotaryDelay::ReachedMaxNotarizationCertificationGap {
+            notarized_height,
+            certified_height,
+        } => {
             warn!(
                 every_n_seconds => 5,
                 log,
-                "notarization certification gap exceeds hard bound of\
+                "The gap between the notarization height ({notarized_height}) and \
+                 the certification height ({certified_height}) exceeds hard bound of \
                  {ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP}"
             );
             None
         }
-        NotaryDelay::ReachedMaxNotarizationCUPGap => {
+        NotaryDelay::ReachedMaxNotarizationCUPGap {
+            notarized_height,
+            cup_height,
+        } => {
             warn!(
                 every_n_seconds => 5,
                 log,
-                "notarization CUP gap exceeds hard bound of {ACCEPTABLE_NOTARIZATION_CUP_GAP}"
+                "The gap between the notarization height ({notarized_height}) and \
+                the CUP height ({cup_height}) exceeds hard bound of \
+                {ACCEPTABLE_NOTARIZATION_CUP_GAP}"
             );
             None
         }
@@ -189,10 +198,16 @@ pub enum NotaryDelay {
     CanNotarizeAfter(Duration),
     /// Gap between notarization and certification is too large. Because we have a
     /// hard limit on this gap, the notary cannot progress for now.
-    ReachedMaxNotarizationCertificationGap,
+    ReachedMaxNotarizationCertificationGap {
+        notarized_height: Height,
+        certified_height: Height,
+    },
     /// Gap between notarization and the next CUP is too large. Because we have a
     /// hard limit on this gap, the notary cannot progress for now.
-    ReachedMaxNotarizationCUPGap,
+    ReachedMaxNotarizationCUPGap {
+        notarized_height: Height,
+        cup_height: Height,
+    },
 }
 
 /// Calculate the required delay for notary based on the rank of block to notarize,
@@ -212,12 +227,17 @@ pub fn get_adjusted_notary_delay_from_settings(
     } = settings;
 
     // We impose a hard limit on the gap between notarization and certification.
-    let notarized_height = pool.get_notarized_height().get();
-    let certified_height = state_manager.latest_certified_height().get();
-    if notarized_height.saturating_sub(certified_height)
+    let notarized_height = pool.get_notarized_height();
+    let certified_height = state_manager.latest_certified_height();
+    if notarized_height
+        .get()
+        .saturating_sub(certified_height.get())
         >= ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP
     {
-        return NotaryDelay::ReachedMaxNotarizationCertificationGap;
+        return NotaryDelay::ReachedMaxNotarizationCertificationGap {
+            notarized_height,
+            certified_height,
+        };
     }
 
     // We adjust regular delay based on the gap between finalization and
@@ -247,7 +267,6 @@ pub fn get_adjusted_notary_delay_from_settings(
     // We measure the gap between our current CUP height and the current notarized
     // height. If the notarized height is in a DKG interval for which we don't yet have
     // the CUP, we limit the notarization-CUP gap to ACCEPTABLE_NOTARIZATION_CUP_GAP.
-    let cup_gap = notarized_height.saturating_sub(pool.get_catch_up_height().get());
     let last_cup = pool.get_highest_catch_up_package();
     let last_cup_dkg_info = &last_cup
         .content
@@ -257,8 +276,13 @@ pub fn get_adjusted_notary_delay_from_settings(
         .as_ref()
         .as_summary()
         .dkg;
+    let cup_height = last_cup.height();
+    let cup_gap = notarized_height.get().saturating_sub(cup_height.get());
     if cup_gap >= last_cup_dkg_info.interval_length.get() + ACCEPTABLE_NOTARIZATION_CUP_GAP {
-        return NotaryDelay::ReachedMaxNotarizationCUPGap;
+        return NotaryDelay::ReachedMaxNotarizationCUPGap {
+            notarized_height,
+            cup_height,
+        };
     }
 
     NotaryDelay::CanNotarizeAfter(Duration::from_millis(certified_adjusted_delay))
@@ -575,6 +599,7 @@ pub fn get_oldest_ecdsa_state_registry_version(
 
 #[cfg(test)]
 mod tests {
+    use assert_matches::assert_matches;
     use std::str::FromStr;
 
     use super::*;
@@ -676,14 +701,14 @@ mod tests {
                 .expect_latest_certified_height()
                 .return_const(gap_trigger_height);
 
-            assert_eq!(
+            assert_matches!(
                 get_adjusted_notary_delay_from_settings(
                     settings.clone(),
                     &PoolReader::new(&pool),
                     state_manager.as_ref(),
                     Rank(0),
                 ),
-                NotaryDelay::ReachedMaxNotarizationCertificationGap,
+                NotaryDelay::ReachedMaxNotarizationCertificationGap { .. }
             );
 
             state_manager.get_mut().checkpoint();
@@ -710,14 +735,14 @@ mod tests {
 
             pool.advance_round_normal_operation_no_cup();
 
-            assert_eq!(
+            assert_matches!(
                 get_adjusted_notary_delay_from_settings(
                     settings,
                     &PoolReader::new(&pool),
                     state_manager.as_ref(),
                     Rank(0),
                 ),
-                NotaryDelay::ReachedMaxNotarizationCUPGap,
+                NotaryDelay::ReachedMaxNotarizationCUPGap { .. }
             );
         });
     }
