@@ -1721,7 +1721,7 @@ impl Governance {
                 ErrorType::PreconditionFailed,
                 "No proposal for given ProposalId.",
             )),
-            Some(pd) => get_proposal_response::Result::Proposal(pd.strip_large_fields()),
+            Some(pd) => get_proposal_response::Result::Proposal(pd.limited_for_get_proposal()),
         };
 
         GetProposalResponse {

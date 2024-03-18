@@ -96,16 +96,31 @@ impl Proposal {
             .map_or(false, |a| a.allowed_when_resources_are_low())
     }
 
-    // Returns a clone of self, except that "large blob fields" are replaced
-    // with a (UTF-8 encoded) textual summary of their contents. See
-    // summarize_blob_field.
-    pub(crate) fn strip_large_fields(&self) -> Self {
+    /// Returns a clone of self, except that "large blob fields" are replaced
+    /// with a (UTF-8 encoded) textual summary of their contents. See
+    /// summarize_blob_field.
+    pub(crate) fn limited_for_get_proposal(&self) -> Self {
         Self {
+            title: self.title.clone(),
+            summary: self.summary.clone(),
+            url: self.url.clone(),
             action: self
                 .action
                 .as_ref()
-                .map(|action| action.strip_large_fields()),
-            ..self.clone()
+                .map(|action| action.limited_for_get_proposal()),
+        }
+    }
+
+    /// Returns a clone of self, except that "large blob fields" are cleared.
+    pub(crate) fn limited_for_list_proposals(&self) -> Self {
+        Self {
+            title: self.title.clone(),
+            summary: self.summary.clone(),
+            url: self.url.clone(),
+            action: self
+                .action
+                .as_ref()
+                .map(|action| action.limited_for_list_proposals()),
         }
     }
 }
@@ -1805,15 +1820,15 @@ impl ProposalData {
         self.executed_timestamp_seconds < earliest_unpurgeable_executed_timestamp_seconds
     }
 
-    // Returns a clone of self, except that "large blob fields" are replaced
-    // with a (UTF-8 encoded) textual summary of their contents. See
-    // summarize_blob_field.
-    pub(crate) fn strip_large_fields(&self) -> Self {
+    /// Returns a clone of self, except that "large blob fields" are replaced
+    /// with a (UTF-8 encoded) textual summary of their contents. See
+    /// summarize_blob_field.
+    pub(crate) fn limited_for_get_proposal(&self) -> Self {
         Self {
             proposal: self
                 .proposal
                 .as_ref()
-                .map(|proposal| proposal.strip_large_fields()),
+                .map(|proposal| proposal.limited_for_get_proposal()),
             ..self.clone()
         }
     }
@@ -1825,31 +1840,64 @@ impl ProposalData {
     /// a UpgradeSnsControlledCanister. The text rendering should include displayable information about
     /// the payload contents already.
     pub fn limited_for_list_proposals(&self, caller_neurons_set: &HashSet<String>) -> Self {
-        let mut limited_proposal_data = self.clone();
-        if let Some(proposal) = limited_proposal_data.proposal.as_mut() {
-            // We can't understand the payloads of nervous system functions, as well as the wasm
-            // for upgrades, so just omit them when listing proposals.
-            match &mut proposal.action {
-                Some(Action::ExecuteGenericNervousSystemFunction(action)) => {
-                    action.payload.clear();
-                }
-                Some(Action::UpgradeSnsControlledCanister(action)) => {
-                    action.new_canister_wasm.clear();
-                }
-                _ => (),
-            }
-        }
+        let ProposalData {
+            action,
+            id,
+            proposer,
+            reject_cost_e8s,
+            proposal,
+            proposal_creation_timestamp_seconds,
+            ballots,
+            latest_tally,
+            decided_timestamp_seconds,
+            executed_timestamp_seconds,
+            failed_timestamp_seconds,
+            failure_reason,
+            reward_event_round,
+            wait_for_quiet_state,
+            payload_text_rendering,
+            is_eligible_for_rewards,
+            initial_voting_period_seconds,
+            wait_for_quiet_deadline_increase_seconds,
+            reward_event_end_timestamp_seconds,
+            minimum_yes_proportion_of_total,
+            minimum_yes_proportion_of_exercised,
+            action_auxiliary,
+        } = self;
 
-        let mut ballots = std::mem::take(&mut limited_proposal_data.ballots);
-        ballots.retain(|neuron_id, _| caller_neurons_set.contains(neuron_id));
-
-        // Truncate the number of ballots to avoid returning too much data.
-        limited_proposal_data.ballots = ballots
-            .into_iter()
+        let limited_ballots: BTreeMap<_, _> = ballots
+            .iter()
+            .filter(|(neuron_id, _)| caller_neurons_set.contains(*neuron_id))
+            .map(|(neuron_id, ballot)| (neuron_id.clone(), ballot.clone()))
             .take(MAX_NUMBER_OF_BALLOTS_IN_LIST_PROPOSALS_RESPONSE)
             .collect();
 
-        limited_proposal_data
+        ProposalData {
+            action: *action,
+            id: *id,
+            proposer: proposer.clone(),
+            reject_cost_e8s: *reject_cost_e8s,
+            proposal_creation_timestamp_seconds: *proposal_creation_timestamp_seconds,
+            latest_tally: latest_tally.clone(),
+            decided_timestamp_seconds: *decided_timestamp_seconds,
+            executed_timestamp_seconds: *executed_timestamp_seconds,
+            failed_timestamp_seconds: *failed_timestamp_seconds,
+            failure_reason: failure_reason.clone(),
+            reward_event_round: *reward_event_round,
+            wait_for_quiet_state: wait_for_quiet_state.clone(),
+            payload_text_rendering: payload_text_rendering.clone(),
+            is_eligible_for_rewards: *is_eligible_for_rewards,
+            initial_voting_period_seconds: *initial_voting_period_seconds,
+            wait_for_quiet_deadline_increase_seconds: *wait_for_quiet_deadline_increase_seconds,
+            reward_event_end_timestamp_seconds: *reward_event_end_timestamp_seconds,
+            minimum_yes_proportion_of_total: *minimum_yes_proportion_of_total,
+            minimum_yes_proportion_of_exercised: *minimum_yes_proportion_of_exercised,
+            action_auxiliary: action_auxiliary.clone(),
+
+            // The following fields are truncated:
+            proposal: proposal.as_ref().map(Proposal::limited_for_list_proposals),
+            ballots: limited_ballots,
+        }
     }
 }
 
@@ -4081,7 +4129,7 @@ Version {
     }
 
     #[test]
-    fn limited_proposal_data_for_list_proposals_limited_action() {
+    fn limited_proposal_data_for_list_proposals_limited_execute_generic_nervous_system_function() {
         let original_proposal_data = ProposalData {
             proposal: Some(Proposal {
                 action: Some(Action::ExecuteGenericNervousSystemFunction(
@@ -4092,7 +4140,6 @@ Version {
                 )),
                 ..Default::default()
             }),
-            ballots: BTreeMap::new(),
             ..Default::default()
         };
 
@@ -4111,7 +4158,45 @@ Version {
                     )),
                     ..Default::default()
                 }),
-                ballots: BTreeMap::new(),
+                ..Default::default()
+            }
+        );
+    }
+
+    #[test]
+    fn limited_proposal_data_for_list_proposals_limited_upgrade_sns_controlled_canister() {
+        let original_proposal_data = ProposalData {
+            proposal: Some(Proposal {
+                action: Some(Action::UpgradeSnsControlledCanister(
+                    UpgradeSnsControlledCanister {
+                        canister_id: Some(PrincipalId::new_user_test_id(1)),
+                        new_canister_wasm: vec![0, 1, 2, 3],
+                        canister_upgrade_arg: Some(vec![4, 5, 6, 7]),
+                        mode: Some(1),
+                    },
+                )),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let limited_proposal_data =
+            original_proposal_data.limited_for_list_proposals(&HashSet::new());
+
+        assert_eq!(
+            limited_proposal_data,
+            ProposalData {
+                proposal: Some(Proposal {
+                    action: Some(Action::UpgradeSnsControlledCanister(
+                        UpgradeSnsControlledCanister {
+                            canister_id: Some(PrincipalId::new_user_test_id(1)),
+                            new_canister_wasm: vec![],
+                            canister_upgrade_arg: Some(vec![4, 5, 6, 7]),
+                            mode: Some(1),
+                        },
+                    )),
+                    ..Default::default()
+                }),
                 ..Default::default()
             }
         );
