@@ -236,8 +236,8 @@ REPLICA_LOG_DEBUG_OVERRIDES="${replica_log_debug_overrides:-[]}"
 MALICIOUS_BEHAVIOR="${malicious_behavior:-null}"
 # Defaults to disabled
 QUERY_STATS_AGGREGATION="${query_stats_aggregation:-\"Disabled\"}"
-# Default is 1800 blocks i.e. around 30min
-QUERY_STATS_EPOCH_LENGTH="${query_stats_epoch_length:-1800}"
+# Default is 600 blocks i.e. around 10min
+QUERY_STATS_EPOCH_LENGTH="${query_stats_epoch_length:-600}"
 
 if [ "${IPV6_ADDRESS}" == "" ]; then
     echo "Cannot determine an IPv6 address, aborting"
