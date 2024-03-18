@@ -14,10 +14,11 @@ LINUX_ONLY = [
     "setupos_tool",
 ]
 
+#TODO: re-add after identifying source of non-determinism
+#    "ic-https-outcalls-adapter",
 NO_STRIP = [
     "canister_sandbox",
     "ic-btc-adapter",
-    "ic-https-outcalls-adapter",
     "replica",
 ]
 
