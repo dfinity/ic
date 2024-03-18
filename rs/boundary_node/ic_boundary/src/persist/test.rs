@@ -135,7 +135,7 @@ pub fn generate_test_subnets(offset: u64) -> Vec<Subnet> {
     vec![subnet1, subnet2, subnet3]
 }
 
-fn generate_test_routes(offset: u64) -> Routes {
+pub fn generate_test_routes(offset: u64) -> Routes {
     let subnet_id_1 =
         Principal::from_text("tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe")
             .unwrap();
@@ -181,15 +181,17 @@ fn generate_test_routes(offset: u64) -> Routes {
         nodes: vec![node(2 + offset, subnet_id_2)],
     };
 
+    let subnets = vec![
+        Arc::new(subnet1),
+        Arc::new(subnet2),
+        Arc::new(subnet3),
+        Arc::new(subnet4),
+        Arc::new(subnet5),
+    ];
+
     Routes {
         node_count: 3,
-        subnets: vec![
-            Arc::new(subnet1),
-            Arc::new(subnet2),
-            Arc::new(subnet3),
-            Arc::new(subnet4),
-            Arc::new(subnet5),
-        ],
+        subnets,
     }
 }
 

@@ -54,11 +54,17 @@ pub struct RegistryConfig {
 
     /// The registry local store path to be populated
     #[clap(long)]
-    pub local_store_path: PathBuf,
+    pub local_store_path: Option<PathBuf>,
 
     /// Whether to disable internal registry replicator
-    #[clap(long, default_value = "false")]
+    #[clap(long)]
     pub disable_registry_replicator: bool,
+
+    /// Instead of using the registry - use the specified replica nodes.
+    /// This disables the registry client, registry replicator and health checking.
+    /// To be used only for performance testing.
+    #[clap(long)]
+    pub stub_replica: Vec<SocketAddr>,
 
     /// Minimum snapshot version age to be useful for initial publishing, in seconds
     #[clap(long, default_value = "10")]
@@ -80,6 +86,10 @@ pub struct ListenConfig {
     #[cfg(feature = "tls")]
     #[clap(long, default_value = "443")]
     pub https_port: u16,
+
+    /// Skip replica TLS certificate verification. DANGER: to be used only for testing
+    #[clap(long)]
+    pub skip_replica_tls_verification: bool,
 
     /// Timeout for the whole HTTP request in milliseconds.
     /// From when it starts connecting until the response body is finished.
@@ -118,6 +128,11 @@ pub struct ListenConfig {
     /// How long to keep idle outgoing connections open, in seconds
     #[clap(long, default_value = "60")]
     pub http_idle_timeout: u64,
+
+    /// Backlog of incoming connections to set on the listening socket.
+    /// Currently used only for UNIX socket.
+    #[clap(long, default_value = "8192")]
+    pub backlog: u32,
 }
 
 #[derive(Args)]

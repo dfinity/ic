@@ -45,7 +45,6 @@ DEPENDENCIES = [
     "@crate_index//:http-body",
     "@crate_index//:hyper",
     "@crate_index//:hyper-rustls",
-    "@crate_index//:hyperlocal",
     "@crate_index//:ic-btc-interface",
     "@crate_index//:instant-acme",
     "@crate_index//:jemallocator",

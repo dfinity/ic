@@ -41,6 +41,7 @@ use crate::{
     retry::RetryResult,
     routes::{ErrorCause, RequestContext, RequestType},
     snapshot::{Node, RegistrySnapshot},
+    socket::TcpConnectInfo,
 };
 
 const KB: f64 = 1024.0;
@@ -633,8 +634,12 @@ pub async fn metrics_middleware(
 
     let connect_info = request
         .extensions()
-        .get::<ConnectInfo<SocketAddr>>()
-        .cloned();
+        .get::<ConnectInfo<TcpConnectInfo>>()
+        .map(|x| (x.0).0)
+        .or(request
+            .extensions()
+            .get::<ConnectInfo<SocketAddr>>()
+            .map(|x| x.0));
 
     let request_type = &request
         .extensions()

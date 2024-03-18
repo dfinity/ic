@@ -18,13 +18,13 @@ use axum::{
     Router,
 };
 use axum_extra::middleware::option_layer;
-use axum_server::{accept::DefaultAcceptor, Server};
 use candid::DecoderConfig;
 use futures::TryFutureExt;
 use ic_interfaces_registry::ZERO_REGISTRY_VERSION;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_local_store::{LocalStoreImpl, LocalStoreReader};
 use ic_registry_replicator::RegistryReplicator;
+use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::CanisterId;
 use little_loadshedder::{LoadShedError, LoadShedLayer};
 use prometheus::Registry;
@@ -48,19 +48,26 @@ use crate::{
         MetricParamsPersist, MetricParamsSnapshot, MetricsCache, MetricsRunner, WithMetrics,
         WithMetricsCheck, WithMetricsPersist, WithMetricsSnapshot,
     },
-    persist::{Persister, Routes},
+    persist::{Persist, Persister, Routes},
     rate_limiting::RateLimit,
     retry::{retry_request, RetryParams},
     routes::{self, ErrorCause, Health, Lookup, Proxy, ProxyRouter, RootKey},
-    snapshot::{RegistrySnapshot, SnapshotPersister, Snapshotter},
+    snapshot::{
+        generate_stub_snapshot, generate_stub_subnet, RegistrySnapshot, SnapshotPersister,
+        Snapshotter,
+    },
+    socket::{TcpConnectInfo, TcpServerExt},
     tls_verify::TlsVerifier,
 };
 
 #[cfg(not(feature = "tls"))]
-use {hyperlocal::UnixServerExt, std::os::unix::fs::PermissionsExt};
+use {crate::socket::UnixServerExt, std::os::unix::fs::PermissionsExt};
 
 #[cfg(feature = "tls")]
-use crate::tls::{acme_challenge, prepare_tls, redirect_to_https};
+use {
+    crate::tls::{acme_challenge, prepare_tls, redirect_to_https},
+    axum_server::Server,
+};
 
 pub const SERVICE_NAME: &str = "ic_boundary";
 pub const AUTHOR_NAME: &str = "Boundary Node Team <boundary-nodes@dfinity.org>";
@@ -92,6 +99,10 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         panic!("--check-timeout should be longer than --http-timeout-connect");
     }
 
+    if !(cli.registry.local_store_path.is_none() ^ cli.registry.stub_replica.is_empty()) {
+        panic!("--local-store-path and --stub-replica are mutually exclusive and at least one of them must be specified");
+    }
+
     // Metrics
     let metrics_registry: Registry = Registry::new_custom(Some(SERVICE_NAME.into()), None)?;
 
@@ -106,8 +117,11 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     // DNS
     let dns_resolver = DnsResolver::new(Arc::clone(&registry_snapshot));
 
-    // TLS Verification
-    let tls_verifier = TlsVerifier::new(Arc::clone(&registry_snapshot));
+    // TLS verifier
+    let tls_verifier = Arc::new(TlsVerifier::new(
+        Arc::clone(&registry_snapshot),
+        cli.listen.skip_replica_tls_verification,
+    ));
 
     // TLS Configuration
     let rustls_config = rustls::ClientConfig::builder()
@@ -115,7 +129,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         .with_safe_default_kx_groups()
         .with_protocol_versions(&[&rustls::version::TLS13])
         .context("unable to build Rustls config")?
-        .with_custom_certificate_verifier(Arc::new(tls_verifier))
+        .with_custom_certificate_verifier(tls_verifier)
         .with_no_client_auth();
 
     let keepalive = Duration::from_secs(cli.listen.http_keepalive);
@@ -137,18 +151,6 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         .build()
         .context("unable to build HTTP client")?;
     let http_client = Arc::new(ReqwestClient(http_client));
-
-    // Registry Client
-    let local_store = Arc::new(LocalStoreImpl::new(&cli.registry.local_store_path));
-
-    let registry_client = Arc::new(RegistryClientImpl::new(
-        local_store.clone(), // data_provider
-        None,                // metrics_registry
-    ));
-
-    registry_client
-        .fetch_and_start_polling()
-        .context("failed to start registry client")?;
 
     #[cfg(feature = "tls")]
     let (configuration_runner, tls_acceptor, token_owner) = prepare_tls(&cli, &metrics_registry)
@@ -192,28 +194,31 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
 
     // HTTP
     let srvs_http = cli.listen.http_port.map(|x| {
-        Server::bind(SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), x))
-            .acceptor(DefaultAcceptor)
-            .serve(
-                routers_http
-                    .clone()
-                    .into_make_service_with_connect_info::<SocketAddr>(),
-            )
+        hyper::Server::bind_tcp(
+            SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), x),
+            cli.listen.backlog,
+        )
+        .expect("cannot bind to the TCP socket")
+        .serve(
+            routers_http
+                .clone()
+                .into_make_service_with_connect_info::<TcpConnectInfo>(),
+        )
     });
 
     // HTTP Unix Socket
     #[cfg(not(feature = "tls"))]
-    let srvs_http_unix = cli.listen.http_unix_socket.map(|x| {
+    let srvs_http_unix = cli.listen.http_unix_socket.as_ref().map(|x| {
         // Remove the socket file if it's there
         if x.exists() {
-            std::fs::remove_file(&x).expect("unable to remove socket");
+            std::fs::remove_file(x).expect("unable to remove socket");
         }
 
-        let srv = hyper::Server::bind_unix(&x)
-            .expect("cannot bind to the socket")
+        let srv = hyper::Server::bind_unix(x, cli.listen.backlog)
+            .expect("cannot bind to the Unix socket")
             .serve(routers_http.clone().into_make_service());
 
-        std::fs::set_permissions(&x, std::fs::Permissions::from_mode(0o666))
+        std::fs::set_permissions(x, std::fs::Permissions::from_mode(0o666))
             .expect("unable to set permissions on socket");
 
         srv
@@ -266,109 +271,42 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         ThrottleParams::new(5 * SECOND),
     );
 
-    // Snapshots
-    let (channel_snapshot_send, channel_snapshot_recv) = tokio::sync::watch::channel(None);
-    let snapshot_runner = WithMetricsSnapshot(
-        {
-            let mut snapshotter = Snapshotter::new(
-                Arc::clone(&registry_snapshot),
-                channel_snapshot_send,
-                registry_client.clone(),
-                Duration::from_secs(cli.registry.min_version_age),
-            );
+    let persister = Persister::new(Arc::clone(&routing_table));
 
-            if let Some(v) = &cli.firewall.nftables_system_replicas_path {
-                let fw_reloader = SystemdReloader::new(SYSTEMCTL_BIN.into(), "nftables", "reload");
+    let (registry_replicator, nns_pub_key, mut registry_runners) =
+        // Set up registry-related stuff if local store was specified
+        if cli.registry.local_store_path.is_some() {
+            let RegistrySetupResult(registry_replicator, nns_pub_key, registry_runners) =
+                setup_registry(
+                    &cli,
+                    registry_snapshot.clone(),
+                    WithMetricsPersist(persister, MetricParamsPersist::new(&metrics_registry)),
+                    http_client.clone(),
+                    &metrics_registry,
+                )?;
 
-                let fw_generator = FirewallGenerator::new(
-                    v.clone(),
-                    cli.firewall.nftables_system_replicas_var.clone(),
-                );
+            (registry_replicator, nns_pub_key, registry_runners)
+        } else {
+            // Otherwise load a stub routing table and snapshot
+            let subnet = generate_stub_subnet(cli.registry.stub_replica.clone());
+            let snapshot = generate_stub_snapshot(vec![subnet.clone()]);
+            let _ = persister.persist(vec![subnet]);
+            registry_snapshot.store(Some(Arc::new(snapshot)));
 
-                let persister = SnapshotPersister::new(fw_generator, fw_reloader);
-                snapshotter.set_persister(persister);
-            }
-
-            snapshotter
-        },
-        MetricParamsSnapshot::new(&metrics_registry),
-    );
-
-    let snapshot_runner = WithThrottle(snapshot_runner, ThrottleParams::new(5 * SECOND));
-
-    // Checks
-    let persister = WithMetricsPersist(
-        Persister::new(Arc::clone(&routing_table)),
-        MetricParamsPersist::new(&metrics_registry),
-    );
-
-    let checker = Checker::new(http_client, Duration::from_millis(cli.health.check_timeout));
-    let checker = WithMetricsCheck(checker, MetricParamsCheck::new(&metrics_registry));
-
-    let check_runner = CheckRunner::new(
-        channel_snapshot_recv,
-        cli.health.max_height_lag,
-        Arc::new(persister),
-        Arc::new(checker),
-        Duration::from_millis(cli.health.check_interval),
-        Duration::from_millis(cli.health.update_interval),
-    );
-
-    let (registry_replicator, nns_pub_key) = if !cli.registry.disable_registry_replicator {
-        // Check if we require an NNS key
-        let nns_pub_key = {
-            // Check if the local store is initialized
-            if !local_store
-                .get_changelog_since_version(ZERO_REGISTRY_VERSION)
-                .expect("failed to read registry local store")
-                .is_empty()
-            {
-                None
-            } else {
-                // If it's not - then we need an NNS public key to initialize it
-                let nns_pub_key_path = cli
-                    .registry
-                    .nns_pub_key_pem
-                    .expect("NNS public key is required to init Registry local store");
-
-                Some(
-                    ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key(&nns_pub_key_path)
-                        .expect("failed to parse NNS public key"),
-                )
-            }
+            (None, None, vec![])
         };
 
-        // Notice no-op logger
-        let logger = ic_logger::new_replica_logger(
-            slog::Logger::root(tracing_slog::TracingSlogDrain, slog::o!()), // logger
-            &ic_config::logger::Config::default(),                          // config
-        );
-
-        (
-            Some(RegistryReplicator::new_with_clients(
-                logger,
-                local_store,
-                registry_client,
-                Duration::from_millis(cli.registry.nns_poll_interval_ms), // poll_delay
-            )),
-            nns_pub_key,
-        )
-    } else {
-        (None, None)
-    };
-
     // Runners
-    let runners: Vec<Box<dyn Run>> = vec![
+    let mut runners: Vec<Box<dyn Run>> = vec![
         #[cfg(feature = "tls")]
         Box::new(configuration_runner),
-        Box::new(snapshot_runner),
-        Box::new(check_runner),
         Box::new(metrics_runner),
     ];
+    runners.append(&mut registry_runners);
 
     TokioScope::scope_and_block(|s| {
         s.spawn(
-            axum::Server::bind(&cli.monitoring.metrics_addr)
+            hyper::Server::bind(&cli.monitoring.metrics_addr)
                 .serve(metrics_router.into_make_service())
                 .map_err(|err| anyhow!("server failed: {:?}", err)),
         );
@@ -415,6 +353,129 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
 // Error argument will always be LoadShedError::Overload since the inner Axum layers are infallible, so we don't care for it.
 async fn handle_shed_error(_err: LoadShedError<Infallible>) -> impl IntoResponse {
     ErrorCause::LoadShed
+}
+
+// Return type for setup_registry() to make clippy happy
+struct RegistrySetupResult(
+    Option<RegistryReplicator>,
+    Option<ThresholdSigPublicKey>,
+    Vec<Box<dyn Run>>,
+);
+
+// Sets up registry-related stuff
+fn setup_registry(
+    cli: &Cli,
+    registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
+    persister: WithMetricsPersist<Persister>,
+    http_client: Arc<dyn HttpClient>,
+    metrics_registry: &Registry,
+) -> Result<RegistrySetupResult, Error> {
+    // Registry Client
+    let local_store = Arc::new(LocalStoreImpl::new(
+        cli.registry.local_store_path.clone().unwrap(),
+    ));
+
+    let registry_client = Arc::new(RegistryClientImpl::new(
+        local_store.clone(), // data_provider
+        None,                // metrics_registry
+    ));
+
+    registry_client
+        .fetch_and_start_polling()
+        .context("failed to start registry client")?;
+
+    // Snapshots
+    let (channel_snapshot_send, channel_snapshot_recv) = tokio::sync::watch::channel(None);
+    let snapshot_runner = WithMetricsSnapshot(
+        {
+            let mut snapshotter = Snapshotter::new(
+                Arc::clone(&registry_snapshot),
+                channel_snapshot_send,
+                registry_client.clone(),
+                Duration::from_secs(cli.registry.min_version_age),
+            );
+
+            if let Some(v) = &cli.firewall.nftables_system_replicas_path {
+                let fw_reloader = SystemdReloader::new(SYSTEMCTL_BIN.into(), "nftables", "reload");
+
+                let fw_generator = FirewallGenerator::new(
+                    v.clone(),
+                    cli.firewall.nftables_system_replicas_var.clone(),
+                );
+
+                let persister = SnapshotPersister::new(fw_generator, fw_reloader);
+                snapshotter.set_persister(persister);
+            }
+
+            snapshotter
+        },
+        MetricParamsSnapshot::new(metrics_registry),
+    );
+
+    let snapshot_runner = WithThrottle(snapshot_runner, ThrottleParams::new(5 * SECOND));
+
+    // Checks
+    let checker = Checker::new(http_client, Duration::from_millis(cli.health.check_timeout));
+    let checker = WithMetricsCheck(checker, MetricParamsCheck::new(metrics_registry));
+
+    let check_runner = CheckRunner::new(
+        channel_snapshot_recv,
+        cli.health.max_height_lag,
+        Arc::new(persister),
+        Arc::new(checker),
+        Duration::from_millis(cli.health.check_interval),
+        Duration::from_millis(cli.health.update_interval),
+    );
+
+    let (registry_replicator, nns_pub_key) = if !cli.registry.disable_registry_replicator {
+        // Check if we require an NNS key
+        let nns_pub_key = {
+            // Check if the local store is initialized
+            if !local_store
+                .get_changelog_since_version(ZERO_REGISTRY_VERSION)
+                .expect("failed to read registry local store")
+                .is_empty()
+            {
+                None
+            } else {
+                // If it's not - then we need an NNS public key to initialize it
+                let nns_pub_key_path = cli
+                    .registry
+                    .nns_pub_key_pem
+                    .clone()
+                    .expect("NNS public key is required to init Registry local store");
+
+                Some(
+                    ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key(&nns_pub_key_path)
+                        .expect("failed to parse NNS public key"),
+                )
+            }
+        };
+
+        // Notice no-op logger
+        let logger = ic_logger::new_replica_logger(
+            slog::Logger::root(tracing_slog::TracingSlogDrain, slog::o!()), // logger
+            &ic_config::logger::Config::default(),                          // config
+        );
+
+        (
+            Some(RegistryReplicator::new_with_clients(
+                logger,
+                local_store,
+                registry_client,
+                Duration::from_millis(cli.registry.nns_poll_interval_ms), // poll_delay
+            )),
+            nns_pub_key,
+        )
+    } else {
+        (None, None)
+    };
+
+    Ok(RegistrySetupResult(
+        registry_replicator,
+        nns_pub_key,
+        vec![Box::new(snapshot_runner), Box::new(check_runner)],
+    ))
 }
 
 pub fn setup_router(

@@ -66,7 +66,7 @@ async fn test_verify_tls_certificate() -> Result<(), Error> {
     let (channel_send, _) = tokio::sync::watch::channel(None);
     let mut snapshotter =
         Snapshotter::new(Arc::clone(&snapshot), channel_send, reg, Duration::ZERO);
-    let verifier = TlsVerifier::new(Arc::clone(&snapshot));
+    let verifier = TlsVerifier::new(Arc::clone(&snapshot), false);
     snapshotter.snapshot()?;
 
     let snapshot = snapshot.load_full().unwrap();

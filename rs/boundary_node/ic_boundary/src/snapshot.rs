@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     fmt,
-    net::IpAddr,
+    net::{IpAddr, SocketAddr},
     str::FromStr,
     sync::Arc,
     time::{Duration, Instant},
@@ -19,6 +19,7 @@ use ic_registry_client_helpers::{
     subnet::{SubnetListRegistry, SubnetRegistry},
 };
 use ic_registry_subnet_type::SubnetType;
+use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::RegistryVersion;
 use tokio::sync::watch;
 use tracing::info;
@@ -111,7 +112,6 @@ pub struct RegistrySnapshot {
     pub nns_subnet_id: Principal,
     pub nns_public_key: Vec<u8>,
     pub subnets: Vec<Subnet>,
-    // Hash map for a faster lookup by DNS resolver
     pub nodes: HashMap<String, Arc<Node>>,
 }
 
@@ -413,6 +413,57 @@ impl<T: Snapshot> Run for WithMetricsSnapshot<T> {
         }
 
         Ok(())
+    }
+}
+
+pub fn generate_stub_snapshot(subnets: Vec<Subnet>) -> RegistrySnapshot {
+    let nodes = subnets
+        .iter()
+        .flat_map(|x| x.nodes.iter())
+        .map(|x| (x.id.to_string(), x.clone()))
+        .collect::<HashMap<_, _>>();
+
+    RegistrySnapshot {
+        version: 0,
+        timestamp: 0,
+        nns_subnet_id: subnet_test_id(666).get().0,
+        nns_public_key: vec![],
+        subnets,
+        nodes,
+    }
+}
+
+pub fn generate_stub_subnet(nodes: Vec<SocketAddr>) -> Subnet {
+    let subnet_id = subnet_test_id(0).get().0;
+
+    let nodes = nodes
+        .into_iter()
+        .enumerate()
+        .map(|(i, x)| {
+            Arc::new(Node {
+                id: node_test_id(i as u64).get().0,
+                subnet_type: SubnetType::Application,
+                subnet_id,
+                addr: x.ip(),
+                port: x.port(),
+                tls_certificate: vec![],
+                replica_version: "".into(),
+            })
+        })
+        .collect::<Vec<_>>();
+
+    // Catch-all canister id range
+    let range = CanisterRange {
+        start: Principal::from_slice(&[0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]),
+        end: Principal::from_slice(&[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]),
+    };
+
+    Subnet {
+        id: subnet_id,
+        subnet_type: SubnetType::Application,
+        ranges: vec![range],
+        nodes,
+        replica_version: "".into(),
     }
 }
 

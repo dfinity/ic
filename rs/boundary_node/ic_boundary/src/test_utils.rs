@@ -43,6 +43,7 @@ use crate::{
     http::HttpClient,
     persist::{Persist, Persister, Routes},
     snapshot::{RegistrySnapshot, Snapshot, Snapshotter, Subnet},
+    socket::TcpConnectInfo,
 };
 
 struct TestHttpClient(usize);
@@ -247,7 +248,10 @@ pub fn setup_test_router(
         )),
     );
 
-    let router = router.layer(MockConnectInfo(SocketAddr::from(([0, 0, 0, 0], 1337))));
+    let router = router.layer(MockConnectInfo(TcpConnectInfo(SocketAddr::from((
+        [0, 0, 0, 0],
+        1337,
+    )))));
 
     (router, subnets)
 }
