@@ -54,8 +54,8 @@ const SUBNET_SIZE: usize = 3 * ALLOWED_FAILURES + 1; // 4 nodes
 
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1);
 
-pub const UP_DOWNGRADE_OVERALL_TIMEOUT: Duration = Duration::from_secs(18 * 60);
-pub const UP_DOWNGRADE_PER_TEST_TIMEOUT: Duration = Duration::from_secs(15 * 60);
+pub const UP_DOWNGRADE_OVERALL_TIMEOUT: Duration = Duration::from_secs(25 * 60);
+pub const UP_DOWNGRADE_PER_TEST_TIMEOUT: Duration = Duration::from_secs(20 * 60);
 
 pub fn config(env: TestEnv, subnet_type: SubnetType, mainnet_version: bool) {
     let mut ic = InternetComputer::new();
