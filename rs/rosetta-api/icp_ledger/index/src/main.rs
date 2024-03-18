@@ -613,7 +613,7 @@ fn get_account_identifier_transactions(
                 ));
             })
         });
-        let settled_transaction = SettledTransaction::from(decode_encoded_block(id, block.into())
+        let settled_transaction = SettledTransaction::from(decode_encoded_block(id, EncodedBlock::from(block))
             .unwrap_or_else(|_| {
                 ic_cdk::api::trap(&format!(
                     "Block {} not found in the block log, account_identifier blocks map is corrupted!",id))
@@ -637,7 +637,7 @@ fn get_account_identifier_transactions(
 #[candid_method(query)]
 fn get_account_transactions(arg: GetAccountTransactionsArgs) -> GetAccountTransactionsResult {
     get_account_identifier_transactions(GetAccountIdentifierTransactionsArgs {
-        account_identifier: arg.account.into(),
+        account_identifier: AccountIdentifier::from(arg.account),
         max_results: arg
             .max_results
             .0
@@ -706,7 +706,7 @@ fn get_account_identifier_balance(account_identifier: AccountIdentifier) -> u64 
 #[query]
 #[candid_method(query)]
 fn icrc1_balance_of(account: Account) -> u64 {
-    get_balance(account.into())
+    get_balance(AccountIdentifier::from(account))
 }
 
 #[query]
