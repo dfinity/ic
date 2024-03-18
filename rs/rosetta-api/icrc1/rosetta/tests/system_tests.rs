@@ -21,9 +21,7 @@ use ic_icrc_rosetta::common::utils::utils::icrc1_rosetta_block_to_rosetta_core_t
 use ic_icrc_rosetta::common::utils::utils::{
     icrc1_operation_to_rosetta_core_operations, icrc1_rosetta_block_to_rosetta_core_block,
 };
-use ic_icrc_rosetta::construction_api::types::{
-    ConstructionMetadataRequestOptions, ConstructionSubmitResponseMetadata, Status,
-};
+use ic_icrc_rosetta::construction_api::types::ConstructionMetadataRequestOptions;
 use ic_icrc_rosetta_client::RosettaClient;
 use ic_icrc_rosetta_runner::RosettaClientArgs;
 use ic_icrc_rosetta_runner::{make_transaction_with_rosetta_client_binary, DEFAULT_TOKEN_SYMBOL};
@@ -790,7 +788,7 @@ fn test_construction_submit() {
                         .build()
                         .await;
 
-                    for (idx, arg_with_caller) in args_with_caller.into_iter().enumerate() {
+                    for arg_with_caller in args_with_caller.into_iter() {
                         let currency = Currency {
                             symbol: DEFAULT_TOKEN_SYMBOL.to_owned(),
                             decimals: DEFAULT_DECIMAL_PLACES as u32,
@@ -899,9 +897,8 @@ fn test_construction_submit() {
                             _ => panic!("Mint and Burn operations are not supported"),
                         };
 
-                        let construction_submit_response = env
-                            .rosetta_client
-                            .make_and_submit_transaction(
+                        env.rosetta_client
+                            .make_submit_and_wait_for_transaction(
                                 &arg_with_caller.caller,
                                 env.network_identifier.clone(),
                                 rosetta_core_operations.clone(),
@@ -910,22 +907,7 @@ fn test_construction_submit() {
                             )
                             .await
                             .unwrap();
-
-                        let submit_metadata: ConstructionSubmitResponseMetadata =
-                            construction_submit_response
-                                .metadata
-                                .unwrap()
-                                .try_into()
-                                .unwrap();
-                        assert_eq!(submit_metadata.operations, rosetta_core_operations);
-                        assert_eq!(submit_metadata.result.status, Status::Successful);
-                        assert_eq!(
-                            submit_metadata.result.response.unwrap(),
-                            serde_json::json!({
-                                "block_index": Nat::from(idx + 1).to_string()
-                            })
-                        );
-
+                        println!("Transaction submitted and confirmed");
                         for (account, expected_balance) in expected_balances.into_iter() {
                             let actual_balance = env
                                 .icrc1_agent
@@ -984,7 +966,7 @@ async fn test_rosetta_client_construction_api_flow() {
         .unwrap();
 
     env.rosetta_client
-        .make_and_submit_transaction(
+        .make_submit_and_wait_for_transaction(
             &sender_keypair,
             env.network_identifier.clone(),
             operations,
@@ -1035,7 +1017,7 @@ async fn test_rosetta_client_construction_api_flow() {
         .unwrap();
 
     env.rosetta_client
-        .make_and_submit_transaction(
+        .make_submit_and_wait_for_transaction(
             &sender_keypair,
             env.network_identifier.clone(),
             operations,

@@ -1,11 +1,9 @@
 use super::types::{
-    CanisterMethodName, ConstructionPayloadsRequestMetadata, EnvelopePair, SignedTransaction,
-    UnsignedTransaction,
+    CanisterMethodName, ConstructionPayloadsRequestMetadata, SignedTransaction, UnsignedTransaction,
 };
 use crate::common::utils::utils::{
     icrc1_operation_to_rosetta_core_operations, rosetta_core_operations_to_icrc1_operation,
 };
-use crate::construction_api::types::ConstructionSubmitResponseMetadata;
 use anyhow::{bail, Context};
 use candid::{Decode, Encode, Principal};
 use ic_agent::agent::{Envelope, EnvelopeContent};
@@ -56,7 +54,6 @@ pub async fn handle_construction_submit(
     signed_transaction: SignedTransaction<'_>,
     canister_id: Principal,
     icrc1_agent: Arc<Icrc1Agent>,
-    currency: Currency,
 ) -> anyhow::Result<ConstructionSubmitResponse> {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)?
@@ -64,61 +61,32 @@ pub async fn handle_construction_submit(
     let valid_ingress_end: u64 =
         now.saturating_add(ic_constants::MAX_INGRESS_TTL.as_nanos() as u64);
 
-    let lowest_ingress_expiry = signed_transaction.get_lowest_ingress_expiry();
-    let highest_ingress_expiry = signed_transaction.get_highest_ingress_expiry();
-
     // We start at the highest ingress expiry and work our way down to the first ingress expiry that is currently valid
-    if let Some(EnvelopePair {
-        call_envelope,
-        read_state_envelope,
-    }) = signed_transaction
-        .envelope_pairs
+    if let Some(envelope) = signed_transaction
+        .envelopes
         .into_iter()
-        .filter(|envelope_pair| {
+        .filter(|envelope| {
             // We need to make sure that the envelope we have currently selected is valid
             // The envelope is valid if it expires within the next INGRESS INTERVAL
-            envelope_pair.call_envelope.content.ingress_expiry() <= valid_ingress_end
-                && envelope_pair.call_envelope.content.ingress_expiry() >= now
+            envelope.content.ingress_expiry() <= valid_ingress_end
+                && envelope.content.ingress_expiry() >= now
         })
-        .max_by_key(|envelope_pair| envelope_pair.call_envelope.content.ingress_expiry())
+        .max_by_key(|envelope| envelope.content.ingress_expiry())
     {
         // Forward the call envelope to the IC
-        let call_envelope_serialized = build_serialized_bytes(&call_envelope)?;
+        let call_envelope_serialized = build_serialized_bytes(&envelope)?;
         icrc1_agent
             .agent
             .update_signed(canister_id, call_envelope_serialized)
-            .await
-            .context("Failed to send EnvelopeContent::Call.")?;
-
-        // Take the request id from the previous call envelope and wait until the IC has processes the content of the call envelope
-        let read_state_envelope_serialized = build_serialized_bytes(&read_state_envelope)?;
-
-        let response = icrc1_agent
-            .agent
-            .wait_signed(
-                &call_envelope.content.to_request_id(),
-                canister_id,
-                read_state_envelope_serialized,
-            )
             .await?;
 
         let transaction_identifier = TransactionIdentifier {
-            hash: build_transaction_hash_from_envelope_content(&call_envelope.content)?,
+            hash: build_transaction_hash_from_envelope_content(&envelope.content)?,
         };
-
-        let rosetta_core_operations: Vec<Operation> = handle_construction_parse(
-            vec![call_envelope.content.into_owned()],
-            currency,
-            lowest_ingress_expiry,
-            highest_ingress_expiry,
-        )?
-        .operations;
-
-        let metadata = ConstructionSubmitResponseMetadata::new(rosetta_core_operations, response)?;
 
         return Ok(ConstructionSubmitResponse {
             transaction_identifier,
-            metadata: Some(metadata.try_into()?),
+            metadata: None,
         });
     }
 
@@ -340,16 +308,15 @@ fn extract_caller_principal_from_icrc1_ledger_operation(
 pub fn handle_construction_hash(
     signed_transaction: SignedTransaction,
 ) -> anyhow::Result<ConstructionHashResponse> {
-    if signed_transaction.envelope_pairs.is_empty() {
+    if signed_transaction.envelopes.is_empty() {
         bail!("No valid envelopes found in the signed transaction");
     }
 
     // There are multiple envelopes in the signed transaction, but we only support one icrc1 ledger transaction per signed transaction
     // If there are multiple different icrc1 ledger transactions in the signed transaction, we return an error
     let mut tx_hashes = HashSet::new();
-    for envelope_pair in signed_transaction.envelope_pairs {
-        let transaction_hash =
-            build_transaction_hash_from_envelope_content(&envelope_pair.call_envelope.content)?;
+    for envelope in signed_transaction.envelopes {
+        let transaction_hash = build_transaction_hash_from_envelope_content(&envelope.content)?;
         tx_hashes.insert(transaction_hash);
     }
 
@@ -383,68 +350,37 @@ pub fn handle_construction_combine(
         request_id_to_signature.insert(signature.signing_payload.hex_bytes.clone(), signature);
     }
 
-    let mut envelope_pairs = vec![];
+    let mut envelopes = vec![];
     for envelope_content in &unsigned_transaction.envelope_contents {
         if matches!(envelope_content, EnvelopeContent::Call { .. }) {
             let request_id = build_signable_payload(envelope_content);
-            let call_signature = request_id_to_signature
+            let signature = request_id_to_signature
                 .get(&request_id)
                 .context("Failed to find signature for request id")?;
 
-            let read_state_envelope_content = build_read_state_envelope_content(
-                envelope_content.sender(),
-                envelope_content.ingress_expiry(),
-                envelope_content.to_request_id(),
-            )?;
-
-            let read_state_signature = request_id_to_signature
-                .get(&build_signable_payload(&read_state_envelope_content))
-                .context("Failed to find signature for read state request id")?;
-
-            let call_envelope = build_envelope_from_signature_and_envelope_content(
-                call_signature,
+            let envelope = build_envelope_from_signature_and_envelope_content(
+                signature,
                 (*envelope_content).clone(),
             )?;
 
-            let read_state_envelope = build_envelope_from_signature_and_envelope_content(
-                read_state_signature,
-                read_state_envelope_content,
-            )?;
-
-            envelope_pairs.push(EnvelopePair {
-                call_envelope,
-                read_state_envelope,
-            });
+            envelopes.push(envelope);
+        } else {
+            bail!(
+                "Wrong EnvelopeContent type, expected EnvelopeContent::Call, got {:?}",
+                envelope_content
+            );
         }
     }
 
     Ok(ConstructionCombineResponse {
-        signed_transaction: hex::encode(serde_cbor::to_vec(&SignedTransaction { envelope_pairs })?),
-    })
-}
-
-fn build_read_state_envelope_content(
-    sender: &Principal,
-    ingress_expiry: u64,
-    request_id: ic_agent::RequestId,
-) -> anyhow::Result<EnvelopeContent> {
-    // This code snipped was taken from ic_agent::agent::Agent::read_state_raw
-    // The ReadState envelope content is derived from the original EnvelopeContent that contained the Canister Call
-    let paths: Vec<Vec<ic_certification::Label>> =
-        vec![vec!["request_status".into(), request_id.to_vec().into()]];
-    Ok(EnvelopeContent::ReadState {
-        sender: *sender,
-        paths,
-        ingress_expiry,
+        signed_transaction: hex::encode(serde_cbor::to_vec(&SignedTransaction { envelopes })?),
     })
 }
 
 fn build_payloads_from_call_envelope_content(
-    call_envelope_content: EnvelopeContent,
+    call_envelope_content: &EnvelopeContent,
     sender_public_key: &PublicKey,
-) -> anyhow::Result<(Vec<SigningPayload>, Vec<EnvelopeContent>)> {
-    let mut envelope_contents = Vec::new();
-    let mut signing_payloads = Vec::new();
+) -> anyhow::Result<SigningPayload> {
     if !matches!(call_envelope_content, EnvelopeContent::Call { .. }) {
         bail!(
             "Wrong EnvelopeContent type, expected EnvelopeContent::Call, got {:?}",
@@ -455,39 +391,14 @@ fn build_payloads_from_call_envelope_content(
     // This is the payload that needs to be signed for the update call to the Canister on the IC
     let signer_account = Account::from(*call_envelope_content.sender());
 
-    // We also need to sign the read state of the update call to the Canister on the IC
-    // When one makes a request to the IC with an EnvelopeContent one first receives an ID for the request back from the IC
-    // This ID can be used to continously ask the IC whether there has been any progress to their request that corresponds to that ID
-    // If that is the case the IC will respond back with the actual content of the response from the Canister endpoint
-    // The ReadState envelope content is derived from the original EnvelopeContent that contained the Canister Call
-    let read_state_envelope_content = build_read_state_envelope_content(
-        call_envelope_content.sender(),
-        call_envelope_content.ingress_expiry(),
-        call_envelope_content.to_request_id(),
-    )?;
-
-    let call_payload = SigningPayload {
+    let signing_payload = SigningPayload {
         address: None,
         account_identifier: Some(signer_account.into()),
-        hex_bytes: build_signable_payload(&call_envelope_content),
+        hex_bytes: build_signable_payload(call_envelope_content),
         signature_type: Some(sender_public_key.curve_type.into()),
     };
 
-    let read_state_payload = SigningPayload {
-        address: None,
-        account_identifier: Some(Account::from(*read_state_envelope_content.sender()).into()),
-        hex_bytes: build_signable_payload(&read_state_envelope_content),
-        signature_type: Some(sender_public_key.curve_type.into()),
-    };
-
-    // For every Canister Call there need to exist two EnvelopContents, one for the acutal content of the Canister Call and the other to read the response of the Canister
-    signing_payloads.push(call_payload);
-    envelope_contents.push(call_envelope_content);
-
-    signing_payloads.push(read_state_payload);
-    envelope_contents.push(read_state_envelope_content);
-
-    Ok((signing_payloads, envelope_contents))
+    Ok(signing_payload)
 }
 
 pub fn handle_construction_payloads(
@@ -524,13 +435,13 @@ pub fn handle_construction_payloads(
             ingress_expiry: *ingress_expiry,
         };
 
-        // For every operation we create a call envelope and a read state envelope
+        // For every operation we create a call envelope
         // For every envelope we create a signing payload
-        let (sp, ec) =
-            build_payloads_from_call_envelope_content(envelope_content, &sender_public_key)?;
+        let payload =
+            build_payloads_from_call_envelope_content(&envelope_content, &sender_public_key)?;
 
-        signing_payloads.extend(sp);
-        envelope_contents.extend(ec);
+        signing_payloads.push(payload);
+        envelope_contents.push(envelope_content);
     }
 
     Ok(ConstructionPayloadsResponse {
@@ -552,7 +463,7 @@ pub fn handle_construction_parse(
     };
 
     // Iterate over all Call EnvelopeContents as they are the only ones that contain the information we need to construct the rosetta core operations
-    for envelope_content in envelope_contents.into_iter() {
+    if let Some(envelope_content) = envelope_contents.into_iter().next() {
         // First we can derive the canister method args and the caller of the function from the https update
         if let EnvelopeContent::Call { arg, .. } = &envelope_content {
             let canister_method_name =
@@ -608,9 +519,12 @@ pub fn handle_construction_parse(
                 .account_identifier_signers
                 .get_or_insert_with(Default::default)
                 .push(caller);
-
-            break;
-        };
+        } else {
+            bail!(
+                "Wrong EnvelopeContent type, expected EnvelopeContent::Call, got {:?}",
+                envelope_content
+            );
+        }
     }
 
     Ok(construction_parse_response)
