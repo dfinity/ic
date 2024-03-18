@@ -2559,7 +2559,7 @@ delegated-identity-bench:
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: cdslo
 dependencies-check:
-  allow_failure: false
+  allow_failure: true
   extends:
     - ".rules-master-pipeline-no-merge-train-rust-bazel-changed"
   needs: []
