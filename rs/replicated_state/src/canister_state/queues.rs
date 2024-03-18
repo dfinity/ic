@@ -13,6 +13,8 @@ use ic_protobuf::{
     state::queues::{v1 as pb_queues, v1::canister_queues::NextInputQueue as ProtoNextInputQueue},
     types::v1 as pb_types,
 };
+use ic_types::messages::CallbackId;
+use ic_types::methods::Callback;
 use ic_types::{
     messages::{
         CanisterMessage, Ingress, Payload, RejectContext, Request, RequestOrResponse, Response,
@@ -29,6 +31,9 @@ use std::{
     sync::Arc,
     time::Duration,
 };
+
+use self::message_pool::{MessagePool, MessageReference};
+use self::queue::CanisterQueue;
 
 pub const DEFAULT_QUEUE_CAPACITY: usize = 500;
 
@@ -84,7 +89,9 @@ pub struct CanisterQueues {
     ingress_queue: IngressQueue,
 
     /// Per remote canister input and output queues.
-    canister_queues: BTreeMap<CanisterId, (InputQueue, OutputQueue)>,
+    canister_queues: BTreeMap<CanisterId, (CanisterQueue, CanisterQueue)>,
+
+    pool: MessagePool,
 
     /// FIFO queue of local subnet sender canister IDs ensuring round-robin
     /// consumption of input messages. Only senders with non-empty queues
@@ -135,7 +142,9 @@ pub struct CanisterOutputQueuesIterator<'a> {
 
     /// Priority queue of non-empty output queues. The next message to be popped
     /// / peeked is the one at the head of the first queue.
-    queues: VecDeque<(&'a CanisterId, &'a mut OutputQueue)>,
+    queues: VecDeque<(&'a CanisterId, &'a mut CanisterQueue)>,
+
+    pool: &'a mut MessagePool,
 
     /// Number of messages that can be popped before the iterator finishes.
     size: usize,
@@ -150,13 +159,14 @@ pub struct CanisterOutputQueuesIterator<'a> {
 impl<'a> CanisterOutputQueuesIterator<'a> {
     fn new(
         owner: CanisterId,
-        queues: &'a mut BTreeMap<CanisterId, (InputQueue, OutputQueue)>,
+        queues: &'a mut BTreeMap<CanisterId, (CanisterQueue, CanisterQueue)>,
+        pool: &'a mut MessagePool,
         memory_stats: &'a mut MemoryUsageStats,
         queue_stats: &'a mut OutputQueuesStats,
     ) -> Self {
         let queues: VecDeque<_> = queues
             .iter_mut()
-            .filter(|(_, (_, queue))| queue.num_messages() > 0)
+            .filter(|(_, (_, queue))| queue.len() > 0)
             .map(|(canister, (_, queue))| (canister, queue))
             .collect();
         let size = Self::compute_size(&queues);
@@ -164,47 +174,80 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
         CanisterOutputQueuesIterator {
             owner,
             queues,
+            pool,
             size,
             memory_stats,
             queue_stats,
         }
     }
 
-    /// Returns a reference to the message that `pop` / `next` would return.
-    pub fn peek(&self) -> Option<(QueueId, &RequestOrResponse)> {
-        if let Some((receiver, queue)) = self.queues.front() {
-            let msg = queue.peek().expect("Empty queue in iterator");
-            let queue_id = QueueId {
-                src_canister: self.owner,
-                dst_canister: **receiver,
-                session_id: SessionId::new(0),
-            };
-            return Some((queue_id, msg));
+    /// Returns the first (non-stale) message from the first queue holding one.
+    ///
+    /// Consumes all encountered stale references. Removes all consumed queues from
+    /// the iteration order.
+    fn peek(&mut self) -> Option<(QueueId, &RequestOrResponse)> {
+        while let Some((receiver, queue)) = self.queues.front() {
+            while let Some(reference) = queue.peek() {
+                let queue_id = QueueId {
+                    src_canister: self.owner,
+                    dst_canister: **receiver,
+                    session_id: SessionId::new(0),
+                };
+
+                let msg = match self.pool.get(*reference) {
+                    Some(msg) => msg,
+
+                    // Stale reference, pop it and try again.
+                    None => {
+                        queue.pop();
+                        continue;
+                    }
+                };
+
+                return Some((queue_id, msg));
+            }
+
+            // Queue only contained stale references and was exhausted.
+            self.queues.pop_front();
         }
         None
     }
 
-    /// Pops a message from the next queue. If this was not the last message in
-    /// that queue, the queue is moved to the back of the iteration order.
+    /// Pops the first (non-stale) message from the first queue holding one. If this
+    /// was not the last message in that queue, the queue is moved to the back of
+    /// the iteration order.
+    ///
+    /// Consumes all encountered stale references. Removes all consumed queues from
+    /// the iteration order.
     pub fn pop(&mut self) -> Option<(QueueId, RequestOrResponse)> {
-        if let Some((receiver, queue)) = self.queues.pop_front() {
-            let msg = queue.pop().expect("Empty queue in iterator");
-            let queue_id = QueueId {
-                src_canister: self.owner,
-                dst_canister: *receiver,
-                session_id: SessionId::new(0),
-            };
+        while let Some((receiver, queue)) = self.queues.pop_front() {
+            while let Some(reference) = queue.pop() {
+                let queue_id = QueueId {
+                    src_canister: self.owner,
+                    dst_canister: *receiver,
+                    session_id: SessionId::new(0),
+                };
 
-            if queue.num_messages() > 0 {
-                self.queues.push_back((receiver, queue));
+                let msg = match self.pool.take2(reference) {
+                    Some(msg) => msg,
+
+                    // Stale reference, try again.
+                    None => {
+                        continue;
+                    }
+                };
+
+                if queue.len() > 0 {
+                    self.queues.push_back((receiver, queue));
+                }
+
+                *self.memory_stats -= MemoryUsageStats::stats_delta(QueueOp::Pop, &msg);
+                *self.queue_stats -= OutputQueuesStats::stats_delta(&msg);
+                self.size -= 1;
+                debug_assert_eq!(Self::compute_size(&self.queues), self.size);
+
+                return Some((queue_id, msg));
             }
-
-            *self.memory_stats -= MemoryUsageStats::stats_delta(QueueOp::Pop, &msg);
-            *self.queue_stats -= OutputQueuesStats::stats_delta(&msg);
-            self.size -= 1;
-            debug_assert_eq!(Self::compute_size(&self.queues), self.size);
-
-            return Some((queue_id, msg));
         }
         None
     }
@@ -218,7 +261,7 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
         let ignored = self
             .queues
             .pop_front()
-            .map(|(_, q)| q.num_messages())
+            .map(|(_, q)| q.len())
             .unwrap_or_default();
 
         self.size -= ignored;
@@ -235,8 +278,8 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
     /// Computes the number of messages left in `queues`.
     ///
     /// Time complexity: O(N).
-    fn compute_size(queues: &VecDeque<(&'a CanisterId, &'a mut OutputQueue)>) -> usize {
-        queues.iter().map(|(_, q)| q.num_messages()).sum()
+    fn compute_size(queues: &VecDeque<(&'a CanisterId, &'a mut CanisterQueue)>) -> usize {
+        queues.iter().map(|(_, q)| q.len()).sum()
     }
 }
 
@@ -250,6 +293,7 @@ impl Iterator for CanisterOutputQueuesIterator<'_> {
 
     /// Returns the exact number of messages left in the iterator.
     fn size_hint(&self) -> (usize, Option<usize>) {
+        // FIXME
         (self.size, Some(self.size))
     }
 }
@@ -281,17 +325,30 @@ impl CanisterQueues {
         F: FnMut(&CanisterId, &RequestOrResponse) -> Result<(), ()>,
     {
         for (canister_id, (_, queue)) in self.canister_queues.iter_mut() {
-            while let Some(msg) = queue.peek() {
-                match f(canister_id, msg) {
-                    Err(_) => break,
-                    Ok(_) => {
-                        let msg = queue
+            while let Some(reference) = queue.peek() {
+                let msg = match self.pool.get(*reference) {
+                    // Actual message.
+                    Some(msg) => msg,
+
+                    // Expired / dropped message. Pop it and advance.
+                    None => {
+                        queue
                             .pop()
                             .expect("peek() returned a message, pop() should not fail");
-                        let oq_stats_delta = OutputQueuesStats::stats_delta(&msg);
-                        self.output_queues_stats -= oq_stats_delta;
-                        self.memory_usage_stats -=
-                            MemoryUsageStats::stats_delta(QueueOp::Pop, &msg);
+                        continue;
+                    }
+                };
+
+                match f(canister_id, msg) {
+                    // `f` rejected the message, move on to next queue.
+                    Err(_) => break,
+
+                    // Message consumed, pop it and update the stats.
+                    Ok(_) => {
+                        queue.pop();
+
+                        self.output_queues_stats -= OutputQueuesStats::stats_delta(msg);
+                        self.memory_usage_stats -= MemoryUsageStats::stats_delta(QueueOp::Pop, msg);
                     }
                 }
             }
@@ -306,6 +363,7 @@ impl CanisterQueues {
         CanisterOutputQueuesIterator::new(
             owner,
             &mut self.canister_queues,
+            &mut self.pool,
             &mut self.memory_usage_stats,
             &mut self.output_queues_stats,
         )
@@ -324,9 +382,9 @@ impl CanisterQueues {
     /// If the message is a `Request` this will also reserve a slot in the
     /// corresponding output queue for the eventual response.
     ///
-    /// If the message is a `Response` the protocol will have already reserved
-    /// space for it, so the push cannot fail due to the input queue being
-    /// full.
+    /// If the message is a `Response` the protocol will have already reserved space
+    /// for it, so the push should not fail due to the input queue being full
+    /// (although an error will be returned in case of a bug in the upper layers).
     ///
     /// # Errors
     ///
@@ -352,7 +410,7 @@ impl CanisterQueues {
                 }
                 // Safe to already (attempt to) reserve an output slot here, as the `push()`
                 // below is guaranteed to succeed due to the check above.
-                if let Err(e) = output_queue.reserve_slot() {
+                if let Err(e) = output_queue.try_reserve_response_slot() {
                     return Err((e, msg));
                 }
                 input_queue
@@ -365,12 +423,20 @@ impl CanisterQueues {
         let iq_stats_delta = InputQueuesStats::stats_delta(QueueOp::Push, &msg);
         let mu_stats_delta = MemoryUsageStats::stats_delta(QueueOp::Push, &msg);
 
-        input_queue.push(msg)?;
+        // FIXME: Try looking up the message ID first.
+        let id = self.pool.next_message_id();
+        match msg {
+            RequestOrResponse::Request(_) => input_queue.push_request(id),
+            RequestOrResponse::Response(_) => {
+                input_queue.push_response(id).map_err(|err| (err, msg))?
+            }
+        }
+        self.pool.insert_inbound(id, msg);
 
         // Add sender canister ID to the input schedule queue if it isn't already there.
         // Sender was not scheduled iff its input queue was empty before the push (i.e.
         // queue size is 1 after the push).
-        if input_queue.num_messages() == 1 {
+        if input_queue.len() == 1 {
             match input_queue_type {
                 InputQueueType::LocalSubnet => self.local_subnet_input_schedule.push_back(sender),
                 InputQueueType::RemoteSubnet => self.remote_subnet_input_schedule.push_back(sender),
@@ -394,26 +460,37 @@ impl CanisterQueues {
             InputQueueType::LocalSubnet => &mut self.local_subnet_input_schedule,
             InputQueueType::RemoteSubnet => &mut self.remote_subnet_input_schedule,
         };
-        if let Some(sender) = input_schedule.pop_front() {
+
+        while let Some(sender) = input_schedule.pop_front() {
             // Get the message queue of this canister.
             let input_queue = &mut self.canister_queues.get_mut(&sender).unwrap().0;
-            let msg = input_queue.pop().unwrap();
-            // If the queue still isn't empty, re-add sender canister ID to the end of the
-            // input schedule queue.
-            if input_queue.num_messages() != 0 {
-                input_schedule.push_back(sender);
+            while let Some(reference) = input_queue.pop() {
+                let msg = match self.pool.take2(reference) {
+                    Some(message) => message,
+
+                    // Stale reference, try again.
+                    None => {
+                        continue;
+                    }
+                };
+
+                // If the queue still isn't empty, re-add sender canister ID to the end of the
+                // input schedule queue.
+                if input_queue.len() != 0 {
+                    input_schedule.push_back(sender);
+                }
+
+                self.input_queues_stats -= InputQueuesStats::stats_delta(QueueOp::Pop, &msg);
+                self.memory_usage_stats -= MemoryUsageStats::stats_delta(QueueOp::Pop, &msg);
+                debug_assert!(self.stats_ok());
+
+                let msg = match msg {
+                    RequestOrResponse::Request(msg) => CanisterMessage::Request(msg),
+                    RequestOrResponse::Response(msg) => CanisterMessage::Response(msg),
+                };
+
+                return Some(msg);
             }
-
-            self.input_queues_stats -= InputQueuesStats::stats_delta(QueueOp::Pop, &msg);
-            self.memory_usage_stats -= MemoryUsageStats::stats_delta(QueueOp::Pop, &msg);
-            debug_assert!(self.stats_ok());
-
-            let msg = match msg {
-                RequestOrResponse::Request(msg) => CanisterMessage::Request(msg),
-                RequestOrResponse::Response(msg) => CanisterMessage::Response(msg),
-            };
-
-            return Some(msg);
         }
 
         None
@@ -425,14 +502,32 @@ impl CanisterQueues {
             InputQueueType::LocalSubnet => &self.local_subnet_input_schedule,
             InputQueueType::RemoteSubnet => &self.remote_subnet_input_schedule,
         };
-        if let Some(sender) = input_schedule.front() {
+
+        while let Some(sender) = input_schedule.front() {
             // Get the message queue of this canister.
             let input_queue = &self.canister_queues.get(sender).unwrap().0;
-            let msg = match input_queue.peek().unwrap() {
-                RequestOrResponse::Request(msg) => CanisterMessage::Request(Arc::clone(msg)),
-                RequestOrResponse::Response(msg) => CanisterMessage::Response(Arc::clone(msg)),
-            };
-            return Some(msg);
+
+            while let Some(reference) = input_queue.peek() {
+                // Look up the message.
+                let msg = match self.pool.get(*reference) {
+                    Some(msg) => msg,
+
+                    // Stale reference, pop it and try again.
+                    None => {
+                        input_queue.pop();
+                        continue;
+                    }
+                };
+
+                let ret = match msg {
+                    RequestOrResponse::Request(msg) => CanisterMessage::Request(Arc::clone(msg)),
+                    RequestOrResponse::Response(msg) => CanisterMessage::Response(Arc::clone(msg)),
+                };
+                return Some(ret);
+            }
+
+            // Queue only contained stale references and was exhausted.
+            input_schedule.pop_front();
         }
 
         None
@@ -446,7 +541,7 @@ impl CanisterQueues {
         };
         if let Some(sender) = input_schedule.pop_front() {
             let input_queue = &mut self.canister_queues.get_mut(&sender).unwrap().0;
-            if input_queue.num_messages() != 0 {
+            if input_queue.len() != 0 {
                 input_schedule.push_back(sender);
             }
         }
@@ -574,7 +669,7 @@ impl CanisterQueues {
         if let Err(e) = output_queue.check_has_request_slot() {
             return Err((e, msg));
         }
-        if let Err(e) = input_queue.reserve_slot() {
+        if let Err(e) = input_queue.try_reserve_response_slot() {
             return Err((e, msg));
         }
 
@@ -582,9 +677,10 @@ impl CanisterQueues {
         let oq_stats_delta =
             OutputQueuesStats::stats_delta(&RequestOrResponse::Request(msg.clone()));
 
-        output_queue
-            .push_request(msg, time + REQUEST_LIFETIME)
-            .expect("cannot fail due to the checks above");
+        let id = self.pool.next_message_id();
+        output_queue.push_request(id);
+        self.pool
+            .insert_outbound(id, RequestOrResponse::Request(msg), time);
 
         self.input_queues_stats.reserved_slots += 1;
         self.output_queues_stats += oq_stats_delta;
@@ -616,7 +712,7 @@ impl CanisterQueues {
         );
 
         let (input_queue, _output_queue) = self.get_or_insert_queues(&request.receiver);
-        input_queue.reserve_slot()?;
+        input_queue.try_reserve_response_slot()?;
         self.input_queues_stats.reserved_slots += 1;
         self.memory_usage_stats += MemoryUsageStats::response_slot_delta();
         debug_assert!(self.stats_ok());
@@ -652,8 +748,8 @@ impl CanisterQueues {
             .collect()
     }
 
-    /// Pushes a `Response` type message into the relevant output queue. The
-    /// protocol should have already reserved a slot, so this cannot fail.
+    /// Pushes a `Response` into the relevant output queue. The protocol should have
+    /// already reserved a slot, so this cannot fail.
     ///
     /// # Panics
     ///
@@ -664,6 +760,7 @@ impl CanisterQueues {
         let oq_stats_delta =
             OutputQueuesStats::stats_delta(&RequestOrResponse::Response(msg.clone()));
 
+        let id = self.pool.next_message_id();
         // Since we make an output queue reservation whenever we induct a request; and
         // we would never garbage collect a non-empty queue (including one with just a
         // reservation); we are guaranteed that the output queue exists.
@@ -671,17 +768,36 @@ impl CanisterQueues {
             .get_mut(&msg.originator)
             .expect("pushing response into inexistent output queue")
             .1
-            .push_response(msg);
+            .push_response(id);
+        self.pool
+            .insert_outbound(id, RequestOrResponse::Response(msg), time);
 
         self.memory_usage_stats += mu_stats_delta;
         self.output_queues_stats += oq_stats_delta;
         debug_assert!(self.stats_ok());
     }
 
-    /// Returns a reference to the message at the head of the respective output
+    /// Returns a reference to the first non-stale message in the respective output
     /// queue, if any.
     pub(super) fn peek_output(&self, canister_id: &CanisterId) -> Option<&RequestOrResponse> {
-        self.canister_queues.get(canister_id)?.1.peek()
+        // Get the message queue of this canister.
+        let output_queue = &self.canister_queues.get(canister_id).unwrap().1;
+
+        while let Some(reference) = output_queue.peek() {
+            // Look up the message.
+            match self.pool.get(*reference) {
+                msg @ Some(_) => return msg,
+
+                // Stale reference, pop it and try again.
+                None => {
+                    output_queue.pop();
+                    continue;
+                }
+            };
+        }
+
+        None
+        // self.canister_queues.get(canister_id)?.1.peek()
     }
 
     /// Tries to induct a message from the output queue to `own_canister_id`
@@ -804,12 +920,12 @@ impl CanisterQueues {
     fn get_or_insert_queues(
         &mut self,
         canister_id: &CanisterId,
-    ) -> (&mut InputQueue, &mut OutputQueue) {
+    ) -> (&mut CanisterQueue, &mut CanisterQueue) {
         let (input_queue, output_queue) =
             self.canister_queues.entry(*canister_id).or_insert_with(|| {
-                let input_queue = InputQueue::new(DEFAULT_QUEUE_CAPACITY);
-                let output_queue = OutputQueue::new(DEFAULT_QUEUE_CAPACITY);
-                self.input_queues_stats.size_bytes += input_queue.calculate_size_bytes();
+                let input_queue = CanisterQueue::new(DEFAULT_QUEUE_CAPACITY);
+                let output_queue = CanisterQueue::new(DEFAULT_QUEUE_CAPACITY);
+                self.input_queues_stats.size_bytes += input_queue.empty_size_bytes();
                 (input_queue, output_queue)
             });
         (input_queue, output_queue)
@@ -1112,6 +1228,52 @@ fn generate_timeout_response(request: &Arc<Request>) -> RequestOrResponse {
         )),
         deadline: request.deadline,
     }))
+}
+
+fn get_message(
+    reference: MessageReference,
+    pool: &MessagePool,
+    callbacks: &BTreeMap<CallbackId, Callback>,
+) -> Option<RequestOrResponse> {
+    use MessageReference::*;
+
+    match reference {
+        Request(id) => pool.get_request(id).cloned(),
+        Response(id) => pool.get_response(id).cloned(),
+        TimeoutRejectResponse(callback) | DropRejectResponse(callback) => {
+            Some(generate_reject_response(
+                callback,
+                callbacks,
+                RejectCode::SysTransient,
+                "Timed out".into(),
+            ))
+        }
+    }
+}
+
+/// Generates a reject `Response` for a `Request` message with the provided
+/// `RejectCode` and error message.
+fn generate_reject_response(
+    callback_id: CallbackId,
+    callbacks: &BTreeMap<CallbackId, Callback>,
+    reject_code: RejectCode,
+    message: String,
+) -> RequestOrResponse {
+    let callback = callbacks.get(&callback_id).unwrap();
+
+    Response {
+        originator: callback.originator,
+        respondent: callback.respondent,
+        originator_reply_callback: callback_id,
+        refund: Cycles::zero(),
+        response_payload: Payload::Reject(RejectContext::new_with_message_length_limit(
+            reject_code,
+            message,
+            MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
+        )),
+        deadline: callback.deadline,
+    }
+    .into()
 }
 
 impl From<&CanisterQueues> for pb_queues::CanisterQueues {

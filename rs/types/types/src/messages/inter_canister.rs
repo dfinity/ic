@@ -467,6 +467,12 @@ impl RequestOrResponse {
             RequestOrResponse::Response(resp) => resp.deadline,
         }
     }
+
+    /// Returns `true` if this is the request or response of a best-effort call
+    /// (i.e. if it has a non-zero deadline).
+    pub fn is_best_effort(&self) -> bool {
+        self.deadline() != NO_DEADLINE
+    }
 }
 
 /// Convenience `CountBytes` implementation that returns the same value as

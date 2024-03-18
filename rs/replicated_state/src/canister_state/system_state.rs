@@ -20,24 +20,21 @@ use ic_protobuf::{
 };
 
 use ic_registry_subnet_type::SubnetType;
-use ic_types::{
-    messages::{
-        CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask, Ingress, RejectContext,
-        Request, RequestOrResponse, Response, StopCanisterContext,
-    },
-    nominal_cycles::NominalCycles,
-    CanisterId, CanisterTimer, Cycles, MemoryAllocation, NumBytes, PrincipalId, Time,
+use ic_types::messages::{
+    CallbackId, CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask, Ingress,
+    RejectContext, Request, RequestOrResponse, Response, StopCanisterContext,
 };
+use ic_types::methods::Callback;
+use ic_types::nominal_cycles::NominalCycles;
+use ic_types::{CanisterId, CanisterTimer, Cycles, MemoryAllocation, NumBytes, PrincipalId, Time};
 use lazy_static::lazy_static;
 use maplit::btreeset;
 use prometheus::IntCounter;
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::BTreeMap,
-    convert::{TryFrom, TryInto},
-};
-use std::{collections::BTreeSet, sync::Arc};
-use std::{collections::VecDeque, str::FromStr};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::convert::{TryFrom, TryInto};
+use std::str::FromStr;
+use std::sync::Arc;
 
 lazy_static! {
     static ref DEFAULT_PRINCIPAL_MULTIPLE_CONTROLLERS: PrincipalId =
