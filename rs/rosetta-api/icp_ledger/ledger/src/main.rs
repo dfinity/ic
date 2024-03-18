@@ -1,4 +1,4 @@
-use candid::{candid_method, Decode, Nat};
+use candid::{candid_method, Decode, Nat, Principal};
 use dfn_candid::{candid, candid_one, CandidOne};
 #[allow(unused_imports)]
 use dfn_core::BytesS;
@@ -35,6 +35,7 @@ use icp_ledger::{
     MAX_BLOCKS_PER_REQUEST, MEMO_SIZE_BYTES,
 };
 use icrc_ledger_types::icrc1::transfer::TransferArg;
+use icrc_ledger_types::icrc1::transfer::TransferError as Icrc1TransferError;
 use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::{
@@ -107,7 +108,7 @@ fn init(
         initial_values,
         minting_account,
         icrc1_minting_account,
-        dfn_core::api::now().into(),
+        TimeStamp::from(dfn_core::api::now()),
         transaction_window,
         send_whitelist,
         transfer_fee,
@@ -810,9 +811,11 @@ fn send_() {
 
 #[candid_method(update, rename = "send_dfx")]
 async fn send_dfx(arg: SendArgs) -> BlockIndex {
-    transfer_candid(arg.into()).await.unwrap_or_else(|e| {
-        trap_with(&e.to_string());
-    })
+    transfer_candid(TransferArgs::from(arg))
+        .await
+        .unwrap_or_else(|e| {
+            trap_with(&e.to_string());
+        })
 }
 
 /// Do not use call this from code, this is only here so dfx has something to
@@ -875,7 +878,7 @@ async fn icrc1_transfer(
     arg: TransferArg,
 ) -> Result<Nat, icrc_ledger_types::icrc1::transfer::TransferError> {
     let from_account = Account {
-        owner: caller().into(),
+        owner: Principal::from(caller()),
         subaccount: arg.from_subaccount,
     };
     Ok(Nat::from(
@@ -891,7 +894,7 @@ async fn icrc1_transfer(
         .await
         .map_err(convert_transfer_error)
         .map_err(|err| {
-            let err: icrc_ledger_types::icrc1::transfer::TransferError = match err.try_into() {
+            let err: Icrc1TransferError = match Icrc1TransferError::try_from(err) {
                 Ok(err) => err,
                 Err(err) => trap_with(&err),
             };
@@ -922,7 +925,7 @@ async fn icrc2_transfer_from(arg: TransferFromArgs) -> Result<Nat, TransferFromE
         trap_with("ICRC-2 features are not enabled on the ledger.");
     }
     let spender_account = Account {
-        owner: caller().into(),
+        owner: Principal::from(caller()),
         subaccount: arg.spender_subaccount,
     };
     Ok(Nat::from(
@@ -938,7 +941,7 @@ async fn icrc2_transfer_from(arg: TransferFromArgs) -> Result<Nat, TransferFromE
         .await
         .map_err(convert_transfer_error)
         .map_err(|err| {
-            let err: TransferFromError = match err.try_into() {
+            let err: TransferFromError = match TransferFromError::try_from(err) {
                 Ok(err) => err,
                 Err(err) => trap_with(&err),
             };
@@ -1162,10 +1165,10 @@ fn query_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> QueryBlocksRe
         .blockchain
         .block_slice(local_blocks.clone())
         .iter()
-        .map(|enc_block| -> CandidBlock {
-            Block::decode(enc_block.clone())
-                .expect("bug: failed to decode encoded block")
-                .into()
+        .map(|enc_block| {
+            CandidBlock::from(
+                Block::decode(enc_block.clone()).expect("bug: failed to decode encoded block"),
+            )
         })
         .collect();
 
@@ -1175,7 +1178,7 @@ fn query_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> QueryBlocksRe
         .map(|(canister_id, slice)| ArchivedBlocksRange {
             start: slice.start,
             length: range_utils::range_len(&slice),
-            callback: QueryArchiveFn::new(canister_id.into(), "get_blocks".to_string()),
+            callback: QueryArchiveFn::new(Principal::from(canister_id), "get_blocks".to_string()),
         })
         .collect();
 
@@ -1350,7 +1353,7 @@ fn query_encoded_blocks(
             start: slice.start,
             length: range_utils::range_len(&slice),
             callback: icrc_ledger_types::icrc3::archive::QueryArchiveFn::new(
-                canister_id.into(),
+                Principal::from(canister_id),
                 "get_encoded_blocks".to_string(),
             ),
         })
@@ -1380,7 +1383,7 @@ async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
     let now = TimeStamp::from_nanos_since_unix_epoch(time_nanos());
 
     let from_account = Account {
-        owner: caller().into(),
+        owner: Principal::from(caller()),
         subaccount: arg.from_subaccount,
     };
     let from = AccountIdentifier::from(from_account);
@@ -1448,7 +1451,7 @@ async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
         let (block_index, hash) = apply_transaction(&mut *ledger, tx, now, expected_fee)
             .map_err(convert_transfer_error)
             .map_err(|err| {
-                let err: ApproveError = match err.try_into() {
+                let err: ApproveError = match ApproveError::try_from(err) {
                     Ok(err) => err,
                     Err(err) => trap_with(&err),
                 };

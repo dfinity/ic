@@ -187,7 +187,7 @@ fn get_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> GetBlocksResult
     Ok(BlockRange {
         blocks: read_encoded_blocks(start, length)?
             .into_iter()
-            .map(|b| Block::decode(b).expect("failed to decode a block").into())
+            .map(|b| CandidBlock::from(Block::decode(b).expect("failed to decode a block")))
             .collect::<Vec<CandidBlock>>(),
     })
 }
