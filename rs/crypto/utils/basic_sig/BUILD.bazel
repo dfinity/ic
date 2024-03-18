@@ -3,14 +3,9 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
-    "//rs/crypto/internal/crypto_lib/basic_sig/der_utils",
-    "//rs/crypto/internal/crypto_lib/basic_sig/ed25519",
-    "//rs/crypto/internal/crypto_lib/types",
+    "//rs/crypto/ed25519",
     "//rs/protobuf",
     "//rs/types/base_types",
-    "@crate_index//:base64",
-    "@crate_index//:ed25519-consensus",
-    "@crate_index//:simple_asn1",
 ]
 
 MACRO_DEPENDENCIES = []
