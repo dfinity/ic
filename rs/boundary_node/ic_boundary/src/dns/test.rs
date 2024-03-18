@@ -17,7 +17,7 @@ async fn test_resolve() -> Result<(), Error> {
     let (reg, nodes, _) = create_fake_registry_client(4, 1, None);
     let reg = Arc::new(reg);
     let snapshot = Arc::new(ArcSwapOption::empty());
-    let helper = DnsResolver::new(Arc::clone(&snapshot));
+    let dns_resolver = DnsResolver::new(Arc::clone(&snapshot));
 
     let (channel_send, _) = tokio::sync::watch::channel(None);
     let mut snapshotter =
@@ -26,7 +26,7 @@ async fn test_resolve() -> Result<(), Error> {
 
     // Check that resolved node's IPs match expected ones
     for node in nodes.into_iter() {
-        let res = helper
+        let res = dns_resolver
             .resolve(Name::from_str(node.0.to_string().as_str()).unwrap())
             .await;
 
@@ -42,7 +42,9 @@ async fn test_resolve() -> Result<(), Error> {
     }
 
     // Check the lookup failure for unknown node name
-    let res = helper.resolve(Name::from_str("foo-bar-baz").unwrap()).await;
+    let res = dns_resolver
+        .resolve(Name::from_str("foo-bar-baz").unwrap())
+        .await;
     assert!(res.is_err());
 
     Ok(())

@@ -5290,7 +5290,6 @@ dependencies = [
  "http-body 0.4.5",
  "hyper 0.14.26",
  "hyper-rustls",
- "hyperlocal",
  "ic-base-types",
  "ic-btc-interface",
  "ic-certification-test-utils",

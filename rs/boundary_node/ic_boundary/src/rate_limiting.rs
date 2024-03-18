@@ -1,7 +1,13 @@
-use std::sync::Arc;
+use std::{
+    net::{IpAddr, SocketAddr},
+    sync::Arc,
+};
 
 use anyhow::anyhow;
-use axum::{error_handling::HandleErrorLayer, response::IntoResponse, BoxError, Router};
+use axum::{
+    error_handling::HandleErrorLayer, extract::ConnectInfo, response::IntoResponse, BoxError,
+    Router,
+};
 use http::request::Request;
 use serde::{Deserialize, Serialize};
 use std::{convert::TryFrom, time::Duration};
@@ -11,7 +17,7 @@ use tower_governor::{
     GovernorLayer,
 };
 
-use crate::{persist::RouteSubnet, routes::ApiError};
+use crate::{persist::RouteSubnet, routes::ApiError, socket::TcpConnectInfo};
 
 pub struct RateLimit {
     requests_per_second: u32, // requests per second allowed
@@ -47,6 +53,25 @@ impl KeyExtractor for SubnetRateToken {
     }
 }
 
+#[derive(Clone)]
+struct IpKeyExtractor;
+
+impl KeyExtractor for IpKeyExtractor {
+    type Key = IpAddr;
+
+    fn extract<B>(&self, req: &Request<B>) -> Result<Self::Key, GovernorError> {
+        req.extensions()
+            .get::<ConnectInfo<TcpConnectInfo>>()
+            .map(|x| (x.0).0)
+            .or(req
+                .extensions()
+                .get::<ConnectInfo<SocketAddr>>()
+                .map(|x| x.0))
+            .map(|x| x.ip())
+            .ok_or(GovernorError::UnableToExtractKey)
+    }
+}
+
 impl RateLimit {
     // Per IP rate limiting.
 
@@ -60,6 +85,7 @@ impl RateLimit {
             GovernorConfigBuilder::default()
                 .per_nanosecond(interval.as_nanos().try_into().unwrap())
                 .burst_size(self.requests_per_second)
+                .key_extractor(IpKeyExtractor)
                 .finish()
                 .unwrap(),
         );
