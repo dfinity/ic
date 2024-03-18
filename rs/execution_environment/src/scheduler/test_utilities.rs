@@ -475,6 +475,7 @@ impl SchedulerTest {
             self.ecdsa_subnet_public_keys.clone(),
             self.ecdsa_quadruple_ids.clone(),
             self.round,
+            None,
             round_type,
             self.registry_settings(),
         );
