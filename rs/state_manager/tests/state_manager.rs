@@ -733,13 +733,16 @@ fn query_stats_are_persisted() {
         };
 
         let mut inner = BTreeMap::new();
-        inner.insert(proposer_id, test_query_stats.clone());
+        inner.insert(canister_id, test_query_stats.clone());
+
+        let mut records = BTreeMap::new();
+        records.insert(epoch, inner);
 
         let mut stats = BTreeMap::new();
-        stats.insert(canister_id, inner);
+        stats.insert(proposer_id, records);
 
         state.epoch_query_stats = RawQueryStats {
-            epoch: Some(epoch),
+            highest_aggregated_epoch: Some(epoch),
             stats,
         };
 
@@ -749,14 +752,16 @@ fn query_stats_are_persisted() {
         let (_height, recovered_tip) = state_manager.take_tip();
 
         let recovered_stats = recovered_tip.epoch_query_stats;
-        assert_eq!(recovered_stats.epoch, Some(epoch));
+        assert_eq!(recovered_stats.highest_aggregated_epoch, Some(epoch));
         assert_eq!(recovered_stats.stats.len(), 1);
         assert_eq!(
             recovered_stats
                 .stats
-                .get(&canister_id)
-                .unwrap()
                 .get(&proposer_id)
+                .unwrap()
+                .get(&epoch)
+                .unwrap()
+                .get(&canister_id)
                 .unwrap(),
             &test_query_stats
         );
@@ -5916,9 +5921,9 @@ fn query_stats_are_collected() {
         assert!(canister_state.egress_payload_size == INITIAL_VALUES);
     }
 
-    // Run for an entire epoch and then deliver one more batch to ensure query stats get copied to the canister state.
+    // Run for an entire epoch and then deliver `NUM_NODES` more batches to ensure query stats get aggregated to the canister state.
     // In practise, some batches have already been delivered (e.g. ingress messages for canister installation).
-    for i in 0..query_stats_epoch_length as usize + 1 {
+    for i in 0..query_stats_epoch_length as usize + NUM_NODES {
         let mut stats = vec![];
 
         // Append query stats the first time each node is a block maker.

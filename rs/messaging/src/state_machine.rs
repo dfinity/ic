@@ -36,7 +36,6 @@ pub(crate) struct StateMachineImpl {
     stream_builder: Box<dyn StreamBuilder>,
     log: ReplicaLogger,
     metrics: MessageRoutingMetrics,
-    query_stats_epoch_length: u64,
 }
 
 impl StateMachineImpl {
@@ -46,7 +45,6 @@ impl StateMachineImpl {
         stream_builder: Box<dyn StreamBuilder>,
         log: ReplicaLogger,
         metrics: MessageRoutingMetrics,
-        query_stats_epoch_length: u64,
     ) -> Self {
         Self {
             scheduler,
@@ -54,7 +52,6 @@ impl StateMachineImpl {
             stream_builder,
             log,
             metrics,
-            query_stats_epoch_length,
         }
     }
 
@@ -86,9 +83,7 @@ impl StateMachine for StateMachineImpl {
             deliver_query_stats(
                 query_stats,
                 &mut state,
-                batch.batch_number,
                 &self.log,
-                self.query_stats_epoch_length,
                 &self.metrics.query_stats_metrics,
             );
         }
