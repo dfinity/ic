@@ -10,13 +10,13 @@ pub enum QueryStatsPermanentValidationError {
     InvalidNodeId { expected: NodeId, reported: NodeId },
     /// The epoch is lower than the aggregated height in the state manager
     EpochAlreadyAggregated {
-        expected: QueryStatsEpoch,
-        reported: QueryStatsEpoch,
+        highest_aggregated_epoch: QueryStatsEpoch,
+        payload_epoch: QueryStatsEpoch,
     },
     /// The epoch is higher than the certified height would allow for
     EpochTooHigh {
-        expected: QueryStatsEpoch,
-        reported: QueryStatsEpoch,
+        max_valid_epoch: QueryStatsEpoch,
+        payload_epoch: QueryStatsEpoch,
     },
     /// Stats for a [`CanisterId`] have been send twice
     DuplicateCanisterId(CanisterId),

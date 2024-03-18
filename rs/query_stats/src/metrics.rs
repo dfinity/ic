@@ -1,5 +1,7 @@
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
-use prometheus::{HistogramVec, IntGauge};
+use prometheus::{HistogramVec, IntCounter, IntGauge};
+
+pub(crate) const CRITICAL_ERROR_AGGREGATION_FAILURE: &str = "query_stats_aggregator_failure";
 
 /// Metrics for query stats collector
 ///
@@ -77,6 +79,10 @@ pub struct QueryStatsAggregatorMetrics {
     /// This is lower than the epoch for which we collect stats, as there is
     /// a delay for propagating local query stats via consensus blocks.
     pub query_stats_aggregator_current_epoch: IntGauge,
+    /// The number of records stored in the unaggregateed state
+    pub query_stats_aggregator_num_records: IntGauge,
+    /// Critical error occuring in aggregator
+    pub query_stats_critical_error_aggregator_failure: IntCounter,
 }
 
 impl QueryStatsAggregatorMetrics {
@@ -86,6 +92,12 @@ impl QueryStatsAggregatorMetrics {
                 "query_stats_aggregator_current_epoch",
                 "Current epoch of the query stats aggregator",
             ),
+            query_stats_aggregator_num_records: metrics_registry.int_gauge(
+                "query_stats_aggregator_num_records",
+                "The number of records stored in the unaggregateed state",
+            ),
+            query_stats_critical_error_aggregator_failure: metrics_registry
+                .error_counter(CRITICAL_ERROR_AGGREGATION_FAILURE),
         }
     }
 }

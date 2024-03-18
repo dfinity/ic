@@ -564,7 +564,6 @@ impl BatchProcessorImpl {
             stream_builder,
             log.clone(),
             metrics.clone(),
-            hypervisor_config.query_stats_epoch_length,
         ));
 
         Self {

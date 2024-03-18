@@ -156,7 +156,6 @@ fn state_machine_populates_network_topology() {
             fixture.stream_builder,
             log,
             fixture.metrics,
-            ic_config::execution_environment::QUERY_STATS_EPOCH_LENGTH,
         ));
 
         assert_ne!(
@@ -191,7 +190,6 @@ fn test_delivered_batch(provided_batch: Batch) -> ReplicatedState {
             fixture.stream_builder,
             log,
             fixture.metrics,
-            ic_config::execution_environment::QUERY_STATS_EPOCH_LENGTH,
         ));
 
         state_machine.execute_round(
@@ -292,7 +290,6 @@ fn test_batch_time_impl(
             fixture.stream_builder,
             log,
             fixture.metrics,
-            ic_config::execution_environment::QUERY_STATS_EPOCH_LENGTH,
         );
 
         assert_eq!(
