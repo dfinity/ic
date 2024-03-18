@@ -304,6 +304,10 @@ bazel-test-macos:
       set -euo pipefail
       VERSION=$(git rev-parse HEAD)
 
+      if [[ "$CI_MERGE_REQUEST_TITLE" == *"[RUN_ALL_BAZEL_TARGETS]"* ]]; then
+          RUN_ON_DIFF_ONLY="false"
+      fi
+
       if [ "$CI_JOB_NAME" == "build-ic-release" ]; then
           # read NNS release version from git tree
           NNS_RELEASE_VERSION="$(jq -r '.subnets["tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"]' testnet/mainnet_revisions.json)"
