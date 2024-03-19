@@ -976,8 +976,8 @@ pub struct ProposalData {
     pub minimum_yes_proportion_of_exercised:
         ::core::option::Option<::ic_nervous_system_proto::pb::v1::Percentage>,
     /// In general, this holds data retrieved at proposal submission/creation time and used later
-    /// during execution is stored. This varies based on the action of the proposal.
-    #[prost(oneof = "proposal_data::ActionAuxiliary", tags = "22")]
+    /// during execution. This varies based on the action of the proposal.
+    #[prost(oneof = "proposal_data::ActionAuxiliary", tags = "22, 23")]
     pub action_auxiliary: ::core::option::Option<proposal_data::ActionAuxiliary>,
 }
 /// Nested message and enum types in `ProposalData`.
@@ -989,14 +989,23 @@ pub mod proposal_data {
         #[prost(message, optional, tag = "1")]
         pub valuation: ::core::option::Option<super::Valuation>,
     }
+    #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct MintSnsTokensActionAuxiliary {
+        #[prost(message, optional, tag = "1")]
+        pub valuation: ::core::option::Option<super::Valuation>,
+    }
     /// In general, this holds data retrieved at proposal submission/creation time and used later
-    /// during execution is stored. This varies based on the action of the proposal.
+    /// during execution. This varies based on the action of the proposal.
     #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum ActionAuxiliary {
         #[prost(message, tag = "22")]
         TransferSnsTreasuryFunds(TransferSnsTreasuryFundsActionAuxiliary),
+        #[prost(message, tag = "23")]
+        MintSnsTokens(MintSnsTokensActionAuxiliary),
     }
 }
 #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
