@@ -1,20 +1,15 @@
 #![allow(unused)]
 
-use ic_error_types::RejectCode;
-use ic_types::messages::{
-    CallbackId, Payload, RejectContext, Request, RequestOrResponse, Response, NO_DEADLINE,
-};
-use ic_types::methods::Callback;
+use ic_types::messages::{CallbackId, Request, RequestOrResponse, Response, NO_DEADLINE};
 use ic_types::time::CoarseTime;
-use ic_types::{CanisterId, CountBytes, Cycles, NumBytes, Time};
+use ic_types::{CountBytes, Time};
 use phantom_newtype::Id;
 use std::cmp::Reverse;
 use std::collections::hash_map::Entry;
-use std::collections::{BTreeMap, BinaryHeap, HashMap};
+use std::collections::{BinaryHeap, HashMap};
 use std::sync::Arc;
 
 use crate::canister_state::queues::REQUEST_LIFETIME;
-use crate::replicated_state::MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN;
 
 pub struct MessageIdTag;
 /// A value used as an opaque nonce to couple outgoing calls with their
@@ -172,7 +167,6 @@ impl MessagePool {
 
         // Record in deadline queue iff a deadline was provided.
         if deadline != NO_DEADLINE {
-            assert!(deadline != NO_DEADLINE);
             self.deadline_queue.push((Reverse(deadline), id));
         }
 
@@ -197,7 +191,7 @@ impl MessagePool {
         match reference {
             Request(id) => self.get_request(*id),
             Response(id) => self.get_response(*id),
-            TimeoutRejectResponse(callback) | DropRejectResponse(callback) => None,
+            TimeoutRejectResponse(_) | DropRejectResponse(_) => None,
         }
     }
 
@@ -260,7 +254,7 @@ impl MessagePool {
         match reference {
             Request(id) => self.take_request(id),
             Response(id) => self.take_response(id),
-            TimeoutRejectResponse(callback) | DropRejectResponse(callback) => None,
+            TimeoutRejectResponse(_) | DropRejectResponse(_) => None,
         }
     }
 
@@ -282,7 +276,7 @@ impl MessagePool {
     pub fn has_expired_deadlines(&self, now: Time) -> bool {
         if let Some((deadline, _)) = self.deadline_queue.peek() {
             let now = CoarseTime::floor(now);
-            if (deadline.0 < now) {
+            if deadline.0 < now {
                 return true;
             }
         }
@@ -298,7 +292,7 @@ impl MessagePool {
         let now = CoarseTime::floor(now);
         let mut expired = Vec::new();
         while let Some((deadline, id)) = self.deadline_queue.peek() {
-            if (deadline.0 >= now) {
+            if deadline.0 >= now {
                 break;
             }
             let id = id.clone();
@@ -318,7 +312,7 @@ impl MessagePool {
     /// Drops the largest message in the pool and returns it.
     pub fn shed_message(&mut self) -> Option<(MessageId, RequestOrResponse)> {
         // Keep trying until we actually drop a message.
-        while let Some((byte_size, id)) = self.size_queue.pop() {
+        while let Some((_, id)) = self.size_queue.pop() {
             if let Some(msg) = self.take_impl(id) {
                 // A message was shed, prune the queues and return it.
                 self.maybe_trim_queues();
@@ -379,11 +373,4 @@ impl Default for MessagePool {
             next_message_id: 0.into(),
         }
     }
-}
-
-/// Helper for generating different hashes for requests and responses.
-#[derive(Hash)]
-enum MessageType {
-    Request,
-    Response,
 }

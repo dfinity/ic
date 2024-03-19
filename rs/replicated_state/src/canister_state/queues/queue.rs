@@ -333,6 +333,14 @@ impl TryFrom<pb_queues::InputOutputQueue> for QueueWithReservation<Option<Reques
 /// A FIFO queue with equal but separate capacities for requests and responses,
 /// ensuring full-duplex communication up to the capacity.
 ///
+/// Note that for the most part (with the exception of transient reject response
+/// markers) the queue holds weak references into a `MessagePool`. Meaning that
+/// the messages that these references point to may expire or be shed, resulting
+/// in stale references that are not immediately removed from the queue. Which
+/// is why the queue stats track "request slots" and "response slots" instead of
+/// "requests" and "responses" and `len()` returns the length of the queue, not
+/// the number of messages that can be popped.
+///
 /// Backpressure (limiting number of open callbacks to a given destination) is
 /// enforced by making enqueuing a request contingent on reserving a slot for
 /// the eventual response in the reverse queue; and bounding the number of
@@ -340,18 +348,12 @@ impl TryFrom<pb_queues::InputOutputQueue> for QueueWithReservation<Option<Reques
 /// Note that this ensures that a response is only ever enqueued into a slot
 /// already reserved for it.
 ///
-/// Also note that we must differentiate between response slots (needed for both
-/// best-effort and guaranteed responses) and response memory reservations (only
-/// required by guaranteed responses).
-///
 /// Backpressure should implicitly limit the number of requests (since there
 /// canot be more live requests than callbacks). It is however possible for
 /// requests to time out; produce a reject response in the reverse queue; and
 /// for that response to be consumed while the request still consumes a slot in
 /// the queue; so we must additionally explicitly limit the number of slots used
 /// by requests by the queue capacity.
-///
-/// This is the basis for both `InputQueue` and `OutputQueue`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct CanisterQueue {
     /// A FIFO queue of all requests and responses. Since responses may be enqueued
@@ -359,17 +361,14 @@ pub(crate) struct CanisterQueue {
     /// represented in `queue`. They only exist as the difference between
     /// `request_slots + response_slots` and `queue.len()`.
     queue: VecDeque<MessageReference>,
-    /// Maximum number of requests; or responses + slots; that can be held in the
-    /// queue at any one time.
+    /// Maximum number of requests; or responses + reserved slots; that can be held
+    /// in the queue at any one time.
     capacity: usize,
     /// Number of enqueued requests.
     request_slots: usize,
     /// Number of slots used by enqueued responses or reserved for expected
     /// responses.
     response_slots: usize,
-    // /// Number of memory reservations for guaranteed responses. This is always less
-    // /// than or equal to the number of slots reserved for responses.
-    // response_memory_reservations: usize,
 }
 
 impl CanisterQueue {
@@ -395,15 +394,6 @@ impl CanisterQueue {
         self.capacity.checked_sub(self.request_slots).unwrap()
     }
 
-    // // Computes the number of enqueued requests, as the difference between queue
-    // // length and the number of enqueued responses.
-    // fn enqueued_requests(&self) -> usize {
-    //     self.queue
-    //         .len()
-    //         .checked_sub(self.enqueued_responses)
-    //         .unwrap()
-    // }
-
     /// Returns `Ok(())` if there exists at least one available request slot,
     /// `Err(StateError::QueueFull)` otherwise.
     pub(super) fn check_has_request_slot(&self) -> Result<(), StateError> {
@@ -416,12 +406,7 @@ impl CanisterQueue {
     }
 
     /// Reserves a slot for a response, if available; else returns `Err(StateError::QueueFull)`.
-    ///
-    /// Also makes a response memory reservation if this is a guaranteed response call.
-    pub(super) fn try_reserve_response_slot(
-        &mut self,
-        // request: Arc<Request>
-    ) -> Result<(), StateError> {
+    pub(super) fn try_reserve_response_slot(&mut self) -> Result<(), StateError> {
         if self.response_slots >= self.capacity {
             return Err(StateError::QueueFull {
                 capacity: self.capacity,
@@ -429,20 +414,9 @@ impl CanisterQueue {
         }
 
         self.response_slots += 1;
-        // if (request.deadline == NO_DEADLINE) {
-        //     self.response_memory_reservations += 1;
-        // }
         debug_assert!(self.check_invariants());
         Ok(())
     }
-
-    // pub(super) fn push(&mut self, reference: MessageReference) -> Result<(), StateError> {
-    //     match reference {
-    //         MessageReference::Request(request) => self.push_request(request),
-    //         MessageReference::Response(response) => self.push_response(response)?,
-    //     }
-    //     Ok(())
-    // }
 
     /// Enqueues a request.
     ///
@@ -456,12 +430,9 @@ impl CanisterQueue {
         debug_assert!(self.check_invariants());
     }
 
-    /// Enqueues a response into a reserved slot, consuming a slot reservation and
-    /// (iff this is a guaranteed response) a memory reservation.
+    /// Enqueues a response into a reserved slot, consuming a slot reservation.
     ///
-    /// Returns `Err(StateError::QueueFull)` if no response slot is available; or if
-    /// this is a guaranteed response and no guaranteed response memory reservation
-    /// is available.
+    /// Returns `Err(StateError::QueueFull)` if no response slot is available.
     pub(super) fn push_response(&mut self, id: MessageId) -> Result<(), StateError> {
         if self.reserved_slots() == 0 {
             return Err(StateError::QueueFull {
@@ -470,15 +441,12 @@ impl CanisterQueue {
         }
 
         self.queue.push_back(MessageReference::Response(id));
-        // if (request.deadline == NO_DEADLINE) {
-        //     self.response_memory_reservations -= 1;
-        // }
         debug_assert!(self.check_invariants());
 
         Ok(())
     }
 
-    /// Pops an item from the queue. Returns `None` if the queue is empty.
+    /// Pops a reference from the queue. Returns `None` if the queue is empty.
     pub(super) fn pop(&mut self) -> Option<MessageReference> {
         let reference = self.queue.pop_front()?;
 
@@ -519,13 +487,48 @@ impl CanisterQueue {
     ///
     /// Time complexity: `O(self.len())`.
     pub(super) fn calculate_size_bytes(&self, pool: &MessagePool) -> usize {
-        size_of::<Self>() + self.calculate_stat_sum(|msg| msg.count_bytes(), pool)
+        size_of::<Self>() + self.calculate_stat_sum(CountBytes::count_bytes, pool)
     }
 
     /// Returns the byte size of an empty `CanisterQueue`. This is the same number
     /// that `Self::calculate_size_bytes()` would return.
     pub(super) fn empty_size_bytes() -> usize {
         size_of::<Self>()
+    }
+
+    /// Calculates the number of messages (non-stale references or reject response
+    /// markers) in the queue.
+    ///
+    /// Time complexity: `O(self.len())`.
+    pub(super) fn calculate_message_count(&self, pool: &MessagePool) -> usize {
+        use MessageReference::*;
+
+        self.calculate_reference_stat_sum(|reference| match reference {
+            Request(id) => pool.get_request(*id).is_some() as usize,
+            Response(id) => pool.get_response(*id).is_some() as usize,
+            TimeoutRejectResponse(_) => 1,
+            DropRejectResponse(_) => 1,
+        })
+    }
+
+    /// Calculates the number of responses (non-stale references or reject response
+    /// markers) in the queue.
+    ///
+    /// Time complexity: `O(self.len())`.
+    pub(super) fn calculate_response_count(&self, pool: &MessagePool) -> usize {
+        use MessageReference::*;
+
+        self.calculate_reference_stat_sum(|reference| match reference {
+            Request(id) => 0,
+            Response(id) => pool.get_response(*id).is_some() as usize,
+            TimeoutRejectResponse(_) => 1,
+            DropRejectResponse(_) => 1,
+        })
+    }
+
+    /// Calculates the amount of cycles contained in the queue.
+    pub(super) fn calculate_cycles_in_queue(&self, pool: &MessagePool) -> Cycles {
+        self.calculate_stat_sum(RequestOrResponse::cycles, pool)
     }
 
     /// Calculates the sum of the given stat across all (non-stale) enqueued
@@ -539,15 +542,20 @@ impl CanisterQueue {
     ) -> S {
         self.queue
             .iter()
-            .filter_map(|reference| pool.get(reference))
+            .filter_map(|reference| match reference {
+                MessageReference::Request(id) => pool.get_request(*id),
+                MessageReference::Response(id) => pool.get_response(*id),
+                MessageReference::TimeoutRejectResponse(_) => None,
+                MessageReference::DropRejectResponse(_) => None,
+            })
             .map(stat)
             .sum()
     }
 
-    /// Calculates the sum of the given stat across all enqueued messages.
+    /// Calculates the sum of the given stat across all enqueued references.
     ///
     /// Time complexity: `O(self.len())`.
-    pub(super) fn calculate_stat_sum2(&self, stat: impl Fn(&MessageReference) -> usize) -> usize {
+    fn calculate_reference_stat_sum(&self, stat: impl Fn(&MessageReference) -> usize) -> usize {
         self.queue.iter().map(stat).sum::<usize>()
     }
 

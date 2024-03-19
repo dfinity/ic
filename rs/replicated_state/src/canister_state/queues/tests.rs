@@ -1850,7 +1850,7 @@ fn time_out_requests_pushes_correct_reject_responses() {
         {
             assert_eq!(
                 num_output_messages,
-                output_queue.calculate_stat_sum(|_| 1, &canister_queues.pool)
+                output_queue.calculate_message_count(&canister_queues.pool)
             );
             assert_eq!(1, input_queue.len());
         }
@@ -1905,7 +1905,7 @@ fn time_out_requests_pushes_correct_reject_responses() {
     {
         assert_eq!(
             0,
-            output_queue.calculate_stat_sum(|_| 1, &canister_queues.pool)
+            output_queue.calculate_message_count(&canister_queues.pool)
         );
         assert_eq!(2, input_queue.len());
     }

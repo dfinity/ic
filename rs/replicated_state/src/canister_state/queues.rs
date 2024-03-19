@@ -25,7 +25,6 @@ use ic_types::{
     xnet::{QueueId, SessionId},
     CanisterId, CountBytes, Cycles, Time,
 };
-use std::mem::size_of;
 use std::{
     collections::{BTreeMap, HashSet, VecDeque},
     convert::{From, TryFrom},
@@ -1042,27 +1041,21 @@ impl CanisterQueues {
     /// Computes input queues stats from scratch. Used when deserializing and
     /// in `debug_assert!()` checks.
     ///
-    /// Time complexity: O(num_messages).
+    /// Time complexity: `O(num_messages)``.
     fn calculate_input_queues_stats(
         canister_queues: &BTreeMap<CanisterId, (CanisterQueue, CanisterQueue)>,
         pool: &MessagePool,
     ) -> InputQueuesStats {
         let mut stats = InputQueuesStats::default();
-        // let response_count = |reference: &MessageReference| reference.is_response() as usize;
-        let response_count = |msg: &RequestOrResponse| match msg {
-            RequestOrResponse::Request(_) => 0,
-            RequestOrResponse::Response(_) => 1,
-        };
         for (q, _) in canister_queues.values() {
             // stats.message_count += q.len();
             // stats.response_count += q.calculate_stat_sum2(response_count);
-            stats.message_count += q.calculate_stat_sum(|_| 1, pool);
-            stats.response_count += q.calculate_stat_sum(response_count, pool);
+            stats.message_count += q.calculate_message_count(pool);
+            stats.response_count += q.calculate_response_count(pool);
             stats.reserved_slots += q.reserved_slots() as isize;
             // FIXME
-            stats.size_bytes +=
-                size_of::<CanisterQueue>() + q.calculate_stat_sum(CountBytes::count_bytes, pool);
-            stats.cycles += q.calculate_stat_sum(RequestOrResponse::cycles, pool);
+            stats.size_bytes += q.calculate_size_bytes(pool);
+            stats.cycles += q.calculate_cycles_in_queue(pool);
         }
         stats
     }
@@ -1070,7 +1063,7 @@ impl CanisterQueues {
     /// Computes output queues stats from scratch. Used when deserializing and
     /// in `debug_assert!()` checks.
     ///
-    /// Time complexity: O(num_messages).
+    /// Time complexity: `O(num_messages)``.
     fn calculate_output_queues_stats(
         canister_queues: &BTreeMap<CanisterId, (CanisterQueue, CanisterQueue)>,
         pool: &MessagePool,
@@ -1078,8 +1071,8 @@ impl CanisterQueues {
         let mut stats = OutputQueuesStats::default();
         for (_, q) in canister_queues.values() {
             // stats.message_count += q.len();
-            stats.message_count += q.calculate_stat_sum(|_| 1, pool);
-            stats.cycles += q.calculate_stat_sum(RequestOrResponse::cycles, pool);
+            stats.message_count += q.calculate_message_count(pool);
+            stats.cycles += q.calculate_cycles_in_queue(pool);
         }
         stats
     }
@@ -1087,7 +1080,7 @@ impl CanisterQueues {
     /// Computes memory usage stats from scratch. Used when deserializing and in
     /// `debug_assert!()` checks.
     ///
-    /// Time complexity: O(num_messages).
+    /// Time complexity: `O(num_messages)``.
     fn calculate_memory_usage_stats(
         canister_queues: &BTreeMap<CanisterId, (CanisterQueue, CanisterQueue)>,
         pool: &MessagePool,
