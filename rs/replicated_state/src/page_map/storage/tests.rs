@@ -22,7 +22,7 @@ use ic_config::flag_status::FlagStatus;
 use ic_config::state_manager::LsmtConfig;
 use ic_metrics::MetricsRegistry;
 use ic_sys::{PageIndex, PAGE_SIZE};
-use ic_test_utilities::io::{make_mutable, make_readonly, write_all_at};
+use ic_test_utilities_io::{make_mutable, make_readonly, write_all_at};
 use ic_test_utilities_metrics::fetch_int_counter_vec;
 use ic_types::Height;
 use tempfile::{tempdir, TempDir};

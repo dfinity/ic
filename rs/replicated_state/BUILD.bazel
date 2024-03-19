@@ -50,7 +50,7 @@ DEV_DEPENDENCIES = [
     "//rs/crypto/internal/crypto_lib/basic_sig/ed25519",
     "//rs/crypto/test_utils/keys",
     "//rs/criterion_time",
-    "//rs/test_utilities",
+    "//rs/test_utilities/io",
     "//rs/test_utilities/metrics",
     "//rs/test_utilities/state",
     "//rs/test_utilities/time",

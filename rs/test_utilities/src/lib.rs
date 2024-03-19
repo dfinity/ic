@@ -5,7 +5,6 @@ pub mod crypto;
 pub mod cycles_account_manager;
 pub mod empty_wasm;
 pub mod ingress_selector;
-pub mod io;
 pub mod message_routing;
 pub mod p2p;
 pub mod port_allocation;
