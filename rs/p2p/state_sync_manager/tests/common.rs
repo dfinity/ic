@@ -103,7 +103,7 @@ impl State {
             .map(|chunk_size| vec![0; *chunk_size])
     }
 
-    /// Calulcates the artifact Id of the current state by hashing the ChunkId map.
+    /// Calculates the artifact Id of the current state by hashing the ChunkId map.
     pub fn artifact_id(&self) -> StateSyncArtifactId {
         let state = self.0.lock().unwrap();
         let mut hasher = DefaultHasher::new();
@@ -229,14 +229,6 @@ impl StateSyncClient for FakeStateSync {
 
         self.global_state.chunk(chunk_id)
     }
-
-    fn deliver_state_sync(&self, msg: StateSyncMessage) {
-        if !self.uses_global() {
-            self.local_state.set_height(msg.height);
-        } else {
-            panic!("Node that follows global state should not start state sync");
-        }
-    }
 }
 
 pub struct FakeChunkable {
@@ -244,6 +236,7 @@ pub struct FakeChunkable {
     syncing_state: StateSyncArtifactId,
     // [meta-manifest, manifests, chunks]
     chunk_sets: [HashSet<ChunkId>; 3],
+    is_completed: bool,
 }
 
 impl FakeChunkable {
@@ -262,6 +255,7 @@ impl FakeChunkable {
             local_state,
             syncing_state: global_state.artifact_id(),
             chunk_sets,
+            is_completed: false,
         }
     }
 }
@@ -299,12 +293,17 @@ impl Chunkable<StateSyncMessage> for FakeChunkable {
             self.local_state.add_chunk(chunk_id, chunk.len())
         }
 
+        let elems = self.chunk_sets.iter().map(|set| set.len()).sum::<usize>();
+        if elems == 0 {
+            self.local_state.set_height(self.syncing_state.height);
+            self.is_completed = true;
+        }
+
         Ok(())
     }
 
     fn completed(&self) -> Option<StateSyncMessage> {
-        let elems = self.chunk_sets.iter().map(|set| set.len()).sum::<usize>();
-        if elems == 0 {
+        if self.is_completed {
             Some(state_sync_artifact(self.syncing_state.clone()))
         } else {
             None
@@ -360,7 +359,6 @@ pub struct SharableMockStateSync {
     start_state_sync_calls: Arc<AtomicUsize>,
     should_cancel_calls: Arc<AtomicUsize>,
     chunk_calls: Arc<AtomicUsize>,
-    deliver_state_sync_calls: Arc<AtomicUsize>,
 }
 
 impl SharableMockStateSync {
@@ -381,7 +379,6 @@ impl SharableMockStateSync {
         self.start_state_sync_calls.store(0, Ordering::SeqCst);
         self.should_cancel_calls.store(0, Ordering::SeqCst);
         self.chunk_calls.store(0, Ordering::SeqCst);
-        self.deliver_state_sync_calls.store(0, Ordering::SeqCst);
     }
 }
 
@@ -406,10 +403,6 @@ impl StateSyncClient for SharableMockStateSync {
     fn chunk(&self, id: &StateSyncArtifactId, chunk_id: ChunkId) -> Option<Chunk> {
         self.chunk_calls.fetch_add(1, Ordering::SeqCst);
         self.mock.lock().unwrap().chunk(id, chunk_id)
-    }
-    fn deliver_state_sync(&self, msg: StateSyncMessage) {
-        self.deliver_state_sync_calls.fetch_add(1, Ordering::SeqCst);
-        self.mock.lock().unwrap().deliver_state_sync(msg)
     }
 }
 

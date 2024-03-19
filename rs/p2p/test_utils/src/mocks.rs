@@ -26,8 +26,6 @@ mock! {
         fn should_cancel(&self, id: &StateSyncArtifactId) -> bool;
 
         fn chunk(&self, id: &StateSyncArtifactId, chunk_id: ChunkId) -> Option<Chunk>;
-
-        fn deliver_state_sync(&self, msg: T);
     }
 }
 

@@ -5,6 +5,7 @@ use crate::{
         MetaManifest, StateSyncChunk, StateSyncMessage, FILE_CHUNK_ID_OFFSET,
         FILE_GROUP_CHUNK_ID_OFFSET, MANIFEST_CHUNK_ID_OFFSET, META_MANIFEST_CHUNK,
     },
+    state_sync::StateSync,
     StateManagerMetrics, StateSyncMetrics, StateSyncRefs,
     CRITICAL_ERROR_STATE_SYNC_CORRUPTED_CHUNKS, LABEL_COPY_CHUNKS, LABEL_COPY_FILES, LABEL_FETCH,
     LABEL_FETCH_MANIFEST_CHUNK, LABEL_FETCH_META_MANIFEST_CHUNK, LABEL_FETCH_STATE_CHUNK,
@@ -78,6 +79,7 @@ enum DownloadState {
 pub(crate) struct IncompleteState {
     log: ReplicaLogger,
     root: PathBuf,
+    state_sync: Arc<StateSync>,
     state_layout: StateLayout,
     height: Height,
     root_hash: CryptoHashOfState,
@@ -190,18 +192,12 @@ impl IncompleteState {
         log: ReplicaLogger,
         height: Height,
         root_hash: CryptoHashOfState,
-        state_layout: StateLayout,
-        manifest_with_checkpoint_layout: Option<(Manifest, CheckpointLayout<ReadOnly>)>,
-        metrics: StateManagerMetrics,
-        own_subnet_type: SubnetType,
+        state_sync: Arc<StateSync>,
         thread_pool: Arc<Mutex<scoped_threadpool::Pool>>,
-        state_sync_refs: StateSyncRefs,
-        fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
-        malicious_flags: MaliciousFlags,
     ) -> Option<IncompleteState> {
         // The state sync manager in the p2p layer is expected not to start a new state sync when there is an ongoing state sync.
         // Here we check it again as a last resort and return `None` if there is already an active state sync reference.
-        let mut active = state_sync_refs.active.write();
+        let mut active = state_sync.state_sync_refs.active.write();
         if let Some((active_height, _hash)) = active.as_ref() {
             warn!(
                 &log,
@@ -212,25 +208,27 @@ impl IncompleteState {
             return None;
         }
         *active = Some((height, root_hash.clone()));
+        let state_layout = state_sync.state_manager.state_layout.clone();
         // Create the `IncompleteState` object while holding the write lock on the active state sync reference.
         Some(Self {
             log,
             root: state_layout
                 .state_sync_scratchpad(height)
                 .expect("failed to create directory for state sync scratchpad"),
+            state_sync: state_sync.clone(),
             state_layout,
             height,
             root_hash,
             state: DownloadState::Blank,
-            manifest_with_checkpoint_layout,
-            metrics,
+            manifest_with_checkpoint_layout: state_sync.state_manager.latest_manifest(),
+            metrics: state_sync.state_manager.metrics.clone(),
             started_at: Instant::now(),
             fetch_started_at: None,
-            own_subnet_type,
+            own_subnet_type: state_sync.state_manager.own_subnet_type,
             thread_pool,
-            state_sync_refs: state_sync_refs.clone(),
-            fd_factory,
-            malicious_flags,
+            state_sync_refs: state_sync.state_sync_refs.clone(),
+            fd_factory: state_sync.state_manager.fd_factory.clone(),
+            malicious_flags: state_sync.state_manager.malicious_flags.clone(),
         })
     }
 
@@ -1405,6 +1403,7 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                             &meta_manifest,
                         );
 
+                        self.state_sync.deliver_state_sync(artifact.clone());
                         self.state = DownloadState::Complete(Box::new(artifact.clone()));
                         self.state_sync_refs
                             .cache
@@ -1586,6 +1585,7 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                         meta_manifest,
                     );
 
+                    self.state_sync.deliver_state_sync(artifact.clone());
                     self.state = DownloadState::Complete(Box::new(artifact));
                     self.state_sync_refs
                         .cache

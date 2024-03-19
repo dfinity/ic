@@ -479,8 +479,7 @@ fn rejoining_node_doesnt_accumulate_states() {
                     .expect("failed to get state sync messages");
                 let chunkable =
                     set_fetch_state_and_start_start_sync(&dst_state_manager, &dst_state_sync, &id);
-                let dst_msg = pipe_state_sync(msg.clone(), chunkable);
-                dst_state_sync.deliver_state_sync(dst_msg);
+                pipe_state_sync(msg.clone(), chunkable);
                 assert_eq!(
                     src_state_manager.get_latest_state().take(),
                     dst_state_manager.get_latest_state().take()
@@ -2172,8 +2171,7 @@ fn can_do_simple_state_sync_transfer() {
             let chunkable =
                 set_fetch_state_and_start_start_sync(&dst_state_manager, &dst_state_sync, &id);
 
-            let dst_msg = pipe_state_sync(msg, chunkable);
-            dst_state_sync.deliver_state_sync(dst_msg);
+            pipe_state_sync(msg, chunkable);
 
             let recovered_state = dst_state_manager
                 .get_state_at(height(1))
@@ -2283,7 +2281,7 @@ fn test_start_and_cancel_state_sync() {
             drop(chunkable);
 
             // starting state sync for state @3 should succeed after the old one is cancelled.
-            let chunkable = dst_state_sync
+            let mut chunkable = dst_state_sync
                 .start_state_sync(&id3)
                 .expect("failed to start state sync");
             // The dst state manager has not reached the state @3 yet. It is not requested to fetch a newer state either.
@@ -2293,15 +2291,18 @@ fn test_start_and_cancel_state_sync() {
             let msg = src_state_sync
                 .get_validated_by_identifier(&id3)
                 .expect("failed to get state sync messages");
-            let dst_msg = pipe_state_sync(msg, chunkable);
 
-            // Although the dst state manager finishes downloading chunks, the state sync is not delivered yet.
-            // We should not cancel this ongoing state sync for state @3.
+            let omit: HashSet<ChunkId> =
+                maplit::hashset! {ChunkId::new(FILE_GROUP_CHUNK_ID_OFFSET)};
+            let completion = pipe_partial_state_sync(&msg, &mut *chunkable, &omit, false);
+            assert!(
+                matches!(completion, Err(StateSyncErrorCode::ChunksMoreNeeded)),
+                "Unexpectedly completed state sync"
+            );
+            // The state sync is not finished yet. We should not cancel this ongoing state sync for state @3.
             assert!(!dst_state_sync.should_cancel(&id3));
 
-            // the state sync should finish successfully.
-            dst_state_sync.deliver_state_sync(dst_msg);
-
+            pipe_state_sync(msg, chunkable);
             let recovered_state = dst_state_manager
                 .get_state_at(height(3))
                 .expect("Destination state manager didn't receive the state")
@@ -2506,8 +2507,7 @@ fn can_state_sync_from_cache() {
                 assert_eq!(fetch_chunks, chunkable.chunks_to_download().collect());
 
                 // Download chunk 1
-                let dst_msg = pipe_state_sync(msg2.clone(), chunkable);
-                dst_state_sync.deliver_state_sync(dst_msg);
+                pipe_state_sync(msg2.clone(), chunkable);
 
                 let recovered_state = dst_state_manager
                     .get_state_at(height(2))
@@ -2600,9 +2600,7 @@ fn can_state_sync_from_cache_alone() {
                 // This is because the omitted file `canister_states/00000000000000640101/software.wasm` in the first state sync
                 // is the same as the other one. As a result, it will be copied and does not need to be fetched.
                 let _res = pipe_meta_manifest(&msg, &mut *chunkable, false);
-                let dst_msg = pipe_manifest(&msg, &mut *chunkable, false).unwrap();
-
-                dst_state_sync.deliver_state_sync(dst_msg);
+                let _res = pipe_manifest(&msg, &mut *chunkable, false).unwrap();
 
                 let recovered_state = dst_state_manager
                     .get_state_at(height(1))
@@ -2697,8 +2695,7 @@ fn can_state_sync_after_aborting_in_prep_phase() {
                 let result = pipe_manifest(&msg, &mut *chunkable, false);
                 assert!(matches!(result, Err(StateSyncErrorCode::ChunksMoreNeeded)));
 
-                let dst_msg = pipe_state_sync(msg.clone(), chunkable);
-                dst_state_sync.deliver_state_sync(dst_msg);
+                pipe_state_sync(msg.clone(), chunkable);
 
                 let recovered_state = dst_state_manager
                     .get_state_at(height(2))
@@ -2807,8 +2804,7 @@ fn state_sync_can_reject_invalid_chunks() {
             }
 
             // Provide correct chunks to dst
-            let dst_msg = pipe_state_sync(msg.clone(), chunkable);
-            dst_state_sync.deliver_state_sync(dst_msg);
+            pipe_state_sync(msg.clone(), chunkable);
 
             let recovered_state = dst_state_manager
                 .get_state_at(height(1))
@@ -2859,8 +2855,7 @@ fn can_state_sync_into_existing_checkpoint() {
                 CertificationScope::Full,
             );
 
-            let dst_msg = pipe_state_sync(msg, chunkable);
-            dst_state_sync.deliver_state_sync(dst_msg);
+            pipe_state_sync(msg, chunkable);
 
             assert_no_remaining_chunks(dst_metrics);
             assert_error_counters(dst_metrics);
@@ -2931,9 +2926,7 @@ fn can_group_small_files_in_state_sync() {
                 .chunks_to_download()
                 .any(|chunk_id| chunk_id.get() == FILE_GROUP_CHUNK_ID_OFFSET));
 
-            let dst_msg = pipe_state_sync(msg, chunkable);
-
-            dst_state_sync.deliver_state_sync(dst_msg);
+            pipe_state_sync(msg, chunkable);
 
             let recovered_state = dst_state_manager
                 .get_state_at(height(1))
@@ -2983,8 +2976,7 @@ fn can_commit_after_prev_state_is_gone() {
 
             let chunkable =
                 set_fetch_state_and_start_start_sync(&dst_state_manager, &dst_state_sync, &id);
-            let dst_msg = pipe_state_sync(msg, chunkable);
-            dst_state_sync.deliver_state_sync(dst_msg);
+            pipe_state_sync(msg, chunkable);
 
             dst_state_manager.remove_states_below(height(2));
 
@@ -3039,8 +3031,7 @@ fn can_commit_without_prev_hash_mismatch_after_taking_tip_at_the_synced_height()
 
             let chunkable =
                 set_fetch_state_and_start_start_sync(&dst_state_manager, &dst_state_sync, &id);
-            let dst_msg = pipe_state_sync(msg, chunkable);
-            dst_state_sync.deliver_state_sync(dst_msg);
+            pipe_state_sync(msg, chunkable);
 
             assert_eq!(height(3), dst_state_manager.latest_state_height());
             let (tip_height, tip) = dst_state_manager.take_tip();
@@ -3085,8 +3076,7 @@ fn can_state_sync_based_on_old_checkpoint() {
             let chunkable =
                 set_fetch_state_and_start_start_sync(&dst_state_manager, &dst_state_sync, &id);
 
-            let dst_msg = pipe_state_sync(msg, chunkable);
-            dst_state_sync.deliver_state_sync(dst_msg);
+            pipe_state_sync(msg, chunkable);
 
             let expected_state = src_state_manager.get_latest_state();
 
@@ -3297,8 +3287,7 @@ fn can_recover_from_corruption_on_state_sync() {
 
             let chunkable =
                 set_fetch_state_and_start_start_sync(&dst_state_manager, &dst_state_sync, &id);
-            let dst_msg = pipe_state_sync(msg, chunkable);
-            dst_state_sync.deliver_state_sync(dst_msg);
+            pipe_state_sync(msg, chunkable);
 
             let expected_state = src_state_manager.get_latest_state();
 
@@ -3343,8 +3332,7 @@ fn can_commit_below_state_sync() {
             assert_eq!(tip_height, height(0));
             let chunkable =
                 set_fetch_state_and_start_start_sync(&dst_state_manager, &dst_state_sync, &id);
-            let dst_msg = pipe_state_sync(msg, chunkable);
-            dst_state_sync.deliver_state_sync(dst_msg);
+            pipe_state_sync(msg, chunkable);
             // Check committing an old state doesn't panic
             dst_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
             dst_state_manager.flush_tip_channel();
@@ -3397,10 +3385,9 @@ fn can_state_sync_below_commit() {
             let (_height, state) = dst_state_manager.take_tip();
             dst_state_manager.remove_states_below(height(2));
             assert_eq!(dst_state_manager.checkpoint_heights(), vec![height(2)]);
+            // Perform the state sync after the state manager reaches height 2.
+            pipe_state_sync(msg, chunkable);
 
-            let dst_msg = pipe_state_sync(msg, chunkable);
-            // the state sync finishes after the state manager reaches height 2.
-            dst_state_sync.deliver_state_sync(dst_msg);
             assert_eq!(
                 dst_state_manager.checkpoint_heights(),
                 vec![height(1), height(2)]
