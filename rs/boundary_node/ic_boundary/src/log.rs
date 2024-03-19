@@ -124,6 +124,16 @@ pub fn setup_logging(cli: &Cli) -> Result<(), Error> {
             cli.monitoring
                 .log_stdout
                 .then_some(layer().json().flatten_event(true).with_filter(level_filter)),
+        )
+        // Null
+        .with(
+            cli.monitoring.log_null.then_some(
+                layer()
+                    .with_writer(std::io::sink)
+                    .json()
+                    .flatten_event(true)
+                    .with_filter(level_filter),
+            ),
         );
 
     Ok(tracing::subscriber::set_global_default(subscriber)?)
