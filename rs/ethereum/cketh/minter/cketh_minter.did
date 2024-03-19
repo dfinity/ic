@@ -236,8 +236,8 @@ type WithdrawErc20Arg = record {
     // ckUSDC uses 6 decimals and so to withdraw 1 ckUSDC, the amount should be 1_000_000.
     amount : nat;
 
-    // CkErc20 token symbol to withdraw, e.g., ckUSDC or ckUSDT.
-    ckerc20_token_symbol : text;
+    // The ledger ID for that ckERC20 token.
+    ckerc20_ledger_id : principal;
 
     // Ethereum address to withdraw to.
     recipient : text;
@@ -254,7 +254,7 @@ type RetrieveErc20Request = record {
 
 type WithdrawErc20Error = variant {
     // The user provided ckERC20 token is not supported by the minter.
-    TokenNotSupported : record {supported_tokens : vec text};
+    TokenNotSupported : record {supported_tokens : vec CkErc20Token};
 
     // The ckETH or ckERC20 balance of the withdrawal account is too low.
     InsufficientFunds : record { balance : nat; failed_burn_amount : nat; token_symbol : text; ledger_id : principal };
@@ -372,7 +372,7 @@ type Event = record {
         AcceptedErc20WithdrawalRequest : record {
             max_transaction_fee : nat;
             withdrawal_amount : nat;
-            ckerc20_token_symbol : text;
+            erc20_contract_address : text;
             destination : text;
             cketh_ledger_burn_index : nat;
             ckerc20_ledger_burn_index : nat;

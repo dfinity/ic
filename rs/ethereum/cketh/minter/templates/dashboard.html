@@ -274,10 +274,10 @@
                 <tbody>
                 {% for withdrawal in withdrawal_requests %}
                 <tr>
-                    <td class="numeric">{{ withdrawal.ledger_burn_index }}</td>
-                    <td>{% call etherscan_address_link(withdrawal.destination) %}</td>
-                    <td class="numeric">{{ withdrawal.withdrawal_amount }}</td>
-                    <td>{% call format_opt_timestamp(withdrawal.created_at) %}</td>
+                    <td class="numeric">{{ withdrawal.cketh_ledger_burn_index() }}</td>
+                    <td>{% call etherscan_address_link(withdrawal.payee()) %}</td>
+                    <td class="numeric">{{ withdrawal|withdrawal_amount }}</td>
+                    <td>{% call format_opt_timestamp(withdrawal.created_at()) %}</td>
                 </tr>
                 {% endfor %}
                 </tbody>
