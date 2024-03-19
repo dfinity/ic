@@ -2,14 +2,17 @@ use assert_matches::assert_matches;
 use candid::{Nat, Principal};
 use ic_base_types::PrincipalId;
 use ic_cketh_minter::endpoints::events::{EventPayload, EventSource};
-use ic_cketh_minter::endpoints::AddCkErc20Token;
+use ic_cketh_minter::endpoints::CandidBlockTag::Finalized;
+use ic_cketh_minter::endpoints::{AddCkErc20Token, CkErc20Token, MinterInfo};
 use ic_cketh_minter::memo::MintMemo;
-use ic_cketh_test_utils::ckerc20::CkErc20Setup;
+use ic_cketh_test_utils::ckerc20::{CkErc20Setup, Erc20Token};
 use ic_cketh_test_utils::flow::DepositParams;
 use ic_cketh_test_utils::response::EthLogEntry;
 use ic_cketh_test_utils::{
-    format_ethereum_address_to_eip_55, CkEthSetup, DEFAULT_DEPOSIT_FROM_ADDRESS,
-    DEFAULT_DEPOSIT_LOG_INDEX, DEFAULT_DEPOSIT_TRANSACTION_HASH, DEFAULT_PRINCIPAL_ID,
+    format_ethereum_address_to_eip_55, CkEthSetup, CKETH_TRANSFER_FEE,
+    DEFAULT_DEPOSIT_FROM_ADDRESS, DEFAULT_DEPOSIT_LOG_INDEX, DEFAULT_DEPOSIT_TRANSACTION_HASH,
+    DEFAULT_PRINCIPAL_ID, ERC20_HELPER_CONTRACT_ADDRESS, ETH_HELPER_CONTRACT_ADDRESS,
+    MINTER_ADDRESS,
 };
 use ic_ethereum_types::Address;
 use ic_ledger_suite_orchestrator_test_utils::supported_erc20_tokens;
@@ -360,4 +363,43 @@ fn should_block_deposit_from_corrupted_principal() {
             },
             reason: format!("failed to decode principal from bytes {invalid_principal}"),
         }]);
+}
+
+#[test]
+fn should_retrieve_minter_info() {
+    let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
+    let supported_ckerc20_tokens = ckerc20
+        .supported_erc20_tokens
+        .iter()
+        .map(|token: &Erc20Token| CkErc20Token {
+            ckerc20_token_symbol: token.ledger_init_arg.token_symbol.clone(),
+            erc20_contract_address: format_ethereum_address_to_eip_55(&token.contract.address),
+            ledger_canister_id: ckerc20
+                .orchestrator
+                .call_orchestrator_canister_ids(&token.contract)
+                .unwrap()
+                .ledger
+                .unwrap(),
+        })
+        .collect::<Vec<_>>();
+
+    let info_at_start = ckerc20.cketh.get_minter_info();
+    assert_eq!(
+        info_at_start,
+        MinterInfo {
+            minter_address: Some(format_ethereum_address_to_eip_55(MINTER_ADDRESS)),
+            eth_helper_contract_address: Some(format_ethereum_address_to_eip_55(
+                ETH_HELPER_CONTRACT_ADDRESS
+            )),
+            erc20_helper_contract_address: Some(format_ethereum_address_to_eip_55(
+                ERC20_HELPER_CONTRACT_ADDRESS
+            )),
+            supported_ckerc20_tokens,
+            minimum_withdrawal_amount: Some(Nat::from(CKETH_TRANSFER_FEE)),
+            ethereum_block_height: Some(Finalized),
+            last_observed_block_number: None,
+            eth_balance: Some(Nat::from(0_u8)),
+            last_gas_fee_estimate: None,
+        }
+    );
 }

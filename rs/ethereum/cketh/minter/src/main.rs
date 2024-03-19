@@ -160,8 +160,8 @@ async fn get_minter_info() -> MinterInfo {
         supported_ckerc20_tokens: s
             .ckerc20_tokens
             .iter()
-            .map(|(addr, symbol, canister)| CkErc20Token {
-                ckerc20_token_symbol: symbol.to_string(),
+            .map(|(symbol, addr, canister)| CkErc20Token {
+                ckerc20_token_symbol: erc20::CkTokenSymbol::to_string(symbol),
                 erc20_contract_address: addr.to_string(),
                 ledger_canister_id: *canister,
             })
