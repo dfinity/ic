@@ -558,6 +558,7 @@ impl ExhaustiveSet for InitialIDkgDealings {
 
 impl ExhaustiveSet for IDkgTranscriptParams {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+        let all_tecdsa_algs = AlgorithmId::all_threshold_ecdsa_algorithms();
         <(IDkgTranscriptId, IDkgTranscriptOperation, RegistryVersion)>::exhaustive_set(rng)
             .into_iter()
             .enumerate()
@@ -572,17 +573,12 @@ impl ExhaustiveSet for IDkgTranscriptParams {
                         BTreeSet::<NodeId>::exhaustive_set(rng).pop().unwrap()
                     }
                 };
-                let algorithm = if i % 2 == 0 {
-                    AlgorithmId::ThresholdEcdsaSecp256k1
-                } else {
-                    AlgorithmId::ThresholdEcdsaSecp256r1
-                };
                 Self::new(
                     id,
                     node_ids.clone(),
                     node_ids.clone(),
                     version,
-                    algorithm,
+                    all_tecdsa_algs[all_tecdsa_algs.len() % i],
                     transcript,
                 )
                 .unwrap()
@@ -749,62 +745,117 @@ impl HasId<RequestId> for ThresholdEcdsaSigInputsRef {}
 impl HasId<QuadrupleId> for QuadrupleInCreation {}
 impl HasId<QuadrupleId> for PreSignatureQuadrupleRef {}
 
-#[test]
-fn verify_exhaustive_cup() {
-    let set = CatchUpPackage::exhaustive_set(&mut rand::thread_rng());
-    println!("number of CUP content variants: {}", set.len());
-    for cup in &set {
-        assert!(cup.check_integrity());
-        // serialize & encode the CUP content
-        let bytes = pb::CatchUpPackage::from(cup).encode_to_vec();
+#[cfg(test)]
+mod tests {
+    use std::{fs, path::PathBuf};
 
-        // flip bits and check that conversion fails
-        let tampered_bytes = bytes
-            .iter()
-            .enumerate()
-            .map(|(idx, byte)| byte ^ (idx as u8))
-            .collect::<Vec<_>>();
-        assert!(pb::CatchUpPackage::decode(tampered_bytes.as_slice()).is_err());
+    use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 
-        // decode the untampered bytes
-        let proto_cup = pb::CatchUpPackage::decode(bytes.as_slice()).unwrap();
-        // deserialize the CUP content
-        let new_cup = CatchUpPackage::try_from(&proto_cup).unwrap();
-        assert!(new_cup.check_integrity());
-        assert_eq!(
-            cup, &new_cup,
-            "deserialized block is different from original"
-        );
+    use super::*;
+
+    const CUP_COMPATIBILITY_TEST_PATH: &str = "cup_compatibility_test";
+
+    /// Serialize the set of [`CatchUpContent`]s to [`CUP_COMPATIBILITY_TEST_PATH`].
+    /// Test is ignored as it should only be used by system or manual tests.
+    #[ignore]
+    #[test]
+    fn serialize() {
+        let directory = PathBuf::from(CUP_COMPATIBILITY_TEST_PATH);
+        fs::create_dir(&directory).expect("Failed to create directory");
+        let set = CatchUpContent::exhaustive_set(&mut reproducible_rng());
+        println!("Number of CUP content variants: {}", set.len());
+
+        for (i, cup) in set.into_iter().enumerate() {
+            assert!(cup.check_integrity(), "Integrity check failed");
+            let bytes = pb::CatchUpContent::from(&cup).encode_to_vec();
+            let file_path = directory.join(format!("{i}.pb"));
+            fs::write(file_path, bytes).expect("Failed to write bytes");
+        }
     }
-}
 
-/// Check if the BTreeMap implementation produces a correct minimal exhaustive set.
-#[test]
-fn check_impl_btreemap() {
-    #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, ExhaustiveSet)]
-    enum Small {
-        A,
-        B,
-    }
-    #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, ExhaustiveSet)]
-    enum Big {
-        X,
-        Y,
-        Z,
-    }
-    impl HasId<Small> for Big {}
-    impl HasId<Big> for Small {}
-    let set = BTreeMap::<Small, Big>::exhaustive_set(&mut rand::thread_rng());
-    assert_eq!(set.len(), 3);
-    assert_eq!(set[0][&Small::A], Big::X);
-    assert_eq!(set[0][&Small::B], Big::Y);
-    assert_eq!(set[1][&Small::A], Big::Z);
-    assert!(set[2].is_empty());
+    /// Deserialize all [`CatchUpContent`]s found in [`CUP_COMPATIBILITY_TEST_PATH`].
+    /// Test is ignored as it should only be used by system or manual tests.
+    #[ignore]
+    #[test]
+    fn deserialize() {
+        let directory = PathBuf::from(CUP_COMPATIBILITY_TEST_PATH);
+        let entries = fs::read_dir(directory).expect("Failed to read test directory");
 
-    let set = BTreeMap::<Big, Small>::exhaustive_set(&mut rand::thread_rng());
-    assert_eq!(set.len(), 2);
-    assert_eq!(set[0][&Big::X], Small::A);
-    assert_eq!(set[0][&Big::Y], Small::B);
-    assert_eq!(set[0][&Big::Z], Small::A);
-    assert!(set[1].is_empty());
+        for entry in entries {
+            let path = entry.unwrap().path();
+            if path.is_file() {
+                let bytes = fs::read(&path).expect("Failed to read file");
+                let proto_cup =
+                    pb::CatchUpContent::decode(bytes.as_slice()).expect("Failed to decode bytes");
+                let cup =
+                    CatchUpContent::try_from(proto_cup).expect("Failed to deserialize CUP content");
+                if !cup.check_integrity() {
+                    panic!(
+                        "Integrity check of file {path:?} failed. Payload: {:?}",
+                        cup.block.as_ref().payload.as_ref()
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn verify_exhaustive_cup() {
+        let set = CatchUpPackage::exhaustive_set(&mut reproducible_rng());
+        println!("Number of CUP content variants: {}", set.len());
+        for cup in &set {
+            assert!(cup.check_integrity());
+            // serialize & encode the CUP content
+            let bytes = pb::CatchUpPackage::from(cup).encode_to_vec();
+
+            // flip bits and check that conversion fails
+            let tampered_bytes = bytes
+                .iter()
+                .enumerate()
+                .map(|(idx, byte)| byte ^ (idx as u8))
+                .collect::<Vec<_>>();
+            assert!(pb::CatchUpPackage::decode(tampered_bytes.as_slice()).is_err());
+
+            // decode the untampered bytes
+            let proto_cup = pb::CatchUpPackage::decode(bytes.as_slice()).unwrap();
+            // deserialize the CUP content
+            let new_cup = CatchUpPackage::try_from(&proto_cup).unwrap();
+            assert!(new_cup.check_integrity());
+            assert_eq!(
+                cup, &new_cup,
+                "deserialized block is different from original"
+            );
+        }
+    }
+
+    /// Check if the BTreeMap implementation produces a correct minimal exhaustive set.
+    #[test]
+    fn check_impl_btreemap() {
+        #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, ExhaustiveSet)]
+        enum Small {
+            A,
+            B,
+        }
+        #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, ExhaustiveSet)]
+        enum Big {
+            X,
+            Y,
+            Z,
+        }
+        impl HasId<Small> for Big {}
+        impl HasId<Big> for Small {}
+        let set = BTreeMap::<Small, Big>::exhaustive_set(&mut rand::thread_rng());
+        assert_eq!(set.len(), 3);
+        assert_eq!(set[0][&Small::A], Big::X);
+        assert_eq!(set[0][&Small::B], Big::Y);
+        assert_eq!(set[1][&Small::A], Big::Z);
+        assert!(set[2].is_empty());
+
+        let set = BTreeMap::<Big, Small>::exhaustive_set(&mut rand::thread_rng());
+        assert_eq!(set.len(), 2);
+        assert_eq!(set[0][&Big::X], Small::A);
+        assert_eq!(set[0][&Big::Y], Small::B);
+        assert_eq!(set[0][&Big::Z], Small::A);
+        assert!(set[1].is_empty());
+    }
 }
