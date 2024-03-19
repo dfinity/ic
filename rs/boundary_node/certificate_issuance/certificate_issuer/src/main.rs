@@ -18,12 +18,11 @@ use axum::{
     middleware::{self, Next},
     response::IntoResponse,
     routing::{delete, get, post, put},
-    Extension, Router, Server,
+    Extension, Router,
 };
 use candid::{DecoderConfig, Principal};
 use chacha20poly1305::{KeyInit, XChaCha20Poly1305};
 use clap::Parser;
-use futures::future::TryFutureExt;
 use ic_agent::{
     agent::http_transport::reqwest_transport::ReqwestHttpReplicaV2Transport,
     identity::Secp256k1Identity, Agent,
@@ -36,7 +35,7 @@ use opentelemetry::{
 };
 use opentelemetry_prometheus::exporter;
 use prometheus::{labels, Encoder as PrometheusEncoder, Registry, TextEncoder};
-use tokio::{sync::Semaphore, task, time::sleep};
+use tokio::{net::TcpListener, sync::Semaphore, task, time::sleep};
 use tower::ServiceBuilder;
 use tracing::info;
 use trust_dns_resolver::{
@@ -619,16 +618,32 @@ async fn main() -> Result<(), Error> {
                 });
             }
         }),
-        task::spawn(
-            Server::bind(&cli.api_addr)
-                .serve(api_router.into_make_service())
+        task::spawn(async move {
+            let listener = TcpListener::bind(&cli.api_addr).await;
+            if let Err(error) = listener {
+                return Err(anyhow!(
+                    "Failed to create the TcpListener for api_addr: {:?}",
+                    error
+                ));
+            }
+            let listener = listener.unwrap();
+            axum::serve(listener, api_router.into_make_service())
+                .await
                 .map_err(|err| anyhow!("server failed: {:?}", err))
-        ),
-        task::spawn(
-            Server::bind(&cli.metrics_addr)
-                .serve(metrics_router.into_make_service())
+        }),
+        task::spawn(async move {
+            let listener = TcpListener::bind(&cli.metrics_addr).await;
+            if let Err(error) = listener {
+                return Err(anyhow!(
+                    "Failed to create the TcpListener for metrics_addr: {:?}",
+                    error
+                ));
+            }
+            let listener = listener.unwrap();
+            axum::serve(listener, metrics_router.into_make_service())
+                .await
                 .map_err(|err| anyhow!("server failed: {:?}", err))
-        ),
+        }),
     )
     .context(format!("{SERVICE_NAME} failed to run"))?;
 
@@ -667,7 +682,7 @@ struct MetricsMiddlewareArgs {
     recorder: Histogram<f64>,
 }
 
-async fn metrics_mw<B>(req: Request<B>, next: Next<B>) -> impl IntoResponse {
+async fn metrics_mw(req: Request<Body>, next: Next) -> impl IntoResponse {
     let MetricsMiddlewareArgs { counter, recorder } = req
         .extensions()
         .get::<MetricsMiddlewareArgs>()
