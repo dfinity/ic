@@ -215,6 +215,9 @@ pub struct MonitoringConfig {
     /// Enables logging to Journald
     #[clap(long)]
     pub log_journald: bool,
+    /// Enables logging to /dev/null (to benchmark logging)
+    #[clap(long)]
+    pub log_null: bool,
     /// Path to a GeoIP country database file
     #[clap(long)]
     pub geoip_db: Option<PathBuf>,

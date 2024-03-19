@@ -205,6 +205,7 @@ pub fn create_fake_registry_client(
 
 pub fn setup_test_router(
     enable_cache: bool,
+    enable_logging: bool,
     subnet_count: usize,
     nodes_per_subnet: usize,
     response_size: usize,
@@ -212,10 +213,18 @@ pub fn setup_test_router(
     use axum::extract::connect_info::MockConnectInfo;
     use std::net::SocketAddr;
 
+    let mut args = vec!["", "--local-store-path", "/tmp", "--log-null"];
+    if !enable_logging {
+        args.push("--disable-request-logging");
+    }
+
     #[cfg(not(feature = "tls"))]
-    let cli = Cli::parse_from(["", "--local-store-path", "/tmp"]);
+    let cli = Cli::parse_from(args);
     #[cfg(feature = "tls")]
-    let cli = Cli::parse_from(["", "--local-store-path", "/tmp", "--hostname", "foobar"]);
+    let cli = Cli::parse_from({
+        args.extend_from_slice(&["--hostname", "foobar"]);
+        args
+    });
 
     let routing_table: Arc<ArcSwapOption<Routes>> = Arc::new(ArcSwapOption::empty());
     let registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>> = Arc::new(ArcSwapOption::empty());
