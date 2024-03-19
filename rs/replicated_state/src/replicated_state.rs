@@ -190,9 +190,9 @@ impl std::iter::Iterator for OutputIterator<'_> {
 }
 
 pub trait PeekableOutputIterator: std::iter::Iterator<Item = (QueueId, RequestOrResponse)> {
-    /// Peeks into the iterator and returns a reference to the item `next`
+    /// Peeks into the iterator and returns a reference to the item that `next`
     /// would return.
-    fn peek(&self) -> Option<(QueueId, &RequestOrResponse)>;
+    fn peek(&mut self) -> Option<(QueueId, &RequestOrResponse)>;
 
     /// Permanently filters out from iteration the next queue (i.e. all messages
     /// with the same sender and receiver as the next). The messages are retained
@@ -201,8 +201,16 @@ pub trait PeekableOutputIterator: std::iter::Iterator<Item = (QueueId, RequestOr
 }
 
 impl PeekableOutputIterator for OutputIterator<'_> {
-    fn peek(&self) -> Option<(QueueId, &RequestOrResponse)> {
-        self.canister_iterators.front().and_then(|it| it.peek())
+    fn peek(&mut self) -> Option<(QueueId, &RequestOrResponse)> {
+        while let Some(canister_iterator) = self.canister_iterators.front_mut() {
+            if let Some(_) = canister_iterator.peek() {
+                // Borrow checker won't let me return here, so bail out and peek again.
+                break;
+            }
+            self.canister_iterators.pop_front();
+            debug_assert_eq!(Self::compute_size(&self.canister_iterators), self.size);
+        }
+        self.canister_iterators.front_mut()?.peek()
     }
 
     fn exclude_queue(&mut self) {
@@ -853,12 +861,48 @@ impl ReplicatedState {
         crate::bitcoin::push_response(self, response)
     }
 
-    /// Times out all requests with expired deadlines (given the state time) in
-    /// all canister (but not subnet) `OutputQueues`. Returns the number of timed
-    /// out requests.
+    // /// Times out all requests with expired deadlines (given the state time) in
+    // /// all canister (but not subnet) `OutputQueues`. Returns the number of timed
+    // /// out requests.
+    // ///
+    // /// See `CanisterQueues::time_out_requests` for further details.
+    // pub fn time_out_requests(&mut self) -> u64 {
+    //     let current_time = self.metadata.time();
+    //     // Because the borrow checker requires us to remove each canister before
+    //     // calling `time_out_requests()` on it and replace it afterwards; and removing
+    //     // and replacing every canister on a large subnet is very costly; we first
+    //     // filter for the (usually much fewer) canisters with timed requests and only
+    //     // apply the costly remove-call-replace to those.
+    //     let canister_ids_with_expired_deadlines = self
+    //         .canister_states
+    //         .iter()
+    //         .filter(|(_, canister_state)| {
+    //             canister_state
+    //                 .system_state
+    //                 .has_expired_deadlines(current_time)
+    //         })
+    //         .map(|(canister_id, _)| *canister_id)
+    //         .collect::<Vec<_>>();
+
+    //     let mut timed_out_requests_count = 0;
+    //     for canister_id in canister_ids_with_expired_deadlines {
+    //         let mut canister = self.canister_states.remove(&canister_id).unwrap();
+    //         timed_out_requests_count += canister.system_state.time_out_requests(
+    //             current_time,
+    //             &canister_id,
+    //             &self.canister_states,
+    //         );
+    //         self.canister_states.insert(canister_id, canister);
+    //     }
+
+    //     timed_out_requests_count
+    // }
+
+    /// Times out all messages with expired deadlines (given the state time) in all
+    /// canister (but not subnet) queues. Returns the number of timed out messages.
     ///
-    /// See `CanisterQueues::time_out_requests` for further details.
-    pub fn time_out_requests(&mut self) -> u64 {
+    /// See `CanisterQueues::time_out_messages` for further details.
+    pub fn time_out_messages(&mut self) -> usize {
         let current_time = self.metadata.time();
         // Because the borrow checker requires us to remove each canister before
         // calling `time_out_requests()` on it and replace it afterwards; and removing
@@ -879,7 +923,7 @@ impl ReplicatedState {
         let mut timed_out_requests_count = 0;
         for canister_id in canister_ids_with_expired_deadlines {
             let mut canister = self.canister_states.remove(&canister_id).unwrap();
-            timed_out_requests_count += canister.system_state.time_out_requests(
+            timed_out_requests_count += canister.system_state.time_out_messages(
                 current_time,
                 &canister_id,
                 &self.canister_states,

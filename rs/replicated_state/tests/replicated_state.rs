@@ -671,7 +671,8 @@ fn time_out_requests_updates_subnet_input_schedules_correctly() {
 
     // Time out everything, then check that subnet input schedules are as expected.
     fixture.state.metadata.batch_time = Time::from_nanos_since_unix_epoch(u64::MAX);
-    assert_eq!(3, fixture.state.time_out_requests());
+    // assert_eq!(3, fixture.state.time_out_requests());
+    assert_eq!(3, fixture.state.time_out_messages());
 
     assert_eq!(2, fixture.local_subnet_input_schedule(&CANISTER_ID).len());
     for canister_id in [CANISTER_ID, OTHER_CANISTER_ID] {

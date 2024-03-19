@@ -100,36 +100,6 @@ pub struct MessagePool {
 }
 
 impl MessagePool {
-    pub fn insert_outbound_guaranteed_request(
-        &mut self,
-        request: Arc<Request>,
-        deadline: CoarseTime,
-    ) -> MessageId {
-        assert_eq!(NO_DEADLINE, request.deadline);
-
-        let id = self.next_message_id();
-        self.insert_impl(id, RequestOrResponse::Request(request), deadline)
-            .expect("Conflicting message with newly generated ID");
-
-        id
-    }
-
-    pub fn insert_inbound_best_effort_response(
-        &mut self,
-        id: MessageId,
-        response: Arc<Response>,
-    ) -> MessageId {
-        // Must be an already assigned ID.
-        assert!(id < self.next_message_id);
-        // Must be a best-effort response.
-        assert_ne!(NO_DEADLINE, response.deadline);
-
-        self.insert_impl(id, RequestOrResponse::Response(response), NO_DEADLINE)
-            .expect("Conflicting message with newly generated ID");
-
-        id
-    }
-
     pub fn insert_inbound(&mut self, id: MessageId, msg: RequestOrResponse) {
         // Must be an already assigned ID.
         assert!(id < self.next_message_id);
@@ -145,22 +115,28 @@ impl MessagePool {
             .expect("Conflicting message with newly generated ID");
     }
 
-    pub fn insert_outbound(&mut self, id: MessageId, msg: RequestOrResponse, now: Time) {
+    pub fn insert_outbound_request(&mut self, id: MessageId, request: Arc<Request>, now: Time) {
         // Must be an already assigned ID.
         assert!(id < self.next_message_id);
 
-        let deadline = match &msg {
-            // Requests of guaranteed response calls expire after `REQUEST_LIFETIME`.
-            RequestOrResponse::Request(request) if request.deadline == NO_DEADLINE => {
-                CoarseTime::ceil(now + REQUEST_LIFETIME)
-            }
-
-            // All other messages expire as per their specidied deadline.
-            RequestOrResponse::Request(request) => request.deadline,
-            RequestOrResponse::Response(response) => response.deadline,
+        let deadline = if request.deadline == NO_DEADLINE {
+            // Guaranteed response call requests expire after `REQUEST_LIFETIME`.
+            CoarseTime::ceil(now + REQUEST_LIFETIME)
+        } else {
+            // Best-effort requests expire as per their specidied deadline.
+            request.deadline
         };
 
-        self.insert_impl(id, msg, deadline)
+        self.insert_impl(id, RequestOrResponse::Request(request), deadline)
+            .expect("Conflicting message with newly generated ID");
+    }
+
+    pub fn insert_outbound_response(&mut self, id: MessageId, response: Arc<Response>) {
+        // Must be an already assigned ID.
+        assert!(id < self.next_message_id);
+
+        let deadline = response.deadline;
+        self.insert_impl(id, RequestOrResponse::Response(response), deadline)
             .expect("Conflicting message with newly generated ID");
     }
 
@@ -175,13 +151,14 @@ impl MessagePool {
     /// The message is recorded into the deadline queue with the provided `deadline`
     /// iff that is non-zero; it is recorded in the load shedding priority queue iff
     /// the message is a best-effort message.
-    pub fn insert_impl(
+    fn insert_impl(
         &mut self,
         id: MessageId,
         msg: RequestOrResponse,
         deadline: CoarseTime,
     ) -> Result<(), RequestOrResponse> {
         let size_bytes = msg.count_bytes();
+        let is_best_effort = msg.is_best_effort();
 
         // Insert.
         if let Some(previous) = self.messages.insert(id, msg) {
@@ -200,76 +177,9 @@ impl MessagePool {
         }
 
         // Record in load shedding queue iff it's a best-effort message.
-        if msg.is_best_effort() {
+        if is_best_effort {
             self.size_queue.push((size_bytes, id));
         }
-
-        Ok(())
-    }
-
-    /// Inserts the given message into the pool and enters it into both priority
-    /// queues.
-    ///
-    /// Returns the unique ID assigned to the message.
-    pub fn insert(&mut self, msg: RequestOrResponse) -> MessageId {
-        let id = self.next_message_id();
-        self.insert_impl2(id, msg, true)
-            .expect("Conflicting message with newly generated ID");
-        id
-    }
-
-    /// Inserts the given inbound response into the pool, entering it in the load
-    /// shedding queue only (because we don't want to time out responses already
-    /// enqueued in input queues).
-    ///
-    /// Returns an error wrapping the provided message in case of a conflict.
-    pub fn insert_inbound_response2(
-        &mut self,
-        id: MessageId,
-        msg: RequestOrResponse,
-    ) -> Result<(), RequestOrResponse> {
-        // Must be an already assigned ID.
-        assert!(id < self.next_message_id);
-        // Must be a response.
-        if let RequestOrResponse::Request(_) = msg {
-            panic!("Not a response: {:?}", msg)
-        }
-
-        self.insert_impl2(id, msg, false)
-    }
-
-    /// Inserts the given message into the pool.
-    ///
-    /// Returns an error wrapping the provided message if a message with the same ID
-    /// already exists in the pool.
-    ///
-    /// The message is recorded in the load shedding priority queue; it is recorded
-    /// into the deadline queue iff `should_expire` is `true`.
-    fn insert_impl2(
-        &mut self,
-        id: MessageId,
-        msg: RequestOrResponse,
-        should_expire: bool,
-    ) -> Result<(), RequestOrResponse> {
-        let deadline = msg.deadline();
-        assert!(deadline != NO_DEADLINE);
-        let size_bytes = msg.count_bytes();
-
-        // Insert.
-        if let Some(previous) = self.messages.insert(id, msg) {
-            // Already had a message with this ID. Replace it and fail.
-            return Err(self.messages.insert(id, previous).unwrap());
-        }
-
-        // Update pool byte size.
-        self.size_bytes += size_bytes;
-        debug_assert_eq!(self.calculate_size_bytes(), self.size_bytes);
-
-        // Record in priority queues.
-        if (should_expire) {
-            self.deadline_queue.push((Reverse(deadline), id));
-        }
-        self.size_queue.push((size_bytes, id));
 
         Ok(())
     }
@@ -281,12 +191,12 @@ impl MessagePool {
         id
     }
 
-    pub fn get(&self, reference: MessageReference) -> Option<&RequestOrResponse> {
+    pub fn get(&self, reference: &MessageReference) -> Option<&RequestOrResponse> {
         use MessageReference::*;
 
         match reference {
-            Request(id) => self.get_request(id),
-            Response(id) => self.get_response(id),
+            Request(id) => self.get_request(*id),
+            Response(id) => self.get_response(*id),
             TimeoutRejectResponse(callback) | DropRejectResponse(callback) => None,
         }
     }
@@ -305,7 +215,7 @@ impl MessagePool {
         }
     }
 
-    pub fn take_request(&mut self, id: MessageId) -> Option<RequestOrResponse> {
+    fn take_request(&mut self, id: MessageId) -> Option<RequestOrResponse> {
         let entry = match self.messages.entry(id) {
             Entry::Occupied(entry) => entry,
             Entry::Vacant(_) => return None,
@@ -323,7 +233,7 @@ impl MessagePool {
         Some(request)
     }
 
-    pub fn take_response(&mut self, id: MessageId) -> Option<RequestOrResponse> {
+    fn take_response(&mut self, id: MessageId) -> Option<RequestOrResponse> {
         let entry = match self.messages.entry(id) {
             Entry::Occupied(entry) => entry,
             Entry::Vacant(_) => return None,
@@ -341,20 +251,10 @@ impl MessagePool {
         Some(response)
     }
 
-    /// Removes the message with given ID from the pool.
-    ///
-    /// Updates the stats; and prunes the priority queues if necessary.
-    pub fn take(&mut self, id: MessageId) -> Option<RequestOrResponse> {
-        let msg = self.take_impl(id)?;
-        self.maybe_trim_queues();
-
-        Some(msg)
-    }
-
     /// Removes the message with given reference from the pool.
     ///
     /// Updates the stats; and prunes the priority queues if necessary.
-    pub fn take2(&mut self, reference: MessageReference) -> Option<RequestOrResponse> {
+    pub fn take(&mut self, reference: MessageReference) -> Option<RequestOrResponse> {
         use MessageReference::*;
 
         match reference {
@@ -376,24 +276,38 @@ impl MessagePool {
         Some(msg)
     }
 
+    /// Queries whether the deadline of any message in the pool has expired.
+    ///
+    /// Time complexity: `O(1)``.
+    pub fn has_expired_deadlines(&self, now: Time) -> bool {
+        if let Some((deadline, _)) = self.deadline_queue.peek() {
+            let now = CoarseTime::floor(now);
+            if (deadline.0 < now) {
+                return true;
+            }
+        }
+        false
+    }
+
     /// Drop all messages with expired deadlines (i.e. `deadline < now`).
-    pub fn expire_messages(&mut self, now: Time) -> Vec<RequestOrResponse> {
+    pub fn expire_messages(&mut self, now: Time) -> Vec<(MessageId, RequestOrResponse)> {
         if self.deadline_queue.is_empty() {
             return Vec::new();
         }
 
-        let now = CoarseTime::ceil(now);
+        let now = CoarseTime::floor(now);
         let mut expired = Vec::new();
         while let Some((deadline, id)) = self.deadline_queue.peek() {
             if (deadline.0 >= now) {
                 break;
             }
-
-            // Drop the message, if still present.
-            self.take_impl(*id).map(|msg| expired.push(msg));
+            let id = id.clone();
 
             // Pop the deadline queue entry.
             self.deadline_queue.pop();
+
+            // Drop the message, if present.
+            self.take_impl(id).map(|msg| expired.push((id, msg)));
         }
 
         self.maybe_trim_queues();
@@ -402,17 +316,17 @@ impl MessagePool {
     }
 
     /// Drops the largest message in the pool and returns it.
-    pub fn shed_message(&mut self) -> Option<RequestOrResponse> {
+    pub fn shed_message(&mut self) -> Option<(MessageId, RequestOrResponse)> {
         // Keep trying until we actually drop a message.
         while let Some((byte_size, id)) = self.size_queue.pop() {
             if let Some(msg) = self.take_impl(id) {
                 // A message was shed, prune the queues and return it.
                 self.maybe_trim_queues();
-                return Some(msg);
+                return Some((id, msg));
             }
         }
 
-        // Nothing was shed.
+        // Nothing to shed.
         None
     }
 

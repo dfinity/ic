@@ -123,10 +123,12 @@ impl StateMachine for StateMachineImpl {
         }
 
         // Time out requests.
-        let timed_out_requests = state.time_out_requests();
+        // let timed_out_requests = state.time_out_requests();
+        // FIXME
+        let timed_out_requests = state.time_out_messages();
         self.metrics
             .timed_out_requests_total
-            .inc_by(timed_out_requests);
+            .inc_by(timed_out_requests as u64);
         self.observe_phase_duration(PHASE_TIME_OUT_REQUESTS, &since);
 
         // Preprocess messages and add messages to the induction pool through the Demux.

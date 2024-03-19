@@ -10,6 +10,7 @@ use ic_protobuf::state::{ingress::v1 as pb_ingress, queues::v1 as pb_queues};
 use ic_types::messages::{Ingress, Request, RequestOrResponse, Response, NO_DEADLINE};
 use ic_types::{CountBytes, Cycles, Time};
 use std::collections::BTreeMap;
+use std::iter::Sum;
 use std::{
     collections::VecDeque,
     convert::{From, TryFrom, TryInto},
@@ -517,13 +518,13 @@ impl CanisterQueue {
     /// Calculates the size in bytes, including struct and messages.
     ///
     /// Time complexity: `O(self.len())`.
-    pub(super) fn calculate_size_bytes(&self, pool: &mut MessagePool) -> usize {
+    pub(super) fn calculate_size_bytes(&self, pool: &MessagePool) -> usize {
         size_of::<Self>() + self.calculate_stat_sum(|msg| msg.count_bytes(), pool)
     }
 
     /// Returns the byte size of an empty `CanisterQueue`. This is the same number
     /// that `Self::calculate_size_bytes()` would return.
-    pub(super) fn empty_size_bytes(&self) -> usize {
+    pub(super) fn empty_size_bytes() -> usize {
         size_of::<Self>()
     }
 
@@ -531,22 +532,34 @@ impl CanisterQueue {
     /// messages.
     ///
     /// Time complexity: `O(self.len())`.
-    fn calculate_stat_sum(
+    pub(super) fn calculate_stat_sum<S: Sum<S>>(
         &self,
-        stat: impl Fn(&RequestOrResponse) -> usize,
-        pool: &mut MessagePool,
-    ) -> usize {
+        stat: impl Fn(&RequestOrResponse) -> S,
+        pool: &MessagePool,
+    ) -> S {
         self.queue
             .iter()
-            .filter_map(|reference| pool.get(*reference))
+            .filter_map(|reference| pool.get(reference))
             .map(stat)
-            .sum::<usize>()
-        // for msg in self.queue.queue.iter() {
-        //     if let Some(request_or_response) = pool.get(*msg) {
-        //         total_cycles += request_or_response.cycles();
-        //     }
-        // }
-        // self.queue.iter().map(stat).sum::<usize>()
+            .sum()
+    }
+
+    /// Calculates the sum of the given stat across all enqueued messages.
+    ///
+    /// Time complexity: `O(self.len())`.
+    pub(super) fn calculate_stat_sum2(&self, stat: impl Fn(&MessageReference) -> usize) -> usize {
+        self.queue.iter().map(stat).sum::<usize>()
+    }
+
+    /// Tests whether the queue contains the message with the given ID.
+    ///
+    /// Time complexity: `O(self.len())`.
+    pub(super) fn contains(&self, id: MessageId) -> bool {
+        use MessageReference::*;
+
+        self.queue
+            .iter()
+            .any(|reference| matches!(reference, Request(qid) | Response(qid) if qid == &id))
     }
 
     /// Queue invariant check that panics if any invariant does not hold. Intended
@@ -561,113 +574,17 @@ impl CanisterQueue {
 
         true
     }
-}
 
-struct NewInputQueue {
-    queue: CanisterQueue,
-}
-
-impl NewInputQueue {
-    pub(super) fn new(capacity: usize) -> Self {
-        Self {
-            queue: CanisterQueue::new(capacity),
-        }
+    /// Returns an iterator over the underlying messages.
+    ///
+    /// For testing purposes only.
+    pub fn iter_for_testing<'a>(
+        &'a self,
+        pool: &'a MessagePool,
+    ) -> impl Iterator<Item = Option<&'a RequestOrResponse>> {
+        // FIXME: Get rid of this.
+        self.queue.iter().map(|reference| pool.get(reference))
     }
-
-    pub(super) fn available_response_slots(&self) -> usize {
-        self.queue.available_response_slots()
-    }
-
-    pub(super) fn check_has_request_slot(&self) -> Result<(), StateError> {
-        self.queue.check_has_request_slot()
-    }
-
-    pub(super) fn push_request(&mut self, id: MessageId) {
-        self.queue.push_request(id);
-    }
-
-    pub(super) fn push_response(&mut self, id: MessageId) -> Result<(), StateError> {
-        self.queue.push_response(id)
-    }
-
-    // pub(super) fn push(
-    //     &mut self,
-    //     message: RequestOrResponse,
-    //     pool: &mut MessagePool,
-    // ) -> Result<(), (StateError, RequestOrResponse)> {
-    //     let id = pool.next_message_id();
-
-    //     match message {
-    //         // Request enqueuing is infallible. Caller must have already checked slot
-    //         // availability / made a response reservation.
-    //         RequestOrResponse::Request(request) => self.queue.push_request(id),
-
-    //         RequestOrResponse::Response(response) => self
-    //             .queue
-    //             .push_response(id)
-    //             .map_err(|err| (err, RequestOrResponse::Response(response)))?,
-    //     };
-
-    //     // Enqueuing succeeded, persist the message.
-    //     pool.insert_inbound(id, message);
-
-    //     Ok(())
-    // }
-
-    pub fn peek(&self) -> Option<&MessageReference> {
-        self.queue.peek()
-    }
-
-    pub(super) fn reserve_slot(&mut self) -> Result<(), StateError> {
-        self.queue.try_reserve_response_slot()
-    }
-
-    pub(super) fn pop(&mut self) -> Option<MessageReference> {
-        self.queue.pop()
-    }
-
-    /// Returns the number of messages in the queue.
-    pub(super) fn num_messages(&self) -> usize {
-        self.queue.queue.len()
-    }
-
-    /// Returns the number of reserved slots in the queue.
-    pub(super) fn reserved_slots(&self) -> usize {
-        self.queue.reserved_slots()
-    }
-
-    /// Returns `true` if the queue has one or more used slots.
-    pub(super) fn has_used_slots(&self) -> bool {
-        self.queue.has_used_slots()
-    }
-
-    // /// Calculates the amount of cycles contained in the queue.
-    // pub(super) fn calculate_cycles_in_queue(&self, pool: &mut MessagePool) -> Cycles {
-    //     let mut total_cycles = Cycles::zero();
-    //     for msg in self.queue.queue.iter() {
-    //         if let Some(request_or_response) = pool.get(*msg) {
-    //             total_cycles += request_or_response.cycles();
-    //         }
-    //     }
-    //     total_cycles
-    // }
-
-    // /// Calculates the size in bytes, including struct and messages.
-    // ///
-    // /// Time complexity: O(num_messages).
-    // pub(super) fn calculate_size_bytes(&self) -> usize {
-    //     size_of::<Self>() + self.queue.calculate_stat_sum(|msg| msg.count_bytes())
-    // }
-
-    // /// Calculates the sum of the given stat across all enqueued messages.
-    // ///
-    // /// Time complexity: O(num_messages).
-    // pub(super) fn calculate_stat_sum(
-    //     &self,
-    //     stat: fn(&RequestOrResponse, pool: &mut MessagePool) -> usize,
-    // ) -> usize {
-    //     self.queue.calculate_stat_sum(stat)
-    // }
 }
 
 /// Representation of a single canister input queue. There is an upper bound on
