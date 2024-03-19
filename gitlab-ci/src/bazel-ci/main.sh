@@ -11,10 +11,6 @@ set -eufo pipefail
 # - merge request pipeline but not merge train pipeline
 # - target branch is not rc--*
 
-if [[ "$CI_MERGE_REQUEST_TITLE:-" == *"[RUN_ALL_BAZEL_TARGETS]"* ]]; then
-    RUN_ON_DIFF_ONLY="false"
-fi
-
 if [ "${RUN_ON_DIFF_ONLY:-}" == "true" ] \
     && [ "${CI_PIPELINE_SOURCE:-}" == "merge_request_event" ] \
     && [ "${CI_MERGE_REQUEST_EVENT_TYPE:-}" != "merge_train" ] \
