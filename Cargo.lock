@@ -10460,7 +10460,7 @@ dependencies = [
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
  "ic-sys",
- "ic-test-utilities",
+ "ic-test-utilities-io",
  "ic-test-utilities-metrics",
  "ic-test-utilities-state",
  "ic-test-utilities-time",
@@ -11296,8 +11296,8 @@ dependencies = [
  "ic-state-layout",
  "ic-state-machine-tests",
  "ic-sys",
- "ic-test-utilities",
  "ic-test-utilities-consensus",
+ "ic-test-utilities-io",
  "ic-test-utilities-logger",
  "ic-test-utilities-metrics",
  "ic-test-utilities-state",
@@ -11662,6 +11662,10 @@ dependencies = [
  "slog",
  "slog-async",
 ]
+
+[[package]]
+name = "ic-test-utilities-io"
+version = "0.9.0"
 
 [[package]]
 name = "ic-test-utilities-load-wasm"
