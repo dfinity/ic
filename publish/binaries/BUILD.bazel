@@ -14,8 +14,6 @@ LINUX_ONLY = [
     "setupos_tool",
 ]
 
-#TODO: re-add after identifying source of non-determinism
-#    "ic-https-outcalls-adapter",
 NO_STRIP = [
     "canister_sandbox",
     "ic-btc-adapter",
@@ -121,8 +119,28 @@ LIBRARIES = {
         ],
     )
     for name in BINARIES
-    if name not in TEST_BINARIES
+    if name not in TEST_BINARIES and name != "ic-https-outcalls-adapter"
 ]
+
+# TODO: remove "ic-https-outcalls-adapter" exception
+# once transition rules are functioning as expected
+genrule(
+    name = "ic-https-outcalls-adapter_cleaned",
+    testonly = True,
+    srcs = ["ic-https-outcalls-adapter_bin"],
+    outs = ["ic-https-outcalls-adapter"],
+    cmd = select({
+        "@platforms//os:linux": "objcopy --strip-unneeded -R .comment -R .note -R .note.gnu.build-id $< $@",
+        "@platforms//os:osx": "cp $< $@",
+    }),
+    executable = True,
+    visibility = [
+        "//ic-os/boundary-guestos/envs:__subpackages__",
+        "//ic-os/guestos/envs:__subpackages__",
+        "//ic-os/hostos/envs:__subpackages__",
+        "//ic-os/setupos/envs:__subpackages__",
+    ],
+)
 
 [
     genrule(
