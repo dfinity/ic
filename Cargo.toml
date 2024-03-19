@@ -142,7 +142,6 @@ members = [
   "rs/ic_os/vsock/guest",
   "rs/ic_os/vsock/host",
   "rs/ic_os/vsock/vsock_lib",
-  "rs/identity",
   "rs/ingress_manager",
   "rs/interfaces",
   "rs/interfaces/adapter_client",
