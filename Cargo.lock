@@ -8359,15 +8359,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-identity"
-version = "0.9.0"
-dependencies = [
- "anyhow",
- "clap 4.4.6",
- "ic-crypto-ed25519",
-]
-
-[[package]]
 name = "ic-image-upgrader"
 version = "0.9.0"
 dependencies = [
