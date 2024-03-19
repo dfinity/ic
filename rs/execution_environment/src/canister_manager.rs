@@ -632,6 +632,9 @@ impl CanisterManager {
         if let Some(log_visibility) = settings.log_visibility() {
             canister.system_state.log_visibility = log_visibility;
         }
+        if let Some(wasm_memory_limit) = settings.wasm_memory_limit() {
+            canister.system_state.wasm_memory_limit = Some(wasm_memory_limit);
+        }
     }
 
     /// Tries to apply the requested settings on the canister identified by
@@ -1177,6 +1180,7 @@ impl CanisterManager {
         let freeze_threshold = canister.system_state.freeze_threshold;
         let reserved_cycles_limit = canister.system_state.reserved_balance_limit();
         let log_visibility = canister.system_state.log_visibility;
+        let wasm_memory_limit = canister.system_state.wasm_memory_limit;
 
         Ok(CanisterStatusResultV2::new(
             canister.status(),
@@ -1213,6 +1217,7 @@ impl CanisterManager {
                 .scheduler_state
                 .total_query_stats
                 .egress_payload_size,
+            wasm_memory_limit.map(|x| x.get()),
         ))
     }
 

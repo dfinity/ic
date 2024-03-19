@@ -167,6 +167,7 @@ pub struct CanisterStateBits {
     pub total_query_stats: TotalQueryStats,
     pub log_visibility: LogVisibility,
     pub canister_log: CanisterLog,
+    pub wasm_memory_limit: Option<NumBytes>,
 }
 
 /// This struct contains bits of the `CanisterSnapshot` that are not already
@@ -1903,6 +1904,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
                 .map(|record| record.clone().into())
                 .collect(),
             next_canister_log_record_idx: item.canister_log.next_idx(),
+            wasm_memory_limit: item.wasm_memory_limit.map(|v| v.get()),
         }
     }
 }
@@ -2031,6 +2033,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
                     .map(|record| record.into())
                     .collect(),
             ),
+            wasm_memory_limit: value.wasm_memory_limit.map(NumBytes::from),
         })
     }
 }

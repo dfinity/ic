@@ -719,6 +719,7 @@ fn can_get_canister_information() {
                 0u128,
                 0u128,
                 0u128,
+                Some(0),
             )
         );
 
@@ -777,6 +778,7 @@ fn can_get_canister_information() {
                     0u128,
                     0u128,
                     0u128,
+                    Some(0)
                 ),
                 CanisterStatusResultV2::decode(&res).unwrap(),
                 2 * BALANCE_EPSILON,
