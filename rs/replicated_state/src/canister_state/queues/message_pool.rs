@@ -1,6 +1,6 @@
 #![allow(unused)]
 
-use ic_types::messages::{CallbackId, Request, RequestOrResponse, Response, NO_DEADLINE};
+use ic_types::messages::{Request, RequestOrResponse, Response, NO_DEADLINE};
 use ic_types::time::CoarseTime;
 use ic_types::{CountBytes, Time};
 use phantom_newtype::Id;
@@ -15,55 +15,6 @@ pub struct MessageIdTag;
 /// A value used as an opaque nonce to couple outgoing calls with their
 /// callbacks.
 pub type MessageId = Id<MessageIdTag, u64>;
-
-/// A reference to a message, used as `CanisterQueue` item.
-///
-/// May be a weak reference into the message pool; or identify a reject response to
-/// a specific callback.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum MessageReference {
-    /// Weak reference to a `Request` held in the message pool.
-    ///
-    /// Guaranteed response call requests in output queues and best-effort requests
-    /// in input or output queues may time out and be dropped from the pool. Such
-    /// stale references can be safely ignored.
-    ///
-    /// Guaranteed response call requests in input queues never time out.
-    Request(MessageId),
-
-    /// Weak reference to a `Response` held in the message pool.
-    ///
-    /// Best-effort responses in output queues may time out and be dropped from the
-    /// pool. Stale response references in output queues can be safely ignored.
-    ///
-    /// A stale response reference is enqueued into an input queue as a
-    /// `SYS_UNKNOWN` reject response marker. A matching response may or may not be
-    /// inserted into the pool while the reference is backlogged in the input queue.
-    /// Meaning that stale response references in input queues are `SYS_UNKNOWN`
-    /// reject responses.
-    ///
-    /// Guaranteed responses never time out.
-    Response(MessageId),
-
-    /// Local known (i.e. `SYS_TRANSIENT`) timeout reject response.
-    TimeoutRejectResponse(CallbackId),
-
-    /// Local known (i.e. `SYS_TRANSIENT`) drop reject response.
-    DropRejectResponse(CallbackId),
-}
-
-impl MessageReference {
-    /// Returns `true` if this is a reference to a response; or a reject response.
-    pub fn is_response(&self) -> bool {
-        match self {
-            Self::Request(_) => false,
-
-            Self::Response(_) | Self::TimeoutRejectResponse(_) | Self::DropRejectResponse(_) => {
-                true
-            }
-        }
-    }
-}
 
 /// A pool of best-effort messages, with built-in support for time-based expiration
 /// and load shedding.
@@ -94,8 +45,18 @@ pub struct MessagePool {
     next_message_id: MessageId,
 }
 
+/// A reference into a `MessagePool` that differentiates between request and
+/// response.
+pub(super) enum MessagePoolReference {
+    /// Reference to a `Request` held in the message pool.
+    Request(MessageId),
+
+    /// Reference to a `Response` held in the message pool.
+    Response(MessageId),
+}
+
 impl MessagePool {
-    pub fn insert_inbound(&mut self, id: MessageId, msg: RequestOrResponse) {
+    pub(crate) fn insert_inbound(&mut self, id: MessageId, msg: RequestOrResponse) {
         // Must be an already assigned ID.
         assert!(id < self.next_message_id);
 
@@ -110,7 +71,12 @@ impl MessagePool {
             .expect("Conflicting message with newly generated ID");
     }
 
-    pub fn insert_outbound_request(&mut self, id: MessageId, request: Arc<Request>, now: Time) {
+    pub(crate) fn insert_outbound_request(
+        &mut self,
+        id: MessageId,
+        request: Arc<Request>,
+        now: Time,
+    ) {
         // Must be an already assigned ID.
         assert!(id < self.next_message_id);
 
@@ -126,7 +92,7 @@ impl MessagePool {
             .expect("Conflicting message with newly generated ID");
     }
 
-    pub fn insert_outbound_response(&mut self, id: MessageId, response: Arc<Response>) {
+    pub(crate) fn insert_outbound_response(&mut self, id: MessageId, response: Arc<Response>) {
         // Must be an already assigned ID.
         assert!(id < self.next_message_id);
 
@@ -179,30 +145,32 @@ impl MessagePool {
     }
 
     /// Reserves and returns a new message ID.
-    pub fn next_message_id(&mut self) -> MessageId {
+    pub(crate) fn next_message_id(&mut self) -> MessageId {
         let id = self.next_message_id;
         self.next_message_id = (self.next_message_id.get() + 1).into();
         id
     }
 
-    pub fn get(&self, reference: &MessageReference) -> Option<&RequestOrResponse> {
-        use MessageReference::*;
+    pub(crate) fn get<'a, R>(&self, reference: &'a R) -> Option<&RequestOrResponse>
+    where
+        &'a R: TryInto<MessagePoolReference>,
+    {
+        use MessagePoolReference::*;
 
-        match reference {
-            Request(id) => self.get_request(*id),
-            Response(id) => self.get_response(*id),
-            TimeoutRejectResponse(_) | DropRejectResponse(_) => None,
+        match reference.try_into().ok()? {
+            Request(id) => self.get_request(id),
+            Response(id) => self.get_response(id),
         }
     }
 
-    pub fn get_request(&self, id: MessageId) -> Option<&RequestOrResponse> {
+    pub(crate) fn get_request(&self, id: MessageId) -> Option<&RequestOrResponse> {
         match self.messages.get(&id) {
             request @ Some(RequestOrResponse::Request(_)) => request,
             Some(RequestOrResponse::Response(_)) | None => None,
         }
     }
 
-    pub fn get_response(&self, id: MessageId) -> Option<&RequestOrResponse> {
+    pub(crate) fn get_response(&self, id: MessageId) -> Option<&RequestOrResponse> {
         match self.messages.get(&id) {
             response @ Some(RequestOrResponse::Response(_)) => response,
             Some(RequestOrResponse::Request(_)) | None => None,
@@ -248,13 +216,15 @@ impl MessagePool {
     /// Removes the message with given reference from the pool.
     ///
     /// Updates the stats; and prunes the priority queues if necessary.
-    pub fn take(&mut self, reference: MessageReference) -> Option<RequestOrResponse> {
-        use MessageReference::*;
+    pub(crate) fn take<'a, R>(&mut self, reference: &'a R) -> Option<RequestOrResponse>
+    where
+        &'a R: TryInto<MessagePoolReference>,
+    {
+        use MessagePoolReference::*;
 
-        match reference {
+        match reference.try_into().ok()? {
             Request(id) => self.take_request(id),
             Response(id) => self.take_response(id),
-            TimeoutRejectResponse(_) | DropRejectResponse(_) => None,
         }
     }
 
@@ -273,7 +243,7 @@ impl MessagePool {
     /// Queries whether the deadline of any message in the pool has expired.
     ///
     /// Time complexity: `O(1)``.
-    pub fn has_expired_deadlines(&self, now: Time) -> bool {
+    pub(crate) fn has_expired_deadlines(&self, now: Time) -> bool {
         if let Some((deadline, _)) = self.deadline_queue.peek() {
             let now = CoarseTime::floor(now);
             if deadline.0 < now {
@@ -284,7 +254,7 @@ impl MessagePool {
     }
 
     /// Drop all messages with expired deadlines (i.e. `deadline < now`).
-    pub fn expire_messages(&mut self, now: Time) -> Vec<(MessageId, RequestOrResponse)> {
+    pub(crate) fn expire_messages(&mut self, now: Time) -> Vec<(MessageId, RequestOrResponse)> {
         if self.deadline_queue.is_empty() {
             return Vec::new();
         }
@@ -310,7 +280,7 @@ impl MessagePool {
     }
 
     /// Drops the largest message in the pool and returns it.
-    pub fn shed_message(&mut self) -> Option<(MessageId, RequestOrResponse)> {
+    pub(crate) fn shed_message(&mut self) -> Option<(MessageId, RequestOrResponse)> {
         // Keep trying until we actually drop a message.
         while let Some((_, id)) = self.size_queue.pop() {
             if let Some(msg) = self.take_impl(id) {
@@ -325,7 +295,7 @@ impl MessagePool {
     }
 
     /// Returns the number of messages in the pool.
-    pub fn len(&self) -> usize {
+    pub(crate) fn len(&self) -> usize {
         self.messages.len()
     }
 

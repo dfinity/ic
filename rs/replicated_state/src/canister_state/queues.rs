@@ -3,8 +3,8 @@ mod queue;
 #[cfg(test)]
 mod tests;
 
-use self::message_pool::{MessageId, MessagePool, MessageReference};
-use self::queue::{CanisterQueue, IngressQueue};
+use self::message_pool::{MessageId, MessagePool};
+use self::queue::{CanisterQueue, IngressQueue, MessageReference};
 use crate::replicated_state::MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN;
 use crate::{CanisterState, InputQueueType, NextInputQueue, StateError};
 use ic_base_types::PrincipalId;
@@ -226,7 +226,7 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
                     session_id: SessionId::new(0),
                 };
 
-                let msg = match self.pool.take(reference) {
+                let msg = match self.pool.take(&reference) {
                     Some(msg) => msg,
 
                     // Stale reference, try again.
@@ -464,7 +464,7 @@ impl CanisterQueues {
             // Get the message queue of this canister.
             let input_queue = &mut self.canister_queues.get_mut(&sender).unwrap().0;
             while let Some(reference) = input_queue.pop() {
-                let msg = match self.pool.take(reference) {
+                let msg = match self.pool.take(&reference) {
                     Some(message) => message,
 
                     // Stale reference, try again.
@@ -1833,7 +1833,7 @@ pub mod testing {
                 .1
                 .pop()
                 .unwrap();
-            let msg = self.pool.take(reference).unwrap();
+            let msg = self.pool.take(&reference).unwrap();
 
             self.output_queues_stats -= OutputQueuesStats::stats_delta(&msg);
             self.memory_usage_stats -= MemoryUsageStats::stats_delta(QueueOp::Pop, &msg);

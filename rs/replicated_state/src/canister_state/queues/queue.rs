@@ -7,7 +7,7 @@ mod tests;
 use ic_base_types::CanisterId;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::state::{ingress::v1 as pb_ingress, queues::v1 as pb_queues};
-use ic_types::messages::{Ingress, Request, RequestOrResponse, Response, NO_DEADLINE};
+use ic_types::messages::{CallbackId, Ingress, Request, RequestOrResponse, Response, NO_DEADLINE};
 use ic_types::{CountBytes, Cycles, Time};
 use std::collections::BTreeMap;
 use std::iter::Sum;
@@ -18,7 +18,7 @@ use std::{
     sync::Arc,
 };
 
-use super::message_pool::{MessageId, MessagePool, MessageReference};
+use super::message_pool::{MessageId, MessagePool, MessagePoolReference};
 
 /// Trait for queue items in `InputQueue` and `OutputQueue`. Such items must
 /// either be a response or a request (including timed out requests).
@@ -330,6 +330,69 @@ impl TryFrom<pb_queues::InputOutputQueue> for QueueWithReservation<Option<Reques
     }
 }
 
+/// A reference to a message, used as `CanisterQueue` item.
+///
+/// May be a weak reference into the message pool; or identify a reject response to
+/// a specific callback.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(super) enum MessageReference {
+    /// Weak reference to a `Request` held in the message pool.
+    ///
+    /// Guaranteed response call requests in output queues and best-effort requests
+    /// in input or output queues may time out and be dropped from the pool. Such
+    /// stale references can be safely ignored.
+    ///
+    /// Guaranteed response call requests in input queues never time out.
+    Request(MessageId),
+
+    /// Weak reference to a `Response` held in the message pool.
+    ///
+    /// Best-effort responses in output queues may time out and be dropped from the
+    /// pool. Stale response references in output queues can be safely ignored.
+    ///
+    /// A stale response reference is enqueued into an input queue as a
+    /// `SYS_UNKNOWN` reject response marker. A matching response may or may not be
+    /// inserted into the pool while the reference is backlogged in the input queue.
+    /// Meaning that stale response references in input queues are `SYS_UNKNOWN`
+    /// reject responses.
+    ///
+    /// Guaranteed responses never time out.
+    Response(MessageId),
+
+    /// Local known (i.e. `SYS_TRANSIENT`) timeout reject response.
+    TimeoutRejectResponse(CallbackId),
+
+    /// Local known (i.e. `SYS_TRANSIENT`) drop reject response.
+    DropRejectResponse(CallbackId),
+}
+
+impl MessageReference {
+    /// Returns `true` if this is a reference to a response; or a reject response.
+    pub(super) fn is_response(&self) -> bool {
+        match self {
+            Self::Request(_) => false,
+
+            Self::Response(_) | Self::TimeoutRejectResponse(_) | Self::DropRejectResponse(_) => {
+                true
+            }
+        }
+    }
+}
+
+impl TryFrom<&MessageReference> for MessagePoolReference {
+    type Error = ();
+
+    fn try_from(reference: &MessageReference) -> Result<Self, Self::Error> {
+        use MessageReference::*;
+
+        match reference {
+            Request(id) => Ok(Self::Request(*id)),
+            Response(id) => Ok(Self::Response(*id)),
+            TimeoutRejectResponse(_) | DropRejectResponse(_) => Err(()),
+        }
+    }
+}
+
 /// A FIFO queue with equal but separate capacities for requests and responses,
 /// ensuring full-duplex communication up to the capacity.
 ///
@@ -519,7 +582,7 @@ impl CanisterQueue {
         use MessageReference::*;
 
         self.calculate_reference_stat_sum(|reference| match reference {
-            Request(id) => 0,
+            Request(_) => 0,
             Response(id) => pool.get_response(*id).is_some() as usize,
             TimeoutRejectResponse(_) => 1,
             DropRejectResponse(_) => 1,
@@ -528,6 +591,7 @@ impl CanisterQueue {
 
     /// Calculates the amount of cycles contained in the queue.
     pub(super) fn calculate_cycles_in_queue(&self, pool: &MessagePool) -> Cycles {
+        // FIXME: A reject response could also refund cycles.
         self.calculate_stat_sum(RequestOrResponse::cycles, pool)
     }
 
@@ -542,12 +606,7 @@ impl CanisterQueue {
     ) -> S {
         self.queue
             .iter()
-            .filter_map(|reference| match reference {
-                MessageReference::Request(id) => pool.get_request(*id),
-                MessageReference::Response(id) => pool.get_response(*id),
-                MessageReference::TimeoutRejectResponse(_) => None,
-                MessageReference::DropRejectResponse(_) => None,
-            })
+            .filter_map(|reference| pool.get(reference))
             .map(stat)
             .sum()
     }
@@ -586,7 +645,7 @@ impl CanisterQueue {
     /// Returns an iterator over the underlying messages.
     ///
     /// For testing purposes only.
-    pub fn iter_for_testing<'a>(
+    pub(super) fn iter_for_testing<'a>(
         &'a self,
         pool: &'a MessagePool,
     ) -> impl Iterator<Item = Option<&'a RequestOrResponse>> {
@@ -633,7 +692,7 @@ impl InputQueue {
         }
     }
 
-    pub fn peek(&self) -> Option<&RequestOrResponse> {
+    pub(super) fn peek(&self) -> Option<&RequestOrResponse> {
         self.queue.peek()
     }
 
@@ -917,7 +976,7 @@ impl OutputQueue {
     }
 
     /// Number of actual messages in the queue (`None` are ignored).
-    pub fn num_messages(&self) -> usize {
+    pub(super) fn num_messages(&self) -> usize {
         self.num_messages
     }
 
@@ -969,7 +1028,7 @@ impl OutputQueue {
     /// Returns an iterator over the underlying messages.
     ///
     /// For testing purposes only.
-    pub fn iter_for_testing(&self) -> impl Iterator<Item = &Option<RequestOrResponse>> {
+    pub(super) fn iter_for_testing(&self) -> impl Iterator<Item = &Option<RequestOrResponse>> {
         self.queue.queue.iter()
     }
 }
