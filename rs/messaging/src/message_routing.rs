@@ -898,7 +898,6 @@ impl BatchProcessorImpl {
         nodes: BTreeSet<NodeId>,
         registry_version: RegistryVersion,
     ) -> Result<NodePublicKeys, ReadRegistryError> {
-        use ic_crypto_internal_basic_sig_ed25519::{public_key_to_der, types::PublicKeyBytes};
         let mut node_public_keys: NodePublicKeys = BTreeMap::new();
         for node_id in nodes {
             let optional_public_key_proto = self
@@ -912,9 +911,10 @@ impl BatchProcessorImpl {
             match optional_public_key_proto {
                 Some(public_key_proto) => {
                     // If the public key protobuf is invalid, we continue without stalling the subnet.
-                    match PublicKeyBytes::try_from(&public_key_proto) {
-                        Ok(pk_bytes) => {
-                            node_public_keys.insert(node_id, public_key_to_der(pk_bytes));
+                    match ic_crypto_ed25519::PublicKey::deserialize_raw(&public_key_proto.key_value)
+                    {
+                        Ok(pk) => {
+                            node_public_keys.insert(node_id, pk.serialize_rfc8410_der());
                         }
                         Err(err) => {
                             self.metrics
@@ -922,7 +922,7 @@ impl BatchProcessorImpl {
                                 .inc();
                             warn!(
                                 self.log,
-                                "{}: the PublicKey protobuf of node {} stored in registry is not an valid Ed25519 public key, {}.",
+                                "{}: the PublicKey protobuf of node {} stored in registry is not a valid Ed25519 public key, {:?}.",
                                 CRITICAL_ERROR_MISSING_OR_INVALID_NODE_PUBLIC_KEYS,
                                 node_id,
                                 err
