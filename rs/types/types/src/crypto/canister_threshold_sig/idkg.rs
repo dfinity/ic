@@ -763,7 +763,7 @@ pub enum IDkgTranscriptOperation {
     /// to produce a `masked` transcript.
     ///
     /// Useful to compute the product transcripts in
-    /// [`EcdsaPreSignatureQuadruple`][`crate::crypto::canister_threshold_sig::PreSignatureQuadruple`]:
+    /// [`EcdsaPreSignatureQuadruple`][`crate::crypto::canister_threshold_sig::EcdsaPreSignatureQuadruple`]:
     /// * Given a unmasked transcript for sharing a random value `kappa` and a masked transcript
     /// for sharing a random value `lambda`, compute the masked transcript for sharing the value
     /// `kappa * lambda`.
