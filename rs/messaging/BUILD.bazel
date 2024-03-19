@@ -15,7 +15,7 @@ rust_library(
         "//rs/canonical_state/certification_version",
         "//rs/config",
         "//rs/constants",
-        "//rs/crypto/internal/crypto_lib/basic_sig/ed25519",
+        "//rs/crypto/ed25519",
         "//rs/crypto/utils/threshold_sig_der",
         "//rs/cycles_account_manager",
         "//rs/interfaces",

@@ -11,7 +11,7 @@ ic-base-types = { path = "../types/base_types" }
 ic-certification-version = { path = "../canonical_state/certification_version" }
 ic-config = { path = "../config" }
 ic-constants = { path = "../constants" }
-ic-crypto-internal-basic-sig-ed25519 = { path = "../crypto/internal/crypto_lib/basic_sig/ed25519" }
+ic-crypto-ed25519 = { path = "../crypto/ed25519" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-error-types = { path = "../types/error_types" }
