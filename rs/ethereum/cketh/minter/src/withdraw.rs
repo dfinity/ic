@@ -11,10 +11,10 @@ use crate::logs::{DEBUG, INFO};
 use crate::numeric::{GasAmount, LedgerBurnIndex, LedgerMintIndex, TransactionCount};
 use crate::state::audit::{process_event, EventType};
 use crate::state::transactions::{
-    create_transaction, CreateTransactionError, Reimbursed, ReimbursementRequest,
+    create_transaction, CreateTransactionError, Reimbursed, ReimbursementRequest, WithdrawalRequest,
 };
 use crate::state::{mutate_state, read_state, State, TaskType};
-use crate::tx::{estimate_transaction_price, TransactionPrice};
+use crate::tx::{estimate_transaction_price, TransactionPriceEstimate};
 use candid::Nat;
 use futures::future::join_all;
 use ic_canister_log::log;
@@ -29,6 +29,7 @@ const TRANSACTIONS_TO_SIGN_BATCH_SIZE: usize = 5;
 const TRANSACTIONS_TO_SEND_BATCH_SIZE: usize = 5;
 
 pub const CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT: GasAmount = GasAmount::new(21_000);
+pub const CKERC20_WITHDRAWAL_TRANSACTION_GAS_LIMIT: GasAmount = GasAmount::new(65_000);
 
 pub async fn process_reimbursement() {
     let _guard = match TimerGuard::new(TaskType::Reimbursement) {
@@ -134,12 +135,12 @@ pub async fn process_retrieve_eth_requests() {
     };
     // Transaction price is estimated everytime since the estimate uses the latest fee history
     // and a block on Ethereum is produced every 12s while making an HTTPs outcall on fiduciary subnet takes around 15s.
-    let transaction_price = match estimate_transaction_price(&fee_history) {
+    let gas_fee_estimate = match estimate_transaction_price(&fee_history) {
         Ok(estimate) => {
             mutate_state(|s| {
                 s.last_transaction_price_estimate = Some((ic_cdk::api::time(), estimate.clone()));
             });
-            estimate.to_price(CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT)
+            estimate
         }
         Err(e) => {
             log!(
@@ -149,15 +150,14 @@ pub async fn process_retrieve_eth_requests() {
             return;
         }
     };
-    let max_transaction_fee = transaction_price.max_transaction_fee();
     log!(
         INFO,
-        "[withdraw]: Estimated max transaction fee: {:?}",
-        max_transaction_fee,
+        "[withdraw]: Estimated transaction fee: {:?}",
+        gas_fee_estimate,
     );
     let latest_transaction_count = latest_transaction_count().await;
-    resubmit_transactions_batch(latest_transaction_count, &transaction_price).await;
-    create_transactions_batch(transaction_price);
+    resubmit_transactions_batch(latest_transaction_count, &gas_fee_estimate).await;
+    create_transactions_batch(gas_fee_estimate);
     sign_transactions_batch().await;
     send_transactions_batch(latest_transaction_count).await;
     finalize_transactions_batch().await;
@@ -188,7 +188,7 @@ async fn latest_transaction_count() -> Option<TransactionCount> {
 }
 async fn resubmit_transactions_batch(
     latest_transaction_count: Option<TransactionCount>,
-    transaction_price: &TransactionPrice,
+    gas_fee_estimate: &TransactionPriceEstimate,
 ) {
     if read_state(|s| s.eth_transactions.is_sent_tx_empty()) {
         return;
@@ -201,7 +201,7 @@ async fn resubmit_transactions_batch(
     };
     let transactions_to_resubmit = read_state(|s| {
         s.eth_transactions
-            .create_resubmit_transactions(latest_transaction_count, transaction_price.clone())
+            .create_resubmit_transactions(latest_transaction_count, gas_fee_estimate.clone())
     });
     for result in transactions_to_resubmit {
         match result {
@@ -227,7 +227,7 @@ async fn resubmit_transactions_batch(
     }
 }
 
-fn create_transactions_batch(transaction_price: TransactionPrice) {
+fn create_transactions_batch(gas_fee_estimate: TransactionPriceEstimate) {
     for request in read_state(|s| {
         s.eth_transactions
             .withdrawal_requests_batch(WITHDRAWAL_REQUESTS_BATCH_SIZE)
@@ -235,7 +235,13 @@ fn create_transactions_batch(transaction_price: TransactionPrice) {
         log!(DEBUG, "[create_transactions_batch]: processing {request:?}",);
         let ethereum_network = read_state(State::ethereum_network);
         let nonce = read_state(|s| s.eth_transactions.next_transaction_nonce());
-        match create_transaction(&request, nonce, transaction_price.clone(), ethereum_network) {
+        let gas_limit = estimate_gas_limit(&request);
+        match create_transaction(
+            &request,
+            nonce,
+            gas_fee_estimate.clone().to_price(gas_limit),
+            ethereum_network,
+        ) {
             Ok(transaction) => {
                 log!(
                     DEBUG,
@@ -246,16 +252,16 @@ fn create_transactions_batch(transaction_price: TransactionPrice) {
                     process_event(
                         s,
                         EventType::CreatedTransaction {
-                            withdrawal_id: request.ledger_burn_index,
+                            withdrawal_id: request.cketh_ledger_burn_index(),
                             transaction,
                         },
                     );
                 });
             }
-            Err(CreateTransactionError::InsufficientAmount {
-                ledger_burn_index,
-                withdrawal_amount,
-                max_transaction_fee,
+            Err(CreateTransactionError::InsufficientTransactionFee {
+                cketh_ledger_burn_index: ledger_burn_index,
+                allowed_max_transaction_fee: withdrawal_amount,
+                actual_max_transaction_fee: max_transaction_fee,
             }) => {
                 log!(
                     INFO,
@@ -266,6 +272,13 @@ fn create_transactions_batch(transaction_price: TransactionPrice) {
                 mutate_state(|s| s.eth_transactions.reschedule_withdrawal_request(request));
             }
         };
+    }
+}
+
+pub fn estimate_gas_limit(withdrawal_request: &WithdrawalRequest) -> GasAmount {
+    match withdrawal_request {
+        WithdrawalRequest::CkEth(_) => CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
+        WithdrawalRequest::CkErc20(_) => CKERC20_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
     }
 }
 

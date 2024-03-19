@@ -796,9 +796,12 @@ fn state_equivalence() {
         ..withdrawal_request1.clone()
     };
     let eth_transactions = EthTransactions {
-        withdrawal_requests: vec![withdrawal_request1.clone(), withdrawal_request2.clone()]
-            .into_iter()
-            .collect(),
+        withdrawal_requests: vec![
+            withdrawal_request1.clone().into(),
+            withdrawal_request2.clone().into(),
+        ]
+        .into_iter()
+        .collect(),
         created_tx: singleton_map(
             2,
             4,
@@ -889,7 +892,7 @@ fn state_equivalence() {
                     .unwrap(),
                 from_subaccount: None,
                 created_at: Some(1699527697000000000),
-            }
+            }.into()
         },
         reimbursement_requests: btreemap! {
             LedgerBurnIndex::new(3) => ReimbursementRequest {
@@ -1080,9 +1083,12 @@ fn state_equivalence() {
         Ok(()),
         state.is_equivalent_to(&State {
             eth_transactions: EthTransactions {
-                withdrawal_requests: vec![withdrawal_request2.clone(), withdrawal_request1.clone()]
-                    .into_iter()
-                    .collect(),
+                withdrawal_requests: vec![
+                    withdrawal_request2.clone().into(),
+                    withdrawal_request1.clone().into()
+                ]
+                .into_iter()
+                .collect(),
                 ..eth_transactions.clone()
             },
             ..state.clone()
@@ -1094,7 +1100,7 @@ fn state_equivalence() {
         Ok(()),
         state.is_equivalent_to(&State {
             eth_transactions: EthTransactions {
-                withdrawal_requests: vec![withdrawal_request1].into_iter().collect(),
+                withdrawal_requests: vec![withdrawal_request1.into()].into_iter().collect(),
                 ..eth_transactions.clone()
             },
             ..state.clone()

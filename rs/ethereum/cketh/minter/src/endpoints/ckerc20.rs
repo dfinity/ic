@@ -5,7 +5,7 @@ use candid::{CandidType, Deserialize, Nat, Principal};
 #[derive(CandidType, Deserialize)]
 pub struct WithdrawErc20Arg {
     pub amount: Nat,
-    pub ckerc20_token_symbol: String,
+    pub ckerc20_ledger_id: Principal,
     pub recipient: String,
 }
 
@@ -27,7 +27,7 @@ impl From<Erc20WithdrawalRequest> for RetrieveErc20Request {
 #[derive(CandidType, Deserialize, Debug, PartialEq)]
 pub enum WithdrawErc20Error {
     TokenNotSupported {
-        supported_tokens: Vec<String>,
+        supported_tokens: Vec<crate::endpoints::CkErc20Token>,
     },
     InsufficientFunds {
         balance: Nat,

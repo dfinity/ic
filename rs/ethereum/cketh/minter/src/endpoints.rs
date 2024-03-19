@@ -28,11 +28,21 @@ impl From<TransactionPrice> for Eip1559TransactionPrice {
     }
 }
 
-#[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
+#[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub struct CkErc20Token {
     pub ckerc20_token_symbol: String,
     pub erc20_contract_address: String,
     pub ledger_canister_id: Principal,
+}
+
+impl From<crate::erc20::CkErc20Token> for CkErc20Token {
+    fn from(value: crate::erc20::CkErc20Token) -> Self {
+        Self {
+            ckerc20_token_symbol: value.ckerc20_token_symbol.to_string(),
+            erc20_contract_address: value.erc20_contract_address.to_string(),
+            ledger_canister_id: value.ckerc20_ledger_id,
+        }
+    }
 }
 
 #[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
@@ -324,7 +334,7 @@ pub mod events {
         AcceptedErc20WithdrawalRequest {
             max_transaction_fee: Nat,
             withdrawal_amount: Nat,
-            ckerc20_token_symbol: String,
+            erc20_contract_address: String,
             destination: String,
             cketh_ledger_burn_index: Nat,
             ckerc20_ledger_burn_index: Nat,

@@ -9,13 +9,15 @@ use ic_cketh_minter::eth_rpc::Hash;
 use ic_cketh_minter::eth_rpc_client::responses::TransactionStatus;
 use ic_cketh_minter::lifecycle::EthereumNetwork;
 use ic_cketh_minter::numeric::{BlockNumber, LedgerBurnIndex, TransactionNonce, Wei};
-use ic_cketh_minter::state::transactions::{EthWithdrawalRequest, Reimbursed};
+use ic_cketh_minter::state::transactions::{Reimbursed, WithdrawalRequest};
 use ic_cketh_minter::state::{EthBalance, MintedEvent, State};
 use ic_ethereum_types::Address;
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet};
 
 mod filters {
+    use super::*;
+
     pub fn timestamp_to_datetime<T: std::fmt::Display>(timestamp: T) -> askama::Result<String> {
         let input = timestamp.to_string();
         let ts: i128 = input
@@ -27,6 +29,14 @@ mod filters {
             time::format_description::parse("[year]-[month]-[day]T[hour]:[minute]:[second]+00:00")
                 .unwrap();
         Ok(dt_offset.format(&format).unwrap())
+    }
+
+    //TODO XC-82: also render token symbol
+    pub fn withdrawal_amount(request: &WithdrawalRequest) -> askama::Result<String> {
+        match request {
+            WithdrawalRequest::CkEth(r) => Ok(r.withdrawal_amount.to_string()),
+            WithdrawalRequest::CkErc20(r) => Ok(r.withdrawal_amount.to_string()),
+        }
     }
 }
 
@@ -63,7 +73,7 @@ pub struct DashboardTemplate {
     pub minted_events: Vec<MintedEvent>,
     pub events_to_mint: Vec<ReceivedEthEvent>,
     pub rejected_deposits: BTreeMap<EventSource, String>,
-    pub withdrawal_requests: Vec<EthWithdrawalRequest>,
+    pub withdrawal_requests: Vec<WithdrawalRequest>,
     pub pending_transactions: Vec<DashboardPendingTransaction>,
     pub finalized_transactions: Vec<DashboardFinalizedTransaction>,
     pub reimbursed_transactions: Vec<Reimbursed>,
@@ -91,7 +101,7 @@ impl DashboardTemplate {
             .withdrawal_requests_iter()
             .cloned()
             .collect();
-        withdrawal_requests.sort_unstable_by_key(|req| Reverse(req.ledger_burn_index));
+        withdrawal_requests.sort_unstable_by_key(|req| Reverse(req.cketh_ledger_burn_index()));
 
         let mut pending_transactions: Vec<_> = state
             .eth_transactions

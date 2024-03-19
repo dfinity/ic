@@ -174,14 +174,33 @@ impl State {
         !self.events_to_mint.is_empty()
     }
 
-    pub fn find_ck_erc20_ledger(&self, symbol: &CkTokenSymbol) -> Option<Principal> {
-        self.ckerc20_tokens
-            .get_entry(symbol)
-            .map(|(_, ledger_id)| *ledger_id)
+    pub fn find_ck_erc20_token_by_ledger_id(
+        &self,
+        ckerc20_ledger_id: &Principal,
+    ) -> Option<CkErc20Token> {
+        //TODO XC-83: refactor data structure for ckerc20_tokens
+        let results: Vec<_> = self
+            .supported_ck_erc20_tokens()
+            .filter(|supported_ckerc20_token| {
+                &supported_ckerc20_token.ckerc20_ledger_id == ckerc20_ledger_id
+            })
+            .collect();
+        assert!(
+            results.len() <= 1,
+            "BUG: multiple ckERC20 tokens with the same ledger ID {ckerc20_ledger_id}"
+        );
+        results.into_iter().next()
     }
 
-    pub fn supported_ck_erc20_token_symbols(&self) -> impl Iterator<Item = &CkTokenSymbol> {
-        self.ckerc20_tokens.keys()
+    pub fn supported_ck_erc20_tokens(&self) -> impl Iterator<Item = CkErc20Token> + '_ {
+        self.ckerc20_tokens
+            .iter()
+            .map(|(symbol, erc20_address, ledger_id)| CkErc20Token {
+                erc20_contract_address: *erc20_address,
+                ckerc20_ledger_id: *ledger_id,
+                erc20_ethereum_network: self.ethereum_network,
+                ckerc20_token_symbol: symbol.clone(),
+            })
     }
 
     fn record_invalid_deposit(&mut self, source: EventSource, error: String) -> bool {
@@ -240,6 +259,7 @@ impl State {
     ) {
         self.eth_transactions
             .record_finalized_transaction(*withdrawal_id, receipt.clone());
+        //TODO XC-59: update ETH balance when ckERC20 withdrawal finalized
         self.update_eth_balance_upon_withdrawal(withdrawal_id, receipt);
     }
 

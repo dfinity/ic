@@ -14,7 +14,6 @@ use ic_cketh_minter::endpoints::{
     RetrieveEthRequest, RetrieveEthStatus, WithdrawalArg, WithdrawalError,
 };
 use ic_cketh_minter::erc20;
-use ic_cketh_minter::erc20::CkTokenSymbol;
 use ic_cketh_minter::eth_logs::{EventSource, ReceivedErc20Event, ReceivedEthEvent};
 use ic_cketh_minter::guard::retrieve_withdraw_guard;
 use ic_cketh_minter::ledger_client::LedgerClient;
@@ -261,7 +260,7 @@ async fn retrieve_eth_status(block_index: u64) -> RetrieveEthStatus {
 async fn withdraw_erc20(
     WithdrawErc20Arg {
         amount,
-        ckerc20_token_symbol,
+        ckerc20_ledger_id,
         recipient,
     }: WithdrawErc20Arg,
 ) -> Result<RetrieveErc20Request, WithdrawErc20Error> {
@@ -285,22 +284,17 @@ async fn withdraw_erc20(
     let ckerc20_withdrawal_amount =
         Erc20Value::try_from(amount).expect("ERROR: failed to convert Nat to u256");
 
-    let ckerc20_token_symbol = CkTokenSymbol::from_str(&ckerc20_token_symbol).unwrap_or_else(|e| {
-        ic_cdk::trap(&e.to_string());
-    });
-
-    let ckerc20_ledger =
-        read_state(|s| LedgerClient::ckerc20_ledger_from_state(s, &ckerc20_token_symbol))
-            .ok_or_else(|| {
-                let supported_ckerc20_tokens: BTreeSet<_> = read_state(|s| {
-                    s.supported_ck_erc20_token_symbols()
-                        .map(|token| token.to_string())
-                        .collect()
-                });
-                WithdrawErc20Error::TokenNotSupported {
-                    supported_tokens: Vec::from_iter(supported_ckerc20_tokens),
-                }
-            })?;
+    let ckerc20_token = read_state(|s| s.find_ck_erc20_token_by_ledger_id(&ckerc20_ledger_id))
+        .ok_or_else(|| {
+            let supported_ckerc20_tokens: BTreeSet<_> = read_state(|s| {
+                s.supported_ck_erc20_tokens()
+                    .map(|token| token.into())
+                    .collect()
+            });
+            WithdrawErc20Error::TokenNotSupported {
+                supported_tokens: Vec::from_iter(supported_ckerc20_tokens),
+            }
+        })?;
     let cketh_ledger = read_state(LedgerClient::cketh_ledger_from_state);
     let erc20_tx_fee = estimate_erc20_transaction_fee();
     let now = ic_cdk::api::time();
@@ -310,7 +304,7 @@ async fn withdraw_erc20(
             caller.into(),
             erc20_tx_fee,
             BurnMemo::Erc20GasFee {
-                ckerc20_token_symbol: ckerc20_token_symbol.clone(),
+                ckerc20_token_symbol: ckerc20_token.ckerc20_token_symbol.clone(),
                 ckerc20_withdrawal_amount,
                 to_address: destination,
             },
@@ -322,9 +316,9 @@ async fn withdraw_erc20(
                 INFO,
                 "[withdraw_erc20]: burning {} {}",
                 ckerc20_withdrawal_amount,
-                ckerc20_token_symbol
+                ckerc20_token.ckerc20_token_symbol
             );
-            match ckerc20_ledger
+            match LedgerClient::ckerc20_ledger(&ckerc20_token)
                 .burn_from(
                     caller.into(),
                     ckerc20_withdrawal_amount,
@@ -342,7 +336,7 @@ async fn withdraw_erc20(
                         destination,
                         cketh_ledger_burn_index,
                         ckerc20_ledger_burn_index,
-                        ckerc20_token_symbol,
+                        erc20_contract_address: ckerc20_token.erc20_contract_address,
                         from: caller,
                         from_subaccount: None,
                         created_at: now,
@@ -596,7 +590,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     withdrawal_amount,
                     destination,
                     cketh_ledger_burn_index,
-                    ckerc20_token_symbol,
+                    erc20_contract_address,
                     ckerc20_ledger_burn_index,
                     from,
                     from_subaccount,
@@ -604,7 +598,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                 }) => EP::AcceptedErc20WithdrawalRequest {
                     max_transaction_fee: max_transaction_fee.into(),
                     withdrawal_amount: withdrawal_amount.into(),
-                    ckerc20_token_symbol: ckerc20_token_symbol.to_string(),
+                    erc20_contract_address: erc20_contract_address.to_string(),
                     destination: destination.to_string(),
                     cketh_ledger_burn_index: cketh_ledger_burn_index.get().into(),
                     ckerc20_ledger_burn_index: ckerc20_ledger_burn_index.get().into(),

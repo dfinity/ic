@@ -104,7 +104,7 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
         EventType::AcceptedErc20WithdrawalRequest(request) => {
             state
                 .eth_transactions
-                .record_erc20_withdrawal_request(request.clone());
+                .record_withdrawal_request(request.clone());
         }
     }
 }
