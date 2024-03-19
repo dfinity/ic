@@ -10,7 +10,7 @@ use ic_cketh_minter::endpoints::ckerc20::{
     RetrieveErc20Request, WithdrawErc20Arg, WithdrawErc20Error,
 };
 use ic_cketh_minter::endpoints::events::EventPayload;
-use ic_ledger_suite_orchestrator::candid::AddErc20Arg as Erc20Token;
+pub use ic_ledger_suite_orchestrator::candid::AddErc20Arg as Erc20Token;
 use ic_ledger_suite_orchestrator::candid::InitArg as LedgerSuiteOrchestratorInitArg;
 use ic_ledger_suite_orchestrator_test_utils::{supported_erc20_tokens, LedgerSuiteOrchestrator};
 use ic_state_machine_tests::{ErrorCode, MessageId, StateMachine};
