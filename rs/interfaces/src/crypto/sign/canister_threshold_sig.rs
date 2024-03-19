@@ -146,7 +146,7 @@ use std::collections::{BTreeMap, HashSet};
 /// honest dealings.
 ///
 /// [`InitialIDkgDealings`]: ic_types::crypto::canister_threshold_sig::idkg::InitialIDkgDealings
-/// [`EcdsaPreSignatureQuadruple`]: ic_types::crypto::canister_threshold_sig::PreSignatureQuadruple
+/// [`EcdsaPreSignatureQuadruple`]: ic_types::crypto::canister_threshold_sig::EcdsaPreSignatureQuadruple
 /// [`Random`]: ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptOperation::Random
 /// [`ReshareOfMasked`]: ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptOperation::ReshareOfMasked
 /// [`ReshareOfUnmasked`]: ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptOperation::ReshareOfUnmasked
