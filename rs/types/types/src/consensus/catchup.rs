@@ -85,6 +85,20 @@ impl CatchUpContent {
                 .oldest_registry_version_in_use_by_replicated_state,
         }
     }
+
+    /// Check the integrity of block, block payload and random beacon in this CUP content.
+    pub fn check_integrity(&self) -> bool {
+        let block_hash = self.block.get_hash();
+        let block = self.block.as_ref();
+        let random_beacon_hash = self.random_beacon.get_hash();
+        let random_beacon = self.random_beacon.as_ref();
+        let payload_hash = block.payload.get_hash();
+        let block_payload = block.payload.as_ref();
+        block.payload.is_summary() == block_payload.is_summary()
+            && &crypto_hash(random_beacon) == random_beacon_hash
+            && &crypto_hash(block) == block_hash
+            && &crypto_hash(block_payload) == payload_hash
+    }
 }
 
 impl From<&CatchUpContent> for pb::CatchUpContent {
