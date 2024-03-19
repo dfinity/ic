@@ -18,8 +18,8 @@ use ic_nns_governance::{
 };
 use ic_nns_governance::{
     governance::{
-        DEPRECATED_TOPICS, MAX_DISSOLVE_DELAY_SECONDS,
-        MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS, ONE_YEAR_SECONDS,
+        MAX_DISSOLVE_DELAY_SECONDS, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
+        ONE_YEAR_SECONDS,
     },
     pb::v1::{
         governance_error::ErrorType::{self, NotAuthorized, NotFound, PreconditionFailed},
@@ -1114,73 +1114,4 @@ fn test_neuron_merge_follow() {
             ])]),
         ])
     );
-}
-
-/// Test that the full neurons returned in the MergeResponse omit deprecated topics from
-/// each neuron's followees field.
-#[test]
-fn test_merge_neuron_omits_deprecated_topics_from_followees() {
-    let deprecated_topic = *DEPRECATED_TOPICS.first().unwrap();
-    let normal_topic = Topic::Governance;
-
-    let mut nns = NNSBuilder::new()
-        .set_economics(NetworkEconomics::with_default_values())
-        .add_neuron(
-            NeuronBuilder::new(1, icp_to_e8s(1), principal(1))
-                .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS)
-                .insert_followees(
-                    deprecated_topic,
-                    Followees {
-                        followees: vec![NeuronId { id: 3 }],
-                    },
-                )
-                .insert_followees(
-                    normal_topic,
-                    Followees {
-                        followees: vec![NeuronId { id: 3 }],
-                    },
-                ),
-        )
-        .add_neuron(
-            NeuronBuilder::new(2, icp_to_e8s(1), principal(1))
-                .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS)
-                .insert_followees(
-                    deprecated_topic,
-                    Followees {
-                        followees: vec![NeuronId { id: 3 }],
-                    },
-                )
-                .insert_followees(
-                    normal_topic,
-                    Followees {
-                        followees: vec![NeuronId { id: 3 }],
-                    },
-                ),
-        )
-        .create();
-
-    let response =
-        nns.simulate_merge_neurons(&NeuronId { id: 1 }, &principal(1), &NeuronId { id: 2 });
-
-    let merge_response = match response.command.unwrap() {
-        CommandResponse::Merge(merge) => merge,
-        _ => panic!("Expected a Merge response from the ManageNeuron API"),
-    };
-
-    let target_neuron = merge_response
-        .target_neuron
-        .expect("Expected target_neuron to be present");
-    let source_neuron = merge_response
-        .source_neuron
-        .expect("Expected source_neuron to be present");
-
-    assert!(!target_neuron
-        .followees
-        .contains_key(&(deprecated_topic as i32)));
-    assert!(target_neuron.followees.contains_key(&(normal_topic as i32)));
-
-    assert!(!source_neuron
-        .followees
-        .contains_key(&(deprecated_topic as i32)));
-    assert!(source_neuron.followees.contains_key(&(normal_topic as i32)));
 }

@@ -219,12 +219,6 @@ const NODE_PROVIDER_REWARD_PERIOD_SECONDS: u64 = 2629800;
 
 const VALID_MATURITY_MODULATION_BASIS_POINTS_RANGE: RangeInclusive<i32> = -500..=500;
 
-// Constant set of deprecated but not yet deleted topics. These topics should
-// not be allowed to be followed on. They are represented as a constant array
-// instead of a static HashSet for brevity, and because search time is equivalent
-// on small arrays.
-pub const DEPRECATED_TOPICS: [Topic; 1] = [Topic::SnsDecentralizationSale];
-
 impl NetworkEconomics {
     /// The multiplier applied to minimum_icp_xdr_rate to convert the XDR unit to basis_points
     pub const ICP_XDR_RATE_TO_BASIS_POINT_MULTIPLIER: u64 = 100;
@@ -774,14 +768,9 @@ impl Proposal {
                 Action::SetDefaultFollowees(_) | Action::RegisterKnownNeuron(_) => {
                     Topic::Governance
                 }
-                Action::SetSnsTokenSwapOpenTimeWindow(_) | Action::OpenSnsTokenSwap(_) => {
-                    println!(
-                        "{}ERROR: Obsolete proposal type used: {:?}",
-                        LOG_PREFIX, action
-                    );
-                    Topic::SnsAndCommunityFund
-                }
-                Action::CreateServiceNervousSystem(_) => Topic::SnsAndCommunityFund,
+                Action::SetSnsTokenSwapOpenTimeWindow(_)
+                | Action::OpenSnsTokenSwap(_)
+                | Action::CreateServiceNervousSystem(_) => Topic::SnsAndCommunityFund,
             }
         } else {
             println!("{}ERROR: No action -> no topic.", LOG_PREFIX);
@@ -3438,7 +3427,7 @@ impl Governance {
                 return Err(GovernanceError::new(ErrorType::NotAuthorized));
             }
         }
-        Ok(neuron_clone.without_deprecated_topics_from_followees())
+        Ok(neuron_clone)
     }
 
     /// Returns the complete neuron data for a given neuron `id` after
@@ -5398,12 +5387,7 @@ impl Governance {
                                 );
                                 // Default following doesn't apply to governance or SNS
                                 // decentralization sale proposals.
-                                if ![
-                                    Topic::Governance,
-                                    Topic::SnsDecentralizationSale,
-                                    Topic::SnsAndCommunityFund,
-                                ]
-                                .contains(&topic)
+                                if ![Topic::Governance, Topic::SnsAndCommunityFund].contains(&topic)
                                 {
                                     // Insert followers from 'Unspecified' (default followers)
                                     all_followers.extend(
@@ -5640,23 +5624,12 @@ impl Governance {
         }
 
         // Validate topic exists
-        let topic = Topic::try_from(follow_request.topic).map_err(|_| {
+        Topic::try_from(follow_request.topic).map_err(|_| {
             GovernanceError::new_with_message(
                 ErrorType::InvalidCommand,
                 format!("Not a known topic number. Follow:\n{:#?}", follow_request),
             )
         })?;
-
-        // Validate topic is not deprecated
-        if DEPRECATED_TOPICS.iter().any(|t| t == &topic) {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::InvalidCommand,
-                format!(
-                    "Topic {:?}({}) is deprecated and cannot be followed on",
-                    topic, follow_request.topic
-                ),
-            ));
-        }
 
         self.with_neuron_mut(id, |neuron| {
             if follow_request.followees.is_empty() {

@@ -18,7 +18,7 @@ use ic_nns_governance::{
     pb::v1::{
         manage_neuron, manage_neuron::NeuronIdOrSubaccount, manage_neuron_response, proposal,
         ExecuteNnsFunction, GovernanceError, ManageNeuron, ManageNeuronResponse, Motion,
-        NetworkEconomics, Neuron, NnsFunction, Proposal, Topic, Vote,
+        NetworkEconomics, Neuron, NnsFunction, Proposal, Vote,
     },
 };
 use ic_sns_root::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
@@ -500,28 +500,6 @@ impl Environment for FakeDriver {
 /// Convenience functions to make creating neurons more concise.
 pub fn principal(i: u64) -> PrincipalId {
     PrincipalId::try_from(format!("SID{}", i).as_bytes().to_vec()).unwrap()
-}
-
-/// Issues a manage_neuron command to follow
-pub fn follow(
-    governance: &mut Governance,
-    caller: PrincipalId,
-    neuron_id: NeuronId,
-    topic: Topic,
-    followee_neuron_id: NeuronId,
-) -> ManageNeuronResponse {
-    let manage_neuron = ManageNeuron {
-        id: None,
-        neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(neuron_id)),
-        command: Some(manage_neuron::Command::Follow(manage_neuron::Follow {
-            topic: topic as i32,
-            followees: vec![followee_neuron_id],
-        })),
-    };
-    governance
-        .manage_neuron(&caller, &manage_neuron)
-        .now_or_never()
-        .unwrap()
 }
 
 /// Issues a manage_neuron command to register a vote
