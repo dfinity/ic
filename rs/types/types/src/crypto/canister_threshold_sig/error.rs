@@ -359,3 +359,57 @@ pub enum ThresholdEcdsaCombineSigSharesError {
     SignerNotAllowed { node_id: NodeId },
 }
 impl_display_using_debug!(ThresholdEcdsaCombineSigSharesError);
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ThresholdSchnorrVerifySigShareError {
+    InternalError(String),
+    SerializationError(String),
+    InvalidSignatureShare,
+    InvalidArgumentMissingSignerInTranscript { signer_id: NodeId },
+    InvalidArguments(String),
+}
+impl_display_using_debug!(ThresholdSchnorrVerifySigShareError);
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ThresholdSchnorrCreateSigShareError {
+    InternalError(String),
+    NotAReceiver,
+    SerializationError(String),
+    SecretSharesNotFound { commitment_string: String },
+    TransientInternalError(String),
+}
+impl_display_using_debug!(ThresholdSchnorrCreateSigShareError);
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ThresholdSchnorrVerifyCombinedSigError {
+    InternalError(String),
+    InvalidSignature,
+    SerializationError(String),
+    InvalidArguments(String),
+}
+impl_display_using_debug!(ThresholdSchnorrVerifyCombinedSigError);
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ThresholdSchnorrCombineSigSharesError {
+    InternalError(String),
+    UnsatisfiedReconstructionThreshold { threshold: u32, share_count: usize },
+    SerializationError(String),
+    SignerNotAllowed { node_id: NodeId },
+}
+impl_display_using_debug!(ThresholdSchnorrCombineSigSharesError);
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ThresholdSchnorrSigInputsCreationError {
+    InconsistentAlgorithmIds(String, String),
+    InconsistentReceivers,
+    InvalidPreSignatureOrigin(String),
+    UnsupportedAlgorithm(String),
+}
+impl_display_using_debug!(ThresholdSchnorrSigInputsCreationError);
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ThresholdSchnorrPresignatureTranscriptCreationError {
+    InvalidTranscriptOrigin(String),
+    UnsupportedAlgorithm(String),
+}
+impl_display_using_debug!(ThresholdSchnorrPresignatureTranscriptCreationError);
