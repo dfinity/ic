@@ -30,7 +30,7 @@ use ic_state_machine_tests::StateMachine;
 use maplit::{btreemap, hashmap};
 use std::{
     collections::{BTreeMap, HashMap},
-    io::Write,
+    io::{Read, Write},
     time::{Duration, Instant},
 };
 
@@ -330,53 +330,18 @@ pub fn add_dummy_wasms_to_sns_wasms(
 
 /// Adds real SNS wasms to the SNS-WASM canister for more robust tests, and returns
 /// a map of those wasms for use in further tests.
+///
+/// Here, "real" means built from current working tree.
+///
+/// Deprecated, because this does not do gzipping. Instead, use a combination of
+/// add_freshly_built_sns_wasms + ensure_sns_wasm_gzipped.
 pub fn add_real_wasms_to_sns_wasms(machine: &StateMachine) -> BTreeMap<SnsCanisterType, SnsWasm> {
-    fn is_not_open(status: i32) -> bool {
-        status != ProposalStatus::Open as i32
+    // Does nothing.
+    fn filter_wasm(sns_wasm: SnsWasm) -> SnsWasm {
+        sns_wasm
     }
-    let timeout = Duration::from_secs(120);
 
-    let mut result = btreemap! {};
-    for (k, (proposal_id, v)) in
-        add_real_wasms_to_sns_wasms_and_return_immediately(machine).into_iter()
-    {
-        wait_for_proposal_status(machine, proposal_id, is_not_open, timeout);
-        result.insert(k, v);
-    }
-    result
-}
-
-// Add the normal wasms, but with custom metadata to get different sets of hashes.
-pub fn add_modified_wasms_to_sns_wasms(
-    machine: &StateMachine,
-    modifier: &str,
-) -> BTreeMap<SnsCanisterType, SnsWasm> {
-    let root_wasm = create_modified_wasm(&build_root_sns_wasm(), Some(modifier));
-    add_wasm_via_proposal(machine, root_wasm.clone());
-
-    let gov_wasm = create_modified_wasm(&build_governance_sns_wasm(), Some(modifier));
-    add_wasm_via_proposal(machine, gov_wasm.clone());
-
-    let ledger_wasm = create_modified_wasm(&build_ledger_sns_wasm(), Some(modifier));
-    add_wasm_via_proposal(machine, ledger_wasm.clone());
-
-    let swap_wasm = create_modified_wasm(&build_swap_sns_wasm(), Some(modifier));
-    add_wasm_via_proposal(machine, swap_wasm.clone());
-
-    let archive_wasm = create_modified_wasm(&build_archive_sns_wasm(), Some(modifier));
-    add_wasm_via_proposal(machine, archive_wasm.clone());
-
-    let index_wasm = create_modified_wasm(&build_index_ng_sns_wasm(), Some(modifier));
-    add_wasm_via_proposal(machine, index_wasm.clone());
-
-    btreemap! {
-        SnsCanisterType::Root => root_wasm,
-        SnsCanisterType::Governance =>  gov_wasm,
-        SnsCanisterType::Ledger => ledger_wasm,
-        SnsCanisterType::Swap =>  swap_wasm,
-        SnsCanisterType::Archive =>  archive_wasm,
-        SnsCanisterType::Index =>  index_wasm,
-    }
+    add_freshly_built_sns_wasms(machine, filter_wasm)
 }
 
 pub fn wait_for_proposal_status(
@@ -397,27 +362,54 @@ pub fn wait_for_proposal_status(
     panic!("Proposal {} never exited the Open state.", proposal_id);
 }
 
-pub fn add_real_wasms_to_sns_wasms_and_return_immediately(
+/// Makes a bunch of proposals, and waits for them to be no longer be open.
+///
+/// One proposal for each type of SNS canister (i.e. root, governance, etc.).
+///
+/// Each proposal is to add a WASM to the sns-wasms canister (for that canister type). The WASM is
+/// (pre-)built from the current working tree (this includes uncommitted changes).
+pub fn add_freshly_built_sns_wasms(
     machine: &StateMachine,
+    filter_wasm: impl Fn(SnsWasm) -> SnsWasm,
+) -> BTreeMap<SnsCanisterType, SnsWasm> {
+    let mut result = btreemap! {};
+    for (sns_canister_type, (proposal_id, sns_wasm)) in
+        add_freshly_built_sns_wasms_and_return_immediately(machine, filter_wasm)
+    {
+        fn is_not_open(status: i32) -> bool {
+            status != ProposalStatus::Open as i32
+        }
+        let timeout = Duration::from_secs(120);
+        wait_for_proposal_status(machine, proposal_id, is_not_open, timeout);
+
+        result.insert(sns_canister_type, sns_wasm);
+    }
+    result
+}
+
+/// Like add_freshly_built_sns_wasms, but does not wait for the proposals to become not open.
+fn add_freshly_built_sns_wasms_and_return_immediately(
+    machine: &StateMachine,
+    filter_wasm: impl Fn(SnsWasm) -> SnsWasm,
 ) -> HashMap<SnsCanisterType, (ProposalId, SnsWasm)> {
-    let root_wasm = build_root_sns_wasm();
+    let root_wasm = filter_wasm(build_root_sns_wasm());
     let root_proposal_id = add_wasm_via_proposal_and_return_immediately(machine, root_wasm.clone());
 
-    let gov_wasm = build_governance_sns_wasm();
+    let gov_wasm = filter_wasm(build_governance_sns_wasm());
     let gov_proposal_id = add_wasm_via_proposal_and_return_immediately(machine, gov_wasm.clone());
 
-    let ledger_wasm = build_ledger_sns_wasm();
+    let ledger_wasm = filter_wasm(build_ledger_sns_wasm());
     let ledger_proposal_id =
         add_wasm_via_proposal_and_return_immediately(machine, ledger_wasm.clone());
 
-    let swap_wasm = build_swap_sns_wasm();
+    let swap_wasm = filter_wasm(build_swap_sns_wasm());
     let swap_proposal_id = add_wasm_via_proposal_and_return_immediately(machine, swap_wasm.clone());
 
-    let archive_wasm = build_archive_sns_wasm();
+    let archive_wasm = filter_wasm(build_archive_sns_wasm());
     let archive_proposal_id =
         add_wasm_via_proposal_and_return_immediately(machine, archive_wasm.clone());
 
-    let index_ng_wasm = build_index_ng_sns_wasm();
+    let index_ng_wasm = filter_wasm(build_index_ng_sns_wasm());
     let index_proposal_id =
         add_wasm_via_proposal_and_return_immediately(machine, index_ng_wasm.clone());
 
@@ -539,33 +531,55 @@ pub fn build_mainnet_index_ng_sns_wasm() -> SnsWasm {
     }
 }
 
-/// Create an SnsWasm with custom metadata
+/// Returns a slightly modified version of original_wasm that has the same behavior.
+///
+/// Specifically, sets a WASM custom section.
 pub fn create_modified_wasm(original_wasm: &SnsWasm, modify_with: Option<&str>) -> SnsWasm {
     let original_hash = original_wasm.sha256_hash();
-    let wasm_to_add = &original_wasm.wasm;
+    let mut wasm_to_add = original_wasm.wasm.clone();
 
-    let wasm_to_add = modify_wasm_bytes(wasm_to_add, modify_with.unwrap_or("no op"));
+    let mut originally_gzipped = false;
+    if is_gzipped_blob(&wasm_to_add) {
+        originally_gzipped = true;
+        let mut decoder = flate2::read::GzDecoder::new(&wasm_to_add[..]);
+        let mut decoded = vec![];
+        decoder.read_to_end(&mut decoded).unwrap();
+        wasm_to_add = decoded;
+    }
+
+    let wasm_to_add = modify_wasm_bytes(&wasm_to_add, modify_with.unwrap_or("no op"));
 
     // We get our new WASM, which is functionally the same.
-    let sns_wasm_to_add = SnsWasm {
+    let mut sns_wasm_to_add = SnsWasm {
         wasm: wasm_to_add,
         canister_type: original_wasm.canister_type,
     };
-    let new_wasm_hash = sns_wasm_to_add.sha256_hash();
 
+    if originally_gzipped {
+        sns_wasm_to_add = ensure_sns_wasm_gzipped(sns_wasm_to_add);
+    }
+
+    // Make sure that the output differs from the input, since that is the whole point of this
+    // function.
+    let new_wasm_hash = sns_wasm_to_add.sha256_hash();
     assert_ne!(new_wasm_hash, original_hash);
+
     sns_wasm_to_add
 }
 
-pub fn ensure_sns_wasm_gzipped(sns_wasm: SnsWasm) -> SnsWasm {
-    let bytes = &sns_wasm.wasm;
-    if (bytes.len() > 4) && (bytes[0] == 0x1F) && (bytes[1] == 0x8B) {
+fn is_gzipped_blob(blob: &[u8]) -> bool {
+    (blob.len() > 4)
+        // Has magic bytes.
+        && (blob[0..2] == [0x1F, 0x8B])
+}
+
+pub fn ensure_sns_wasm_gzipped(mut sns_wasm: SnsWasm) -> SnsWasm {
+    if is_gzipped_blob(&sns_wasm.wasm) {
         return sns_wasm;
     }
 
     let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
-    encoder.write_all(bytes).unwrap();
-    let mut sns_wasm = sns_wasm;
+    encoder.write_all(&sns_wasm.wasm).unwrap();
     sns_wasm.wasm = encoder.finish().unwrap();
 
     sns_wasm

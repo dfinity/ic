@@ -71,6 +71,28 @@ pub enum Token {
     SnsToken,
 }
 
+impl Token {
+    pub async fn assess_balance(
+        self,
+        sns_ledger_canister_id: CanisterId, // Not used when self = Icp.
+        swap_canister_id: CanisterId,       // Not used when self = Icp.
+        account: Account,
+    ) -> Result<Valuation, ValuationError> {
+        match self {
+            Token::Icp => try_get_icp_balance_valuation(account).await,
+
+            Token::SnsToken => {
+                try_get_sns_token_balance_valuation(
+                    account,
+                    sns_ledger_canister_id,
+                    swap_canister_id,
+                )
+                .await
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Valuation {
     pub token: Token,

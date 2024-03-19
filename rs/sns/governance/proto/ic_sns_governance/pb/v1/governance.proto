@@ -855,10 +855,15 @@ message ProposalData {
     Valuation valuation = 1;
   }
 
+  message MintSnsTokensActionAuxiliary {
+    Valuation valuation = 1;
+  }
+
   // In general, this holds data retrieved at proposal submission/creation time and used later
-  // during execution is stored. This varies based on the action of the proposal.
+  // during execution. This varies based on the action of the proposal.
   oneof action_auxiliary {
     TransferSnsTreasuryFundsActionAuxiliary transfer_sns_treasury_funds = 22;
+    MintSnsTokensActionAuxiliary mint_sns_tokens = 23;
   }
 }
 

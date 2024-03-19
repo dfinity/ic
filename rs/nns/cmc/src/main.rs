@@ -406,7 +406,7 @@ impl Default for State {
             authorized_subnets: BTreeMap::new(),
             default_subnets: vec![],
             icp_xdr_conversion_rate: Some(IcpXdrConversionRate {
-                timestamp_seconds: 1620633600,    // 10 May 2021 10:00:00 AM CEST
+                timestamp_seconds: DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS,
                 xdr_permyriad_per_icp: 1_000_000, // 100 XDR = 1 ICP
             }),
             average_icp_xdr_conversion_rate: None,

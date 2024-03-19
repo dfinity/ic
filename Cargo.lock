@@ -10815,6 +10815,7 @@ dependencies = [
  "async-trait",
  "candid",
  "canister-test",
+ "cycles-minting-canister",
  "dfn_candid",
  "dfn_core",
  "ic-base-types",
