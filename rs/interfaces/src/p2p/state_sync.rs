@@ -68,8 +68,4 @@ pub trait StateSyncClient: Send + Sync {
     fn should_cancel(&self, id: &StateSyncArtifactId) -> bool;
     /// Get a specific chunk from the specified state.
     fn chunk(&self, id: &StateSyncArtifactId, chunk_id: ChunkId) -> Option<Chunk>;
-    /// Finish a state sync by delivering the `StateSyncMessage` returned in `Chunkable::add_chunks`.
-    /// This function should be called only once for each completed state sync message.
-    /// TODO: (NET-1469) In the future the above invariant should be enforced by the API.
-    fn deliver_state_sync(&self, msg: Self::Message);
 }

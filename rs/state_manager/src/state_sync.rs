@@ -31,30 +31,70 @@ impl StateSync {
         }
     }
 
+    #[cfg(test)]
+    fn new_for_testing(
+        state_manager: Arc<StateManagerImpl>,
+        state_sync_refs: StateSyncRefs,
+        log: ReplicaLogger,
+    ) -> Self {
+        Self {
+            state_manager,
+            state_sync_refs,
+            log,
+        }
+    }
+
     /// Returns requested state as a Chunkable artifact for StateSync.
     fn create_chunkable_state(
         &self,
         id: &StateSyncArtifactId,
     ) -> Option<Box<dyn Chunkable<StateSyncMessage> + Send>> {
         info!(self.log, "Starting state sync @{}", id.height);
-        crate::state_sync::chunkable::IncompleteState::try_new(
+        chunkable::IncompleteState::try_new(
             self.log.clone(),
             id.height,
             CryptoHashOfState::from(id.hash.clone()),
-            self.state_manager.state_layout.clone(),
-            self.state_manager.latest_manifest(),
-            self.state_manager.metrics.clone(),
-            self.state_manager.own_subnet_type,
+            Arc::new(self.clone()),
             Arc::new(Mutex::new(scoped_threadpool::Pool::new(
                 NUMBER_OF_CHECKPOINT_THREADS,
             ))),
-            self.state_sync_refs.clone(),
-            self.state_manager.get_fd_factory(),
-            self.state_manager.malicious_flags.clone(),
         )
         .map(|incomplete_state| {
             Box::new(incomplete_state) as Box<dyn Chunkable<StateSyncMessage> + Send>
         })
+    }
+
+    /// Loads the synced checkpoint and gets the corresponding replicated state.
+    /// Delivers both to the state manager and updates the internals of the state manager.
+    fn deliver_state_sync(&self, message: StateSyncMessage) {
+        let height = message.height;
+        info!(self.log, "Received state {} at height", message.height);
+        let ro_layout = self
+            .state_manager
+            .state_layout
+            .checkpoint(height)
+            .expect("failed to create checkpoint layout");
+        let state = crate::checkpoint::load_checkpoint_parallel(
+            &ro_layout,
+            self.state_manager.own_subnet_type,
+            &self.state_manager.metrics.checkpoint_metrics,
+            self.state_manager.get_fd_factory(),
+        )
+        .expect("failed to recover checkpoint");
+
+        self.state_manager.on_synced_checkpoint(
+            state,
+            height,
+            message.manifest,
+            message.meta_manifest,
+            message.root_hash,
+        );
+
+        let height = self.state_manager.states.read().last_advertised;
+        let ids = self.get_all_validated_ids_by_height(height);
+        if let Some(ids) = ids.last() {
+            self.state_manager.states.write().last_advertised = ids.height;
+        }
     }
 
     pub fn get_validated_by_identifier(
@@ -272,37 +312,5 @@ impl StateSyncClient for StateSync {
     fn chunk(&self, id: &StateSyncArtifactId, chunk_id: ChunkId) -> Option<Chunk> {
         let msg = self.get_validated_by_identifier(id)?;
         msg.get_chunk(chunk_id)
-    }
-
-    /// Blocking. Makes synchronous file system calls.
-    fn deliver_state_sync(&self, message: StateSyncMessage) {
-        let height = message.height;
-        info!(self.log, "Received state {} at height", message.height);
-        let ro_layout = self
-            .state_manager
-            .state_layout
-            .checkpoint(height)
-            .expect("failed to create checkpoint layout");
-        let state = crate::checkpoint::load_checkpoint_parallel(
-            &ro_layout,
-            self.state_manager.own_subnet_type,
-            &self.state_manager.metrics.checkpoint_metrics,
-            self.state_manager.get_fd_factory(),
-        )
-        .expect("failed to recover checkpoint");
-
-        self.state_manager.on_synced_checkpoint(
-            state,
-            height,
-            message.manifest,
-            message.meta_manifest,
-            message.root_hash,
-        );
-
-        let height = self.state_manager.states.read().last_advertised;
-        let ids = self.get_all_validated_ids_by_height(height);
-        if let Some(ids) = ids.last() {
-            self.state_manager.states.write().last_advertised = ids.height;
-        }
     }
 }

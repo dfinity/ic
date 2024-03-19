@@ -138,9 +138,7 @@ impl<T: 'static + Send> OngoingStateSync<T> {
                             // undercount active downloads for this peer but this is acceptable since everything will be reset anyway every
                             // 5-10min when state sync restarts.
                             self.active_downloads.entry(result.peer_id).and_modify(|v| { *v = v.saturating_sub(1) });
-                            // Usually it is discouraged to use await in the event loop.
-                            // In this case it is ok because the function only is async if state sync completed.
-                            self.handle_downloaded_chunk_result(result).await;
+                            self.handle_downloaded_chunk_result(result);
                             self.spawn_chunk_downloads();
                         }
                         Err(err) => {
@@ -182,23 +180,18 @@ impl<T: 'static + Send> OngoingStateSync<T> {
         }
 
         while let Some(Ok((finished, _))) = self.downloading_chunks.join_next().await {
-            self.handle_downloaded_chunk_result(finished).await;
+            self.handle_downloaded_chunk_result(finished);
         }
     }
 
-    async fn handle_downloaded_chunk_result(
+    fn handle_downloaded_chunk_result(
         &mut self,
         DownloadResult { peer_id, result }: DownloadResult<T>,
     ) {
         self.metrics.record_chunk_download_result(&result);
         match result {
             // Received chunk
-            Ok(Some(msg)) => {
-                let state_sync_c = self.state_sync.clone();
-                let _ = self
-                    .rt
-                    .spawn_blocking(move || state_sync_c.deliver_state_sync(msg))
-                    .await;
+            Ok(Some(_)) => {
                 self.state_sync_finished = true;
             }
             Ok(None) => {}

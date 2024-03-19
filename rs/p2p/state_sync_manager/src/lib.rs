@@ -287,9 +287,6 @@ mod tests {
             let mut seq = Sequence::new();
             let mut seq2 = Sequence::new();
             s.expect_should_cancel().returning(move |_| false);
-            s.expect_deliver_state_sync().return_once(move |_| {
-                finished_c.notify_waiters();
-            });
             s.expect_available_states().return_const(vec![]);
             let mut t = MockTransport::default();
             t.expect_rpc().times(50).returning(|p, _| {
@@ -316,7 +313,10 @@ mod tests {
                 .in_sequence(&mut seq);
             c.expect_add_chunk()
                 .once()
-                .return_once(|_, _| Ok(()))
+                .return_once(move |_, _| {
+                    finished_c.notify_waiters();
+                    Ok(())
+                })
                 .in_sequence(&mut seq);
             c.expect_completed()
                 .times(49)

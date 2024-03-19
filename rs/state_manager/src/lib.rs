@@ -42,6 +42,7 @@ use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_protobuf::proxy::{ProtoProxy, ProxyDecodeError};
 use ic_protobuf::{messaging::xnet::v1, state::v1 as pb};
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::{
     canister_state::execution_state::SandboxMemory,
     page_map::{PersistenceError, StorageMetrics},
@@ -64,6 +65,8 @@ use prost::Message;
 use std::convert::{From, TryFrom};
 use std::fs::File;
 use std::fs::OpenOptions;
+use std::os::unix::io::RawFd;
+use std::os::unix::prelude::IntoRawFd;
 use std::path::{Path, PathBuf};
 use std::sync::{
     atomic::{AtomicU64, Ordering},
@@ -74,10 +77,6 @@ use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
     sync::Mutex,
 };
-
-use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
-use std::os::unix::io::RawFd;
-use std::os::unix::prelude::IntoRawFd;
 use tempfile::tempfile;
 use uuid::Uuid;
 
