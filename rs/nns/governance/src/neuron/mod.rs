@@ -1,7 +1,7 @@
 use crate::{
     governance,
     governance::{
-        DEPRECATED_TOPICS, LOG_PREFIX, MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS,
+        LOG_PREFIX, MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS,
         MAX_NEURON_RECENT_BALLOTS, MAX_NUM_HOT_KEYS_PER_NEURON,
     },
     neuron::types::{DissolveStateAndAge, StoredDissolvedStateAndAge},
@@ -828,16 +828,6 @@ impl Neuron {
             Some(WhenDissolvedTimestampSeconds(result)) => Some(result),
             Some(DissolveDelaySeconds(_)) => None,
         }
-    }
-
-    /// Omit deprecated topics from a Neuron's followees. Used to scrub deprecated
-    /// topics from Governance's APIs.
-    pub(crate) fn without_deprecated_topics_from_followees(mut self) -> Self {
-        for topic in DEPRECATED_TOPICS {
-            let converted_topic = topic as i32;
-            self.followees.remove(&converted_topic);
-        }
-        self
     }
 
     /// Returns an enum representing the dissolve state and age of a neuron.
