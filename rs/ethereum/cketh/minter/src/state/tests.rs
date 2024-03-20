@@ -13,7 +13,7 @@ use crate::numeric::{
 use crate::state::event::{Event, EventType};
 use crate::state::State;
 use crate::tx::{
-    AccessList, AccessListItem, Eip1559Signature, Eip1559TransactionRequest,
+    AccessList, AccessListItem, Eip1559Signature, Eip1559TransactionRequest, ResubmissionStrategy,
     SignedEip1559TransactionRequest, StorageKey, TransactionPriceEstimate,
 };
 use candid::{Nat, Principal};
@@ -755,7 +755,9 @@ fn state_equivalence() {
         EthTransactions, EthWithdrawalRequest, Reimbursed, ReimbursementRequest,
     };
     use crate::state::MintedEvent;
-    use crate::tx::{Eip1559Signature, Eip1559TransactionRequest};
+    use crate::tx::{
+        Eip1559Signature, Eip1559TransactionRequest, SignedTransactionRequest, TransactionRequest,
+    };
     use ic_cdk::api::management_canister::ecdsa::EcdsaPublicKeyResponse;
     use maplit::btreemap;
 
@@ -805,27 +807,10 @@ fn state_equivalence() {
         created_tx: singleton_map(
             2,
             4,
-            Eip1559TransactionRequest {
-                chain_id: 1,
-                nonce: TransactionNonce::new(2),
-                max_priority_fee_per_gas: WeiPerGas::new(100_000_000),
-                max_fee_per_gas: WeiPerGas::new(100_000_000),
-                gas_limit: GasAmount::new(21_000),
-                destination: "0xA776Cc20DFdCCF0c3ba89cB9Fb0f10Aba5b98f52"
-                    .parse()
-                    .unwrap(),
-                amount: Wei::new(1_000_000_000_000),
-                data: vec![],
-                access_list: Default::default(),
-            },
-        ),
-        sent_tx: singleton_map(
-            1,
-            3,
-            vec![SignedEip1559TransactionRequest::from((
-                Eip1559TransactionRequest {
+            TransactionRequest {
+                transaction: Eip1559TransactionRequest {
                     chain_id: 1,
-                    nonce: TransactionNonce::new(1),
+                    nonce: TransactionNonce::new(2),
                     max_priority_fee_per_gas: WeiPerGas::new(100_000_000),
                     max_fee_per_gas: WeiPerGas::new(100_000_000),
                     gas_limit: GasAmount::new(21_000),
@@ -836,12 +821,39 @@ fn state_equivalence() {
                     data: vec![],
                     access_list: Default::default(),
                 },
-                Eip1559Signature {
-                    signature_y_parity: true,
-                    r: Default::default(),
-                    s: Default::default(),
+                resubmission: ResubmissionStrategy::ReduceEthAmount {
+                    withdrawal_amount: Wei::new(1_000_000_000_000),
                 },
-            ))],
+            },
+        ),
+        sent_tx: singleton_map(
+            1,
+            3,
+            vec![SignedTransactionRequest {
+                transaction: SignedEip1559TransactionRequest::from((
+                    Eip1559TransactionRequest {
+                        chain_id: 1,
+                        nonce: TransactionNonce::new(1),
+                        max_priority_fee_per_gas: WeiPerGas::new(100_000_000),
+                        max_fee_per_gas: WeiPerGas::new(100_000_000),
+                        gas_limit: GasAmount::new(21_000),
+                        destination: "0xA776Cc20DFdCCF0c3ba89cB9Fb0f10Aba5b98f52"
+                            .parse()
+                            .unwrap(),
+                        amount: Wei::new(1_000_000_000_000),
+                        data: vec![],
+                        access_list: Default::default(),
+                    },
+                    Eip1559Signature {
+                        signature_y_parity: true,
+                        r: Default::default(),
+                        s: Default::default(),
+                    },
+                )),
+                resubmission: ResubmissionStrategy::ReduceEthAmount {
+                    withdrawal_amount: Wei::new(1_000_000_000_000),
+                },
+            }],
         ),
         finalized_tx: singleton_map(
             0,

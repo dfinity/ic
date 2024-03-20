@@ -86,6 +86,92 @@ pub struct Eip1559TransactionRequest {
     pub access_list: AccessList,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Resubmittable<T> {
+    pub transaction: T,
+    pub resubmission: ResubmissionStrategy,
+}
+
+pub type TransactionRequest = Resubmittable<Eip1559TransactionRequest>;
+pub type SignedTransactionRequest = Resubmittable<SignedEip1559TransactionRequest>;
+
+impl<T> Resubmittable<T> {
+    pub fn clone_resubmission_strategy<V>(&self, other: V) -> Resubmittable<V> {
+        Resubmittable {
+            transaction: other,
+            resubmission: self.resubmission.clone(),
+        }
+    }
+}
+
+impl<T> AsRef<T> for Resubmittable<T> {
+    fn as_ref(&self) -> &T {
+        &self.transaction
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ResubmissionStrategy {
+    ReduceEthAmount { withdrawal_amount: Wei },
+    GuaranteeEthAmount { allowed_max_transaction_fee: Wei },
+}
+
+impl ResubmissionStrategy {
+    pub fn allowed_max_transaction_fee(&self) -> Wei {
+        match self {
+            ResubmissionStrategy::ReduceEthAmount { withdrawal_amount } => *withdrawal_amount,
+            ResubmissionStrategy::GuaranteeEthAmount {
+                allowed_max_transaction_fee,
+            } => *allowed_max_transaction_fee,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ResubmitTransactionError {
+    InsufficientTransactionFee {
+        allowed_max_transaction_fee: Wei,
+        actual_max_transaction_fee: Wei,
+    },
+}
+
+impl SignedTransactionRequest {
+    pub fn resubmit(
+        &self,
+        new_gas_fee: TransactionPriceEstimate,
+    ) -> Result<Option<Eip1559TransactionRequest>, ResubmitTransactionError> {
+        let transaction_request = self.transaction.transaction();
+        let new_tx_price = new_gas_fee.clone().to_price(transaction_request.gas_limit);
+        let last_tx_price = transaction_request.transaction_price();
+        if !last_tx_price.is_fee_increased(&new_tx_price) {
+            return Ok(None);
+        }
+        let new_tx_price = last_tx_price
+            .increase_by_10_percent()
+            .max(new_tx_price.clone());
+        if new_tx_price.max_transaction_fee() > self.resubmission.allowed_max_transaction_fee() {
+            return Err(ResubmitTransactionError::InsufficientTransactionFee {
+                allowed_max_transaction_fee: self.resubmission.allowed_max_transaction_fee(),
+                actual_max_transaction_fee: new_tx_price.max_transaction_fee(),
+            });
+        }
+        let new_amount = match self.resubmission {
+            ResubmissionStrategy::ReduceEthAmount { withdrawal_amount } => {
+                withdrawal_amount.checked_sub(new_tx_price.max_transaction_fee())
+                    .expect("BUG: withdrawal_amount covers new transaction fee because it was checked before")
+            }
+            ResubmissionStrategy::GuaranteeEthAmount { .. } => transaction_request.amount,
+        };
+        Ok(Some(Eip1559TransactionRequest {
+            max_priority_fee_per_gas: new_tx_price.max_priority_fee_per_gas,
+            max_fee_per_gas: new_tx_price.max_fee_per_gas,
+            gas_limit: new_tx_price.gas_limit,
+            amount: new_amount,
+            ..transaction_request.clone()
+        }))
+    }
+}
+
 impl rlp::Encodable for Eip1559TransactionRequest {
     fn rlp_append(&self, s: &mut RlpStream) {
         s.begin_unbounded_list();

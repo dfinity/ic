@@ -11,8 +11,9 @@ use crate::numeric::{
     Erc20Value, LedgerBurnIndex, LedgerMintIndex, TransactionCount, TransactionNonce, Wei,
 };
 use crate::tx::{
-    Eip1559TransactionRequest, FinalizedEip1559Transaction, SignedEip1559TransactionRequest,
-    TransactionPrice, TransactionPriceEstimate,
+    Eip1559TransactionRequest, FinalizedEip1559Transaction, ResubmissionStrategy,
+    SignedEip1559TransactionRequest, SignedTransactionRequest, TransactionPrice,
+    TransactionPriceEstimate, TransactionRequest,
 };
 use candid::Principal;
 use ic_ethereum_types::Address;
@@ -253,9 +254,9 @@ impl fmt::Debug for Erc20WithdrawalRequest {
 pub struct EthTransactions {
     pub(in crate::state) withdrawal_requests: VecDeque<WithdrawalRequest>,
     pub(in crate::state) created_tx:
-        MultiKeyMap<TransactionNonce, LedgerBurnIndex, Eip1559TransactionRequest>,
+        MultiKeyMap<TransactionNonce, LedgerBurnIndex, TransactionRequest>,
     pub(in crate::state) sent_tx:
-        MultiKeyMap<TransactionNonce, LedgerBurnIndex, Vec<SignedEip1559TransactionRequest>>,
+        MultiKeyMap<TransactionNonce, LedgerBurnIndex, Vec<SignedTransactionRequest>>,
     pub(in crate::state) finalized_tx:
         MultiKeyMap<TransactionNonce, LedgerBurnIndex, FinalizedEip1559Transaction>,
     pub(in crate::state) next_nonce: TransactionNonce,
@@ -392,11 +393,22 @@ impl EthTransactions {
             .checked_increment()
             .expect("Transaction nonce overflow");
         self.remove_withdrawal_request(&withdrawal_request);
+        let transaction_request = TransactionRequest {
+            transaction,
+            resubmission: match &withdrawal_request {
+                WithdrawalRequest::CkEth(cketh) => ResubmissionStrategy::ReduceEthAmount {
+                    withdrawal_amount: cketh.withdrawal_amount,
+                },
+                WithdrawalRequest::CkErc20(ckerc20) => ResubmissionStrategy::GuaranteeEthAmount {
+                    allowed_max_transaction_fee: ckerc20.max_transaction_fee,
+                },
+            },
+        };
         assert_eq!(
             self.created_tx.try_insert(
                 nonce,
                 withdrawal_request.cketh_ledger_burn_index(),
-                transaction
+                transaction_request
             ),
             Ok(())
         );
@@ -413,20 +425,21 @@ impl EthTransactions {
             .get(&signed_transaction.nonce())
             .expect("BUG: missing created transaction");
         assert_eq!(
-            created_tx,
+            created_tx.as_ref(),
             signed_transaction.transaction(),
             "BUG: mismatch between sent transaction and created transaction"
         );
+        let signed_tx = created_tx.clone_resubmission_strategy(signed_transaction);
         let (nonce, ledger_burn_index, _created_tx) = self
             .created_tx
-            .remove_entry(&signed_transaction.nonce())
+            .remove_entry(&signed_tx.as_ref().nonce())
             .expect("BUG: missing created transaction");
         if let Some(sent_tx) = self.sent_tx.get_mut(&nonce) {
-            sent_tx.push(signed_transaction);
+            sent_tx.push(signed_tx);
         } else {
             assert_eq!(
                 self.sent_tx
-                    .try_insert(nonce, ledger_burn_index, vec![signed_transaction]),
+                    .try_insert(nonce, ledger_burn_index, vec![signed_tx]),
                 Ok(())
             );
         }
@@ -456,60 +469,45 @@ impl EthTransactions {
             .filter(|(nonce, _burn_index, _signed_tx)| *nonce >= &first_pending_tx_nonce)
         {
             let last_signed_tx = signed_tx.last().expect("BUG: empty sent transactions list");
-            let last_tx = last_signed_tx.transaction().clone();
-            let last_tx_price = last_tx.transaction_price();
-            let current_transaction_price = current_gas_fee.clone().to_price(last_tx.gas_limit);
-            let last_tx_max_fee = last_tx_price.max_transaction_fee();
-            if last_tx_price.is_fee_increased(&current_transaction_price) {
-                let new_tx_price = last_tx_price
-                    .increase_by_10_percent()
-                    .max(current_transaction_price.clone());
-                //TODO XC-59: need to track an allowed gas fee amount for ckERC20 since transaction amount is zero.
-                let new_amount = match last_tx.amount.checked_sub(
-                    new_tx_price
-                        .max_transaction_fee()
-                        .checked_sub(last_tx_max_fee)
-                        .expect("BUG: new price was increased by at least 10%"),
-                ) {
-                    Some(amount) => amount,
-                    None => {
-                        transactions_to_resubmit.push(Err(
-                            ResubmitTransactionError::InsufficientTransactionAmount {
-                                ledger_burn_index: *burn_index,
-                                transaction_nonce: *nonce,
-                                transaction_amount: last_tx.amount,
-                                max_transaction_fee: new_tx_price.max_transaction_fee(),
-                            },
-                        ));
-                        return transactions_to_resubmit;
-                    }
-                };
-                let new_tx = Eip1559TransactionRequest {
-                    max_priority_fee_per_gas: new_tx_price.max_priority_fee_per_gas,
-                    max_fee_per_gas: new_tx_price.max_fee_per_gas,
-                    gas_limit: new_tx_price.gas_limit,
-                    amount: new_amount,
-                    ..last_tx
-                };
-                transactions_to_resubmit.push(Ok((*burn_index, new_tx)));
-            } else {
-                // the transaction fee is still up-to-date but because the transaction did not get mined,
-                // we re-send it as is to be sure that it remains known to the mempool and hopefully be mined at some point.
-                // Since we always re-send the last non-mined transactions in sent_tx, there is nothing to do.
+            match last_signed_tx.resubmit(current_gas_fee.clone()) {
+                Ok(Some(new_tx)) => {
+                    transactions_to_resubmit.push(Ok((*burn_index, new_tx)));
+                }
+                Ok(None) => {
+                    // the transaction fee is still up-to-date but because the transaction did not get included,
+                    // we re-send it as is to be sure that it remains known to the mempool and hopefully be included at some point.
+                    // Since we always re-send the last non-included transactions in sent_tx, there is nothing to do.
+                }
+                Err(crate::tx::ResubmitTransactionError::InsufficientTransactionFee {
+                    allowed_max_transaction_fee,
+                    actual_max_transaction_fee,
+                }) => {
+                    transactions_to_resubmit.push(Err(
+                        ResubmitTransactionError::InsufficientTransactionAmount {
+                            ledger_burn_index: *burn_index,
+                            transaction_nonce: *nonce,
+                            transaction_amount: allowed_max_transaction_fee,
+                            max_transaction_fee: actual_max_transaction_fee,
+                        },
+                    ));
+                    return transactions_to_resubmit;
+                }
             }
         }
         transactions_to_resubmit
     }
 
     pub fn record_resubmit_transaction(&mut self, new_tx: Eip1559TransactionRequest) {
+        let nonce = new_tx.nonce;
         let (ledger_burn_index, last_sent_tx) =
-            Self::expect_last_sent_tx_entry(&self.sent_tx, &new_tx.nonce);
-        assert!(equal_ignoring_fee_and_amount(last_sent_tx.transaction(), &new_tx),
+            Self::expect_last_sent_tx_entry(&self.sent_tx, &nonce);
+        assert!(equal_ignoring_fee_and_amount(last_sent_tx.as_ref().transaction(), &new_tx),
                 "BUG: mismatch between last sent transaction {last_sent_tx:?} and the transaction to resubmit {new_tx:?}");
-        Self::cleanup_failed_resubmitted_transactions(&mut self.created_tx, &new_tx.nonce);
+        Self::cleanup_failed_resubmitted_transactions(&mut self.created_tx, &nonce);
+        let new_tx = last_sent_tx.clone_resubmission_strategy(new_tx);
         assert_eq!(
             self.created_tx
-                .try_insert(new_tx.nonce, *ledger_burn_index, new_tx.clone()),
+                .try_insert(nonce, *ledger_burn_index, new_tx),
             Ok(())
         );
     }
@@ -527,9 +525,9 @@ impl EthTransactions {
             .filter(|(nonce, _burn_index, _signed_txs)| *nonce < &first_non_finalized_tx_nonce)
         {
             for sent_tx in sent_txs {
-                if let Some(prev_index) = transactions.insert(sent_tx.hash(), *index) {
+                if let Some(prev_index) = transactions.insert(sent_tx.as_ref().hash(), *index) {
                     assert_eq!(prev_index, *index,
-                               "BUG: duplicate transaction hash {} for burn indices {prev_index} and {index}", sent_tx.hash());
+                               "BUG: duplicate transaction hash {} for burn indices {prev_index} and {index}", sent_tx.as_ref().hash());
                 }
             }
         }
@@ -546,15 +544,15 @@ impl EthTransactions {
             .get_alt(&ledger_burn_index)
             .expect("BUG: missing sent transactions")
             .iter()
-            .find(|sent_tx| sent_tx.hash() == receipt.transaction_hash)
-            .expect("ERROR: no transaction matching receipt")
-            .clone();
+            .find(|sent_tx| sent_tx.as_ref().hash() == receipt.transaction_hash)
+            .expect("ERROR: no transaction matching receipt");
         let finalized_tx = sent_tx
+            .as_ref()
             .clone()
             .try_finalize(receipt.clone())
             .expect("ERROR: invalid transaction receipt");
 
-        let nonce = sent_tx.nonce();
+        let nonce = sent_tx.as_ref().nonce();
         {
             self.sent_tx.remove_entry(&nonce);
             Self::cleanup_failed_resubmitted_transactions(&mut self.created_tx, &nonce);
@@ -568,15 +566,23 @@ impl EthTransactions {
         let maybe_reimburse = self.maybe_reimburse.remove(&ledger_burn_index).expect(
             "failed to remove entry from maybe_reimburse map with block index: {ledger_burn_index}",
         );
+        //TODO XC-60 reimburse unused transaction fee also when transaction successful
         if receipt.status == TransactionStatus::Failure {
             //TODO XC-59 also plan reimbursement of burned ckERC20 tokens
+            let reimbursed_amount = match &maybe_reimburse {
+                WithdrawalRequest::CkEth(_) => *finalized_tx.transaction_amount(),
+                WithdrawalRequest::CkErc20(ckerc20) => ckerc20
+                    .max_transaction_fee
+                    .checked_sub(finalized_tx.effective_transaction_fee())
+                    .unwrap_or(Wei::ZERO),
+            };
             self.reimbursement_requests.insert(
                 ledger_burn_index,
                 ReimbursementRequest {
                     withdrawal_id: ledger_burn_index,
                     to: maybe_reimburse.from(),
                     to_subaccount: maybe_reimburse.from_subaccount().clone(),
-                    reimbursed_amount: *finalized_tx.transaction_amount(),
+                    reimbursed_amount,
                     transaction_hash: Some(receipt.transaction_hash),
                 },
             );
@@ -620,7 +626,7 @@ impl EthTransactions {
         }
 
         if let Some(tx) = self.sent_tx.get_alt(burn_index).and_then(|txs| txs.last()) {
-            return RetrieveEthStatus::TxSent(EthTransaction::from(tx));
+            return RetrieveEthStatus::TxSent(EthTransaction::from(tx.as_ref()));
         }
 
         if let Some(tx) = self.finalized_tx.get_alt(burn_index) {
@@ -683,7 +689,9 @@ impl EthTransactions {
             &Eip1559TransactionRequest,
         ),
     > {
-        self.created_tx.iter()
+        self.created_tx
+            .iter()
+            .map(|(nonce, ledger_burn_index, tx)| (nonce, ledger_burn_index, tx.as_ref()))
     }
 
     pub fn transactions_to_sign_batch(
@@ -710,7 +718,7 @@ impl EthTransactions {
                     .filter(|(nonce, _ledger_burn_index, _tx)| *nonce >= &first_pending_tx_nonce)
             })
             .take(batch_size)
-            .map(|(_nonce, _index, tx)| tx)
+            .map(|(_nonce, _index, tx)| tx.as_ref())
             .cloned()
             .collect()
     }
@@ -721,10 +729,12 @@ impl EthTransactions {
         Item = (
             &TransactionNonce,
             &LedgerBurnIndex,
-            &Vec<SignedEip1559TransactionRequest>,
+            Vec<&SignedEip1559TransactionRequest>,
         ),
     > {
-        self.sent_tx.iter()
+        self.sent_tx
+            .iter()
+            .map(|(nonce, index, txs)| (nonce, index, txs.iter().map(|tx| tx.as_ref()).collect()))
     }
 
     pub fn finalized_transactions_iter(
@@ -754,13 +764,9 @@ impl EthTransactions {
     }
 
     fn expect_last_sent_tx_entry<'a>(
-        sent_tx: &'a MultiKeyMap<
-            TransactionNonce,
-            LedgerBurnIndex,
-            Vec<SignedEip1559TransactionRequest>,
-        >,
+        sent_tx: &'a MultiKeyMap<TransactionNonce, LedgerBurnIndex, Vec<SignedTransactionRequest>>,
         nonce: &TransactionNonce,
-    ) -> (&'a LedgerBurnIndex, &'a SignedEip1559TransactionRequest) {
+    ) -> (&'a LedgerBurnIndex, &'a SignedTransactionRequest) {
         let (ledger_burn_index, sent_txs) = sent_tx
             .get_entry(nonce)
             .expect("BUG: sent transaction not found");
@@ -769,7 +775,7 @@ impl EthTransactions {
     }
 
     fn cleanup_failed_resubmitted_transactions(
-        created_tx: &mut MultiKeyMap<TransactionNonce, LedgerBurnIndex, Eip1559TransactionRequest>,
+        created_tx: &mut MultiKeyMap<TransactionNonce, LedgerBurnIndex, TransactionRequest>,
         nonce: &TransactionNonce,
     ) {
         use crate::logs::INFO;
@@ -864,7 +870,6 @@ pub fn create_transaction(
                 });
             }
             Ok(Eip1559TransactionRequest {
-                // TODO XC-59: track max transaction fee allowed in created transaction
                 chain_id: ethereum_network.chain_id(),
                 nonce,
                 max_priority_fee_per_gas: transaction_price.max_priority_fee_per_gas,
@@ -879,12 +884,9 @@ pub fn create_transaction(
     }
 }
 
+// First 4 bytes of keccak256(transfer(address,uint256))
+const ERC_20_TRANSFER_FUNCTION_SELECTOR: [u8; 4] = hex_literal::hex!("a9059cbb");
 fn create_transaction_data(withdrawal_request: &Erc20WithdrawalRequest) -> Vec<u8> {
-    use hex_literal::hex;
-
-    // First 4 bytes of keccak256(transfer(address,uint256))
-    const ERC_20_TRANSFER_FUNCTION_SELECTOR: [u8; 4] = hex!("a9059cbb");
-
     let mut data = Vec::with_capacity(68);
     data.extend(ERC_20_TRANSFER_FUNCTION_SELECTOR);
     data.extend(<[u8; 32]>::from(&withdrawal_request.destination));
