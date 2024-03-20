@@ -468,6 +468,10 @@ name = "ic-systest-remote-replicable-mock-test"
 path = "testing_verification/remote_replicable_mock_test.rs"
 
 [[bin]]
+name = "ic-systest-cup-compatibility"
+path = "consensus/orchestrator/cup_compatibility_test.rs"
+
+[[bin]]
 name = "ic-systest-subnet-recovery-app-same-nodes"
 path = "consensus/orchestrator/sr_app_same_nodes_test.rs"
 
