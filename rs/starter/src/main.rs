@@ -95,7 +95,6 @@ fn main() -> Result<()> {
                 public_api: config.http_listen_addr,
                 node_operator_principal_id: None,
                 secret_key_store: None,
-                chip_id: None,
             },
         );
 
@@ -150,7 +149,6 @@ fn main() -> Result<()> {
             None,
             None,
             /* ssh_readonly_access_to_unassigned_nodes */ vec![],
-            /* guest_launch_measurement_sha256_hex */ None,
         );
 
         ic_config.set_use_specified_ids_allocation_range(config.use_specified_ids_allocation_range);
@@ -554,11 +552,10 @@ impl CliArgs {
 fn to_subnet_features(features: &[String]) -> SubnetFeatures {
     let canister_sandboxing = features.iter().any(|s| s.as_str() == "canister_sandboxing");
     let http_requests = features.iter().any(|s| s.as_str() == "http_requests");
-    let sev_enabled = features.iter().any(|s| s.as_str() == "sev_enabled");
     SubnetFeatures {
         canister_sandboxing,
         http_requests,
-        sev_enabled,
+        ..Default::default()
     }
 }
 

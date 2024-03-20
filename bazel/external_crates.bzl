@@ -1069,12 +1069,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "serde_yaml": crate.spec(
                 version = "^0.9.29",
             ),
-            "sev": crate.spec(
-                version = "^2.0.2",
-                features = [
-                    "crypto_nossl",
-                ],
-            ),
             "sha2": crate.spec(
                 version = "^0.10.8",
             ),

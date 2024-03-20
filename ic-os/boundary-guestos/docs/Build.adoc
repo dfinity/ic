@@ -24,9 +24,6 @@ It allows to build `prod` and `dev` images. The `dev` images use the local servi
 worker from the branch and allow for console access using the username `root` and
 the password `root`.
 
-Both the `prod` and `dev` image can be built with SEV-SNP enabled by appending
-`sev` to the target (e.g., `prod-sev`).
-
 See notes below on the individual build steps.
 
 == Constructing the system using docker

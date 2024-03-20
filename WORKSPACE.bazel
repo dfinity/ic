@@ -359,13 +359,6 @@ load("@buildifier_prebuilt//:defs.bzl", "buildifier_prebuilt_register_toolchains
 
 buildifier_prebuilt_register_toolchains()
 
-new_git_repository(
-    name = "sevtool",
-    build_file = "//ic-os:sevtool/BUILD.sevtool.bazel",
-    commit = "3e6418e09f5ca91d789e115d0751ead1227aab47",
-    remote = "https://github.com/AMDESE/sev-tool.git",
-)
-
 # Rosetta CLI
 
 load("//bazel:rosetta_cli.bzl", "rosetta_cli_repository")

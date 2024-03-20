@@ -217,7 +217,7 @@ impl NodeRegistration {
             http_endpoint: http_config_to_endpoint(&self.log, &self.node_config.http_handler)
                 .expect("Invalid endpoints in http handler config."),
             p2p_flow_endpoints: vec![],
-            chip_id: get_snp_chip_id().expect("Failed to retrieve chip_id from snp firmware"),
+            chip_id: None,
             prometheus_metrics_endpoint: "".to_string(),
             public_ipv4_config: process_ipv4_config(
                 &self.log,
@@ -707,13 +707,6 @@ fn generate_nonce() -> Vec<u8> {
         .as_nanos()
         .to_le_bytes()
         .to_vec()
-}
-
-/// Get a chip_id from SNP guest firmware via SEV library.
-/// If SEV-SNP in not enabled on the guest, return None.
-/// In other cases, return the error and notify the Node Provider.
-fn get_snp_chip_id() -> OrchestratorResult<Option<Vec<u8>>> {
-    Ok(None)
 }
 
 fn protobuf_to_vec<M: Message>(entry: M) -> Vec<u8> {

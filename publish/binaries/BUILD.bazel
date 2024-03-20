@@ -4,8 +4,6 @@ load("//publish:defs.bzl", "release_nostrip_binary", "release_strip_binary", "re
 
 LINUX_ONLY = [
     "metrics-proxy",
-    "sevctl",
-    "snptool",
     "vsock_guest",
     "vsock_host",
     "fstrim_tool",
@@ -64,7 +62,6 @@ BINARIES = {
     "orchestrator": "//rs/orchestrator",
     "sandbox_launcher": "//rs/canister_sandbox:sandbox_launcher",
     "setupos_tool": "//rs/ic_os/setupos_tool:setupos_tool",
-    "snptool": "//rs/ic_os/snptool:snptool",
     "sns": "//rs/sns/cli:sns",
     "sns-audit": "//rs/sns/audit:sns-audit",
     "sns-test-feature": "//rs/sns/cli:sns--test_feature",

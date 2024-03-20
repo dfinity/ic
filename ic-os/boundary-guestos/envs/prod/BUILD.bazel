@@ -10,6 +10,5 @@ exports_files(["build_container_filesystem_config.txt"])
 boundary_node_icos_build(
     name = "prod",
     image_deps_func = image_deps,
-    sev = False,
     visibility = ["//testnet/tools:__pkg__"],
 )

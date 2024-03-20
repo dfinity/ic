@@ -202,7 +202,6 @@ pub fn init_ic(
         ic.node_operator,
         ic.node_provider,
         ic.ssh_readonly_access_to_unassigned_nodes.clone(),
-        /* guest_launch_measurement_sha256_hex= */ None,
     );
 
     ic_config.set_use_specified_ids_allocation_range(specific_ids);
@@ -569,7 +568,6 @@ fn node_to_config(node: &Node) -> NodeConfiguration {
         // this value will be overridden by IcConfig::with_node_operator()
         node_operator_principal_id: None,
         secret_key_store: node.secret_key_store.clone(),
-        chip_id: None,
     }
 }
 

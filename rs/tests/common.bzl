@@ -354,11 +354,6 @@ BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS = [
     "//ic-os/boundary-guestos:scripts/build-bootstrap-config-image.sh",
 ]
 
-BOUNDARY_NODE_GUESTOS_SEV_RUNTIME_DEPS = [
-    "//ic-os/boundary-guestos/envs/dev-sev:disk-img.tar.zst.cas-url",
-    "//ic-os/boundary-guestos/envs/dev-sev:disk-img.tar.zst.sha256",
-]
-
 COUNTER_CANISTER_RUNTIME_DEPS = ["//rs/tests:src/counter.wat"]
 
 CANISTER_HTTP_RUNTIME_DEPS = [

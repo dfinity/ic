@@ -130,24 +130,11 @@ function setup_custom_domains() {
     fi
 }
 
-function setup_cgi() {
-    cat >"/run/ic-node/etc/nginx/conf.d/cgi.conf" <<EOF
-# Setup server for the cgi
-server {
-  listen 80;
-  listen [::]:80;
-  # Fast cgi support from fcgiwrap
-  include /etc/nginx/fcgiwrap.conf;
-}
-EOF
-}
-
 function main() {
     read_variables
     copy_certs
     setup_domains
     setup_custom_domains
-    setup_cgi
 }
 
 main "$@"

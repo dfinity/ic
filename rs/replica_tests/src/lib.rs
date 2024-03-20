@@ -219,7 +219,6 @@ pub fn get_ic_config() -> IcConfig {
             public_api: SocketAddr::from_str("128.0.0.1:1").expect("can't fail"),
             node_operator_principal_id: None,
             secret_key_store: Some(node_sks),
-            chip_id: None,
         },
     );
 
@@ -267,7 +266,6 @@ pub fn get_ic_config() -> IcConfig {
         None,
         None,
         /* ssh_readonly_access_to_unassgined_nodes */ vec![],
-        /* guest_launch_measurement_sha256_hex= */ None,
     )
 }
 

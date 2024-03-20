@@ -605,7 +605,6 @@ def boundary_node_icos_build(
         name,
         image_deps_func,
         mode = None,
-        sev = False,
         visibility = None,
         ic_version = "//bazel:version.txt"):
     """
@@ -615,14 +614,13 @@ def boundary_node_icos_build(
       name: Name for the generated filegroup.
       image_deps_func: Function to be used to generate image manifest
       mode: dev, or prod. If not specified, will use the value of `name`
-      sev: if True, build an SEV-SNP enabled image
       visibility: See Bazel documentation
       ic_version: the label pointing to the target that returns IC version
     """
     if mode == None:
         mode = name
 
-    image_deps = image_deps_func(mode, sev = sev)
+    image_deps = image_deps_func(mode)
 
     native.sh_binary(
         name = "vuln-scan",
@@ -790,8 +788,6 @@ def boundary_node_icos_build(
     )
 
     upload_suffix = ""
-    if sev:
-        upload_suffix += "-snp"
     if mode == "dev":
         upload_suffix += "-dev"
 

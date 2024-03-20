@@ -24,12 +24,6 @@ REPOS_TO_SCAN = [
                 owner=Team.BOUNDARY_NODE_TEAM,
             ),
             Project(
-                name="boundary-guestos",
-                path="ic/ic-os/boundary-guestos/envs/prod-sev",
-                link="https://gitlab.com/dfinity-lab/public/ic/-/tree/master/ic-os/boundary-guestos/rootfs",
-                owner=Team.BOUNDARY_NODE_TEAM,
-            ),
-            Project(
                 name="guestos",
                 path="ic/ic-os/guestos/envs/prod",
                 link="https://gitlab.com/dfinity-lab/public/ic/-/tree/master/ic-os/guestos/rootfs",

@@ -7,13 +7,12 @@ Hold manifest common to all Boundary GuestOS variants.
 # compute the hash over all inputs going into the image and derive the
 # "version.txt" file from it.
 
-def image_deps(mode, sev = False):
+def image_deps(mode):
     """
     Define all Boundary GuestOS inputs.
 
     Args:
       mode: Variant to be built, dev or prod.
-      sev: if True, build an SEV-SNP enabled image
     Returns:
       A dict containing all file inputs to build this image.
     """
@@ -50,23 +49,11 @@ def image_deps(mode, sev = False):
         "dev": {
             "build_container_filesystem_config_file": "//ic-os/boundary-guestos/envs/dev:build_container_filesystem_config.txt",
         },
-        "dev-sev": {
-            "build_container_filesystem_config_file": "//ic-os/boundary-guestos/envs/dev-sev:build_container_filesystem_config.txt",
-        },
         "prod": {
             "build_container_filesystem_config_file": "//ic-os/boundary-guestos/envs/prod:build_container_filesystem_config.txt",
-        },
-        "prod-sev": {
-            "build_container_filesystem_config_file": "//ic-os/boundary-guestos/envs/prod-sev:build_container_filesystem_config.txt",
         },
     }
 
     deps.update(extra_deps[mode])
-
-    if sev:
-        sev_rootfs_deps = {
-            "@sevtool": "/opt/ic/bin/sevtool:0755",
-        }
-        deps["rootfs"].update(sev_rootfs_deps)
 
     return deps
