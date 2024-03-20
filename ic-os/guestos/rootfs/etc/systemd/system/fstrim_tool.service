@@ -1,0 +1,33 @@
+[Unit]
+Description=Discard unused blocks on /var/lib/ic/crypto filesystem
+
+[Service]
+Type=oneshot
+ExecStart=/opt/ic/bin/fstrim_tool --target /var/lib/ic/crypto --metrics /run/node_exporter/collector_textfile/fstrim.prom
+DeviceAllow=/dev/vda
+IPAddressDeny=any
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+NoNewPrivileges=yes
+PrivateDevices=no
+PrivateNetwork=yes
+PrivateTmp=yes
+PrivateUsers=no
+ProtectClock=yes
+ProtectControlGroups=yes
+ProtectHome=yes
+ProtectHostname=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectSystem=strict
+ReadOnlyPaths=/var/lib/ic/crypto
+ReadWritePaths=/run/node_exporter/collector_textfile
+RestrictAddressFamilies=AF_UNIX
+RestrictAddressFamilies=~AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native
+SystemCallErrorNumber=EPERM
+SystemCallFilter=@system-service
+UMask=022
