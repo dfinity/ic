@@ -12,7 +12,7 @@ use ic_validator::{
     CanisterIdSet, HttpRequestVerifier, HttpRequestVerifierImpl, RequestValidationError,
 };
 use std::future::Future;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use threadpool::ThreadPool;
 use tokio::sync::oneshot;
 
@@ -23,7 +23,7 @@ const VALIDATOR_EXECUTOR_THREADS: usize = 1;
 pub struct ValidatorExecutor<C> {
     registry_client: Arc<dyn RegistryClient>,
     validator: Arc<dyn HttpRequestVerifier<C, RegistryRootOfTrustProvider>>,
-    threadpool: ThreadPool,
+    threadpool: Arc<Mutex<ThreadPool>>,
     logger: ReplicaLogger,
 }
 
@@ -66,7 +66,7 @@ where
         ValidatorExecutor {
             registry_client,
             validator,
-            threadpool: ThreadPool::new(VALIDATOR_EXECUTOR_THREADS),
+            threadpool: Arc::new(Mutex::new(ThreadPool::new(VALIDATOR_EXECUTOR_THREADS))),
             logger,
         }
     }
@@ -84,7 +84,7 @@ impl<C: HttpRequestContent + Send + Sync + 'static> ValidatorExecutor<C> {
         let root_of_trust_provider =
             RegistryRootOfTrustProvider::new(Arc::clone(&self.registry_client), registry_version);
         let validator = self.validator.clone();
-        self.threadpool.execute(move || {
+        self.threadpool.lock().unwrap().execute(move || {
             if !tx.is_closed() {
                 let _ = tx.send(validator.validate_request(
                     &request,

@@ -44,7 +44,7 @@ pub use common::cors_layer;
 use axum::{
     body::Body,
     error_handling::HandleErrorLayer,
-    extract::{MatchedPath, State},
+    extract::{DefaultBodyLimit, MatchedPath, State},
     middleware::Next,
     response::{IntoResponse, Redirect},
     routing::{get, get_service, post_service, MethodRouter},
@@ -146,7 +146,7 @@ pub(crate) type EndpointService = BoxCloneService<Request<Body>, Response<Body>,
 /// Struct that holds all endpoint services.
 #[derive(Clone)]
 struct HttpHandler {
-    call_service: EndpointService,
+    call_router: Router,
     query_service: EndpointService,
     catchup_service: EndpointService,
     dashboard_service: EndpointService,
@@ -315,20 +315,18 @@ pub fn start_server(
     let health_status = Arc::new(AtomicCell::new(ReplicaHealthStatus::Starting));
     let state_reader_clone = state_reader.clone();
     let state_reader_executor = StateReaderExecutor::new(state_reader);
-    let call_service = BoxCloneService::new(
-        CallServiceBuilder::builder(
-            node_id,
-            subnet_id,
-            registry_client.clone(),
-            ingress_verifier.clone(),
-            ingress_filter,
-            ingress_throttler,
-            ingress_tx,
-        )
-        .with_logger(log.clone())
-        .with_malicious_flags(malicious_flags.clone())
-        .build(),
-    );
+    let call_router = CallServiceBuilder::builder(
+        node_id,
+        subnet_id,
+        registry_client.clone(),
+        ingress_verifier.clone(),
+        ingress_filter,
+        ingress_throttler,
+        ingress_tx,
+    )
+    .with_logger(log.clone())
+    .with_malicious_flags(malicious_flags.clone())
+    .build_router();
     let query_service = BoxCloneService::new(
         QueryServiceBuilder::builder(
             node_id,
@@ -409,7 +407,7 @@ pub fn start_server(
     );
 
     let http_handler = HttpHandler {
-        call_service,
+        call_router,
         query_service,
         status_method,
         catchup_service,
@@ -669,7 +667,6 @@ fn make_router(
     metrics: HttpHandlerMetrics,
     health_status_refresher: HealthStatusRefreshLayer,
 ) -> Router {
-    let call_service = http_handler.call_service.clone();
     let query_service = http_handler.query_service.clone();
     let catch_up_package_service = http_handler.catchup_service.clone();
     let dashboard_service = http_handler.dashboard_service.clone();
@@ -680,20 +677,6 @@ fn make_router(
     let pprof_flamegraph_service = http_handler.pprof_flamegraph_service.clone();
 
     let post_router: Router = Router::new()
-        .route(
-            "/api/v2/canister/:effective_canister_id/call",
-            post_service(
-                ServiceBuilder::new()
-                    .layer(HandleErrorLayer::new(map_box_error_to_response))
-                    .load_shed()
-                    .layer(GlobalConcurrencyLimitLayer::new(
-                        config.max_call_concurrent_requests,
-                    ))
-                    .layer(axum::middleware::from_fn(verify_cbor_content_header))
-                    .layer(axum::middleware::from_fn(attach_effective_canister_id))
-                    .service(call_service),
-            ),
-        )
         .route(
             "/api/v2/canister/:effective_canister_id/query",
             post_service(
@@ -813,7 +796,16 @@ fn make_router(
             make_plaintext_response(StatusCode::NOT_FOUND, "Endpoint not found.".to_string())
         });
 
-    let final_router = get_router.merge(post_router);
+    let final_router = get_router.merge(post_router).merge(
+        http_handler.call_router.layer(
+            ServiceBuilder::new()
+                .layer(HandleErrorLayer::new(map_box_error_to_response))
+                .load_shed()
+                .layer(GlobalConcurrencyLimitLayer::new(
+                    config.max_call_concurrent_requests,
+                )),
+        ),
+    );
 
     final_router.layer(
         ServiceBuilder::new()
@@ -825,6 +817,8 @@ fn make_router(
                 Arc::new(metrics),
                 collect_timer_metric,
             ))
+            // Disable default limit since apply a request limit to all routes.
+            .layer(DefaultBodyLimit::disable())
             .layer(RequestBodyLimitLayer::new(
                 config.max_request_size_bytes as usize,
             ))
@@ -1230,6 +1224,8 @@ mod tests {
     use ic_logger::replica_logger::no_op_logger;
     use ic_types::{CanisterId, Height};
 
+    use crate::call::CallService;
+
     use super::*;
 
     fn dummy_router(config: Config) -> Router {
@@ -1240,7 +1236,10 @@ mod tests {
             }
         }));
         let http_handler = HttpHandler {
-            call_service: dummy_service.clone(),
+            call_router: Router::new().route(
+                CallService::route(),
+                axum::routing::post_service(dummy_service.clone()),
+            ),
             query_service: dummy_service.clone(),
             catchup_service: dummy_service.clone(),
             dashboard_service: dummy_service.clone(),

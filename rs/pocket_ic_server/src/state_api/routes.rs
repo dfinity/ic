@@ -18,12 +18,12 @@ use aide::{
     NoApi,
 };
 
-use axum::response::IntoResponse;
 use axum::{
     body::{Body, Bytes},
     extract::{self, Path, State},
     http::{self, HeaderMap, HeaderName, StatusCode},
-    response::Response,
+    middleware::Next,
+    response::{IntoResponse, Response},
     Json,
 };
 use axum_extra::headers;
@@ -97,9 +97,18 @@ where
 {
     ApiRouter::new()
         .directory_route("/status", get(handler_status))
-        .directory_route("/canister/:ecid/call", post(handler_call))
-        .directory_route("/canister/:ecid/query", post(handler_query))
-        .directory_route("/canister/:ecid/read_state", post(handler_read_state))
+        .directory_route(
+            "/canister/:ecid/call",
+            post(handler_call).layer(axum::middleware::from_fn(verify_cbor_content_header)),
+        )
+        .directory_route(
+            "/canister/:ecid/query",
+            post(handler_query).layer(axum::middleware::from_fn(verify_cbor_content_header)),
+        )
+        .directory_route(
+            "/canister/:ecid/read_state",
+            post(handler_read_state).layer(axum::middleware::from_fn(verify_cbor_content_header)),
+        )
 }
 
 pub fn instances_routes<S>() -> ApiRouter<S>
@@ -964,4 +973,29 @@ fn make_plaintext_response(status: StatusCode, message: String) -> Response<Body
         header::HeaderValue::from_static(CONTENT_TYPE_TEXT),
     );
     resp
+}
+
+async fn verify_cbor_content_header(
+    request: axum::extract::Request,
+    next: Next,
+) -> axum::response::Response {
+    const CONTENT_TYPE_CBOR: &str = "application/cbor";
+    if !request
+        .headers()
+        .get_all(http::header::CONTENT_TYPE)
+        .iter()
+        .any(|value| {
+            if let Ok(v) = value.to_str() {
+                return v.to_lowercase() == CONTENT_TYPE_CBOR;
+            }
+            false
+        })
+    {
+        return make_plaintext_response(
+            StatusCode::BAD_REQUEST,
+            format!("Unexpected content-type, expected {}.", CONTENT_TYPE_CBOR),
+        );
+    }
+
+    next.run(request).await
 }

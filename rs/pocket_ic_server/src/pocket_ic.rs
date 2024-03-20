@@ -5,7 +5,8 @@ use crate::Operation;
 use crate::{copy_dir, BlobStore};
 use axum::{extract::State, response::IntoResponse};
 use hyper::body::Bytes;
-use hyper::header::HeaderValue;
+use hyper::header::{HeaderValue, CONTENT_TYPE};
+use hyper::Method;
 use ic_boundary::{Health, RootKey};
 use ic_config::execution_environment;
 use ic_config::subnet_config::SubnetConfig;
@@ -717,7 +718,6 @@ const CONTENT_TYPE_CBOR: HeaderValue = HeaderValue::from_static("application/cbo
 pub async fn status(
     State((rk, h)): State<(Arc<dyn RootKey>, Arc<dyn Health>)>,
 ) -> impl IntoResponse {
-    use hyper::header::CONTENT_TYPE;
     use ic_types::messages::HttpStatusResponse;
 
     let health = h.health().await;
@@ -834,10 +834,15 @@ impl Operation for CallRequest {
                     Arc::new(RwLock::new(PocketIngressPoolThrottler)),
                     s,
                 )
-                .build();
+                .build_service();
 
                 let request = axum::http::Request::builder()
-                    .extension(PrincipalId(self.effective_canister_id.get().into()))
+                    .method(Method::POST)
+                    .header(CONTENT_TYPE, CONTENT_TYPE_CBOR)
+                    .uri(format!(
+                        "/api/v2/canister/{}/call",
+                        PrincipalId(self.effective_canister_id.get().into())
+                    ))
                     .body(self.bytes.clone().into())
                     .unwrap();
                 let resp = self.runtime.block_on(svc.oneshot(request)).unwrap();
