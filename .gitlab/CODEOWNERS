@@ -134,7 +134,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/embedders/                                          @dfinity-lab/teams/runtime-owners
 /rs/ethereum/                                           @dfinity-lab/teams/cross-chain-team
 /rs/execution_environment/                              @dfinity-lab/teams/execution-owners @dfinity-lab/teams/runtime-owners
-/rs/fuzzers                                             @dfinity-lab/teams/prodsec
+/rs/fuzzers/                                            @dfinity-lab/teams/prodsec
 /rs/gitlab-ci-config.yml                                @dfinity-lab/teams/idx
 /rs/ic_os/                                              @dfinity-lab/teams/node-team
 /rs/http_endpoints/                                     @dfinity-lab/teams/networking-team
