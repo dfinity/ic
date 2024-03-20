@@ -9,9 +9,9 @@ BindsTo=setup-icx-proxy.service
 User=root
 Group=root
 LimitNOFILE=524288
-Environment="RUST_BACKTRACE=1"
 EnvironmentFile=/run/ic-node/etc/icx-proxy/env
-ExecStart=/opt/ic/bin/icx-proxy                                  \
+ExecStart=/bin/bash -c ' \
+  /opt/ic/bin/icx-proxy                                          \
     --unix-socket /run/ic-node/icx-proxy.socket                  \
     --canister-alias "personhood:g3wsl-eqaaa-aaaan-aaaaa-cai"    \
     --canister-alias "identity:rdmx6-jaaaa-aaaaa-aaadq-cai"      \
@@ -20,9 +20,16 @@ ExecStart=/opt/ic/bin/icx-proxy                                  \
     --metrics-addr "[::]:9314"                                   \
     --root-key "/run/ic-node/etc/icx-proxy/root_key.der"         \
     --replica-unix-socket /run/ic-node/ic-boundary.socket        \
+    --pre-isolation-canisters /run/ic-node/etc/icx-proxy/pre_isolation_canisters.txt \
+    --geoip-db /run/ic-node/etc/icx-proxy/GeoLite2-Country.mmdb  \
+    ${DENYLIST_URL:+ --denylist-url "${DENYLIST_URL}"}           \
+    --denylist-initial /run/ic-node/etc/icx-proxy/denylist.json  \
+    --allowlist /run/ic-node/etc/icx-proxy/allowlist.txt         \
     --quiet                                                      \
-    $DOMAINS                                                     \
-    $SSL_OPTIONS
+    ${DOMAINS} \
+    ${DOMAINS_SYSTEM} \
+    ${DOMAINS_APPLICATION} \
+'
 
 Restart=always
 RestartSec=10

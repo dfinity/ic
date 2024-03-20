@@ -11,7 +11,7 @@ derive_more = { git = "https://github.com/dfinity-lab/derive_more", rev = "9f1b8
 ic-base-types = { path = "../types/base_types" }
 ic-crypto-interfaces-sig-verification = { path = "../crypto/interfaces/sig_verification" }
 ic-error-types = { path = "../types/error_types" }
-ic-ic00-types = { path = "../types/ic00_types" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-interfaces-state-manager = { path = "./state_manager" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist" }
@@ -23,7 +23,7 @@ phantom_newtype = { path = "../phantom_newtype" }
 prost = { workspace = true }
 serde = { workspace = true }
 tower = { workspace = true }
-thiserror = "1.0"
+thiserror = { workspace = true }
 
 [dev-dependencies]
 ic-crypto-internal-csp-proptest-utils = { path = "../crypto/internal/crypto_service_provider/csp_proptest_utils" }

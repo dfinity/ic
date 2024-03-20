@@ -322,8 +322,49 @@ pub struct ConstructionSubmitResponse {
     pub metadata: Option<ObjectMap>,
 }
 
+/// An AccountBalanceResponse is returned on the /account/balance endpoint. If
+/// an account has a balance for each AccountIdentifier describing it (ex: an
+/// ERC-20 token balance on a few smart contracts), an account balance request
+/// must be made with each AccountIdentifier.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+pub struct AccountBalanceResponse {
+    #[serde(rename = "block_identifier")]
+    pub block_identifier: BlockIdentifier,
+
+    /// A single account may have a balance in multiple currencies.
+    #[serde(rename = "balances")]
+    pub balances: Vec<Amount>,
+
+    /// Account-based blockchains that utilize a nonce or sequence number should
+    /// include that number in the metadata. This number could be unique to the
+    /// identifier or global across the account address.
+    #[serde(rename = "metadata")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<ObjectMap>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConstructionHashResponse {
     pub transaction_identifier: TransactionIdentifier,
     pub metadata: ObjectMap,
+}
+
+/// SearchTransactionsResponse contains an ordered collection of
+/// BlockTransactions that match the query in SearchTransactionsRequest. These
+/// BlockTransactions are sorted from most recent block to oldest block.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+pub struct SearchTransactionsResponse {
+    /// transactions is an array of BlockTransactions sorted by most recent BlockIdentifier (meaning that transactions in recent blocks appear first).
+    /// If there are many transactions for a particular search, transactions may not contain all matching transactions. It is up to the caller to paginate these transactions using the max_block field.
+    pub transactions: Vec<BlockTransaction>,
+
+    /// total_count is the number of results for a given search. Callers typically use this value to concurrently fetch results by offset or to display a virtual page number associated with results.
+    #[serde(rename = "total_count")]
+    pub total_count: i64,
+
+    /// next_offset is the next offset to use when paginating through transaction results. If this field is not populated, there are no more transactions to query.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_offset: Option<i64>,
 }

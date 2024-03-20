@@ -9,8 +9,8 @@ description = "Synchronizes a local copy of the ledger blocks with the ledger"
 async-trait = "0.1.41"
 candid = { workspace = true }
 chrono = { workspace = true }
-clap = { workspace = true }
-dfn_protobuf = {path = "../../rust_canisters/dfn_protobuf"}
+clap = { version = "3.2.25", features = ["derive"] }
+dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
 ic-agent = { workspace = true }
 ic-certification = { path = "../../certification" }
 ic-ledger-canister-core = { path = "../ledger_canister_core" }
@@ -18,7 +18,7 @@ ic-ledger-core = { path = "../ledger_core" }
 ic-types = { path = "../../types/types" }
 icp-ledger = { path = "../icp_ledger" }
 ic-ledger-hash-of = { path = "../../../packages/ic-ledger-hash-of" }
-on_wire = {path = "../../rust_canisters/on_wire"}
+on_wire = { path = "../../rust_canisters/on_wire" }
 rusqlite = { version = "~0.28.0", features = ["bundled"] }
 serde = { workspace = true }
 tokio = { workspace = true }

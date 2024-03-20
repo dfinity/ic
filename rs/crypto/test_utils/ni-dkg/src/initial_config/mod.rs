@@ -1,6 +1,6 @@
 //! Utilities for non-interactive Distributed Key Generation (NI-DKG), and
 //! for testing distributed key generation and threshold signing.
-use crate::dummy_transcript_for_tests_with_params;
+use crate::{dummy_transcript_for_tests, dummy_transcript_for_tests_with_params};
 use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine, Scalar};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspNiDkgTranscript::Groth20_Bls12_381;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
@@ -145,6 +145,33 @@ pub fn initial_dkg_transcript_and_master_key<R: rand::Rng + rand::CryptoRng>(
     rng: &mut R,
 ) -> (NiDkgTranscript, SecretKeyBytes) {
     let mut transcript = initial_dkg_transcript(initial_dkg_config, receiver_keys, rng);
+
+    let master_secret = Scalar::random(rng);
+
+    let public_key_bytes = G2Affine::from(G2Affine::generator() * &master_secret).serialize();
+
+    let master_secret_bytes = SecretKeyBytes {
+        val: master_secret.serialize(),
+    };
+
+    transcript.internal_csp_transcript = match transcript.internal_csp_transcript {
+        Groth20_Bls12_381(transcript) => {
+            let mut mod_transcript = transcript.clone();
+            mod_transcript.public_coefficients.coefficients[0] = PublicKeyBytes(public_key_bytes);
+            Groth20_Bls12_381(mod_transcript)
+        }
+    };
+
+    (transcript, master_secret_bytes)
+}
+
+/// Return a fake transcript and the master secret associated with it
+///
+/// The transcript is not valid and cannot be used by NIDKG
+pub fn dummy_initial_dkg_transcript_with_master_key<R: rand::Rng + rand::CryptoRng>(
+    rng: &mut R,
+) -> (NiDkgTranscript, SecretKeyBytes) {
+    let mut transcript = dummy_transcript_for_tests();
 
     let master_secret = Scalar::random(rng);
 

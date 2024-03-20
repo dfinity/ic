@@ -11,7 +11,7 @@ DEPENDENCIES = [
     "//rs/rosetta-api/icp_ledger/ledger",
     "//rs/rosetta-api/icrc1",
     "//rs/test_utilities/load_wasm",
-    "//rs/types/ic00_types",
+    "//rs/types/management_canister_types",
     "//rs/rosetta-api/rosetta_core:rosetta-core",
     "@crate_index//:candid",
     "@crate_index//:ic-agent",

@@ -1,22 +1,21 @@
 use super::{parse_principal_id, verify_principal_ids};
 use crate::{
     common::{cbor_response, into_cbor, make_plaintext_response, remove_effective_principal_id},
-    metrics::LABEL_UNKNOWN,
+    receive_request_body,
     state_reader_executor::StateReaderExecutor,
-    types::ApiReqType,
     validator_executor::ValidatorExecutor,
-    HttpError, HttpHandlerMetrics, ReplicaHealthStatus,
+    HttpError, ReplicaHealthStatus,
 };
-use bytes::Bytes;
+
+use axum::body::Body;
 use crossbeam::atomic::AtomicCell;
 use http::Request;
-use hyper::{Body, Response, StatusCode};
+use hyper::{Response, StatusCode};
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path, TooLongPathError};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{error, replica_logger::no_op_logger, ReplicaLogger};
-use ic_metrics::MetricsRegistry;
 use ic_replicated_state::{canister_state::execution_state::CustomSectionType, ReplicatedState};
 use ic_types::{
     malicious_flags::MaliciousFlags,
@@ -38,7 +37,6 @@ use tower::Service;
 #[derive(Clone)]
 pub struct CanisterReadStateService {
     log: ReplicaLogger,
-    metrics: HttpHandlerMetrics,
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
     delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
     state_reader_executor: StateReaderExecutor,
@@ -48,7 +46,6 @@ pub struct CanisterReadStateService {
 
 pub struct CanisterReadStateServiceBuilder {
     log: Option<ReplicaLogger>,
-    metrics: Option<HttpHandlerMetrics>,
     health_status: Option<Arc<AtomicCell<ReplicaHealthStatus>>>,
     malicious_flags: Option<MaliciousFlags>,
     delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
@@ -66,7 +63,6 @@ impl CanisterReadStateServiceBuilder {
     ) -> Self {
         Self {
             log: None,
-            metrics: None,
             health_status: None,
             malicious_flags: None,
             delegation_from_nns,
@@ -94,19 +90,10 @@ impl CanisterReadStateServiceBuilder {
         self
     }
 
-    pub(crate) fn with_metrics(mut self, metrics: HttpHandlerMetrics) -> Self {
-        self.metrics = Some(metrics);
-        self
-    }
-
     pub fn build(self) -> CanisterReadStateService {
         let log = self.log.unwrap_or(no_op_logger());
-        let default_metrics_registry = MetricsRegistry::default();
         CanisterReadStateService {
             log: log.clone(),
-            metrics: self
-                .metrics
-                .unwrap_or_else(|| HttpHandlerMetrics::new(&default_metrics_registry)),
             health_status: self
                 .health_status
                 .unwrap_or_else(|| Arc::new(AtomicCell::new(ReplicaHealthStatus::Healthy))),
@@ -123,7 +110,7 @@ impl CanisterReadStateServiceBuilder {
     }
 }
 
-impl Service<Request<Bytes>> for CanisterReadStateService {
+impl Service<Request<Body>> for CanisterReadStateService {
     type Response = Response<Body>;
     type Error = Infallible;
     #[allow(clippy::type_complexity)]
@@ -133,12 +120,7 @@ impl Service<Request<Bytes>> for CanisterReadStateService {
         Poll::Ready(Ok(()))
     }
 
-    fn call(&mut self, request: Request<Bytes>) -> Self::Future {
-        self.metrics
-            .request_body_size_bytes
-            .with_label_values(&[ApiReqType::ReadState.into(), LABEL_UNKNOWN])
-            .observe(request.body().len() as f64);
-
+    fn call(&mut self, request: Request<Body>) -> Self::Future {
         if self.health_status.load() != ReplicaHealthStatus::Healthy {
             let res = make_plaintext_response(
                 StatusCode::SERVICE_UNAVAILABLE,
@@ -164,37 +146,39 @@ impl Service<Request<Bytes>> for CanisterReadStateService {
 
         let delegation_from_nns = self.delegation_from_nns.read().unwrap().clone();
 
-        let request = match <HttpRequestEnvelope<HttpReadStateContent>>::try_from(
-            &SignedRequestBytes::from(body.to_vec()),
-        ) {
-            Ok(request) => request,
-            Err(e) => {
-                let res = make_plaintext_response(
-                    StatusCode::BAD_REQUEST,
-                    format!("Could not parse body as read request: {}", e),
-                );
-                return Box::pin(async move { Ok(res) });
-            }
-        };
-
-        // Convert the message to a strongly-typed struct.
-        let request = match HttpRequest::<ReadState>::try_from(request) {
-            Ok(request) => request,
-            Err(e) => {
-                let res = make_plaintext_response(
-                    StatusCode::BAD_REQUEST,
-                    format!("Malformed request: {:?}", e),
-                );
-                return Box::pin(async move { Ok(res) });
-            }
-        };
-
-        let read_state = request.content().clone();
         let registry_version = self.registry_client.get_latest_version();
         let state_reader_executor = self.state_reader_executor.clone();
         let validator_executor = self.validator_executor.clone();
-        let metrics = self.metrics.clone();
         Box::pin(async move {
+            let body = match receive_request_body(body).await {
+                Ok(bytes) => bytes,
+                Err(e) => return Ok(e),
+            };
+            let request = match <HttpRequestEnvelope<HttpReadStateContent>>::try_from(
+                &SignedRequestBytes::from(body.to_vec()),
+            ) {
+                Ok(request) => request,
+                Err(e) => {
+                    let res = make_plaintext_response(
+                        StatusCode::BAD_REQUEST,
+                        format!("Could not parse body as read request: {}", e),
+                    );
+                    return Ok(res);
+                }
+            };
+
+            // Convert the message to a strongly-typed struct.
+            let request = match HttpRequest::<ReadState>::try_from(request) {
+                Ok(request) => request,
+                Err(e) => {
+                    let res = make_plaintext_response(
+                        StatusCode::BAD_REQUEST,
+                        format!("Malformed request: {:?}", e),
+                    );
+                    return Ok(res);
+                }
+            };
+            let read_state = request.content().clone();
             let targets_fut =
                 validator_executor.validate_request(request.clone(), registry_version);
 
@@ -262,11 +246,7 @@ impl Service<Request<Bytes>> for CanisterReadStateService {
                     delegation: delegation_from_nns,
                 })),
             };
-            let (resp, body_size) = cbor_response(&res);
-            metrics
-                .response_body_size_bytes
-                .with_label_values(&[ApiReqType::ReadState.into()])
-                .observe(body_size as f64);
+            let (resp, _body_size) = cbor_response(&res);
             Ok(resp)
         })
     }
@@ -312,6 +292,9 @@ fn verify_paths(
                     state,
                 )?
             }
+            [b"api_boundary_nodes"] => {}
+            [b"api_boundary_nodes", _node_id]
+            | [b"api_boundary_nodes", _node_id, b"domain" | b"ipv4_address" | b"ipv6_address"] => {}
             [b"subnet"] => {}
             [b"subnet", _subnet_id]
             | [b"subnet", _subnet_id, b"public_key" | b"canister_ranges" | b"node"] => {}
@@ -430,13 +413,12 @@ mod test {
     use hyper::StatusCode;
     use ic_crypto_tree_hash::{Digest, Label, MixedHashTree, Path};
     use ic_registry_subnet_type::SubnetType;
-    use ic_replicated_state::{CanisterQueues, ReplicatedState, SystemMetadata};
-    use ic_test_utilities::{
-        state::insert_dummy_canister,
-        types::ids::{canister_test_id, subnet_test_id, user_test_id},
+    use ic_replicated_state::{
+        canister_snapshots::CanisterSnapshots, CanisterQueues, ReplicatedState, SystemMetadata,
     };
-    use ic_test_utilities_time::mock_time;
-    use ic_types::batch::RawQueryStats;
+    use ic_test_utilities_state::insert_dummy_canister;
+    use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
+    use ic_types::{batch::RawQueryStats, time::UNIX_EPOCH};
     use ic_validator::CanisterIdSet;
     use std::collections::BTreeMap;
 
@@ -552,12 +534,13 @@ mod test {
     fn test_verify_path() {
         let subnet_id = subnet_test_id(1);
         let mut metadata = SystemMetadata::new(subnet_id, SubnetType::Application);
-        metadata.batch_time = mock_time();
+        metadata.batch_time = UNIX_EPOCH;
         let state = ReplicatedState::new_from_checkpoint(
             BTreeMap::new(),
             metadata,
             CanisterQueues::default(),
             RawQueryStats::default(),
+            CanisterSnapshots::default(),
         );
         assert_eq!(
             verify_paths(

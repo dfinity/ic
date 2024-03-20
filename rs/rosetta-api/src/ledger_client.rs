@@ -651,13 +651,13 @@ impl LedgerClient {
                         result.neuron_id = Some(neuron_id);
                     }
                     OperationOutput::NeuronResponse(response) => {
-                        result.response = Some(ObjectMap::from(response));
+                        result.response = Some(ObjectMap::try_from(response)?);
                     }
                     OperationOutput::ProposalInfoResponse(response) => {
-                        result.response = Some(ObjectMap::from(response));
+                        result.response = Some(ObjectMap::try_from(response)?);
                     }
                     OperationOutput::ListNeuronsResponse(response) => {
-                        result.response = Some(ObjectMap::from(response))
+                        result.response = Some(ObjectMap::try_from(response)?)
                     }
                 }
                 result.status = Status::Completed;

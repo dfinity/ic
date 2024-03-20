@@ -26,9 +26,9 @@ use ic_config::subnet_config::CyclesAccountManagerConfig;
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_crypto_tree_hash::MixedHashTree;
 use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_from_der;
-use ic_ic00_types::{CanisterIdRecord, CanisterStatusResult};
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::tokens::CheckedAdd;
+use ic_management_canister_types::{CanisterIdRecord, CanisterStatusResult};
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL, TEST_USER2_KEYPAIR,
 };
@@ -36,12 +36,9 @@ use ic_nns_common::types::{NeuronId, UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, ROOT_CANISTER_ID,
 };
-use ic_nns_governance::pb::v1::NnsFunction;
-use ic_nns_test_utils::{
-    governance::{
-        submit_external_update_proposal_allowing_error, upgrade_nns_canister_by_proposal,
-    },
-    ids::TEST_NEURON_1_ID,
+use ic_nns_governance::{init::TEST_NEURON_1_ID, pb::v1::NnsFunction};
+use ic_nns_test_utils::governance::{
+    submit_external_update_proposal_allowing_error, upgrade_nns_canister_by_proposal,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_rosetta_test_utils::make_user_ed25519;

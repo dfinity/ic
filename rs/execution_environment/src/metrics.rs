@@ -12,7 +12,6 @@ use std::{cell::RefCell, rc::Rc, time::Instant};
 
 pub(crate) const QUERY_HANDLER_CRITICAL_ERROR: &str = "query_handler_critical_error";
 pub(crate) const SYSTEM_API_DATA_CERTIFICATE_COPY: &str = "data_certificate_copy";
-pub(crate) const SYSTEM_API_CALL_PERFORM: &str = "call_perform";
 pub(crate) const SYSTEM_API_CANISTER_CYCLE_BALANCE: &str = "canister_cycle_balance";
 pub(crate) const SYSTEM_API_CANISTER_CYCLE_BALANCE128: &str = "canister_cycle_balance128";
 pub(crate) const SYSTEM_API_TIME: &str = "time";
@@ -145,7 +144,9 @@ pub(crate) struct QueryHandlerMetrics {
     pub query_system_api_calls: IntCounterVec,
     /// The number of canisters evaluated and executed at least once
     /// during the call graph evaluation.
-    pub query_evaluated_canisters: Histogram,
+    pub evaluated_canisters: Histogram,
+    /// The number of transient errors.
+    pub transient_errors: IntCounter,
 }
 
 impl QueryHandlerMetrics {
@@ -256,10 +257,16 @@ impl QueryHandlerMetrics {
                         during the query execution",
                 &["system_api_call_counter"],
             ),
-            query_evaluated_canisters: metrics_registry.histogram(
+            evaluated_canisters: metrics_registry.histogram(
                 "execution_query_evaluated_canisters",
-                "The number of canisters evaluated and executed at least once during the call graph evaluation",
+                "The number of canisters evaluated and executed at least once \
+                        during the call graph evaluation",
                 vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 10.0],
+            ),
+            transient_errors: metrics_registry.int_counter(
+                "execution_query_transient_errors_total",
+                "The total number of transient errors accumulated \
+                        during the query execution",
             ),
         }
     }

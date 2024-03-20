@@ -1,16 +1,15 @@
 use super::{parse_principal_id, verify_principal_ids};
 use crate::{
     common::{cbor_response, into_cbor, make_plaintext_response, remove_effective_principal_id},
-    metrics::LABEL_UNKNOWN,
+    receive_request_body,
     state_reader_executor::StateReaderExecutor,
-    types::ApiReqType,
-    EndpointService, HttpError, HttpHandlerMetrics, ReplicaHealthStatus,
+    EndpointService, HttpError, ReplicaHealthStatus,
 };
-use bytes::Bytes;
+
+use axum::body::Body;
 use crossbeam::atomic::AtomicCell;
 use http::Request;
-use hyper::{Body, Response, StatusCode};
-use ic_config::http_handler::Config;
+use hyper::{Response, StatusCode};
 use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path, TooLongPathError};
 use ic_logger::{error, ReplicaLogger};
 use ic_types::{
@@ -25,14 +24,11 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, RwLock};
 use std::task::{Context, Poll};
-use tower::{
-    limit::concurrency::GlobalConcurrencyLimitLayer, util::BoxCloneService, Service, ServiceBuilder,
-};
+use tower::{util::BoxCloneService, Service};
 
 #[derive(Clone)]
 pub(crate) struct SubnetReadStateService {
     log: ReplicaLogger,
-    metrics: HttpHandlerMetrics,
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
     delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
     state_reader_executor: StateReaderExecutor,
@@ -41,31 +37,22 @@ pub(crate) struct SubnetReadStateService {
 impl SubnetReadStateService {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new_service(
-        config: Config,
         log: ReplicaLogger,
-        metrics: HttpHandlerMetrics,
         health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
         delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
         state_reader_executor: StateReaderExecutor,
     ) -> EndpointService {
         let base_service = Self {
             log,
-            metrics,
             health_status,
             delegation_from_nns,
             state_reader_executor,
         };
-        BoxCloneService::new(
-            ServiceBuilder::new()
-                .layer(GlobalConcurrencyLimitLayer::new(
-                    config.max_read_state_concurrent_requests,
-                ))
-                .service(base_service),
-        )
+        BoxCloneService::new(base_service)
     }
 }
 
-impl Service<Request<Bytes>> for SubnetReadStateService {
+impl Service<Request<Body>> for SubnetReadStateService {
     type Response = Response<Body>;
     type Error = Infallible;
     #[allow(clippy::type_complexity)]
@@ -75,12 +62,7 @@ impl Service<Request<Bytes>> for SubnetReadStateService {
         Poll::Ready(Ok(()))
     }
 
-    fn call(&mut self, request: Request<Bytes>) -> Self::Future {
-        self.metrics
-            .request_body_size_bytes
-            .with_label_values(&[ApiReqType::ReadState.into(), LABEL_UNKNOWN])
-            .observe(request.body().len() as f64);
-
+    fn call(&mut self, request: Request<Body>) -> Self::Future {
         if self.health_status.load() != ReplicaHealthStatus::Healthy {
             let res = make_plaintext_response(
                 StatusCode::SERVICE_UNAVAILABLE,
@@ -105,35 +87,7 @@ impl Service<Request<Bytes>> for SubnetReadStateService {
         };
 
         let delegation_from_nns = self.delegation_from_nns.read().unwrap().clone();
-
-        let request = match <HttpRequestEnvelope<HttpReadStateContent>>::try_from(
-            &SignedRequestBytes::from(body.to_vec()),
-        ) {
-            Ok(request) => request,
-            Err(e) => {
-                let res = make_plaintext_response(
-                    StatusCode::BAD_REQUEST,
-                    format!("Could not parse body as read request: {}", e),
-                );
-                return Box::pin(async move { Ok(res) });
-            }
-        };
-
-        // Convert the message to a strongly-typed struct.
-        let request = match HttpRequest::<ReadState>::try_from(request) {
-            Ok(request) => request,
-            Err(e) => {
-                let res = make_plaintext_response(
-                    StatusCode::BAD_REQUEST,
-                    format!("Malformed request: {:?}", e),
-                );
-                return Box::pin(async move { Ok(res) });
-            }
-        };
-
-        let read_state = request.content().clone();
         let state_reader_executor = self.state_reader_executor.clone();
-        let metrics = self.metrics.clone();
         Box::pin(async move {
             let make_service_unavailable_response = || {
                 make_plaintext_response(
@@ -141,6 +95,35 @@ impl Service<Request<Bytes>> for SubnetReadStateService {
                     "Certified state is not available yet. Please try again...".to_string(),
                 )
             };
+            let body = match receive_request_body(body).await {
+                Ok(bytes) => bytes,
+                Err(e) => return Ok(e),
+            };
+            let request = match <HttpRequestEnvelope<HttpReadStateContent>>::try_from(
+                &SignedRequestBytes::from(body.to_vec()),
+            ) {
+                Ok(request) => request,
+                Err(e) => {
+                    let res = make_plaintext_response(
+                        StatusCode::BAD_REQUEST,
+                        format!("Could not parse body as read request: {}", e),
+                    );
+                    return Ok(res);
+                }
+            };
+
+            // Convert the message to a strongly-typed struct.
+            let request = match HttpRequest::<ReadState>::try_from(request) {
+                Ok(request) => request,
+                Err(e) => {
+                    let res = make_plaintext_response(
+                        StatusCode::BAD_REQUEST,
+                        format!("Malformed request: {:?}", e),
+                    );
+                    return Ok(res);
+                }
+            };
+            let read_state = request.content().clone();
             let certified_state_reader =
                 match state_reader_executor.get_certified_state_snapshot().await {
                     Ok(Some(reader)) => reader,
@@ -188,11 +171,7 @@ impl Service<Request<Bytes>> for SubnetReadStateService {
                     delegation: delegation_from_nns,
                 })),
             };
-            let (resp, body_size) = cbor_response(&res);
-            metrics
-                .response_body_size_bytes
-                .with_label_values(&[ApiReqType::ReadState.into()])
-                .observe(body_size as f64);
+            let (resp, _body_size) = cbor_response(&res);
             Ok(resp)
         })
     }
@@ -207,13 +186,13 @@ fn verify_paths(paths: &[Path], effective_principal_id: PrincipalId) -> Result<(
 
     for path in paths {
         match path.as_slice() {
-            [b"time"] | [b"subnet"] => {}
-            [b"subnet", subnet_id, b"public_key" | b"canister_ranges" | b"metrics"] => {
-                let principal_id = parse_principal_id(subnet_id)?;
-                verify_principal_ids(&principal_id, &effective_principal_id)?;
-            }
-            [b"subnet", subnet_id, b"node", _node_id]
-            | [b"subnet", subnet_id, b"node", _node_id, b"public_key"] => {
+            [b"time"] => {}
+            [b"subnet"] => {}
+            [b"subnet", _subnet_id]
+            | [b"subnet", _subnet_id, b"public_key" | b"canister_ranges" | b"node"] => {}
+            [b"subnet", _subnet_id, b"node", _node_id]
+            | [b"subnet", _subnet_id, b"node", _node_id, b"public_key"] => {}
+            [b"subnet", subnet_id, b"metrics"] => {
                 let principal_id = parse_principal_id(subnet_id)?;
                 verify_principal_ids(&principal_id, &effective_principal_id)?;
             }
@@ -234,7 +213,7 @@ fn verify_paths(paths: &[Path], effective_principal_id: PrincipalId) -> Result<(
 mod test {
     use super::*;
     use ic_crypto_tree_hash::{Label, Path};
-    use ic_test_utilities::types::ids::{canister_test_id, subnet_test_id};
+    use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id};
     use serde_bytes::ByteBuf;
 
     #[test]

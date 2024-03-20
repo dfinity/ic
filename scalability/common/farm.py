@@ -112,6 +112,7 @@ def prepare_prometheus_vm_config_image_file(group_name, ic_node_ipv6s) -> str:
     # and the private key in ./prometheus_vm/ssh_keys. This allows the script to SSH into
     # the prometheus-vm via the "admin" user later on.
     ssh_dir = "prometheus_vm/ssh_keys"
+    shutil.rmtree(ssh_dir, ignore_errors=True)
     os.makedirs(ssh_dir, exist_ok=False)
     gen_key_command = [
         "ssh-keygen",

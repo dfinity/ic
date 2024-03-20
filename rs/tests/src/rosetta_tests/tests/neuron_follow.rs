@@ -24,7 +24,7 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const PORT: u32 = 8108;
-const VM_NAME: &str = "rosetta-test-neuron-follow";
+const VM_NAME: &str = "rosetta-neuron-follow";
 
 pub fn test(env: TestEnv) {
     let _logger = env.logger();
@@ -94,7 +94,7 @@ async fn test_follow(ros: &RosettaApiClient, _ledger: &LedgerClient, neuron_info
                 .first()
                 .expect("Expected one follow operation."),
             ic_rosetta_api::models::Operation {
-                _type: _expected_type,
+                type_: _expected_type,
                 ..
             }
         ));
@@ -185,7 +185,7 @@ async fn test_follow_with_hotkey(
                 .first()
                 .expect("Expected one follow operation."),
             ic_rosetta_api::models::Operation {
-                _type: _expected_type,
+                type_: _expected_type,
                 ..
             }
         ));

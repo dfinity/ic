@@ -828,7 +828,7 @@ impl TryFrom<pb_queues::InputOutputQueue> for OutputQueue {
 /// the back of `schedule`.
 ///
 /// When `pop()` is called `IngressQueue` returns the first Ingress message
-/// from the canister at the front of the `schedlue`. If that canister
+/// from the canister at the front of the `schedule`. If that canister
 /// has other incoming Ingress messages it is moved to the
 /// back of `schedule`, otherwise it is removed from `schedule`.
 ///

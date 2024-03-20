@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     fmt,
-    net::IpAddr,
+    net::{IpAddr, SocketAddr},
     str::FromStr,
     sync::Arc,
     time::{Duration, Instant},
@@ -19,7 +19,9 @@ use ic_registry_client_helpers::{
     subnet::{SubnetListRegistry, SubnetRegistry},
 };
 use ic_registry_subnet_type::SubnetType;
+use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::RegistryVersion;
+use tokio::sync::watch;
 use tracing::info;
 use x509_parser::{certificate::X509Certificate, prelude::FromDer};
 
@@ -32,7 +34,7 @@ use crate::{
 // Some magical prefix that the public key should have
 const DER_PREFIX: &[u8; 37] = b"\x30\x81\x82\x30\x1d\x06\x0d\x2b\x06\x01\x04\x01\x82\xdc\x7c\x05\x03\x01\x02\x01\x06\x0c\x2b\x06\x01\x04\x01\x82\xdc\x7c\x05\x03\x02\x01\x03\x61\x00";
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug)]
 pub struct Node {
     pub id: Principal,
     pub subnet_id: Principal,
@@ -43,19 +45,28 @@ pub struct Node {
     pub replica_version: String,
 }
 
+// Lightweight Eq, just compare principals
+// If one ever needs a deep comparison - this needs to be removed and #[derive(Eq)] used
+impl PartialEq for Node {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+impl Eq for Node {}
+
 impl fmt::Display for Node {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "[{:?}]:{:?}", self.addr, self.port)
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct CanisterRange {
     pub start: Principal,
     pub end: Principal,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct Subnet {
     pub id: Principal,
     pub subnet_type: SubnetType,
@@ -101,12 +112,12 @@ pub struct RegistrySnapshot {
     pub nns_subnet_id: Principal,
     pub nns_public_key: Vec<u8>,
     pub subnets: Vec<Subnet>,
-    // Hash map for a faster lookup by DNS resolver
     pub nodes: HashMap<String, Arc<Node>>,
 }
 
 pub struct Snapshotter {
     published_registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
+    channel_notify: watch::Sender<Option<Arc<RegistrySnapshot>>>,
     registry_client: Arc<dyn RegistryClient>,
     registry_version_available: Option<RegistryVersion>,
     registry_version_published: Option<RegistryVersion>,
@@ -136,11 +147,13 @@ pub enum SnapshotResult {
 impl Snapshotter {
     pub fn new(
         published_registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
+        channel_notify: watch::Sender<Option<Arc<RegistrySnapshot>>>,
         registry_client: Arc<dyn RegistryClient>,
         min_version_age: Duration,
     ) -> Self {
         Self {
             published_registry_snapshot,
+            channel_notify,
             registry_client,
             registry_version_published: None,
             registry_version_available: None,
@@ -229,7 +242,7 @@ impl Snapshotter {
                 // If this fails then the libraries are in despair, better to die here
                 let subnet_type = SubnetType::try_from(subnet.subnet_type()).unwrap();
 
-                let nodes = node_ids
+                let mut nodes = node_ids
                     .into_iter()
                     .map(|node_id| {
                         let transport_info = self
@@ -269,6 +282,8 @@ impl Snapshotter {
                     })
                     .collect::<Result<Vec<Arc<Node>>, Error>>()
                     .context("unable to get nodes")?;
+
+                nodes.sort_by_key(|x| x.id);
 
                 let ranges = ranges_by_subnet
                     .remove(&subnet_id.as_ref().0)
@@ -351,10 +366,11 @@ impl Snapshot for Snapshotter {
         };
 
         // Publish the new snapshot
+        let snapshot_arc = Arc::new(snapshot.clone());
         self.published_registry_snapshot
-            .store(Some(Arc::new(snapshot.clone())));
-
+            .store(Some(snapshot_arc.clone()));
         self.registry_version_published = Some(version);
+        self.channel_notify.send_replace(Some(snapshot_arc));
 
         // Persist the firewall rules if configured
         if let Some(v) = &self.persister {
@@ -397,6 +413,57 @@ impl<T: Snapshot> Run for WithMetricsSnapshot<T> {
         }
 
         Ok(())
+    }
+}
+
+pub fn generate_stub_snapshot(subnets: Vec<Subnet>) -> RegistrySnapshot {
+    let nodes = subnets
+        .iter()
+        .flat_map(|x| x.nodes.iter())
+        .map(|x| (x.id.to_string(), x.clone()))
+        .collect::<HashMap<_, _>>();
+
+    RegistrySnapshot {
+        version: 0,
+        timestamp: 0,
+        nns_subnet_id: subnet_test_id(666).get().0,
+        nns_public_key: vec![],
+        subnets,
+        nodes,
+    }
+}
+
+pub fn generate_stub_subnet(nodes: Vec<SocketAddr>) -> Subnet {
+    let subnet_id = subnet_test_id(0).get().0;
+
+    let nodes = nodes
+        .into_iter()
+        .enumerate()
+        .map(|(i, x)| {
+            Arc::new(Node {
+                id: node_test_id(i as u64).get().0,
+                subnet_type: SubnetType::Application,
+                subnet_id,
+                addr: x.ip(),
+                port: x.port(),
+                tls_certificate: vec![],
+                replica_version: "".into(),
+            })
+        })
+        .collect::<Vec<_>>();
+
+    // Catch-all canister id range
+    let range = CanisterRange {
+        start: Principal::from_slice(&[0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]),
+        end: Principal::from_slice(&[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]),
+    };
+
+    Subnet {
+        id: subnet_id,
+        subnet_type: SubnetType::Application,
+        ranges: vec![range],
+        nodes,
+        replica_version: "".into(),
     }
 }
 

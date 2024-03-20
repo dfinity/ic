@@ -3,11 +3,11 @@ use crate::driver::universal_vm::UniversalVm;
 use crate::k8s::tnet::TNet;
 use anyhow::{self, bail};
 use flate2::{write::GzEncoder, Compression};
-use ic_registry_subnet_type::SubnetType;
+use kube::ResourceExt;
 use serde::{Deserialize, Serialize};
 use slog::{info, warn};
 use std::collections::BTreeMap;
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::{self, Write};
 use std::net::Ipv6Addr;
 use std::path::{Path, PathBuf};
@@ -25,8 +25,11 @@ use crate::driver::ic::{ImageSizeGiB, VmAllocationStrategy, VmResources};
 use crate::driver::nested::NestedNode;
 use crate::driver::test_env::{TestEnv, TestEnvAttribute};
 use crate::driver::test_env_api::HasIcDependencies;
-use crate::driver::test_setup::GroupSetup;
+use crate::driver::test_setup::{GroupSetup, InfraProvider};
 use crate::util::block_on;
+
+use super::constants::SSH_USERNAME;
+use super::driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR;
 
 const DEFAULT_VCPUS_PER_VM: NrOfVCPUs = NrOfVCPUs::new(6);
 const DEFAULT_MEMORY_KIB_PER_VM: AmountOfMemoryKiB = AmountOfMemoryKiB::new(25165824); // 24GiB
@@ -51,7 +54,8 @@ pub struct DiskImage {
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ImageType {
     IcOsImage,
-    RawImage,
+    PrometheusImage,
+    UniversalImage,
 }
 
 impl From<DiskImage> for ImageLocation {
@@ -61,7 +65,7 @@ impl From<DiskImage> for ImageLocation {
                 url: src.url.clone(),
                 sha256: src.sha256,
             },
-            ImageType::RawImage => ImageViaUrl {
+            ImageType::PrometheusImage | ImageType::UniversalImage => ImageViaUrl {
                 url: src.url.clone(),
                 sha256: src.sha256,
             },
@@ -243,7 +247,7 @@ pub fn get_resource_request_for_universal_vm(
     group_name: &str,
 ) -> anyhow::Result<ResourceRequest> {
     let primary_image = universal_vm.primary_image.clone().unwrap_or_else(|| DiskImage {
-        image_type: ImageType::RawImage,
+        image_type: ImageType::UniversalImage,
         url: Url::parse(&format!("http://download.proxy-global.dfinity.network:8080/farm/universal-vm/{DEFAULT_UNIVERSAL_VM_IMG_SHA256}/x86_64-linux/universal-vm.img.zst")).expect("should not fail!"),
         sha256: String::from(DEFAULT_UNIVERSAL_VM_IMG_SHA256),
     });
@@ -284,10 +288,15 @@ pub fn get_resource_request_for_universal_vm(
     Ok(res_req)
 }
 
-pub fn allocate_resources(farm: &Farm, req: &ResourceRequest) -> FarmResult<ResourceGroup> {
+pub fn allocate_resources(
+    farm: &Farm,
+    req: &ResourceRequest,
+    env: &TestEnv,
+) -> FarmResult<ResourceGroup> {
     let group_name = req.group_name.clone();
-    // Create VMs in parallel via Farm.
+
     let mut threads = vec![];
+    let mut vm_responses = vec![];
     for vm_config in req.vm_configs.iter() {
         let farm_cloned = farm.clone();
         let vm_name = vm_config.name.clone();
@@ -311,68 +320,75 @@ pub fn allocate_resources(farm: &Farm, req: &ResourceRequest) -> FarmResult<Reso
             vm_config.required_host_features.clone(),
         );
         let group_name = group_name.clone();
-        // Spin up another thread
-        threads.push(std::thread::spawn(move || {
-            (
-                vm_name,
-                farm_cloned.create_vm(&group_name, create_vm_request),
-            )
-        }));
-    }
-    let mut res_group = ResourceGroup::new(group_name.clone());
-    for thread in threads {
-        let (vm_name, created_vm) = thread
-            .join()
-            .expect("Couldn't join on the associated thread");
-        let VMCreateResponse { ipv6, mac6, .. } = created_vm?;
-        res_group.add_vm(AllocatedVm {
-            name: vm_name,
-            group_name: group_name.clone(),
-            ipv6,
-            mac6,
-        })
-    }
-    Ok(res_group)
-}
 
-pub fn allocate_resources_k8s(
-    ic: &InternetComputer,
-    req: &ResourceRequest,
-) -> anyhow::Result<(ResourceGroup, TNet)> {
-    let mut system_subnet_count = 0;
-    let mut app_subnet_count = 0;
-    for subnet in ic.subnets.iter() {
-        if subnet.subnet_type == SubnetType::System {
-            system_subnet_count += subnet.nodes.len();
-        } else {
-            app_subnet_count += subnet.nodes.len();
+        match InfraProvider::read_attribute(env) {
+            InfraProvider::Farm => {
+                threads.push(std::thread::spawn(move || {
+                    (
+                        vm_name,
+                        farm_cloned.create_vm(&group_name, create_vm_request),
+                    )
+                }));
+            }
+            InfraProvider::K8s => {
+                let mut tnet = TNet::read_attribute(env);
+                tnet.access_key = fs::read_to_string(
+                    env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR).join(SSH_USERNAME),
+                )
+                .expect("failed to read ssh authorized pub key")
+                .into();
+                vm_responses.push((
+                    vm_name,
+                    block_on(tnet.vm_create(
+                        CreateVmRequest {
+                            primary_image: ImageLocation::PersistentVolumeClaim {
+                                name: match req.primary_image.image_type {
+                                    ImageType::IcOsImage => {
+                                        format!("{}-image-guestos", tnet.owner.name_any())
+                                    }
+                                    ImageType::PrometheusImage => "image-prometheus-vm".into(),
+                                    ImageType::UniversalImage => "image-universal-vm".into(),
+                                },
+                            },
+                            ..create_vm_request
+                        },
+                        req.primary_image.image_type.clone(),
+                    ))
+                    .expect("failed to create vm"),
+                ));
+                tnet.write_attribute(env);
+            }
         }
     }
-    let group_name = req.group_name.clone();
-    let image_url = req.primary_image.url.clone();
-    let mut tnet = TNet::new(&group_name)?
-        .image_url(image_url.as_ref())
-        .init(false)
-        .topology(system_subnet_count, app_subnet_count);
-    block_on(tnet.create()).expect("Failed to create testnet");
-
     let mut res_group = ResourceGroup::new(group_name.clone());
-    let mut addesses: Vec<Ipv6Addr> = tnet
-        .nns_nodes
-        .iter()
-        .chain(tnet.app_nodes.iter())
-        .map(|n| n.ipv6_addr.unwrap())
-        .collect();
-    for vm_config in req.vm_configs.iter() {
-        let vm_name = vm_config.name.clone();
-        res_group.add_vm(AllocatedVm {
-            name: vm_name,
-            group_name: group_name.clone(),
-            ipv6: addesses.remove(0),
-            mac6: "00:11:22:33:44:55".to_string(),
-        });
+    match InfraProvider::read_attribute(env) {
+        InfraProvider::Farm => {
+            for thread in threads {
+                let (vm_name, created_vm) = thread
+                    .join()
+                    .expect("Couldn't join on the associated thread");
+                let VMCreateResponse { ipv6, mac6, .. } = created_vm?;
+                res_group.add_vm(AllocatedVm {
+                    name: vm_name,
+                    group_name: group_name.clone(),
+                    ipv6,
+                    mac6,
+                })
+            }
+        }
+        InfraProvider::K8s => {
+            for (vm_name, created_vm) in vm_responses {
+                let VMCreateResponse { ipv6, mac6, .. } = created_vm;
+                res_group.add_vm(AllocatedVm {
+                    name: vm_name,
+                    group_name: group_name.clone(),
+                    ipv6,
+                    mac6,
+                })
+            }
+        }
     }
-    Ok((res_group, tnet))
+    Ok(res_group)
 }
 
 fn vm_spec_from_node(n: &Node, default_vm_resources: Option<VmResources>) -> VmSpec {

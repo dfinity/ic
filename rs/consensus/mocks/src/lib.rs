@@ -14,13 +14,11 @@ use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::ROOT_SUBNET_ID_KEY;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
-use ic_test_utilities::{
-    crypto::CryptoReturningOk,
-    state_manager::RefMockStateManager,
-    types::ids::{node_test_id, subnet_test_id},
-};
+use ic_test_utilities::{crypto::CryptoReturningOk, state_manager::RefMockStateManager};
+use ic_test_utilities_consensus::EcdsaStatsNoOp;
 use ic_test_utilities_registry::{setup_registry_non_final, SubnetRecordBuilder};
 use ic_test_utilities_time::FastForwardTimeSource;
+use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::{
     batch::{BatchPayload, ValidationContext},
     consensus::{block_maker::SubnetRecords, Payload},
@@ -102,6 +100,7 @@ pub fn dependencies_with_subnet_records_with_raw_state_manager(
         pool_config.clone(),
         log.clone(),
         ic_metrics::MetricsRegistry::new(),
+        Box::new(EcdsaStatsNoOp {}),
     )));
     let canister_http_pool = Arc::new(RwLock::new(CanisterHttpPoolImpl::new(
         ic_metrics::MetricsRegistry::new(),
@@ -166,7 +165,7 @@ pub fn dependencies_with_subnet_params(
         .expect_get_state_at()
         .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
             Height::new(0),
-            Arc::new(ic_test_utilities::state::get_initial_state(0, 0)),
+            Arc::new(ic_test_utilities_state::get_initial_state(0, 0)),
         )));
 
     Dependencies {

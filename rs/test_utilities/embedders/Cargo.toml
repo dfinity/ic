@@ -1,0 +1,24 @@
+[package]
+name = "ic-test-utilities-embedders"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+ic-base-types = { path = "../../types/base_types" }
+ic-config = { path = "../../config" }
+ic-cycles-account-manager = { path = "../../cycles_account_manager" }
+ic-embedders = { path = "../../embedders" }
+ic-interfaces = { path = "../../interfaces" }
+ic-logger = { path = "../../monitoring/logger" }
+ic-registry-subnet-type = { path = "../../registry/subnet_type" }
+ic-replicated-state = { path = "../../replicated_state" }
+ic-system-api = { path = "../../system_api" }
+ic-test-utilities = { path = ".." }
+ic-test-utilities-state = { path = "../state" }
+ic-test-utilities-types = { path = "../types" }
+ic-types = { path = "../../types/types" }
+ic-wasm-types = { path = "../../types/wasm_types" }
+wat = "1.0.52"

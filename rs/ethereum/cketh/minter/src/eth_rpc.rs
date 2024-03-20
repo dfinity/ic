@@ -197,6 +197,16 @@ impl From<CandidBlockTag> for BlockTag {
     }
 }
 
+impl From<BlockTag> for CandidBlockTag {
+    fn from(value: BlockTag) -> Self {
+        match value {
+            BlockTag::Latest => CandidBlockTag::Latest,
+            BlockTag::Safe => CandidBlockTag::Safe,
+            BlockTag::Finalized => CandidBlockTag::Finalized,
+        }
+    }
+}
+
 impl Display for BlockTag {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
@@ -255,7 +265,27 @@ pub struct GetLogsParam {
     /// Topics are order-dependent.
     /// Each topic can also be an array of DATA with "or" options.
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub topics: Vec<FixedSizeData>,
+    pub topics: Vec<Topic>,
+}
+
+/// A topic is either a 32 Bytes DATA, or an array of 32 Bytes DATA with "or" options.
+#[derive(Debug, Clone, Serialize)]
+#[serde(untagged)]
+pub enum Topic {
+    Single(FixedSizeData),
+    Multiple(Vec<FixedSizeData>),
+}
+
+impl From<FixedSizeData> for Topic {
+    fn from(data: FixedSizeData) -> Self {
+        Topic::Single(data)
+    }
+}
+
+impl From<Vec<FixedSizeData>> for Topic {
+    fn from(data: Vec<FixedSizeData>) -> Self {
+        Topic::Multiple(data)
+    }
 }
 
 /// An entry of the [`eth_getLogs`](https://ethereum.org/en/developers/docs/apis/json-rpc/#eth_getlogs) call reply.

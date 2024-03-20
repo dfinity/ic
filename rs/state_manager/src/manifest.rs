@@ -25,6 +25,7 @@ use ic_config::flag_status::FlagStatus;
 use ic_crypto_sha2::Sha256;
 use ic_logger::{error, fatal, replica_logger::no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
+use ic_replicated_state::page_map::StorageLayout;
 use ic_replicated_state::PageIndex;
 use ic_state_layout::{CheckpointLayout, ReadOnly, CANISTER_FILE};
 use ic_sys::{mmap::ScopedMmap, PAGE_SIZE};
@@ -231,7 +232,7 @@ pub struct ManifestDelta {
     /// state at `base_height`.
     pub(crate) dirty_memory_pages: DirtyPages,
     pub(crate) base_checkpoint: CheckpointLayout<ReadOnly>,
-    pub(crate) lsmt_storage: FlagStatus,
+    pub(crate) lsmt_status: FlagStatus,
 }
 
 /// Groups small files into larger chunks.
@@ -785,21 +786,24 @@ fn dirty_pages_to_dirty_chunks(
 
     let mut dirty_chunks: BTreeMap<PathBuf, BitVec> = Default::default();
 
-    // If `lsmt_storage` is enabled, we shouldn't have populated `dirty_memory_pages` in the first place.
+    // If `lsmt_status` is enabled, we shouldn't have populated `dirty_memory_pages` in the first place.
     debug_assert!(
-        manifest_delta.lsmt_storage == FlagStatus::Disabled
+        manifest_delta.lsmt_status == FlagStatus::Disabled
             || manifest_delta.dirty_memory_pages.is_empty()
     );
 
-    // Any information on dirty pages is not relevant to what files might have changed with `lsmt_storage`
-    // enabled.
-    if manifest_delta.lsmt_storage == FlagStatus::Disabled {
+    // Any information on dirty pages is not relevant to what files might have changed with
+    // `lsmt_status` enabled.
+    if manifest_delta.lsmt_status == FlagStatus::Disabled {
         for dirty_page in &manifest_delta.dirty_memory_pages {
             if dirty_page.height != manifest_delta.base_height {
                 continue;
             }
 
-            let path = dirty_page.page_type.path(checkpoint);
+            let path = dirty_page
+                .page_type
+                .layout(checkpoint)
+                .map(|layout| layout.base());
 
             if let Ok(path) = path {
                 let relative_path = path
@@ -1256,8 +1260,7 @@ pub(crate) fn compute_bundled_manifest(manifest: Manifest) -> BundledManifest {
     }
 }
 
-// This method will be used when replicas start fetching meta-manifest in future versions.
-#[allow(dead_code)]
+/// Checks that the hash of the meta-manifest matches the expected root hash.
 pub fn validate_meta_manifest(
     meta_manifest: &MetaManifest,
     root_hash: &CryptoHashOfState,

@@ -3,11 +3,7 @@
 The Boundary Node has a number of specific components:
 
 == Nginx and `ic_router.js`
-Nginx is used to serve assets such as the service worker, it acts as a proxy that dispatches requests to the IC and performs rate limiting. Nginx is extended by two modules
-
-- link:https://nginx.org/en/docs/njs/[njs] which provides a subset of the JavaScript language that allows extending nginx functionality
-
-In particular njs is used to for the link:../rootfs/etc/nginx/ic_router.js[`ic_router.js`]. The router maps a   `canister_id`  to a `subnet_id` and for the subnet to a `node_id`.
+Nginx is used as reverse proxy that terminates TLS, forwards requests to `ic-boundary` and `icx-proxy`, and provides a caching layer for static assets.
 
 == `icx-proxy`
 Transforms HTTP-to-canister request as API calls.

@@ -44,7 +44,7 @@ fn check_storage_validity(storage_client: Arc<StorageClient>, highest_index: u64
     // Make sure the blocks that are stored are valid
     assert!(blocks_verifier::is_valid_blockchain(
         &blocks_stored,
-        &blocks_stored.last().unwrap().block_hash
+        &blocks_stored.last().unwrap().clone().get_block_hash()
     ));
 }
 

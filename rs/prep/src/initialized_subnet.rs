@@ -4,7 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use ic_ic00_types::EcdsaKeyId;
+use ic_management_canister_types::EcdsaKeyId;
 use ic_protobuf::registry::{
     crypto::v1::{EcdsaSigningSubnetList, PublicKey},
     subnet::v1::{CatchUpPackageContents, SubnetRecord},

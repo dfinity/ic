@@ -22,7 +22,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 const PORT: u32 = 8107;
-const VM_NAME: &str = "rosetta-test-neuron-info";
+const VM_NAME: &str = "rosetta-neuron-info";
 
 pub fn test(env: TestEnv) {
     let _logger = env.logger();
@@ -92,7 +92,7 @@ async fn test_list_neurons(
                 .first()
                 .expect("Expected one list neuron operation."),
             ic_rosetta_api::models::Operation {
-                _type: _expected_type,
+                type_: _expected_type,
                 ..
             }
         ));

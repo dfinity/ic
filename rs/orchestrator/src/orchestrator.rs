@@ -11,6 +11,7 @@ use crate::registration::NodeRegistration;
 use crate::registry_helper::RegistryHelper;
 use crate::ssh_access_manager::SshAccessManager;
 use crate::upgrade::Upgrade;
+use get_if_addrs::get_if_addrs;
 use ic_config::metrics::{Config as MetricsConfig, Exporter};
 use ic_crypto::CryptoComponent;
 use ic_crypto_node_key_generation::{generate_node_keys_once, NodeKeyGenerationError};
@@ -118,7 +119,18 @@ impl Orchestrator {
 
         let version = replica_version.clone();
         thread::spawn(move || loop {
-            let message = format!("\nNode-id: {}\nReplica version: {}\n\n", node_id, version);
+            let (ipv4, ipv6) = Self::get_ip_addresses();
+
+            let message = indoc::formatdoc!(
+                r#"
+                    Node-id: {node_id}
+                    Replica version: {version}
+                    IPv6: {ipv6}
+                    IPv4: {ipv4}
+
+                "#
+            );
+
             UtilityCommand::notify_host(&message, 1);
             thread::sleep(Duration::from_secs(15 * 60));
         });
@@ -573,5 +585,31 @@ impl Orchestrator {
         let metrics = OrchestratorMetrics::new(metrics_registry);
 
         (metrics, metrics_endpoint)
+    }
+
+    fn get_ip_addresses() -> (String, String) {
+        let ifaces = get_if_addrs().unwrap_or_default();
+
+        let ipv4 = ifaces
+            .iter()
+            .find_map(|iface| match iface.addr {
+                get_if_addrs::IfAddr::V4(ref addr) if !addr.ip.is_loopback() => {
+                    Some(addr.ip.to_string())
+                }
+                _ => None,
+            })
+            .unwrap_or_else(|| "none configured".to_string());
+
+        let ipv6 = ifaces
+            .iter()
+            .find_map(|iface| match iface.addr {
+                get_if_addrs::IfAddr::V6(ref addr) if !addr.ip.is_loopback() => {
+                    Some(addr.ip.to_string())
+                }
+                _ => None,
+            })
+            .unwrap_or_else(|| "none configured".to_string());
+
+        (ipv4, ipv6)
     }
 }

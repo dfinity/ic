@@ -22,24 +22,21 @@ use ic_system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ApiType, ExecutionParameters,
     InstructionLimits,
 };
-use ic_test_utilities::{
-    cycles_account_manager::CyclesAccountManagerBuilder, state::SystemStateBuilder,
-    types::ids::user_test_id,
-};
-use ic_test_utilities_time::mock_time;
+use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
+use ic_test_utilities_embedders::DEFAULT_NUM_INSTRUCTIONS;
+use ic_test_utilities_state::SystemStateBuilder;
+use ic_test_utilities_types::ids::user_test_id;
 use ic_types::{
     messages::RequestMetadata,
     methods::{FuncRef, WasmMethod},
-    ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions,
+    time::UNIX_EPOCH,
+    ComputeAllocation, MemoryAllocation, NumBytes,
 };
 use ic_wasm_types::CanisterModule;
 use libfuzzer_sys::fuzz_target;
 use std::{collections::BTreeSet, path::PathBuf, sync::Arc};
 mod ic_wasm;
-use ic_wasm::ICWasmConfig;
-mod transform;
-use transform::{transform_exported_globals, transform_exports};
-use wasm_smith::ConfiguredModule;
+use ic_wasm::ICWasmModule;
 // The fuzzer creates valid wasms and tries to execute a query method via WasmExecutor.
 // The fuzzing success rate directly depends upon the IC valid wasm corpus provided.
 // The fuzz test is only compiled but not executed by CI.
@@ -48,24 +45,21 @@ use wasm_smith::ConfiguredModule;
 // libfuzzer: bazel run --config=fuzzing //rs/embedders/fuzz:execute_with_wasm_executor_libfuzzer -- corpus/
 // afl:  bazel run --config=afl //rs/embedders/fuzz:execute_with_wasm_executor_afl -- corpus/
 
-fuzz_target!(|module: ConfiguredModule<ICWasmConfig>| {
+fuzz_target!(|module: ICWasmModule| {
     let wasm = module.module.to_bytes();
 
-    let exported_globals = module.module.exported_globals();
-    let persisted_globals: Vec<Global> = transform_exported_globals(exported_globals);
+    let persisted_globals: Vec<Global> = module.exoported_globals;
 
     let canister_module = CanisterModule::new(wasm);
     let wasm_binary = WasmBinary::new(canister_module);
 
-    let exports = module.module.exports();
-    let wasm_methods: BTreeSet<WasmMethod> = transform_exports(exports);
+    let wasm_methods: BTreeSet<WasmMethod> = module.exported_functions;
 
     let log = no_op_logger();
     let embedder_config = Config {
         feature_flags: FeatureFlags {
-            rate_limiting_of_debug_prints: FlagStatus::Enabled,
-            wasm_native_stable_memory: FlagStatus::Enabled,
             write_barrier: FlagStatus::Enabled,
+            ..Default::default()
         },
         ..Default::default()
     };
@@ -73,7 +67,7 @@ fuzz_target!(|module: ConfiguredModule<ICWasmConfig>| {
     let fd_factory = Arc::new(TestPageAllocatorFileDescriptorImpl::new());
 
     let wasm_executor = Arc::new(WasmExecutorImpl::new(
-        WasmtimeEmbedder::new(embedder_config, log.clone()),
+        WasmtimeEmbedder::new(embedder_config.clone(), log.clone()),
         &metrics_registry,
         log,
         fd_factory,
@@ -81,11 +75,7 @@ fuzz_target!(|module: ConfiguredModule<ICWasmConfig>| {
     let execution_state =
         setup_execution_state(wasm_binary, wasm_methods.clone(), persisted_globals);
 
-    // return early if
-    // 1. There are no exproted functions available to execute
-    // 2. The total length of exports names is greater than 20_000
-
-    if wasm_methods.is_empty() || module.module.export_length_total() > 20_000 {
+    if wasm_methods.is_empty() {
         return;
     }
 
@@ -100,9 +90,7 @@ fuzz_target!(|module: ConfiguredModule<ICWasmConfig>| {
 });
 
 fn setup_wasm_execution_input(func_ref: FuncRef) -> WasmExecutionInput {
-    const DEFAULT_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(5_000_000_000);
-
-    let time = mock_time();
+    let time = UNIX_EPOCH;
     let api_type = ApiType::init(time, vec![], user_test_id(24).get());
 
     let system_state = SystemStateBuilder::default().build();
@@ -116,7 +104,8 @@ fn setup_wasm_execution_input(func_ref: FuncRef) -> WasmExecutionInput {
         &network_topology,
         dirty_page_overhead,
         ComputeAllocation::default(),
-        RequestMetadata::new(0, mock_time()),
+        RequestMetadata::new(0, UNIX_EPOCH),
+        api_type.caller(),
     );
 
     let canister_current_memory_usage = NumBytes::new(0);

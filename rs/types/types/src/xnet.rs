@@ -160,14 +160,62 @@ impl<T> Default for StreamIndexedQueue<T> {
 /// signal) and a collection of `reject_signals`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct StreamHeader {
-    pub begin: StreamIndex,
-    pub end: StreamIndex,
+    begin: StreamIndex,
+    end: StreamIndex,
 
     /// Index of the next expected message.
-    pub signals_end: StreamIndex,
+    signals_end: StreamIndex,
 
     /// Stream indices of rejected messages, in ascending order.
-    pub reject_signals: VecDeque<StreamIndex>,
+    reject_signals: VecDeque<StreamIndex>,
+
+    /// Flags informing the other subnet e.g. what kinds of messages will be accepted.
+    flags: StreamFlags,
+}
+
+/// Flags for `Stream`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct StreamFlags {
+    /// Indicates that the subnet expects responses only in the reverse stream.
+    pub responses_only: bool,
+}
+
+impl StreamHeader {
+    pub fn new(
+        begin: StreamIndex,
+        end: StreamIndex,
+        signals_end: StreamIndex,
+        reject_signals: VecDeque<StreamIndex>,
+        flags: StreamFlags,
+    ) -> Self {
+        Self {
+            begin,
+            end,
+            signals_end,
+            reject_signals,
+            flags,
+        }
+    }
+
+    pub fn begin(&self) -> StreamIndex {
+        self.begin
+    }
+
+    pub fn end(&self) -> StreamIndex {
+        self.end
+    }
+
+    pub fn signals_end(&self) -> StreamIndex {
+        self.signals_end
+    }
+
+    pub fn reject_signals(&self) -> &VecDeque<StreamIndex> {
+        &self.reject_signals
+    }
+
+    pub fn flags(&self) -> &StreamFlags {
+        &self.flags
+    }
 }
 
 /// A continuous slice of messages pulled from a remote subnet.  The slice also
@@ -260,8 +308,29 @@ pub struct QueueId {
 }
 
 pub mod testing {
-    use super::{StreamHeader, StreamIndexedQueue};
+    use super::{StreamFlags, StreamHeader, StreamIndex, StreamIndexedQueue};
     use crate::messages::RequestOrResponse;
+
+    /// Provides test-only methods for `StreamHeader`.
+    pub trait StreamHeaderTesting {
+        fn set_begin(&mut self, begin: StreamIndex);
+        fn set_end(&mut self, end: StreamIndex);
+        fn set_flags(&mut self, flags: StreamFlags);
+    }
+
+    impl StreamHeaderTesting for super::StreamHeader {
+        fn set_begin(&mut self, begin: StreamIndex) {
+            self.begin = begin;
+        }
+
+        fn set_end(&mut self, end: StreamIndex) {
+            self.end = end;
+        }
+
+        fn set_flags(&mut self, flags: StreamFlags) {
+            self.flags = flags;
+        }
+    }
 
     /// Provides test-only methods for `StreamSlice`.
     pub trait StreamSliceTesting {

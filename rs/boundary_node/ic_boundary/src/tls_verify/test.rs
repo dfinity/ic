@@ -63,8 +63,10 @@ async fn test_verify_tls_certificate() -> Result<(), Error> {
 
     let (reg, _, _) = create_fake_registry_client(1, 1, Some(node_id));
     let reg = Arc::new(reg);
-    let mut snapshotter = Snapshotter::new(Arc::clone(&snapshot), reg, Duration::ZERO);
-    let verifier = TlsVerifier::new(Arc::clone(&snapshot));
+    let (channel_send, _) = tokio::sync::watch::channel(None);
+    let mut snapshotter =
+        Snapshotter::new(Arc::clone(&snapshot), channel_send, reg, Duration::ZERO);
+    let verifier = TlsVerifier::new(Arc::clone(&snapshot), false);
     snapshotter.snapshot()?;
 
     let snapshot = snapshot.load_full().unwrap();

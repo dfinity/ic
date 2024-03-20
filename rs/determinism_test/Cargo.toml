@@ -10,7 +10,7 @@ documentation.workspace = true
 ic-config = { path = "../config" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-execution-environment = { path = "../execution_environment" }
-ic-ic00-types = { path = "../types/ic00_types" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
 ic-messaging = { path = "../messaging" }
@@ -23,10 +23,10 @@ ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist"
 ic-registry-routing-table = { path = "../registry/routing_table" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-state-manager = { path = "../state_manager" }
-ic-test-utilities = { path = "../test_utilities" }
+ic-test-utilities-consensus = { path = "../test_utilities/consensus" }
 ic-test-utilities-registry = { path = "../test_utilities/registry" }
+ic-test-utilities-types = { path = "../test_utilities/types" }
 ic-types = { path = "../types/types" }
 slog = { workspace = true }
 tokio = { workspace = true }
 wat = "1.0.52"
-

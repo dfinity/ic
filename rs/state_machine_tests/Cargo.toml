@@ -11,7 +11,7 @@ documentation.workspace = true
 [dependencies]
 candid = { workspace = true }
 ciborium = { workspace = true }
-clap = { workspace = true }
+clap = { version = "3.2.25", features = ["derive"] }
 ed25519-consensus = "2.0.1"
 hex = "0.4.2"
 ic-config = { path = "../config" }
@@ -21,16 +21,14 @@ ic-crypto-ecdsa-secp256k1 = { path = "../crypto/ecdsa_secp256k1" }
 ic-crypto-extended-bip32 = { path = "../crypto/extended_bip32" }
 ic-crypto-iccsa = { path = "../crypto/iccsa" }
 ic-crypto-interfaces-sig-verification = { path = "../crypto/interfaces/sig_verification" }
-ic-crypto-internal-seed = { path = "../crypto/internal/crypto_lib/seed" }
-ic-crypto-internal-threshold-sig-bls12381 = { path = "../crypto/internal/crypto_lib/threshold_sig/bls12_381" }
-ic-crypto-internal-types = { path = "../crypto/internal/crypto_lib/types" }
 ic-crypto-test-utils-keys = { path = "../crypto/test_utils/keys" }
+ic-crypto-test-utils-ni-dkg = { path = "../crypto/test_utils/ni-dkg" }
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-error-types = { path = "../types/error_types" }
 ic-execution-environment = { path = "../execution_environment/" }
-ic-ic00-types = { path = "../types/ic00_types" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-ingress-manager = { path = "../ingress_manager" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
@@ -55,6 +53,7 @@ ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-metrics = { path = "../test_utilities/metrics" }
 ic-test-utilities-registry = { path = "../test_utilities/registry" }
 ic-test-utilities-time = { path = "../test_utilities/time" }
+ic-test-utilities-types = { path = "../test_utilities/types" }
 ic-test-state-machine-client = "3.0"
 ic-types = { path = "../types/types" }
 ic-xnet-payload-builder = { path = "../xnet/payload_builder" }
@@ -68,6 +67,7 @@ tempfile = "3.1.0"
 tokio = { workspace = true }
 wat = "1.0.52"
 maplit = "1.0.2"
+tower = { workspace = true }
 
 [dev-dependencies]
 proptest = "1.0"

@@ -1,8 +1,8 @@
 use ic00::CanisterSettingsArgsBuilder;
 use ic_config::execution_environment;
 use ic_config::subnet_config::{SchedulerConfig, SubnetConfig};
-use ic_ic00_types::CanisterInstallMode::{Install, Reinstall, Upgrade};
-use ic_ic00_types::{
+use ic_management_canister_types::CanisterInstallMode::{Install, Reinstall, Upgrade};
+use ic_management_canister_types::{
     self as ic00, CanisterIdRecord, CanisterInstallMode, InstallCodeArgs, Method, Payload,
 };
 use ic_registry_subnet_type::SubnetType;

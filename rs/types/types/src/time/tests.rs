@@ -122,3 +122,73 @@ fn should_convert_from_system_time_and_back() {
     let back: SystemTime = time.into();
     assert_eq!(system_time, back);
 }
+
+mod coarse {
+    use super::*;
+    use crate::time::CoarseTime;
+
+    const NANOS_PER_HALF_SEC: i64 = NANOS_PER_SEC as i64 / 2;
+
+    /// Constructs a `Time` value from a number of seconds and a possibly negative number of nanoseconds.
+    fn time_from(seconds: u64, nanos: i64) -> Time {
+        assert!(nanos.abs() < NANOS_PER_SEC as i64);
+
+        Time::from_nanos_since_unix_epoch(((seconds * NANOS_PER_SEC) as i64 + nanos) as u64)
+    }
+
+    #[test]
+    fn coarse_time_floor() {
+        // All times between `3s` and `4s-1ns` have a floor of `3s`.
+        assert_eq!(3, CoarseTime::floor(time_from(3, 0)).0);
+        assert_eq!(3, CoarseTime::floor(time_from(3, 1)).0);
+        assert_eq!(3, CoarseTime::floor(time_from(3, NANOS_PER_HALF_SEC - 1)).0);
+        assert_eq!(3, CoarseTime::floor(time_from(3, NANOS_PER_HALF_SEC)).0);
+        assert_eq!(3, CoarseTime::floor(time_from(3, NANOS_PER_HALF_SEC + 1)).0);
+        assert_eq!(3, CoarseTime::floor(time_from(4, -1)).0);
+
+        assert_eq!(0, CoarseTime::floor(time_from(0, 0)).0);
+        assert_eq!(0, CoarseTime::floor(time_from(0, 1)).0);
+        assert_eq!(
+            u32::MAX,
+            CoarseTime::floor(Time::from_nanos_since_unix_epoch(u64::MAX)).0
+        );
+    }
+
+    #[test]
+    fn coarse_time_round() {
+        // All times between `3s` and `3.5s` (exclusive) round to `3s`.
+        assert_eq!(3, CoarseTime::round(time_from(3, 0)).0);
+        assert_eq!(3, CoarseTime::round(time_from(3, 1)).0);
+        assert_eq!(3, CoarseTime::round(time_from(3, NANOS_PER_HALF_SEC - 1)).0);
+        // All times between `3.5s` and `4s-1ns` round to `4s`.
+        assert_eq!(4, CoarseTime::round(time_from(3, NANOS_PER_HALF_SEC)).0);
+        assert_eq!(4, CoarseTime::round(time_from(3, NANOS_PER_HALF_SEC + 1)).0);
+        assert_eq!(4, CoarseTime::round(time_from(4, -1)).0);
+
+        assert_eq!(0, CoarseTime::round(time_from(0, 0)).0);
+        assert_eq!(0, CoarseTime::round(time_from(0, 1)).0);
+        assert_eq!(
+            u32::MAX,
+            CoarseTime::round(Time::from_nanos_since_unix_epoch(u64::MAX)).0
+        );
+    }
+
+    #[test]
+    fn coarse_time_ceil() {
+        // The ceiling of `3s` is `3s`.
+        assert_eq!(3, CoarseTime::ceil(time_from(3, 0)).0);
+        // All times between `3s+1ns` and `4s-1ns` have a ceiling of `4s`.
+        assert_eq!(4, CoarseTime::ceil(time_from(3, 1)).0);
+        assert_eq!(4, CoarseTime::ceil(time_from(3, NANOS_PER_HALF_SEC - 1)).0);
+        assert_eq!(4, CoarseTime::ceil(time_from(3, NANOS_PER_HALF_SEC)).0);
+        assert_eq!(4, CoarseTime::ceil(time_from(3, NANOS_PER_HALF_SEC + 1)).0);
+        assert_eq!(4, CoarseTime::ceil(time_from(4, -1)).0);
+
+        assert_eq!(0, CoarseTime::ceil(time_from(0, 0)).0);
+        assert_eq!(1, CoarseTime::ceil(time_from(0, 1)).0);
+        assert_eq!(
+            u32::MAX,
+            CoarseTime::ceil(Time::from_nanos_since_unix_epoch(u64::MAX)).0
+        );
+    }
+}

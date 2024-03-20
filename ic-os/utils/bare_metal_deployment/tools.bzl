@@ -29,4 +29,5 @@ def launch_bare_metal(name, image_zst_file):
             "--idrac_script_dir",
             "$(location //ic-os/utils/bare_metal_deployment:find_idrac_package_path)",
         ],
+        tags = ["manual"],
     )

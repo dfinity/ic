@@ -1,9 +1,11 @@
 use ic_base_types::{CanisterId, NumBytes, NumSeconds, SubnetId};
 use ic_config::subnet_config::SchedulerConfig;
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
-use ic_ic00_types::{CanisterIdRecord, CanisterSettingsArgs, Payload, UpdateSettingsArgs, IC_00};
 use ic_interfaces::execution_environment::SystemApi;
 use ic_logger::replica_logger::no_op_logger;
+use ic_management_canister_types::{
+    CanisterIdRecord, CanisterSettingsArgs, Payload, UpdateSettingsArgs, IC_00,
+};
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
@@ -11,18 +13,16 @@ use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_replicated_state::testing::SystemStateTesting;
 use ic_replicated_state::{NetworkTopology, SystemState};
 use ic_system_api::sandbox_safe_system_state::SandboxSafeSystemState;
-use ic_test_utilities::{
-    cycles_account_manager::CyclesAccountManagerBuilder,
-    state::SystemStateBuilder,
-    types::{
-        ids::{canister_test_id, subnet_test_id, user_test_id},
-        messages::{RequestBuilder, ResponseBuilder},
-    },
+use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
+use ic_test_utilities_state::SystemStateBuilder;
+use ic_test_utilities_types::{
+    ids::{canister_test_id, subnet_test_id, user_test_id},
+    messages::{RequestBuilder, ResponseBuilder},
 };
-use ic_test_utilities_time::mock_time;
 use ic_types::nominal_cycles::NominalCycles;
 use ic_types::{
     messages::{CanisterMessage, RequestMetadata, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
+    time::UNIX_EPOCH,
     ComputeAllocation, Cycles, NumInstructions,
 };
 use prometheus::IntCounter;
@@ -64,7 +64,8 @@ fn push_output_request_fails_not_enough_cycles_for_request() {
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
-        RequestMetadata::new(0, mock_time()),
+        RequestMetadata::new(0, UNIX_EPOCH),
+        Some(request.sender().into()),
     );
 
     assert_eq!(
@@ -116,7 +117,8 @@ fn push_output_request_fails_not_enough_cycles_for_response() {
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
-        RequestMetadata::new(0, mock_time()),
+        RequestMetadata::new(0, UNIX_EPOCH),
+        Some(request.sender().into()),
     );
 
     assert_eq!(
@@ -144,13 +146,15 @@ fn push_output_request_succeeds_with_enough_cycles() {
         NumSeconds::from(100_000),
     );
 
+    let caller = None;
     let mut sandbox_safe_system_state = SandboxSafeSystemState::new(
         &system_state,
         cycles_account_manager,
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
-        RequestMetadata::new(0, mock_time()),
+        RequestMetadata::new(0, UNIX_EPOCH),
+        caller,
     );
 
     let prepayment_for_response_execution =
@@ -188,19 +192,20 @@ fn correct_charging_source_canister_for_a_request() {
 
     let initial_cycles_balance = system_state.balance();
 
+    let request = RequestBuilder::default()
+        .sender(canister_test_id(0))
+        .receiver(canister_test_id(1))
+        .build();
+
     let mut sandbox_safe_system_state = SandboxSafeSystemState::new(
         &system_state,
         cycles_account_manager,
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
-        RequestMetadata::new(0, mock_time()),
+        RequestMetadata::new(0, UNIX_EPOCH),
+        Some(request.sender().into()),
     );
-
-    let request = RequestBuilder::default()
-        .sender(canister_test_id(0))
-        .receiver(canister_test_id(1))
-        .build();
 
     let xnet_cost = cycles_account_manager.xnet_call_performed_fee(SMALL_APP_SUBNET_MAX_SIZE);
     let request_payload_cost = cycles_account_manager
@@ -238,7 +243,7 @@ fn correct_charging_source_canister_for_a_request() {
     sandbox_safe_system_state
         .system_state_changes
         .apply_changes(
-            mock_time(),
+            UNIX_EPOCH,
             &mut system_state,
             &default_network_topology(),
             subnet_test_id(1),
@@ -337,13 +342,15 @@ fn is_controller_test() {
     let mut system_state = SystemStateBuilder::default().build();
     system_state.controllers = BTreeSet::from([user_test_id(1).get(), user_test_id(2).get()]);
 
+    let caller = None;
     let sandbox_safe_system_state = SandboxSafeSystemState::new(
         &system_state,
         CyclesAccountManagerBuilder::new().build(),
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
-        RequestMetadata::new(0, mock_time()),
+        RequestMetadata::new(0, UNIX_EPOCH),
+        caller,
     );
 
     // Users IDs 1 and 2 are controllers, hence is_controller should return true,
@@ -372,7 +379,7 @@ fn call_increases_cycles_consumed_metric() {
     let system_state_changes = api.into_system_state_changes();
     system_state_changes
         .apply_changes(
-            mock_time(),
+            UNIX_EPOCH,
             &mut system_state,
             &default_network_topology(),
             subnet_test_id(1),
@@ -428,7 +435,8 @@ fn test_inter_canister_call(
         topo,
         SchedulerConfig::application_subnet().dirty_page_overhead,
         ComputeAllocation::default(),
-        RequestMetadata::new(0, mock_time()),
+        RequestMetadata::new(0, UNIX_EPOCH),
+        Some(sender.into()),
     );
 
     let request = RequestBuilder::default()
@@ -457,7 +465,7 @@ fn test_inter_canister_call(
     sandbox_safe_system_state
         .system_state_changes
         .apply_changes(
-            mock_time(),
+            UNIX_EPOCH,
             &mut system_state,
             topo,
             subnet_id,
@@ -712,7 +720,7 @@ fn wrong_method_name_ic00() {
     failing_mgmt_canister_call_ic00(
         "start",
         arg.encode(),
-        "IC0302: Management canister has no method 'start'".to_string(),
+        "IC0536: Management canister has no method 'start'".to_string(),
     );
 }
 
@@ -722,6 +730,6 @@ fn wrong_method_name_subnet_message() {
     failing_mgmt_canister_call_subnet_message(
         "start",
         arg.encode(),
-        "IC0302: Management canister has no method 'start'".to_string(),
+        "IC0536: Management canister has no method 'start'".to_string(),
     );
 }

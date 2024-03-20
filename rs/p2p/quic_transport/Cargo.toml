@@ -6,8 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+anyhow = { workspace = true }
 async-trait = "0.1.36"
-axum = "0.7.0"
+axum = { workspace = true }
 bincode = "1.2.1"
 bytes = { workspace = true }
 either = "1.6.0"
@@ -18,7 +19,6 @@ ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
 ic-crypto-utils-tls = { path = "../../crypto/utils/tls" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-base-types = { path = "../../types/base_types" }
-ic-icos-sev = { path = "../../ic_os/sev" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
 phantom_newtype = { path = "../../phantom_newtype" }
@@ -28,10 +28,9 @@ serde = { workspace = true }
 serde_bytes = { workspace = true }
 slog = { workspace = true }
 socket2 = { version = "0.5", features = ["all"] }
-thiserror = "1.0.50"
 tokio = { workspace = true }
-tokio-metrics = "0.3.0"
-tokio-rustls = "0.24.0"
+tokio-metrics = { workspace = true }
+tokio-rustls = { workspace = true }
 tokio-util = { workspace = true }
 tower = { workspace = true }
 
@@ -41,4 +40,3 @@ ic-p2p-test-utils = { path = "../test_utils" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
 turmoil = { workspace = true }
-

@@ -1,4 +1,5 @@
 use ic_crypto_internal_csp::Csp;
+use ic_interfaces::time_source::SysTimeSource;
 use ic_protobuf::registry::crypto::v1::{EcdsaCurve, EcdsaKeyId};
 use ic_protobuf::registry::subnet::v1::{EcdsaConfig, SubnetRecord, SubnetType};
 use ic_types::{NodeId, ReplicaVersion, SubnetId};
@@ -43,7 +44,6 @@ pub mod internal {
         TlsHandshake, TlsPublicKeyCert, TlsServerHandshakeError, TlsStream,
     };
     use ic_crypto_utils_basic_sig::conversions::derive_node_id;
-    use ic_crypto_utils_time::CurrentSystemTimeSource;
     use ic_interfaces::crypto::{
         BasicSigVerifier, BasicSigner, CheckKeysWithRegistryError, CurrentNodePublicKeysError,
         IDkgDealingEncryptionKeyRotationError, IDkgKeyRotationResult, IDkgProtocol, KeyManager,
@@ -250,7 +250,7 @@ pub mod internal {
                 .unwrap_or_else(|| Arc::new(CryptoMetrics::none()));
             let time_source = self
                 .time_source
-                .unwrap_or_else(|| Arc::new(CurrentSystemTimeSource::new(new_logger!(&logger))));
+                .unwrap_or_else(|| Arc::new(SysTimeSource::new()));
 
             let (mut config, temp_dir) = CryptoConfig::new_in_temp_dir();
             if let Some(source) = self.temp_dir_source {
@@ -282,23 +282,23 @@ pub mod internal {
             });
 
             let csp = if let Some(env) = &opt_remote_vault_environment {
-                Csp::builder(
-                    env.new_vault_client_builder()
-                        .with_logger(new_logger!(logger))
-                        .with_metrics(Arc::clone(&metrics))
-                        .build()
-                        .expect("Failed to build a vault client"),
+                let vault_client = env
+                    .new_vault_client_builder()
+                    .with_logger(new_logger!(logger))
+                    .with_metrics(Arc::clone(&metrics))
+                    .build()
+                    .expect("Failed to build a vault client");
+                Csp::new_from_vault(
+                    Arc::new(vault_client),
                     new_logger!(logger),
                     Arc::clone(&metrics),
                 )
-                .build()
             } else {
-                Csp::builder(
-                    Arc::clone(&local_vault),
+                Csp::new_from_vault(
+                    Arc::clone(&local_vault) as _,
                     new_logger!(logger),
                     Arc::clone(&metrics),
                 )
-                .build()
             };
 
             let node_keys_to_generate = self
@@ -412,8 +412,9 @@ pub mod internal {
                 fake_registry_client as Arc<dyn RegistryClient>
             });
 
-            let crypto_component = CryptoComponent::new_with_csp_and_fake_node_id(
+            let crypto_component = CryptoComponent::new_for_test(
                 csp,
+                local_vault,
                 logger,
                 registry_client,
                 node_id,

@@ -1,15 +1,19 @@
-use std::sync::{
-    atomic::{AtomicUsize, Ordering},
-    Arc,
+use std::{
+    net::IpAddr,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
 };
 
 use anyhow::bail;
 use axum::extract::{FromRef, State};
+use bytes::Bytes;
 use candid::Principal;
-use hyper::{http::header::CONTENT_TYPE, Body, Request, Response, StatusCode, Uri};
+use http::header::{HeaderValue, HOST};
+use hyper::{Body, Request, Response, StatusCode, Uri};
 use ic_agent::{
     agent::{Agent, RejectCode, RejectResponse},
-    agent_error::HttpErrorPayload,
     AgentError,
 };
 use ic_response_verification::MAX_VERIFICATION_VERSION;
@@ -27,14 +31,20 @@ use crate::{
         request::HttpRequest,
         response::{AgentResponseAny, HttpResponse},
     },
-    http_client::{RequestHeaders, HEADER_X_REQUEST_ID, REQUEST_HEADERS},
+    http_client::{
+        RequestHeaders, HEADER_IC_CANISTER_ID, HEADER_X_IC_COUNTRY_CODE, HEADER_X_REAL_IP,
+        HEADER_X_REQUEST_ID, REQUEST_HEADERS,
+    },
     metrics::RequestContext,
-    proxy::{AppState, HandleError},
+    proxy::{denylist::Denylist, geoip::GeoIp, AppState, DomainCanisterMatcher, HandleError},
     validate::Validate,
 };
 
 pub struct Args<V> {
     agent: Agent,
+    domain_match: Option<Arc<DomainCanisterMatcher>>,
+    geoip: Option<Arc<GeoIp>>,
+    denylist: Option<Arc<Denylist>>,
     validator: V,
     debug: bool,
 }
@@ -68,19 +78,25 @@ impl<V: Clone> FromRef<AppState<V>> for Args<V> {
 
         Args {
             agent,
+            domain_match: state.domain_match(),
             validator: state.validator().clone(),
+            geoip: state.geoip(),
+            denylist: state.denylist(),
             debug: state.debug(),
         }
     }
 }
 
 #[instrument(
+    level = "error",
     parent = None,
     target = "",
     skip_all,
     fields(
         request_id,
         canister_id,
+        client_ip,
+        country_code,
         method,
         uri,
         code,
@@ -111,42 +127,108 @@ pub async fn handler<V: Validate + 'static>(
         .or(referer_host_canister_id)
         .or(referer_query_param_canister_id);
 
-    if canister_id.is_none() {
-        return Response::builder()
-            .status(StatusCode::BAD_REQUEST)
-            .body("Could not find a canister id to forward to.".into())
-            .unwrap();
-    }
+    let span = Span::current();
+    span.record("method", request.method().as_str());
+    span.record("uri", request.uri().to_string());
 
-    // Initialize task local variable and process the request
-    let res = REQUEST_HEADERS
-        .scope(RequestHeaders::new(), async {
-            process_request(request, &args.agent, &args.validator, canister_id.unwrap()).await
-        })
-        .await;
-
-    res.handle_error(args.debug)
-}
-
-async fn process_request(
-    request: Request<Body>,
-    agent: &Agent,
-    validator: &impl Validate,
-    canister_id: Principal,
-) -> Result<Response<Body>, anyhow::Error> {
     let request_id = request
         .headers()
         .get(HEADER_X_REQUEST_ID)
         .cloned()
         .map(|x| x.to_str().unwrap_or("<malformed id>").to_string())
         .unwrap_or("<unknown id>".into());
+    span.record("request_id", &request_id);
 
-    Span::current().record("request_id", &request_id);
-    Span::current().record("canister_id", &canister_id.to_string());
-    Span::current().record("method", request.method().as_str());
-    Span::current().record("uri", &request.uri().to_string());
+    // Try to get & parse client IP from the header
+    let client_ip = request
+        .headers()
+        .get(HEADER_X_REAL_IP)
+        .and_then(|x| x.to_str().ok().and_then(|x| x.parse::<IpAddr>().ok()));
+
+    let country_code = client_ip
+        .and_then(|x| args.geoip.as_ref().map(|v| v.lookup(x)))
+        .unwrap_or("N/A".into());
+
+    span.record(
+        "client_ip",
+        client_ip.map(|x| x.to_string()).unwrap_or("unknown".into()),
+    );
+    span.record("country_code", &country_code);
+
+    // Initialize task local variable and process the request
+    let res = REQUEST_HEADERS
+        .scope(RequestHeaders::new(), async {
+            process_request(request, &args, canister_id, &country_code).await
+        })
+        .await;
+
+    let mut res = res.handle_error(args.debug);
+    res.headers_mut().insert(
+        HEADER_X_IC_COUNTRY_CODE,
+        HeaderValue::from_maybe_shared(Bytes::from(country_code)).unwrap(),
+    );
+
+    if let Some(v) = canister_id {
+        res.headers_mut().insert(
+            HEADER_IC_CANISTER_ID,
+            HeaderValue::from_maybe_shared(Bytes::from(v.to_string())).unwrap(),
+        );
+    }
+
+    res
+}
+
+async fn process_request<V: Validate + 'static>(
+    request: Request<Body>,
+    args: &Args<V>,
+    canister_id: Option<Principal>,
+    country_code: &str,
+) -> Result<Response<Body>, anyhow::Error> {
+    let agent = &args.agent;
+    let span = Span::current();
+
+    if canister_id.is_none() {
+        return Ok(Response::builder()
+            .status(StatusCode::BAD_REQUEST)
+            .body("Could not find a canister id to forward to".into())
+            .unwrap());
+    }
+
+    let canister_id = canister_id.unwrap();
+    span.record("canister_id", &canister_id.to_string());
+
+    if let Some(v) = &args.denylist {
+        if v.is_blocked(canister_id, country_code) {
+            return Ok(Response::builder()
+                .status(StatusCode::UNAVAILABLE_FOR_LEGAL_REASONS)
+                .body("".into())
+                .unwrap());
+        }
+    }
 
     let (parts, body) = request.into_parts();
+
+    let host = parts.headers.get(HOST).and_then(|x| x.to_str().ok());
+    let host = match host {
+        None => {
+            return Ok(Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .body("Host header is missing or corrupt".into())
+                .unwrap());
+        }
+
+        Some(x) => x,
+    };
+
+    // Check the domain-canister match if configured
+    if let Some(v) = &args.domain_match {
+        if !v.check(canister_id, host) {
+            return Ok(Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .body("".into())
+                .unwrap());
+        }
+    }
 
     // Store the request headers in task local storage
     REQUEST_HEADERS.with(|x| {
@@ -163,7 +245,7 @@ async fn process_request(
         Err(e) => bail!(e),
     };
 
-    Span::current().record("req_len", body.len());
+    span.record("req_len", body.len());
 
     let http_request = HttpRequest::from((&parts, body));
 
@@ -223,10 +305,10 @@ async fn process_request(
         agent_response
     };
 
-    Span::current().record("resp_len", agent_response.body.len());
+    span.record("resp_len", agent_response.body.len());
 
     let http_response = HttpResponse::create(agent, &agent_response).await?;
-    Span::current().record("stream", http_response.has_streaming_body);
+    span.record("stream", http_response.has_streaming_body);
 
     let mut response_builder =
         Response::builder().status(StatusCode::from_u16(http_response.status_code)?);
@@ -237,11 +319,12 @@ async fn process_request(
     let should_validate = !http_response.has_streaming_body && !is_update_call;
     let validation_info = if should_validate {
         let validation_result =
-            validator.validate(agent, &canister_id, &http_request, &http_response);
+            args.validator
+                .validate(agent, &canister_id, &http_request, &http_response);
 
         match validation_result {
             Err(err) => {
-                Span::current().record("error", format!("Request validation failed: {err}"));
+                span.record("error", format!("Request validation failed: {err}"));
 
                 return Ok(Response::builder()
                     .status(StatusCode::INTERNAL_SERVER_ERROR)
@@ -269,7 +352,7 @@ async fn process_request(
                 // status codes are not certified in v1, reject known dangerous status codes
                 if http_response.status_code >= 300 && http_response.status_code < 400 {
                     let msg = "Response verification v1 does not allow redirects";
-                    Span::current().record("error", msg);
+                    span.record("error", msg);
 
                     return Ok(Response::builder()
                         .status(StatusCode::INTERNAL_SERVER_ERROR)
@@ -336,7 +419,7 @@ async fn process_request(
 fn handle_result(
     result: Result<(AgentResponseAny,), AgentError>,
 ) -> Result<AgentResponseAny, Result<Response<Body>, anyhow::Error>> {
-    use AgentError::{HttpError, ReplicaError, ResponseSizeExceededLimit};
+    use AgentError::{ReplicaError, ResponseSizeExceededLimit};
     use RejectCode::DestinationInvalid;
 
     let result = match result {
@@ -346,6 +429,8 @@ fn handle_result(
         Err(e) => e,
     };
 
+    let span = Span::current();
+
     let response = match result {
         // Turn all `DestinationInvalid`s into 404
         ReplicaError(RejectResponse {
@@ -353,7 +438,8 @@ fn handle_result(
             reject_message,
             ..
         }) => {
-            Span::current().record("error", format!("Destination invalid: {reject_message}"));
+            span.record("error", format!("Destination invalid: {reject_message}"));
+
             Response::builder()
                 .status(StatusCode::NOT_FOUND)
                 .body(reject_message.into())
@@ -368,7 +454,7 @@ fn handle_result(
                 response.reject_code, response.reject_message, response.error_code,
             );
 
-            Span::current().record("error", &msg);
+            span.record("error", &msg);
 
             Response::builder()
                 .status(StatusCode::BAD_GATEWAY)
@@ -376,23 +462,8 @@ fn handle_result(
                 .unwrap()
         }
 
-        // Handle all 451s (denylist)
-        HttpError(HttpErrorPayload {
-            status: 451,
-            content_type,
-            content,
-        }) => {
-            Span::current().record("error", "Denylisted");
-            content_type
-                .into_iter()
-                .fold(Response::builder(), |r, c| r.header(CONTENT_TYPE, c))
-                .status(451)
-                .body(content.into())
-                .unwrap()
-        }
-
         ResponseSizeExceededLimit() => {
-            Span::current().record("error", "Response size exceeds limit");
+            span.record("error", "Response size exceeds limit");
 
             Response::builder()
                 .status(StatusCode::INSUFFICIENT_STORAGE)

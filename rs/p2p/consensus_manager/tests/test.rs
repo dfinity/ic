@@ -51,7 +51,6 @@ fn test_artifact_sent_to_other_peer() {
             None,
             None,
             None,
-            None,
             Some(processor_1.clone()),
             waiter_fut(),
         );
@@ -61,7 +60,6 @@ fn test_artifact_sent_to_other_peer() {
             NODE_2,
             registry_handle.clone(),
             topology_watcher.clone(),
-            None,
             None,
             None,
             None,
@@ -110,7 +108,6 @@ fn test_artifact_in_validated_pool_is_sent_to_peer_joining_subnet() {
             None,
             None,
             None,
-            None,
             Some(processor_1.clone()),
             waiter_fut(),
         );
@@ -120,7 +117,6 @@ fn test_artifact_in_validated_pool_is_sent_to_peer_joining_subnet() {
             NODE_2,
             registry_handle.clone(),
             topology_watcher.clone(),
-            None,
             None,
             None,
             None,
@@ -150,7 +146,6 @@ fn test_artifact_in_validated_pool_is_sent_to_peer_joining_subnet() {
             NODE_3,
             registry_handle.clone(),
             topology_watcher.clone(),
-            None,
             None,
             None,
             None,
@@ -196,7 +191,6 @@ fn test_flapping_connection_does_not_cause_duplicate_artifact_downloads() {
             None,
             None,
             None,
-            None,
             Some(processor_1.clone()),
             waiter_fut(),
         );
@@ -206,7 +200,6 @@ fn test_flapping_connection_does_not_cause_duplicate_artifact_downloads() {
             NODE_2,
             registry_handle.clone(),
             topology_watcher.clone(),
-            None,
             None,
             None,
             None,
@@ -568,7 +561,6 @@ fn test_adverts_are_retransmitted_on_reconnection() {
             None,
             None,
             None,
-            None,
             Some(processor_1.clone()),
             waiter_fut(),
         );
@@ -581,7 +573,6 @@ fn test_adverts_are_retransmitted_on_reconnection() {
             None,
             None,
             None,
-            None,
             Some(processor_2.clone()),
             waiter_fut(),
         );
@@ -591,7 +582,6 @@ fn test_adverts_are_retransmitted_on_reconnection() {
             NODE_3,
             registry_handle.clone(),
             topology_watcher.clone(),
-            None,
             None,
             None,
             None,
@@ -667,7 +657,6 @@ fn test_new_adverts_are_transmitted_on_reconnection() {
             None,
             None,
             None,
-            None,
             Some(processor_1.clone()),
             waiter_fut(),
         );
@@ -680,7 +669,6 @@ fn test_new_adverts_are_transmitted_on_reconnection() {
             None,
             None,
             None,
-            None,
             Some(processor_2.clone()),
             waiter_fut(),
         );
@@ -690,7 +678,6 @@ fn test_new_adverts_are_transmitted_on_reconnection() {
             NODE_3,
             registry_handle.clone(),
             topology_watcher.clone(),
-            None,
             None,
             None,
             None,

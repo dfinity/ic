@@ -13,7 +13,7 @@ use ic_config::{
     subnet_config::SubnetConfig,
 };
 use ic_error_types::RejectCode;
-use ic_ic00_types::{
+use ic_management_canister_types::{
     self as ic00, BitcoinGetBalanceArgs, BitcoinGetCurrentFeePercentilesArgs,
     BitcoinGetSuccessorsArgs, BitcoinGetUtxosArgs, BitcoinSendTransactionArgs,
     BitcoinSendTransactionInternalArgs, EmptyBlob, Method, Payload,

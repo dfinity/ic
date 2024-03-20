@@ -80,9 +80,11 @@ mod tests {
     use ic_crypto_tree_hash::{flatmap, Label, LabeledTree};
     use ic_interfaces_state_manager_mocks::MockStateManager;
     use ic_registry_subnet_type::SubnetType;
-    use ic_replicated_state::{CanisterQueues, ReplicatedState, SystemMetadata};
-    use ic_test_utilities::{state::ReplicatedStateBuilder, types::ids::subnet_test_id};
-    use ic_test_utilities_time::mock_time;
+    use ic_replicated_state::{
+        canister_snapshots::CanisterSnapshots, CanisterQueues, ReplicatedState, SystemMetadata,
+    };
+    use ic_test_utilities_state::ReplicatedStateBuilder;
+    use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
         batch::RawQueryStats,
         consensus::certification::{Certification, CertificationContent},
@@ -91,6 +93,7 @@ mod tests {
             CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, Signed,
         },
         signature::ThresholdSignature,
+        time::UNIX_EPOCH,
         CryptoHashOfPartialState, Height,
     };
     use std::collections::BTreeMap;
@@ -103,7 +106,7 @@ mod tests {
             .expect_get_latest_state()
             .returning(move || {
                 let mut metadata = SystemMetadata::new(subnet_id, SubnetType::Application);
-                metadata.batch_time = mock_time();
+                metadata.batch_time = UNIX_EPOCH;
                 Labeled::new(
                     Height::from(1),
                     Arc::new(ReplicatedState::new_from_checkpoint(
@@ -111,6 +114,7 @@ mod tests {
                         metadata,
                         CanisterQueues::default(),
                         RawQueryStats::default(),
+                        CanisterSnapshots::default(),
                     )),
                 )
             });

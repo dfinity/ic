@@ -14,7 +14,7 @@ ic-cycles-account-manager = { path = "../../cycles_account_manager" }
 ic-embedders = { path = "../../embedders" }
 ic-error-types = { path = "../../types/error_types" }
 ic-execution-environment = { path = "../../execution_environment" }
-ic-ic00-types = { path = "../../types/ic00_types" }
+ic-management-canister-types = { path = "../../types/management_canister_types" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-state-manager = { path = "../../interfaces/state_manager" }
 ic-logger = { path = "../../monitoring/logger" }
@@ -28,6 +28,7 @@ ic-replicated-state = { path = "../../replicated_state" }
 ic-system-api = { path = "../../system_api" }
 ic-test-utilities = { path = ".." }
 ic-test-utilities-time = { path = "../time" }
+ic-test-utilities-types = { path = "../types" }
 ic-types = { path = "../../types/types" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
 ic-universal-canister = { path = "../../universal_canister/lib" }

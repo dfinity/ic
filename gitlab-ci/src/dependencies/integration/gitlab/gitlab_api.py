@@ -51,5 +51,6 @@ class GitlabApi:
             job.play()
             return True
         except GitlabPipelinePlayError:
-            logging.error(f"Could not run pipeline {pipeline}.\n{traceback.format_exc()}")
+            logging.error(f"Could not run pipeline {pipeline}.")
+            logging.debug(f"Could not run pipeline {pipeline}.\nReason: {traceback.format_exc()}")
             return False

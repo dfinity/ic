@@ -123,6 +123,7 @@ type CreateServiceNervousSystem = record {
   swap_parameters : opt SwapParameters;
   initial_token_distribution : opt InitialTokenDistribution;
 };
+type Decimal = record { human_readable : opt text };
 type DerivedProposalInformation = record {
   swap_background_information : opt SwapBackgroundInformation;
 };
@@ -172,6 +173,7 @@ type Governance = record {
   topic_followee_index : vec record { int32; FollowersMap };
   migrations : opt Migrations;
   proposals : vec record { nat64; ProposalData };
+  xdr_conversion_rate : opt XdrConversionRate;
   in_flight_commands : vec record { nat64; NeuronInFlightCommand };
   neurons : vec record { nat64; Neuron };
   genesis_timestamp_seconds : nat64;
@@ -325,6 +327,7 @@ type NetworkEconomics = record {
   neuron_spawn_dissolve_delay_seconds : nat64;
   minimum_icp_xdr_rate : nat64;
   maximum_node_provider_rewards_e8s : nat64;
+  neurons_fund_economics : opt NeuronsFundEconomics;
 };
 type Neuron = record {
   id : opt NeuronId;
@@ -404,6 +407,17 @@ type NeuronsFundData = record {
   final_neurons_fund_participation : opt NeuronsFundParticipation;
   initial_neurons_fund_participation : opt NeuronsFundParticipation;
   neurons_fund_refunds : opt NeuronsFundSnapshot;
+};
+type NeuronsFundEconomics = record {
+  maximum_icp_xdr_rate : opt Percentage;
+  neurons_fund_matched_funding_curve_coefficients : opt NeuronsFundMatchedFundingCurveCoefficients;
+  max_theoretical_neurons_fund_participation_amount_xdr : opt Decimal;
+  minimum_icp_xdr_rate : opt Percentage;
+};
+type NeuronsFundMatchedFundingCurveCoefficients = record {
+  contribution_threshold_xdr : opt Decimal;
+  one_third_participation_milestone_xdr : opt Decimal;
+  full_participation_milestone_xdr : opt Decimal;
 };
 type NeuronsFundNeuron = record {
   hotkey_principal : opt text;
@@ -631,6 +645,10 @@ type VotingRewardParameters = record {
   final_reward_rate : opt Percentage;
 };
 type WaitForQuietState = record { current_deadline_timestamp_seconds : nat64 };
+type XdrConversionRate = record {
+  xdr_permyriad_per_icp : opt nat64;
+  timestamp_seconds : opt nat64;
+};
 service : (Governance) -> {
   claim_gtc_neurons : (principal, vec NeuronId) -> (Result);
   claim_or_refresh_neuron_from_account : (ClaimOrRefreshNeuronFromAccount) -> (

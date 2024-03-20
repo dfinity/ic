@@ -1,6 +1,6 @@
 load("//bazel:defs.bzl", "gzip_compress")
 load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
-load("//publish:defs.bzl", "release_nostrip_binary", "release_strip_binary")
+load("//publish:defs.bzl", "release_nostrip_binary", "release_strip_binary", "release_strip_binary_test")
 
 LINUX_ONLY = [
     "metrics-proxy",
@@ -8,6 +8,7 @@ LINUX_ONLY = [
     "snptool",
     "vsock_guest",
     "vsock_host",
+    "fstrim_tool",
     "guestos_tool",
     "hostos_tool",
     "setupos_tool",
@@ -16,13 +17,17 @@ LINUX_ONLY = [
 NO_STRIP = [
     "canister_sandbox",
     "ic-btc-adapter",
-    "ic-https-outcalls-adapter",
     "replica",
+]
+
+TEST_BINARIES = [
+    "types-test",
 ]
 
 BINARIES = {
     "canary-proxy": "//rs/boundary_node/canary_proxy:canary-proxy",
     "canister_sandbox": "//rs/canister_sandbox",
+    "compiler_sandbox": "//rs/canister_sandbox:compiler_sandbox",
     "ic-btc-adapter": "//rs/bitcoin/adapter:ic-btc-adapter",
     "replica": "//rs/replica",
     "boundary-node-prober": "//rs/boundary_node/prober:boundary-node-prober",
@@ -30,12 +35,14 @@ BINARIES = {
     "certificate-syncer": "//rs/boundary_node/certificate_issuance/certificate_syncer:certificate-syncer",
     "denylist-updater": "//rs/boundary_node/denylist_updater:denylist-updater",
     "e2e-test-driver": "//rs/scenario_tests:e2e-test-driver",
+    "fstrim_tool": "//rs/ic_os/fstrim_tool:fstrim_tool_bin",
     "guestos_tool": "//rs/ic_os/guestos_tool:guestos_tool",
     "hostos_tool": "//rs/ic_os/hostos_tool:hostos_tool",
     "ic-admin": "//rs/registry/admin:ic-admin",
     "ic-backup": "//rs/backup:ic-backup",
     "ic-balance-exporter": "//rs/boundary_node/ic_balance_exporter:ic-balance-exporter",
     "ic-boundary": "//rs/boundary_node/ic_boundary:ic-boundary",
+    "ic-boundary-tls": "//rs/boundary_node/ic_boundary:ic-boundary-tls",
     "ic-starter": "//rs/starter:ic-starter",
     "ic-https-outcalls-adapter": "//rs/https_outcalls/adapter:ic-https-outcalls-adapter",
     "ic-consensus-pool-util": "//rs/artifact_pool:ic-consensus-pool-util",
@@ -67,6 +74,7 @@ BINARIES = {
     "vsock_host": "//rs/ic_os/vsock/host:vsock_host",
     "drun": "//rs/drun:drun",
     "pocket-ic": "//rs/pocket_ic_server:pocket-ic-server",
+    "types-test": "//rs/types/types:types_test",
 }
 
 LIBRARIES = {
@@ -76,12 +84,17 @@ LIBRARIES = {
 [release_nostrip_binary(
     name = name + "_bin",
     binary = BINARIES[name],
-) for name in BINARIES if name in NO_STRIP]
+) for name in BINARIES if name in NO_STRIP and name not in TEST_BINARIES]
 
 [release_strip_binary(
     name = name + "_bin",
     binary = BINARIES[name],
-) for name in BINARIES if name not in NO_STRIP]
+) for name in BINARIES if name not in NO_STRIP and name not in TEST_BINARIES]
+
+[release_strip_binary_test(
+    name = name + "_bin",
+    binary = BINARIES[name],
+) for name in BINARIES if name not in NO_STRIP and name in TEST_BINARIES]
 
 [release_strip_binary(
     name = name + "_lib",
@@ -106,6 +119,48 @@ LIBRARIES = {
         ],
     )
     for name in BINARIES
+    if name not in TEST_BINARIES and name != "ic-https-outcalls-adapter"
+]
+
+# TODO: remove "ic-https-outcalls-adapter" exception
+# once transition rules are functioning as expected
+genrule(
+    name = "ic-https-outcalls-adapter_cleaned",
+    testonly = True,
+    srcs = ["ic-https-outcalls-adapter_bin"],
+    outs = ["ic-https-outcalls-adapter"],
+    cmd = select({
+        "@platforms//os:linux": "objcopy --strip-unneeded -R .comment -R .note -R .note.gnu.build-id $< $@",
+        "@platforms//os:osx": "cp $< $@",
+    }),
+    executable = True,
+    visibility = [
+        "//ic-os/boundary-guestos/envs:__subpackages__",
+        "//ic-os/guestos/envs:__subpackages__",
+        "//ic-os/hostos/envs:__subpackages__",
+        "//ic-os/setupos/envs:__subpackages__",
+    ],
+)
+
+[
+    genrule(
+        name = name + "_cleaned",
+        testonly = True,
+        srcs = [name + "_bin"],
+        outs = [name],
+        cmd = select({
+            "@platforms//os:linux": "objcopy -R .comment -R .note -R .note.gnu.build-id $< $@",
+            "@platforms//os:osx": "cp $< $@",
+        }),
+        executable = True,
+        visibility = [
+            "//ic-os/boundary-guestos/envs:__subpackages__",
+            "//ic-os/guestos/envs:__subpackages__",
+            "//ic-os/hostos/envs:__subpackages__",
+            "//ic-os/setupos/envs:__subpackages__",
+        ],
+    )
+    for name in TEST_BINARIES
 ]
 
 [

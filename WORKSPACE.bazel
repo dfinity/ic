@@ -6,6 +6,7 @@ load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository", "new_git_r
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive", "http_file", "http_jar")
 load("//third_party/lmdb-0.9.70:repository.bzl", "lmdb_repository")
 load("//third_party/lmdb-rkv-0.14.99:repository.bzl", "lmdb_rkv_repository")
+load("mainnet-canisters.bzl", "mainnet_core_nns_canisters", "mainnet_sns_canisters")
 
 http_archive(
     name = "aspect_rules_sol",
@@ -65,8 +66,8 @@ gazelle_dependencies(go_repository_default_config = "//:WORKSPACE.bazel")
 
 http_archive(
     name = "rules_rust",
-    sha256 = "1e7114ea2af800c6987ca38daeee13e3ae6e934875b4f7ca24b798857f95431e",
-    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.32.0/rules_rust-v0.32.0.tar.gz"],
+    sha256 = "0f18dd752b87d2203c140b3e356364b08a91eb6aa9b2d689ea69eb7cc2530f4d",
+    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.33.0/rules_rust-v0.33.0.tar.gz"],
 )
 
 load("@rules_rust//rust:repositories.bzl", "rules_rust_dependencies", "rust_register_toolchains")
@@ -81,7 +82,7 @@ rust_register_toolchains(
     # The nightly version is required to compile fuzz tests from Bazel.
     # The version below is chosen so that it is in sync with the non-nightly version.
     versions = [
-        "1.75.0",
+        "1.76.0",
         "nightly/2023-11-11",
     ],
 )
@@ -484,125 +485,9 @@ new_git_repository(
     remote = "https://github.com/WebAssembly/testsuite.git",
 )
 
-# Deployed NNS canisters
+mainnet_core_nns_canisters()
 
-http_file(
-    name = "mainnet_nns_registry_canister",
-    downloaded_file_path = "registry-canister.wasm.gz",
-    sha256 = "641b6607bff6cd979fcf8af028831fc66d5f7f2bacc6ca498861cf7a8df4ec2c",
-    url = "https://download.dfinity.systems/ic/87f48a595b6f666fbc7fe6ad4081aa98fd113d12/canisters/registry-canister.wasm.gz",
-)
-
-http_file(
-    name = "mainnet_nns_governance_canister",
-    downloaded_file_path = "governance-canister.wasm.gz",
-    sha256 = "0588a175af106fa0849d8175f47bd89648f96e244abba705211a3cbcb889daee",
-    url = "https://download.dfinity.systems/ic/87f48a595b6f666fbc7fe6ad4081aa98fd113d12/canisters/governance-canister.wasm.gz",
-)
-
-http_file(
-    name = "mainnet_icp_ledger_canister",
-    downloaded_file_path = "ledger-canister_notify-method.wasm.gz",
-    sha256 = "cb16acc20a8948b68cc40b7d7328a53ec36c3cf713b3111921b49d009b98c5a5",
-    url = "https://download.dfinity.systems/ic/c63b73baa88d65a45a60f4d7e0ec043f1fbf98be/canisters/ledger-canister_notify-method.wasm.gz",
-)
-
-# From https://dashboard.internetcomputer.org/proposal/44955
-# Note: the Wasm module hash in the proposal is computed for the uncompressed WASM
-http_file(
-    name = "mainnet_icp_ledger-archive-node-canister",
-    downloaded_file_path = "ledger-archive-node-canister.wasm.gz",
-    sha256 = "569d498b638668733953a756f4a417533e1f513d1d41d55960abcd2f160d2aad",
-    url = "https://download.dfinity.systems/ic/acd7e2928237a8e8bc1aa5e73efd47c8a8dfb556/canisters/ledger-archive-node-canister.wasm.gz",
-)
-
-# Most recent upgrade proposal: https://dashboard.internetcomputer.org/proposal/127154
-http_file(
-    name = "mainnet_nns_root-canister",
-    downloaded_file_path = "root-canister.wasm.gz",
-    sha256 = "25af9548c5594dc95ba48e6140f4eaa0b59ef0c51ba939a73b1da160bed450ae",
-    url = "https://download.dfinity.systems/ic/80261cb2fdf2e0b49c81040b97a7cac2dfec2251/canisters/root-canister.wasm.gz",
-)
-
-http_file(
-    name = "mainnet_nns_lifeline_canister",
-    downloaded_file_path = "lifeline-canister.wasm.gz",
-    sha256 = "6d3029dcd359f80cd64bb68bbc8bd95b810b08bd29b9ef1054118a5285f2abc5",
-    url = "https://download.dfinity.systems/ic/87f48a595b6f666fbc7fe6ad4081aa98fd113d12/canisters/lifeline_canister.wasm.gz",
-)
-
-http_file(
-    name = "mainnet_nns_genesis-token-canister",
-    downloaded_file_path = "genesis-token-canister.wasm.gz",
-    sha256 = "dd71862512af57e938e01810be016e17431912d9ca0ea3952bc04015eb02acc4",
-    url = "https://download.dfinity.systems/ic/87f48a595b6f666fbc7fe6ad4081aa98fd113d12/canisters/genesis-token-canister.wasm.gz",
-)
-
-# From https://dashboard.internetcomputer.org/proposal/83624
-# Note: the Wasm module hash in the proposal is computed for the uncompressed WASM
-http_file(
-    name = "mainnet_nns_cycles-minting-canister",
-    downloaded_file_path = "cycles-minting-canister.wasm.gz",
-    sha256 = "fc1655302a81cd1b7148a6f66479b2830bd0d567d04780720e7bdd6c5b124fb5",
-    url = "https://download.dfinity.systems/ic/e813c43a337a26c026c2f2ec19099bd2036e7280/canisters/cycles-minting-canister.wasm.gz",
-)
-
-http_file(
-    name = "mainnet_nns_sns-wasm-canister",
-    downloaded_file_path = "sns-wasm-canister.wasm.gz",
-    sha256 = "8c775d8cf1d0ef07884c1aa057e5366111daf59f1c52c0e8514e8b4f6e692e40",
-    url = "https://download.dfinity.systems/ic/87f48a595b6f666fbc7fe6ad4081aa98fd113d12/canisters/sns-wasm-canister.wasm.gz",
-)
-
-# Deployed SNS canisters
-
-# From https://dashboard.internetcomputer.org/proposal/114485
-http_file(
-    name = "mainnet_sns-root-canister",
-    downloaded_file_path = "sns-root-canister.wasm.gz",
-    sha256 = "fde766f00e72f3888161159b93275f4febb8eb399dcc68fc1a5bade7922d18ba",
-    url = "https://download.dfinity.systems/ic/8573ad55864cd396e963ab03668cc4bf634375c4/canisters/sns-root-canister.wasm.gz",
-)
-
-# From https://dashboard.internetcomputer.org/proposal/114483
-http_file(
-    name = "mainnet_sns-governance-canister",
-    downloaded_file_path = "sns-governance-canister.wasm.gz",
-    sha256 = "6a82f46c75d45f22f782ad808ccaeb6175180537bb6565b6d7e868a10ace6b0a",
-    url = "https://download.dfinity.systems/ic/8573ad55864cd396e963ab03668cc4bf634375c4/canisters/sns-governance-canister.wasm.gz",
-)
-
-# From https://dashboard.internetcomputer.org/proposal/114191
-http_file(
-    name = "mainnet_sns-swap-canister",
-    downloaded_file_path = "sns-swap-canister.wasm.gz",
-    sha256 = "028aa2d9817903fe8c5b94f2f31c596b682b013d4ac8acbb74d5a91ac56bc0b7",
-    url = "https://download.dfinity.systems/ic/932c1bfc04728783a815e0867b579c1eb26df99d/canisters/sns-swap-canister.wasm.gz",
-)
-
-# From https://dashboard.internetcomputer.org/proposal/110038
-http_file(
-    name = "mainnet_ic-icrc1-ledger",
-    downloaded_file_path = "ic-icrc1-ledger.wasm.gz",
-    sha256 = "443412d2cde8f60121e9b2ba7372e784c558ecffc09808350adaf72fd97c8b73",
-    url = "https://download.dfinity.systems/ic/822f933e7db6b3f843401245d0bf814632ed4084/canisters/ic-icrc1-ledger.wasm.gz",
-)
-
-# From https://dashboard.internetcomputer.org/proposal/110039
-http_file(
-    name = "mainnet_ic-icrc1-archive",
-    downloaded_file_path = "ic-icrc1-archive.wasm.gz",
-    sha256 = "1adb66726a8ea05563f85ede478f2a233e54a2d07f1d74b83af26a0b392e3e14",
-    url = "https://download.dfinity.systems/ic/822f933e7db6b3f843401245d0bf814632ed4084/canisters/ic-icrc1-archive.wasm.gz",
-)
-
-# From https://dashboard.internetcomputer.org/proposal/109497
-http_file(
-    name = "mainnet_ic-icrc1-index",
-    downloaded_file_path = "ic-icrc1-index.wasm.gz",
-    sha256 = "bd4c020f34af4bbd705566a7330c74ffed5b4c51baf012698f7afd41d7ab4272",
-    url = "https://download.dfinity.systems/ic/9bb8f35cccd013b38657c67964c39d48fac6353f/canisters/ic-icrc1-index.wasm.gz",
-)
+mainnet_sns_canisters()
 
 # Asset canister
 

@@ -2,6 +2,7 @@
 use crate::pb::v1::{
     AddMaturityRequest, AddMaturityResponse, MintTokensRequest, MintTokensResponse,
 };
+
 use crate::{
     canister_control::{
         get_canister_id, perform_execute_generic_nervous_system_function_call,
@@ -39,6 +40,7 @@ use crate::{
             },
             neuron::{DissolveState, Followees},
             proposal::Action,
+            proposal_data::ActionAuxiliary as ActionAuxiliaryPb,
             transfer_sns_treasury_funds::TransferFrom,
             Account as AccountProto, Ballot, ClaimSwapNeuronsError, ClaimSwapNeuronsRequest,
             ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus, DefaultFollowees,
@@ -60,6 +62,8 @@ use crate::{
         },
     },
     proposal::{
+        get_action_auxiliary,
+        transfer_sns_treasury_funds_amount_is_small_enough_at_execution_time_or_err,
         validate_and_render_proposal, ValidGenericNervousSystemFunction, MAX_LIST_PROPOSAL_RESULTS,
         MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
     },
@@ -77,11 +81,10 @@ use dfn_core::api::{spawn, CanisterId};
 use ic_base_types::PrincipalId;
 use ic_canister_log::log;
 use ic_canister_profiler::SpanStats;
-use ic_ic00_types::{
-    CanisterChangeDetails, CanisterInfoRequest, CanisterInfoResponse, CanisterInstallMode, IC_00,
-};
 use ic_ledger_core::Tokens;
-use ic_nervous_system_clients::update_settings::{CanisterSettings, UpdateSettings};
+use ic_management_canister_types::{
+    CanisterChangeDetails, CanisterInfoRequest, CanisterInfoResponse, CanisterInstallMode,
+};
 use ic_nervous_system_collections_union_multi_map::UnionMultiMap;
 use ic_nervous_system_common::{
     cmc::CMC,
@@ -95,6 +98,7 @@ use ic_nervous_system_governance::maturity_modulation::{
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
 use ic_sns_governance_proposal_criticality::ProposalCriticality;
+use ic_sns_governance_token_valuation::Valuation;
 use icp_ledger::DEFAULT_TRANSFER_FEE as NNS_DEFAULT_TRANSFER_FEE;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use lazy_static::lazy_static;
@@ -1717,41 +1721,11 @@ impl Governance {
                 ErrorType::PreconditionFailed,
                 "No proposal for given ProposalId.",
             )),
-            Some(pd) => get_proposal_response::Result::Proposal(pd.strip_large_fields()),
+            Some(pd) => get_proposal_response::Result::Proposal(pd.limited_for_get_proposal()),
         };
 
         GetProposalResponse {
             result: Some(proposal_data),
-        }
-    }
-
-    /// Removes some data from a given proposal data and returns it.
-    ///
-    /// Specifically, remove the ballots in the proposal data and possibly the proposal's payload.
-    /// The payload is removed if the proposal is an ExecuteNervousSystemFunction or if it's
-    /// a UpgradeSnsControlledCanister. The text rendering should include displayable information about
-    /// the payload contents already.
-    fn limit_proposal_data(&self, data: &ProposalData) -> ProposalData {
-        let mut new_proposal = data.proposal.clone();
-        if let Some(proposal) = &mut new_proposal {
-            // We can't understand the payloads of nervous system functions, as well as the wasm
-            // for upgrades, so just omit them when listing proposals.
-            match &mut proposal.action {
-                Some(Action::ExecuteGenericNervousSystemFunction(m)) => {
-                    m.payload.clear();
-                }
-                Some(Action::UpgradeSnsControlledCanister(m)) => {
-                    m.new_canister_wasm.clear();
-                }
-                _ => (),
-            }
-        }
-
-        ProposalData {
-            proposal: new_proposal,
-            proposal_creation_timestamp_seconds: data.proposal_creation_timestamp_seconds,
-            ballots: BTreeMap::new(), // To reduce size of payload, exclude ballots
-            ..data.clone()
         }
     }
 
@@ -1782,11 +1756,20 @@ impl Governance {
     ///
     /// The caller can retrieve dropped payloads and ballots by calling `get_proposal`
     /// for each proposal of interest.
-    pub fn list_proposals(&self, req: &ListProposals) -> ListProposalsResponse {
-        let exclude_type: HashSet<u64> = req.exclude_type.iter().cloned().collect();
+    pub fn list_proposals(
+        &self,
+        request: &ListProposals,
+        caller: &PrincipalId,
+    ) -> ListProposalsResponse {
+        let caller_neurons_set: HashSet<_> = self
+            .get_neuron_ids_by_principal(caller)
+            .into_iter()
+            .map(|neuron_id| neuron_id.to_string())
+            .collect();
+        let exclude_type: HashSet<u64> = request.exclude_type.iter().cloned().collect();
         let include_reward_status: HashSet<i32> =
-            req.include_reward_status.iter().cloned().collect();
-        let include_status: HashSet<i32> = req.include_status.iter().cloned().collect();
+            request.include_reward_status.iter().cloned().collect();
+        let include_status: HashSet<i32> = request.include_status.iter().cloned().collect();
         let now = self.env.now();
         let filter_all = |data: &ProposalData| -> bool {
             let action = data.action;
@@ -1807,31 +1790,36 @@ impl Governance {
 
             true
         };
-        let limit = if req.limit == 0 || req.limit > MAX_LIST_PROPOSAL_RESULTS {
+        let limit = if request.limit == 0 || request.limit > MAX_LIST_PROPOSAL_RESULTS {
             MAX_LIST_PROPOSAL_RESULTS
         } else {
-            req.limit
+            request.limit
         } as usize;
         let props = &self.proto.proposals;
         // Proposals are stored in a sorted map. If 'before_proposal'
         // is provided, grab all proposals before that, else grab the
         // whole range.
-        let rng = if let Some(n) = req.before_proposal {
+        let rng = if let Some(n) = request.before_proposal {
             props.range(..(n.id))
         } else {
             props.range(..)
         };
         // Now reverse the range, filter, and restrict to 'limit'.
-        let limited_rng = rng.rev().filter(|(_, x)| filter_all(x)).take(limit);
+        let limited_rng = rng
+            .rev()
+            .filter(|(_, proposal)| filter_all(proposal))
+            .take(limit);
 
         let proposal_info = limited_rng
-            .map(|(_, y)| y)
-            .map(|pd| self.limit_proposal_data(pd))
+            .map(|(_id, proposal_data)| {
+                proposal_data.limited_for_list_proposals(&caller_neurons_set)
+            })
             .collect();
 
         // Ignore the keys and clone to a vector.
         ListProposalsResponse {
             proposals: proposal_info,
+            include_ballots_by_caller: Some(true),
         }
     }
 
@@ -1919,7 +1907,7 @@ impl Governance {
             }
         }
 
-        // A yes decision as been made, execute the proposal!
+        // A yes decision has been made, execute the proposal!
         // Safely unwrap action.
         let action = proposal_data
             .proposal
@@ -2063,7 +2051,13 @@ impl Governance {
                 self.perform_manage_sns_metadata(manage_sns_metadata)
             }
             Action::TransferSnsTreasuryFunds(transfer) => {
-                self.perform_transfer_sns_treasury_funds(transfer).await
+                let valuation =
+                    get_action_auxiliary(&self.proto.proposals, ProposalId { id: proposal_id })
+                        .and_then(|action_auxiliary| {
+                            action_auxiliary.unwrap_transfer_sns_treasury_funds_or_err()
+                        });
+                self.perform_transfer_sns_treasury_funds(valuation, &transfer)
+                    .await
             }
             Action::MintSnsTokens(mint) => self.perform_mint_sns_tokens(mint).await,
             Action::ManageLedgerParameters(manage_ledger_parameters) => {
@@ -2570,8 +2564,16 @@ impl Governance {
 
     async fn perform_transfer_sns_treasury_funds(
         &mut self,
-        transfer: TransferSnsTreasuryFunds,
+        valuation: Result<Valuation, GovernanceError>,
+        transfer: &TransferSnsTreasuryFunds,
     ) -> Result<(), GovernanceError> {
+        transfer_sns_treasury_funds_amount_is_small_enough_at_execution_time_or_err(
+            transfer,
+            valuation?,
+            self.proto.proposals.values(),
+            self.env.now(),
+        )?;
+
         let to = Account {
             owner: transfer
                 .to_principal
@@ -2928,7 +2930,7 @@ impl Governance {
     async fn validate_and_render_proposal(
         &mut self,
         proposal: &Proposal,
-    ) -> Result<String, GovernanceError> {
+    ) -> Result<(String, Option<ActionAuxiliaryPb>), GovernanceError> {
         if !proposal.allowed_when_resources_are_low() {
             self.check_heap_can_grow()?;
         }
@@ -2968,7 +2970,7 @@ impl Governance {
         let now_seconds = self.env.now();
 
         // Validate proposal
-        let rendering = self.validate_and_render_proposal(proposal).await?;
+        let (rendering, action_auxiliary) = self.validate_and_render_proposal(proposal).await?;
 
         // This should not panic, because the proposal was just validated.
         let action = proposal.action.as_ref().expect("No action.");
@@ -3172,6 +3174,7 @@ impl Governance {
                 .reward_event_end_timestamp_seconds,
             minimum_yes_proportion_of_total: Some(minimum_yes_proportion_of_total),
             minimum_yes_proportion_of_exercised: Some(minimum_yes_proportion_of_exercised),
+            action_auxiliary,
         };
 
         proposal_data.wait_for_quiet_state = Some(WaitForQuietState {
@@ -4585,80 +4588,6 @@ impl Governance {
         self.maybe_move_staked_maturity();
 
         self.maybe_gc();
-
-        // TODO(NNS1-2835): Remove this call after changes published.
-        self.set_sns_canisters_memory_allocations().await;
-    }
-
-    // TODO(NNS1-2835): Remove this method after changes published.
-    async fn set_sns_canisters_memory_allocations(&self) {
-        use candid::Nat;
-
-        // Check if this hotfix has been applied before; return if that's the case.
-        let already_tried_executing_hotfix = ATTEMPTED_FIXING_MEMORY_ALLOCATIONS.with(
-            |attempted_doubling_user_index_canister_memory_allocation| {
-                *attempted_doubling_user_index_canister_memory_allocation.borrow()
-            },
-        );
-
-        if already_tried_executing_hotfix {
-            return;
-        }
-
-        // Acquire the lock.
-        ATTEMPTED_FIXING_MEMORY_ALLOCATIONS.with(
-            |attempted_doubling_user_index_canister_memory_allocation| {
-                let mut cell =
-                    attempted_doubling_user_index_canister_memory_allocation.borrow_mut();
-                *cell = true;
-            },
-        );
-
-        // Get SNS Canister IDs
-        let root_canister_id = self.proto.root_canister_id;
-
-        if let Some(canister_id) = root_canister_id {
-            for i in 0..10 {
-                let response = self
-                    .env
-                    .call_canister(
-                        IC_00,
-                        "update_settings",
-                        Encode!(&UpdateSettings {
-                            canister_id,
-                            settings: CanisterSettings {
-                                memory_allocation: Some(Nat::from(0_u8)),
-                                ..Default::default()
-                            },
-                            sender_canister_version: self.env.canister_version()
-                        })
-                        .unwrap(),
-                    )
-                    .await;
-
-                match &response {
-                    Ok(_) => {
-                        log!(
-                            INFO,
-                            "Updating SNS canister {:?} to unbounded memory allocation succeeded!",
-                            canister_id
-                        );
-                        break;
-                    }
-                    Err(err) => {
-                        if i < 9 {
-                            log!(
-                                ERROR,
-                                "Updating SNS canister {:?} to unbounded memory allocation failed!: {:?}",
-                                canister_id, err
-                            );
-                        } else {
-                            log!(ERROR, "Updating SNS canister {:?} to unbounded memory allocation failed after 10 attempts!: {:?}", canister_id, err);
-                        }
-                    }
-                }
-            }
-        }
     }
 
     fn should_update_maturity_modulation(&self) -> bool {
@@ -4882,7 +4811,7 @@ impl Governance {
         for proposal_id in &considered_proposals {
             if let Some(proposal) = self.get_proposal_data(*proposal_id) {
                 for (voter, ballot) in &proposal.ballots {
-                    #[allow(clippy::blocks_in_if_conditions)]
+                    #[allow(clippy::blocks_in_conditions)]
                     if !Vote::try_from(ballot.vote)
                         .unwrap_or_else(|_| {
                             println!(
@@ -5624,7 +5553,7 @@ mod tests {
     use ic_nns_constants::SNS_WASM_CANISTER_ID;
     use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
     use ic_sns_test_utils::itest_helpers::UserInfo;
-    use ic_test_utilities::types::ids::canister_test_id;
+    use ic_test_utilities_types::ids::canister_test_id;
     use maplit::{btreemap, btreeset};
     use pretty_assertions::assert_eq;
     use proptest::prelude::{prop_assert, proptest};
@@ -7244,8 +7173,8 @@ mod tests {
                 env.require_call_canister_invocation(
                     CanisterId::ic_00(),
                     "install_code",
-                    Encode!(&ic_ic00_types::InstallCodeArgs {
-                        mode: ic_ic00_types::CanisterInstallMode::Upgrade,
+                    Encode!(&ic_management_canister_types::InstallCodeArgs {
+                        mode: ic_management_canister_types::CanisterInstallMode::Upgrade,
                         canister_id: canister_id.get(),
                         wasm_module: vec![9, 8, 7, 6, 5, 4, 3, 2],
                         arg: Encode!().unwrap(),

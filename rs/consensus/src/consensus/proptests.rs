@@ -1,15 +1,12 @@
 use crate::consensus::payload_builder::test::make_test_payload_impl;
 use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
 use ic_interfaces::{batch_payload::ProposalContext, consensus::PayloadBuilder};
-use ic_test_utilities::{
-    consensus::fake::Fake,
-    types::{
-        ids::{node_test_id, subnet_test_id},
-        messages::SignedIngressBuilder,
-    },
-};
+use ic_test_utilities_consensus::fake::Fake;
 use ic_test_utilities_registry::SubnetRecordBuilder;
-use ic_test_utilities_time::mock_time;
+use ic_test_utilities_types::{
+    ids::{node_test_id, subnet_test_id},
+    messages::SignedIngressBuilder,
+};
 use ic_types::{
     batch::{BatchPayload, ValidationContext},
     consensus::{
@@ -21,6 +18,7 @@ use ic_types::{
     crypto::{CryptoHash, Signed},
     messages::SignedIngress,
     signature::ThresholdSignature,
+    time::UNIX_EPOCH,
     xnet::CertifiedStreamSlice,
     CryptoHashOfPartialState, Height, RegistryVersion, SubnetId,
 };
@@ -72,7 +70,7 @@ fn proptest_round(
         let validation_context = ValidationContext {
             certified_height: Height::from(height),
             registry_version: RegistryVersion::from(1),
-            time: mock_time(),
+            time: UNIX_EPOCH,
         };
         let proposal_context = ProposalContext {
             proposer: node_test_id(0),

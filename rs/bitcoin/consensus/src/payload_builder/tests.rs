@@ -17,16 +17,14 @@ use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
-use ic_test_utilities::{
-    self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
-    state::ReplicatedStateBuilder,
-    types::ids::{node_test_id, subnet_test_id},
-};
+use ic_test_utilities::self_validating_payload_builder::FakeSelfValidatingPayloadBuilder;
 use ic_test_utilities_logger::with_test_replica_logger;
-use ic_test_utilities_time::mock_time;
+use ic_test_utilities_state::ReplicatedStateBuilder;
+use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::{
     batch::ValidationContext,
     crypto::{CryptoHash, CryptoHashOf},
+    time::UNIX_EPOCH,
     Height, NumBytes, RegistryVersion, SubnetId,
 };
 use mockall::mock;
@@ -102,7 +100,7 @@ fn bitcoin_payload_builder_test(
     run_test: impl FnOnce(ProposalContext, BitcoinPayloadBuilder),
 ) {
     with_test_replica_logger(|log| {
-        let time = mock_time();
+        let time = UNIX_EPOCH;
 
         let validation_context = ValidationContext {
             registry_version: REGISTRY_VERSION,
@@ -347,7 +345,7 @@ fn includes_only_responses_for_callback_ids_not_seen_in_past_payloads() {
             );
             let past_payloads = vec![PastPayload {
                 height: Height::from(0),
-                time: mock_time(),
+                time: UNIX_EPOCH,
                 block_hash: CryptoHashOf::from(CryptoHash(vec![])),
                 payload: &past_payload,
             }];

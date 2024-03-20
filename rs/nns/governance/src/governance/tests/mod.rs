@@ -463,8 +463,6 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
     fn test_convert_from_valid() {
         // Step 1: Prepare the world. (In this case, trivial.)
 
-        use ic_sns_init::pb::v1::NeuronsFundParticipants;
-
         use crate::governance::test_data::NEURONS_FUND_PARTICIPATION_CONSTRAINTS;
         let current_timestamp_seconds = 13_245;
         let proposal_id = 1000;
@@ -475,7 +473,6 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
                 create_service_nervous_system: CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING
                     .clone(),
                 proposal_id,
-                neurons_fund_participants: vec![],
                 random_swap_start_time: GlobalTimeOfDay {
                     seconds_after_utc_midnight: Some(0),
                 },
@@ -606,9 +603,7 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
                 confirmation_text: original_swap_parameters.confirmation_text.clone(),
                 restricted_countries: original_swap_parameters.restricted_countries.clone(),
                 nns_proposal_id: Some(proposal_id),
-                neurons_fund_participants: Some(NeuronsFundParticipants {
-                    participants: vec![],
-                }),
+                neurons_fund_participants: None,
                 neurons_fund_participation: Some(true),
 
                 neurons_fund_participation_constraints: Some(
@@ -811,10 +806,15 @@ mod metrics_tests {
 
     #[test]
     fn test_metrics_proposal_deadline_timestamp_seconds() {
+        let manage_neuron_action = proposal::Action::ManageNeuron(Box::default());
+        let motion_action = proposal::Action::Motion(Motion {
+            motion_text: "Text for this motion".to_string(),
+        });
+
         let open_proposal = ProposalData {
             proposal: Some(Proposal {
                 title: Some("open_proposal".to_string()),
-                action: Some(proposal::Action::ManageNeuron(Box::default())),
+                action: Some(manage_neuron_action.clone()),
                 ..Proposal::default()
             }),
             ..ProposalData::default()
@@ -823,7 +823,7 @@ mod metrics_tests {
         let rejected_proposal = ProposalData {
             proposal: Some(Proposal {
                 title: Some("rejected_proposal".to_string()),
-                action: Some(proposal::Action::ManageNeuron(Box::default())),
+                action: Some(manage_neuron_action.clone()),
                 ..Proposal::default()
             }),
             decided_timestamp_seconds: 1,
@@ -833,9 +833,7 @@ mod metrics_tests {
         let motion_proposal = ProposalData {
             proposal: Some(Proposal {
                 title: Some("Foo Foo Bar".to_string()),
-                action: Some(proposal::Action::Motion(Motion {
-                    motion_text: "Text for this motion".to_string(),
-                })),
+                action: Some(motion_action.clone()),
                 ..Proposal::default()
             }),
             ..ProposalData::default()
@@ -866,8 +864,9 @@ mod metrics_tests {
         let deadline_ts = open_proposal.get_deadline_timestamp_seconds(voting_period);
 
         assert!(s.contains(&format!(
-            "governance_proposal_deadline_timestamp_seconds{{proposal_id=\"1\",proposal_topic=\"{}\"}} {} 10",
+            "governance_proposal_deadline_timestamp_seconds{{proposal_id=\"1\",proposal_topic=\"{}\",proposal_type=\"{}\"}} {} 10",
             Topic::NeuronManagement.as_str_name(),
+            &manage_neuron_action.as_str_name(),
             deadline_ts,
         )));
 
@@ -875,16 +874,14 @@ mod metrics_tests {
         let deadline_ts = motion_proposal.get_deadline_timestamp_seconds(voting_period);
 
         assert!(s.contains(&format!(
-            "governance_proposal_deadline_timestamp_seconds{{proposal_id=\"3\",proposal_topic=\"{}\"}} {} 10",
+            "governance_proposal_deadline_timestamp_seconds{{proposal_id=\"3\",proposal_topic=\"{}\",proposal_type=\"{}\"}} {} 10",
             Topic::Governance.as_str_name(),
+            &motion_action.as_str_name(),
             deadline_ts,
         )));
 
         // We assert that decided proposals are filtered out from metrics
-        assert!(!s.contains(&format!(
-            "governance_proposal_deadline_timestamp_seconds{{proposal_id=\"2\",proposal_topic=\"{}\"}}",
-            Topic::NeuronManagement.as_str_name()
-        )));
+        assert!(!s.contains("proposal_id=\"2\""));
     }
 }
 

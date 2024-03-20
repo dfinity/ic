@@ -1,0 +1,22 @@
+[package]
+name = "management-canister-types-fuzz"
+version = "0.0.0"
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+candid = { workspace = true }
+ic-management-canister-types = {path = ".."}
+libfuzzer-sys = "0.4"
+
+# Prevent this from interfering with workspaces
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "decode_install_code_args"
+path = "fuzz_targets/decode_install_code_args.rs"
+test = false
+doc = false

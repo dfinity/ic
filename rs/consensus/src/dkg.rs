@@ -1560,17 +1560,21 @@ fn bootstrap_ecdsa_summary_from_cup_contents(
     subnet_id: SubnetId,
     logger: &ReplicaLogger,
 ) -> Result<ecdsa::Summary, String> {
-    let Some((key_id, dealings)) =
-        inspect_ecdsa_initializations(&cup_contents.ecdsa_initializations)?
-    else {
+    let initial_dealings = inspect_ecdsa_initializations(&cup_contents.ecdsa_initializations)?;
+    if initial_dealings.is_empty() {
         return Ok(None);
     };
 
+    // TODO(kpop): use all dealings
+    let (key_id, dealings) = initial_dealings
+        .first_key_value()
+        .expect("Should not be empty");
+
     make_bootstrap_summary_with_initial_dealings(
         subnet_id,
-        key_id,
+        key_id.clone(),
         Height::new(cup_contents.height),
-        dealings,
+        dealings.clone(),
         logger,
     )
     .map_err(|err| format!("Failed to create ECDSA summary block: {:?}", err))
@@ -1625,16 +1629,14 @@ mod tests {
         SetupInitialDkgContext, SubnetCallContext,
     };
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
-    use ic_test_utilities::{
-        consensus::fake::FakeContentSigner,
-        crypto::CryptoReturningOk,
-        state_manager::RefMockStateManager,
-        types::ids::{node_test_id, subnet_test_id},
-        types::messages::RequestBuilder,
-    };
+    use ic_test_utilities::{crypto::CryptoReturningOk, state_manager::RefMockStateManager};
+    use ic_test_utilities_consensus::fake::FakeContentSigner;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
-    use ic_test_utilities_time::mock_time;
+    use ic_test_utilities_types::{
+        ids::{node_test_id, subnet_test_id},
+        messages::RequestBuilder,
+    };
     use ic_types::{
         batch::BatchPayload,
         consensus::{ecdsa, DataPayload, HasVersion},
@@ -1970,7 +1972,7 @@ mod tests {
                     &ValidationContext {
                         registry_version: RegistryVersion::from(112),
                         certified_height: Height::from(3),
-                        time: mock_time(),
+                        time: UNIX_EPOCH,
                     },
                     no_op_logger(),
                 )
@@ -2257,7 +2259,7 @@ mod tests {
         times: Option<usize>,
         target: Option<NiDkgTargetId>,
     ) {
-        let mut state = ic_test_utilities::state::get_initial_state(0, 0);
+        let mut state = ic_test_utilities_state::get_initial_state(0, 0);
 
         // Add the context into state_manager.
         let nodes_in_target_subnet = node_ids.into_iter().map(node_test_id).collect();
@@ -3030,7 +3032,7 @@ mod tests {
                             dkg_pool_2.insert(UnvalidatedArtifact {
                                 message,
                                 peer_id: node_test_id(1),
-                                timestamp: ic_test_utilities_time::mock_time(),
+                                timestamp: ic_types::time::UNIX_EPOCH,
                             });
                         }
                     }
@@ -3236,7 +3238,7 @@ mod tests {
                 let validation_context = ValidationContext {
                     registry_version: registry.get_latest_version(),
                     certified_height: Height::from(0),
-                    time: ic_test_utilities_time::mock_time(),
+                    time: ic_types::time::UNIX_EPOCH,
                 };
 
                 // STEP 1;
@@ -3371,7 +3373,7 @@ mod tests {
             let context = ValidationContext {
                 registry_version: RegistryVersion::from(5),
                 certified_height: Height::from(0),
-                time: ic_test_utilities_time::mock_time(),
+                time: ic_types::time::UNIX_EPOCH,
             };
 
             // Advance the blockchain to height `dkg_interval_length - 1`

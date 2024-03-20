@@ -10,6 +10,7 @@ use ic_types::{
     consensus::catchup::*, consensus::*, crypto::CryptoHashOf, replica_config::ReplicaConfig,
     Height, NodeId, RegistryVersion, ReplicaVersion, Time,
 };
+use std::time::Instant;
 use std::{cmp::Ordering, collections::BTreeMap};
 
 /// A struct and corresponding impl with helper methods to obtain particular
@@ -96,10 +97,12 @@ impl<'a> PoolReader<'a> {
             .collect()
     }
 
-    /// Returns the parent of the given block if there exist one.
-    pub fn get_parent(&self, child: &Block) -> Option<Block> {
-        match child.height.cmp(&self.get_catch_up_height()) {
-            Ordering::Greater => match self.get_block(&child.parent, child.height.decrement()) {
+    /// Returns the parent of the given block if there exists one.
+    pub fn get_parent(&self, child: &HashedBlock) -> Option<HashedBlock> {
+        match child.height().cmp(&self.get_catch_up_height()) {
+            Ordering::Greater => match self
+                .get_block(&child.as_ref().parent, child.height().decrement())
+            {
                 Ok(block) => Some(block),
                 Err(OnlyError::NoneAvailable) => None,
                 Err(OnlyError::MultipleValues) => panic!("Multiple parents found for {:?}", child),
@@ -109,7 +112,11 @@ impl<'a> PoolReader<'a> {
     }
 
     /// Return a valid block with the matching hash and height if it exists.
-    pub fn get_block(&self, hash: &CryptoHashOf<Block>, h: Height) -> Result<Block, OnlyError> {
+    pub fn get_block(
+        &self,
+        hash: &CryptoHashOf<Block>,
+        h: Height,
+    ) -> Result<HashedBlock, OnlyError> {
         match h.cmp(&self.get_catch_up_height()) {
             Ordering::Less => Err(OnlyError::NoneAvailable),
             Ordering::Equal => {
@@ -117,7 +124,7 @@ impl<'a> PoolReader<'a> {
                 if cup.content.block.get_hash() != hash {
                     Err(OnlyError::NoneAvailable)
                 } else {
-                    Ok(cup.content.block.into_inner())
+                    Ok(cup.content.block)
                 }
             }
             Ordering::Greater => {
@@ -130,7 +137,7 @@ impl<'a> PoolReader<'a> {
                     .collect();
                 match blocks.len() {
                     0 => Err(OnlyError::NoneAvailable),
-                    1 => Ok(blocks.remove(0).into()),
+                    1 => Ok(blocks.remove(0).content),
                     _ => Err(OnlyError::MultipleValues),
                 }
             }
@@ -143,7 +150,7 @@ impl<'a> PoolReader<'a> {
         &self,
         hash: &CryptoHashOf<Block>,
         h: Height,
-    ) -> Result<Block, OnlyError> {
+    ) -> Result<HashedBlock, OnlyError> {
         self.get_block(hash, h).and_then(|block| {
             if h > self.get_catch_up_height() {
                 if self
@@ -161,6 +168,12 @@ impl<'a> PoolReader<'a> {
                 Ok(block)
             }
         })
+    }
+
+    /// Return the the first instant at which a block with the given hash was inserted
+    /// into the consensus pool. Returns None if no timestamp was found.
+    pub fn get_block_instant(&self, hash: &CryptoHashOf<Block>) -> Option<Instant> {
+        self.pool.block_instant(hash)
     }
 
     /// Return the finalized block of a given height which is either the genesis
@@ -194,7 +207,7 @@ impl<'a> PoolReader<'a> {
                     // the pool. Since there is only one block at this height,
                     // we know that this block must be a part of that finalized
                     // chain.
-                    (Some(block), None) => Some(block),
+                    (Some(block), None) => Some(block.into_inner()),
                     // If we have multiple notarized blocks, create a finalization height range,
                     // starting from `h`, then get the next finalization above `h`, and walk the chain
                     // back to `h`.
@@ -212,7 +225,7 @@ impl<'a> PoolReader<'a> {
                             .finalization()
                             .get_by_height_range(height_range)
                             .next()
-                            .and_then(|f| self.get_block(&f.content.block, f.content.height).ok())
+                            .and_then(|f| self.get_block(&f.content.block, f.content.height).ok().map(|block| block.into_inner()))
                             .and_then(|block| self.follow_to_height(block, h))
                     }
                 }
@@ -221,14 +234,11 @@ impl<'a> PoolReader<'a> {
     }
 
     /// Return all valid notarized blocks of a given height.
-    pub fn get_notarized_blocks(&'a self, h: Height) -> Box<dyn Iterator<Item = Block> + 'a> {
+    pub fn get_notarized_blocks(&'a self, h: Height) -> Box<dyn Iterator<Item = HashedBlock> + 'a> {
         match h.cmp(&self.get_catch_up_height()) {
             Ordering::Less => Box::new(std::iter::empty()),
             Ordering::Equal => Box::new(std::iter::once(
-                self.get_highest_catch_up_package()
-                    .content
-                    .block
-                    .into_inner(),
+                self.get_highest_catch_up_package().content.block,
             )),
             Ordering::Greater => Box::new(
                 self.pool
@@ -567,8 +577,8 @@ where
 pub mod test {
     use super::*;
     use ic_consensus_mocks::{dependencies, dependencies_with_subnet_params, Dependencies};
-    use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 
     #[test]
     fn test_get_dkg_summary_block() {

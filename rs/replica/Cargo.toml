@@ -7,8 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-clap = { workspace = true }
-crossbeam-channel = "0.5.5"
+clap = { version = "3.2.25", features = ["derive"] }
 hex = "0.4.2"
 ic-artifact-pool = { path = "../artifact_pool" }
 ic-async-utils = { path = "../async_utils" }
@@ -26,6 +25,7 @@ ic-https-outcalls-adapter-client = { path = "../https_outcalls/client" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-certified-stream-store = { path = "../interfaces/certified_stream_store" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
+ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
 ic-logger = { path = "../monitoring/logger" }
 ic-messaging = { path = "../messaging" }
 ic-metrics = { path = "../monitoring/metrics" }
@@ -49,8 +49,8 @@ libc = "0.2.91"
 nix = { workspace = true }
 num_cpus = "1.13.1"
 pprof = { version = "0.13", default-features = false, features = [
-  "flamegraph",
-  "prost-codec",
+    "flamegraph",
+    "prost-codec",
 ], optional = true }
 prometheus = { workspace = true }
 rand = "0.8"
@@ -67,7 +67,7 @@ ic-backtrace = { path = "../monitoring/backtrace" }
 assert_cmd = "2.0.12"
 canister-test = { path = "../rust_canisters/canister_test" }
 criterion = "0.5"
-ic-ic00-types = { path = "../types/ic00_types" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-interfaces-registry-mocks = { path = "../interfaces/registry/mocks" }
 ic-test-utilities = { path = "../test_utilities" }
 predicates = "3.0.4"
@@ -84,6 +84,6 @@ path = "src/main.rs"
 [features]
 profiler = ["pprof"]
 malicious_code = [
-  "ic-consensus/malicious_code",
-  "ic-state-manager/malicious_code",
+    "ic-consensus/malicious_code",
+    "ic-state-manager/malicious_code",
 ]

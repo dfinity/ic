@@ -15,8 +15,8 @@ ic-base-types = { path = "../../types/base_types" }
 ic-nervous-system-proxied-canister-calls-tracker = { path = "../proxied_canister_calls_tracker" }
 ic-nervous-system-runtime = { path = "../runtime" }
 ic-error-types = { path = "../../types/error_types" }
-ic-ic00-types = { path = "../../types/ic00_types" }
-num-traits = "0.2.15"
+ic-management-canister-types = { path = "../../types/management_canister_types" }
+num-traits = { workspace = true }
 serde = { workspace = true }
 
 [dev-dependencies]

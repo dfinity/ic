@@ -17,7 +17,7 @@ use ic_embedders::wasmtime_embedder::{system_api_complexity, WasmtimeInstance};
 use ic_interfaces::execution_environment::HypervisorError;
 use ic_interfaces::execution_environment::SystemApi;
 use ic_replicated_state::Global;
-use ic_test_utilities::wasmtime_instance::WasmtimeInstanceBuilder;
+use ic_test_utilities_embedders::WasmtimeInstanceBuilder;
 use ic_types::{
     methods::{FuncRef, WasmMethod},
     NumBytes, NumInstructions,
@@ -166,6 +166,47 @@ fn test_get_data() {
     if !module.data.is_empty() {
         panic!("instrumentation should have removed data sections");
     }
+}
+
+#[test]
+fn test_mixed_data_segments() {
+    let config = EmbeddersConfig::default();
+    let embedder = WasmtimeEmbedder::new(config, no_op_logger());
+    let output = validate_and_instrument_for_testing(
+        &embedder,
+        &BinaryEncodedWasm::new(
+            wat::parse_str(
+                r#"(module
+                (memory 1)
+                (data "passive 0")
+                (data (i32.const 0)  "active 1")
+                (data (i32.const 16) "active 2")
+                (data "passive 3")
+                (data (i32.const 32) "active 4")
+                (data "passive 5")
+                (data (i32.const 48) "active 6")
+                (data (i32.const 64) "active 7")
+            )"#,
+            )
+            .unwrap(),
+        ),
+    )
+    .unwrap()
+    .1;
+    let data = output.data.into_slice();
+    assert_eq!((0, b"active 1".to_vec()), data[0]);
+    assert_eq!((16, b"active 2".to_vec()), data[1]);
+    assert_eq!((32, b"active 4".to_vec()), data[2]);
+    assert_eq!((48, b"active 6".to_vec()), data[3]);
+    assert_eq!((64, b"active 7".to_vec()), data[4]);
+    let module = Module::parse(output.binary.as_slice(), false).unwrap();
+    assert_eq!(module.data.len(), 6);
+    assert_eq!(&module.data[0].data, &b"passive 0");
+    assert_eq!(module.data[1].data.len(), 0);
+    assert_eq!(module.data[2].data.len(), 0);
+    assert_eq!(&module.data[3].data, &b"passive 3");
+    assert_eq!(module.data[4].data.len(), 0);
+    assert_eq!(&module.data[5].data, &b"passive 5");
 }
 
 #[test]

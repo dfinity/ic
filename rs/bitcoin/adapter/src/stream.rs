@@ -368,6 +368,7 @@ pub fn handle_stream(config: StreamConfig) -> tokio::task::JoinHandle<()> {
 
 #[cfg(test)]
 pub mod test {
+
     use std::net::{IpAddr, Ipv4Addr};
 
     use crate::common::DEFAULT_CHANNEL_BUFFER_SIZE;
@@ -377,6 +378,7 @@ pub mod test {
     use ic_logger::replica_logger::no_op_logger;
 
     /// Test that large messages get rejected and we disconnect as a consequence.
+    #[allow(clippy::disallowed_methods)]
     #[tokio::test]
     async fn read_huge_message_from_network() {
         let network = Network::Bitcoin;
@@ -433,6 +435,7 @@ pub mod test {
     async fn initialization_times_out_after_five_seconds() {
         let network = Network::Bitcoin;
         let (net_tx, _) = tokio::sync::mpsc::channel(DEFAULT_CHANNEL_BUFFER_SIZE);
+        #[allow(clippy::disallowed_methods)]
         let (_adapter_tx, adapter_rx) = tokio::sync::mpsc::unbounded_channel();
         let (stream_tx, _) = tokio::sync::mpsc::channel(DEFAULT_CHANNEL_BUFFER_SIZE);
 
@@ -462,6 +465,7 @@ pub mod test {
     async fn read_two_messages_at_size_boundary() {
         let network = Network::Bitcoin;
         let (net_tx, mut net_rx) = tokio::sync::mpsc::channel(DEFAULT_CHANNEL_BUFFER_SIZE);
+        #[allow(clippy::disallowed_methods)]
         let (_adapter_tx, adapter_rx) = tokio::sync::mpsc::unbounded_channel();
         let (stream_tx, mut stream_rx) = tokio::sync::mpsc::channel(DEFAULT_CHANNEL_BUFFER_SIZE);
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();

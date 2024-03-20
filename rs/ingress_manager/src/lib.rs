@@ -255,13 +255,12 @@ pub(crate) mod tests {
         artifact_pool_config::with_test_pool_config,
         crypto::temp_crypto_component_with_fake_registry,
         cycles_account_manager::CyclesAccountManagerBuilder,
-        history::MockIngressHistory,
-        state::ReplicatedStateBuilder,
-        types::ids::{node_test_id, subnet_test_id},
     };
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::test_subnet_record;
-    use ic_test_utilities_time::{mock_time, FastForwardTimeSource};
+    use ic_test_utilities_state::{MockIngressHistory, ReplicatedStateBuilder};
+    use ic_test_utilities_time::FastForwardTimeSource;
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{ingress::IngressStatus, Height, RegistryVersion, SubnetId};
     use std::{ops::DerefMut, sync::Arc};
 
@@ -334,7 +333,7 @@ pub(crate) mod tests {
                     log.clone(),
                 )));
                 let time_source = FastForwardTimeSource::new();
-                time_source.set_time(mock_time()).unwrap();
+                time_source.set_time(UNIX_EPOCH).unwrap();
                 run(
                     IngressManager::new(
                         time_source,

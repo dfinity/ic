@@ -1,7 +1,7 @@
 use super::CanisterId;
 
 use hex::decode;
-use ic_ic00_types::{self as ic00, CanisterInstallMode, Payload};
+use ic_management_canister_types::{self as ic00, CanisterInstallMode, Payload};
 use ic_types::{
     messages::{SignedIngress, UserQuery},
     time::expiry_time_from_now,
@@ -151,7 +151,7 @@ fn parse_message(s: &str, nonce: u64) -> Result<Message, String> {
     match &tokens[..] {
         [] => Err("Too few arguments.".to_string()),
         ["ingress", canister_id, method_name, payload] => {
-            use ic_test_utilities::types::messages::SignedIngressBuilder;
+            use ic_test_utilities_types::messages::SignedIngressBuilder;
 
             let canister_id = parse_canister_id(canister_id)?;
             let method_name = validate_method_name(method_name)?;
@@ -204,7 +204,7 @@ fn parse_canister_id(canister_id: &str) -> Result<CanisterId, String> {
 }
 
 fn parse_create(nonce: u64) -> Result<Message, String> {
-    use ic_test_utilities::types::messages::SignedIngressBuilder;
+    use ic_test_utilities_types::messages::SignedIngressBuilder;
 
     let signed_ingress = SignedIngressBuilder::new()
         .method_name(ic00::Method::ProvisionalCreateCanisterWithCycles)
@@ -223,7 +223,7 @@ fn parse_install(
     wasm_file: &str,
     mode: &str,
 ) -> Result<Message, String> {
-    use ic_test_utilities::types::messages::SignedIngressBuilder;
+    use ic_test_utilities_types::messages::SignedIngressBuilder;
 
     let mut wasm_data = Vec::new();
     let mut wasm_file = File::open(wasm_file)
@@ -365,7 +365,7 @@ enum Radix {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_test_utilities::types::{ids::canister_test_id, messages::SignedIngressBuilder};
+    use ic_test_utilities_types::{ids::canister_test_id, messages::SignedIngressBuilder};
     use std::io::Cursor;
 
     const APP_CANISTER_URL: &str = "ryjl3-tyaaa-aaaaa-aaaba-cai";

@@ -3,14 +3,20 @@ pub mod test_fixtures;
 #[cfg(test)]
 mod tests;
 
-use crate::candid::{AddErc20Arg, LedgerInitArg};
+use crate::candid::{AddCkErc20Token, AddErc20Arg, LedgerInitArg, UpgradeArg};
+use crate::logs::DEBUG;
 use crate::logs::INFO;
-use crate::management::{CallError, CanisterRuntime};
+use crate::management::{CallError, CanisterRuntime, Reason};
 use crate::state::{
-    mutate_state, read_state, Canisters, Index, Ledger, ManageSingleCanister,
-    ManagedCanisterStatus, RetrieveCanisterWasm, State, WasmHash,
+    mutate_state, read_state, Canisters, CanistersMetadata, Index, Ledger, ManageSingleCanister,
+    ManagedCanisterStatus, State, WasmHash,
 };
-use candid::{CandidType, Encode, Principal};
+use crate::storage::{
+    read_wasm_store, validate_wasm_hashes, wasm_store_try_get, StorableWasm, WasmHashError,
+    WasmStore, WasmStoreError,
+};
+use candid::{CandidType, Encode, Nat, Principal};
+use futures::future;
 use ic_base_types::PrincipalId;
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
@@ -21,7 +27,14 @@ use std::collections::VecDeque;
 use std::fmt::Debug;
 use std::str::FromStr;
 
-const HUNDRED_TRILLIONS: u64 = 100_000_000_000_000;
+pub const TEN_TRILLIONS: u64 = 10_000_000_000_000; // 10 TC
+pub const HUNDRED_TRILLIONS: u64 = 100_000_000_000_000; // 100 TC
+
+// We need at least 220 TC to be able to spawn ledger suite (200 TC).
+pub const MINIMUM_ORCHESTRATOR_CYCLES: u64 = 220_000_000_000_000;
+// We need at least 110 TC for ledger to spawn archive.
+pub const MINIMUM_MONITORED_CANISTER_CYCLES: u64 = 110_000_000_000_000;
+
 const THREE_GIGA_BYTES: u64 = 3_221_225_472;
 
 /// A list of *independent* tasks to be executed in order.
@@ -35,6 +48,14 @@ impl Tasks {
 
     pub fn add_task(&mut self, task: Task) {
         self.0.push_back(task);
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    pub fn contains(&self, task: Task) -> bool {
+        self.0.contains(&task)
     }
 }
 
@@ -64,78 +85,98 @@ impl Tasks {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub enum Task {
     InstallLedgerSuite(InstallLedgerSuiteArgs),
+    MaybeTopUp,
+    NotifyErc20Added {
+        erc20_token: Erc20Token,
+        minter_id: Principal,
+    },
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+pub struct UpgradeOrchestratorArgs {
+    ledger_compressed_wasm_hash: Option<WasmHash>,
+    index_compressed_wasm_hash: Option<WasmHash>,
+    archive_compressed_wasm_hash: Option<WasmHash>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum InvalidUpgradeArgError {
+    WasmHashError(WasmHashError),
+}
+
+impl UpgradeOrchestratorArgs {
+    pub fn validate_upgrade_arg(
+        wasm_store: &WasmStore,
+        arg: UpgradeArg,
+    ) -> Result<UpgradeOrchestratorArgs, InvalidUpgradeArgError> {
+        let [ledger_compressed_wasm_hash, index_compressed_wasm_hash, archive_compressed_wasm_hash] =
+            validate_wasm_hashes(
+                wasm_store,
+                arg.ledger_compressed_wasm_hash.as_deref(),
+                arg.index_compressed_wasm_hash.as_deref(),
+                arg.archive_compressed_wasm_hash.as_deref(),
+            )
+            .map_err(InvalidUpgradeArgError::WasmHashError)?;
+        Ok(UpgradeOrchestratorArgs {
+            ledger_compressed_wasm_hash,
+            index_compressed_wasm_hash,
+            archive_compressed_wasm_hash,
+        })
+    }
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct InstallLedgerSuiteArgs {
-    contract: Erc20Contract,
+    contract: Erc20Token,
     ledger_init_arg: LedgerInitArg,
     ledger_compressed_wasm_hash: WasmHash,
     index_compressed_wasm_hash: WasmHash,
 }
 
+impl InstallLedgerSuiteArgs {
+    pub fn erc20_contract(&self) -> &Erc20Token {
+        &self.contract
+    }
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum InvalidAddErc20ArgError {
     InvalidErc20Contract(String),
-    InvalidWasmHash(String),
-    Erc20ContractAlreadyManaged(Erc20Contract),
-    WasmHashNotFound(WasmHash),
+    Erc20ContractAlreadyManaged(Erc20Token),
+    WasmHashError(WasmHashError),
 }
 
 impl InstallLedgerSuiteArgs {
     pub fn validate_add_erc20(
         state: &State,
+        wasm_store: &WasmStore,
         args: AddErc20Arg,
     ) -> Result<InstallLedgerSuiteArgs, InvalidAddErc20ArgError> {
-        let contract = Erc20Contract::try_from(args.contract.clone())
+        let contract = Erc20Token::try_from(args.contract.clone())
             .map_err(|e| InvalidAddErc20ArgError::InvalidErc20Contract(e.to_string()))?;
         if let Some(_canisters) = state.managed_canisters(&contract) {
             return Err(InvalidAddErc20ArgError::Erc20ContractAlreadyManaged(
                 contract,
             ));
         }
-        let ledger_compressed_wasm_hash = WasmHash::from_str(&args.ledger_compressed_wasm_hash)
-            .map_err(|e| {
-                InvalidAddErc20ArgError::InvalidWasmHash(format!(
-                    "Invalid ledger compressed wasm hash: {}",
-                    e
-                ))
-            })?;
-        let index_compressed_wasm_hash = WasmHash::from_str(&args.index_compressed_wasm_hash)
-            .map_err(|e| {
-                InvalidAddErc20ArgError::InvalidWasmHash(format!(
-                    "Invalid index compressed wasm hash: {}",
-                    e
-                ))
-            })?;
-        if ledger_compressed_wasm_hash == index_compressed_wasm_hash {
-            return Err(InvalidAddErc20ArgError::InvalidWasmHash(format!(
-                "ledger and index compressed wasm hash have the same value: {}",
-                ledger_compressed_wasm_hash
-            )));
-        }
-        if RetrieveCanisterWasm::<Ledger>::retrieve_wasm(state, &ledger_compressed_wasm_hash)
-            .is_none()
-        {
-            return Err(InvalidAddErc20ArgError::WasmHashNotFound(
-                ledger_compressed_wasm_hash,
-            ));
-        }
-        if RetrieveCanisterWasm::<Index>::retrieve_wasm(state, &index_compressed_wasm_hash)
-            .is_none()
-        {
-            return Err(InvalidAddErc20ArgError::WasmHashNotFound(
-                index_compressed_wasm_hash,
-            ));
-        }
+        let [ledger_compressed_wasm_hash, index_compressed_wasm_hash, _archive_compressed_wasm_hash] =
+            validate_wasm_hashes(
+                wasm_store,
+                Some(&args.ledger_compressed_wasm_hash),
+                Some(&args.index_compressed_wasm_hash),
+                None,
+            )
+            .map_err(InvalidAddErc20ArgError::WasmHashError)?;
+
         Ok(Self {
             contract,
             ledger_init_arg: args.ledger_init_arg,
-            ledger_compressed_wasm_hash,
-            index_compressed_wasm_hash,
+            ledger_compressed_wasm_hash: ledger_compressed_wasm_hash.unwrap(),
+            index_compressed_wasm_hash: index_compressed_wasm_hash.unwrap(),
         })
     }
 }
@@ -144,7 +185,11 @@ impl InstallLedgerSuiteArgs {
 pub enum TaskError {
     CanisterCreationError(CallError),
     InstallCodeError(CallError),
+    CanisterStatusError(CallError),
     WasmHashNotFound(WasmHash),
+    WasmStoreError(WasmStoreError),
+    LedgerNotFound(Erc20Token),
+    InterCanisterCallError(CallError),
 }
 
 impl TaskError {
@@ -154,7 +199,17 @@ impl TaskError {
         match self {
             TaskError::CanisterCreationError(_) => true,
             TaskError::InstallCodeError(_) => true,
+            TaskError::CanisterStatusError(_) => true,
             TaskError::WasmHashNotFound(_) => false,
+            TaskError::WasmStoreError(_) => false,
+            TaskError::LedgerNotFound(_) => true, //ledger may not yet be created
+            TaskError::InterCanisterCallError(CallError { method: _, reason }) => match reason {
+                Reason::OutOfCycles => true,
+                Reason::CanisterError(_) => false,
+                Reason::Rejected(_) => false,
+                Reason::TransientInternalError(_) => true,
+                Reason::InternalError(_) => false,
+            },
         }
     }
 }
@@ -163,14 +218,92 @@ impl Task {
     pub async fn execute<R: CanisterRuntime>(&self, runtime: &R) -> Result<(), TaskError> {
         match self {
             Task::InstallLedgerSuite(args) => install_ledger_suite(args, runtime).await,
+            Task::MaybeTopUp => maybe_top_up(runtime).await,
+            Task::NotifyErc20Added {
+                erc20_token,
+                minter_id,
+            } => notify_erc20_added(erc20_token, minter_id, runtime).await,
         }
     }
+}
+
+async fn maybe_top_up<R: CanisterRuntime>(runtime: &R) -> Result<(), TaskError> {
+    let mut principals: Vec<Principal> = read_state(|s| {
+        s.managed_canisters_iter()
+            .flat_map(|(_, canisters)| canisters.collect_principals())
+            .chain(std::iter::once(runtime.id()))
+            .collect()
+    });
+
+    let mut results =
+        future::join_all(principals.iter().map(|p| runtime.canister_cycles(*p))).await;
+    assert!(!results.is_empty());
+
+    let mut orchestrator_cycle_balance = match results
+        .pop()
+        .expect("BUG: should at least fetch the orchestrator balance")
+    {
+        Ok(balance) => balance,
+        Err(e) => {
+            log!(
+                INFO,
+                "[maybe_top_up] failed to get orchestrator status, with error: {:?}",
+                e
+            );
+            return Err(TaskError::CanisterStatusError(e));
+        }
+    };
+    principals.pop();
+
+    for (canister_id, cycles_result) in principals.iter().zip(results) {
+        match cycles_result {
+            Ok(balance) => {
+                if balance < MINIMUM_MONITORED_CANISTER_CYCLES as u128
+                    && orchestrator_cycle_balance > MINIMUM_ORCHESTRATOR_CYCLES as u128
+                {
+                    match runtime.send_cycles(*canister_id, TEN_TRILLIONS.into()) {
+                        Ok(()) => {
+                            orchestrator_cycle_balance -= TEN_TRILLIONS as u128;
+                            log!(
+                                DEBUG,
+                                "[maybe_top_up] topped up canister {canister_id} with previous balance {balance}"
+                            );
+                        }
+                        Err(e) => {
+                            log!(
+                                INFO,
+                                "[maybe_top_up] failed to send cycles to {}, with error: {:?}",
+                                canister_id,
+                                e
+                            );
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                log!(
+                    INFO,
+                    "[maybe_top_up] failed to get canister status of {}, with error: {:?}",
+                    canister_id,
+                    e
+                );
+            }
+        }
+    }
+
+    Ok(())
 }
 
 async fn install_ledger_suite<R: CanisterRuntime>(
     args: &InstallLedgerSuiteArgs,
     runtime: &R,
 ) -> Result<(), TaskError> {
+    record_new_erc20_token_once(
+        args.contract.clone(),
+        CanistersMetadata {
+            ckerc20_token_symbol: args.ledger_init_arg.token_symbol.clone(),
+        },
+    );
     let ledger_canister_id = create_canister_once::<Ledger, _>(&args.contract, runtime).await?;
     install_canister_once::<Ledger, _, _>(
         &args.contract,
@@ -195,6 +328,15 @@ async fn install_ledger_suite<R: CanisterRuntime>(
     )
     .await?;
     Ok(())
+}
+
+fn record_new_erc20_token_once(contract: Erc20Token, metadata: CanistersMetadata) {
+    mutate_state(|s| {
+        if s.managed_canisters(&contract).is_some() {
+            return;
+        }
+        s.record_new_erc20_token(contract, metadata);
+    });
 }
 
 fn icrc1_ledger_init_arg(
@@ -237,7 +379,7 @@ fn icrc1_archive_options(archive_controller_id: PrincipalId) -> ArchiveOptions {
 }
 
 async fn create_canister_once<C, R>(
-    contract: &Erc20Contract,
+    contract: &Erc20Token,
     runtime: &R,
 ) -> Result<Principal, TaskError>
 where
@@ -252,7 +394,10 @@ where
     }) {
         return Ok(canister_id);
     }
-    let canister_id = match runtime.create_canister(100_000_000_000).await {
+    let canister_id = match runtime
+        .create_canister(controllers_of_children_canisters(runtime), 100_000_000_000)
+        .await
+    {
         Ok(id) => {
             log!(
                 INFO,
@@ -278,16 +423,23 @@ where
     Ok(canister_id)
 }
 
+fn controllers_of_children_canisters<R: CanisterRuntime>(runtime: &R) -> Vec<Principal> {
+    let more_controllers = read_state(|s| s.more_controller_ids().to_vec());
+    vec![runtime.id()]
+        .into_iter()
+        .chain(more_controllers)
+        .collect()
+}
+
 async fn install_canister_once<C, R, I>(
-    contract: &Erc20Contract,
+    contract: &Erc20Token,
     wasm_hash: &WasmHash,
     init_args: &I,
     runtime: &R,
 ) -> Result<(), TaskError>
 where
-    C: Debug,
+    C: Debug + StorableWasm + Send,
     Canisters: ManageSingleCanister<C>,
-    State: RetrieveCanisterWasm<C>,
     R: CanisterRuntime,
     I: Debug + CandidType,
 {
@@ -302,21 +454,36 @@ where
         Some(ManagedCanisterStatus::Installed { .. }) => return Ok(()),
     };
 
-    let wasm = read_state(|s| s.retrieve_wasm(wasm_hash).cloned()).ok_or_else(|| {
-        log!(
-            INFO,
-            "ERROR: failed to install {} canister for {:?} at '{}': wasm hash not found",
-            Canisters::display_name(),
-            contract,
-            canister_id
-        );
-        TaskError::WasmHashNotFound(wasm_hash.clone())
-    })?;
+    let wasm = match read_wasm_store(|s| wasm_store_try_get::<C>(s, wasm_hash)) {
+        Ok(Some(wasm)) => Ok(wasm),
+        Ok(None) => {
+            log!(
+                INFO,
+                "ERROR: failed to install {} canister for {:?} at '{}': wasm hash {} not found",
+                Canisters::display_name(),
+                contract,
+                canister_id,
+                wasm_hash
+            );
+            Err(TaskError::WasmHashNotFound(wasm_hash.clone()))
+        }
+        Err(e) => {
+            log!(
+                INFO,
+                "ERROR: failed to install {} canister for {:?} at '{}': {:?}",
+                Canisters::display_name(),
+                contract,
+                canister_id,
+                e
+            );
+            Err(TaskError::WasmStoreError(e))
+        }
+    }?;
 
     match runtime
         .install_code(
             canister_id,
-            wasm,
+            wasm.to_bytes(),
             Encode!(init_args).expect("BUG: failed to encode init arg"),
         )
         .await
@@ -350,10 +517,37 @@ where
     Ok(())
 }
 
-#[derive(Debug, PartialEq, Clone, Ord, PartialOrd, Eq, Serialize, Deserialize)]
-pub struct Erc20Contract(ChainId, Address);
+async fn notify_erc20_added<R: CanisterRuntime>(
+    token: &Erc20Token,
+    minter_id: &Principal,
+    runtime: &R,
+) -> Result<(), TaskError> {
+    let managed_canisters = read_state(|s| s.managed_canisters(token).cloned());
+    match managed_canisters {
+        Some(Canisters {
+            ledger: Some(ledger),
+            metadata,
+            ..
+        }) => {
+            let args = AddCkErc20Token {
+                chain_id: Nat::from(*token.chain_id().as_ref()),
+                address: token.address().to_string(),
+                ckerc20_token_symbol: metadata.ckerc20_token_symbol,
+                ckerc20_ledger_id: *ledger.canister_id(),
+            };
+            runtime
+                .call_canister(*minter_id, "add_ckerc20_token", args)
+                .await
+                .map_err(TaskError::InterCanisterCallError)
+        }
+        _ => Err(TaskError::LedgerNotFound(token.clone())),
+    }
+}
 
-impl Erc20Contract {
+#[derive(Debug, PartialEq, Clone, Ord, PartialOrd, Eq, Serialize, Deserialize)]
+pub struct Erc20Token(ChainId, Address);
+
+impl Erc20Token {
     pub fn chain_id(&self) -> &ChainId {
         &self.0
     }
@@ -373,7 +567,7 @@ impl AsRef<u64> for ChainId {
     }
 }
 
-impl TryFrom<crate::candid::Erc20Contract> for Erc20Contract {
+impl TryFrom<crate::candid::Erc20Contract> for Erc20Token {
     type Error = String;
 
     fn try_from(contract: crate::candid::Erc20Contract) -> Result<Self, Self::Error> {

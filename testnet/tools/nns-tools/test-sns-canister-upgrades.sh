@@ -10,11 +10,6 @@ Usage: $0 <VERSION> <SNS_CANISTER_TYPE> (<SNS_CANISTER_TYPE>...)
   VERSION: Version to test (generally git hash, could be build id.  Green checkmarks on gitlab commit list have assets)
   SNS_CANISTER_TYPE: Human readable SNS canister name (root, governance, ledger, swap, archive, index)
 
-
-  NOTE: Both NNS_URL and NEURON_ID must be set as environment variables.
-    Using \"source \$YOUR_WORKING_DIRECTORY/output_vars_nns_state_deployment.sh\" will give you the needed
-    variables in your shell.
-
   This script will test upgrading the canisters to a particular version, and will test doing so
     in all possible permutations of the upgrades.
   "
@@ -27,6 +22,8 @@ fi
 VERSION=$1
 shift
 CANISTERS="${@}"
+
+set_testnet_env_variables
 
 ensure_variable_set IDL2JSON
 ensure_variable_set SNS_QUILL

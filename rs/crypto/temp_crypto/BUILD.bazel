@@ -12,7 +12,6 @@ DEPENDENCIES = [
     "//rs/crypto/tls_interfaces",
     "//rs/crypto/temp_crypto/temp_vault",
     "//rs/crypto/utils/basic_sig",
-    "//rs/crypto/utils/time",
     "//rs/interfaces",
     "//rs/interfaces/registry",
     "//rs/monitoring/logger",

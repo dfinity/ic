@@ -276,7 +276,7 @@ pub fn get_notarization_threshold_for_subnet_of_size(subnet_size: usize) -> Thre
 #[cfg(test)]
 pub mod test {
     use super::*;
-    use ic_test_utilities::types::ids::node_test_id;
+    use ic_test_utilities_types::ids::node_test_id;
     use ic_types::consensus::*;
 
     #[test]

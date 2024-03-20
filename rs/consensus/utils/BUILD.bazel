@@ -24,8 +24,11 @@ DEV_DEPENDENCIES = [
     "//rs/consensus/mocks",
     "//rs/test_utilities",
     "//rs/test_utilities/registry",
+    "//rs/test_utilities/state",
     "//rs/test_utilities/time",
-    "//rs/types/ic00_types",
+    "//rs/test_utilities/types",
+    "//rs/types/management_canister_types",
+    "@crate_index//:assert_matches",
 ]
 
 rust_library(

@@ -105,7 +105,9 @@ pub const HEADER_IC_SUBNET_TYPE: HeaderName = HeaderName::from_static("x-ic-subn
 #[allow(clippy::declare_interior_mutable_const)]
 pub const HEADER_IC_NODE_ID: HeaderName = HeaderName::from_static("x-ic-node-id");
 #[allow(clippy::declare_interior_mutable_const)]
-const HEADER_IC_CANISTER_ID: HeaderName = HeaderName::from_static("x-ic-canister-id");
+pub const HEADER_IC_CANISTER_ID: HeaderName = HeaderName::from_static("x-ic-canister-id");
+#[allow(clippy::declare_interior_mutable_const)]
+const HEADER_IC_CANISTER_ID_CBOR: HeaderName = HeaderName::from_static("x-ic-canister-id-cbor");
 #[allow(clippy::declare_interior_mutable_const)]
 const HEADER_IC_METHOD_NAME: HeaderName = HeaderName::from_static("x-ic-method-name");
 #[allow(clippy::declare_interior_mutable_const)]
@@ -121,6 +123,11 @@ const HEADER_IC_CACHE: HeaderName = HeaderName::from_static("x-ic-cache-status")
 #[allow(clippy::declare_interior_mutable_const)]
 const HEADER_IC_CACHE_BYPASS_REASON: HeaderName =
     HeaderName::from_static("x-ic-cache-bypass-reason");
+#[allow(clippy::declare_interior_mutable_const)]
+pub const HEADER_X_REAL_IP: http::HeaderName = http::HeaderName::from_static("x-real-ip");
+#[allow(clippy::declare_interior_mutable_const)]
+pub const HEADER_X_IC_COUNTRY_CODE: http::HeaderName =
+    http::HeaderName::from_static("x-ic-country-code");
 
 // Headers to pass from replica to the caller
 #[allow(clippy::declare_interior_mutable_const)]
@@ -128,7 +135,7 @@ pub const HEADERS_PASS_IN: [HeaderName; 11] = [
     HEADER_IC_SUBNET_ID,
     HEADER_IC_NODE_ID,
     HEADER_IC_SUBNET_TYPE,
-    HEADER_IC_CANISTER_ID,
+    HEADER_IC_CANISTER_ID_CBOR,
     HEADER_IC_METHOD_NAME,
     HEADER_IC_SENDER,
     HEADER_IC_REQUEST_TYPE,
@@ -140,7 +147,7 @@ pub const HEADERS_PASS_IN: [HeaderName; 11] = [
 
 // Headers to pass from caller to replica
 #[allow(clippy::declare_interior_mutable_const)]
-pub const HEADERS_PASS_OUT: [HeaderName; 1] = [HEADER_X_REQUEST_ID];
+pub const HEADERS_PASS_OUT: [HeaderName; 2] = [HEADER_X_REQUEST_ID, HEADER_X_REAL_IP];
 
 pub struct RequestHeaders {
     pub headers_in: HeaderMap<HeaderValue>,
@@ -214,8 +221,15 @@ where
                 }
             });
 
+            let is_read_state = req.uri().to_string().ends_with("/read_state");
+
             // Execute the request
             let res = inner.call(req).await;
+
+            // Do not pass headers for the read_state calls
+            if is_read_state {
+                return res;
+            }
 
             // If the request was a success - extract headers from it
             if let Ok(v) = &res {

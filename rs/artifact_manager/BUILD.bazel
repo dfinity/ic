@@ -6,8 +6,8 @@ DEPENDENCIES = [
     "//rs/interfaces",
     "//rs/monitoring/metrics",
     "//rs/types/types",
-    "@crate_index//:crossbeam-channel",
     "@crate_index//:prometheus",
+    "@crate_index//:tokio",
 ]
 
 MACRO_DEPENDENCIES = []

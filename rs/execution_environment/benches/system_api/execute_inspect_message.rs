@@ -8,8 +8,8 @@ use ic_execution_environment::execution::inspect_message;
 use ic_execution_environment::{ExecutionEnvironment, IngressFilterMetrics};
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
-use ic_test_utilities::types::ids::user_test_id;
-use ic_test_utilities::types::messages::SignedIngressBuilder;
+use ic_test_utilities_types::ids::user_test_id;
+use ic_test_utilities_types::messages::SignedIngressBuilder;
 
 pub fn execute_inspect_message_bench(c: &mut Criterion) {
     // List of benchmarks: benchmark id (name), WAT, expected instructions.

@@ -2,11 +2,14 @@ use ic_base_types::{CanisterId, NumBytes};
 use ic_error_types::UserError;
 use ic_interfaces::execution_environment::SystemApiCallCounters;
 use ic_metrics::MetricsRegistry;
+use ic_query_stats::QueryStatsCollector;
 use ic_replicated_state::ReplicatedState;
-use ic_types::{ingress::WasmResult, messages::UserQuery, CountBytes, Cycles, Time, UserId};
+use ic_types::{
+    batch::QueryStats, ingress::WasmResult, messages::UserQuery, CountBytes, Cycles, Time, UserId,
+};
 use ic_utils_lru_cache::LruCache;
 use prometheus::{Histogram, IntCounter, IntGauge};
-use std::{mem::size_of_val, sync::Mutex, time::Duration};
+use std::{collections::BTreeMap, mem::size_of_val, sync::Mutex, time::Duration};
 
 use crate::metrics::duration_histogram;
 
@@ -28,11 +31,12 @@ pub(crate) struct QueryCacheMetrics {
     pub invalidated_entries_by_data_certificate_expiry_time: IntCounter,
     pub invalidated_entries_by_canister_version: IntCounter,
     pub invalidated_entries_by_canister_balance: IntCounter,
-    pub invalidated_entries_by_nested_call: IntCounter,
     pub invalidated_entries_by_transient_error: IntCounter,
     pub invalidated_entries_duration: Histogram,
     pub count_bytes: IntGauge,
     pub len: IntGauge,
+    pub push_errors: IntCounter,
+    pub validation_errors: IntCounter,
 }
 
 impl QueryCacheMetrics {
@@ -87,10 +91,6 @@ impl QueryCacheMetrics {
                 "execution_query_cache_invalidated_entries_by_canister_balance_total",
                 "The total number of invalidated entries due to the changed canister balance",
             ),
-            invalidated_entries_by_nested_call: metrics_registry.int_counter(
-                "execution_query_cache_invalidated_entries_by_nested_call_total",
-                "The total number of invalidated entries due to a nested call",
-            ),
             invalidated_entries_by_transient_error: metrics_registry.int_counter(
                 "execution_query_cache_invalidated_entries_by_transient_error_total",
                 "The total number of invalidated entries due to a transient error",
@@ -107,6 +107,14 @@ impl QueryCacheMetrics {
             len: metrics_registry.int_gauge(
                 "execution_query_cache_len",
                 "The current replica side query cache len in elements",
+            ),
+            push_errors: metrics_registry.int_counter(
+                "execution_query_cache_push_errors_total",
+                "The total number of errors adding new query cache entries",
+            ),
+            validation_errors: metrics_registry.int_counter(
+                "execution_query_cache_validation_errors_total",
+                "The total number of errors validating query cache entries",
             ),
         }
     }
@@ -155,21 +163,29 @@ impl From<&UserQuery> for EntryKey {
 pub(crate) struct EntryEnv {
     /// The consensus-determined time when the query is executed.
     pub batch_time: Time,
-    /// Receiving canister version (includes both canister updates and upgrades).
-    pub canister_version: u64,
-    /// Receiving canister cycles balance.
-    pub canister_balance: Cycles,
+    /// A vector of evaluated canister IDs with their versions, balances and stats.
+    pub canisters_versions_balances_stats: Vec<(CanisterId, u64, Cycles, QueryStats)>,
 }
 
-impl TryFrom<(&EntryKey, &ReplicatedState)> for EntryEnv {
-    type Error = UserError;
-
-    fn try_from((key, state): (&EntryKey, &ReplicatedState)) -> Result<Self, Self::Error> {
-        let canister = state.get_active_canister(&key.receiver)?;
-        Ok(Self {
+impl EntryEnv {
+    // Capture a state (canister version and balance) of the evaluated canisters.
+    fn try_new(
+        state: &ReplicatedState,
+        evaluated_stats: &BTreeMap<CanisterId, QueryStats>,
+    ) -> Result<Self, UserError> {
+        let mut canisters_versions_balances_stats = Vec::with_capacity(evaluated_stats.len());
+        for (id, stats) in evaluated_stats.iter() {
+            let canister = state.get_active_canister(id)?;
+            canisters_versions_balances_stats.push((
+                *id,
+                canister.system_state.canister_version,
+                canister.system_state.balance(),
+                stats.clone(),
+            ));
+        }
+        Ok(EntryEnv {
             batch_time: state.metadata.batch_time,
-            canister_version: canister.system_state.canister_version,
-            canister_balance: canister.system_state.balance(),
+            canisters_versions_balances_stats,
         })
     }
 }
@@ -183,10 +199,10 @@ pub(crate) struct EntryValue {
     result: Result<WasmResult, UserError>,
     /// If set, the cached entry should be expired after `data_certificate_expiry_time`.
     includes_data_certificate: bool,
-    /// If set, the `env.batch_time` might be ignored.
+    /// If set, the batch time changes might be ignored.
     ignore_batch_time: bool,
-    /// If set, the `env.canister_balance` might be ignored.
-    ignore_canister_balance: bool,
+    /// If set, the canister balance changes might be ignored.
+    ignore_canister_balances: bool,
 }
 
 impl CountBytes for EntryValue {
@@ -206,37 +222,108 @@ impl EntryValue {
         // It's safe to ignore `batch_time` changes if the query never calls `ic0.time()`.
         let ignore_batch_time = system_api_call_counters.time == 0;
         // It's safe to ignore `canister_balance` changes if the query never checks the balance.
-        let ignore_canister_balance = system_api_call_counters.canister_cycle_balance == 0
+        let ignore_canister_balances = system_api_call_counters.canister_cycle_balance == 0
             && system_api_call_counters.canister_cycle_balance128 == 0;
         EntryValue {
             env,
             result,
             includes_data_certificate,
             ignore_batch_time,
-            ignore_canister_balance,
+            ignore_canister_balances,
         }
     }
 
     fn is_valid(
         &self,
-        env: &EntryEnv,
+        state: &ReplicatedState,
+        query_stats_collector: Option<&QueryStatsCollector>,
+        metrics: &QueryCacheMetrics,
         max_expiry_time: Duration,
         data_certificate_expiry_time: Duration,
     ) -> bool {
-        self.is_valid_time(env)
-            && !self.is_expired(env, max_expiry_time)
-            && !self.is_expired_data_certificate(env, data_certificate_expiry_time)
-            && self.is_valid_canister_version(env)
-            && self.is_valid_canister_balance(env)
-    }
+        // Iterate over the captured data and validate it against the current state.
+        let mut all_canister_versions_are_valid = true;
+        let mut all_canister_balances_are_valid = true;
+        let mut canisters_stats =
+            Vec::with_capacity(self.env.canisters_versions_balances_stats.len());
+        for (id, version, balance, stats) in &self.env.canisters_versions_balances_stats {
+            let Ok(canister) = state.get_active_canister(id) else {
+                metrics.validation_errors.inc();
+                return false;
+            };
+            canisters_stats.push((id, stats));
 
-    fn is_valid_time(&self, env: &EntryEnv) -> bool {
-        self.ignore_batch_time || self.env.batch_time == env.batch_time
+            if &canister.system_state.canister_version != version {
+                all_canister_versions_are_valid = false;
+            }
+            if &canister.system_state.balance() != balance {
+                all_canister_balances_are_valid = false;
+            }
+        }
+
+        // Validate the rest of the cached value.
+        let now = state.metadata.batch_time;
+        let is_expired = self.is_expired(now, max_expiry_time);
+        let is_expired_data_certificate =
+            self.is_expired_data_certificate(now, data_certificate_expiry_time);
+
+        // Check if the cache entry value is valid.
+        if !is_expired
+            && !is_expired_data_certificate
+            && (self.env.batch_time == now || self.ignore_batch_time)
+            && all_canister_versions_are_valid
+            && (all_canister_balances_are_valid || self.ignore_canister_balances)
+        {
+            // The value is still valid.
+            metrics.hits.inc();
+            // Apply query stats.
+            for (id, stats) in canisters_stats {
+                // Add query statistics to the query aggregator.
+                if let Some(query_stats_collector) = query_stats_collector {
+                    query_stats_collector.register_query_statistics(*id, stats);
+                }
+            }
+            // Several factors might cause ignoring behavior simultaneously.
+            // To ensure correctness, we need a fallthrough logic here.
+            if self.env.batch_time != now && self.ignore_batch_time {
+                metrics.hits_with_ignored_time.inc();
+            }
+            if !all_canister_balances_are_valid && self.ignore_canister_balances {
+                metrics.hits_with_ignored_canister_balance.inc();
+            }
+            true
+        } else {
+            // The value is invalid.
+            metrics.invalidated_entries.inc();
+            metrics
+                .invalidated_entries_duration
+                .observe(self.elapsed_seconds(now));
+            // To ensure all invalidation reasons are accounted for,
+            // even if multiple occur simultaneously, we need a fallthrough logic here.
+            if is_expired {
+                metrics.invalidated_entries_by_max_expiry_time.inc();
+            }
+            if is_expired_data_certificate {
+                metrics
+                    .invalidated_entries_by_data_certificate_expiry_time
+                    .inc();
+            }
+            if !(self.env.batch_time == now || self.ignore_batch_time) {
+                metrics.invalidated_entries_by_time.inc();
+            }
+            if !all_canister_versions_are_valid {
+                metrics.invalidated_entries_by_canister_version.inc();
+            }
+            if !(all_canister_balances_are_valid || self.ignore_canister_balances) {
+                metrics.invalidated_entries_by_canister_balance.inc();
+            }
+            false
+        }
     }
 
     /// Check cache entry max expiration time.
-    fn is_expired(&self, env: &EntryEnv, max_expiry_time: Duration) -> bool {
-        if let Some(duration) = env.batch_time.checked_duration_since(self.env.batch_time) {
+    fn is_expired(&self, now: Time, max_expiry_time: Duration) -> bool {
+        if let Some(duration) = now.checked_duration_since(self.env.batch_time) {
             duration > max_expiry_time
         } else {
             false
@@ -244,37 +331,24 @@ impl EntryValue {
     }
 
     /// Check cache entry data certificate expiration time.
+    ///
+    /// When we track the query execution, any `ic0.data_certificate_copy`
+    /// System API call will set the `includes_data_certificate` flag in
+    /// the cached value.
+    ///
+    /// Just like the system time, we don't need to track it per-canister.
+    /// If any of the canisters in the call graph read the certificate,
+    /// the whole cached result will be expired sooner. But it just depends
+    /// on the system time, not the canister state.
     fn is_expired_data_certificate(
         &self,
-        env: &EntryEnv,
+        now: Time,
         data_certificate_expiry_time: Duration,
     ) -> bool {
         if self.includes_data_certificate {
-            return self.is_expired(env, data_certificate_expiry_time);
+            return self.is_expired(now, data_certificate_expiry_time);
         }
         false
-    }
-
-    fn is_valid_canister_version(&self, env: &EntryEnv) -> bool {
-        self.env.canister_version == env.canister_version
-    }
-
-    fn is_valid_canister_balance(&self, env: &EntryEnv) -> bool {
-        self.ignore_canister_balance || self.env.canister_balance == env.canister_balance
-    }
-
-    /// Return true if the time difference was ignored.
-    fn is_ignored_time(&self, env: &EntryEnv) -> bool {
-        self.env.batch_time != env.batch_time && self.ignore_batch_time
-    }
-
-    /// Return true if the canister balance difference was ignored.
-    fn is_ignored_canister_balance(&self, env: &EntryEnv) -> bool {
-        self.env.canister_balance != env.canister_balance && self.ignore_canister_balance
-    }
-
-    fn result(&self) -> Result<WasmResult, UserError> {
-        self.result.clone()
     }
 
     fn elapsed_seconds(&self, now: Time) -> f64 {
@@ -319,58 +393,30 @@ impl QueryCache {
         }
     }
 
-    /// Return the cached `Result` if it's still valid, updating the metrics.
+    /// Return the cached `Result` if it's still valid, updating the metrics and stats.
     pub(crate) fn get_valid_result(
         &self,
         key: &EntryKey,
-        env: &EntryEnv,
+        state: &ReplicatedState,
+        query_stats_collector: Option<&QueryStatsCollector>,
     ) -> Option<Result<WasmResult, UserError>> {
         let mut cache = self.cache.lock().unwrap();
-        let now = env.batch_time;
 
         if let Some(value) = cache.get(key) {
-            if value.is_valid(env, self.max_expiry_time, self.data_certificate_expiry_time) {
-                let res = value.result();
-                // Update the metrics.
-                self.metrics.hits.inc();
-                // For the sake of correctness, we need a fall-through logic here.
-                if value.is_ignored_time(env) {
-                    self.metrics.hits_with_ignored_time.inc();
-                }
-                if value.is_ignored_canister_balance(env) {
-                    self.metrics.hits_with_ignored_canister_balance.inc();
-                }
+            if value.is_valid(
+                state,
+                query_stats_collector,
+                &self.metrics,
+                self.max_expiry_time,
+                self.data_certificate_expiry_time,
+            ) {
                 // The cache entry is valid, return it.
-                return Some(res);
+                return Some(value.result.clone());
             } else {
-                // Update the metrics.
-                self.metrics.invalidated_entries.inc();
-                self.metrics
-                    .invalidated_entries_duration
-                    .observe(value.elapsed_seconds(now));
-                // For the sake of correctness, we need a fall-through logic here.
-                if !value.is_valid_time(env) {
-                    self.metrics.invalidated_entries_by_time.inc();
-                }
-                if value.is_expired(env, self.max_expiry_time) {
-                    self.metrics.invalidated_entries_by_max_expiry_time.inc();
-                }
-                if value.is_expired_data_certificate(env, self.data_certificate_expiry_time) {
-                    self.metrics
-                        .invalidated_entries_by_data_certificate_expiry_time
-                        .inc();
-                }
-                if !value.is_valid_canister_version(env) {
-                    self.metrics.invalidated_entries_by_canister_version.inc();
-                }
-                if !value.is_valid_canister_balance(env) {
-                    self.metrics.invalidated_entries_by_canister_balance.inc();
-                }
                 // The cache entry is no longer valid, remove it.
                 cache.pop(key);
-                // Update the metrics.
-                let count_bytes = cache.count_bytes() as i64;
-                self.metrics.count_bytes.set(count_bytes);
+                // Update the `count_bytes` metric.
+                self.metrics.count_bytes.set(cache.count_bytes() as i64);
             }
         }
         None
@@ -380,34 +426,33 @@ impl QueryCache {
     pub(crate) fn push(
         &self,
         key: EntryKey,
-        env: EntryEnv,
         result: &Result<WasmResult, UserError>,
-        system_api_call_counters: &SystemApiCallCounters,
+        state: &ReplicatedState,
+        system_api_counters: &SystemApiCallCounters,
+        evaluated_stats: &BTreeMap<CanisterId, QueryStats>,
+        transient_errors: usize,
     ) {
-        let now = env.batch_time;
+        let now = state.metadata.batch_time;
         // Push is always a cache miss.
         self.metrics.misses.inc();
 
-        // The result should not be saved if the query calls a nested query.
-        if system_api_call_counters.call_perform != 0 {
-            // Because of the nested calls the entry is immediately invalidated.
-            self.metrics.invalidated_entries.inc();
-            self.metrics.invalidated_entries_duration.observe(0_f64);
-            self.metrics.invalidated_entries_by_nested_call.inc();
-            return;
-        }
-
-        // The result should not be saved if the result is a transient error.
-        // TODO: RUN-908: For now, we treat all the errors as transient.
-        if result.is_err() {
-            // Because of the nested calls the entry is immediately invalidated.
+        // The result should not be saved if there were transient errors.
+        if transient_errors > 0 {
+            // Because of the transient error, the cache entry is immediately invalidated.
             self.metrics.invalidated_entries.inc();
             self.metrics.invalidated_entries_duration.observe(0_f64);
             self.metrics.invalidated_entries_by_transient_error.inc();
             return;
         }
 
-        let value = EntryValue::new(env, result.clone(), system_api_call_counters);
+        // This can fail only if there is no active canister ID,
+        // which should not happen, as we just evaluated those canisters.
+        let Ok(env) = EntryEnv::try_new(state, evaluated_stats) else {
+            self.metrics.push_errors.inc();
+            return;
+        };
+
+        let value = EntryValue::new(env, result.clone(), system_api_counters);
         let mut cache = self.cache.lock().unwrap();
         let evicted_entries = cache.push(key, value);
 

@@ -9,8 +9,8 @@ use ic_embedders::{CompilationResult, SerializedModule, SerializedModuleBytes};
 use ic_interfaces::execution_environment::HypervisorResult;
 use ic_replicated_state::{
     page_map::{
-        CheckpointSerialization, MappingSerialization, OverlayFileSerialization,
-        OverlayIndicesSerialization, PageAllocatorSerialization, PageMapSerialization,
+        BaseFileSerialization, CheckpointSerialization, MappingSerialization,
+        OverlayFileSerialization, PageAllocatorSerialization, PageMapSerialization,
         StorageSerialization,
     },
     Global, NumWasmPages,
@@ -131,7 +131,10 @@ impl EnumerateInnerFileDescriptors for CheckpointSerialization {
 
 impl EnumerateInnerFileDescriptors for StorageSerialization {
     fn enumerate_fds<'a>(&'a mut self, fds: &mut Vec<&'a mut std::os::unix::io::RawFd>) {
-        self.base.enumerate_fds(fds);
+        match self.base {
+            BaseFileSerialization::Base(ref mut b) => b.enumerate_fds(fds),
+            BaseFileSerialization::Overlay(ref mut o) => o.enumerate_fds(fds),
+        }
         for overlay in &mut self.overlays {
             overlay.enumerate_fds(fds);
         }
@@ -141,13 +144,6 @@ impl EnumerateInnerFileDescriptors for StorageSerialization {
 impl EnumerateInnerFileDescriptors for OverlayFileSerialization {
     fn enumerate_fds<'a>(&'a mut self, fds: &mut Vec<&'a mut std::os::unix::io::RawFd>) {
         self.mapping.enumerate_fds(fds);
-        self.index.enumerate_fds(fds);
-    }
-}
-
-impl EnumerateInnerFileDescriptors for OverlayIndicesSerialization {
-    fn enumerate_fds<'a>(&'a mut self, fds: &mut Vec<&'a mut std::os::unix::io::RawFd>) {
-        fds.push(&mut self.file_descriptor.fd);
     }
 }
 

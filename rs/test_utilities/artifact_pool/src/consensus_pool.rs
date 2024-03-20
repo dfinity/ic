@@ -4,8 +4,8 @@ use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_interfaces::{
     consensus_pool::{
-        ChangeAction, ChangeSet, ConsensusBlockCache, ConsensusPool, ConsensusPoolCache,
-        PoolSection, UnvalidatedConsensusArtifact, ValidatedConsensusArtifact,
+        ChangeAction, ChangeSet, ConsensusBlockCache, ConsensusBlockChain, ConsensusPool,
+        ConsensusPoolCache, PoolSection, UnvalidatedConsensusArtifact, ValidatedConsensusArtifact,
     },
     crypto::{MultiSigner, ThresholdSigner},
     dkg::DkgPool,
@@ -17,18 +17,20 @@ use ic_interfaces_state_manager::StateManager;
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
-use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
-use ic_test_utilities::{consensus::fake::*, crypto::CryptoReturningOk};
-use ic_test_utilities_time::mock_time;
+use ic_test_utilities::crypto::CryptoReturningOk;
+use ic_test_utilities_consensus::fake::*;
+use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::signature::*;
 use ic_types::{artifact::ConsensusMessageId, batch::ValidationContext};
 use ic_types::{
     artifact_kind::ConsensusArtifact,
     crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
+    time::UNIX_EPOCH,
 };
 use ic_types::{consensus::*, crypto::*, *};
 use std::sync::Arc;
 use std::sync::RwLock;
+use std::time::Instant;
 
 #[allow(clippy::type_complexity)]
 pub struct TestConsensusPool {
@@ -189,10 +191,11 @@ impl TestConsensusPool {
         let pool = ConsensusPoolImpl::new(
             node_id,
             subnet_id,
-            (&ic_test_utilities::consensus::make_genesis(summary)).into(),
+            (&ic_test_utilities_consensus::make_genesis(summary)).into(),
             pool_config,
             ic_metrics::MetricsRegistry::new(),
             no_op_logger(),
+            time_source.clone(),
         );
         TestConsensusPool {
             subnet_id,
@@ -204,15 +207,20 @@ impl TestConsensusPool {
     }
 
     pub fn make_next_block(&self) -> BlockProposal {
+        self.make_next_block_with_rank(Rank(0))
+    }
+
+    pub fn make_next_block_with_rank(&self, rank: Rank) -> BlockProposal {
         if let Some(parent) = self.latest_notarized_blocks().next() {
-            self.make_next_block_from_parent(&parent)
+            self.make_next_block_from_parent(&parent, rank)
         } else {
             panic!("Pool contains a valid notarization on a block that is not in the pool");
         }
     }
 
-    pub fn make_next_block_from_parent(&self, parent: &Block) -> BlockProposal {
+    pub fn make_next_block_from_parent(&self, parent: &Block, rank: Rank) -> BlockProposal {
         let mut block = Block::from_parent(parent);
+        block.rank = rank;
         let registry_version = self.registry_client.get_latest_version();
 
         // Increase time monotonically by at least initial_notary_delay
@@ -480,7 +488,9 @@ impl TestConsensusPool {
         let mut blocks = Vec::new();
         for i in 0..new_blocks {
             let parent = &candidates[rand_num.next().unwrap() % candidates.len()];
-            let mut block: Block = self.make_next_block_from_parent(parent).into();
+            let mut block: Block = self
+                .make_next_block_from_parent(parent, Rank(i as u64))
+                .into();
             // if it is a dkg summary block and catch up package is required, we must
             // finalize this round too.
             if block.payload.as_ref().is_summary() && add_catch_up_package_if_needed {
@@ -488,7 +498,6 @@ impl TestConsensusPool {
             } else {
                 add_catch_up_package_if_needed = false;
             }
-            block.rank = Rank(i as u64);
             if let Some(height) = certified_height {
                 block.context.certified_height = height;
             }
@@ -591,14 +600,20 @@ impl TestConsensusPool {
         height
     }
 
-    pub fn notarize(&mut self, block: &BlockProposal) {
+    pub fn notarize(&mut self, block: &BlockProposal) -> Notarization {
         let content = NotarizationContent::new(block.height(), block.content.get_hash().clone());
-        self.insert_validated(Notarization::fake(content))
+        let notarization = Notarization::fake(content);
+        self.insert_validated(notarization.clone());
+
+        notarization
     }
 
-    pub fn finalize(&mut self, block: &BlockProposal) {
+    pub fn finalize(&mut self, block: &BlockProposal) -> Finalization {
         let content = FinalizationContent::new(block.height(), block.content.get_hash().clone());
-        self.insert_validated(Finalization::fake(content))
+        let finalization = Finalization::fake(content);
+        self.insert_validated(finalization.clone());
+
+        finalization
     }
 
     pub fn finalize_block(&mut self, block: &Block) {
@@ -645,7 +660,7 @@ impl TestConsensusPool {
         let mut result = Vec::new();
         let mut last = start;
         while last.height() <= to {
-            let next = self.make_next_block_from_parent(last.as_ref());
+            let next = self.make_next_block_from_parent(last.as_ref(), Rank(0));
             result.push(last.clone());
             self.insert_validated(last.clone());
             self.notarize(&last);
@@ -694,7 +709,7 @@ impl TestConsensusPool {
         self.insert(UnvalidatedConsensusArtifact {
             message: value.into_message(),
             peer_id: node_test_id(0),
-            timestamp: mock_time(),
+            timestamp: UNIX_EPOCH,
         });
     }
 
@@ -722,6 +737,14 @@ impl ConsensusPool for TestConsensusPool {
 
     fn as_block_cache(&self) -> &dyn ConsensusBlockCache {
         self.pool.as_block_cache()
+    }
+
+    fn build_block_chain(&self, start: &Block, end: &Block) -> Arc<dyn ConsensusBlockChain> {
+        self.pool.build_block_chain(start, end)
+    }
+
+    fn block_instant(&self, hash: &CryptoHashOf<Block>) -> Option<Instant> {
+        self.pool.block_instant(hash)
     }
 }
 

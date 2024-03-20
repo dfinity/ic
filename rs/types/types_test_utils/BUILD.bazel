@@ -8,8 +8,6 @@ rust_library(
     crate_name = "ic_types_test_utils",
     version = "0.9.0",
     deps = [
-        "//rs/canonical_state",
-        "//rs/canonical_state/certification_version",
         "//rs/types/types",
         "@crate_index//:proptest",
         "@crate_index//:strum",

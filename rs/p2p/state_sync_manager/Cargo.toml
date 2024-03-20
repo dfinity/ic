@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-axum = "0.7.0"
+axum = { workspace = true }
 bytes = { workspace = true }
 ic-async-utils = { path = "../../async_utils" }
 ic-interfaces = { path = "../../interfaces" }
@@ -17,13 +17,13 @@ ic-quic-transport = { path = "../quic_transport" }
 ic-base-types = { path = "../../types/base_types" }
 prometheus = { workspace = true }
 prost = { workspace = true }
-rand = "0.8.5"
+rand = { workspace = true }
 slog = { workspace = true }
-strum_macros = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true }
-tokio-metrics = "0.3.0"
+tokio-metrics = { workspace = true }
 tokio-util = { workspace = true }
-zstd = "0.12.4"
+zstd = "0.13.0"
 
 [dev-dependencies]
 ic-memory-transport = { path = "../memory_transport" }

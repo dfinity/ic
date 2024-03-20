@@ -4,8 +4,8 @@ use dfn_candid::candid_one;
 use dfn_core::bytes;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_client_sender::Sender;
-use ic_ic00_types::{CanisterInstallMode, CanisterSettingsArgsBuilder};
 use ic_ledger_core::Tokens;
+use ic_management_canister_types::{CanisterInstallMode, CanisterSettingsArgsBuilder};
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::{CanisterStatusResult, CanisterStatusType},

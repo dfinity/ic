@@ -5,7 +5,7 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     "//rs/ic_os/utils",
     "@crate_index//:anyhow",
-    "@crate_index//:clap_4_0_0",
+    "@crate_index//:clap",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
     "@crate_index//:serde",

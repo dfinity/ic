@@ -15,7 +15,10 @@ use crate::driver::test_env_api::{
     get_ssh_session_from_env, retry, HasDependencies, HasTestEnv, HasVmName, RetrieveIpv4Addr,
     SshSession, RETRY_BACKOFF, SSH_RETRY_TIMEOUT,
 };
-use crate::driver::test_setup::GroupSetup;
+use crate::driver::test_setup::{GroupSetup, InfraProvider};
+use crate::k8s::images::upload_image;
+use crate::k8s::tnet::TNet;
+use crate::util::block_on;
 use anyhow::{bail, Result};
 use chrono::Duration;
 use chrono::Utc;
@@ -109,9 +112,11 @@ impl UniversalVm {
     pub fn start(&self, env: &TestEnv) -> Result<()> {
         let farm = Farm::from_test_env(env, "universal VM");
         let pot_setup = GroupSetup::read_attribute(env);
+
+        env.ssh_keygen()?;
         let res_request =
             get_resource_request_for_universal_vm(self, &pot_setup, &pot_setup.infra_group_name)?;
-        let resource_group = allocate_resources(&farm, &res_request)?;
+        let resource_group = allocate_resources(&farm, &res_request, env)?;
         let vm = resource_group
             .vms
             .get(&self.name)
@@ -121,18 +126,21 @@ impl UniversalVm {
         env.write_json_object(univm_path.join("vm.json"), vm)?;
         let universal_vm_dir = env.get_path(univm_path);
 
-        // Setup SSH image
-        env.ssh_keygen()?;
-        let config_ssh_dir = env.get_universal_vm_config_ssh_dir(&self.name);
-        setup_ssh(env, config_ssh_dir.clone())?;
-        let config_ssh_img = universal_vm_dir.join(CONF_SSH_IMG_FNAME);
-        create_universal_vm_config_image(env, &config_ssh_dir, &config_ssh_img, "SSH")?;
-        let ssh_config_img_file_id = farm.upload_file(
-            &pot_setup.infra_group_name,
-            config_ssh_img,
-            CONF_SSH_IMG_FNAME,
-        )?;
-        let mut image_ids = vec![ssh_config_img_file_id];
+        let mut image_ids = vec![];
+        if InfraProvider::read_attribute(env) == InfraProvider::Farm {
+            // Setup SSH image
+            let config_ssh_dir = env.get_universal_vm_config_ssh_dir(&self.name);
+            setup_ssh(env, config_ssh_dir.clone())?;
+            let config_ssh_img = universal_vm_dir.join(CONF_SSH_IMG_FNAME);
+            create_universal_vm_config_image(env, &config_ssh_dir, &config_ssh_img, "SSH")?;
+
+            let ssh_config_img_file_id = farm.upload_file(
+                &pot_setup.infra_group_name,
+                config_ssh_img,
+                CONF_SSH_IMG_FNAME,
+            )?;
+            image_ids.push(ssh_config_img_file_id);
+        }
 
         // Setup config image
         if let Some(config) = &self.config {
@@ -145,46 +153,71 @@ impl UniversalVm {
                 }
                 UniversalVmConfig::Img(config_img) => config_img.to_path_buf(),
             };
-            let mut file_id = id_of_file(config_img.clone())?;
 
-            let upload = match farm.claim_file(&pot_setup.infra_group_name, &file_id)? {
-                ClaimResult::FileClaimed(file_expiration) => {
-                    if let Some(expiration) = file_expiration.expiration {
-                        let now = Utc::now();
-                        let ttl = expiration - now;
-                        // If the file expires within a day we upload it again
-                        // to ensure it exists for at least a month.
-                        ttl < Duration::days(1)
-                    } else {
-                        // If there's no expiration time we assume the file never expires
-                        // so we don't need to upload it again.
-                        false
+            if InfraProvider::read_attribute(env) == InfraProvider::Farm {
+                let mut file_id = id_of_file(config_img.clone())?;
+
+                let upload = match farm.claim_file(&pot_setup.infra_group_name, &file_id)? {
+                    ClaimResult::FileClaimed(file_expiration) => {
+                        if let Some(expiration) = file_expiration.expiration {
+                            let now = Utc::now();
+                            let ttl = expiration - now;
+                            // If the file expires within a day we upload it again
+                            // to ensure it exists for at least a month.
+                            ttl < Duration::days(1)
+                        } else {
+                            // If there's no expiration time we assume the file never expires
+                            // so we don't need to upload it again.
+                            false
+                        }
                     }
-                }
-                ClaimResult::FileNotFound => true,
-            };
+                    ClaimResult::FileNotFound => true,
+                };
 
-            if upload {
-                file_id =
-                    farm.upload_file(&pot_setup.infra_group_name, config_img, CONF_IMG_FNAME)?;
-                info!(env.logger(), "Uploaded image: {}", file_id);
+                if upload {
+                    file_id =
+                        farm.upload_file(&pot_setup.infra_group_name, config_img, CONF_IMG_FNAME)?;
+                    info!(env.logger(), "Uploaded image: {}", file_id);
+                } else {
+                    info!(
+                        env.logger(),
+                        "Image: {} was already uploaded, no need to upload it again", file_id,
+                    );
+                }
+                image_ids.push(file_id);
             } else {
+                let tnet = TNet::read_attribute(env);
+                let tnet_node = tnet.nodes.last().expect("no nodes");
                 info!(
                     env.logger(),
-                    "Image: {} was already uploaded, no need to upload it again", file_id,
+                    "Uploading image {} to {}",
+                    config_img.clone().display().to_string(),
+                    tnet_node.config_url.clone().expect("missing config url")
                 );
+                block_on(upload_image(
+                    config_img,
+                    &format!(
+                        "{}/{}",
+                        tnet_node.config_url.clone().expect("missing config url"),
+                        CONF_IMG_FNAME
+                    ),
+                ))?;
+                block_on(tnet_node.deploy_config_image(CONF_IMG_FNAME))
+                    .expect("deploying config image failed");
+                block_on(tnet_node.start()).expect("starting vm failed");
             }
-            image_ids.push(file_id);
         }
 
-        farm.attach_disk_images(
-            &pot_setup.infra_group_name,
-            &self.name,
-            "usb-storage",
-            image_ids,
-        )?;
+        if InfraProvider::read_attribute(env) == InfraProvider::Farm {
+            farm.attach_disk_images(
+                &pot_setup.infra_group_name,
+                &self.name,
+                "usb-storage",
+                image_ids,
+            )?;
+            farm.start_vm(&pot_setup.infra_group_name, &self.name)?;
+        }
 
-        farm.start_vm(&pot_setup.infra_group_name, &self.name)?;
         Ok(())
     }
 }

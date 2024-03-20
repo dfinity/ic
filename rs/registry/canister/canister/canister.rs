@@ -934,7 +934,7 @@ fn update_node_ipv4_config_directly() {
         LOG_PREFIX,
         dfn_core::api::caller()
     );
-    over_may_reject(candid_one, update_node_ipv4_config_directly_);
+    over(candid_one, update_node_ipv4_config_directly_);
 }
 
 #[candid_method(update, rename = "update_node_ipv4_config_directly")]

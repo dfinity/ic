@@ -12,7 +12,7 @@ ic-canister-client = { path = "../canister_client" }
 ic-canister-client-sender = { path = "../canister_client/sender" }
 ic-config = { path = "../config" }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
-ic-ic00-types = { path = "../types/ic00_types" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-http-endpoints-metrics = { path = "../http_endpoints/metrics" }
 ic-test-identity = { path = "../test_utilities/identity" }
@@ -20,7 +20,7 @@ ic-types = { path = "../types/types" }
 byte-unit = "4.0.14"
 candid = { workspace = true }
 chrono = { workspace = true }
-clap = { workspace = true }
+clap = { version = "3.2.25", features = ["derive"] }
 console = "0.11"
 futures = { workspace = true }
 hex = "0.4.3"

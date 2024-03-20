@@ -6,8 +6,12 @@ no-interrupt:
     - echo "This pipeline is not interruptible"
 
 after-script-test:
-  extends:
-    - .rules-master-pipeline-and-merge-request
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
+      changes:
+        - "gitlab-ci/src/after_script/*"
+        - "gitlab-ci/config/*"
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
   needs: [] # don't wait on other jobs
   script:
     - |
@@ -58,7 +62,6 @@ bazel-build-fuzzers-archives:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       changes:
-        - gitlab-ci/config/main.yml
         - bin/build-all-fuzzers.sh
         - bazel/fuzz_testing.bzl
   needs: [] # don't wait on other jobs
@@ -149,6 +152,14 @@ bazel-test-coverage:
     - bazel clean --expunge
 
 bazel-test-all:
+  artifacts:
+    when: always
+    paths:
+      - bazel-build-log*.json.gz
+      - bazel-bep.pb
+      - bazel-targets
+    reports:
+      junit: bazel-testlogs-gitlab/**/test.xml
   extends:
     - .bazel-test-all
   rules:
@@ -156,6 +167,7 @@ bazel-test-all:
     - if: '$CI_COMMIT_REF_PROTECTED == "true" && $CI_COMMIT_TAG =~ /^release-.+/'
   variables:
     BAZEL_EXTRA_ARGS: "--keep_going $BAZEL_EXTRA_ARGS_RULES"
+    RUN_ON_DIFF_ONLY: "true" # only test targets that changed
   timeout: 80 minutes
 
 bazel-system-tests-k8s:
@@ -174,8 +186,8 @@ bazel-system-tests-k8s:
   variables:
     RUST_LOG: info
     KUBECONFIG: "$KUBECONFIG_TNET_CREATOR"
-    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel $BAZEL_EXTRA_ARGS_RULES --test_tag_filters=k8s --k8s"
-  timeout: 80 minutes
+    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel $BAZEL_EXTRA_ARGS_RULES --jobs=5 --test_tag_filters=k8s,-manual --k8s"
+  timeout: 150 minutes
 
 bazel-system-test-hourly:
   extends:
@@ -197,10 +209,10 @@ bazel-system-test-hotfix:
       when: always
     - if: $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "trigger"
       when: manual
-      allow_failure: true  # the pipeline continues running even if the manual job is not run
+      allow_failure: true # the pipeline continues running even if the manual job is not run
     - if: '$CI_MERGE_REQUEST_TITLE =~ /(\[rc\]|hotfix)/i'
       when: manual
-      allow_failure: true  # the pipeline continues running even if the manual job is not run
+      allow_failure: true # the pipeline continues running even if the manual job is not run
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       when: manual
       allow_failure: true
@@ -238,6 +250,9 @@ bazel-system-test-nightly-nns:
 bazel-config-check-all-rebuild:
   extends:
     - .bazel-test-all
+  rules:
+    - if: $CI_MERGE_REQUEST_EVENT_TYPE == "merge_train"
+    - !reference [.rules-master-pipeline-no-merge-train-rust-bazel-changed, rules]
   variables:
     BAZEL_EXTRA_ARGS: "--keep_going --config=check"
     BAZEL_COMMAND: "build"
@@ -246,7 +261,13 @@ bazel-config-check-all-rebuild:
 bazel-test-all-rebuild:
   extends:
     - .bazel-test-all
-    - .rules-post-master
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
+      when: manual
+      allow_failure: true
+    - if: '$SCHEDULE_NAME == "run-all-master"'
+      when: manual
+      allow_failure: true
   variables:
     BAZEL_CI_CONFIG: "--config=ci"
     BAZEL_COMMAND: "build"
@@ -260,7 +281,7 @@ bazel-test-macos:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train" && $CI_MERGE_REQUEST_TITLE =~ /\bhotfix\b/i'
       variables:
         BAZEL_EXTRA_ARGS_RULES: "--test_timeout_filters=short,moderate"
-    - !reference [.rules-master-pipeline-no-merge-train, rules]
+    - !reference [.rules-master-pipeline-no-merge-train-rust-bazel-changed, rules]
   tags:
     - macos
   variables:
@@ -299,29 +320,56 @@ bazel-test-macos:
 
       if [ "$CI_COMMIT_REF_PROTECTED" == "true" ]; then
           gitlab-ci/container/build-ic.sh -i -c -b
+      elif [ "${RUN_ON_DIFF_ONLY:-}" == "true" ] \
+          && [ "${CI_PIPELINE_SOURCE:-}" == "merge_request_event" ] \
+          && [ "${CI_MERGE_REQUEST_EVENT_TYPE:-}" != "merge_train" ] \
+          && [[ "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}" != "rc--"* ]]; then
+
+          TARGETS=$(gitlab-ci/src/bazel-ci/diff.sh)
+          ARGS=(--no-release)
+
+          if [ "$TARGETS" == "//..." ]; then
+              ARGS+=(-i -c -b)
+          else
+              if grep -q "ic-os" <<<"$TARGETS"; then
+                  ARGS+=(-i)
+              fi
+              if grep -q "publish/canisters" <<<"$TARGETS"; then
+                  ARGS+=(-c)
+              fi
+              if grep -q "publish/binaries" <<<"$TARGETS"; then
+                  ARGS+=(-b)
+              fi
+          fi
+
+          if [ ${#ARGS[@]} -eq 1 ]; then
+              echo "No changes that require building IC-OS, binaries or canisters."
+              exit 0
+          fi
+          gitlab-ci/container/build-ic.sh "${ARGS[@]}"
       else
           gitlab-ci/container/build-ic.sh -i -c -b --no-release
       fi
 
       # release binaries
-      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
+      [ -d artifacts/release ] && buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
           gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
           "artifacts/release" "${CI_JOB_NAME}/release"
       # canister binaries
-      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
+      [ -d artifacts/canisters ] && buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
           gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
           "artifacts/canisters" "${CI_JOB_NAME}/canisters"
 
       # guestos images
-      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
+      [ -d artifacts/icos/guestos ] && buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
           gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
           "artifacts/icos/guestos" "${CI_JOB_NAME}/guest-os"
       # hostos images
-      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
+      [ -d artifacts/icos/hostos ] && buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
           gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
           "artifacts/icos/hostos" "${CI_JOB_NAME}/host-os"
       # setupos images
-      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
+      [ -d artifacts/icos/setupos ] && buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
           gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
           "artifacts/icos/setupos" "${CI_JOB_NAME}/setup-os"
 
@@ -338,6 +386,10 @@ build-ic:
   extends:
     - .build-ic
     - .rules-master-pipeline-no-merge-train
+  variables:
+    # only build binaries, canisters, ic-os if there are changes
+    RUN_ON_DIFF_ONLY: "true"
+    BAZEL_COMMAND: "build"
 
 # Scheduled Pipeline
 build-ic-release:
@@ -349,6 +401,14 @@ build-ic-release:
 lock-generate:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes:
+        - ".bazelrc"
+        - ".bazelversion"
+        - "**/*.bazel"
+        - "**/*.bzl"
+        - "**/*.lock"
+        - "**/*.rs"
+        - "**/*.toml"
   needs: []
   tags:
     - dfinity-ic
@@ -432,7 +492,7 @@ pre-commit:
         exit 1
       fi
 
-python-gitlab-ci-tests:
+python-ci-tests:
   rules:
     # this job breaks when not run against the default branch
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH'
@@ -451,12 +511,12 @@ python-gitlab-ci-tests:
       set -xeuo pipefail
       pip3 install --ignore-installed -r requirements.txt
       cd gitlab-ci/src
-      pytest -v -o junit_family=xunit1 --junitxml=../../test_report.xml --cov=. --cov-report=term --cov-report=term-missing --cov-report=html --cov-branch
+      pytest --ignore=gitlab_config/ -v -o junit_family=xunit1 --junitxml=../../test_report.xml --cov=. --cov-report=term --cov-report=term-missing --cov-report=html --cov-branch
 
 cargo-clippy-linux:
   needs: [] # don't wait on other jobs
   extends:
-    - .rules-master-pipeline-and-merge-request
+    - .rules-master-pipeline-and-merge-request-rust-changed
   variables:
     CARGO_BUILD_TARGET: "x86_64-unknown-linux-gnu"
   script:
@@ -468,7 +528,7 @@ cargo-clippy-linux:
 cargo-build-release-linux:
   needs: [] # don't wait on other jobs
   extends:
-    - .rules-master-pipeline-and-merge-request
+    - .rules-master-pipeline-and-merge-request-rust-changed
   script:
     - |
       set -eExuo pipefail
@@ -533,26 +593,40 @@ build-determinism:
     - .rules-master-pipeline-no-merge-train
   needs:
     - job: bazel-test-all
-      artifacts: false
+      artifacts: true
     - job: build-ic
       artifacts: false
   parallel:
     matrix:
-      - PATH0: "release"
+      - TARGET: "//publish/binaries:upload"
+        PATH0: "release"
         PATH1: "build-ic/release"
-      - PATH0: "canisters"
+      - TARGET: "//publish/canisters:upload"
+        PATH0: "canisters"
         PATH1: "build-ic/canisters"
-      - PATH0: "guest-os/update-img"
+      - TARGET: "//ic-os/guestos/envs/prod:upload_update-img"
+        PATH0: "guest-os/update-img"
         PATH1: "build-ic/guest-os"
-      - PATH0: "host-os/update-img"
+      - TARGET: "//ic-os/hostos/envs/prod:upload_update-img"
+        PATH0: "host-os/update-img"
         PATH1: "build-ic/host-os"
-      - PATH0: "setup-os/disk-img"
+      - TARGET: "//ic-os/setupos/envs/prod:upload_disk-img"
+        PATH0: "setup-os/disk-img"
         PATH1: "build-ic/setup-os"
         SETUPOS_FLAG: "true"
   script:
     - |
       set -eExuo pipefail
-      ./gitlab-ci/tools/build-diff.sh "$PATH0" "$PATH1"
+
+      # bazel-targets file is expected from bazel-test-all CI job
+      if [ ! -e bazel-targets ]; then
+          echo "Missing 'bazel-targets' file!"
+          exit 1
+      fi
+
+      if grep -q "$TARGET" bazel-targets || grep -qF "//..." bazel-targets; then
+          gitlab-ci/tools/build-diff.sh "$PATH0" "$PATH1"
+      fi
 
 build-determinism-release:
   rules:

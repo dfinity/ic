@@ -5,7 +5,7 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     "@crate_index//:anyhow",
     "@crate_index//:bytes",
-    "@crate_index//:clap_4_0_0",
+    "@crate_index//:clap",
     "@crate_index//:futures-util",
     "@crate_index//:http_1_0_0",
     "@crate_index//:http_body_1_0_0",

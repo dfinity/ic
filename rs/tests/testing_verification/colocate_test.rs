@@ -134,6 +134,12 @@ fn setup(env: TestEnv) {
             env_tar_path
         )
     });
+    info!(
+        log,
+        "scp-ed {:?} of {:?} KiB to {UVM_NAME}:{to:?} .",
+        env_tar_path,
+        size / 1024,
+    );
 
     let docker_env_vars = {
         let mut env_vars = String::from("");

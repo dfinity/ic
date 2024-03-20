@@ -1,8 +1,8 @@
 use canister_test::{Cycles, PrincipalId, WasmResult};
 use ic_interfaces::execution_environment::HypervisorResult;
-use ic_test_utilities::wasmtime_instance::WasmtimeInstanceBuilder;
-use ic_test_utilities_time::mock_time;
+use ic_test_utilities_embedders::WasmtimeInstanceBuilder;
 use ic_types::methods::{FuncRef, WasmMethod};
+use ic_types::time::UNIX_EPOCH;
 
 fn wat_with_imports(wat: &str) -> String {
     format!(
@@ -35,7 +35,7 @@ fn wat_with_imports(wat: &str) -> String {
 fn run_test(wat: &str) -> HypervisorResult<Option<WasmResult>> {
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_api_type(ic_system_api::ApiType::update(
-            mock_time(),
+            UNIX_EPOCH,
             vec![],
             Cycles::zero(),
             PrincipalId::new_user_test_id(0),
@@ -55,7 +55,7 @@ fn run_test(wat: &str) -> HypervisorResult<Option<WasmResult>> {
 fn can_grow_then_read_stable_memory() {
     let wat = r#"
 	  (memory 1)
-	  (func (export "canister_update go") 
+	  (func (export "canister_update go")
 	    ;; Grow stable memory to one page
 	  	(i64.ne (call $ic0_stable64_grow (i64.const 1)) (i64.const 0))
 	  	(if (then unreachable))
@@ -78,7 +78,7 @@ fn can_grow_then_read_stable_memory() {
 fn can_write_then_read_stable_memory_across_pages() {
     let wat = r#"
 	  (memory 1)
-	  (func (export "canister_update go") 
+	  (func (export "canister_update go")
 	    ;; Grow stable memory to one page
 	  	(i64.ne (call $ic0_stable64_grow (i64.const 1)) (i64.const 0))
 	  	(if (then unreachable))
@@ -87,7 +87,7 @@ fn can_write_then_read_stable_memory_across_pages() {
 	  	(i32.store (i32.const 0) (i32.const 55))
 		(call $ic0_stable64_write (i64.const 4092) (i64.const 0) (i64.const 4))
 
-		;; Read back data from first and second pages 
+		;; Read back data from first and second pages
 	  	(call $ic0_stable64_read (i64.const 1000) (i64.const 4092) (i64.const 8))
 	  	(i64.ne (i64.load (i32.const 1000)) (i64.const 55))
 	  	(if (then unreachable))
@@ -105,7 +105,7 @@ fn can_write_then_read_stable_memory_across_pages() {
 fn can_read_from_accessed_and_unaccessed_pages() {
     let wat = r#"
 	  (memory 1)
-	  (func (export "canister_update go") 
+	  (func (export "canister_update go")
 	    ;; Grow stable memory to one page
 	  	(i64.ne (call $ic0_stable64_grow (i64.const 1)) (i64.const 0))
 	  	(if (then unreachable))
@@ -115,7 +115,7 @@ fn can_read_from_accessed_and_unaccessed_pages() {
 	  	(i64.ne (i64.load (i32.const 0)) (i64.const 0))
 	  	(if (then unreachable))
 
-		;; Read from the first and second pages 
+		;; Read from the first and second pages
 	  	(call $ic0_stable64_read (i64.const 1000) (i64.const 4092) (i64.const 8))
 	  	(i64.ne (i64.load (i32.const 1000)) (i64.const 0))
 	  	(if (then unreachable))

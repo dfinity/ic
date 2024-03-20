@@ -108,19 +108,11 @@ You can properly dispose of the testnet by killing the `ict` process.
 ### Interacting Afterwards
 
 To interact with the testnet using the shell scripts in this directory, you'll need to run
-`set_testnet_env_variables.sh` deep within `test_tmpdir`. This script can be sourced in your current
-shell. Just look for a log line similar to the following:
-
-```
-...ic_mainnet_nns_recovery/src/lib.rs... source "/ic/test_tmpdir/_tmp/c689987f6ae05176e3097f73827ab180/setup/set_testnet_env_variables.sh"
-```
-
-Then go into another container again and source that script:
+`set_testnet_env_variables.sh` deep within `test_tmpdir`. There is a helper function to do this for you:
 
 ```
 ./gitlab-ci/container/container-run.sh
-
-source "/ic/test_tmpdir/_tmp/c689987f6ae05176e3097f73827ab180/setup/set_testnet_env_variables.sh"
+. ./testnet/tools/nns-tools/cmd.sh set_testnet_env_variables
 ```
 
 Once you have those definitions, the following commands become possible:

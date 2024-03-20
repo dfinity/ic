@@ -6,7 +6,7 @@
 use candid::{CandidType, Deserialize};
 use core::fmt;
 use ic_base_types::{NodeId, SubnetId};
-use ic_ic00_types::EcdsaKeyId;
+use ic_management_canister_types::EcdsaKeyId;
 use ic_types::crypto::KeyPurpose;
 use ic_types::registry::RegistryClientError;
 use ic_types::PrincipalId;
@@ -344,7 +344,7 @@ pub fn make_nns_canister_records_key() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_ic00_types::EcdsaCurve;
+    use ic_management_canister_types::EcdsaCurve;
     use rand::Rng;
 
     #[test]

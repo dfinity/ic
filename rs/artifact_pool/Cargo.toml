@@ -9,7 +9,7 @@ documentation.workspace = true
 [dependencies]
 bincode = "1.2.1"
 byteorder = "1.3.4"
-clap = { workspace = true }
+clap = { version = "3.2.25", features = ["derive"] }
 ic-config = { path = "../config" }
 ic-constants = { path = "../constants" }
 ic-interfaces = { path = "../interfaces" }
@@ -34,12 +34,14 @@ nix = { workspace = true }
 [dev-dependencies]
 criterion = "0.5"
 ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/canister_threshold_sigs" }
-ic-ic00-types = { path = "../types/ic00_types" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-test-artifact-pool = { path = "../test_utilities/artifact_pool" }
 ic-test-utilities = { path = "../test_utilities" }
+ic-test-utilities-consensus = { path = "../test_utilities/consensus" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }
 ic-test-utilities-registry = { path = "../test_utilities/registry" }
 ic-test-utilities-time = { path = "../test_utilities/time" }
+ic-test-utilities-types = { path = "../test_utilities/types" }
 slog-term = "2.6.0"
 slog-envlogger = "2.2.0"
 slog-async = "2.5.0"

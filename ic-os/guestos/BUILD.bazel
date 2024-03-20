@@ -6,7 +6,6 @@ exports_files([
     "partitions.csv",
     "rootfs/docker-base.dev",
     "rootfs/docker-base.prod",
-    "rootfs/docker-base.dev-sev",
     "rootfs/allow_console_root",
     "rootfs/extra_boot_args.template",
     "rootfs/dev-certs/canister_http_test_ca.cert",
@@ -17,11 +16,13 @@ exports_files([
 filegroup(
     name = "rootfs-files",
     srcs = glob(["rootfs/**"]),
+    tags = ["manual"],
 )
 
 ext4_image(
     name = "partition-config.tar",
     partition_size = "100M",
+    tags = ["manual"],
     target_compatible_with = [
         "@platforms//os:linux",
     ],
@@ -32,6 +33,7 @@ sh_test(
     srcs = ["rootfs/opt/ic/bin/validate-replica-config.sh"],
     args = ["$(execpath :rootfs/opt/ic/share/ic.json5.template)"],
     data = [":rootfs/opt/ic/share/ic.json5.template"],
+    tags = ["manual"],
 )
 
 # All guest-os targets are named the same, just stay in different submodules.
@@ -39,6 +41,5 @@ sh_test(
 #
 # bazel run   //ic-os/guestos/envs/prod:upload_disk-img           [--s3_endpoint=<internal endpoint address>]
 # bazel build //ic-os/guestos/envs/dev/...
-# bazel build //ic-os/guestos/envs/dev-sev/...
 #
 # check //ic-os/defs.bzl for the full list of targets.

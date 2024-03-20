@@ -12,3 +12,4 @@
 //! crate.
 
 pub mod create_service_nervous_system_builder;
+pub mod pocket_ic_helpers;

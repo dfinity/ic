@@ -17,7 +17,7 @@ pub fn build_dashboard() -> Vec<u8> {
         <!DOCTYPE html>
         <html lang=\"en\">
             <head>
-                <title>Minter Dashboard</title>
+                <title>ckBTC Minter Dashboard</title>
                 <style>
                     body {{
                         font-family: monospace;

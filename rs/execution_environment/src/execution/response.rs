@@ -31,9 +31,11 @@ use crate::execution::common::{
     self, action_to_response, apply_canister_state_changes, update_round_limits,
 };
 use crate::execution_environment::{
-    ExecuteMessageResult, ExecutionResponse, PausedExecution, RoundContext, RoundLimits,
+    log_dirty_pages, ExecuteMessageResult, ExecutionResponse, PausedExecution, RoundContext,
+    RoundLimits,
 };
 use crate::metrics::CallTreeMetrics;
+use ic_config::flag_status::FlagStatus;
 
 #[cfg(test)]
 mod tests;
@@ -240,6 +242,7 @@ impl ResponseHelper {
                     heap_delta: NumBytes::from(0),
                     instructions_used: NumInstructions::from(0),
                     response: ExecutionResponse::Empty,
+                    call_duration: Some(round.time.saturating_duration_since(call_context.time())),
                 });
             }
             // Since the call context has responded, passing `Ok(None)` will produce
@@ -382,11 +385,10 @@ impl ResponseHelper {
                     self.canister.canister_id(),
                     err,
                 );
-                let err = HypervisorError::InsufficientCyclesBalance(err);
                 // Return total instructions: wasm executor leftovers + cleanup reservation.
                 return Err((
                     self,
-                    err,
+                    HypervisorError::InsufficientCyclesBalance(err),
                     output.num_instructions_left + reserved_cleanup_instructions,
                 ));
             }
@@ -514,7 +516,7 @@ impl ResponseHelper {
                 .get()
                 .saturating_sub(instructions_left.get()),
         );
-        let action = self
+        let (action, call_context) = self
             .canister
             .system_state
             .call_context_manager_mut()
@@ -554,11 +556,23 @@ impl ResponseHelper {
             );
         }
 
+        if original.log_dirty_pages == FlagStatus::Enabled {
+            log_dirty_pages(
+                round.log,
+                &original.canister_id,
+                format!("reponse_to_{}", original.message.originator).as_str(),
+                heap_delta.get() as usize / PAGE_SIZE,
+                instructions_used,
+            );
+        }
+
         ExecuteMessageResult::Finished {
             canister: self.canister,
             response,
             instructions_used,
             heap_delta,
+            call_duration: call_context
+                .map(|call_context| round.time.saturating_duration_since(call_context.time())),
         }
     }
 
@@ -639,6 +653,7 @@ struct OriginalContext {
     canister_id: CanisterId,
     subnet_memory_reservation: NumBytes,
     instructions_executed: NumInstructions,
+    log_dirty_pages: FlagStatus,
 }
 
 /// Struct used to hold necessary information for the
@@ -844,6 +859,7 @@ pub fn execute_response(
     subnet_size: usize,
     subnet_memory_reservation: NumBytes,
     call_tree_metrics: &dyn CallTreeMetrics,
+    log_dirty_pages: FlagStatus,
 ) -> ExecuteMessageResult {
     let (callback, callback_id, call_context, call_context_id) =
         match common::get_call_context_and_callback(
@@ -861,6 +877,7 @@ pub fn execute_response(
                     instructions_used: NumInstructions::from(0),
                     heap_delta: NumBytes::from(0),
                     response: ExecutionResponse::Empty,
+                    call_duration: None,
                 };
             }
         };
@@ -890,6 +907,7 @@ pub fn execute_response(
         canister_id: clean_canister.canister_id(),
         subnet_memory_reservation,
         instructions_executed: call_context.instructions_executed(),
+        log_dirty_pages,
     };
 
     let mut helper =
@@ -908,9 +926,9 @@ pub fn execute_response(
     };
 
     let func_ref = match original.call_origin {
-        CallOrigin::Ingress(_, _) | CallOrigin::CanisterUpdate(_, _) | CallOrigin::SystemTask => {
-            FuncRef::UpdateClosure(closure)
-        }
+        CallOrigin::Ingress(_, _)
+        | CallOrigin::CanisterUpdate(_, _, _)
+        | CallOrigin::SystemTask => FuncRef::UpdateClosure(closure),
         CallOrigin::CanisterQuery(_, _) | CallOrigin::Query(_) => FuncRef::QueryClosure(closure),
     };
 
@@ -998,9 +1016,9 @@ fn execute_response_cleanup(
         .instruction_limits
         .update(instructions_left);
     let func_ref = match original.call_origin {
-        CallOrigin::Ingress(_, _) | CallOrigin::CanisterUpdate(_, _) | CallOrigin::SystemTask => {
-            FuncRef::UpdateClosure(cleanup_closure)
-        }
+        CallOrigin::Ingress(_, _)
+        | CallOrigin::CanisterUpdate(_, _, _)
+        | CallOrigin::SystemTask => FuncRef::UpdateClosure(cleanup_closure),
         CallOrigin::CanisterQuery(_, _) | CallOrigin::Query(_) => {
             FuncRef::QueryClosure(cleanup_closure)
         }

@@ -45,7 +45,7 @@ pub type ChunkId = Id<ChunkIdTag, u32>;
 pub trait Chunkable<T> {
     fn chunks_to_download(&self) -> Box<dyn Iterator<Item = ChunkId>>;
     fn add_chunk(&mut self, chunk_id: ChunkId, chunk: Chunk) -> Result<(), AddChunkError>;
-    fn completed(&self) -> Option<T>;
+    fn completed(&self) -> bool;
 }
 
 pub trait StateSyncClient: Send + Sync {
@@ -68,8 +68,4 @@ pub trait StateSyncClient: Send + Sync {
     fn should_cancel(&self, id: &StateSyncArtifactId) -> bool;
     /// Get a specific chunk from the specified state.
     fn chunk(&self, id: &StateSyncArtifactId, chunk_id: ChunkId) -> Option<Chunk>;
-    /// Finish a state sync by delivering the `StateSyncMessage` returned in `Chunkable::add_chunks`.
-    /// This function should be called only once for each completed state sync message.
-    /// TODO: (NET-1469) In the future the above invariant should be enforced by the API.
-    fn deliver_state_sync(&self, msg: Self::Message);
 }

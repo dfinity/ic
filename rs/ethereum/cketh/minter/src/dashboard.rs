@@ -4,18 +4,20 @@ mod tests;
 use askama::Template;
 use candid::Principal;
 use ic_cketh_minter::endpoints::{EthTransaction, RetrieveEthStatus};
-use ic_cketh_minter::eth_logs::{EventSource, ReceivedEthEvent};
+use ic_cketh_minter::eth_logs::{EventSource, ReceivedEthEvent, ReceivedEvent};
 use ic_cketh_minter::eth_rpc::Hash;
 use ic_cketh_minter::eth_rpc_client::responses::TransactionStatus;
 use ic_cketh_minter::lifecycle::EthereumNetwork;
 use ic_cketh_minter::numeric::{BlockNumber, LedgerBurnIndex, TransactionNonce, Wei};
-use ic_cketh_minter::state::transactions::{EthWithdrawalRequest, Reimbursed};
+use ic_cketh_minter::state::transactions::{Reimbursed, WithdrawalRequest};
 use ic_cketh_minter::state::{EthBalance, MintedEvent, State};
 use ic_ethereum_types::Address;
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet};
 
 mod filters {
+    use super::*;
+
     pub fn timestamp_to_datetime<T: std::fmt::Display>(timestamp: T) -> askama::Result<String> {
         let input = timestamp.to_string();
         let ts: i128 = input
@@ -27,6 +29,14 @@ mod filters {
             time::format_description::parse("[year]-[month]-[day]T[hour]:[minute]:[second]+00:00")
                 .unwrap();
         Ok(dt_offset.format(&format).unwrap())
+    }
+
+    //TODO XC-82: also render token symbol
+    pub fn withdrawal_amount(request: &WithdrawalRequest) -> askama::Result<String> {
+        match request {
+            WithdrawalRequest::CkEth(r) => Ok(r.withdrawal_amount.to_string()),
+            WithdrawalRequest::CkErc20(r) => Ok(r.withdrawal_amount.to_string()),
+        }
     }
 }
 
@@ -53,7 +63,7 @@ pub struct DashboardTemplate {
     pub ethereum_network: EthereumNetwork,
     pub ecdsa_key_name: String,
     pub minter_address: String,
-    pub contract_address: String,
+    pub eth_helper_contract_address: String,
     pub next_transaction_nonce: TransactionNonce,
     pub minimum_withdrawal_amount: Wei,
     pub first_synced_block: BlockNumber,
@@ -63,7 +73,7 @@ pub struct DashboardTemplate {
     pub minted_events: Vec<MintedEvent>,
     pub events_to_mint: Vec<ReceivedEthEvent>,
     pub rejected_deposits: BTreeMap<EventSource, String>,
-    pub withdrawal_requests: Vec<EthWithdrawalRequest>,
+    pub withdrawal_requests: Vec<WithdrawalRequest>,
     pub pending_transactions: Vec<DashboardPendingTransaction>,
     pub finalized_transactions: Vec<DashboardFinalizedTransaction>,
     pub reimbursed_transactions: Vec<Reimbursed>,
@@ -75,15 +85,23 @@ impl DashboardTemplate {
     pub fn from_state(state: &State) -> Self {
         let mut minted_events: Vec<_> = state.minted_events.values().cloned().collect();
         minted_events.sort_unstable_by_key(|event| Reverse(event.mint_block_index));
-        let mut events_to_mint: Vec<_> = state.events_to_mint.values().cloned().collect();
-        events_to_mint.sort_unstable_by_key(|event| Reverse(event.block_number));
+        let (eth_events_to_mint, _erc20_events_to_mint): (Vec<_>, Vec<_>) = state
+            .events_to_mint()
+            .into_iter()
+            .map(|event| match event {
+                ReceivedEvent::Eth(event) => (Some(event), None),
+                ReceivedEvent::Erc20(event) => (None, Some(event)),
+            })
+            .unzip();
+        let mut eth_events_to_mint: Vec<_> = eth_events_to_mint.into_iter().flatten().collect();
+        eth_events_to_mint.sort_unstable_by_key(|event| Reverse(event.block_number));
 
         let mut withdrawal_requests: Vec<_> = state
             .eth_transactions
             .withdrawal_requests_iter()
             .cloned()
             .collect();
-        withdrawal_requests.sort_unstable_by_key(|req| Reverse(req.ledger_burn_index));
+        withdrawal_requests.sort_unstable_by_key(|req| Reverse(req.cketh_ledger_burn_index()));
 
         let mut pending_transactions: Vec<_> = state
             .eth_transactions
@@ -99,7 +117,7 @@ impl DashboardTemplate {
             .collect();
         pending_transactions.extend(state.eth_transactions.sent_transactions_iter().flat_map(
             |(_nonce, ledger_burn_index, txs)| {
-                txs.iter().map(|tx| DashboardPendingTransaction {
+                txs.into_iter().map(|tx| DashboardPendingTransaction {
                     ledger_burn_index: *ledger_burn_index,
                     destination: tx.transaction().destination,
                     transaction_amount: tx.transaction().amount,
@@ -136,8 +154,8 @@ impl DashboardTemplate {
                 .minter_address()
                 .map(|addr| addr.to_string())
                 .unwrap_or_default(),
-            contract_address: state
-                .ethereum_contract_address
+            eth_helper_contract_address: state
+                .eth_helper_contract_address
                 .map_or("N/A".to_string(), |address| address.to_string()),
             ledger_id: state.ledger_id,
             next_transaction_nonce: state.eth_transactions.next_transaction_nonce(),
@@ -146,7 +164,7 @@ impl DashboardTemplate {
             last_synced_block: state.last_scraped_block_number,
             last_observed_block: state.last_observed_block_number,
             minted_events,
-            events_to_mint,
+            events_to_mint: eth_events_to_mint,
             rejected_deposits: state.invalid_events.clone(),
             withdrawal_requests,
             pending_transactions,

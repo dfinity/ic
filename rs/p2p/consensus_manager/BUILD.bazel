@@ -17,20 +17,21 @@ DEPENDENCIES = [
     "@crate_index//:axum_0_7_0",
     "@crate_index//:backoff",
     "@crate_index//:bytes",
-    "@crate_index//:crossbeam-channel",
-    "@crate_index//:futures",
     "@crate_index//:prometheus",
     "@crate_index//:rand",
     "@crate_index//:slog",
     "@crate_index//:tokio",
+    "@crate_index//:tokio-util",
 ]
 
 DEV_DEPENDENCIES = [
     "//rs/p2p/test_utils",
     "//rs/test_utilities/logger",
     "//rs/types/types_test_utils",
+    "@crate_index//:anyhow",
+    "@crate_index//:futures",
     "@crate_index//:mockall",
-    "@crate_index//:tokio-util",
+    "@crate_index//:tower",
     "@crate_index//:turmoil",
 ]
 

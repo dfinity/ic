@@ -1,6 +1,6 @@
 use crate::NeuronArgs;
 use ic_base_types::{NodeId, RegistryVersion};
-use ic_ic00_types::EcdsaKeyId;
+use ic_management_canister_types::EcdsaKeyId;
 use ic_types::{Height, ReplicaVersion, SubnetId};
 use url::Url;
 

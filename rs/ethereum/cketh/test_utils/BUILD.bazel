@@ -1,0 +1,45 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "test_utils",
+    srcs = glob(
+        ["src/**/*.rs"],
+    ),
+    crate_name = "ic_cketh_test_utils",
+    proc_macro_deps = [
+        "@crate_index//:strum_macros",
+    ],
+    version = "0.1.0",
+    deps = [
+        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//rs/ethereum/cketh/minter",
+        "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator",
+        "//rs/ethereum/ledger-suite-orchestrator/test_utils",
+        "//rs/ethereum/types",
+        "//rs/rosetta-api/icrc1/ledger",
+        "//rs/rust_canisters/http_types",
+        "//rs/state_machine_tests",
+        "//rs/test_utilities/load_wasm",
+        "//rs/types/base_types",
+        "@crate_index//:assert_matches",
+        "@crate_index//:candid",
+        "@crate_index//:ethers-core",
+        "@crate_index//:hex",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:num-traits",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:serde_json",
+        "@crate_index//:strum",
+    ],
+)
+
+rust_test(
+    name = "lib_tests",
+    crate = ":test_utils",
+    deps = [
+        ":test_utils",
+    ],
+)

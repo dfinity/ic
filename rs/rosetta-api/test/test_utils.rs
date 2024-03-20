@@ -261,8 +261,14 @@ pub async fn get_balance(
         index: Some(h.try_into().unwrap()),
         hash: None,
     });
-    let mut msg =
-        AccountBalanceRequest::new(req_handler.network_id(), to_model_account_identifier(&acc));
+
+    let mut msg = AccountBalanceRequest {
+        network_identifier: req_handler.network_id(),
+        account_identifier: to_model_account_identifier(&acc),
+        block_identifier: None,
+        metadata: None,
+    };
+
     msg.block_identifier = block_id;
     let resp = req_handler.account_balance(msg).await?;
     Ok(Tokens::from_e8s(resp.balances[0].value.parse().unwrap()))

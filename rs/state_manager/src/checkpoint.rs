@@ -7,7 +7,8 @@ use ic_base_types::{subnet_id_try_from_protobuf, CanisterId};
 use ic_config::flag_status::FlagStatus;
 use ic_logger::error;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
+use ic_replicated_state::canister_snapshots::CanisterSnapshots;
+use ic_replicated_state::page_map::{PageAllocatorFileDescriptor, StorageLayout};
 use ic_replicated_state::{
     canister_state::execution_state::WasmBinary, page_map::PageMap, CanisterMetrics, CanisterState,
     ExecutionState, ReplicatedState, SchedulerState, SystemState,
@@ -82,6 +83,7 @@ pub(crate) fn make_checkpoint(
             .make_checkpoint_step_duration
             .with_label_values(&["tip_to_checkpoint"])
             .start_timer();
+        #[allow(clippy::disallowed_methods)]
         let (send, recv) = unbounded();
         tip_channel
             .send(TipRequest::TipToCheckpoint {
@@ -108,6 +110,7 @@ pub(crate) fn make_checkpoint(
             .make_checkpoint_step_duration
             .with_label_values(&["wait_for_reflinking"])
             .start_timer();
+        #[allow(clippy::disallowed_methods)]
         let (send, recv) = unbounded();
         tip_channel.send(TipRequest::Wait { sender: send }).unwrap();
         recv.recv().unwrap();
@@ -258,8 +261,15 @@ pub fn load_checkpoint<P: ReadPolicy + Send + Sync>(
         canister_states
     };
 
-    let state =
-        ReplicatedState::new_from_checkpoint(canister_states, metadata, subnet_queues, query_stats);
+    // TODO(EXC-1539): Load canister snapshots from checkpoint.
+    let canister_snapshots = CanisterSnapshots::default();
+    let state = ReplicatedState::new_from_checkpoint(
+        canister_states,
+        metadata,
+        subnet_queues,
+        query_stats,
+        canister_snapshots,
+    );
 
     Ok(state)
 }
@@ -310,10 +320,11 @@ pub fn load_canister_state<P: ReadPolicy>(
     let execution_state = match canister_state_bits.execution_state_bits {
         Some(execution_state_bits) => {
             let starting_time = Instant::now();
+            let wasm_memory_layout = canister_layout.vmemory_0();
             let wasm_memory = Memory::new(
                 PageMap::open(
-                    &canister_layout.vmemory_0(),
-                    &canister_layout.vmemory_0_overlays()?,
+                    &wasm_memory_layout.base(),
+                    &wasm_memory_layout.existing_overlays()?,
                     height,
                     Arc::clone(&fd_factory),
                 )?,
@@ -322,10 +333,11 @@ pub fn load_canister_state<P: ReadPolicy>(
             durations.insert("wasm_memory", starting_time.elapsed());
 
             let starting_time = Instant::now();
+            let stable_memory_layout = canister_layout.stable_memory();
             let stable_memory = Memory::new(
                 PageMap::open(
-                    &canister_layout.stable_memory_blob(),
-                    &canister_layout.stable_memory_overlays()?,
+                    &stable_memory_layout.base(),
+                    &stable_memory_layout.existing_overlays()?,
                     height,
                     Arc::clone(&fd_factory),
                 )?,
@@ -382,9 +394,10 @@ pub fn load_canister_state<P: ReadPolicy>(
     );
 
     let starting_time = Instant::now();
+    let wasm_chunk_store_layout = canister_layout.wasm_chunk_store();
     let wasm_chunk_store_data = PageMap::open(
-        &canister_layout.wasm_chunk_store(),
-        &canister_layout.wasm_chunk_store_overlays()?,
+        &wasm_chunk_store_layout.base(),
+        &wasm_chunk_store_layout.existing_overlays()?,
         height,
         Arc::clone(&fd_factory),
     )?;
@@ -410,6 +423,8 @@ pub fn load_canister_state<P: ReadPolicy>(
         wasm_chunk_store_data,
         canister_state_bits.wasm_chunk_store_metadata,
         canister_state_bits.log_visibility,
+        canister_state_bits.canister_log,
+        canister_state_bits.wasm_memory_limit,
     );
 
     let canister_state = CanisterState {

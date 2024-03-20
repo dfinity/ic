@@ -1,3 +1,4 @@
+pub mod canister_snapshot_bits;
 pub mod canister_state_bits;
 pub mod ingress;
 pub mod queues;

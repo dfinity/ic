@@ -338,7 +338,7 @@ mod tests {
     use ic_crypto_test_utils_root_of_trust::MockRootOfTrustProvider;
     use ic_crypto_tree_hash::{Digest, Label, MixedHashTree};
     use ic_test_utilities::crypto::temp_crypto_component_with_fake_registry;
-    use ic_test_utilities::types::ids::node_test_id;
+    use ic_test_utilities_types::ids::node_test_id;
     use ic_types::messages::{
         HttpCanisterUpdate, HttpReadStateResponse, HttpRequest, HttpUserQuery, UserQuery,
     };

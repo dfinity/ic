@@ -10,7 +10,7 @@ use ic_rosetta_api::models::CallResponse;
 use std::collections::HashMap;
 
 const PORT: u32 = 8107;
-const VM_NAME: &str = "rosetta-test-neuron-info";
+const VM_NAME: &str = "rosetta-neuron-info";
 
 pub fn test(env: TestEnv) {
     let _logger = env.logger();

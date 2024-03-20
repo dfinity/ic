@@ -4,14 +4,12 @@ load("//bazel:defs.bzl", "rust_bench")
 package(default_visibility = [
     "//rs/certification/test-utils:__subpackages__",
     "//rs/crypto:__subpackages__",
-    "//rs/state_machine_tests:__pkg__",
     "//rs/validator/http_request_test_utils:__subpackages__",
 ])
 
 DEPENDENCIES = [
     "//rs/crypto/internal/crypto_lib/bls12_381/type",
     "//rs/crypto/internal/crypto_lib/seed",
-    "//rs/crypto/internal/crypto_lib/threshold_sig/bls12_381/der_utils",
     "//rs/crypto/internal/crypto_lib/types",
     "//rs/crypto/secrets_containers",
     "//rs/crypto/sha2",

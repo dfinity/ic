@@ -80,9 +80,6 @@ replicated_state/src/page_map/checkpoint.rs:use std::fs::{File, OpenOptions};
 replicated_state/src/page_map/tests.rs:use std::fs::OpenOptions;
 rust_canisters/canister_test/src/canister.rs:use std::{convert::AsRef, fs::File, io::Read, path::Path};
 sns/cli/src/deploy.rs:use std::fs::OpenOptions;
-sns/cli/src/init_config_file.rs:    convert::TryFrom,
-sns/cli/src/init_config_file.rs:    fs::File,
-sns/cli/src/init_config_file.rs:use std::{
 sns/cli/src/main.rs:use std::fs::File;
 state_layout/src/basic_cpmgr.rs:    fs, io,
 state_layout/src/basic_cpmgr.rs:use std::{

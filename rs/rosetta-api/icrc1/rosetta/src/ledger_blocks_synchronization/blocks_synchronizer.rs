@@ -1,6 +1,6 @@
+use crate::common::storage::types::RosettaBlock;
 use crate::common::{
-    storage::{storage_client::StorageClient, types::RosettaBlock},
-    utils::utils::create_progress_bar,
+    storage::storage_client::StorageClient, utils::utils::create_progress_bar_if_needed,
 };
 use anyhow::{bail, Context};
 use candid::{Decode, Encode, Nat};
@@ -65,8 +65,8 @@ fn derive_synchronization_gaps(
             SyncRange::new(
                 a.index + 1,
                 b.index - 1,
-                b.parent_hash.unwrap(),
-                Some(a.block_hash),
+                b.get_parent_hash().unwrap(),
+                Some(a.clone().get_block_hash()),
             )
         })
         .collect::<Vec<SyncRange>>();
@@ -81,7 +81,7 @@ fn derive_synchronization_gaps(
             SyncRange::new(
                 0,
                 lowest_block.index - 1,
-                lowest_block.parent_hash.unwrap(),
+                lowest_block.get_parent_hash().unwrap(),
                 None,
             ),
         );
@@ -112,6 +112,8 @@ pub async fn start_synching_blocks(
 
     // After all the gaps have been filled continue with a synchronization from the top of the blockchain.
     sync_from_the_tip(agent, storage_client.clone(), maximum_blocks_per_request).await?;
+
+    storage_client.update_account_balances()?;
 
     Ok(())
 }
@@ -149,7 +151,7 @@ pub async fn sync_from_the_tip(
                 block.index + 1,
                 tip_block_index,
                 ByteBuf::from(tip_block_hash),
-                Some(block.block_hash),
+                Some(block.clone().get_block_hash()),
             )
         },
     );
@@ -176,7 +178,7 @@ async fn sync_blocks_interval(
     sync_range: SyncRange,
 ) -> anyhow::Result<()> {
     // Create a progress bar for visualization.
-    let pb = create_progress_bar(
+    let pb = create_progress_bar_if_needed(
         *sync_range.index_range.start(),
         *sync_range.index_range.end(),
     );
@@ -215,9 +217,11 @@ async fn sync_blocks_interval(
             );
         }
 
-        leading_block_hash = fetched_blocks[0].parent_hash.clone();
+        leading_block_hash = fetched_blocks[0].get_parent_hash().clone();
         let number_of_blocks_fetched = fetched_blocks.len();
-        pb.inc(number_of_blocks_fetched as u64);
+        if let Some(ref pb) = pb {
+            pb.inc(number_of_blocks_fetched as u64);
+        }
 
         // Store the fetched blocks in the database.
         storage_client.store_blocks(fetched_blocks.clone())?;
@@ -251,10 +255,13 @@ async fn sync_blocks_interval(
         );
         next_index_interval = RangeInclusive::new(interval_start, interval_end);
     }
-    pb.finish_with_message(format!(
+    if let Some(pb) = pb {
+        pb.finish_with_message("Done");
+    }
+    info!(
         "Synced Up to block height: {}",
         *sync_range.index_range.end()
-    ));
+    );
     Ok(())
 }
 
@@ -404,31 +411,28 @@ async fn fetch_blocks_interval(
 }
 
 pub mod blocks_verifier {
-    use crate::ledger_blocks_synchronization::blocks_synchronizer::RosettaBlock;
+    use crate::common::storage::types::RosettaBlock;
     use serde_bytes::ByteBuf;
 
-    pub fn is_valid_blockchain(
-        blockchain: &Vec<RosettaBlock>,
-        leading_block_hash: &ByteBuf,
-    ) -> bool {
+    pub fn is_valid_blockchain(blockchain: &[RosettaBlock], leading_block_hash: &ByteBuf) -> bool {
         if blockchain.is_empty() {
             return true;
         }
 
         // Check that the leading block has the block hash that is provided.
         // Safe to call unwrap as the blockchain is guaranteed to have at least one element.
-        if blockchain.last().unwrap().block_hash.clone() != leading_block_hash {
+        if blockchain.last().unwrap().clone().get_block_hash().clone() != leading_block_hash {
             return false;
         }
 
-        let mut parent_hash = Some(blockchain[0].block_hash.clone());
+        let mut parent_hash = Some(blockchain[0].clone().get_block_hash().clone());
         // The blockchain has more than one element so it is save to skip the first one.
         // The first element cannot be verified so we start at element 2.
         for block in blockchain.iter().skip(1) {
-            if block.parent_hash != parent_hash {
+            if block.get_parent_hash() != parent_hash {
                 return false;
             }
-            parent_hash = Some(block.block_hash.clone());
+            parent_hash = Some(block.clone().get_block_hash());
         }
 
         // No invalid blocks were found return true.
@@ -439,29 +443,31 @@ pub mod blocks_verifier {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::common::storage::types::Tokens;
+    use ic_icrc1::blocks::encoded_block_to_generic_block;
     use ic_icrc1_test_utils::valid_blockchain_strategy;
+    use ic_icrc1_tokens_u256::U256;
+    use ic_ledger_core::block::BlockType;
     use proptest::prelude::*;
     use rand::seq::SliceRandom;
     use serde_bytes::ByteBuf;
 
     proptest! {
             #[test]
-        fn test_valid_blockchain(blockchain in valid_blockchain_strategy::<Tokens>(1000)){
+        fn test_valid_blockchain(blockchain in valid_blockchain_strategy::<U256>(1000)){
             let num_blocks = blockchain.len();
             let mut rosetta_blocks = vec![];
             for (index,block) in blockchain.into_iter().enumerate(){
-                rosetta_blocks.push(RosettaBlock::from_icrc_ledger_block(block,index as u64).unwrap());
+                rosetta_blocks.push(RosettaBlock::from_generic_block(encoded_block_to_generic_block(&block.encode()),index as u64).unwrap());
             }
             // Blockchain is valid and should thus pass the verification.
-            assert!(blocks_verifier::is_valid_blockchain(&rosetta_blocks,&rosetta_blocks.last().map(|block|block.block_hash.clone()).unwrap_or_else(|| ByteBuf::from(r#"TestBytes"#))));
+            assert!(blocks_verifier::is_valid_blockchain(&rosetta_blocks,&rosetta_blocks.last().map(|block|block.clone().get_block_hash().clone()).unwrap_or_else(|| ByteBuf::from(r#"TestBytes"#))));
 
             // There is no point in shuffling the blockchain if it has length zero.
             if num_blocks > 0 {
                 // If shuffled, the blockchain is no longer in order and thus no longer valid.
                 rosetta_blocks.shuffle(&mut rand::thread_rng());
                 let shuffled_blocks = rosetta_blocks.to_vec();
-                assert!(!blocks_verifier::is_valid_blockchain(&shuffled_blocks,&rosetta_blocks.last().unwrap().block_hash.clone())|| num_blocks<=1||rosetta_blocks==shuffled_blocks);
+                assert!(!blocks_verifier::is_valid_blockchain(&shuffled_blocks,&rosetta_blocks.last().unwrap().clone().get_block_hash().clone())|| num_blocks<=1||rosetta_blocks==shuffled_blocks);
             }
 
         }

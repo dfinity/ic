@@ -5,8 +5,6 @@
 # - `docker push/pull dfinity/setupos-base:<tag>`
 # - `docker build -t dfinity/setupos-base-dev:<tag> --build-arg PACKAGE_FILES="packages.common packages.dev" -f Dockerfile.base .`
 # - `docker push/pull dfinity/setupos-base-dev:<tag>`
-# - `docker build -t dfinity/setupos-base-dev-sev:<tag> --build-arg PACKAGE_FILES="packages.common packages.dev" -f Dockerfile.base .`
-# - `docker push/pull dfinity/setupos-base-dev-sev:<tag>`
 #
 # First build stage:
 # - Download and cache minimal Ubuntu Server 20.04 LTS Docker image
@@ -42,6 +40,7 @@ RUN apt-get -y update && \
 # In the future this will change. Either:
 # - the mainline kernel will get SEV-SNP or
 # - AMDSEV repo might get built as part of this dockerfile
+# This sev-snp kernel is only used to check hardware capability.
 ARG MODIFIED_KERNEL_DEB="linux-image-6.1.0-rc4-snp-host-93fa8c5918a4_6.1.0-rc4-snp-host-93fa8c5918a4-1_amd64.deb"
 RUN curl -LsSf --remote-name https://github.com/dfinity/AMDSEV/releases/download/snp-release-2023-05-24/${MODIFIED_KERNEL_DEB} \
     && dpkg -i ${MODIFIED_KERNEL_DEB} \

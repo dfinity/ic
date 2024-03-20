@@ -4,10 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+anyhow = { workspace = true }
 async-trait = "0.1.36"
-axum = "0.7.0"
+axum = { workspace = true }
 bytes = { workspace = true }
-crossbeam-channel = "0.5.5"
 either = "1.6.0"
 futures = { workspace = true }
 ic-artifact-manager = { path = "../../artifact_manager" }
@@ -17,7 +17,6 @@ ic-consensus-manager = { path = "../consensus_manager" }
 ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
-ic-icos-sev = { path = "../../ic_os/sev" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-mocks = { path = "../../interfaces/mocks" }
 ic-peer-manager = { path = "../peer_manager" }
@@ -35,6 +34,7 @@ ic-types = { path = "../../types/types" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-registry = { path = "../../test_utilities/registry" }
+ic-test-utilities-types = { path = "../../test_utilities/types" }
 mockall = "0.11.4"
 quinn = { version = "0.10.2", features = ["ring"] }
 serde = "1.0.99"
@@ -42,4 +42,3 @@ slog = { workspace = true }
 tempfile = "3.0"
 tokio = { workspace = true }
 turmoil = { workspace = true }
-

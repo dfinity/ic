@@ -9,5 +9,5 @@ documentation.workspace = true
 [dependencies]
 ic-base-types = { path = "../../../types/base_types" }
 ic-crypto-tls-interfaces = { path = "../../tls_interfaces" }
-tokio-rustls = "0.24.0"
-x509-parser = { version = "0.15.1" }
+tokio-rustls = { workspace = true }
+x509-parser = { workspace = true }

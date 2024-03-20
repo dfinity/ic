@@ -4,6 +4,10 @@ package(default_visibility = ["//visibility:public"])
 
 LIB_DEPENDENCIES = [
     "//rs/config",
+    "//rs/boundary_node/ic_boundary",
+    "//rs/interfaces",
+    "//rs/http_endpoints/public",
+    "//rs/validator/ingress_message",
     "//rs/crypto/iccsa",
     "//rs/crypto/utils/threshold_sig_der",
     "//rs/registry/subnet_type",
@@ -11,7 +15,7 @@ LIB_DEPENDENCIES = [
     "//rs/state_machine_tests",
     "//packages/pocket-ic:pocket-ic",
     "//rs/types/types",
-    "//rs/types/ic00_types",
+    "//rs/types/management_canister_types",
     "//rs/crypto/sha2",
     "//rs/utils",
     "//rs/registry/routing_table",
@@ -19,18 +23,23 @@ LIB_DEPENDENCIES = [
     "@crate_index//:aide",
     "@crate_index//:axum_0_7_0",
     "@crate_index//:axum-extra",
+    "@crate_index//:backoff",
     "@crate_index//:itertools",
     "@crate_index//:tokio",
     "@crate_index//:tempfile",
     "@crate_index//:candid",
-    "@crate_index//:clap",
+    "@crate_index//:hyper_1_0_0",
+    "@crate_index//:ed25519-consensus",
+    "@crate_index//:clap_3_2_25",
     "@crate_index//:serde",
     "@crate_index//:hex",
     "@crate_index//:rand",
+    "@crate_index//:serde_cbor",
     "@crate_index//:time",
     "@crate_index//:tracing",
     "@crate_index//:tracing-subscriber",
     "@crate_index//:tracing-appender",
+    "@crate_index//:tower",
     "@crate_index//:tower_http_0_5_1",
     "@crate_index//:ic-cdk",
     "@crate_index//:base64",
@@ -40,6 +49,10 @@ LIB_DEPENDENCIES = [
 
 TEST_DEPENDENCIES = [
     "//packages/pocket-ic:pocket-ic",
+    "//rs/tests/testing_verification/spec_compliance",
+    "//rs/types/types",
+    "//rs/registry/subnet_type",
+    "//rs/registry/routing_table",
     "@crate_index//:ic-cdk",
     "@crate_index//:reqwest",
     "@crate_index//:candid",
@@ -68,7 +81,7 @@ rust_library(
     ]),
     crate_name = "pocket_ic_server",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "3.0.0",
+    version = "3.0.1",
     deps = LIB_DEPENDENCIES,
 )
 
@@ -81,12 +94,15 @@ rust_test(
 
 rust_test(
     name = "test",
+    size = "medium",
     srcs = ["tests/api_test.rs"],
     data = [
         ":pocket-ic-server",
+        "//rs/tests:ic-hs",
     ],
     env = {
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+        "IC_REF_TEST_ROOT": "rs/tests/ic-hs",
     },
     deps = TEST_DEPENDENCIES,
 )

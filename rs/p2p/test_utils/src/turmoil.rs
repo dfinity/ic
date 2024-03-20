@@ -16,8 +16,7 @@ use axum::Router;
 use either::Either;
 use futures::{future::BoxFuture, FutureExt};
 use ic_artifact_manager::run_artifact_processor;
-use ic_crypto_tls_interfaces::{TlsConfig, TlsStream};
-use ic_icos_sev::{Sev, ValidateAttestedStream};
+use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::{
     p2p::artifact_manager::{ArtifactProcessorEvent, JoinGuard},
     p2p::state_sync::StateSyncClient,
@@ -29,7 +28,6 @@ use ic_quic_transport::SubnetTopology;
 use ic_quic_transport::{QuicTransport, Transport};
 use ic_state_manager::state_sync::types::StateSyncMessage;
 use ic_types::{artifact::UnvalidatedArtifactMutation, NodeId, RegistryVersion};
-use ic_types_test_utils::ids::SUBNET_1;
 use quinn::{
     self,
     udp::{EcnCodepoint, Transmit},
@@ -217,6 +215,7 @@ pub fn add_peer_manager_to_sim(
     RegistryConsensusHandle,
 ) {
     let (peer_manager_sender, mut peer_manager_receiver) = oneshot::channel();
+    #[allow(clippy::disallowed_methods)]
     let (peer_manager_cmd_sender, mut peer_manager_cmd_receiver) = mpsc::unbounded_channel();
     sim.client("peer-manager", async move {
         let rt = tokio::runtime::Handle::current();
@@ -271,7 +270,6 @@ pub fn add_transport_to_sim<F>(
     topology_watcher: watch::Receiver<SubnetTopology>,
     conn_checker: Option<Router>,
     crypto: Option<Arc<dyn TlsConfig + Send + Sync>>,
-    sev: Option<Arc<dyn ValidateAttestedStream<Box<dyn TlsStream>> + Send + Sync>>,
     state_sync_client: Option<Arc<dyn StateSyncClient<Message = StateSyncMessage>>>,
     consensus_manager: Option<TestConsensus<U64Artifact>>,
     post_setup_future: F,
@@ -283,21 +281,12 @@ pub fn add_transport_to_sim<F>(
 
     let node_crypto =
         crypto.unwrap_or_else(|| temp_crypto_component_with_tls_keys(&registry_handler, peer));
-    let sev_handshake = sev.unwrap_or_else(|| {
-        Arc::new(Sev::new(
-            peer,
-            SUBNET_1,
-            registry_handler.registry_client.clone(),
-            log.clone(),
-        ))
-    });
     registry_handler.registry_client.update_to_latest_version();
 
     sim.host(peer.to_string(), move || {
         let log = log.clone();
         let registry_client = registry_handler.registry_client.clone();
         let node_crypto_clone = node_crypto.clone();
-        let sev_handshake_clone = sev_handshake.clone();
         let conn_checker_clone = conn_checker.clone();
         let topology_watcher_clone = topology_watcher.clone();
         let post_setup_future_clone = post_setup_future.clone();
@@ -355,7 +344,6 @@ pub fn add_transport_to_sim<F>(
                 &tokio::runtime::Handle::current(),
                 node_crypto_clone,
                 registry_client,
-                sev_handshake_clone,
                 peer,
                 topology_watcher_clone.clone(),
                 Either::Right(custom_udp),
@@ -399,8 +387,8 @@ pub fn start_test_processor(
     change_set_producer: TestConsensus<U64Artifact>,
 ) -> (
     Box<dyn JoinGuard>,
-    tokio::sync::mpsc::Receiver<ArtifactProcessorEvent<U64Artifact>>,
-    crossbeam_channel::Sender<UnvalidatedArtifactMutation<U64Artifact>>,
+    mpsc::Receiver<ArtifactProcessorEvent<U64Artifact>>,
+    mpsc::UnboundedSender<UnvalidatedArtifactMutation<U64Artifact>>,
 ) {
     let (tx, rx) = tokio::sync::mpsc::channel(1000);
     let time_source = Arc::new(SysTimeSource::new());

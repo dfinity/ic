@@ -2,6 +2,7 @@ use crate::height_index::HeightIndex;
 use crate::metrics::{PoolMetrics, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED};
 use crate::pool_common::HasLabel;
 use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
+use ic_interfaces::p2p::consensus::ArtifactWithOpt;
 use ic_interfaces::{
     certification::{CertificationPool, ChangeAction, ChangeSet},
     consensus_pool::HeightIndexedPool,
@@ -204,12 +205,15 @@ impl MutablePool<CertificationArtifact> for CertificationPoolImpl {
 
     fn apply_changes(&mut self, change_set: ChangeSet) -> ChangeResult<CertificationArtifact> {
         let changed = !change_set.is_empty();
-        let mut adverts = Vec::new();
+        let mut artifacts_with_opt = Vec::new();
         let mut purged = Vec::new();
 
         change_set.into_iter().for_each(|action| match action {
             ChangeAction::AddToValidated(msg) => {
-                adverts.push(CertificationArtifact::message_to_advert(&msg));
+                artifacts_with_opt.push(ArtifactWithOpt {
+                    advert: CertificationArtifact::message_to_advert(&msg),
+                    is_latency_sensitive: true,
+                });
                 self.validated_pool_metrics
                     .received_artifact_bytes
                     .with_label_values(&[msg.label()])
@@ -219,7 +223,11 @@ impl MutablePool<CertificationArtifact> for CertificationPoolImpl {
 
             ChangeAction::MoveToValidated(msg) => {
                 if !msg.is_share() {
-                    adverts.push(CertificationArtifact::message_to_advert(&msg));
+                    artifacts_with_opt.push(ArtifactWithOpt {
+                        advert: CertificationArtifact::message_to_advert(&msg),
+                        // relayed
+                        is_latency_sensitive: false,
+                    });
                 }
                 let label = msg.label().to_owned();
 
@@ -265,7 +273,7 @@ impl MutablePool<CertificationArtifact> for CertificationPoolImpl {
 
         ChangeResult {
             purged,
-            adverts,
+            artifacts_with_opt,
             poll_immediately: changed,
         }
     }
@@ -445,8 +453,8 @@ mod tests {
     use super::*;
     use ic_interfaces::certification::CertificationPool;
     use ic_logger::replica_logger::no_op_logger;
-    use ic_test_utilities::consensus::fake::{Fake, FakeSigner};
-    use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_consensus::fake::{Fake, FakeSigner};
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::time::UNIX_EPOCH;
     use ic_types::{
         consensus::certification::{
@@ -582,7 +590,7 @@ mod tests {
                 ChangeAction::AddToValidated(share_msg.clone()),
                 ChangeAction::AddToValidated(cert_msg.clone()),
             ]);
-            assert_eq!(result.adverts.len(), 2);
+            assert_eq!(result.artifacts_with_opt.len(), 2);
             assert!(result.purged.is_empty());
             assert!(result.poll_immediately);
             assert_eq!(
@@ -614,8 +622,8 @@ mod tests {
                 ChangeAction::MoveToValidated(cert_msg.clone()),
             ]);
             let expected = CertificationArtifact::message_to_advert(&cert_msg).id;
-            assert_eq!(result.adverts[0].id, expected);
-            assert_eq!(result.adverts.len(), 1);
+            assert_eq!(result.artifacts_with_opt[0].advert.id, expected);
+            assert_eq!(result.artifacts_with_opt.len(), 1);
             assert!(result.purged.is_empty());
             assert!(result.poll_immediately);
             assert_eq!(
@@ -693,7 +701,7 @@ mod tests {
                     panic!("Purging couldn't finish in more than 6 seconds.")
                 }
             }
-            assert!(result.adverts.is_empty());
+            assert!(result.artifacts_with_opt.is_empty());
             assert_eq!(result.purged.len(), 2);
             assert!(result.poll_immediately);
             assert_eq!(pool.all_heights_with_artifacts().len(), 0);
@@ -736,7 +744,7 @@ mod tests {
                 share_msg,
                 "Testing the removal of invalid artifacts".to_string(),
             )]);
-            assert!(result.adverts.is_empty());
+            assert!(result.artifacts_with_opt.is_empty());
             assert!(result.purged.is_empty());
             assert!(result.poll_immediately);
             assert_eq!(
@@ -795,7 +803,7 @@ mod tests {
                 ChangeAction::AddToValidated(share_msg.clone()),
                 ChangeAction::AddToValidated(cert_msg.clone()),
             ]);
-            assert_eq!(result.adverts.len(), 2);
+            assert_eq!(result.artifacts_with_opt.len(), 2);
             assert!(result.purged.is_empty());
             assert!(result.poll_immediately);
             assert_eq!(

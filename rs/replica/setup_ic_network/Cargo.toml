@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-crossbeam-channel = "0.5.5"
+crossbeam-channel = { workspace = true }
 either = "1.6.0"
 ic-artifact-manager = { path = "../../artifact_manager" }
 ic-artifact-pool = { path = "../../artifact_pool" }
@@ -19,7 +19,6 @@ ic-crypto-interfaces-sig-verification = { path = "../../crypto/interfaces/sig_ve
 ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
 ic-cycles-account-manager = { path = "../../cycles_account_manager" }
 ic-https-outcalls-consensus = { path = "../../https_outcalls/consensus" }
-ic-icos-sev = { path = "../../ic_os/sev" }
 ic-ingress-manager = { path = "../../ingress_manager" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-adapter-client = { path = "../../interfaces/adapter_client" }
@@ -35,7 +34,6 @@ ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-replicated-state = { path = "../../replicated_state" }
 ic-state-manager = { path = "../../state_manager" }
 ic-state-sync-manager = { path = "../../p2p/state_sync_manager" }
-ic-transport = { path = "../../transport" }
 ic-types = { path = "../../types/types" }
 slog = { workspace = true }
 tokio = { workspace = true }

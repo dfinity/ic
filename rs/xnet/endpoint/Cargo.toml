@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-crossbeam-channel = "0.5.5"
+crossbeam-channel = { workspace = true }
 hyper = { version = "0.14.18", features = ["full", "tcp"] }
 ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
 ic-interfaces-certified-stream-store = { path = "../../interfaces/certified_stream_store" }
@@ -35,6 +35,7 @@ ic-replicated-state = { path = "../../replicated_state" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }
 ic-test-utilities-metrics = { path = "../../test_utilities/metrics" }
+ic-test-utilities-types = { path = "../../test_utilities/types" }
 maplit = "1.0.2"
 prost = { workspace = true }
 reqwest = { workspace = true }

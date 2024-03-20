@@ -12,7 +12,7 @@ function install_guestos() {
     echo "* Installing GuestOS disk-image..."
 
     vgchange -ay hostlvm
-    log_and_reboot_on_error "${?}" "Unable to activate HostOS volume group."
+    log_and_halt_installation_on_error "${?}" "Unable to activate HostOS volume group."
 
     TMPDIR=$(mktemp -d)
     tar xafS /data/guest-os.img.tar.zst -C "${TMPDIR}" disk.img
@@ -21,15 +21,15 @@ function install_guestos() {
     size="${size:=0}"
 
     pv -f -s "$size" "${TMPDIR}/disk.img" | dd of=${LV} bs=10M conv=sparse
-    log_and_reboot_on_error "${?}" "Unable to install GuestOS disk-image."
+    log_and_halt_installation_on_error "${?}" "Unable to install GuestOS disk-image."
 
     rm -rf "${TMPDIR}"
 
     sync
-    log_and_reboot_on_error "${?}" "Unable to synchronize cached writes to persistent storage."
+    log_and_halt_installation_on_error "${?}" "Unable to synchronize cached writes to persistent storage."
 
     vgchange -an hostlvm
-    log_and_reboot_on_error "${?}" "Unable to deactivate HostOS volume group."
+    log_and_halt_installation_on_error "${?}" "Unable to deactivate HostOS volume group."
 }
 
 # Establish run order

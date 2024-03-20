@@ -20,15 +20,15 @@ use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_embedders::wasm_utils::instrumentation::instruction_to_cost_new;
 use ic_error_types::{ErrorCode, UserError};
-use ic_ic00_types::{
-    CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterIdRecord,
-    CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgsBuilder,
-    CanisterStatusResultV2, CanisterStatusType, ClearChunkStoreArgs, CreateCanisterArgs, EmptyBlob,
-    InstallCodeArgsV2, Method, Payload, SkipPreUpgrade, StoredChunksArgs, StoredChunksReply,
-    UpdateSettingsArgs, UploadChunkArgs, UploadChunkReply,
-};
 use ic_interfaces::execution_environment::{ExecutionMode, HypervisorError, SubnetAvailableMemory};
 use ic_logger::replica_logger::no_op_logger;
+use ic_management_canister_types::{
+    CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterIdRecord,
+    CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgsBuilder,
+    CanisterStatusResultV2, CanisterStatusType, CanisterUpgradeOptions, ChunkHash,
+    ClearChunkStoreArgs, CreateCanisterArgs, EmptyBlob, InstallCodeArgsV2, Method, Payload,
+    StoredChunksArgs, StoredChunksReply, UpdateSettingsArgs, UploadChunkArgs, UploadChunkReply,
+};
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET};
@@ -46,27 +46,27 @@ use ic_state_machine_tests::{StateMachineBuilder, StateMachineConfig};
 use ic_system_api::{ExecutionParameters, InstructionLimits};
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
-    state::{
-        get_running_canister, get_running_canister_with_args, get_stopped_canister,
-        get_stopped_canister_with_controller, get_stopping_canister,
-        get_stopping_canister_with_controller, CallContextBuilder, CanisterStateBuilder,
-        ReplicatedStateBuilder,
-    },
-    types::{
-        ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id},
-        messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder},
-    },
     universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM},
 };
 use ic_test_utilities_execution_environment::{
     assert_delta, get_reply, get_routing_table_with_specified_ids_allocation_range,
     wasm_compilation_cost, wat_compilation_cost, ExecutionTest, ExecutionTestBuilder,
 };
-use ic_test_utilities_time::mock_time;
+use ic_test_utilities_state::{
+    get_running_canister, get_running_canister_with_args, get_stopped_canister,
+    get_stopped_canister_with_controller, get_stopping_canister,
+    get_stopping_canister_with_controller, CallContextBuilder, CanisterStateBuilder,
+    ReplicatedStateBuilder,
+};
+use ic_test_utilities_types::{
+    ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id},
+    messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder},
+};
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
-    messages::{CallbackId, CanisterCall, StopCanisterCallId, StopCanisterContext},
+    messages::{CallbackId, CanisterCall, StopCanisterCallId, StopCanisterContext, NO_DEADLINE},
     nominal_cycles::NominalCycles,
+    time::UNIX_EPOCH,
     CanisterId, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
     NumInstructions, SubnetId, Time, UserId,
 };
@@ -368,6 +368,7 @@ fn install_code(
         round_limits,
         round_counters,
         SMALL_APP_SUBNET_MAX_SIZE,
+        Config::default().dirty_page_logging,
     );
     let instructions_left = instruction_limit - instructions_used.min(instruction_limit);
     (instructions_left, result, canister)
@@ -1715,6 +1716,7 @@ fn stop_a_running_canister() {
             reply_callback: CallbackId::new(0),
             call_id: Some(StopCanisterCallId::new(0)),
             cycles: Cycles::zero(),
+            deadline: NO_DEADLINE,
         };
         assert_eq!(
             canister_manager.stop_canister(canister_id, stop_context.clone(), &mut state),
@@ -1797,6 +1799,7 @@ fn stop_a_stopped_canister_from_another_canister() {
             reply_callback: CallbackId::from(0),
             call_id: Some(StopCanisterCallId::new(0)),
             cycles: Cycles::from(cycles),
+            deadline: NO_DEADLINE,
         };
         assert_eq!(
             canister_manager.stop_canister(canister_id, stop_context, &mut state),
@@ -2976,7 +2979,7 @@ fn uninstall_canister_doesnt_respond_to_responded_call_contexts() {
             &mut CanisterStateBuilder::new()
                 .with_call_context(CallContextBuilder::new().with_responded(true).build())
                 .build(),
-            mock_time(),
+            UNIX_EPOCH,
             AddCanisterChangeToHistory::No,
             Arc::new(TestPageAllocatorFileDescriptorImpl),
         ),
@@ -3001,7 +3004,7 @@ fn uninstall_canister_responds_to_unresponded_call_contexts() {
                         .build()
                 )
                 .build(),
-            mock_time(),
+            UNIX_EPOCH,
             AddCanisterChangeToHistory::No,
             Arc::new(TestPageAllocatorFileDescriptorImpl),
         )[0],
@@ -3010,7 +3013,7 @@ fn uninstall_canister_responds_to_unresponded_call_contexts() {
             status: IngressStatus::Known {
                 receiver: canister_test_id(789).get(),
                 user_id: user_test_id(123),
-                time: mock_time(),
+                time: UNIX_EPOCH,
                 state: IngressState::Failed(UserError::new(
                     ErrorCode::CanisterRejectedMessage,
                     "Canister has been uninstalled.",
@@ -6270,7 +6273,9 @@ fn test_upgrade_with_skip_pre_upgrade_preserves_stable_memory() {
     test.upgrade_canister_v2(
         canister_id,
         UNIVERSAL_CANISTER_WASM.to_vec(),
-        Some(SkipPreUpgrade(Some(true))),
+        CanisterUpgradeOptions {
+            skip_pre_upgrade: Some(true),
+        },
     )
     .unwrap();
 
@@ -6287,7 +6292,9 @@ fn test_upgrade_with_skip_pre_upgrade_preserves_stable_memory() {
         .upgrade_canister_v2(
             canister_id,
             UNIVERSAL_CANISTER_WASM.to_vec(),
-            Some(SkipPreUpgrade(None)),
+            CanisterUpgradeOptions {
+                skip_pre_upgrade: None,
+            },
         )
         .unwrap_err();
     assert_eq!(ErrorCode::CanisterCalledTrap, err.code());
@@ -7384,8 +7391,6 @@ fn clear_chunk_store_works() {
 
 #[test]
 fn stored_chunks_works() {
-    use serde_bytes::ByteBuf;
-
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
     let mut test = ExecutionTestBuilder::new()
@@ -7439,7 +7444,12 @@ fn stored_chunks_works() {
         StoredChunksReply
     )
     .unwrap();
-    assert_eq!(reply, StoredChunksReply(vec![ByteBuf::from(hash1)]));
+    assert_eq!(
+        reply,
+        StoredChunksReply(vec![ChunkHash {
+            hash: hash1.to_vec()
+        }])
+    );
 
     // Then two chunks
     test.subnet_message(
@@ -7465,7 +7475,14 @@ fn stored_chunks_works() {
         StoredChunksReply
     )
     .unwrap();
-    let mut expected = vec![ByteBuf::from(hash1), ByteBuf::from(hash2)];
+    let mut expected = vec![
+        ChunkHash {
+            hash: hash1.to_vec(),
+        },
+        ChunkHash {
+            hash: hash2.to_vec(),
+        },
+    ];
     expected.sort();
     assert_eq!(reply, StoredChunksReply(expected));
 }

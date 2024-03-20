@@ -65,17 +65,6 @@ build-guestos-base-dev:
   - BUILD_ARGS=(--build-arg "PACKAGE_FILES=packages.common packages.dev")
   - *build-base-image
 
-build-guestos-base-dev-sev:
-  extends:
-    - .build-base-image-job
-  variables:
-    CONTEXT: "${CI_PROJECT_DIR}/ic-os/guestos/rootfs"
-    IMAGE: "guestos-base-dev-sev"
-    REF_FILE: "ic-os/guestos/rootfs/docker-base.dev-sev"
-  script:
-    - BUILD_ARGS=(--build-arg "PACKAGE_FILES=packages.common packages.dev" --build-arg "CPU_SUPPORT=sev")
-    - *build-base-image
-
 build-boundaryos-base:
   extends:
     - .build-base-image-job
@@ -114,17 +103,6 @@ build-hostos-base-dev:
   - BUILD_ARGS=(--build-arg "PACKAGE_FILES=packages.common packages.dev")
   - *build-base-image
 
-build-hostos-base-dev-sev:
-  extends:
-    - .build-base-image-job
-  variables:
-    CONTEXT: "${CI_PROJECT_DIR}/ic-os/hostos/rootfs"
-    IMAGE: "hostos-base-dev-sev"
-    REF_FILE: "ic-os/hostos/rootfs/docker-base.dev-sev"
-  script:
-  - BUILD_ARGS=(--build-arg "PACKAGE_FILES=packages.common packages.dev" --build-arg "CPU_SUPPORT=sev")
-  - *build-base-image
-
 build-setupos-base:
   extends:
     - .build-base-image-job
@@ -144,44 +122,27 @@ build-setupos-base-dev:
   - BUILD_ARGS=(--build-arg "PACKAGE_FILES=packages.common packages.dev")
   - *build-base-image
 
-build-setupos-base-dev-sev:
-  extends:
-    - .build-base-image-job
-  variables:
-    CONTEXT: "${CI_PROJECT_DIR}/ic-os/setupos/rootfs"
-    IMAGE: "setupos-base-dev-sev"
-    REF_FILE: "ic-os/setupos/rootfs/docker-base.dev-sev"
-  script:
-  - BUILD_ARGS=(--build-arg "PACKAGE_FILES=packages.common packages.dev")
-  - *build-base-image
-
 build-base-images-ref-update:
   extends:
     - .rules-build-base-images
   needs:
     - build-guestos-base
     - build-guestos-base-dev
-    - build-guestos-base-dev-sev
     - build-boundaryos-base
     - build-boundaryos-base-snp
     - build-hostos-base
     - build-hostos-base-dev
-    - build-hostos-base-dev-sev
     - build-setupos-base
     - build-setupos-base-dev
-    - build-setupos-base-dev-sev
   dependencies:
     - build-guestos-base
     - build-guestos-base-dev
-    - build-guestos-base-dev-sev
     - build-boundaryos-base
     - build-boundaryos-base-snp
     - build-hostos-base
     - build-hostos-base-dev
-    - build-hostos-base-dev-sev
     - build-setupos-base
     - build-setupos-base-dev
-    - build-setupos-base-dev-sev
   script:
    - |
      set -euo pipefail

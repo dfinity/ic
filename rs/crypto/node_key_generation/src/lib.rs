@@ -190,7 +190,7 @@ fn csp_for_config(
     config: &CryptoConfig,
     tokio_runtime_handle: Option<tokio::runtime::Handle>,
 ) -> Csp {
-    Csp::new(
+    Csp::new_from_config(
         config,
         tokio_runtime_handle,
         None,

@@ -90,11 +90,21 @@ class JiraFindingDataSource(FindingDataSource):
         self.deleted_findings_cached = {}
         self.risk_assessors = []
 
+    # Remove the unnecessary text strings from the description of the Linux kernel CNA CVEs
+    @staticmethod
+    def __filter_linux_kernel_cna_cves(vuln_description: str) -> str:
+        filter_strings = [
+            "In the Linux kernel, the following vulnerability has been resolved: "
+        ]
+        for filter_string in filter_strings:
+            vuln_description = vuln_description.replace(filter_string, "")
+        return vuln_description
+
     @staticmethod
     def __finding_to_jira_vulnerabilities(vulnerabilities: List[Vulnerability]) -> str:
         vuln_table: str = "||*id*||*name*||*description*||*score*||*risk*||\n"
         for vuln in vulnerabilities:
-            vuln_table += f"|{JiraFindingDataSource.__finding_to_jira_escape_wiki_renderer_chars(vuln.id)}|{JiraFindingDataSource.__finding_to_jira_escape_wiki_renderer_chars(vuln.name)}|{JiraFindingDataSource.__finding_to_jira_escape_wiki_renderer_chars(vuln.description)}|{vuln.score}|{JiraFindingDataSource.__finding_to_jira_escape_wiki_renderer_chars(vuln.risk_note if vuln.risk_note != JIRA_VULNERABILITY_TABLE_RISK_NOTE_MIGRATION_LABEL else ' ', True)}|\n"
+            vuln_table += f"|{JiraFindingDataSource.__finding_to_jira_escape_wiki_renderer_chars(vuln.id)}|{JiraFindingDataSource.__finding_to_jira_escape_wiki_renderer_chars(vuln.name)}|{JiraFindingDataSource.__finding_to_jira_escape_wiki_renderer_chars(JiraFindingDataSource.__filter_linux_kernel_cna_cves(vuln.description))}|{vuln.score}|{JiraFindingDataSource.__finding_to_jira_escape_wiki_renderer_chars(vuln.risk_note if vuln.risk_note != JIRA_VULNERABILITY_TABLE_RISK_NOTE_MIGRATION_LABEL else ' ', True)}|\n"
         return vuln_table
 
     @staticmethod
@@ -668,6 +678,9 @@ class JiraFindingDataSource(FindingDataSource):
             return self.risk_assessors
         except RuntimeError:
             logging.error(
-                f"could not determine risk assessors by ticket, reason:\n{traceback.format_exc()}\nusing default risk assessors instead"
+                "could not determine risk assessors by ticket\nusing default risk assessors instead"
+            )
+            logging.debug(
+                f"could not determine risk assessors by ticket, reason:\n{traceback.format_exc()}"
             )
             return JIRA_DEFAULT_RISK_ASSESSORS

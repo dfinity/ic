@@ -15,12 +15,12 @@ use ic_crypto_tree_hash::{
     flatmap, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree, WitnessGenerator,
     WitnessGeneratorImpl,
 };
-use ic_ic00_types::{
+use ic_ledger_core::block::BlockType;
+use ic_ledger_core::tokens::CheckedSub;
+use ic_management_canister_types::{
     BoundedVec, CanisterIdRecord, CanisterSettingsArgs, CanisterSettingsArgsBuilder,
     CreateCanisterArgs, Method, IC_00,
 };
-use ic_ledger_core::block::BlockType;
-use ic_ledger_core::tokens::CheckedSub;
 use ic_nervous_system_governance::maturity_modulation::{
     MAX_MATURITY_MODULATION_PERMYRIAD, MIN_MATURITY_MODULATION_PERMYRIAD,
 };
@@ -406,7 +406,7 @@ impl Default for State {
             authorized_subnets: BTreeMap::new(),
             default_subnets: vec![],
             icp_xdr_conversion_rate: Some(IcpXdrConversionRate {
-                timestamp_seconds: 1620633600,    // 10 May 2021 10:00:00 AM CEST
+                timestamp_seconds: DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS,
                 xdr_permyriad_per_icp: 1_000_000, // 100 XDR = 1 ICP
             }),
             average_icp_xdr_conversion_rate: None,

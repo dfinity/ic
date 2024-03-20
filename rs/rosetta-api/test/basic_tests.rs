@@ -167,21 +167,25 @@ async fn smoke_test() {
         ))
     );
 
-    let msg = AccountBalanceRequest::new(
-        req_handler.network_id(),
-        ic_rosetta_api::convert::to_model_account_identifier(&acc_id(0)),
-    );
+    let msg = AccountBalanceRequest {
+        network_identifier: req_handler.network_id(),
+        account_identifier: ic_rosetta_api::convert::to_model_account_identifier(&acc_id(0)),
+        block_identifier: None,
+        metadata: None,
+    };
+
     let res = req_handler.account_balance(msg).await;
     assert_eq!(
         res,
-        Ok(AccountBalanceResponse::new(
-            block_id(scribe.blockchain.back().unwrap()).unwrap(),
-            vec![tokens_to_amount(
+        Ok(AccountBalanceResponse {
+            block_identifier: block_id(scribe.blockchain.back().unwrap()).unwrap(),
+            balances: vec![tokens_to_amount(
                 *scribe.balance_book.get(&acc_id(0)).unwrap(),
                 DEFAULT_TOKEN_SYMBOL
             )
-            .unwrap()]
-        ))
+            .unwrap()],
+            metadata: None
+        })
     );
 
     let (acc_id, _ed_kp, pk, _pid) = ic_rosetta_test_utils::make_user_ed25519(4);
@@ -310,7 +314,10 @@ async fn blocks_test() {
         .unwrap();
     assert_eq!(
         resp.transactions,
-        vec![BlockTransaction::new(block_id, trans)]
+        vec![BlockTransaction {
+            block_identifier: block_id,
+            transaction: trans
+        }]
     );
     assert_eq!(resp.total_count, 1);
 

@@ -36,7 +36,7 @@ use crate::util::*;
 use candid::{Decode, Encode};
 use futures::future::join_all;
 use ic_agent::{agent::RejectCode, export::Principal, identity::Identity, AgentError};
-use ic_ic00_types::{
+use ic_management_canister_types::{
     CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2, CreateCanisterArgs,
     EmptyBlob, Payload,
 };
@@ -173,6 +173,7 @@ pub fn update_settings_of_frozen_canister(env: TestEnv) {
                     compute_allocation: None,
                     memory_allocation: None,
                     freezing_threshold: Some(low_freezing_threshold.into()),
+                    reserved_cycles_limit: None,
                 },
             };
             let bytes = Encode!(&arg).unwrap();

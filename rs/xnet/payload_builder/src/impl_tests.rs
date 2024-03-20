@@ -9,11 +9,10 @@ use ic_interfaces_state_manager::StateReader;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::testing::ReplicatedStateTesting;
 use ic_test_utilities::{
-    crypto::fake_tls_handshake::FakeTlsHandshake,
-    state_manager::FakeStateManager,
-    types::ids::{SUBNET_1, SUBNET_2, SUBNET_3, SUBNET_4, SUBNET_42, SUBNET_5},
+    crypto::fake_tls_handshake::FakeTlsHandshake, state_manager::FakeStateManager,
 };
 use ic_test_utilities_logger::with_test_replica_logger;
+use ic_test_utilities_types::ids::{SUBNET_1, SUBNET_2, SUBNET_3, SUBNET_4, SUBNET_42, SUBNET_5};
 use maplit::btreemap;
 
 const OWN_SUBNET_ID: SubnetId = SUBNET_42;

@@ -17,10 +17,11 @@ pub use self::http::{
     SignedDelegation,
 };
 pub use crate::methods::SystemMethod;
+use crate::time::CoarseTime;
 use crate::{user_id_into_protobuf, user_id_try_from_protobuf, Cycles, Funds, NumBytes, UserId};
 pub use blob::Blob;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_ic00_types::CanisterChangeOrigin;
+use ic_management_canister_types::CanisterChangeOrigin;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::canister_state_bits::v1 as pb;
 use ic_protobuf::types::v1 as pb_types;
@@ -30,7 +31,7 @@ pub use ingress_messages::{
 };
 pub use inter_canister::{
     CallContextId, CallbackId, Payload, RejectContext, Request, RequestMetadata, RequestOrResponse,
-    Response, MAX_REJECT_MESSAGE_LEN_BYTES,
+    Response, MAX_REJECT_MESSAGE_LEN_BYTES, NO_DEADLINE,
 };
 pub use message_id::{MessageId, MessageIdError, EXPECTED_MESSAGE_ID_LENGTH};
 use phantom_newtype::Id;
@@ -112,6 +113,8 @@ pub enum StopCanisterContext {
         /// here so that they can be returned to the caller in the eventual
         /// reply.
         cycles: Cycles,
+        /// Deadline of the the stop canister call, if any (copied from request).
+        deadline: CoarseTime,
     },
 }
 
@@ -148,6 +151,7 @@ impl From<(CanisterCall, StopCanisterCallId)> for StopCanisterContext {
                 reply_callback: req.sender_reply_callback,
                 call_id: Some(call_id),
                 cycles: Arc::make_mut(&mut req).payment.take(),
+                deadline: req.deadline,
             },
             CanisterCall::Ingress(ingress) => StopCanisterContext::Ingress {
                 sender: ingress.source,
@@ -179,6 +183,7 @@ impl From<&StopCanisterContext> for pb::StopCanisterContext {
                 reply_callback,
                 call_id,
                 cycles,
+                deadline,
             } => Self {
                 context: Some(pb::stop_canister_context::Context::Canister(
                     pb::stop_canister_context::Canister {
@@ -187,6 +192,7 @@ impl From<&StopCanisterContext> for pb::StopCanisterContext {
                         call_id: call_id.map(|id| id.get()),
                         funds: Some((&Funds::new(*cycles)).into()),
                         cycles: Some((*cycles).into()),
+                        deadline_seconds: deadline.as_secs_since_unix_epoch(),
                     },
                 )),
             },
@@ -220,6 +226,7 @@ impl TryFrom<pb::StopCanisterContext> for StopCanisterContext {
                         call_id,
                         funds,
                         cycles,
+                        deadline_seconds,
                     },
                 ) => {
                     // To maintain backwards compatibility we fall back to reading from `funds` if
@@ -246,6 +253,7 @@ impl TryFrom<pb::StopCanisterContext> for StopCanisterContext {
                         reply_callback: CallbackId::from(reply_callback),
                         call_id: call_id.map(StopCanisterCallId::from),
                         cycles,
+                        deadline: CoarseTime::from_secs_since_unix_epoch(deadline_seconds),
                     }
                 }
             };
@@ -398,6 +406,15 @@ impl CanisterCall {
             }
         }
     }
+
+    /// Returns the deadline of canister requests, `NO_DEADLINE` for ingress
+    /// messages.
+    pub fn deadline(&self) -> CoarseTime {
+        match self {
+            CanisterCall::Request(request) => request.deadline,
+            CanisterCall::Ingress(_) => NO_DEADLINE,
+        }
+    }
 }
 
 impl TryFrom<CanisterMessage> for CanisterCall {
@@ -473,6 +490,15 @@ impl CanisterCallOrTask {
         match self {
             CanisterCallOrTask::Call(msg) => Some(*msg.sender()),
             CanisterCallOrTask::Task(_) => None,
+        }
+    }
+
+    /// Returns the deadline of canister requests, `NO_DEADLINE` for ingress
+    /// messages and tasks.
+    pub fn deadline(&self) -> CoarseTime {
+        match self {
+            CanisterCallOrTask::Call(msg) => msg.deadline(),
+            CanisterCallOrTask::Task(_) => NO_DEADLINE,
         }
     }
 }
@@ -704,6 +730,7 @@ mod tests {
                 method_name: "method".into(),
                 method_payload: vec![0_u8, 1_u8, 2_u8, 3_u8, 4_u8, 5_u8],
                 metadata,
+                deadline: CoarseTime::from_secs_since_unix_epoch(169),
             };
             let bytes = bincode::serialize(&request).unwrap();
             let request1 = bincode::deserialize::<Request>(&bytes);
@@ -719,6 +746,7 @@ mod tests {
             originator_reply_callback: CallbackId::from(100),
             refund: Cycles::from(100_000_000_u128),
             response_payload: Payload::Data(vec![0_u8, 1_u8, 2_u8, 3_u8, 4_u8, 5_u8]),
+            deadline: CoarseTime::from_secs_since_unix_epoch(169),
         };
         let bytes = bincode::serialize(&response).unwrap();
         let response1 = bincode::deserialize::<Response>(&bytes);

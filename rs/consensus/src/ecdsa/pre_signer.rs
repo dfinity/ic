@@ -28,6 +28,8 @@ use std::collections::{btree_map::Entry, BTreeMap, BTreeSet};
 use std::fmt::{self, Debug, Formatter};
 use std::sync::Arc;
 
+use super::utils::update_purge_height;
+
 pub(crate) trait EcdsaPreSigner: Send {
     /// The on_state_change() called from the main ECDSA path.
     fn on_state_change(
@@ -45,6 +47,7 @@ pub struct EcdsaPreSignerImpl {
     schedule: RoundRobin,
     pub(crate) metrics: EcdsaPreSignerMetrics,
     pub(crate) log: ReplicaLogger,
+    prev_finalized_height: RefCell<Height>,
 }
 
 impl EcdsaPreSignerImpl {
@@ -62,6 +65,7 @@ impl EcdsaPreSignerImpl {
             schedule: RoundRobin::default(),
             metrics: EcdsaPreSignerMetrics::new(metrics_registry),
             log,
+            prev_finalized_height: RefCell::new(Height::from(0)),
         }
     }
 
@@ -920,6 +924,17 @@ impl EcdsaPreSigner for EcdsaPreSignerImpl {
         ecdsa_pool.stats().update_active_transcripts(&block_reader);
         ecdsa_pool.stats().update_active_quadruples(&block_reader);
 
+        let mut changes =
+            update_purge_height(&self.prev_finalized_height, block_reader.tip_height())
+                .then(|| {
+                    timed_call(
+                        "purge_artifacts",
+                        || self.purge_artifacts(ecdsa_pool, &block_reader),
+                        &metrics.on_state_change_duration,
+                    )
+                })
+                .unwrap_or_default();
+
         let send_dealings = || {
             timed_call(
                 "send_dealings",
@@ -948,22 +963,16 @@ impl EcdsaPreSigner for EcdsaPreSignerImpl {
                 &metrics.on_state_change_duration,
             )
         };
-        let purge_artifacts = || {
-            timed_call(
-                "purge_artifacts",
-                || self.purge_artifacts(ecdsa_pool, &block_reader),
-                &metrics.on_state_change_duration,
-            )
-        };
 
-        let calls: [&'_ dyn Fn() -> EcdsaChangeSet; 5] = [
+        let calls: [&'_ dyn Fn() -> EcdsaChangeSet; 4] = [
             &send_dealings,
             &validate_dealings,
             &send_dealing_support,
             &validate_dealing_support,
-            &purge_artifacts,
         ];
-        self.schedule.call_next(&calls)
+
+        changes.append(&mut self.schedule.call_next(&calls));
+        changes
     }
 }
 
@@ -1344,9 +1353,10 @@ mod tests {
     };
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
-    use ic_test_utilities::types::ids::{NODE_1, NODE_2, NODE_3, NODE_4};
+    use ic_test_utilities_consensus::EcdsaStatsNoOp;
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_types::consensus::ecdsa::{EcdsaObject, EcdsaStatsNoOp};
+    use ic_test_utilities_types::ids::{NODE_1, NODE_2, NODE_3, NODE_4};
+    use ic_types::consensus::ecdsa::EcdsaObject;
     use ic_types::crypto::{AlgorithmId, BasicSig, BasicSigOf, CryptoHash};
     use ic_types::time::UNIX_EPOCH;
     use ic_types::{Height, RegistryVersion};
@@ -1456,6 +1466,53 @@ mod tests {
                 assert_eq!(change_set.len(), 2);
                 assert!(is_dealing_added_to_validated(&change_set, &id_4,));
                 assert!(is_dealing_added_to_validated(&change_set, &id_5,));
+            })
+        })
+    }
+
+    // Tests that dealings are purged once the finalized height increases
+    #[test]
+    fn test_ecdsa_dealings_purging() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let (mut ecdsa_pool, pre_signer, mut consensus_pool) =
+                    create_pre_signer_dependencies_and_pool(pool_config, logger);
+                let transcript_loader = TestEcdsaTranscriptLoader::default();
+                let transcript_height = Height::from(30);
+                let id_1 = create_transcript_id_with_height(1, Height::from(0));
+                let id_2 = create_transcript_id_with_height(2, transcript_height);
+
+                let dealing1 = create_dealing(id_1, NODE_2);
+                let msg_id1 = dealing1.message_id();
+                let dealing2 = create_dealing(id_2, NODE_2);
+                let msg_id2 = dealing2.message_id();
+                let change_set = vec![
+                    EcdsaChangeAction::AddToValidated(EcdsaMessage::EcdsaSignedDealing(dealing1)),
+                    EcdsaChangeAction::AddToValidated(EcdsaMessage::EcdsaSignedDealing(dealing2)),
+                ];
+                ecdsa_pool.apply_changes(change_set);
+
+                // Finalized height doesn't increase, so dealing1 shouldn't be purged
+                let change_set = pre_signer.on_state_change(&ecdsa_pool, &transcript_loader);
+                assert_eq!(*pre_signer.prev_finalized_height.borrow(), Height::from(0));
+                assert!(change_set.is_empty());
+
+                // Finalized height increases, so dealing1 is purged
+                let new_height = consensus_pool.advance_round_normal_operation_n(29);
+                let change_set = pre_signer.on_state_change(&ecdsa_pool, &transcript_loader);
+                assert_eq!(*pre_signer.prev_finalized_height.borrow(), new_height);
+                assert_eq!(change_set.len(), 1);
+                assert!(is_removed_from_validated(&change_set, &msg_id1));
+
+                ecdsa_pool.apply_changes(change_set);
+
+                // Finalized height increases above dealing2, so it is purged
+                let new_height = consensus_pool.advance_round_normal_operation();
+                let change_set = pre_signer.on_state_change(&ecdsa_pool, &transcript_loader);
+                assert_eq!(*pre_signer.prev_finalized_height.borrow(), new_height);
+                assert_eq!(transcript_height, new_height);
+                assert_eq!(change_set.len(), 1);
+                assert!(is_removed_from_validated(&change_set, &msg_id2));
             })
         })
     }

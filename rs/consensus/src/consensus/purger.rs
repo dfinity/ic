@@ -28,13 +28,16 @@ use ic_interfaces_state_manager::StateManager;
 use ic_logger::{trace, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
-use ic_types::Height;
+use ic_types::{
+    consensus::{ConsensusMessage, HasHeight, HashedBlock},
+    Height,
+};
 use std::{cell::RefCell, sync::Arc};
 
 use super::MINIMUM_CHAIN_LENGTH;
 
 /// The Purger sub-component.
-pub struct Purger {
+pub(crate) struct Purger {
     prev_expected_batch_height: RefCell<Height>,
     prev_finalized_certified_height: RefCell<Height>,
     prev_finalized_height: RefCell<Height>,
@@ -47,19 +50,18 @@ pub struct Purger {
 }
 
 impl Purger {
-    pub fn new(
+    pub(crate) fn new(
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         message_routing: Arc<dyn MessageRouting>,
         log: ReplicaLogger,
         metrics_registry: MetricsRegistry,
     ) -> Purger {
         Self {
-            // expected_batch_height starts from 1
-            prev_expected_batch_height: RefCell::new(Height::from(1)),
-            prev_finalized_certified_height: RefCell::new(Height::from(1)),
-            prev_finalized_height: RefCell::new(Height::from(1)),
-            prev_maximum_cup_height: RefCell::new(Height::from(1)),
-            prev_latest_state_height: RefCell::new(Height::from(1)),
+            prev_expected_batch_height: RefCell::new(Height::from(0)),
+            prev_finalized_certified_height: RefCell::new(Height::from(0)),
+            prev_finalized_height: RefCell::new(Height::from(0)),
+            prev_maximum_cup_height: RefCell::new(Height::from(0)),
+            prev_latest_state_height: RefCell::new(Height::from(0)),
             state_manager,
             message_routing,
             log,
@@ -73,11 +75,20 @@ impl Purger {
     /// Pool purging is conveyed through the returned [ChangeSet] which has to
     /// be applied by the caller, but state purging is directly communicated to
     /// the state manager.
-    pub fn on_state_change(&self, pool: &PoolReader<'_>) -> ChangeSet {
+    pub(crate) fn on_state_change(&self, pool: &PoolReader<'_>) -> ChangeSet {
         let mut changeset = ChangeSet::new();
         self.purge_unvalidated_pool_by_expected_batch_height(pool, &mut changeset);
+        let previous_finalized_height = *self.prev_finalized_height.borrow();
+        if let Some(new_finalized_height) = self.update_finalized_height(pool) {
+            self.purge_validated_shares_by_finalized_height(new_finalized_height, &mut changeset);
+            self.purge_non_finalized_blocks(
+                pool,
+                previous_finalized_height,
+                new_finalized_height,
+                &mut changeset,
+            );
+        }
         self.purge_validated_pool_by_catch_up_package(pool, &mut changeset);
-        self.purge_validated_shares_by_finalized_height(pool, &mut changeset);
 
         let certified_height_increased = self.update_finalized_certified_height(pool);
         let cup_height_increased = self.update_cup_height(pool);
@@ -215,52 +226,50 @@ impl Purger {
         changeset: &mut ChangeSet,
     ) -> bool {
         if let Some(purge_height) = get_purge_height(pool_reader) {
-            if purge_height < self.state_manager.latest_state_height() {
-                changeset.push(ChangeAction::PurgeValidatedBelow(purge_height));
-                trace!(self.log, "Purge validated pool below {:?}", purge_height);
-                self.metrics
-                    .validated_pool_purge_height
-                    .set(purge_height.get() as i64);
-                true
-            } else {
+            changeset.push(ChangeAction::PurgeValidatedBelow(purge_height));
+            trace!(self.log, "Purge validated pool below {:?}", purge_height);
+            self.metrics
+                .validated_pool_purge_height
+                .set(purge_height.get() as i64);
+
+            if purge_height > self.state_manager.latest_state_height() {
                 warn!(
                     every_n_seconds => 30,
                     self.log,
-                    "Execution state is not yet available at {:?} that is below \
-                    CUP height at {:?}. Cancel purge.",
+                    "Execution state is not yet available at height {} that is below \
+                    CUP height at {}. Purging anyways.",
                     purge_height,
                     pool_reader.get_catch_up_height()
                 );
-                false
             }
+
+            true
         } else {
             false
         }
     }
 
-    /// Validated Finalization and Notarization shares older than the latest
+    /// Validated Finalization and Notarization shares at and below the latest
     /// finalized height can be purged from the pool.
     ///
     /// Return true if a purge action is taken.
     fn purge_validated_shares_by_finalized_height(
         &self,
-        pool_reader: &PoolReader<'_>,
+        finalized_height: Height,
         changeset: &mut ChangeSet,
-    ) -> bool {
-        if let Some(height) = self.update_finalized_height(pool_reader) {
-            changeset.push(ChangeAction::PurgeValidatedOfGivenTypeBelow(
-                PurgeableArtifactType::NotarizationShare,
-                height,
-            ));
-            changeset.push(ChangeAction::PurgeValidatedOfGivenTypeBelow(
-                PurgeableArtifactType::FinalizationShare,
-                height,
-            ));
-            trace!(self.log, "Purge validated shares below {height:?}");
-            true
-        } else {
-            false
-        }
+    ) {
+        changeset.push(ChangeAction::PurgeValidatedOfTypeBelow(
+            PurgeableArtifactType::NotarizationShare,
+            finalized_height.increment(),
+        ));
+        changeset.push(ChangeAction::PurgeValidatedOfTypeBelow(
+            PurgeableArtifactType::FinalizationShare,
+            finalized_height.increment(),
+        ));
+        trace!(
+            self.log,
+            "Purge validated shares below {finalized_height:?}"
+        );
     }
 
     /// Ask state manager to purge all states below the given height
@@ -305,17 +314,67 @@ impl Purger {
             .replicated_state_purge_height_disk
             .set(cup_height.get() as i64);
     }
+
+    /// Goes through every height in (previous_finalized_height, new_finalized_height] and removes
+    /// all non-finalized block proposals and notarizations at the given height.
+    fn purge_non_finalized_blocks(
+        &self,
+        pool: &PoolReader,
+        previous_finalized_height: Height,
+        new_finalized_height: Height,
+        changeset: &mut ChangeSet,
+    ) {
+        // TODO: Consider changing the signature of [`PoolReader::get_finalized_block`] to also
+        // return the hash of the block.
+        let mut maybe_finalized_block = pool
+            .get_finalized_block(new_finalized_height)
+            .map(|block| HashedBlock::new(ic_types::crypto::crypto_hash, block));
+
+        while let Some(finalized_block) = maybe_finalized_block {
+            // Stop if we have reached the `previous_finalized_height`
+            if finalized_block.height() <= previous_finalized_height {
+                break;
+            }
+
+            // Purge notarizations at the given height
+            for notarization in pool
+                .pool()
+                .validated()
+                .notarization()
+                .get_by_height(finalized_block.height())
+            {
+                if notarization.content.block != *finalized_block.get_hash() {
+                    changeset.push(ChangeAction::RemoveFromValidated(
+                        ConsensusMessage::Notarization(notarization),
+                    ));
+                }
+            }
+
+            // Purge block proposals at the given height
+            for block_proposal in pool
+                .pool()
+                .validated()
+                .block_proposal()
+                .get_by_height(finalized_block.height())
+            {
+                if block_proposal.content.get_hash() != finalized_block.get_hash() {
+                    changeset.push(ChangeAction::RemoveFromValidated(
+                        ConsensusMessage::BlockProposal(block_proposal),
+                    ));
+                }
+            }
+
+            // Repeat for the parent of the current block
+            maybe_finalized_block = pool.get_parent(&finalized_block);
+        }
+    }
 }
 
 /// Compute the purge height by looking at available CatchUpPackage(s) in the
 /// validated pool. Usually things with height less than a min_length below the
 /// latest catch up height can be purged, but if there is nothing to purge,
 /// this function will return None.
-///
-/// Note that for actual purging, we must also consider execution state
-/// so that we don't purge below latest known state height. Otherwise
-/// we cannot replay past blocks to catch up state during a replica restart.
-pub fn get_purge_height(pool_reader: &PoolReader<'_>) -> Option<Height> {
+fn get_purge_height(pool_reader: &PoolReader<'_>) -> Option<Height> {
     pool_reader
         .pool()
         .validated()
@@ -342,7 +401,8 @@ mod tests {
     use ic_interfaces_mocks::messaging::MockMessageRouting;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
-    use ic_types::{crypto::CryptoHash, CryptoHashOfState};
+    use ic_test_utilities::message_routing::FakeMessageRouting;
+    use ic_types::{consensus::Rank, crypto::CryptoHash, CryptoHashOfState};
     use std::sync::{Arc, RwLock};
 
     #[test]
@@ -409,19 +469,18 @@ mod tests {
             let pool_reader = PoolReader::new(&pool);
             *expected_batch_height.write().unwrap() = Height::from(10);
             let changeset = purger.on_state_change(&pool_reader);
+            let purge_height = expected_batch_height.read().unwrap().decrement();
             assert_eq!(
                 changeset,
                 vec![
-                    ChangeAction::PurgeUnvalidatedBelow(
-                        expected_batch_height.read().unwrap().decrement()
-                    ),
-                    ChangeAction::PurgeValidatedOfGivenTypeBelow(
+                    ChangeAction::PurgeUnvalidatedBelow(purge_height),
+                    ChangeAction::PurgeValidatedOfTypeBelow(
                         PurgeableArtifactType::NotarizationShare,
-                        expected_batch_height.read().unwrap().decrement()
+                        purge_height.increment()
                     ),
-                    ChangeAction::PurgeValidatedOfGivenTypeBelow(
+                    ChangeAction::PurgeValidatedOfTypeBelow(
                         PurgeableArtifactType::FinalizationShare,
-                        expected_batch_height.read().unwrap().decrement()
+                        purge_height.increment()
                     )
                 ]
             );
@@ -445,21 +504,22 @@ mod tests {
             *checkpoint_purge_height.write().unwrap() = pool_reader.get_catch_up_height();
             *expected_batch_height.write().unwrap() = Height::from(65);
             let changeset = purger.on_state_change(&pool_reader);
+
             assert_eq!(
                 changeset,
                 vec![
                     ChangeAction::PurgeUnvalidatedBelow(
                         expected_batch_height.read().unwrap().decrement()
                     ),
-                    ChangeAction::PurgeValidatedBelow(get_purge_height(&pool_reader).unwrap()),
-                    ChangeAction::PurgeValidatedOfGivenTypeBelow(
+                    ChangeAction::PurgeValidatedOfTypeBelow(
                         PurgeableArtifactType::NotarizationShare,
-                        pool_reader.get_finalized_height()
+                        pool_reader.get_finalized_height().increment()
                     ),
-                    ChangeAction::PurgeValidatedOfGivenTypeBelow(
+                    ChangeAction::PurgeValidatedOfTypeBelow(
                         PurgeableArtifactType::FinalizationShare,
-                        pool_reader.get_finalized_height()
+                        pool_reader.get_finalized_height().increment()
                     ),
+                    ChangeAction::PurgeValidatedBelow(get_purge_height(&pool_reader).unwrap()),
                 ]
             );
 
@@ -468,6 +528,38 @@ mod tests {
             let pool_reader = PoolReader::new(&pool);
             let changeset = purger.on_state_change(&pool_reader);
             assert_eq!(changeset.len(), 0);
+        })
+    }
+
+    #[test]
+    fn test_purge_finalization_shares() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let Dependencies {
+                mut pool,
+                state_manager,
+                ..
+            } = dependencies(pool_config, 3);
+            state_manager
+                .get_mut()
+                .expect_latest_state_height()
+                .returning(|| Height::new(0));
+            let purger = Purger::new(
+                state_manager,
+                Arc::new(FakeMessageRouting::new()),
+                no_op_logger(),
+                MetricsRegistry::new(),
+            );
+
+            // Move to finalized height 30
+            pool.advance_round_normal_operation_n(30);
+
+            // We expect to purge finalization shares below AND at the finalized height.
+            let pool_reader = PoolReader::new(&pool);
+            let changeset = purger.on_state_change(&pool_reader);
+            assert!(changeset.contains(&ChangeAction::PurgeValidatedOfTypeBelow(
+                PurgeableArtifactType::FinalizationShare,
+                Height::new(31),
+            )));
         })
     }
 
@@ -493,6 +585,87 @@ mod tests {
             assert_eq!(
                 get_purge_height(&pool_reader),
                 Some(catch_up_height - Height::from(MINIMUM_CHAIN_LENGTH))
+            );
+        })
+    }
+
+    #[test]
+    fn purging_non_finalized_blocks_test() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let Dependencies {
+                mut pool,
+                state_manager,
+                ..
+            } = dependencies(pool_config, 1);
+            state_manager
+                .get_mut()
+                .expect_latest_state_height()
+                .returning(|| Height::new(0));
+            let mut message_routing = MockMessageRouting::new();
+            message_routing
+                .expect_expected_batch_height()
+                .returning(|| Height::new(0));
+            let purger = Purger::new(
+                state_manager,
+                Arc::new(message_routing),
+                no_op_logger(),
+                MetricsRegistry::new(),
+            );
+
+            // Height 1 - two block proposals, one notarization, one finalization.
+            // We will later instruct purger not to consider this height.
+            let finalized_block_proposal_1 = pool.make_next_block_with_rank(Rank(0));
+            let non_finalized_block_proposal_1 = pool.make_next_block_with_rank(Rank(1));
+            pool.insert_validated(finalized_block_proposal_1.clone());
+            pool.insert_validated(non_finalized_block_proposal_1.clone());
+            pool.notarize(&finalized_block_proposal_1);
+            pool.finalize(&finalized_block_proposal_1);
+            // Height 2 - three block proposals, two notarizations, one finalization
+            let finalized_block_proposal_2 = pool.make_next_block_with_rank(Rank(0));
+            let non_finalized_block_proposal_2_0 = pool.make_next_block_with_rank(Rank(1));
+            let non_finalized_block_proposal_2_1 = pool.make_next_block_with_rank(Rank(2));
+            pool.insert_validated(finalized_block_proposal_2.clone());
+            pool.insert_validated(non_finalized_block_proposal_2_0.clone());
+            pool.insert_validated(non_finalized_block_proposal_2_1.clone());
+            pool.notarize(&finalized_block_proposal_2);
+            let non_finalized_notarization_2 = pool.notarize(&non_finalized_block_proposal_2_0);
+            pool.finalize(&finalized_block_proposal_2);
+            // Height 3 - two block proposals, two notarizations, no finalizations.
+            // The purger should not consider this height as it hasn't been finalized yet.
+            let finalized_block_proposal_3_0 = pool.make_next_block_with_rank(Rank(0));
+            let finalized_block_proposal_3_1 = pool.make_next_block_with_rank(Rank(1));
+            pool.insert_validated(finalized_block_proposal_3_0.clone());
+            pool.insert_validated(finalized_block_proposal_3_1.clone());
+            pool.notarize(&finalized_block_proposal_3_0);
+            pool.notarize(&finalized_block_proposal_3_1);
+
+            // We want to purge only artifacts height above Height 1
+            purger
+                .prev_finalized_height
+                .replace(finalized_block_proposal_1.content.as_ref().height);
+
+            let pool_reader = PoolReader::new(&pool);
+            let remove_from_validated_changeset: Vec<_> = purger
+                .on_state_change(&pool_reader)
+                .into_iter()
+                .filter(|change_action| {
+                    matches!(change_action, ChangeAction::RemoveFromValidated(_))
+                })
+                .collect();
+
+            assert_eq!(
+                remove_from_validated_changeset,
+                vec![
+                    ChangeAction::RemoveFromValidated(ConsensusMessage::Notarization(
+                        non_finalized_notarization_2
+                    )),
+                    ChangeAction::RemoveFromValidated(ConsensusMessage::BlockProposal(
+                        non_finalized_block_proposal_2_0
+                    )),
+                    ChangeAction::RemoveFromValidated(ConsensusMessage::BlockProposal(
+                        non_finalized_block_proposal_2_1
+                    )),
+                ]
             );
         })
     }

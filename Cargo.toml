@@ -59,6 +59,7 @@ members = [
   "rs/crypto",
   "rs/crypto/ecdsa_secp256k1",
   "rs/crypto/ecdsa_secp256r1",
+  "rs/crypto/ed25519",
   "rs/crypto/extended_bip32",
   "rs/crypto/for_verification_only",
   "rs/crypto/iccsa",
@@ -77,7 +78,6 @@ members = [
   "rs/crypto/internal/crypto_lib/sha2",
   "rs/crypto/secrets_containers",
   "rs/crypto/internal/crypto_lib/threshold_sig/bls12_381",
-  "rs/crypto/internal/crypto_lib/threshold_sig/bls12_381/der_utils",
   "rs/crypto/internal/crypto_lib/threshold_sig/tecdsa",
   "rs/crypto/internal/crypto_lib/threshold_sig/tecdsa/test_utils",
   "rs/crypto/internal/crypto_lib/tls",
@@ -126,6 +126,7 @@ members = [
   "rs/http_utils",
   "rs/ic_os/deterministic_ips",
   "rs/ic_os/config",
+  "rs/ic_os/fstrim_tool",
   "rs/ic_os/guestos_tool",
   "rs/ic_os/hostos_tool",
   "rs/ic_os/launch-single-vm",
@@ -135,13 +136,11 @@ members = [
   "rs/ic_os/partition_tools",
   "rs/ic_os/setupos-disable-checks",
   "rs/ic_os/setupos_tool",
-  "rs/ic_os/sev",
   "rs/ic_os/utils",
   "rs/ic_os/snptool",
   "rs/ic_os/vsock/guest",
   "rs/ic_os/vsock/host",
   "rs/ic_os/vsock/vsock_lib",
-  "rs/identity",
   "rs/ingress_manager",
   "rs/interfaces",
   "rs/interfaces/adapter_client",
@@ -307,13 +306,14 @@ members = [
   "rs/sns/governance/proposal_criticality",
   "rs/sns/governance/protobuf_generator",
   "rs/sns/governance/token_valuation",
-  "rs/sns/governance/treasury_transfer_limit",
+  "rs/sns/governance/proposals_amount_total_limit",
   "rs/sns/init",
   "rs/sns/init/protobuf_generator",
   "rs/sns/integration_tests",
   "rs/sns/root",
   "rs/sns/root/protobuf_generator",
   "rs/sns/swap",
+  "rs/sns/swap/proto_library",
   "rs/sns/test_utils",
   "rs/starter",
   "rs/state_manager",
@@ -324,13 +324,16 @@ members = [
   "rs/system_api",
   "rs/test_utilities",
   "rs/test_utilities/artifact_pool",
+  "rs/test_utilities/consensus",
   "rs/test_utilities/execution_environment",
   "rs/test_utilities/load_wasm",
   "rs/test_utilities/compare_dirs",
   "rs/test_utilities/logger",
   "rs/test_utilities/metrics",
   "rs/test_utilities/serialization",
+  "rs/test_utilities/state",
   "rs/test_utilities/time",
+  "rs/test_utilities/types",
   "rs/test_utilities/tmpdir",
   "rs/tests",
   "rs/tests/httpbin-rs",
@@ -339,7 +342,9 @@ members = [
   "rs/tests/test_canisters/http_counter",
   "rs/tests/test_canisters/kv_store",
   "rs/tests/test_canisters/message",
+  "rs/tests/testing_verification",
   "rs/tests/testing_verification/wabt-tests",
+  "rs/tests/testing_verification/spec_compliance",
   "rs/tests/testing_verification/testnets",
   "rs/transport",
   "rs/transport/test_utils",
@@ -349,7 +354,7 @@ members = [
   "rs/types/base_types",
   "rs/types/base_types/protobuf_generator",
   "rs/types/error_types",
-  "rs/types/ic00_types",
+  "rs/types/management_canister_types",
   "rs/types/wasm_types",
   "rs/universal_canister/lib",
   "rs/utils",
@@ -415,18 +420,19 @@ opt-level = 3
 jsonrpc = { git = "https://github.com/apoelstra/rust-jsonrpc", rev = "e42044d" }
 
 [workspace.dependencies]
+anyhow = "1.0.80"
 arrayvec = "0.7.4"
 askama = { version = "0.12.1", features = ["serde-json"] }
 async-recursion = "1.0.5"
 async-scoped = { version = "0.8", features = ["use-tokio"] }
-axum = "0.6.20"
+axum = "0.7.4"
 backoff = "0.4"
 base64 = { version = "0.13.1" }
 # build-info and build-info-build MUST be kept in sync!
 build-info = { git = "https://github.com/dfinity-lab/build-info", rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7" }
 build-info-build = { git = "https://github.com/dfinity-lab/build-info", rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7", default_features = false }
 bytes = "1.5.0"
-candid = { version = "0.10.2" }
+candid = { version = "0.10.5" }
 candid_parser = { version = "0.1.2" }
 chrono = { version = "0.4.31", default-features = false, features = [
   "alloc",
@@ -434,27 +440,30 @@ chrono = { version = "0.4.31", default-features = false, features = [
   "serde",
 ] }
 ciborium = "0.2.1"
-clap = { version = "3.2.25", features = ["derive"] }
+clap = { version = "4.4.6", features = ["derive", "string"] }
 cloudflare = { version = "0.9.1", default_features = false, features = [
   "rustls-tls",
 ] }
-crossbeam-channel = "0.5.10"
+crossbeam-channel = "0.5.11"
+curve25519-dalek = "=4.1.1"
 ethnum = { version = "1.3.2", features = ["serde"] }
 flate2 = "1.0.28"
 futures = "0.3.28"
+hyper-rustls = { version = "0.24.2", features = ["http2"] }
 hyper-socks2 = { version = "0.8.0", default_features = false, features = [
   "rustls",
 ] }
-ic-agent = { version = "0.32.0", features = ["hyper"] }
-ic-cdk = "0.12.0"
-ic-cdk-macros = "0.8.3"
-ic-cdk-timers = "0.6.0"
+ic-agent = { version = "0.33.0", features = ["hyper"] }
+ic-cdk = "0.13.1"
+ic-cdk-macros = "0.9.0"
+ic-cdk-timers = "0.7.0"
+ic_principal = { version = "0.1.1", default-features = false }
 ic-response-verification = "2.3.0"
 ic-http-certification = "2.3.0"
 ic-certification = "2.3.0"
 ic-cbor = "2.3.0"
 ic-stable-structures = "0.6.2"
-ic-utils = { version = "0.32.0", features = ["raw"] }
+ic-utils = { version = "0.33.0", features = ["raw"] }
 ic-btc-interface = { git = "https://github.com/dfinity/bitcoin-canister", rev = "9b239d1d67253eb14a35be6061e3967d5ec9db9d" }
 indexmap = "2.1.0"
 itertools = "0.12.0"
@@ -464,6 +473,7 @@ k256 = { version = "0.13.3", default_features = false, features = [
   "pem",
   "pkcs8",
   "precomputed-tables",
+  "schnorr",
   "std",
 ] }
 libnss = "0.5.0"
@@ -473,6 +483,7 @@ mockito = "1.2.0"
 minicbor = { version = "0.19.1", features = ["alloc", "derive"] }
 minicbor-derive = "0.13.0"
 nix = "0.24.3"
+num-traits = { version = "0.2.14", features = ["libm"] }
 p256 = { version = "0.13", default_features = false, features = [
   "arithmetic",
   "ecdsa",
@@ -483,11 +494,9 @@ ping = "0.5.0"
 pkcs8 = "0.10.2"
 pretty_assertions = "1.4.0"
 prometheus = { version = "0.13.3", features = ["process"] }
-prometheus-http-query = { version = "0.6.6", default_features = false, features = [
-  "rustls-tls-webpki-roots",
-] }
 prost = "0.12.3"
 prost-build = "0.12.3"
+rand = "0.8.5"
 rcgen = { version = "0.11.1", features = ["zeroize"] }
 reqwest = { version = "0.11.22", default-features = false, features = [
   "blocking",
@@ -496,9 +505,9 @@ reqwest = { version = "0.11.22", default-features = false, features = [
   "rustls-tls-webpki-roots",
   "stream",
 ] }
+rustls = { version = "0.21.10", features = ["dangerous_configuration"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_bytes = "0.11"
-serde_bytes_repr = "0.1.5"
 serde_cbor = "0.11.2"
 serde_derive = "1.0"
 serde_json = { version = "1.0.107", features = ["std"] }
@@ -515,14 +524,22 @@ slog = { version = "2.7.0", features = [
 strum = { version = "0.25.0", features = ["derive"] }
 strum_macros = "0.25.3"
 syn = { version = "1.0.109", features = ["fold", "full"] }
+thiserror = "1.0.57"
 time = { version = "0.3.20", features = ["formatting"] }
 tokio = { version = "1.36.0", features = ["full"] }
+tokio-metrics = "0.3.0"
+tokio-rustls = { version = "0.24.1", features = ["dangerous_configuration"] }
 tokio-util = { version = "0.7.10", features = ["full"] }
-tonic = "0.10.2"
-tonic-build = "0.10.2"
+tonic = "0.11.0"
+tonic-build = "0.11.0"
 tower = { version = "0.4.13", features = ["full"] }
 tracing = "0.1.40"
 tracing-appender = "0.2.3"
-tracing-subscriber = { version = "0.3.18", features = [ "env-filter", "fmt", "json"] }
+tracing-subscriber = { version = "0.3.18", features = [
+  "env-filter",
+  "fmt",
+  "json",
+] }
 turmoil = "0.6.0"
 x509-cert = { version = "0.2.4", features = ["builder", "hazmat"] }
+x509-parser = { version = "0.15.1" }

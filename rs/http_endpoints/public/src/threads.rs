@@ -1,7 +1,9 @@
 use crate::common::make_plaintext_response;
-use hyper::{Body, Response, StatusCode};
+use axum::body::Body;
+use hyper::{Response, StatusCode};
 
 /// Collects a backtrace of all threads of this process in text format.
+#[allow(dead_code)]
 pub(crate) async fn collect() -> Response<Body> {
     #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
     let (status, body) = match tokio::task::spawn_blocking(ic_backtrace::collect_fmt).await {

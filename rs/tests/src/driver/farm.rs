@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    net::Ipv6Addr,
+    net::{Ipv4Addr, Ipv6Addr},
     path::{Path, PathBuf},
     time::{Duration, Instant},
 };
@@ -581,7 +581,7 @@ impl TestEnvAttribute for Vec<HostFeature> {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CreateVmRequest {
     #[serde(skip)]
-    name: String,
+    pub name: String,
     #[serde(rename = "type")]
     pub vm_type: VmType,
     #[serde(rename = "vCPUs")]
@@ -647,6 +647,7 @@ pub enum ImageLocation {
     ImageViaUrl { url: Url, sha256: String },
     IcOsImageViaId { id: FileId },
     IcOsImageViaUrl { url: Url, sha256: String },
+    PersistentVolumeClaim { name: String },
 }
 
 #[derive(Error, Debug)]
@@ -676,6 +677,8 @@ pub enum FarmError {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct VMCreateResponse {
     pub ipv6: Ipv6Addr,
+    #[serde(default)]
+    pub ipv4: Option<Ipv4Addr>,
     pub mac6: String,
     pub hostname: String,
     pub spec: VmSpec,

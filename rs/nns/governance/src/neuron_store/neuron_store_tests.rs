@@ -434,7 +434,7 @@ fn test_neuron_store_builds_index_unless_provided() {
     );
 
     let empty_topic_followee_index = HeapNeuronFollowingIndex::new(BTreeMap::new());
-    let neuron_store = NeuronStore::new_restored(neurons, empty_topic_followee_index);
+    let neuron_store = NeuronStore::new_restored((neurons, empty_topic_followee_index));
 
     assert_eq!(neuron_store.topic_followee_index.num_entries(), 0);
     assert_eq!(
@@ -448,14 +448,14 @@ fn test_neuron_store_builds_index_unless_provided() {
 fn test_neuron_store_new_then_restore() {
     // Creating a NeuronStore for the first time.
     let neurons: BTreeMap<_, _> = (0..10).map(|i| (i, simple_neuron(i))).collect();
-    let mut neuron_store = NeuronStore::new(neurons.clone());
+    let neuron_store = NeuronStore::new(neurons.clone());
 
     // Taking its states (simulating how it's called by Governance).
-    let heap_neurons = neuron_store.take_heap_neurons();
-    let heap_topic_followee_index = neuron_store.take_heap_topic_followee_index();
+    let (heap_neurons, heap_topic_followee_index) = neuron_store.take();
 
     // Restoring from those states.
-    let restored_neuron_store = NeuronStore::new_restored(heap_neurons, heap_topic_followee_index);
+    let restored_neuron_store =
+        NeuronStore::new_restored((heap_neurons, heap_topic_followee_index));
 
     for neuron in neurons.into_values() {
         assert_eq!(

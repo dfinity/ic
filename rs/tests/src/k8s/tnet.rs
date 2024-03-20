@@ -1,73 +1,56 @@
 use std::collections::BTreeMap;
-use std::env::var;
-use std::net::Ipv6Addr;
-use std::path::Path;
+use std::net::{Ipv4Addr, Ipv6Addr};
+use std::str::FromStr;
+use url::Url;
 
-use backon::ExponentialBuilder;
+use anyhow::Result;
 use backon::Retryable;
-
-use anyhow::{anyhow, Result};
-use cidr::Ipv6Cidr;
+use backon::{ConstantBuilder, ExponentialBuilder};
 use k8s_openapi::api::core::v1::{
-    ConfigMap, PersistentVolumeClaim, Pod, TypedLocalObjectReference,
+    ConfigMap, PersistentVolumeClaim, Pod, Service, TypedLocalObjectReference,
 };
+use k8s_openapi::api::networking::v1::Ingress;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::OwnerReference;
 use k8s_openapi::chrono::DateTime;
 use k8s_openapi::chrono::Duration;
 use k8s_openapi::chrono::Utc;
-use kube::api::{ListParams, PostParams};
+use kube::api::PostParams;
 use kube::core::ObjectMeta;
-use kube::Error;
 use kube::ResourceExt;
 use kube::{
     api::{Api, DynamicObject, GroupVersionKind},
     Client,
 };
-use once_cell::sync::Lazy;
-use rand::seq::SliceRandom;
-use reqwest::Body;
+use serde::{Deserialize, Serialize};
 use tokio;
-use tokio_util::codec::{BytesCodec, FramedRead};
 use tracing::*;
 
+use crate::driver::farm::{CreateVmRequest, ImageLocation, VMCreateResponse, VmSpec};
+use crate::driver::resource::ImageType;
+use crate::driver::test_env::TestEnvAttribute;
+use crate::k8s::config::*;
 use crate::k8s::datavolume::*;
 use crate::k8s::persistentvolumeclaim::*;
-use crate::k8s::pod::*;
-use crate::k8s::prep::*;
 use crate::k8s::virtualmachine::*;
 
-pub static TNET_IPV6: Lazy<String> =
-    Lazy::new(|| var("TNET_IPV6").unwrap_or("fda6:8d22:43e1:fda6".to_string()));
-static TNET_CDN_URL: Lazy<String> =
-    Lazy::new(|| var("TNET_CDN_URL").unwrap_or("https://download.dfinity.systems".to_string()));
-static TNET_CONFIG_URL: Lazy<String> = Lazy::new(|| {
-    var("TNET_CONFIG_URL").unwrap_or("https://objects.sf1-idx1.dfinity.network".to_string())
-});
-static TNET_BUCKET: Lazy<String> = Lazy::new(|| {
-    var("TNET_BUCKET").unwrap_or("tnet-config-5f1a0cb6-fdf2-4ca8-b816-9b9c2ffa1669".to_string())
-});
-static TNET_NAMESPACE: Lazy<String> =
-    Lazy::new(|| var("TNET_NAMESPACE").unwrap_or("tnets".to_string()));
-
-static TNET_STATIC_LABELS: Lazy<BTreeMap<String, String>> =
-    Lazy::new(|| BTreeMap::from([("app".to_string(), "tnet".to_string())]));
-
-static TNET_INDEX_LABEL: &str = "tnet.internetcomputer.org/index";
-static TNET_NAME_LABEL: &str = "tnet.internetcomputer.org/name";
-static TNET_TERMINATE_TIME_ANNOTATION: &str = "tnet.internetcomputer.org/terminate-time";
-
+#[allow(dead_code)]
 pub struct K8sClient {
     pub(crate) api_dv: Api<DynamicObject>,
     pub(crate) api_vm: Api<DynamicObject>,
     pub(crate) api_vmi: Api<DynamicObject>,
     pub(crate) api_pvc: Api<PersistentVolumeClaim>,
     pub(crate) api_pod: Api<Pod>,
+    pub(crate) api_svc: Api<Service>,
+    pub(crate) api_ingress: Api<Ingress>,
 }
 
 impl K8sClient {
-    pub async fn new(client: Client) -> Result<Self> {
+    pub async fn new() -> Result<Self> {
+        let client = Client::try_default().await?;
         let api_pod: Api<Pod> = Api::namespaced(client.clone(), &TNET_NAMESPACE);
         let api_pvc: Api<PersistentVolumeClaim> = Api::namespaced(client.clone(), &TNET_NAMESPACE);
+        let api_svc: Api<Service> = Api::namespaced(client.clone(), &TNET_NAMESPACE);
+        let api_ingress: Api<Ingress> = Api::namespaced(client.clone(), &TNET_NAMESPACE);
 
         let gvk = GroupVersionKind::gvk("cdi.kubevirt.io", "v1beta1", "DataVolume");
         let (ar, _caps) = kube::discovery::pinned_kind(&client, &gvk).await?;
@@ -87,48 +70,23 @@ impl K8sClient {
             api_vmi,
             api_pvc,
             api_pod,
+            api_svc,
+            api_ingress,
         })
     }
 }
 
-#[derive(Default, Clone, Debug)]
+#[derive(Default, Clone, Deserialize, Serialize, Debug)]
 pub struct TNode {
+    pub node_id: Option<String>,
     pub name: Option<String>,
     pub ipv6_addr: Option<Ipv6Addr>,
     pub config_url: Option<String>,
-}
-
-#[derive(Default)]
-pub struct TNet {
-    name: String,
-    version: String,
-    init: bool,
-    use_zero_version: bool,
-    pub image_url: String,
-    ipv6_net: Option<Ipv6Cidr>,
-    config_url: Option<String>,
-    pub index: Option<u32>,
-    pub nns_nodes: Vec<TNode>,
-    pub app_nodes: Vec<TNode>,
-    k8s: Option<K8sClient>,
     owner: ConfigMap,
-    terminate_time: Option<DateTime<Utc>>,
 }
 
-impl TNet {
-    pub fn new(name: &str) -> Result<Self> {
-        Self {
-            name: name.to_string(),
-            ..Default::default()
-        }
-        .ttl(Duration::minutes(90))
-    }
-
-    pub fn owner_config_map_name(idx: u32) -> String {
-        format!("tnet-{}", idx)
-    }
-
-    pub fn owner_reference(&self) -> OwnerReference {
+impl TNode {
+    fn owner_reference(&self) -> OwnerReference {
         OwnerReference {
             api_version: k8s_openapi::api_version(&self.owner).to_owned(),
             kind: k8s_openapi::kind(&self.owner).to_owned(),
@@ -143,101 +101,61 @@ impl TNet {
         }
     }
 
-    fn get_tnet_index(cm: &ConfigMap) -> Result<u32> {
-        Ok(cm
-            .metadata
-            .labels
-            .as_ref()
-            .unwrap()
-            .get(TNET_INDEX_LABEL)
-            .unwrap_or(&"-".to_string())
-            .parse()?)
-    }
-
-    pub async fn delete(idx: u32) -> Result<()> {
+    pub async fn deploy_config_image(&self, image_name: &str) -> Result<()> {
         let client = Client::try_default().await?;
-        let api: Api<ConfigMap> = Api::namespaced(client.clone(), &TNET_NAMESPACE);
+        let gvk = GroupVersionKind::gvk("cdi.kubevirt.io", "v1beta1", "DataVolume");
+        let (ar, _) = kube::discovery::pinned_kind(&client, &gvk).await?;
+        let api = Api::<DynamicObject>::namespaced_with(client, &TNET_NAMESPACE, &ar);
 
-        api.delete(&Self::owner_config_map_name(idx), &Default::default())
-            .await?;
-        Ok(())
-    }
-
-    pub async fn list() -> Result<Vec<(String, String)>> {
-        let client = Client::try_default().await?;
-        let api: Api<ConfigMap> = Api::namespaced(client.clone(), &TNET_NAMESPACE);
-
-        let label_selector = TNET_STATIC_LABELS
-            .iter()
-            .map(|(k, v)| format!("{}={}", k, v))
-            .collect::<Vec<String>>()
-            .join(",");
-
-        Ok(api
-            .list(&ListParams::default().labels(&label_selector))
-            .await?
-            .iter()
-            .map(|cm| {
-                (
-                    cm.name_any(),
-                    cm.metadata.labels.as_ref().expect("should have labels")[TNET_NAME_LABEL]
-                        .clone(),
-                )
-            })
-            .collect::<Vec<(String, String)>>())
-    }
-
-    async fn vm_action(name: &str, action: &str) -> kube::Result<String> {
-        let client = Client::try_default().await?;
-        client
-            .request_text(
-                http::Request::builder()
-                    .method("PUT")
-                    .uri(format!(
-                        "/apis/subresources.kubevirt.io/v1/namespaces/{}/virtualmachines/{}/{}",
-                        *TNET_NAMESPACE, name, action,
-                    ))
-                    .body("{}".as_bytes().to_vec())
-                    .unwrap(),
-            )
-            .await
-            .or_else(|e| match e {
-                Error::Api(error_response) if error_response.reason == "Conflict" => {
-                    kube::Result::Ok(Default::default())
-                }
-                _ => kube::Result::Err(e),
-            })
-    }
-
-    pub async fn vms_action(index: u32, action: &str) -> Result<()> {
-        let tnet = Self::owner_config_map_name(index);
-        let client = Client::try_default().await?;
-
-        let gvk = GroupVersionKind::gvk("kubevirt.io", "v1", "VirtualMachine");
-        let (ar, _caps) = kube::discovery::pinned_kind(&client, &gvk).await?;
-        let api_vm = Api::<DynamicObject>::namespaced_with(client.clone(), &TNET_NAMESPACE, &ar);
-        let vms = api_vm
-            .list(&ListParams {
-                label_selector: format!("{}={}", TNET_NAME_LABEL, tnet).into(),
-                ..Default::default()
-            })
-            .await?;
-
-        futures::future::try_join_all(vms.into_iter().map(|vm| {
-            let name = vm.name_any();
-            async move { Self::vm_action(&name, action).await }
-        }))
-        .await?;
-
+        let dvname = format!("{}-config", self.name.clone().unwrap());
+        let source = DvSource::url(format!(
+            "{}/{}",
+            self.config_url.clone().unwrap(),
+            image_name
+        ));
+        let dvinfo = DvInfo::new(&dvname, source, "kubevirt", "512Mi");
+        info!("Creating DV {}", dvname);
+        create_datavolume(&api, &dvinfo, self.owner_reference()).await?;
         Ok(())
     }
 
     pub async fn start(&self) -> Result<()> {
-        Self::vms_action(self.index.expect("TNet missing index"), "start").await
+        let _ = start_vm(&self.name.clone().expect("name missing")).await;
+        Ok(())
     }
 
     pub async fn stop(&self) -> Result<()> {
-        Self::vms_action(self.index.expect("TNet missing index"), "stop").await
+        let _ = stop_vm(&self.name.clone().expect("name missing")).await;
+        Ok(())
+    }
+}
+
+#[derive(Default, Deserialize, Serialize)]
+pub struct TNet {
+    pub group_name: String,
+    pub unique_name: Option<String>,
+    pub version: String,
+    pub image_url: String,
+    pub config_url: Option<String>,
+    pub access_key: Option<String>,
+    pub nodes: Vec<TNode>,
+    pub owner: ConfigMap,
+    terminate_time: Option<DateTime<Utc>>,
+}
+
+impl TestEnvAttribute for TNet {
+    fn attribute_name() -> String {
+        "tnet".to_string()
+    }
+}
+
+impl TNet {
+    pub fn new(group_name: &str) -> Result<Self> {
+        Self {
+            group_name: group_name.to_string(),
+            ..Default::default()
+        }
+        .ttl(Duration::minutes(90))
     }
 
     pub fn version(mut self, version: &str) -> Self {
@@ -256,24 +174,6 @@ impl TNet {
         self
     }
 
-    pub fn init(mut self, init: bool) -> Self {
-        self.init = init;
-
-        self
-    }
-
-    pub fn use_zero_version(mut self, use_zero_version: bool) -> Self {
-        self.use_zero_version = use_zero_version;
-
-        self
-    }
-
-    pub fn topology(mut self, nns_count: usize, app_count: usize) -> Self {
-        self.nns_nodes = vec![Default::default(); nns_count];
-        self.app_nodes = vec![Default::default(); app_count];
-        self
-    }
-
     pub fn ttl(mut self, ttl: Duration) -> Result<Self> {
         self.terminate_time = Some(
             k8s_openapi::chrono::Utc::now()
@@ -283,133 +183,38 @@ impl TNet {
         Ok(self)
     }
 
-    pub async fn upload<P: AsRef<Path>>(path: P, uri: &str) -> Result<()> {
-        Self::upload_url(
-            path,
-            &format!("{}/{}/{}", *TNET_CONFIG_URL, *TNET_BUCKET, uri),
-        )
-        .await
-    }
-
-    pub async fn upload_url<P: AsRef<Path>>(path: P, url: &str) -> Result<()> {
-        let client = reqwest::Client::new();
-
-        info!(
-            "Uploading {} to {}",
-            path.as_ref().display().to_string(),
-            url
-        );
-        let file = tokio::fs::File::open(path.as_ref()).await?;
-        let res = client
-            .put(url)
-            .body({
-                let stream = FramedRead::new(file, BytesCodec::new());
-                Body::wrap_stream(stream)
-            })
-            .send()
-            .await?;
-        debug!("Upload's put response: {:?}", res);
-        if res.status().as_u16() != 200 {
-            return Err(anyhow!(
-                "Failed to upload {} to {}",
-                path.as_ref().display(),
-                url
-            ));
+    fn owner_reference(&self) -> OwnerReference {
+        OwnerReference {
+            api_version: k8s_openapi::api_version(&self.owner).to_owned(),
+            kind: k8s_openapi::kind(&self.owner).to_owned(),
+            name: self
+                .owner
+                .metadata
+                .name
+                .clone()
+                .expect("should have a name"),
+            uid: self.owner.metadata.uid.clone().expect("should have uid"),
+            ..Default::default()
         }
-
-        Ok(())
     }
 
-    async fn upload_config(&self) -> Result<()> {
-        for (count, node) in self
-            .nns_nodes
-            .iter()
-            .chain(self.app_nodes.iter())
-            .enumerate()
-        {
-            Self::upload_url(
-                format!("out/bootstrap-{}.img", count),
-                &node.config_url.clone().unwrap(),
-            )
-            .await?;
-        }
-        Self::upload_url(
-            "out/init.tar",
-            &format!("{}/init.tar", self.config_url.clone().unwrap()),
-        )
-        .await?;
-
-        Ok(())
-    }
-
-    fn autoconfigure(&mut self) -> &Self {
-        let index = self.index.expect("should have an index");
-        self.config_url = Some(format!(
-            "{}/{}/{}/tnet-{}",
-            *TNET_CONFIG_URL, *TNET_BUCKET, self.version, index
-        ));
-        self.ipv6_net = Some(format!("{}:{:x}::/80", *TNET_IPV6, index).parse().unwrap());
-
-        let mut count = 0;
-        let mut iter = self.ipv6_net.unwrap().iter();
-        iter.next(); // skip network address
-        self.nns_nodes.iter_mut().for_each(|node| {
-            node.name = Some(format!("{}-nns-{}", self.owner.name_any(), count));
-            node.config_url = Some(format!(
-                "{}/{}.img",
-                self.config_url.clone().unwrap(),
-                node.name.clone().unwrap()
-            ));
-            node.ipv6_addr = Some(iter.next().unwrap().address());
-            count += 1;
-        });
-        let mut count = 0;
-        self.app_nodes.iter_mut().for_each(|node| {
-            node.name = Some(format!("{}-app-{}", self.owner.name_any(), count));
-            node.config_url = Some(format!(
-                "{}/{}.img",
-                self.config_url.clone().unwrap(),
-                node.name.clone().unwrap()
-            ));
-            node.ipv6_addr = Some(iter.next().unwrap().address());
-            count += 1;
-        });
-
-        debug!("Index: {}", index);
-        debug!("NNS Nodes: {:?}", self.nns_nodes);
-        debug!("APP Nodes: {:?}", self.app_nodes);
-
-        self
-    }
-
-    async fn tnet_owner(&mut self) -> Result<()> {
+    pub async fn create(&mut self) -> Result<&Self> {
         let client = Client::try_default().await?;
         let config_map_api = Api::<ConfigMap>::namespaced(client.clone(), &TNET_NAMESPACE);
 
-        debug!("Allocating namespace");
+        debug!("Creating owner configmap");
         let config_map = (|| async {
-            let tnet_name = self.name.clone();
-            let mut rng = rand::thread_rng();
-
-            let tnet_idx = (0..65536)
-                .collect::<Vec<u32>>()
-                .choose(&mut rng)
-                .unwrap()
-                .to_owned();
             config_map_api
                 .create(
                     &PostParams::default(),
                     &ConfigMap {
                         metadata: ObjectMeta {
-                            name: format!("tnet-{}", tnet_idx).into(),
-                            labels: [
-                                (TNET_NAME_LABEL.to_string(), tnet_name),
-                                (TNET_INDEX_LABEL.to_string(), tnet_idx.to_string()),
-                            ]
-                            .into_iter()
-                            .chain(TNET_STATIC_LABELS.clone().into_iter())
-                            .collect::<BTreeMap<String, String>>()
-                            .into(),
+                            generate_name: format!("{}-", self.group_name).into(),
+                            labels: [(TNET_NAME_LABEL.to_string(), self.group_name.clone())]
+                                .into_iter()
+                                .chain(TNET_STATIC_LABELS.clone().into_iter())
+                                .collect::<BTreeMap<String, String>>()
+                                .into(),
                             annotations: [(
                                 TNET_TERMINATE_TIME_ANNOTATION.to_string(),
                                 self.terminate_time
@@ -432,73 +237,56 @@ impl TNet {
         .retry(&ExponentialBuilder::default())
         .await?;
 
-        self.k8s = Some(K8sClient::new(client.clone()).await?);
-        self.index = Self::get_tnet_index(&config_map)?.into();
+        debug!("Tnet owner: {}", config_map.name_any());
+        self.unique_name = config_map.metadata.name.clone();
         self.owner = config_map;
-        self.autoconfigure();
+        self.config_url = Some(format!(
+            "{}/{}/{}",
+            *TNET_CONFIG_URL,
+            *TNET_BUCKET,
+            self.unique_name.clone().unwrap(),
+        ));
+        Ok(self)
+    }
 
+    pub async fn delete(self) -> Result<()> {
+        let client = Client::try_default().await?;
+        let api: Api<ConfigMap> = Api::namespaced(client.clone(), &TNET_NAMESPACE);
+        api.delete(
+            &self.unique_name.clone().expect("missing unique name"),
+            &Default::default(),
+        )
+        .await?;
         Ok(())
     }
 
-    pub async fn deploy_config_drives(&self) -> Result<()> {
+    pub async fn deploy_guestos_image(&self) -> Result<()> {
+        let image_name = &format!("{}-image-guestos", self.owner.name_any());
+        self.deploy_image(image_name, &self.image_url).await?;
+        Ok(())
+    }
+
+    pub async fn deploy_boundary_image(&self, url: Url) -> Result<()> {
+        let image_name = &format!("{}-image-boundaryos", self.owner.name_any());
+        self.deploy_image(image_name, url.as_str()).await?;
+        Ok(())
+    }
+
+    async fn deploy_image(&self, name: &str, url: &str) -> Result<()> {
         let client = Client::try_default().await?;
         let gvk = GroupVersionKind::gvk("cdi.kubevirt.io", "v1beta1", "DataVolume");
         let (ar, _) = kube::discovery::pinned_kind(&client, &gvk).await?;
-        let api = Api::<DynamicObject>::namespaced_with(client, &TNET_NAMESPACE, &ar);
-        for node in self.nns_nodes.iter().chain(self.app_nodes.iter()) {
-            let dvname = format!("{}-config", node.name.clone().unwrap());
-            let source = DvSource::url(node.config_url.clone().unwrap());
-            let dvinfo = DvInfo::new(&dvname, source, "kubevirt", "12Mi");
-            info!("Creating DV {}", dvname);
-            create_datavolume(&api, &dvinfo, self.owner_reference()).await?;
-        }
-        Ok(())
-    }
+        let api_dv = Api::<DynamicObject>::namespaced_with(client, &TNET_NAMESPACE, &ar);
 
-    pub async fn create(&mut self) -> Result<&Self> {
-        self.tnet_owner().await?;
-        let k8s_client = &self.k8s.as_ref().unwrap();
-
-        // tnet guestos image
-        let tnet_image = &format!("{}-image-guestos", self.owner.name_any());
-        let source = DvSource::url(self.image_url.clone());
-        let dvinfo = DvInfo::new(tnet_image, source, "archive", "50Gi");
-        info!("Creating DV {} from {}", tnet_image, self.image_url);
-        create_datavolume(&k8s_client.api_dv, &dvinfo, self.owner_reference()).await?;
-
-        // generate and upload node config images
-        let dv_info_name = format!("{}-config-init", self.owner.name_any());
-        if self.init {
-            generate_config(
-                &self.version,
-                self.use_zero_version,
-                &self.nns_nodes,
-                &self.app_nodes,
-            )?;
-            self.upload_config().await?;
-
-            // tnet-config-init for nns init
-            let config_url = format!("{}/init.tar", self.config_url.clone().unwrap());
-            let source = DvSource::url(config_url);
-            let dvinfo = DvInfo::new(&dv_info_name, source, "archive", "128Mi");
-            create_datavolume(&k8s_client.api_dv, &dvinfo, self.owner_reference()).await?;
-
-            // nns-config and app-config images
-            for node in self.nns_nodes.iter().chain(self.app_nodes.iter()) {
-                let dvname = format!("{}-config", node.name.clone().unwrap());
-                let source = DvSource::url(node.config_url.clone().unwrap());
-                let dvinfo = DvInfo::new(&dvname, source, "kubevirt", "12Mi");
-                create_datavolume(&k8s_client.api_dv, &dvinfo, self.owner_reference()).await?;
-            }
-        }
-
+        let source = DvSource::url(url.into());
+        let dvinfo = DvInfo::new(name, source, "archive", "50Gi");
+        info!("Creating DV {} from {}", name, url);
+        create_datavolume(&api_dv, &dvinfo, self.owner_reference()).await?;
+        // wait for the datavolume to be ready
         tokio::time::timeout(tokio::time::Duration::from_secs(300), async {
             while (|| async {
-                self.k8s
-                    .as_ref()
-                    .unwrap()
-                    .api_dv
-                    .get(tnet_image)
+                api_dv
+                    .get(name)
                     .await
                     .map(|r| r.data["status"]["phase"] != "Succeeded")
             })
@@ -511,96 +299,256 @@ impl TNet {
         })
         .await??;
 
-        for node in self.nns_nodes.iter().chain(self.app_nodes.iter()) {
-            let pvc_name = format!("{}-guestos", node.name.clone().unwrap());
-            let data_source = Some(TypedLocalObjectReference {
-                api_group: None,
-                kind: "PersistentVolumeClaim".to_string(),
-                name: tnet_image.to_string(),
-            });
-            create_pvc(
-                &k8s_client.api_pvc,
-                &pvc_name,
-                "100Gi",
-                None,
-                None,
-                data_source,
-                self.owner_reference(),
-            )
+        Ok(())
+    }
+
+    pub async fn vm_create(
+        &mut self,
+        vm_req: CreateVmRequest,
+        vm_type: ImageType,
+    ) -> Result<VMCreateResponse> {
+        let k8s_client = &K8sClient::new().await?;
+        let vm_name = format!(
+            "{}-{}",
+            self.unique_name.clone().expect("no unique name"),
+            match vm_type {
+                ImageType::IcOsImage => self.nodes.len().to_string(),
+                ImageType::UniversalImage | ImageType::PrometheusImage =>
+                    format!("{}-{}", self.nodes.len(), vm_req.name),
+            }
+        );
+        let pvc_name = format!("{}-guestos", vm_name.clone());
+        let data_source = Some(TypedLocalObjectReference {
+            api_group: None,
+            kind: "PersistentVolumeClaim".to_string(),
+            name: match vm_req.primary_image {
+                ImageLocation::PersistentVolumeClaim { name } => name,
+                _ => unimplemented!(),
+            },
+        });
+
+        create_pvc(
+            &k8s_client.api_pvc,
+            &pvc_name,
+            "100Gi",
+            None,
+            None,
+            data_source,
+            self.owner_reference(),
+        )
+        .await?;
+
+        create_vm(
+            &k8s_client.api_vm,
+            &vm_name.clone(),
+            &vm_req.vcpus.to_string(),
+            &vm_req.memory_kibibytes.to_string(),
+            false,
+            self.owner_reference(),
+            self.access_key.clone(),
+            vm_type.clone(),
+        )
+        .await?;
+
+        let mut svc: Service = serde_yaml::from_str(&format!(
+            r#"
+apiVersion: v1
+kind: Service
+metadata:
+  name: {name}
+spec:
+  ipFamilyPolicy: PreferDualStack
+  ipFamilies:
+  - IPv6
+  - IPv4
+  ports:
+    - port: 22
+      name: ssh
+    - port: 80
+      name: http
+    - port: 443
+      name: https
+    - port: 2497
+      name: port-2497
+    - port: 3000
+      name: grafana
+    - port: 4100
+      name: port-4100
+    - port: 4444
+      name: port-4444
+    - port: 7070
+      name: port-7070
+    - port: 8080
+      name: port-8080
+    - port: 8100
+      name: port-8100
+    - port: 8101
+      name: port-8101
+    - port: 8102
+      name: port-8102
+    - port: 8103
+      name: port-8103
+    - port: 8104
+      name: port-8104
+    - port: 8105
+      name: port-8105
+    - port: 8106
+      name: port-8106
+    - port: 8107
+      name: port-8107
+    - port: 8108
+      name: port-8108
+    - port: 8109
+      name: port-8109
+    - port: 8110
+      name: port-8110
+    - port: 8111
+      name: port-8111
+    - port: 9091
+      name: port-9091
+    - port: 9100
+      name: prometheus-node-exporter
+    - port: 9090
+      name: prometheus
+    - port: 19100
+      name: port-19100
+    - port: 19531
+      name: port-19531
+    - port: 20443
+      name: port-20443
+  selector:
+    kubevirt.io/vm: {name}
+  type: ClusterIP
+    "#,
+            name = vm_name,
+        ))?;
+        svc.metadata.owner_references = vec![self.owner_reference()].into();
+
+        (|| async {
+            k8s_client
+                .api_svc
+                .create(&PostParams::default(), &svc)
+                .await
+        })
+        .retry(&ExponentialBuilder::default())
+        .await?;
+
+        let (ipv4, ipv6) = (|| async {
+            k8s_client
+                .api_svc
+                .get(&vm_name)
+                .await
+                .map_err(|e| anyhow::anyhow!(e))
+                .and_then(|s| s.spec.ok_or_else(|| anyhow::anyhow!("missing spec")))
+                .and_then(|s| {
+                    s.cluster_ips
+                        .ok_or_else(|| anyhow::anyhow!("missing clusterIPs"))
+                })
+                .and_then(|ips| {
+                    ips.iter()
+                        .map(|ip| Ipv4Addr::from_str(ip).map_err(|e| anyhow::anyhow!(e)))
+                        .find_map(|r| r.ok())
+                        .ok_or_else(|| anyhow::anyhow!("missing ipv4 address"))
+                        .and_then(|ipv4| {
+                            ips.iter()
+                                .map(|ip| Ipv6Addr::from_str(ip).map_err(|e| anyhow::anyhow!(e)))
+                                .find_map(|r| r.ok().map(|ipv6| (ipv4, ipv6)))
+                                .ok_or_else(|| anyhow::anyhow!("missing ipv6 address"))
+                        })
+                })
+        })
+        .retry(
+            &ConstantBuilder::default()
+                .with_max_times(60)
+                .with_delay(std::time::Duration::from_secs(1)),
+        )
+        .await?;
+
+        if vm_type == ImageType::PrometheusImage {
+            let mut ingress: Ingress = serde_yaml::from_str(&format!(
+                r#"
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {name}
+  labels:
+    app: nginx
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: grafana-{name}.{suffix}
+      http:
+        paths:
+          - backend:
+              service:
+                name: {svc_name}
+                port:
+                  number: 3000
+            path: /
+            pathType: Prefix
+    - host: prometheus-{name}.{suffix}
+      http:
+        paths:
+          - backend:
+              service:
+                name: {svc_name}
+                port:
+                  number: 9090
+            path: /
+            pathType: Prefix
+  tls:
+    - secretName: tnets-wildcard-tls
+      hosts:
+        - "*.tnets.{suffix}"
+"#,
+                name = self.unique_name.clone().expect("missing unique name"),
+                svc_name = vm_name,
+                suffix = *TNET_DNS_SUFFIX,
+            ))?;
+            ingress.metadata.owner_references = vec![self.owner_reference()].into();
+
+            (|| async {
+                k8s_client
+                    .api_ingress
+                    .create(&PostParams::default(), &ingress)
+                    .await
+            })
+            .retry(&ExponentialBuilder::default())
             .await?;
         }
 
-        // create virtual machines
-        for node in self.nns_nodes.iter().chain(self.app_nodes.iter()) {
-            create_vm(
-                &self.k8s.as_ref().unwrap().api_vm,
-                &node.name.clone().unwrap(),
-                &node.ipv6_addr.unwrap().to_string(),
-                self.init,
-                self.owner_reference(),
-            )
-            .await?;
+        self.nodes.push(TNode {
+            node_id: vm_req.name.clone().into(),
+            name: vm_name.clone().into(),
+            ipv6_addr: ipv6.into(),
+            config_url: format!("{}/{}", self.config_url.clone().unwrap(), vm_name.clone()).into(),
+            owner: self.owner.clone(),
+        });
+
+        Ok(VMCreateResponse {
+            ipv4: ipv4.into(),
+            ipv6,
+            mac6: "00:11:22:33:44:55".to_string(),
+            hostname: vm_name,
+            spec: VmSpec {
+                v_cpus: vm_req.vcpus.get(),
+                memory_ki_b: vm_req.memory_kibibytes.get(),
+            },
+        })
+    }
+
+    pub async fn start(&self) -> Result<()> {
+        for node in self.nodes.iter() {
+            node.start().await?;
         }
+        Ok(())
+    }
 
-        let nns_ips = self
-            .nns_nodes
-            .iter()
-            .map(|node| node.ipv6_addr.unwrap().to_string())
-            .collect::<Vec<String>>()
-            .join(" ");
-
-        // initialize nns
-        if self.init {
-            create_pod(
-                &k8s_client.api_pod,
-                &format!("{}-operator", self.owner.name_any()),
-                "ubuntu:20.04",
-                vec![
-                    "/usr/bin/bash",
-                    "-c",
-                    &format!(
-                        r#"
-                        set -eEuo pipefail
-
-                        if [ -e /mnt/ic-nns-init.complete ]; then
-                          echo NNS already initialized, nothing to do
-                          exit 0
-                        fi
-
-                        apt update && apt install -y parallel wget iputils-ping libssl1.1="1.1.1f-1ubuntu2"
-                        gunzip /mnt/*.gz /mnt/canisters/*.gz || true
-                        chmod u+x /mnt/ic-nns-init
-
-                        timeout 10m bash -c 'until parallel -u ping -c1 -W1 ::: {} >/dev/null;
-                        do
-                          echo Waiting for NNS nodes to come up...
-                          sleep 5
-                        done'
-
-                        echo NNS nodes seem to be up...
-                        echo Giving them 2 minutes to settle...
-                        sleep 120
-                        echo Initiliazing NNS nodes...
-                        /mnt/ic-nns-init --url 'http://[{}]:8080' \
-                          --registry-local-store-dir /mnt/ic_registry_local_store \
-                          --wasm-dir /mnt/canisters --http2-only 2>&1 | tee /mnt/ic-nns-init.log
-                        touch /mnt/ic-nns-init.complete
-                        "#,
-                        nns_ips, self.nns_nodes[0].ipv6_addr.unwrap()
-                    ),
-                ],
-                vec![
-                    "/usr/bin/bash",
-                    "-c",
-                    "tail -f /dev/null",
-                ],
-                Some((&dv_info_name, "/mnt")),
-                self.owner_reference(),
-            )
-            .await?;
+    pub async fn stop(&self) -> Result<()> {
+        for node in self.nodes.iter() {
+            node.stop().await?;
         }
-
-        Ok(self)
+        Ok(())
     }
 }
 
@@ -611,13 +559,10 @@ mod tests {
     #[tokio::test]
     async fn test_tnet_new() {
         let tnet = TNet::new("testnet").expect("should create a testnet");
-        assert_eq!(tnet.name, "testnet");
+        assert_eq!(tnet.group_name, "testnet");
         assert_eq!(tnet.version, "");
-        assert!(!tnet.use_zero_version);
         assert_eq!(tnet.image_url, "");
-        assert_eq!(tnet.ipv6_net, None);
         assert_eq!(tnet.config_url, None);
-        assert_eq!(tnet.index, None);
     }
 
     #[tokio::test]
@@ -630,19 +575,5 @@ mod tests {
             tnet.image_url,
             "https://download.dfinity.systems/ic/1.0.0/guest-os/disk-img-dev/disk-img.tar.gz"
         );
-    }
-
-    #[tokio::test]
-    async fn test_tnet_topology() {
-        let tnet = TNet::new("testnet")
-            .expect("should create a testnet")
-            .topology(2, 3);
-        assert_eq!(tnet.nns_nodes.len(), 2);
-        assert_eq!(tnet.app_nodes.len(), 3);
-    }
-
-    #[tokio::test]
-    async fn test_tnet_owner() {
-        // TODO:
     }
 }

@@ -13,7 +13,7 @@ path = "src/lib.rs"
 base64 = { workspace = true }
 candid = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
-ic-icrc1-index = { path = "../../rosetta-api/icrc1/index" }
+ic-icrc1-index-ng = { path = "../../rosetta-api/icrc1/index-ng" }
 ic-icrc1-ledger = { path = "../../rosetta-api/icrc1/ledger" }
 ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
 ic-ledger-canister-core = { path = "../../rosetta-api/ledger_canister_core" }
@@ -35,7 +35,7 @@ serde_yaml = { workspace = true }
 ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
 ic-sns-init-protobuf-generator = { path = "protobuf_generator" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
-num-traits = "0.2"
+num-traits = { workspace = true }
 tempfile = "3.1.0"
 
 [features]

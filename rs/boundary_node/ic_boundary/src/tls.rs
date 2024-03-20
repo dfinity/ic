@@ -1,3 +1,12 @@
+use std::{
+    fs,
+    fs::File,
+    io::{self, ErrorKind},
+    path::PathBuf,
+    sync::Arc,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
+
 use anyhow::{anyhow, Context, Error};
 use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
@@ -8,25 +17,34 @@ use axum::{
 };
 use axum_server::{accept::Accept, tls_rustls::RustlsAcceptor};
 use futures_util::future::BoxFuture;
-use instant_acme::{Account, AccountCredentials, NewAccount};
+use instant_acme::{Account, AccountCredentials, LetsEncrypt, NewAccount};
+use lazy_static::lazy_static;
 use mockall::automock;
+use prometheus::Registry;
 use rcgen::{Certificate, CertificateParams, DistinguishedName};
-use std::{
-    fs,
-    fs::File,
-    io::{self, ErrorKind},
-    path::PathBuf,
-    sync::Arc,
-    time::{Duration, SystemTime, UNIX_EPOCH},
-};
+use regex::Regex;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     sync::RwLock,
 };
 use tokio_rustls::server::TlsStream;
+use tracing::{info, warn};
 use x509_parser::prelude::{Pem, Validity};
 
-use crate::acme::{Finalize, Obtain, Order, Ready};
+use crate::{
+    acme::{Acme, Finalize, Obtain, Order, Ready},
+    cli::Cli,
+    configuration::{ConfigurationRunner, Configurator, TlsConfigurator},
+    core::{Run, ThrottleParams, WithRetry, WithThrottle, SECOND},
+    metrics::{MetricParams, WithMetrics},
+};
+
+const DAY: Duration = Duration::from_secs(24 * 3600);
+
+lazy_static! {
+    pub static ref HOSTNAME_REGEX: Regex =
+        Regex::new(r"^([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])(\.([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]{0,61}[a-zA-Z0-9]))*$").unwrap();
+}
 
 // Public + Private key pair
 #[derive(Clone, Debug, PartialEq)]
@@ -59,8 +77,7 @@ where
     type Future = BoxFuture<'static, io::Result<(Self::Stream, Self::Service)>>;
 
     fn accept(&self, stream: I, service: S) -> Self::Future {
-        let inner = &*self.inner;
-        let acceptor = inner.load().clone();
+        let acceptor = self.inner.load_full().clone();
 
         Box::pin(async move {
             match acceptor {
@@ -74,7 +91,7 @@ where
     }
 }
 
-pub struct TokenOwner(pub Arc<RwLock<Option<String>>>);
+pub struct TokenOwner(Arc<RwLock<Option<String>>>);
 
 impl TokenOwner {
     pub fn new() -> Self {
@@ -101,15 +118,13 @@ pub enum LoadError {
 }
 
 #[automock]
-#[async_trait]
-trait Load<T: Send + Sync>: Sync + Send {
-    async fn load(&self) -> Result<T, LoadError>;
+pub trait Load<T: Send + Sync>: Sync + Send {
+    fn load(&self) -> Result<T, LoadError>;
 }
 
-#[async_trait]
 impl<T: Send + Sync, L: Load<T>> Load<T> for Arc<L> {
-    async fn load(&self) -> Result<T, LoadError> {
-        self.as_ref().load().await
+    fn load(&self) -> Result<T, LoadError> {
+        self.as_ref().load()
     }
 }
 
@@ -120,15 +135,13 @@ pub enum StoreError {
 }
 
 #[automock]
-#[async_trait]
 trait Store<T: Send + Sync>: Sync + Send {
-    async fn store(&self, v: T) -> Result<(), StoreError>;
+    fn store(&self, v: T) -> Result<(), StoreError>;
 }
 
-#[async_trait]
 impl<T: 'static + Send + Sync, S: Store<T>> Store<T> for Arc<S> {
-    async fn store(&self, v: T) -> Result<(), StoreError> {
-        self.as_ref().store(v).await
+    fn store(&self, v: T) -> Result<(), StoreError> {
+        self.as_ref().store(v)
     }
 }
 
@@ -182,12 +195,15 @@ impl Provisioner {
 #[async_trait]
 impl Provision for Provisioner {
     async fn provision(&mut self, name: &str) -> Result<ProvisionResult, ProvisionError> {
+        warn!("TLS: Provisioning new certificate for '{name}'");
+
         // Create a new ACME order
         let (mut order, challenge_key) = self
             .acme_order
             .order(name)
             .await
             .context("failed to create ACME order")?;
+        info!("TLS: Order created");
 
         // Set the challenge token
         self.token_owner
@@ -199,6 +215,7 @@ impl Provision for Provisioner {
             .ready(&mut order)
             .await
             .context("failed to mark ACME order as ready")?;
+        info!("TLS: Order marked as ready");
 
         // Create a certificate for the ACME provider to sign
         let cert = Certificate::from_params({
@@ -207,17 +224,20 @@ impl Provision for Provisioner {
             params
         })
         .context("failed to generate certificate")?;
+        info!("TLS: Certificate generated");
 
         // Create a Certificate Signing Request for the ACME provider
         let csr = cert
             .serialize_request_der()
             .context("failed to create certificate signing request")?;
+        info!("TLS: CSR created");
 
         // Attempt to finalize the order by having the ACME provider sign our certificate
         self.acme_finalize
             .finalize(&mut order, &csr)
             .await
             .context("failed to finalize ACME order")?;
+        info!("TLS: Order finalized");
 
         // Obtain the signed certificate chain from the ACME provider
         let cert_chain_pem = self
@@ -229,10 +249,21 @@ impl Provision for Provisioner {
         // Unset the challenge token
         self.token_owner.set(None).await;
 
+        warn!("TLS: Certificate for {name} successfully provisioned");
         Ok(ProvisionResult::Issued(TLSCert(
             cert_chain_pem,                   // Certificate Chain
             cert.serialize_private_key_pem(), // Private Key
         )))
+    }
+}
+
+// Used in case ACME client is not required
+pub struct ProvisionerStatic(pub TLSCert);
+
+#[async_trait]
+impl Provision for ProvisionerStatic {
+    async fn provision(&mut self, _name: &str) -> Result<ProvisionResult, ProvisionError> {
+        return Ok(ProvisionResult::StillValid(self.0.clone()));
     }
 }
 
@@ -241,9 +272,8 @@ pub struct Loader {
     pub pkey_path: PathBuf,
 }
 
-#[async_trait]
 impl Load<TLSCert> for Loader {
-    async fn load(&self) -> Result<TLSCert, LoadError> {
+    fn load(&self) -> Result<TLSCert, LoadError> {
         let (cert, pkey) = (
             fs::read_to_string(&self.cert_path),
             fs::read_to_string(&self.pkey_path),
@@ -270,9 +300,8 @@ impl Load<TLSCert> for Loader {
     }
 }
 
-#[async_trait]
 impl Store<TLSCert> for Loader {
-    async fn store(&self, v: TLSCert) -> Result<(), StoreError> {
+    fn store(&self, v: TLSCert) -> Result<(), StoreError> {
         fs::write(&self.cert_path, v.0).context("failed to write certificate to file")?;
         fs::write(&self.pkey_path, v.1).context("failed to write private-key to file")?;
 
@@ -287,7 +316,7 @@ pub struct WithLoad<P, L>(pub P, pub L, pub Duration);
 #[async_trait]
 impl<P: Provision, L: Load<TLSCert>> Provision for WithLoad<P, L> {
     async fn provision(&mut self, name: &str) -> Result<ProvisionResult, ProvisionError> {
-        match self.1.load().await {
+        match self.1.load() {
             Ok(tls_cert) => {
                 // An existing set of certificates was found
                 // attempt to ensure they are valid
@@ -331,7 +360,7 @@ impl<P: Provision, S: Store<TLSCert>> Provision for WithStore<P, S> {
 
         // Persist the certificates if they were renewed
         if let ProvisionResult::Issued(tls_cert) = out.clone() {
-            self.1.store(tls_cert).await?;
+            self.1.store(tls_cert)?;
         }
 
         Ok(out)
@@ -416,6 +445,139 @@ pub async fn redirect_to_https(
             .unwrap()
             .to_string(),
     )
+}
+
+async fn prepare_acme_provisioner(
+    acme_credentials: &PathBuf,
+    renew_before: Duration,
+    tls_loader: Loader,
+    token_owner: Arc<TokenOwner>,
+) -> Result<Box<dyn Provision>, Error> {
+    // ACME client
+    let acme_http_client = hyper::Client::builder().build(
+        hyper_rustls::HttpsConnectorBuilder::new()
+            .with_native_roots()
+            .https_only()
+            .enable_all_versions()
+            .build(),
+    );
+
+    let acme_account = load_or_create_acme_account(
+        acme_credentials,
+        LetsEncrypt::Production.url(),
+        Box::new(acme_http_client),
+    )
+    .await
+    .context("failed to load acme credentials")?;
+
+    let acme_client = Acme::new(acme_account);
+
+    let acme_order = acme_client.clone();
+    let acme_order = Box::new(acme_order);
+
+    let acme_ready = acme_client.clone();
+    let acme_ready = Box::new(acme_ready);
+
+    let acme_finalize = acme_client.clone();
+    let acme_finalize = WithThrottle(acme_finalize, ThrottleParams::new(Duration::from_secs(5)));
+    let acme_finalize = WithRetry(acme_finalize, Duration::from_secs(60));
+    let acme_finalize = Box::new(acme_finalize);
+
+    let acme_obtain = acme_client;
+    let acme_obtain = WithThrottle(acme_obtain, ThrottleParams::new(Duration::from_secs(5)));
+    let acme_obtain = WithRetry(acme_obtain, Duration::from_secs(60));
+    let acme_obtain = Box::new(acme_obtain);
+
+    // TLS Provisioner
+    let tls_loader = Arc::new(tls_loader);
+    let tls_provisioner = Provisioner::new(
+        token_owner,
+        acme_order,
+        acme_ready,
+        acme_finalize,
+        acme_obtain,
+    );
+    let tls_provisioner = WithStore(tls_provisioner, tls_loader.clone());
+    let tls_provisioner = WithLoad(tls_provisioner, tls_loader, renew_before);
+    let tls_provisioner = Box::new(tls_provisioner);
+
+    info!("TLS: Using ACME provisioner");
+    Ok(tls_provisioner)
+}
+
+fn prepare_static_provisioner(loader: Loader) -> Result<Box<dyn Provision>, Error> {
+    info!("TLS: Using static provisioner");
+    Ok(Box::new(ProvisionerStatic(loader.load()?)))
+}
+
+pub async fn prepare_tls(
+    cli: &Cli,
+    registry: &Registry,
+) -> Result<(impl Run, CustomAcceptor, Arc<TokenOwner>), Error> {
+    // TLS Certificates Loader (Ingress)
+    let tls_loader = Loader {
+        cert_path: cli.tls.tls_cert_path.clone(),
+        pkey_path: cli.tls.tls_pkey_path.clone(),
+    };
+
+    let token_owner = Arc::new(TokenOwner::new());
+
+    // Use the ACME provisioner if the credentials file was specified.
+    // Otherwise use static provisioner that just uses the certificates from files on disk.
+    let tls_provisioner = if let Some(v) = &cli.tls.acme_credentials_path {
+        if fs::metadata(v)?.len() == 0 {
+            // If the file is empty - then use static provisioner also.
+            // This is needed to run integration tests where we can't manipulate arguments easily
+            prepare_static_provisioner(tls_loader)?
+        } else {
+            if !HOSTNAME_REGEX.is_match(&cli.tls.hostname) {
+                return Err(anyhow!(
+                    "'{}' does not look like a valid hostname",
+                    cli.tls.hostname,
+                ));
+            }
+
+            prepare_acme_provisioner(
+                v,
+                cli.tls.renew_days_before * DAY,
+                tls_loader,
+                token_owner.clone(),
+            )
+            .await?
+        }
+    } else {
+        prepare_static_provisioner(tls_loader)?
+    };
+
+    // TLS (Ingress) Configurator
+    let tls_acceptor = Arc::new(ArcSwapOption::new(None));
+
+    let tls_configurator = TlsConfigurator::new(tls_acceptor.clone(), tls_provisioner);
+    let tls_configurator = WithMetrics(
+        tls_configurator,
+        MetricParams::new(registry, "configure_tls"),
+    );
+
+    let tls_acceptor = CustomAcceptor::new(tls_acceptor);
+
+    // Service Configurator
+    let svc_configurator = Configurator {
+        tls: Box::new(tls_configurator),
+    };
+
+    // Configuration
+    let configuration_runner = ConfigurationRunner::new(
+        cli.tls.hostname.clone(),
+        svc_configurator, // configurator
+    );
+    let configuration_runner = WithMetrics(
+        configuration_runner,
+        MetricParams::new(registry, "run_configuration"),
+    );
+    let configuration_runner =
+        WithThrottle(configuration_runner, ThrottleParams::new(600 * SECOND));
+
+    Ok((configuration_runner, tls_acceptor, token_owner))
 }
 
 #[cfg(test)]

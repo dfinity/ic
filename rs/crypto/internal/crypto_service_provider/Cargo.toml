@@ -32,7 +32,6 @@ ic-crypto-node-key-validation = { path = "../../../crypto/node_key_validation" }
 ic-crypto-sha2 = { path = "../../sha2" }
 ic-crypto-standalone-sig-verifier = { path = "../../standalone-sig-verifier" }
 ic-crypto-tls-interfaces = { path = "../../tls_interfaces" }
-ic-crypto-utils-time = { path = "../../utils/time" }
 ic-interfaces = { path = "../../../interfaces" }
 ic-logger = { path = "../../../monitoring/logger" }
 ic-metrics = { path = "../../../monitoring/metrics" }
@@ -54,11 +53,11 @@ strum_macros = { workspace = true }
 tarpc = { version = "0.34", features = ["full"] }
 tempfile = "3.1.0"
 time = "0.3.20"
-thiserror = "1.0.26"
+thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-serde = { version = "0.8", features = ["json", "bincode"] }
 tokio-util = { workspace = true }
-x509-parser = { version = "0.15.1", features = ["verify"] }
+x509-parser = { workspace = true }
 zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
 
 [dev-dependencies]

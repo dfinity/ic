@@ -155,3 +155,22 @@ dfx canister --network ic call minter retrieve_btc "(record {address=\"BTC_ADDRE
 ----
 
 You now have your BTC back on the Bitcoin network (caution: transaction finalization may take a while). 
+
+=== Ledger Memos
+
+All ckBTC transactions issued by the ckBTC minter and recorded on the ledger use a memo field to store additional information about the transaction. The ckBTC minter records a transaction on the ledger in the following cases:
+
+. minting ckBTC after a deposit of BTC,
+. burning ckBTC after a withdrawal request to BTC,
+. minting ckBTC to reimburse a failed withdrawal or to pay the kyt fees.
+
+=== Design
+The general idea is to encode the memo as a https://cbor.io/[CBOR] message and use the transaction type to select the message type. The messages will follow the compact encoding described in the https://twittner.gitlab.io/minicbor/minicbor_derive/index.html[minicbor] package documentation with the following https://datatracker.ietf.org/doc/html/rfc8610[CDDL] schema:
+
+.Example Implementation in Typescript
+====
+There is an example implementation of how to decode the ckBTC ledger memos in Typescript in the https://github.com/dfinity/oisy-wallet/tree/main[Oisy Wallet] repository:
+
+* https://github.com/dfinity/oisy-wallet/blob/384013a67a994555b6bd1cd6baeba0a83c444839/src/frontend/src/icp/utils/ckbtc-memo.utils.ts[Decode ckBTC ledger burn and mint memo]
+* https://github.com/dfinity/oisy-wallet/blob/384013a67a994555b6bd1cd6baeba0a83c444839/src/frontend/src/tests/icp/utils/ckbtc-memo.utils.spec.ts[Tests to decode ckBTC ledger memo]
+====

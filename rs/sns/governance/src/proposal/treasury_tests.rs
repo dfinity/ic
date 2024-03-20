@@ -96,7 +96,7 @@ fn test_can_be_purged_retain_recent_transfer_sns_treasury_funds() {
 }
 
 #[test]
-fn test_total_treasury_transfer_amount_e8s() {
+fn test_total_treasury_transfer_amount_tokens() {
     let min_executed_timestamp_seconds = 123_456_789;
 
     let transfer_sns_treasury_funds = TransferSnsTreasuryFunds {
@@ -203,30 +203,30 @@ fn test_total_treasury_transfer_amount_e8s() {
     ];
 
     assert_eq!(
-        total_treasury_transfer_amount_e8s(
-            &proposals,
+        total_treasury_transfer_amount_tokens(
+            proposals.iter(),
             TransferFrom::IcpTreasury,
             min_executed_timestamp_seconds,
         ),
-        Some(4321),
+        Ok(Decimal::from(4321) / Decimal::from(E8)),
     );
 
     // No time limit. This causes just one additional ProposalData to be included in the total. It
     // has the prototypical amount: 999_000_000, so the result here should be greater than the
     // previous result by this amount.
     assert_eq!(
-        total_treasury_transfer_amount_e8s(
-            &proposals,
+        total_treasury_transfer_amount_tokens(
+            proposals.iter(),
             TransferFrom::IcpTreasury,
             // This is somewhat pathological, but the behavior is still well-defined. Therefore, the
             // code under test should be able to handle this even though we do not expect to see
             // this in practice.
             0,
         ),
-        Some(999_004_321),
+        Ok(Decimal::from(999_004_321) / Decimal::from(E8)),
     );
 
-    // Add data to proposals that causes us to be on the verge of causing an overflow.
+    // Add data to proposals that causes the total to be u64::MAX e8s.
     let proposals = {
         let mut result = proposals;
 
@@ -249,15 +249,15 @@ fn test_total_treasury_transfer_amount_e8s() {
 
     // Assert result is MAX.
     assert_eq!(
-        total_treasury_transfer_amount_e8s(
-            &proposals,
+        total_treasury_transfer_amount_tokens(
+            proposals.iter(),
             TransferFrom::IcpTreasury,
             min_executed_timestamp_seconds,
         ),
-        Some(u64::MAX),
+        Ok(Decimal::from(u64::MAX) / Decimal::from(E8)),
     );
 
-    // Add "straw that broke the camel's back" proposal.
+    // Add another proposal such that the total amount > u64::MAX.
     let proposals = {
         let mut result = proposals;
         result.push(ProposalData {
@@ -276,13 +276,13 @@ fn test_total_treasury_transfer_amount_e8s() {
         result
     };
 
-    // Assert quietly explodes.
+    // Assert result is u64::MAX + 1.
     assert_eq!(
-        total_treasury_transfer_amount_e8s(
-            &proposals,
+        total_treasury_transfer_amount_tokens(
+            proposals.iter(),
             TransferFrom::IcpTreasury,
             min_executed_timestamp_seconds,
         ),
-        None, // Quiet explosion.
+        Ok((Decimal::from(u64::MAX) + Decimal::from(1)) / Decimal::from(E8)),
     );
 }

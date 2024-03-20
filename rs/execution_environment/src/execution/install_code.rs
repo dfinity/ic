@@ -6,11 +6,13 @@ use std::path::{Path, PathBuf};
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_config::flag_status::FlagStatus;
 use ic_embedders::wasm_executor::CanisterStateChanges;
-use ic_ic00_types::{CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2};
 use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, SubnetAvailableMemoryError, WasmExecutionOutput,
 };
 use ic_logger::{error, fatal, info, warn};
+use ic_management_canister_types::{
+    CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2,
+};
 use ic_replicated_state::canister_state::system_state::ReservationError;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use ic_replicated_state::{CanisterState, ExecutionState};
@@ -28,7 +30,7 @@ use crate::{
         CanisterManagerError, CanisterMgrConfig, DtsInstallCodeResult, InstallCodeResult,
     },
     canister_settings::{validate_canister_settings, CanisterSettings},
-    execution_environment::RoundContext,
+    execution_environment::{log_dirty_pages, RoundContext},
     CompilationCostHandling, RoundLimits,
 };
 
@@ -413,6 +415,17 @@ impl InstallCodeHelper {
 
         let old_wasm_hash = get_wasm_hash(&clean_canister);
         let new_wasm_hash = get_wasm_hash(&self.canister);
+
+        if original.log_dirty_pages == FlagStatus::Enabled {
+            log_dirty_pages(
+                round.log,
+                &original.canister_id,
+                original.message.method_name(),
+                self.total_heap_delta.get() as usize / PAGE_SIZE,
+                instructions_used,
+            );
+        }
+
         DtsInstallCodeResult::Finished {
             canister: self.canister,
             message: original.message,
@@ -449,6 +462,7 @@ impl InstallCodeHelper {
                 freezing_threshold: None,
                 reserved_cycles_limit: None,
                 log_visibility: None,
+                wasm_memory_limit: None,
             },
             self.canister.memory_usage(),
             self.canister.message_memory_usage(),
@@ -796,6 +810,7 @@ pub(crate) struct OriginalContext {
     pub requested_memory_allocation: Option<MemoryAllocation>,
     pub sender: PrincipalId,
     pub canister_id: CanisterId,
+    pub log_dirty_pages: FlagStatus,
 }
 
 pub(crate) fn validate_controller(

@@ -8,7 +8,9 @@ use canister_test::{local_test_e, Project};
 use dfn_candid::candid_one;
 use ic_base_types::PrincipalId;
 use ic_canister_client_sender::Sender;
-use ic_ic00_types::{CanisterIdRecord, CanisterInstallMode, CanisterSettingsArgsBuilder};
+use ic_management_canister_types::{
+    CanisterIdRecord, CanisterInstallMode, CanisterSettingsArgsBuilder,
+};
 use ic_nervous_system_clients::canister_status::{CanisterStatusResult, CanisterStatusType};
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
@@ -17,7 +19,7 @@ use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID, GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET, ROOT_CANISTER_ID,
 };
 use ic_nns_governance::{
-    init::GovernanceCanisterInitPayloadBuilder,
+    init::{GovernanceCanisterInitPayloadBuilder, TEST_NEURON_1_ID},
     pb::v1::{
         manage_neuron::{configure, Command, Configure, NeuronIdOrSubaccount, RemoveHotKey},
         ManageNeuron, ManageNeuronResponse,
@@ -25,7 +27,6 @@ use ic_nns_governance::{
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    ids::TEST_NEURON_1_ID,
     itest_helpers::install_governance_canister,
     state_test_helpers::{
         create_canister_id_at_position, setup_nns_root_with_correct_canister_id, update_with_sender,

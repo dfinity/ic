@@ -318,9 +318,6 @@ pub mod neuron {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AbridgedNeuron {
-    /// TODO: drop this field after the change to use AbridgedNeuron is released.
-    #[prost(message, optional, tag = "1")]
-    pub id: ::core::option::Option<::ic_nns_common::pb::v1::NeuronId>,
     #[prost(bytes = "vec", tag = "2")]
     pub account: ::prost::alloc::vec::Vec<u8>,
     #[prost(message, optional, tag = "3")]
@@ -536,7 +533,7 @@ pub struct Proposal {
     #[prost(string, optional, tag = "20")]
     pub title: ::core::option::Option<::prost::alloc::string::String>,
     /// Text providing a short description of the proposal, composed
-    /// using a maximum of 15000 bytes of characters.
+    /// using a maximum of 30000 bytes of characters.
     #[prost(string, tag = "1")]
     pub summary: ::prost::alloc::string::String,
     /// The Web address of additional content required to evaluate the
@@ -1874,6 +1871,67 @@ pub struct NetworkEconomics {
     /// If unspecified or zero, all proposals are kept.
     #[prost(uint32, tag = "10")]
     pub max_proposals_to_keep_per_topic: u32,
+    /// Global Neurons' Fund participation thresholds.
+    #[prost(message, optional, tag = "11")]
+    pub neurons_fund_economics: ::core::option::Option<NeuronsFundEconomics>,
+}
+/// The thresholds specify the shape of the ideal matching function used by the Neurons' Fund to
+/// determine how much to contribute for a given direct participation amount. Note that the actual
+/// swap participation is in ICP, whereas these thresholds are specifid in XDR; the conversion rate
+/// is determined at the time of execution of the CreateServiceNervousSystem proposal.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct NeuronsFundMatchedFundingCurveCoefficients {
+    /// Up to this amount of direct participation, the Neurons' Fund does not contribute to this SNS.
+    #[prost(message, optional, tag = "1")]
+    pub contribution_threshold_xdr:
+        ::core::option::Option<::ic_nervous_system_proto::pb::v1::Decimal>,
+    /// Say the direct participation amount is `x_icp`. When `x_icp` equals the equavalent of
+    /// `one_third_participation_milestone_xdr` in ICP (we use ICP/XDR conversion data from the CMC),
+    /// the Neurons' Fund contributes 50% on top of that amount, so the overall contributions would
+    /// be `1.5 * x_icp` of which 1/3 comes from the Neurons' Fund.
+    #[prost(message, optional, tag = "2")]
+    pub one_third_participation_milestone_xdr:
+        ::core::option::Option<::ic_nervous_system_proto::pb::v1::Decimal>,
+    /// Say the direct participation amount is `x_icp`. When `x_icp` equals the equavalent of
+    /// `full_participation_milestone_xdr` in ICP (we use ICP/XDR conversion data from the CMC),
+    /// the Neurons' Fund contributes 100% on top of that amount, so the overall contributions would
+    /// be `2.0 * x_icp` of which a half comes from the Neurons' Fund.
+    #[prost(message, optional, tag = "3")]
+    pub full_participation_milestone_xdr:
+        ::core::option::Option<::ic_nervous_system_proto::pb::v1::Decimal>,
+}
+/// When the Neurons' Fund decides to participates in an SNS swap, the amount of participation is
+/// determined according to the rules of Matched Funding. The amount of ICP tokens contributed by
+/// the Neurons' Fund depends on four factors:
+/// (1) Direct participation amount at the time of the swap's successful finalization.
+/// (2) Amount of maturity held by all eligible neurons that were members of the Neurons' Fund
+///      at the time of the CreateServiceNervousSystem proposal execution.
+/// (3) Global Neurons' Fund participation thresholds, held in this structure (defined in XDR).
+/// (4) ICP/XDR conversion rate at the time of the CreateServiceNervousSystem proposal execution.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct NeuronsFundEconomics {
+    /// This is a theoretical limit which should be smaller than any realistic amount of maturity
+    /// that practically needs to be reserved from the Neurons' Fund for a given SNS swap.
+    #[prost(message, optional, tag = "1")]
+    pub max_theoretical_neurons_fund_participation_amount_xdr:
+        ::core::option::Option<::ic_nervous_system_proto::pb::v1::Decimal>,
+    /// Thresholds specifying the shape of the matching function used by the Neurons' Fund to
+    /// determine how much to contribute for a given direct participation amount.
+    #[prost(message, optional, tag = "2")]
+    pub neurons_fund_matched_funding_curve_coefficients:
+        ::core::option::Option<NeuronsFundMatchedFundingCurveCoefficients>,
+    /// The minimum value of the ICP/XDR conversion rate used by the Neurons' Fund for converting
+    /// XDR values into ICP.
+    #[prost(message, optional, tag = "3")]
+    pub minimum_icp_xdr_rate: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Percentage>,
+    /// The maximum value of the ICP/XDR conversion rate used by the Neurons' Fund for converting
+    /// XDR values into ICP.
+    #[prost(message, optional, tag = "4")]
+    pub maximum_icp_xdr_rate: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Percentage>,
 }
 /// A reward event is an event at which neuron maturity is increased
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
@@ -2327,6 +2385,9 @@ pub struct Governance {
     /// This is the inverse of what is stored in a Neuron (its followees).
     #[prost(map = "int32, message", tag = "22")]
     pub topic_followee_index: ::std::collections::HashMap<i32, governance::FollowersMap>,
+    /// Local cache for XDR-related conversion rates (the source of truth is in the CMC canister).
+    #[prost(message, optional, tag = "26")]
+    pub xdr_conversion_rate: ::core::option::Option<XdrConversionRate>,
 }
 /// Nested message and enum types in `Governance`.
 pub mod governance {
@@ -2605,6 +2666,17 @@ pub mod governance {
             pub followers: ::prost::alloc::vec::Vec<::ic_nns_common::pb::v1::NeuronId>,
         }
     }
+}
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct XdrConversionRate {
+    /// / Time at which this rate has been fetched.
+    #[prost(uint64, optional, tag = "1")]
+    pub timestamp_seconds: ::core::option::Option<u64>,
+    /// / One ICP is worth this number of 1/10,000ths parts of an XDR.
+    #[prost(uint64, optional, tag = "2")]
+    pub xdr_permyriad_per_icp: ::core::option::Option<u64>,
 }
 /// Proposals with restricted voting are not included unless the caller
 /// is allowed to vote on them.
@@ -3122,12 +3194,6 @@ pub enum Topic {
     Kyc = 9,
     /// Topic for proposals to reward node providers.
     NodeProviderRewards = 10,
-    /// Superseded by SNS_COMMUNITY_FUND.
-    ///
-    /// TODO(NNS1-1787): Delete this. In addition to clients wiping this from their
-    /// memory, I think we'll need Candid support in order to safely delete
-    /// this. There is no rush to delete this though.
-    SnsDecentralizationSale = 11,
     /// Proposals handling updates of a subnet's replica version.
     /// The only proposal in this topic is UpdateSubnetReplicaVersion.
     SubnetReplicaVersionManagement = 12,
@@ -3156,7 +3222,6 @@ impl Topic {
             Topic::NetworkCanisterManagement => "TOPIC_NETWORK_CANISTER_MANAGEMENT",
             Topic::Kyc => "TOPIC_KYC",
             Topic::NodeProviderRewards => "TOPIC_NODE_PROVIDER_REWARDS",
-            Topic::SnsDecentralizationSale => "TOPIC_SNS_DECENTRALIZATION_SALE",
             Topic::SubnetReplicaVersionManagement => "TOPIC_SUBNET_REPLICA_VERSION_MANAGEMENT",
             Topic::ReplicaVersionManagement => "TOPIC_REPLICA_VERSION_MANAGEMENT",
             Topic::SnsAndCommunityFund => "TOPIC_SNS_AND_COMMUNITY_FUND",
@@ -3177,7 +3242,6 @@ impl Topic {
             "TOPIC_NETWORK_CANISTER_MANAGEMENT" => Some(Self::NetworkCanisterManagement),
             "TOPIC_KYC" => Some(Self::Kyc),
             "TOPIC_NODE_PROVIDER_REWARDS" => Some(Self::NodeProviderRewards),
-            "TOPIC_SNS_DECENTRALIZATION_SALE" => Some(Self::SnsDecentralizationSale),
             "TOPIC_SUBNET_REPLICA_VERSION_MANAGEMENT" => Some(Self::SubnetReplicaVersionManagement),
             "TOPIC_REPLICA_VERSION_MANAGEMENT" => Some(Self::ReplicaVersionManagement),
             "TOPIC_SNS_AND_COMMUNITY_FUND" => Some(Self::SnsAndCommunityFund),

@@ -1,4 +1,4 @@
-use ic_base_types::{CanisterIdError, NumBytes, PrincipalIdBlobParseError};
+use ic_base_types::{NumBytes, PrincipalIdBlobParseError};
 use ic_error_types::UserError;
 use ic_types::{methods::WasmMethod, CanisterId, CountBytes, Cycles, NumInstructions};
 use ic_wasm_types::{WasmEngineError, WasmInstrumentationError, WasmValidationError};
@@ -98,19 +98,8 @@ pub enum HypervisorError {
     /// An attempt was made to grow the canister's memory above its memory
     /// allocation.
     OutOfMemory,
-    /// An attempt to perform an operation that isn't allowed when the canister
-    /// is stopped.
-    CanisterStopped,
-    /// An attempt was made to use more cycles than was available in a call
-    /// context.
-    InsufficientCyclesInCall {
-        available: Cycles,
-        requested: Cycles,
-    },
     /// The principal ID specified by the canister is invalid.
     InvalidPrincipalId(PrincipalIdBlobParseError),
-    /// The canister ID specified by the canister is invalid.
-    InvalidCanisterId(CanisterIdError),
     /// The canister rejected the message.
     MessageRejected,
     /// An attempt was made to add more cycles to an outgoing call than
@@ -140,6 +129,7 @@ pub enum HypervisorError {
         bytes: NumBytes,
         available: Cycles,
         threshold: Cycles,
+        reveal_top_up: bool,
     },
     ReservedCyclesLimitExceededInMemoryGrow {
         bytes: NumBytes,
@@ -150,6 +140,7 @@ pub enum HypervisorError {
         bytes: NumBytes,
         available: Cycles,
         threshold: Cycles,
+        reveal_top_up: bool,
     },
 }
 
@@ -188,22 +179,11 @@ impl HypervisorError {
         use ic_error_types::ErrorCode as E;
 
         match self {
-            Self::MessageRejected => UserError::new(
-                E::CanisterRejectedMessage,
-                format!("Canister {} rejected the message", canister_id),
-            ),
             Self::FunctionNotFound(table_idx, func_idx) => UserError::new(
                 E::CanisterFunctionNotFound,
                 format!(
                     "Canister {} requested to invoke a non-existent Wasm function {} from table {}",
                     canister_id, func_idx, table_idx
-                ),
-            ),
-            Self::WasmModuleNotFound => UserError::new(
-                E::CanisterWasmModuleNotFound,
-                format!(
-                    "Attempt to execute a message on canister {} which contains no Wasm module",
-                    canister_id,
                 ),
             ),
             Self::MethodNotFound(wasm_method) => {
@@ -233,7 +213,10 @@ impl HypervisorError {
             ),
             Self::InstructionLimitExceeded => UserError::new(
                 E::CanisterInstructionLimitExceeded,
-                format!("Canister {} exceeded the instruction limit for single message execution.", canister_id),
+                format!(
+                    "Canister {} exceeded the instruction limit for single message execution.",
+                    canister_id
+                ),
             ),
             Self::InvalidWasm(err) => UserError::new(
                 E::CanisterInvalidWasm,
@@ -257,6 +240,13 @@ impl HypervisorError {
                 E::CanisterCalledTrap,
                 format!("Canister {} trapped explicitly: {}", canister_id, msg),
             ),
+            Self::WasmModuleNotFound => UserError::new(
+                E::CanisterWasmModuleNotFound,
+                format!(
+                    "Attempt to execute a message on canister {} which contains no Wasm module",
+                    canister_id,
+                ),
+            ),
             Self::OutOfMemory => UserError::new(
                 E::CanisterOutOfMemory,
                 format!(
@@ -264,39 +254,18 @@ impl HypervisorError {
                     canister_id
                 ),
             ),
-            Self::WasmReservedPages => UserError::new(
-                E::CanisterOutOfMemory,
-                format!(
-                    "Canister {} ran out of available Wasm memory.",
-                    canister_id
-                ),
-            ),
-            Self::CanisterStopped => UserError::new(
-                E::CanisterStopped,
-                format!("Canister {} is stopped", canister_id,),
-            ),
-            Self::InsufficientCyclesInCall {
-                available,
-                requested,
-            } => UserError::new(
-                E::InsufficientCyclesInCall,
-                format!(
-                    "Canister {} attempted to keep {} cycles from a call when only {} was available",
-                    canister_id, requested, available
-                ),
-            ),
             Self::InvalidPrincipalId(_) => UserError::new(
-                E::CanisterTrapped,
+                E::CanisterContractViolation,
                 format!("Canister {} provided invalid principal id", canister_id),
             ),
-            Self::InvalidCanisterId(_) => UserError::new(
-                E::CanisterTrapped,
-                format!("Canister {} provided invalid canister id", canister_id),
+            // `CANISTER_REJECT` reject code.
+            Self::MessageRejected => UserError::new(
+                E::CanisterRejectedMessage,
+                format!("Canister {} rejected the message", canister_id),
             ),
-            Self::InsufficientCyclesBalance(err) => UserError::new(
-                E::CanisterOutOfCycles,
-                err.to_string(),
-            ),
+            Self::InsufficientCyclesBalance(err) => {
+                UserError::new(E::CanisterContractViolation, err.to_string())
+            }
             Self::Cleanup {
                 callback_err,
                 cleanup_err,
@@ -306,56 +275,101 @@ impl HypervisorError {
 
                 UserError::new(
                     callback_user_error.code(), // Use the same error code as the original callback error.
-                    format!("{}\n\ncall_on_cleanup also failed:\n\n{}",
+                    format!(
+                        "{}\n\ncall_on_cleanup also failed:\n\n{}",
                         callback_user_error.description(),
                         cleanup_user_error.description()
-                    )
+                    ),
                 )
             }
             Self::WasmEngineError(err) => UserError::new(
                 E::CanisterWasmEngineError,
                 format!(
-                    "Canister {} encountered a Wasm engine error: {}", canister_id, err
+                    "Canister {} encountered a Wasm engine error: {}",
+                    canister_id, err
                 ),
+            ),
+            Self::WasmReservedPages => UserError::new(
+                E::CanisterOutOfMemory,
+                format!("Canister {} ran out of available Wasm memory.", canister_id),
             ),
             Self::Aborted => {
                 unreachable!("Aborted execution should not be visible to the user.");
-            },
-            Self::SliceOverrun {instructions, limit} => UserError::new(
+            }
+            Self::SliceOverrun {
+                instructions,
+                limit,
+            } => UserError::new(
                 E::CanisterInstructionLimitExceeded,
-                format!("Canister {} attempted to perform \
+                format!(
+                    "Canister {} attempted to perform \
                 a large memory operation that used {} instructions and \
-                exceeded the slice limit {}.", canister_id, instructions, limit),
+                exceeded the slice limit {}.",
+                    canister_id, instructions, limit
+                ),
             ),
             Self::MemoryAccessLimitExceeded(s) => UserError::new(
                 E::CanisterMemoryAccessLimitExceeded,
-                format!("Canister exceeded memory access limits: {}", s)
-
+                format!("Canister exceeded memory access limits: {}", s),
             ),
-            Self::InsufficientCyclesInMemoryGrow { bytes, available, threshold } => UserError::new(
-                E::InsufficientCyclesInMemoryGrow,
-                format!(
-                    "Canister cannot grow memory by {} bytes due to insufficient cycles. \
-                     At least {} additional cycles are required.",
-                     bytes,
-                     threshold - available)
-            ),
-            Self::ReservedCyclesLimitExceededInMemoryGrow { bytes, requested, limit } => UserError::new(
-                E::ReservedCyclesLimitExceededInMemoryGrow,
+            Self::InsufficientCyclesInMemoryGrow {
+                bytes,
+                available,
+                threshold,
+                reveal_top_up,
+            } => {
+                let msg = if reveal_top_up {
+                    format!(
+                        " At least {} additional cycles are required.",
+                        threshold - available
+                    )
+                } else {
+                    "".to_string()
+                };
+                UserError::new(
+                    E::InsufficientCyclesInMemoryGrow,
+                    format!(
+                        "Canister cannot grow memory by {} bytes due to insufficient cycles.{}",
+                        bytes, msg
+                    ),
+                )
+            }
+            Self::ReservedCyclesLimitExceededInMemoryGrow {
+                bytes,
+                requested,
+                limit,
+            } => {
+                UserError::new(
+                    E::ReservedCyclesLimitExceededInMemoryGrow,
                     format!(
                         "Canister cannot grow memory by {} bytes due to its reserved cycles limit. \
                          The current limit ({}) would be exceeded by {}.",
                         bytes, limit, requested - limit,
                     ),
-            ),
-            Self::InsufficientCyclesInMessageMemoryGrow { bytes, available, threshold } => UserError::new(
-                E::InsufficientCyclesInMessageMemoryGrow,
-                format!(
-                    "Canister cannot grow message memory by {} bytes due to insufficient cycles. \
-                     At least {} additional cycles are required.",
-                     bytes,
-                     threshold - available)
-            ),
+                )
+            }
+            Self::InsufficientCyclesInMessageMemoryGrow {
+                bytes,
+                available,
+                threshold,
+                reveal_top_up,
+            } => {
+                let msg = if reveal_top_up {
+                    format!(
+                        " At least {} additional cycles are required.",
+                        threshold - available
+                    )
+                } else {
+                    "".to_string()
+                };
+                UserError::new(
+                    E::InsufficientCyclesInMessageMemoryGrow,
+                    format!(
+                    "Canister cannot grow message memory by {} bytes due to insufficient cycles.{}",
+                    bytes, msg,
+                ),
+                )
+            }
         }
     }
 
@@ -373,10 +387,7 @@ impl HypervisorError {
             HypervisorError::CalledTrap(_) => "CalledTrap",
             HypervisorError::WasmModuleNotFound => "WasmModuleNotFound",
             HypervisorError::OutOfMemory => "OutOfMemory",
-            HypervisorError::CanisterStopped => "CanisterStopped",
-            HypervisorError::InsufficientCyclesInCall { .. } => "InsufficientCyclesInCall",
             HypervisorError::InvalidPrincipalId(_) => "InvalidPrincipalId",
-            HypervisorError::InvalidCanisterId(_) => "InvalidCanisterId",
             HypervisorError::MessageRejected => "MessageRejected",
             HypervisorError::InsufficientCyclesBalance { .. } => "InsufficientCyclesBalance",
             HypervisorError::Cleanup { .. } => "Cleanup",

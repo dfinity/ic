@@ -50,7 +50,7 @@ EOF
                 touch profraw_list.txt
 
                 for FILE in "$TEST_INPUT"/*; do
-                    FILENAME=$(basename "$FILE")
+                    FILENAME=$(basename "$FILE" | sha256sum | head -c 40)
                     PROFILE_FILE="profdata/$FILENAME.profraw"
                     LLVM_PROFILE_FILE=$PROFILE_FILE $FUZZING_BINARY $FILE
                     echo "$PWD/$PROFILE_FILE" >>profraw_list.txt

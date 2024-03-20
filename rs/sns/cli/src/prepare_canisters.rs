@@ -16,7 +16,7 @@ pub struct PrepareCanistersArgs {
 #[derive(Debug, Parser)]
 pub struct SubCommandArgs {
     /// The canisters you want to operate on
-    #[clap(name = "CANISTER", multiple_values(true), required = true)]
+    #[clap(name = "CANISTER", required = true, num_args = 1..)]
     canisters: Vec<PrincipalId>,
 }
 

@@ -7,18 +7,18 @@ use icrc_ledger_types::icrc3::transactions::Transaction;
 /// The maximum number of blocks to return in a single [get_blocks] request.
 pub const DEFAULT_MAX_BLOCKS_PER_RESPONSE: u64 = 2000;
 
-#[derive(CandidType, Debug, Deserialize)]
+#[derive(CandidType, Debug, Deserialize, Clone)]
 pub enum IndexArg {
     Init(InitArg),
     Upgrade(UpgradeArg),
 }
 
-#[derive(CandidType, Debug, Deserialize)]
+#[derive(CandidType, Debug, Deserialize, Clone)]
 pub struct InitArg {
     pub ledger_id: Principal,
 }
 
-#[derive(CandidType, Debug, Deserialize)]
+#[derive(CandidType, Debug, Deserialize, Clone)]
 pub struct UpgradeArg {
     pub ledger_id: Option<Principal>,
 }

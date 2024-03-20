@@ -31,6 +31,24 @@ pub mod memory_manager_upgrade_storage;
 lazy_static! {
     // 10^-4. There is one ten-thousandth of a unit in one permyriad.
     pub static ref UNITS_PER_PERMYRIAD: Decimal = Decimal::from(10_000_u64).inv();
+
+    // Includes 0, all powers of 2 (including 1), and u64::MAX, plus values around the
+    // aforementioned numbers. This is useful for tests.
+    pub static ref WIDE_RANGE_OF_U64_VALUES: Vec<u64> = (0..=64)
+        .flat_map(|i| {
+            let pow_of_two: i128 = 2_i128.pow(i);
+            let perturbations = vec![-42, -7, -3, -2, -1, 0, 1, 2, 3, 7, 42];
+
+            perturbations
+                .into_iter()
+                .map(|perturbation| {
+                    pow_of_two
+                        .saturating_add(perturbation)
+                        .clamp(0, u64::MAX as i128) as u64
+                })
+                .collect::<Vec<u64>>()
+        })
+        .collect();
 }
 
 // 10^8
@@ -80,6 +98,22 @@ macro_rules! assert_is_err {
             r
         );
     };
+}
+
+/// Besides dividing, this also converts to Decimal (from u64).
+///
+/// The only way this can fail is if denominations_per_token is 0. Therefore, if you pass a positive
+/// constant (e.g. E8) for denominations_per_token, you do not have to implement clean up/recovery
+/// in case of None. E.g. you can use unwrap_or_default.
+pub fn denominations_to_tokens(
+    denominations: u64,
+    denominations_per_token: u64,
+) -> Option<Decimal> {
+    let denominations = Decimal::from(denominations);
+    let denominations_per_token = Decimal::from(denominations_per_token);
+
+    // denominations * tokens_per_denomination
+    denominations.checked_div(denominations_per_token)
 }
 
 pub fn i2d(i: u64) -> Decimal {
@@ -778,3 +812,6 @@ fn checked_div_mod(dividend: usize, divisor: usize) -> (usize, usize) {
 
 #[cfg(test)]
 mod serve_logs_tests;
+
+#[cfg(test)]
+mod tests;

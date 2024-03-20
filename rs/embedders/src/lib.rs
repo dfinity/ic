@@ -23,6 +23,9 @@ pub use wasmtime_embedder::{WasmtimeEmbedder, WasmtimeMemoryCreator};
 /// overhead is negligible.
 pub(crate) const MIN_GUARD_REGION_SIZE: usize = 8 * 1024 * 1024 * 1024;
 
+/// The maximum Wasm stack size as configured by Wasmtime.
+pub(crate) const MAX_WASM_STACK_SIZE: usize = 5 * 1024 * 1024;
+
 pub struct WasmExecutionInput {
     pub api_type: ApiType,
     pub sandbox_safe_system_state: SandboxSafeSystemState,

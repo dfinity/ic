@@ -1,0 +1,34 @@
+name: 'Bazel-Test-All'
+inputs:
+  BAZEL_COMMAND:
+    required: true
+    default: 'test'
+  BAZEL_TARGETS:
+    required: false
+    default: '//...'
+  BAZEL_CI_CONFIG:
+    required: false
+    default: '--config=ci'
+  BAZEL_EXTRA_ARGS:
+    required: false
+    default: '--keep_going'
+  BAZEL_EXTRA_ARGS_RULES:
+    required: false
+    default: ''
+  RUN_ON_DIFF_ONLY:
+    required: false
+    default: "false"
+
+runs:
+  using: "composite"
+  steps:
+      - name: Run Bazel Test All
+        id: bazel-test-all
+        shell: bash
+        run: ${GITHUB_WORKSPACE}/gitlab-ci/src/bazel-ci/main.sh
+        env:
+          BAZEL_COMMAND: ${{ inputs.BAZEL_COMMAND }}
+          BAZEL_TARGETS: ${{ inputs.BAZEL_TARGETS }}
+          BAZEL_CI_CONFIG: ${{ inputs.BAZEL_CI_CONFIG }}
+          BAZEL_EXTRA_ARGS: "${{ inputs.BAZEL_EXTRA_ARGS }} ${{ inputs.BAZEL_EXTRA_ARGS_RULES }}"
+          RUN_ON_DIFF_ONLY: ${{ inputs.RUN_ON_DIFF_ONLY }}

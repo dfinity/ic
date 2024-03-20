@@ -6,7 +6,7 @@ use crate::{
 use async_trait::async_trait;
 use candid::Encode;
 use ic_error_types::RejectCode;
-use ic_ic00_types::IC_00;
+use ic_management_canister_types::IC_00;
 use ic_nervous_system_proxied_canister_calls_tracker::ProxiedCanisterCallsTracker;
 use ic_nervous_system_runtime::Runtime;
 use std::{

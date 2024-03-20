@@ -189,7 +189,7 @@ icTests my_sub other_sub =
                                                                                              ic_provisional_create ic00 ecid (Just specified_id) (Just (2 ^ (60 :: Int))) empty >>= is specified_canister_id,
                                                                                            simpleTestCase "specified_id already taken" ecid $ \cid -> do
                                                                                              let specified_id = entityIdToPrincipal $ EntityId cid
-                                                                                             ic_provisional_create' ic00 ecid (Just specified_id) (Just (2 ^ (60 :: Int))) empty >>= isReject [3],
+                                                                                             ic_provisional_create' ic00 ecid (Just specified_id) (Just (2 ^ (60 :: Int))) empty >>= isReject [5],
                                                                                            testCase "specified_id does not belong to the subnet's canister ranges" $ do
                                                                                              let specified_id = entityIdToPrincipal $ EntityId doesn'tExist
                                                                                              ic_provisional_create' ic00 ecid (Just specified_id) (Just (2 ^ (60 :: Int))) empty >>= isReject [4]
@@ -600,7 +600,7 @@ icTests my_sub other_sub =
                                                                                                      "method_name" =: GText "no_such_update",
                                                                                                      "arg" =: GBlob ""
                                                                                                    ]
-                                                                                               >>= isErrOrReject [3],
+                                                                                               >>= isErrOrReject [5],
                                                                                            simpleTestCase "Call no non-existent query method" ecid $ \cid ->
                                                                                              do
                                                                                                let cbor =
@@ -613,7 +613,7 @@ icTests my_sub other_sub =
                                                                                                        ]
                                                                                                (rid, res) <- queryCBOR cid cbor
                                                                                                res <- queryResponse res
-                                                                                               isQueryReject ecid [3] (rid, res),
+                                                                                               isQueryReject ecid [5] (rid, res),
                                                                                            simpleTestCase "reject" ecid $ \cid ->
                                                                                              call' cid (reject "ABCD") >>= isReject [4],
                                                                                            simpleTestCase "reject (query)" ecid $ \cid ->
@@ -1219,7 +1219,7 @@ icTests my_sub other_sub =
                                                                                            simpleTestCase "to nonexistent canister (user id)" ecid $ \cid ->
                                                                                              call cid (inter_call defaultUser "bar" defArgs) >>= isRelay >>= isReject [3],
                                                                                            simpleTestCase "to nonexistent method" ecid $ \cid ->
-                                                                                             call cid (inter_call cid "bar" defArgs) >>= isRelay >>= isReject [3],
+                                                                                             call cid (inter_call cid "bar" defArgs) >>= isRelay >>= isReject [5],
                                                                                            simpleTestCase "Call from query method traps (in update call)" ecid $ \cid ->
                                                                                              callToQuery'' cid (inter_query cid defArgs) >>= is2xx >>= isReject [5],
                                                                                            simpleTestCase "Call from query method traps (in query call)" ecid $ \cid ->
@@ -1652,8 +1652,8 @@ icTests my_sub other_sub =
                                                                                              query cid (replyData "Hi") >>= is "Hi"
                                                                                              ic_uninstall ic00 cid
                                                                                              -- should be http error, due to inspection
-                                                                                             call'' cid (replyData "Hi") >>= isNoErrReject [3]
-                                                                                             query' cid (replyData "Hi") >>= isQueryReject ecid [3],
+                                                                                             call'' cid (replyData "Hi") >>= isNoErrReject [5]
+                                                                                             query' cid (replyData "Hi") >>= isQueryReject ecid [5],
                                                                                            testCaseSteps "open call contexts are rejected" $ \step -> do
                                                                                              cid <- install ecid noop
 
@@ -1793,7 +1793,7 @@ icTests my_sub other_sub =
                                                                                                cid <- create ecid
                                                                                                install' cid pgm >>= isReject [5]
                                                                                                -- canister does not exist
-                                                                                               query' cid noop >>= isQueryReject ecid [3]
+                                                                                               query' cid noop >>= isQueryReject ecid [5]
                                                                                           in [ testCase "explicit trap" $ failInInit $ trap "trapping in install",
                                                                                                testCase "call" $ failInInit $ inter_query "dummy" defArgs,
                                                                                                testCase "reply" $ failInInit reply,
@@ -2439,8 +2439,8 @@ icTests my_sub other_sub =
                                                                                          "canister_inspect_message"
                                                                                          [ testCase "empty canister" $ do
                                                                                              cid <- create ecid
-                                                                                             call'' cid reply >>= isNoErrReject [3]
-                                                                                             callToQuery'' cid reply >>= isNoErrReject [3],
+                                                                                             call'' cid reply >>= isNoErrReject [5]
+                                                                                             callToQuery'' cid reply >>= isNoErrReject [5],
                                                                                            testCase "accept all" $ do
                                                                                              cid <- install ecid $ onInspectMessage $ callback acceptMessage
                                                                                              call_ cid reply

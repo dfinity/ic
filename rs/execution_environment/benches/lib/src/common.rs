@@ -23,17 +23,14 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::page_map::TestPageAllocatorFileDescriptorImpl;
 use ic_replicated_state::{CallOrigin, CanisterState, NetworkTopology, ReplicatedState};
 use ic_system_api::{ExecutionParameters, InstructionLimits};
-use ic_test_utilities::types::ids::subnet_test_id;
-use ic_test_utilities::{
-    state::canister_from_exec_state,
-    types::ids::{canister_test_id, user_test_id},
-    types::messages::IngressBuilder,
-};
 use ic_test_utilities_execution_environment::generate_network_topology;
-use ic_test_utilities_time::mock_time;
+use ic_test_utilities_state::canister_from_exec_state;
+use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
+use ic_test_utilities_types::messages::IngressBuilder;
 use ic_types::{
-    messages::{CallbackId, CanisterMessage, Payload, RejectContext, RequestMetadata},
+    messages::{CallbackId, CanisterMessage, Payload, RejectContext, RequestMetadata, NO_DEADLINE},
     methods::{Callback, WasmClosure},
+    time::UNIX_EPOCH,
     Cycles, MemoryAllocation, NumBytes, NumInstructions, Time,
 };
 use ic_wasm_types::CanisterModule;
@@ -107,8 +104,11 @@ where
     canister_state.system_state.freeze_threshold = 0.into();
 
     // Create call context and callback
-    let call_origin =
-        CallOrigin::CanisterUpdate(canister_test_id(REMOTE_CANISTER_ID), CallbackId::new(0));
+    let call_origin = CallOrigin::CanisterUpdate(
+        canister_test_id(REMOTE_CANISTER_ID),
+        CallbackId::new(0),
+        NO_DEADLINE,
+    );
     let call_context_id = canister_state
         .system_state
         .call_context_manager_mut()
@@ -116,8 +116,8 @@ where
         .new_call_context(
             call_origin.clone(),
             Cycles::new(10),
-            mock_time(),
-            RequestMetadata::new(0, mock_time()),
+            UNIX_EPOCH,
+            RequestMetadata::new(0, UNIX_EPOCH),
         );
     let callback = Callback::new(
         call_context_id,
@@ -129,6 +129,7 @@ where
         WasmClosure::new(0, 1),
         WasmClosure::new(0, 1),
         None,
+        NO_DEADLINE,
     );
 
     // Create an Ingress message
@@ -172,7 +173,7 @@ where
         canister_state,
         ingress,
         reject,
-        time: mock_time(),
+        time: UNIX_EPOCH,
         network_topology,
         execution_parameters,
         subnet_available_memory: *MAX_SUBNET_AVAILABLE_MEMORY,
@@ -225,8 +226,11 @@ fn run_benchmark<G, I, W, R>(
 }
 
 fn check_sandbox_defined() -> bool {
-    if std::env::var("SANDBOX_BINARY").is_err() || std::env::var("LAUNCHER_BINARY").is_err() {
-        eprintln!("WARNING: The SANDBOX_BINARY or LAUNCHER_BINARY env variables are not defined.");
+    if std::env::var("SANDBOX_BINARY").is_err()
+        || std::env::var("LAUNCHER_BINARY").is_err()
+        || std::env::var("COMPILER_BINARY").is_err()
+    {
+        eprintln!("WARNING: The SANDBOX_BINARY or LAUNCHER_BINARY or COMPILER_BINARY env variables are not defined.");
         eprintln!("         Please use `bazel run ...` instead or define the variables manually.");
         eprintln!("         Skipping the benchmark...");
         return false;

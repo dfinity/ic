@@ -20,7 +20,7 @@ DEPENDENCIES = [
     "//rs/sys",
     "//rs/types/base_types",
     "//rs/types/error_types",
-    "//rs/types/ic00_types",
+    "//rs/types/management_canister_types",
     "//rs/types/types",
     "//rs/types/wasm_types",
     "//rs/utils",
@@ -47,11 +47,14 @@ MACRO_DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
-    "//rs/crypto/internal/crypto_lib/basic_sig/ed25519",
+    "//rs/crypto/ed25519",
     "//rs/crypto/test_utils/keys",
     "//rs/criterion_time",
-    "//rs/test_utilities",
+    "//rs/test_utilities/io",
+    "//rs/test_utilities/metrics",
+    "//rs/test_utilities/state",
     "//rs/test_utilities/time",
+    "//rs/test_utilities/types",
     "@crate_index//:assert_matches",
     "@crate_index//:ic-btc-test-utils",
     "@crate_index//:criterion",

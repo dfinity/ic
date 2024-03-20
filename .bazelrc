@@ -58,6 +58,7 @@ build:ci --build_event_binary_file=bazel-bep.pb
 build --bes_results_url=https://dash.idx.dfinity.network/invocation/
 build --bes_backend=bes.idx.dfinity.network
 build --bes_timeout=30s # Default is no timeout.
+build --bes_upload_mode=wait_for_upload_complete
 build:ci --bes_timeout=180s # Default is no timeout.
 build --experimental_remote_build_event_upload=minimal
 
@@ -107,6 +108,7 @@ test:ci --flaky_test_attempts=default
 
 build:ci --noremote_local_fallback
 build:ci --build_tag_filters="-system_test,-fuzz_test"
+build:ci --verbose_failures
 
 # So that developers can build in debug mode.
 build:dev --compilation_mode=fastbuild

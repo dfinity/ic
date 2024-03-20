@@ -1,22 +1,213 @@
+use crate::common::types::OperationType;
+use anyhow::anyhow;
+use anyhow::bail;
+use ic_agent::agent::Envelope;
+use ic_agent::agent::EnvelopeContent;
 use rosetta_core::objects::*;
 use serde::Deserialize;
 use serde::Serialize;
+use std::str::FromStr;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ConstructionMetadataRequestOptions {
     pub suggested_fee: bool,
 }
 
-impl From<ConstructionMetadataRequestOptions> for ObjectMap {
-    fn from(m: ConstructionMetadataRequestOptions) -> Self {
-        match serde_json::to_value(m) {
-            Ok(serde_json::Value::Object(o)) => o,
-            _ => unreachable!(),
+impl TryFrom<ConstructionMetadataRequestOptions> for ObjectMap {
+    type Error = anyhow::Error;
+    fn try_from(d: ConstructionMetadataRequestOptions) -> Result<ObjectMap, Self::Error> {
+        match serde_json::to_value(d) {
+            Ok(v) => match v {
+                serde_json::Value::Object(ob) => Ok(ob),
+                _ => anyhow::bail!("Could not convert ConstructionMetadataRequestOptions to ObjectMap. Expected type Object but received: {:?}",v)
+            },Err(err) => anyhow::bail!("Could not convert ConstructionMetadataRequestOptions to ObjectMap: {:?}",err),
         }
     }
 }
 
 impl TryFrom<Option<ObjectMap>> for ConstructionMetadataRequestOptions {
+    type Error = String;
+    fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
+        serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default()))
+            .map_err(|e| format!("Could not parse MetadataOptions from JSON object: {}", e))
+    }
+}
+
+// A signed transaction contains a list of envelopes. The list exists because we do not know when we create the envelopes which ingress interval is going to be used by the user
+// To support the 24h window of valid transactions a single signed transaction does not contain a single envelope but 24*3600/INGRESS_INTERVAL envelopes, one for every possible ingress interval.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SignedTransaction<'a> {
+    pub envelopes: Vec<Envelope<'a>>,
+}
+
+impl<'a> ToString for SignedTransaction<'a> {
+    fn to_string(&self) -> String {
+        hex::encode(serde_cbor::ser::to_vec(self).unwrap())
+    }
+}
+
+impl<'a> FromStr for SignedTransaction<'a> {
+    type Err = anyhow::Error;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        serde_cbor::from_slice(hex::decode(s)?.as_slice()).map_err(|err| anyhow!("{:?}", err))
+    }
+}
+impl<'a> SignedTransaction<'a> {
+    pub fn get_lowest_ingress_expiry(&self) -> Option<u64> {
+        self.envelopes
+            .iter()
+            .map(|envelope| envelope.content.ingress_expiry())
+            .min()
+    }
+
+    pub fn get_highest_ingress_expiry(&self) -> Option<u64> {
+        self.envelopes
+            .iter()
+            .map(|envelope| envelope.content.ingress_expiry())
+            .max()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CanisterMethodName {
+    Icrc2Approve,
+    Icrc2TransferFrom,
+    Icrc1Transfer,
+}
+
+impl CanisterMethodName {
+    pub fn new_from_envelope_content(envelope_content: &EnvelopeContent) -> anyhow::Result<Self> {
+        match envelope_content {
+            EnvelopeContent::Call { method_name, .. } => {
+                Ok(method_name.parse::<CanisterMethodName>()?)
+            }
+            _ => bail!(
+                "EnvelopeContent has to be of type Call, but was {:?}",
+                envelope_content
+            ),
+        }
+    }
+
+    pub fn new_from_rosetta_core_operations(
+        operations: &Vec<rosetta_core::objects::Operation>,
+    ) -> anyhow::Result<Self> {
+        for operation in operations {
+            let operation_type = operation.type_.parse::<OperationType>()?;
+            match operation_type {
+                OperationType::Transfer => return Ok(Self::Icrc1Transfer),
+                OperationType::Approve => return Ok(Self::Icrc2Approve),
+                // An icrc1 operation is made up of multiple rosetta_core operations, so we have to look for the definining operation
+                _ => continue,
+            }
+        }
+        bail!(
+            "Could not derive a valid CanisterMethodName from the given operations vector: {:?} ",
+            operations
+        )
+    }
+}
+
+impl ToString for CanisterMethodName {
+    fn to_string(&self) -> String {
+        match self {
+            Self::Icrc2Approve => "icrc2_approve".to_string(),
+            Self::Icrc2TransferFrom => "icrc2_transfer_from".to_string(),
+            Self::Icrc1Transfer => "icrc1_transfer".to_string(),
+        }
+    }
+}
+
+impl FromStr for CanisterMethodName {
+    type Err = anyhow::Error;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "icrc2_approve" => Ok(Self::Icrc2Approve),
+            "icrc2_transfer_from" => Ok(Self::Icrc2TransferFrom),
+            "icrc1_transfer" => Ok(Self::Icrc1Transfer),
+            _ => bail!("Invalid CanisterMethodName: {}", s),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UnsignedTransaction {
+    pub envelope_contents: Vec<EnvelopeContent>,
+}
+
+impl ToString for UnsignedTransaction {
+    fn to_string(&self) -> String {
+        hex::encode(serde_cbor::ser::to_vec(self).unwrap())
+    }
+}
+
+impl FromStr for UnsignedTransaction {
+    type Err = anyhow::Error;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        serde_cbor::from_slice(hex::decode(s)?.as_slice()).map_err(|err| anyhow!("{:?}", err))
+    }
+}
+
+impl UnsignedTransaction {
+    pub fn get_lowest_ingress_expiry(&self) -> Option<u64> {
+        self.envelope_contents
+            .iter()
+            .map(|ec: &EnvelopeContent| ec.ingress_expiry())
+            .min()
+    }
+
+    pub fn get_highest_ingress_expiry(&self) -> Option<u64> {
+        self.envelope_contents
+            .iter()
+            .map(|ec: &EnvelopeContent| ec.ingress_expiry())
+            .max()
+    }
+}
+
+/// Typed metadata of ConstructionPayloadsRequest.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConstructionPayloadsRequestMetadata {
+    /// The memo to use for a ledger transfer.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub memo: Option<Vec<u8>>,
+
+    /// The earliest acceptable expiry date for a ledger transfer.
+    /// Must be within 24 hours from created_at_time.
+    /// Represents number of nanoseconds since UNIX epoch.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ingress_start: Option<u64>,
+
+    /// The latest acceptable expiry date for a ledger transfer.
+    /// Must be within 24 hours from created_at_time.
+    /// Represents number of nanoseconds since UNIX epoch.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ingress_end: Option<u64>,
+
+    /// If present, overrides ledger transaction creation time.
+    /// Represents number of nanoseconds since UNIX epoch.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_at_time: Option<u64>,
+}
+
+impl TryFrom<ConstructionPayloadsRequestMetadata> for ObjectMap {
+    type Error = anyhow::Error;
+    fn try_from(d: ConstructionPayloadsRequestMetadata) -> Result<ObjectMap, Self::Error> {
+        match serde_json::to_value(d) {
+            Ok(serde_json::Value::Object(o)) => Ok(o),
+            Ok(o) => bail!("Could not convert ConstructionPayloadsRequestMetadata to ObjectMap. Expected type Object but received: {:?}",o),
+            Err(err) => bail!("Could not convert ConstructionPayloadsRequestMetadata to ObjectMap: {:?}",err),
+        }
+    }
+}
+
+impl TryFrom<ObjectMap> for ConstructionPayloadsRequestMetadata {
+    type Error = crate::common::types::Error;
+    fn try_from(o: ObjectMap) -> Result<Self, crate::common::types::Error> {
+        serde_json::from_value(serde_json::Value::Object(o))
+            .map_err(|e| crate::common::types::Error::invalid_metadata(&e))
+    }
+}
+
+impl TryFrom<Option<ObjectMap>> for ConstructionPayloadsRequestMetadata {
     type Error = String;
     fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default()))

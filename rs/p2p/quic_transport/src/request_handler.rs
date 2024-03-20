@@ -136,7 +136,7 @@ async fn handle_bi_stream(
     let mut request = match read_request(bi_rx).await {
         Ok(request) => request,
         Err(e) => {
-            info!(log, "Failed to read request from bidi stream: {}", e);
+            info!(every_n_seconds => 60, log, "Failed to read request from bidi stream: {}", e);
             metrics
                 .request_handle_errors_total
                 .with_label_values(&[STREAM_TYPE_BIDI, ERROR_TYPE_READ])
@@ -169,14 +169,14 @@ async fn handle_bi_stream(
     // if the other peer has closed the connection. In this case `accept_bi` in the peer event
     // loop will close this connection.
     if let Err(e) = write_response(&mut bi_tx, response).await {
-        info!(log, "Failed to write response to stream: {}", e);
+        info!(every_n_seconds => 60, log, "Failed to write response to stream: {}", e);
         metrics
             .request_handle_errors_total
             .with_label_values(&[STREAM_TYPE_BIDI, ERROR_TYPE_WRITE])
             .inc();
     }
     if let Err(e) = bi_tx.finish().await {
-        info!(log, "Failed to finish stream: {}", e.to_string());
+        info!(every_n_seconds => 60, log, "Failed to finish stream: {}", e.to_string());
         metrics
             .request_handle_errors_total
             .with_label_values(&[STREAM_TYPE_BIDI, ERROR_TYPE_FINISH])
@@ -195,7 +195,7 @@ async fn handle_uni_stream(
     let mut request = match read_request(uni_rx).await {
         Ok(request) => request,
         Err(e) => {
-            info!(log, "Failed to read request from uni stream: {}", e);
+            info!(every_n_seconds => 60, log, "Failed to read request from uni stream: {}", e);
             metrics
                 .request_handle_errors_total
                 .with_label_values(&[STREAM_TYPE_UNI, ERROR_TYPE_READ])

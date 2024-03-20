@@ -40,10 +40,10 @@ use lmdb::{
 use prost::Message;
 use serde::{Deserialize, Serialize};
 use std::convert::{TryFrom, TryInto};
-use std::fmt::Debug;
+use std::fmt::{Debug, Formatter};
 use std::marker::PhantomData;
 use std::{os::raw::c_uint, path::Path, sync::Arc};
-use strum::IntoEnumIterator;
+use strum::{AsRefStr, FromRepr, IntoEnumIterator};
 
 /// Implementation of a persistent, height indexed pool using LMDB.
 ///
@@ -108,15 +108,15 @@ pub(crate) struct PersistentHeightIndexedPool<T> {
 ///
 /// 3. Individual message type.
 pub(crate) trait PoolArtifact: Sized {
+    /// The set of [`TypeKey`]s, one for each individual message type.
+    const TYPE_KEYS: &'static [TypeKey];
+
     /// Type of the object to store.
     type ObjectType;
     type Id;
 
-    /// The set of TypeKeys, one for each individual message type.
-    /// This should be a const function.
-    fn type_keys() -> &'static [TypeKey];
-
     /// Save an artifact to the database.
+    // TODO: Consider using an internal error type, instead of `lmdb::Error`
     fn save(
         key: &IdKey,
         value: Self::ObjectType,
@@ -127,6 +127,7 @@ pub(crate) trait PoolArtifact: Sized {
 
     /// Load an artifact from the database. This is parameterized
     /// by the individual message type T.
+    // TODO: Consider using an internal error type, instead of `lmdb::Error`
     fn load_as<T: TryFrom<Self>>(
         key: &IdKey,
         db_env: Arc<Environment>,
@@ -139,21 +140,56 @@ pub(crate) trait PoolArtifact: Sized {
 }
 
 /// A unique representation for each type of supported message.
-/// Internally it is just a const string.
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub(crate) struct TypeKey {
-    name: &'static str,
+#[derive(Copy, Clone, PartialEq, Eq, Debug, AsRefStr, FromRepr)]
+#[repr(u8)]
+pub(crate) enum TypeKey {
+    // Consensus messages
+    RandomBeacon,
+    Finalization,
+    Notarization,
+    BlockProposal,
+    BlockPayload,
+    RandomBeaconShare,
+    NotarizationShare,
+    FinalizationShare,
+    RandomTape,
+    RandomTapeShare,
+    CatchUpPackage,
+    CatchUpPackageShare,
+    // Certification messages
+    Certification,
+    CertificationShare,
+    // Ecdsa messages
+    EcdsaDealing,
+    EcdsaDealingSupport,
+    EcdsaSigShare,
+    EcdsaComplaint,
+    EcdsaOpening,
 }
 
 impl TypeKey {
-    const fn new(name: &'static str) -> TypeKey {
-        TypeKey { name }
+    fn name(&self) -> &str {
+        self.as_ref()
+    }
+}
+
+impl From<TypeKey> for u8 {
+    fn from(value: TypeKey) -> u8 {
+        value as u8
+    }
+}
+
+impl TryFrom<u8> for TypeKey {
+    type Error = String;
+
+    fn try_from(byte: u8) -> Result<Self, Self::Error> {
+        Self::from_repr(byte).ok_or(format!("Failed to convert byte {:#x} to TypeKey", byte))
     }
 }
 
 impl AsRef<[u8]> for TypeKey {
     fn as_ref(&self) -> &[u8] {
-        self.name.as_bytes()
+        self.name().as_bytes()
     }
 }
 
@@ -162,31 +198,83 @@ trait HasTypeKey {
     fn type_key() -> TypeKey;
 }
 
+impl From<&ConsensusMessageId> for TypeKey {
+    fn from(id: &ConsensusMessageId) -> Self {
+        match id.hash {
+            ConsensusMessageHash::RandomBeacon(_) => TypeKey::RandomBeacon,
+            ConsensusMessageHash::Finalization(_) => TypeKey::Finalization,
+            ConsensusMessageHash::Notarization(_) => TypeKey::Notarization,
+            ConsensusMessageHash::BlockProposal(_) => TypeKey::BlockProposal,
+            ConsensusMessageHash::RandomBeaconShare(_) => TypeKey::RandomBeaconShare,
+            ConsensusMessageHash::NotarizationShare(_) => TypeKey::NotarizationShare,
+            ConsensusMessageHash::FinalizationShare(_) => TypeKey::FinalizationShare,
+            ConsensusMessageHash::RandomTape(_) => TypeKey::RandomTape,
+            ConsensusMessageHash::RandomTapeShare(_) => TypeKey::RandomTapeShare,
+            ConsensusMessageHash::CatchUpPackage(_) => TypeKey::CatchUpPackage,
+            ConsensusMessageHash::CatchUpPackageShare(_) => TypeKey::CatchUpPackageShare,
+        }
+    }
+}
+
+impl From<&CertificationMessageId> for TypeKey {
+    fn from(id: &CertificationMessageId) -> Self {
+        match id.hash {
+            CertificationMessageHash::Certification(_) => TypeKey::Certification,
+            CertificationMessageHash::CertificationShare(_) => TypeKey::CertificationShare,
+        }
+    }
+}
+
 /// Message id as Key. The first 8 bytes is the big-endian representation
 /// of the height, and the rest is hash.
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub(crate) struct IdKey(Vec<u8>);
 
+const HEIGHT_OFFSET: usize = 0;
+const TYPE_OFFSET: usize = 8;
+const HASH_OFFSET: usize = 9;
+
+impl Debug for IdKey {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("IdKey")
+            .field("height", &self.height())
+            .field("type_key", &self.type_key())
+            .field("hash", &self.hash())
+            .finish()
+    }
+}
+
 impl IdKey {
-    fn new(height: Height, hash: &CryptoHash) -> Self {
+    fn new(height: Height, type_key: TypeKey, hash: &CryptoHash) -> Self {
         let hash_bytes = &hash.0;
-        let len = hash_bytes.len() + 8;
+        let len = hash_bytes.len() + 8 + 1;
         let mut bytes: Vec<u8> = vec![0; len];
-        let (left, right) = bytes.split_at_mut(8);
-        left.copy_from_slice(&u64::to_be_bytes(height.get()));
-        right.copy_from_slice(hash_bytes);
+        bytes[HEIGHT_OFFSET..TYPE_OFFSET].copy_from_slice(&u64::to_be_bytes(height.get()));
+        bytes[TYPE_OFFSET] = type_key.into();
+        bytes[HASH_OFFSET..].copy_from_slice(hash_bytes);
 
         Self(bytes)
     }
 
     fn height(&self) -> Height {
         let mut bytes = [0; 8];
-        bytes.copy_from_slice(&self.0[0..8]);
+        bytes.copy_from_slice(&self.0[HEIGHT_OFFSET..TYPE_OFFSET]);
         Height::from(u64::from_be_bytes(bytes))
     }
 
+    fn type_key(&self) -> Result<TypeKey, String> {
+        TypeKey::try_from(self.0[TYPE_OFFSET])
+    }
+
     fn hash(&self) -> CryptoHash {
-        CryptoHash(self.0[8..].to_vec())
+        CryptoHash(self.0[HASH_OFFSET..].to_vec())
+    }
+
+    fn with_type_key(&self, type_key: TypeKey) -> Self {
+        let mut copy = self.clone();
+        copy.0[TYPE_OFFSET] = type_key.into();
+
+        copy
     }
 }
 
@@ -202,15 +290,16 @@ impl From<&[u8]> for IdKey {
     }
 }
 
-// This conversion is lossy because height and type tag are not preserved.
-// It is okay because we don't expect reverse conversion.
-impl<T: HasHeight + HasHash> From<&T> for IdKey {
+impl<T> From<&T> for IdKey
+where
+    T: HasHeight + HasHash,
+    for<'a> &'a T: Into<TypeKey>,
+{
     fn from(id: &T) -> IdKey {
-        IdKey::new(id.height(), id.hash())
+        IdKey::new(id.height(), id.into(), id.hash())
     }
 }
 
-/// Height key.
 #[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Debug, Serialize, Deserialize)]
 pub(crate) struct HeightKey([u8; 8]);
 
@@ -328,8 +417,7 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
         read_only: bool,
         log: ReplicaLogger,
     ) -> PersistentHeightIndexedPool<Artifact> {
-        let type_keys = Artifact::type_keys();
-        let db_env = create_db_env(path, read_only, (type_keys.len() + 2) as c_uint);
+        let db_env = create_db_env(path, read_only, (Artifact::TYPE_KEYS.len() + 2) as c_uint);
 
         // Create all databases.
         let meta = if read_only {
@@ -351,19 +439,19 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
                 .unwrap_or_else(|err| panic!("Error creating db for artifacts: {:?}", err))
         };
         let indices = {
-            type_keys
+            Artifact::TYPE_KEYS
                 .iter()
                 .map(|type_key| {
                     // Use DUP_SORT to enable multi-value for each HeightKey.
                     let store = if read_only {
-                        db_env.open_db(Some(type_key.name)).unwrap_or_else(|err| {
-                            panic!("Error opening db {}: {:?}", type_key.name, err)
+                        db_env.open_db(Some(type_key.name())).unwrap_or_else(|err| {
+                            panic!("Error opening db {}: {:?}", type_key.name(), err)
                         })
                     } else {
                         db_env
-                            .create_db(Some(type_key.name), DatabaseFlags::DUP_SORT)
+                            .create_db(Some(type_key.name()), DatabaseFlags::DUP_SORT)
                             .unwrap_or_else(|err| {
-                                panic!("Error creating db {}: {:?}", type_key.name, err)
+                                panic!("Error creating db {}: {:?}", type_key.name(), err)
                             })
                     };
                     (*type_key, store)
@@ -505,23 +593,13 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
                 Err(err)
             };
         }
+
         let index_db = self.get_index_db(&key.type_key);
         tx.del(index_db, &key.height_key, Some(&key.id_key.0))?;
 
-        let min_height;
-        let max_height;
-        {
-            let mut cursor = tx.open_ro_cursor(index_db)?;
-            let mut iter = cursor.iter_start();
-            min_height = iter
-                .next()
-                .transpose()?
-                .map(|(key, _)| HeightKey::from(key));
-            max_height = iter
-                .last()
-                .transpose()?
-                .map(|(key, _)| HeightKey::from(key));
-        }
+        let min_height = tx_get_key(tx, index_db, GetOp::First)?;
+        let max_height = tx_get_key(tx, index_db, GetOp::Last)?;
+
         match (min_height, max_height) {
             (Some(min), Some(max)) => self.update_meta(tx, &key.type_key, &Meta { min, max }),
             (Some(min), None) => self.update_meta(tx, &key.type_key, &Meta { min, max: min }),
@@ -545,45 +623,40 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
             if meta.min >= height_key {
                 return Ok(artifact_ids);
             }
+
             let index_db = self.get_index_db(&type_key);
             {
                 let mut cursor = tx.open_rw_cursor(index_db)?;
-                loop {
-                    match cursor.iter().next().transpose()? {
-                        None => break,
-                        Some((key, id)) => {
-                            if HeightKey::from(key) >= height_key {
-                                break;
-                            }
-                            artifact_ids.push(ArtifactKey {
-                                type_key,
-                                height_key: HeightKey::from(key),
-                                id_key: IdKey::from(id),
-                            });
-                            cursor.del(WriteFlags::empty())?;
-                        }
+
+                while let Some((key, id)) = cursor.iter().next().transpose()? {
+                    if HeightKey::from(key) >= height_key {
+                        break;
                     }
+                    artifact_ids.push(ArtifactKey {
+                        type_key,
+                        height_key: HeightKey::from(key),
+                        id_key: IdKey::from(id),
+                    });
+                    cursor.del(WriteFlags::empty())?;
                 }
             }
+
             // update meta
             let meta = if meta.max <= height_key {
                 None
             } else {
-                let mut cursor = tx.open_rw_cursor(index_db)?;
-                cursor
-                    .iter_start()
-                    .next()
-                    .transpose()?
-                    .map(|(key, _)| Meta {
-                        min: HeightKey::from(key),
-                        max: meta.max,
-                    })
+                tx_get_key(tx, index_db, GetOp::First)?.map(|key| Meta {
+                    min: key,
+                    max: meta.max,
+                })
             };
+
             match meta {
                 None => tx.del(self.meta, &type_key, None)?,
                 Some(meta) => self.update_meta(tx, &type_key, &meta)?,
             }
         }
+
         Ok(artifact_ids)
     }
 
@@ -596,24 +669,21 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
     ) -> lmdb::Result<Vec<ArtifactKey>> {
         let mut purged = Vec::new();
         // delete from all index tables
-        for &type_key in Artifact::type_keys() {
+        for &type_key in Artifact::TYPE_KEYS {
             purged.append(&mut self.tx_purge_index_below(tx, type_key, height_key)?);
         }
+
         // delete from artifacts table
         let mut cursor = tx.open_rw_cursor(self.artifacts)?;
         let height = Height::from(height_key);
-        loop {
-            match cursor.iter().next().transpose()? {
-                None => break,
-                Some((key, _)) => {
-                    let id_key = IdKey::from(key);
-                    if id_key.height() >= height {
-                        break;
-                    }
-                    cursor.del(WriteFlags::empty())?;
-                }
+
+        while let Some((key, _)) = cursor.iter().next().transpose()? {
+            if IdKey::from(key).height() >= height {
+                break;
             }
+            cursor.del(WriteFlags::empty())?;
         }
+
         Ok(purged)
     }
 
@@ -639,6 +709,35 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
     }
 }
 
+#[derive(Copy, Clone)]
+enum GetOp {
+    First,
+    Last,
+}
+
+impl From<GetOp> for c_uint {
+    fn from(op: GetOp) -> Self {
+        match op {
+            GetOp::First => lmdb_sys::MDB_FIRST,
+            GetOp::Last => lmdb_sys::MDB_LAST,
+        }
+    }
+}
+
+/// Retrieves the first or the last key from the database.
+fn tx_get_key(
+    tx: &impl Transaction,
+    database: Database,
+    op: GetOp,
+) -> lmdb::Result<Option<HeightKey>> {
+    let cursor = tx.open_ro_cursor(database)?;
+    match cursor.get(/*key=*/ None, /*data=*/ None, op.into()) {
+        Ok((key, _value)) => Ok(key.map(HeightKey::from)),
+        Err(lmdb::Error::NotFound) => Ok(None),
+        Err(err) => Err(err),
+    }
+}
+
 impl InitializablePoolSection for PersistentHeightIndexedPool<ConsensusMessage> {
     /// Insert a cup with the original bytes from which that cup was received.
     fn insert_cup_with_proto(&self, cup_proto: pb::CatchUpPackage) {
@@ -647,7 +746,7 @@ impl InitializablePoolSection for PersistentHeightIndexedPool<ConsensusMessage> 
             .db_env
             .begin_rw_txn()
             .expect("Unable to begin transaction to initialize consensus pool");
-        let key = ArtifactKey::from(cup.get_id());
+        let key = ArtifactKey::from(&cup.get_id());
 
         // convert cup to bytes
         let bytes = &pb::ValidatedConsensusArtifact {
@@ -752,120 +851,93 @@ where
 }
 
 ///////////////////////////// Consensus Pool /////////////////////////////
-
-const RANDOM_BEACON_KEY: TypeKey = TypeKey::new("RB");
-const FINALIZATION_KEY: TypeKey = TypeKey::new("FZ");
-const NOTARIZATION_KEY: TypeKey = TypeKey::new("NZ");
-const BLOCK_PROPOSAL_KEY: TypeKey = TypeKey::new("BP");
-const BLOCK_PAYLOAD_KEY: TypeKey = TypeKey::new("PL");
-const RANDOM_BEACON_SHARE_KEY: TypeKey = TypeKey::new("RBS");
-const NOTARIZATION_SHARE_KEY: TypeKey = TypeKey::new("NZS");
-const FINALIZATION_SHARE_KEY: TypeKey = TypeKey::new("FZS");
-const RANDOM_TAPE_KEY: TypeKey = TypeKey::new("RT");
-const RANDOM_TAPE_SHARE_KEY: TypeKey = TypeKey::new("RTS");
-const CATCH_UP_PACKAGE_KEY: TypeKey = TypeKey::new("CUP");
-const CATCH_UP_PACKAGE_SHARE_KEY: TypeKey = TypeKey::new("CUS");
-
 const CONSENSUS_KEYS: [TypeKey; 12] = [
-    RANDOM_BEACON_KEY,
-    FINALIZATION_KEY,
-    NOTARIZATION_KEY,
-    BLOCK_PROPOSAL_KEY,
-    BLOCK_PAYLOAD_KEY,
-    RANDOM_BEACON_SHARE_KEY,
-    NOTARIZATION_SHARE_KEY,
-    FINALIZATION_SHARE_KEY,
-    RANDOM_TAPE_KEY,
-    RANDOM_TAPE_SHARE_KEY,
-    CATCH_UP_PACKAGE_KEY,
-    CATCH_UP_PACKAGE_SHARE_KEY,
+    TypeKey::RandomBeacon,
+    TypeKey::Finalization,
+    TypeKey::Notarization,
+    TypeKey::BlockProposal,
+    TypeKey::BlockPayload,
+    TypeKey::RandomBeaconShare,
+    TypeKey::NotarizationShare,
+    TypeKey::FinalizationShare,
+    TypeKey::RandomTape,
+    TypeKey::RandomTapeShare,
+    TypeKey::CatchUpPackage,
+    TypeKey::CatchUpPackageShare,
 ];
 
 impl HasTypeKey for RandomBeacon {
     fn type_key() -> TypeKey {
-        RANDOM_BEACON_KEY
+        TypeKey::RandomBeacon
     }
 }
 
 impl HasTypeKey for Notarization {
     fn type_key() -> TypeKey {
-        NOTARIZATION_KEY
+        TypeKey::Notarization
     }
 }
 
 impl HasTypeKey for Finalization {
     fn type_key() -> TypeKey {
-        FINALIZATION_KEY
+        TypeKey::Finalization
     }
 }
 
 impl HasTypeKey for BlockProposal {
     fn type_key() -> TypeKey {
-        BLOCK_PROPOSAL_KEY
+        TypeKey::BlockProposal
     }
 }
 
 impl HasTypeKey for RandomBeaconShare {
     fn type_key() -> TypeKey {
-        RANDOM_BEACON_SHARE_KEY
+        TypeKey::RandomBeaconShare
     }
 }
 
 impl HasTypeKey for NotarizationShare {
     fn type_key() -> TypeKey {
-        NOTARIZATION_SHARE_KEY
+        TypeKey::NotarizationShare
     }
 }
 
 impl HasTypeKey for FinalizationShare {
     fn type_key() -> TypeKey {
-        FINALIZATION_SHARE_KEY
+        TypeKey::FinalizationShare
     }
 }
 
 impl HasTypeKey for RandomTape {
     fn type_key() -> TypeKey {
-        RANDOM_TAPE_KEY
+        TypeKey::RandomTape
     }
 }
 
 impl HasTypeKey for RandomTapeShare {
     fn type_key() -> TypeKey {
-        RANDOM_TAPE_SHARE_KEY
+        TypeKey::RandomTapeShare
     }
 }
 
 impl HasTypeKey for CatchUpPackage {
     fn type_key() -> TypeKey {
-        CATCH_UP_PACKAGE_KEY
+        TypeKey::CatchUpPackage
     }
 }
 
 impl HasTypeKey for CatchUpPackageShare {
     fn type_key() -> TypeKey {
-        CATCH_UP_PACKAGE_SHARE_KEY
+        TypeKey::CatchUpPackageShare
     }
 }
 
-impl From<ConsensusMessageId> for ArtifactKey {
-    fn from(msg_id: ConsensusMessageId) -> Self {
-        let type_key = match msg_id.hash {
-            ConsensusMessageHash::RandomBeacon(_) => RANDOM_BEACON_KEY,
-            ConsensusMessageHash::Finalization(_) => FINALIZATION_KEY,
-            ConsensusMessageHash::Notarization(_) => NOTARIZATION_KEY,
-            ConsensusMessageHash::BlockProposal(_) => BLOCK_PROPOSAL_KEY,
-            ConsensusMessageHash::RandomBeaconShare(_) => RANDOM_BEACON_SHARE_KEY,
-            ConsensusMessageHash::NotarizationShare(_) => NOTARIZATION_SHARE_KEY,
-            ConsensusMessageHash::FinalizationShare(_) => FINALIZATION_SHARE_KEY,
-            ConsensusMessageHash::RandomTape(_) => RANDOM_TAPE_KEY,
-            ConsensusMessageHash::RandomTapeShare(_) => RANDOM_TAPE_SHARE_KEY,
-            ConsensusMessageHash::CatchUpPackage(_) => CATCH_UP_PACKAGE_KEY,
-            ConsensusMessageHash::CatchUpPackageShare(_) => CATCH_UP_PACKAGE_SHARE_KEY,
-        };
+impl From<&ConsensusMessageId> for ArtifactKey {
+    fn from(msg_id: &ConsensusMessageId) -> Self {
         Self {
-            type_key,
+            type_key: msg_id.into(),
             height_key: HeightKey::from(msg_id.height),
-            id_key: IdKey::new(msg_id.height, msg_id.hash.digest()),
+            id_key: IdKey::from(msg_id),
         }
     }
 }
@@ -875,18 +947,18 @@ impl TryFrom<ArtifactKey> for ConsensusMessageId {
     fn try_from(key: ArtifactKey) -> Result<Self, Self::Error> {
         let h = key.id_key.hash();
         let hash = match key.type_key {
-            RANDOM_BEACON_KEY => ConsensusMessageHash::RandomBeacon(h.into()),
-            FINALIZATION_KEY => ConsensusMessageHash::Finalization(h.into()),
-            NOTARIZATION_KEY => ConsensusMessageHash::Notarization(h.into()),
-            BLOCK_PROPOSAL_KEY => ConsensusMessageHash::BlockProposal(h.into()),
-            RANDOM_BEACON_SHARE_KEY => ConsensusMessageHash::RandomBeaconShare(h.into()),
-            NOTARIZATION_SHARE_KEY => ConsensusMessageHash::NotarizationShare(h.into()),
-            FINALIZATION_SHARE_KEY => ConsensusMessageHash::FinalizationShare(h.into()),
-            RANDOM_TAPE_KEY => ConsensusMessageHash::RandomTape(h.into()),
-            RANDOM_TAPE_SHARE_KEY => ConsensusMessageHash::RandomTapeShare(h.into()),
-            CATCH_UP_PACKAGE_KEY => ConsensusMessageHash::CatchUpPackage(h.into()),
-            CATCH_UP_PACKAGE_SHARE_KEY => ConsensusMessageHash::CatchUpPackageShare(h.into()),
-            BLOCK_PAYLOAD_KEY => {
+            TypeKey::RandomBeacon => ConsensusMessageHash::RandomBeacon(h.into()),
+            TypeKey::Finalization => ConsensusMessageHash::Finalization(h.into()),
+            TypeKey::Notarization => ConsensusMessageHash::Notarization(h.into()),
+            TypeKey::BlockProposal => ConsensusMessageHash::BlockProposal(h.into()),
+            TypeKey::RandomBeaconShare => ConsensusMessageHash::RandomBeaconShare(h.into()),
+            TypeKey::NotarizationShare => ConsensusMessageHash::NotarizationShare(h.into()),
+            TypeKey::FinalizationShare => ConsensusMessageHash::FinalizationShare(h.into()),
+            TypeKey::RandomTape => ConsensusMessageHash::RandomTape(h.into()),
+            TypeKey::RandomTapeShare => ConsensusMessageHash::RandomTapeShare(h.into()),
+            TypeKey::CatchUpPackage => ConsensusMessageHash::CatchUpPackage(h.into()),
+            TypeKey::CatchUpPackageShare => ConsensusMessageHash::CatchUpPackageShare(h.into()),
+            TypeKey::BlockPayload => {
                 return Err("Block payloads do not have a ConsensusMessageId".into())
             }
             other => {
@@ -904,12 +976,12 @@ impl TryFrom<ArtifactKey> for ConsensusMessageId {
 }
 
 impl PoolArtifact for ConsensusMessage {
+    // TODO: consider removing [`TypeKey::BlockPayload`] from here, as it's not necessary to create
+    // an Index DB for this type of artifacts.
+    const TYPE_KEYS: &'static [TypeKey] = &CONSENSUS_KEYS;
+
     type ObjectType = ValidatedConsensusArtifact;
     type Id = ConsensusMessageId;
-
-    fn type_keys() -> &'static [TypeKey] {
-        &CONSENSUS_KEYS
-    }
 
     fn save(
         key: &IdKey,
@@ -927,7 +999,7 @@ impl PoolArtifact for ConsensusMessage {
             let start_height = payload.dkg_interval_start_height();
             let payload_type = payload.payload_type();
             {
-                let payload_key = IdKey::new(block.height(), payload_hash.get_ref());
+                let payload_key = key.with_type_key(TypeKey::BlockPayload);
                 let bytes = log_err!(
                     bincode::serialize::<BlockPayload>(payload),
                     log,
@@ -978,7 +1050,7 @@ impl PoolArtifact for ConsensusMessage {
                 // Lazy loading of block proposal and its payload
                 let block = proposal.content.as_mut();
                 let payload_hash = block.payload.get_hash();
-                let payload_key = IdKey::new(block.height(), payload_hash.get_ref());
+                let payload_key = key.with_type_key(TypeKey::BlockPayload);
                 let log_clone = log.clone();
                 block.payload = Payload::new_with(
                     payload_hash.clone(),
@@ -1064,7 +1136,7 @@ impl PersistentHeightIndexedPool<ConsensusMessage> {
             match op {
                 PoolSectionOp::Insert(artifact) => {
                     let msg_id = artifact.msg.get_id();
-                    let key = ArtifactKey::from(msg_id);
+                    let key = ArtifactKey::from(&msg_id);
                     // Ignore KeyExist
                     match self.tx_insert(&mut tx, &key, artifact) {
                         Err(lmdb::Error::KeyExist) => Ok(()),
@@ -1072,9 +1144,18 @@ impl PersistentHeightIndexedPool<ConsensusMessage> {
                     }?
                 }
                 PoolSectionOp::Remove(msg_id) => {
-                    let key = ArtifactKey::from(msg_id.clone());
-                    // Note: We do not remove block payloads here, but leave it to purging.
+                    let key = ArtifactKey::from(&msg_id);
                     self.tx_remove(&mut tx, &key)?;
+
+                    // If we are removing a block proposal, remove its block payload as well
+                    if key.type_key == TypeKey::BlockProposal {
+                        tx.del(
+                            self.artifacts,
+                            &key.id_key.with_type_key(TypeKey::BlockPayload),
+                            /*data=*/ None,
+                        )?;
+                    }
+
                     purged.push(msg_id);
                 }
                 PoolSectionOp::PurgeBelow(height) => {
@@ -1091,8 +1172,8 @@ impl PersistentHeightIndexedPool<ConsensusMessage> {
                 PoolSectionOp::PurgeTypeBelow(artifact_type, height) => {
                     let height_key = HeightKey::from(height);
                     let type_key = match artifact_type {
-                        PurgeableArtifactType::NotarizationShare => NOTARIZATION_SHARE_KEY,
-                        PurgeableArtifactType::FinalizationShare => FINALIZATION_SHARE_KEY,
+                        PurgeableArtifactType::NotarizationShare => TypeKey::NotarizationShare,
+                        PurgeableArtifactType::FinalizationShare => TypeKey::FinalizationShare,
                     };
 
                     purged.extend(
@@ -1288,20 +1369,17 @@ impl PoolSection<ValidatedConsensusArtifact> for PersistentHeightIndexedPool<Con
 
 ///////////////////////////// Certification Pool /////////////////////////////
 
-const CERTIFICATION_KEY: TypeKey = TypeKey::new("CE");
-const CERTIFICATION_SHARE_KEY: TypeKey = TypeKey::new("CES");
-
-const CERTIFICATION_KEYS: [TypeKey; 2] = [CERTIFICATION_KEY, CERTIFICATION_SHARE_KEY];
+const CERTIFICATION_KEYS: [TypeKey; 2] = [TypeKey::Certification, TypeKey::CertificationShare];
 
 impl HasTypeKey for Certification {
     fn type_key() -> TypeKey {
-        CERTIFICATION_KEY
+        TypeKey::Certification
     }
 }
 
 impl HasTypeKey for CertificationShare {
     fn type_key() -> TypeKey {
-        CERTIFICATION_SHARE_KEY
+        TypeKey::CertificationShare
     }
 }
 
@@ -1310,8 +1388,8 @@ impl TryFrom<ArtifactKey> for CertificationMessageId {
     fn try_from(key: ArtifactKey) -> Result<Self, Self::Error> {
         let h = key.id_key.hash();
         let hash = match key.type_key {
-            CERTIFICATION_KEY => CertificationMessageHash::Certification(h.into()),
-            CERTIFICATION_SHARE_KEY => CertificationMessageHash::CertificationShare(h.into()),
+            TypeKey::Certification => CertificationMessageHash::Certification(h.into()),
+            TypeKey::CertificationShare => CertificationMessageHash::CertificationShare(h.into()),
             other => {
                 return Err(format!(
                     "{:?} is not a valid CertificationMessage TypeKey.",
@@ -1327,12 +1405,10 @@ impl TryFrom<ArtifactKey> for CertificationMessageId {
 }
 
 impl PoolArtifact for CertificationMessage {
+    const TYPE_KEYS: &'static [TypeKey] = &CERTIFICATION_KEYS;
+
     type ObjectType = CertificationMessage;
     type Id = CertificationMessageId;
-
-    fn type_keys() -> &'static [TypeKey] {
-        &CERTIFICATION_KEYS
-    }
 
     fn save(
         key: &IdKey,
@@ -1390,13 +1466,15 @@ impl PersistentHeightIndexedPool<CertificationMessage> {
         hash: CryptoHashOf<T>,
         value: T,
     ) -> lmdb::Result<()> {
+        let message: CertificationMessage = value.into();
+        let message_id = CertificationMessageId::from(&message);
         let key = ArtifactKey {
             type_key: T::type_key(),
-            id_key: IdKey::new(value.height(), hash.get_ref()),
-            height_key: HeightKey::from(value.height()),
+            id_key: IdKey::new(message_id.height(), T::type_key(), hash.get_ref()),
+            height_key: HeightKey::from(message_id.height()),
         };
         let mut tx = self.db_env.begin_rw_txn()?;
-        self.tx_insert(&mut tx, &key, value.into())?;
+        self.tx_insert(&mut tx, &key, message)?;
         tx.commit()
     }
 
@@ -1740,14 +1818,14 @@ impl PersistentEcdsaPoolSection {
         let metrics = EcdsaPoolMetrics::new(metrics_registry, pool, pool_type);
         for (message_type, type_key) in &type_keys {
             let db = if read_only {
-                db_env.open_db(Some(type_key.name)).unwrap_or_else(|err| {
-                    panic!("Error opening ECDSA db {}: {:?}", type_key.name, err)
+                db_env.open_db(Some(type_key.name())).unwrap_or_else(|err| {
+                    panic!("Error opening ECDSA db {}: {:?}", type_key.name(), err)
                 })
             } else {
                 db_env
-                    .create_db(Some(type_key.name), DatabaseFlags::empty())
+                    .create_db(Some(type_key.name()), DatabaseFlags::empty())
                     .unwrap_or_else(|err| {
-                        panic!("Error creating ECDSA db {}: {:?}", type_key.name, err)
+                        panic!("Error creating ECDSA db {}: {:?}", type_key.name(), err)
                     })
             };
             message_dbs.push((
@@ -1786,11 +1864,11 @@ impl PersistentEcdsaPoolSection {
 
     fn get_type_key(message_type: EcdsaMessageType) -> TypeKey {
         match message_type {
-            EcdsaMessageType::Dealing => TypeKey::new("ECD"),
-            EcdsaMessageType::DealingSupport => TypeKey::new("ECS"),
-            EcdsaMessageType::SigShare => TypeKey::new("ECI"),
-            EcdsaMessageType::Complaint => TypeKey::new("ECC"),
-            EcdsaMessageType::Opening => TypeKey::new("ECO"),
+            EcdsaMessageType::Dealing => TypeKey::EcdsaDealing,
+            EcdsaMessageType::DealingSupport => TypeKey::EcdsaDealingSupport,
+            EcdsaMessageType::SigShare => TypeKey::EcdsaSigShare,
+            EcdsaMessageType::Complaint => TypeKey::EcdsaComplaint,
+            EcdsaMessageType::Opening => TypeKey::EcdsaOpening,
         }
     }
 }
@@ -1942,11 +2020,12 @@ mod tests {
     use crate::{
         consensus_pool::MutablePoolSection,
         test_utils::{
-            block_proposal_ops, fake_random_beacon, finalization_share_ops, notarization_share_ops,
-            random_beacon_ops, PoolTestHelper,
+            block_proposal_ops, fake_block_proposal_with_rank, fake_random_beacon,
+            finalization_share_ops, notarization_share_ops, random_beacon_ops, PoolTestHelper,
         },
     };
     use ic_test_utilities_logger::with_test_replica_logger;
+    use ic_types::consensus::Rank;
     use std::{panic, path::PathBuf};
 
     #[test]
@@ -1956,13 +2035,17 @@ mod tests {
         let msg = ConsensusMessage::RandomBeacon(beacon);
         let hash = msg.get_cm_hash();
         let height_key = HeightKey::from(height);
-        let id_key = IdKey::new(height, hash.digest());
+        let id_key = IdKey::new(height, TypeKey::BlockPayload, hash.digest());
         assert_eq!(Height::from(height_key), height, "height does not match");
         assert_eq!(id_key.height(), height, "Height of IdKey does not match");
         assert_eq!(
             &id_key.hash(),
             hash.digest(),
             "Hash of IdKey does not match"
+        );
+        assert_eq!(
+            id_key.type_key().expect("Should deserialize the key"),
+            TypeKey::BlockPayload
         );
     }
 
@@ -2035,6 +2118,140 @@ mod tests {
     #[test]
     fn test_persistent_pool_path_is_cleanedup_after_tests() {
         crate::test_utils::test_persistent_pool_path_is_cleanedup_after_tests::<LMDBConfig>()
+    }
+
+    fn validated_block_proposal(height: Height, rank: Rank) -> ValidatedConsensusArtifact {
+        ValidatedConsensusArtifact {
+            msg: ConsensusMessage::BlockProposal(fake_block_proposal_with_rank(height, rank)),
+            timestamp: ic_types::time::UNIX_EPOCH,
+        }
+    }
+
+    #[test]
+    fn block_proposals_consistency_test() {
+        run_persistent_pool_test("block_proposals_consistency_test", |config, log| {
+            let mut pool = PersistentHeightIndexedPool::new_consensus_pool(
+                config, /*read_only=*/ false, log,
+            );
+            let mut ops = PoolSectionOps::new();
+            // Note: all these proposals have exactly same payload
+            ops.insert(validated_block_proposal(Height::new(1), Rank(0)));
+            ops.insert(validated_block_proposal(Height::new(1), Rank(1)));
+            ops.insert(validated_block_proposal(Height::new(2), Rank(1)));
+            ops.insert(validated_block_proposal(Height::new(3), Rank(1)));
+            ops.insert(validated_block_proposal(Height::new(3), Rank(2)));
+
+            pool.mutate(ops);
+
+            assert_consistency(&pool);
+        });
+    }
+
+    #[test]
+    fn remove_block_proposals_consistency_test() {
+        run_persistent_pool_test("remove_block_proposals_consistency_test", |config, log| {
+            let mut pool = PersistentHeightIndexedPool::new_consensus_pool(
+                config, /*read_only=*/ false, log,
+            );
+            let block_proposal_1_0 = validated_block_proposal(Height::new(1), Rank(0));
+            let block_proposal_1_1 = validated_block_proposal(Height::new(1), Rank(1));
+            let block_proposal_2_1 = validated_block_proposal(Height::new(2), Rank(1));
+            let block_proposal_3_1 = validated_block_proposal(Height::new(3), Rank(1));
+            let block_proposal_3_2 = validated_block_proposal(Height::new(3), Rank(2));
+
+            // Insert 5 block proposals
+            let mut ops = PoolSectionOps::new();
+            ops.insert(block_proposal_1_0.clone());
+            ops.insert(block_proposal_1_1.clone());
+            ops.insert(block_proposal_2_1.clone());
+            ops.insert(block_proposal_3_1.clone());
+            ops.insert(block_proposal_3_2.clone());
+            pool.mutate(ops);
+
+            // Remove 2 of them
+            let mut removal_ops: PoolSectionOps<ValidatedConsensusArtifact> = PoolSectionOps::new();
+            removal_ops.remove(block_proposal_1_0.msg.get_id());
+            removal_ops.remove(block_proposal_2_1.msg.get_id());
+            pool.mutate(removal_ops);
+
+            assert_eq!(pool.block_proposal().size(), 3);
+            assert_consistency(&pool);
+
+            // Remove the remaining 3 of them
+            let mut removal_ops: PoolSectionOps<ValidatedConsensusArtifact> = PoolSectionOps::new();
+            removal_ops.remove(block_proposal_1_1.msg.get_id());
+            removal_ops.remove(block_proposal_3_1.msg.get_id());
+            removal_ops.remove(block_proposal_3_2.msg.get_id());
+            pool.mutate(removal_ops);
+
+            assert_eq!(pool.block_proposal().size(), 0);
+            assert_consistency(&pool);
+        });
+    }
+
+    #[test]
+    fn remove_block_proposals_bounds_test() {
+        run_persistent_pool_test("remove_block_proposals_bounds_test", |config, log| {
+            let mut pool = PersistentHeightIndexedPool::new_consensus_pool(
+                config, /*read_only=*/ false, log,
+            );
+            let block_proposal_1_0 = validated_block_proposal(Height::new(1), Rank(0));
+            let block_proposal_1_1 = validated_block_proposal(Height::new(1), Rank(1));
+            let block_proposal_2_1 = validated_block_proposal(Height::new(2), Rank(1));
+            let block_proposal_3_1 = validated_block_proposal(Height::new(3), Rank(1));
+
+            let mut ops = PoolSectionOps::new();
+            ops.insert(block_proposal_1_0.clone());
+            ops.insert(block_proposal_1_1.clone());
+            ops.insert(block_proposal_2_1.clone());
+            ops.insert(block_proposal_3_1.clone());
+            pool.mutate(ops);
+
+            // Remove a block at Height 1 - the height bounds shouldn't change
+            let removal_ops = PoolSectionOps {
+                ops: vec![PoolSectionOp::Remove(block_proposal_1_0.msg.get_id())],
+            };
+
+            pool.mutate(removal_ops);
+
+            assert_eq!(
+                pool.block_proposal().height_range(),
+                Some(HeightRange::new(Height::new(1), Height::new(3))),
+            );
+
+            // Remove a block at Height 3 - the upper bound should change
+            let removal_ops = PoolSectionOps {
+                ops: vec![PoolSectionOp::Remove(block_proposal_3_1.msg.get_id())],
+            };
+
+            pool.mutate(removal_ops);
+
+            assert_eq!(
+                pool.block_proposal().height_range(),
+                Some(HeightRange::new(Height::new(1), Height::new(2))),
+            );
+
+            // Remove a block at Height 1 - the lower bound should change
+            let removal_ops = PoolSectionOps {
+                ops: vec![PoolSectionOp::Remove(block_proposal_1_1.msg.get_id())],
+            };
+
+            pool.mutate(removal_ops);
+
+            assert_eq!(
+                pool.block_proposal().height_range(),
+                Some(HeightRange::new(Height::new(2), Height::new(2))),
+            );
+
+            // Remove the remaining block, at Height 2 - `height_range` should be `None`
+            let removal_ops = PoolSectionOps {
+                ops: vec![PoolSectionOp::Remove(block_proposal_2_1.msg.get_id())],
+            };
+
+            pool.mutate(removal_ops);
+
+            assert!(pool.block_proposal().height_range().is_none(),);
+        });
     }
 
     #[test]
@@ -2223,7 +2440,7 @@ mod tests {
             .collect::<Vec<_>>();
 
         let block_proposal_ids_index = {
-            let block_proposal_index_db = pool.get_index_db(&BLOCK_PROPOSAL_KEY);
+            let block_proposal_index_db = pool.get_index_db(&TypeKey::BlockProposal);
             let mut cursor = tx.open_ro_cursor(block_proposal_index_db).unwrap();
             cursor
                 .iter()
@@ -2236,24 +2453,7 @@ mod tests {
 
         let block_payload_ids_from_block_proposals = block_proposal_ids_index
             .iter()
-            .map(|block_proposal_id| {
-                let artifact = tx_get_validated_consensus_artifact(
-                    block_proposal_id,
-                    pool.artifacts,
-                    &tx,
-                    &pool.log,
-                )
-                .expect("The payload should exist in the artifacts db");
-
-                let ConsensusMessage::BlockProposal(proposal) = artifact.msg else {
-                    panic!("Referenced artifact is not a block proposal");
-                };
-
-                let block = proposal.content.as_ref();
-                let payload_hash = block.payload.get_hash().clone();
-
-                IdKey::new(block.height(), payload_hash.get_ref())
-            })
+            .map(|block_proposal_id| block_proposal_id.with_type_key(TypeKey::BlockPayload))
             .collect::<Vec<_>>();
 
         // get all ids from artifacts db

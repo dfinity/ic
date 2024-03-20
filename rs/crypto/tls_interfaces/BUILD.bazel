@@ -2,11 +2,11 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = [
     "//rs/crypto:__subpackages__",
+    "//rs/http_endpoints/fuzz:__subpackages__",
     "//rs/http_endpoints/metrics:__subpackages__",
     "//rs/http_endpoints/public:__subpackages__",
     "//rs/orchestrator:__subpackages__",
-    "//rs/p2p/quic_transport:__subpackages__",
-    "//rs/p2p/test_utils:__subpackages__",
+    "//rs/p2p:__subpackages__",
     "//rs/replica:__subpackages__",
     "//rs/replica/setup_ic_network:__subpackages__",
     "//rs/test_utilities:__subpackages__",

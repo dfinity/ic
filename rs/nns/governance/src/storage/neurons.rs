@@ -111,7 +111,7 @@ where
     main: StableBTreeMap<NeuronId, AbridgedNeuron, Memory>,
 
     // Collections
-    hot_keys_map: StableBTreeMap<(NeuronId, /* index */ u64), PrincipalId, Memory>,
+    hot_keys_map: StableBTreeMap<(NeuronId, /* index */ u64), Principal, Memory>,
     recent_ballots_map: StableBTreeMap<(NeuronId, /* index */ u64), BallotInfo, Memory>,
     followees_map: StableBTreeMap<FolloweesKey, NeuronId, Memory>,
 
@@ -193,7 +193,14 @@ where
         // Auxiliary Data
         // --------------
 
-        update_repeated_field(neuron_id, hot_keys, &mut self.hot_keys_map);
+        update_repeated_field(
+            neuron_id,
+            hot_keys
+                .iter()
+                .map(|principal_id| Principal::from(*principal_id))
+                .collect(),
+            &mut self.hot_keys_map,
+        );
         update_repeated_field(neuron_id, recent_ballots, &mut self.recent_ballots_map);
         self.update_followees(neuron_id, followees);
 
@@ -265,7 +272,14 @@ where
         // --------------
 
         if hot_keys != old_neuron.hot_keys {
-            update_repeated_field(neuron_id, hot_keys, &mut self.hot_keys_map);
+            update_repeated_field(
+                neuron_id,
+                hot_keys
+                    .iter()
+                    .map(|principal_id| Principal::from(*principal_id))
+                    .collect(),
+                &mut self.hot_keys_map,
+            );
         }
         if recent_ballots != old_neuron.recent_ballots {
             update_repeated_field(neuron_id, recent_ballots, &mut self.recent_ballots_map);
@@ -366,7 +380,10 @@ where
             id: neuron_id,
             main: main_neuron_part,
 
-            hot_keys,
+            hot_keys: hot_keys
+                .iter()
+                .map(|principal| PrincipalId::from(*principal))
+                .collect(),
             recent_ballots,
             followees,
 
@@ -646,7 +663,6 @@ impl TryFrom<Neuron> for DecomposedNeuron {
         let id = id.ok_or(NeuronStoreError::NeuronIdIsNone)?;
 
         let main = AbridgedNeuron {
-            id: Some(id),
             account,
             controller,
             cached_neuron_stake_e8s,
@@ -695,7 +711,6 @@ impl DecomposedNeuron {
         } = self;
 
         let AbridgedNeuron {
-            id: _,
             account,
             controller,
             cached_neuron_stake_e8s,

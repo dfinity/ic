@@ -3,14 +3,15 @@ use crate::sign::basic_sig::BasicSigVerifierInternal;
 use crate::sign::canister_threshold_sig::idkg::complaint::verify_complaint;
 use crate::sign::canister_threshold_sig::idkg::utils::{
     index_and_batch_signed_dealing_of_dealer, index_and_dealing_of_dealer,
-    retrieve_mega_public_key_from_registry,
+    key_id_from_mega_public_key_or_panic, retrieve_mega_public_key_from_registry,
 };
-use ic_crypto_internal_csp::api::CspIDkgProtocol;
 use ic_crypto_internal_csp::api::CspSigner;
-use ic_crypto_internal_csp::vault::api::IDkgTranscriptInternalBytes;
+use ic_crypto_internal_csp::vault::api::{CspVault, IDkgTranscriptInternalBytes};
 use ic_crypto_internal_threshold_sig_ecdsa::{
-    CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
-    IDkgTranscriptOperationInternal,
+    create_transcript as idkg_create_transcript,
+    verify_dealing_opening as idkg_verify_dealing_opening,
+    verify_transcript as idkg_verify_transcript, CommitmentOpening, IDkgComplaintInternal,
+    IDkgDealingInternal, IDkgTranscriptInternal, IDkgTranscriptOperationInternal,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_types::crypto::canister_threshold_sig::error::{
@@ -26,11 +27,12 @@ use ic_types::{NodeId, NodeIndex, NumberOfNodes, RegistryVersion};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
+use std::sync::Arc;
 
 #[cfg(test)]
 mod tests;
 
-pub fn create_transcript<C: CspIDkgProtocol + CspSigner>(
+pub fn create_transcript<C: CspSigner>(
     csp_client: &C,
     registry: &dyn RegistryClient,
     params: &IDkgTranscriptParams,
@@ -64,12 +66,15 @@ pub fn create_transcript<C: CspIDkgProtocol + CspSigner>(
             }
         })?;
 
-    let internal_transcript = csp_client.idkg_create_transcript(
+    let internal_transcript = idkg_create_transcript(
         params.algorithm_id(),
         params.reconstruction_threshold(),
         &internal_dealings,
         &internal_operation_type,
-    )?;
+    )
+    .map_err(|e| IDkgCreateTranscriptError::InternalError {
+        internal_error: format!("{:?}", e),
+    })?;
 
     let internal_transcript_raw = internal_transcript.serialize().map_err(|e| {
         IDkgCreateTranscriptError::SerializationError {
@@ -90,7 +95,7 @@ pub fn create_transcript<C: CspIDkgProtocol + CspSigner>(
     })
 }
 
-pub fn verify_transcript<C: CspIDkgProtocol + CspSigner>(
+pub fn verify_transcript<C: CspSigner>(
     csp_client: &C,
     registry: &dyn RegistryClient,
     params: &IDkgTranscriptParams,
@@ -133,17 +138,17 @@ pub fn verify_transcript<C: CspIDkgProtocol + CspSigner>(
     let internal_dealings = internal_dealings_from_verified_dealings(&transcript.verified_dealings)
         .map_err(|e| IDkgVerifyTranscriptError::SerializationError(e.serde_error))?;
 
-    csp_client.idkg_verify_transcript(
+    Ok(idkg_verify_transcript(
         &internal_transcript,
         transcript.algorithm_id,
         params.reconstruction_threshold(),
         &internal_dealings,
         &internal_transcript_operation,
-    )
+    )?)
 }
 
-pub fn load_transcript<C: CspIDkgProtocol>(
-    csp_client: &C,
+pub fn load_transcript(
+    vault: &Arc<dyn CspVault>,
     self_node_id: &NodeId,
     registry: &dyn RegistryClient,
     transcript: &IDkgTranscript,
@@ -161,11 +166,11 @@ pub fn load_transcript<C: CspIDkgProtocol>(
         transcript.registry_version,
     )?;
 
-    let internal_complaints = csp_client.idkg_load_transcript(
+    let internal_complaints = vault.idkg_load_transcript(
         transcript.verified_dealings.clone(),
         transcript.context_data(),
         self_index,
-        self_mega_pubkey,
+        key_id_from_mega_public_key_or_panic(&self_mega_pubkey),
         IDkgTranscriptInternalBytes::from(transcript.transcript_to_bytes()),
     )?;
     let complaints = complaints_from_internal_complaints(&internal_complaints, transcript)?;
@@ -173,8 +178,8 @@ pub fn load_transcript<C: CspIDkgProtocol>(
     Ok(complaints)
 }
 
-pub fn load_transcript_with_openings<C: CspIDkgProtocol>(
-    csp_client: &C,
+pub fn load_transcript_with_openings(
+    vault: &Arc<dyn CspVault>,
     self_node_id: &NodeId,
     registry: &dyn RegistryClient,
     transcript: &IDkgTranscript,
@@ -225,18 +230,18 @@ pub fn load_transcript_with_openings<C: CspIDkgProtocol>(
         internal_openings.insert(dealer_index, internal_openings_by_opener_index);
     }
 
-    csp_client.idkg_load_transcript_with_openings(
+    vault.idkg_load_transcript_with_openings(
         transcript.verified_dealings.clone(),
         internal_openings,
         transcript.context_data(),
         self_index,
-        self_mega_pubkey,
+        key_id_from_mega_public_key_or_panic(&self_mega_pubkey),
         IDkgTranscriptInternalBytes::from(transcript.transcript_to_bytes()),
     )
 }
 
-pub fn open_transcript<C: CspIDkgProtocol>(
-    csp_idkg_client: &C,
+pub fn open_transcript(
+    vault: &Arc<dyn CspVault>,
     self_node_id: &NodeId,
     registry: &dyn RegistryClient,
     transcript: &IDkgTranscript,
@@ -244,15 +249,10 @@ pub fn open_transcript<C: CspIDkgProtocol>(
     complaint: &IDkgComplaint,
 ) -> Result<IDkgOpening, IDkgOpenTranscriptError> {
     // Verifies the complaint
-    verify_complaint(
-        csp_idkg_client,
-        registry,
-        transcript,
-        complaint,
-        complainer_id,
-    )
-    .map_err(|e| IDkgOpenTranscriptError::InternalError {
-        internal_error: format!("Complaint verification failed: {:?}", e),
+    verify_complaint(registry, transcript, complaint, complainer_id).map_err(|e| {
+        IDkgOpenTranscriptError::InternalError {
+            internal_error: format!("Complaint verification failed: {:?}", e),
+        }
     })?;
 
     // Get the MEGa-encryption public key.
@@ -275,12 +275,12 @@ pub fn open_transcript<C: CspIDkgProtocol>(
         Some(index) => index,
     };
 
-    let internal_opening = csp_idkg_client.idkg_open_dealing(
+    let internal_opening = vault.idkg_open_dealing(
         signed_dealing.clone(),
         dealer_index,
         context_data,
         opener_index,
-        opener_public_key,
+        key_id_from_mega_public_key_or_panic(&opener_public_key),
     )?;
     let internal_opening_raw =
         internal_opening
@@ -296,8 +296,7 @@ pub fn open_transcript<C: CspIDkgProtocol>(
     })
 }
 
-pub fn verify_opening<C: CspIDkgProtocol>(
-    csp_idkg_client: &C,
+pub fn verify_opening(
     transcript: &IDkgTranscript,
     opener_id: NodeId,
     opening: &IDkgOpening,
@@ -325,7 +324,11 @@ pub fn verify_opening<C: CspIDkgProtocol>(
         }
     })?;
 
-    csp_idkg_client.idkg_verify_dealing_opening(internal_dealing, opener_index, internal_opening)
+    idkg_verify_dealing_opening(&internal_dealing, opener_index, &internal_opening).map_err(|e| {
+        IDkgVerifyOpeningError::InternalError {
+            internal_error: format!("{:?}", e),
+        }
+    })
 }
 
 fn ensure_sufficient_dealings_collected(

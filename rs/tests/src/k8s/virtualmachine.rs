@@ -1,14 +1,15 @@
+use crate::driver::resource::ImageType;
+use crate::k8s::config::*;
 use anyhow::Result;
+use backon::{ExponentialBuilder, Retryable};
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::OwnerReference;
-use kube::api::DynamicObject;
-use kube::api::{Patch, PatchParams};
-use kube::Api;
+use kube::api::{DynamicObject, Patch, PatchParams};
+use kube::{Api, Client};
+use std::convert::AsRef;
+use strum_macros::AsRefStr;
 use tracing::*;
 
-use crate::k8s::tnet::K8sClient;
-use crate::k8s::tnet::{TNet, TNode};
-
-static VM_PVC_TEMPLATE: &str = r#"
+static UVM_TEMPLATE: &str = r#"
 apiVersion: kubevirt.io/v1
 kind: VirtualMachine
 metadata:
@@ -21,7 +22,6 @@ spec:
   template:
     metadata:
       annotations:
-        "cni.projectcalico.org/ipAddrs": '["{ipv6}"]'
         "container.apparmor.security.beta.kubernetes.io/compute": unconfined
       labels:
         kubevirt.io/vm: {name}
@@ -29,7 +29,95 @@ spec:
     spec:
       domain:
         cpu:
-          cores: 32
+          cores: {cpus}
+        firmware:
+          bootloader:
+            efi:
+              secureBoot: false
+        devices:
+          disks:
+            - name: disk0
+              disk:
+                bus: virtio
+            - name: disk1
+              disk:
+                bus: scsi
+              serial: "config"
+            - name: cloudinitdisk
+              disk:
+                bus: virtio
+          interfaces:
+          - name: default
+            passt: {}
+        resources:
+          requests:
+            memory: {memory}Ki
+      networks:
+      - name: default
+        pod: {}
+      volumes:
+        - dataVolume:
+            name: "{name}-guestos"
+          name: disk0
+        - dataVolume:
+            name: "{name}-config"
+          name: disk1
+        - name: cloudinitdisk
+          cloudInitNoCloud:
+            userData: |
+              #cloud-config
+              mounts:
+                - ["/dev/sda", "/config", "vfat", "dmask=000,fmask=0111,user,nofail", 0, 0]
+              users:
+                - name: admin
+                  sudo: ALL=(ALL) NOPASSWD:ALL
+                  groups: docker
+                  no_user_group: true
+                  shell: /bin/bash
+                  ssh-authorized-keys:
+                    - {pub_key}
+              write_files:
+                - path: /etc/systemd/system/activate.service
+                  permissions: '0755'
+                  content: |
+                      [Unit]
+                      Description=Activate Script
+                      Requires=docker.service
+                      After=docker.service
+
+                      [Service]
+                      Type=simple
+                      ExecStart=bash /config/activate
+                      Restart=no
+
+                      [Install]
+                      WantedBy=multi-user.target
+              runcmd:
+                - systemctl daemon-reload
+                - systemctl enable --now activate
+"#;
+
+static NODE_TEMPLATE: &str = r#"
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  labels:
+    kubevirt.io/vm: {name}
+    tnet.internetcomputer.org/name: {tnet}
+  name: {name}
+spec:
+  running: {running}
+  template:
+    metadata:
+      annotations:
+        "container.apparmor.security.beta.kubernetes.io/compute": unconfined
+      labels:
+        kubevirt.io/vm: {name}
+        kubevirt.io/network: passt
+    spec:
+      domain:
+        cpu:
+          cores: {cpus}
         firmware:
           bootloader:
             efi:
@@ -48,8 +136,11 @@ spec:
             passt: {}
             ports:
               - port: 22
+              - port: 80
+              - port: 443
               - port: 2497
               - port: 4100
+              - port: 4444
               - port: 7070
               - port: 8080
               - port: 9090
@@ -59,7 +150,7 @@ spec:
               - port: 19531
         resources:
           requests:
-            memory: 64Gi
+            memory: {memory}Ki
       networks:
       - name: default
         pod: {}
@@ -72,113 +163,27 @@ spec:
           name: disk1
 "#;
 
-static VMI_SETUP_TEMPLATE: &str = r#"
-apiVersion: kubevirt.io/v1
-kind: VirtualMachineInstance
-metadata:
-  name: {vmi_name}
-  labels:
-    kubevirt.io/vm: {vm_name}
-    tnet.internetcomputer.org/name: {tnet}
-spec:
-  terminationGracePeriodSeconds: 30
-  domain:
-    cpu:
-      cores: 32
-    resources:
-      requests:
-        memory: 64G
-    devices:
-      disks:
-      - name: containerdisk
-        disk:
-          bus: virtio
-      - name: host-disk-guestos
-        disk:
-          bus: virtio
-      - name: host-disk-config
-        disk:
-          bus: virtio
-      - disk:
-          bus: virtio
-        name: cloudinitdisk
-  volumes:
-  - name: containerdisk
-    containerDisk:
-      image: kubevirt/fedora-cloud-container-disk-demo:v0.36.4
-  - hostDisk:
-      capacity: 52Gi
-      path: /tnet/{tnet}/{vm_name}-guestos.img
-      type: DiskOrCreate
-    name: host-disk-guestos
-  - hostDisk:
-      capacity: 12Mi
-      path: /tnet/{tnet}/{vm_name}-config.img
-      type: DiskOrCreate
-    name: host-disk-config
-  - name: cloudinitdisk
-    cloudInitNoCloud:
-      userData: |-
-        #cloud-config
-        password: fedora
-        chpasswd: { expire: False }
-        runcmd:
-          - set -exuo pipefail
-          - |
-            # write guestos disk image to /dev/sdb
-            curl -O {url_image}
-            tar -xzOf disk-img.tar.gz | sudo dd of=/dev/vdb bs=1M status=progress
-          - |
-            # write config disk image to /dev/sdc
-            curl -o config.img {url_config}
-            sudo dd if=config.img of=/dev/vdc bs=1M status=progress
-          - sudo poweroff
-"#;
-
-pub async fn prepare_host_vm(k8s_client: &K8sClient, node: &TNode, tnet: &TNet) -> Result<()> {
-    let vm_name: String = node.name.as_ref().unwrap().to_string();
-    let vmi_name: String = format!("{}-disk-setup", &node.name.as_ref().unwrap());
-    let ipv6_addr: String = node.ipv6_addr.unwrap().to_string();
-    let url_image: String = tnet.image_url.clone();
-    let url_config: String = node.config_url.as_ref().unwrap().to_string();
-
-    info!("Preparing disks for virtual machine {}", &vm_name);
-    let yaml = VMI_SETUP_TEMPLATE
-        .replace("{vm_name}", &vm_name)
-        .replace("{vmi_name}", &vmi_name)
-        .replace("{tnet}", &TNet::owner_config_map_name(tnet.index.unwrap()))
-        .replace("{ipv6}", &ipv6_addr)
-        .replace("{url_image}", &url_image)
-        .replace("{url_config}", &url_config);
-
-    let mut data: DynamicObject = serde_yaml::from_str(&yaml)?;
-    data.metadata.owner_references = vec![tnet.owner_reference()].into();
-    let response = k8s_client
-        .api_vmi
-        .patch(
-            &vmi_name,
-            &PatchParams::apply("system-driver"),
-            &Patch::Apply(data),
-        )
-        .await?;
-    debug!("Creating virtual machine instance response: {:?}", response);
-
-    Ok(())
-}
-
 pub async fn create_vm(
     api: &Api<DynamicObject>,
     name: &str,
-    ipv6: &str,
+    cpus: &str,
+    memory: &str,
     running: bool,
     owner: OwnerReference,
+    access_key: Option<String>,
+    vm_type: ImageType,
 ) -> Result<()> {
     info!("Creating virtual machine {}", name);
-    let yaml = VM_PVC_TEMPLATE
+    let template = match vm_type {
+        ImageType::IcOsImage => NODE_TEMPLATE.to_string(),
+        _ => UVM_TEMPLATE.replace("{pub_key}", &access_key.unwrap()),
+    };
+    let yaml = template
         .replace("{name}", name)
         .replace("{tnet}", &owner.name)
         .replace("{running}", &running.to_string())
-        .replace("{ipv6}", ipv6);
+        .replace("{memory}", memory)
+        .replace("{cpus}", cpus);
     let mut data: DynamicObject = serde_yaml::from_str(&yaml)?;
     data.metadata.owner_references = vec![owner].into();
     let response = api
@@ -191,4 +196,68 @@ pub async fn create_vm(
     debug!("Creating virtual machine response: {:?}", response);
     info!("Creating virtual machine {} complete", name);
     Ok(())
+}
+
+#[derive(Debug, AsRefStr)]
+enum Action {
+    #[strum(serialize = "start")]
+    Start,
+    #[strum(serialize = "restart")]
+    Restart,
+    #[strum(serialize = "stop")]
+    Stop,
+    Delete,
+}
+
+pub async fn start_vm(name: &str) -> Result<String> {
+    action_vm(name, Action::Start).await
+}
+
+pub async fn restart_vm(name: &str) -> Result<String> {
+    action_vm(name, Action::Restart).await
+}
+
+pub async fn stop_vm(name: &str) -> Result<String> {
+    action_vm(name, Action::Stop).await
+}
+
+pub async fn delete_vm(name: &str) -> Result<String> {
+    action_vm(name, Action::Delete).await
+}
+
+async fn action_vm(name: &str, action: Action) -> Result<String> {
+    let client = Client::try_default().await?;
+
+    Ok((|| async {
+        client
+            .request_text(match action {
+                Action::Start | Action::Stop | Action::Restart => http::Request::builder()
+                    .method("PUT")
+                    .uri(format!(
+                        "/apis/subresources.kubevirt.io/v1/namespaces/{}/virtualmachines/{}/{}",
+                        *TNET_NAMESPACE,
+                        name,
+                        action.as_ref(),
+                    ))
+                    .body("{}".as_bytes().to_vec())
+                    .unwrap(),
+                Action::Delete => http::Request::builder()
+                    .method("DELETE")
+                    .uri(format!(
+                        "/apis/kubevirt.io/v1/namespaces/{}/virtualmachines/{}",
+                        *TNET_NAMESPACE, name
+                    ))
+                    .body("{}".as_bytes().to_vec())
+                    .unwrap(),
+            })
+            .await
+            .or_else(|e| match e {
+                kube::Error::Api(error_response) if error_response.reason == "Conflict" => {
+                    kube::Result::Ok(Default::default())
+                }
+                _ => kube::Result::Err(e),
+            })
+    })
+    .retry(&ExponentialBuilder::default())
+    .await?)
 }

@@ -16,6 +16,7 @@ dfn_core = { path = "../../rust_canisters/dfn_core" }
 dfn_http = { path = "../../rust_canisters/dfn_http" }
 dfn_json = { path = "../../rust_canisters/dfn_json" }
 dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
+flate2 = "1.0.27"
 futures = { workspace = true }
 ic-icrc1 = { path = "../../rosetta-api/icrc1" }
 ic-base-types = { path = "../../types/base_types" }
@@ -28,7 +29,7 @@ ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-crypto-test-utils-ni-dkg = { path = "../../crypto/test_utils/ni-dkg" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
 ic-crypto-utils-ni-dkg = { path = "../../crypto/utils/ni_dkg" }
-ic-ic00-types = { path = "../../types/ic00_types" }
+ic-management-canister-types = { path = "../../types/management_canister_types" }
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
@@ -51,13 +52,14 @@ ic-sns-swap = { path = "../../sns/swap" }
 ic-sns-wasm = { path = "../sns-wasm" }
 ic-state-machine-tests = { path = "../../state_machine_tests" }
 ic-test-utilities = { path = "../../test_utilities" }
+ic-test-utilities-types = { path = "../../test_utilities/types" }
 ic-types = { path = "../../types/types" }
 ic-utils = { path = "../../utils" }
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 lifeline = { path = "../handlers/lifeline/impl" }
 maplit = "1.0.2"
-num-traits = "0.2.14"
+num-traits = { workspace = true }
 on_wire = { path = "../../rust_canisters/on_wire" }
 prometheus-parse = "0.2.4"
 prost = { workspace = true }

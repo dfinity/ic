@@ -1,11 +1,13 @@
 use crate::{
-    common::{get_cors_headers, make_plaintext_response, CONTENT_TYPE_HTML, CONTENT_TYPE_PROTOBUF},
+    common::{make_plaintext_response, CONTENT_TYPE_HTML, CONTENT_TYPE_PROTOBUF},
     EndpointService,
 };
-use bytes::Bytes;
+
+use axum::body::Body;
 use futures_util::Future;
 use http::{header, request::Parts, Request};
-use hyper::{self, Body, Response, StatusCode};
+use http_body_util::{BodyExt, Full};
+use hyper::{self, Response, StatusCode};
 use ic_pprof::{Error, PprofCollector};
 use std::{
     collections::HashMap,
@@ -15,7 +17,9 @@ use std::{
     task::{Context, Poll},
     time::Duration,
 };
-use tower::{limit::GlobalConcurrencyLimitLayer, util::BoxCloneService, Service, ServiceBuilder};
+use tower::{
+    limit::GlobalConcurrencyLimitLayer, util::BoxCloneService, BoxError, Service, ServiceBuilder,
+};
 
 pub const CONTENT_TYPE_SVG: &str = "image/svg+xml";
 /// Default CPU profile duration.
@@ -88,9 +92,8 @@ fn into_response(result: Result<Vec<u8>, Error>, content_type: &'static str) -> 
 fn ok_response(body: Vec<u8>, content_type: &'static str) -> Response<Body> {
     let mut response = Response::builder()
         .status(StatusCode::OK)
-        .body(body.into())
+        .body(Body::new(Full::from(body).map_err(BoxError::from)))
         .unwrap();
-    *response.headers_mut() = get_cors_headers();
     response.headers_mut().insert(
         header::CONTENT_TYPE,
         header::HeaderValue::from_static(content_type),
@@ -112,7 +115,7 @@ impl PprofHomeService {
     }
 }
 
-impl Service<Request<Bytes>> for PprofHomeService {
+impl Service<Request<Body>> for PprofHomeService {
     type Response = Response<Body>;
     type Error = Infallible;
     #[allow(clippy::type_complexity)]
@@ -122,10 +125,11 @@ impl Service<Request<Bytes>> for PprofHomeService {
         Poll::Ready(Ok(()))
     }
 
-    fn call(&mut self, _unused: Request<Bytes>) -> Self::Future {
-        let mut response = Response::new(Body::from(PPROF_HOME_HTML));
+    fn call(&mut self, _unused: Request<Body>) -> Self::Future {
+        let mut response = Response::new(Body::new(
+            PPROF_HOME_HTML.to_string().map_err(BoxError::from),
+        ));
         *response.status_mut() = StatusCode::OK;
-        *response.headers_mut() = get_cors_headers();
         response.headers_mut().insert(
             header::CONTENT_TYPE,
             header::HeaderValue::from_static(CONTENT_TYPE_HTML),
@@ -153,7 +157,7 @@ impl PprofProfileService {
     }
 }
 
-impl Service<Request<Bytes>> for PprofProfileService {
+impl Service<Request<Body>> for PprofProfileService {
     type Response = Response<Body>;
     type Error = Infallible;
     #[allow(clippy::type_complexity)]
@@ -172,7 +176,7 @@ impl Service<Request<Bytes>> for PprofProfileService {
     /// `frequency` and its accuracy are limited (on Linux) by the resolution of
     /// the software clock, which is 250Hz by default. See
     /// [`man 7 time`](https://linux.die.net/man/7/time) for details.
-    fn call(&mut self, body: Request<Bytes>) -> Self::Future {
+    fn call(&mut self, body: Request<Body>) -> Self::Future {
         let parts = body.into_parts().0;
         let collector = self.collector.clone();
 
@@ -206,7 +210,7 @@ impl PprofFlamegraphService {
     }
 }
 
-impl Service<Request<Bytes>> for PprofFlamegraphService {
+impl Service<Request<Body>> for PprofFlamegraphService {
     type Response = Response<Body>;
     type Error = Infallible;
     #[allow(clippy::type_complexity)]
@@ -216,7 +220,7 @@ impl Service<Request<Bytes>> for PprofFlamegraphService {
         Poll::Ready(Ok(()))
     }
 
-    fn call(&mut self, body: Request<Bytes>) -> Self::Future {
+    fn call(&mut self, body: Request<Body>) -> Self::Future {
         let parts = body.into_parts().0;
         let collector = self.collector.clone();
 

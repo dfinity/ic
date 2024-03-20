@@ -1,0 +1,17 @@
+[package]
+name = "ic-sns-governance-proposals-amount-total-limit"
+version = "0.0.1"
+edition = "2021"
+
+[dependencies]
+ic-sns-governance-token-valuation = { path = "../token_valuation" }
+num-traits = { workspace = true }
+rust_decimal = "1.25"
+rust_decimal_macros = "1.25"
+
+[dev-dependencies]
+candid = { workspace = true }
+ic-base-types = { path = "../../../types/base_types" }
+ic-nervous-system-common = { path = "../../../nervous_system/common" }
+icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
+lazy_static = "1.4.0"

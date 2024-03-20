@@ -24,9 +24,8 @@ use ic_types::{
     batch::{BatchPayload, ValidationContext},
     consensus::{
         block_maker::SubnetRecords, dkg, hashed, Block, BlockPayload, BlockProposal, DataPayload,
-        HasRank, Payload, RandomBeacon, Rank, SummaryPayload,
+        HasHeight, HasRank, HashedBlock, Payload, RandomBeacon, Rank, SummaryPayload,
     },
-    crypto::CryptoHashOf,
     replica_config::ReplicaConfig,
     time::current_time,
     CountBytes, Height, NodeId, RegistryVersion,
@@ -184,10 +183,9 @@ impl BlockMaker {
         &self,
         pool: &PoolReader<'_>,
         rank: Rank,
-        parent: Block,
+        parent: HashedBlock,
     ) -> Option<BlockProposal> {
-        let parent_hash = ic_types::crypto::crypto_hash(&parent);
-        let height = parent.height.increment();
+        let height = parent.height().increment();
         let certified_height = self.state_manager.latest_certified_height();
 
         // Note that we will skip blockmaking if registry versions or replica_versions
@@ -207,7 +205,7 @@ impl BlockMaker {
 
         // The stable registry version to be agreed on in this block. If this is a summary
         // block, this version will be the new membership version of the next dkg interval.
-        let stable_registry_version = self.get_stable_registry_version(&parent)?;
+        let stable_registry_version = self.get_stable_registry_version(parent.as_ref())?;
         // Get the subnet records that are relevant to making a block
         let subnet_records =
             subnet_records_for_registry_version(self, registry_version, stable_registry_version)?;
@@ -251,11 +249,11 @@ impl BlockMaker {
             // blocks. The additional 1ns makes no practical difference in that regard.
             time: std::cmp::max(
                 self.time_source.get_relative_time(),
-                parent.context.time + monotonic_block_increment,
+                parent.as_ref().context.time + monotonic_block_increment,
             ),
         };
 
-        if !context.greater(&parent.context) {
+        if !context.greater(&parent.as_ref().context) {
             // The values in our validation context are not strictly monotonically
             // increasing the values included in the parent block by at least
             // monotonic_block_increment. To avoid proposing an invalid block, we simply
@@ -267,7 +265,7 @@ impl BlockMaker {
                 smaller than the parent validation context (locally available={:?}, \
                 parent context={:?})",
                 context,
-                &parent.context
+                &parent.as_ref().context
             );
             return None;
         }
@@ -276,7 +274,6 @@ impl BlockMaker {
             pool,
             context,
             parent,
-            parent_hash,
             height,
             certified_height,
             rank,
@@ -293,8 +290,7 @@ impl BlockMaker {
         &self,
         pool: &PoolReader<'_>,
         context: ValidationContext,
-        parent: Block,
-        parent_hash: CryptoHashOf<Block>,
+        parent: HashedBlock,
         height: Height,
         certified_height: Height,
         rank: Rank,
@@ -310,7 +306,7 @@ impl BlockMaker {
             &*self.crypto,
             pool,
             Arc::clone(&self.dkg_pool),
-            &parent,
+            parent.as_ref(),
             &*self.state_manager,
             &context,
             self.log.clone(),
@@ -330,7 +326,7 @@ impl BlockMaker {
                         &*self.registry_client,
                         pool,
                         &context,
-                        &parent,
+                        parent.as_ref(),
                         Some(&self.ecdsa_payload_metrics),
                         &self.log,
                     )
@@ -367,7 +363,7 @@ impl BlockMaker {
                                 height,
                                 certified_height,
                                 &context,
-                                &parent,
+                                parent.as_ref(),
                                 subnet_records,
                             );
 
@@ -379,7 +375,7 @@ impl BlockMaker {
                                 self.ecdsa_pool.clone(),
                                 &*self.state_manager,
                                 &context,
-                                &parent,
+                                parent.as_ref(),
                                 &self.ecdsa_payload_metrics,
                                 &self.log,
                             )
@@ -406,7 +402,7 @@ impl BlockMaker {
                 }
             },
         );
-        let block = Block::new(parent_hash, payload, height, rank, context);
+        let block = Block::new(parent.get_hash().clone(), payload, height, rank, context);
         let hashed_block = hashed::Hashed::new(ic_types::crypto::crypto_hash, block);
         match self
             .crypto
@@ -498,7 +494,7 @@ impl BlockMaker {
 /// Return the parent random beacon and block of the latest round for which
 /// this node might propose a block.
 /// Return None otherwise.
-pub(crate) fn get_dependencies(pool: &PoolReader<'_>) -> Option<(RandomBeacon, Block)> {
+pub(crate) fn get_dependencies(pool: &PoolReader<'_>) -> Option<(RandomBeacon, HashedBlock)> {
     let notarized_height = pool.get_notarized_height();
     let beacon = pool.get_random_beacon(notarized_height)?;
     let parent = pool
@@ -518,14 +514,16 @@ pub(crate) fn already_proposed(pool: &PoolReader<'_>, h: Height, this_node: Node
 
 #[cfg(test)]
 mod tests {
+    use crate::ecdsa::test_utils::create_ecdsa_pool;
+
     use super::*;
     use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies, MockPayloadBuilder};
     use ic_consensus_utils::get_block_maker_delay;
     use ic_interfaces::consensus_pool::ConsensusPool;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
-    use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
         consensus::{dkg, HasHeight, HasVersion},
         crypto::CryptoHash,
@@ -754,13 +752,11 @@ mod tests {
                 MetricsRegistry::new(),
                 no_op_logger(),
             )));
-            let ecdsa_pool = Arc::new(RwLock::new(
-                ic_artifact_pool::ecdsa_pool::EcdsaPoolImpl::new(
-                    pool_config,
-                    no_op_logger(),
-                    MetricsRegistry::new(),
-                ),
-            ));
+            let ecdsa_pool = Arc::new(RwLock::new(create_ecdsa_pool(
+                pool_config,
+                no_op_logger(),
+                MetricsRegistry::new(),
+            )));
 
             state_manager
                 .get_mut()
@@ -776,7 +772,7 @@ mod tests {
                 .expect_get_state_at()
                 .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
                     Height::new(0),
-                    Arc::new(ic_test_utilities::state::get_initial_state(0, 0)),
+                    Arc::new(ic_test_utilities_state::get_initial_state(0, 0)),
                 )));
 
             let mut payload_builder = MockPayloadBuilder::new();

@@ -174,7 +174,8 @@ to declutter the heavily overloaded role of the +ic_replica_t+
 domain).
 
 * +ic_canister_sandbox_exec_t+: This label is applied to the canister_sandbox
-_binary_ file located at +/opt/ic/bin/canister_sandbox+. Its purpose is
+_binary_ file located at +/opt/ic/bin/canister_sandbox+ and to the compiler_sandbox
+_binary_ file located at +/opt/ic/bin/compiler_sandbox+. Its purpose is
 to trigger transition into the +ic_canister_sandbox_t+ domain when executed.
 
 * +ic_canister_sandbox_t+: This label is applied to the canister

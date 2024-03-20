@@ -9,18 +9,20 @@ use crate::{
 use crossbeam_channel::{unbounded, Sender};
 use ic_base_types::subnet_id_into_protobuf;
 use ic_config::flag_status::FlagStatus;
+use ic_config::state_manager::LsmtConfig;
 use ic_logger::{error, fatal, info, ReplicaLogger};
 use ic_protobuf::state::{
     stats::v1::Stats,
     system_metadata::v1::{SplitFrom, SystemMetadata},
 };
 use ic_replicated_state::page_map::{
-    MergeCandidate, PersistDestination, PersistenceError, StorageMetrics, MAX_NUMBER_OF_FILES,
+    MergeCandidate, StorageMetrics, StorageResult, MAX_NUMBER_OF_FILES,
 };
 #[allow(unused)]
 use ic_replicated_state::{
-    canister_state::execution_state::SandboxMemory, page_map::PAGE_SIZE, CanisterState,
-    NumWasmPages, PageMap, ReplicatedState,
+    canister_state::execution_state::SandboxMemory,
+    page_map::{Shard, StorageLayout, PAGE_SIZE},
+    CanisterState, NumWasmPages, PageMap, ReplicatedState,
 };
 use ic_state_layout::{
     error::LayoutError, CanisterStateBits, CheckpointLayout, ExecutionStateBits, ReadOnly,
@@ -36,7 +38,7 @@ use rand::{seq::IteratorRandom, Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
 use std::collections::BTreeSet;
 use std::os::unix::prelude::MetadataExt;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -128,34 +130,6 @@ fn request_timer(metrics: &StateManagerMetrics, name: &str) -> HistogramTimer {
         .start_timer()
 }
 
-/// Helper struct for some relevant paths. Also see page_map_paths().
-struct PageMapPaths {
-    /// Path of the base file
-    base_file_path: PathBuf,
-    /// All existing overlay files
-    existing_overlays: Vec<PathBuf>,
-    /// If we write a new overlay file, we use this path
-    next_overlay_path: PathBuf,
-}
-
-/// Helper function to collect all relevant paths for a PageMap
-fn page_map_paths(
-    tip_handler: &mut TipHandler,
-    height: Height,
-    page_map_type: &PageMapType,
-) -> Result<PageMapPaths, LayoutError> {
-    let layout = &tip_handler.tip(height)?;
-    let base_file_path = page_map_type.path(layout)?;
-    let existing_overlays = page_map_type.overlays(layout)?;
-    let next_overlay_path = page_map_type.overlay(layout, height)?;
-
-    Ok(PageMapPaths {
-        base_file_path,
-        existing_overlays,
-        next_overlay_path,
-    })
-}
-
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum DowngradeState {
     /// We don't know whether we need to downgrade.
@@ -174,17 +148,18 @@ pub(crate) fn spawn_tip_thread(
     log: ReplicaLogger,
     mut tip_handler: TipHandler,
     state_layout: StateLayout,
-    lsmt_storage: FlagStatus,
+    lsmt_config: LsmtConfig,
     metrics: StateManagerMetrics,
     malicious_flags: MaliciousFlags,
 ) -> (JoinOnDrop<()>, Sender<TipRequest>) {
+    #[allow(clippy::disallowed_methods)]
     let (tip_sender, tip_receiver) = unbounded();
     let mut thread_pool = scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS);
     let mut tip_state = TipState::ReadyForPageDeltas(Height::from(0));
     // On top of tip state transitions, we enforce that each checkpoint gets manifest before we
     // create next one. Height(0) doesn't need manifest, so original state is true.
     let mut have_latest_manifest = true;
-    let mut downgrade_state = if lsmt_storage == FlagStatus::Enabled {
+    let mut downgrade_state = if lsmt_config.lsmt_status == FlagStatus::Enabled {
         DowngradeState::NotNeeded
     } else {
         DowngradeState::Unknown
@@ -258,56 +233,53 @@ pub(crate) fn spawn_tip_thread(
                                 _ => panic!("Unexpected tip state: {:?}", tip_state),
                             }
                             tip_state = TipState::ReadyForPageDeltas(height);
+                            let layout = &tip_handler.tip(height).unwrap_or_else(|err| {
+                                fatal!(
+                                    log,
+                                    "Failed to get tip @{} to serialize to: {}",
+                                    height,
+                                    err
+                                );
+                            });
                             parallel_map(
                                 &mut thread_pool,
-                                pagemaps.into_iter().map(
-                                    |PageMapToFlush {
-                                         page_map_type,
-                                         truncate,
-                                         page_map,
-                                     }| {
-                                        (
-                                            truncate,
-                                            page_map,
-                                            page_map_paths(
-                                                &mut tip_handler,
-                                                height,
-                                                &page_map_type,
-                                            )
-                                            .unwrap_or_else(|err| {
-                                                fatal!(log, "Failed to flush page map: {}", err);
-                                            }),
-                                        )
-                                    },
-                                ),
-                                |(
-                                    truncate,
-                                    page_map,
-                                    PageMapPaths {
-                                        base_file_path,
-                                        existing_overlays,
-                                        next_overlay_path,
-                                    },
-                                )| {
+                                pagemaps.into_iter(),
+                                |PageMapToFlush {
+                                     page_map_type,
+                                     truncate,
+                                     page_map,
+                                 }| {
+                                    let page_map_layout =
+                                        page_map_type.layout(layout).unwrap_or_else(|err| {
+                                            fatal!(
+                                                log,
+                                                "Failed to get layout for {:?}: {}",
+                                                page_map_type,
+                                                err
+                                            );
+                                        });
                                     if *truncate {
-                                        delete_pagemap_files(
-                                            &log,
-                                            base_file_path,
-                                            existing_overlays,
-                                        );
+                                        page_map_layout.delete_files().unwrap_or_else(|err| {
+                                            fatal!(
+                                                log,
+                                                "Failed to delete files for {:#?}: {}",
+                                                page_map_type,
+                                                err
+                                            )
+                                        });
                                     }
                                     if page_map.is_some()
                                         && !page_map.as_ref().unwrap().unflushed_delta_is_empty()
                                     {
-                                        let dst = PersistDestination::new(
-                                            base_file_path.clone(),
-                                            next_overlay_path.clone(),
-                                            lsmt_storage,
-                                        );
                                         page_map
                                             .as_ref()
                                             .unwrap()
-                                            .persist_unflushed_delta(dst, &metrics.storage_metrics)
+                                            .persist_unflushed_delta(
+                                                &page_map_layout,
+                                                height,
+                                                &lsmt_config,
+                                                &metrics.storage_metrics,
+                                            )
                                             .unwrap_or_else(|err| {
                                                 fatal!(
                                                     log,
@@ -343,7 +315,7 @@ pub(crate) fn spawn_tip_thread(
                                 }),
                                 &mut thread_pool,
                                 &metrics.storage_metrics,
-                                lsmt_storage,
+                                &lsmt_config,
                             )
                             .unwrap_or_else(|err| {
                                 fatal!(log, "Failed to serialize to tip @{}: {}", height, err);
@@ -360,7 +332,7 @@ pub(crate) fn spawn_tip_thread(
                                 .reset_tip_to(
                                     &state_layout,
                                     &checkpoint_layout,
-                                    lsmt_storage,
+                                    lsmt_config.lsmt_status,
                                     Some(&mut thread_pool),
                                 )
                                 .unwrap_or_else(|err| {
@@ -371,18 +343,19 @@ pub(crate) fn spawn_tip_thread(
                                         err
                                     );
                                 });
-                            match lsmt_storage {
+                            match lsmt_config.lsmt_status {
                                 FlagStatus::Enabled => merge(
                                     &mut tip_handler,
                                     &pagemaptypes_with_num_pages,
                                     height,
                                     &mut thread_pool,
                                     &log,
+                                    &lsmt_config,
                                     &metrics,
                                 ),
                                 FlagStatus::Disabled => {
                                     if downgrade_state == DowngradeState::Unknown {
-                                        if merge_full(
+                                        if merge_to_base(
                                             &mut tip_handler,
                                             &pagemaptypes_with_num_pages,
                                             height,
@@ -463,74 +436,32 @@ pub(crate) fn spawn_tip_thread(
     (tip_handle, tip_sender)
 }
 
-#[derive(Clone, Debug)]
-struct MergeCandidateAndMetrics {
-    // Merge candidate if any merge is applicable.
-    merge_candidate: Option<MergeCandidate>,
-
-    // Number of files for the page map currently (before merge).
-    num_files_before: usize,
-
-    // Storage size on disk currently (before merge) and an estimate of it for after the merge.
-    storage_size_bytes_before: usize,
-    storage_size_bytes_after: usize,
-
-    // Page map size in RAM.
-    page_map_size_bytes: usize,
-
-    // Estimate how much is necessary to flush to disk to apply the merge.
-    write_size_bytes: usize,
+struct StorageInfo {
+    disk_size: u64,
+    mem_size: u64,
 }
 
-impl MergeCandidateAndMetrics {
-    fn new(
-        merge_candidate: Option<MergeCandidate>,
-        base_path: &Path,
-        existing_overlays: &[PathBuf],
-        page_map_num_pages: usize,
-    ) -> Result<Self, PersistenceError> {
-        let merge_all = merge_candidate
-            .as_ref()
-            .map_or(false, |m| m.is_full_merge());
-        let existing_base = if base_path.exists() {
-            Some(base_path.to_path_buf())
-        } else {
-            None
-        };
-        let existing_files = existing_base.iter().chain(existing_overlays.iter());
-        let existing_files_lengths: Vec<u64> = existing_files
-            .map(|f| std::fs::metadata(f).unwrap().len())
-            .collect();
-        let num_files_before = existing_files_lengths.len();
-
-        let page_map_size_bytes = page_map_num_pages * PAGE_SIZE;
-        let storage_size_bytes_before = existing_files_lengths.iter().sum::<u64>() as usize;
-        // If we do partial merges, in the worst case scenario all the overlays contain
-        // non-overlapping pages and we don't save space. We do these merges to maintain a pyramid
-        // shape of file sizes and to cap number of files.
-        let storage_size_bytes_after = if merge_all {
-            page_map_size_bytes
-        } else {
-            storage_size_bytes_before
-        };
-        let merge_input_bytes = match merge_candidate.as_ref() {
-            None => 0,
-            Some(m) => m.input_size_bytes()?,
-        };
-        let write_size_bytes = if merge_all {
-            page_map_size_bytes
-        } else {
-            std::cmp::min(page_map_size_bytes, merge_input_bytes as usize)
-        };
-        Ok(MergeCandidateAndMetrics {
-            merge_candidate,
-            num_files_before,
-            storage_size_bytes_before,
-            storage_size_bytes_after,
-            page_map_size_bytes,
-            write_size_bytes,
-        })
+fn merge_candidates_and_storage_info(
+    tip_handler: &mut TipHandler,
+    pagemaptypes_with_num_pages: &[(PageMapType, usize)],
+    height: Height,
+    lsmt_config: &LsmtConfig,
+) -> StorageResult<(Vec<MergeCandidate>, StorageInfo)> {
+    let layout = &tip_handler.tip(height)?;
+    let mut merge_candidates = Vec::new();
+    let mut storage_info = StorageInfo {
+        disk_size: 0,
+        mem_size: 0,
+    };
+    for (page_map_type, num_pages) in pagemaptypes_with_num_pages {
+        let pm_layout = page_map_type.layout(layout)?;
+        storage_info.disk_size += (&pm_layout as &dyn StorageLayout).storage_size()?;
+        storage_info.mem_size += (num_pages * PAGE_SIZE) as u64;
+        for m in MergeCandidate::new(&pm_layout, height, *num_pages as u64, lsmt_config)? {
+            merge_candidates.push(m)
+        }
     }
+    Ok((merge_candidates, storage_info))
 }
 
 /// Merge excessive overlays.
@@ -586,76 +517,43 @@ impl MergeCandidateAndMetrics {
 /// further increase the amount of data written in order to enforce the storage overhead.
 fn merge(
     tip_handler: &mut TipHandler,
-    pagemaptypes_with_num_pages: &Vec<(PageMapType, usize)>,
+    pagemaptypes_with_num_pages: &[(PageMapType, usize)],
     height: Height,
     thread_pool: &mut scoped_threadpool::Pool,
     log: &ReplicaLogger,
+    lsmt_config: &LsmtConfig,
     metrics: &StateManagerMetrics,
 ) {
-    let merges_with_metrics = parallel_map(
-        thread_pool,
-        pagemaptypes_with_num_pages
-            .iter()
-            .map(|(page_map_type, num_pages)| {
-                (
-                    *num_pages,
-                    page_map_paths(tip_handler, height, page_map_type).unwrap_or_else(|err| {
-                        fatal!(log, "Failed to get page map paths: {}", err);
-                    }),
-                )
-            }),
-        |(
-            num_pages,
-            PageMapPaths {
-                base_file_path,
-                existing_overlays,
-                next_overlay_path,
-            },
-        )| {
-            let m = MergeCandidate::new(
-                base_file_path,
-                next_overlay_path,
-                base_file_path,
-                existing_overlays,
-            )
-            .unwrap_or_else(|err| {
-                fatal!(log, "Failed to get MergeCandidate: {}", err);
-            });
-            MergeCandidateAndMetrics::new(m, base_file_path, existing_overlays, *num_pages)
-                .unwrap_or_else(|err| {
-                    fatal!(log, "Failed to get metrics for MergeCandidate: {}", err);
-                })
-        },
-    );
+    // We have a merge candidate for each shard, unless no merge is needed, i. e.
+    //   1) Shard forms a pyramid (hence overhead < 2.0)
+    //   and
+    //   2) number of files is <= MAX_NUMBER_OF_FILES
+    let (mut merge_candidates, storage_info) = merge_candidates_and_storage_info(
+        tip_handler,
+        pagemaptypes_with_num_pages,
+        height,
+        lsmt_config,
+    )
+    .unwrap_or_else(|err| {
+        fatal!(log, "Failed to get MergeCandidateAndMetrics: {}", err);
+    });
 
-    let pm_size: usize = merges_with_metrics
-        .iter()
-        .map(|m| m.page_map_size_bytes)
-        .sum();
-    let storage_size: usize = merges_with_metrics
-        .iter()
-        .map(|m| m.storage_size_bytes_before)
-        .sum();
     // Max 2.5 overhead
-    let max_storage = pm_size * 2 + pm_size / 2;
+    let max_storage = storage_info.mem_size * 2 + storage_info.mem_size / 2;
 
-    // Discard ones where no merge is applicable.
-    // These have number of files less or equal to Storage::MAX_NUMBER_OF_FILES and at most 2.0
-    // overhead.
-    let mut merges_with_metrics: Vec<MergeCandidateAndMetrics> = merges_with_metrics
-        .into_iter()
-        .filter(|m| m.merge_candidate.is_some())
-        .collect();
-
-    merges_with_metrics.sort_by_key(|m| -(m.num_files_before as i64));
-    let storage_to_merge_for_filenum = pm_size / 4;
-    let merges_by_filenum = merges_with_metrics
+    merge_candidates.sort_by_key(|m| -(m.num_files_before() as i64));
+    let storage_to_merge_for_filenum = storage_info.mem_size / 4;
+    let min_storage_to_merge = storage_info.mem_size / 50;
+    let merges_by_filenum = merge_candidates
         .iter()
         .scan(0, |state, m| {
-            if *state >= storage_to_merge_for_filenum || m.num_files_before < MAX_NUMBER_OF_FILES {
+            if *state >= storage_to_merge_for_filenum
+                || (m.num_files_before() <= MAX_NUMBER_OF_FILES as u64
+                    && (*state + m.page_map_size_bytes() >= min_storage_to_merge))
+            {
                 None
             } else {
-                *state += m.page_map_size_bytes;
+                *state += m.page_map_size_bytes();
                 Some(())
             }
         })
@@ -663,60 +561,57 @@ fn merge(
 
     // [0; merges_by_filenum) are already scheduled, some of the rest may be necessary to achieve
     // low enough overhead.
-    let mut scheduled_merges = merges_with_metrics;
-    let mut merges_with_metrics = scheduled_merges.split_off(merges_by_filenum);
+    let mut scheduled_merges = merge_candidates;
+    let mut merge_candidates = scheduled_merges.split_off(merges_by_filenum);
 
     // Sort by ratio of saved bytes to write size.
-    merges_with_metrics.sort_by_key(|m| {
-        if m.write_size_bytes != 0 {
+    merge_candidates.sort_by_key(|m| {
+        if m.write_size_bytes() != 0 {
             // Fixed point to compute overhead ratio for sort.
-            -1000i64 * (m.storage_size_bytes_before as i64 - m.storage_size_bytes_after as i64)
-                / m.write_size_bytes as i64
+            -1000i64 * (m.storage_size_bytes_before() as i64 - m.storage_size_bytes_after() as i64)
+                / m.write_size_bytes() as i64
         } else {
             0
         }
     });
-    let storage_to_save = storage_size as i64 - max_storage as i64;
+    let storage_to_save = storage_info.disk_size as i64 - max_storage as i64;
     // For a full merge the resulting base file can be larger than sum of the overlays,
     // so we need a signed accumulator.
     let mut storage_saved: i64 = scheduled_merges
         .iter()
-        .map(|m| m.storage_size_bytes_before as i64 - m.storage_size_bytes_after as i64)
+        .map(|m| m.storage_size_bytes_before() as i64 - m.storage_size_bytes_after() as i64)
         .sum();
-    for m in merges_with_metrics.into_iter() {
+    for m in merge_candidates.into_iter() {
         if storage_saved >= storage_to_save {
             break;
         }
 
-        storage_saved += m.storage_size_bytes_before as i64 - m.storage_size_bytes_after as i64;
+        storage_saved += m.storage_size_bytes_before() as i64 - m.storage_size_bytes_after() as i64;
         // Only full merges reduce overhead, and there should be enough of them to reach
         // `storage_to_save` before tapping into partial merges.
-        debug_assert!(m.merge_candidate.as_ref().unwrap().is_full_merge());
+        debug_assert!(m.is_full_merge());
         scheduled_merges.push(m);
     }
     info!(
         log,
-        "Merging {} files out of {}; pm_size: {}; storage_size: {}; max_storage: {}, storage_saves: {}, merges_by_filenum: {}",
+        "Merging {} PageMaps out of {}; mem_size: {}; disk_size: {}; max_storage: {}, storage_saves: {}, merges_by_filenum: {}",
         scheduled_merges.len(),
         pagemaptypes_with_num_pages.len(),
-        pm_size,
-        storage_size,
+        storage_info.mem_size,
+        storage_info.disk_size,
         max_storage,
         storage_saved,
         merges_by_filenum,
     );
 
     parallel_map(thread_pool, scheduled_merges.iter(), |m| {
-        m.merge_candidate
-            .as_ref()
-            .unwrap()
-            .apply(&metrics.storage_metrics)
+        m.apply(&metrics.storage_metrics)
     });
 }
 
 /// Merge all the overlays (if any) into bases.
 /// Return true if any merge was done.
-fn merge_full(
+fn merge_to_base(
     tip_handler: &mut TipHandler,
     pagemaptypes_with_num_pages: &[(PageMapType, usize)],
     height: Height,
@@ -724,22 +619,18 @@ fn merge_full(
     log: &ReplicaLogger,
     metrics: &StateManagerMetrics,
 ) -> bool {
+    let layout = &tip_handler.tip(height).unwrap_or_else(|err| {
+        fatal!(log, "Failed to get layout for {}: {}", height, err);
+    });
     let rewritten = parallel_map(
         thread_pool,
-        pagemaptypes_with_num_pages
-            .iter()
-            .map(|(page_map_type, _)| {
-                page_map_paths(tip_handler, height, page_map_type).unwrap_or_else(|err| {
-                    fatal!(log, "Failed to merge page map: {}", err);
-                })
-            }),
-        |PageMapPaths {
-             base_file_path,
-             existing_overlays,
-             next_overlay_path: _,
-         }| {
-            let merge_candidate =
-                MergeCandidate::full_merge(base_file_path, base_file_path, existing_overlays);
+        pagemaptypes_with_num_pages.iter(),
+        |(page_map_type, num_pages)| {
+            let pm_layout = page_map_type.layout(layout).unwrap_or_else(|err| {
+                fatal!(log, "Failed to get layout for {:?}: {}", page_map_type, err);
+            });
+            let merge_candidate = MergeCandidate::merge_to_base(&pm_layout, *num_pages as u64)
+                .unwrap_or_else(|err| fatal!(log, "Failed to merge page map: {}", err));
             if let Some(m) = merge_candidate.as_ref() {
                 m.apply(&metrics.storage_metrics).unwrap_or_else(|err| {
                     fatal!(log, "Failed to apply MergeCandidate for downgrade: {}", err);
@@ -758,8 +649,11 @@ fn serialize_to_tip(
     tip: &CheckpointLayout<RwPolicy<TipHandler>>,
     thread_pool: &mut scoped_threadpool::Pool,
     metrics: &StorageMetrics,
-    lsmt_storage: FlagStatus,
+    lsmt_config: &LsmtConfig,
 ) -> Result<(), CheckpointError> {
+    //TODO(MR-530): Implement serializing canister snapshots.
+    debug_assert!(state.canister_snapshots.is_unflushed_changes_empty());
+
     // Serialize ingress history separately. The `SystemMetadata` proto does not
     // encode it.
     //
@@ -794,7 +688,7 @@ fn serialize_to_tip(
     })?;
 
     let results = parallel_map(thread_pool, state.canisters_iter(), |canister_state| {
-        serialize_canister_to_tip(log, canister_state, tip, metrics, lsmt_storage)
+        serialize_canister_to_tip(log, canister_state, tip, metrics, lsmt_config)
     });
 
     for result in results.into_iter() {
@@ -809,9 +703,10 @@ fn serialize_canister_to_tip(
     canister_state: &CanisterState,
     tip: &CheckpointLayout<RwPolicy<TipHandler>>,
     metrics: &StorageMetrics,
-    lsmt_storage: FlagStatus,
+    lsmt_config: &LsmtConfig,
 ) -> Result<(), CheckpointError> {
-    let canister_layout = tip.canister(&canister_state.canister_id())?;
+    let canister_id = canister_state.canister_id();
+    let canister_layout = tip.canister(&canister_id)?;
     canister_layout
         .queues()
         .serialize(canister_state.system_state.queues().into())?;
@@ -841,24 +736,18 @@ fn serialize_canister_to_tip(
                         .serialize(&execution_state.wasm_binary.binary)?;
                 }
             }
-            let memory_dst = PersistDestination::new(
-                canister_layout.vmemory_0(),
-                canister_layout.vmemory_0_overlay(tip.height()),
-                lsmt_storage,
-            );
-            let stable_dst = PersistDestination::new(
-                canister_layout.stable_memory_blob(),
-                canister_layout.stable_memory_overlay(tip.height()),
-                lsmt_storage,
-            );
-            execution_state
-                .wasm_memory
-                .page_map
-                .persist_delta(memory_dst, metrics)?;
-            execution_state
-                .stable_memory
-                .page_map
-                .persist_delta(stable_dst, metrics)?;
+            execution_state.wasm_memory.page_map.persist_delta(
+                &canister_layout.vmemory_0(),
+                tip.height(),
+                lsmt_config,
+                metrics,
+            )?;
+            execution_state.stable_memory.page_map.persist_delta(
+                &canister_layout.stable_memory(),
+                tip.height(),
+                lsmt_config,
+                metrics,
+            )?;
 
             Some(ExecutionStateBits {
                 exported_globals: execution_state.exported_globals.clone(),
@@ -871,31 +760,23 @@ fn serialize_canister_to_tip(
             })
         }
         None => {
-            delete_pagemap_files(
-                log,
-                &canister_layout.vmemory_0(),
-                &canister_layout.vmemory_0_overlays()?,
-            );
-            delete_pagemap_files(
-                log,
-                &canister_layout.stable_memory_blob(),
-                &canister_layout.stable_memory_overlays()?,
-            );
+            canister_layout.vmemory_0().delete_files()?;
+            canister_layout.stable_memory().delete_files()?;
             canister_layout.wasm().try_delete_file()?;
             None
         }
     };
 
-    let wasm_chunk_store_dst = PersistDestination::new(
-        canister_layout.wasm_chunk_store(),
-        canister_layout.wasm_chunk_store_overlay(tip.height()),
-        lsmt_storage,
-    );
     canister_state
         .system_state
         .wasm_chunk_store
         .page_map()
-        .persist_delta(wasm_chunk_store_dst, metrics)?;
+        .persist_delta(
+            &canister_layout.wasm_chunk_store(),
+            tip.height(),
+            lsmt_config,
+            metrics,
+        )?;
 
     // Priority credit must be zero at this point
     assert_eq!(canister_state.scheduler_state.priority_credit.get(), 0);
@@ -967,6 +848,8 @@ fn serialize_canister_to_tip(
                 .clone(),
             total_query_stats: canister_state.scheduler_state.total_query_stats.clone(),
             log_visibility: canister_state.system_state.log_visibility,
+            canister_log: canister_state.system_state.canister_log.clone(),
+            wasm_memory_limit: canister_state.system_state.wasm_memory_limit,
         }
         .into(),
     )?;
@@ -1010,7 +893,7 @@ pub fn defrag_tip(
     let path_with_sizes: Vec<(PathBuf, u64)> = page_map_subset
         .iter()
         .filter_map(|entry| {
-            let path = entry.path(tip).ok()?;
+            let path = entry.layout(tip).ok()?.base();
             let size = path.metadata().ok()?.size();
             Some((path, size))
         })
@@ -1035,30 +918,6 @@ pub fn defrag_tip(
         })?;
     }
     Ok(())
-}
-
-fn delete_pagemap_files(log: &ReplicaLogger, base: &Path, overlays: &[PathBuf]) {
-    if base.exists() {
-        std::fs::remove_file(base).unwrap_or_else(|err| {
-            fatal!(
-                log,
-                "Failed to remove base file at {}: {}",
-                base.display(),
-                err
-            );
-        });
-    }
-
-    for overlay in overlays {
-        std::fs::remove_file(overlay).unwrap_or_else(|err| {
-            fatal!(
-                log,
-                "Failed to remove overlay file {}: {}",
-                overlay.display(),
-                err
-            );
-        });
-    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1220,11 +1079,11 @@ fn handle_compute_manifest_request(
 #[cfg(test)]
 mod test {
     use super::*;
-    use ic_config::state_manager::lsmt_storage_default;
+    use ic_config::state_manager::lsmt_config_default;
     use ic_metrics::MetricsRegistry;
-    use ic_test_utilities::types::ids::canister_test_id;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_tmpdir::tmpdir;
+    use ic_test_utilities_types::ids::canister_test_id;
 
     #[test]
     fn dont_crash_or_hang() {
@@ -1239,7 +1098,7 @@ mod test {
                 log,
                 tip_handler,
                 layout,
-                lsmt_storage_default(),
+                lsmt_config_default(),
                 metrics,
                 MaliciousFlags::default(),
             );
@@ -1266,7 +1125,7 @@ mod test {
 
             let paths: Vec<PathBuf> = page_maps
                 .iter()
-                .map(|page_map_type| page_map_type.path(&tip).unwrap())
+                .map(|page_map_type| page_map_type.layout(&tip).unwrap().base())
                 .collect();
 
             for path in &paths {

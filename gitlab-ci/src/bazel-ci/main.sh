@@ -6,12 +6,43 @@
 
 set -eufo pipefail
 
+# We run the diff if the following is true:
+# - bazel target is //...
+# - merge request pipeline but not merge train pipeline
+# - target branch is not rc--*
+
+if [ "${RUN_ON_DIFF_ONLY:-}" == "true" ] \
+    && [ "${CI_PIPELINE_SOURCE:-}" == "merge_request_event" ] \
+    && [ "${CI_MERGE_REQUEST_EVENT_TYPE:-}" != "merge_train" ] \
+    && [[ "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}" != "rc--"* ]]; then
+    # get bazel targets that changed within the MR
+    BAZEL_TARGETS=$("${CI_PROJECT_DIR:-}"/gitlab-ci/src/bazel-ci/diff.sh)
+fi
+
+# github logic
+if [ "${RUN_ON_DIFF_ONLY:-}" == "true" ] \
+    && [ "${CI_PIPELINE_SOURCE:-}" == "pull_request" ] \
+    && [[ "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}" != "rc--"* ]]; then
+    # get bazel targets that changed within the MR
+    BAZEL_TARGETS=$("${CI_PROJECT_DIR:-}"/gitlab-ci/src/bazel-ci/diff.sh)
+fi
+
+# pass info about bazel targets to bazel-targets file
+echo "$BAZEL_TARGETS" >bazel-targets
+
+# if bazel targets is empty we don't need to run any tests
+if [ -z "${BAZEL_TARGETS:-}" ]; then
+    echo "No bazel targets to build"
+    exit 0
+fi
+
 echo "Building as user: $(whoami)"
 echo "Bazel version: $(bazel version)"
 
 AWS_CREDS="${HOME}/.aws/credentials"
 mkdir -p "$(dirname "${AWS_CREDS}")"
-# handle github and gitlab differnetly
+
+# handle github and gitlab differently
 if [ -n "${AWS_SHARED_CREDENTIALS_FILE+x}" ]; then
     ln -fs "${AWS_SHARED_CREDENTIALS_FILE}" "${AWS_CREDS}"
 elif [ -n "${AWS_SHARED_CREDENTIALS_CONTENT+x}" ]; then
@@ -39,7 +70,6 @@ if [[ "${CI_COMMIT_TAG:-}" =~ ^release-.+ ]]; then
     RC="True"
 fi
 
-EXIT_CODE=0
 # shellcheck disable=SC2086
 # ${BAZEL_...} variables are expected to contain several arguments. We have `set -f` set above to disable globbing (and therefore only allow splitting)"
 buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" "${CI_JOB_NAME}-bazel-cmd" -- bazel \
@@ -53,13 +83,4 @@ buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" "${CI_JOB_NAME}-bazel-cmd" 
     ${BAZEL_EXTRA_ARGS:-} \
     ${BAZEL_TARGETS} \
     2>&1 \
-    | perl -pe 'BEGIN { select(STDOUT); $| = 1 } s/(.*Streaming build results to:.*)/\o{33}[92m$1\o{33}[0m/' || EXIT_CODE="${PIPESTATUS[0]}"
-
-if [ "$EXIT_CODE" == "38" ]; then
-    echo "Tolerating BEP upload failure."
-    # ERROR: The Build Event Protocol upload failed: Not retrying publishBuildEvents, no more attempts left: status='Status{code=CANCELLED, description=context canceled, cause=null}' CANCELLED: CANCELLED: context canceled CANCELLED: CANCELLED: context canceled
-    #Error: exit status 38
-else
-    echo "bazel process exited with $EXIT_CODE" >&2
-    exit "$EXIT_CODE"
-fi
+    | perl -pe 'BEGIN { select(STDOUT); $| = 1 } s/(.*Streaming build results to:.*)/\o{33}[92m$1\o{33}[0m/'

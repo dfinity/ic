@@ -233,8 +233,6 @@ To make things more concrete, we break down the cost of a concrete withdrawal (l
 
 == Cost of all ckETH Transactions
 
-
-
 |===
 |Operation |Canister |Cost |Example
 
@@ -269,3 +267,22 @@ a| Approval
 Set by `transfer_fee` decided in proposal https://dashboard.internetcomputer.org/proposal/126309[126309].
 | Approval with https://dashboard.internetcomputer.org/ethereum/transaction/3[ledger index 3]
 |===
+
+== Ledger Memos
+
+All ckETH transactions issued by the ckETH minter and recorded on the ledger use a memo field to store additional information about the transaction. The ckETH minter records a transaction on the ledger in the following cases:
+
+. minting ckETH after a deposit of ETH,
+. burning ckETH after a withdrawal request to ETH,
+. minting ckETH to reimburse a failed withdrawal.
+
+=== Design
+The general idea is to encode the memo as a https://cbor.io/[CBOR] message and use the transaction type to select the message type. The messages will follow the compact encoding described in the https://twittner.gitlab.io/minicbor/minicbor_derive/index.html[minicbor] package documentation.
+
+.Example Implementation in TypeScript
+====
+There is an example implementation of how to decode the ckETH ledger memos in Javascript in the https://github.com/dfinity/oisy-wallet/tree/main[Oisy Wallet] repository:
+
+* https://github.com/dfinity/oisy-wallet/blob/384013a67a994555b6bd1cd6baeba0a83c444839/src/frontend/src/icp/utils/cketh-memo.utils.ts[Decode ckETH ledger burn and mint memo]
+* https://github.com/dfinity/oisy-wallet/blob/384013a67a994555b6bd1cd6baeba0a83c444839/src/frontend/src/tests/icp/utils/cketh-memo.utils.spec.ts[Tests to decode ckETH ledger memo]
+====

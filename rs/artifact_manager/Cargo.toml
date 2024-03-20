@@ -10,8 +10,8 @@ documentation.workspace = true
 ic-interfaces = { path = "../interfaces" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-types = { path = "../types/types" }
-crossbeam-channel = "0.5.5"
 prometheus = { workspace = true }
+tokio = { workspace = true }
 
 [dev-dependencies]
 ic-config = { path = "../config" }
@@ -19,4 +19,3 @@ ic-artifact-pool = { path = "../artifact_pool" }
 ic-protobuf = { path = "../protobuf" }
 ic-test-utilities = { path = "../test_utilities" }
 assert_matches = "1.3.0"
-

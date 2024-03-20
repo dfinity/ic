@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use ic_crypto_prng::Csprng;
-use ic_ic00_types::EcdsaKeyId;
 use ic_interfaces::execution_environment::RegistryExecutionSettings;
+use ic_management_canister_types::EcdsaKeyId;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithEcdsaContext;
 use ic_types::{consensus::ecdsa::QuadrupleId, messages::CallbackId, ExecutionRound, Height};
 use rand::RngCore;
@@ -100,8 +100,8 @@ fn match_quadruples_by_key_id(
 mod tests {
     use super::*;
     use crate::scheduler::tests::make_key_id;
-    use ic_test_utilities::types::messages::RequestBuilder;
-    use ic_test_utilities_time::mock_time;
+    use ic_test_utilities_types::messages::RequestBuilder;
+    use ic_types::time::UNIX_EPOCH;
 
     fn fake_context(
         id: u64,
@@ -116,7 +116,7 @@ mod tests {
                 pseudo_random_id: [id as u8; 32],
                 message_hash: [0; 32],
                 derivation_path: vec![],
-                batch_time: mock_time(),
+                batch_time: UNIX_EPOCH,
                 matched_quadruple: matched_quadruple
                     .map(|(id, h)| (QuadrupleId(id, Some(key_id)), h)),
                 nonce: None,

@@ -19,7 +19,7 @@ DEPENDENCIES = [
     "//rs/test_utilities/identity",
     "//rs/types/base_types",
     "@crate_index//:candid",
-    "@crate_index//:clap",
+    "@crate_index//:clap_3_2_25",
     "@crate_index//:prost",
     "@crate_index//:tokio",
     "@crate_index//:url",

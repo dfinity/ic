@@ -6,7 +6,7 @@ use crate::rosetta_tests::test_neurons::TestNeurons;
 use crate::util::block_on;
 use ic_nns_governance::pb::v1::neuron::DissolveState;
 use ic_rosetta_api::models::seconds::Seconds;
-use ic_rosetta_api::models::{AccountBalanceResponse, NeuronState};
+use ic_rosetta_api::models::{AccountBalanceResponse, NeuronInfoResponse, NeuronState};
 use ic_rosetta_api::request::request_result::RequestResult;
 use ic_rosetta_api::request::Request;
 use ic_rosetta_api::request_types::{SetDissolveTimestamp, StartDissolve, StopDissolve};
@@ -16,7 +16,7 @@ use std::sync::Arc;
 use std::time::{Duration, UNIX_EPOCH};
 
 const PORT: u32 = 8105;
-const VM_NAME: &str = "rosetta-test-neuron-dissolve";
+const VM_NAME: &str = "rosetta-neuron-dissolve";
 
 pub fn test(env: TestEnv) {
     let _logger = env.logger();
@@ -49,9 +49,10 @@ pub fn test(env: TestEnv) {
             .await
             .expect("Failed test start dissolve");
         // Verify change of state.
-        let metadata = get_neuron_balance(&client, &neuron1)
+        let metadata: NeuronInfoResponse = get_neuron_balance(&client, &neuron1)
             .await
             .metadata
+            .try_into()
             .unwrap();
         assert_eq!(metadata.state, NeuronState::Dissolving);
 

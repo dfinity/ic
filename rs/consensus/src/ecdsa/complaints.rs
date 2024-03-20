@@ -20,8 +20,11 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgComplaint, IDkgOpening, IDkgTranscript, IDkgTranscriptId,
 };
 use ic_types::{Height, NodeId, RegistryVersion};
+use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
+
+use super::utils::update_purge_height;
 
 pub(crate) trait EcdsaComplaintHandler: Send {
     /// The on_state_change() called from the main ECDSA path.
@@ -72,6 +75,7 @@ pub(crate) struct EcdsaComplaintHandlerImpl {
     schedule: RoundRobin,
     metrics: EcdsaComplaintMetrics,
     log: ReplicaLogger,
+    prev_finalized_height: RefCell<Height>,
 }
 
 impl EcdsaComplaintHandlerImpl {
@@ -89,6 +93,7 @@ impl EcdsaComplaintHandlerImpl {
             schedule: RoundRobin::default(),
             metrics: EcdsaComplaintMetrics::new(metrics_registry),
             log,
+            prev_finalized_height: RefCell::new(Height::from(0)),
         }
     }
 
@@ -774,6 +779,17 @@ impl EcdsaComplaintHandler for EcdsaComplaintHandlerImpl {
         let block_reader = EcdsaBlockReaderImpl::new(self.consensus_block_cache.finalized_chain());
         let metrics = self.metrics.clone();
 
+        let mut changes =
+            update_purge_height(&self.prev_finalized_height, block_reader.tip_height())
+                .then(|| {
+                    timed_call(
+                        "purge_artifacts",
+                        || self.purge_artifacts(ecdsa_pool, &block_reader),
+                        &metrics.on_state_change_duration,
+                    )
+                })
+                .unwrap_or_default();
+
         let validate_complaints = || {
             timed_call(
                 "validate_complaints",
@@ -795,21 +811,12 @@ impl EcdsaComplaintHandler for EcdsaComplaintHandlerImpl {
                 &metrics.on_state_change_duration,
             )
         };
-        let purge_artifacts = || {
-            timed_call(
-                "purge_artifacts",
-                || self.purge_artifacts(ecdsa_pool, &block_reader),
-                &metrics.on_state_change_duration,
-            )
-        };
 
-        let calls: [&'_ dyn Fn() -> EcdsaChangeSet; 4] = [
-            &validate_complaints,
-            &send_openings,
-            &validate_openings,
-            &purge_artifacts,
-        ];
-        self.schedule.call_next(&calls)
+        let calls: [&'_ dyn Fn() -> EcdsaChangeSet; 3] =
+            [&validate_complaints, &send_openings, &validate_openings];
+
+        changes.append(&mut self.schedule.call_next(&calls));
+        changes
     }
 
     fn as_transcript_loader(&self) -> &dyn EcdsaTranscriptLoader {
@@ -973,8 +980,8 @@ mod tests {
     use ic_crypto_test_utils_canister_threshold_sigs::CanisterThresholdSigTestEnvironment;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
-    use ic_test_utilities::types::ids::{NODE_1, NODE_2, NODE_3, NODE_4};
     use ic_test_utilities_logger::with_test_replica_logger;
+    use ic_test_utilities_types::ids::{NODE_1, NODE_2, NODE_3, NODE_4};
     use ic_types::consensus::ecdsa::{EcdsaObject, TranscriptRef};
     use ic_types::time::UNIX_EPOCH;
     use ic_types::Height;
@@ -1023,14 +1030,14 @@ mod tests {
         );
 
         // Messages for transcripts currently active
-        assert!(matches!(
+        assert_matches!(
             Action::action(&block_reader, &active, &requested, Height::from(10), &id_1),
             Action::Process(_)
-        ));
-        assert!(matches!(
+        );
+        assert_matches!(
             Action::action(&block_reader, &active, &requested, Height::from(20), &id_2),
             Action::Process(_)
-        ));
+        );
     }
 
     #[test]
@@ -1182,6 +1189,61 @@ mod tests {
                 let change_set = complaint_handler.validate_complaints(&ecdsa_pool, &block_reader);
                 assert_eq!(change_set.len(), 1);
                 assert!(is_handle_invalid(&change_set, &msg_id));
+            })
+        })
+    }
+
+    // Tests that complaints are purged once the finalized height increases
+    #[test]
+    fn test_ecdsa_complaints_purging() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let (mut ecdsa_pool, complaint_handler, mut consensus_pool) =
+                    create_complaint_dependencies_and_pool(pool_config, logger);
+                let transcript_height = Height::from(30);
+                let id_1 = create_transcript_id_with_height(1, Height::from(0));
+                let id_2 = create_transcript_id_with_height(2, transcript_height);
+
+                let complaint1 = create_complaint(id_1, NODE_2, NODE_3);
+                let msg_id1 = complaint1.message_id();
+                let complaint2 = create_complaint(id_2, NODE_2, NODE_3);
+                let msg_id2 = complaint2.message_id();
+                let change_set = vec![
+                    EcdsaChangeAction::AddToValidated(EcdsaMessage::EcdsaComplaint(complaint1)),
+                    EcdsaChangeAction::AddToValidated(EcdsaMessage::EcdsaComplaint(complaint2)),
+                ];
+                ecdsa_pool.apply_changes(change_set);
+
+                // Finalized height doesn't increase, so complaint1 shouldn't be purged
+                let change_set = complaint_handler.on_state_change(&ecdsa_pool);
+                assert_eq!(
+                    *complaint_handler.prev_finalized_height.borrow(),
+                    Height::from(0)
+                );
+                assert!(change_set.is_empty());
+
+                // Finalized height increases, so complaint1 is purged
+                let new_height = consensus_pool.advance_round_normal_operation_n(29);
+                let change_set = complaint_handler.on_state_change(&ecdsa_pool);
+                assert_eq!(
+                    *complaint_handler.prev_finalized_height.borrow(),
+                    new_height
+                );
+                assert_eq!(change_set.len(), 1);
+                assert!(is_removed_from_validated(&change_set, &msg_id1));
+
+                ecdsa_pool.apply_changes(change_set);
+
+                // Finalized height increases above complaint2, so it is purged
+                let new_height = consensus_pool.advance_round_normal_operation();
+                let change_set = complaint_handler.on_state_change(&ecdsa_pool);
+                assert_eq!(
+                    *complaint_handler.prev_finalized_height.borrow(),
+                    new_height
+                );
+                assert_eq!(transcript_height, new_height);
+                assert_eq!(change_set.len(), 1);
+                assert!(is_removed_from_validated(&change_set, &msg_id2));
             })
         })
     }

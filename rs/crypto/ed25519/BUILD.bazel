@@ -1,0 +1,54 @@
+load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_library", "rust_test", "rust_test_suite")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "@crate_index//:curve25519-dalek",
+    "@crate_index//:ed25519-dalek",
+    "@crate_index//:pem",
+    "@crate_index//:rand",
+    "@crate_index//:zeroize",
+]
+
+MACRO_DEPENDENCIES = []
+
+DEV_DEPENDENCIES = [
+    "@crate_index//:hex",
+    "@crate_index//:hex-literal",
+    "@crate_index//:wycheproof",
+]
+
+MACRO_DEV_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_library(
+    name = "ed25519",
+    srcs = glob(["src/**/*.rs"]),
+    aliases = ALIASES,
+    crate_name = "ic_crypto_ed25519",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.9.0",
+    deps = DEPENDENCIES,
+)
+
+rust_doc(
+    name = "ed25519_doc",
+    crate = ":ed25519",
+)
+
+rust_test(
+    name = "ed25519_test",
+    aliases = ALIASES,
+    crate = ":ed25519",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test_suite(
+    name = "ed25519_integration",
+    srcs = glob(["tests/**/*.rs"]),
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = [":ed25519"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)

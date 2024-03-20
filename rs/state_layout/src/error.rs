@@ -60,3 +60,12 @@ impl fmt::Display for LayoutError {
         }
     }
 }
+
+impl std::error::Error for LayoutError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            LayoutError::IoError { io_err, .. } => Some(io_err),
+            _ => None,
+        }
+    }
+}

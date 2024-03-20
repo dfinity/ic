@@ -4,6 +4,8 @@
 // A replicated query is a call to a `canister_query` function in update
 // context.
 
+use std::time::Duration;
+
 use crate::execution::common::{
     finish_call_with_error, validate_message, wasm_result_to_query_response,
 };
@@ -124,7 +126,7 @@ pub fn execute_replicated_query(
     // unmodified version of the canister. Hence, execute on clones
     // of system and execution states so that we have the original
     // versions.
-    let (output, _output_execution_state, _output_system_state) = round.hypervisor.execute(
+    let (mut output, _output_execution_state, _output_system_state) = round.hypervisor.execute(
         api_type,
         time,
         canister.system_state.clone(),
@@ -140,6 +142,7 @@ pub fn execute_replicated_query(
         time,
     );
 
+    canister.append_log(&mut output.canister_log);
     let result = output.wasm_result;
     let log = round.log;
     let result = result.map_err(|err| err.into_user_error(&canister.canister_id()));
@@ -167,5 +170,6 @@ pub fn execute_replicated_query(
         response,
         instructions_used,
         heap_delta: NumBytes::from(0),
+        call_duration: Some(Duration::from_secs(0)),
     }
 }

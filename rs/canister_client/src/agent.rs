@@ -9,7 +9,7 @@ use crate::{
 use backoff::backoff::Backoff;
 use ic_canister_client_sender::Sender;
 use ic_crypto_tree_hash::Path;
-use ic_ic00_types::{InstallCodeArgs, Method, Payload, IC_00};
+use ic_management_canister_types::{InstallCodeArgs, Method, Payload, IC_00};
 use ic_protobuf::types::v1 as pb;
 use ic_types::{
     consensus::catchup::CatchUpPackageParam,

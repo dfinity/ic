@@ -27,9 +27,9 @@ As an alternative, the following script can be used to build the images in a con
 
 Each image has its own build targets, which are variations of the image:
 
-* SetupOS: `prod`, `dev`, `dev-sev`
-* HostOS: `prod`, `dev`, `dev-sev`
-* GuestOS: `prod`, `dev`, `dev-malicious`, `dev-sev`
+* SetupOS: `prod`, `dev`
+* HostOS: `prod`, `dev`
+* GuestOS: `prod`, `dev`, `dev-malicious`
 * BoundaryGuestOS: `prod`, `prod-sev`, `dev`, `dev-sev`
 
 The difference between production and development images is that the console can be accessed on `dev` images, but not on `prod` images.
@@ -99,33 +99,3 @@ To add a new package to an IC-OS image you need to:
 
 * *rootfs/*: Each rootfs subdirectory contains everything required to build a bootable Ubuntu system. Various template directories (e.g., /opt) are used, which are copied verbatim to the target system. You can add files to these directories to include them in the image.
 ** For instructions on how to make changes to the OS, refer to the link:docs/Rootfs.adoc#[rootfs documentation]
-
-== SEV testing
-
-=== Preparing DEV machine
-
-Follow instructions link:docs/SEVSnpTest.adoc#[here] to prepare the dev machine.
-
-==== Storing the SEV Certificates on the host (e.g. for test/farm machines)
-
-Note: we are storing the PEM files instead of the DER files.
-
-```bash
-% snptool get-certs
-% sev-host-set-cert-chain  -r ark.pem -s ask.pem -v vcek.pem
-```
-
-=== Running SEV-SNP VM with virsh
-
-### Preparing image
-
-* cd to the root of the source tree
-* build the image: bazel build //ic-os/boundary-guestos/envs/dev-sev/...
-* ic-os/scripts/bn-virsh/prepare-for-virsh.sh
-
-### Create, login, destroy
-
-* ```$ virsh create ./bn_sev_vm.xml```
-* ```$ virsh console boundary_nodes_sev_snp-$USER```
-** Note: control-] to exit
-* ```$ virsh destroy boundary_nodes_sev_snp-$USER```

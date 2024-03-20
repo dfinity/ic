@@ -13,7 +13,6 @@ use candid::{Decode, Encode, Nat};
 use futures::{future::join_all, join};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
-use ic_cdk::println;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::CanisterStatusResultV2,
@@ -68,7 +67,7 @@ fn swap_remove_if<T>(v: &mut Vec<T>, predicate: impl Fn(&T) -> bool) {
 }
 
 // Defined in Rust instead of PB, because we want CanisterStatusResultV2
-// (defined in ic00_types) to be in the response, but CSRV2 doesn't have a
+// (defined in management_canister_types) to be in the response, but CSRV2 doesn't have a
 // corresponding PB definition.
 #[derive(Default, PartialEq, Eq, Debug, candid::CandidType, candid::Deserialize)]
 pub struct GetSnsCanistersSummaryRequest {
@@ -708,7 +707,6 @@ impl SnsRootCanister {
     pub async fn heartbeat(
         self_ref: &'static LocalKey<RefCell<Self>>,
         ledger_client: &impl LedgerCanisterClient,
-        management_canister_client: &impl ManagementCanisterClient,
         current_timestamp_seconds: u64,
     ) {
         let should_poll_archives = self_ref.with(|state| {
@@ -726,88 +724,6 @@ impl SnsRootCanister {
                 current_timestamp_seconds,
             )
             .await;
-        }
-
-        // TODO(NNS1-2835): Remove this call after changes published.
-        Self::set_sns_canisters_memory_allocations(self_ref, management_canister_client).await;
-    }
-
-    // TODO(NNS1-2835): Remove this method after changes published.
-    async fn set_sns_canisters_memory_allocations(
-        self_ref: &'static LocalKey<RefCell<Self>>,
-        management_canister_client: &impl ManagementCanisterClient,
-    ) {
-        // Check if this hotfix has been applied before; return if that's the case.
-        let already_tried_executing_hotfix = ATTEMPTED_FIXING_MEMORY_ALLOCATIONS.with(
-            |attempted_doubling_user_index_canister_memory_allocation| {
-                *attempted_doubling_user_index_canister_memory_allocation.borrow()
-            },
-        );
-
-        if already_tried_executing_hotfix {
-            return;
-        }
-
-        // Acquire the lock.
-        ATTEMPTED_FIXING_MEMORY_ALLOCATIONS.with(
-            |attempted_doubling_user_index_canister_memory_allocation| {
-                let mut cell =
-                    attempted_doubling_user_index_canister_memory_allocation.borrow_mut();
-                *cell = true;
-            },
-        );
-
-        // Get SNS Canister IDs
-        // We cannot set swap, and we cannot set root from here.  Root's fix is handled in Governance
-        let sns_canister_ids_to_set_memory_allocation = {
-            self_ref.with(|self_ref| {
-                let self_ref = self_ref.borrow();
-                let mut sns_canister_ids = vec![
-                    self_ref.governance_canister_id(),
-                    self_ref.ledger_canister_id(),
-                    self_ref.index_canister_id(),
-                ];
-                sns_canister_ids.extend(self_ref.archive_canister_ids.iter().cloned());
-
-                sns_canister_ids
-            })
-        };
-
-        for canister_id in sns_canister_ids_to_set_memory_allocation {
-            for i in 0..10 {
-                let response = management_canister_client
-                    .update_settings(UpdateSettings {
-                        canister_id,
-                        settings: CanisterSettings {
-                            memory_allocation: Some(Nat::from(0_u8)),
-                            ..Default::default()
-                        },
-                        sender_canister_version: management_canister_client.canister_version(),
-                    })
-                    .await;
-
-                match &response {
-                    Ok(_) => {
-                        log!(
-                            INFO,
-                            "Updating SNS canister {:?} to unbounded memory allocation succeeded!",
-                            canister_id
-                        );
-                        break;
-                    }
-                    Err(err) => {
-                        if i < 9 {
-                            log!(
-                                ERROR,
-                                "Updating SNS canister {:?} to unbounded memory allocation failed!: {:?}",
-                                canister_id, err
-                            );
-                        } else {
-                            log!(ERROR, "Updating SNS canister {:?} to unbounded memory allocation failed after 10 attempts!: {:?}", canister_id, err);
-                        }
-                    }
-                }
-            }
         }
     }
 
@@ -982,11 +898,6 @@ async fn get_owned_canister_summary(
         canister_id: Some(canister_id),
         status,
     }
-}
-
-// TODO(NNS1-2835): Remove this const after changes published.
-thread_local! {
-    static ATTEMPTED_FIXING_MEMORY_ALLOCATIONS: RefCell<bool> = RefCell::new(false);
 }
 
 #[cfg(test)]
@@ -2794,21 +2705,8 @@ mod tests {
             },
         ]);
 
-        let management_canister_client = MockManagementCanisterClient::new(vec![
-            MockManagementCanisterClientReply::UpdateSettings(Ok(())),
-            MockManagementCanisterClientReply::UpdateSettings(Ok(())),
-            MockManagementCanisterClientReply::UpdateSettings(Ok(())),
-            MockManagementCanisterClientReply::UpdateSettings(Ok(())),
-        ]);
-
         // Step 2: Call the code under test.
-        SnsRootCanister::heartbeat(
-            &SNS_ROOT_CANISTER,
-            &ledger_canister_client,
-            &management_canister_client,
-            NOW,
-        )
-        .await;
+        SnsRootCanister::heartbeat(&SNS_ROOT_CANISTER, &ledger_canister_client, NOW).await;
 
         // Step 3: Inspect results.
         assert_archive_poll_state_change(
@@ -2819,13 +2717,7 @@ mod tests {
 
         // Running periodic tasks one second in the future should
         // result in no change to state.
-        SnsRootCanister::heartbeat(
-            &SNS_ROOT_CANISTER,
-            &ledger_canister_client,
-            &management_canister_client,
-            NOW + 1,
-        )
-        .await;
+        SnsRootCanister::heartbeat(&SNS_ROOT_CANISTER, &ledger_canister_client, NOW + 1).await;
 
         assert_archive_poll_state_change(
             &SNS_ROOT_CANISTER,
@@ -2838,7 +2730,6 @@ mod tests {
         SnsRootCanister::heartbeat(
             &SNS_ROOT_CANISTER,
             &ledger_canister_client,
-            &management_canister_client,
             NOW + ONE_DAY_SECONDS,
         )
         .await;
@@ -2873,11 +2764,6 @@ mod tests {
             });
 
         let management_canister_client = MockManagementCanisterClient::new(vec![
-            // TODO(NNS1-2835): Remove this when we no longer calls update_settings during heartbeat.
-            MockManagementCanisterClientReply::UpdateSettings(Ok(())),
-            MockManagementCanisterClientReply::UpdateSettings(Ok(())),
-            MockManagementCanisterClientReply::UpdateSettings(Ok(())),
-            MockManagementCanisterClientReply::UpdateSettings(Ok(())),
             // First set of calls
             MockManagementCanisterClientReply::CanisterStatus(Ok(
                 CanisterStatusResultFromManagementCanister::dummy_with_controllers(vec![
@@ -2989,13 +2875,7 @@ mod tests {
             };
 
         // Step 2: Call the code under test.
-        SnsRootCanister::heartbeat(
-            &SNS_ROOT_CANISTER,
-            &ledger_canister_client,
-            &management_canister_client,
-            NOW,
-        )
-        .await;
+        SnsRootCanister::heartbeat(&SNS_ROOT_CANISTER, &ledger_canister_client, NOW).await;
 
         // We should now have a single Archive canister registered.
         assert_archive_poll_state_change(
@@ -3052,39 +2932,6 @@ mod tests {
 
         let actual_management_canister_calls = management_canister_client.get_calls_snapshot();
         let expected_management_canister_calls = vec![
-            // TODO(NNS1-2835): Remove this when we no longer calls update_settings during heartbeat.
-            MockManagementCanisterClientCall::UpdateSettings(UpdateSettings {
-                canister_id: governance_canister_id,
-                settings: CanisterSettings {
-                    memory_allocation: Some(Nat::from(0_u8)),
-                    ..Default::default()
-                },
-                sender_canister_version: None,
-            }),
-            MockManagementCanisterClientCall::UpdateSettings(UpdateSettings {
-                canister_id: ledger_canister_id,
-                settings: CanisterSettings {
-                    memory_allocation: Some(Nat::from(0_u8)),
-                    ..Default::default()
-                },
-                sender_canister_version: None,
-            }),
-            MockManagementCanisterClientCall::UpdateSettings(UpdateSettings {
-                canister_id: index_canister_id,
-                settings: CanisterSettings {
-                    memory_allocation: Some(Nat::from(0_u8)),
-                    ..Default::default()
-                },
-                sender_canister_version: None,
-            }),
-            MockManagementCanisterClientCall::UpdateSettings(UpdateSettings {
-                canister_id: expected_archive_canister_ids[0].get(),
-                settings: CanisterSettings {
-                    memory_allocation: Some(Nat::from(0_u8)),
-                    ..Default::default()
-                },
-                sender_canister_version: None,
-            }),
             MockManagementCanisterClientCall::CanisterStatus(CanisterIdRecord {
                 canister_id: root_canister_id,
             }),

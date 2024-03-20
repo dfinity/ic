@@ -563,7 +563,7 @@ impl DownloadPrioritizer for DownloadPrioritizerImpl {
             .ok_or(DownloadPrioritizerError::NotFound)?
             .advert_map
             .remove(integrity_hash)
-            .map_or(Err(DownloadPrioritizerError::NotFound), Ok)?;
+            .ok_or(DownloadPrioritizerError::NotFound)?;
         // remove from peer maps
         let advert_tracker = advert_tracker_ref.read().unwrap();
         self.peer_queues_update(
@@ -818,8 +818,8 @@ pub(crate) mod test {
     use super::*;
     use ic_artifact_manager::manager::ArtifactManagerImpl;
     use ic_metrics::MetricsRegistry;
-    use ic_test_utilities::types::ids::node_test_id;
     use ic_test_utilities_metrics::fetch_histogram_stats;
+    use ic_test_utilities_types::ids::node_test_id;
     use ic_types::artifact::ArtifactAttribute;
     use ic_types::crypto::CryptoHash;
     use std::time::Duration;

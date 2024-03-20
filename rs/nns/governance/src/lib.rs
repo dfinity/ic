@@ -124,6 +124,7 @@ use crate::{
     governance::{Governance, TimeWarp},
     pb::v1::{governance::GovernanceCachedMetrics, ProposalStatus},
 };
+use candid::DecoderConfig;
 use mockall::automock;
 use std::{
     collections::{BTreeMap, HashMap},
@@ -146,6 +147,7 @@ mod garbage_collection;
 /// distribute configuration information to all nodes of all
 /// subnetworks that participate in the Internet Computer (IC).
 pub mod governance;
+pub mod governance_proto_builder;
 mod heap_governance_data;
 pub mod init;
 mod known_neuron_index;
@@ -159,6 +161,17 @@ pub mod proposals;
 mod reward;
 pub mod storage;
 mod subaccount_index;
+
+/// Limit the amount of work for skipping unneeded data on the wire when parsing Candid.
+/// The value of 10_000 follows the Candid recommendation.
+const DEFAULT_SKIPPING_QUOTA: usize = 10_000;
+
+pub fn decoder_config() -> DecoderConfig {
+    let mut config = DecoderConfig::new();
+    config.set_skipping_quota(DEFAULT_SKIPPING_QUOTA);
+    config.set_full_error_message(false);
+    config
+}
 
 #[automock]
 trait Clock {
@@ -409,18 +422,31 @@ pub fn encode_metrics(
             let voting_period = governance.voting_period_seconds()(data.topic());
             let deadline_ts = data.get_deadline_timestamp_seconds(voting_period);
             let proposal_topic = data.topic().as_str_name();
-            (proposal_id, (deadline_ts, proposal_topic))
-        })
-        .collect::<BTreeMap<&u64, (u64, &str)>>();
-    for (proposal_id, (deadline_ts, proposal_topic)) in open_proposals_deadline.iter() {
-        builder = builder
-            .value(
-                &[
-                    ("proposal_id", &proposal_id.to_string()),
-                    ("proposal_topic", *proposal_topic),
-                ],
-                Metric::into(*deadline_ts),
+            let proposal_action_type = data
+                .proposal
+                .as_ref()
+                .map(|proposal| proposal.action_type());
+
+            (
+                proposal_id,
+                (deadline_ts, proposal_topic, proposal_action_type),
             )
+        })
+        .collect::<BTreeMap<&u64, (u64, &str, Option<String>)>>();
+
+    for (proposal_id, (deadline_ts, proposal_topic, proposal_action_type)) in
+        open_proposals_deadline.iter()
+    {
+        let proposal_id = proposal_id.to_string();
+        let mut labels: Vec<(&str, &str)> = vec![
+            ("proposal_id", proposal_id.as_str()),
+            ("proposal_topic", *proposal_topic),
+        ];
+        if let Some(proposal_action_type) = proposal_action_type {
+            labels.push(("proposal_type", proposal_action_type))
+        }
+        builder = builder
+            .value(labels.as_slice(), Metric::into(*deadline_ts))
             .unwrap();
     }
 
@@ -677,4 +703,9 @@ pub fn encode_metrics(
     }
 
     Ok(())
+}
+
+/// Whether we should switch to new merge neurons flow.
+fn should_use_new_merge_neurons_flow() -> bool {
+    false
 }

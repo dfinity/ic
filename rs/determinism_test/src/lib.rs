@@ -1,17 +1,17 @@
 mod setup;
 
-use ic_ic00_types::{
-    CanisterIdRecord, CanisterInstallMode, InstallCodeArgs, Method as Ic00Method, Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, IC_00,
-};
 use ic_interfaces::{execution_environment::IngressHistoryReader, messaging::MessageRouting};
 use ic_interfaces_state_manager::{
     PermanentStateHashError::*, StateHashError, StateManager, StateReader,
     TransientStateHashError::*,
 };
+use ic_management_canister_types::{
+    CanisterIdRecord, CanisterInstallMode, InstallCodeArgs, Method as Ic00Method, Payload,
+    ProvisionalCreateCanisterWithCyclesArgs, IC_00,
+};
 use ic_messaging::MessageRoutingImpl;
 use ic_state_manager::StateManagerImpl;
-use ic_test_utilities::types::messages::SignedIngressBuilder;
+use ic_test_utilities_types::messages::SignedIngressBuilder;
 use ic_types::{
     batch::{Batch, BatchMessages, BlockmakerMetrics},
     ingress::{IngressState, IngressStatus, WasmResult},
@@ -25,6 +25,7 @@ use std::{collections::BTreeMap, convert::TryFrom, sync::Arc, thread::sleep, tim
 fn build_batch(message_routing: &dyn MessageRouting, msgs: Vec<SignedIngress>) -> Batch {
     Batch {
         batch_number: message_routing.expected_batch_height(),
+        next_checkpoint_height: None,
         requires_full_state_hash: false,
         messages: BatchMessages {
             signed_ingress_msgs: msgs,
@@ -43,6 +44,7 @@ fn build_batch(message_routing: &dyn MessageRouting, msgs: Vec<SignedIngress>) -
 fn build_batch_with_full_state_hash(message_routing: &dyn MessageRouting) -> Batch {
     Batch {
         batch_number: message_routing.expected_batch_height(),
+        next_checkpoint_height: None,
         requires_full_state_hash: true,
         messages: BatchMessages::default(),
         randomness: Randomness::from([0; 32]),

@@ -1,8 +1,8 @@
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_error_types::{ErrorCode, UserError};
-use ic_ic00_types::{CanisterSettingsArgs, LogVisibility};
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
+use ic_management_canister_types::{CanisterSettingsArgs, LogVisibility};
 use ic_types::{
     ComputeAllocation, Cycles, InvalidComputeAllocationError, InvalidMemoryAllocationError,
     MemoryAllocation, PrincipalId,
@@ -22,6 +22,7 @@ pub(crate) struct CanisterSettings {
     pub(crate) freezing_threshold: Option<NumSeconds>,
     pub(crate) reserved_cycles_limit: Option<Cycles>,
     pub(crate) log_visibility: Option<LogVisibility>,
+    pub(crate) wasm_memory_limit: Option<NumBytes>,
 }
 
 impl CanisterSettings {
@@ -33,6 +34,7 @@ impl CanisterSettings {
         freezing_threshold: Option<NumSeconds>,
         reserved_cycles_limit: Option<Cycles>,
         log_visibility: Option<LogVisibility>,
+        wasm_memory_limit: Option<NumBytes>,
     ) -> Self {
         Self {
             controller,
@@ -42,6 +44,7 @@ impl CanisterSettings {
             freezing_threshold,
             reserved_cycles_limit,
             log_visibility,
+            wasm_memory_limit,
         }
     }
 
@@ -71,6 +74,10 @@ impl CanisterSettings {
 
     pub fn log_visibility(&self) -> Option<LogVisibility> {
         self.log_visibility
+    }
+
+    pub fn wasm_memory_limit(&self) -> Option<NumBytes> {
+        self.wasm_memory_limit
     }
 }
 
@@ -109,6 +116,17 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
             None => None,
         };
 
+        let wasm_memory_limit = match input.wasm_memory_limit {
+            Some(limit) => Some(
+                limit
+                    .0
+                    .to_u64()
+                    .ok_or(UpdateSettingsError::WasmMemoryLimitOutOfRange { provided: limit })?
+                    .into(),
+            ),
+            None => None,
+        };
+
         Ok(CanisterSettings::new(
             controller,
             input
@@ -119,6 +137,7 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
             freezing_threshold,
             reserved_cycles_limit,
             input.log_visibility,
+            wasm_memory_limit,
         ))
     }
 }
@@ -142,6 +161,7 @@ pub(crate) struct CanisterSettingsBuilder {
     freezing_threshold: Option<NumSeconds>,
     reserved_cycles_limit: Option<Cycles>,
     log_visibility: Option<LogVisibility>,
+    wasm_memory_limit: Option<NumBytes>,
 }
 
 #[allow(dead_code)]
@@ -155,6 +175,7 @@ impl CanisterSettingsBuilder {
             freezing_threshold: None,
             reserved_cycles_limit: None,
             log_visibility: None,
+            wasm_memory_limit: None,
         }
     }
 
@@ -167,6 +188,7 @@ impl CanisterSettingsBuilder {
             freezing_threshold: self.freezing_threshold,
             reserved_cycles_limit: self.reserved_cycles_limit,
             log_visibility: self.log_visibility,
+            wasm_memory_limit: self.wasm_memory_limit,
         }
     }
 
@@ -218,6 +240,13 @@ impl CanisterSettingsBuilder {
             ..self
         }
     }
+
+    pub fn with_wasm_memory_limit(self, wasm_memory_limit: NumBytes) -> Self {
+        Self {
+            wasm_memory_limit: Some(wasm_memory_limit),
+            ..self
+        }
+    }
 }
 
 pub enum UpdateSettingsError {
@@ -225,6 +254,7 @@ pub enum UpdateSettingsError {
     MemoryAllocation(InvalidMemoryAllocationError),
     FreezingThresholdOutOfRange { provided: candid::Nat },
     ReservedCyclesLimitOutOfRange { provided: candid::Nat },
+    WasmMemoryLimitOutOfRange { provided: candid::Nat },
 }
 
 impl From<UpdateSettingsError> for UserError {
@@ -260,6 +290,13 @@ impl From<UpdateSettingsError> for UserError {
                     provided
                 ),
             ),
+            UpdateSettingsError::WasmMemoryLimitOutOfRange { provided } => UserError::new(
+                ErrorCode::CanisterContractViolation,
+                format!(
+                    "Wasm memory limit expected to be in the range of [0..2^64-1], got {}",
+                    provided
+                ),
+            ),
         }
     }
 }
@@ -285,6 +322,7 @@ pub(crate) struct ValidatedCanisterSettings {
     reserved_cycles_limit: Option<Cycles>,
     reservation_cycles: Cycles,
     log_visibility: Option<LogVisibility>,
+    wasm_memory_limit: Option<NumBytes>,
 }
 
 impl ValidatedCanisterSettings {
@@ -318,6 +356,10 @@ impl ValidatedCanisterSettings {
 
     pub fn log_visibility(&self) -> Option<LogVisibility> {
         self.log_visibility
+    }
+
+    pub fn wasm_memory_limit(&self) -> Option<NumBytes> {
+        self.wasm_memory_limit
     }
 }
 
@@ -516,5 +558,6 @@ pub(crate) fn validate_canister_settings(
         reserved_cycles_limit: settings.reserved_cycles_limit(),
         reservation_cycles,
         log_visibility: settings.log_visibility(),
+        wasm_memory_limit: settings.wasm_memory_limit(),
     })
 }

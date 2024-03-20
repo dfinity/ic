@@ -8,18 +8,20 @@ use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
 };
 use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
-use ic_nns_governance::pb::v1::{
-    governance_error::ErrorType,
-    manage_neuron::{Command, Merge, NeuronIdOrSubaccount, Spawn},
-    manage_neuron_response::{
-        Command as CommandResponse, {self},
+use ic_nns_governance::{
+    init::{TEST_NEURON_1_ID, TEST_NEURON_2_ID},
+    pb::v1::{
+        governance_error::ErrorType,
+        manage_neuron::{Command, Merge, NeuronIdOrSubaccount, Spawn},
+        manage_neuron_response::{
+            Command as CommandResponse, {self},
+        },
+        neuron::DissolveState,
+        GovernanceError, ManageNeuron, ManageNeuronResponse, Neuron, NeuronState,
     },
-    neuron::DissolveState,
-    GovernanceError, ManageNeuron, ManageNeuronResponse, Neuron, NeuronState,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    ids::{TEST_NEURON_1_ID, TEST_NEURON_2_ID},
     itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
     state_test_helpers::{
         list_neurons, nns_add_hot_key, nns_join_community_fund, nns_leave_community_fund,

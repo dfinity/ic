@@ -1,0 +1,20 @@
+[package]
+name = "ic-test-utilities-consensus"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+bincode = "1.2.1"
+ic-base-types = { path = "../../types/base_types" }
+ic-crypto-test-utils-ni-dkg = { path = "../../crypto/test_utils/ni-dkg" }
+ic-interfaces = { path = "../../interfaces" }
+ic-protobuf = { path = "../../protobuf" }
+ic-test-utilities-types = { path = "../types" }
+ic-types = { path = "../../types/types" }
+mockall = { workspace = true }
+phantom_newtype = { path = "../../phantom_newtype" }
+prost = { workspace = true }
+serde = { workspace = true }

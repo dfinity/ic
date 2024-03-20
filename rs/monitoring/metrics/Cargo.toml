@@ -12,7 +12,7 @@ ic-adapter-metrics = { path = "../adapter_metrics" }
 libc = "0.2.91"
 prometheus = { workspace = true }
 tokio = { workspace = true }
-tokio-metrics = "0.3.0"
+tokio-metrics = { workspace = true }
 
 [dev-dependencies]
 ic-logger = { path = "../logger" }

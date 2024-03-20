@@ -19,14 +19,14 @@ use ic_embedders::{
     CompilationCache, CompilationResult, WasmExecutionInput,
 };
 use ic_error_types::UserError;
-use ic_ic00_types::{
-    CanisterInstallMode, CanisterStatusType, EcdsaKeyId, InstallCodeArgs, Method, Payload, IC_00,
-};
 use ic_interfaces::execution_environment::{
     ExecutionRoundType, HypervisorError, HypervisorResult, IngressHistoryWriter, InstanceStats,
     RegistryExecutionSettings, Scheduler, SystemApiCallCounters, WasmExecutionOutput,
 };
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
+use ic_management_canister_types::{
+    CanisterInstallMode, CanisterStatusType, EcdsaKeyId, InstallCodeArgs, Method, Payload, IC_00,
+};
 use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
@@ -40,19 +40,19 @@ use ic_system_api::{
     sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateChanges},
     ApiType, ExecutionParameters,
 };
-use ic_test_utilities::{
-    state::CanisterStateBuilder,
-    types::{
-        ids::{canister_test_id, subnet_test_id, user_test_id},
-        messages::{RequestBuilder, SignedIngressBuilder},
-    },
-};
 use ic_test_utilities_execution_environment::{generate_subnets, test_registry_settings};
+use ic_test_utilities_state::CanisterStateBuilder;
+use ic_test_utilities_types::{
+    ids::{canister_test_id, subnet_test_id, user_test_id},
+    messages::{RequestBuilder, SignedIngressBuilder},
+};
 use ic_types::{
     consensus::ecdsa::QuadrupleId,
     crypto::{canister_threshold_sig::MasterEcdsaPublicKey, AlgorithmId},
     ingress::{IngressState, IngressStatus},
-    messages::{CallContextId, Ingress, MessageId, Request, RequestOrResponse, Response},
+    messages::{
+        CallContextId, Ingress, MessageId, Request, RequestOrResponse, Response, NO_DEADLINE,
+    },
     methods::{Callback, FuncRef, SystemMethod, WasmClosure, WasmMethod},
     CanisterTimer, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation, NumInstructions,
     Randomness, Time, UserId,
@@ -475,6 +475,7 @@ impl SchedulerTest {
             self.ecdsa_subnet_public_keys.clone(),
             self.ecdsa_quadruple_ids.clone(),
             self.round,
+            None,
             round_type,
             self.registry_settings(),
         );
@@ -1081,6 +1082,7 @@ impl TestWasmExecutorCore {
                 allocated_message_bytes: NumBytes::from(0),
                 instance_stats: InstanceStats::default(),
                 system_api_call_counters: SystemApiCallCounters::default(),
+                canister_log: Default::default(),
             };
             self.schedule
                 .push((self.round, canister_id, instructions_to_execute));
@@ -1126,6 +1128,7 @@ impl TestWasmExecutorCore {
             num_instructions_left: instructions_left,
             instance_stats,
             system_api_call_counters: SystemApiCallCounters::default(),
+            canister_log: Default::default(),
         };
         self.schedule
             .push((self.round, canister_id, instructions_to_execute));
@@ -1211,6 +1214,7 @@ impl TestWasmExecutorCore {
         let prepayment_for_response_transmission = self
             .cycles_account_manager
             .prepayment_for_response_transmission(self.subnet_size);
+        let deadline = NO_DEADLINE;
         let callback = system_state
             .register_callback(Callback {
                 call_context_id,
@@ -1222,6 +1226,7 @@ impl TestWasmExecutorCore {
                 on_reply: closure.clone(),
                 on_reject: closure,
                 on_cleanup: None,
+                deadline,
             })
             .map_err(|err| err.to_string())?;
         let request = Request {
@@ -1232,6 +1237,7 @@ impl TestWasmExecutorCore {
             method_name: "update".into(),
             method_payload: encode_message_id_as_payload(call_message_id),
             metadata: None,
+            deadline,
         };
         if let Err(req) = system_state.push_output_request(
             canister_current_memory_usage,

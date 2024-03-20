@@ -3,10 +3,10 @@ use assert_matches::assert_matches;
 use ic_crypto_test_utils_ni_dkg::{
     dummy_transcript_for_tests, dummy_transcript_for_tests_with_params,
 };
-use ic_ic00_types::{EcdsaCurve, EcdsaKeyId};
 use ic_interfaces_registry::RegistryValue;
 use ic_interfaces_state_manager::StateReader;
 use ic_interfaces_state_manager_mocks::MockStateManager;
+use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId};
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_protobuf::registry::subnet::v1::SubnetRecord as SubnetRecordProto;
 use ic_protobuf::registry::{
@@ -20,17 +20,14 @@ use ic_registry_proto_data_provider::{ProtoRegistryDataProvider, ProtoRegistryDa
 use ic_registry_routing_table::{routing_table_insert_subnet, CanisterMigrations, RoutingTable};
 use ic_registry_subnet_features::EcdsaConfig;
 use ic_test_utilities::state_manager::FakeStateManager;
-use ic_test_utilities::{
-    notification::{Notification, WaitResult},
-    state::CanisterStateBuilder,
-    types::{
-        batch::BatchBuilder,
-        ids::{canister_test_id, node_test_id, subnet_test_id},
-    },
-};
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{fetch_int_counter_vec, metric_vec};
 use ic_test_utilities_registry::SubnetRecordBuilder;
+use ic_test_utilities_state::CanisterStateBuilder;
+use ic_test_utilities_types::{
+    batch::BatchBuilder,
+    ids::{canister_test_id, node_test_id, subnet_test_id},
+};
 use ic_types::batch::BlockmakerMetrics;
 use ic_types::{
     batch::{Batch, BatchMessages},
@@ -61,8 +58,144 @@ fn assert_deliver_batch_count_eq(
     );
 }
 
+mod notification {
+    use std::sync::{Condvar, Mutex};
+    use std::time::Duration;
+
+    /// One-off notification that can be used to synchronize two threads.
+    ///
+    /// ```no_run
+    /// use notification::{Notification, WaitResult};
+    /// use std::sync::Arc;
+    /// use std::thread;
+    /// use std::time::Duration;
+    ///
+    /// let notification = Arc::new(Notification::new());
+    /// let handle = thread::spawn({
+    ///     let notification = Arc::clone(&notification);
+    ///     move || {
+    ///         assert_eq!(
+    ///             notification.wait_with_timeout(Duration::from_secs(10)),
+    ///             WaitResult::Notified(()),
+    ///         );
+    ///     }
+    /// });
+    /// notification.notify(());
+    /// handle.join().unwrap();
+    /// ```
+    pub struct Notification<T> {
+        mutex: Mutex<Option<T>>,
+        condvar: Condvar,
+    }
+
+    /// The result of the `wait_with_timeout` call.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+    pub enum WaitResult<T> {
+        Notified(T),
+        TimedOut,
+    }
+
+    impl<T> Default for Notification<T> {
+        fn default() -> Self {
+            Self {
+                mutex: Mutex::new(None),
+                condvar: Condvar::new(),
+            }
+        }
+    }
+
+    impl<T> Notification<T>
+    where
+        T: Clone + std::fmt::Debug + PartialEq,
+    {
+        /// Create a new notification that is not raised.
+        pub fn new() -> Self {
+            Self::default()
+        }
+
+        /// Set the notification to the raised state. Once notification is
+        /// saturated, it stays saturated forever, there is no way to reset it.
+        ///
+        /// # Panics
+        ///
+        /// Panics if `notify` is called twice with different values.
+        pub fn notify(&self, value: T) {
+            {
+                let mut guard = self.mutex.lock().unwrap();
+                if let Some(ref old_value) = *guard {
+                    if value != *old_value {
+                        panic!(
+                            "Notified twice with different values: first {:?}, then {:?}",
+                            old_value, value
+                        );
+                    } else {
+                        return;
+                    }
+                }
+                *guard = Some(value);
+            }
+            self.condvar.notify_all();
+        }
+
+        /// Wait for another thread to call `notify`, but no longer than
+        /// `duration`.
+        ///
+        /// Returns `WaitResult::Notified(T)` if the notification was raised and
+        /// `WaitResult::TimedOut` if it didn't happen within `duration`.
+        pub fn wait_with_timeout(&self, duration: Duration) -> WaitResult<T> {
+            let guard = self.mutex.lock().unwrap();
+
+            if let Some(ref value) = *guard {
+                return WaitResult::Notified(value.clone());
+            }
+
+            let (guard, _result) = self.condvar.wait_timeout(guard, duration).unwrap();
+            match *guard {
+                Some(ref value) => WaitResult::Notified(value.clone()),
+                None => WaitResult::TimedOut,
+            }
+        }
+    }
+
+    #[test]
+    fn test_single_threaded_notification() {
+        let notification = Notification::<i32>::new();
+        assert_eq!(
+            notification.wait_with_timeout(Duration::from_millis(0)),
+            WaitResult::TimedOut
+        );
+
+        notification.notify(1);
+        assert_eq!(
+            notification.wait_with_timeout(Duration::from_millis(0)),
+            WaitResult::Notified(1)
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "first 1, then 2")]
+    fn test_panics_on_incompatible_notify() {
+        let notification = Notification::<i32>::new();
+        notification.notify(1);
+        notification.notify(2);
+    }
+
+    #[test]
+    fn test_notify_same_value_twice_does_not_panic() {
+        let notification = Notification::<i32>::new();
+        notification.notify(1);
+        notification.notify(1);
+        assert_eq!(
+            notification.wait_with_timeout(Duration::from_millis(0)),
+            WaitResult::Notified(1)
+        );
+    }
+}
+
 #[test]
 fn message_routing_does_not_block() {
+    use notification::{Notification, WaitResult};
+
     with_test_replica_logger(|log| {
         let timeout = Duration::from_secs(10);
 
@@ -577,7 +710,6 @@ fn try_to_read_registry(
 #[test]
 fn try_read_registry_succeeds_with_fully_specified_registry_records() {
     with_test_replica_logger(|log| {
-        use ic_crypto_internal_basic_sig_ed25519::{public_key_to_der, types::PublicKeyBytes};
         use Integrity::*;
 
         // Own subnet characteristics.
@@ -653,14 +785,20 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
         let dummy_node_key_1 = PublicKeyProto {
             version: 0,
             algorithm: AlgorithmId::Ed25519 as i32,
-            key_value: [1; 32].to_vec(),
+            key_value: vec![
+                194, 4, 63, 12, 39, 41, 96, 171, 151, 5, 92, 5, 93, 46, 7, 29, 26, 73, 51, 85, 118,
+                76, 74, 0, 82, 39, 82, 75, 0, 45, 238, 3,
+            ],
             proof_data: None,
             timestamp: None,
         };
         let dummy_node_key_2 = PublicKeyProto {
             version: 0,
             algorithm: AlgorithmId::Ed25519 as i32,
-            key_value: [2; 32].to_vec(),
+            key_value: vec![
+                85, 122, 95, 50, 59, 92, 34, 104, 48, 6, 2, 64, 1, 8, 116, 27, 56, 8, 62, 96, 92,
+                28, 26, 52, 12, 45, 64, 17, 6, 20, 104, 8,
+            ],
             proof_data: None,
             timestamp: None,
         };
@@ -812,10 +950,10 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             (node_test_id(2), &dummy_node_key_2),
         ] {
             assert_eq!(
-                &public_key_to_der(
-                    PublicKeyBytes::try_from(public_key).expect("invalid public key")
-                ),
-                node_public_keys.get(&node_id).unwrap(),
+                ic_crypto_ed25519::PublicKey::deserialize_raw(&public_key.key_value)
+                    .expect("invalid public key")
+                    .serialize_rfc8410_der(),
+                *node_public_keys.get(&node_id).unwrap(),
             );
         }
 
@@ -865,6 +1003,7 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
         );
         batch_processor.process_batch(Batch {
             batch_number: height.increment().increment(),
+            next_checkpoint_height: None,
             requires_full_state_hash: false,
             messages: BatchMessages::default(),
             randomness: Randomness::new([123; 32]),
@@ -1177,7 +1316,6 @@ fn try_to_read_registry_returns_errors_for_corrupted_records() {
 #[test]
 fn try_read_registry_can_skip_missing_or_invalid_node_public_keys() {
     with_test_replica_logger(|log| {
-        use ic_crypto_internal_basic_sig_ed25519::{public_key_to_der, types::PublicKeyBytes};
         use Integrity::*;
 
         let own_subnet_id = subnet_test_id(13);
@@ -1217,7 +1355,10 @@ fn try_read_registry_can_skip_missing_or_invalid_node_public_keys() {
         let valid_node_key = PublicKeyProto {
             version: 0,
             algorithm: AlgorithmId::Ed25519 as i32,
-            key_value: [0; 32].to_vec(),
+            key_value: vec![
+                5, 33, 1, 58, 103, 6, 147, 39, 52, 223, 50, 129, 91, 4, 116, 88, 204, 9, 15, 8, 0,
+                86, 1, 18, 53, 51, 73, 136, 89, 73, 171, 53,
+            ],
             proof_data: None,
             timestamp: None,
         };
@@ -1255,10 +1396,10 @@ fn try_read_registry_can_skip_missing_or_invalid_node_public_keys() {
         assert!(!node_public_keys.contains_key(&node_test_id(1)));
         assert!(!node_public_keys.contains_key(&node_test_id(2)));
         assert_eq!(
-            &public_key_to_der(
-                PublicKeyBytes::try_from(&valid_node_key).expect("invalid public key")
-            ),
-            node_public_keys.get(&node_test_id(3)).unwrap(),
+            ic_crypto_ed25519::PublicKey::deserialize_raw(&valid_node_key.key_value)
+                .expect("invalid public key")
+                .serialize_rfc8410_der(),
+            *node_public_keys.get(&node_test_id(3)).unwrap(),
         );
     });
 }
@@ -1605,14 +1746,20 @@ fn process_batch_updates_subnet_metrics() {
         let dummy_node_key_1 = PublicKeyProto {
             version: 0,
             algorithm: AlgorithmId::Ed25519 as i32,
-            key_value: [1; 32].to_vec(),
+            key_value: vec![
+                14, 52, 33, 2, 5, 208, 188, 227, 25, 91, 30, 79, 70, 187, 95, 199, 50, 5, 99, 11,
+                66, 19, 2, 94, 30, 40, 3, 51, 32, 79, 197, 9,
+            ],
             proof_data: None,
             timestamp: None,
         };
         let dummy_node_key_2 = PublicKeyProto {
             version: 0,
             algorithm: AlgorithmId::Ed25519 as i32,
-            key_value: [2; 32].to_vec(),
+            key_value: vec![
+                5, 33, 1, 58, 103, 6, 147, 39, 52, 223, 50, 129, 91, 4, 116, 88, 204, 9, 15, 8, 0,
+                86, 1, 18, 53, 51, 73, 136, 89, 73, 171, 53,
+            ],
             proof_data: None,
             timestamp: None,
         };
@@ -1647,6 +1794,7 @@ fn process_batch_updates_subnet_metrics() {
 
         batch_processor.process_batch(Batch {
             batch_number: height.increment().increment(),
+            next_checkpoint_height: None,
             requires_full_state_hash: false,
             messages: BatchMessages::default(),
             randomness: Randomness::new([123; 32]),

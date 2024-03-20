@@ -133,7 +133,9 @@ impl From<&SubnetRecordProto> for SubnetRecord {
 /// Ipv4 is parsed into Ipv4Addr. Other fields are omitted for now.
 #[derive(Serialize, Clone)]
 pub(crate) struct IPv4Interface {
-    pub ipv4: Ipv4Addr,
+    pub address: Ipv4Addr,
+    pub gateways: Vec<Ipv4Addr>,
+    pub prefix_length: u32,
 }
 
 /// Encapsulates a node/node operator id pair.
@@ -145,15 +147,22 @@ pub(crate) struct NodeDetails {
     pub node_provider_id: PrincipalId,
     pub dc_id: String,
     pub hostos_version_id: Option<String>,
+    pub domain: Option<String>,
 }
 
 impl From<IPv4InterfaceConfig> for IPv4Interface {
     fn from(value: IPv4InterfaceConfig) -> Self {
         Self {
-            ipv4: value
+            address: value
                 .ip_addr
                 .parse::<Ipv4Addr>()
                 .expect("couldn't parse ipv4 address"),
+            gateways: value
+                .gateway_ip_addr
+                .into_iter()
+                .map(|s| s.parse::<Ipv4Addr>().expect("couldn't parse ipv4 address"))
+                .collect(),
+            prefix_length: value.prefix_length,
         }
     }
 }

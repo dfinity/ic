@@ -4,11 +4,13 @@ mod cbor;
 pub mod checked_amount;
 pub mod deposit;
 pub mod endpoints;
+pub mod erc20;
 pub mod eth_logs;
 pub mod eth_rpc;
 pub mod eth_rpc_client;
 pub mod eth_rpc_error;
 pub mod guard;
+pub mod ledger_client;
 pub mod lifecycle;
 pub mod logs;
 pub mod management;
@@ -20,6 +22,8 @@ pub mod storage;
 pub mod tx;
 pub mod withdraw;
 
+#[cfg(test)]
+pub mod test_fixtures;
 #[cfg(test)]
 mod tests;
 

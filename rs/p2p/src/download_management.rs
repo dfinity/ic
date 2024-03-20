@@ -991,15 +991,11 @@ pub mod tests {
     use ic_metrics::MetricsRegistry;
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_client_helpers::subnet::SubnetTransportRegistry;
-    use ic_test_utilities::consensus::fake::FakeSigner;
     use ic_test_utilities::port_allocation::allocate_ports;
-    use ic_test_utilities::{
-        consensus::{fake::*, make_genesis},
-        p2p::*,
-        thread_transport::*,
-        types::ids::{node_test_id, subnet_test_id},
-    };
+    use ic_test_utilities::{p2p::*, thread_transport::*};
+    use ic_test_utilities_consensus::{fake::*, make_genesis};
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::consensus::dkg::{DealingContent, DkgMessageId, Message as DkgMessage};
     use ic_types::crypto::{
         threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetSubnet},

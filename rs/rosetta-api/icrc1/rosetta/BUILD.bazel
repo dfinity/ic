@@ -1,3 +1,8 @@
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@io_bazel_rules_docker//container:container.bzl", "container_image", "container_push")
+load("@io_bazel_rules_docker//contrib:passwd.bzl", "passwd_entry", "passwd_file")
+load("@rules_pkg//:pkg.bzl", "pkg_tar")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_mkdirs")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 
@@ -16,7 +21,7 @@ DEPENDENCIES = [
     "@crate_index//:serde_with",
     "@crate_index//:axum",
     "@crate_index//:tempfile",
-    "@crate_index//:clap_4_0_0",  # no clap because feature derive
+    "@crate_index//:clap",  # no clap because feature derive
     "@crate_index//:tokio",
     "@crate_index//:proptest",
     "@crate_index//:hex",
@@ -26,17 +31,22 @@ DEPENDENCIES = [
     "@crate_index//:url",
     "@crate_index//:http",
     "@crate_index//:tower-http",
+    "@crate_index//:ic-certification",
     "@crate_index//:tower-request-id",
     "@crate_index//:tracing",
     "@crate_index//:indicatif",
     "@crate_index//:strum",
     "@crate_index//:tracing-subscriber",
     "@crate_index//:num-bigint",
+    "@crate_index//:reqwest",
+    "@crate_index//:tracing-appender",
+    "@crate_index//:rolling-file",
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//packages/icrc-ledger-agent:icrc_ledger_agent",
     "//rs/rosetta-api",
     "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
     "//rs/rosetta-api/icrc1",
+    "//rs/constants",
     "//rs/rosetta-api/icrc1/ledger",
     "//rs/rosetta-api/icrc1/tokens_u64",
     "//rs/rosetta-api/icrc1/tokens_u256",
@@ -50,7 +60,7 @@ DEPENDENCIES = [
 DEV_DEPENDENCIES = [
     "//packages/ic-starter-tests",
     "//rs/test_utilities/load_wasm",
-    "//rs/types/ic00_types",
+    "//rs/types/management_canister_types",
     "//rs/rosetta-api/icrc1/test_utils",
     "//rs/rosetta-api/icrc1/ledger/sm-tests",
     "//rs/rosetta-api/icrc1/rosetta/client:ic-icrc-rosetta-client",
@@ -61,7 +71,6 @@ DEV_DEPENDENCIES = [
     "@crate_index//:futures",
     "@crate_index//:ring",
     "@crate_index//:once_cell",
-    "@crate_index//:reqwest",
 ]
 
 MACRO_DEPENDENCIES = [
@@ -97,6 +106,7 @@ rust_binary(
 
 rust_test(
     name = "ic-icrc-rosetta-unit-tests",
+    size = "large",
     aliases = ALIASES,
     crate = ":ic-icrc-rosetta",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
@@ -110,6 +120,7 @@ LOCAL_REPLICA_DATA = [
     "//rs/rosetta-api/icrc1/archive:archive_canister",
     "//rs/rosetta-api/icrc1/ledger:ledger_canister",
     "//rs/rosetta-api/icrc1/rosetta:ic-icrc-rosetta-bin",
+    "//rs/rosetta-api/icrc1/rosetta/client:ic-icrc-rosetta-client-bin",
     "//rs/starter:ic-starter",
 ]
 
@@ -121,6 +132,7 @@ LOCAL_REPLICA_ENV = {
     "ROSETTA_BIN_PATH": "$(rootpath //rs/rosetta-api/icrc1/rosetta:ic-icrc-rosetta-bin)",
     "SANDBOX_LAUNCHER": "$(rootpath //rs/canister_sandbox:sandbox_launcher)",
     "STARTER_BIN": "$(rootpath //rs/starter:ic-starter)",
+    "ROSETTA_CLIENT_BIN_PATH": "$(rootpath //rs/rosetta-api/icrc1/rosetta/client:ic-icrc-rosetta-client-bin)",
 }
 
 rust_test_suite_with_extra_srcs(
@@ -154,4 +166,111 @@ rust_test_suite_with_extra_srcs(
     ]),
     proc_macro_deps = MACRO_DEV_DEPENDENCIES,
     deps = DEV_DEPENDENCIES + DEPENDENCIES,
+)
+
+# Rosetta docker image
+
+## The text file with the release version
+
+write_file(
+    name = "version",
+    out = "version.txt",
+    content = [ROSETTA_VERSION],
+)
+
+## Create a layer with a rosetta user
+passwd_entry(
+    name = "root_user",
+    uid = 0,
+    username = "root",
+)
+
+passwd_entry(
+    name = "ic_icrc_rosetta_user",
+    home = "/home/ic_icrc_rosetta",
+    info = "icrc rosetta node user",
+    uid = 1002,
+    username = "ic_icrc_rosetta",
+)
+
+passwd_file(
+    name = "passwd",
+    entries = [
+        ":ic_icrc_rosetta_user",
+        ":root_user",
+    ],
+)
+
+pkg_tar(
+    name = "passwd_tar",
+    srcs = [":passwd"],
+    mode = "0644",
+    package_dir = "etc",
+)
+
+pkg_mkdirs(
+    name = "data_dir",
+    # Unfortunately, rules_docker does not preserve the file ownership:
+    # https://github.com/bazelbuild/rules_docker/issues/1928
+    #
+    # We make the /data directory rwx for everyone so that "rosetta"
+    # user could write to that directory.
+    attributes = pkg_attributes(
+        mode = "0777",
+        user = "ic_icrc_rosetta",
+    ),
+    dirs = [
+        "/home/ic_icrc_rosetta/log",
+        "/data",
+    ],
+)
+
+pkg_tar(
+    name = "data_tar",
+    srcs = [":data_dir"],
+)
+
+## An intermediate image with the passwd file and empty directories.
+
+container_image(
+    name = "ic_icrc_rosetta_image_base",
+    base = "@rust_base//image",
+    tags = ["manual"],
+    tars = [
+        ":passwd_tar",
+        ":data_tar",
+    ],
+)
+
+## The final image we can publish.
+
+container_image(
+    name = "ic_icrc_rosetta_image",
+    base = ":ic_icrc_rosetta_image_base",
+    directory = "/home/ic_icrc_rosetta",
+    entrypoint = [
+        "/home/ic_icrc_rosetta/ic-icrc-rosetta-bin",
+        "--store-file",
+        "/data/db.sqlite",
+    ],
+    files = [
+        ":ic-icrc-rosetta-bin",
+    ],
+    ports = ["8080"],
+    tags = ["manual"],
+    user = "ic_icrc_rosetta",
+    workdir = "/home/ic_icrc_rosetta",
+)
+
+## Run this target with --embed_label flag[1] to specify the image tag.
+## [1]: https://bazel.build/reference/command-line-reference#flag--embed_label
+
+container_push(
+    name = "push_ic_icrc_rosetta_image",
+    format = "Docker",
+    image = ":ic_icrc_rosetta_image",
+    registry = "index.docker.io",
+    repository = "dfinity/ic-icrc-rosetta-api",
+    tag = "{BUILD_EMBED_LABEL}",
+    tags = ["manual"],
 )

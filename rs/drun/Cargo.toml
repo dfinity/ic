@@ -9,11 +9,12 @@ documentation.workspace = true
 [dependencies]
 ic-canister-sandbox-backend-lib = { path = "../canister_sandbox" }
 ic-config = { path = "../config" }
+ic-crypto-test-utils-ni-dkg = { path = "../crypto/test_utils/ni-dkg" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-error-types = { path = "../types/error_types" }
 ic-execution-environment = { path = "../execution_environment" }
 ic-http-endpoints-metrics = { path = "../http_endpoints/metrics" }
-ic-ic00-types = { path = "../types/ic00_types" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
 ic-messaging = { path = "../messaging" }
@@ -25,21 +26,25 @@ ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
 ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist" }
 ic-registry-routing-table = { path = "../registry/routing_table" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
+ic-state-machine-tests = { path = "../state_machine_tests" }
 ic-state-manager = { path = "../state_manager" }
 # This is usually supposed to be a dev-dependency. However, using it in `drun`
 # greatly simplifies the code that parses input messages to `SignedIngress`
 # messages that are delivered to Message Routing. `drun` is a tool that
 # is meant to be used mostly for testing anyway, so this dependency
 # should be fine.
-ic-test-utilities = { path = "../test_utilities" }
+ic-test-utilities-consensus = { path = "../test_utilities/consensus" }
 ic-test-utilities-registry = { path = "../test_utilities/registry" }
+ic-test-utilities-types = { path = "../test_utilities/types" }
 ic-types = { path = "../types/types" }
-clap = { workspace = true }
+clap = { version = "3.2.25", features = ["derive"] }
 hex = "0.4.2"
 slog = { workspace = true }
 slog-term = "2.6.0"
 tokio = { workspace = true }
 rand = "0.8"
+tower = { workspace = true }
+futures.workspace = true
 
 [[bin]]
 name = "drun"

@@ -6,17 +6,18 @@ use crate::execution::common::{
     ingress_status_with_processing_state, update_round_limits, validate_message,
 };
 use crate::execution_environment::{
-    ExecuteMessageResult, PausedExecution, RoundContext, RoundLimits,
+    log_dirty_pages, ExecuteMessageResult, PausedExecution, RoundContext, RoundLimits,
 };
 use crate::metrics::CallTreeMetrics;
 use ic_base_types::CanisterId;
+use ic_config::flag_status::FlagStatus;
 use ic_embedders::wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult};
 use ic_error_types::{ErrorCode, UserError};
-use ic_ic00_types::IC_00;
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, WasmExecutionOutput,
 };
 use ic_logger::{info, ReplicaLogger};
+use ic_management_canister_types::IC_00;
 use ic_replicated_state::{CallOrigin, CanisterState};
 use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::messages::{
@@ -43,6 +44,7 @@ pub fn execute_update(
     round_limits: &mut RoundLimits,
     subnet_size: usize,
     call_tree_metrics: &dyn CallTreeMetrics,
+    log_dirty_pages: FlagStatus,
 ) -> ExecuteMessageResult {
     let (clean_canister, prepaid_execution_cycles, resuming_aborted) =
         match prepaid_execution_cycles {
@@ -111,6 +113,7 @@ pub fn execute_update(
         request_metadata,
         freezing_threshold,
         canister_id: clean_canister.canister_id(),
+        log_dirty_pages,
     };
 
     let helper = match UpdateHelper::new(&clean_canister, &original) {
@@ -267,6 +270,7 @@ struct OriginalContext {
     request_metadata: RequestMetadata,
     freezing_threshold: Cycles,
     canister_id: CanisterId,
+    log_dirty_pages: FlagStatus,
 }
 
 /// Contains fields of `UpdateHelper` that are necessary for resuming an update
@@ -363,6 +367,7 @@ impl UpdateHelper {
         round_limits: &mut RoundLimits,
         call_tree_metrics: &dyn CallTreeMetrics,
     ) -> ExecuteMessageResult {
+        self.canister.append_log(&mut output.canister_log);
         self.canister
             .system_state
             .apply_ingress_induction_cycles_debit(
@@ -436,7 +441,7 @@ impl UpdateHelper {
                 .get()
                 .saturating_sub(output.num_instructions_left.get()),
         );
-        let action = self
+        let (action, call_context) = self
             .canister
             .system_state
             .call_context_manager_mut()
@@ -465,11 +470,24 @@ impl UpdateHelper {
             original.subnet_size,
             round.log,
         );
+
+        if original.log_dirty_pages == FlagStatus::Enabled {
+            log_dirty_pages(
+                round.log,
+                &original.canister_id,
+                &original.method.name(),
+                output.instance_stats.dirty_pages,
+                instructions_used,
+            );
+        }
+
         ExecuteMessageResult::Finished {
             canister: self.canister,
             response,
             instructions_used,
             heap_delta,
+            call_duration: call_context
+                .map(|call_context| round.time.saturating_duration_since(call_context.time())),
         }
     }
 

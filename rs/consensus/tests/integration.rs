@@ -8,8 +8,8 @@ use ic_consensus_utils::{membership::Membership, pool_reader::PoolReader};
 use ic_interfaces::consensus_pool::ConsensusPool;
 use ic_interfaces::messaging::MessageRouting;
 use ic_interfaces_registry::RegistryClient;
-use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
 use ic_test_utilities_time::FastForwardTimeSource;
+use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::malicious_flags::MaliciousFlags;
 use ic_types::{crypto::CryptoHash, replica_config::ReplicaConfig, Height};
 use rand::Rng;
@@ -247,6 +247,7 @@ fn run_test(
                     pool_config.clone(),
                     Arc::clone(&registry_client) as Arc<dyn RegistryClient>,
                     cup.clone(),
+                    time_source.clone(),
                 )
             })
             .collect();

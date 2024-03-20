@@ -5,3 +5,5 @@
 . https://dashboard.internetcomputer.org/proposal/126309[126309]: install ckETH ledger canister
 . https://dashboard.internetcomputer.org/proposal/126314[126314]: upgrade ckETH minter canister
 . https://dashboard.internetcomputer.org/proposal/126397[126397]: upgrade ckETH ledger canister
+. https://dashboard.internetcomputer.org/proposal/128083[128083]: upgrade ckETH minter canister
+. https://dashboard.internetcomputer.org/proposal/128365[128365]: upgrade ckETH minter canister

@@ -20,9 +20,10 @@ ic-nns-constants = { path = "../../../nns/constants" }
 ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
 ic-replicated-state = { path = "../../../replicated_state" }
 ic-system-api = { path = "../../../system_api" }
-ic-test-utilities = { path = "../../../test_utilities" }
 ic-test-utilities-execution-environment = { path = "../../../test_utilities/execution_environment" }
+ic-test-utilities-state = { path = "../../../test_utilities/state" }
 ic-test-utilities-time = { path = "../../../test_utilities/time" }
+ic-test-utilities-types = { path = "../../../test_utilities/types" }
 ic-types = { path = "../../../types/types" }
 ic-wasm-types = { path = "../../../types/wasm_types" }
 lazy_static = "1.4.0"

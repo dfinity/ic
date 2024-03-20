@@ -42,10 +42,12 @@ const TEST_TARGET_HEAP_SIZE_IN_NUM_PAGES: usize = (MAX_POSSIBLE_HEAP_SIZE_IN_PAG
 /// Total number of neurons the governance will have.
 const TEST_NUM_NEURONS: u64 = MAX_NUMBER_OF_NEURONS as u64;
 
-/// Number of settled proposals to keep, per topic. Settled proposals have empty
-/// `ballots` list.
-const TEST_NUM_SETTLED_PROPOSALS_PER_TOPIC: usize =
-    NetworkEconomics::with_default_values().max_proposals_to_keep_per_topic as usize;
+lazy_static! {
+    /// Number of settled proposals to keep, per topic. Settled proposals have empty
+    /// `ballots` list.
+    static ref TEST_NUM_SETTLED_PROPOSALS_PER_TOPIC: usize =
+        NetworkEconomics::with_default_values().max_proposals_to_keep_per_topic as usize;
+}
 
 /// Number of open proposals. Open proposals will have a `ballot` for each
 /// neuron.
@@ -174,7 +176,7 @@ fn populate_canister_state() {
     );
 
     let mut proposal_id = 0_u64;
-    for _ in 0..TEST_NUM_SETTLED_PROPOSALS_PER_TOPIC {
+    for _ in 0..*TEST_NUM_SETTLED_PROPOSALS_PER_TOPIC {
         for topic in topic_iterator() {
             // Closed proposals don't have ballots
             proto
@@ -317,7 +319,7 @@ fn allocate_proposal_data(with_ballots: bool, topic: Topic) -> ProposalData {
             title: Some(['t'; 256].iter().collect()), /* 256 bytes upper limit copied from the
                                                        * type
                                                        * definition. */
-            summary: ['a'; 15000].iter().collect(), /* 15000-bytes upper limit copied from type
+            summary: ['a'; 30000].iter().collect(), /* 30000-bytes upper limit copied from type
                                                      * definition */
             url: ['a'; 2000].iter().collect(), // 2000-bytes upper limit copied from type definition
             action: Some(Action::Motion(Motion {

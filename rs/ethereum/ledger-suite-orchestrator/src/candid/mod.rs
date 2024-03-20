@@ -13,15 +13,32 @@ pub enum OrchestratorArg {
 }
 
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct InitArg {}
+pub struct InitArg {
+    pub more_controller_ids: Vec<Principal>,
+    pub minter_id: Option<Principal>,
+}
 
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct UpgradeArg {}
+pub struct UpgradeArg {
+    pub git_commit_hash: Option<String>,
+    pub ledger_compressed_wasm_hash: Option<String>,
+    pub index_compressed_wasm_hash: Option<String>,
+    pub archive_compressed_wasm_hash: Option<String>,
+}
+
+impl UpgradeArg {
+    pub fn upgrade_icrc1_ledger_suite(&self) -> bool {
+        self.ledger_compressed_wasm_hash.is_some()
+            || self.index_compressed_wasm_hash.is_some()
+            || self.archive_compressed_wasm_hash.is_some()
+    }
+}
 
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct AddErc20Arg {
     pub contract: Erc20Contract,
     pub ledger_init_arg: LedgerInitArg,
+    pub git_commit_hash: String,
     pub ledger_compressed_wasm_hash: String,
     pub index_compressed_wasm_hash: String,
 }
@@ -100,4 +117,13 @@ impl Display for ManagedCanisterIds {
             )
             .finish()
     }
+}
+
+// TODO XC-47: extract type to separate crate since used between ckETH minter and LSO
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
+pub struct AddCkErc20Token {
+    pub chain_id: Nat,
+    pub address: String,
+    pub ckerc20_token_symbol: String,
+    pub ckerc20_ledger_id: Principal,
 }

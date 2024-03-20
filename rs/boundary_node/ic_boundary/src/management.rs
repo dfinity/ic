@@ -6,14 +6,14 @@ use candid::{CandidType, Decode};
 use http::Request;
 use ic_btc_interface::{Network as BitcoinNetwork, NetworkInRequest};
 use ic_config::execution_environment::{BITCOIN_MAINNET_CANISTER_ID, BITCOIN_TESTNET_CANISTER_ID};
-use ic_ic00_types::QueryMethod;
+use ic_management_canister_types::QueryMethod;
 use ic_types::CanisterId;
 use lazy_static::lazy_static;
 use ratelimit::Ratelimiter;
 use serde::Deserialize;
 
 use crate::{
-    core::MANAGEMENT_CANISTER_ID_PRINCIPAL,
+    core::{decoder_config, MANAGEMENT_CANISTER_ID_PRINCIPAL},
     routes::{ApiError, ErrorCause, RateLimitCause, RequestContext, RequestType},
 };
 
@@ -88,7 +88,8 @@ struct BitcoinNetworkRecord {
 
 fn extract_btc_network(ctx: &RequestContext) -> Result<BitcoinNetwork, Error> {
     let arg = ctx.arg.as_ref().ok_or_else(|| anyhow!("missing arg"))?;
-    let r = Decode!(arg, BitcoinNetworkRecord).context("failed to decode arg")?;
+    let r =
+        Decode!([decoder_config()]; arg, BitcoinNetworkRecord).context("failed to decode arg")?;
 
     Ok(r.network.into())
 }

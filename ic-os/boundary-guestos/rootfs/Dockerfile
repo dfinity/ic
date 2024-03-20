@@ -23,17 +23,6 @@ USER root:root
 
 WORKDIR /tmp
 
-# Download Nginx NJS Plugins
-ARG NGINX_NJS_PLUGINS_PROJECT_ID=38466408
-ARG NGINX_NJS_PLUGINS_REF_NAME=v1.0.2
-ARG NGINX_NJS_PLUGINS_GITLAB_READ_ONLY_CI_TOKEN=glpat-2s2iXys15ZmVpgdxok58
-
-RUN \
-    curl -sL -o njs-plugin-is-bot.js \
-        -H "Private-Token: ${NGINX_NJS_PLUGINS_GITLAB_READ_ONLY_CI_TOKEN}" \
-        https://gitlab.com/api/v4/projects/${NGINX_NJS_PLUGINS_PROJECT_ID}/jobs/artifacts/${NGINX_NJS_PLUGINS_REF_NAME}/raw/dist/njs-plugin-is-bot.js?job=build-plugins && \
-    echo "53d6febad8f2f14bbc649ad57acd998d942a1e9f96b68e3dd28b2bbe1fbadebd4357600092d6b44914c1b83e5745b15bb6ec6db1b4e1587b24bf45a14bbb8f3f  njs-plugin-is-bot.js" | shasum -c
-
 #
 # Second build stage:
 # - Construct base images with the differences between dev and prod (IC-OS root filesystem)
@@ -73,10 +62,6 @@ COPY etc /etc
 COPY --chmod=644 etc/hosts /etc/hosts
 COPY --chmod=644 etc/hostname /etc/hostname
 COPY --chmod=644 etc/resolv.conf /etc/resolv.conf
-
-# Install Nginx NJS Plugins
-COPY --from=download \
-    /tmp/njs-plugin-is-bot.js /etc/nginx/njs/
 
 # Update POSIX permissions in /etc/
 RUN find /etc -type d -exec chmod 0755 {} \+ && \
@@ -192,15 +177,6 @@ RUN \
     chown prober:prober /var/log/prober && \
     chmod 755 /var/log/prober
 
-# Setup denylist-updater
-RUN \
-    addgroup denylist-updater && \
-    adduser --system --disabled-password --shell /usr/sbin/nologin --no-create-home denylist-updater && \
-    adduser denylist-updater denylist-updater && \
-    mkdir -p /var/opt/nginx/denylist && \
-    chown denylist-updater:denylist-updater /var/opt/nginx/denylist && \
-    chmod 644 /var/opt/nginx/denylist
-
 # Install node_exporter
 RUN chown root:root /etc/node_exporter \
                     /usr/local/bin/node_exporter && \
@@ -253,7 +229,6 @@ RUN find /opt -type d -exec chmod 0755 {} \+ && \
 # Take care of nginx files
 RUN chmod 0755 /etc/nginx/* && \
     chmod 0644 /etc/nginx/nginx.conf && \
-    chmod 0644 /etc/nginx/modules-enabled/ngx_http_js_module.conf && \
     rm -rf /etc/nginx/conf.d/nginx-global.conf && \
     rm -rf /etc/nginx/conf.d/default.conf && \
     rm -rf /etc/nginx/sites-enabled/default && \

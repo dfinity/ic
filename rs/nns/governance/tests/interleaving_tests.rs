@@ -6,7 +6,9 @@ use common::{increase_dissolve_delay_raw, set_dissolve_delay_raw};
 use fixtures::{principal, NNSBuilder, NeuronBuilder, NNS};
 use futures::{channel::mpsc, future::FutureExt, StreamExt};
 use ic_nervous_system_common::{ledger::IcpLedger, E8};
-use ic_neurons_fund::{PolynomialMatchingFunction, SerializableFunction};
+use ic_neurons_fund::{
+    NeuronsFundParticipationLimits, PolynomialMatchingFunction, SerializableFunction,
+};
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_governance::{
     governance::{Environment, Governance},
@@ -22,6 +24,7 @@ use ic_sns_swap::pb::v1::Lifecycle;
 use ic_sns_wasm::pb::v1::DeployedSns;
 use icp_ledger::AccountIdentifier;
 use interleaving::{InterleavingTestLedger, LedgerControlMessage};
+use rust_decimal_macros::dec;
 use std::{
     pin::Pin,
     sync::{atomic, atomic::Ordering as AOrdering},
@@ -43,6 +46,7 @@ fn test_cant_increase_dissolve_delay_while_disbursing() {
 
     // We use channels to control how the disbursing and delay increase are
     // interleaved
+    #[allow(clippy::disallowed_methods)]
     let (tx, mut rx) = mpsc::unbounded::<LedgerControlMessage>();
     // Once we're done with disbursing, we will need to manually close the above
     // channel to terminate the test.
@@ -160,10 +164,19 @@ fn test_cant_interleave_calls_to_settle_neurons_fund() {
     let effective_direct_participation_icp_e8s = 100_000 * E8;
     let effective_nf_participation_icp_e8s = 5_015_003_742_481;
     let max_participant_icp_e8s = 100_000 * E8;
-    let matching_function =
-        PolynomialMatchingFunction::new(total_nf_maturity_equivalent_icp_e8s).unwrap();
+    let matching_function = PolynomialMatchingFunction::new(
+        total_nf_maturity_equivalent_icp_e8s,
+        NeuronsFundParticipationLimits {
+            max_theoretical_neurons_fund_participation_amount_icp: dec!(333_000.0),
+            contribution_threshold_icp: dec!(33_000.0),
+            one_third_participation_milestone_icp: dec!(100_000.0),
+            full_participation_milestone_icp: dec!(167_000.0),
+        },
+    )
+    .unwrap();
 
     // We use channels to control how the cals are interleaved
+    #[allow(clippy::disallowed_methods)]
     let (tx, mut rx) = mpsc::unbounded::<LedgerControlMessage>();
     // Once we're done with the successful settle, we will need to manually close the above
     // channel to terminate the test.

@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-anyhow = "1.0.31"
+anyhow = { workspace = true }
 ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
 tests = { path = "../.." }
 ic-mainnet-nns-recovery = { path = "../../nns/ic_mainnet_nns_recovery" }

@@ -1,7 +1,10 @@
 use super::*;
+use crate::StateManagerImpl;
+use ic_config::state_manager::Config;
 use ic_metrics::MetricsRegistry;
-use ic_replicated_state::page_map::TestPageAllocatorFileDescriptorImpl;
+use ic_test_utilities_consensus::fake::FakeVerifier;
 use ic_test_utilities_logger::with_test_replica_logger;
+use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types::{
     crypto::CryptoHash,
     state_sync::StateSyncVersion::{self, *},
@@ -14,7 +17,7 @@ const NUM_THREADS: u32 = 3;
 /// `IncompleteState`
 struct TestEnvironment {
     log: ReplicaLogger,
-    metrics: StateManagerMetrics,
+    state_sync: Arc<StateSync>,
     state_layout: StateLayout,
     cache: Arc<parking_lot::RwLock<StateSyncCache>>,
     _root_dir: TempDir,
@@ -24,17 +27,33 @@ impl TestEnvironment {
     fn new(log: ReplicaLogger) -> Self {
         let root_dir = tempfile::TempDir::new().expect("failed to create a temporary directory");
         let cache = Arc::new(parking_lot::RwLock::new(StateSyncCache::new(log.clone())));
-        let metrics = StateManagerMetrics::new(&MetricsRegistry::new(), log.clone());
-        let state_layout = StateLayout::try_new(
+        let state_sync_refs = StateSyncRefs {
+            active: Arc::new(parking_lot::RwLock::new(Default::default())),
+            cache: Arc::clone(&cache),
+        };
+
+        let config = Config::new(root_dir.path().into());
+        let state_manager = Arc::new(StateManagerImpl::new(
+            Arc::new(FakeVerifier::new()),
+            subnet_test_id(42),
+            SubnetType::Application,
             log.clone(),
-            root_dir.path().to_owned(),
             &MetricsRegistry::new(),
-        )
-        .unwrap();
+            &config,
+            None,
+            ic_types::malicious_flags::MaliciousFlags::default(),
+        ));
+
+        let state_layout = state_manager.state_layout.clone();
+        let state_sync = Arc::new(StateSync::new_for_testing(
+            state_manager,
+            state_sync_refs,
+            log.clone(),
+        ));
 
         Self {
             log,
-            metrics,
+            state_sync,
             state_layout,
             cache,
             _root_dir: root_dir,
@@ -67,23 +86,9 @@ fn fake_loading(
     (state, manifest, fetch_chunks, state_sync_file_group)
 }
 
-/// Creates a fake DownloadState::Completed for an empty state.
+/// Creates a fake DownloadState::Complete for an empty state.
 fn fake_complete() -> DownloadState {
-    let manifest = Manifest::new(StateSyncVersion::V0, vec![], vec![]);
-    let meta_manifest = MetaManifest {
-        version: StateSyncVersion::V0,
-        sub_manifest_hashes: vec![],
-    };
-    let artifact = StateSyncMessage {
-        height: Height::new(0),
-        root_hash: CryptoHashOfState::from(CryptoHash(vec![0; 32])),
-        checkpoint_root: PathBuf::new(),
-        manifest,
-        meta_manifest: Arc::new(meta_manifest),
-        state_sync_file_group: Default::default(),
-        malicious_flags: Default::default(),
-    };
-    DownloadState::Complete(Box::new(artifact))
+    DownloadState::Complete
 }
 
 fn ungroup_fetch_chunks(
@@ -111,23 +116,14 @@ fn incomplete_state_for_tests(
     state: DownloadState,
 ) -> IncompleteState {
     let hash = CryptoHashOfState::from(CryptoHash(vec![0; 32]));
-    let state_sync_refs = StateSyncRefs {
-        active: Arc::new(parking_lot::RwLock::new(Default::default())),
-        cache: Arc::clone(&env.cache),
-    };
-    let mut result = IncompleteState::new(
+    let mut result = IncompleteState::try_new(
         env.log.clone(),
         height,
         hash,
-        env.state_layout.clone(),
-        None,
-        env.metrics.clone(),
-        SubnetType::Application,
+        env.state_sync.clone(),
         Arc::new(Mutex::new(scoped_threadpool::Pool::new(NUM_THREADS))),
-        state_sync_refs,
-        Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
-        MaliciousFlags::default(),
-    );
+    )
+    .expect("there exists an ongoing state sync");
 
     // The constructor doesn't create the directory, it gets created when we receive
     // a manifest (in production), or later in this function (in tests)

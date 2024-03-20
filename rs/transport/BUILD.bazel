@@ -2,6 +2,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:defs.bzl", "rust_bench", "rust_test_suite_with_extra_srcs")
 
 package(default_visibility = [
+    "//rs/p2p:__subpackages__",
     "//rs/replica:__subpackages__",
     "//rs/transport:__subpackages__",
     "//rs/transport_test_client:__subpackages__",
@@ -11,7 +12,6 @@ DEPENDENCIES = [
     "//rs/async_utils",
     "//rs/config",
     "//rs/crypto/tls_interfaces",
-    "//rs/ic_os/sev",
     "//rs/interfaces/transport",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",

@@ -1,6 +1,4 @@
 use std::{
-    collections::HashMap,
-    io::{BufWriter, Write},
     path::{Component, Path, PathBuf},
     sync::{Arc, RwLock},
     time::Instant,
@@ -45,7 +43,6 @@ pub struct Persister {
     // Configuration
     certificates_path: PathBuf,
     configuration_path: PathBuf,
-    domain_mappings_path: PathBuf,
 }
 
 impl Persister {
@@ -53,13 +50,11 @@ impl Persister {
         renderer: Arc<dyn Render>,
         certificates_path: PathBuf,
         configuration_path: PathBuf,
-        domain_mappings_path: PathBuf,
     ) -> Self {
         Self {
             renderer,
             certificates_path,
             configuration_path,
-            domain_mappings_path,
         }
     }
 }
@@ -154,6 +149,7 @@ impl Persist for Persister {
                 self.renderer
                     .render(&Context {
                         name: &pkg.name,
+                        canister_id: pkg.canister.to_string().as_str(),
                         ssl_certificate_key_path: &ssl_certificate_key_path,
                         ssl_certificate_path: &ssl_certificate_path,
                     })
@@ -163,30 +159,6 @@ impl Persist for Persister {
 
         std::fs::write(&self.configuration_path, cfgs.join("\n"))
             .context("failed to write configuration")?;
-
-        // Domain mappings
-        let mut domains: HashMap<String, String> = HashMap::new();
-
-        pkgs.iter().for_each(|pkg| {
-            domains.insert(pkg.name.to_owned(), pkg.canister.to_string());
-        });
-
-        let cntnt = (|| {
-            let mut inner: Vec<u8> = Vec::new();
-            let mut buf = BufWriter::new(&mut inner);
-
-            buf.write_all("let domain_mappings = ".as_bytes())?;
-            serde_json::to_writer(&mut buf, &domains)?;
-            buf.write_all("; export default domain_mappings;".as_bytes())?;
-
-            buf.flush()?;
-            drop(buf);
-
-            Ok::<_, Error>(inner)
-        })()?;
-
-        std::fs::write(&self.domain_mappings_path, cntnt)
-            .context("failed to write domain mappings")?;
 
         Ok(PersistStatus::Completed)
     }
@@ -285,10 +257,9 @@ mod tests {
         let renderer = Renderer::new("{name}|{ssl_certificate_key_path}|{ssl_certificate_path}");
 
         let persister = Persister::new(
-            Arc::new(renderer),              // renderer
-            tmp_dir.path().join("certs"),    // certificates_path
-            tmp_dir.path().join("conf"),     // configuration_path
-            tmp_dir.path().join("mappings"), // domain_mappings_path
+            Arc::new(renderer),           // renderer
+            tmp_dir.path().join("certs"), // certificates_path
+            tmp_dir.path().join("conf"),  // configuration_path
         );
 
         // Run persister
@@ -324,12 +295,6 @@ mod tests {
                 tmp_dir.path().join("certs/test-key.pem").display(),
                 tmp_dir.path().join("certs/test.pem").display(),
             )
-        );
-
-        // Check mappings
-        assert_eq!(
-            std::fs::read_to_string(tmp_dir.path().join("mappings"))?,
-            "let domain_mappings = {\"test\":\"aaaaa-aa\"}; export default domain_mappings;",
         );
 
         Ok(())

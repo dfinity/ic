@@ -26,7 +26,7 @@ dfn_macro = { path = "../../../../rust_canisters/dfn_macro" }
 ic-base-types = { path = "../../../../types/base_types" }
 ic-canisters-http-types = { path = "../../../../rust_canisters/http_types" }
 ic-crypto-sha2 = { path = "../../../../crypto/sha2" }
-ic-ic00-types = { path = "../../../../types/ic00_types" }
+ic-management-canister-types = { path = "../../../../types/management_canister_types" }
 ic-metrics-encoder = "1"
 ic-nervous-system-clients = { path = "../../../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../../../nervous_system/common" }

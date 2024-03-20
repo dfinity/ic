@@ -33,6 +33,7 @@
 /// ┌──────┐   │                  │    ┌──────┐
 /// │ Node ├───┘                  └────┤ Node │
 /// └──────┘                           └──────┘
+use anyhow::anyhow;
 use async_trait::async_trait;
 use axum::{
     body::Body,
@@ -40,7 +41,7 @@ use axum::{
     Router,
 };
 use bytes::Bytes;
-use ic_quic_transport::{ConnId, SendError, Transport};
+use ic_quic_transport::{ConnId, Transport};
 use ic_types::NodeId;
 use std::{
     collections::HashMap,
@@ -93,6 +94,7 @@ pub struct TransportRouter {
 }
 
 impl TransportRouter {
+    #[allow(clippy::disallowed_methods)]
     pub fn new() -> Self {
         let (router_req_tx, mut router_req_rx) =
             unbounded_channel::<(Request<Bytes>, NodeId, oneshot::Sender<Response<Bytes>>)>();
@@ -133,6 +135,7 @@ impl TransportRouter {
     ) -> PeerTransport {
         // It is fine to use unbounded channel since ingestion rate is limited by
         // capacity and processing rate >> ingestion rate.
+        #[allow(clippy::disallowed_methods)]
         let (rpc_tx, mut rpc_rx) =
             unbounded_channel::<(Request<Bytes>, oneshot::Sender<Response<Bytes>>)>();
         self.peers
@@ -277,11 +280,9 @@ impl Transport for PeerTransport {
         &self,
         peer_id: &NodeId,
         mut request: Request<Bytes>,
-    ) -> Result<Response<Bytes>, SendError> {
+    ) -> Result<Response<Bytes>, anyhow::Error> {
         if peer_id == &self.node_id {
-            return Err(SendError::ConnectionUnavailable(
-                "Can't connect to self".to_string(),
-            ));
+            return Err(anyhow!("Can't connect to self"));
         }
 
         let (oneshot_tx, oneshot_rx) = oneshot::channel();
@@ -291,19 +292,15 @@ impl Transport for PeerTransport {
             .send((request, *peer_id, oneshot_tx))
             .is_err()
         {
-            return Err(SendError::ConnectionUnavailable(String::from(
-                "router channel closed",
-            )));
+            return Err(anyhow!("router channel closed"));
         }
         match oneshot_rx.await {
             Ok(r) => Ok(r),
-            Err(_) => Err(SendError::ConnectionUnavailable(String::from(
-                "channel closed",
-            ))),
+            Err(_) => Err(anyhow!("channel closed")),
         }
     }
 
-    async fn push(&self, peer_id: &NodeId, request: Request<Bytes>) -> Result<(), SendError> {
+    async fn push(&self, peer_id: &NodeId, request: Request<Bytes>) -> Result<(), anyhow::Error> {
         let _ = self.rpc(peer_id, request).await?;
         Ok(())
     }

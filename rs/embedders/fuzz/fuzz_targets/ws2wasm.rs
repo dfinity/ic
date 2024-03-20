@@ -3,14 +3,13 @@ use arbitrary::{Arbitrary, Unstructured};
 use clap::Parser;
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_logger::replica_logger::no_op_logger;
-use ic_wasm::ICWasmConfig;
+use ic_wasm::ICWasmModule;
 use std::fs::File;
 use std::io;
 use std::io::prelude::*;
 use std::io::BufReader;
 use std::path::PathBuf;
 use std::sync::Arc;
-use wasm_smith::ConfiguredModule;
 use wasmprinter::print_bytes;
 
 use ic_embedders::{
@@ -47,12 +46,12 @@ fn main() -> io::Result<()> {
 
     println!("Reading file at {}", ws_path.display());
 
-    if buffer.len() < <ConfiguredModule<ICWasmConfig> as Arbitrary>::size_hint(0).0 {
+    if buffer.len() < <ICWasmModule as Arbitrary>::size_hint(0).0 {
         panic!("Not enough data to construct a valid wasm");
     }
 
     let unstrucutred = Unstructured::new(buffer.as_slice());
-    let module = <ConfiguredModule<ICWasmConfig> as Arbitrary>::arbitrary_take_rest(unstrucutred)
+    let module = <ICWasmModule as Arbitrary>::arbitrary_take_rest(unstrucutred)
         .expect("Unable to extract wasm from Unstructured data");
     let mut wasm = module.module.to_bytes();
     println!("WASM extraction successful!");

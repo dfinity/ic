@@ -27,8 +27,8 @@ use ic_registry_keys::{
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable as RoutingTableIC};
-use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
 use ic_test_utilities_registry::test_subnet_record;
+use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::{
     crypto::threshold_sig::ThresholdSigPublicKey, CanisterId, RegistryVersion, SubnetId,
 };
@@ -43,6 +43,7 @@ use crate::{
     http::HttpClient,
     persist::{Persist, Persister, Routes},
     snapshot::{RegistrySnapshot, Snapshot, Snapshotter, Subnet},
+    socket::TcpConnectInfo,
 };
 
 struct TestHttpClient(usize);
@@ -204,6 +205,7 @@ pub fn create_fake_registry_client(
 
 pub fn setup_test_router(
     enable_cache: bool,
+    enable_logging: bool,
     subnet_count: usize,
     nodes_per_subnet: usize,
     response_size: usize,
@@ -211,10 +213,18 @@ pub fn setup_test_router(
     use axum::extract::connect_info::MockConnectInfo;
     use std::net::SocketAddr;
 
+    let mut args = vec!["", "--local-store-path", "/tmp", "--log-null"];
+    if !enable_logging {
+        args.push("--disable-request-logging");
+    }
+
     #[cfg(not(feature = "tls"))]
-    let cli = Cli::parse_from(["", "--local-store-path", "/tmp"]);
+    let cli = Cli::parse_from(args);
     #[cfg(feature = "tls")]
-    let cli = Cli::parse_from(["", "--local-store-path", "/tmp", "--hostname", "foobar"]);
+    let cli = Cli::parse_from({
+        args.extend_from_slice(&["--hostname", "foobar"]);
+        args
+    });
 
     let routing_table: Arc<ArcSwapOption<Routes>> = Arc::new(ArcSwapOption::empty());
     let registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>> = Arc::new(ArcSwapOption::empty());
@@ -223,8 +233,10 @@ pub fn setup_test_router(
     let metrics_registry = Registry::new_custom(None, None).unwrap();
 
     let (registry_client, _, _) = create_fake_registry_client(subnet_count, nodes_per_subnet, None);
+    let (channel_send, _) = tokio::sync::watch::channel(None);
     let mut snapshotter = Snapshotter::new(
         registry_snapshot.clone(),
+        channel_send,
         Arc::new(registry_client),
         Duration::ZERO,
     );
@@ -245,7 +257,10 @@ pub fn setup_test_router(
         )),
     );
 
-    let router = router.layer(MockConnectInfo(SocketAddr::from(([0, 0, 0, 0], 1337))));
+    let router = router.layer(MockConnectInfo(TcpConnectInfo(SocketAddr::from((
+        [0, 0, 0, 0],
+        1337,
+    )))));
 
     (router, subnets)
 }

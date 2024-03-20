@@ -13,6 +13,8 @@ pub mod reward;
 pub mod sns_upgrade;
 pub mod types;
 
+mod treasury;
+
 trait Len {
     fn len(&self) -> usize;
 }

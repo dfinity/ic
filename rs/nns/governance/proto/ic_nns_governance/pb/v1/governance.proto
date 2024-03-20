@@ -93,12 +93,6 @@ enum Topic {
   TOPIC_KYC = 9;
   // Topic for proposals to reward node providers.
   TOPIC_NODE_PROVIDER_REWARDS = 10;
-  // Superseded by SNS_COMMUNITY_FUND.
-  //
-  // TODO(NNS1-1787): Delete this. In addition to clients wiping this from their
-  // memory, I think we'll need Candid support in order to safely delete
-  // this. There is no rush to delete this though.
-  TOPIC_SNS_DECENTRALIZATION_SALE = 11;
   // Proposals handling updates of a subnet's replica version.
   // The only proposal in this topic is UpdateSubnetReplicaVersion.
   TOPIC_SUBNET_REPLICA_VERSION_MANAGEMENT = 12;
@@ -108,6 +102,10 @@ enum Topic {
   TOPIC_SNS_AND_COMMUNITY_FUND = 14;
   // Proposals related to the management of API Boundary Nodes
   TOPIC_API_BOUNDARY_NODE_MANAGEMENT = 15;
+
+  // Superseded by SNS_COMMUNITY_FUND.
+  reserved 11;
+  reserved "TOPIC_SNS_DECENTRALIZATION_SALE";
 }
 
 // Every neuron is in one of three states.
@@ -387,8 +385,6 @@ message Neuron {
 // the goal is to keep the size of the struct consistent and can be easily stored in a
 // StableBTreeMap. For the meaning of each field, see the Neuron struct.
 message AbridgedNeuron {
-  // TODO: drop this field after the change to use AbridgedNeuron is released.
-  ic_nns_common.pb.v1.NeuronId id = 1;
   bytes account = 2;
   ic_base_types.pb.v1.PrincipalId controller = 3;
   uint64 cached_neuron_stake_e8s = 5;
@@ -407,6 +403,9 @@ message AbridgedNeuron {
   bool not_for_profit = 16;
   optional uint64 joined_community_fund_timestamp_seconds = 17;
   optional NeuronType neuron_type = 22;
+
+  reserved 1;
+  reserved "id";
 }
 
 // Types of a Neuron.
@@ -739,7 +738,7 @@ message Proposal {
   optional string title = 20;
 
   // Text providing a short description of the proposal, composed
-  // using a maximum of 15000 bytes of characters.
+  // using a maximum of 30000 bytes of characters.
   string summary = 1;
 
   // The Web address of additional content required to evaluate the
@@ -1699,6 +1698,56 @@ message NetworkEconomics {
   //
   // If unspecified or zero, all proposals are kept.
   uint32 max_proposals_to_keep_per_topic = 10;
+
+  // Global Neurons' Fund participation thresholds.
+  optional NeuronsFundEconomics neurons_fund_economics = 11;
+}
+
+// The thresholds specify the shape of the ideal matching function used by the Neurons' Fund to
+// determine how much to contribute for a given direct participation amount. Note that the actual
+// swap participation is in ICP, whereas these thresholds are specifid in XDR; the conversion rate
+// is determined at the time of execution of the CreateServiceNervousSystem proposal.
+message NeuronsFundMatchedFundingCurveCoefficients {
+  // Up to this amount of direct participation, the Neurons' Fund does not contribute to this SNS.
+  optional ic_nervous_system.pb.v1.Decimal contribution_threshold_xdr = 1;
+
+  // Say the direct participation amount is `x_icp`. When `x_icp` equals the equavalent of
+  // `one_third_participation_milestone_xdr` in ICP (we use ICP/XDR conversion data from the CMC),
+  // the Neurons' Fund contributes 50% on top of that amount, so the overall contributions would
+  // be `1.5 * x_icp` of which 1/3 comes from the Neurons' Fund.
+  optional ic_nervous_system.pb.v1.Decimal one_third_participation_milestone_xdr = 2;
+
+  // Say the direct participation amount is `x_icp`. When `x_icp` equals the equavalent of
+  // `full_participation_milestone_xdr` in ICP (we use ICP/XDR conversion data from the CMC),
+  // the Neurons' Fund contributes 100% on top of that amount, so the overall contributions would
+  // be `2.0 * x_icp` of which a half comes from the Neurons' Fund.
+  optional ic_nervous_system.pb.v1.Decimal full_participation_milestone_xdr = 3;
+}
+
+// When the Neurons' Fund decides to participates in an SNS swap, the amount of participation is
+// determined according to the rules of Matched Funding. The amount of ICP tokens contributed by
+// the Neurons' Fund depends on four factors:
+// (1) Direct participation amount at the time of the swap's successful finalization.
+// (2) Amount of maturity held by all eligible neurons that were members of the Neurons' Fund
+//     at the time of the CreateServiceNervousSystem proposal execution.
+// (3) Global Neurons' Fund participation thresholds, held in this structure (defined in XDR).
+// (4) ICP/XDR conversion rate at the time of the CreateServiceNervousSystem proposal execution.
+message NeuronsFundEconomics {
+  // This is a theoretical limit which should be smaller than any realistic amount of maturity
+  // that practically needs to be reserved from the Neurons' Fund for a given SNS swap.
+  optional ic_nervous_system.pb.v1.Decimal max_theoretical_neurons_fund_participation_amount_xdr = 1;
+
+  // Thresholds specifying the shape of the matching function used by the Neurons' Fund to
+  // determine how much to contribute for a given direct participation amount.
+  optional NeuronsFundMatchedFundingCurveCoefficients neurons_fund_matched_funding_curve_coefficients = 2;
+
+  // The minimum value of the ICP/XDR conversion rate used by the Neurons' Fund for converting
+  // XDR values into ICP.
+  optional ic_nervous_system.pb.v1.Percentage minimum_icp_xdr_rate = 3;
+
+  // The maximum value of the ICP/XDR conversion rate used by the Neurons' Fund for converting
+  // XDR values into ICP.
+  optional ic_nervous_system.pb.v1.Percentage maximum_icp_xdr_rate = 4;
 }
 
 // A reward event is an event at which neuron maturity is increased
@@ -2184,6 +2233,17 @@ message Governance {
   // Reserved id for deprecated `genesis_neuron_accounts`
   reserved 24;
   reserved "genesis_neuron_accounts";
+
+  // Local cache for XDR-related conversion rates (the source of truth is in the CMC canister).
+  optional XdrConversionRate xdr_conversion_rate = 26;
+}
+
+message XdrConversionRate {
+  /// Time at which this rate has been fetched.
+  optional uint64 timestamp_seconds = 1;
+
+  /// One ICP is worth this number of 1/10,000ths parts of an XDR.
+  optional uint64 xdr_permyriad_per_icp = 2;
 }
 
 // Proposals with restricted voting are not included unless the caller

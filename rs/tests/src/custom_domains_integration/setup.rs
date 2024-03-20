@@ -944,7 +944,7 @@ pub async fn setup_dns_records(
     if response_json["result"].is_array() && response_json["result"].as_array().unwrap().is_empty()
     {
         let url = format!("{}//client/v4/zones", base_url);
-        let json_body = json!({"name": DELEGATION_DOMAIN});
+        let json_body = json!({ "name": DELEGATION_DOMAIN });
         let _response = client
             .post(&url)
             .json(&json_body)
@@ -955,7 +955,7 @@ pub async fn setup_dns_records(
 
     // create the zone
     let url = format!("{}//client/v4/zones", base_url);
-    let json_body = json!({"name": domain_name});
+    let json_body = json!({ "name": domain_name });
     let response = client
         .post(&url)
         .json(&json_body)
@@ -1177,9 +1177,7 @@ pub async fn submit_registration_request(
     domain_name: &str,
 ) -> Result<RegistrationRequestState, Error> {
     let url = "https://ic0.app/registrations";
-    let request_body = json!({
-        "name": domain_name
-    });
+    let request_body = json!({ "name": domain_name });
 
     let response = bn_client
         .post(url)

@@ -18,4 +18,4 @@ slog-json = { version = "2.3", features = ["nested-values"] }
 uuid = { version = "1.3.0", features = ["v4"] }
 
 [dev-dependencies]
-anyhow = "1.0.31"
+anyhow = { workspace = true }

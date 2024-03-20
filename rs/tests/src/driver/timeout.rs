@@ -86,6 +86,7 @@ mod tests {
         let rt = create_rt();
         let d = ms(1);
         let expected_task_id = TaskId::Test("test-id".to_string());
+        #[allow(clippy::disallowed_methods)]
         let (evt_send, evt_rcv) = unbounded();
 
         let t = TimeoutTask::new(rt.handle().clone(), d, expected_task_id.clone());
@@ -103,6 +104,7 @@ mod tests {
         let rt = create_rt();
         let d = ms(2000);
         let expected_task_id = TaskId::Test("test-id".to_string());
+        #[allow(clippy::disallowed_methods)]
         let (evt_send, _evt_rcv) = unbounded();
         let evt_send2 = evt_send.clone();
 

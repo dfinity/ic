@@ -1,0 +1,19 @@
+[package]
+name = "ic-test-utilities-types"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+ed25519-consensus = "2.0.1"
+ic-canister-client-sender = { path = "../../canister_client/sender" }
+ic-types = { path = "../../types/types" }
+ic-types-test-utils = { path = "../../types/types_test_utils" }
+rand = "0.8"
+
+[dev-dependencies]
+assert_matches = "1.5.0"
+bincode = "1.2.1"
+serde_cbor = { workspace = true }

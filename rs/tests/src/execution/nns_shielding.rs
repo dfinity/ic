@@ -11,7 +11,7 @@ use ic_agent::{
     AgentError,
 };
 use ic_base_types::RegistryVersion;
-use ic_ic00_types::SetupInitialDKGArgs;
+use ic_management_canister_types::SetupInitialDKGArgs;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Cycles;

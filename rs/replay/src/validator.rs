@@ -216,6 +216,7 @@ impl ReplayValidator {
             artifact_pool_config,
             MetricsRegistry::new(),
             self.log.clone(),
+            self.time_source.clone(),
         );
 
         let validated = consensus_pool.validated();

@@ -9,7 +9,7 @@ use std::{
 use anyhow::{anyhow, Context, Error};
 use async_trait::async_trait;
 use axum::{handler::Handler, routing::get, Extension, Router};
-use candid::{CandidType, Decode, Encode, Principal};
+use candid::{CandidType, Decode, DecoderConfig, Encode, Principal};
 use clap::Parser;
 use dashmap::DashMap;
 use futures::{future::TryFutureExt, stream::FuturesUnordered};
@@ -232,8 +232,15 @@ impl Scrape for Scraper {
             .await
             .context("failed to query canister")?;
 
+        // Limit the amount of work for skipping unneeded data on the wire when parsing Candid.
+        // The value of 10_000 follows the Candid recommendation.
+        const DEFAULT_SKIPPING_QUOTA: usize = 10_000;
+        let mut config = DecoderConfig::new();
+        config.set_skipping_quota(DEFAULT_SKIPPING_QUOTA);
+        config.set_full_error_message(false);
+
         let Amount { amount } =
-            candid::Decode!(&result, Amount).context("failed to decode result")?;
+            candid::Decode!([config]; &result, Amount).context("failed to decode result")?;
 
         Ok(amount)
     }

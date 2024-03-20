@@ -193,29 +193,56 @@
 
       if [ "$CI_COMMIT_REF_PROTECTED" == "true" ]; then
           gitlab-ci/container/build-ic.sh -i -c -b
+      elif [ "${RUN_ON_DIFF_ONLY:-}" == "true" ] \
+          && [ "${CI_PIPELINE_SOURCE:-}" == "merge_request_event" ] \
+          && [ "${CI_MERGE_REQUEST_EVENT_TYPE:-}" != "merge_train" ] \
+          && [[ "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}" != "rc--"* ]]; then
+
+          TARGETS=$(gitlab-ci/src/bazel-ci/diff.sh)
+          ARGS=(--no-release)
+
+          if [ "$TARGETS" == "//..." ]; then
+              ARGS+=(-i -c -b)
+          else
+              if grep -q "ic-os" <<<"$TARGETS"; then
+                  ARGS+=(-i)
+              fi
+              if grep -q "publish/canisters" <<<"$TARGETS"; then
+                  ARGS+=(-c)
+              fi
+              if grep -q "publish/binaries" <<<"$TARGETS"; then
+                  ARGS+=(-b)
+              fi
+          fi
+
+          if [ ${#ARGS[@]} -eq 1 ]; then
+              echo "No changes that require building IC-OS, binaries or canisters."
+              exit 0
+          fi
+          gitlab-ci/container/build-ic.sh "${ARGS[@]}"
       else
           gitlab-ci/container/build-ic.sh -i -c -b --no-release
       fi
 
       # release binaries
-      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
+      [ -d artifacts/release ] && buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
           gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
           "artifacts/release" "${CI_JOB_NAME}/release"
       # canister binaries
-      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
+      [ -d artifacts/canisters ] && buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
           gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
           "artifacts/canisters" "${CI_JOB_NAME}/canisters"
 
       # guestos images
-      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
+      [ -d artifacts/icos/guestos ] && buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
           gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
           "artifacts/icos/guestos" "${CI_JOB_NAME}/guest-os"
       # hostos images
-      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
+      [ -d artifacts/icos/hostos ] && buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
           gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
           "artifacts/icos/hostos" "${CI_JOB_NAME}/host-os"
       # setupos images
-      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
+      [ -d artifacts/icos/setupos ] && buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
           gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
           "artifacts/icos/setupos" "${CI_JOB_NAME}/setup-os"
 
@@ -250,9 +277,32 @@
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
     - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/
+".rules-master-pipeline-and-merge-request-rust-changed":
+  rules:
+    - changes:
+        - "**/*.rs"
+        - "**/*.toml"
+        - "**/*.lock"
+      if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/
 ".rules-master-pipeline-no-merge-train":
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"
+    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/
+".rules-master-pipeline-no-merge-train-rust-bazel-changed":
+  rules:
+    - changes:
+        - ".bazelrc"
+        - ".bazelversion"
+        - "**/*.bazel"
+        - "**/*.bzl"
+        - "**/*.lock"
+        - "**/*.rs"
+        - "**/*.toml"
+        - gitlab-ci/container/Dockerfile
+      if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
     - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/
 ".rules-post-master":
@@ -275,13 +325,13 @@
       if: $CI_PIPELINE_SOURCE == "trigger"
       when: manual
 after-script-test:
-  extends:
-    - ".rules-master-pipeline-and-merge-request"
   needs: []
   rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - changes:
+        - gitlab-ci/src/after_script/*
+        - gitlab-ci/config/*
+      if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
-    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/
   script:
     - |
       set -eExuo pipefail
@@ -484,7 +534,6 @@ bazel-build-fuzzers-archives:
   needs: []
   rules:
     - changes:
-        - gitlab-ci/config/main.yml
         - bin/build-all-fuzzers.sh
         - bazel/fuzz_testing.bzl
       if: $CI_PIPELINE_SOURCE == "merge_request_event"
@@ -611,16 +660,19 @@ bazel-config-check-all-rebuild:
     - ".bazel-test-all"
   needs: []
   rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE == "merge_train"
-      variables:
-        BAZEL_EXTRA_ARGS_RULES: "--test_timeout_filters=short,moderate --flaky_test_attempts=3"
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TITLE =~ /\bhotfix\b/i
-      variables:
-        BAZEL_EXTRA_ARGS_RULES: "--test_timeout_filters=short,moderate"
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "tnet-test"
-    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/
+    - if: $CI_MERGE_REQUEST_EVENT_TYPE == "merge_train"
+    - - changes:
+          - ".bazelrc"
+          - ".bazelversion"
+          - "**/*.bazel"
+          - "**/*.bzl"
+          - "**/*.lock"
+          - "**/*.rs"
+          - "**/*.toml"
+          - gitlab-ci/container/Dockerfile
+        if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"
+      - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
+      - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/
   script:
     - "./gitlab-ci/src/bazel-ci/main.sh"
   tags:
@@ -1022,11 +1074,11 @@ bazel-system-tests-k8s:
   tags:
     - dfinity-ic
     - sf
-  timeout: 80 minutes
+  timeout: 150 minutes
   variables:
     BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
     BAZEL_COMMAND: test
-    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel $BAZEL_EXTRA_ARGS_RULES --test_tag_filters=k8s --k8s"
+    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel $BAZEL_EXTRA_ARGS_RULES --jobs=5 --test_tag_filters=k8s,-manual --k8s"
     BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
     BAZEL_TARGETS: "//..."
     KUBECONFIG: "$KUBECONFIG_TNET_CREATOR"
@@ -1067,8 +1119,9 @@ bazel-test-all:
         echo -e "\e[0Ksection_end:$(date +%s):after_script\r\e[0K"
   artifacts:
     paths:
-      - bazel-build-log*.json*
+      - bazel-build-log*.json.gz
       - bazel-bep.pb
+      - bazel-targets
     reports:
       junit:
         - bazel-testlogs-gitlab/**/test.xml
@@ -1100,6 +1153,7 @@ bazel-test-all:
     BAZEL_EXTRA_ARGS: "--keep_going $BAZEL_EXTRA_ARGS_RULES"
     BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
     BAZEL_TARGETS: "//..."
+    RUN_ON_DIFF_ONLY: 'true'
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
 bazel-test-all-rebuild:
   after_script:
@@ -1144,13 +1198,14 @@ bazel-test-all-rebuild:
     when: always
   extends:
     - ".bazel-test-all"
-    - ".rules-post-master"
   needs: []
   rules:
     - allow_failure: true
       if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"
       when: manual
-    - if: $SCHEDULE_NAME == "run-all-master"
+    - allow_failure: true
+      if: $SCHEDULE_NAME == "run-all-master"
+      when: manual
   script:
     - "./gitlab-ci/src/bazel-ci/main.sh"
   tags:
@@ -1325,7 +1380,16 @@ bazel-test-macos:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train" && $CI_MERGE_REQUEST_TITLE =~ /\bhotfix\b/i
       variables:
         BAZEL_EXTRA_ARGS_RULES: "--test_timeout_filters=short,moderate"
-    - - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"
+    - - changes:
+          - ".bazelrc"
+          - ".bazelversion"
+          - "**/*.bazel"
+          - "**/*.bzl"
+          - "**/*.lock"
+          - "**/*.rs"
+          - "**/*.toml"
+          - gitlab-ci/container/Dockerfile
+        if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"
       - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
       - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/
   script:
@@ -1555,29 +1619,23 @@ build-base-images-ref-update:
   dependencies:
     - build-guestos-base
     - build-guestos-base-dev
-    - build-guestos-base-dev-sev
     - build-boundaryos-base
     - build-boundaryos-base-snp
     - build-hostos-base
     - build-hostos-base-dev
-    - build-hostos-base-dev-sev
     - build-setupos-base
     - build-setupos-base-dev
-    - build-setupos-base-dev-sev
   extends:
     - ".rules-build-base-images"
   needs:
     - build-guestos-base
     - build-guestos-base-dev
-    - build-guestos-base-dev-sev
     - build-boundaryos-base
     - build-boundaryos-base-snp
     - build-hostos-base
     - build-hostos-base-dev
-    - build-hostos-base-dev-sev
     - build-setupos-base
     - build-setupos-base-dev
-    - build-setupos-base-dev-sev
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "build-push-base-images"
     - allow_failure: true
@@ -1728,7 +1786,7 @@ build-determinism:
   extends:
     - ".rules-master-pipeline-no-merge-train"
   needs:
-    - artifacts: false
+    - artifacts: true
       job: bazel-test-all
     - artifacts: false
       job: build-ic
@@ -1736,15 +1794,20 @@ build-determinism:
     matrix:
       - PATH0: release
         PATH1: build-ic/release
+        TARGET: "//publish/binaries:upload"
       - PATH0: canisters
         PATH1: build-ic/canisters
+        TARGET: "//publish/canisters:upload"
       - PATH0: guest-os/update-img
         PATH1: build-ic/guest-os
+        TARGET: "//ic-os/guestos/envs/prod:upload_update-img"
       - PATH0: host-os/update-img
         PATH1: build-ic/host-os
+        TARGET: "//ic-os/hostos/envs/prod:upload_update-img"
       - PATH0: setup-os/disk-img
         PATH1: build-ic/setup-os
         SETUPOS_FLAG: 'true'
+        TARGET: "//ic-os/setupos/envs/prod:upload_disk-img"
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
@@ -1752,7 +1815,16 @@ build-determinism:
   script:
     - |
       set -eExuo pipefail
-      ./gitlab-ci/tools/build-diff.sh "$PATH0" "$PATH1"
+
+      # bazel-targets file is expected from bazel-test-all CI job
+      if [ ! -e bazel-targets ]; then
+          echo "Missing 'bazel-targets' file!"
+          exit 1
+      fi
+
+      if grep -q "$TARGET" bazel-targets || grep -qF "//..." bazel-targets; then
+          gitlab-ci/tools/build-diff.sh "$PATH0" "$PATH1"
+      fi
 build-determinism-release:
   needs:
     - job: build-ic-release
@@ -1881,54 +1953,6 @@ build-guestos-base-dev:
     CONTEXT: "${CI_PROJECT_DIR}/ic-os/guestos/rootfs"
     IMAGE: guestos-base-dev
     REF_FILE: ic-os/guestos/rootfs/docker-base.dev
-build-guestos-base-dev-sev:
-  artifacts:
-    paths:
-      - digestfile*
-  extends:
-    - ".build-base-image-job"
-  needs: []
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "build-push-base-images"
-    - allow_failure: true
-      if: $CI_COMMIT_BRANCH == "master" && $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
-      when: manual
-    - changes:
-        - gitlab-ci/config/base-images-build.yml
-        - ic-os/boundary-guestos/rootfs/Dockerfile.base
-        - ic-os/guestos/rootfs/Dockerfile.base
-        - ic-os/guestos/rootfs/packages.common
-        - ic-os/guestos/rootfs/packages.dev
-        - ic-os/hostos/rootfs/Dockerfile.base
-        - ic-os/hostos/rootfs/packages.common
-        - ic-os/hostos/rootfs/packages.dev
-        - ic-os/setupos/rootfs/Dockerfile.base
-        - ic-os/setupos/rootfs/packages.common
-        - ic-os/setupos/rootfs/packages.dev
-      if: $CI_PIPELINE_SOURCE == "merge_request_event"
-  script:
-    - BUILD_ARGS=(--build-arg "PACKAGE_FILES=packages.common packages.dev" --build-arg "CPU_SUPPORT=sev")
-    - |
-      set -euo pipefail
-
-      TAG=$(date '+%Y-%m-%d-%H%M')
-      echo -e "\e[0Ksection_start:$(date +%s):${IMAGE}[collapsed=true]\r\e[0KClick here to see the ${IMAGE} build"
-      pushd "$CONTEXT"
-      podman build "${BUILD_ARGS[@]}" --squash-all --no-cache -t "docker.io/dfinity/${IMAGE}:${TAG}" -f Dockerfile.base .
-      popd
-      echo -e "\e[0Ksection_end:$(date +%s):${IMAGE}\r\e[0K"
-
-      if [ "${CI_COMMIT_REF_NAME:-}" == "master" ]; then
-          podman login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD" docker.io
-          podman push "dfinity/${IMAGE}:${TAG}" --digestfile digestfile
-          echo "dfinity/${IMAGE}@$(cat digestfile)" > "digestfile-${IMAGE}"
-          echo "$REF_FILE" >> "digestfile-${IMAGE}"
-          rm -f digestfile
-      fi
-  variables:
-    CONTEXT: "${CI_PROJECT_DIR}/ic-os/guestos/rootfs"
-    IMAGE: guestos-base-dev-sev
-    REF_FILE: ic-os/guestos/rootfs/docker-base.dev-sev
 build-hostos-base:
   artifacts:
     paths:
@@ -2024,54 +2048,6 @@ build-hostos-base-dev:
     CONTEXT: "${CI_PROJECT_DIR}/ic-os/hostos/rootfs"
     IMAGE: hostos-base-dev
     REF_FILE: ic-os/hostos/rootfs/docker-base.dev
-build-hostos-base-dev-sev:
-  artifacts:
-    paths:
-      - digestfile*
-  extends:
-    - ".build-base-image-job"
-  needs: []
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "build-push-base-images"
-    - allow_failure: true
-      if: $CI_COMMIT_BRANCH == "master" && $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
-      when: manual
-    - changes:
-        - gitlab-ci/config/base-images-build.yml
-        - ic-os/boundary-guestos/rootfs/Dockerfile.base
-        - ic-os/guestos/rootfs/Dockerfile.base
-        - ic-os/guestos/rootfs/packages.common
-        - ic-os/guestos/rootfs/packages.dev
-        - ic-os/hostos/rootfs/Dockerfile.base
-        - ic-os/hostos/rootfs/packages.common
-        - ic-os/hostos/rootfs/packages.dev
-        - ic-os/setupos/rootfs/Dockerfile.base
-        - ic-os/setupos/rootfs/packages.common
-        - ic-os/setupos/rootfs/packages.dev
-      if: $CI_PIPELINE_SOURCE == "merge_request_event"
-  script:
-    - BUILD_ARGS=(--build-arg "PACKAGE_FILES=packages.common packages.dev" --build-arg "CPU_SUPPORT=sev")
-    - |
-      set -euo pipefail
-
-      TAG=$(date '+%Y-%m-%d-%H%M')
-      echo -e "\e[0Ksection_start:$(date +%s):${IMAGE}[collapsed=true]\r\e[0KClick here to see the ${IMAGE} build"
-      pushd "$CONTEXT"
-      podman build "${BUILD_ARGS[@]}" --squash-all --no-cache -t "docker.io/dfinity/${IMAGE}:${TAG}" -f Dockerfile.base .
-      popd
-      echo -e "\e[0Ksection_end:$(date +%s):${IMAGE}\r\e[0K"
-
-      if [ "${CI_COMMIT_REF_NAME:-}" == "master" ]; then
-          podman login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD" docker.io
-          podman push "dfinity/${IMAGE}:${TAG}" --digestfile digestfile
-          echo "dfinity/${IMAGE}@$(cat digestfile)" > "digestfile-${IMAGE}"
-          echo "$REF_FILE" >> "digestfile-${IMAGE}"
-          rm -f digestfile
-      fi
-  variables:
-    CONTEXT: "${CI_PROJECT_DIR}/ic-os/hostos/rootfs"
-    IMAGE: hostos-base-dev-sev
-    REF_FILE: ic-os/hostos/rootfs/docker-base.dev-sev
 build-ic:
   artifacts:
     paths:
@@ -2108,29 +2084,56 @@ build-ic:
 
       if [ "$CI_COMMIT_REF_PROTECTED" == "true" ]; then
           gitlab-ci/container/build-ic.sh -i -c -b
+      elif [ "${RUN_ON_DIFF_ONLY:-}" == "true" ] \
+          && [ "${CI_PIPELINE_SOURCE:-}" == "merge_request_event" ] \
+          && [ "${CI_MERGE_REQUEST_EVENT_TYPE:-}" != "merge_train" ] \
+          && [[ "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}" != "rc--"* ]]; then
+
+          TARGETS=$(gitlab-ci/src/bazel-ci/diff.sh)
+          ARGS=(--no-release)
+
+          if [ "$TARGETS" == "//..." ]; then
+              ARGS+=(-i -c -b)
+          else
+              if grep -q "ic-os" <<<"$TARGETS"; then
+                  ARGS+=(-i)
+              fi
+              if grep -q "publish/canisters" <<<"$TARGETS"; then
+                  ARGS+=(-c)
+              fi
+              if grep -q "publish/binaries" <<<"$TARGETS"; then
+                  ARGS+=(-b)
+              fi
+          fi
+
+          if [ ${#ARGS[@]} -eq 1 ]; then
+              echo "No changes that require building IC-OS, binaries or canisters."
+              exit 0
+          fi
+          gitlab-ci/container/build-ic.sh "${ARGS[@]}"
       else
           gitlab-ci/container/build-ic.sh -i -c -b --no-release
       fi
 
       # release binaries
-      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
+      [ -d artifacts/release ] && buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
           gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
           "artifacts/release" "${CI_JOB_NAME}/release"
       # canister binaries
-      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
+      [ -d artifacts/canisters ] && buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
           gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
           "artifacts/canisters" "${CI_JOB_NAME}/canisters"
 
       # guestos images
-      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
+      [ -d artifacts/icos/guestos ] && buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
           gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
           "artifacts/icos/guestos" "${CI_JOB_NAME}/guest-os"
       # hostos images
-      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
+      [ -d artifacts/icos/hostos ] && buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
           gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
           "artifacts/icos/hostos" "${CI_JOB_NAME}/host-os"
       # setupos images
-      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
+      [ -d artifacts/icos/setupos ] && buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
           gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
           "artifacts/icos/setupos" "${CI_JOB_NAME}/setup-os"
 
@@ -2141,6 +2144,9 @@ build-ic:
       if [ -f /tmp/nns.release.env ]; then
           mv /tmp/nns.release.env .
       fi
+  variables:
+    BAZEL_COMMAND: build
+    RUN_ON_DIFF_ONLY: 'true'
 build-ic-release:
   artifacts:
     paths:
@@ -2174,29 +2180,56 @@ build-ic-release:
 
       if [ "$CI_COMMIT_REF_PROTECTED" == "true" ]; then
           gitlab-ci/container/build-ic.sh -i -c -b
+      elif [ "${RUN_ON_DIFF_ONLY:-}" == "true" ] \
+          && [ "${CI_PIPELINE_SOURCE:-}" == "merge_request_event" ] \
+          && [ "${CI_MERGE_REQUEST_EVENT_TYPE:-}" != "merge_train" ] \
+          && [[ "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}" != "rc--"* ]]; then
+
+          TARGETS=$(gitlab-ci/src/bazel-ci/diff.sh)
+          ARGS=(--no-release)
+
+          if [ "$TARGETS" == "//..." ]; then
+              ARGS+=(-i -c -b)
+          else
+              if grep -q "ic-os" <<<"$TARGETS"; then
+                  ARGS+=(-i)
+              fi
+              if grep -q "publish/canisters" <<<"$TARGETS"; then
+                  ARGS+=(-c)
+              fi
+              if grep -q "publish/binaries" <<<"$TARGETS"; then
+                  ARGS+=(-b)
+              fi
+          fi
+
+          if [ ${#ARGS[@]} -eq 1 ]; then
+              echo "No changes that require building IC-OS, binaries or canisters."
+              exit 0
+          fi
+          gitlab-ci/container/build-ic.sh "${ARGS[@]}"
       else
           gitlab-ci/container/build-ic.sh -i -c -b --no-release
       fi
 
       # release binaries
-      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
+      [ -d artifacts/release ] && buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
           gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
           "artifacts/release" "${CI_JOB_NAME}/release"
       # canister binaries
-      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
+      [ -d artifacts/canisters ] && buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
           gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
           "artifacts/canisters" "${CI_JOB_NAME}/canisters"
 
       # guestos images
-      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
+      [ -d artifacts/icos/guestos ] && buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
           gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
           "artifacts/icos/guestos" "${CI_JOB_NAME}/guest-os"
       # hostos images
-      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
+      [ -d artifacts/icos/hostos ] && buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
           gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
           "artifacts/icos/hostos" "${CI_JOB_NAME}/host-os"
       # setupos images
-      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
+      [ -d artifacts/icos/setupos ] && buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
           gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
           "artifacts/icos/setupos" "${CI_JOB_NAME}/setup-os"
 
@@ -2302,60 +2335,16 @@ build-setupos-base-dev:
     CONTEXT: "${CI_PROJECT_DIR}/ic-os/setupos/rootfs"
     IMAGE: setupos-base-dev
     REF_FILE: ic-os/setupos/rootfs/docker-base.dev
-build-setupos-base-dev-sev:
-  artifacts:
-    paths:
-      - digestfile*
-  extends:
-    - ".build-base-image-job"
-  needs: []
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "build-push-base-images"
-    - allow_failure: true
-      if: $CI_COMMIT_BRANCH == "master" && $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
-      when: manual
-    - changes:
-        - gitlab-ci/config/base-images-build.yml
-        - ic-os/boundary-guestos/rootfs/Dockerfile.base
-        - ic-os/guestos/rootfs/Dockerfile.base
-        - ic-os/guestos/rootfs/packages.common
-        - ic-os/guestos/rootfs/packages.dev
-        - ic-os/hostos/rootfs/Dockerfile.base
-        - ic-os/hostos/rootfs/packages.common
-        - ic-os/hostos/rootfs/packages.dev
-        - ic-os/setupos/rootfs/Dockerfile.base
-        - ic-os/setupos/rootfs/packages.common
-        - ic-os/setupos/rootfs/packages.dev
-      if: $CI_PIPELINE_SOURCE == "merge_request_event"
-  script:
-    - BUILD_ARGS=(--build-arg "PACKAGE_FILES=packages.common packages.dev")
-    - |
-      set -euo pipefail
-
-      TAG=$(date '+%Y-%m-%d-%H%M')
-      echo -e "\e[0Ksection_start:$(date +%s):${IMAGE}[collapsed=true]\r\e[0KClick here to see the ${IMAGE} build"
-      pushd "$CONTEXT"
-      podman build "${BUILD_ARGS[@]}" --squash-all --no-cache -t "docker.io/dfinity/${IMAGE}:${TAG}" -f Dockerfile.base .
-      popd
-      echo -e "\e[0Ksection_end:$(date +%s):${IMAGE}\r\e[0K"
-
-      if [ "${CI_COMMIT_REF_NAME:-}" == "master" ]; then
-          podman login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD" docker.io
-          podman push "dfinity/${IMAGE}:${TAG}" --digestfile digestfile
-          echo "dfinity/${IMAGE}@$(cat digestfile)" > "digestfile-${IMAGE}"
-          echo "$REF_FILE" >> "digestfile-${IMAGE}"
-          rm -f digestfile
-      fi
-  variables:
-    CONTEXT: "${CI_PROJECT_DIR}/ic-os/setupos/rootfs"
-    IMAGE: setupos-base-dev-sev
-    REF_FILE: ic-os/setupos/rootfs/docker-base.dev-sev
 cargo-build-release-linux:
   extends:
-    - ".rules-master-pipeline-and-merge-request"
+    - ".rules-master-pipeline-and-merge-request-rust-changed"
   needs: []
   rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - changes:
+        - "**/*.rs"
+        - "**/*.toml"
+        - "**/*.lock"
+      if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
     - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/
   script:
@@ -2364,10 +2353,14 @@ cargo-build-release-linux:
       buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- cargo build --release
 cargo-clippy-linux:
   extends:
-    - ".rules-master-pipeline-and-merge-request"
+    - ".rules-master-pipeline-and-merge-request-rust-changed"
   needs: []
   rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - changes:
+        - "**/*.rs"
+        - "**/*.toml"
+        - "**/*.lock"
+      if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
     - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/
   script:
@@ -2454,8 +2447,8 @@ container-autobuild:
       popd
 
       # update github CI docker image
-      pushd .github/workflows
-      sed -i -E "s|$IMG_BAZEL_DOCKER_HUB:[^\"]{5,}|$IMG_BAZEL_DOCKER_HUB_FULL|g" -- *
+      pushd .github
+      sed -i -E "s|$IMG_BAZEL_DOCKER_HUB:[^\"]{5,}|$IMG_BAZEL_DOCKER_HUB_FULL|g" -- workflow*/*
       popd
 
       # commit and push the change upstream
@@ -2520,7 +2513,7 @@ default:
     expire_in: 3 days
     when: always
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:f46892f10dba6d7839a6e07e30787217a3c06180843472129ceb61534ab1fc9d
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:e95ed63e9addda1b335c50fde800a8d9f0aad91a0d0cbe7da2fa782dc6ac1d4c
   interruptible: true
   retry:
     max: 2
@@ -2570,18 +2563,29 @@ delegated-identity-bench:
     TESTNET: cdslo
 dependencies-check:
   allow_failure: false
+  extends:
+    - ".rules-master-pipeline-no-merge-train-rust-bazel-changed"
   needs: []
   rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"
+    - changes:
+        - ".bazelrc"
+        - ".bazelversion"
+        - "**/*.bazel"
+        - "**/*.bzl"
+        - "**/*.lock"
+        - "**/*.rs"
+        - "**/*.toml"
+        - gitlab-ci/container/Dockerfile
+      if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"
+    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/
   script:
     - |
       set -euo pipefail
       pip3 install --ignore-installed -r requirements.txt
-      $SHELL_WRAPPER cargo install cargo-audit --version "${CARGO_AUDIT_VERSION}"
       cd "${CI_PROJECT_DIR}"/gitlab-ci/src/dependencies/
       $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_merge_job.py
   variables:
-    CARGO_AUDIT_VERSION: 0.16.0
     PYTHONPATH: "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
     SHELL_WRAPPER: "/usr/bin/time"
 dependency-scan-nightly:
@@ -2593,10 +2597,10 @@ dependency-scan-nightly:
     - |
       set -euo pipefail
       pip3 install --ignore-installed -r requirements.txt
-      $SHELL_WRAPPER cargo install cargo-audit --version "${CARGO_AUDIT_VERSION}"
+      $SHELL_WRAPPER cargo install wasm-pack --version "${CARGO_WASMPACK_VERSION}"
       # shellcheck disable=SC1090
       source "${NVM_DIR}/nvm.sh"
-      nvm use ${NVM_VERSION}
+      nvm use ${DEFAULT_NODE_VERSION}
       node --version
       npm --version
       cd "${CI_PROJECT_DIR}"/gitlab-ci/src/dependencies
@@ -2604,8 +2608,8 @@ dependency-scan-nightly:
       $SHELL_WRAPPER python3 job/npm_scanner_periodic_job.py
       $SHELL_WRAPPER python3 job/bazel_trivy_container_ic_scanner_periodic_job.py
   variables:
-    CARGO_AUDIT_VERSION: 0.16.0
-    NVM_VERSION: '19'
+    CARGO_WASMPACK_VERSION: 0.12.1
+    DEFAULT_NODE_VERSION: '20'
     PYTHONPATH: "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
     SHELL_WRAPPER: "/usr/bin/time"
 dependency-scan-release-cut:
@@ -2617,11 +2621,9 @@ dependency-scan-release-cut:
     - |
       set -euo pipefail
       pip3 install --ignore-installed -r requirements.txt
-      $SHELL_WRAPPER cargo install cargo-audit --version "${CARGO_AUDIT_VERSION}"
       cd "${CI_PROJECT_DIR}"/gitlab-ci/src/dependencies
       $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_release_job.py
   variables:
-    CARGO_AUDIT_VERSION: 0.16.0
     PYTHONPATH: "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
     SHELL_WRAPPER: "/usr/bin/time"
 heavy-memory-update-performance-test-nightly:
@@ -2720,7 +2722,15 @@ large-response-downloading-nightly:
 lock-generate:
   needs: []
   rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - changes:
+        - ".bazelrc"
+        - ".bazelversion"
+        - "**/*.bazel"
+        - "**/*.bzl"
+        - "**/*.lock"
+        - "**/*.rs"
+        - "**/*.toml"
+      if: $CI_PIPELINE_SOURCE == "merge_request_event"
   script:
     - |
       set -euo pipefail
@@ -3313,7 +3323,7 @@ pre-commit:
       fi
   variables:
     PRE_COMMIT_HOME: "/cache/pre-commit/$CI_CONCURRENT_ID"
-python-gitlab-ci-tests:
+python-ci-tests:
   artifacts:
     paths:
       - gitlab-ci/src/htmlcov
@@ -3330,7 +3340,7 @@ python-gitlab-ci-tests:
       set -xeuo pipefail
       pip3 install --ignore-installed -r requirements.txt
       cd gitlab-ci/src
-      pytest -v -o junit_family=xunit1 --junitxml=../../test_report.xml --cov=. --cov-report=term --cov-report=term-missing --cov-report=html --cov-branch
+      pytest --ignore=gitlab_config/ -v -o junit_family=xunit1 --junitxml=../../test_report.xml --cov=. --cov-report=term --cov-report=term-missing --cov-report=html --cov-branch
   variables:
     PYTHONPATH: "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
 rosetta-api-docker-image:

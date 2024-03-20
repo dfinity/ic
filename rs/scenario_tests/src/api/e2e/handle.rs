@@ -2,10 +2,7 @@ use crate::api::e2e::testnet::{Testnet, TestnetT};
 use crate::api::handle::{Ic, Node, Subnet};
 use canister_test::*;
 use ic_canister_client::{Agent, HttpClient, Sender};
-use ic_crypto_internal_types::sign::eddsa::ed25519::{
-    PublicKey as InternalPublicKey, SecretKey as InternalSecretKey,
-};
-use ic_crypto_utils_basic_sig::conversions::{Ed25519Conversions, Ed25519SecretKeyConversions};
+use ic_crypto_ed25519::{PrivateKey, PublicKey};
 use ic_types::{NodeId, SubnetId};
 use std::sync::Arc;
 use url::Url;
@@ -138,9 +135,9 @@ impl IcInnerHandle {
         caller_principal: ic_canister_client::Ed25519KeyPair,
     ) -> Self {
         let principal_id = PrincipalId::new_self_authenticating(
-            InternalPublicKey(caller_principal.public_key)
-                .to_der()
-                .as_slice(),
+            &PublicKey::deserialize_raw(&caller_principal.public_key)
+                .expect("Invalid public key")
+                .serialize_rfc8410_der(),
         );
         Self {
             testnet,
@@ -152,14 +149,15 @@ impl IcInnerHandle {
     pub fn from_testnet_with_principal_from_file(testnet: Testnet, key_file: String) -> Self {
         let key_file = std::fs::read_to_string(key_file.clone())
             .unwrap_or_else(|_| panic!("Failed to load principal key from file {}", key_file));
-        let (secret_key, public_key) =
-            InternalSecretKey::from_pem(&key_file).expect("Invalid secret key.");
+        let secret_key = PrivateKey::deserialize_pkcs8_pem(&key_file).expect("Invalid secret key.");
+
+        let public_key = secret_key.public_key();
 
         Self::from_testnet_with_principal(
             testnet,
             ic_canister_client::Ed25519KeyPair {
-                secret_key: secret_key.0,
-                public_key: public_key.0,
+                secret_key: secret_key.serialize_raw(),
+                public_key: public_key.serialize_raw(),
             },
         )
     }

@@ -11,10 +11,10 @@ async-trait = "0.1.53"
 candid = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-constants = { path = "../../constants" }
-ic-ic00-types = { path = "../../types/ic00_types" }
+ic-management-canister-types = { path = "../../types/management_canister_types" }
 ic-canister-log = { path = "../../rust_canisters/canister_log" }
 ic-ledger-core = { path = "../ledger_core" }
 ic-utils = { path = "../../utils" }
 ic-ledger-hash-of = { path = "../../../packages/ic-ledger-hash-of" }
-num-traits = "0.2.12"
+num-traits = { workspace = true }
 serde = { workspace = true }

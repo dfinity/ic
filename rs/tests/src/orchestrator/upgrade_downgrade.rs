@@ -13,12 +13,18 @@ Success:: Upgrades work into both directions for all subnet types.
 end::catalog[] */
 
 use super::utils::rw_message::install_nns_and_check_progress;
+use crate::generic_workload_engine::metrics::LoadTestMetricsProvider;
+use crate::generic_workload_engine::metrics::RequestOutcome;
 use crate::{
+    canister_agent::HasCanisterAgentCapability,
+    canister_requests,
+    consensus::tecdsa_performance_test::EcdsaSignatureRequest,
     driver::{
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
         test_env_api::*,
     },
+    generic_workload_engine::engine::Engine,
     orchestrator::utils::{
         rw_message::{
             can_read_msg, can_read_msg_with_retries, cert_state_makes_progress_with_retries,
@@ -28,9 +34,10 @@ use crate::{
         upgrade::*,
     },
     tecdsa::{make_key, KEY_ID1},
-    util::{block_on, MessageCanister},
+    util::{block_on, get_app_subnet_and_node, MessageCanister},
 };
 use candid::Principal;
+use futures::future::join_all;
 use ic_agent::Agent;
 use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
@@ -38,14 +45,17 @@ use ic_types::{Height, SubnetId};
 use k256::ecdsa::VerifyingKey;
 use slog::{info, Logger};
 use std::time::Duration;
+use tokio::runtime::{Builder, Runtime};
 
 const DKG_INTERVAL: u64 = 9;
 
 const ALLOWED_FAILURES: usize = 1;
 const SUBNET_SIZE: usize = 3 * ALLOWED_FAILURES + 1; // 4 nodes
 
-pub const UP_DOWNGRADE_OVERALL_TIMEOUT: Duration = Duration::from_secs(18 * 60);
-pub const UP_DOWNGRADE_PER_TEST_TIMEOUT: Duration = Duration::from_secs(15 * 60);
+const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1);
+
+pub const UP_DOWNGRADE_OVERALL_TIMEOUT: Duration = Duration::from_secs(25 * 60);
+pub const UP_DOWNGRADE_PER_TEST_TIMEOUT: Duration = Duration::from_secs(20 * 60);
 
 pub fn config(env: TestEnv, subnet_type: SubnetType, mainnet_version: bool) {
     let mut ic = InternetComputer::new();
@@ -101,13 +111,39 @@ pub fn upgrade_downgrade_app_subnet(env: TestEnv) {
     let nns_node = env.get_first_healthy_system_node_snapshot();
     let branch_version = bless_branch_version(&env, &nns_node);
     let agent = nns_node.with_default_agent(|agent| async move { agent });
-    let ecdsa_state = get_ecdsa_canister_and_key(&env, &nns_node, &agent, SubnetType::Application);
+    get_ecdsa_canister_and_key(&env, &nns_node, &agent, SubnetType::Application);
+
+    let logger = env.logger();
+    let (app_subnet, app_node) = get_app_subnet_and_node(&env.topology_snapshot());
+    let app_agent = app_node.with_default_agent(|agent| async move { agent });
+
+    let requests = (0..4)
+        .map(|_| {
+            let principal = block_on(MessageCanister::new_with_cycles(
+                &app_agent,
+                app_node.effective_canister_id(),
+                u128::MAX,
+            ))
+            .canister_id();
+            EcdsaSignatureRequest::new(principal, KEY_ID1)
+        })
+        .collect::<Vec<_>>();
+
+    let rt: Runtime = Builder::new_multi_thread()
+        .worker_threads(16)
+        .max_blocking_threads(16)
+        .enable_all()
+        .build()
+        .unwrap();
+
+    rt.spawn(start_workload(app_subnet, requests, logger));
+
     let (faulty_node, can_id, msg) = upgrade(
         &env,
         &nns_node,
         &branch_version,
         SubnetType::Application,
-        Some(&ecdsa_state),
+        None,
     );
     let mainnet_version = env
         .read_dependency_to_string("testnet/mainnet_nns_revision.txt")
@@ -117,7 +153,7 @@ pub fn upgrade_downgrade_app_subnet(env: TestEnv) {
         &nns_node,
         &mainnet_version,
         SubnetType::Application,
-        Some(&ecdsa_state),
+        None,
     );
     // Make sure we can still read the message stored before the first upgrade
     assert!(can_read_msg_with_retries(
@@ -157,6 +193,32 @@ pub fn upgrade_app_subnet(env: TestEnv) {
         SubnetType::Application,
         Some(&ecdsa_state),
     );
+}
+
+async fn start_workload(subnet: SubnetSnapshot, requests: Vec<EcdsaSignatureRequest>, log: Logger) {
+    let agents = join_all(
+        subnet
+            .nodes()
+            .map(|n| async move { n.build_canister_agent().await }),
+    )
+    .await;
+
+    let generator = move |idx: usize| {
+        let request = requests[idx % requests.len()].clone();
+        let agent = agents[idx % agents.len()].clone();
+        async move {
+            let request_outcome = canister_requests![
+                idx,
+                1 * agent => request,
+            ];
+            request_outcome.into_test_outcome()
+        }
+    };
+
+    Engine::new(log.clone(), generator, 4.0, UP_DOWNGRADE_OVERALL_TIMEOUT)
+        .increase_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT)
+        .execute_simply(log.clone())
+        .await;
 }
 
 fn bless_branch_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> String {

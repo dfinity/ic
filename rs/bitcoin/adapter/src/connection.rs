@@ -325,6 +325,7 @@ mod test {
         let addr = SocketAddr::from_str("127.0.0.1:8333").expect("invalid string");
         let address_entry = AddressEntry::Discovered(addr);
         let handle = runtime.spawn(async {});
+        #[allow(clippy::disallowed_methods)]
         let (writer, reader) = unbounded_channel();
         (
             Connection::new(ConnectionConfig {

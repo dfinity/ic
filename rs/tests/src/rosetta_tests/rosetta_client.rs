@@ -173,7 +173,8 @@ impl RosettaApiClient {
                 ConstructionDeriveRequestMetadata {
                     account_type: AccountType::Neuron { neuron_index: 0 },
                 }
-                .into(),
+                .try_into()
+                .unwrap(),
             ),
         };
         to_rosetta_response::<ConstructionDeriveResponse>(
@@ -242,7 +243,7 @@ impl RosettaApiClient {
     ) -> Result<Result<ConstructionMetadataResponse, Error>, String> {
         let req = ConstructionMetadataRequest {
             network_identifier: self.network_id(),
-            options: options.map(|op| op.into()),
+            options: options.map(|op| op.try_into().unwrap()),
             public_keys,
         };
         to_rosetta_response::<ConstructionMetadataResponse>(
@@ -281,7 +282,7 @@ impl RosettaApiClient {
     ) -> Result<Result<ConstructionPayloadsResponse, Error>, String> {
         let req = ConstructionPayloadsRequest {
             network_identifier: self.network_id(),
-            metadata: metadata.map(|m| m.into()),
+            metadata: metadata.map(|m| m.try_into().unwrap()),
             operations,
             public_keys,
         };
@@ -367,7 +368,7 @@ impl RosettaApiClient {
             network_identifier: self.network_id(),
             account_identifier: to_model_account_identifier(&acc),
             block_identifier: None,
-            metadata: Some(account_balance_metadata),
+            metadata: Some(account_balance_metadata.into()),
         };
 
         to_rosetta_response::<AccountBalanceResponse>(
@@ -404,8 +405,13 @@ impl RosettaApiClient {
         &self,
         account: AccountIdentifier,
     ) -> Result<Result<AccountBalanceResponse, Error>, String> {
-        let req =
-            AccountBalanceRequest::new(self.network_id(), to_model_account_identifier(&account));
+        let req = AccountBalanceRequest {
+            network_identifier: self.network_id(),
+            account_identifier: to_model_account_identifier(&account),
+            block_identifier: None,
+            metadata: None,
+        };
+
         to_rosetta_response::<AccountBalanceResponse>(
             self.post_json_request(
                 &format!("{}/account/balance", self.api_url),
@@ -438,7 +444,7 @@ impl RosettaApiClient {
         let req = CallRequest::new(
             self.network_id(),
             "get_proposal_info".to_owned(),
-            ObjectMap::from(GetProposalInfo { proposal_id }),
+            ObjectMap::try_from(GetProposalInfo { proposal_id }).unwrap(),
         );
         debug!(&self.logger, "[Rosetta client] Call Request: {:?}", req);
         debug!(

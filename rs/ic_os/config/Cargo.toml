@@ -4,4 +4,4 @@ version = "1.0.0"
 edition = "2021"
 
 [target.'cfg(target_os = "linux")'.dependencies]
-anyhow = {version = "^1"} 
+anyhow = { workspace = true }

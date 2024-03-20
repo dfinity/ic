@@ -2,22 +2,20 @@ use ic_base_types::NumSeconds;
 use ic_config::subnet_config::CyclesAccountManagerConfig;
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::{IngressInductionCost, ResourceSaturation};
-use ic_ic00_types::{CanisterIdRecord, Payload, IC_00};
 use ic_interfaces::execution_environment::CanisterOutOfCyclesError;
 use ic_logger::replica_logger::no_op_logger;
+use ic_management_canister_types::{CanisterIdRecord, Payload, IC_00};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::system_state::CyclesUseCase, testing::SystemStateTesting, SystemState,
 };
-use ic_test_utilities::{
-    cycles_account_manager::CyclesAccountManagerBuilder,
-    state::{new_canister_state, SystemStateBuilder},
-    types::{
-        ids::{canister_test_id, subnet_test_id, user_test_id},
-        messages::SignedIngressBuilder,
-    },
-};
+use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_logger::with_test_replica_logger;
+use ic_test_utilities_state::{new_canister_state, SystemStateBuilder};
+use ic_test_utilities_types::{
+    ids::{canister_test_id, subnet_test_id, user_test_id},
+    messages::SignedIngressBuilder,
+};
 use ic_types::{
     messages::{extract_effective_canister_id, SignedIngressContent},
     nominal_cycles::NominalCycles,

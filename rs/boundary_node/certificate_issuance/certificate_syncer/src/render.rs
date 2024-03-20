@@ -9,6 +9,7 @@ use crate::metrics::{MetricParams, WithMetrics};
 #[derive(Debug, PartialEq, Serialize)]
 pub struct Context<'a> {
     pub name: &'a str,
+    pub canister_id: &'a str,
     pub ssl_certificate_key_path: &'a str,
     pub ssl_certificate_path: &'a str,
 }
@@ -33,6 +34,7 @@ impl Render for Renderer {
     fn render(&self, cx: &Context) -> Result<String, Error> {
         let out = self.template.clone();
         let out = out.replace("{name}", cx.name);
+        let out = out.replace("{canister_id}", cx.canister_id);
         let out = out.replace("{ssl_certificate_key_path}", cx.ssl_certificate_key_path);
         let out = out.replace("{ssl_certificate_path}", cx.ssl_certificate_path);
 
@@ -68,26 +70,29 @@ mod tests {
 
     #[test]
     fn test_render() {
-        let r = Renderer::new("{name}|{ssl_certificate_key_path}|{ssl_certificate_path}");
+        let r =
+            Renderer::new("{name}|{canister_id}|{ssl_certificate_key_path}|{ssl_certificate_path}");
 
         let out = r
             .render(&Context {
                 name: "A",
+                canister_id: "B",
                 ssl_certificate_key_path: "2",
                 ssl_certificate_path: "3",
             })
             .expect("failed to render");
 
-        assert_eq!(out, "A|2|3");
+        assert_eq!(out, "A|B|2|3");
 
         let out = r
             .render(&Context {
                 name: "X",
+                canister_id: "Y",
                 ssl_certificate_key_path: "2",
                 ssl_certificate_path: "3",
             })
             .expect("failed to render");
 
-        assert_eq!(out, "X|2|3");
+        assert_eq!(out, "X|Y|2|3");
     }
 }

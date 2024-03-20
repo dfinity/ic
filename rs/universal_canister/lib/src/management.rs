@@ -70,7 +70,9 @@ pub fn create_canister(cycles: (u64, u64)) -> CandidCallBuilder<CreateCanisterAr
 /// // Upgrade a canister while skipping pre_upgrade hook with custom callbacks
 /// wasm().call(
 ///   management::install_code(canister_id, wasm_module)
-///      .with_mode(management::InstallMode::Upgrade(Some(management::SkipPreUpgrade(Some(true)))))
+///      .with_mode(management::InstallMode::Upgrade(Some(management::CanisterUpgradeOptions {
+///         skip_pre_upgrade: Some(false),
+///       })))
 ///      .on_reply(wasm().noop()) // custom on_reply
 ///      .on_reject(wasm().noop()) // custom on_reject
 ///      .on_cleanup(wasm().noop())); // custom on_cleanup
@@ -285,7 +287,9 @@ impl<Args: CandidType> From<CandidCallBuilder<Args>> for Call {
 }
 
 #[derive(CandidType, Deserialize)]
-pub struct SkipPreUpgrade(pub Option<bool>);
+pub struct CanisterUpgradeOptions {
+    pub skip_pre_upgrade: Option<bool>,
+}
 
 #[derive(CandidType, Deserialize)]
 pub enum InstallMode {
@@ -294,7 +298,7 @@ pub enum InstallMode {
     #[serde(rename = "reinstall")]
     Reinstall,
     #[serde(rename = "upgrade")]
-    Upgrade(Option<SkipPreUpgrade>),
+    Upgrade(Option<CanisterUpgradeOptions>),
 }
 
 #[derive(CandidType)]

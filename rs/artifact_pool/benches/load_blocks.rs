@@ -7,11 +7,12 @@ use ic_interfaces::consensus_pool::{
     ChangeAction, ChangeSet, ConsensusPool, ValidatedConsensusArtifact,
 };
 use ic_interfaces::p2p::consensus::MutablePool;
+use ic_interfaces::time_source::SysTimeSource;
 use ic_logger::replica_logger::no_op_logger;
-use ic_test_utilities::{
-    consensus::{fake::*, make_genesis},
-    types::ids::{node_test_id, subnet_test_id},
-    types::messages::SignedIngressBuilder,
+use ic_test_utilities_consensus::{fake::*, make_genesis};
+use ic_test_utilities_types::{
+    ids::{node_test_id, subnet_test_id},
+    messages::SignedIngressBuilder,
 };
 use ic_types::consensus::{BlockPayload, DataPayload};
 use ic_types::{
@@ -36,6 +37,7 @@ where
             pool_config,
             ic_metrics::MetricsRegistry::new(),
             no_op_logger(),
+            std::sync::Arc::new(SysTimeSource::new()),
         );
         test(&mut consensus_pool);
     })

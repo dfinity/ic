@@ -10,7 +10,7 @@ documentation.workspace = true
 askama = { workspace = true }
 candid = { workspace = true }
 candid_parser = { workspace = true }
-clap = { version = "4", features = ["derive"] }
+clap = { workspace = true }
 hex = "0.4.2"
 serde_json = { workspace = true }
 strum = { workspace = true }

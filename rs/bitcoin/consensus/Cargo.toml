@@ -25,13 +25,15 @@ ic-types = { path = "../../types/types" }
 prometheus = { workspace = true }
 prost = { workspace = true }
 slog = { workspace = true }
-thiserror = "1.0"
+thiserror = { workspace = true }
 
 [dev-dependencies]
 ic-interfaces-state-manager-mocks = { path = "../../interfaces/state_manager/mocks" }
 ic-interfaces-registry-mocks = { path = "../../interfaces/registry/mocks" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }
+ic-test-utilities-state = { path = "../../test_utilities/state" }
 ic-test-utilities-time = { path = "../../test_utilities/time" }
+ic-test-utilities-types = { path = "../../test_utilities/types" }
 mockall = "0.11.4"
 proptest = "1.0"

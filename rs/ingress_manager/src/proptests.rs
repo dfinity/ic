@@ -21,18 +21,16 @@ use ic_interfaces::{
     p2p::consensus::{MutablePool, UnvalidatedArtifact, ValidatedPoolReader},
     time_source::TimeSource,
 };
-use ic_test_utilities::{
-    state::{CanisterStateBuilder, ReplicatedStateBuilder},
-    types::{
-        ids::{canister_test_id, node_test_id},
-        messages::SignedIngressBuilder,
-    },
+use ic_test_utilities_state::{CanisterStateBuilder, ReplicatedStateBuilder};
+use ic_test_utilities_time::FastForwardTimeSource;
+use ic_test_utilities_types::{
+    ids::{canister_test_id, node_test_id},
+    messages::SignedIngressBuilder,
 };
-use ic_test_utilities_time::{mock_time, FastForwardTimeSource};
 use ic_types::crypto::crypto_hash;
 use ic_types::{
-    artifact::IngressMessageId, batch::ValidationContext, messages::SignedIngress, CountBytes,
-    Height, NumBytes, RegistryVersion,
+    artifact::IngressMessageId, batch::ValidationContext, messages::SignedIngress,
+    time::UNIX_EPOCH, CountBytes, Height, NumBytes, RegistryVersion,
 };
 use proptest::prelude::*;
 use std::collections::HashSet;
@@ -62,7 +60,7 @@ proptest! {
                     .build(),
             ),
             |ingress_manager, ingress_pool| {
-                let time = mock_time();
+                let time = UNIX_EPOCH;
                 let time_source = FastForwardTimeSource::new();
                 let validation_context = ValidationContext {
                     time: time + MAX_INGRESS_TTL,
@@ -127,7 +125,7 @@ fn prop_signed_ingress_for_size_test(
             .canister_id(canister_test_id(0))
             .method_name("Size proptest")
             .method_payload(method_payload)
-            .expiry_time(mock_time() + MAX_INGRESS_TTL)
+            .expiry_time(UNIX_EPOCH + MAX_INGRESS_TTL)
             .build()
     })
 }

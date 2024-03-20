@@ -9,8 +9,8 @@ documentation.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0"
-clap = { workspace = true }
+anyhow = { workspace = true }
+clap = { version = "3.2.25", features = ["derive"] }
 ic-config = { path = "../config" }
 ic-logger = { path = "../monitoring/logger" }
 ic-prep = { path = "../prep" }
@@ -19,7 +19,7 @@ ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist"
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-registry-subnet-features = { path = "../registry/subnet_features" }
 ic-types = { path = "../types/types" }
-ic-ic00-types = { path = "../types/ic00_types" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }

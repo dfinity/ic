@@ -146,3 +146,5 @@ user.bazelrc
 .viminfo
 .local
 .config
+
+test_tmpdir/**

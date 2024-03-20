@@ -229,7 +229,8 @@ mod tests {
     use super::*;
     use ic_consensus_mocks::{dependencies, Dependencies};
     use ic_metrics::MetricsRegistry;
-    use ic_test_utilities::{consensus::fake::FakeContent, types::ids::node_test_id};
+    use ic_test_utilities_consensus::fake::FakeContent;
+    use ic_test_utilities_types::ids::node_test_id;
     use ic_types::consensus::{
         ConsensusMessageHashable, Finalization, FinalizationContent, Notarization,
         NotarizationContent,

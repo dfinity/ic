@@ -17,7 +17,7 @@ use ic_interfaces::ecdsa::{
     EcdsaPoolSectionOps, MutableEcdsaPoolSection,
 };
 use ic_interfaces::p2p::consensus::{
-    ChangeResult, MutablePool, UnvalidatedArtifact, ValidatedPoolReader,
+    ArtifactWithOpt, ChangeResult, MutablePool, UnvalidatedArtifact, ValidatedPoolReader,
 };
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -26,7 +26,7 @@ use ic_types::artifact_kind::EcdsaArtifact;
 use ic_types::consensus::{
     ecdsa::{
         EcdsaArtifactId, EcdsaComplaint, EcdsaMessage, EcdsaMessageType, EcdsaOpening,
-        EcdsaPrefixOf, EcdsaSigShare, EcdsaStats, EcdsaStatsNoOp,
+        EcdsaPrefixOf, EcdsaSigShare, EcdsaStats,
     },
     CatchUpPackage,
 };
@@ -288,7 +288,7 @@ pub struct EcdsaPoolImpl {
 }
 
 impl EcdsaPoolImpl {
-    pub fn new_with_stats(
+    pub fn new(
         config: ArtifactPoolConfig,
         log: ReplicaLogger,
         metrics_registry: MetricsRegistry,
@@ -325,14 +325,6 @@ impl EcdsaPoolImpl {
             stats,
             log,
         }
-    }
-
-    pub fn new(
-        config: ArtifactPoolConfig,
-        log: ReplicaLogger,
-        metrics_registry: MetricsRegistry,
-    ) -> Self {
-        Self::new_with_stats(config, log, metrics_registry, Box::new(EcdsaStatsNoOp {}))
     }
 
     // Populates the validated pool with the initial dealings from the CUP.
@@ -400,19 +392,27 @@ impl MutablePool<EcdsaArtifact> for EcdsaPoolImpl {
         let mut unvalidated_ops = EcdsaPoolSectionOps::new();
         let mut validated_ops = EcdsaPoolSectionOps::new();
         let changed = !change_set.is_empty();
-        let mut adverts = Vec::new();
+        let mut artifacts_with_opt = Vec::new();
         let mut purged = Vec::new();
         for action in change_set {
             match action {
                 EcdsaChangeAction::AddToValidated(message) => {
-                    adverts.push(EcdsaArtifact::message_to_advert(&message));
+                    artifacts_with_opt.push(ArtifactWithOpt {
+                        advert: EcdsaArtifact::message_to_advert(&message),
+                        is_latency_sensitive: true,
+                    });
                     validated_ops.insert(message);
                 }
                 EcdsaChangeAction::MoveToValidated(message) => {
                     match &message {
                         EcdsaMessage::EcdsaDealingSupport(_)
+                        | EcdsaMessage::EcdsaSigShare(_)
                         | EcdsaMessage::EcdsaSignedDealing(_) => (),
-                        _ => adverts.push(EcdsaArtifact::message_to_advert(&message)),
+                        _ => artifacts_with_opt.push(ArtifactWithOpt {
+                            advert: EcdsaArtifact::message_to_advert(&message),
+                            // relayed
+                            is_latency_sensitive: false,
+                        }),
                     }
                     unvalidated_ops.remove(EcdsaArtifactId::from(&message));
                     validated_ops.insert(message);
@@ -435,7 +435,7 @@ impl MutablePool<EcdsaArtifact> for EcdsaPoolImpl {
                     } else {
                         warn!(
                             self.log,
-                            "HandleInvalid:: artifact was not found: msg_id = {msg_id:?}, msg = {msg}" 
+                            "HandleInvalid:: artifact was not found: msg_id = {msg_id:?}, msg = {msg}"
                         );
                     }
                 }
@@ -446,7 +446,7 @@ impl MutablePool<EcdsaArtifact> for EcdsaPoolImpl {
         self.validated.mutate(validated_ops);
         ChangeResult {
             purged,
-            adverts,
+            artifacts_with_opt,
             poll_immediately: changed,
         }
     }
@@ -473,15 +473,25 @@ mod tests {
     use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_idkg_dealing_for_tests;
     use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_idkg_transcript_id_for_tests;
     use ic_metrics::MetricsRegistry;
-    use ic_test_utilities::consensus::fake::*;
-    use ic_test_utilities::types::ids::{NODE_1, NODE_2, NODE_3, NODE_4, NODE_5, NODE_6};
+    use ic_test_utilities_consensus::fake::*;
+    use ic_test_utilities_consensus::EcdsaStatsNoOp;
     use ic_test_utilities_logger::with_test_replica_logger;
+    use ic_test_utilities_types::ids::{NODE_1, NODE_2, NODE_3, NODE_4, NODE_5, NODE_6};
     use ic_types::consensus::ecdsa::{dealing_support_prefix, EcdsaObject};
     use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
     use ic_types::crypto::{CryptoHash, CryptoHashOf};
     use ic_types::signature::BasicSignature;
     use ic_types::{time::UNIX_EPOCH, NodeId};
     use std::collections::BTreeSet;
+
+    fn create_ecdsa_pool(config: ArtifactPoolConfig, log: ReplicaLogger) -> EcdsaPoolImpl {
+        EcdsaPoolImpl::new(
+            config,
+            log,
+            MetricsRegistry::new(),
+            Box::new(EcdsaStatsNoOp {}),
+        )
+    }
 
     fn create_ecdsa_dealing(transcript_id: IDkgTranscriptId) -> SignedIDkgDealing {
         let mut idkg_dealing = dummy_idkg_dealing_for_tests();
@@ -598,7 +608,7 @@ mod tests {
                 )];
                 let result = ecdsa_pool.apply_changes(change_set);
                 assert!(result.purged.is_empty());
-                assert_eq!(result.adverts[0].id, support.message_id());
+                assert_eq!(result.artifacts_with_opt[0].advert.id, support.message_id());
                 assert!(result.poll_immediately);
             }
         }
@@ -762,8 +772,7 @@ mod tests {
     fn test_ecdsa_pool_insert_remove() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let mut ecdsa_pool =
-                    EcdsaPoolImpl::new(pool_config, logger, MetricsRegistry::new());
+                let mut ecdsa_pool = create_ecdsa_pool(pool_config, logger);
 
                 let msg_id_1 = {
                     let ecdsa_dealing =
@@ -800,8 +809,7 @@ mod tests {
     fn test_ecdsa_pool_add_validated() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let mut ecdsa_pool =
-                    EcdsaPoolImpl::new(pool_config, logger, MetricsRegistry::new());
+                let mut ecdsa_pool = create_ecdsa_pool(pool_config, logger);
 
                 let msg_id_1 = {
                     let ecdsa_dealing =
@@ -834,8 +842,7 @@ mod tests {
     fn test_ecdsa_pool_move_validated() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let mut ecdsa_pool =
-                    EcdsaPoolImpl::new(pool_config, logger, MetricsRegistry::new());
+                let mut ecdsa_pool = create_ecdsa_pool(pool_config, logger);
 
                 let msg_id_1 = {
                     let ecdsa_dealing =
@@ -881,8 +888,8 @@ mod tests {
                     EcdsaChangeAction::MoveToValidated(msg_3),
                 ]);
                 assert!(result.purged.is_empty());
-                // No adverts are created for moved dealings and dealing support
-                assert!(result.adverts.is_empty());
+                // No artifacts_with_opt are created for moved dealings and dealing support
+                assert!(result.artifacts_with_opt.is_empty());
                 assert!(result.poll_immediately);
                 check_state(&ecdsa_pool, &[], &[msg_id_1, msg_id_2]);
             })
@@ -893,8 +900,7 @@ mod tests {
     fn test_ecdsa_pool_remove_validated() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let mut ecdsa_pool =
-                    EcdsaPoolImpl::new(pool_config, logger, MetricsRegistry::new());
+                let mut ecdsa_pool = create_ecdsa_pool(pool_config, logger);
                 let msg_id_1 = {
                     let ecdsa_dealing =
                         create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(100));
@@ -934,14 +940,14 @@ mod tests {
 
                 let result = ecdsa_pool
                     .apply_changes(vec![EcdsaChangeAction::RemoveValidated(msg_id_1.clone())]);
-                assert!(result.adverts.is_empty());
+                assert!(result.artifacts_with_opt.is_empty());
                 assert_eq!(result.purged, vec![msg_id_1]);
                 assert!(result.poll_immediately);
                 check_state(&ecdsa_pool, &[msg_id_3.clone()], &[msg_id_2.clone()]);
 
                 let result = ecdsa_pool
                     .apply_changes(vec![EcdsaChangeAction::RemoveValidated(msg_id_2.clone())]);
-                assert!(result.adverts.is_empty());
+                assert!(result.artifacts_with_opt.is_empty());
                 assert_eq!(result.purged, vec![msg_id_2]);
                 assert!(result.poll_immediately);
                 check_state(&ecdsa_pool, &[msg_id_3], &[]);
@@ -956,8 +962,7 @@ mod tests {
     fn test_ecdsa_pool_remove_unvalidated() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let mut ecdsa_pool =
-                    EcdsaPoolImpl::new(pool_config, logger, MetricsRegistry::new());
+                let mut ecdsa_pool = create_ecdsa_pool(pool_config, logger);
                 let msg_id = {
                     let ecdsa_dealing =
                         create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(200));
@@ -974,7 +979,7 @@ mod tests {
                 let result =
                     ecdsa_pool.apply_changes(vec![EcdsaChangeAction::RemoveUnvalidated(msg_id)]);
                 assert!(result.purged.is_empty());
-                assert!(result.adverts.is_empty());
+                assert!(result.artifacts_with_opt.is_empty());
                 assert!(result.poll_immediately);
                 check_state(&ecdsa_pool, &[], &[]);
             })
@@ -985,8 +990,7 @@ mod tests {
     fn test_ecdsa_pool_handle_invalid_unvalidated() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let mut ecdsa_pool =
-                    EcdsaPoolImpl::new(pool_config, logger, MetricsRegistry::new());
+                let mut ecdsa_pool = create_ecdsa_pool(pool_config, logger);
                 let msg_id = {
                     let ecdsa_dealing =
                         create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(200));
@@ -1013,8 +1017,7 @@ mod tests {
     fn test_ecdsa_pool_handle_invalid_validated() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let mut ecdsa_pool =
-                    EcdsaPoolImpl::new(pool_config, logger, MetricsRegistry::new());
+                let mut ecdsa_pool = create_ecdsa_pool(pool_config, logger);
 
                 let msg_id = {
                     let ecdsa_dealing =
@@ -1041,8 +1044,7 @@ mod tests {
     fn test_ecdsa_prefix_search_unvalidated() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let mut ecdsa_pool =
-                    EcdsaPoolImpl::new(pool_config, logger, MetricsRegistry::new());
+                let mut ecdsa_pool = create_ecdsa_pool(pool_config, logger);
                 check_search_by_prefix(&mut ecdsa_pool, true);
             })
         })
@@ -1052,8 +1054,7 @@ mod tests {
     fn test_ecdsa_prefix_search_validated() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let mut ecdsa_pool =
-                    EcdsaPoolImpl::new(pool_config, logger, MetricsRegistry::new());
+                let mut ecdsa_pool = create_ecdsa_pool(pool_config, logger);
                 check_search_by_prefix(&mut ecdsa_pool, false);
             })
         })

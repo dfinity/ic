@@ -525,7 +525,7 @@ mod tests {
     use std::collections::BTreeSet;
 
     use super::*;
-    use ic_test_utilities::types::ids::node_test_id;
+    use ic_test_utilities_types::ids::node_test_id;
     use ic_types::{
         crypto::{CombinedMultiSig, CombinedMultiSigOf, IndividualMultiSig, IndividualMultiSigOf},
         messages::MessageId,

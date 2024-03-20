@@ -5,7 +5,6 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/artifact_pool",
     "//rs/config",
     "//rs/consensus/utils",
     "//rs/crypto",
@@ -26,7 +25,7 @@ DEPENDENCIES = [
     "//rs/registry/subnet_type",
     "//rs/replicated_state",
     "//rs/types/error_types",
-    "//rs/types/ic00_types",
+    "//rs/types/management_canister_types",
     "//rs/types/types",
     "@crate_index//:prometheus",
     "@crate_index//:rand",
@@ -37,6 +36,7 @@ DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
+    "//rs/artifact_pool",
     "//rs/bitcoin/types/internal",
     "//rs/consensus/mocks",
     "//rs/crypto/temp_crypto",
@@ -55,9 +55,12 @@ DEV_DEPENDENCIES = [
     "//rs/sys",
     "//rs/test_utilities",
     "//rs/test_utilities/artifact_pool",
+    "//rs/test_utilities/consensus",
     "//rs/test_utilities/logger",
     "//rs/test_utilities/registry",
+    "//rs/test_utilities/state",
     "//rs/test_utilities/time",
+    "//rs/test_utilities/types",
     "@crate_index//:assert_matches",
     "@crate_index//:criterion",
     "@crate_index//:proptest",
@@ -152,9 +155,12 @@ rust_ic_bench(
         "//rs/registry/subnet_type",
         "//rs/state_manager",
         "//rs/test_utilities",
+        "//rs/test_utilities/consensus",
         "//rs/test_utilities/registry",
+        "//rs/test_utilities/state",
         "//rs/test_utilities/time",
-        "//rs/types/ic00_types",
+        "//rs/test_utilities/types",
+        "//rs/types/management_canister_types",
         "//rs/types/types",
         "@crate_index//:criterion",
         "@crate_index//:tempfile",

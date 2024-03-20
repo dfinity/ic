@@ -17,6 +17,10 @@ message Funds {
   Cycles cycles_struct = 3;
 }
 
+message StreamFlags {
+  bool responses_only = 1;
+}
+
 message Stream {
   uint64 messages_begin = 1;
   repeated RequestOrResponse messages = 2;
@@ -24,6 +28,7 @@ message Stream {
   reserved "signals_begin", "signals";
   uint64 signals_end = 5;
   repeated uint64 reject_signals = 6;
+  StreamFlags reverse_stream_flags = 7;
 }
 
 message StreamEntry {
@@ -53,6 +58,8 @@ message Request {
   bytes method_payload = 6;
   Cycles cycles_payment = 7;
   RequestMetadata metadata = 8;
+  // If non-zero, this is a best-effort call.
+  uint32 deadline_seconds = 9;
 }
 
 message RejectContext {
@@ -70,6 +77,8 @@ message Response {
     RejectContext reject = 6;
   }
   Cycles cycles_refund = 7;
+  // If non-zero, this is a best-effort call.
+  uint32 deadline_seconds = 8;
 }
 
 message RequestOrResponse {

@@ -1,42 +1,37 @@
 use assert_matches::assert_matches;
 use candid::{Decode, Encode};
-use ic_config::flag_status::FlagStatus;
-use ic_registry_routing_table::RoutingTable;
-use ic_replicated_state::canister_state::system_state::CyclesUseCase;
-use ic_replicated_state::ReplicatedState;
-use ic_types::nominal_cycles::NominalCycles;
-
 use ic_base_types::{NumBytes, NumSeconds};
+use ic_config::flag_status::FlagStatus;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
-use ic_ic00_types::{
+use ic_management_canister_types::{
     self as ic00, BitcoinGetUtxosArgs, BitcoinNetwork, BoundedHttpHeaders, CanisterChange,
     CanisterHttpRequestArgs, CanisterIdRecord, CanisterStatusResultV2, CanisterStatusType,
     DerivationPath, EcdsaCurve, EcdsaKeyId, EmptyBlob, FetchCanisterLogsRequest, HttpMethod,
     LogVisibility, Method, Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs,
     ProvisionalTopUpCanisterArgs, TransformContext, TransformFunc, IC_00,
 };
-use ic_registry_routing_table::canister_id_into_u64;
-use ic_registry_routing_table::CanisterIdRange;
+use ic_registry_routing_table::{canister_id_into_u64, CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
+    canister_state::system_state::CyclesUseCase,
     canister_state::{DEFAULT_QUEUE_CAPACITY, WASM_PAGE_SIZE_IN_BYTES},
     testing::{CanisterQueuesTesting, SystemStateTesting},
-    CanisterStatus, SystemState,
+    CanisterStatus, ReplicatedState, SystemState,
 };
 use ic_test_utilities::assert_utils::assert_balance_equals;
 use ic_test_utilities_execution_environment::{
-    assert_empty_reply, check_ingress_status, get_output_messages, get_reply, ExecutionTest,
-    ExecutionTestBuilder,
+    assert_empty_reply, check_ingress_status, get_reply, ExecutionTest, ExecutionTestBuilder,
 };
 use ic_test_utilities_metrics::{fetch_histogram_vec_count, fetch_int_counter, metric_vec};
-use ic_test_utilities_time::mock_time;
-use ic_types::canister_http::Transform;
 use ic_types::{
-    canister_http::CanisterHttpMethod,
+    canister_http::{CanisterHttpMethod, Transform},
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
         CallbackId, Payload, RejectContext, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES,
+        NO_DEADLINE,
     },
+    nominal_cycles::NominalCycles,
+    time::UNIX_EPOCH,
     CanisterId, Cycles, PrincipalId, RegistryVersion,
 };
 use ic_types_test_utils::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id};
@@ -51,6 +46,9 @@ mod canister_task;
 mod compilation;
 #[cfg(test)]
 mod orthogonal_persistence;
+
+#[cfg(test)]
+mod canister_snapshots;
 
 const BALANCE_EPSILON: Cycles = Cycles::new(10_000_000);
 const ONE_GIB: i64 = 1 << 30;
@@ -190,7 +188,7 @@ fn ingress_can_reply_and_produce_output_request() {
         IngressStatus::Known {
             receiver: canister_id.get(),
             user_id: test.user_id(),
-            time: mock_time(),
+            time: UNIX_EPOCH,
             state: IngressState::Completed(WasmResult::Reply(b"MONOLORD".to_vec())),
         }
     );
@@ -211,7 +209,7 @@ fn ingress_can_reject() {
         IngressStatus::Known {
             receiver: canister_id.get(),
             user_id: test.user_id(),
-            time: mock_time(),
+            time: UNIX_EPOCH,
             state: IngressState::Completed(WasmResult::Reject("MONOLORD".to_string())),
         }
     );
@@ -566,24 +564,48 @@ fn stopping_an_already_stopped_canister_succeeds() {
 }
 
 #[test]
-fn stopping_a_running_canister_does_not_update_ingress_history() {
+fn stopping_a_running_canister_updates_ingress_history() {
     let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
     let canister_id = test.universal_canister().unwrap();
     let ingress_id = test.stop_canister(canister_id);
     let ingress_status = test.ingress_status(&ingress_id);
-    assert_eq!(ingress_status, IngressStatus::Unknown);
+    assert_eq!(
+        ingress_status,
+        IngressStatus::Known {
+            receiver: ic00::IC_00.get(),
+            user_id: test.user_id(),
+            time: test.time(),
+            state: IngressState::Processing,
+        }
+    );
 }
 
 #[test]
-fn stopping_a_stopping_canister_does_not_update_ingress_history() {
+fn stopping_a_stopping_canister_updates_ingress_history() {
     let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
     let canister_id = test.universal_canister().unwrap();
     let ingress_id = test.stop_canister(canister_id);
     let ingress_status = test.ingress_status(&ingress_id);
-    assert_eq!(ingress_status, IngressStatus::Unknown);
+    assert_eq!(
+        ingress_status,
+        IngressStatus::Known {
+            receiver: ic00::IC_00.get(),
+            user_id: test.user_id(),
+            time: test.time(),
+            state: IngressState::Processing,
+        }
+    );
     let ingress_id = test.stop_canister(canister_id);
     let ingress_status = test.ingress_status(&ingress_id);
-    assert_eq!(ingress_status, IngressStatus::Unknown);
+    assert_eq!(
+        ingress_status,
+        IngressStatus::Known {
+            receiver: ic00::IC_00.get(),
+            user_id: test.user_id(),
+            time: test.time(),
+            state: IngressState::Processing,
+        }
+    );
 }
 
 #[test]
@@ -1077,9 +1099,14 @@ fn clean_in_progress_stop_canister_calls_from_subnet_call_context_manager() {
             .stop_canister_calls_len(),
         1
     );
-    assert_matches!(
+    assert_eq!(
         test.ingress_status(&ingress_id),
-        IngressStatus::Unknown // As opposed to `Known::Failed`.
+        IngressStatus::Known {
+            receiver: ic00::IC_00.get(),
+            user_id: test.user_id(),
+            time: test.time(),
+            state: IngressState::Processing,
+        } // As opposed to `Known::Failed`.
     );
 
     // Simulate a subnet split that migrates canister 2 to another subnet.
@@ -1290,7 +1317,7 @@ fn subnet_canister_request_unknown_method() {
         .build();
     assert_eq!(
         test.ingress(canister, "update", run).unwrap(),
-        WasmResult::Reject("IC0302: Management canister has no method 'unknown'".to_string())
+        WasmResult::Reject("IC0536: Management canister has no method 'unknown'".to_string())
     );
 }
 
@@ -1471,7 +1498,8 @@ fn setup_initial_dkg_sender_not_on_nns() {
                     ic00::Method::SetupInitialDKG,
                     other_canister,
                 )
-            ))
+            )),
+            deadline: NO_DEADLINE,
         }
         .into()
     );
@@ -3119,102 +3147,6 @@ fn output_requests_on_application_subnets_update_subnet_available_memory_reserve
 }
 
 #[test]
-fn test_request_snapshot_rejected_because_feature_is_enabled() {
-    let own_subnet = subnet_test_id(1);
-    let caller_canister = canister_test_id(1);
-    let mut test = ExecutionTestBuilder::new()
-        .with_own_subnet_id(own_subnet)
-        .with_manual_execution()
-        .with_snapshots(FlagStatus::Enabled)
-        .with_caller(own_subnet, caller_canister)
-        .build();
-
-    // Inject a take_canister_snapshot request.
-    test.inject_call_to_ic00(
-        Method::TakeCanisterSnapshot,
-        Encode!().unwrap(),
-        Cycles::new(1_000_000_000),
-    );
-
-    test.execute_subnet_message();
-
-    let (receiver, response) = &get_output_messages(test.state_mut()).pop().unwrap();
-    assert_matches!(response, RequestOrResponse::Response(_));
-    if let RequestOrResponse::Response(res) = response {
-        assert_eq!(res.originator, *receiver);
-        assert_eq!(
-            res.response_payload,
-            Payload::Reject(RejectContext::new(
-                RejectCode::CanisterReject,
-                "Canister snapshotting API is not yet implemented."
-            ))
-        );
-    }
-}
-
-#[test]
-fn test_request_snapshot_rejected_because_feature_is_disabled() {
-    let own_subnet = subnet_test_id(1);
-    let caller_canister = canister_test_id(1);
-    let mut test = ExecutionTestBuilder::new()
-        .with_own_subnet_id(own_subnet)
-        .with_manual_execution()
-        .with_caller(own_subnet, caller_canister)
-        .build();
-
-    // Inject a take_canister_snapshot request.
-    test.inject_call_to_ic00(
-        Method::TakeCanisterSnapshot,
-        Encode!().unwrap(),
-        Cycles::new(1_000_000_000),
-    );
-
-    test.execute_subnet_message();
-
-    let (receiver, response) = &get_output_messages(test.state_mut()).pop().unwrap();
-    assert_matches!(response, RequestOrResponse::Response(_));
-    if let RequestOrResponse::Response(res) = response {
-        assert_eq!(res.originator, *receiver);
-        assert_eq!(
-            res.response_payload,
-            Payload::Reject(RejectContext::new(
-                RejectCode::CanisterError,
-                "This API is not enabled on this subnet"
-            ))
-        );
-    }
-}
-
-#[test]
-fn test_ingress_snapshot_rejected_because_feature_is_disabled() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_snapshots(FlagStatus::Disabled)
-        .build();
-    let uni = test.universal_canister().unwrap();
-
-    let snapshot_methods = [
-        Method::TakeCanisterSnapshot,
-        Method::LoadCanisterSnapshot,
-        Method::DeleteCanisterSnapshot,
-        Method::ListCanisterSnapshots,
-    ];
-    for method in snapshot_methods {
-        let call = wasm()
-            .call_simple(
-                ic00::IC_00,
-                method,
-                call_args()
-                    .other_side(vec![])
-                    .on_reject(wasm().reject_message().reject()),
-            )
-            .build();
-        let result = test.ingress(uni, "update", call).unwrap();
-        let expected_result = WasmResult::Reject(format!("Unable to route management canister request {}: UserError(UserError {{ code: CanisterRejectedMessage, description: {} }})", method, "\"Snapshotting API is not yet implemented\""));
-        assert_eq!(result, expected_result);
-    }
-}
-
-#[test]
 fn test_canister_settings_log_visibility_default_controllers() {
     // Arrange.
     let mut test = ExecutionTestBuilder::new().build();
@@ -3274,7 +3206,7 @@ fn test_fetch_canister_logs_should_accept_ingress_message_disabled() {
     // - disable the fetch_canister_logs API
     // - set the log visibility to public so any user can read the logs
     let mut test = ExecutionTestBuilder::new()
-        .with_fetch_canister_logs(FlagStatus::Disabled)
+        .with_canister_logging(FlagStatus::Disabled)
         .build();
     let canister_id = test.universal_canister().unwrap();
     let not_a_controller = user_test_id(42);
@@ -3285,18 +3217,15 @@ fn test_fetch_canister_logs_should_accept_ingress_message_disabled() {
     let result = test.should_accept_ingress_message(
         test.state().metadata.own_subnet_id.into(),
         Method::FetchCanisterLogs,
-        FetchCanisterLogsRequest {
-            canister_id: canister_id.into(),
-        }
-        .encode(),
+        FetchCanisterLogsRequest::new(canister_id).encode(),
     );
     // Assert.
     // Expect error because the API is disabled.
     assert_eq!(
         result,
         Err(UserError::new(
-            ErrorCode::CanisterContractViolation,
-            "fetch_canister_logs API is not enabled on this subnet"
+            ErrorCode::CanisterRejectedMessage,
+            "fetch_canister_logs API is only accessible in non-replicated mode"
         ))
     );
 }
@@ -3307,7 +3236,7 @@ fn test_fetch_canister_logs_should_accept_ingress_message_enabled() {
     // - enable the fetch_canister_logs API
     // - set the log visibility to public so any user can read the logs
     let mut test = ExecutionTestBuilder::new()
-        .with_fetch_canister_logs(FlagStatus::Enabled)
+        .with_canister_logging(FlagStatus::Enabled)
         .build();
     let canister_id = test.universal_canister().unwrap();
     let not_a_controller = user_test_id(42);
@@ -3318,10 +3247,7 @@ fn test_fetch_canister_logs_should_accept_ingress_message_enabled() {
     let result = test.should_accept_ingress_message(
         test.state().metadata.own_subnet_id.into(),
         Method::FetchCanisterLogs,
-        FetchCanisterLogsRequest {
-            canister_id: canister_id.into(),
-        }
-        .encode(),
+        FetchCanisterLogsRequest::new(canister_id).encode(),
     );
     // Assert.
     // Expect error since `should_accept_ingress_message` is only called in replicated mode which is not supported.

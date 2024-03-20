@@ -14,7 +14,7 @@ BASE_DEPENDENCIES = [
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/nervous_system/common",
     "//rs/nervous_system/proto",
-    "//rs/rosetta-api/icrc1/index",
+    "//rs/rosetta-api/icrc1/index-ng",
     "//rs/rosetta-api/icrc1/ledger",
     "//rs/rosetta-api/ledger_canister_core",
     "//rs/rosetta-api/ledger_core",

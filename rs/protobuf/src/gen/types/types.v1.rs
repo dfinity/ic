@@ -540,6 +540,13 @@ pub struct RandomTranscriptParams {
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RandomUnmaskedTranscriptParams {
+    #[prost(message, optional, tag = "1")]
+    pub transcript_ref: ::core::option::Option<IDkgTranscriptParamsRef>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ReshareOfMaskedParams {
     #[prost(message, optional, tag = "1")]
     pub transcript_ref: ::core::option::Option<IDkgTranscriptParamsRef>,
@@ -563,13 +570,15 @@ pub struct UnmaskedTimesMaskedParams {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct QuadrupleInCreation {
     #[prost(message, optional, tag = "1")]
-    pub kappa_config: ::core::option::Option<RandomTranscriptParams>,
+    pub kappa_masked_config: ::core::option::Option<RandomTranscriptParams>,
     #[prost(message, optional, tag = "2")]
     pub kappa_masked: ::core::option::Option<MaskedTranscript>,
     #[prost(message, optional, tag = "3")]
     pub lambda_config: ::core::option::Option<RandomTranscriptParams>,
     #[prost(message, optional, tag = "4")]
     pub lambda_masked: ::core::option::Option<MaskedTranscript>,
+    #[prost(message, optional, tag = "11")]
+    pub kappa_unmasked_config: ::core::option::Option<RandomUnmaskedTranscriptParams>,
     #[prost(message, optional, tag = "5")]
     pub unmask_kappa_config: ::core::option::Option<ReshareOfMaskedParams>,
     #[prost(message, optional, tag = "6")]

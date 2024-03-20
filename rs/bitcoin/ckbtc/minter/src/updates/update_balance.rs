@@ -132,6 +132,9 @@ pub async fn update_balance(
         ic_cdk::trap("cannot update minter's balance");
     }
 
+    // When the minter is in the mode using a whitelist we only want a certain
+    // set of principal to be able to mint. But we also want those principals
+    // to mint at any desired address. Therefore the check below is on "caller".
     state::read_state(|s| s.mode.is_deposit_available_for(&caller))
         .map_err(UpdateBalanceError::TemporarilyUnavailable)?;
 
@@ -208,7 +211,7 @@ pub async fn update_balance(
     }
 
     let token_name = match btc_network {
-        ic_ic00_types::BitcoinNetwork::Mainnet => "ckBTC",
+        ic_management_canister_types::BitcoinNetwork::Mainnet => "ckBTC",
         _ => "ckTESTBTC",
     };
 

@@ -1,4 +1,5 @@
-from data_source.console_logger_finding_data_source_subscriber import ConsoleLoggerFindingDataSourceSubscriber
+import logging
+
 from data_source.jira_finding_data_source import JiraFindingDataSource
 from integration.slack.slack_default_notification_handler import SlackDefaultNotificationHandler
 from integration.slack.slack_trivy_finding_notification_handler import SlackTrivyFindingNotificationHandler
@@ -7,7 +8,6 @@ from model.repository import Repository
 from model.team import Team
 from notification.notification_config import NotificationConfig
 from notification.notification_creator import NotificationCreator
-from scanner.console_logger_scanner_subscriber import ConsoleLoggerScannerSubscriber
 from scanner.dependency_scanner import DependencyScanner
 from scanner.manager.bazel_trivy_dependency_manager import BazelTrivyContainer
 from scanner.scanner_job_type import ScannerJobType
@@ -40,6 +40,7 @@ REPOS_TO_SCAN = [
 ]
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.WARNING)
     scanner_job = ScannerJobType.PERIODIC_SCAN
     notify_on_scan_job_succeeded, notify_on_scan_job_failed = {}, {}
     for job_type in ScannerJobType:
@@ -59,8 +60,8 @@ if __name__ == "__main__":
         notification_handlers=[SlackTrivyFindingNotificationHandler(), SlackDefaultNotificationHandler()]
     )
     notifier = NotificationCreator(config)
-    finding_data_source_subscribers = [ConsoleLoggerFindingDataSourceSubscriber(), notifier]
-    scanner_subscribers = [ConsoleLoggerScannerSubscriber(), notifier]
+    finding_data_source_subscribers = [notifier]
+    scanner_subscribers = [notifier]
     scanner_job = DependencyScanner(
         BazelTrivyContainer(app_owner_msg_subscriber=notifier),
         JiraFindingDataSource(finding_data_source_subscribers),

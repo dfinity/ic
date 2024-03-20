@@ -18,17 +18,17 @@ use std::time::Duration;
 
 pub mod aggregation;
 
-const QUERY_STATS_TEST_EPOCH_LENGTH: u64 = 80;
+const QUERY_STATS_TEST_EPOCH_LENGTH: u64 = 120;
 
-const QUERY_STATS_WAIT_PERIOD: u64 = 15;
+const QUERY_STATS_WAIT_PERIOD: u64 = 30;
 
 pub fn query_stats_config(env: TestEnv) {
     InternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
         .add_subnet(
             Subnet::new(SubnetType::Application)
-                .with_unit_delay(Duration::from_millis(100))
-                .with_initial_notary_delay(Duration::from_millis(100))
+                .with_unit_delay(Duration::from_millis(200))
+                .with_initial_notary_delay(Duration::from_millis(200))
                 .with_dkg_interval_length(Height::from(99))
                 .with_query_stats_epoch_length(QUERY_STATS_TEST_EPOCH_LENGTH)
                 .add_nodes(4),

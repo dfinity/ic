@@ -981,6 +981,21 @@ impl CkBtcMinterState {
         self.finalized_requests.push_back(req)
     }
 
+    /// Return UTXOs of the given account that are known to the minter.
+    pub fn known_utxos_for_account(&self, account: &Account) -> Vec<Utxo> {
+        let maybe_existing_utxos = self.utxos_state_addresses.get(account);
+        let maybe_finalized_utxos = self.finalized_utxos.get(&account.owner);
+        match (maybe_existing_utxos, maybe_finalized_utxos) {
+            (Some(existing_utxos), Some(finalized_utxos)) => existing_utxos
+                .union(finalized_utxos)
+                .cloned()
+                .collect::<Vec<_>>(),
+            (Some(existing_utxos), None) => existing_utxos.iter().cloned().collect::<Vec<_>>(),
+            (None, Some(finalized_utxos)) => finalized_utxos.iter().cloned().collect::<Vec<_>>(),
+            (None, None) => vec![],
+        }
+    }
+
     /// Filters out known UTXOs of the given account from the given UTXO list.
     pub fn new_utxos_for_account(&self, mut utxos: Vec<Utxo>, account: &Account) -> Vec<Utxo> {
         let maybe_existing_utxos = self.utxos_state_addresses.get(account);

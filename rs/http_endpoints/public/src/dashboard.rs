@@ -7,9 +7,10 @@ use crate::{
     EndpointService,
 };
 use askama::Template;
-use bytes::Bytes;
+use axum::body::Body;
 use http::Request;
-use hyper::{Body, Response, StatusCode};
+use http_body_util::BodyExt;
+use hyper::{Response, StatusCode};
 use ic_config::http_handler::Config;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{Height, ReplicaVersion};
@@ -17,9 +18,7 @@ use std::convert::Infallible;
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use tower::{
-    limit::concurrency::GlobalConcurrencyLimitLayer, util::BoxCloneService, Service, ServiceBuilder,
-};
+use tower::{util::BoxCloneService, BoxError, Service};
 
 // See build.rs
 include!(concat!(env!("OUT_DIR"), "/dashboard.rs"));
@@ -37,21 +36,15 @@ impl DashboardService {
         subnet_type: SubnetType,
         state_reader_executor: StateReaderExecutor,
     ) -> EndpointService {
-        BoxCloneService::new(
-            ServiceBuilder::new()
-                .layer(GlobalConcurrencyLimitLayer::new(
-                    config.max_dashboard_concurrent_requests,
-                ))
-                .service(Self {
-                    config,
-                    subnet_type,
-                    state_reader_executor,
-                }),
-        )
+        BoxCloneService::new(Self {
+            config,
+            subnet_type,
+            state_reader_executor,
+        })
     }
 }
 
-impl Service<Request<Bytes>> for DashboardService {
+impl Service<Request<Body>> for DashboardService {
     type Response = Response<Body>;
     type Error = Infallible;
     #[allow(clippy::type_complexity)]
@@ -61,7 +54,7 @@ impl Service<Request<Bytes>> for DashboardService {
         Poll::Ready(Ok(()))
     }
 
-    fn call(&mut self, _unused: Request<Bytes>) -> Self::Future {
+    fn call(&mut self, _unused: Request<Body>) -> Self::Future {
         use hyper::header;
         let http_config = self.config.clone();
         let subnet_type = self.subnet_type;
@@ -87,7 +80,7 @@ impl Service<Request<Bytes>> for DashboardService {
 
             let res = match dashboard.render() {
                 Ok(content) => {
-                    let mut response = Response::new(Body::from(content));
+                    let mut response = Response::new(Body::new(content.map_err(BoxError::from)));
                     *response.status_mut() = StatusCode::OK;
                     response.headers_mut().insert(
                         header::CONTENT_TYPE,

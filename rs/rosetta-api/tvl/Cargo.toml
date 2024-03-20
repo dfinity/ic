@@ -23,7 +23,7 @@ ic-cdk-timers = { workspace = true }
 ic-cdk-macros = { workspace = true }
 ic-metrics-encoder = "1"
 ic-stable-structures = { workspace = true }
-num-traits = "0.2.15"
+num-traits = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 

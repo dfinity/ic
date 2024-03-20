@@ -9,6 +9,7 @@ type CanisterStatusResponse = record {
   idle_cycles_burned_per_day : nat;
   module_hash : opt vec nat8;
   query_stats : QueryStats;
+  reserved_cycles : nat;
 };
 
 type QueryStats = record {
@@ -25,6 +26,7 @@ type DefiniteCanisterSettings = record {
   controllers : vec principal;
   memory_allocation : nat;
   compute_allocation : nat;
+  reserved_cycles_limit : nat;
 };
 
 type RetrieveBtcArgs = record {
@@ -382,6 +384,12 @@ service : (minter_arg : MinterArg) -> {
     //
     // If the owner is not set, it defaults to the caller's principal.
     get_btc_address : (record { owner: opt principal; subaccount : opt blob }) -> (text);
+
+    // Returns UTXOs of the given account known by the minter (with no
+    // guarantee in the ordering of the returned values).
+    //
+    // If the owner is not set, it defaults to the caller's principal.
+    get_known_utxos: (record { owner: opt principal; subaccount : opt blob }) -> (vec Utxo) query;
 
     // Mints ckBTC for newly deposited UTXOs.
     //

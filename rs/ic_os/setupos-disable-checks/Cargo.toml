@@ -5,8 +5,8 @@ edition = "2021"
 
 [dependencies]
 partition_tools = { path = "../partition_tools/" }
-anyhow = "1.0.75"
-clap = { version = "4.4.3", features = ["derive"] }
+anyhow = { workspace = true }
+clap = { workspace = true }
 tempfile = "3.8.0"
 tokio = { workspace = true }
 indoc = "1.0.9"

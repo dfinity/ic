@@ -21,15 +21,12 @@ use ic_interfaces::{
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_features::SubnetFeatures;
-use ic_test_utilities::{
-    state_manager::RefMockStateManager,
-    types::{
-        ids::{canister_test_id, node_test_id, subnet_test_id},
-        messages::RequestBuilder,
-    },
-};
+use ic_test_utilities::state_manager::RefMockStateManager;
 use ic_test_utilities_registry::SubnetRecordBuilder;
-use ic_test_utilities_time::mock_time;
+use ic_test_utilities_types::{
+    ids::{canister_test_id, node_test_id, subnet_test_id},
+    messages::RequestBuilder,
+};
 use ic_types::{
     artifact_kind::CanisterHttpArtifact,
     batch::{CanisterHttpPayload, ValidationContext},
@@ -149,8 +146,8 @@ fn multiple_payload_test() {
 
                 // Add a response that is already timed out
                 let (mut response, mut metadata) = test_response_and_metadata(2);
-                response.timeout = mock_time();
-                metadata.timeout = mock_time();
+                response.timeout = UNIX_EPOCH;
+                metadata.timeout = UNIX_EPOCH;
                 let shares = metadata_to_shares(subnet_size, &metadata);
                 add_own_share_to_pool(pool_access.deref_mut(), &shares[0], &response);
                 add_received_shares_to_pool(
@@ -208,7 +205,7 @@ fn multiple_payload_test() {
 
             let past_payloads = vec![PastPayload {
                 height: Height::from(0),
-                time: mock_time(),
+                time: UNIX_EPOCH,
                 block_hash: CryptoHashOf::from(CryptoHash(vec![])),
                 payload: &past_payload,
             }];
@@ -216,7 +213,7 @@ fn multiple_payload_test() {
             let validation_context = ValidationContext {
                 registry_version: RegistryVersion::new(1),
                 certified_height: Height::new(0),
-                time: mock_time() + Duration::from_secs(3),
+                time: UNIX_EPOCH + Duration::from_secs(3),
             };
 
             // Build a payload
@@ -270,7 +267,7 @@ fn multiple_share_same_source_test() {
             let validation_context = ValidationContext {
                 registry_version: RegistryVersion::new(1),
                 certified_height: Height::new(0),
-                time: mock_time() + Duration::from_secs(3),
+                time: UNIX_EPOCH + Duration::from_secs(3),
             };
 
             // Build a payload
@@ -296,8 +293,8 @@ fn multiple_share_same_source_test() {
 #[test]
 fn timeout_priority() {
     // the time used for the validation context.
-    let context_time = mock_time() + CANISTER_HTTP_TIMEOUT_INTERVAL + Duration::from_secs(1);
-    let mut init_state = ic_test_utilities::state::get_initial_state(0, 0);
+    let context_time = UNIX_EPOCH + CANISTER_HTTP_TIMEOUT_INTERVAL + Duration::from_secs(1);
+    let mut init_state = ic_test_utilities_state::get_initial_state(0, 0);
 
     let response_count = 10;
     let timeout_count = 100;
@@ -327,7 +324,7 @@ fn timeout_priority() {
                     http_method: CanisterHttpMethod::GET,
                     transform: None,
                     // this is the important one
-                    time: mock_time(),
+                    time: UNIX_EPOCH,
                 };
                 init_state
                     .metadata
@@ -350,7 +347,7 @@ fn timeout_priority() {
         let validation_context = ValidationContext {
             registry_version: RegistryVersion::new(1),
             certified_height: Height::new(0),
-            time: mock_time() + CANISTER_HTTP_TIMEOUT_INTERVAL + Duration::from_secs(1),
+            time: UNIX_EPOCH + CANISTER_HTTP_TIMEOUT_INTERVAL + Duration::from_secs(1),
         };
 
         // Build a payload
@@ -399,7 +396,7 @@ fn divergence_response_inclusion_test() {
         let validation_context = ValidationContext {
             registry_version: RegistryVersion::new(1),
             certified_height: Height::new(0),
-            time: mock_time() + Duration::from_secs(3),
+            time: UNIX_EPOCH + Duration::from_secs(3),
         };
 
         // Build a payload
@@ -462,7 +459,7 @@ fn max_responses() {
         let validation_context = ValidationContext {
             registry_version: RegistryVersion::new(1),
             certified_height: Height::new(0),
-            time: mock_time() + Duration::from_secs(3),
+            time: UNIX_EPOCH + Duration::from_secs(3),
         };
 
         // Build a payload
@@ -563,7 +560,7 @@ fn timeout_validation() {
         |_, _| { /* Nothing to modify */ },
         &ValidationContext {
             // Set the time further in the future, such that this payload is timed out
-            time: mock_time() + Duration::from_secs(20),
+            time: UNIX_EPOCH + Duration::from_secs(20),
             ..default_validation_context()
         },
     );
@@ -631,7 +628,7 @@ fn duplicate_validation() {
         let payload = payload_to_bytes(&payload, NumBytes::new(4 * 1024 * 1024));
         let past_payloads = vec![PastPayload {
             height: Height::new(1),
-            time: mock_time(),
+            time: UNIX_EPOCH,
             block_hash: CryptoHashOf::from(CryptoHash(vec![])),
             payload: &payload,
         }];
@@ -790,7 +787,7 @@ fn test_response_and_metadata_with_content(
     callback_id: u64,
     content: CanisterHttpResponseContent,
 ) -> (CanisterHttpResponse, CanisterHttpResponseMetadata) {
-    test_response_and_metadata_full(callback_id, mock_time() + Duration::from_secs(10), content)
+    test_response_and_metadata_full(callback_id, UNIX_EPOCH + Duration::from_secs(10), content)
 }
 
 /// Create a response and a supporting metadata object from the response content.
@@ -824,7 +821,7 @@ pub(crate) fn add_received_shares_to_pool(
         pool.insert(UnvalidatedArtifact {
             message: share.clone(),
             peer_id: node_test_id(0),
-            timestamp: mock_time(),
+            timestamp: UNIX_EPOCH,
         });
 
         pool.apply_changes(vec![CanisterHttpChangeAction::MoveToValidated(share)]);

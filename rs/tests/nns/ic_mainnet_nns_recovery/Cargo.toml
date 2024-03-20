@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-anyhow = "1.0.31"
+anyhow = { workspace = true }
 candid = { workspace = true }
 canister-test = { path = "../../../rust_canisters/canister_test" }
 cycles-minting-canister = { path = "../../../nns/cmc" }

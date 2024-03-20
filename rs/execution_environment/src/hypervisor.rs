@@ -234,6 +234,7 @@ impl Hypervisor {
         let mut embedder_config = config.embedders_config.clone();
         embedder_config.subnet_type = own_subnet_type;
         embedder_config.dirty_page_overhead = dirty_page_overhead;
+        embedder_config.feature_flags.canister_logging = config.canister_logging;
 
         let wasm_executor: Arc<dyn WasmExecutor> = match config.canister_sandboxing_flag {
             FlagStatus::Enabled => {
@@ -398,6 +399,7 @@ impl Hypervisor {
             self.dirty_page_overhead,
             execution_parameters.compute_allocation,
             request_metadata,
+            api_type.caller(),
         );
         let (compilation_result, execution_result) = Arc::clone(&self.wasm_executor).execute(
             WasmExecutionInput {

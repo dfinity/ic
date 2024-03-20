@@ -18,16 +18,20 @@ DEPENDENCIES = [
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
     "@crate_index//:serde_cbor",
+    "@crate_index//:strum",
 ]
 
-MACRO_DEPENDENCIES = []
+MACRO_DEPENDENCIES = [
+    "@crate_index//:strum_macros",
+]
 
 DEV_DEPENDENCIES = [
     "//rs/canonical_state/tree_hash/test_utils",
     "//rs/registry/subnet_features",
     "//rs/sys",
-    "//rs/test_utilities",
+    "//rs/test_utilities/state",
     "//rs/test_utilities/time",
+    "//rs/test_utilities/types",
     "//rs/types/wasm_types",
     "//rs/utils",
     "@crate_index//:assert_matches",
@@ -35,12 +39,10 @@ DEV_DEPENDENCIES = [
     "@crate_index//:lazy_static",
     "@crate_index//:maplit",
     "@crate_index//:proptest",
-    "@crate_index//:strum",
     "@crate_index//:tempfile",
 ]
 
 DEV_MACRO_DEPENDENCIES = [
-    "@crate_index//:strum_macros",
 ]
 
 rust_library(

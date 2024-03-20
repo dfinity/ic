@@ -78,6 +78,9 @@ pub struct FeatureFlags {
     /// Track dirty pages with a write barrier instead of the signal handler.
     pub write_barrier: FlagStatus,
     pub wasm_native_stable_memory: FlagStatus,
+    // TODO(IC-272): remove this flag once the feature is enabled by default.
+    /// Indicates whether canister logging feature is enabled or not.
+    pub canister_logging: FlagStatus,
 }
 
 impl FeatureFlags {
@@ -86,6 +89,7 @@ impl FeatureFlags {
             rate_limiting_of_debug_prints: FlagStatus::Enabled,
             write_barrier: FlagStatus::Disabled,
             wasm_native_stable_memory: FlagStatus::Enabled,
+            canister_logging: FlagStatus::Disabled,
         }
     }
 }
@@ -106,8 +110,6 @@ pub enum MeteringType {
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Config {
-    pub max_wasm_stack_size: usize,
-
     /// The number of threads to use for query execution per canister.
     pub query_execution_threads_per_canister: usize,
 
@@ -189,7 +191,6 @@ pub struct Config {
 impl Config {
     pub const fn new() -> Self {
         Config {
-            max_wasm_stack_size: 5 * 1024 * 1024,
             query_execution_threads_per_canister: QUERY_EXECUTION_THREADS_PER_CANISTER,
             max_globals: MAX_GLOBALS,
             max_functions: MAX_FUNCTIONS,

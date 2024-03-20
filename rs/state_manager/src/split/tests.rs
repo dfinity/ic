@@ -7,7 +7,7 @@ use crate::{
 };
 use assert_matches::assert_matches;
 use ic_base_types::{subnet_id_try_from_protobuf, CanisterId, NumSeconds};
-use ic_config::{flag_status::FlagStatus, state_manager::lsmt_storage_default};
+use ic_config::{flag_status::FlagStatus, state_manager::lsmt_config_default};
 use ic_error_types::{ErrorCode, UserError};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
@@ -21,21 +21,19 @@ use ic_state_layout::{
     ProtoFileWith, StateLayout, CANISTER_FILE, CANISTER_STATES_DIR, CHECKPOINTS_DIR,
     INGRESS_HISTORY_FILE, SPLIT_MARKER_FILE, SUBNET_QUEUES_FILE, SYSTEM_METADATA_FILE,
 };
-use ic_test_utilities::{
-    state::new_canister_state,
-    types::{
-        ids::{user_test_id, SUBNET_1, SUBNET_2},
-        messages::RequestBuilder,
-    },
-};
 use ic_test_utilities_logger::with_test_replica_logger;
-use ic_test_utilities_time::mock_time;
+use ic_test_utilities_state::new_canister_state;
 use ic_test_utilities_tmpdir::tmpdir;
+use ic_test_utilities_types::{
+    ids::{user_test_id, SUBNET_1, SUBNET_2},
+    messages::RequestBuilder,
+};
 use ic_types::state_sync::CURRENT_STATE_SYNC_VERSION;
 use ic_types::{
     ingress::{IngressState, IngressStatus},
     malicious_flags::MaliciousFlags,
     messages::MessageId,
+    time::UNIX_EPOCH,
     Cycles, Height,
 };
 use std::{path::Path, sync::Arc, time::Duration};
@@ -84,7 +82,7 @@ const SUBNET_B_RANGES: &[CanisterIdRange] = &[
 /// Note that any queue files are missing as they would be empty.
 fn subnet_a_files() -> &'static [&'static str] {
     // With lsmt enabled, we do do not write empty files for the wasm chunk store.
-    match lsmt_storage_default() {
+    match lsmt_config_default().lsmt_status {
         FlagStatus::Enabled => &[
             "canister_states/00000000000000010101/canister.pbuf",
             "canister_states/00000000000000020101/canister.pbuf",
@@ -109,7 +107,7 @@ fn subnet_a_files() -> &'static [&'static str] {
 
 /// Full list of files expected to be listed in the manifest of subnet A'.
 fn subnet_a_prime_files() -> &'static [&'static str] {
-    match lsmt_storage_default() {
+    match lsmt_config_default().lsmt_status {
         FlagStatus::Enabled => &[
             "canister_states/00000000000000010101/canister.pbuf",
             "canister_states/00000000000000030101/canister.pbuf",
@@ -133,7 +131,7 @@ fn subnet_a_prime_files() -> &'static [&'static str] {
 
 /// Full list of files expected to be listed in the manifest of subnet B.
 fn subnet_b_files() -> &'static [&'static str] {
-    match lsmt_storage_default() {
+    match lsmt_config_default().lsmt_status {
         FlagStatus::Enabled => &[
             "canister_states/00000000000000020101/canister.pbuf",
             INGRESS_HISTORY_FILE,
@@ -367,7 +365,7 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
         log,
         tip_handler,
         layout.clone(),
-        lsmt_storage_default(),
+        lsmt_config_default(),
         state_manager_metrics.clone(),
         MaliciousFlags::default(),
     );
@@ -396,13 +394,13 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
         IngressStatus::Known {
             receiver: CANISTER_1.get(),
             user_id: user_test_id(123),
-            time: mock_time(),
+            time: UNIX_EPOCH,
             state: IngressState::Failed(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 "Canister rejected the message",
             )),
         },
-        mock_time(),
+        UNIX_EPOCH,
         (1u64 << 30).into(),
     );
     state.metadata.batch_time = Time::from_secs_since_unix_epoch(1234567890).unwrap();
@@ -425,7 +423,7 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
         &state_manager_metrics.checkpoint_metrics,
         &mut thread_pool(),
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
-        lsmt_storage_default(),
+        lsmt_config_default().lsmt_status,
     )
     .unwrap_or_else(|err| panic!("Expected make_checkpoint to succeed, got {:?}", err))
     .1;

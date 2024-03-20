@@ -19,7 +19,7 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgUnmaskedTranscriptOrigin, SignedIDkgDealing,
 };
 use ic_types::crypto::canister_threshold_sig::{
-    ExtendedDerivationPath, PreSignatureQuadruple, ThresholdEcdsaSigShare,
+    EcdsaPreSignatureQuadruple, ExtendedDerivationPath, ThresholdEcdsaSigShare,
 };
 use ic_types::crypto::canister_threshold_sig::{
     ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs,
@@ -213,7 +213,7 @@ pub fn generate_key_transcript<R: RngCore + CryptoRng>(
         .run_idkg_and_create_and_verify_transcript(&unmasked_key_params, rng)
 }
 
-pub fn generate_presig_quadruple<R: RngCore + CryptoRng>(
+pub fn generate_ecdsa_presig_quadruple<R: RngCore + CryptoRng>(
     env: &CanisterThresholdSigTestEnvironment,
     dealers: &IDkgDealers,
     receivers: &IDkgReceivers,
@@ -221,7 +221,7 @@ pub fn generate_presig_quadruple<R: RngCore + CryptoRng>(
     key_transcript: &IDkgTranscript,
     random_unmasked_kappa: bool,
     rng: &mut R,
-) -> PreSignatureQuadruple {
+) -> EcdsaPreSignatureQuadruple {
     let lambda_params = setup_masked_random_params(env, alg, dealers, receivers, rng);
     let lambda_transcript = env
         .nodes
@@ -276,7 +276,7 @@ pub fn generate_presig_quadruple<R: RngCore + CryptoRng>(
             .run_idkg_and_create_and_verify_transcript(&key_times_lambda_params, rng)
     };
 
-    PreSignatureQuadruple::new(
+    EcdsaPreSignatureQuadruple::new(
         kappa_transcript,
         lambda_transcript,
         kappa_times_lambda_transcript,
@@ -1483,68 +1483,26 @@ impl IDkgMode {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum IDkgModeTestContext {
-    RandomUnmasked {
-        dealers: IDkgDealers,
-        receivers: IDkgReceivers,
-    },
-    Random {
-        dealers: IDkgDealers,
-        receivers: IDkgReceivers,
-    },
-    ReshareOfMasked {
-        dealers: IDkgDealers,
-        receivers: IDkgReceivers,
-    },
-    ReshareOfUnmasked {
-        dealers: IDkgDealers,
-        receivers: IDkgReceivers,
-    },
-    UnmaskedTimesMasked {
-        dealers: IDkgDealers,
-        receivers: IDkgReceivers,
-    },
+pub struct IDkgModeTestContext {
+    mode: IDkgMode,
+    dealers: IDkgDealers,
+    receivers: IDkgReceivers,
 }
 
 impl IDkgModeTestContext {
-    /// Generates dealers and receivers from `env` for the IDKG mode chosen in `mode`.
+    /// Generates a new test context, where all nodes are acting as both dealers and receivers.
     pub fn new<R: RngCore + CryptoRng>(
         mode: IDkgMode,
         env: &CanisterThresholdSigTestEnvironment,
         rng: &mut R,
     ) -> Self {
-        match mode {
-            IDkgMode::RandomUnmasked => {
-                let (dealers, receivers) =
-                    env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
-                Self::RandomUnmasked { dealers, receivers }
-            }
-            IDkgMode::Random => {
-                let (dealers, receivers) =
-                    env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
-                Self::Random { dealers, receivers }
-            }
-            IDkgMode::ReshareOfUnmasked => {
-                let (dealers, receivers) = env.choose_dealers_and_receivers(
-                    &IDkgParticipants::AllNodesAsDealersAndReceivers,
-                    rng,
-                );
-                Self::UnmaskedTimesMasked { dealers, receivers }
-            }
-            IDkgMode::ReshareOfMasked => {
-                let (dealers, receivers) = env.choose_dealers_and_receivers(
-                    &IDkgParticipants::AllNodesAsDealersAndReceivers,
-                    rng,
-                );
-                Self::ReshareOfMasked { dealers, receivers }
-            }
-            IDkgMode::UnmaskedTimesMasked => {
-                let (dealers, receivers) = env.choose_dealers_and_receivers(
-                    &IDkgParticipants::AllNodesAsDealersAndReceivers,
-                    rng,
-                );
-                Self::UnmaskedTimesMasked { dealers, receivers }
-            }
+        let (dealers, receivers) =
+            env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
+
+        Self {
+            mode,
+            dealers,
+            receivers,
         }
     }
 
@@ -1552,7 +1510,10 @@ impl IDkgModeTestContext {
     /// `mode`. Since `Self::new` can return a setting with only 1 node, this
     /// function modifies that setting to always return at least two receivers
     /// s.t. complaints always work.
-    pub fn new_for_complaint<R: RngCore + CryptoRng>(
+    ///
+    /// Note that this function returns random dealers and receivers with some
+    /// constraints, so this method is not very useful for benchmarks.
+    pub fn new_for_testing_complaint<R: RngCore + CryptoRng>(
         mode: IDkgMode,
         env: &CanisterThresholdSigTestEnvironment,
         rng: &mut R,
@@ -1567,7 +1528,11 @@ impl IDkgModeTestContext {
                     },
                     rng,
                 );
-                Self::Random { dealers, receivers }
+                Self {
+                    mode: IDkgMode::Random,
+                    dealers,
+                    receivers,
+                }
             }
             _ => Self::new(mode, env, rng),
         }
@@ -1580,20 +1545,23 @@ impl IDkgModeTestContext {
         alg: AlgorithmId,
         rng: &mut R,
     ) -> IDkgTranscriptParams {
-        match self {
-            IDkgModeTestContext::RandomUnmasked { dealers, receivers } => {
+        let IDkgModeTestContext {
+            mode,
+            dealers,
+            receivers,
+        } = self;
+        match mode {
+            IDkgMode::RandomUnmasked => {
                 setup_unmasked_random_params(env, alg, dealers, receivers, rng)
             }
-            IDkgModeTestContext::Random { dealers, receivers } => {
-                setup_masked_random_params(env, alg, dealers, receivers, rng)
-            }
-            IDkgModeTestContext::ReshareOfMasked { dealers, receivers } => {
+            IDkgMode::Random => setup_masked_random_params(env, alg, dealers, receivers, rng),
+            IDkgMode::ReshareOfMasked => {
                 setup_reshare_of_masked_params(env, alg, dealers, receivers, rng)
             }
-            IDkgModeTestContext::ReshareOfUnmasked { dealers, receivers } => {
+            IDkgMode::ReshareOfUnmasked => {
                 setup_reshare_of_unmasked_params(env, alg, dealers, receivers, rng)
             }
-            IDkgModeTestContext::UnmaskedTimesMasked { dealers, receivers } => {
+            IDkgMode::UnmaskedTimesMasked => {
                 setup_unmasked_times_masked_params(env, alg, dealers, receivers, rng)
             }
         }
@@ -1626,13 +1594,7 @@ impl IDkgModeTestContext {
     }
 
     fn receivers(&self) -> &IDkgReceivers {
-        match self {
-            IDkgModeTestContext::RandomUnmasked { receivers, .. }
-            | IDkgModeTestContext::Random { receivers, .. }
-            | IDkgModeTestContext::ReshareOfMasked { receivers, .. }
-            | IDkgModeTestContext::ReshareOfUnmasked { receivers, .. }
-            | IDkgModeTestContext::UnmaskedTimesMasked { receivers, .. } => receivers,
-        }
+        &self.receivers
     }
 }
 
@@ -1721,7 +1683,7 @@ pub fn setup_reshare_of_unmasked_params<R: Rng + CryptoRng>(
     let unmasked_transcript = run_idkg_without_complaint(&unmasked_params, &env.nodes, rng);
     let reshare_params = build_params_from_previous(
         unmasked_params,
-        IDkgTranscriptOperation::ReshareOfMasked(unmasked_transcript),
+        IDkgTranscriptOperation::ReshareOfUnmasked(unmasked_transcript),
         rng,
     );
     load_previous_transcripts_for_all_dealers(&reshare_params, &env.nodes);
@@ -1878,7 +1840,7 @@ pub fn generate_tecdsa_protocol_inputs<R: RngCore + CryptoRng>(
     random_unmasked_kappa: bool,
     rng: &mut R,
 ) -> ThresholdEcdsaSigInputs {
-    let quadruple = generate_presig_quadruple(
+    let quadruple = generate_ecdsa_presig_quadruple(
         env,
         dealers,
         receivers,
@@ -2306,7 +2268,7 @@ pub struct ThresholdEcdsaSigInputsBuilder {
     derivation_path: ExtendedDerivationPath,
     hashed_message: Vec<u8>,
     nonce: Randomness,
-    presig_quadruple: PreSignatureQuadruple,
+    presig_quadruple: EcdsaPreSignatureQuadruple,
     key_transcript: IDkgTranscript,
 }
 

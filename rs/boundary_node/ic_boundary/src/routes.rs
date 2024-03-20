@@ -36,7 +36,7 @@ use url::Url;
 
 use crate::{
     cache::CacheStatus,
-    core::MAX_REQUEST_BODY_SIZE,
+    core::{decoder_config, MAX_REQUEST_BODY_SIZE},
     http::{read_streaming_body, reqwest_error_infer, HttpClient},
     persist::{RouteSubnet, Routes},
     retry::RetryResult,
@@ -67,6 +67,8 @@ const HEADER_IC_NODE_ID: HeaderName = HeaderName::from_static("x-ic-node-id");
 #[allow(clippy::declare_interior_mutable_const)]
 const HEADER_IC_CANISTER_ID: HeaderName = HeaderName::from_static("x-ic-canister-id");
 #[allow(clippy::declare_interior_mutable_const)]
+const HEADER_IC_CANISTER_ID_CBOR: HeaderName = HeaderName::from_static("x-ic-canister-id-cbor");
+#[allow(clippy::declare_interior_mutable_const)]
 const HEADER_IC_METHOD_NAME: HeaderName = HeaderName::from_static("x-ic-method-name");
 #[allow(clippy::declare_interior_mutable_const)]
 const HEADER_IC_SENDER: HeaderName = HeaderName::from_static("x-ic-sender");
@@ -78,6 +80,11 @@ const HEADER_IC_RETRIES: HeaderName = HeaderName::from_static("x-ic-retries");
 const HEADER_IC_ERROR_CAUSE: HeaderName = HeaderName::from_static("x-ic-error-cause");
 #[allow(clippy::declare_interior_mutable_const)]
 const HEADER_X_REQUEST_ID: HeaderName = HeaderName::from_static("x-request-id");
+#[allow(clippy::declare_interior_mutable_const)]
+pub const HEADER_X_REAL_IP: http::HeaderName = http::HeaderName::from_static("x-real-ip");
+#[allow(clippy::declare_interior_mutable_const)]
+pub const HEADER_X_IC_COUNTRY_CODE: http::HeaderName =
+    http::HeaderName::from_static("x-ic-country-code");
 
 const HEADERS_HIDE_HTTP_REQUEST: [&str; 4] =
     ["x-real-ip", "x-forwarded-for", "x-request-id", "user-agent"];
@@ -509,6 +516,7 @@ impl From<BoxError> for ApiError {
 
 pub async fn validate_request(
     matched_path: MatchedPath,
+    canister_id: Path<String>,
     mut request: Request<Body>,
     next: Next<Body>,
 ) -> Result<impl IntoResponse, ApiError> {
@@ -521,11 +529,19 @@ pub async fn validate_request(
 
     request.extensions_mut().insert(request_type);
 
+    // Decode canister_id from URL
+    let canister_id = CanisterId::from_str(&canister_id).map_err(|err| {
+        ErrorCause::MalformedRequest(format!("Unable to decode canister_id from URL: {err}"))
+    })?;
+
+    request.extensions_mut().insert(canister_id);
+
     if let Some(id_header) = request.headers().get(HEADER_X_REQUEST_ID) {
         let is_valid_id = id_header
             .to_str()
             .map(|id| UUID_REGEX.is_match(id))
             .unwrap_or(false);
+
         if !is_valid_id {
             #[allow(clippy::borrow_interior_mutable_const)]
             return Err(ErrorCause::MalformedRequest(format!(
@@ -535,21 +551,21 @@ pub async fn validate_request(
         }
     }
 
-    Ok(next.run(request).await)
+    let mut resp = next.run(request).await;
+    resp.headers_mut().insert(
+        HEADER_IC_CANISTER_ID,
+        HeaderValue::from_maybe_shared(Bytes::from(canister_id.to_string())).unwrap(),
+    );
+
+    Ok(resp)
 }
 
 // Middleware: preprocess the request before handing it over to handlers
 pub async fn preprocess_request(
     Extension(request_type): Extension<RequestType>,
-    canister_id: Path<String>,
     request: Request<Body>,
     next: Next<Body>,
 ) -> Result<impl IntoResponse, ApiError> {
-    // Decode canister_id from URL
-    let canister_id = CanisterId::from_str(&canister_id).map_err(|err| {
-        ErrorCause::MalformedRequest(format!("Unable to decode canister_id from URL: {err}"))
-    })?;
-
     // Consume body
     let (parts, body) = request.into_parts();
     let body = read_streaming_body(body, MAX_REQUEST_BODY_SIZE).await?;
@@ -563,11 +579,12 @@ pub async fn preprocess_request(
     let (arg, http_request) = match (&content.method_name, content.arg) {
         (Some(method), Some(arg)) => {
             if request_type == RequestType::Query && method == METHOD_HTTP {
-                let mut req: HttpRequest = Decode!(&arg.0, HttpRequest).map_err(|err| {
-                    ErrorCause::UnableToParseHTTPArg(format!(
-                        "unable to decode arg as HttpRequest: {err}"
-                    ))
-                })?;
+                let mut req: HttpRequest = Decode!([decoder_config()]; &arg.0, HttpRequest)
+                    .map_err(|err| {
+                        ErrorCause::UnableToParseHTTPArg(format!(
+                            "unable to decode arg as HttpRequest: {err}"
+                        ))
+                    })?;
 
                 // Remove specific headers
                 req.headers
@@ -603,18 +620,12 @@ pub async fn preprocess_request(
 
     // Inject variables into the request
     request.extensions_mut().insert(ctx.clone());
-    request.extensions_mut().insert(canister_id);
 
     // Pass request to the next processor
     let mut response = next.run(request).await;
 
     // Inject context into the response for access by other middleware
     response.extensions_mut().insert(ctx);
-
-    // Inject canister_id if it's not there already (could be overriden by other middleware)
-    if response.extensions().get::<CanisterId>().is_none() {
-        response.extensions_mut().insert(canister_id);
-    }
 
     Ok(response)
 }
@@ -704,19 +715,12 @@ pub async fn postprocess_response(request: Request<Body>, next: Next<Body>) -> i
             HeaderValue::from_maybe_shared(Bytes::from(ctx.request_type.to_string())).unwrap(),
         );
 
-        // Try to get canister_id from CBOR first, then from the URL
-        ctx.canister_id
-            .or(response
-                .extensions()
-                .get::<CanisterId>()
-                .map(|x| x.get_ref().0))
-            .map(|x| x.to_string())
-            .and_then(|v| {
-                response.headers_mut().insert(
-                    HEADER_IC_CANISTER_ID,
-                    HeaderValue::from_maybe_shared(Bytes::from(v)).unwrap(),
-                )
-            });
+        ctx.canister_id.and_then(|v| {
+            response.headers_mut().insert(
+                HEADER_IC_CANISTER_ID_CBOR,
+                HeaderValue::from_maybe_shared(Bytes::from(v.to_string())).unwrap(),
+            )
+        });
 
         ctx.sender.and_then(|v| {
             response.headers_mut().insert(

@@ -31,10 +31,12 @@
 use std::{
     collections::{BTreeSet, HashMap},
     fmt::Debug,
+    future::Future,
     net::SocketAddr,
     sync::{Arc, RwLock},
 };
 
+use anyhow::anyhow;
 use async_trait::async_trait;
 use axum::{
     http::{Request, Response},
@@ -43,14 +45,12 @@ use axum::{
 use bytes::Bytes;
 use either::Either;
 use ic_base_types::{NodeId, RegistryVersion};
-use ic_crypto_tls_interfaces::{TlsConfig, TlsStream};
-use ic_icos_sev::ValidateAttestedStream;
+use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use phantom_newtype::AmountOf;
-use quinn::{AsyncUdpSocket, ConnectionError, WriteError};
-use thiserror::Error;
+use quinn::AsyncUdpSocket;
 use tokio::sync::watch;
 use tokio_util::{sync::CancellationToken, task::task_tracker::TaskTracker};
 
@@ -64,10 +64,43 @@ mod request_handler;
 mod utils;
 
 #[derive(Clone)]
+pub struct Shutdown {
+    rt_handle: tokio::runtime::Handle,
+    cancellation: CancellationToken,
+    task_tracker: TaskTracker,
+}
+
+impl Shutdown {
+    pub fn new(rt_handle: tokio::runtime::Handle) -> Self {
+        Self {
+            rt_handle,
+            cancellation: CancellationToken::new(),
+            task_tracker: TaskTracker::new(),
+        }
+    }
+
+    pub async fn shutdown(&self) {
+        let _ = self.task_tracker.close();
+        // If an error is returned it means the conn manager is already stopped.
+        self.cancellation.cancel();
+        self.task_tracker.wait().await;
+    }
+
+    pub fn spawn_on_with_cancellation<F>(&self, run: impl FnOnce(CancellationToken) -> F)
+    where
+        F: Future + Send + 'static,
+        F::Output: Send + 'static,
+    {
+        self.task_tracker
+            .spawn_on(run(self.cancellation.clone()), &self.rt_handle);
+        // no need to return the join handle because it is already managed by the task tracker
+    }
+}
+
+#[derive(Clone)]
 pub struct QuicTransport {
     conn_handles: Arc<RwLock<HashMap<NodeId, ConnectionHandle>>>,
-    cancellation: CancellationToken,
-    conn_manager_task_tracker: TaskTracker,
+    shutdown: Shutdown,
 }
 
 /// This is the main transport handle used for communication between peers.
@@ -91,7 +124,6 @@ impl QuicTransport {
         rt: &tokio::runtime::Handle,
         tls_config: Arc<dyn TlsConfig + Send + Sync>,
         registry_client: Arc<dyn RegistryClient>,
-        sev_handshake: Arc<dyn ValidateAttestedStream<Box<dyn TlsStream>> + Send + Sync>,
         node_id: NodeId,
         // The receiver is passed here mainly to be consistent with other managers that also
         // require receivers on construction.
@@ -102,50 +134,42 @@ impl QuicTransport {
     ) -> QuicTransport {
         info!(log, "Starting Quic transport.");
 
-        let cancellation = CancellationToken::new();
         let conn_handles = Arc::new(RwLock::new(HashMap::new()));
-        let conn_manager_task_tracker = TaskTracker::new();
 
-        start_connection_manager(
+        let shutdown = start_connection_manager(
             log,
             metrics_registry,
             rt,
             tls_config.clone(),
             registry_client,
-            sev_handshake,
             node_id,
             conn_handles.clone(),
             topology_watcher,
-            cancellation.clone(),
-            conn_manager_task_tracker.clone(),
             udp_socket,
             router,
         );
 
         QuicTransport {
             conn_handles,
-            cancellation,
-            conn_manager_task_tracker,
+            shutdown,
         }
     }
 
-    /// Graceful shutdown of transport.
+    /// Graceful shutdown of transport
     pub async fn shutdown(&self) {
-        let _ = self.conn_manager_task_tracker.close();
-        // If an error is returned it means the conn manager is already stopped.
-        self.cancellation.cancel();
-        self.conn_manager_task_tracker.wait().await;
+        self.shutdown.shutdown().await;
     }
 
-    pub(crate) fn get_conn_handle(&self, peer_id: &NodeId) -> Result<ConnectionHandle, SendError> {
+    pub(crate) fn get_conn_handle(
+        &self,
+        peer_id: &NodeId,
+    ) -> Result<ConnectionHandle, anyhow::Error> {
         let conn = self
             .conn_handles
             .read()
             .unwrap()
             .get(peer_id)
-            .ok_or(SendError::ConnectionUnavailable(
-                "Currently not connected to this peer".to_string(),
-            ))?
+            .ok_or(anyhow!("Currently not connected to this peer"))?
             .clone();
         Ok(conn)
     }
@@ -157,12 +181,12 @@ impl Transport for QuicTransport {
         &self,
         peer_id: &NodeId,
         request: Request<Bytes>,
-    ) -> Result<Response<Bytes>, SendError> {
+    ) -> Result<Response<Bytes>, anyhow::Error> {
         let peer = self.get_conn_handle(peer_id)?;
         peer.rpc(request).await
     }
 
-    async fn push(&self, peer_id: &NodeId, request: Request<Bytes>) -> Result<(), SendError> {
+    async fn push(&self, peer_id: &NodeId, request: Request<Bytes>) -> Result<(), anyhow::Error> {
         let peer = self.get_conn_handle(peer_id)?;
         peer.push(request).await
     }
@@ -177,40 +201,15 @@ impl Transport for QuicTransport {
     }
 }
 
-#[derive(Debug, Error)]
-pub enum SendError {
-    #[error("the connection to peer `{0}` is unavailable")]
-    ConnectionUnavailable(String),
-    // This serves as catch-all error for invariant breaking errors.
-    // E.g. failing to serialize, peer closing connections unexpectedly, etc.
-    #[error("internal error `{0}`")]
-    Internal(String),
-}
-
-impl From<ConnectionError> for SendError {
-    fn from(conn_err: ConnectionError) -> Self {
-        SendError::Internal(conn_err.to_string())
-    }
-}
-
-impl From<WriteError> for SendError {
-    fn from(write_err: WriteError) -> Self {
-        match write_err {
-            WriteError::ConnectionLost(conn_err) => conn_err.into(),
-            _ => SendError::Internal(write_err.to_string()),
-        }
-    }
-}
-
 #[async_trait]
 pub trait Transport: Send + Sync {
     async fn rpc(
         &self,
         peer_id: &NodeId,
         request: Request<Bytes>,
-    ) -> Result<Response<Bytes>, SendError>;
+    ) -> Result<Response<Bytes>, anyhow::Error>;
 
-    async fn push(&self, peer_id: &NodeId, request: Request<Bytes>) -> Result<(), SendError>;
+    async fn push(&self, peer_id: &NodeId, request: Request<Bytes>) -> Result<(), anyhow::Error>;
 
     fn peers(&self) -> Vec<(NodeId, ConnId)>;
 }

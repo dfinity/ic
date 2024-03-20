@@ -80,6 +80,18 @@ class Args:
     # If present - decompress `upload_img` and inject this into config.ini
     inject_image_ipv6_gateway: Optional[str] = None
 
+    # If present - decompress `upload_img` and inject this into config.ini
+    inject_image_ipv4_address: Optional[str] = None
+
+    # If present - decompress `upload_img` and inject this into config.ini
+    inject_image_ipv4_gateway: Optional[str] = None
+
+    # If present - decompress `upload_img` and inject this into config.ini
+    inject_image_ipv4_prefix_length: Optional[str] = None
+
+    # If present - decompress `upload_img` and inject this into config.ini
+    inject_image_domain: Optional[str] = None
+
     # Path to the setupos-inject-configuration tool. Necessary if any inject* args are present
     inject_configuration_tool: Optional[str] = None
 
@@ -112,6 +124,12 @@ class Args:
         if self.inject_image_ipv6_prefix:
             assert self.inject_configuration_tool, \
                 "setupos_inject_configuration tool required to modify image"
+        ipv4_args = [self.inject_image_ipv4_address,
+                     self.inject_image_ipv4_gateway,
+                     self.inject_image_ipv4_prefix_length,
+                     self.inject_image_domain]
+        assert all(ipv4_args) or not any(ipv4_args), \
+            "All ipv4 flags must be present or none"
         assert self.file_share_ssh_key is None \
             or Path(self.file_share_ssh_key).exists(), \
             "File share ssh key path does not exist"
@@ -149,6 +167,14 @@ class OperationResult:
     bmc_info: BMCInfo
     success: bool
     error_msg: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class Ipv4Args:
+    address: str
+    gateway: str
+    prefix_length: str
+    domain: str
 
 
 def parse_from_row(row: List[str], network_image_url: str) -> BMCInfo:
@@ -211,8 +237,8 @@ def check_guestos_ping_connectivity(ip_address: IPv6Address, timeout_secs: int) 
 
 
 def check_guestos_metrics_version(ip_address: IPv6Address, timeout_secs: int) -> bool:
-    log.info("Attempting to curl metrics endpoint...")
     metrics_endpoint = f"https://[{ip_address.exploded}]:9100/metrics"
+    log.info(f"Attempting GET on metrics at {metrics_endpoint}...")
     metrics_output = get_url_content(metrics_endpoint, timeout_secs)
     if not metrics_output:
         log.warning(f"Request to {metrics_endpoint} failed.")
@@ -358,10 +384,10 @@ def deploy_server(bmc_info: BMCInfo, wait_time_mins: int, idrac_script_dir: Path
         )
         for i in tqdm.tqdm(range(int(60 * (wait_time_mins / timeout_secs))),disable=DISABLE_PROGRESS_BAR):
             if iterate_func():
-                break
+                log.info("*** Deployment SUCCESS!")
+                return OperationResult(bmc_info, success=True)
 
-        log.info("*** Deployment SUCCESS!")
-        return OperationResult(bmc_info, success=True)
+        raise Exception("Could not successfully verify connectivity to node.")
 
     except DeploymentError as e:
         log.error(f"Error: {e.result.error_msg}")
@@ -451,7 +477,8 @@ def inject_config_into_image(setupos_inject_configuration_path: Path,
                              working_dir: Path,
                              compressed_image_path: Path,
                              ipv6_prefix: str,
-                             ipv6_gateway: str) -> Path:
+                             ipv6_gateway: str,
+                             ipv4_args: Optional[Ipv4Args]) -> Path:
     """
     Transform the compressed image.
     * Decompress image into working_dir
@@ -475,7 +502,14 @@ def inject_config_into_image(setupos_inject_configuration_path: Path,
     image_part = f"--image-path {img_path}"
     prefix_part = f"--ipv6-prefix {ipv6_prefix}"
     gateway_part = f"--ipv6-gateway {ipv6_gateway}"
-    invoke.run(f"{setupos_inject_configuration_path} {image_part} {prefix_part} {gateway_part}", echo=True)
+    ipv4_part = ""
+    if ipv4_args:
+        ipv4_part = f"--ipv4-address {ipv4_args.address} "
+        ipv4_part += f"--ipv4-gateway {ipv4_args.gateway} "
+        ipv4_part += f"--ipv4-prefix-length {ipv4_args.prefix_length} "
+        ipv4_part += f"--domain {ipv4_args.domain} "
+
+    invoke.run(f"{setupos_inject_configuration_path} {image_part} {prefix_part} {gateway_part} {ipv4_part}", echo=True)
 
     # Reuse the name of the compressed image path in the working directory
     result_filename = compressed_image_path.name
@@ -511,6 +545,13 @@ def main():
     csv_filename: str = args.csv_filename
     bmc_infos = parse_from_csv_file(csv_filename, network_image_url)
 
+    ipv4_args = None
+    if args.inject_image_ipv4_address:
+        ipv4_args = Ipv4Args(args.inject_image_ipv4_address,
+                             args.inject_image_ipv4_gateway,
+                             args.inject_image_ipv4_prefix_length,
+                             args.inject_image_domain)
+
     if args.upload_img or args.inject_image_ipv6_prefix:
         file_share_endpoint = create_file_share_endpoint(args.file_share_url, args.file_share_username)
         assert_ssh_connectivity(file_share_endpoint, args.file_share_ssh_key)
@@ -523,7 +564,8 @@ def main():
                 Path(tmpdir),
                 Path(args.upload_img),
                 args.inject_image_ipv6_prefix,
-                args.inject_image_ipv6_gateway)
+                args.inject_image_ipv6_gateway,
+                ipv4_args)
 
             upload_to_file_share(
                 modified_image_path,

@@ -1,16 +1,13 @@
 use async_trait::async_trait;
-use candid::CandidType;
+use candid::{CandidType, Nat};
 use cycles_minting_canister::IcpXdrConversionRateCertifiedResponse;
 use futures::join;
 use ic_base_types::CanisterId;
-use ic_nervous_system_common::{
-    ledger::{ICRC1Ledger, IcpLedgerCanister as LedgerCanister},
-    E8, UNITS_PER_PERMYRIAD,
-};
+use ic_nervous_system_common::{E8, UNITS_PER_PERMYRIAD};
 use ic_nervous_system_runtime::{CdkRuntime, Runtime};
 use ic_nervous_system_string::clamp_debug_len;
 use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID};
-use ic_sns_swap::pb::v1::{
+use ic_sns_swap_proto_library::pb::v1::{
     GetDerivedStateRequest, GetDerivedStateResponse, GetInitRequest, GetInitResponse,
 };
 use icrc_ledger_types::icrc1::account::Account;
@@ -27,7 +24,7 @@ pub async fn try_get_icp_balance_valuation(account: Account) -> Result<Valuation
 
     try_get_balance_valuation_factors(
         account,
-        &mut LedgerCanister::new(ICP_LEDGER_CANISTER_ID),
+        &mut LedgerCanister::<CdkRuntime>::new(ICP_LEDGER_CANISTER_ID),
         &mut IcpsPerIcpClient {},
         &mut new_standard_xdrs_per_icp_client::<CdkRuntime>(),
     )
@@ -49,7 +46,7 @@ pub async fn try_get_sns_token_balance_valuation(
 
     try_get_balance_valuation_factors(
         account,
-        &mut LedgerCanister::new(sns_ledger_canister_id),
+        &mut LedgerCanister::<CdkRuntime>::new(sns_ledger_canister_id),
         &mut IcpsPerSnsTokenClient::<CdkRuntime>::new(swap_canister_id),
         &mut new_standard_xdrs_per_icp_client::<CdkRuntime>(),
     )
@@ -72,6 +69,28 @@ pub enum Token {
 
     /// The native token of the SNS.
     SnsToken,
+}
+
+impl Token {
+    pub async fn assess_balance(
+        self,
+        sns_ledger_canister_id: CanisterId, // Not used when self = Icp.
+        swap_canister_id: CanisterId,       // Not used when self = Icp.
+        account: Account,
+    ) -> Result<Valuation, ValuationError> {
+        match self {
+            Token::Icp => try_get_icp_balance_valuation(account).await,
+
+            Token::SnsToken => {
+                try_get_sns_token_balance_valuation(
+                    account,
+                    sns_ledger_canister_id,
+                    swap_canister_id,
+                )
+                .await
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -121,7 +140,7 @@ impl ValuationFactors {
 ///   calling new_standard_xdrs_per_icp_client::<DfnRuntime> with zero arguments.
 async fn try_get_balance_valuation_factors(
     account: Account,
-    icrc1_client: &mut dyn ICRC1Ledger,
+    icrc1_client: &mut dyn Icrc1Client,
     icps_per_token_client: &mut dyn IcpsPerTokenClient,
     xdrs_per_icp_client: &mut dyn XdrsPerIcpClient,
 ) -> Result<ValuationFactors, ValuationError> {
@@ -132,19 +151,19 @@ async fn try_get_balance_valuation_factors(
     //     3. ICP -> XDR
     //
     // No await here. Instead, we use join (right after this).
-    let account_balance_request = icrc1_client.account_balance(account);
+    let balance_of_request = icrc1_client.icrc1_balance_of(account);
     let icps_per_token_request = icps_per_token_client.get();
     let xdrs_per_icp_request = xdrs_per_icp_client.get();
 
     // Make all (3) requests (concurrently).
-    let (account_balance_response, icps_per_token_response, xdrs_per_icp_response) = join!(
-        account_balance_request,
+    let (balance_of_response, icps_per_token_response, xdrs_per_icp_response) = join!(
+        balance_of_request,
         icps_per_token_request,
         xdrs_per_icp_request,
     );
 
     // Unwrap/forward errors to the caller.
-    let account_balance_response = account_balance_response.map_err(|err| {
+    let balance_of_response = balance_of_response.map_err(|err| {
         ValuationError::new_external(format!("Unable to obtain balance from ledger: {:?}", err))
     })?;
     let icps_per_token_response = icps_per_token_response.map_err(|err| {
@@ -155,7 +174,12 @@ async fn try_get_balance_valuation_factors(
     })?;
 
     // Extract and interpret the data we actually care about from the (Ok) responses.
-    let tokens = Decimal::from(account_balance_response.get_e8s()) / Decimal::from(E8);
+    let tokens = Decimal::from(u128::try_from(balance_of_response.0).map_err(|err| {
+        ValuationError::new_arithmetic(format!(
+            "Balance of {:?} does not fit in u128: {:?}",
+            account, err
+        ))
+    })?) / Decimal::from(E8);
     let icps_per_token = icps_per_token_response;
     let xdrs_per_icp = xdrs_per_icp_response;
 
@@ -218,6 +242,12 @@ pub enum ValuationErrorSpecies {
 
 #[automock]
 #[async_trait]
+trait Icrc1Client: Send {
+    async fn icrc1_balance_of(&mut self, account: Account) -> Result<Nat, (i32, String)>;
+}
+
+#[automock]
+#[async_trait]
 trait IcpsPerTokenClient: Send {
     async fn get(&mut self) -> Result<Decimal, ValuationError>;
 }
@@ -229,6 +259,30 @@ trait XdrsPerIcpClient: Send {
 }
 
 // Trait Implementations Suitable For Production.
+
+struct LedgerCanister<MyRuntime: Runtime + Send + Sync> {
+    canister_id: CanisterId,
+    _runtime: PhantomData<MyRuntime>,
+}
+
+impl<MyRuntime: Runtime + Send + Sync> LedgerCanister<MyRuntime> {
+    fn new(canister_id: CanisterId) -> Self {
+        Self {
+            canister_id,
+            _runtime: Default::default(),
+        }
+    }
+}
+
+#[async_trait]
+impl<MyRuntime: Runtime + Send + Sync> Icrc1Client for LedgerCanister<MyRuntime> {
+    async fn icrc1_balance_of(&mut self, account: Account) -> Result<Nat, (i32, String)> {
+        let (result,): (Nat,) =
+            MyRuntime::call_with_cleanup(self.canister_id, "icrc1_balance_of", (account,)).await?;
+
+        Ok(result)
+    }
+}
 
 struct IcpsPerIcpClient {}
 

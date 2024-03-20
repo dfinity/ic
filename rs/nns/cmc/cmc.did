@@ -12,6 +12,7 @@ type CanisterSettings = record {
   freezing_threshold : opt nat;
   reserved_cycles_limit: opt nat;
   log_visibility : opt log_visibility;
+  wasm_memory_limit: opt nat;
 };
 type Subaccount = opt blob;
 type Memo = opt blob;

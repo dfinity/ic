@@ -15,11 +15,10 @@ ic-base-types = { path = "../types/base_types" }
 ic-certification-version = { path = "../canonical_state/certification_version" }
 ic-config = { path = "../config" }
 ic-constants = { path = "../constants" }
-ic-crypto-internal-basic-sig-ed25519 = { path = "../crypto/internal/crypto_lib/basic_sig/ed25519" }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-crypto-test-utils-keys = { path = "../crypto/test_utils/keys" }
 ic-error-types = { path = "../types/error_types" }
-ic-ic00-types = { path = "../types/ic00_types" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-interfaces = { path = "../interfaces" }
 ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }
@@ -52,8 +51,12 @@ assert_matches = "1.3.0"
 criterion = "0.5"
 criterion-time = { path = "../criterion_time" }
 ic-btc-test-utils = { git = "https://github.com/dfinity/bitcoin-canister", rev = "b1693619e3d4dbc00d8c79e9b6886e1db48b21f7" }
-ic-test-utilities = { path = "../test_utilities" }
+ic-crypto-ed25519 = { path = "../crypto/ed25519" }
+ic-test-utilities-io = { path = "../test_utilities/io" }
+ic-test-utilities-metrics = { path = "../test_utilities/metrics" }
+ic-test-utilities-state = { path = "../test_utilities/state" }
 ic-test-utilities-time = { path = "../test_utilities/time" }
+ic-test-utilities-types = { path = "../test_utilities/types" }
 maplit = "1.0.2"
 serde_cbor = { workspace = true }
 proptest = "1.0"

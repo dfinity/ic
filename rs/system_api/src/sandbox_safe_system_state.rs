@@ -7,12 +7,13 @@ use ic_cycles_account_manager::{
     CyclesAccountManager, CyclesAccountManagerError, ResourceSaturation,
 };
 use ic_error_types::{ErrorCode, RejectCode, UserError};
-use ic_ic00_types::{
-    CreateCanisterArgs, InstallChunkedCodeArgs, InstallCodeArgsV2, Method as Ic00Method, Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, UninstallCodeArgs, UpdateSettingsArgs, IC_00,
-};
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 use ic_logger::{info, ReplicaLogger};
+use ic_management_canister_types::{
+    CanisterLog, CreateCanisterArgs, InstallChunkedCodeArgs, InstallCodeArgsV2,
+    Method as Ic00Method, Payload, ProvisionalCreateCanisterWithCyclesArgs, UninstallCodeArgs,
+    UpdateSettingsArgs, IC_00,
+};
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -69,6 +70,7 @@ pub struct SystemStateChanges {
     request_slots_used: BTreeMap<CanisterId, usize>,
     requests: Vec<Request>,
     pub(super) new_global_timer: Option<CanisterTimer>,
+    canister_log: CanisterLog,
 }
 
 impl Default for SystemStateChanges {
@@ -83,6 +85,7 @@ impl Default for SystemStateChanges {
             request_slots_used: BTreeMap::new(),
             requests: vec![],
             new_global_timer: None,
+            canister_log: Default::default(),
         }
     }
 }
@@ -305,12 +308,12 @@ impl SystemStateChanges {
                     .ok_or_else(|| {
                         Self::error("Canister accepted cycles from invalid call context")
                     })?;
-                call_context.withdraw_cycles(*amount_taken).map_err(|_| {
+                call_context.withdraw_cycles(*amount_taken).map_err(|()| {
                     Self::error("Canister accepted more cycles than available from call context")
                 })?;
                 if (*amount_taken).get() > LOG_CANISTER_OPERATION_CYCLES_THRESHOLD {
                     match call_context.call_origin() {
-                        CallOrigin::CanisterUpdate(origin_canister_id, _)
+                        CallOrigin::CanisterUpdate(origin_canister_id, _, _)
                         | CallOrigin::CanisterQuery(origin_canister_id, _) => info!(
                             logger,
                             "Canister {} accepted {} cycles from canister {}.",
@@ -558,6 +561,7 @@ pub struct SandboxSafeSystemState {
     canister_version: u64,
     controllers: BTreeSet<PrincipalId>,
     pub(super) request_metadata: RequestMetadata,
+    caller: Option<PrincipalId>,
 }
 
 impl SandboxSafeSystemState {
@@ -585,6 +589,8 @@ impl SandboxSafeSystemState {
         canister_version: u64,
         controllers: BTreeSet<PrincipalId>,
         request_metadata: RequestMetadata,
+        caller: Option<PrincipalId>,
+        next_canister_log_record_idx: u64,
     ) -> Self {
         Self {
             canister_id,
@@ -595,7 +601,11 @@ impl SandboxSafeSystemState {
             freeze_threshold,
             memory_allocation,
             compute_allocation,
-            system_state_changes: SystemStateChanges::default(),
+            system_state_changes: SystemStateChanges {
+                // Start indexing new batch of canister log records from the given index.
+                canister_log: CanisterLog::new_with_next_index(next_canister_log_record_idx),
+                ..SystemStateChanges::default()
+            },
             initial_cycles_balance,
             initial_reserved_balance,
             reserved_balance_limit,
@@ -609,6 +619,7 @@ impl SandboxSafeSystemState {
             canister_version,
             controllers,
             request_metadata,
+            caller,
         }
     }
 
@@ -619,6 +630,7 @@ impl SandboxSafeSystemState {
         dirty_page_overhead: NumInstructions,
         compute_allocation: ComputeAllocation,
         request_metadata: RequestMetadata,
+        caller: Option<PrincipalId>,
     ) -> Self {
         let call_context_balances = match system_state.call_context_manager() {
             Some(call_context_manager) => call_context_manager
@@ -682,6 +694,8 @@ impl SandboxSafeSystemState {
             system_state.canister_version,
             system_state.controllers.clone(),
             request_metadata,
+            caller,
+            system_state.canister_log.next_idx(),
         )
     }
 
@@ -1028,6 +1042,7 @@ impl SandboxSafeSystemState {
                         bytes: new_memory_usage - old_memory_usage,
                         available: self.cycles_balance(),
                         threshold,
+                        reveal_top_up: self.caller_is_controller(),
                     })
                 }
             }
@@ -1071,6 +1086,7 @@ impl SandboxSafeSystemState {
                 bytes: new_message_memory_usage - old_message_memory_usage,
                 available: self.cycles_balance(),
                 threshold,
+                reveal_top_up: self.caller_is_controller(),
             })
         }
     }
@@ -1150,6 +1166,7 @@ impl SandboxSafeSystemState {
                         bytes: allocated_bytes,
                         available: old_balance,
                         threshold: cycles_to_reserve,
+                        reveal_top_up: self.caller_is_controller(),
                     });
                 }
                 let new_balance = old_balance - cycles_to_reserve;
@@ -1185,12 +1202,37 @@ impl SandboxSafeSystemState {
             }
         }
     }
+
+    /// Appends a log record to the system state changes.
+    pub fn append_canister_log(&mut self, time: &Time, content: &[u8]) {
+        self.system_state_changes
+            .canister_log
+            .add_record(time.as_nanos_since_unix_epoch(), content);
+    }
+
+    /// Takes collected canister log records.
+    pub fn take_canister_log(&mut self) -> CanisterLog {
+        std::mem::take(&mut self.system_state_changes.canister_log)
+    }
+
+    /// Returns collected canister log records.
+    pub fn canister_log(&self) -> &CanisterLog {
+        &self.system_state_changes.canister_log
+    }
+
+    fn caller_is_controller(&self) -> bool {
+        if let Some(caller) = self.caller {
+            self.controllers.contains(&caller)
+        } else {
+            false
+        }
+    }
 }
 
 /// Holds the metadata and the number of downstream requests. Requests created during the same
 /// execution have the same metadata. This fact is reflected by the use of a counter, rather than
 /// a list of identical metadata.
-///      
+///
 /// This is used for call tree metrics.
 pub struct RequestMetadataStats {
     pub metadata: Option<RequestMetadata>,
@@ -1203,7 +1245,7 @@ mod tests {
 
     use ic_base_types::NumSeconds;
     use ic_replicated_state::{canister_state::system_state::CyclesUseCase, SystemState};
-    use ic_test_utilities::types::ids::{canister_test_id, user_test_id};
+    use ic_test_utilities_types::ids::{canister_test_id, user_test_id};
     use ic_types::Cycles;
 
     use crate::{

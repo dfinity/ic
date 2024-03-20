@@ -12,6 +12,7 @@ use ic_agent::{
 };
 use ic_base_types::CanisterId;
 use ic_icrc_rosetta::{
+    common::constants::{BLOCK_SYNC_WAIT_SECS, MAX_BLOCK_SYNC_WAIT_SECS},
     common::storage::{storage_client::StorageClient, types::MetadataEntry},
     construction_api::endpoints::*,
     data_api::endpoints::*,
@@ -25,7 +26,12 @@ use std::{path::PathBuf, process};
 use tower_http::classify::{ServerErrorsAsFailures, SharedClassifier};
 use tower_http::trace::TraceLayer;
 use tower_request_id::{RequestId, RequestIdLayer};
-use tracing::{debug, error_span, info, Level, Span};
+use tracing::level_filters::LevelFilter;
+use tracing::{debug, error, error_span, info, Level, Span};
+use tracing_appender::non_blocking::WorkerGuard;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::{Layer, Registry};
 use url::Url;
 
 lazy_static! {
@@ -96,6 +102,10 @@ struct Args {
     /// Set this option to only run the rosetta server, no block synchronization will be performed and no transactions can be submitted in this mode.
     #[arg(long)]
     offline: bool,
+
+    /// The file to use for storing logs.
+    #[arg(long = "log-file", default_value = "log/rosetta-api.log")]
+    log_file: PathBuf,
 }
 
 impl Args {
@@ -129,13 +139,37 @@ impl Args {
     }
 }
 
-fn init_logs(log_level: Level) {
-    tracing_subscriber::fmt()
-        .with_max_level(log_level)
+fn init_logs(log_level: Level, log_file_path: &PathBuf) -> anyhow::Result<WorkerGuard> {
+    let stdout_layer = tracing_subscriber::fmt::Layer::default()
         .with_target(false) // instead include file and lines in the next lines
         .with_file(true) // display source code file paths
         .with_line_number(true) // display source code line numbers
+        .with_filter(LevelFilter::from_level(log_level));
+
+    // rolling file
+    std::fs::create_dir_all(log_file_path.parent().ok_or(anyhow::Error::msg(format!(
+        "Could not find the parent directory of {}",
+        log_file_path.display()
+    )))?)?;
+    let file_appender = rolling_file::RollingFileAppender::new(
+        log_file_path,
+        rolling_file::RollingConditionBasic::new().max_size(100_000_000),
+        usize::MAX,
+    )?;
+    let (file_writer, guard) = tracing_appender::non_blocking(file_appender);
+    let file_layer = tracing_subscriber::fmt::Layer::default()
+        .with_target(false) // instead include file and lines in the next lines
+        .with_file(true) // display source code file paths
+        .with_line_number(true) // display source code line numbers
+        .with_writer(file_writer)
+        .with_filter(LevelFilter::from_level(log_level));
+
+    Registry::default()
+        .with(stdout_layer)
+        .with(file_layer)
         .init();
+
+    Ok(guard)
 }
 
 type FnTraceLayer =
@@ -245,7 +279,7 @@ async fn load_metadata(
 async fn main() -> Result<()> {
     let args = Args::parse();
 
-    init_logs(args.log_level);
+    let _guard = init_logs(args.log_level, &args.log_file)?;
 
     let storage = Arc::new(match args.store_type {
         StoreType::InMemory => StorageClient::new_in_memory()?,
@@ -280,7 +314,11 @@ async fn main() -> Result<()> {
         ledger_canister_id: args.ledger_id.into(),
     });
 
-    if !args.offline {
+    if args.exit_on_sync {
+        if args.offline {
+            bail!("'exit-on-sync' and 'offline' parameters cannot be specified at the same time.");
+        }
+
         info!("Starting to sync blocks");
         start_synching_blocks(
             icrc1_agent.clone(),
@@ -288,20 +326,13 @@ async fn main() -> Result<()> {
             *MAXIMUM_BLOCKS_PER_REQUEST,
         )
         .await?;
-    }
 
-    info!("Starting to update account balances");
-    // Once the entire blockchain has been synched and no gaps remain, the account_balance table can be updated
-    storage.update_account_balances()?;
-
-    // If the option of exiting after the synchronization is completed is set we can exit rosetta
-    if args.exit_on_sync {
         process::exit(0);
     }
 
     let metadata = load_metadata(&args, &icrc1_agent, &storage).await?;
     let shared_state = Arc::new(AppState {
-        icrc1_agent,
+        icrc1_agent: icrc1_agent.clone(),
         ledger_id: args.ledger_id,
         storage: storage.clone(),
         metadata,
@@ -313,12 +344,19 @@ async fn main() -> Result<()> {
         .route("/network/options", post(network_options))
         .route("/network/status", post(network_status))
         .route("/block", post(block))
+        .route("/account/balance", post(account_balance))
         .route("/block/transaction", post(block_transaction))
+        .route("/search/transactions", post(search_transactions))
         .route("/mempool", post(mempool))
         .route("/mempool/transaction", post(mempool_transaction))
         .route("/construction/derive", post(construction_derive))
         .route("/construction/preprocess", post(construction_preprocess))
         .route("/construction/metadata", post(construction_metadata))
+        .route("/construction/combine", post(construction_combine))
+        .route("/construction/submit", post(construction_submit))
+        .route("/construction/hash", post(construction_hash))
+        .route("/construction/payloads", post(construction_payloads))
+        .route("/construction/parse", post(construction_parse))
         // This layer creates a span for each http request and attaches
         // the request_id, HTTP Method and path to it.
         .layer(add_request_span())
@@ -332,6 +370,29 @@ async fn main() -> Result<()> {
 
     if let Some(port_file) = args.port_file {
         std::fs::write(port_file, tcp_listener.local_addr()?.port().to_string())?;
+    }
+
+    if !args.offline {
+        tokio::spawn(async move {
+            let mut sync_wait_secs = BLOCK_SYNC_WAIT_SECS;
+            loop {
+                if let Err(e) = start_synching_blocks(
+                    icrc1_agent.clone(),
+                    storage.clone(),
+                    *MAXIMUM_BLOCKS_PER_REQUEST,
+                )
+                .await
+                {
+                    error!("Error while syncing blocks: {}", e);
+                    sync_wait_secs = std::cmp::min(sync_wait_secs * 2, MAX_BLOCK_SYNC_WAIT_SECS);
+                    info!("Retrying in {} seconds.", sync_wait_secs);
+                } else {
+                    sync_wait_secs = BLOCK_SYNC_WAIT_SECS;
+                }
+
+                tokio::time::sleep(std::time::Duration::from_secs(sync_wait_secs)).await;
+            }
+        });
     }
 
     info!("Starting Rosetta server");

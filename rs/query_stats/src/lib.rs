@@ -4,7 +4,7 @@ use ic_logger::{info, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
     batch::{CanisterQueryStats, LocalQueryStats, QueryStats},
-    epoch_from_height, CanisterId, Height, NumInstructions, QueryStatsEpoch,
+    epoch_from_height, CanisterId, Height, QueryStatsEpoch,
 };
 use std::sync::Mutex;
 use std::{collections::BTreeMap, sync::RwLock};
@@ -116,37 +116,23 @@ impl QueryStatsCollector {
             .set(new_epoch.get() as i64);
     }
 
-    pub fn register_query_statistics(
-        &self,
-        canister_id: CanisterId,
-        num_instructions: NumInstructions,
-        ingress_payload_size: u64,
-        egress_payload_size: u64,
-    ) {
+    pub fn register_query_statistics(&self, canister_id: CanisterId, stats: &QueryStats) {
         let current_epoch = *self.current_epoch.read().unwrap();
         if current_epoch.is_none() {
             info!(
                 every_n_seconds => 30,
                 self.log,
-                "QueryStatsCollector epoch not set - omitting stats for canister {} - num_instructions: {} - payload_size: {}:{}",
-                canister_id, num_instructions, ingress_payload_size, egress_payload_size
+                "QueryStatsCollector epoch not set - omitting stats for canister {} - num_calls: {} num_instructions: {} - payload_size: {}:{}",
+                canister_id, stats.num_calls, stats.num_instructions, stats.ingress_payload_size, stats.egress_payload_size
             );
             return;
         }
 
         let mut state = self.current_query_stats.lock().unwrap();
-        let stats_for_canister = state.entry(canister_id).or_default();
-
-        stats_for_canister.num_calls = stats_for_canister.num_calls.saturating_add(1);
-        stats_for_canister.num_instructions = stats_for_canister
-            .num_instructions
-            .saturating_add(num_instructions.get());
-        stats_for_canister.ingress_payload_size = stats_for_canister
-            .ingress_payload_size
-            .saturating_add(ingress_payload_size);
-        stats_for_canister.egress_payload_size = stats_for_canister
-            .egress_payload_size
-            .saturating_add(egress_payload_size);
+        state
+            .entry(canister_id)
+            .or_default()
+            .saturating_accumulate(stats);
 
         self.metrics
             .query_stats_collector_num_canister_ids

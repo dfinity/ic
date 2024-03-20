@@ -6,11 +6,11 @@ use crate::registry_helper::RegistryHelper;
 use async_trait::async_trait;
 use ic_crypto::get_tecdsa_master_public_key;
 use ic_http_utils::file_downloader::FileDownloader;
-use ic_ic00_types::EcdsaKeyId;
 use ic_image_upgrader::error::{UpgradeError, UpgradeResult};
 use ic_image_upgrader::ImageUpgrader;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, warn, ReplicaLogger};
+use ic_management_canister_types::EcdsaKeyId;
 use ic_registry_client_helpers::node::NodeRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_local_store::LocalStoreImpl;
@@ -681,16 +681,40 @@ fn reexec_current_process(logger: &ReplicaLogger) -> OrchestratorError {
 }
 
 /// Return the threshold ECDSA master public key of the given CUP, if it exists.
-fn get_tecdsa_key(cup: &CatchUpPackage) -> Option<(EcdsaKeyId, MasterEcdsaPublicKey)> {
-    let ecdsa = cup.content.block.get_value().payload.as_ref().as_ecdsa()?;
-    let transcript_ref = ecdsa.key_transcript.current.as_ref()?;
-    let transcript = ecdsa
-        .idkg_transcripts
-        .get(&transcript_ref.transcript_id())?;
+fn get_tecdsa_keys(
+    cup: &CatchUpPackage,
+    log: &ReplicaLogger,
+) -> BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey> {
+    let mut public_keys = BTreeMap::new();
 
-    get_tecdsa_master_public_key(transcript)
-        .ok()
-        .map(|key| (ecdsa.key_transcript.key_id.clone(), key))
+    let Some(ecdsa) = cup.content.block.get_value().payload.as_ref().as_ecdsa() else {
+        return public_keys;
+    };
+
+    // TODO(CON-1053): add support for multiple keys
+    let key_id = ecdsa.key_transcript.key_id.clone();
+    let Some(transcript) = ecdsa
+        .key_transcript
+        .current
+        .as_ref()
+        .and_then(|transcript_ref| ecdsa.idkg_transcripts.get(&transcript_ref.transcript_id()))
+    else {
+        return public_keys;
+    };
+
+    match get_tecdsa_master_public_key(transcript) {
+        Ok(public_key) => {
+            public_keys.insert(key_id, public_key);
+        }
+        Err(err) => {
+            warn!(
+                log,
+                "Failed to get the tecdsa public key for key id {}: {:?}", key_id, err,
+            );
+        }
+    };
+
+    public_keys
 }
 
 /// Get tECDSA public keys of both CUPs and make sure previous keys weren't changed
@@ -702,25 +726,44 @@ fn compare_tecdsa_public_keys(
     path: PathBuf,
     log: &ReplicaLogger,
 ) {
-    let Some(old_key) = get_tecdsa_key(old_cup) else {
+    let old_public_keys = get_tecdsa_keys(old_cup, log);
+    if old_public_keys.is_empty() {
         return;
-    };
-    let new_key = get_tecdsa_key(new_cup);
-    let mut changes = BTreeMap::new();
-    // Get the metric here already, which will initialize it with zero
-    // even if keys haven't changed.
-    let metric = metrics
-        .ecdsa_key_changed_errors
-        .get_metric_with_label_values(&[&old_key.0.name])
-        .expect("Failed to get ECDSA key changed metric");
-    if Some(&old_key) != new_key.as_ref() {
-        error!(
-            log,
-            "Threshold ECDSA public key has changed! Old: {:?}, New: {:?}", old_key, new_key,
-        );
-        metric.inc();
-        changes.insert(old_key.0.name, metric.get());
     }
+
+    let new_public_keys = get_tecdsa_keys(new_cup, log);
+    let mut changes = BTreeMap::new();
+
+    for (key_id, old_public_key) in old_public_keys {
+        // Get the metric here already, which will initialize it with zero
+        // even if keys haven't changed.
+        let metric = metrics
+            .ecdsa_key_changed_errors
+            .get_metric_with_label_values(&[&key_id.name])
+            .expect("Failed to get ECDSA key changed metric");
+
+        if let Some(new_public_key) = new_public_keys.get(&key_id) {
+            if old_public_key != *new_public_key {
+                error!(
+                    log,
+                    "Threshold ECDSA public key for {} has changed! Old: {:?}, New: {:?}",
+                    key_id,
+                    old_public_key,
+                    new_public_key,
+                );
+                metric.inc();
+                changes.insert(key_id.name.clone(), metric.get());
+            }
+        } else {
+            error!(
+                log,
+                "Threshold ECDSA public key for {} has been deleted!", key_id,
+            );
+            metric.inc();
+            changes.insert(key_id.name.clone(), metric.get());
+        }
+    }
+
     // We persist the latest value of the changed metrics, such that we can re-apply them
     // after the restart. As any increase in the value is enough to trigger the alert, it
     // is fine to reset the metric of keys that haven't changed.
@@ -766,14 +809,11 @@ mod tests {
         generate_key_transcript, CanisterThresholdSigTestEnvironment, IDkgParticipants,
     };
     use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
-    use ic_ic00_types::EcdsaCurve;
+    use ic_management_canister_types::EcdsaCurve;
     use ic_metrics::MetricsRegistry;
-    use ic_test_utilities::{
-        consensus::fake::{Fake, FakeContent},
-        types::ids::subnet_test_id,
-    };
+    use ic_test_utilities_consensus::fake::{Fake, FakeContent};
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_test_utilities_time::mock_time;
+    use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
         batch::ValidationContext,
         consensus::{
@@ -785,6 +825,7 @@ mod tests {
             canister_threshold_sig::idkg::IDkgTranscript, AlgorithmId, CryptoHash, CryptoHashOf,
         },
         signature::ThresholdSignature,
+        time::UNIX_EPOCH,
     };
     use tempfile::{tempdir, TempDir};
 
@@ -837,7 +878,7 @@ mod tests {
             ValidationContext {
                 registry_version: RegistryVersion::from(101),
                 certified_height: Height::from(42),
-                time: mock_time(),
+                time: UNIX_EPOCH,
             },
         );
 

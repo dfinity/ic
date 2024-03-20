@@ -11,7 +11,7 @@ use ic_sns_wasm::pb::v1::{
     DappCanistersTransferResult, DeployNewSnsResponse, GetDeployedSnsByProposalIdResponse,
     SnsCanisterIds,
 };
-use ic_test_utilities::types::ids::canister_test_id;
+use ic_test_utilities_types::ids::canister_test_id;
 
 pub mod common;
 
@@ -19,7 +19,7 @@ pub mod common;
 fn test_get_deployed_sns_by_proposal_id() {
     // Setup the state machine
     state_test_helpers::reduce_state_machine_logging_unless_env_set();
-    let machine = set_up_state_machine_with_nns(vec![]);
+    let machine = set_up_state_machine_with_nns();
 
     // Add cycles to the SNS-W canister to deploy the SNS
     machine.add_cycles(SNS_WASM_CANISTER_ID, 200 * ONE_TRILLION as u128);
@@ -30,7 +30,7 @@ fn test_get_deployed_sns_by_proposal_id() {
     // Add the dapp to the SnsInitPayload
     let sns_init_payload = SnsInitPayload {
         dapp_canisters: Some(DappCanisters { canisters: vec![] }),
-        ..SnsInitPayload::with_valid_values_for_testing()
+        ..SnsInitPayload::with_valid_values_for_testing_post_execution()
     };
     let proposal_id = *sns_init_payload.nns_proposal_id.as_ref().unwrap();
 
@@ -40,7 +40,6 @@ fn test_get_deployed_sns_by_proposal_id() {
         GOVERNANCE_CANISTER_ID,
         SNS_WASM_CANISTER_ID,
         sns_init_payload,
-        0,
     );
 
     // SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 1 is the ID of the wallet canister

@@ -49,7 +49,7 @@ use ic_types::{
 use std::{
     collections::{BTreeMap, HashSet},
     sync::{Arc, RwLock},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 /// The number of seconds spent in unvalidated pool, after which we start
@@ -544,6 +544,7 @@ fn get_notarized_parent(
     let parent = &proposal.as_ref().parent;
     let height = proposal.height().decrement();
     pool.get_notarized_block(parent, height)
+        .map(|block| block.into_inner())
         .map_err(|_| TransientError::BlockNotFound(parent.clone(), height).into())
 }
 
@@ -581,6 +582,10 @@ pub struct Validator {
     metrics: ValidatorMetrics,
     schedule: RoundRobin,
     time_source: Arc<dyn TimeSource>,
+    /// Earliest monotonic measurement available for the validator, used for fallback
+    /// during out-of-sync validation. Should ideally represent a time close to the
+    /// start of the replica process.
+    origin_instant: Instant,
 }
 
 impl Validator {
@@ -611,6 +616,7 @@ impl Validator {
             log,
             metrics,
             schedule: RoundRobin::default(),
+            origin_instant: time_source.get_instant(),
             time_source,
         }
     }
@@ -968,7 +974,8 @@ impl Validator {
     ///   the block
     /// - Any of the values in the `ValidationContext` on the `Block` are less
     ///   than the corresponding value on the parent `Block`'s
-    ///   `ValidationContext`.
+    ///   `ValidationContext`. Additionally for timestamps, we require a strict
+    ///   monotonic increase between blocks.
     fn check_block_validity(
         &self,
         pool_reader: &PoolReader<'_>,
@@ -1007,18 +1014,48 @@ impl Validator {
             return Err(PermanentError::NonStrictlyIncreasingValidationContext.into());
         }
 
-        let locally_available_context = ValidationContext {
+        let local_context = ValidationContext {
             certified_height: self.state_manager.latest_certified_height(),
             registry_version: self.registry_client.get_latest_version(),
             time: self.time_source.get_relative_time(),
         };
 
-        // If any part of our locally available validation context is less than the
-        // proposal's validation context, we cannot validate it yet.
-        if !locally_available_context.greater_or_equal(&proposal.context) {
+        // If we don't find an instant for the parent block, we fall back to the origin
+        // instant which we recorded at validator initialization.
+        // The only scenario in which we may have a notarized parent but no instant for
+        // the block are replica restarts due to updates or crashes, or while the replica
+        // is catching up via CUP. This is not a big problem in practice, because we will
+        // always wait at most `proposal.time - parent.time` before validating the
+        // proposal. Any heights after that point will have instants, so there will be no
+        // further slowdown for other rounds.
+        let parent_block_instant = pool_reader
+            .get_block_instant(&proposal.parent)
+            .unwrap_or(self.origin_instant);
+        let duration_since_received_parent = self
+            .time_source
+            .get_instant()
+            .saturating_duration_since(parent_block_instant);
+
+        // Check that our locally available validation context is sufficient for
+        // validating the proposal. We require all fields of our local context - with
+        // the exception of time - to be greater or equal to the proposal's context.
+        //
+        // We allow out-of-sync validation, assuming the block proposal's timestamp is
+        // not further than the time since we received the parent block.
+        // We do this to shield against clock issues, to prevent nodes with lagging
+        // clocks to stall a subnet with f malicious replicas.
+        let sufficient_local_ctx = local_context.registry_version
+            >= proposal.context.registry_version
+            && local_context.certified_height >= proposal.context.certified_height
+            && std::cmp::max(
+                local_context.time,
+                parent.context.time + duration_since_received_parent,
+            ) >= proposal.context.time;
+
+        if !sufficient_local_ctx {
             return Err(TransientError::ValidationContextNotReached(
                 proposal.context.clone(),
-                locally_available_context,
+                local_context,
             )
             .into());
         }
@@ -1566,7 +1603,8 @@ impl Validator {
                         Some(timestamp) if now > timestamp + CATCH_UP_HOLD_OF_TIME => {
                             warn!(
                                 self.log,
-                                "Validating CUP after holding it back for {} seconds",
+                                "Validating CUP at height {} after holding it back for {} seconds",
+                                cup_height,
                                 CATCH_UP_HOLD_OF_TIME.as_secs()
                             );
                             Ok(())
@@ -1608,7 +1646,10 @@ pub mod test {
         Dependencies, MockPayloadBuilder,
     };
     use ic_consensus_utils::get_block_maker_delay;
-    use ic_interfaces::{messaging::XNetTransientValidationError, p2p::consensus::MutablePool};
+    use ic_interfaces::{
+        messaging::XNetTransientValidationError, p2p::consensus::MutablePool,
+        time_source::TimeSource,
+    };
     use ic_interfaces_mocks::messaging::MockMessageRouting;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
@@ -1616,16 +1657,11 @@ pub mod test {
     use ic_registry_client_helpers::subnet::SubnetRegistry;
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
-    use ic_test_utilities::{
-        assert_changeset_matches_pattern,
-        consensus::fake::*,
-        crypto::CryptoReturningOk,
-        matches_pattern,
-        state_manager::RefMockStateManager,
-        types::ids::{node_test_id, subnet_test_id},
-    };
+    use ic_test_utilities::{crypto::CryptoReturningOk, state_manager::RefMockStateManager};
+    use ic_test_utilities_consensus::{assert_changeset_matches_pattern, fake::*, matches_pattern};
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_test_utilities_time::FastForwardTimeSource;
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
         consensus::{
             ecdsa::QuadrupleId, BlockPayload, CatchUpPackageShare, Finalization, FinalizationShare,
@@ -2046,42 +2082,42 @@ pub mod test {
         assert!(!ValidationContext {
             registry_version: RegistryVersion::from(10),
             certified_height: Height::from(5),
-            time: ic_test_utilities_time::mock_time(),
+            time: ic_types::time::UNIX_EPOCH,
         }
         .greater_or_equal(&ValidationContext {
             registry_version: RegistryVersion::from(11),
             certified_height: Height::from(4),
-            time: ic_test_utilities_time::mock_time(),
+            time: ic_types::time::UNIX_EPOCH,
         }),);
         assert!(ValidationContext {
             registry_version: RegistryVersion::from(10),
             certified_height: Height::from(5),
-            time: ic_test_utilities_time::mock_time(),
+            time: ic_types::time::UNIX_EPOCH,
         }
         .greater_or_equal(&ValidationContext {
             registry_version: RegistryVersion::from(10),
             certified_height: Height::from(5),
-            time: ic_test_utilities_time::mock_time(),
+            time: ic_types::time::UNIX_EPOCH,
         }),);
         assert!(ValidationContext {
             registry_version: RegistryVersion::from(11),
             certified_height: Height::from(5),
-            time: ic_test_utilities_time::mock_time(),
+            time: ic_types::time::UNIX_EPOCH,
         }
         .greater_or_equal(&ValidationContext {
             registry_version: RegistryVersion::from(11),
             certified_height: Height::from(4),
-            time: ic_test_utilities_time::mock_time(),
+            time: ic_types::time::UNIX_EPOCH,
         }),);
         assert!(!ValidationContext {
             registry_version: RegistryVersion::from(10),
             certified_height: Height::from(5),
-            time: ic_test_utilities_time::mock_time(),
+            time: ic_types::time::UNIX_EPOCH,
         }
         .greater_or_equal(&ValidationContext {
             registry_version: RegistryVersion::from(11),
             certified_height: Height::from(6),
-            time: ic_test_utilities_time::mock_time(),
+            time: ic_types::time::UNIX_EPOCH,
         }),);
     }
 
@@ -2342,9 +2378,9 @@ pub mod test {
 
             // Create and insert the block whose validation we will be testing
             let parent: &Block = block_chain.last().unwrap().as_ref();
-            let mut test_block: Block = pool.make_next_block_from_parent(parent).into();
-
             let rank = Rank(1);
+            let mut test_block: Block = pool.make_next_block_from_parent(parent, rank).into();
+
             let node_id = get_block_maker_by_rank(
                 membership.borrow(),
                 &PoolReader::new(&pool),
@@ -2355,7 +2391,6 @@ pub mod test {
 
             test_block.context.registry_version = RegistryVersion::from(11);
             test_block.context.certified_height = Height::from(1);
-            test_block.rank = rank;
             let block_proposal = BlockProposal::fake(test_block.clone(), node_id);
             pool.insert_unvalidated(block_proposal.clone());
 
@@ -2466,8 +2501,8 @@ pub mod test {
 
             // Create and insert the block whose validation we will be testing
             let parent: &Block = block_chain.last().unwrap().as_ref();
-            let mut test_block: Block = pool.make_next_block_from_parent(parent).into();
             let rank = Rank(1);
+            let mut test_block: Block = pool.make_next_block_from_parent(parent, rank).into();
             let node_id = get_block_maker_by_rank(
                 membership.borrow(),
                 &PoolReader::new(&pool),
@@ -2479,7 +2514,6 @@ pub mod test {
             test_block.context.registry_version = RegistryVersion::from(11);
             test_block.context.certified_height = Height::from(1);
             test_block.version = ReplicaVersion::try_from("old_version").unwrap();
-            test_block.rank = rank;
 
             let block_proposal = BlockProposal::fake(test_block.clone(), node_id);
             pool.insert_unvalidated(block_proposal.clone());
@@ -2580,7 +2614,7 @@ pub mod test {
                 .expect_get_state_at()
                 .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
                     Height::new(0),
-                    Arc::new(ic_test_utilities::state::get_initial_state(0, 0)),
+                    Arc::new(ic_test_utilities_state::get_initial_state(0, 0)),
                 )));
 
             add_subnet_record(
@@ -2629,17 +2663,18 @@ pub mod test {
             assert_block_valid(&valid_results, &test_block);
             pool.apply_changes(valid_results);
 
-            let mut next_block = pool.make_next_block_from_parent(test_block.as_ref());
+            let rank = Rank(0);
+            let mut next_block = pool.make_next_block_from_parent(test_block.as_ref(), rank);
             next_block.signature.signer = get_block_maker_by_rank(
                 membership.borrow(),
                 &PoolReader::new(&pool),
                 next_block.height(),
                 &committee,
-                Rank(0),
+                rank,
             );
             next_block.content.as_mut().context.registry_version = RegistryVersion::from(11);
             next_block.content.as_mut().context.certified_height = Height::from(1);
-            next_block.content.as_mut().rank = Rank(0);
+            next_block.content.as_mut().rank = rank;
             next_block.update_content();
             pool.insert_unvalidated(next_block.clone());
             // Forward time correctly
@@ -3070,18 +3105,18 @@ pub mod test {
             // Only one notarization is emitted in the ChangeSet.
             let changeset = validator.on_state_change(&PoolReader::new(&pool));
             assert_eq!(changeset.len(), 1);
-            assert!(matches!(
+            assert_matches!(
                 changeset[0],
                 ChangeAction::MoveToValidated(ConsensusMessage::Notarization(_))
-            ));
+            );
             pool.apply_changes(changeset);
 
             let changeset = validator.on_state_change(&PoolReader::new(&pool));
             assert_eq!(changeset.len(), 1);
-            assert!(matches!(
+            assert_matches!(
                 changeset[0],
                 ChangeAction::RemoveFromUnvalidated(ConsensusMessage::Notarization(_))
-            ));
+            );
             pool.apply_changes(changeset);
 
             // Finally, changeset should be empty.
@@ -3145,10 +3180,10 @@ pub mod test {
 
             // Only one finalization is emitted in the ChangeSet.
             let changeset = validator.on_state_change(&PoolReader::new(&pool));
-            assert!(matches!(
+            assert_matches!(
                 changeset[0],
                 ChangeAction::MoveToValidated(ConsensusMessage::Finalization(_))
-            ));
+            );
             assert_eq!(changeset.len(), 1);
             pool.apply_changes(changeset);
 
@@ -3229,6 +3264,140 @@ pub mod test {
         })
     }
 
+    // TODO: This test panics because the block maker delay still uses relative time
+    // to compute round starts.
+    #[test]
+    #[should_panic(expected = "couldn't validate rank-1 block proposal")]
+    fn test_out_of_sync_validation() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
+            let ValidatorDependencies {
+                mut payload_builder,
+                membership,
+                state_manager,
+                message_routing,
+                crypto,
+                registry_client,
+                mut pool,
+                dkg_pool,
+                time_source,
+                replica_config,
+                ..
+            } = setup_dependencies(pool_config, &subnet_members);
+
+            Arc::get_mut(&mut payload_builder)
+                .unwrap()
+                .expect_validate_payload()
+                .returning(|_, _, _, _| Ok(()));
+            state_manager
+                .get_mut()
+                .expect_latest_certified_height()
+                .return_const(Height::from(0));
+
+            // Insert a chain of blocks, and for each round set the time_source during
+            // insertion equal to the block proposal's timestamp.
+            let mut current = pool.make_next_block();
+            let mut current_beacon = pool.make_next_beacon();
+            for _ in 0..5 {
+                // Set local time to the block proposal timestamp
+                time_source
+                    .set_time(current.content.get_value().context.time)
+                    .unwrap();
+                pool.insert_validated(current.clone());
+                pool.insert_validated(current_beacon.clone());
+                pool.notarize(&current);
+                pool.finalize(&current);
+                current = pool.make_next_block_from_parent(current.as_ref(), Rank(0));
+                current_beacon = RandomBeacon::from_parent(&current_beacon);
+            }
+
+            let validator = Validator::new(
+                replica_config.clone(),
+                membership.clone(),
+                registry_client.clone(),
+                crypto,
+                payload_builder,
+                state_manager,
+                message_routing,
+                dkg_pool,
+                no_op_logger(),
+                ValidatorMetrics::new(MetricsRegistry::new()),
+                Arc::clone(&time_source) as Arc<_>,
+            );
+
+            // The current time is the time at which we inserted, notarized and finalized
+            // the current tip of the chain (i.e. the parent of test_block).
+            let parent_time = time_source.get_relative_time();
+            let test_block = make_next_block(&pool, membership.as_ref(), &subnet_members);
+            let proposal_time = test_block.content.get_value().context.time;
+            pool.insert_unvalidated(test_block.clone());
+
+            // Sanity check: monotonic increment
+            assert!(proposal_time > parent_time);
+
+            // Our local time has not changed. We can't validate.
+            let results = validator.on_state_change(&PoolReader::new(&pool));
+            assert!(results.is_empty());
+
+            // Now, assume our node goes out of sync. The clock stalls. We can only
+            // advance the monotonic time.
+            // According to the rules of out-of-sync validation, we need to advance
+            // the time by x, so that `parent + x >= proposal`. Then the proposal is
+            // allowed to be validated.
+            let diff = proposal_time.saturating_duration_since(parent_time);
+            time_source.advance_only_monotonic(diff);
+
+            // Sanity check: our local time is still unchanged.
+            assert_eq!(parent_time, time_source.get_relative_time());
+
+            let results = validator.on_state_change(&PoolReader::new(&pool));
+            match results.first() {
+                Some(ChangeAction::MoveToValidated(ConsensusMessage::BlockProposal(proposal))) => {
+                    assert_eq!(proposal, &test_block);
+                }
+                a => panic!("unexpected ChangeAction: {a:?}"),
+            }
+
+            pool.apply_changes(results);
+            pool.notarize(&test_block);
+            pool.finalize(&test_block);
+            pool.insert_validated(pool.make_next_beacon());
+
+            // Continue stalling the clock, and validate a rank > 0 block.
+            let mut test_block = make_next_block(&pool, membership.as_ref(), &subnet_members);
+            let rank = Rank(1);
+            let delay = get_block_maker_delay(
+                &no_op_logger(),
+                registry_client.as_ref(),
+                replica_config.subnet_id,
+                PoolReader::new(&pool)
+                    .registry_version(test_block.height())
+                    .unwrap(),
+                rank,
+            )
+            .unwrap();
+            test_block.content.as_mut().rank = rank;
+            test_block.content.as_mut().context.time += delay;
+            test_block.update_content();
+            let proposal_time = test_block.content.get_value().context.time;
+            pool.insert_unvalidated(test_block.clone());
+
+            let diff = proposal_time.saturating_duration_since(parent_time);
+            time_source.advance_only_monotonic(diff);
+
+            // Sanity check: our local time is still unchanged.
+            assert_eq!(parent_time, time_source.get_relative_time());
+
+            let results = validator.on_state_change(&PoolReader::new(&pool));
+            match results.first() {
+                Some(ChangeAction::MoveToValidated(ConsensusMessage::BlockProposal(proposal))) => {
+                    assert_eq!(proposal, &test_block);
+                }
+                _ => panic!("couldn't validate rank-1 block proposal"),
+            }
+        })
+    }
+
     #[test]
     fn test_block_validated_through_notarization() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
@@ -3280,15 +3449,15 @@ pub mod test {
             // First ensure that we require the parent block
             pool.insert_validated(pool.make_next_beacon());
             let parent_block = pool.make_next_block();
-            let mut block = pool.make_next_block_from_parent(parent_block.as_ref());
+            let rank = Rank(0);
+            let mut block = pool.make_next_block_from_parent(parent_block.as_ref(), rank);
             block.signature.signer = get_block_maker_by_rank(
                 membership.borrow(),
                 &PoolReader::new(&pool),
                 block.height(),
                 &subnet_members,
-                Rank(0),
+                rank,
             );
-            block.content.as_mut().rank = Rank(0);
 
             block.update_content();
             let content = NotarizationContent::new(

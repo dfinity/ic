@@ -8,6 +8,7 @@ package(default_visibility = [
 
 DEPENDENCIES = [
     "//rs/config",
+    "//rs/crypto/tls_interfaces",
     "//rs/interfaces",
     "//rs/interfaces/registry",
     "//rs/interfaces/transport",
@@ -15,6 +16,7 @@ DEPENDENCIES = [
     "//rs/monitoring/metrics",
     "//rs/protobuf",
     "//rs/registry/helpers",
+    "//rs/transport",
     "//rs/types/types",
     "@crate_index//:crossbeam-channel",
     "@crate_index//:linked-hash-map",
@@ -41,14 +43,15 @@ DEV_DEPENDENCIES = [
     "//rs/execution_environment",
     "//rs/https_outcalls/client",
     "//rs/interfaces/mocks",
-    "//rs/ic_os/sev",
     "//rs/registry/client",
     "//rs/registry/fake",
     "//rs/registry/nns_data_provider",
     "//rs/replica/setup_ic_network",
     "//rs/test_utilities",
+    "//rs/test_utilities/consensus",
     "//rs/test_utilities/metrics",
     "//rs/test_utilities/registry",
+    "//rs/test_utilities/types",
     "@crate_index//:tempfile",
 ]
 

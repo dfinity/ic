@@ -6,12 +6,12 @@ use rand::{thread_rng, Rng};
 use std::time::Duration;
 
 /// Five canister_status calls are made via LimitedOutstandingCallsManagementCanisterClient with a
-/// capaity of 2. Timeline:
+/// capacity of 2. Timeline:
 ///
 ///   1. Of course, the first two calls are ok.
 ///   2. The third fails, because the first two are still in flight.
 ///   3. Then, the second call completes.
-///   4. The four call succeeds, because only 1 out of 2 slots is in use.
+///   4. The fourth call succeeds, because only 1 out of 2 slots is in use.
 ///   5. Finally, the fifth call fails, similar to the third call.
 #[tokio::test]
 async fn test_limit_outstanding_calls() {
@@ -73,7 +73,7 @@ async fn test_limit_outstanding_calls() {
 
         let expected_call_count = if return_value.is_some() { 1 } else { 0 };
 
-        // Generate a random CanisterIdRecrod.
+        // Generate a random CanisterIdRecord.
         let canister_id_record = {
             let result = PrincipalId::new_user_test_id(thread_rng().gen());
             let result = CanisterId::try_from(result).unwrap();

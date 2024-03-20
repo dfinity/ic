@@ -8,7 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 candid = { workspace = true }
-clap = { workspace = true }
+clap = { version = "3.2.25", features = ["derive"] }
 hex = "0.4.2"
 ic-artifact-pool = { path = "../artifact_pool" }
 ic-canister-client = { path = "../canister_client" }
@@ -17,6 +17,7 @@ ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
 ic-consensus-utils = { path = "../consensus/utils" }
 ic-crypto-for-verification-only = { path = "../crypto/for_verification_only" }
+ic-crypto-test-utils-ni-dkg = { path = "../crypto/test_utils/ni-dkg" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-execution-environment = { path = "../execution_environment" }
 ic-interfaces = { path = "../interfaces" }
@@ -43,16 +44,19 @@ ic-state-manager = { path = "../state_manager" }
 ic-types = { path = "../types/types" }
 icp-ledger = { path = "../rosetta-api/icp_ledger" }
 prost = { workspace = true }
+rand = "0.8"
 serde = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }
 slog-async = { version = "2.5", features = ["nested-values"] }
 tempfile = "3.1.0"
 tokio = { workspace = true }
+tower = { workspace = true }
 url = { version = "2.1.1", features = ["serde"] }
 
 [dev-dependencies]
-ic-test-utilities = { path = "../test_utilities" }
+ic-test-utilities-consensus = { path = "../test_utilities/consensus" }
+ic-test-utilities-types = { path = "../test_utilities/types" }
 
 [[bin]]
 name = "ic-replay"

@@ -2,13 +2,13 @@ use ic_cycles_account_manager::{
     CRITICAL_ERROR_EXECUTION_CYCLES_REFUND, CRITICAL_ERROR_RESPONSE_CYCLES_REFUND,
 };
 use ic_error_types::ErrorCode;
-use ic_ic00_types as ic00;
 use ic_logger::{error, ReplicaLogger};
-use ic_metrics::buckets::decimal_buckets;
+use ic_management_canister_types as ic00;
+use ic_metrics::buckets::{decimal_buckets, decimal_buckets_with_zero};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use ic_types::CanisterId;
-use prometheus::{HistogramVec, IntCounter};
+use prometheus::{Histogram, HistogramVec, IntCounter};
 use std::str::FromStr;
 
 pub const FINISHED_OUTCOME_LABEL: &str = "finished";
@@ -26,6 +26,7 @@ pub(crate) struct ExecutionEnvironmentMetrics {
     pub(crate) compute_allocation_in_install_code_total: IntCounter,
     pub(crate) memory_allocation_in_install_code_total: IntCounter,
     pub(crate) controller_in_update_settings_total: IntCounter,
+    pub(crate) call_durations: Histogram,
 
     /// Critical error for responses above the maximum allowed size.
     pub(crate) response_cycles_refund_error: IntCounter,
@@ -84,6 +85,12 @@ impl ExecutionEnvironmentMetrics {
             controller_in_update_settings_total: metrics_registry.int_counter(
                 "execution_controller_in_update_settings_total",
                 "Total number of times controller used in update_settings requests",
+            ),
+            call_durations: metrics_registry.histogram(
+                "execution_call_duration_seconds",
+                "Call durations, measured as call context age when completed / dropped.",
+                // Buckets: 0s, 0.1s, 0.2s, 0.5s, ..., 5M seconds
+                decimal_buckets_with_zero(-1, 6),
             ),
             response_cycles_refund_error: metrics_registry
                 .error_counter(CRITICAL_ERROR_RESPONSE_CYCLES_REFUND),

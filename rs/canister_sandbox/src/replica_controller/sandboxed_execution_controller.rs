@@ -1,3 +1,4 @@
+use crate::compiler_sandbox::WasmCompilerProxy;
 use crate::controller_launcher_service::ControllerLauncherService;
 use crate::launcher_service::LauncherService;
 use crate::protocol::id::{ExecId, MemoryId, WasmId};
@@ -44,7 +45,9 @@ use std::time::{Duration, Instant};
 use super::active_execution_state_registry::{ActiveExecutionStateRegistry, CompletionResult};
 use super::controller_service_impl::ControllerServiceImpl;
 use super::launch_as_process::{create_sandbox_process, spawn_launcher_process};
-use super::process_exe_and_args::{create_launcher_argv, create_sandbox_argv};
+use super::process_exe_and_args::{
+    create_compiler_sandbox_argv, create_launcher_argv, create_sandbox_argv,
+};
 #[cfg(target_os = "linux")]
 use super::process_os_metrics;
 use super::sandbox_process_eviction::{self, EvictionCandidate};
@@ -226,8 +229,8 @@ impl SandboxedExecutionMetrics {
                 decimal_buckets_with_zero(-4, 1),
             ),
             sandboxed_execution_replica_cache_lookups: metrics_registry.int_counter_vec(
-                "sandboxed_execution_replica_cache_lookups", 
-                "Results from looking up a wasm module in the embedder cache or compilation cache", 
+                "sandboxed_execution_replica_cache_lookups",
+                "Results from looking up a wasm module in the embedder cache or compilation cache",
                 &["lookup_result"]),
             sandboxed_execution_wasm_imports_call_cycles_add: metrics_registry.int_counter(
                 "sandboxed_execution_wasm_imports_call_cycles_add",
@@ -1008,7 +1011,8 @@ impl SandboxedExecutionController {
         embedder_config: &EmbeddersConfig,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     ) -> std::io::Result<Self> {
-        let launcher_exec_argv = create_launcher_argv().expect("No sandbox_launcher binary found");
+        let launcher_exec_argv =
+            create_launcher_argv(embedder_config).expect("No sandbox_launcher binary found");
         let min_sandbox_count = embedder_config.min_sandbox_count;
         let max_sandbox_count = embedder_config.max_sandbox_count;
         let max_sandbox_idle_time = embedder_config.max_sandbox_idle_time;
@@ -1411,6 +1415,200 @@ impl SandboxedExecutionController {
             }
         }
     }
+
+    // to be enabled when we switch to compiler_sandbox
+    #[allow(dead_code)]
+    fn create_execution_state_with_compiler_sandbox(
+        &self,
+        canister_module: CanisterModule,
+        canister_root: PathBuf,
+        canister_id: CanisterId,
+        compilation_cache: Arc<CompilationCache>,
+    ) -> HypervisorResult<(ExecutionState, NumInstructions, Option<CompilationResult>)> {
+        let _create_exe_state_timer = self
+            .metrics
+            .sandboxed_execution_replica_create_exe_state_duration
+            .start_timer();
+        let sandbox_process = self.get_sandbox_process(canister_id);
+        let wasm_binary = WasmBinary::new(canister_module);
+
+        // The sandbox process prepares wasm memory, instantiates page maps
+        // and compiles the wasm binary (or looks it up in the cache).
+        // Then, through RPC, operations are sent to the sandbox, passing along
+        // also serialized versions of the needed objects (e.g., the page allocator through the pagemap)
+        let wasm_id = WasmId::new();
+        let wasm_page_map = PageMap::new(Arc::clone(&self.fd_factory));
+        let next_wasm_memory_id = MemoryId::new();
+
+        let stable_memory_page_map = PageMap::new(Arc::clone(&self.fd_factory));
+
+        let (memory_modifications, exported_globals, serialized_module, compilation_result) =
+            match compilation_cache.get(&wasm_binary.binary) {
+                None => {
+                    self.metrics.inc_cache_lookup(CACHE_MISS);
+                    let _compilation_timer = self
+                        .metrics
+                        .sandboxed_execution_replica_create_exe_state_wait_compile_duration
+                        .start_timer();
+
+                    let compiler_command = create_compiler_sandbox_argv().ok_or_else(|| {
+                        HypervisorError::WasmEngineError(
+                            ic_wasm_types::WasmEngineError::Unexpected(
+                                "Couldn't find compiler binary".to_string(),
+                            ),
+                        )
+                    })?;
+
+                    let compiler = WasmCompilerProxy::start(
+                        self.logger.clone(),
+                        &*self.launcher_service,
+                        &compiler_command[0],
+                        &compiler_command[1..],
+                    )?;
+                    let reply = compiler.compile(wasm_binary.binary.as_slice().to_vec());
+                    // Let the compiler proxy know that it can start shutting down, since
+                    // we are not planning to send any addtional requests to it.
+                    compiler.initiate_stop();
+
+                    match reply {
+                        Err(err) => {
+                            compilation_cache.insert(&wasm_binary.binary, Err(err.clone()));
+                            return Err(err);
+                        }
+                        Ok((compilation_result, serialized_module)) => {
+                            let serialized_module = Arc::new(serialized_module);
+                            compilation_cache
+                                .insert(&wasm_binary.binary, Ok(Arc::clone(&serialized_module)));
+
+                            sandbox_process.history.record(format!(
+                                "CreateExecutionStateSerialized(wasm_id={}, next_wasm_memory_id={})",
+                                wasm_id, next_wasm_memory_id
+                            ));
+                            let sandbox_result = sandbox_process
+                                .sandbox_service
+                                .create_execution_state_serialized(
+                                    protocol::sbxsvc::CreateExecutionStateSerializedRequest {
+                                        wasm_id,
+                                        serialized_module: Arc::clone(&serialized_module),
+                                        wasm_page_map: wasm_page_map.serialize(),
+                                        next_wasm_memory_id,
+                                        canister_id,
+                                        stable_memory_page_map: stable_memory_page_map.serialize(),
+                                    },
+                                )
+                                .sync()
+                                .unwrap()
+                                .0?;
+                            self.metrics
+                                .sandboxed_execution_sandbox_create_exe_state_deserialize_total_duration
+                                .observe(sandbox_result.total_sandbox_time.as_secs_f64());
+                            self.metrics
+                                .sandboxed_execution_sandbox_create_exe_state_deserialize_duration
+                                .observe(sandbox_result.deserialization_time.as_secs_f64());
+                            (
+                                sandbox_result.wasm_memory_modifications,
+                                sandbox_result.exported_globals,
+                                serialized_module,
+                                Some(compilation_result),
+                            )
+                        }
+                    }
+                }
+                Some(Err(err)) => {
+                    self.metrics
+                        .inc_cache_lookup(COMPILATION_CACHE_HIT_COMPILATION_ERROR);
+                    return Err(err);
+                }
+                Some(Ok(serialized_module)) => {
+                    self.metrics.inc_cache_lookup(COMPILATION_CACHE_HIT);
+                    let _deserialization_timer = self
+                        .metrics
+                        .sandboxed_execution_replica_create_exe_state_wait_deserialize_duration
+                        .start_timer();
+                    sandbox_process.history.record(format!(
+                        "CreateExecutionStateSerialized(wasm_id={}, next_wasm_memory_id={})",
+                        wasm_id, next_wasm_memory_id
+                    ));
+                    let sandbox_result = sandbox_process
+                        .sandbox_service
+                        .create_execution_state_serialized(
+                            protocol::sbxsvc::CreateExecutionStateSerializedRequest {
+                                wasm_id,
+                                serialized_module: Arc::clone(&serialized_module),
+                                wasm_page_map: wasm_page_map.serialize(),
+                                next_wasm_memory_id,
+                                canister_id,
+                                stable_memory_page_map: stable_memory_page_map.serialize(),
+                            },
+                        )
+                        .sync()
+                        .unwrap()
+                        .0?;
+                    self.metrics
+                        .sandboxed_execution_sandbox_create_exe_state_deserialize_total_duration
+                        .observe(sandbox_result.total_sandbox_time.as_secs_f64());
+                    self.metrics
+                        .sandboxed_execution_sandbox_create_exe_state_deserialize_duration
+                        .observe(sandbox_result.deserialization_time.as_secs_f64());
+                    (
+                        sandbox_result.wasm_memory_modifications,
+                        sandbox_result.exported_globals,
+                        serialized_module,
+                        None,
+                    )
+                }
+            };
+        let _finish_timer = self
+            .metrics
+            .sandboxed_execution_replica_create_exe_state_finish_duration
+            .start_timer();
+        observe_metrics(&self.metrics, &serialized_module.imports_details);
+
+        cache_opened_wasm(
+            &mut wasm_binary.embedder_cache.lock().unwrap(),
+            &sandbox_process,
+            wasm_id,
+        );
+
+        // Step 5. Create the execution state.
+        let mut wasm_memory = Memory::new(wasm_page_map, memory_modifications.size);
+        wasm_memory
+            .page_map
+            .deserialize_delta(memory_modifications.page_delta);
+        wasm_memory.sandbox_memory =
+            SandboxMemory::synced(wrap_remote_memory(&sandbox_process, next_wasm_memory_id));
+        if let Err(err) = wasm_memory.verify_size() {
+            error!(
+                self.logger,
+                "{}: Canister {} has invalid initial wasm memory size: {}",
+                SANDBOXED_EXECUTION_INVALID_MEMORY_SIZE,
+                canister_id,
+                err
+            );
+            self.metrics
+                .sandboxed_execution_critical_error_invalid_memory_size
+                .inc();
+        }
+
+        let stable_memory = Memory::new(
+            stable_memory_page_map,
+            ic_replicated_state::NumWasmPages::from(0),
+        );
+        let execution_state = ExecutionState::new(
+            canister_root,
+            wasm_binary,
+            ExportedFunctions::new(serialized_module.exported_functions.clone()),
+            wasm_memory,
+            stable_memory,
+            exported_globals,
+            serialized_module.wasm_metadata.clone(),
+        );
+        Ok((
+            execution_state,
+            serialized_module.compilation_cost,
+            compilation_result,
+        ))
+    }
 }
 
 /// Cache the sandbox process and wasm id of the opened wasm in the embedder
@@ -1479,6 +1677,108 @@ fn open_wasm(
                 .0
             {
                 Ok((compilation_result, serialized_module)) => {
+                    cache_opened_wasm(&mut embedder_cache, sandbox_process, wasm_id);
+                    observe_metrics(metrics, &serialized_module.imports_details);
+                    compilation_cache.insert(&wasm_binary.binary, Ok(Arc::new(serialized_module)));
+                    Ok((wasm_id, Some(compilation_result)))
+                }
+                Err(err) => {
+                    compilation_cache.insert(&wasm_binary.binary, Err(err.clone()));
+                    cache_errored_wasm(&mut embedder_cache, err.clone());
+                    Err(err)
+                }
+            }
+        }
+        Some(Err(err)) => {
+            metrics.inc_cache_lookup(COMPILATION_CACHE_HIT_COMPILATION_ERROR);
+            cache_errored_wasm(&mut embedder_cache, err.clone());
+            Err(err)
+        }
+        Some(Ok(serialized_module)) => {
+            metrics.inc_cache_lookup(COMPILATION_CACHE_HIT);
+            observe_metrics(metrics, &serialized_module.imports_details);
+            sandbox_process
+                .history
+                .record(format!("OpenWasmSerialized(wasm_id={})", wasm_id));
+            sandbox_process
+                .sandbox_service
+                .open_wasm_serialized(protocol::sbxsvc::OpenWasmSerializedRequest {
+                    wasm_id,
+                    serialized_module: Arc::clone(&serialized_module.bytes),
+                })
+                .on_completion(|_| ());
+            cache_opened_wasm(&mut embedder_cache, sandbox_process, wasm_id);
+            Ok((wasm_id, None))
+        }
+    }
+}
+
+// Get compiled wasm object in sandbox. Ask cache first, upload + compile if
+// needed.
+// to be enabled when we switch to compiler_sandbox
+#[allow(dead_code)]
+fn open_wasm_with_compiler_sandbox(
+    sandbox_process: &Arc<SandboxProcess>,
+    launcher: &dyn LauncherService,
+    wasm_binary: &WasmBinary,
+    compilation_cache: Arc<CompilationCache>,
+    metrics: &SandboxedExecutionMetrics,
+    log: &ReplicaLogger,
+) -> HypervisorResult<(WasmId, Option<CompilationResult>)> {
+    let mut embedder_cache = wasm_binary.embedder_cache.lock().unwrap();
+    if let Some(cache) = embedder_cache.as_ref() {
+        if let Some(opened_wasm) = cache.downcast::<HypervisorResult<OpenedWasm>>() {
+            match opened_wasm {
+                Ok(opened_wasm) => {
+                    if let Some(cached_sandbox_process) = opened_wasm.sandbox_process.upgrade() {
+                        metrics.inc_cache_lookup(EMBEDDER_CACHE_HIT_SUCCESS);
+                        assert!(Arc::ptr_eq(&cached_sandbox_process, sandbox_process));
+                        return Ok((opened_wasm.wasm_id, None));
+                    } else {
+                        metrics.inc_cache_lookup(EMBEDDER_CACHE_HIT_SANDBOX_EVICTED);
+                    }
+                }
+                Err(err) => {
+                    metrics.inc_cache_lookup(EMBEDDER_CACHE_HIT_COMPILATION_ERROR);
+                    return Err(err.clone());
+                }
+            }
+        }
+    }
+
+    let wasm_id = WasmId::new();
+    match compilation_cache.get(&wasm_binary.binary) {
+        None => {
+            metrics.inc_cache_lookup(CACHE_MISS);
+            let compiler_command = create_compiler_sandbox_argv().ok_or_else(|| {
+                HypervisorError::WasmEngineError(ic_wasm_types::WasmEngineError::Unexpected(
+                    "Couldn't find compiler binary".to_string(),
+                ))
+            })?;
+
+            let compiler = WasmCompilerProxy::start(
+                log.clone(),
+                launcher,
+                &compiler_command[0],
+                &compiler_command[1..],
+            )?;
+            let result = compiler.compile(wasm_binary.binary.as_slice().to_vec());
+            // Let the compiler proxy know that it can start shutting down, since
+            // we are not planning to send any addtional requests to it.
+            compiler.initiate_stop();
+
+            match result {
+                Ok((compilation_result, serialized_module)) => {
+                    sandbox_process
+                        .history
+                        .record(format!("OpenWasmSerialized(wasm_id={})", wasm_id));
+                    sandbox_process
+                        .sandbox_service
+                        .open_wasm_serialized(protocol::sbxsvc::OpenWasmSerializedRequest {
+                            wasm_id,
+                            serialized_module: Arc::clone(&serialized_module.bytes),
+                        })
+                        .on_completion(|_| ());
                     cache_opened_wasm(&mut embedder_cache, sandbox_process, wasm_id);
                     observe_metrics(metrics, &serialized_module.imports_details);
                     compilation_cache.insert(&wasm_binary.binary, Ok(Arc::new(serialized_module)));
@@ -1736,14 +2036,14 @@ mod tests {
         execution_environment::MAX_COMPILATION_CACHE_SIZE, logger::Config as LoggerConfig,
     };
     use ic_logger::{new_replica_logger, replica_logger::no_op_logger};
-    use ic_test_utilities::types::ids::canister_test_id;
+    use ic_test_utilities_types::ids::canister_test_id;
     use libc::kill;
     use slog::{o, Drain};
 
     #[test]
     #[should_panic(expected = "exited due to signal!")]
     fn controller_handles_killed_launcher_process() {
-        let launcher_exec_argv = create_launcher_argv().unwrap();
+        let launcher_exec_argv = create_launcher_argv(&EmbeddersConfig::default()).unwrap();
         let exit_watcher = Arc::new(ExitWatcher {
             logger: no_op_logger(),
             backends: Arc::new(Mutex::new(HashMap::new())),

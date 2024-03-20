@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-anyhow = "1.0.31"
+anyhow = { workspace = true }
 ic-nervous-system-common = { path = "../../../nervous_system/common" }
 ic-nervous-system-proto = { path = "../../../nervous_system/proto" }
 ic-nns-governance = { path = "../../../nns/governance" }

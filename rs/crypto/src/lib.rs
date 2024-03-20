@@ -17,6 +17,7 @@ mod keygen;
 mod sign;
 mod tls;
 
+use ic_crypto_internal_csp::vault::api::CspVault;
 pub use sign::{
     get_tecdsa_master_public_key, retrieve_mega_public_key_from_registry, MegaKeyFromRegistryError,
 };
@@ -24,12 +25,12 @@ pub use sign::{
 use crate::sign::ThresholdSigDataStoreImpl;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_csp::api::CspPublicKeyStore;
+use ic_crypto_internal_csp::vault::vault_from_config;
 use ic_crypto_internal_csp::{CryptoServiceProvider, Csp};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_utils_basic_sig::conversions::derive_node_id;
-use ic_crypto_utils_time::CurrentSystemTimeSource;
 use ic_interfaces::crypto::KeyManager;
-use ic_interfaces::time_source::TimeSource;
+use ic_interfaces::time_source::{SysTimeSource, TimeSource};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{new_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -53,6 +54,7 @@ pub type CryptoComponent = CryptoComponentImpl<Csp>;
 /// handshakes.
 pub struct CryptoComponentImpl<C: CryptoServiceProvider> {
     lockable_threshold_sig_data_store: LockableThresholdSigDataStore,
+    vault: Arc<dyn CspVault>,
     csp: C,
     registry_client: Arc<dyn RegistryClient>,
     // The node id of the node that instantiated this crypto component.
@@ -90,10 +92,13 @@ impl LockableThresholdSigDataStore {
     }
 }
 
+/// Methods required for testing. Ideally, this block would be `#[test]` code,
+/// but this is not possible as the methods are required outside of the crate.
 impl<C: CryptoServiceProvider> CryptoComponentImpl<C> {
     /// Creates a crypto component using the given `csp` and fake `node_id`.
-    pub fn new_with_csp_and_fake_node_id(
+    pub fn new_for_test(
         csp: C,
+        vault: Arc<dyn CspVault>,
         logger: ReplicaLogger,
         registry_client: Arc<dyn RegistryClient>,
         node_id: NodeId,
@@ -103,12 +108,12 @@ impl<C: CryptoServiceProvider> CryptoComponentImpl<C> {
         CryptoComponentImpl {
             lockable_threshold_sig_data_store: LockableThresholdSigDataStore::new(),
             csp,
+            vault,
             registry_client,
             node_id,
-            logger: new_logger!(&logger),
+            logger,
             metrics,
-            time_source: time_source
-                .unwrap_or_else(|| Arc::new(CurrentSystemTimeSource::new(logger))),
+            time_source: time_source.unwrap_or_else(|| Arc::new(SysTimeSource::new())),
         }
     }
 }
@@ -184,10 +189,15 @@ impl CryptoComponentImpl<Csp> {
         metrics_registry: Option<&MetricsRegistry>,
     ) -> Self {
         let metrics = Arc::new(CryptoMetrics::new(metrics_registry));
-        let csp = Csp::new(
+        let vault = vault_from_config(
             config,
             tokio_runtime_handle,
-            Some(new_logger!(&logger)),
+            new_logger!(&logger),
+            Arc::clone(&metrics),
+        );
+        let csp = Csp::new_from_vault(
+            Arc::clone(&vault),
+            new_logger!(&logger),
             Arc::clone(&metrics),
         );
         let node_pks = csp
@@ -203,11 +213,12 @@ impl CryptoComponentImpl<Csp> {
         let crypto_component = CryptoComponentImpl {
             lockable_threshold_sig_data_store: LockableThresholdSigDataStore::new(),
             csp,
+            vault,
             registry_client,
             node_id,
-            logger: new_logger!(&logger),
+            time_source: Arc::new(SysTimeSource::new()),
+            logger,
             metrics,
-            time_source: Arc::new(CurrentSystemTimeSource::new(logger)),
         };
         crypto_component.collect_and_store_key_count_metrics(latest_registry_version);
         crypto_component

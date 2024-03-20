@@ -111,7 +111,7 @@ const QUERY_CACHE_MAX_EXPIRY_TIME: Duration = Duration::from_secs(600);
 const QUERY_CACHE_DATA_CERTIFICATE_EXPIRY_TIME: Duration = Duration::from_secs(60);
 
 /// Length of an epoch of query statistics in blocks
-pub const QUERY_STATS_EPOCH_LENGTH: u64 = 1800;
+pub const QUERY_STATS_EPOCH_LENGTH: u64 = 600;
 
 // The ID of the Bitcoin testnet canister.
 pub const BITCOIN_TESTNET_CANISTER_ID: &str = "g4xu7-jiaaa-aaaan-aaaaq-cai";
@@ -262,8 +262,11 @@ pub struct Config {
     pub canister_snapshots: FlagStatus,
 
     // TODO(IC-272): remove this flag once the feature is enabled by default.
-    /// Indicates whether fetching canister logs API is enabled or not.
-    pub fetch_canister_logs: FlagStatus,
+    /// Indicates whether canister logging feature is enabled or not.
+    pub canister_logging: FlagStatus,
+
+    /// Indicates whether dirty page logging is enabled or not.
+    pub dirty_page_logging: FlagStatus,
 }
 
 impl Default for Config {
@@ -334,7 +337,8 @@ impl Default for Config {
             wasm_chunk_store: FlagStatus::Enabled,
             stop_canister_timeout_duration: STOP_CANISTER_TIMEOUT_DURATION,
             canister_snapshots: FlagStatus::Disabled,
-            fetch_canister_logs: FlagStatus::Disabled,
+            canister_logging: FlagStatus::Disabled,
+            dirty_page_logging: FlagStatus::Disabled,
         }
     }
 }

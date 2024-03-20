@@ -38,8 +38,8 @@ use ic_config::{
     transport::TransportConfig,
     ConfigOptional as ReplicaConfig,
 };
-use ic_ic00_types::EcdsaKeyId;
 use ic_logger::{info, new_replica_logger_from_config};
+use ic_management_canister_types::EcdsaKeyId;
 use ic_prep_lib::{
     internet_computer::{IcConfig, TopologyConfig},
     node::{NodeConfiguration, NodeIndex},
@@ -655,6 +655,9 @@ impl ValidatedConfig {
             rate_limiting_of_instructions: FlagStatus::Disabled,
             composite_queries: FlagStatus::Enabled,
             wasm_chunk_store: FlagStatus::Enabled,
+            query_stats_aggregation: FlagStatus::Enabled,
+            query_stats_epoch_length: 60,
+            canister_logging: FlagStatus::Enabled,
             ..HypervisorConfig::default()
         };
 

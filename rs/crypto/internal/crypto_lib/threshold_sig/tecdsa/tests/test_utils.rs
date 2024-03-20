@@ -68,6 +68,17 @@ fn verify_ecdsa_signature_using_third_party(
     }
 }
 
+pub fn verify_bip340_signature_using_third_party(pk: &[u8], sig: &[u8], msg: &[u8]) -> bool {
+    use k256::ecdsa::signature::hazmat::PrehashVerifier;
+
+    assert_eq!(pk.len(), 32);
+    assert_eq!(sig.len(), 64);
+
+    let vk = k256::schnorr::VerifyingKey::from_bytes(pk).unwrap();
+    let sig = k256::schnorr::Signature::try_from(sig).unwrap();
+    vk.verify_prehash(msg, &sig).is_ok()
+}
+
 #[derive(Debug, Clone)]
 pub struct ProtocolSetup {
     alg: AlgorithmId,
@@ -800,7 +811,7 @@ impl ProtocolRound {
 }
 
 #[derive(Clone, Debug)]
-pub struct SignatureProtocolSetup {
+pub struct EcdsaSignatureProtocolSetup {
     setup: ProtocolSetup,
     pub key: ProtocolRound,
     pub kappa: ProtocolRound,
@@ -809,8 +820,8 @@ pub struct SignatureProtocolSetup {
     pub kappa_times_lambda: ProtocolRound,
 }
 
-impl SignatureProtocolSetup {
-    /// Create a key plus quadruple
+impl EcdsaSignatureProtocolSetup {
+    /// Create a key plus a quadruple for performing an ECDSA signature
     ///
     /// Generates a new key and a quadruple (kappa, lambda, kappa*lambda, key*lambda)
     ///
@@ -897,7 +908,8 @@ impl SignatureProtocolSetup {
             algorithm_id: mpk_alg,
             public_key: self.key.transcript.constant_term().serialize(),
         };
-        ic_crypto_internal_threshold_sig_ecdsa::sign::derive_public_key(&master_public_key, path)
+        ic_crypto_internal_threshold_sig_ecdsa::derive_ecdsa_public_key(&master_public_key, path)
+            .map_err(|e| ThresholdEcdsaError::InvalidArguments(format!("{:?}", e)))
     }
 
     pub fn alg(&self) -> AlgorithmId {
@@ -906,17 +918,17 @@ impl SignatureProtocolSetup {
 }
 
 #[derive(Clone, Debug)]
-pub struct SignatureProtocolExecution {
-    setup: SignatureProtocolSetup,
+pub struct EcdsaSignatureProtocolExecution {
+    setup: EcdsaSignatureProtocolSetup,
     signed_message: Vec<u8>,
     hashed_message: Vec<u8>,
     random_beacon: Randomness,
     derivation_path: DerivationPath,
 }
 
-impl SignatureProtocolExecution {
+impl EcdsaSignatureProtocolExecution {
     pub fn new(
-        setup: SignatureProtocolSetup,
+        setup: EcdsaSignatureProtocolSetup,
         signed_message: Vec<u8>,
         random_beacon: Randomness,
         derivation_path: DerivationPath,
@@ -938,7 +950,7 @@ impl SignatureProtocolExecution {
         let mut shares = BTreeMap::new();
 
         for node_index in 0..self.setup.setup.receivers {
-            let share = sign_share(
+            let share = create_ecdsa_signature_share(
                 &self.derivation_path,
                 &self.hashed_message,
                 self.random_beacon,
@@ -951,7 +963,7 @@ impl SignatureProtocolExecution {
             )
             .expect("Failed to create sig share");
 
-            verify_signature_share(
+            verify_ecdsa_signature_share(
                 &share,
                 &self.derivation_path,
                 &self.hashed_message,
@@ -977,7 +989,7 @@ impl SignatureProtocolExecution {
         shares: &BTreeMap<NodeIndex, ThresholdEcdsaSigShareInternal>,
     ) -> Result<ThresholdEcdsaCombinedSigInternal, ThresholdEcdsaCombineSigSharesInternalError>
     {
-        combine_sig_shares(
+        combine_ecdsa_signature_shares(
             &self.derivation_path,
             &self.hashed_message,
             self.random_beacon,
@@ -993,7 +1005,7 @@ impl SignatureProtocolExecution {
         &self,
         sig: &ThresholdEcdsaCombinedSigInternal,
     ) -> Result<(), ThresholdEcdsaVerifySignatureInternalError> {
-        verify_threshold_signature(
+        verify_ecdsa_threshold_signature(
             sig,
             &self.derivation_path,
             &self.hashed_message,
@@ -1010,6 +1022,148 @@ impl SignatureProtocolExecution {
             self.setup.setup.alg,
             &pk.public_key,
             &sig.serialize(),
+            &self.signed_message
+        ));
+
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct Bip340SignatureProtocolSetup {
+    setup: ProtocolSetup,
+    pub key: ProtocolRound,
+    pub presig: ProtocolRound,
+}
+
+impl Bip340SignatureProtocolSetup {
+    /// Create a key plus a presignature for BIP340 Schnorr signature
+    pub fn new(
+        number_of_dealers: usize,
+        threshold: usize,
+        number_of_dealings_corrupted: usize,
+        seed: Seed,
+    ) -> ThresholdEcdsaResult<Self> {
+        let cfg = TestConfig::new(EccCurveType::K256);
+        let setup = ProtocolSetup::new(cfg, number_of_dealers, threshold, seed)?;
+
+        let key = ProtocolRound::random(&setup, number_of_dealers, number_of_dealings_corrupted)?;
+
+        let key = ProtocolRound::reshare_of_masked(
+            &setup,
+            &key,
+            number_of_dealers,
+            number_of_dealings_corrupted,
+        )?;
+
+        let presig = ProtocolRound::random_unmasked(
+            &setup,
+            number_of_dealers,
+            number_of_dealings_corrupted,
+        )?;
+
+        Ok(Self { setup, key, presig })
+    }
+
+    pub fn public_key(&self, path: &DerivationPath) -> Result<Vec<u8>, ThresholdEcdsaError> {
+        Ok(derive_bip340_public_key(&self.key.transcript, path)?.to_vec())
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct Bip340SignatureProtocolExecution {
+    setup: Bip340SignatureProtocolSetup,
+    signed_message: Vec<u8>,
+    random_beacon: Randomness,
+    derivation_path: DerivationPath,
+}
+
+impl Bip340SignatureProtocolExecution {
+    pub fn new(
+        setup: Bip340SignatureProtocolSetup,
+        signed_message: Vec<u8>,
+        random_beacon: Randomness,
+        derivation_path: DerivationPath,
+    ) -> Self {
+        Self {
+            setup,
+            signed_message,
+            random_beacon,
+            derivation_path,
+        }
+    }
+
+    pub fn generate_shares(
+        &self,
+    ) -> ThresholdEcdsaResult<BTreeMap<u32, ThresholdBip340SignatureShareInternal>> {
+        let mut shares = BTreeMap::new();
+
+        for node_index in 0..self.setup.setup.receivers {
+            let share = create_bip340_signature_share(
+                &self.derivation_path,
+                &self.signed_message,
+                self.random_beacon,
+                &self.setup.key.transcript,
+                &self.setup.presig.transcript,
+                &self.setup.key.openings[node_index],
+                &self.setup.presig.openings[node_index],
+            )
+            .expect("Failed to create sig share");
+
+            verify_bip340_signature_share(
+                &share,
+                &self.derivation_path,
+                &self.signed_message,
+                self.random_beacon,
+                node_index as u32,
+                &self.setup.key.transcript,
+                &self.setup.presig.transcript,
+            )
+            .expect("Signature share verification failed");
+
+            shares.insert(node_index as NodeIndex, share);
+        }
+
+        Ok(shares)
+    }
+
+    pub fn generate_signature(
+        &self,
+        shares: &BTreeMap<NodeIndex, ThresholdBip340SignatureShareInternal>,
+    ) -> Result<
+        ThresholdBip340CombinedSignatureInternal,
+        ThresholdBip340CombineSigSharesInternalError,
+    > {
+        combine_bip340_signature_shares(
+            &self.derivation_path,
+            &self.signed_message,
+            self.random_beacon,
+            &self.setup.key.transcript,
+            &self.setup.presig.transcript,
+            self.setup.setup.threshold,
+            shares,
+        )
+    }
+
+    pub fn verify_signature(
+        &self,
+        sig: &ThresholdBip340CombinedSignatureInternal,
+    ) -> Result<(), ThresholdBip340VerifySignatureInternalError> {
+        verify_bip340_threshold_signature(
+            sig,
+            &self.derivation_path,
+            &self.signed_message,
+            self.random_beacon,
+            &self.setup.presig.transcript,
+            &self.setup.key.transcript,
+        )?;
+
+        // If verification succeeded, check with RustCrypto's version also
+        let pk = self.setup.public_key(&self.derivation_path)?;
+
+        assert!(verify_bip340_signature_using_third_party(
+            &pk,
+            &sig.serialize()?,
             &self.signed_message
         ));
 

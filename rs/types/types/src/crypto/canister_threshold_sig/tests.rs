@@ -1,6 +1,6 @@
 use super::*;
 use crate::crypto::canister_threshold_sig::error::{
-    PresignatureQuadrupleCreationError, ThresholdEcdsaSigInputsCreationError,
+    EcdsaPresignatureQuadrupleCreationError, ThresholdEcdsaSigInputsCreationError,
 };
 use crate::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
 use crate::{Height, NodeId, RegistryVersion, SubnetId};
@@ -27,7 +27,7 @@ fn should_create_quadruples_correctly() {
     for kappa_unmasked_type in kappa_unmasked_supported_types {
         kappa_unmasked.transcript_type = kappa_unmasked_type;
 
-        let result = PreSignatureQuadruple::new(
+        let result = EcdsaPreSignatureQuadruple::new(
             kappa_unmasked.clone(),
             lambda_masked.clone(),
             kappa_times_lambda.clone(),
@@ -54,7 +54,7 @@ fn should_not_create_quadruples_with_inconsistent_algorithms() {
     kappa_unmasked.algorithm_id = wrong_algorithm_id;
     assert_ne!(kappa_unmasked.algorithm_id, lambda_masked.algorithm_id);
 
-    let quadruple = PreSignatureQuadruple::new(
+    let quadruple = EcdsaPreSignatureQuadruple::new(
         kappa_unmasked,
         lambda_masked,
         kappa_times_lambda,
@@ -62,7 +62,7 @@ fn should_not_create_quadruples_with_inconsistent_algorithms() {
     );
     assert_matches!(
         quadruple,
-        Err(PresignatureQuadrupleCreationError::InconsistentAlgorithmIds)
+        Err(EcdsaPresignatureQuadrupleCreationError::InconsistentAlgorithmIds)
     );
 }
 
@@ -77,7 +77,7 @@ fn should_not_create_quadruples_with_inconsistent_receivers() {
     kappa_unmasked.receivers = IDkgReceivers::new(wrong_receivers).unwrap();
     assert_ne!(kappa_unmasked.receivers, lambda_masked.receivers);
 
-    let quadruple = PreSignatureQuadruple::new(
+    let quadruple = EcdsaPreSignatureQuadruple::new(
         kappa_unmasked,
         lambda_masked,
         kappa_times_lambda,
@@ -85,7 +85,7 @@ fn should_not_create_quadruples_with_inconsistent_receivers() {
     );
     assert_matches!(
         quadruple,
-        Err(PresignatureQuadrupleCreationError::InconsistentReceivers)
+        Err(EcdsaPresignatureQuadrupleCreationError::InconsistentReceivers)
     );
 }
 
@@ -110,13 +110,13 @@ fn should_not_create_quadruples_for_kappa_with_wrong_type() {
         assert_ne!(kappa_unmasked.transcript_type, wrong_kappa_unmasked_type);
         kappa_unmasked.transcript_type = wrong_kappa_unmasked_type;
 
-        let quadruple = PreSignatureQuadruple::new(
+        let quadruple = EcdsaPreSignatureQuadruple::new(
             kappa_unmasked.clone(),
             lambda_masked,
             kappa_times_lambda,
             key_times_lambda,
         );
-        assert_matches!(quadruple, Err(PresignatureQuadrupleCreationError::InvalidTranscriptOrigin(error))
+        assert_matches!(quadruple, Err(EcdsaPresignatureQuadrupleCreationError::InvalidTranscriptOrigin(error))
             if error == format!("`kappa_unmasked` transcript expected to have type `Unmasked` with `ReshareMasked` or `Random` origin, but found transcript of type {:?}",kappa_unmasked.transcript_type)
         );
     }
@@ -135,13 +135,13 @@ fn should_not_create_quadruples_for_lambda_with_wrong_type() {
     assert_ne!(lambda_masked.transcript_type, wrong_lambda_masked_type);
     lambda_masked.transcript_type = wrong_lambda_masked_type;
 
-    let quadruple = PreSignatureQuadruple::new(
+    let quadruple = EcdsaPreSignatureQuadruple::new(
         kappa_unmasked,
         lambda_masked.clone(),
         kappa_times_lambda,
         key_times_lambda,
     );
-    assert_matches!(quadruple, Err(PresignatureQuadrupleCreationError::InvalidTranscriptOrigin(error))
+    assert_matches!(quadruple, Err(EcdsaPresignatureQuadrupleCreationError::InvalidTranscriptOrigin(error))
         if error == format!("`lambda_masked` transcript expected to have type `Masked` with `Random` origin, but found transcript of type {:?}",lambda_masked.transcript_type)
     );
 }
@@ -164,13 +164,13 @@ fn should_not_create_quadruples_for_kappa_times_lambda_with_wrong_origin() {
     );
     kappa_times_lambda.transcript_type = wrong_kappa_times_lambda_type.clone();
 
-    let quadruple = PreSignatureQuadruple::new(
+    let quadruple = EcdsaPreSignatureQuadruple::new(
         kappa_unmasked.clone(),
         lambda_masked.clone(),
         kappa_times_lambda,
         key_times_lambda,
     );
-    assert_matches!(quadruple, Err(PresignatureQuadrupleCreationError::InvalidTranscriptOrigin(error))
+    assert_matches!(quadruple, Err(EcdsaPresignatureQuadrupleCreationError::InvalidTranscriptOrigin(error))
           if error == format!("`kappa_times_lambda` transcript expected to have type `Masked` with origin of type `UnmaskedTimesMasked({:?},{:?})`, but found transcript of type {:?}", kappa_unmasked.transcript_id, lambda_masked.transcript_id, wrong_kappa_times_lambda_type)
     );
 }
@@ -190,13 +190,13 @@ fn should_not_create_quadruples_for_kappa_times_lambda_of_wrong_type() {
     );
     kappa_times_lambda.transcript_type = wrong_kappa_times_lambda_type.clone();
 
-    let quadruple = PreSignatureQuadruple::new(
+    let quadruple = EcdsaPreSignatureQuadruple::new(
         kappa_unmasked.clone(),
         lambda_masked.clone(),
         kappa_times_lambda,
         key_times_lambda,
     );
-    assert_matches!(quadruple, Err(PresignatureQuadrupleCreationError::InvalidTranscriptOrigin(error))
+    assert_matches!(quadruple, Err(EcdsaPresignatureQuadrupleCreationError::InvalidTranscriptOrigin(error))
         if error == format!("`kappa_times_lambda` transcript expected to have type `Masked` with origin of type `UnmaskedTimesMasked({:?},{:?})`, but found transcript of type {:?}", kappa_unmasked.transcript_id, lambda_masked.transcript_id, wrong_kappa_times_lambda_type)
     );
 }
@@ -219,13 +219,13 @@ fn should_not_create_quadruples_for_key_times_lambda_with_wrong_origin() {
     );
     key_times_lambda.transcript_type = wrong_key_times_lambda_type.clone();
 
-    let quadruple = PreSignatureQuadruple::new(
+    let quadruple = EcdsaPreSignatureQuadruple::new(
         kappa_unmasked,
         lambda_masked.clone(),
         kappa_times_lambda,
         key_times_lambda,
     );
-    assert_matches!(quadruple, Err(PresignatureQuadrupleCreationError::InvalidTranscriptOrigin(error))
+    assert_matches!(quadruple, Err(EcdsaPresignatureQuadrupleCreationError::InvalidTranscriptOrigin(error))
         if error == format!("`key_times_lambda` transcript expected to have type `Masked` with origin of type `UnmaskedTimesMasked(_,{:?})`, but found transcript of type {:?}", lambda_masked.transcript_id, wrong_key_times_lambda_type)
     );
 }
@@ -245,13 +245,13 @@ fn should_not_create_quadruples_for_key_times_lambda_with_wrong_type() {
     );
     key_times_lambda.transcript_type = wrong_key_times_lambda_type.clone();
 
-    let quadruple = PreSignatureQuadruple::new(
+    let quadruple = EcdsaPreSignatureQuadruple::new(
         kappa_unmasked,
         lambda_masked.clone(),
         kappa_times_lambda,
         key_times_lambda,
     );
-    assert_matches!(quadruple, Err(PresignatureQuadrupleCreationError::InvalidTranscriptOrigin(error))
+    assert_matches!(quadruple, Err(EcdsaPresignatureQuadrupleCreationError::InvalidTranscriptOrigin(error))
         if error == format!("`key_times_lambda` transcript expected to have type `Masked` with origin of type `UnmaskedTimesMasked(_,{:?})`, but found transcript of type {:?}", lambda_masked.transcript_id, wrong_key_times_lambda_type)
     );
 }
@@ -261,9 +261,9 @@ fn should_create_ecdsa_inputs_correctly() {
     let rng = &mut reproducible_rng();
     let common_receivers = set_of_nodes(&[1, 2, 3]);
     let (kappa_unmasked, lambda_masked, kappa_times_lambda, key_times_lambda, key_transcript) =
-        transcripts_for_ecdsa_inputs(common_receivers, rng);
+        transcripts_for_ecdsa_inputs(common_receivers.clone(), rng);
 
-    let quadruple = PreSignatureQuadruple::new(
+    let quadruple = EcdsaPreSignatureQuadruple::new(
         kappa_unmasked,
         lambda_masked,
         kappa_times_lambda,
@@ -296,6 +296,13 @@ fn should_create_ecdsa_inputs_correctly() {
     );
     assert_eq!(ecdsa_inputs.receivers(), &key_transcript.receivers);
     assert_eq!(ecdsa_inputs.algorithm_id(), key_transcript.algorithm_id);
+    for node_id in common_receivers.iter() {
+        assert!(ecdsa_inputs.index_for_signer_id(*node_id).is_some());
+        assert_eq!(
+            ecdsa_inputs.index_for_signer_id(*node_id),
+            key_transcript.index_for_signer_id(*node_id)
+        );
+    }
 }
 
 #[test]
@@ -310,7 +317,7 @@ fn should_not_create_ecdsa_inputs_with_inconsistent_algorithm() {
 
     key_transcript.algorithm_id = wrong_algorithm;
 
-    let quadruple = PreSignatureQuadruple::new(
+    let quadruple = EcdsaPreSignatureQuadruple::new(
         kappa_unmasked,
         lambda_masked,
         kappa_times_lambda,
@@ -353,7 +360,7 @@ fn should_not_create_ecdsa_inputs_with_unsupported_algorithm() {
     key_times_lambda.algorithm_id = wrong_algorithm;
     key_transcript.algorithm_id = wrong_algorithm;
 
-    let quadruple = PreSignatureQuadruple::new(
+    let quadruple = EcdsaPreSignatureQuadruple::new(
         kappa_unmasked,
         lambda_masked,
         kappa_times_lambda,
@@ -382,7 +389,7 @@ fn should_not_create_ecdsa_inputs_with_invalid_hash_length() {
     let (kappa_unmasked, lambda_masked, kappa_times_lambda, key_times_lambda, key_transcript) =
         transcripts_for_ecdsa_inputs(common_receivers, rng);
 
-    let quadruple = PreSignatureQuadruple::new(
+    let quadruple = EcdsaPreSignatureQuadruple::new(
         kappa_unmasked,
         lambda_masked,
         kappa_times_lambda,
@@ -416,7 +423,7 @@ fn should_not_create_ecdsa_inputs_with_distinct_receivers() {
 
     key_transcript.receivers = wrong_receivers;
 
-    let quadruple = PreSignatureQuadruple::new(
+    let quadruple = EcdsaPreSignatureQuadruple::new(
         kappa_unmasked,
         lambda_masked,
         kappa_times_lambda,
@@ -450,7 +457,7 @@ fn should_not_create_ecdsa_inputs_for_quadruple_with_wrong_origin() {
 
     key_transcript.transcript_id = wrong_key_transcript_id;
 
-    let quadruple = PreSignatureQuadruple::new(
+    let quadruple = EcdsaPreSignatureQuadruple::new(
         kappa_unmasked,
         lambda_masked,
         kappa_times_lambda,
@@ -513,7 +520,7 @@ fn should_return_correct_index_for_signer_id_from_threshold_ecdsa_sig_inputs() {
     let (kappa_unmasked, lambda_masked, kappa_times_lambda, key_times_lambda, key_transcript) =
         transcripts_for_ecdsa_inputs(common_receivers, rng);
 
-    let quadruple = PreSignatureQuadruple::new(
+    let quadruple = EcdsaPreSignatureQuadruple::new(
         kappa_unmasked,
         lambda_masked,
         kappa_times_lambda,
@@ -542,8 +549,280 @@ fn should_return_correct_index_for_signer_id_from_threshold_ecdsa_sig_inputs() {
     assert_eq!(inputs.index_for_signer_id(ordered_node_id(128)), Some(3));
 }
 
+#[test]
+fn should_create_schnorr_presignature_correctly() {
+    let rng = &mut reproducible_rng();
+    let receivers = set_of_nodes(&[1, 2, 3]);
+    let transcript_type = IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::Random);
+    let presignature_transcript = schnorr_transcript(receivers.clone(), transcript_type, rng);
+    let result = SchnorrPreSignatureTranscript::new(presignature_transcript.clone());
+    assert_matches!(result, Ok(presignature) if presignature.blinder_unmasked() == &presignature_transcript);
+}
+
+#[test]
+fn should_not_create_schnorr_presignature_with_invalid_algorithm_id() {
+    let rng = &mut reproducible_rng();
+    let receivers = set_of_nodes(&[1, 2, 3]);
+    let transcript_type = IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::Random);
+    let mut presignature_transcript = schnorr_transcript(receivers.clone(), transcript_type, rng);
+    let unsupported_algorithm = AlgorithmId::Tls;
+    presignature_transcript.algorithm_id = unsupported_algorithm;
+    let result = SchnorrPreSignatureTranscript::new(presignature_transcript.clone());
+    assert_matches!(
+        result,
+        Err( error::ThresholdSchnorrPresignatureTranscriptCreationError::UnsupportedAlgorithm(internal_error))
+        if internal_error == unsupported_algorithm.to_string()
+    );
+}
+
+#[test]
+fn should_not_create_schnorr_presignature_with_invalid_origin() {
+    let rng = &mut reproducible_rng();
+    let receivers = set_of_nodes(&[1, 2, 3]);
+    let transcript_type = IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::Random);
+    let mut presignature_transcript = schnorr_transcript(receivers.clone(), transcript_type, rng);
+    let random_transcript_id = random_transcript_id(rng);
+    let invalid_transcript_types = [
+        IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareMasked(
+            random_transcript_id,
+        )),
+        IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareUnmasked(
+            random_transcript_id,
+        )),
+        IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
+        IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::UnmaskedTimesMasked(
+            random_transcript_id,
+            random_transcript_id,
+        )),
+    ];
+    for invalid_transcript_type in invalid_transcript_types {
+        presignature_transcript.transcript_type = invalid_transcript_type.clone();
+        let result = SchnorrPreSignatureTranscript::new(presignature_transcript.clone());
+        assert_matches!(
+            result,
+            Err( error::ThresholdSchnorrPresignatureTranscriptCreationError::InvalidTranscriptOrigin(internal_error))
+            if internal_error == format!(
+                "Expected unmasked transcript with origin `Random`, but found transcript of type {invalid_transcript_type:?}"
+            )
+        );
+    }
+}
+
+#[test]
+fn should_create_schnorr_sig_inputs_correctly() {
+    let rng = &mut reproducible_rng();
+    let common_receivers = set_of_nodes(&[1, 2, 3]);
+    let (presignature_transcript_raw, key_transcript) =
+        transcripts_for_schnorr_sig_inputs(common_receivers.clone(), rng);
+
+    let presignature_transcript = SchnorrPreSignatureTranscript::new(presignature_transcript_raw)
+        .expect("failed to created presignature transcript");
+
+    let derivation_path = derivation_path();
+    let message = message_in_size_range(0..1_000, rng);
+    let nonce = nonce();
+    let tschnorr_sig_inputs = ThresholdSchnorrSigInputs::new(
+        &derivation_path,
+        &message,
+        nonce,
+        presignature_transcript.clone(),
+        key_transcript.clone(),
+    )
+    .expect("failed to create threshold Schnorr signature inputs");
+
+    assert_eq!(tschnorr_sig_inputs.derivation_path(), &derivation_path);
+    assert_eq!(tschnorr_sig_inputs.message(), &message);
+    assert_eq!(tschnorr_sig_inputs.nonce(), &nonce);
+    assert_eq!(
+        tschnorr_sig_inputs.presig_transcript(),
+        &presignature_transcript
+    );
+    assert_eq!(tschnorr_sig_inputs.key_transcript(), &key_transcript);
+    assert_eq!(
+        tschnorr_sig_inputs.reconstruction_threshold(),
+        key_transcript.reconstruction_threshold()
+    );
+    assert_eq!(tschnorr_sig_inputs.receivers(), &key_transcript.receivers);
+    assert_eq!(
+        AsRef::<IDkgReceivers>::as_ref(&tschnorr_sig_inputs),
+        &key_transcript.receivers
+    );
+    assert_eq!(
+        tschnorr_sig_inputs.algorithm_id(),
+        key_transcript.algorithm_id
+    );
+    for node_id in common_receivers.iter() {
+        assert!(tschnorr_sig_inputs.index_for_signer_id(*node_id).is_some());
+        assert_eq!(
+            tschnorr_sig_inputs.index_for_signer_id(*node_id),
+            key_transcript.index_for_signer_id(*node_id)
+        );
+    }
+}
+
+#[test]
+fn should_fail_creating_schnorr_sig_inputs_with_inconsistent_algorithms() {
+    let rng = &mut reproducible_rng();
+    let common_receivers = set_of_nodes(&[1, 2, 3]);
+    let (presignature_transcript_raw, key_transcript) =
+        transcripts_for_schnorr_sig_inputs(common_receivers, rng);
+
+    let mut presignature_transcript =
+        SchnorrPreSignatureTranscript::new(presignature_transcript_raw)
+            .expect("failed to created presignature transcript");
+
+    let derivation_path = derivation_path();
+    let message = message_in_size_range(0..1_000, rng);
+    let nonce = nonce();
+
+    {
+        let mut key_transcript = key_transcript.clone();
+        key_transcript.algorithm_id = AlgorithmId::Tls;
+        assert_eq!(
+            ThresholdSchnorrSigInputs::new(
+                &derivation_path,
+                &message,
+                nonce,
+                presignature_transcript.clone(),
+                key_transcript,
+            ),
+            Err(
+                error::ThresholdSchnorrSigInputsCreationError::InconsistentAlgorithmIds(
+                    AlgorithmId::ThresholdSchnorrBip340.to_string(),
+                    AlgorithmId::Tls.to_string()
+                )
+            )
+        );
+    }
+
+    presignature_transcript.blinder_unmasked.algorithm_id = AlgorithmId::Tls;
+    assert_eq!(
+        ThresholdSchnorrSigInputs::new(
+            &derivation_path,
+            &message,
+            nonce,
+            presignature_transcript,
+            key_transcript,
+        ),
+        Err(
+            error::ThresholdSchnorrSigInputsCreationError::InconsistentAlgorithmIds(
+                AlgorithmId::Tls.to_string(),
+                AlgorithmId::ThresholdSchnorrBip340.to_string(),
+            )
+        )
+    );
+}
+
+#[test]
+fn should_fail_creating_schnorr_sig_inputs_with_unsupported_algorithm() {
+    let rng = &mut reproducible_rng();
+    let common_receivers = set_of_nodes(&[1, 2, 3]);
+    let (presignature_transcript_raw, mut key_transcript) =
+        transcripts_for_schnorr_sig_inputs(common_receivers, rng);
+
+    let mut presignature_transcript =
+        SchnorrPreSignatureTranscript::new(presignature_transcript_raw)
+            .expect("failed to created presignature transcript");
+
+    let derivation_path = derivation_path();
+    let message = message_in_size_range(0..1_000, rng);
+    let nonce = nonce();
+
+    let unsupported_algorithm = AlgorithmId::ThresholdEcdsaSecp256k1;
+    key_transcript.algorithm_id = unsupported_algorithm;
+    presignature_transcript.blinder_unmasked.algorithm_id = unsupported_algorithm;
+    assert_eq!(
+        ThresholdSchnorrSigInputs::new(
+            &derivation_path,
+            &message,
+            nonce,
+            presignature_transcript,
+            key_transcript,
+        ),
+        Err(
+            error::ThresholdSchnorrSigInputsCreationError::UnsupportedAlgorithm(
+                unsupported_algorithm.to_string()
+            )
+        )
+    );
+}
+
+#[test]
+fn should_fail_creating_schnorr_sig_inputs_with_inconsistent_receivers() {
+    let rng = &mut reproducible_rng();
+    let receivers_presig = set_of_nodes(&[1, 2, 3]);
+    let receivers_key = set_of_nodes(&[4, 2, 3]);
+    let presignature_transcript_type =
+        IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::Random);
+    let presignature_transcript_raw =
+        schnorr_transcript(receivers_presig.clone(), presignature_transcript_type, rng);
+
+    let key_type = IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareMasked(
+        random_transcript_id(rng),
+    ));
+    let key_transcript = schnorr_transcript(receivers_key.clone(), key_type, rng);
+
+    let presignature_transcript = SchnorrPreSignatureTranscript::new(presignature_transcript_raw)
+        .expect("failed to created presignature transcript");
+
+    assert_eq!(
+        ThresholdSchnorrSigInputs::new(
+            &derivation_path(),
+            &message_in_size_range(0..1_000, rng),
+            nonce(),
+            presignature_transcript,
+            key_transcript,
+        ),
+        Err(error::ThresholdSchnorrSigInputsCreationError::InconsistentReceivers)
+    );
+}
+
+#[test]
+fn should_fail_creating_schnorr_sig_inputs_with_invalid_transcript_origin() {
+    let rng = &mut reproducible_rng();
+    let common_receivers = set_of_nodes(&[1, 2, 3]);
+    let (presignature_transcript_raw, key_transcript) =
+        transcripts_for_schnorr_sig_inputs(common_receivers, rng);
+
+    let mut presignature_transcript =
+        SchnorrPreSignatureTranscript::new(presignature_transcript_raw)
+            .expect("failed to created presignature transcript");
+
+    let derivation_path: ExtendedDerivationPath = derivation_path();
+    let message = message_in_size_range(0..1_000, rng);
+    let nonce = nonce();
+
+    let invalid_transcript_types = [
+        IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareMasked(
+            random_transcript_id(rng),
+        )),
+        IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareUnmasked(
+            random_transcript_id(rng),
+        )),
+        IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
+        IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::UnmaskedTimesMasked(
+            random_transcript_id(rng),
+            random_transcript_id(rng),
+        )),
+    ];
+    for invalid_transcript_type in invalid_transcript_types {
+        presignature_transcript.blinder_unmasked.transcript_type = invalid_transcript_type.clone();
+        assert_matches!(
+            ThresholdSchnorrSigInputs::new(
+                &derivation_path,
+                &message,
+                nonce,
+                presignature_transcript.clone(),
+                key_transcript.clone(),
+            ),
+            Err(error::ThresholdSchnorrSigInputsCreationError::InvalidPreSignatureOrigin(internal_error))
+            if internal_error == format!("Presignature transcript: {invalid_transcript_type:?}")
+        );
+    }
+}
+
 // A randomized way to get non-repeating IDs.
-pub fn random_transcript_id<R: Rng + CryptoRng>(rng: &mut R) -> IDkgTranscriptId {
+fn random_transcript_id<R: Rng + CryptoRng>(rng: &mut R) -> IDkgTranscriptId {
     let id = rng.gen();
     let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(rng.gen::<u64>()));
     let height = Height::from(rng.gen::<u64>());
@@ -551,7 +830,7 @@ pub fn random_transcript_id<R: Rng + CryptoRng>(rng: &mut R) -> IDkgTranscriptId
     IDkgTranscriptId::new(subnet, id, height)
 }
 
-pub fn transcript<R: Rng + CryptoRng>(
+fn transcript<R: Rng + CryptoRng>(
     receivers: BTreeSet<NodeId>,
     transcript_type: IDkgTranscriptType,
     rng: &mut R,
@@ -567,7 +846,23 @@ pub fn transcript<R: Rng + CryptoRng>(
     }
 }
 
-pub fn transcripts_for_quadruple<R: Rng + CryptoRng>(
+fn schnorr_transcript<R: Rng + CryptoRng>(
+    receivers: BTreeSet<NodeId>,
+    transcript_type: IDkgTranscriptType,
+    rng: &mut R,
+) -> IDkgTranscript {
+    IDkgTranscript {
+        transcript_id: random_transcript_id(rng),
+        receivers: IDkgReceivers::new(receivers).expect("failed to create IDKG receivers"),
+        registry_version: RegistryVersion::from(314),
+        verified_dealings: BTreeMap::new(),
+        transcript_type,
+        algorithm_id: AlgorithmId::ThresholdSchnorrBip340,
+        internal_transcript_raw: vec![1, 2, 3],
+    }
+}
+
+fn transcripts_for_quadruple<R: Rng + CryptoRng>(
     receivers: BTreeSet<NodeId>,
     rng: &mut R,
 ) -> (
@@ -606,7 +901,7 @@ pub fn transcripts_for_quadruple<R: Rng + CryptoRng>(
     )
 }
 
-pub fn transcripts_for_ecdsa_inputs<R: Rng + CryptoRng>(
+fn transcripts_for_ecdsa_inputs<R: Rng + CryptoRng>(
     receivers: BTreeSet<NodeId>,
     rng: &mut R,
 ) -> (
@@ -652,6 +947,21 @@ pub fn transcripts_for_ecdsa_inputs<R: Rng + CryptoRng>(
     )
 }
 
+fn transcripts_for_schnorr_sig_inputs<R: Rng + CryptoRng>(
+    receivers: BTreeSet<NodeId>,
+    rng: &mut R,
+) -> (IDkgTranscript, IDkgTranscript) {
+    let blinder_type = IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::Random);
+    let blinder_unmasked_transcript = schnorr_transcript(receivers.clone(), blinder_type, rng);
+
+    let key_type = IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareMasked(
+        random_transcript_id(rng),
+    ));
+    let key_transcript = schnorr_transcript(receivers.clone(), key_type, rng);
+
+    (blinder_unmasked_transcript, key_transcript)
+}
+
 fn derivation_path() -> ExtendedDerivationPath {
     ExtendedDerivationPath {
         caller: Default::default(),
@@ -665,4 +975,12 @@ fn nonce() -> Randomness {
 
 fn hashed_message() -> Vec<u8> {
     vec![123; 32]
+}
+
+fn message_in_size_range<R: Rng + CryptoRng>(
+    range: core::ops::Range<usize>,
+    rng: &mut R,
+) -> Vec<u8> {
+    let size = rng.gen_range(range);
+    vec![123; size]
 }

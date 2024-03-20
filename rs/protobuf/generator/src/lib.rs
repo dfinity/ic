@@ -347,6 +347,7 @@ fn build_state_proto(def: &Path, out: &Path) {
         def.join("state/ingress/v1/ingress.proto"),
         def.join("state/metadata/v1/metadata.proto"),
         def.join("state/canister_state_bits/v1/canister_state_bits.proto"),
+        def.join("state/canister_snapshot_bits/v1/canister_snapshot_bits.proto"),
         def.join("state/queues/v1/queues.proto"),
         def.join("state/sync/v1/manifest.proto"),
         def.join("state/stats/v1/stats.proto"),
@@ -378,7 +379,7 @@ fn build_types_proto(def: &Path, out: &Path) {
         "#[allow(clippy::large_enum_variant)]",
     );
     let files = [
-        def.join("types/v1/ic00_types.proto"),
+        def.join("types/v1/management_canister_types.proto"),
         def.join("types/v1/types.proto"),
         def.join("types/v1/dkg.proto"),
         def.join("types/v1/consensus.proto"),

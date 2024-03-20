@@ -6,7 +6,7 @@ use crate::replicated_state::MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN;
 use crate::{CanisterState, InputQueueType, NextInputQueue, StateError};
 use ic_base_types::PrincipalId;
 use ic_error_types::RejectCode;
-use ic_ic00_types::IC_00;
+use ic_management_canister_types::IC_00;
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::queues::{v1 as pb_queues, v1::canister_queues::NextInputQueue as ProtoNextInputQueue},
@@ -626,6 +626,7 @@ impl CanisterQueues {
             originator_reply_callback: request.sender_reply_callback,
             refund: request.payment,
             response_payload: Payload::Reject(reject_context),
+            deadline: request.deadline,
         }));
         self.push_input(response, InputQueueType::LocalSubnet)
             .map_err(|(e, _msg)| e)
@@ -1108,6 +1109,7 @@ fn generate_timeout_response(request: &Arc<Request>) -> RequestOrResponse {
             "Request timed out.",
             MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
         )),
+        deadline: request.deadline,
     }))
 }
 

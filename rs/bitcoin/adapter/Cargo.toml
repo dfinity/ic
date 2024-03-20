@@ -8,7 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 bitcoin = { version = "0.28.1", features = ["default", "use-serde", "rand"] }
-clap = { workspace = true }
+clap = { version = "3.2.25", features = ["derive"] }
 futures = { workspace = true }
 hashlink = "0.8.0"
 hex = "0.4.2"
@@ -28,7 +28,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }
 slog-async = "2.7.0"
-thiserror = "1.0.26"
+thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-socks = "0.5.1"
 tonic = { workspace = true }

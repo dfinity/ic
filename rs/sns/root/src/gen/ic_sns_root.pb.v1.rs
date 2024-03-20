@@ -1,7 +1,7 @@
 /// All essential state of an SNS root canister.
 ///
 /// When canister_init is called in the SNS root canister, it is expected that a
-/// serialized version of this was passed via ic_ic00_types::InstallCodeArgs::args,
+/// serialized version of this was passed via ic_management_canister_types::InstallCodeArgs::args,
 /// which can be retrieved by the canister via ic_cdk::api::call::arg_data().
 #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
 #[allow(clippy::derive_partial_eq_without_eq)]

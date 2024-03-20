@@ -14,41 +14,33 @@ use ic_config::{
     subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetConfig},
 };
 use ic_error_types::RejectCode;
-use ic_ic00_types::{
+use ic_interfaces::execution_environment::SubnetAvailableMemory;
+use ic_logger::replica_logger::no_op_logger;
+use ic_management_canister_types::{
     self as ic00, BoundedHttpHeaders, CanisterHttpResponsePayload, CanisterIdRecord,
     CanisterStatusType, DerivationPath, EcdsaCurve, EmptyBlob, Method, Payload as _,
 };
-use ic_interfaces::execution_environment::SubnetAvailableMemory;
-use ic_logger::replica_logger::no_op_logger;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::PausedExecutionId;
-use ic_replicated_state::testing::CanisterQueuesTesting;
-use ic_replicated_state::testing::SystemStateTesting;
+use ic_replicated_state::testing::{CanisterQueuesTesting, SystemStateTesting};
 use ic_state_machine_tests::{PayloadBuilder, StateMachineBuilder};
-use ic_test_utilities::types::ids::message_test_id;
-use ic_test_utilities::{
-    state::{get_running_canister, get_stopped_canister, get_stopping_canister},
-    types::{
-        ids::{canister_test_id, subnet_test_id},
-        messages::RequestBuilder,
-    },
-};
 use ic_test_utilities_metrics::{
     fetch_counter, fetch_gauge, fetch_gauge_vec, fetch_histogram_stats, fetch_int_gauge,
     fetch_int_gauge_vec, metric_vec, HistogramStats,
 };
-use ic_test_utilities_time::mock_time;
-use ic_types::methods::SystemMethod;
-use ic_types::time::expiry_time_from_now;
+use ic_test_utilities_state::{get_running_canister, get_stopped_canister, get_stopping_canister};
+use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::{
     messages::{
         CallbackId, Payload, RejectContext, Response, StopCanisterCallId, MAX_RESPONSE_COUNT_BYTES,
+        NO_DEADLINE,
     },
-    Height,
+    methods::SystemMethod,
+    time::{expiry_time_from_now, UNIX_EPOCH},
+    ComputeAllocation, Cycles, Height, NumBytes,
 };
-use ic_types::{time::UNIX_EPOCH, ComputeAllocation, Cycles, NumBytes};
-use ic_types_test_utils::ids::user_test_id;
+use ic_types_test_utils::ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use proptest::prelude::*;
 use std::collections::HashMap;
@@ -513,20 +505,20 @@ fn induct_messages_on_same_subnet_respects_memory_limits() {
             .receiver(source)
             .build();
         source_canister
-            .push_output_request(self_request.clone().into(), mock_time())
+            .push_output_request(self_request.clone().into(), UNIX_EPOCH)
             .unwrap();
         source_canister
-            .push_output_request(self_request.into(), mock_time())
+            .push_output_request(self_request.into(), UNIX_EPOCH)
             .unwrap();
         let other_request = RequestBuilder::default()
             .sender(source)
             .receiver(dest)
             .build();
         source_canister
-            .push_output_request(other_request.clone().into(), mock_time())
+            .push_output_request(other_request.clone().into(), UNIX_EPOCH)
             .unwrap();
         source_canister
-            .push_output_request(other_request.into(), mock_time())
+            .push_output_request(other_request.into(), UNIX_EPOCH)
             .unwrap();
         test.induct_messages_on_same_subnet();
 
@@ -1865,7 +1857,7 @@ fn scheduler_executes_postponed_raw_rand_requests() {
         .push_raw_rand_request(
             RequestBuilder::new().sender(canister_id).build(),
             last_round,
-            mock_time(),
+            UNIX_EPOCH,
         );
     assert_eq!(
         test.state()
@@ -3049,6 +3041,7 @@ fn ecdsa_signature_agreements_metric_is_updated() {
         originator_reply_callback: *callback_id,
         refund: context.request.payment,
         response_payload: Payload::Reject(RejectContext::new(RejectCode::SysFatal, "")),
+        deadline: context.request.deadline,
     };
 
     test.state_mut().consensus_queue.push(response);
@@ -3097,6 +3090,7 @@ fn ecdsa_signature_agreements_metric_is_updated() {
             }
             .encode(),
         ),
+        deadline: NO_DEADLINE,
     };
 
     test.state_mut().consensus_queue.push(response);
@@ -3654,190 +3648,187 @@ prop_compose! {
     }
 }
 
-proptest! {
-    // In the following tests we use a notion of `minimum_executed_messages` per
-    // execution round. The minimum is defined as `min(available_messages,
-    // floor(`max_instructions_per_round` / `max_instructions_per_message`))`. `available_messages` are the sum of
-    // messages in the input queues of all canisters.
+// In the following tests we use a notion of `minimum_executed_messages` per
+// execution round. The minimum is defined as `min(available_messages,
+// floor(`max_instructions_per_round` / `max_instructions_per_message`))`. `available_messages` are the sum of
+// messages in the input queues of all canisters.
 
-    #[test]
-    // This test verifies that the scheduler will never consume more than
-    // `max_instructions_per_round` in a single execution round per core.
-    fn should_never_consume_more_than_max_instructions_per_round_in_a_single_execution_round(
-        (
-            mut test,
-            scheduler_cores,
-            instructions_per_round,
-            instructions_per_message,
-        ) in arb_scheduler_test(2..10, 1..20, 1..100, M..B, 1..M, 100, false),
-    ) {
-        let available_messages = get_available_messages(test.state());
-        let minimum_executed_messages = min(
-            available_messages,
-            instructions_per_round / instructions_per_message,
-        );
-        test.execute_round(ExecutionRoundType::OrdinaryRound);
-        let mut executed = HashMap::new();
-        for (round, _canister_id, instructions) in test.executed_schedule().into_iter() {
-            let entry = executed.entry(round).or_insert(0);
-            assert!(instructions <= instructions_per_message);
-            *entry += instructions.get();
-        }
-        for instructions in executed.values() {
-            assert!(
-                *instructions / scheduler_cores as u64 <= instructions_per_round.get(),
-                "Executed more instructions than expected: {} <= {}",
-                *instructions,
-                instructions_per_round
-            );
-        }
-        let total_executed_instructions: u64 = executed.into_values().sum();
-        let total_executed_messages: u64 = total_executed_instructions / instructions_per_message.get();
+#[test_strategy::proptest]
+// This test verifies that the scheduler will never consume more than
+// `max_instructions_per_round` in a single execution round per core.
+fn should_never_consume_more_than_max_instructions_per_round_in_a_single_execution_round(
+    #[strategy(arb_scheduler_test(2..10, 1..20, 1..100, M..B, 1..M, 100, false))] test: (
+        SchedulerTest,
+        usize,
+        NumInstructions,
+        NumInstructions,
+    ),
+) {
+    let (mut test, scheduler_cores, instructions_per_round, instructions_per_message) = test;
+    let available_messages = get_available_messages(test.state());
+    let minimum_executed_messages = min(
+        available_messages,
+        instructions_per_round / instructions_per_message,
+    );
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    let mut executed = HashMap::new();
+    for (round, _canister_id, instructions) in test.executed_schedule().into_iter() {
+        let entry = executed.entry(round).or_insert(0);
+        assert!(instructions <= instructions_per_message);
+        *entry += instructions.get();
+    }
+    for instructions in executed.values() {
         assert!(
-            minimum_executed_messages <= total_executed_messages,
-            "Executed {} messages but expected at least {}.",
-            total_executed_messages,
-            minimum_executed_messages,
+            *instructions / scheduler_cores as u64 <= instructions_per_round.get(),
+            "Executed more instructions than expected: {} <= {}",
+            *instructions,
+            instructions_per_round
         );
     }
+    let total_executed_instructions: u64 = executed.into_values().sum();
+    let total_executed_messages: u64 = total_executed_instructions / instructions_per_message.get();
+    assert!(
+        minimum_executed_messages <= total_executed_messages,
+        "Executed {} messages but expected at least {}.",
+        total_executed_messages,
+        minimum_executed_messages,
+    );
+}
 
-    #[test]
-    // This test verifies that the scheduler is deterministic, i.e. given
-    // the same input, if we execute a round of computation, we always
-    // get the same result.
-    fn scheduler_deterministically_produces_same_output_given_same_input(
-        (
-            mut test1,
-            mut test2,
-            _scheduler_cores,
-            _instructions_per_round,
-            _instructions_per_message,
-        ) in arb_scheduler_test_double(2..10, 1..20, 1..100, M..B, 1..M, 100, false),
-    ) {
-        assert_eq!(test1.state(), test2.state());
-        test1.execute_round(ExecutionRoundType::OrdinaryRound);
-        test2.execute_round(ExecutionRoundType::OrdinaryRound);
-        assert_eq!(test1.state(), test2.state());
+#[test_strategy::proptest]
+// This test verifies that the scheduler is deterministic, i.e. given
+// the same input, if we execute a round of computation, we always
+// get the same result.
+fn scheduler_deterministically_produces_same_output_given_same_input(
+    #[strategy(arb_scheduler_test_double(2..10, 1..20, 1..100, M..B, 1..M, 100, false))] test: (
+        SchedulerTest,
+        SchedulerTest,
+        usize,
+        NumInstructions,
+        NumInstructions,
+    ),
+) {
+    let (mut test1, mut test2, _cores, _instructions_per_round, _instructions_per_message) = test;
+    assert_eq!(test1.state(), test2.state());
+    test1.execute_round(ExecutionRoundType::OrdinaryRound);
+    test2.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert_eq!(test1.state(), test2.state());
+}
+
+#[test_strategy::proptest]
+// This test verifies that the scheduler can successfully deplete the induction
+// pool given sufficient consecutive execution rounds.
+fn scheduler_can_deplete_induction_pool_given_enough_execution_rounds(
+    #[strategy(arb_scheduler_test(2..10, 1..20, 1..100, M..B, 1..M, 100, false))] test: (
+        SchedulerTest,
+        usize,
+        NumInstructions,
+        NumInstructions,
+    ),
+) {
+    let (mut test, _scheduler_cores, instructions_per_round, instructions_per_message) = test;
+    let available_messages = get_available_messages(test.state());
+    let minimum_executed_messages = min(
+        available_messages,
+        instructions_per_round / instructions_per_message,
+    );
+    let required_rounds = if minimum_executed_messages != 0 {
+        available_messages / minimum_executed_messages + 1
+    } else {
+        1
+    };
+    for _ in 0..required_rounds {
+        test.execute_round(ExecutionRoundType::OrdinaryRound);
     }
-
-    #[test]
-    // This test verifies that the scheduler can successfully deplete the induction
-    // pool given sufficient consecutive execution rounds.
-    fn scheduler_can_deplete_induction_pool_given_enough_execution_rounds(
-        (
-            mut test,
-            _scheduler_cores,
-            instructions_per_round,
-            instructions_per_message,
-        ) in arb_scheduler_test(2..10, 1..20, 1..100, M..B, 1..M, 100, false),
-    ) {
-        let available_messages = get_available_messages(test.state());
-        let minimum_executed_messages = min(
-            available_messages,
-            instructions_per_round / instructions_per_message
-        );
-        let required_rounds = if minimum_executed_messages != 0 {
-            available_messages / minimum_executed_messages + 1
-        } else {
-            1
-        };
-        for _ in 0..required_rounds {
-            test.execute_round(ExecutionRoundType::OrdinaryRound);
-        }
-        for canister_state in test.state().canisters_iter() {
-            assert_eq!(canister_state.system_state.queues().ingress_queue_size(), 0);
-        }
-    }
-
-    #[test]
-    // This test verifies that the scheduler does not lose any canisters
-    // after an execution round.
-    fn scheduler_does_not_lose_canisters(
-        (
-            mut test,
-            _scheduler_cores,
-            _instructions_per_round,
-            _instructions_per_message,
-        ) in arb_scheduler_test(2..3, 1..10, 1..100, M..B, 1..M, 100, false),
-    ) {
-        let canisters_before = test.state().canisters_iter().count();
-         test.execute_round(ExecutionRoundType::OrdinaryRound);
-        let canisters_after = test.state().canisters_iter().count();
-        assert_eq!(canisters_before, canisters_after);
+    for canister_state in test.state().canisters_iter() {
+        assert_eq!(canister_state.system_state.queues().ingress_queue_size(), 0);
     }
 }
 
-proptest! {
-    #![proptest_config(ProptestConfig {
-        cases: 20, .. ProptestConfig::default()
-    })]
-    #[test]
-    // Verifies that each canister is scheduled as the first of its thread as
-    // much as its compute_allocation requires.
-    fn scheduler_respects_compute_allocation(
-        (
-            mut test,
-            scheduler_cores,
-            _instructions_per_round,
-            _instructions_per_message,
-        ) in arb_scheduler_test(2..10, 1..20, 0..1, B..B+1, B..B+1, 0, true),
-    ) {
-        let replicated_state = test.state();
-        let number_of_canisters = replicated_state.canister_states.len();
-        let total_compute_allocation = replicated_state.total_compute_allocation();
-        assert!(total_compute_allocation <= 100 * scheduler_cores as u64);
+#[test_strategy::proptest]
+// This test verifies that the scheduler does not lose any canisters
+// after an execution round.
+fn scheduler_does_not_lose_canisters(
+    #[strategy(arb_scheduler_test(2..3, 1..10, 1..100, M..B, 1..M, 100, false))] test: (
+        SchedulerTest,
+        usize,
+        NumInstructions,
+        NumInstructions,
+    ),
+) {
+    let (mut test, _scheduler_cores, _instructions_per_round, _instructions_per_message) = test;
+    let canisters_before = test.state().canisters_iter().count();
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    let canisters_after = test.state().canisters_iter().count();
+    assert_eq!(canisters_before, canisters_after);
+}
 
-        // Count, for each canister, how many times it is the first canister
-        // to be executed by a thread.
-        let mut scheduled_first_counters = HashMap::<CanisterId, usize>::new();
+#[test_strategy::proptest(ProptestConfig { cases: 20, ..ProptestConfig::default() })]
+// Verifies that each canister is scheduled as the first of its thread as
+// much as its compute_allocation requires.
+fn scheduler_respects_compute_allocation(
+    #[strategy(arb_scheduler_test(2..10, 1..20, 0..1, B..B+1, B..B+1, 0, true))] test: (
+        SchedulerTest,
+        usize,
+        NumInstructions,
+        NumInstructions,
+    ),
+) {
+    let (mut test, scheduler_cores, _instructions_per_round, _instructions_per_message) = test;
+    let replicated_state = test.state();
+    let number_of_canisters = replicated_state.canister_states.len();
+    let total_compute_allocation = replicated_state.total_compute_allocation();
+    assert!(total_compute_allocation <= 100 * scheduler_cores as u64);
 
-        // Because we may be left with as little free compute capacity as 1, run for
-        // enough rounds that every canister gets a chance to be scheduled at least once
-        // for free, i.e. `100 * number_of_canisters` rounds.
-        let number_of_rounds = 100 * number_of_canisters;
+    // Count, for each canister, how many times it is the first canister
+    // to be executed by a thread.
+    let mut scheduled_first_counters = HashMap::<CanisterId, usize>::new();
 
-        let canister_ids: Vec<_> = test.state().canister_states.iter().map(|x| *x.0).collect();
+    // Because we may be left with as little free compute capacity as 1, run for
+    // enough rounds that every canister gets a chance to be scheduled at least once
+    // for free, i.e. `100 * number_of_canisters` rounds.
+    let number_of_rounds = 100 * number_of_canisters;
 
-        for _ in 0..number_of_rounds {
-            for canister_id in canister_ids.iter() {
-                test.expect_heartbeat(*canister_id, instructions(B as u64));
-            }
-            test.execute_round(ExecutionRoundType::OrdinaryRound);
-            for (canister_id, canister) in test.state().canister_states.iter() {
-                if canister.scheduler_state.last_full_execution_round == test.last_round() {
-                    let count = scheduled_first_counters.entry(*canister_id).or_insert(0);
-                    *count += 1;
-                }
-            }
+    let canister_ids: Vec<_> = test.state().canister_states.iter().map(|x| *x.0).collect();
+
+    for _ in 0..number_of_rounds {
+        for canister_id in canister_ids.iter() {
+            test.expect_heartbeat(*canister_id, instructions(B as u64));
         }
-
-        // Check that the compute allocations of the canisters are respected.
+        test.execute_round(ExecutionRoundType::OrdinaryRound);
         for (canister_id, canister) in test.state().canister_states.iter() {
-            let compute_allocation =
-                canister.scheduler_state.compute_allocation.as_percent() as usize;
-
-            let count = scheduled_first_counters.get(canister_id).unwrap_or(&0);
-
-            // Due to `total_compute_allocation < 100 * scheduler_cores`, all canisters
-            // except those with an allocation of 100 should have gotten scheduled for free
-            // at least once.
-            let expected_count = if compute_allocation == 100 {
-                number_of_rounds
-            } else {
-                number_of_rounds / 100 * compute_allocation + 1
-            };
-
-            assert!(
-                *count >= expected_count,
-                "Canister {} (allocation {}) should have been scheduled \
-                    {} out of {} rounds, was scheduled only {} rounds instead.",
-                canister_id,
-                compute_allocation,
-                expected_count,
-                number_of_rounds,
-                *count
-            );
+            if canister.scheduler_state.last_full_execution_round == test.last_round() {
+                let count = scheduled_first_counters.entry(*canister_id).or_insert(0);
+                *count += 1;
+            }
         }
+    }
+
+    // Check that the compute allocations of the canisters are respected.
+    for (canister_id, canister) in test.state().canister_states.iter() {
+        let compute_allocation = canister.scheduler_state.compute_allocation.as_percent() as usize;
+
+        let count = scheduled_first_counters.get(canister_id).unwrap_or(&0);
+
+        // Due to `total_compute_allocation < 100 * scheduler_cores`, all canisters
+        // except those with an allocation of 100 should have gotten scheduled for free
+        // at least once.
+        let expected_count = if compute_allocation == 100 {
+            number_of_rounds
+        } else {
+            number_of_rounds / 100 * compute_allocation + 1
+        };
+
+        assert!(
+            *count >= expected_count,
+            "Canister {} (allocation {}) should have been scheduled \
+                    {} out of {} rounds, was scheduled only {} rounds instead.",
+            canister_id,
+            compute_allocation,
+            expected_count,
+            number_of_rounds,
+            *count
+        );
     }
 }
 
@@ -5065,7 +5056,7 @@ fn clean_in_progress_raw_rand_request_from_subnet_call_context_manager() {
         .push_raw_rand_request(
             RequestBuilder::new().sender(canister_id).build(),
             last_round,
-            mock_time(),
+            UNIX_EPOCH,
         );
     // `SubnetCallContextManager` contains one `RawRandContext`.
     assert_eq!(

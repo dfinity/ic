@@ -52,6 +52,7 @@ DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
 
 MACRO_DEPENDENCIES = [
     "@crate_index//:async-trait",
+    "@crate_index//:rust_decimal_macros",
 ]
 
 BUILD_DEPENDENCIES = [

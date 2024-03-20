@@ -23,24 +23,24 @@ use crate::{
             HasDependencies, HasPublicApiUrl, HasTestEnv, HasTopologySnapshot, HasVmName,
             IcNodeContainer, RetrieveIpv4Addr, SshSession, RETRY_BACKOFF, SSH_RETRY_TIMEOUT,
         },
-        test_setup::GroupSetup,
+        test_setup::{GroupSetup, InfraProvider},
     },
-    util::{create_agent, create_agent_mapping},
+    k8s::images::upload_image,
+    k8s::tnet::TNet,
+    util::{block_on, create_agent, create_agent_mapping},
 };
 
 use anyhow::{bail, Result};
 use async_trait::async_trait;
 use flate2::{write::GzEncoder, Compression};
 use ic_agent::{Agent, AgentError};
+use kube::ResourceExt;
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use slog::info;
 use ssh2::Session;
 
-use crate::driver::{
-    farm::{FileId, PlaynetCertificate},
-    test_env_api::HasIcDependencies,
-};
+use crate::driver::{farm::PlaynetCertificate, test_env_api::HasIcDependencies};
 
 // The following default values are the same as for replica nodes
 const DEFAULT_VCPUS_PER_VM: NrOfVCPUs = NrOfVCPUs::new(6);
@@ -287,22 +287,41 @@ impl BoundaryNodeWithVm {
                 .map(|existing_playnet_cert| existing_playnet_cert.playnet.clone()),
         )?;
 
-        let image_id = create_and_upload_config_disk_image(
+        let compressed_img_path = create_config_disk_image(
             self,
             env,
             &pot_setup.infra_group_name,
-            &farm,
             opt_existing_playnet_cert,
         )?;
 
-        farm.attach_disk_images(
-            &pot_setup.infra_group_name,
-            &self.name,
-            "usb-storage",
-            vec![image_id],
-        )?;
-
-        farm.start_vm(&pot_setup.infra_group_name, &self.name)?;
+        if InfraProvider::read_attribute(env) == InfraProvider::Farm {
+            let image_id = farm.upload_file(
+                &pot_setup.infra_group_name,
+                compressed_img_path,
+                &mk_compressed_img_path(),
+            )?;
+            farm.attach_disk_images(
+                &pot_setup.infra_group_name,
+                &self.name,
+                "usb-storage",
+                vec![image_id],
+            )?;
+            farm.start_vm(&pot_setup.infra_group_name, &self.name)?;
+        } else {
+            let tnet = TNet::read_attribute(env);
+            let tnet_node = tnet.nodes.last().expect("no nodes");
+            block_on(upload_image(
+                compressed_img_path,
+                &format!(
+                    "{}/{}",
+                    tnet_node.config_url.clone().expect("missing config url"),
+                    &mk_compressed_img_path()
+                ),
+            ))?;
+            block_on(tnet_node.deploy_config_image(&mk_compressed_img_path()))
+                .expect("deploying config image failed");
+            block_on(tnet_node.start()).expect("starting vm failed");
+        }
 
         if self.has_ipv4 {
             // Provision an A record pointing ic{ix}.farm.dfinity.systems
@@ -417,7 +436,7 @@ impl BoundaryNode {
             self.qemu_cli_args.clone(),
             match &self.boot_image {
                 None => {
-                    let url = boundary_node_img_url;
+                    let url = boundary_node_img_url.clone();
                     let sha256 = boundary_node_img_sha256;
                     ImageLocation::IcOsImageViaUrl { url, sha256 }
                 }
@@ -434,7 +453,26 @@ impl BoundaryNode {
             self.vm_allocation.clone(),
             self.required_host_features.clone(),
         );
-        let allocated_vm = farm.create_vm(&pot_setup.infra_group_name, create_vm_req)?;
+        let allocated_vm = match InfraProvider::read_attribute(env) {
+            InfraProvider::K8s => {
+                let mut tnet = TNet::read_attribute(env);
+                block_on(tnet.deploy_boundary_image(boundary_node_img_url))
+                    .expect("failed to deploy guestos image");
+                let vm_res = block_on(tnet.vm_create(
+                    CreateVmRequest {
+                        primary_image: ImageLocation::PersistentVolumeClaim {
+                            name: format!("{}-image-boundaryos", tnet.owner.name_any()),
+                        },
+                        ..create_vm_req
+                    },
+                    ImageType::IcOsImage,
+                ))
+                .expect("failed to create vm");
+                tnet.write_attribute(env);
+                vm_res
+            }
+            InfraProvider::Farm => farm.create_vm(&pot_setup.infra_group_name, create_vm_req)?,
+        };
 
         Ok(BoundaryNodeWithVm {
             name: self.name,
@@ -467,13 +505,12 @@ impl BoundaryNode {
 
 /// side-effectful function that creates the config disk images
 /// in the boundary node directories.
-fn create_and_upload_config_disk_image(
+fn create_config_disk_image(
     boundary_node: &BoundaryNodeWithVm,
     env: &TestEnv,
     group_name: &str,
-    farm: &Farm,
     opt_playnet_cert: Option<PlaynetCertificate>,
-) -> anyhow::Result<FileId> {
+) -> anyhow::Result<PathBuf> {
     let boundary_node_dir = env
         .base_path()
         .join(BOUNDARY_NODE_VMS_DIR)
@@ -504,9 +541,13 @@ fn create_and_upload_config_disk_image(
         .arg("--ipv6_monitoring_ips")
         .arg("::/0")
         .arg("--canary-proxy-port")
-        .arg("8888")
-        .arg("--elasticsearch_url")
-        .arg("https://elasticsearch.testnet.dfinity.systems");
+        .arg("8888");
+
+    let elasticsearch_hosts: Vec<String> = env.get_elasticsearch_hosts().unwrap();
+    if let Some(elasticsearch_host) = elasticsearch_hosts.first() {
+        cmd.arg("--elasticsearch_url")
+            .arg(format!("https://{}", elasticsearch_host));
+    }
 
     // add custom nameservers
     cmd.arg("--ipv6_name_servers");
@@ -645,10 +686,7 @@ fn create_and_upload_config_disk_image(
     std::io::stdout().write_all(&output.stdout)?;
     std::io::stderr().write_all(&output.stderr)?;
 
-    let image_id = farm.upload_file(group_name, compressed_img_path, &mk_compressed_img_path())?;
-    info!(farm.logger, "Uploaded image: {}", image_id);
-
-    Ok(image_id)
+    Ok(compressed_img_path)
 }
 
 pub trait BoundaryNodeVm {
@@ -843,12 +881,17 @@ echo "$ipv4"
 
 impl RetrieveIpv4Addr for BoundaryNodeSnapshot {
     fn block_on_ipv4(&self) -> Result<Ipv4Addr> {
-        use anyhow::Context;
-        let ipv4_string = self.block_on_bash_script(IPV4_RETRIEVE_SH_SCRIPT)?;
-        ipv4_string
-            .trim()
-            .parse::<Ipv4Addr>()
-            .context("ipv4 retrieval")
+        match InfraProvider::read_attribute(&self.env) {
+            InfraProvider::K8s => Ok(self.vm.ipv4.expect("ipv4 should be present")),
+            InfraProvider::Farm => {
+                use anyhow::Context;
+                let ipv4_string = self.block_on_bash_script(IPV4_RETRIEVE_SH_SCRIPT)?;
+                ipv4_string
+                    .trim()
+                    .parse::<Ipv4Addr>()
+                    .context("ipv4 retrieval")
+            }
+        }
     }
 }
 

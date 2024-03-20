@@ -2,18 +2,18 @@ use dfn_candid::{candid, candid_one};
 use ic_canister_client_sender::Sender;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
-use ic_nns_governance::pb::v1::{
-    manage_neuron::{Command, NeuronIdOrSubaccount},
-    manage_neuron_response::Command as CommandResponse,
-    proposal::Action,
-    GovernanceError, KnownNeuron, KnownNeuronData, ListKnownNeuronsResponse, ManageNeuron,
-    ManageNeuronResponse, NeuronInfo, Proposal, ProposalStatus,
+use ic_nns_governance::{
+    init::{TEST_NEURON_1_ID, TEST_NEURON_2_ID, TEST_NEURON_3_ID},
+    pb::v1::{
+        manage_neuron::{Command, NeuronIdOrSubaccount},
+        manage_neuron_response::Command as CommandResponse,
+        proposal::Action,
+        GovernanceError, KnownNeuron, KnownNeuronData, ListKnownNeuronsResponse, ManageNeuron,
+        ManageNeuronResponse, NeuronInfo, Proposal, ProposalStatus,
+    },
 };
 use ic_nns_test_utils::{
-    common::NnsInitPayloadsBuilder,
-    governance::wait_for_final_state,
-    ids::{TEST_NEURON_1_ID, TEST_NEURON_2_ID, TEST_NEURON_3_ID},
-    itest_helpers::NnsCanisters,
+    common::NnsInitPayloadsBuilder, governance::wait_for_final_state, itest_helpers::NnsCanisters,
 };
 
 /// Integration test for the known neuron functionality.

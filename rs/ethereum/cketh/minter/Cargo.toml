@@ -25,8 +25,8 @@ ic-cdk-macros = { workspace = true }
 ic-cdk-timers = { workspace = true }
 ic-crypto-ecdsa-secp256k1 = { path = "../../../crypto/ecdsa_secp256k1" }
 ic-crypto-sha3 = { path = "../../../crypto/sha3" }
-ic-ic00-types = { path = "../../../types/ic00_types" }
-ic-ethereum-types = { path = "../../types"}
+ic-management-canister-types = { path = "../../../types/management_canister_types" }
+ic-ethereum-types = { path = "../../types" }
 icrc-ledger-client-cdk = { path = "../../../../packages/icrc-ledger-client-cdk" }
 ic-metrics-encoder = "1"
 ic-stable-structures = { workspace = true }
@@ -35,7 +35,7 @@ icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 minicbor = { workspace = true }
 minicbor-derive = { workspace = true }
 num-bigint = "0.4.3"
-num-traits = "0.2.14"
+num-traits = { workspace = true }
 phantom_newtype = { path = "../../../phantom_newtype" }
 rlp = "0.5.2"
 serde = { workspace = true }
@@ -44,19 +44,20 @@ serde_json = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 time = { workspace = true }
-thiserror = "1.0"
+thiserror = { workspace = true }
 thousands = "0.2"
 
 [dev-dependencies]
 assert_matches = "1.5.0"
 candid_parser = { workspace = true }
 ethers-core = "2.0.8"
+hex = "0.4"
 ic-base-types = { path = "../../../types/base_types" }
+ic-cketh-test-utils = { path = "../test_utils" }
+ic-ledger-suite-orchestrator-test-utils = { path = "../../ledger-suite-orchestrator/test_utils" }
 ic-config = { path = "../../../config" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../crypto/test_utils/reproducible_rng" }
-ic-icrc1-ledger = { path = "../../../rosetta-api/icrc1/ledger" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
-ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
 maplit = "1"
 proptest = "1.0"
 rand = "0.8"

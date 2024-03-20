@@ -1,0 +1,19 @@
+[package]
+name = "ic-crypto-ed25519"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+ed25519-dalek = { version = "2.1.1", features = ["std", "zeroize", "digest", "batch", "pkcs8", "pem"] }
+curve25519-dalek = { workspace = true }
+rand = "0.8"
+zeroize = { version = "1.5", features = ["zeroize_derive"] }
+pem = "1"
+
+[dev-dependencies]
+hex = "0.4"
+hex-literal = "0.4"
+wycheproof = "0.5"

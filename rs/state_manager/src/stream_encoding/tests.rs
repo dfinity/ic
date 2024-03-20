@@ -3,18 +3,18 @@ use ic_base_types::NumSeconds;
 use ic_canonical_state::MAX_SUPPORTED_CERTIFICATION_VERSION;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{testing::ReplicatedStateTesting, ReplicatedState};
-use ic_test_utilities::{
-    state::{arb_stream, new_canister_state},
-    types::ids::{canister_test_id, subnet_test_id, user_test_id},
-};
+use ic_test_utilities_state::{arb_stream, arb_stream_with_config, new_canister_state};
+use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
 use ic_types::{xnet::StreamSlice, Cycles};
 use proptest::prelude::*;
 
 const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
 
 proptest! {
+    // TODO(MR-549) Go back to using plain `arb_stream()` once the canonical state
+    // encodes deadlines.
     #[test]
-    fn stream_encode_decode_roundtrip(stream in arb_stream(0, 10, 0, 10)) {
+    fn stream_encode_decode_roundtrip(stream in arb_stream_with_config(0, 10, 0, 10, true, true)) {
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
 
         let subnet = subnet_test_id(42);
@@ -32,7 +32,7 @@ proptest! {
             NumSeconds::from(100_000),
         ));
 
-        let tree_encoding = encode_stream_slice(&state, subnet, stream_slice.header().begin, stream_slice.header().end, None).0;
+        let tree_encoding = encode_stream_slice(&state, subnet, stream_slice.header().begin(), stream_slice.header().end(), None).0;
         let bytes = encode_tree(tree_encoding.clone());
         assert_eq!(decode_stream_slice(&bytes[..]), Ok((subnet, stream_slice)), "failed to decode tree {:?}", tree_encoding);
     }
@@ -48,7 +48,7 @@ proptest! {
         });
         state.metadata.certification_version = MAX_SUPPORTED_CERTIFICATION_VERSION;
 
-        let tree_encoding = encode_stream_slice(&state, subnet, stream_slice.header().begin, stream_slice.header().end, Some(size_limit)).0;
+        let tree_encoding = encode_stream_slice(&state, subnet, stream_slice.header().begin(), stream_slice.header().end(), Some(size_limit)).0;
         let bytes = encode_tree(tree_encoding.clone());
         match decode_stream_slice(&bytes[..]) {
             Ok((actual_subnet, actual_slice)) => {
@@ -57,7 +57,7 @@ proptest! {
                     // Expect at least one message.
                     Some(messages) => {
                         assert_eq!(stream_slice.header(), actual_slice.header());
-                        assert_eq!(stream_slice.header().begin, messages.begin());
+                        assert_eq!(stream_slice.header().begin(), messages.begin());
                         assert!(messages.begin() < messages.end());
                     }
 

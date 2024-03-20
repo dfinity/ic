@@ -16,15 +16,17 @@ rusqlite = { version = "~0.28.0", features = ["bundled"] }
 ic-ledger-core = { path = "../../ledger_core" }
 ic-ledger-canister-core = { path = "../../ledger_canister_core" }
 ic-base-types = { path = "../../../types/base_types" }
-anyhow = { version = "1.0", default-features = false }
+anyhow = { workspace = true }
 tempfile = "3.1.0"
 candid = { workspace = true }
 serde_bytes = { workspace = true }
 serde = { workspace = true }
+ic-constants = { path = "../../../constants" }
 serde_json = { workspace = true }
 serde_cbor = { workspace = true }
 serde_with = { workspace = true }
-num-traits = "0.2.12"
+ic-certification = { workspace = true }
+num-traits = { workspace = true }
 ciborium = { workspace = true }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 ic-icrc1-ledger = { path = "../ledger" }
@@ -35,7 +37,7 @@ proptest = "1.0"
 rand = "0.8.4"
 axum = "0.6.1"
 url = "2.2.1"
-clap = { version = "4.0.29", features = ["derive"] }
+clap = { workspace = true }
 tokio = { workspace = true }
 ic-agent = { workspace = true }
 icrc-ledger-agent = { path = "../../../../packages/icrc-ledger-agent" }
@@ -46,6 +48,7 @@ http = "0.2.9"
 tower-http = { version = "0.4.0", features = ["trace"] }
 tower-request-id = "0.2.1"
 tracing = { workspace = true }
+tracing-appender = { workspace = true }
 tracing-subscriber = { workspace = true }
 indicatif = "0.17.3"
 ic-rosetta-api = { path = "../../" }
@@ -54,6 +57,8 @@ strum_macros = { workspace = true }
 strum = { workspace = true }
 num-bigint = "0.4.4"
 ic-ledger-hash-of = { path = "../../../../packages/ic-ledger-hash-of" }
+reqwest = { workspace = true }
+rolling-file = "0.2.0"
 
 [lib]
 path = "src/lib.rs"
@@ -63,13 +68,12 @@ ic-icrc1-ledger-sm-tests = { path = "../ledger/sm-tests" }
 ic-icrc1-test-utils = { path = "../test_utils" }
 ic-base-types = { path = "../../../types/base_types" }
 ic-ledger-canister-core = { path = "../../ledger_canister_core" }
-ic-ic00-types = { path = "../../../types/ic00_types" }
+ic-management-canister-types = { path = "../../../types/management_canister_types" }
 ic-starter-tests = { path = "../../../../packages/ic-starter-tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
 url = "2.3.1"
 once_cell = "1.8.0"
 ring = { version = "0.16.11", features = ["std"] }
-reqwest = { workspace = true }
 futures = { workspace = true }
 ic-icrc-rosetta-client = { path = "client" }
 ic-icrc-rosetta-runner = { path = "runner" }

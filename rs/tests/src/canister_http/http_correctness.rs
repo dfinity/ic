@@ -27,14 +27,14 @@ use canister_test::Canister;
 use dfn_candid::candid_one;
 use ic_base_types::{CanisterId, NumBytes};
 use ic_cdk::api::call::RejectionCode;
-use ic_ic00_types::{
+use ic_management_canister_types::{
     BoundedHttpHeaders, CanisterHttpRequestArgs, HttpHeader, HttpMethod, TransformContext,
     TransformFunc,
 };
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
-use ic_test_utilities::types::messages::RequestBuilder;
-use ic_test_utilities_time::mock_time;
+use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::canister_http::{CanisterHttpRequestContext, MAX_CANISTER_HTTP_REQUEST_BYTES};
+use ic_types::time::UNIX_EPOCH;
 use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
 use slog::{info, Logger};
 use std::convert::TryFrom;
@@ -52,7 +52,7 @@ fn expected_cycle_cost(
         .unwrap_or(MAX_CANISTER_HTTP_REQUEST_BYTES);
 
     let dummy_context = CanisterHttpRequestContext::try_from((
-        mock_time(),
+        UNIX_EPOCH,
         &RequestBuilder::default()
             .receiver(CanisterId::from(1))
             .sender(proxy_canister)
@@ -339,7 +339,7 @@ pub fn test(env: TestEnv) {
                     },
                     cycles: 500_000_000_000,
                 },
-                |response| matches!(response, Err((RejectionCode::DestinationInvalid, _))),
+                |response| matches!(response, Err((RejectionCode::CanisterError, _))),
             )
             .await,
         );

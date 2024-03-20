@@ -1,6 +1,6 @@
 use ic_consensus_utils::{get_block_hash_string, pool_reader::PoolReader};
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpBatchStats;
-use ic_ic00_types::EcdsaKeyId;
+use ic_management_canister_types::EcdsaKeyId;
 use ic_metrics::{
     buckets::{decimal_buckets, decimal_buckets_with_zero, linear_buckets},
     MetricsRegistry,
@@ -189,7 +189,6 @@ pub struct EcdsaStats {
     pub quadruples_in_creation: CounterPerEcdsaKeyId,
     pub ongoing_xnet_reshares: CounterPerEcdsaKeyId,
     pub xnet_reshare_agreements: CounterPerEcdsaKeyId,
-    pub available_quadruples_with_key_transcript: usize,
 }
 
 impl From<&EcdsaPayload> for EcdsaStats {
@@ -238,11 +237,6 @@ impl From<&EcdsaPayload> for EcdsaStats {
                     .filter(|(_, status)| matches!(status, CompletedReshareRequest::Unreported(_))),
                 &keys,
             ),
-            available_quadruples_with_key_transcript: payload
-                .available_quadruples
-                .values()
-                .filter(|quadruple| quadruple.key_unmasked_ref.is_some())
-                .count(),
         }
     }
 }
@@ -283,7 +277,6 @@ pub struct FinalizerMetrics {
     pub ecdsa_quadruples_in_creation: IntGaugeVec,
     pub ecdsa_ongoing_xnet_reshares: IntGaugeVec,
     pub ecdsa_xnet_reshare_agreements: IntCounterVec,
-    pub ecdsa_available_quadruples_with_key_transcript: IntGauge,
     // canister http payload metrics
     pub canister_http_success_delivered: IntCounter,
     pub canister_http_timeouts_delivered: IntCounter,
@@ -345,10 +338,6 @@ impl FinalizerMetrics {
                 "consensus_ecdsa_available_quadruples",
                 "The number of available ECDSA quadruples",
                 &[ECDSA_KEY_ID_LABEL],
-            ),
-            ecdsa_available_quadruples_with_key_transcript: metrics_registry.int_gauge(
-                "consensus_ecdsa_available_quadruples_with_key_transcript",
-                "The number of available ECDSA quadruples with key transcript",
             ),
             ecdsa_quadruples_in_creation: metrics_registry.int_gauge_vec(
                 "consensus_ecdsa_quadruples_in_creation",
@@ -440,8 +429,6 @@ impl FinalizerMetrics {
                 &self.ecdsa_xnet_reshare_agreements,
                 &ecdsa.xnet_reshare_agreements,
             );
-            self.ecdsa_available_quadruples_with_key_transcript
-                .set(ecdsa.available_quadruples_with_key_transcript as i64);
         }
     }
 }

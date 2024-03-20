@@ -4,7 +4,6 @@ set -euox pipefail
 source '/opt/ic/bin/helpers.shlib'
 
 readonly RUN_DIR='/run/ic-node/etc/nginx'
-readonly EMPTY_NJS_EXPORTS='let v = {}; export default v; // PLACEHOLDER'
 
 SYSTEM_DOMAINS=()
 APPLICATION_DOMAINS=()
@@ -30,8 +29,6 @@ function read_variables() {
             "system_domains") SYSTEM_DOMAINS+=("${value}") ;;
             "application_domains") APPLICATION_DOMAINS+=("${value}") ;;
             "api_domains") API_DOMAINS+=("${value}") ;;
-            "require_seo_certification") REQUIRE_SEO_CERTIFICATION="${value}" ;;
-            "require_underscore_certification") REQUIRE_UNDERSCORE_CERTIFICATION="${value}" ;;
         esac
     done <"${BN_CONFIG}"
 
@@ -82,35 +79,7 @@ function copy_certs() {
     done
 }
 
-function copy_deny_list() {
-    local -r DENY_LIST_SRC="${BOOT_DIR}/denylist.map"
-    local -r DENY_LIST_DST="/var/opt/nginx/denylist/denylist.map"
-
-    if [[ -f "${DENY_LIST_DST}" ]]; then
-        echo "${DENY_LIST_DST} already present, skipping"
-        return
-    fi
-
-    if [[ ! -f "${DENY_LIST_SRC}" ]]; then
-        touch "${DENY_LIST_DST}"
-    else
-        cp "${DENY_LIST_SRC}" "${DENY_LIST_DST}"
-    fi
-}
-
 function setup_domains() {
-    local -r SYSTEM_DOMAINS_PATH="${RUN_DIR}/conf.d/system_domains.conf"
-    for DOMAIN in "${SYSTEM_DOMAINS[@]}"; do
-        local DOMAIN_ESCAPED=${DOMAIN//\./\\.}
-        echo "~^([^.]+\.)?(raw\.)?${DOMAIN_ESCAPED}$ 1;" >>"${SYSTEM_DOMAINS_PATH}"
-    done
-
-    local -r APPLICATION_DOMAINS_PATH="${RUN_DIR}/conf.d/application_domains.conf"
-    for DOMAIN in "${APPLICATION_DOMAINS[@]}"; do
-        local DOMAIN_ESCAPED=${DOMAIN//\./\\.}
-        echo "~^([^.]+\.)?(raw\.)?${DOMAIN_ESCAPED}$ 1;" >>"${APPLICATION_DOMAINS_PATH}"
-    done
-
     local -r DOMAIN_DIR="${RUN_DIR}/conf.d"
     mkdir -p "${DOMAIN_DIR}"
 
@@ -121,7 +90,6 @@ function setup_domains() {
     fi
 
     # primary domains
-    echo "map nop \$primary_system_domain { default ${SYSTEM_DOMAINS[0]}; }" >"${DOMAIN_DIR}/set_primary_system_domain.conf"
     echo "map nop \$primary_application_domain { default ${APPLICATION_DOMAINS[0]}; }" >"${DOMAIN_DIR}/set_primary_application_domain.conf"
     echo "map nop \$primary_api_domain { default ${API_DOMAINS[0]}; }" >"${DOMAIN_DIR}/set_primary_api_domain.conf"
 
@@ -153,37 +121,6 @@ function setup_domains() {
     done
 }
 
-function setup_geolite2_dbs() {
-    local -r BOOT_DBS="${BOOT_DIR}/geolite2_dbs"
-    local -r EMPTY_DBS='/etc/nginx/geoip'
-    local -r DBS_DST="${RUN_DIR}/geoip"
-    local -r DB_NAMES=(
-        GeoLite2-Country.mmdb
-        GeoLite2-City.mmdb
-    )
-
-    mkdir -p "${DBS_DST}"
-
-    if [[ ! -d "${BOOT_DBS}" ]]; then
-        err "missing geolite2 dbs dir '${BOOT_DBS}', defaulting to empty dbs '${EMPTY_DBS}'"
-        local -r DBS_SRC="${EMPTY_DBS}"
-    else
-        local -r DBS_SRC="${BOOT_DBS}"
-    fi
-
-    # Copy databases
-    for DB_NAME in "${DB_NAMES[@]}"; do
-        if [[ ! -f "${DBS_SRC}/${DB_NAME}" ]]; then
-            err "missing geolite2 db: ${DBS_SRC}/${DB_NAME}"
-            exit 1
-        fi
-
-        cp \
-            "${DBS_SRC}/${DB_NAME}" \
-            "${DBS_DST}/${DB_NAME}"
-    done
-}
-
 function setup_custom_domains() {
     local -r SERVER_BLOCKS='/var/opt/nginx/domains.conf'
     mkdir -p "$(dirname ${SERVER_BLOCKS})"
@@ -191,49 +128,6 @@ function setup_custom_domains() {
     if [[ ! -f "${SERVER_BLOCKS}" ]]; then
         touch "${SERVER_BLOCKS}"
     fi
-
-    local -r DOMAIN_MAPPINGS="/var/opt/nginx/domain_canister_mappings.js"
-    mkdir -p "$(dirname ${DOMAIN_MAPPINGS})"
-
-    if [[ ! -f "${DOMAIN_MAPPINGS}" ]]; then
-        echo "${EMPTY_NJS_EXPORTS}" >"${DOMAIN_MAPPINGS}"
-    fi
-}
-
-function setup_pre_isolation_canisters() {
-    local -r SRC_CANISTERS_PATH="${BOOT_DIR}/pre_isolation_canisters.txt"
-    local -r DST_CANISTERS_PATH="/run/ic-node/etc/nginx/conf.d/pre_isolation_canisters.conf"
-
-    # Make sure the file exists
-    touch "${DST_CANISTERS_PATH}"
-
-    if [[ ! -f "${SRC_CANISTERS_PATH}" ]]; then
-        err "missing pre_isolation_canisters.txt file: ${SRC_CANISTERS_PATH}; continuing with an empty one"
-        return
-    fi
-
-    # Check that ID matches the regex for a canister ID
-    # And write to nginx config
-    while read id; do
-        echo "${id} 1;" >>"${DST_CANISTERS_PATH}"
-    done < <(cat "${SRC_CANISTERS_PATH}" | grep -E '^[a-z0-9-]{27}$')
-}
-
-function setup_canister_id_alises() {
-    local -r CANISTER_ID_ALIASES_DIR="/var/opt/nginx/canister_aliases"
-    local -r CANISTER_ID_ALIASES_PATH="${CANISTER_ID_ALIASES_DIR}/canister_id_aliases.js"
-
-    mkdir -p "${CANISTER_ID_ALIASES_DIR}"
-    cat >"${CANISTER_ID_ALIASES_PATH}" <<EOF
-let CANISTER_ID_ALIASES = {
-  dscvr: "h5aet-waaaa-aaaab-qaamq-cai",
-  identity: "rdmx6-jaaaa-aaaaa-aaadq-cai",
-  nns: "qoctq-giaaa-aaaaa-aaaea-cai",
-  personhood: "g3wsl-eqaaa-aaaan-aaaaa-cai",
-};
-
-export default CANISTER_ID_ALIASES;
-EOF
 }
 
 function setup_cgi() {
@@ -251,12 +145,8 @@ EOF
 function main() {
     read_variables
     copy_certs
-    copy_deny_list
     setup_domains
-    setup_geolite2_dbs
     setup_custom_domains
-    setup_pre_isolation_canisters
-    setup_canister_id_alises
     setup_cgi
 }
 

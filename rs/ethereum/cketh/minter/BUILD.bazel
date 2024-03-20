@@ -2,7 +2,7 @@ load("@aspect_rules_sol//sol:defs.bzl", "sol_binary")
 load("@io_bazel_rules_closure//closure:defs.bzl", "closure_js_library", "closure_js_test")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_doc", "rust_doc_test", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
-load("//bazel:defs.bzl", "rust_ic_test")
+load("//bazel:defs.bzl", "rust_ic_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -46,7 +46,7 @@ rust_library(
         "//rs/crypto/sha3",
         "//rs/ethereum/types",
         "//rs/phantom_newtype",
-        "//rs/types/ic00_types",
+        "//rs/types/management_canister_types",
         "//rs/utils/ensure",
         "@crate_index//:candid",
         "@crate_index//:ethnum",
@@ -166,41 +166,42 @@ rust_binary(
     ],
 )
 
-rust_ic_test(
+rust_ic_test_suite(
     name = "integration_tests",
-    srcs = ["tests/tests.rs"],
+    srcs = glob(["tests/**/*.rs"]),
     data = [
         ":cketh_minter_debug.wasm",
-        "//rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm",
+        "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm",
+        "//rs/rosetta-api/icrc1/archive:archive_canister_u256.wasm.gz",
+        "//rs/rosetta-api/icrc1/index-ng:index_ng_canister_u256.wasm.gz",
+        "//rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm.gz",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/ethereum/cketh/minter",
         "CKETH_MINTER_WASM_PATH": "$(rootpath :cketh_minter_debug.wasm)",
-        "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm)",
+        "LEDGER_SUITE_ORCHESTRATOR_WASM_PATH": "$(rootpath //rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm)",
+        "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm.gz)",
+        "INDEX_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/index-ng:index_ng_canister_u256.wasm.gz)",
+        "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/archive:archive_canister_u256.wasm.gz)",
     },
-    proc_macro_deps = [
-        "@crate_index//:strum_macros",
-    ],
+    proc_macro_deps = [],
     deps = [
         ":minter",
         "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//rs/ethereum/cketh/test_utils",
+        "//rs/ethereum/ledger-suite-orchestrator/test_utils",
         "//rs/ethereum/types",
-        "//rs/rosetta-api/icrc1/ledger",
-        "//rs/rust_canisters/http_types",
         "//rs/state_machine_tests",
-        "//rs/test_utilities/load_wasm",
         "//rs/types/base_types",
+        "@crate_index//:assert_matches",
         "@crate_index//:candid",
-        "@crate_index//:candid_parser",
         "@crate_index//:ethers-core",
         "@crate_index//:hex",
-        "@crate_index//:ic-cdk",
+        "@crate_index//:num-bigint",
         "@crate_index//:num-traits",
-        "@crate_index//:rlp",
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",
         "@crate_index//:serde_json",
-        "@crate_index//:strum",
     ],
 )
 

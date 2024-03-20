@@ -5,8 +5,10 @@ use ic_config::subnet_config::SchedulerConfig;
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::wasm_utils::instrumentation::instruction_to_cost_new;
 use ic_error_types::{ErrorCode, RejectCode};
-use ic_ic00_types::{CanisterChange, CanisterHttpResponsePayload, SkipPreUpgrade};
 use ic_interfaces::execution_environment::{HypervisorError, SubnetAvailableMemory};
+use ic_management_canister_types::{
+    CanisterChange, CanisterHttpResponsePayload, CanisterUpgradeOptions,
+};
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::{NextExecution, WASM_PAGE_SIZE_IN_BYTES};
@@ -1068,20 +1070,37 @@ fn ic0_canister_version_returns_correct_value() {
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
     );
 
-    test.set_controller(canister_id, canister_id.into())
-        .unwrap();
+    // This internally transitioning to stopping and then stopped,
+    // i.e. it adds 2 to canister version.
+    test.stop_canister(canister_id);
+    test.process_stopping_canisters();
+    test.ingress(canister_id, "update", ctr.clone())
+        .expect_err("The update should fail on the stopped canister.");
+    test.start_canister(canister_id)
+        .expect("The start canister should not fail.");
     let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
-    // Plus 8 for the previous ingress messages.
-    let expected_ctr: u64 = 10 + 8;
+    // Plus 8 for the previous (successful) ingress messages.
+    let expected_ctr: u64 = 12 + 8;
     assert_eq!(
         result,
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
     );
 
-    test.uninstall_code(canister_id).unwrap_err();
-    let result = test.ingress(canister_id, "update", ctr).unwrap();
+    test.set_controller(canister_id, canister_id.into())
+        .unwrap();
+    let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
     // Plus 9 for the previous ingress messages.
-    let expected_ctr: u64 = 10 + 9;
+    let expected_ctr: u64 = 13 + 9;
+    assert_eq!(
+        result,
+        WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
+    );
+
+    test.uninstall_code(canister_id)
+        .expect_err("Uninstall code should fail as the controller has changed.");
+    let result = test.ingress(canister_id, "update", ctr).unwrap();
+    // Plus 10 for the previous ingress messages.
+    let expected_ctr: u64 = 13 + 10;
     assert_eq!(
         result,
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
@@ -1604,7 +1623,7 @@ fn ic0_msg_caller_size_works_in_heartbeat() {
         .unwrap();
     assert_eq!(
         WasmResult::Reply(
-            (ic_ic00_types::IC_00.get().to_vec().len() as u32)
+            (ic_management_canister_types::IC_00.get().to_vec().len() as u32)
                 .to_le_bytes()
                 .to_vec()
         ),
@@ -1619,7 +1638,10 @@ fn ic0_msg_caller_copy_works_in_heartbeat() {
     let set_heartbeat = wasm()
         .set_heartbeat(
             wasm()
-                .msg_caller_copy(0, ic_ic00_types::IC_00.get().to_vec().len() as u32)
+                .msg_caller_copy(
+                    0,
+                    ic_management_canister_types::IC_00.get().to_vec().len() as u32,
+                )
                 .set_global_data_from_stack()
                 .build(),
         )
@@ -1636,7 +1658,7 @@ fn ic0_msg_caller_copy_works_in_heartbeat() {
         )
         .unwrap();
     assert_eq!(
-        WasmResult::Reply(ic_ic00_types::IC_00.get().to_vec()),
+        WasmResult::Reply(ic_management_canister_types::IC_00.get().to_vec()),
         result
     );
 }
@@ -1667,7 +1689,7 @@ fn ic0_msg_caller_size_works_in_global_timer() {
         .unwrap();
     assert_eq!(
         WasmResult::Reply(
-            (ic_ic00_types::IC_00.get().to_vec().len() as u32)
+            (ic_management_canister_types::IC_00.get().to_vec().len() as u32)
                 .to_le_bytes()
                 .to_vec()
         ),
@@ -1682,7 +1704,10 @@ fn ic0_msg_caller_copy_works_in_global_timer() {
     let set_timer = wasm()
         .set_global_timer_method(
             wasm()
-                .msg_caller_copy(0, ic_ic00_types::IC_00.get().to_vec().len() as u32)
+                .msg_caller_copy(
+                    0,
+                    ic_management_canister_types::IC_00.get().to_vec().len() as u32,
+                )
                 .set_global_data_from_stack()
                 .build(),
         )
@@ -1699,7 +1724,7 @@ fn ic0_msg_caller_copy_works_in_global_timer() {
         )
         .unwrap();
     assert_eq!(
-        WasmResult::Reply(ic_ic00_types::IC_00.get().to_vec()),
+        WasmResult::Reply(ic_management_canister_types::IC_00.get().to_vec()),
         result
     );
 }
@@ -4074,7 +4099,7 @@ fn cycles_are_refunded_if_callee_traps() {
             "update",
             call_args()
                 .other_side(b.clone())
-                .on_reject(wasm().reject_code().reject_message().reject()),
+                .on_reject(wasm().reject_message().reject()),
             a_to_b_transferred,
         )
         .build();
@@ -4223,7 +4248,7 @@ fn cycles_are_refunded_if_callee_is_uninstalled_before_execution() {
             "update",
             call_args()
                 .other_side(b.clone())
-                .on_reject(wasm().reject_code().reject_message().reject()),
+                .on_reject(wasm().reject_message().reject()),
             Cycles::from(a_to_b_transferred),
         )
         .build();
@@ -4301,7 +4326,7 @@ fn cycles_are_refunded_if_callee_is_uninstalled_after_execution() {
             "update",
             call_args()
                 .other_side(b.clone())
-                .on_reject(wasm().reject_code().reject_message().reject()),
+                .on_reject(wasm().reject_message().reject()),
             a_to_b_transferred,
         )
         .build();
@@ -4407,7 +4432,7 @@ fn cycles_are_refunded_if_callee_is_reinstalled() {
             "update",
             call_args()
                 .other_side(b.clone())
-                .on_reject(wasm().reject_code().reject_message().reject()),
+                .on_reject(wasm().reject_message().reject()),
             a_to_b_transferred,
         )
         .build();
@@ -4517,7 +4542,7 @@ fn cycles_are_refunded_if_callee_is_uninstalled_during_a_self_call() {
             "update",
             call_args()
                 .other_side(b_1.clone())
-                .on_reject(wasm().reject_code().reject_message().reject()),
+                .on_reject(wasm().reject_message().reject()),
             b_transferred_1,
         )
         .build();
@@ -4531,7 +4556,7 @@ fn cycles_are_refunded_if_callee_is_uninstalled_during_a_self_call() {
             "update",
             call_args()
                 .other_side(b_0.clone())
-                .on_reject(wasm().reject_code().reject_message().reject()),
+                .on_reject(wasm().reject_message().reject()),
             a_to_b_transferred,
         )
         .build();
@@ -4573,7 +4598,7 @@ fn cycles_are_refunded_if_callee_is_uninstalled_during_a_self_call() {
 
     // The reject message from method #2 of B to method #1.
     let reject_message_b_2_to_1 = format!(
-        "IC0304: Attempt to execute a message on canister {} which contains no Wasm module",
+        "IC0537: Attempt to execute a message on canister {} which contains no Wasm module",
         b_id
     );
 
@@ -4942,7 +4967,7 @@ fn system_state_apply_change_fails() {
             b_id,
             call_args()
                 .other_side(b)
-                .on_reject(wasm().reject_code().reject_message().reject()),
+                .on_reject(wasm().reject_message().reject()),
         )
         .build();
 
@@ -6304,7 +6329,9 @@ fn upgrade_with_skip_pre_upgrade_preserves_stable_memory() {
     test.upgrade_canister_v2(
         canister_id,
         wat::parse_str(wat.clone()).unwrap(),
-        Some(SkipPreUpgrade(Some(true))),
+        CanisterUpgradeOptions {
+            skip_pre_upgrade: Some(true),
+        },
     )
     .unwrap();
 
@@ -6313,7 +6340,9 @@ fn upgrade_with_skip_pre_upgrade_preserves_stable_memory() {
         .upgrade_canister_v2(
             canister_id,
             wat::parse_str(wat).unwrap(),
-            Some(SkipPreUpgrade(Some(false))),
+            CanisterUpgradeOptions {
+                skip_pre_upgrade: Some(false),
+            },
         )
         .unwrap_err();
     assert_eq!(ErrorCode::CanisterTrapped, err.code());

@@ -13,20 +13,21 @@ use crate::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use crate::CallOrigin;
 use crate::Memory;
 use ic_base_types::NumSeconds;
-use ic_ic00_types::{CanisterChange, CanisterChangeDetails, CanisterChangeOrigin};
 use ic_logger::replica_logger::no_op_logger;
+use ic_management_canister_types::{
+    CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterLogRecord, LogVisibility,
+};
 use ic_metrics::MetricsRegistry;
-use ic_test_utilities::types::{
+use ic_test_utilities_types::{
     ids::canister_test_id,
     ids::message_test_id,
     ids::user_test_id,
     messages::{RequestBuilder, ResponseBuilder},
 };
-use ic_test_utilities_time::mock_time;
 use ic_types::{
     messages::{
         CallContextId, CallbackId, CanisterCall, RequestMetadata, StopCanisterCallId,
-        StopCanisterContext, MAX_RESPONSE_COUNT_BYTES,
+        StopCanisterContext, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE,
     },
     methods::{Callback, WasmClosure},
     nominal_cycles::NominalCycles,
@@ -35,6 +36,7 @@ use ic_types::{
 };
 use ic_wasm_types::CanisterModule;
 use prometheus::IntCounter;
+use strum::IntoEnumIterator;
 
 const CANISTER_ID: CanisterId = CanisterId::from_u64(42);
 const OTHER_CANISTER_ID: CanisterId = CanisterId::from_u64(13);
@@ -95,10 +97,10 @@ impl CanisterStateFixture {
             .call_context_manager_mut()
             .unwrap()
             .new_call_context(
-                CallOrigin::CanisterUpdate(CANISTER_ID, CallbackId::from(1)),
+                CallOrigin::CanisterUpdate(CANISTER_ID, CallbackId::from(1), NO_DEADLINE),
                 Cycles::zero(),
                 Time::from_nanos_since_unix_epoch(0),
-                RequestMetadata::new(0, mock_time()),
+                RequestMetadata::new(0, UNIX_EPOCH),
             );
         self.canister_state
             .system_state
@@ -114,6 +116,7 @@ impl CanisterStateFixture {
                 WasmClosure::new(0, 2),
                 WasmClosure::new(0, 2),
                 None,
+                NO_DEADLINE,
             ))
     }
 
@@ -138,7 +141,7 @@ impl CanisterStateFixture {
 
     fn with_input_reservation(&mut self) {
         self.canister_state
-            .push_output_request(default_output_request(), mock_time())
+            .push_output_request(default_output_request(), UNIX_EPOCH)
             .unwrap();
         self.pop_output().unwrap();
     }
@@ -421,7 +424,7 @@ fn canister_state_push_output_request_mismatched_sender() {
         .canister_state
         .push_output_request(
             Arc::new(RequestBuilder::default().sender(OTHER_CANISTER_ID).build()),
-            mock_time(),
+            UNIX_EPOCH,
         )
         .unwrap();
 }
@@ -556,23 +559,83 @@ fn update_balance_and_consumed_cycles_by_use_case_correctly() {
 fn canister_state_callback_round_trip() {
     use ic_protobuf::state::canister_state_bits::v1 as pb;
 
-    let callback = Callback::new(
+    let minimal_callback = Callback::new(
         CallContextId::new(1),
         CANISTER_ID,
         OTHER_CANISTER_ID,
         Cycles::zero(),
-        Cycles::new(42),
-        Cycles::new(84),
+        Cycles::zero(),
+        Cycles::zero(),
         WasmClosure::new(0, 2),
         WasmClosure::new(0, 2),
         None,
+        NO_DEADLINE,
+    );
+    let maximal_callback = Callback::new(
+        CallContextId::new(1),
+        CANISTER_ID,
+        OTHER_CANISTER_ID,
+        Cycles::new(21),
+        Cycles::new(42),
+        Cycles::new(84),
+        WasmClosure::new(0, 2),
+        WasmClosure::new(1, 2),
+        Some(WasmClosure::new(2, 2)),
+        ic_types::time::CoarseTime::from_secs_since_unix_epoch(329),
     );
 
-    let pb_callback = pb::Callback::from(&callback);
+    for callback in [minimal_callback, maximal_callback] {
+        let pb_callback = pb::Callback::from(&callback);
+        let round_trip = Callback::try_from(pb_callback).unwrap();
 
-    let round_trip = Callback::try_from(pb_callback).unwrap();
+        assert_eq!(callback, round_trip);
+    }
+}
 
-    assert_eq!(callback, round_trip);
+#[test]
+fn canister_state_log_visibility_i32_round_trip() {
+    for initial in LogVisibility::iter() {
+        let encoded = i32::from(initial);
+        let round_trip = LogVisibility::try_from(encoded).unwrap();
+
+        assert_eq!(initial, round_trip);
+    }
+}
+
+#[test]
+fn canister_state_log_visibility_i32_default() {
+    const UNSPECIFIED: i32 = 0;
+    assert_eq!(
+        LogVisibility::try_from(UNSPECIFIED).unwrap(),
+        LogVisibility::default()
+    );
+}
+
+#[test]
+fn canister_state_log_visibility_round_trip() {
+    use ic_protobuf::state::canister_state_bits::v1 as pb;
+
+    for initial in LogVisibility::iter() {
+        let encoded = pb::LogVisibility::from(initial);
+        let round_trip = LogVisibility::from(encoded);
+
+        assert_eq!(initial, round_trip);
+    }
+}
+
+#[test]
+fn canister_state_canister_log_record_round_trip() {
+    use ic_protobuf::state::canister_state_bits::v1 as pb;
+
+    let initial = CanisterLogRecord {
+        idx: 42,
+        timestamp_nanos: 27,
+        content: vec![1, 2, 3],
+    };
+    let encoded = pb::CanisterLogRecord::from(initial.clone());
+    let round_trip = CanisterLogRecord::from(encoded);
+
+    assert_eq!(initial, round_trip);
 }
 
 #[test]
@@ -814,7 +877,7 @@ fn reverts_stopping_status_after_split() {
         CallOrigin::Ingress(user_test_id(1), message_test_id(2)),
         Cycles::from(0u128),
         Time::from_nanos_since_unix_epoch(0),
-        RequestMetadata::new(0, mock_time()),
+        RequestMetadata::new(0, UNIX_EPOCH),
     );
     canister_state.system_state.status = CanisterStatus::Stopping {
         call_context_manager: call_context_manager.clone(),

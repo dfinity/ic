@@ -18,71 +18,10 @@ use serde::{Deserialize, Serialize};
 use std::convert::{TryFrom, TryInto};
 use std::str::FromStr;
 
-/// An AccountBalanceRequest is utilized to make a balance request on the
-/// /account/balance endpoint. If the block_identifier is populated, a
-/// historical balance query should be performed.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct AccountBalanceRequest {
-    #[serde(rename = "network_identifier")]
-    pub network_identifier: NetworkIdentifier,
-
-    #[serde(rename = "account_identifier")]
-    pub account_identifier: AccountIdentifier,
-
-    #[serde(rename = "block_identifier")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub block_identifier: Option<PartialBlockIdentifier>,
-
-    #[serde(rename = "metadata")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<AccountBalanceMetadata>,
-}
-
-impl AccountBalanceRequest {
-    pub fn new(
-        network_identifier: NetworkIdentifier,
-        account_identifier: AccountIdentifier,
-    ) -> AccountBalanceRequest {
-        AccountBalanceRequest {
-            network_identifier,
-            account_identifier,
-            block_identifier: None,
-            metadata: None,
-        }
-    }
-}
-
-/// An AccountBalanceResponse is returned on the /account/balance endpoint. If
-/// an account has a balance for each AccountIdentifier describing it (ex: an
-/// ERC-20 token balance on a few smart contracts), an account balance request
-/// must be made with each AccountIdentifier.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct AccountBalanceResponse {
-    #[serde(rename = "block_identifier")]
-    pub block_identifier: BlockIdentifier,
-
-    /// A single account may have a balance in multiple currencies.
-    #[serde(rename = "balances")]
-    pub balances: Vec<Amount>,
-
-    /// Account-based blockchains that utilize a nonce or sequence number should
-    /// include that number in the metadata. This number could be unique to the
-    /// identifier or global across the account address.
-    #[serde(rename = "metadata")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<NeuronInfoResponse>,
-}
-
-impl AccountBalanceResponse {
-    pub fn new(block_identifier: BlockIdentifier, balances: Vec<Amount>) -> AccountBalanceResponse {
-        AccountBalanceResponse {
-            block_identifier,
-            balances,
-            metadata: None,
-        }
-    }
+pub struct ConstructionHashResponse {
+    pub transaction_identifier: TransactionIdentifier,
+    pub metadata: ObjectMap,
 }
 
 /// CallRequest is the input to the `/call`
@@ -193,11 +132,13 @@ pub struct ConstructionDeriveRequestMetadata {
     pub account_type: AccountType,
 }
 
-impl From<ConstructionDeriveRequestMetadata> for ObjectMap {
-    fn from(p: ConstructionDeriveRequestMetadata) -> Self {
-        match serde_json::to_value(p) {
-            Ok(serde_json::Value::Object(o)) => o,
-            _ => unreachable!(),
+impl TryFrom<ConstructionDeriveRequestMetadata> for ObjectMap {
+    type Error = ApiError;
+    fn try_from(d: ConstructionDeriveRequestMetadata) -> Result<ObjectMap, Self::Error> {
+        match serde_json::to_value(d) {
+            Ok(serde_json::Value::Object(o)) => Ok(o),
+            Ok(o) => Err(ApiError::internal_error(format!("Could not convert ConstructionDeriveRequestMetadata to ObjectMap. Expected type Object but received: {:?}",o))),
+            Err(err) => Err(ApiError::internal_error(format!("Could not convert ConstructionDeriveRequestMetadata to ObjectMap: {:?}",err))),
         }
     }
 }
@@ -232,11 +173,13 @@ pub struct ConstructionMetadataRequestOptions {
     pub request_types: Vec<RequestType>,
 }
 
-impl From<ConstructionMetadataRequestOptions> for ObjectMap {
-    fn from(p: ConstructionMetadataRequestOptions) -> Self {
-        match serde_json::to_value(p) {
-            Ok(serde_json::Value::Object(o)) => o,
-            _ => unreachable!(),
+impl TryFrom<ConstructionMetadataRequestOptions> for ObjectMap {
+    type Error = ApiError;
+    fn try_from(d: ConstructionMetadataRequestOptions) -> Result<ObjectMap, Self::Error> {
+        match serde_json::to_value(d) {
+            Ok(serde_json::Value::Object(o)) => Ok(o),
+            Ok(o) => Err(ApiError::internal_error(format!("Could not convert ConstructionMetadataRequestOptions to ObjectMap. Expected type Object but received: {:?}",o))),
+            Err(err) => Err(ApiError::internal_error(format!("Could not convert ConstructionMetadataRequestOptions to ObjectMap: {:?}",err))),
         }
     }
 }
@@ -318,11 +261,13 @@ pub struct ConstructionPayloadsRequestMetadata {
     pub created_at_time: Option<u64>,
 }
 
-impl From<ConstructionPayloadsRequestMetadata> for ObjectMap {
-    fn from(p: ConstructionPayloadsRequestMetadata) -> Self {
-        match serde_json::to_value(p) {
-            Ok(serde_json::Value::Object(o)) => o,
-            _ => unreachable!(),
+impl TryFrom<ConstructionPayloadsRequestMetadata> for ObjectMap {
+    type Error = ApiError;
+    fn try_from(d: ConstructionPayloadsRequestMetadata) -> Result<ObjectMap, Self::Error> {
+        match serde_json::to_value(d) {
+            Ok(serde_json::Value::Object(o)) => Ok(o),
+            Ok(o) => Err(ApiError::internal_error(format!("Could not convert ConstructionPayloadsRequestMetadata to ObjectMap. Expected type Object but received: {:?}",o))),
+            Err(err) => Err(ApiError::internal_error(format!("Could not convert ConstructionPayloadsRequestMetadata to ObjectMap: {:?}",err))),
         }
     }
 }
@@ -435,184 +380,6 @@ impl MempoolTransactionRequest {
     }
 }
 
-/// TransactionIdentifierResponse contains the transaction_identifier of a
-/// transaction that was submitted to either `/construction/hash` or
-/// `/construction/submit`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct TransactionIdentifierResponse {
-    #[serde(rename = "transaction_identifier")]
-    pub transaction_identifier: TransactionIdentifier,
-
-    #[serde(rename = "metadata")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<ObjectMap>,
-}
-
-impl TransactionIdentifierResponse {
-    pub fn new(transaction_identifier: TransactionIdentifier) -> TransactionIdentifierResponse {
-        TransactionIdentifierResponse {
-            transaction_identifier,
-            metadata: None,
-        }
-    }
-}
-
-/// Operator is used by query-related endpoints to determine how to apply
-/// conditions. If this field is not populated, the default and value will be
-/// used.
-#[allow(non_camel_case_types)]
-#[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGenericEnum))]
-pub enum Operator {
-    #[serde(rename = "or")]
-    Or,
-    #[serde(rename = "and")]
-    And,
-}
-
-impl ::std::fmt::Display for Operator {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        match *self {
-            Operator::Or => write!(f, "or"),
-            Operator::And => write!(f, "and"),
-        }
-    }
-}
-
-/// SearchTransactionsRequest models a small subset of the /search/transactions
-/// endpoint. Currently we only support looking up a transaction given its hash;
-/// this functionality is desired by our crypto exchanges partners.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct SearchTransactionsRequest {
-    #[serde(rename = "network_identifier")]
-    pub network_identifier: NetworkIdentifier,
-
-    #[serde(rename = "operator")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub operator: Option<Operator>,
-
-    #[serde(rename = "max_block")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub max_block: Option<i64>,
-
-    #[serde(rename = "offset")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub offset: Option<i64>,
-
-    #[serde(rename = "limit")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub limit: Option<i64>,
-
-    #[serde(rename = "transaction_identifier")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub transaction_identifier: Option<TransactionIdentifier>,
-
-    #[serde(rename = "account_identifier")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub account_identifier: Option<AccountIdentifier>,
-
-    #[serde(rename = "coin_identifier")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub coin_identifier: Option<CoinIdentifier>,
-
-    #[serde(rename = "currency")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub currency: Option<Currency>,
-
-    #[serde(rename = "status")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub status: Option<String>,
-
-    #[serde(rename = "type")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub _type: Option<String>,
-
-    #[serde(rename = "address")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub address: Option<String>,
-
-    #[serde(rename = "success")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub success: Option<bool>,
-}
-
-impl SearchTransactionsRequest {
-    pub fn new(
-        network_identifier: NetworkIdentifier,
-        transaction_identifier: Option<TransactionIdentifier>,
-        account_identifier: Option<AccountIdentifier>,
-    ) -> SearchTransactionsRequest {
-        SearchTransactionsRequest {
-            network_identifier,
-            operator: None,
-            max_block: None,
-            offset: None,
-            limit: None,
-            transaction_identifier,
-            account_identifier,
-            coin_identifier: None,
-            currency: None,
-            status: None,
-            _type: None,
-            address: None,
-            success: None,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct BlockTransaction {
-    #[serde(rename = "block_identifier")]
-    pub block_identifier: BlockIdentifier,
-
-    #[serde(rename = "transaction")]
-    pub transaction: Transaction,
-}
-
-impl BlockTransaction {
-    pub fn new(block_identifier: BlockIdentifier, transaction: Transaction) -> BlockTransaction {
-        BlockTransaction {
-            block_identifier,
-            transaction,
-        }
-    }
-}
-
-/// SearchTransactionsResponse contains an ordered collection of
-/// BlockTransactions that match the query in SearchTransactionsRequest. These
-/// BlockTransactions are sorted from most recent block to oldest block.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
-pub struct SearchTransactionsResponse {
-    #[serde(rename = "transactions")]
-    pub transactions: Vec<BlockTransaction>,
-
-    #[serde(rename = "total_count")]
-    pub total_count: i64,
-
-    #[serde(rename = "next_offset")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub next_offset: Option<i64>,
-}
-
-impl SearchTransactionsResponse {
-    pub fn new(
-        transactions: Vec<BlockTransaction>,
-        total_count: i64,
-        next_offset: Option<i64>,
-    ) -> SearchTransactionsResponse {
-        SearchTransactionsResponse {
-            transactions,
-            total_count,
-            next_offset,
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct NeuronSubaccountComponents {
@@ -665,6 +432,27 @@ pub struct AccountBalanceMetadata {
     #[serde(flatten)]
     #[serde(default)]
     pub account_type: BalanceAccountType,
+}
+
+impl From<AccountBalanceMetadata> for ObjectMap {
+    fn from(p: AccountBalanceMetadata) -> Self {
+        match serde_json::to_value(p) {
+            Ok(serde_json::Value::Object(o)) => o,
+            _ => unreachable!(),
+        }
+    }
+}
+
+impl TryFrom<Option<ObjectMap>> for AccountBalanceMetadata {
+    type Error = ApiError;
+    fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
+        serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
+            ApiError::internal_error(format!(
+                "Could not parse AccountBalanceMetadata metadata from metadata JSON object: {}",
+                e
+            ))
+        })
+    }
 }
 
 #[test]
@@ -788,4 +576,25 @@ pub struct NeuronInfoResponse {
     /// Current stake of the neuron, in e8s.
     #[serde(rename = "stake_e8s")]
     pub stake_e8s: u64,
+}
+
+impl From<NeuronInfoResponse> for ObjectMap {
+    fn from(p: NeuronInfoResponse) -> Self {
+        match serde_json::to_value(p) {
+            Ok(serde_json::Value::Object(o)) => o,
+            _ => unreachable!(),
+        }
+    }
+}
+
+impl TryFrom<Option<ObjectMap>> for NeuronInfoResponse {
+    type Error = ApiError;
+    fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
+        serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
+            ApiError::internal_error(format!(
+                "Could not parse NeuronInfoResponse metadata from metadata JSON object: {}",
+                e
+            ))
+        })
+    }
 }

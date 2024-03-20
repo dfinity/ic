@@ -18,7 +18,6 @@ use thiserror::Error;
 
 /// Time since UNIX_EPOCH (in nanoseconds). Just like 'std::time::Instant' or
 /// 'std::time::SystemTime', [Time] does not implement the [Default] trait.
-/// Please use `ic_test_utilities_time::mock_time` if you ever need such a value.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash, Serialize, Deserialize)]
 #[cfg_attr(test, derive(Arbitrary, ExhaustiveSet))]
 pub struct Time(u64);
@@ -47,7 +46,7 @@ impl std::ops::AddAssign<Duration> for Time {
 }
 
 impl Time {
-    /// Number of nanoseconds since UNIX EPOCH
+    /// Number of nanoseconds since `UNIX EPOCH`.
     pub fn as_nanos_since_unix_epoch(self) -> u64 {
         self.0
     }
@@ -56,7 +55,7 @@ impl Time {
         Time(nanos)
     }
 
-    /// Number of milliseconds since UNIX EPOCH
+    /// Number of milliseconds since `UNIX EPOCH`.
     pub fn as_millis_since_unix_epoch(self) -> u64 {
         self.as_nanos_since_unix_epoch() / NANOS_PER_MILLI
     }
@@ -73,7 +72,7 @@ impl Time {
             })
     }
 
-    /// Number of seconds since UNIX EPOCH
+    /// Number of seconds since `UNIX EPOCH`.
     pub fn as_secs_since_unix_epoch(self) -> u64 {
         self.as_nanos_since_unix_epoch() / NANOS_PER_SEC
     }
@@ -304,4 +303,64 @@ pub fn expiry_time_from_now() -> Time {
         .expect("Time wrapped around");
 
     UNIX_EPOCH + (since_epoch + MAX_INGRESS_TTL - PERMITTED_DRIFT)
+}
+
+/// Time since `UNIX_EPOCH`, in seconds.
+///
+/// Only intended for storing and passing around low resolution timestamps.
+/// For any time arithmetic or pretty printing, convert to `Time` first. Like
+/// `Time`, does not implement the `Default` trait.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub struct CoarseTime(u32);
+
+impl CoarseTime {
+    pub const fn from_secs_since_unix_epoch(seconds: u32) -> Self {
+        Self(seconds)
+    }
+
+    /// Returns a `CoarseTime` obtained by rounding `time` down to an integer second.
+    ///
+    /// If the result would exceed `u32::MAX` (`2106-02-07T06:28:15`), it is replaced
+    /// by `u32::MAX`.
+    pub const fn floor(time: Time) -> Self {
+        Self::from_u64_seconds(time.0 / NANOS_PER_SEC)
+    }
+
+    /// Returns a `CoarseTime` obtained by rounding `time` toward the closest integer
+    /// second.
+    ///
+    /// If the result would exceed `u32::MAX` (`2106-02-07T06:28:15`), it is replaced
+    /// by `u32::MAX`.
+    pub const fn round(time: Time) -> Self {
+        Self::from_u64_seconds(time.0.saturating_add(NANOS_PER_SEC / 2) / NANOS_PER_SEC)
+    }
+
+    /// Returns a `CoarseTime` obtained by rounding `time` up to an integer second.
+    ///
+    /// If the result would exceed `u32::MAX` (`2106-02-07T06:28:15`), it is replaced
+    /// by `u32::MAX`.
+    pub const fn ceil(time: Time) -> Self {
+        Self::from_u64_seconds(time.0.saturating_add(NANOS_PER_SEC - 1) / NANOS_PER_SEC)
+    }
+
+    /// Helper for saturating rounding to `u32`.
+    const fn from_u64_seconds(seconds: u64) -> Self {
+        if seconds < u32::MAX as u64 {
+            Self(seconds as u32)
+        } else {
+            Self(u32::MAX)
+        }
+    }
+
+    /// Number of seconds since `UNIX EPOCH`.
+    pub const fn as_secs_since_unix_epoch(&self) -> u32 {
+        self.0
+    }
+}
+
+impl From<CoarseTime> for Time {
+    fn from(time: CoarseTime) -> Self {
+        Self(time.0 as u64 * NANOS_PER_SEC)
+    }
 }

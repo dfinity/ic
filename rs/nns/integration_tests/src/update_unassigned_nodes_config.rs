@@ -4,11 +4,13 @@ use ic_nns_common::{
     registry::MAX_NUM_SSH_KEYS,
     types::{NeuronId, ProposalId},
 };
-use ic_nns_governance::pb::v1::{NnsFunction, ProposalStatus};
+use ic_nns_governance::{
+    init::TEST_NEURON_1_ID,
+    pb::v1::{NnsFunction, ProposalStatus},
+};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     governance::{get_pending_proposals, submit_external_update_proposal, wait_for_final_state},
-    ids::TEST_NEURON_1_ID,
     itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
     registry::get_value_or_panic,
 };

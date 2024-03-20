@@ -1,4 +1,5 @@
 use candid::Principal;
+use ic_btc_interface::Utxo;
 use ic_canister_log::export as export_logs;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk_macros::{init, post_upgrade, query, update};
@@ -167,6 +168,16 @@ fn retrieve_btc_status_v2(req: RetrieveBtcStatusRequest) -> RetrieveBtcStatusV2 
 #[query]
 fn retrieve_btc_status_v2_by_account(target: Option<Account>) -> Vec<BtcRetrievalStatusV2> {
     read_state(|s| s.retrieve_btc_status_v2_by_account(target))
+}
+
+#[query]
+fn get_known_utxos(args: UpdateBalanceArgs) -> Vec<Utxo> {
+    read_state(|s| {
+        s.known_utxos_for_account(&Account {
+            owner: args.owner.unwrap_or(ic_cdk::caller()),
+            subaccount: args.subaccount,
+        })
+    })
 }
 
 #[update]

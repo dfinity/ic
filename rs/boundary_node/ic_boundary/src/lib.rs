@@ -5,6 +5,7 @@ mod cli;
 mod core;
 mod dns;
 mod firewall;
+mod geoip;
 mod http;
 mod management;
 mod metrics;
@@ -13,6 +14,7 @@ mod rate_limiting;
 mod retry;
 mod routes;
 mod snapshot;
+mod socket;
 #[cfg(any(test, feature = "bench"))]
 pub mod test_utils;
 mod tls_verify;

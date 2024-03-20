@@ -9,8 +9,6 @@
 //! pretending it's a library with several modules inside, `cargo test` is
 //! supposed to run all tests in parallel, because they are all in the same
 //! crate.
-#[cfg(test)]
-mod fix_sns_canisters_memory_allocation;
 
 #[cfg(test)]
 mod ledger;

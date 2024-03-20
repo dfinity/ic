@@ -5,9 +5,9 @@ use crate::metadata_state::subnet_call_context_manager::{
 use assert_matches::assert_matches;
 use ic_constants::MAX_INGRESS_TTL;
 use ic_error_types::{ErrorCode, UserError};
-use ic_ic00_types::{EcdsaCurve, IC_00};
+use ic_management_canister_types::{EcdsaCurve, IC_00};
 use ic_registry_routing_table::CanisterIdRange;
-use ic_test_utilities::types::{
+use ic_test_utilities_types::{
     ids::{
         canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id, SUBNET_0,
         SUBNET_1, SUBNET_2,
@@ -15,7 +15,6 @@ use ic_test_utilities::types::{
     messages::{RequestBuilder, ResponseBuilder},
     xnet::{StreamHeaderBuilder, StreamSliceBuilder},
 };
-use ic_test_utilities_time::mock_time;
 use ic_types::{
     batch::BlockmakerMetrics,
     canister_http::{CanisterHttpMethod, CanisterHttpRequestContext},
@@ -56,13 +55,13 @@ fn can_prune_old_ingress_history_entries() {
     let message_id2 = MessageId::from([2_u8; 32]);
     let message_id3 = MessageId::from([3_u8; 32]);
 
-    let time = mock_time();
+    let time = UNIX_EPOCH;
     ingress_history.insert(
         message_id1.clone(),
         IngressStatus::Known {
             receiver: canister_test_id(1).get(),
             user_id: user_test_id(1),
-            time: mock_time(),
+            time: UNIX_EPOCH,
             state: IngressState::Completed(WasmResult::Reply(vec![])),
         },
         time,
@@ -73,7 +72,7 @@ fn can_prune_old_ingress_history_entries() {
         IngressStatus::Known {
             receiver: canister_test_id(2).get(),
             user_id: user_test_id(2),
-            time: mock_time(),
+            time: UNIX_EPOCH,
             state: IngressState::Completed(WasmResult::Reply(vec![])),
         },
         time,
@@ -84,7 +83,7 @@ fn can_prune_old_ingress_history_entries() {
         IngressStatus::Known {
             receiver: canister_test_id(1).get(),
             user_id: user_test_id(1),
-            time: mock_time(),
+            time: UNIX_EPOCH,
             state: IngressState::Completed(WasmResult::Reply(vec![])),
         },
         time + MAX_INGRESS_TTL / 2,
@@ -103,7 +102,7 @@ fn can_prune_old_ingress_history_entries() {
 #[test]
 fn entries_sorted_lexicographically() {
     let mut ingress_history = IngressHistoryState::new();
-    let time = mock_time();
+    let time = UNIX_EPOCH;
 
     for i in (0..10u64).rev() {
         ingress_history.insert(
@@ -447,10 +446,12 @@ fn roundtrip_encoding() {
     };
     system_metadata.network_topology = network_topology;
 
-    use ic_crypto_internal_basic_sig_ed25519::{public_key_to_der, types::PublicKeyBytes};
     use ic_crypto_test_utils_keys::public_keys::valid_node_signing_public_key;
     let pk_der =
-        public_key_to_der(PublicKeyBytes::try_from(&valid_node_signing_public_key()).unwrap());
+        ic_crypto_ed25519::PublicKey::deserialize_raw(&valid_node_signing_public_key().key_value)
+            .unwrap()
+            .serialize_rfc8410_der();
+
     system_metadata.node_public_keys = btreemap! {
         node_test_id(1) => pk_der,
     };
@@ -531,7 +532,7 @@ fn system_metadata_split() {
     // Ingress history with 4 Received messages, addressed to canisters 1 and 2;
     // `IC_00`; and respectively `SUBNET_A`.
     let mut ingress_history = IngressHistoryState::new();
-    let time = mock_time();
+    let time = UNIX_EPOCH;
     let receivers = [
         CANISTER_1.get(),
         CANISTER_2.get(),
@@ -701,7 +702,7 @@ fn subnet_call_contexts_deserialization() {
         body: None,
         http_method: CanisterHttpMethod::GET,
         transform: Some(transform.clone()),
-        time: mock_time(),
+        time: UNIX_EPOCH,
     };
     subnet_call_context_manager.push_context(SubnetCallContext::CanisterHttpRequest(
         canister_http_request,
@@ -715,7 +716,7 @@ fn subnet_call_contexts_deserialization() {
     let install_code_call = InstallCodeCall {
         call: CanisterCall::Request(Arc::new(request)),
         effective_canister_id: canister_test_id(3),
-        time: mock_time(),
+        time: UNIX_EPOCH,
     };
     let call_id = subnet_call_context_manager.push_install_code_call(install_code_call.clone());
 
@@ -727,7 +728,7 @@ fn subnet_call_contexts_deserialization() {
     let stop_canister_call = StopCanisterCall {
         call: CanisterCall::Request(Arc::new(request)),
         effective_canister_id: canister_test_id(3),
-        time: mock_time(),
+        time: UNIX_EPOCH,
     };
     let stop_canister_call_id =
         subnet_call_context_manager.push_stop_canister_call(stop_canister_call.clone());
@@ -740,13 +741,13 @@ fn subnet_call_contexts_deserialization() {
     subnet_call_context_manager.push_raw_rand_request(
         raw_rand_request.clone(),
         ExecutionRound::new(5),
-        mock_time(),
+        UNIX_EPOCH,
     );
 
     // Encode and decode.
     let subnet_call_context_manager_proto: ic_protobuf::state::system_metadata::v1::SubnetCallContextManager = (&subnet_call_context_manager).into();
     let mut deserialized_subnet_call_context_manager: SubnetCallContextManager =
-        SubnetCallContextManager::try_from((mock_time(), subnet_call_context_manager_proto))
+        SubnetCallContextManager::try_from((UNIX_EPOCH, subnet_call_context_manager_proto))
             .unwrap();
 
     // Check HTTP request deserialization.
@@ -794,7 +795,7 @@ fn subnet_call_contexts_deserialization() {
         vec![RawRandContext {
             request: raw_rand_request,
             execution_round_id: ExecutionRound::new(5),
-            time: mock_time(),
+            time: UNIX_EPOCH,
         }]
     )
 }
@@ -1369,15 +1370,16 @@ struct MessageConfig {
 }
 
 fn generate_stream(msg_config: MessageConfig, signal_config: SignalConfig) -> Stream {
-    let stream_header_builder = StreamHeaderBuilder::new()
+    let stream_header = StreamHeaderBuilder::new()
         .begin(StreamIndex::from(msg_config.begin))
         .end(StreamIndex::from(msg_config.begin + msg_config.count))
-        .signals_end(StreamIndex::from(signal_config.end));
+        .signals_end(StreamIndex::from(signal_config.end))
+        .build();
 
     let msg_begin = StreamIndex::from(msg_config.begin);
 
     let slice = StreamSliceBuilder::new()
-        .header(stream_header_builder.build())
+        .header(stream_header)
         .generate_messages(
             msg_begin,
             msg_config.count,
@@ -1391,7 +1393,7 @@ fn generate_stream(msg_config: MessageConfig, signal_config: SignalConfig) -> St
             .messages()
             .cloned()
             .unwrap_or_else(|| StreamIndexedQueue::with_begin(msg_begin)),
-        slice.header().signals_end,
+        slice.header().signals_end(),
     )
 }
 
@@ -1453,6 +1455,25 @@ fn stream_discard_signals_before() {
     stream.discard_signals_before(new_signals_begin);
     let expected_reject_signals: VecDeque<StreamIndex> = vec![145.into()].into();
     assert_eq!(stream.reject_signals, expected_reject_signals);
+}
+
+#[test]
+fn stream_roundtrip_encoding() {
+    let mut stream = generate_stream(
+        MessageConfig {
+            begin: 30,
+            count: 5,
+        },
+        SignalConfig { end: 153 },
+    );
+    stream.reverse_stream_flags = StreamFlags {
+        responses_only: true,
+    };
+
+    let proto_stream: pb_queues::Stream = (&stream).into();
+    let deserialized_stream: Stream = proto_stream.try_into().expect("bad conversion");
+
+    assert_eq!(stream, deserialized_stream);
 }
 
 #[test]

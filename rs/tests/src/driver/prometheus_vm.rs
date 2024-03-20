@@ -31,6 +31,8 @@ use crate::driver::{
     test_env::TestEnvAttribute,
     test_env_api::{CreateDnsRecords, HasDependencies},
 };
+use crate::k8s::config::TNET_DNS_SUFFIX;
+use crate::k8s::tnet::TNet;
 
 use super::boundary_node::BoundaryNodeVm;
 
@@ -95,7 +97,7 @@ impl PrometheusVm {
         PrometheusVm {
             universal_vm: UniversalVm::new(name)
                 .with_primary_image(DiskImage {
-                    image_type: ImageType::RawImage,
+                    image_type: ImageType::PrometheusImage,
                     url: Url::parse(&get_default_prometheus_vm_img_url())
                         .expect("should not fail!"),
                     sha256: String::from(DEFAULT_PROMETHEUS_VM_IMG_SHA256),
@@ -137,13 +139,6 @@ impl PrometheusVm {
     }
 
     pub fn start(&self, env: &TestEnv) -> Result<()> {
-        let infra_provider = InfraProvider::read_attribute(env);
-        let use_k8s = infra_provider == InfraProvider::K8s;
-        if use_k8s {
-            // TODO: k8s
-            return Ok(());
-        }
-
         // Create a config directory containing the prometheus.yml configuration file.
         let vm_name = String::from(PROMETHEUS_VM_NAME);
         let log = env.logger();
@@ -156,7 +151,19 @@ mkdir -p -m 755 {PROMETHEUS_SCRAPING_TARGETS_DIR}
 for name in replica orchestrator node_exporter; do
   echo '[]' > "{PROMETHEUS_SCRAPING_TARGETS_DIR}/$name.json"
 done
-chown -R {SSH_USERNAME}:users {PROMETHEUS_SCRAPING_TARGETS_DIR}
+
+if uname -a | grep -q Ubuntu; then
+  # k8s
+  chmod g+s /etc/prometheus
+  cp -f /config/prometheus/prometheus.yml /etc/prometheus/prometheus.yml
+  cp -R /config/grafana/dashboards/IC /var/lib/grafana/dashboards/
+  chown -R grafana:grafana /var/lib/grafana/dashboards/IC/
+  chown -R {SSH_USERNAME}:prometheus /etc/prometheus
+  systemctl reload prometheus
+else
+  # farm
+  chown -R {SSH_USERNAME}:users {PROMETHEUS_SCRAPING_TARGETS_DIR}
+fi
 "#
                 ),
             )
@@ -172,24 +179,45 @@ chown -R {SSH_USERNAME}:users {PROMETHEUS_SCRAPING_TARGETS_DIR}
             .with_config_dir(config_dir)
             .start(env)?;
 
-        // Log the Prometheus URL so users can browse to it while the test is running.
-        let deployed_prometheus_vm = env.get_deployed_universal_vm(&vm_name).unwrap();
-        let prometheus_vm = deployed_prometheus_vm.get_vm().unwrap();
-        let ipv6 = prometheus_vm.ipv6.to_string();
-        let suffix = env.create_dns_records(vec![
-            DnsRecord {
-                name: PROMETHEUS_DOMAIN_NAME.to_string(),
-                record_type: DnsRecordType::AAAA,
-                records: vec![ipv6.clone()],
-            },
-            DnsRecord {
-                name: GRAFANA_DOMAIN_NAME.to_string(),
-                record_type: DnsRecordType::AAAA,
-                records: vec![ipv6],
-            },
-        ]);
-        let prometheus_fqdn = format!("{PROMETHEUS_DOMAIN_NAME}.{suffix}");
-        let grafana_fqdn = format!("{GRAFANA_DOMAIN_NAME}.{suffix}");
+        let (prometheus_fqdn, grafana_fqdn) = match InfraProvider::read_attribute(env) {
+            InfraProvider::Farm => {
+                // Log the Prometheus URL so users can browse to it while the test is running.
+                let deployed_prometheus_vm = env.get_deployed_universal_vm(&vm_name).unwrap();
+                let prometheus_vm = deployed_prometheus_vm.get_vm().unwrap();
+                let ipv6 = prometheus_vm.ipv6.to_string();
+                let suffix = env.create_dns_records(vec![
+                    DnsRecord {
+                        name: PROMETHEUS_DOMAIN_NAME.to_string(),
+                        record_type: DnsRecordType::AAAA,
+                        records: vec![ipv6.clone()],
+                    },
+                    DnsRecord {
+                        name: GRAFANA_DOMAIN_NAME.to_string(),
+                        record_type: DnsRecordType::AAAA,
+                        records: vec![ipv6],
+                    },
+                ]);
+                (
+                    format!("{PROMETHEUS_DOMAIN_NAME}.{suffix}"),
+                    format!("{GRAFANA_DOMAIN_NAME}.{suffix}"),
+                )
+            }
+            InfraProvider::K8s => {
+                let tnet = TNet::read_attribute(env);
+                (
+                    format!(
+                        "prometheus-{}.{}",
+                        tnet.unique_name.clone().expect("no unique name"),
+                        *TNET_DNS_SUFFIX
+                    ),
+                    format!(
+                        "grafana-{}.{}",
+                        tnet.unique_name.clone().expect("no unique name"),
+                        *TNET_DNS_SUFFIX
+                    ),
+                )
+            }
+        };
         let prometheus_message = format!("Prometheus Web UI at http://{prometheus_fqdn}");
         let grafana_message = format!("Grafana at http://{grafana_fqdn}");
         let ic_progress_clock_message = format!(
@@ -236,13 +264,10 @@ impl HasPrometheus for TestEnv {
     fn sync_with_prometheus_by_name(
         &self,
         name: &str,
-        farm_url_for_ledger_canister: Option<String>,
+        mut farm_url_for_ledger_canister: Option<String>,
     ) {
-        let infra_provider = InfraProvider::read_attribute(self);
-        let use_k8s = infra_provider == InfraProvider::K8s;
-        if use_k8s {
-            // TODO: k8s
-            return;
+        if InfraProvider::read_attribute(self) == InfraProvider::K8s {
+            farm_url_for_ledger_canister = None;
         }
 
         let vm_name = PROMETHEUS_VM_NAME.to_string();

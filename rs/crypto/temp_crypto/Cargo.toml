@@ -18,7 +18,6 @@ ic-crypto-node-key-generation = { path = "../node_key_generation" }
 ic-crypto-tls-interfaces = { path = "../tls_interfaces" }
 ic-crypto-temp-crypto-vault = { path = "temp_vault" }
 ic-crypto-utils-basic-sig = { path = "../utils/basic_sig" }
-ic-crypto-utils-time = { path = "../utils/time" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-logger = { path = "../../monitoring/logger" }
@@ -30,7 +29,7 @@ ic-types = { path = "../../types/types" }
 rand = "0.8"
 tempfile = "3.1.0"
 tokio = { workspace = true }
-tokio-rustls = "0.24.0"
+tokio-rustls = { workspace = true }
 
 [dev-dependencies]
 assert_matches = "1.5.0"

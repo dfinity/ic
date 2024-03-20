@@ -10,12 +10,12 @@ documentation.workspace = true
 path = "../certificate_orchestrator_interface"
 
 [dependencies]
-anyhow = "1.0.66"
+anyhow = { workspace = true }
 async-trait = "0.1.58"
-axum = { version = "0.6.1", features = ["json"] }
+axum = { workspace = true }
 candid = { workspace = true }
 chacha20poly1305 = "0.10.0"
-clap = { version = "4.0.18", features = ["derive"] }
+clap = { workspace = true }
 cloudflare = { workspace = true }
 flate2 = "1.0.22"
 futures = { workspace = true }
@@ -37,7 +37,7 @@ serde = { workspace = true }
 serde_cbor = { workspace = true }
 serde_json = { workspace = true }
 sha2 = "0.10.6"
-thiserror = "1.0.37"
+thiserror = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }
 tracing = { workspace = true }

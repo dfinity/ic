@@ -6,16 +6,17 @@
 //!
 //! With PocketIC, testing canisters is as simple as calling rust functions. Here is a minimal example:
 //!
-//! ```rust
-//! use candid;
-//! use pocket_ic;
+//! ```rust,no_run
+//! use candid::encode_one;
+//! use pocket_ic::PocketIc;
 //!
 //!  #[test]
 //!  fn test_counter_canister() {
 //!     let pic = PocketIc::new();
-//!     // Create an empty canister as the anonymous principal.
-//!     let canister_id = pic.create_canister(None);
-//!     pic.add_cycles(canister_id, 2_000_000_000_000); // 2T cycles
+//!     // Create an empty canister as the anonymous principal and add cycles.
+//!     let canister_id = pic.create_canister();
+//!     pic.add_cycles(canister_id, 2_000_000_000_000);
+//!  
 //!     let wasm_bytes = load_counter_wasm(...);
 //!     pic.install_canister(canister_id, wasm_bytes, vec![], None);
 //!     // 'inc' is a counter canister method.
@@ -43,9 +44,10 @@ use candid::{
     utils::{ArgumentDecoder, ArgumentEncoder},
     CandidType, Nat, Principal,
 };
-use ic_cdk::api::management_canister::{
-    main::{CanisterInstallMode, InstallCodeArgument, UpdateSettingsArgument},
-    provisional::{CanisterId, CanisterIdRecord, CanisterSettings},
+pub use ic_cdk::api::management_canister::main::CanisterSettings;
+use ic_cdk::api::management_canister::main::{
+    CanisterId, CanisterIdRecord, CanisterInstallMode, CanisterStatusResponse, InstallCodeArgument,
+    UpdateSettingsArgument,
 };
 use reqwest::Url;
 use schemars::JsonSchema;
@@ -55,13 +57,16 @@ use std::{
     process::Command,
     time::{Duration, Instant, SystemTime},
 };
-use tracing::{debug, instrument};
+use tracing::{debug, instrument, warn};
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::EnvFilter;
 pub mod common;
 
-const PROCESSING_TIME_HEADER: &str = "processing-timeout-ms";
-const PROCESSING_TIME_VALUE_MS: u64 = 300_000;
+// how long a get/post request may retry or poll
+const MAX_REQUEST_TIME_MS: u64 = 300_000;
+// wait time between polling requests
+const POLLING_PERIOD_MS: u64 = 10;
+
 const LOCALHOST: &str = "127.0.0.1";
 
 const LOG_DIR_PATH_ENV_NAME: &str = "POCKET_IC_LOG_DIR";
@@ -87,7 +92,7 @@ impl PocketIcBuilder {
     pub fn with_nns_subnet(self) -> Self {
         Self {
             config: ExtendedSubnetConfigSet {
-                nns: Some(SubnetSpec::New),
+                nns: Some(SubnetSpec::default()),
                 ..self.config
             },
         }
@@ -129,10 +134,7 @@ impl PocketIcBuilder {
     pub fn with_nns_state(self, nns_subnet_id: SubnetId, path_to_state: PathBuf) -> Self {
         Self {
             config: ExtendedSubnetConfigSet {
-                nns: Some(SubnetSpec::FromPath(
-                    path_to_state,
-                    RawSubnetId::from(nns_subnet_id),
-                )),
+                nns: Some(SubnetSpec::default().with_state_dir(path_to_state, nns_subnet_id)),
                 ..self.config
             },
         }
@@ -142,7 +144,7 @@ impl PocketIcBuilder {
     pub fn with_sns_subnet(self) -> Self {
         Self {
             config: ExtendedSubnetConfigSet {
-                sns: Some(SubnetSpec::New),
+                sns: Some(SubnetSpec::default()),
                 ..self.config
             },
         }
@@ -151,7 +153,7 @@ impl PocketIcBuilder {
     pub fn with_ii_subnet(self) -> Self {
         Self {
             config: ExtendedSubnetConfigSet {
-                ii: Some(SubnetSpec::New),
+                ii: Some(SubnetSpec::default()),
                 ..self.config
             },
         }
@@ -161,7 +163,7 @@ impl PocketIcBuilder {
     pub fn with_fiduciary_subnet(self) -> Self {
         Self {
             config: ExtendedSubnetConfigSet {
-                fiduciary: Some(SubnetSpec::New),
+                fiduciary: Some(SubnetSpec::default()),
                 ..self.config
             },
         }
@@ -171,7 +173,7 @@ impl PocketIcBuilder {
     pub fn with_bitcoin_subnet(self) -> Self {
         Self {
             config: ExtendedSubnetConfigSet {
-                bitcoin: Some(SubnetSpec::New),
+                bitcoin: Some(SubnetSpec::default()),
                 ..self.config
             },
         }
@@ -179,13 +181,20 @@ impl PocketIcBuilder {
 
     /// Add an empty generic system subnet
     pub fn with_system_subnet(mut self) -> Self {
-        self.config.system.push(SubnetSpec::New);
+        self.config.system.push(SubnetSpec::default());
         self
     }
 
     /// Add an empty generic application subnet
     pub fn with_application_subnet(mut self) -> Self {
-        self.config.application.push(SubnetSpec::New);
+        self.config.application.push(SubnetSpec::default());
+        self
+    }
+
+    pub fn with_benchmarking_application_subnet(mut self) -> Self {
+        self.config
+            .application
+            .push(SubnetSpec::default().with_benchmarking_instruction_config());
         self
     }
 }
@@ -338,9 +347,28 @@ impl PocketIc {
     }
 
     /// Make the IC produce and progress by one block.
+    /// Note that multiple ticks might be necessary to observe
+    /// an expected effect, e.g., if the effect depends on
+    /// inter-canister calls or heartbeats.
     #[instrument(skip(self), fields(instance_id=self.instance_id))]
     pub fn tick(&self) {
         let endpoint = "update/tick";
+        self.post::<(), _>(endpoint, "");
+    }
+
+    /// Configures the IC to make progress automatically,
+    /// i.e., periodically update the time of the IC
+    /// to the real time and execute rounds on the subnets.
+    #[instrument(skip(self), fields(instance_id=self.instance_id))]
+    pub fn auto_progress(&self) {
+        let endpoint = "auto_progress";
+        self.post::<(), _>(endpoint, "");
+    }
+
+    /// Stops automatic progress (see `auto_progress`) on the IC.
+    #[instrument(skip(self), fields(instance_id=self.instance_id))]
+    pub fn stop_progress(&self) {
+        let endpoint = "stop_progress";
         self.post::<(), _>(endpoint, "");
     }
 
@@ -449,6 +477,24 @@ impl PocketIc {
             method,
             payload,
         )
+    }
+
+    /// Request a canister's status.
+    #[instrument(skip(self), fields(instance_id=self.instance_id, sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    pub fn canister_status(
+        &self,
+        canister_id: CanisterId,
+        sender: Option<Principal>,
+    ) -> Result<CanisterStatusResponse, CallError> {
+        call_candid_as::<(CanisterIdRecord,), (CanisterStatusResponse,)>(
+            self,
+            Principal::management_canister(),
+            RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
+            sender.unwrap_or(Principal::anonymous()),
+            "canister_status",
+            (CanisterIdRecord { canister_id },),
+        )
+        .map(|responses| responses.0)
     }
 
     /// Create a canister with default settings as the anonymous principal.
@@ -641,6 +687,7 @@ impl PocketIc {
             compute_allocation: None,
             memory_allocation: None,
             freezing_threshold: None,
+            reserved_cycles_limit: None,
         };
         call_candid_as::<(UpdateSettingsArgument,), ()>(
             self,
@@ -734,36 +781,103 @@ impl PocketIc {
     }
 
     fn get<T: DeserializeOwned>(&self, endpoint: &str) -> T {
-        let result = self
-            .reqwest_client
-            .get(self.instance_url().join(endpoint).unwrap())
-            .header(PROCESSING_TIME_HEADER, PROCESSING_TIME_VALUE_MS)
-            .send()
-            .expect("HTTP failure");
-        Self::check_response(result)
+        // we may have to try several times if the instance is busy
+        let start = std::time::SystemTime::now();
+        loop {
+            let result = self
+                .reqwest_client
+                .get(self.instance_url().join(endpoint).unwrap())
+                .send()
+                .expect("HTTP failure");
+            match result.into() {
+                ApiResponse::Success(t) => break t,
+                ApiResponse::Error { message } => panic!("{}", message),
+                ApiResponse::Busy { state_label, op_id } => {
+                    debug!(
+                        "instance_id={} Instance is busy: state_label: {}, op_id: {}",
+                        self.instance_id, state_label, op_id
+                    );
+                }
+                ApiResponse::Started { state_label, op_id } => {
+                    panic!(
+                        "Error: A 'get' should not return Started: state_label: {}, op_id: {}",
+                        state_label, op_id
+                    )
+                }
+            }
+            if start.elapsed().unwrap() > Duration::from_millis(MAX_REQUEST_TIME_MS) {
+                panic!("'get' request to PocketIC server timed out.");
+            }
+            std::thread::sleep(Duration::from_millis(POLLING_PERIOD_MS));
+        }
     }
 
     fn post<T: DeserializeOwned, B: Serialize>(&self, endpoint: &str, body: B) -> T {
-        let result = self
-            .reqwest_client
-            .post(self.instance_url().join(endpoint).unwrap())
-            .header(PROCESSING_TIME_HEADER, PROCESSING_TIME_VALUE_MS)
-            .json(&body)
-            .send()
-            .expect("HTTP failure");
-        Self::check_response(result)
-    }
-
-    fn check_response<T: DeserializeOwned>(result: reqwest::blocking::Response) -> T {
-        match result.into() {
-            ApiResponse::Success(t) => t,
-            ApiResponse::Error { message } => panic!("{}", message),
-            ApiResponse::Busy { state_label, op_id } => {
-                panic!("Busy: state_label: {}, op_id: {}", state_label, op_id)
+        // we may have to try several times if the instance is busy
+        let start = std::time::SystemTime::now();
+        loop {
+            let result = self
+                .reqwest_client
+                .post(self.instance_url().join(endpoint).unwrap())
+                .json(&body)
+                .send()
+                .expect("HTTP failure");
+            match result.into() {
+                ApiResponse::Success(t) => break t,
+                ApiResponse::Error { message } => panic!("{}", message),
+                ApiResponse::Busy { state_label, op_id } => {
+                    debug!(
+                        "instance_id={} Instance is busy (with a different computation): state_label: {}, op_id: {}",
+                        self.instance_id, state_label, op_id
+                    );
+                }
+                ApiResponse::Started { state_label, op_id } => {
+                    // once we have a Started reply, we only want to query the result to that computation
+                    debug!(
+                        "instance_id={} Instance has Started: state_label: {}, op_id: {}",
+                        self.instance_id, state_label, op_id
+                    );
+                    loop {
+                        std::thread::sleep(Duration::from_millis(POLLING_PERIOD_MS));
+                        let result = self
+                            .reqwest_client
+                            .get(
+                                self.server_url
+                                    .join(&format!("/read_graph/{}/{}", state_label, op_id))
+                                    .unwrap(),
+                            )
+                            .send()
+                            .expect("HTTP failure");
+                        match result.into() {
+                            ApiResponse::Error { message } => {
+                                debug!("Polling has not succeeded yet: {}", message)
+                            }
+                            ApiResponse::Success(t) => {
+                                return t;
+                            }
+                            ApiResponse::Started { state_label, op_id } => {
+                                warn!(
+                                    "instance_id={} unexpected Started({} {})",
+                                    self.instance_id, state_label, op_id
+                                );
+                            }
+                            ApiResponse::Busy { state_label, op_id } => {
+                                warn!(
+                                    "instance_id={} unexpected Busy({} {})",
+                                    self.instance_id, state_label, op_id
+                                );
+                            }
+                        }
+                        if start.elapsed().unwrap() > Duration::from_millis(MAX_REQUEST_TIME_MS) {
+                            panic!("'post' request to PocketIC server timed out.");
+                        }
+                    }
+                }
             }
-            ApiResponse::Started { state_label, op_id } => {
-                panic!("Started: state_label: {}, op_id: {}", state_label, op_id)
+            if start.elapsed().unwrap() > Duration::from_millis(MAX_REQUEST_TIME_MS) {
+                panic!("'post' request to PocketIC server timed out.");
             }
+            std::thread::sleep(Duration::from_millis(POLLING_PERIOD_MS));
         }
     }
 
@@ -1019,22 +1133,35 @@ pub enum TryFromError {
     PartialOrd, Ord, Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema,
 )]
 pub enum ErrorCode {
+    // 1xx -- `RejectCode::SysFatal`
     SubnetOversubscribed = 101,
     MaxNumberOfCanistersReached = 102,
+    // 2xx -- `RejectCode::SysTransient`
     CanisterQueueFull = 201,
     IngressMessageTimeout = 202,
     CanisterQueueNotEmpty = 203,
     IngressHistoryFull = 204,
     CanisterIdAlreadyExists = 205,
+    StopCanisterRequestTimeout = 206,
+    CanisterOutOfCycles = 207,
+    CertifiedStateUnavailable = 208,
+    CanisterInstallCodeRateLimited = 209,
+    // 3xx -- `RejectCode::DestinationInvalid`
     CanisterNotFound = 301,
-    CanisterMethodNotFound = 302,
-    CanisterAlreadyInstalled = 303,
-    CanisterWasmModuleNotFound = 304,
+    // 302 (previously `CanisterMethodNotFound`)
+    // 303 (previously `CanisterAlreadyInstalled`)
+    // 304 (previously `CanisterWasmModuleNotFound`)
+    // 4xx -- `RejectCode::CanisterReject`
+    // 401
     InsufficientMemoryAllocation = 402,
     InsufficientCyclesForCreateCanister = 403,
     SubnetNotFound = 404,
     CanisterNotHostedBySubnet = 405,
-    CanisterOutOfCycles = 501,
+    CanisterRejectedMessage = 406,
+    UnknownManagementMessage = 407,
+    InvalidManagementPayload = 408,
+    // 5xx -- `RejectCode::CanisterError`
+    // 501 (previously `CanisterOutOfCycles`)
     CanisterTrapped = 502,
     CanisterCalledTrap = 503,
     CanisterContractViolation = 504,
@@ -1048,15 +1175,15 @@ pub enum ErrorCode {
     CanisterInvalidController = 512,
     CanisterFunctionNotFound = 513,
     CanisterNonEmpty = 514,
-    CertifiedStateUnavailable = 515,
-    CanisterRejectedMessage = 516,
+    // 515 (previously `CertifiedStateUnavailable`)
+    // 516 (previously `CanisterRejectedMessage`)
     QueryCallGraphLoopDetected = 517,
-    UnknownManagementMessage = 518,
-    InvalidManagementPayload = 519,
+    // 518 (previously `UnknownManagementMessage`)
+    // 519 (previously `InvalidManagementPayload`)
     InsufficientCyclesInCall = 520,
     CanisterWasmEngineError = 521,
     CanisterInstructionLimitExceeded = 522,
-    CanisterInstallCodeRateLimited = 523,
+    // 523 (previously `CanisterInstallCodeRateLimited`)
     CanisterMemoryAccessLimitExceeded = 524,
     QueryCallGraphTooDeep = 525,
     QueryCallGraphTotalInstructionLimitExceeded = 526,
@@ -1069,28 +1196,44 @@ pub enum ErrorCode {
     ReservedCyclesLimitExceededInMemoryAllocation = 533,
     ReservedCyclesLimitExceededInMemoryGrow = 534,
     InsufficientCyclesInMessageMemoryGrow = 535,
+    CanisterMethodNotFound = 536,
+    CanisterWasmModuleNotFound = 537,
+    CanisterAlreadyInstalled = 538,
 }
 
 impl TryFrom<u64> for ErrorCode {
     type Error = TryFromError;
     fn try_from(err: u64) -> Result<ErrorCode, Self::Error> {
         match err {
+            // 1xx -- `RejectCode::SysFatal`
             101 => Ok(ErrorCode::SubnetOversubscribed),
             102 => Ok(ErrorCode::MaxNumberOfCanistersReached),
+            // 2xx -- `RejectCode::SysTransient`
             201 => Ok(ErrorCode::CanisterQueueFull),
             202 => Ok(ErrorCode::IngressMessageTimeout),
             203 => Ok(ErrorCode::CanisterQueueNotEmpty),
             204 => Ok(ErrorCode::IngressHistoryFull),
             205 => Ok(ErrorCode::CanisterIdAlreadyExists),
+            206 => Ok(ErrorCode::StopCanisterRequestTimeout),
+            207 => Ok(ErrorCode::CanisterOutOfCycles),
+            208 => Ok(ErrorCode::CertifiedStateUnavailable),
+            209 => Ok(ErrorCode::CanisterInstallCodeRateLimited),
+            // 3xx -- `RejectCode::DestinationInvalid`
             301 => Ok(ErrorCode::CanisterNotFound),
-            302 => Ok(ErrorCode::CanisterMethodNotFound),
-            303 => Ok(ErrorCode::CanisterAlreadyInstalled),
-            304 => Ok(ErrorCode::CanisterWasmModuleNotFound),
+            // 302 (previously `CanisterMethodNotFound`)
+            // 303 (previously `CanisterAlreadyInstalled`)
+            // 304 (previously `CanisterWasmModuleNotFound`)
+            // 4xx -- `RejectCode::CanisterReject`
+            // 401
             402 => Ok(ErrorCode::InsufficientMemoryAllocation),
             403 => Ok(ErrorCode::InsufficientCyclesForCreateCanister),
             404 => Ok(ErrorCode::SubnetNotFound),
             405 => Ok(ErrorCode::CanisterNotHostedBySubnet),
-            501 => Ok(ErrorCode::CanisterOutOfCycles),
+            406 => Ok(ErrorCode::CanisterRejectedMessage),
+            407 => Ok(ErrorCode::UnknownManagementMessage),
+            408 => Ok(ErrorCode::InvalidManagementPayload),
+            // 5xx -- `RejectCode::CanisterError`
+            // 501 (previously `CanisterOutOfCycles`)
             502 => Ok(ErrorCode::CanisterTrapped),
             503 => Ok(ErrorCode::CanisterCalledTrap),
             504 => Ok(ErrorCode::CanisterContractViolation),
@@ -1104,15 +1247,15 @@ impl TryFrom<u64> for ErrorCode {
             512 => Ok(ErrorCode::CanisterInvalidController),
             513 => Ok(ErrorCode::CanisterFunctionNotFound),
             514 => Ok(ErrorCode::CanisterNonEmpty),
-            515 => Ok(ErrorCode::CertifiedStateUnavailable),
-            516 => Ok(ErrorCode::CanisterRejectedMessage),
+            // 515 (previously `CertifiedStateUnavailable`)
+            // 516 (previously `CanisterRejectedMessage`)
             517 => Ok(ErrorCode::QueryCallGraphLoopDetected),
-            518 => Ok(ErrorCode::UnknownManagementMessage),
-            519 => Ok(ErrorCode::InvalidManagementPayload),
+            // 518 (previously `UnknownManagementMessage`)
+            // 519 (previously `InvalidManagementPayload`)
             520 => Ok(ErrorCode::InsufficientCyclesInCall),
             521 => Ok(ErrorCode::CanisterWasmEngineError),
             522 => Ok(ErrorCode::CanisterInstructionLimitExceeded),
-            523 => Ok(ErrorCode::CanisterInstallCodeRateLimited),
+            // 523 (previously `CanisterInstallCodeRateLimited`)
             524 => Ok(ErrorCode::CanisterMemoryAccessLimitExceeded),
             525 => Ok(ErrorCode::QueryCallGraphTooDeep),
             526 => Ok(ErrorCode::QueryCallGraphTotalInstructionLimitExceeded),
@@ -1125,6 +1268,9 @@ impl TryFrom<u64> for ErrorCode {
             533 => Ok(ErrorCode::ReservedCyclesLimitExceededInMemoryAllocation),
             534 => Ok(ErrorCode::ReservedCyclesLimitExceededInMemoryGrow),
             535 => Ok(ErrorCode::InsufficientCyclesInMessageMemoryGrow),
+            536 => Ok(ErrorCode::CanisterMethodNotFound),
+            537 => Ok(ErrorCode::CanisterWasmModuleNotFound),
+            538 => Ok(ErrorCode::CanisterAlreadyInstalled),
             _ => Err(TryFromError::ValueOutOfRange(err)),
         }
     }

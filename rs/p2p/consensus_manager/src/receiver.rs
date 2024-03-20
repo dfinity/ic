@@ -1,3 +1,5 @@
+#![allow(clippy::disallowed_methods)]
+
 use std::{
     collections::{hash_map::Entry, HashMap, HashSet},
     sync::{Arc, RwLock},
@@ -12,14 +14,13 @@ use crate::{
     uri_prefix, CommitId, SlotNumber, SlotUpdate, Update,
 };
 use axum::{
-    extract::State,
+    extract::{DefaultBodyLimit, State},
     http::{Request, StatusCode},
     routing::any,
     Extension, Router,
 };
 use backoff::{backoff::Backoff, ExponentialBackoffBuilder};
 use bytes::Bytes;
-use crossbeam_channel::Sender as CrossbeamSender;
 use ic_base_types::NodeId;
 use ic_interfaces::p2p::consensus::{PriorityFnAndFilterProducer, ValidatedPoolReader};
 use ic_logger::{error, warn, ReplicaLogger};
@@ -31,7 +32,7 @@ use tokio::{
     runtime::Handle,
     select,
     sync::{
-        mpsc::{Receiver, Sender},
+        mpsc::{Receiver, Sender, UnboundedSender},
         watch,
     },
     task::JoinSet,
@@ -61,7 +62,9 @@ pub fn build_axum_router<Artifact: ArtifactKind>(
             &format!("/{}/update", uri_prefix::<Artifact>()),
             any(update_handler),
         )
-        .with_state((log, update_tx));
+        .with_state((log, update_tx))
+        // Disable request size limit since consensus might push artifacts larger than limit.
+        .layer(DefaultBodyLimit::disable());
 
     (router, update_rx)
 }
@@ -166,7 +169,7 @@ pub(crate) struct ConsensusManagerReceiver<Artifact: ArtifactKind, Pool, Receive
     raw_pool: Arc<RwLock<Pool>>,
     priority_fn_producer: Arc<dyn PriorityFnAndFilterProducer<Artifact, Pool>>,
     current_priority_fn: watch::Sender<PriorityFn<Artifact::Id, Artifact::Attribute>>,
-    sender: CrossbeamSender<UnvalidatedArtifactMutation<Artifact>>,
+    sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
 
     slot_table: HashMap<NodeId, HashMap<SlotNumber, SlotEntry<Artifact::Id>>>,
     active_downloads: HashMap<Artifact::Id, watch::Sender<PeerCounter>>,
@@ -195,7 +198,7 @@ where
         adverts_received: Receiver<(SlotUpdate<Artifact>, NodeId, ConnId)>,
         raw_pool: Arc<RwLock<Pool>>,
         priority_fn_producer: Arc<dyn PriorityFnAndFilterProducer<Artifact, Pool>>,
-        sender: CrossbeamSender<UnvalidatedArtifactMutation<Artifact>>,
+        sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
         transport: Arc<dyn Transport>,
         topology_watcher: watch::Receiver<SubnetTopology>,
     ) {
@@ -596,7 +599,7 @@ where
         mut artifact: Option<(Artifact::Message, NodeId)>,
         mut peer_rx: watch::Receiver<PeerCounter>,
         mut priority_fn_watcher: watch::Receiver<PriorityFn<Artifact::Id, Artifact::Attribute>>,
-        sender: CrossbeamSender<UnvalidatedArtifactMutation<Artifact>>,
+        sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
         transport: Arc<dyn Transport>,
         metrics: ConsensusManagerMetrics,
     ) -> (
@@ -709,9 +712,9 @@ impl<T> SlotEntry<T> {
 
 #[cfg(test)]
 mod tests {
-    use std::{backtrace::Backtrace, sync::Mutex};
+    use std::{backtrace::Backtrace, convert::Infallible, sync::Mutex};
 
-    use axum::http::Response;
+    use axum::{body::Body, http::Response};
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_p2p_test_utils::{
@@ -719,57 +722,125 @@ mod tests {
         mocks::{MockPriorityFnAndFilterProducer, MockTransport, MockValidatedPoolReader},
     };
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_types::RegistryVersion;
+    use ic_types::{
+        artifact::{Advert, ArtifactTag},
+        RegistryVersion,
+    };
     use ic_types_test_utils::ids::{NODE_1, NODE_2};
     use mockall::Sequence;
-    use tokio::time::timeout;
+    use tokio::{sync::mpsc::UnboundedReceiver, time::timeout};
+    use tower::util::ServiceExt;
 
     use super::*;
 
     const PROCESS_ARTIFACT_TIMEOUT: Duration = Duration::from_millis(1000);
 
-    fn create_receive_manager(
-        log: ReplicaLogger,
-        metrics: ConsensusManagerMetrics,
-        rt_handle: Handle,
-
+    struct ReceiverManagerBuilder {
         // Adverts received from peers
         adverts_received: Receiver<(SlotUpdate<U64Artifact>, NodeId, ConnId)>,
-        raw_pool: Arc<RwLock<MockValidatedPoolReader>>,
-        priority_fn_producer: Arc<
-            dyn PriorityFnAndFilterProducer<U64Artifact, MockValidatedPoolReader>,
-        >,
-        sender: CrossbeamSender<UnvalidatedArtifactMutation<U64Artifact>>,
+        raw_pool: MockValidatedPoolReader<U64Artifact>,
+        priority_fn_producer:
+            Arc<dyn PriorityFnAndFilterProducer<U64Artifact, MockValidatedPoolReader<U64Artifact>>>,
+        sender: UnboundedSender<UnvalidatedArtifactMutation<U64Artifact>>,
         transport: Arc<dyn Transport>,
         topology_watcher: watch::Receiver<SubnetTopology>,
-    ) -> ConsensusManagerReceiver<
+
+        channels: Channels,
+    }
+
+    type ConsensusManagerReceiverForTest = ConsensusManagerReceiver<
         U64Artifact,
-        MockValidatedPoolReader,
+        MockValidatedPoolReader<U64Artifact>,
         (SlotUpdate<U64Artifact>, NodeId, ConnId),
-    > {
-        let priority_fn = priority_fn_producer.get_priority_function(&raw_pool.read().unwrap());
-        let (current_priority_fn, _) = watch::channel(priority_fn);
-        ConsensusManagerReceiver {
-            log,
-            metrics,
-            rt_handle: rt_handle.clone(),
-            adverts_received,
-            pool_reader: raw_pool.clone() as Arc<_>,
-            raw_pool,
-            priority_fn_producer,
-            current_priority_fn,
-            sender,
-            transport,
-            active_downloads: HashMap::new(),
-            slot_table: HashMap::new(),
-            artifact_processor_tasks: JoinSet::new(),
-            topology_watcher,
+    >;
+
+    struct Channels {
+        unvalidated_artifact_receiver: UnboundedReceiver<UnvalidatedArtifactMutation<U64Artifact>>,
+    }
+
+    impl ReceiverManagerBuilder {
+        fn new() -> Self {
+            let (_, adverts_received) = tokio::sync::mpsc::channel(100);
+            let (sender, unvalidated_artifact_receiver) = tokio::sync::mpsc::unbounded_channel();
+            let (_, topology_watcher) = watch::channel(SubnetTopology::default());
+
+            let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
+
+            mock_pfn
+                .expect_get_priority_function()
+                .returning(|_| Box::new(|_, _| Priority::Stash));
+
+            Self {
+                adverts_received,
+                raw_pool: MockValidatedPoolReader::new(),
+                priority_fn_producer: Arc::new(mock_pfn),
+                sender,
+                transport: Arc::new(MockTransport::new()),
+                topology_watcher,
+                channels: Channels {
+                    unvalidated_artifact_receiver,
+                },
+            }
+        }
+
+        fn with_priority_fn_producer(
+            mut self,
+            priority_fn_producer: Arc<
+                dyn PriorityFnAndFilterProducer<U64Artifact, MockValidatedPoolReader<U64Artifact>>,
+            >,
+        ) -> Self {
+            self.priority_fn_producer = priority_fn_producer;
+            self
+        }
+
+        fn with_transport(mut self, transport: Arc<dyn Transport>) -> Self {
+            self.transport = transport;
+            self
+        }
+
+        fn with_topology_watcher(
+            mut self,
+            topology_watcher: watch::Receiver<SubnetTopology>,
+        ) -> Self {
+            self.topology_watcher = topology_watcher;
+            self
+        }
+
+        fn build(self) -> (ConsensusManagerReceiverForTest, Channels) {
+            let consensus_manager_receiver = with_test_replica_logger(|log| {
+                let priority_fn = self
+                    .priority_fn_producer
+                    .get_priority_function(&self.raw_pool);
+                let (current_priority_fn, _) = watch::channel(priority_fn);
+
+                let raw_pool = Arc::new(RwLock::new(self.raw_pool));
+                ConsensusManagerReceiver {
+                    log,
+                    metrics: ConsensusManagerMetrics::new::<U64Artifact>(
+                        &MetricsRegistry::default(),
+                    ),
+                    rt_handle: Handle::current(),
+                    adverts_received: self.adverts_received,
+                    pool_reader: raw_pool.clone() as Arc<_>,
+                    raw_pool: raw_pool.clone() as Arc<_>,
+                    priority_fn_producer: self.priority_fn_producer,
+                    current_priority_fn,
+                    sender: self.sender,
+                    transport: self.transport,
+                    topology_watcher: self.topology_watcher,
+                    active_downloads: HashMap::new(),
+                    slot_table: HashMap::new(),
+                    artifact_processor_tasks: JoinSet::new(),
+                }
+            });
+
+            (consensus_manager_receiver, self.channels)
         }
     }
 
     /// Check that all variants of stale adverts to not get added to the slot table.
-    #[test]
-    fn receiving_stale_advert_updates() {
+    #[tokio::test]
+    async fn receiving_stale_advert_updates() {
         // Abort process if a thread panics. This catches detached tokio tasks that panic.
         // https://github.com/tokio-rs/tokio/issues/4516
         std::panic::set_hook(Box::new(|info| {
@@ -777,155 +848,135 @@ mod tests {
             println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
             std::process::abort();
         }));
-        with_test_replica_logger(|log| {
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            let mock_reader = MockValidatedPoolReader::new();
-            let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
-            mock_pfn
-                .expect_get_priority_function()
-                .returning(|_| Box::new(|_, _| Priority::Stash));
-            let mock_transport = MockTransport::new();
-            let (_tx, rx) = tokio::sync::mpsc::channel(100);
-            let (cb_tx, _cb_rx) = crossbeam_channel::unbounded();
-            let (_pfn_tx, pfn_rx) = watch::channel(SubnetTopology::default());
-            let mut mgr = create_receive_manager(
-                log,
-                ConsensusManagerMetrics::new::<U64Artifact>(&MetricsRegistry::default()),
-                rt.handle().clone(),
-                rx,
-                Arc::new(RwLock::new(mock_reader)),
-                Arc::new(mock_pfn),
-                cb_tx,
-                Arc::new(mock_transport),
-                pfn_rx,
-            );
-            mgr.handle_advert_receive(
-                SlotUpdate {
-                    slot_number: SlotNumber::from(1),
-                    commit_id: CommitId::from(1),
-                    update: Update::Advert((0, ())),
-                },
-                NODE_1,
-                ConnId::from(1),
-            );
-            assert_eq!(
-                mgr.slot_table
-                    .get(&NODE_1)
-                    .unwrap()
-                    .get(&SlotNumber::from(1))
-                    .unwrap(),
-                &SlotEntry {
-                    conn_id: ConnId::from(1),
-                    commit_id: CommitId::from(1),
-                    id: 0,
-                }
-            );
-            assert_eq!(mgr.slot_table.len(), 1);
-            assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 1);
-            assert_eq!(mgr.active_downloads.len(), 1);
-            assert_eq!(mgr.artifact_processor_tasks.len(), 1);
-            // Send stale advert with lower commit id.
-            mgr.handle_advert_receive(
-                SlotUpdate {
-                    slot_number: SlotNumber::from(1),
-                    commit_id: CommitId::from(0),
-                    update: Update::Advert((0, ())),
-                },
-                NODE_1,
-                ConnId::from(1),
-            );
-            // Check that slot table did not get updated.
-            assert_eq!(
-                mgr.slot_table
-                    .get(&NODE_1)
-                    .unwrap()
-                    .get(&SlotNumber::from(1))
-                    .unwrap(),
-                &SlotEntry {
-                    conn_id: ConnId::from(1),
-                    commit_id: CommitId::from(1),
-                    id: 0,
-                }
-            );
-            // Send stale advert with lower conn id
-            mgr.handle_advert_receive(
-                SlotUpdate {
-                    slot_number: SlotNumber::from(1),
-                    commit_id: CommitId::from(0),
-                    update: Update::Advert((0, ())),
-                },
-                NODE_1,
-                ConnId::from(0),
-            );
-            // Check that slot table did not get updated.
-            assert_eq!(
-                mgr.slot_table
-                    .get(&NODE_1)
-                    .unwrap()
-                    .get(&SlotNumber::from(1))
-                    .unwrap(),
-                &SlotEntry {
-                    conn_id: ConnId::from(1),
-                    commit_id: CommitId::from(1),
-                    id: 0,
-                }
-            );
-            // Send stale advert with lower conn id but higher commit id
-            mgr.handle_advert_receive(
-                SlotUpdate {
-                    slot_number: SlotNumber::from(1),
-                    commit_id: CommitId::from(10),
-                    update: Update::Advert((0, ())),
-                },
-                NODE_1,
-                ConnId::from(0),
-            );
-            // Check that slot table did not get updated.
-            assert_eq!(
-                mgr.slot_table
-                    .get(&NODE_1)
-                    .unwrap()
-                    .get(&SlotNumber::from(1))
-                    .unwrap(),
-                &SlotEntry {
-                    conn_id: ConnId::from(1),
-                    commit_id: CommitId::from(1),
-                    id: 0,
-                }
-            );
-            // Send stale advert with lower conn id and lower commit id
-            mgr.handle_advert_receive(
-                SlotUpdate {
-                    slot_number: SlotNumber::from(1),
-                    commit_id: CommitId::from(0),
-                    update: Update::Advert((0, ())),
-                },
-                NODE_1,
-                ConnId::from(0),
-            );
-            // Check that slot table did not get updated.
-            assert_eq!(
-                mgr.slot_table
-                    .get(&NODE_1)
-                    .unwrap()
-                    .get(&SlotNumber::from(1))
-                    .unwrap(),
-                &SlotEntry {
-                    conn_id: ConnId::from(1),
-                    commit_id: CommitId::from(1),
-                    id: 0,
-                }
-            );
-            assert_eq!(mgr.slot_table.len(), 1);
-            assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 1);
-            assert_eq!(mgr.active_downloads.len(), 1);
-            assert_eq!(mgr.artifact_processor_tasks.len(), 1);
-        });
+
+        let (mut mgr, _channels) = ReceiverManagerBuilder::new().build();
+
+        mgr.handle_advert_receive(
+            SlotUpdate {
+                slot_number: SlotNumber::from(1),
+                commit_id: CommitId::from(1),
+                update: Update::Advert((0, ())),
+            },
+            NODE_1,
+            ConnId::from(1),
+        );
+        assert_eq!(
+            mgr.slot_table
+                .get(&NODE_1)
+                .unwrap()
+                .get(&SlotNumber::from(1))
+                .unwrap(),
+            &SlotEntry {
+                conn_id: ConnId::from(1),
+                commit_id: CommitId::from(1),
+                id: 0,
+            }
+        );
+        assert_eq!(mgr.slot_table.len(), 1);
+        assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 1);
+        assert_eq!(mgr.active_downloads.len(), 1);
+        assert_eq!(mgr.artifact_processor_tasks.len(), 1);
+        // Send stale advert with lower commit id.
+        mgr.handle_advert_receive(
+            SlotUpdate {
+                slot_number: SlotNumber::from(1),
+                commit_id: CommitId::from(0),
+                update: Update::Advert((0, ())),
+            },
+            NODE_1,
+            ConnId::from(1),
+        );
+        // Check that slot table did not get updated.
+        assert_eq!(
+            mgr.slot_table
+                .get(&NODE_1)
+                .unwrap()
+                .get(&SlotNumber::from(1))
+                .unwrap(),
+            &SlotEntry {
+                conn_id: ConnId::from(1),
+                commit_id: CommitId::from(1),
+                id: 0,
+            }
+        );
+        // Send stale advert with lower conn id
+        mgr.handle_advert_receive(
+            SlotUpdate {
+                slot_number: SlotNumber::from(1),
+                commit_id: CommitId::from(0),
+                update: Update::Advert((0, ())),
+            },
+            NODE_1,
+            ConnId::from(0),
+        );
+        // Check that slot table did not get updated.
+        assert_eq!(
+            mgr.slot_table
+                .get(&NODE_1)
+                .unwrap()
+                .get(&SlotNumber::from(1))
+                .unwrap(),
+            &SlotEntry {
+                conn_id: ConnId::from(1),
+                commit_id: CommitId::from(1),
+                id: 0,
+            }
+        );
+        // Send stale advert with lower conn id but higher commit id
+        mgr.handle_advert_receive(
+            SlotUpdate {
+                slot_number: SlotNumber::from(1),
+                commit_id: CommitId::from(10),
+                update: Update::Advert((0, ())),
+            },
+            NODE_1,
+            ConnId::from(0),
+        );
+        // Check that slot table did not get updated.
+        assert_eq!(
+            mgr.slot_table
+                .get(&NODE_1)
+                .unwrap()
+                .get(&SlotNumber::from(1))
+                .unwrap(),
+            &SlotEntry {
+                conn_id: ConnId::from(1),
+                commit_id: CommitId::from(1),
+                id: 0,
+            }
+        );
+        // Send stale advert with lower conn id and lower commit id
+        mgr.handle_advert_receive(
+            SlotUpdate {
+                slot_number: SlotNumber::from(1),
+                commit_id: CommitId::from(0),
+                update: Update::Advert((0, ())),
+            },
+            NODE_1,
+            ConnId::from(0),
+        );
+        // Check that slot table did not get updated.
+        assert_eq!(
+            mgr.slot_table
+                .get(&NODE_1)
+                .unwrap()
+                .get(&SlotNumber::from(1))
+                .unwrap(),
+            &SlotEntry {
+                conn_id: ConnId::from(1),
+                commit_id: CommitId::from(1),
+                id: 0,
+            }
+        );
+        assert_eq!(mgr.slot_table.len(), 1);
+        assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 1);
+        assert_eq!(mgr.active_downloads.len(), 1);
+        assert_eq!(mgr.artifact_processor_tasks.len(), 1);
     }
 
     /// Check that adverts updates with higher connection ids take precedence.
-    #[test]
-    fn overwrite_slot() {
+    #[tokio::test]
+    async fn overwrite_slot() {
         // Abort process if a thread panics. This catches detached tokio tasks that panic.
         // https://github.com/tokio-rs/tokio/issues/4516
         std::panic::set_hook(Box::new(|info| {
@@ -933,95 +984,74 @@ mod tests {
             println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
             std::process::abort();
         }));
-        with_test_replica_logger(|log| {
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            let mock_reader = MockValidatedPoolReader::new();
-            let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
-            mock_pfn
-                .expect_get_priority_function()
-                .returning(|_| Box::new(|_, _| Priority::Stash));
-            let mock_transport = MockTransport::new();
-            let (_tx, rx) = tokio::sync::mpsc::channel(100);
-            let (cb_tx, _cb_rx) = crossbeam_channel::unbounded();
-            let (_pfn_tx, pfn_rx) = watch::channel(SubnetTopology::default());
-            let mut mgr = create_receive_manager(
-                log,
-                ConsensusManagerMetrics::new::<U64Artifact>(&MetricsRegistry::default()),
-                rt.handle().clone(),
-                rx,
-                Arc::new(RwLock::new(mock_reader)),
-                Arc::new(mock_pfn),
-                cb_tx,
-                Arc::new(mock_transport),
-                pfn_rx,
-            );
 
-            mgr.handle_advert_receive(
-                SlotUpdate {
-                    slot_number: SlotNumber::from(1),
-                    commit_id: CommitId::from(1),
-                    update: Update::Advert((0, ())),
-                },
-                NODE_1,
-                ConnId::from(1),
-            );
-            // Verify that advert is correctly inserted into slot table.
-            assert_eq!(
-                mgr.slot_table
-                    .get(&NODE_1)
-                    .unwrap()
-                    .get(&SlotNumber::from(1))
-                    .unwrap(),
-                &SlotEntry {
-                    conn_id: ConnId::from(1),
-                    commit_id: CommitId::from(1),
-                    id: 0,
-                }
-            );
-            assert_eq!(mgr.slot_table.len(), 1);
-            assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 1);
-            assert_eq!(mgr.active_downloads.len(), 1);
-            assert_eq!(mgr.artifact_processor_tasks.len(), 1);
-            // Send advert with higher conn id.
-            mgr.handle_advert_receive(
-                SlotUpdate {
-                    slot_number: SlotNumber::from(1),
-                    commit_id: CommitId::from(0),
-                    update: Update::Advert((1, ())),
-                },
-                NODE_1,
-                ConnId::from(2),
-            );
-            // Verify that slot table now only contains newer entry.
-            assert_eq!(
-                mgr.slot_table
-                    .get(&NODE_1)
-                    .unwrap()
-                    .get(&SlotNumber::from(1))
-                    .unwrap(),
-                &SlotEntry {
-                    conn_id: ConnId::from(2),
-                    commit_id: CommitId::from(0),
-                    id: 1,
-                }
-            );
-            assert_eq!(mgr.slot_table.len(), 1);
-            assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 1);
+        let (mut mgr, _channels) = ReceiverManagerBuilder::new().build();
 
-            let joined_artifact_processor = rt.block_on(mgr.artifact_processor_tasks.join_next());
+        mgr.handle_advert_receive(
+            SlotUpdate {
+                slot_number: SlotNumber::from(1),
+                commit_id: CommitId::from(1),
+                update: Update::Advert((0, ())),
+            },
+            NODE_1,
+            ConnId::from(1),
+        );
+        // Verify that advert is correctly inserted into slot table.
+        assert_eq!(
+            mgr.slot_table
+                .get(&NODE_1)
+                .unwrap()
+                .get(&SlotNumber::from(1))
+                .unwrap(),
+            &SlotEntry {
+                conn_id: ConnId::from(1),
+                commit_id: CommitId::from(1),
+                id: 0,
+            }
+        );
+        assert_eq!(mgr.slot_table.len(), 1);
+        assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 1);
+        assert_eq!(mgr.active_downloads.len(), 1);
+        assert_eq!(mgr.artifact_processor_tasks.len(), 1);
+        // Send advert with higher conn id.
+        mgr.handle_advert_receive(
+            SlotUpdate {
+                slot_number: SlotNumber::from(1),
+                commit_id: CommitId::from(0),
+                update: Update::Advert((1, ())),
+            },
+            NODE_1,
+            ConnId::from(2),
+        );
+        // Verify that slot table now only contains newer entry.
+        assert_eq!(
+            mgr.slot_table
+                .get(&NODE_1)
+                .unwrap()
+                .get(&SlotNumber::from(1))
+                .unwrap(),
+            &SlotEntry {
+                conn_id: ConnId::from(2),
+                commit_id: CommitId::from(0),
+                id: 1,
+            }
+        );
+        assert_eq!(mgr.slot_table.len(), 1);
+        assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 1);
 
-            let result = joined_artifact_processor
-                .expect("Joining artifact processor task failed")
-                .expect("Artifact processor task panicked");
+        let joined_artifact_processor = mgr.artifact_processor_tasks.join_next().await;
 
-            // Check that download task for first advert closes.
-            assert_eq!(result.1, 0);
-        });
+        let result = joined_artifact_processor
+            .expect("Joining artifact processor task failed")
+            .expect("Artifact processor task panicked");
+
+        // Check that download task for first advert closes.
+        assert_eq!(result.1, 0);
     }
 
     /// Verify that if two peers advertise the same advert it will get added to the same download task.
-    #[test]
-    fn two_peers_advertise_same_advert() {
+    #[tokio::test]
+    async fn two_peers_advertise_same_advert() {
         // Abort process if a thread panics. This catches detached tokio tasks that panic.
         // https://github.com/tokio-rs/tokio/issues/4516
         std::panic::set_hook(Box::new(|info| {
@@ -1029,59 +1059,38 @@ mod tests {
             println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
             std::process::abort();
         }));
-        with_test_replica_logger(|log| {
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            let mock_reader = MockValidatedPoolReader::new();
-            let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
-            mock_pfn
-                .expect_get_priority_function()
-                .returning(|_| Box::new(|_, _| Priority::Stash));
-            let mock_transport = MockTransport::new();
-            let (_tx, rx) = tokio::sync::mpsc::channel(100);
-            let (cb_tx, _cb_rx) = crossbeam_channel::unbounded();
-            let (_pfn_tx, pfn_rx) = watch::channel(SubnetTopology::default());
-            let mut mgr = create_receive_manager(
-                log,
-                ConsensusManagerMetrics::new::<U64Artifact>(&MetricsRegistry::default()),
-                rt.handle().clone(),
-                rx,
-                Arc::new(RwLock::new(mock_reader)),
-                Arc::new(mock_pfn),
-                cb_tx,
-                Arc::new(mock_transport),
-                pfn_rx,
-            );
 
-            mgr.handle_advert_receive(
-                SlotUpdate {
-                    slot_number: SlotNumber::from(1),
-                    commit_id: CommitId::from(1),
-                    update: Update::Advert((0, ())),
-                },
-                NODE_1,
-                ConnId::from(1),
-            );
-            // Second advert for advert 0.
-            mgr.handle_advert_receive(
-                SlotUpdate {
-                    slot_number: SlotNumber::from(1),
-                    commit_id: CommitId::from(1),
-                    update: Update::Advert((0, ())),
-                },
-                NODE_2,
-                ConnId::from(1),
-            );
-            // Verify that we only have one download task.
-            assert_eq!(mgr.slot_table.len(), 2);
-            assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 1);
-            assert_eq!(mgr.slot_table.get(&NODE_2).unwrap().len(), 1);
-            assert_eq!(mgr.active_downloads.len(), 1);
-        });
+        let (mut mgr, _channels) = ReceiverManagerBuilder::new().build();
+
+        mgr.handle_advert_receive(
+            SlotUpdate {
+                slot_number: SlotNumber::from(1),
+                commit_id: CommitId::from(1),
+                update: Update::Advert((0, ())),
+            },
+            NODE_1,
+            ConnId::from(1),
+        );
+        // Second advert for advert 0.
+        mgr.handle_advert_receive(
+            SlotUpdate {
+                slot_number: SlotNumber::from(1),
+                commit_id: CommitId::from(1),
+                update: Update::Advert((0, ())),
+            },
+            NODE_2,
+            ConnId::from(1),
+        );
+        // Verify that we only have one download task.
+        assert_eq!(mgr.slot_table.len(), 2);
+        assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 1);
+        assert_eq!(mgr.slot_table.get(&NODE_2).unwrap().len(), 1);
+        assert_eq!(mgr.active_downloads.len(), 1);
     }
 
     /// Verify that a new download task is started if we receive a new update for an already finished download.
-    #[test]
-    fn new_advert_while_download_finished() {
+    #[tokio::test]
+    async fn new_advert_while_download_finished() {
         // Abort process if a thread panics. This catches detached tokio tasks that panic.
         // https://github.com/tokio-rs/tokio/issues/4516
         std::panic::set_hook(Box::new(|info| {
@@ -1089,73 +1098,54 @@ mod tests {
             println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
             std::process::abort();
         }));
-        with_test_replica_logger(|log| {
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            let mock_reader = MockValidatedPoolReader::new();
-            let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
-            mock_pfn
-                .expect_get_priority_function()
-                .returning(|_| Box::new(|_, _| Priority::Stash));
-            let mock_transport = MockTransport::new();
-            let (_tx, rx) = tokio::sync::mpsc::channel(100);
-            let (cb_tx, _cb_rx) = crossbeam_channel::unbounded();
-            let (_pfn_tx, pfn_rx) = watch::channel(SubnetTopology::default());
-            let mut mgr = create_receive_manager(
-                log,
-                ConsensusManagerMetrics::new::<U64Artifact>(&MetricsRegistry::default()),
-                rt.handle().clone(),
-                rx,
-                Arc::new(RwLock::new(mock_reader)),
-                Arc::new(mock_pfn),
-                cb_tx,
-                Arc::new(mock_transport),
-                pfn_rx,
-            );
 
-            mgr.handle_advert_receive(
-                SlotUpdate {
-                    slot_number: SlotNumber::from(1),
-                    commit_id: CommitId::from(1),
-                    update: Update::Advert((0, ())),
-                },
-                NODE_1,
-                ConnId::from(1),
-            );
-            // Overwrite advert to close the download task.
-            mgr.handle_advert_receive(
-                SlotUpdate {
-                    slot_number: SlotNumber::from(1),
-                    commit_id: CommitId::from(2),
-                    update: Update::Advert((1, ())),
-                },
-                NODE_1,
-                ConnId::from(1),
-            );
-            // Check that the download task is closed.
-            let (peer_rx, id, attr) = rt
-                .block_on(mgr.artifact_processor_tasks.join_next())
-                .unwrap()
-                .unwrap();
-            // Simulate that a new peer was added for this advert while closing.
-            mgr.handle_advert_receive(
-                SlotUpdate {
-                    slot_number: SlotNumber::from(1),
-                    commit_id: CommitId::from(3),
-                    update: Update::Advert((0, ())),
-                },
-                NODE_2,
-                ConnId::from(1),
-            );
-            assert_eq!(mgr.active_downloads.len(), 2);
-            // Verify that we reopened the download task for advert 0.
-            mgr.handle_artifact_processor_joined(peer_rx, id, attr);
-            assert_eq!(mgr.active_downloads.len(), 2);
-        });
+        let (mut mgr, _channels) = ReceiverManagerBuilder::new().build();
+
+        mgr.handle_advert_receive(
+            SlotUpdate {
+                slot_number: SlotNumber::from(1),
+                commit_id: CommitId::from(1),
+                update: Update::Advert((0, ())),
+            },
+            NODE_1,
+            ConnId::from(1),
+        );
+        // Overwrite advert to close the download task.
+        mgr.handle_advert_receive(
+            SlotUpdate {
+                slot_number: SlotNumber::from(1),
+                commit_id: CommitId::from(2),
+                update: Update::Advert((1, ())),
+            },
+            NODE_1,
+            ConnId::from(1),
+        );
+        // Check that the download task is closed.
+        let (peer_rx, id, attr) = mgr
+            .artifact_processor_tasks
+            .join_next()
+            .await
+            .unwrap()
+            .unwrap();
+        // Simulate that a new peer was added for this advert while closing.
+        mgr.handle_advert_receive(
+            SlotUpdate {
+                slot_number: SlotNumber::from(1),
+                commit_id: CommitId::from(3),
+                update: Update::Advert((0, ())),
+            },
+            NODE_2,
+            ConnId::from(1),
+        );
+        assert_eq!(mgr.active_downloads.len(), 2);
+        // Verify that we reopened the download task for advert 0.
+        mgr.handle_artifact_processor_joined(peer_rx, id, attr);
+        assert_eq!(mgr.active_downloads.len(), 2);
     }
 
     /// Verify that advert that transitions from stash to drop is not downloaded.
-    #[test]
-    fn priority_from_stash_to_drop() {
+    #[tokio::test]
+    async fn priority_from_stash_to_drop() {
         // Abort process if a thread panics. This catches detached tokio tasks that panic.
         // https://github.com/tokio-rs/tokio/issues/4516
         std::panic::set_hook(Box::new(|info| {
@@ -1163,74 +1153,63 @@ mod tests {
             println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
             std::process::abort();
         }));
-        with_test_replica_logger(|log| {
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            let mock_reader = MockValidatedPoolReader::new();
-            let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
-            let mut seq = Sequence::new();
-            mock_pfn
-                .expect_get_priority_function()
-                .times(1)
-                .returning(|_| Box::new(|_, _| Priority::Stash))
-                .in_sequence(&mut seq);
-            mock_pfn
-                .expect_get_priority_function()
-                .times(1)
-                .returning(|_| Box::new(|_, _| Priority::Drop))
-                .in_sequence(&mut seq);
-            let mock_transport = MockTransport::new();
-            let (_tx, rx) = tokio::sync::mpsc::channel(100);
-            let (cb_tx, _cb_rx) = crossbeam_channel::unbounded();
-            let (_pfn_tx, pfn_rx) = watch::channel(SubnetTopology::default());
-            let mut mgr = create_receive_manager(
-                log,
-                ConsensusManagerMetrics::new::<U64Artifact>(&MetricsRegistry::default()),
-                rt.handle().clone(),
-                rx,
-                Arc::new(RwLock::new(mock_reader)),
-                Arc::new(mock_pfn),
-                cb_tx,
-                Arc::new(mock_transport),
-                pfn_rx,
-            );
-            mgr.handle_advert_receive(
-                SlotUpdate {
-                    slot_number: SlotNumber::from(1),
-                    commit_id: CommitId::from(1),
-                    update: Update::Advert((0, ())),
-                },
-                NODE_1,
-                ConnId::from(1),
-            );
-            assert_eq!(mgr.slot_table.len(), 1);
-            assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 1);
-            assert_eq!(mgr.active_downloads.len(), 1);
-            assert_eq!(mgr.artifact_processor_tasks.len(), 1);
-            // Update priority fn to drop.
-            mgr.handle_pfn_timer_tick();
-            // Overwrite existing advert to finish download task.
-            mgr.handle_advert_receive(
-                SlotUpdate {
-                    slot_number: SlotNumber::from(1),
-                    commit_id: CommitId::from(2),
-                    update: Update::Advert((1, ())),
-                },
-                NODE_1,
-                ConnId::from(1),
-            );
-            assert_eq!(
-                rt.block_on(mgr.artifact_processor_tasks.join_next())
-                    .unwrap()
-                    .unwrap()
-                    .1,
-                0
-            );
-        });
+
+        let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
+        let mut seq = Sequence::new();
+        mock_pfn
+            .expect_get_priority_function()
+            .times(1)
+            .returning(|_| Box::new(|_, _| Priority::Stash))
+            .in_sequence(&mut seq);
+        mock_pfn
+            .expect_get_priority_function()
+            .times(1)
+            .returning(|_| Box::new(|_, _| Priority::Drop))
+            .in_sequence(&mut seq);
+
+        let (mut mgr, _channels) = ReceiverManagerBuilder::new()
+            .with_priority_fn_producer(Arc::new(mock_pfn))
+            .build();
+
+        mgr.handle_advert_receive(
+            SlotUpdate {
+                slot_number: SlotNumber::from(1),
+                commit_id: CommitId::from(1),
+                update: Update::Advert((0, ())),
+            },
+            NODE_1,
+            ConnId::from(1),
+        );
+        assert_eq!(mgr.slot_table.len(), 1);
+        assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 1);
+        assert_eq!(mgr.active_downloads.len(), 1);
+        assert_eq!(mgr.artifact_processor_tasks.len(), 1);
+        // Update priority fn to drop.
+        mgr.handle_pfn_timer_tick();
+        // Overwrite existing advert to finish download task.
+        mgr.handle_advert_receive(
+            SlotUpdate {
+                slot_number: SlotNumber::from(1),
+                commit_id: CommitId::from(2),
+                update: Update::Advert((1, ())),
+            },
+            NODE_1,
+            ConnId::from(1),
+        );
+        assert_eq!(
+            mgr.artifact_processor_tasks
+                .join_next()
+                .await
+                .unwrap()
+                .unwrap()
+                .1,
+            0
+        );
     }
 
     /// Check that an advert for which the priority changes from stash to fetch is downloaded.
-    #[test]
-    fn priority_from_stash_to_fetch() {
+    #[tokio::test]
+    async fn priority_from_stash_to_fetch() {
         // Abort process if a thread panics. This catches detached tokio tasks that panic.
         // https://github.com/tokio-rs/tokio/issues/4516
         std::panic::set_hook(Box::new(|info| {
@@ -1238,70 +1217,59 @@ mod tests {
             println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
             std::process::abort();
         }));
-        with_test_replica_logger(|log| {
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            let mock_reader = MockValidatedPoolReader::new();
-            let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
-            let mut seq = Sequence::new();
-            mock_pfn
-                .expect_get_priority_function()
-                .times(1)
-                .returning(|_| Box::new(|_, _| Priority::Stash))
-                .in_sequence(&mut seq);
-            mock_pfn
-                .expect_get_priority_function()
-                .times(1)
-                .returning(|_| Box::new(|_, _| Priority::Fetch))
-                .in_sequence(&mut seq);
-            let mut mock_transport = MockTransport::new();
-            mock_transport.expect_rpc().returning(|_, _| {
-                Ok(Response::builder()
-                    .body(Bytes::from(
-                        <<U64Artifact as ArtifactKind>::PbMessage>::proxy_encode(0_u64),
-                    ))
-                    .unwrap())
-            });
-            let (_tx, rx) = tokio::sync::mpsc::channel(100);
-            let (cb_tx, cb_rx) = crossbeam_channel::unbounded();
-            let (_pfn_tx, pfn_rx) = watch::channel(SubnetTopology::default());
-            let mut mgr = create_receive_manager(
-                log,
-                ConsensusManagerMetrics::new::<U64Artifact>(&MetricsRegistry::default()),
-                rt.handle().clone(),
-                rx,
-                Arc::new(RwLock::new(mock_reader)),
-                Arc::new(mock_pfn),
-                cb_tx,
-                Arc::new(mock_transport),
-                pfn_rx,
-            );
 
-            mgr.handle_advert_receive(
-                SlotUpdate {
-                    slot_number: SlotNumber::from(1),
-                    commit_id: CommitId::from(1),
-                    update: Update::Advert((0, ())),
-                },
-                NODE_1,
-                ConnId::from(1),
-            );
-            assert_eq!(mgr.slot_table.len(), 1);
-            assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 1);
-            assert_eq!(mgr.active_downloads.len(), 1);
-            assert_eq!(mgr.artifact_processor_tasks.len(), 1);
-            // Update priority fn to fetch.
-            mgr.handle_pfn_timer_tick();
-            // Check that we received downloaded artifact.
-            assert_eq!(
-                cb_rx.recv().unwrap(),
-                UnvalidatedArtifactMutation::Insert((0, NODE_1))
-            );
+        let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
+        let mut seq = Sequence::new();
+        mock_pfn
+            .expect_get_priority_function()
+            .times(1)
+            .returning(|_| Box::new(|_, _| Priority::Stash))
+            .in_sequence(&mut seq);
+        mock_pfn
+            .expect_get_priority_function()
+            .times(1)
+            .returning(|_| Box::new(|_, _| Priority::Fetch))
+            .in_sequence(&mut seq);
+
+        let mut mock_transport = MockTransport::new();
+        mock_transport.expect_rpc().returning(|_, _| {
+            Ok(Response::builder()
+                .body(Bytes::from(
+                    <<U64Artifact as ArtifactKind>::PbMessage>::proxy_encode(0_u64),
+                ))
+                .unwrap())
         });
+
+        let (mut mgr, mut channels) = ReceiverManagerBuilder::new()
+            .with_priority_fn_producer(Arc::new(mock_pfn))
+            .with_transport(Arc::new(mock_transport))
+            .build();
+
+        mgr.handle_advert_receive(
+            SlotUpdate {
+                slot_number: SlotNumber::from(1),
+                commit_id: CommitId::from(1),
+                update: Update::Advert((0, ())),
+            },
+            NODE_1,
+            ConnId::from(1),
+        );
+        assert_eq!(mgr.slot_table.len(), 1);
+        assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 1);
+        assert_eq!(mgr.active_downloads.len(), 1);
+        assert_eq!(mgr.artifact_processor_tasks.len(), 1);
+        // Update priority fn to fetch.
+        mgr.handle_pfn_timer_tick();
+        // Check that we received downloaded artifact.
+        assert_eq!(
+            channels.unvalidated_artifact_receiver.recv().await.unwrap(),
+            UnvalidatedArtifactMutation::Insert((0, NODE_1))
+        );
     }
 
     /// Verify that slot table is pruned if node leaves subnet.
-    #[test]
-    fn topology_update() {
+    #[tokio::test]
+    async fn topology_update() {
         // Abort process if a thread panics. This catches detached tokio tasks that panic.
         // https://github.com/tokio-rs/tokio/issues/4516
         std::panic::set_hook(Box::new(|info| {
@@ -1309,89 +1277,77 @@ mod tests {
             println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
             std::process::abort();
         }));
-        with_test_replica_logger(|log| {
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            let mock_reader = MockValidatedPoolReader::new();
-            let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
-            mock_pfn
-                .expect_get_priority_function()
-                .returning(|_| Box::new(|_, _| Priority::Stash));
-            let mock_transport = MockTransport::new();
-            let (_tx, rx) = tokio::sync::mpsc::channel(100);
-            let (cb_tx, _cb_rx) = crossbeam_channel::unbounded();
-            let (pfn_tx, pfn_rx) = watch::channel(SubnetTopology::default());
-            let mut mgr = create_receive_manager(
-                log,
-                ConsensusManagerMetrics::new::<U64Artifact>(&MetricsRegistry::default()),
-                rt.handle().clone(),
-                rx,
-                Arc::new(RwLock::new(mock_reader)),
-                Arc::new(mock_pfn),
-                cb_tx,
-                Arc::new(mock_transport),
-                pfn_rx,
-            );
-            mgr.handle_advert_receive(
-                SlotUpdate {
-                    slot_number: SlotNumber::from(1),
-                    commit_id: CommitId::from(1),
-                    update: Update::Advert((0, ())),
-                },
-                NODE_1,
-                ConnId::from(1),
-            );
-            mgr.handle_advert_receive(
-                SlotUpdate {
-                    slot_number: SlotNumber::from(1),
-                    commit_id: CommitId::from(1),
-                    update: Update::Advert((0, ())),
-                },
-                NODE_2,
-                ConnId::from(1),
-            );
-            let addr = "127.0.0.1:8080".parse().unwrap();
-            // Send current topology of two nodes.
-            pfn_tx
-                .send(SubnetTopology::new(
-                    vec![(NODE_1, addr), (NODE_2, addr)],
-                    RegistryVersion::from(1),
-                    RegistryVersion::from(1),
-                ))
-                .unwrap();
-            mgr.handle_topology_update();
-            assert_eq!(mgr.slot_table.len(), 2);
-            assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 1);
-            assert_eq!(mgr.slot_table.get(&NODE_2).unwrap().len(), 1);
-            // Remove one node from topology.
-            pfn_tx
-                .send(SubnetTopology::new(
-                    vec![(NODE_1, addr)],
-                    RegistryVersion::from(1),
-                    RegistryVersion::from(1),
-                ))
-                .unwrap();
-            mgr.handle_topology_update();
-            assert_eq!(mgr.slot_table.len(), 1);
-            assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 1);
-            assert!(mgr.slot_table.get(&NODE_2).is_none());
-            // Remove all nodes.
-            pfn_tx
-                .send(SubnetTopology::new(
-                    vec![],
-                    RegistryVersion::from(1),
-                    RegistryVersion::from(1),
-                ))
-                .unwrap();
-            mgr.handle_topology_update();
-            assert_eq!(mgr.slot_table.len(), 0);
-            assert!(mgr.slot_table.get(&NODE_1).is_none());
-            assert!(mgr.slot_table.get(&NODE_2).is_none());
-        });
+
+        let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
+        mock_pfn
+            .expect_get_priority_function()
+            .returning(|_| Box::new(|_, _| Priority::Stash));
+        let (pfn_tx, pfn_rx) = watch::channel(SubnetTopology::default());
+        let (mut mgr, _channels) = ReceiverManagerBuilder::new()
+            .with_priority_fn_producer(Arc::new(mock_pfn))
+            .with_topology_watcher(pfn_rx)
+            .build();
+
+        mgr.handle_advert_receive(
+            SlotUpdate {
+                slot_number: SlotNumber::from(1),
+                commit_id: CommitId::from(1),
+                update: Update::Advert((0, ())),
+            },
+            NODE_1,
+            ConnId::from(1),
+        );
+        mgr.handle_advert_receive(
+            SlotUpdate {
+                slot_number: SlotNumber::from(1),
+                commit_id: CommitId::from(1),
+                update: Update::Advert((0, ())),
+            },
+            NODE_2,
+            ConnId::from(1),
+        );
+        let addr = "127.0.0.1:8080".parse().unwrap();
+        // Send current topology of two nodes.
+        pfn_tx
+            .send(SubnetTopology::new(
+                vec![(NODE_1, addr), (NODE_2, addr)],
+                RegistryVersion::from(1),
+                RegistryVersion::from(1),
+            ))
+            .unwrap();
+        mgr.handle_topology_update();
+        assert_eq!(mgr.slot_table.len(), 2);
+        assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 1);
+        assert_eq!(mgr.slot_table.get(&NODE_2).unwrap().len(), 1);
+        // Remove one node from topology.
+        pfn_tx
+            .send(SubnetTopology::new(
+                vec![(NODE_1, addr)],
+                RegistryVersion::from(1),
+                RegistryVersion::from(1),
+            ))
+            .unwrap();
+        mgr.handle_topology_update();
+        assert_eq!(mgr.slot_table.len(), 1);
+        assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 1);
+        assert!(mgr.slot_table.get(&NODE_2).is_none());
+        // Remove all nodes.
+        pfn_tx
+            .send(SubnetTopology::new(
+                vec![],
+                RegistryVersion::from(1),
+                RegistryVersion::from(1),
+            ))
+            .unwrap();
+        mgr.handle_topology_update();
+        assert_eq!(mgr.slot_table.len(), 0);
+        assert!(mgr.slot_table.get(&NODE_1).is_none());
+        assert!(mgr.slot_table.get(&NODE_2).is_none());
     }
 
     /// Verify that if node leaves subnet all download tasks are informed.
-    #[test]
-    fn topology_update_finish_download() {
+    #[tokio::test]
+    async fn topology_update_finish_download() {
         // Abort process if a thread panics. This catches detached tokio tasks that panic.
         // https://github.com/tokio-rs/tokio/issues/4516
         std::panic::set_hook(Box::new(|info| {
@@ -1399,61 +1355,53 @@ mod tests {
             println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
             std::process::abort();
         }));
-        with_test_replica_logger(|log| {
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            let mock_reader = MockValidatedPoolReader::new();
-            let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
-            mock_pfn
-                .expect_get_priority_function()
-                .returning(|_| Box::new(|_, _| Priority::Stash));
-            let mock_transport = MockTransport::new();
-            let (_tx, rx) = tokio::sync::mpsc::channel(100);
-            let (cb_tx, _cb_rx) = crossbeam_channel::unbounded();
-            let (pfn_tx, pfn_rx) = watch::channel(SubnetTopology::default());
-            let mut mgr = create_receive_manager(
-                log,
-                ConsensusManagerMetrics::new::<U64Artifact>(&MetricsRegistry::default()),
-                rt.handle().clone(),
-                rx,
-                Arc::new(RwLock::new(mock_reader)),
-                Arc::new(mock_pfn),
-                cb_tx,
-                Arc::new(mock_transport),
-                pfn_rx,
-            );
-            mgr.handle_advert_receive(
-                SlotUpdate {
-                    slot_number: SlotNumber::from(1),
-                    commit_id: CommitId::from(1),
-                    update: Update::Advert((0, ())),
-                },
-                NODE_1,
-                ConnId::from(1),
-            );
-            assert_eq!(mgr.active_downloads.len(), 1);
-            assert_eq!(mgr.artifact_processor_tasks.len(), 1);
-            // Remove node with active download from topology.
-            pfn_tx
-                .send(SubnetTopology::new(
-                    vec![],
-                    RegistryVersion::from(1),
-                    RegistryVersion::from(1),
-                ))
-                .unwrap();
-            mgr.handle_topology_update();
-            assert_eq!(
-                rt.block_on(mgr.artifact_processor_tasks.join_next())
-                    .unwrap()
-                    .unwrap()
-                    .1,
-                0
-            );
-        });
+
+        let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
+        mock_pfn
+            .expect_get_priority_function()
+            .returning(|_| Box::new(|_, _| Priority::Stash));
+
+        let (pfn_tx, pfn_rx) = watch::channel(SubnetTopology::default());
+
+        let (mut mgr, _channels) = ReceiverManagerBuilder::new()
+            .with_priority_fn_producer(Arc::new(mock_pfn))
+            .with_topology_watcher(pfn_rx)
+            .build();
+
+        mgr.handle_advert_receive(
+            SlotUpdate {
+                slot_number: SlotNumber::from(1),
+                commit_id: CommitId::from(1),
+                update: Update::Advert((0, ())),
+            },
+            NODE_1,
+            ConnId::from(1),
+        );
+        assert_eq!(mgr.active_downloads.len(), 1);
+        assert_eq!(mgr.artifact_processor_tasks.len(), 1);
+        // Remove node with active download from topology.
+        pfn_tx
+            .send(SubnetTopology::new(
+                vec![],
+                RegistryVersion::from(1),
+                RegistryVersion::from(1),
+            ))
+            .unwrap();
+        mgr.handle_topology_update();
+        assert_eq!(
+            mgr.artifact_processor_tasks
+                .join_next()
+                .await
+                .unwrap()
+                .unwrap()
+                .1,
+            0
+        );
     }
 
-    #[test]
+    #[tokio::test]
     /// Advertise same id on different slots and overwrite both slots with new ids.
-    fn duplicate_advert_on_different_slots() {
+    async fn duplicate_advert_on_different_slots() {
         // Abort process if a thread panics. This catches detached tokio tasks that panic.
         // https://github.com/tokio-rs/tokio/issues/4516
         std::panic::set_hook(Box::new(|info| {
@@ -1461,98 +1409,77 @@ mod tests {
             println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
             std::process::abort();
         }));
-        with_test_replica_logger(|log| {
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            let mock_reader = MockValidatedPoolReader::new();
-            let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
-            mock_pfn
-                .expect_get_priority_function()
-                .returning(|_| Box::new(|_, _| Priority::Stash));
-            let mock_transport = MockTransport::new();
-            let (_tx, rx) = tokio::sync::mpsc::channel(100);
-            let (cb_tx, _cb_rx) = crossbeam_channel::unbounded();
-            let (_pfn_tx, pfn_rx) = watch::channel(SubnetTopology::default());
-            let mut mgr = create_receive_manager(
-                log,
-                ConsensusManagerMetrics::new::<U64Artifact>(&MetricsRegistry::default()),
-                rt.handle().clone(),
-                rx,
-                Arc::new(RwLock::new(mock_reader)),
-                Arc::new(mock_pfn),
-                cb_tx,
-                Arc::new(mock_transport),
-                pfn_rx,
-            );
-            // Add id 0 on slot 1.
-            mgr.handle_advert_receive(
-                SlotUpdate {
-                    slot_number: SlotNumber::from(1),
-                    commit_id: CommitId::from(1),
-                    update: Update::Advert((0, ())),
-                },
-                NODE_1,
-                ConnId::from(1),
-            );
-            // Add id 0 on slot 2.
-            mgr.handle_advert_receive(
-                SlotUpdate {
-                    slot_number: SlotNumber::from(2),
-                    commit_id: CommitId::from(2),
-                    update: Update::Advert((0, ())),
-                },
-                NODE_1,
-                ConnId::from(1),
-            );
-            // Overwrite id 0 on slot 1.
-            mgr.handle_advert_receive(
-                SlotUpdate {
-                    slot_number: SlotNumber::from(1),
-                    commit_id: CommitId::from(3),
-                    update: Update::Advert((1, ())),
-                },
-                NODE_1,
-                ConnId::from(1),
-            );
-            // Make sure no download task closes since we still have slot entries for 0 and 1.
-            rt.block_on(async {
-                tokio::time::timeout(
-                    PROCESS_ARTIFACT_TIMEOUT,
-                    mgr.artifact_processor_tasks.join_next(),
-                )
-                .await
-                .unwrap_err()
-            });
 
-            assert_eq!(mgr.artifact_processor_tasks.len(), 2);
-            // Overwrite remaining id 0 at slot 2.
-            mgr.handle_advert_receive(
-                SlotUpdate {
-                    slot_number: SlotNumber::from(2),
-                    commit_id: CommitId::from(4),
-                    update: Update::Advert((1, ())),
-                },
-                NODE_1,
-                ConnId::from(1),
-            );
+        let (mut mgr, _channels) = ReceiverManagerBuilder::new().build();
 
-            // Make sure the download task for 0 closes since both entries got overwritten.
-            let joined_artifact_processor = rt.block_on(mgr.artifact_processor_tasks.join_next());
+        // Add id 0 on slot 1.
+        mgr.handle_advert_receive(
+            SlotUpdate {
+                slot_number: SlotNumber::from(1),
+                commit_id: CommitId::from(1),
+                update: Update::Advert((0, ())),
+            },
+            NODE_1,
+            ConnId::from(1),
+        );
+        // Add id 0 on slot 2.
+        mgr.handle_advert_receive(
+            SlotUpdate {
+                slot_number: SlotNumber::from(2),
+                commit_id: CommitId::from(2),
+                update: Update::Advert((0, ())),
+            },
+            NODE_1,
+            ConnId::from(1),
+        );
+        // Overwrite id 0 on slot 1.
+        mgr.handle_advert_receive(
+            SlotUpdate {
+                slot_number: SlotNumber::from(1),
+                commit_id: CommitId::from(3),
+                update: Update::Advert((1, ())),
+            },
+            NODE_1,
+            ConnId::from(1),
+        );
 
-            let result = joined_artifact_processor
-                .expect("Joining artifact processor task failed")
-                .expect("Artifact processor task panicked");
+        // Make sure no download task closes since we still have slot entries for 0 and 1.
+        tokio::time::timeout(
+            PROCESS_ARTIFACT_TIMEOUT,
+            mgr.artifact_processor_tasks.join_next(),
+        )
+        .await
+        .unwrap_err();
 
-            assert_eq!(
-                result.1, 0,
-                "Expected artifact processor task for id 0 to closed"
-            );
-            assert_eq!(mgr.artifact_processor_tasks.len(), 1);
-        });
+        assert_eq!(mgr.artifact_processor_tasks.len(), 2);
+        // Overwrite remaining id 0 at slot 2.
+        mgr.handle_advert_receive(
+            SlotUpdate {
+                slot_number: SlotNumber::from(2),
+                commit_id: CommitId::from(4),
+                update: Update::Advert((1, ())),
+            },
+            NODE_1,
+            ConnId::from(1),
+        );
+
+        // Make sure the download task for 0 closes since both entries got overwritten.
+        let joined_artifact_processor = mgr.artifact_processor_tasks.join_next().await;
+
+        let result = joined_artifact_processor
+            .expect("Joining artifact processor task failed")
+            .expect("Artifact processor task panicked");
+
+        assert_eq!(
+            result.1, 0,
+            "Expected artifact processor task for id 0 to closed"
+        );
+        assert_eq!(mgr.artifact_processor_tasks.len(), 1);
     }
 
-    #[test]
+    #[tokio::test]
     /// Advertise same id on different slots where one slot is occupied.
-    fn same_id_different_occupied_slot() {
+    async fn same_id_different_occupied_slot() {
         // Abort process if a thread panics. This catches detached tokio tasks that panic.
         // https://github.com/tokio-rs/tokio/issues/4516
         std::panic::set_hook(Box::new(|info| {
@@ -1560,83 +1487,69 @@ mod tests {
             println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
             std::process::abort();
         }));
-        with_test_replica_logger(|log| {
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            let mock_reader = MockValidatedPoolReader::new();
-            let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
-            mock_pfn
-                .expect_get_priority_function()
-                .returning(|_| Box::new(|_, _| Priority::Stash));
-            let mock_transport = MockTransport::new();
-            let (_tx, rx) = tokio::sync::mpsc::channel(100);
-            let (cb_tx, _cb_rx) = crossbeam_channel::unbounded();
-            let (_pfn_tx, pfn_rx) = watch::channel(SubnetTopology::default());
-            let mut mgr = create_receive_manager(
-                log,
-                ConsensusManagerMetrics::new::<U64Artifact>(&MetricsRegistry::default()),
-                rt.handle().clone(),
-                rx,
-                Arc::new(RwLock::new(mock_reader)),
-                Arc::new(mock_pfn),
-                cb_tx,
-                Arc::new(mock_transport),
-                pfn_rx,
-            );
-            mgr.handle_advert_receive(
-                SlotUpdate {
-                    slot_number: SlotNumber::from(1),
-                    commit_id: CommitId::from(1),
-                    update: Update::Advert((0, ())),
-                },
-                NODE_1,
-                ConnId::from(1),
-            );
-            mgr.handle_advert_receive(
-                SlotUpdate {
-                    slot_number: SlotNumber::from(2),
-                    commit_id: CommitId::from(2),
-                    update: Update::Advert((1, ())),
-                },
-                NODE_1,
-                ConnId::from(1),
-            );
-            assert_eq!(mgr.artifact_processor_tasks.len(), 2);
-            // Make sure no download task closes since we still have slot entries for 0 and 1.
-            rt.block_on(async {
-                tokio::time::timeout(
-                    Duration::from_millis(100),
-                    mgr.artifact_processor_tasks.join_next(),
-                )
-                .await
-                .unwrap_err()
-            });
-            // Overwrite id 1 with id 0.
-            mgr.handle_advert_receive(
-                SlotUpdate {
-                    slot_number: SlotNumber::from(2),
-                    commit_id: CommitId::from(3),
-                    update: Update::Advert((0, ())),
-                },
-                NODE_1,
-                ConnId::from(1),
-            );
-            // Only download task 1 closes because it got overwritten.
-            rt.block_on(async {
-                tokio::time::timeout(Duration::from_millis(100), async {
-                    while let Some(id) = mgr.artifact_processor_tasks.join_next().await {
-                        assert_eq!(id.unwrap().1, 1);
-                    }
-                })
-                .await
-                .unwrap_err()
-            });
-            assert_eq!(mgr.artifact_processor_tasks.len(), 1);
-        });
+
+        let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
+        mock_pfn
+            .expect_get_priority_function()
+            .returning(|_| Box::new(|_, _| Priority::Stash));
+
+        let (mut mgr, _channels) = ReceiverManagerBuilder::new()
+            .with_priority_fn_producer(Arc::new(mock_pfn))
+            .build();
+
+        mgr.handle_advert_receive(
+            SlotUpdate {
+                slot_number: SlotNumber::from(1),
+                commit_id: CommitId::from(1),
+                update: Update::Advert((0, ())),
+            },
+            NODE_1,
+            ConnId::from(1),
+        );
+        mgr.handle_advert_receive(
+            SlotUpdate {
+                slot_number: SlotNumber::from(2),
+                commit_id: CommitId::from(2),
+                update: Update::Advert((1, ())),
+            },
+            NODE_1,
+            ConnId::from(1),
+        );
+        assert_eq!(mgr.artifact_processor_tasks.len(), 2);
+
+        // Make sure no download task closes since we still have slot entries for 0 and 1.
+        tokio::time::timeout(
+            Duration::from_millis(100),
+            mgr.artifact_processor_tasks.join_next(),
+        )
+        .await
+        .unwrap_err();
+
+        // Overwrite id 1 with id 0.
+        mgr.handle_advert_receive(
+            SlotUpdate {
+                slot_number: SlotNumber::from(2),
+                commit_id: CommitId::from(3),
+                update: Update::Advert((0, ())),
+            },
+            NODE_1,
+            ConnId::from(1),
+        );
+        // Only download task 1 closes because it got overwritten.
+        tokio::time::timeout(Duration::from_millis(100), async {
+            while let Some(id) = mgr.artifact_processor_tasks.join_next().await {
+                assert_eq!(id.unwrap().1, 1);
+            }
+        })
+        .await
+        .unwrap_err();
+
+        assert_eq!(mgr.artifact_processor_tasks.len(), 1);
     }
 
-    #[test]
+    #[tokio::test]
     /// Advertise same id on same slots. This should be a noop where only the commit id and connection id get updated.
-    fn same_id_same_slot() {
+    async fn same_id_same_slot() {
         // Abort process if a thread panics. This catches detached tokio tasks that panic.
         // https://github.com/tokio-rs/tokio/issues/4516
         std::panic::set_hook(Box::new(|info| {
@@ -1644,124 +1557,100 @@ mod tests {
             println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
             std::process::abort();
         }));
-        with_test_replica_logger(|log| {
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            let mock_reader = MockValidatedPoolReader::new();
-            let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
-            mock_pfn
-                .expect_get_priority_function()
-                .returning(|_| Box::new(|_, _| Priority::Stash));
-            let mock_transport = MockTransport::new();
-            let (_tx, rx) = tokio::sync::mpsc::channel(100);
-            let (cb_tx, _cb_rx) = crossbeam_channel::unbounded();
-            let (_pfn_tx, pfn_rx) = watch::channel(SubnetTopology::default());
-            let mut mgr = create_receive_manager(
-                log,
-                ConsensusManagerMetrics::new::<U64Artifact>(&MetricsRegistry::default()),
-                rt.handle().clone(),
-                rx,
-                Arc::new(RwLock::new(mock_reader)),
-                Arc::new(mock_pfn),
-                cb_tx,
-                Arc::new(mock_transport),
-                pfn_rx,
-            );
-            mgr.handle_advert_receive(
-                SlotUpdate {
-                    slot_number: SlotNumber::from(1),
-                    commit_id: CommitId::from(1),
-                    update: Update::Advert((0, ())),
-                },
-                NODE_1,
-                ConnId::from(1),
-            );
-            assert_eq!(
-                mgr.slot_table
-                    .get(&NODE_1)
-                    .unwrap()
-                    .get(&SlotNumber::from(1))
-                    .unwrap(),
-                &SlotEntry {
-                    conn_id: ConnId::from(1),
-                    commit_id: CommitId::from(1),
-                    id: 0,
-                }
-            );
-            // Advertise id 0 again on same slot.
-            mgr.handle_advert_receive(
-                SlotUpdate {
-                    slot_number: SlotNumber::from(1),
-                    commit_id: CommitId::from(2),
-                    update: Update::Advert((0, ())),
-                },
-                NODE_1,
-                ConnId::from(1),
-            );
 
-            // Make sure no download task closes since we still have entry for 0.
-            let joined_artifact_processor = rt.block_on(async {
-                timeout(
-                    PROCESS_ARTIFACT_TIMEOUT,
-                    mgr.artifact_processor_tasks.join_next(),
-                )
-                .await
-            });
+        let (mut mgr, _channels) = ReceiverManagerBuilder::new().build();
 
-            assert!(
-                joined_artifact_processor.is_err(),
-                "Artifact task should not close when overwriting with same artifact id."
-            );
-            assert_eq!(mgr.artifact_processor_tasks.len(), 1);
+        mgr.handle_advert_receive(
+            SlotUpdate {
+                slot_number: SlotNumber::from(1),
+                commit_id: CommitId::from(1),
+                update: Update::Advert((0, ())),
+            },
+            NODE_1,
+            ConnId::from(1),
+        );
+        assert_eq!(
+            mgr.slot_table
+                .get(&NODE_1)
+                .unwrap()
+                .get(&SlotNumber::from(1))
+                .unwrap(),
+            &SlotEntry {
+                conn_id: ConnId::from(1),
+                commit_id: CommitId::from(1),
+                id: 0,
+            }
+        );
+        // Advertise id 0 again on same slot.
+        mgr.handle_advert_receive(
+            SlotUpdate {
+                slot_number: SlotNumber::from(1),
+                commit_id: CommitId::from(2),
+                update: Update::Advert((0, ())),
+            },
+            NODE_1,
+            ConnId::from(1),
+        );
 
-            // Check that newer commit id is stored.
-            assert_eq!(mgr.slot_table.len(), 1);
-            assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 1);
-            assert_eq!(
-                mgr.slot_table
-                    .get(&NODE_1)
-                    .unwrap()
-                    .get(&1.into())
-                    .unwrap()
-                    .commit_id,
-                2.into()
-            );
-            assert_eq!(mgr.artifact_processor_tasks.len(), 1);
+        // Make sure no download task closes since we still have entry for 0.
+        let joined_artifact_processor = timeout(
+            PROCESS_ARTIFACT_TIMEOUT,
+            mgr.artifact_processor_tasks.join_next(),
+        )
+        .await;
 
-            // Overwrite id 0.
-            mgr.handle_advert_receive(
-                SlotUpdate {
-                    slot_number: SlotNumber::from(1),
-                    commit_id: CommitId::from(3),
-                    update: Update::Advert((2, ())),
-                },
-                NODE_1,
-                ConnId::from(1),
-            );
+        assert!(
+            joined_artifact_processor.is_err(),
+            "Artifact task should not close when overwriting with same artifact id."
+        );
+        assert_eq!(mgr.artifact_processor_tasks.len(), 1);
 
-            // Make sure the download task for 0 closes.
-            let joined_artifact_processor = rt.block_on(async {
-                timeout(
-                    PROCESS_ARTIFACT_TIMEOUT,
-                    mgr.artifact_processor_tasks.join_next(),
-                )
-                .await
-            });
+        // Check that newer commit id is stored.
+        assert_eq!(mgr.slot_table.len(), 1);
+        assert_eq!(mgr.slot_table.get(&NODE_1).unwrap().len(), 1);
+        assert_eq!(
+            mgr.slot_table
+                .get(&NODE_1)
+                .unwrap()
+                .get(&1.into())
+                .unwrap()
+                .commit_id,
+            2.into()
+        );
+        assert_eq!(mgr.artifact_processor_tasks.len(), 1);
 
-            let result = joined_artifact_processor
-                .expect("Joining artifact processor join-set timed out")
-                .expect("Joining artifact processor task failed")
-                .expect("Artifact processor task panicked");
+        // Overwrite id 0.
+        mgr.handle_advert_receive(
+            SlotUpdate {
+                slot_number: SlotNumber::from(1),
+                commit_id: CommitId::from(3),
+                update: Update::Advert((2, ())),
+            },
+            NODE_1,
+            ConnId::from(1),
+        );
 
-            assert_eq!(
-                result.1, 0,
-                "Expected artifact processor task for id 0 to closed"
-            );
-            assert_eq!(mgr.artifact_processor_tasks.len(), 1);
-        });
+        // Make sure the download task for 0 closes.
+        let joined_artifact_processor = timeout(
+            PROCESS_ARTIFACT_TIMEOUT,
+            mgr.artifact_processor_tasks.join_next(),
+        )
+        .await;
+
+        let result = joined_artifact_processor
+            .expect("Joining artifact processor join-set timed out")
+            .expect("Joining artifact processor task failed")
+            .expect("Artifact processor task panicked");
+
+        assert_eq!(
+            result.1, 0,
+            "Expected artifact processor task for id 0 to closed"
+        );
+        assert_eq!(mgr.artifact_processor_tasks.len(), 1);
     }
 
-    #[test]
-    fn fetch_to_stash() {
+    #[tokio::test]
+    async fn fetch_to_stash() {
         // Abort process if a thread panics. This catches detached tokio tasks that panic.
         // https://github.com/tokio-rs/tokio/issues/4516
         std::panic::set_hook(Box::new(|info| {
@@ -1769,57 +1658,45 @@ mod tests {
             println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
             std::process::abort();
         }));
-        with_test_replica_logger(|log| {
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            let mock_reader = MockValidatedPoolReader::new();
-            let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
-            let priorities = Arc::new(Mutex::new(vec![Priority::Fetch, Priority::Stash]));
-            mock_pfn
-                .expect_get_priority_function()
-                .times(1)
-                .returning(move |_| {
-                    let priorities = priorities.clone();
-                    Box::new(move |_, _| priorities.lock().unwrap().remove(0))
-                });
-            let mut mock_transport = MockTransport::new();
-            mock_transport.expect_rpc().once().returning(|_, _| {
-                Ok(Response::builder()
-                    .status(StatusCode::NO_CONTENT)
-                    .body(Bytes::new())
-                    .unwrap())
+
+        let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
+        let priorities = Arc::new(Mutex::new(vec![Priority::Fetch, Priority::Stash]));
+        mock_pfn
+            .expect_get_priority_function()
+            .times(1)
+            .returning(move |_| {
+                let priorities = priorities.clone();
+                Box::new(move |_, _| priorities.lock().unwrap().remove(0))
             });
-            let (_tx, rx) = tokio::sync::mpsc::channel(100);
-            let (cb_tx, _cb_rx) = crossbeam_channel::unbounded();
-            let (_pfn_tx, pfn_rx) = watch::channel(SubnetTopology::default());
-            let mut mgr = create_receive_manager(
-                log,
-                ConsensusManagerMetrics::new::<U64Artifact>(&MetricsRegistry::default()),
-                rt.handle().clone(),
-                rx,
-                Arc::new(RwLock::new(mock_reader)),
-                Arc::new(mock_pfn),
-                cb_tx,
-                Arc::new(mock_transport),
-                pfn_rx,
-            );
-            mgr.handle_advert_receive(
-                SlotUpdate {
-                    slot_number: SlotNumber::from(1),
-                    commit_id: CommitId::from(1),
-                    update: Update::Advert((0, ())),
-                },
-                NODE_1,
-                ConnId::from(1),
-            );
-            rt.block_on(async {
-                timeout(
-                    Duration::from_secs(4),
-                    mgr.artifact_processor_tasks.join_next(),
-                )
-                .await
-            })
-            .expect_err("Task should not close because it is stash.");
+        let mut mock_transport = MockTransport::new();
+        mock_transport.expect_rpc().once().returning(|_, _| {
+            Ok(Response::builder()
+                .status(StatusCode::NO_CONTENT)
+                .body(Bytes::new())
+                .unwrap())
         });
+
+        let (mut mgr, _channels) = ReceiverManagerBuilder::new()
+            .with_priority_fn_producer(Arc::new(mock_pfn))
+            .with_transport(Arc::new(mock_transport))
+            .build();
+
+        mgr.handle_advert_receive(
+            SlotUpdate {
+                slot_number: SlotNumber::from(1),
+                commit_id: CommitId::from(1),
+                update: Update::Advert((0, ())),
+            },
+            NODE_1,
+            ConnId::from(1),
+        );
+
+        timeout(
+            Duration::from_secs(4),
+            mgr.artifact_processor_tasks.join_next(),
+        )
+        .await
+        .expect_err("Task should not close because it is stash.");
     }
 
     /// Verify that downloads with AdvertId != ArtifactId are not added to the pool.
@@ -1871,7 +1748,7 @@ mod tests {
             assert_eq!(
                 ConsensusManagerReceiver::<
                     U64Artifact,
-                    MockValidatedPoolReader,
+                    MockValidatedPoolReader<U64Artifact>,
                     (SlotUpdate<U64Artifact>, NodeId, ConnId),
                 >::download_artifact(
                     no_op_logger(),
@@ -1887,5 +1764,62 @@ mod tests {
                 Ok((0, NODE_1))
             )
         });
+    }
+
+    #[tokio::test]
+    async fn large_artifact() {
+        use ic_protobuf::p2p::v1 as pb;
+
+        #[derive(PartialEq, Eq, Debug, Clone)]
+        pub struct BigArtifact;
+
+        impl ArtifactKind for BigArtifact {
+            // Does not matter
+            const TAG: ArtifactTag = ArtifactTag::ConsensusArtifact;
+            type PbMessage = Vec<u8>;
+            type PbIdError = Infallible;
+            type PbMessageError = Infallible;
+            type PbAttributeError = Infallible;
+            type PbFilterError = Infallible;
+            type Message = Vec<u8>;
+            type PbId = ();
+            type Id = ();
+            type PbAttribute = ();
+            type Attribute = ();
+            type PbFilter = ();
+            type Filter = ();
+
+            fn message_to_advert(_: &Self::Message) -> Advert<BigArtifact> {
+                todo!()
+            }
+        }
+
+        let (router, mut update_rx) = build_axum_router::<BigArtifact>(
+            no_op_logger(),
+            Arc::new(RwLock::new(MockValidatedPoolReader::default())),
+        );
+
+        let slot_update = SlotUpdate::<BigArtifact> {
+            slot_number: 0.into(),
+            commit_id: 0.into(),
+            update: Update::Artifact(vec![0; 100_000_000]),
+        };
+
+        let req_pb = pb::SlotUpdate::proxy_encode(slot_update);
+
+        let resp = router
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/{}/update", uri_prefix::<BigArtifact>()))
+                    .extension(NODE_1)
+                    .extension(ConnId::from(1))
+                    .body(Body::from(req_pb))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        update_rx.recv().await.unwrap();
     }
 }

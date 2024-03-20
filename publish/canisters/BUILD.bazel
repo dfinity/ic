@@ -1,6 +1,11 @@
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 load("//bazel:defs.bzl", "gzip_compress")
 load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
+load(
+    "//rs/nervous_system:compressed_wasm_size_limits.bzl",
+    "NNS_CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES",
+    "SNS_CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES",
+)
 
 CANISTERS = {
     "candid-test-canister.wasm": "//rs/rust_canisters/dfn_candid:candid-test-canister",
@@ -63,26 +68,18 @@ CANISTERS = {
 DEFAULT_CANISTERS_MAX_SIZE_E5_BYTES = "21"
 
 CANISTERS_MAX_SIZE_E5_BYTES = {
-    "cycles-minting-canister.wasm": "25",
-    "genesis-token-canister.wasm": "25",
-    "governance-mem-test-canister.wasm": "25",
     "ic-ckbtc-minter.wasm": "19",
     "ic-icrc1-ledger.wasm": "19",
     "ledger-canister.wasm": "19",
     "ledger-canisternotify-method.wasm": "19",
-    "root-canister.wasm": "15",
     "sns-canister.wasm": "15",
-    "sns-governance-canister.wasm": "20",
-    "sns-governance-canister_test.wasm": "20",
-    "sns-root-canister.wasm": "15",
-    "sns-swap-canister.wasm": "15",
 }
 
-CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES = {
-    "governance-canister.wasm.gz": "21",
-    "governance-canister_test.wasm.gz": "21",
-    "registry-canister.wasm.gz": "21",
-}
+CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES = {}
+
+CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES.update(NNS_CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES)
+
+CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES.update(SNS_CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES)
 
 [
     gzip_compress(
@@ -102,7 +99,7 @@ CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES = {
             "MAX_SIZE": CANISTERS_MAX_SIZE_E5_BYTES.get(
                 name,
                 DEFAULT_CANISTERS_MAX_SIZE_E5_BYTES,
-            ) + "00000",
+            ) + "0" * 5,
         },
     )
     for (name, target) in CANISTERS.items()
@@ -119,7 +116,7 @@ CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES = {
             "MAX_SIZE": CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES.get(
                 name,
                 DEFAULT_CANISTERS_MAX_SIZE_E5_BYTES,
-            ) + "00000",
+            ) + "0" * 5,
         },
     )
     for (name, size) in CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES.items()

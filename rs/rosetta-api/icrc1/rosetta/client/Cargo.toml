@@ -5,14 +5,27 @@ authors = ["The Internet Computer Project Developers"]
 description = "Build Once. Integrate Your Blockchain Everywhere. "
 edition = "2021"
 
+[[bin]]
+name = "ic-icrc-rosetta-client-bin"
+path = "src/main.rs"
+
 [lib]
 path = "src/lib.rs"
 
 [dependencies]
 ic-rosetta-api = { path = "../../../" }
 ic-icrc-rosetta = { path = "../" }
-anyhow = { version = "1.0", default-features = false }
+anyhow = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }
 url = "2.2.1"
 rosetta-core = {path = "../../../rosetta_core"}
+ed25519-consensus = "2.0.1"
+hex = "^0.4.2"
+icrc-ledger-types = { path = "../../../../../packages/icrc-ledger-types" }
+candid = { workspace = true }
+tokio = { workspace = true }
+clap = { workspace = true }
+ic-crypto-ecdsa-secp256k1 = { path = "../../../../crypto/ecdsa_secp256k1" }
+ic-crypto-ed25519 = { path = "../../../../crypto/ed25519" }
+ic-agent = { workspace = true }

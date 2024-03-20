@@ -9,7 +9,7 @@ documentation.workspace = true
 [dependencies]
 async-trait = "0.1.41"
 bincode = "1.2.1"
-clap = { workspace = true }
+clap = { version = "3.2.25", features = ["derive"] }
 ed25519-consensus = "2.0.1"
 hex = "0.4.2"
 ic-adapter-metrics-server = { path = "../monitoring/adapter_metrics_server" }
@@ -30,7 +30,6 @@ ic-crypto-standalone-sig-verifier = { path = "standalone-sig-verifier" }
 ic-crypto-tls-cert-validation = { path = "node_key_validation/tls_cert_validation" }
 ic-crypto-tls-interfaces = { path = "tls_interfaces" }
 ic-crypto-utils-basic-sig = { path = "utils/basic_sig" }
-ic-crypto-utils-time = { path = "utils/time" }
 ic-crypto-utils-tls = { path = "utils/tls" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
@@ -51,7 +50,7 @@ tempfile = "3.1.0"
 tokio = { workspace = true }
 # We use the `dangerous_configuration` flag for rustls to be able to set custom `ClientCertVerifier` and
 # `ServerCertVerifier` in order to verify node certificates.
-tokio-rustls = { version = "0.24.0", features = ["dangerous_configuration"] }
+tokio-rustls = { workspace = true }
 
 [dev-dependencies]
 assert_matches = "1.5.0"

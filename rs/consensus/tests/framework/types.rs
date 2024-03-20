@@ -28,11 +28,11 @@ use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_test_artifact_pool::ingress_pool::TestIngressPool;
 use ic_test_utilities::{
-    consensus::batch::MockBatchPayloadBuilder, ingress_selector::FakeIngressSelector,
-    message_routing::FakeMessageRouting,
+    ingress_selector::FakeIngressSelector, message_routing::FakeMessageRouting,
     self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
     state_manager::FakeStateManager, xnet_payload_builder::FakeXNetPayloadBuilder,
 };
+use ic_test_utilities_consensus::{batch::MockBatchPayloadBuilder, EcdsaStatsNoOp};
 use ic_types::{
     artifact::{ArtifactKind, Priority, PriorityFn},
     artifact_kind::ConsensusArtifact,
@@ -188,6 +188,7 @@ impl ConsensusDependencies {
         pool_config: ArtifactPoolConfig,
         registry_client: Arc<dyn RegistryClient>,
         cup: CatchUpPackage,
+        time_source: Arc<dyn TimeSource>,
     ) -> ConsensusDependencies {
         let state_manager = FakeStateManager::new();
         let state_manager = Arc::new(state_manager);
@@ -201,10 +202,15 @@ impl ConsensusDependencies {
             pool_config.clone(),
             metrics_registry.clone(),
             no_op_logger(),
+            time_source,
         )));
         let dkg_pool = dkg_pool::DkgPoolImpl::new(metrics_registry.clone(), no_op_logger());
-        let ecdsa_pool =
-            ecdsa_pool::EcdsaPoolImpl::new(pool_config, no_op_logger(), metrics_registry.clone());
+        let ecdsa_pool = ecdsa_pool::EcdsaPoolImpl::new(
+            pool_config,
+            no_op_logger(),
+            metrics_registry.clone(),
+            Box::new(EcdsaStatsNoOp {}),
+        );
         let canister_http_pool =
             canister_http_pool::CanisterHttpPoolImpl::new(metrics_registry.clone(), no_op_logger());
         let xnet_payload_builder = FakeXNetPayloadBuilder::new();

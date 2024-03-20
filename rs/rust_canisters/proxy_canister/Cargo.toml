@@ -9,7 +9,7 @@ edition = "2021"
 candid = { workspace = true }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
-ic-ic00-types = { path = "../../types/ic00_types" }
+ic-management-canister-types = { path = "../../types/management_canister_types" }
 serde = { workspace = true }
 
 [[bin]]

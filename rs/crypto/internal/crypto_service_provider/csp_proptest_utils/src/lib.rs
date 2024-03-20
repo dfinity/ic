@@ -119,7 +119,7 @@ mod common {
     use proptest::prelude::{prop, Strategy};
     use strum::IntoEnumIterator;
 
-    pub(crate) const MAX_ALGORITHM_ID_INDEX: i32 = 18;
+    pub(crate) const MAX_ALGORITHM_ID_INDEX: i32 = 19;
 
     prop_compose! {
         pub fn arb_key_id()(id in uniform32(any::<u8>())) -> KeyId {

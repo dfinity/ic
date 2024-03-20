@@ -10,7 +10,7 @@ DEPENDENCIES = [
     "//rs/registry/subnet_type",
     "//rs/replicated_state",
     "//rs/types/base_types",
-    "//rs/types/ic00_types",
+    "//rs/types/management_canister_types",
     "//rs/types/types",
     "@crate_index//:prometheus",
     "@crate_index//:serde",
@@ -21,6 +21,8 @@ DEV_DEPENDENCIES = [
     "//rs/constants",
     "//rs/test_utilities",
     "//rs/test_utilities/logger",
+    "//rs/test_utilities/state",
+    "//rs/test_utilities/types",
     "//rs/types/wasm_types",
     "@crate_index//:candid",
 ]

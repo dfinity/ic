@@ -6,15 +6,15 @@ use ic_nervous_system_common::{E8, SECONDS_PER_DAY};
 use ic_nns_test_utils::state_test_helpers::icrc1_transfer;
 use ic_sns_swap::{
     pb::v1::{
-        get_open_ticket_response, new_sale_ticket_response, BuyerState, GetLifecycleResponse, Init,
-        Lifecycle, NeuronBasketConstructionParameters, NewSaleTicketResponse, OpenResponse, Params,
+        new_sale_ticket_response, BuyerState, GetLifecycleResponse, Init, Lifecycle,
+        NeuronBasketConstructionParameters, NewSaleTicketResponse, Params,
         RefreshBuyerTokensResponse, Ticket,
     },
     swap::principal_to_subaccount,
 };
 use ic_sns_test_utils::state_test_helpers::{
     get_buyer_state, get_buyers_total, get_lifecycle, get_open_ticket, get_sns_sale_parameters,
-    new_sale_ticket, notify_payment_failure, open_sale, refresh_buyer_tokens,
+    new_sale_ticket, notify_payment_failure, refresh_buyer_tokens,
 };
 use ic_state_machine_tests::StateMachine;
 use icp_ledger::{
@@ -45,27 +45,6 @@ lazy_static! {
     pub static ref DEFAULT_FALLBACK_CONTROLLER_PRINCIPAL_IDS: Vec<Principal> =
         vec![Principal::anonymous()];
     pub static ref DEFAULT_NEURON_MINIMUM_STAKE: u64 = 400_000;
-    pub static ref DEFAULT_SNS_SALE_PARAMS: Params = Params {
-        min_participants: 1,
-        min_icp_e8s: 1,
-        max_icp_e8s: 10_000_000,
-        min_direct_participation_icp_e8s: Some(1),
-        max_direct_participation_icp_e8s: Some(10_000_000),
-        min_participant_icp_e8s: 1_010_000,
-        max_participant_icp_e8s: 10_000_000,
-        swap_due_timestamp_seconds: StateMachine::new()
-            .time()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs()
-            + 13 * SECONDS_PER_DAY,
-        sns_token_e8s: 10_000_000,
-        neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
-            count: 2,
-            dissolve_delay_interval_seconds: 1,
-        }),
-        sale_delay_seconds: None,
-    };
     pub static ref DEFAULT_ICRC1_ARCHIVE_OPTIONS: ArchiveOptions = ArchiveOptions {
         trigger_threshold: 1,
         num_blocks_to_archive: 1,
@@ -184,36 +163,33 @@ impl PaymentProtocolTestSetup {
             neuron_minimum_stake_e8s: Some(*DEFAULT_NEURON_MINIMUM_STAKE),
             confirmation_text: None,
             restricted_countries: None,
-            min_participants: None,                      // TODO[NNS1-2339]
-            min_icp_e8s: None,                           // TODO[NNS1-2339]
-            max_icp_e8s: None,                           // TODO[NNS1-2339]
-            min_direct_participation_icp_e8s: None,      // TODO[NNS1-2339]
-            max_direct_participation_icp_e8s: None,      // TODO[NNS1-2339]
-            min_participant_icp_e8s: None,               // TODO[NNS1-2339]
-            max_participant_icp_e8s: None,               // TODO[NNS1-2339]
-            swap_start_timestamp_seconds: None,          // TODO[NNS1-2339]
-            swap_due_timestamp_seconds: None,            // TODO[NNS1-2339]
-            sns_token_e8s: None,                         // TODO[NNS1-2339]
-            neuron_basket_construction_parameters: None, // TODO[NNS1-2339]
-            nns_proposal_id: None,                       // TODO[NNS1-2339]
-            neurons_fund_participants: None,             // TODO[NNS1-2339]
+            min_participants: Some(1),
+            min_direct_participation_icp_e8s: Some(1),
+            max_direct_participation_icp_e8s: Some(10_000_000),
+            min_participant_icp_e8s: Some(1_010_000),
+            max_participant_icp_e8s: Some(10_000_000),
+            sns_token_e8s: Some(10_000_000),
+            swap_start_timestamp_seconds: Some(0),
+            swap_due_timestamp_seconds: Some(
+                StateMachine::new()
+                    .time()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs()
+                    + 13 * SECONDS_PER_DAY,
+            ),
+            neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
+                count: 2,
+                dissolve_delay_interval_seconds: 1,
+            }),
+            nns_proposal_id: Some(10),
             should_auto_finalize: Some(true),
+            max_icp_e8s: None,
+            min_icp_e8s: None,
+            neurons_fund_participants: None,
             neurons_fund_participation_constraints: None,
             neurons_fund_participation: None,
         }
-    }
-
-    pub fn default_params() -> Params {
-        // sanity check
-        DEFAULT_SNS_SALE_PARAMS
-            .validate(&Init {
-                transaction_fee_e8s: Some(100),
-                neuron_minimum_stake_e8s: Some(100),
-                ..Default::default()
-            })
-            .unwrap();
-
-        DEFAULT_SNS_SALE_PARAMS.clone()
     }
 
     pub fn mint_icp(&self, account: &Account, amount: &u64) -> Result<u64, String> {
@@ -275,15 +251,6 @@ impl PaymentProtocolTestSetup {
             },
         )
     }
-
-    pub fn open_sale(&self, params: Params) -> OpenResponse {
-        open_sale(
-            &self.state_machine,
-            &self.sns_sale_canister_id,
-            Some(params),
-        )
-    }
-
     pub fn get_buyer_state(&self, buyer: &PrincipalId) -> Option<BuyerState> {
         get_buyer_state(&self.state_machine, &self.sns_sale_canister_id, buyer).buyer_state
     }
@@ -339,30 +306,9 @@ impl PaymentProtocolTestSetup {
 }
 
 #[test]
-fn test_payment_flow_disabled_when_sale_not_open() {
-    let user0 = PrincipalId::new_user_test_id(0);
-    let payment_flow_protocol = PaymentProtocolTestSetup::default_setup();
-    // Sale is not yet open --> Should not be able to call new_sale_ticket successfully
-    assert!(payment_flow_protocol
-        .new_sale_ticket(&user0, &E8, None)
-        .is_err());
-
-    // Sale is not yet open --> Should not be able to call get_open_ticket successfully
-    assert!(payment_flow_protocol.get_open_ticket(&user0).is_err());
-}
-
-#[test]
 fn test_get_open_ticket() {
     let user0 = PrincipalId::new_user_test_id(0);
     let payment_flow_protocol = PaymentProtocolTestSetup::default_setup();
-    assert_eq!(
-        payment_flow_protocol.get_open_ticket(&user0).unwrap_err(),
-        get_open_ticket_response::err::Type::SaleNotOpen as i32
-    );
-
-    // open the sale
-    payment_flow_protocol.open_sale(PaymentProtocolTestSetup::default_params());
-    // get_open_ticket should return none when the sale is open but there are no tickets
     assert_eq!(payment_flow_protocol.get_open_ticket(&user0).unwrap(), None);
 }
 
@@ -371,7 +317,6 @@ fn test_new_sale_ticket() {
     let user0 = PrincipalId::new_user_test_id(0);
     let user1 = PrincipalId::new_user_test_id(1);
     let payment_flow_protocol = PaymentProtocolTestSetup::default_setup();
-    payment_flow_protocol.open_sale(PaymentProtocolTestSetup::default_params());
     let params = payment_flow_protocol.get_sns_sale_parameters();
     // error when caller is anonymous
     assert_eq!(
@@ -509,13 +454,12 @@ fn test_simple_refresh_buyer_token() {
     let user0 = PrincipalId::new_user_test_id(0);
     let payment_flow_protocol = PaymentProtocolTestSetup::default_setup();
 
-    // Lifecycle of Swap should be Pending
+    // Lifecycle of Swap should be Open
     assert_eq!(
         payment_flow_protocol.get_lifecycle().lifecycle,
-        Some(Lifecycle::Pending as i32)
+        Some(Lifecycle::Open as i32)
     );
 
-    payment_flow_protocol.open_sale(PaymentProtocolTestSetup::default_params());
     let params = payment_flow_protocol.get_sns_sale_parameters();
     // Amount bought by user 0 amountx_y being the amount bought by user x with a counter y counting the number of purchases.
     let amount0_0 = params.min_participant_icp_e8s;
@@ -569,13 +513,12 @@ fn test_multiple_payment_flows() {
     let user0 = PrincipalId::new_user_test_id(0);
     let payment_flow_protocol = PaymentProtocolTestSetup::default_setup();
 
-    // Lifecycle of Swap should be Pending
+    // Lifecycle of Swap should be Open
     assert_eq!(
         payment_flow_protocol.get_lifecycle().lifecycle,
-        Some(Lifecycle::Pending as i32)
+        Some(Lifecycle::Open as i32)
     );
 
-    payment_flow_protocol.open_sale(PaymentProtocolTestSetup::default_params());
     let params = payment_flow_protocol.get_sns_sale_parameters();
     let amount0_0 = params.min_participant_icp_e8s;
 
@@ -634,20 +577,16 @@ fn test_payment_flow_multiple_users_concurrent() {
     let mut handles = vec![];
     let payment_flow_protocol = Arc::new(Mutex::new(PaymentProtocolTestSetup::default_setup()));
 
-    // Lifecycle of Swap should be Pending
+    // Lifecycle of Swap should be Open
     assert_eq!(
         payment_flow_protocol
             .lock()
             .unwrap()
             .get_lifecycle()
             .lifecycle,
-        Some(Lifecycle::Pending as i32)
+        Some(Lifecycle::Open as i32)
     );
 
-    payment_flow_protocol
-        .lock()
-        .unwrap()
-        .open_sale(PaymentProtocolTestSetup::default_params());
     let params = payment_flow_protocol
         .lock()
         .unwrap()
@@ -749,13 +688,12 @@ fn test_multiple_spending() {
     let user0 = PrincipalId::new_user_test_id(0);
     let payment_flow_protocol = PaymentProtocolTestSetup::default_setup();
 
-    // Lifecycle of Swap should be Pending
+    // Lifecycle of Swap should be Open
     assert_eq!(
         payment_flow_protocol.get_lifecycle().lifecycle,
-        Some(Lifecycle::Pending as i32)
+        Some(Lifecycle::Open as i32)
     );
 
-    payment_flow_protocol.open_sale(PaymentProtocolTestSetup::default_params());
     let params = payment_flow_protocol.get_sns_sale_parameters();
     let amount0_0 = params.min_participant_icp_e8s;
 
@@ -823,13 +761,12 @@ fn test_maximum_reached() {
 
     let payment_flow_protocol = PaymentProtocolTestSetup::default_setup();
 
-    // Lifecycle of Swap should be Pending
+    // Lifecycle of Swap should be Open
     assert_eq!(
         payment_flow_protocol.get_lifecycle().lifecycle,
-        Some(Lifecycle::Pending as i32)
+        Some(Lifecycle::Open as i32)
     );
 
-    payment_flow_protocol.open_sale(PaymentProtocolTestSetup::default_params());
     let params = payment_flow_protocol.get_sns_sale_parameters();
     let amount0_0 = params.min_participant_icp_e8s;
     let amount1_0 = params.min_participant_icp_e8s;
@@ -926,14 +863,14 @@ fn test_commitment_below_participant_minimum() {
 
     let payment_flow_protocol = PaymentProtocolTestSetup::default_setup();
 
-    // Lifecycle of Swap should be Pending
+    // Lifecycle of Swap should be Open
     assert_eq!(
         payment_flow_protocol.get_lifecycle().lifecycle,
-        Some(Lifecycle::Pending as i32)
+        Some(Lifecycle::Open as i32)
     );
 
-    payment_flow_protocol.open_sale(PaymentProtocolTestSetup::default_params());
     let params = payment_flow_protocol.get_sns_sale_parameters();
+    println!("Sale parameters: {:?}", params);
     let amount0_0 = (params.max_participant_icp_e8s - 1) / 2;
     let amount1_0 = (params.max_participant_icp_e8s - 1) / 2;
     let amount2_0 = params.min_participant_icp_e8s;
@@ -962,6 +899,11 @@ fn test_commitment_below_participant_minimum() {
             )
             .is_ok());
     }
+
+    assert_eq!(
+        payment_flow_protocol.get_lifecycle().lifecycle,
+        Some(Lifecycle::Open as i32)
+    );
 
     // Conduct payment flow for user0 and user1
     payment_flow_protocol

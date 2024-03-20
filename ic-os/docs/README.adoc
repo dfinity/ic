@@ -8,4 +8,3 @@ Refer to detailed documentation on:
 * link:SELinux{outfilesuffix}[SELinux security policy]
 * link:Configuration{outfilesuffix}[Configuration]
 * link:ConfigStore-SetupOSHostOS{outfilesuffix}[SetupOS and HostOS config store]
-* link:SEVSnpTest{outfilesuffix}[SEV SNP Test]

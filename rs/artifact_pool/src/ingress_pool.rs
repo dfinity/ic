@@ -13,8 +13,8 @@ use ic_interfaces::{
         UnvalidatedIngressArtifact, ValidatedIngressArtifact,
     },
     p2p::consensus::{
-        ChangeResult, MutablePool, PriorityFnAndFilterProducer, UnvalidatedArtifact,
-        ValidatedPoolReader,
+        ArtifactWithOpt, ChangeResult, MutablePool, PriorityFnAndFilterProducer,
+        UnvalidatedArtifact, ValidatedPoolReader,
     },
     time_source::TimeSource,
 };
@@ -304,7 +304,7 @@ impl MutablePool<IngressArtifact> for IngressPoolImpl {
 
     /// Apply changeset to the Ingress Pool
     fn apply_changes(&mut self, change_set: ChangeSet) -> ChangeResult<IngressArtifact> {
-        let mut adverts = Vec::new();
+        let mut artifacts_with_opt = Vec::new();
         let mut purged = Vec::new();
         for change_action in change_set {
             match change_action {
@@ -316,11 +316,14 @@ impl MutablePool<IngressArtifact> for IngressPoolImpl {
                     integrity_hash,
                 )) => {
                     if source_node_id == self.node_id {
-                        adverts.push(Advert {
-                            size,
-                            id: message_id.clone(),
-                            attribute: (),
-                            integrity_hash: integrity_hash.clone(),
+                        artifacts_with_opt.push(ArtifactWithOpt {
+                            advert: Advert {
+                                size,
+                                id: message_id.clone(),
+                                attribute: (),
+                                integrity_hash: integrity_hash.clone(),
+                            },
+                            is_latency_sensitive: false,
                         });
                     }
                     // remove it from unvalidated pool and remove it from peer_index, move it
@@ -395,7 +398,7 @@ impl MutablePool<IngressArtifact> for IngressPoolImpl {
         }
         ChangeResult {
             purged,
-            adverts,
+            artifacts_with_opt,
             poll_immediately: false,
         }
     }
@@ -475,10 +478,10 @@ mod tests {
     use ic_constants::MAX_INGRESS_TTL;
     use ic_interfaces::p2p::consensus::MutablePool;
     use ic_interfaces::time_source::TimeSource;
-    use ic_test_utilities::{types::ids::node_test_id, types::messages::SignedIngressBuilder};
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_test_utilities_time::mock_time;
     use ic_test_utilities_time::FastForwardTimeSource;
+    use ic_test_utilities_types::{ids::node_test_id, messages::SignedIngressBuilder};
+    use ic_types::time::UNIX_EPOCH;
     use rand::Rng;
     use std::time::Duration;
 
@@ -494,7 +497,7 @@ mod tests {
                 UnvalidatedIngressArtifact {
                     message: IngressPoolObject::from(ingress_msg),
                     peer_id: node_test_id(0),
-                    timestamp: mock_time(),
+                    timestamp: UNIX_EPOCH,
                 },
             );
             assert_eq!(ingress_pool.size(), 1);
@@ -522,7 +525,7 @@ mod tests {
                     message_id.clone(),
                     ValidatedIngressArtifact {
                         msg: IngressPoolObject::from(ingress_msg),
-                        timestamp: mock_time(),
+                        timestamp: UNIX_EPOCH,
                     },
                 );
                 assert!(ingress_pool.contains(&message_id));
@@ -551,7 +554,7 @@ mod tests {
                     message_id,
                     ValidatedIngressArtifact {
                         msg: IngressPoolObject::from(ingress_msg),
-                        timestamp: mock_time(),
+                        timestamp: UNIX_EPOCH,
                     },
                 );
 
@@ -616,7 +619,7 @@ mod tests {
                         message_id.clone(),
                         ValidatedIngressArtifact {
                             msg: IngressPoolObject::from(ingress_msg),
-                            timestamp: mock_time(),
+                            timestamp: UNIX_EPOCH,
                         },
                     );
                 }
@@ -682,8 +685,8 @@ mod tests {
 
                 // Check moved message is returned as an advert
                 assert!(result.purged.is_empty());
-                assert_eq!(result.adverts.len(), 1);
-                assert_eq!(result.adverts[0].id, message_id0);
+                assert_eq!(result.artifacts_with_opt.len(), 1);
+                assert_eq!(result.artifacts_with_opt[0].advert.id, message_id0);
                 assert!(!result.poll_immediately);
                 // Check timestamp is carried over for msg_0.
                 assert_eq!(ingress_pool.unvalidated.get_timestamp(&message_id0), None);
@@ -745,15 +748,15 @@ mod tests {
                 assert_eq!(ingress_pool.unvalidated().size(), initial_count);
                 let result = ingress_pool.apply_changes(changeset);
                 assert!(result.purged.is_empty());
-                // adverts are only created for own node id
-                assert_eq!(result.adverts.len(), initial_count / nodes);
+                // artifacts_with_opt are only created for own node id
+                assert_eq!(result.artifacts_with_opt.len(), initial_count / nodes);
                 assert!(!result.poll_immediately);
                 assert_eq!(ingress_pool.unvalidated().size(), 0);
                 assert_eq!(ingress_pool.validated().size(), initial_count);
 
                 let changeset = vec![ChangeAction::PurgeBelowExpiry(cutoff_time)];
                 let result = ingress_pool.apply_changes(changeset);
-                assert!(result.adverts.is_empty());
+                assert!(result.artifacts_with_opt.is_empty());
                 assert_eq!(result.purged.len(), initial_count - non_expired_count);
                 assert!(!result.poll_immediately);
                 assert_eq!(ingress_pool.validated().size(), non_expired_count);
@@ -847,7 +850,7 @@ mod tests {
         insert_validated_artifact_with_timestamps(
             ingress_pool,
             nonce,
-            mock_time(),
+            UNIX_EPOCH,
             ic_types::time::expiry_time_from_now(),
         );
     }

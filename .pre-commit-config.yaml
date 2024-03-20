@@ -10,28 +10,35 @@ repos:
 
   - id: bazel_shfmt_format
     name: Auto format shell files
-    stages: [commit]
+    stages: [commit, manual]
     entry: bazel run //:shfmt-format
     files: \.sh$
     language: system
 
   - id: bazel_ruff_format
     name: Auto format Python files
-    stages: [commit]
+    stages: [commit, manual]
     entry: bazel run //:ruff-format
+    files: \.py$
+    language: system
+
+  - id: bazel_ruff_lint
+    name: Auto lint Python files
+    stages: [commit, manual]
+    entry: bazel run //:ruff-lint
     files: \.py$
     language: system
 
   - id: bazel_protobuf_format
     name: Auto format Protobuf files
-    stages: [commit]
+    stages: [commit, manual]
     entry: bazel run //:protobuf-format
     files: \.proto$
     language: system
 
   - id: bazel_ormolu_format
     name: Auto format Haskell files
-    stages: [commit]
+    stages: [commit, manual]
     entry: bazel run //:ormolu-format
     files: \.hs|\.lhs$
     language: system
@@ -65,16 +72,6 @@ repos:
     language: script
     stages: [manual]
     pass_filenames: false
-
--   repo: https://github.com/nix-community/nixpkgs-fmt
-    rev: 6740ea881d3ac5942d4fbf124f5956b896666c76
-    hooks:
-    -   id: nixpkgs-fmt
-        exclude: |
-            (?x)^(
-                .*/Cargo\.nix|
-                experimental/.*
-            )$
 
 - repo: https://github.com/willthames/ansible-lint.git
   rev: v4.2.0

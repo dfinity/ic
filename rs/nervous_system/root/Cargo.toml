@@ -15,6 +15,6 @@ ic-cdk = { workspace = true }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-nervous-system-clients = { path = "../clients" }
 ic-nervous-system-runtime = { path = "../runtime" }
-ic-ic00-types = { path = "../../types/ic00_types" }
+ic-management-canister-types = { path = "../../types/management_canister_types" }
 serde = { workspace = true }
 serde_bytes = { workspace = true }

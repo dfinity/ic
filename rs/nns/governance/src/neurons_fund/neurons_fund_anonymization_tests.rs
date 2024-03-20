@@ -38,9 +38,17 @@ fn test_neurons_fund_participation_anonymization() {
     let participation = NeuronsFundParticipationPb {
         ideal_matched_participation_function: Some(IdealMatchedParticipationFunctionPb {
             serialized_representation: Some(
-                PolynomialMatchingFunction::new(1_000_000_000_000_000)
-                    .unwrap()
-                    .serialize(),
+                PolynomialMatchingFunction::new(
+                    1_000_000_000_000_000,
+                    NeuronsFundParticipationLimits {
+                        max_theoretical_neurons_fund_participation_amount_icp: dec!(333_000.0),
+                        contribution_threshold_icp: dec!(33_000.0),
+                        one_third_participation_milestone_icp: dec!(100_000.0),
+                        full_participation_milestone_icp: dec!(167_000.0),
+                    },
+                )
+                .unwrap()
+                .serialize(),
             ),
         }),
         neurons_fund_reserves: Some(snapshot.clone()),

@@ -1,11 +1,13 @@
-use crossbeam::channel::Receiver;
+use axum::body::Body;
 use hyper::{
-    client::conn::{handshake, SendRequest},
-    Body, Method, Request, StatusCode,
+    client::conn::http1::{handshake, SendRequest},
+    Method, Request, StatusCode,
 };
+use hyper_util::rt::TokioIo;
 use ic_agent::Agent;
 use ic_config::http_handler::Config;
-use ic_crypto_tls_interfaces_mocks::MockTlsHandshake;
+use ic_crypto_tls_interfaces::TlsConfig;
+use ic_crypto_tls_interfaces_mocks::{MockTlsConfig, MockTlsHandshake};
 use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
 use ic_error_types::UserError;
 use ic_http_endpoints_public::start_server;
@@ -34,32 +36,29 @@ use ic_registry_keys::{
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{CanisterMigrations, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{CanisterQueues, NetworkTopology, ReplicatedState, SystemMetadata};
-use ic_test_utilities::{
-    crypto::{temp_crypto_component_with_fake_registry, CryptoReturningOk},
-    state::ReplicatedStateBuilder,
-    types::ids::{node_test_id, subnet_test_id},
+use ic_replicated_state::{
+    canister_snapshots::CanisterSnapshots, CanisterQueues, NetworkTopology, ReplicatedState,
+    SystemMetadata,
 };
-use ic_test_utilities_time::mock_time;
+use ic_test_utilities::crypto::{temp_crypto_component_with_fake_registry, CryptoReturningOk};
+use ic_test_utilities_state::ReplicatedStateBuilder;
+use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
     artifact_kind::IngressArtifact,
-    batch::{BatchPayload, RawQueryStats, ValidationContext},
-    consensus::{
-        certification::{Certification, CertificationContent},
-        dkg::Dealings,
-        Block, BlockPayload, DataPayload, Payload, Rank,
-    },
+    batch::RawQueryStats,
+    consensus::certification::{Certification, CertificationContent},
     crypto::{
         threshold_sig::{
             ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
             ThresholdSigPublicKey,
         },
-        CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, CryptoHashOf, Signed,
+        CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, Signed,
     },
     malicious_flags::MaliciousFlags,
     messages::{CertificateDelegation, SignedIngressContent, UserQuery},
     signature::ThresholdSignature,
+    time::UNIX_EPOCH,
     CryptoHashOfPartialState, Height, RegistryVersion,
 };
 use mockall::{mock, predicate::*};
@@ -68,7 +67,10 @@ use std::{
     collections::BTreeMap, convert::Infallible, net::SocketAddr, sync::Arc, sync::RwLock,
     time::Duration,
 };
-use tokio::net::{TcpSocket, TcpStream};
+use tokio::{
+    net::{TcpSocket, TcpStream},
+    sync::mpsc::UnboundedReceiver,
+};
 use tower::{util::BoxCloneService, Service, ServiceExt};
 use tower_test::mock::Handle;
 
@@ -202,7 +204,7 @@ pub fn default_get_latest_state() -> Labeled<Arc<ReplicatedState>> {
     };
 
     metadata.network_topology = network_topology;
-    metadata.batch_time = mock_time();
+    metadata.batch_time = UNIX_EPOCH;
 
     Labeled::new(
         Height::from(1),
@@ -211,6 +213,7 @@ pub fn default_get_latest_state() -> Labeled<Arc<ReplicatedState>> {
             metadata,
             CanisterQueues::default(),
             RawQueryStats::default(),
+            CanisterSnapshots::default(),
         )),
     )
 }
@@ -250,27 +253,8 @@ fn basic_state_manager_mock() -> MockStateManager {
 fn basic_consensus_pool_cache() -> MockConsensusPoolCache {
     let mut mock_consensus_cache = MockConsensusPoolCache::new();
     mock_consensus_cache
-        .expect_finalized_block()
-        .returning(move || {
-            Block::new(
-                CryptoHashOf::from(CryptoHash(Vec::new())),
-                Payload::new(
-                    ic_types::crypto::crypto_hash,
-                    BlockPayload::Data(DataPayload {
-                        batch: BatchPayload::default(),
-                        dealings: Dealings::new_empty(Height::from(1)),
-                        ecdsa: None,
-                    }),
-                ),
-                Height::from(1),
-                Rank(456),
-                ValidationContext {
-                    registry_version: RegistryVersion::from(1),
-                    certified_height: Height::from(1),
-                    time: mock_time(),
-                },
-            )
-        });
+        .expect_is_replica_behind()
+        .return_const(false);
     mock_consensus_cache
 }
 
@@ -366,7 +350,7 @@ pub async fn create_conn_and_send_request(addr: SocketAddr) -> (SendRequest<Body
         .await
         .expect("tcp connection to server address failed");
 
-    let (mut request_sender, connection) = handshake(target_stream)
+    let (mut request_sender, connection) = handshake(TokioIo::new(target_stream))
         .await
         .expect("tcp client handshake failed");
 
@@ -404,6 +388,7 @@ pub struct HttpEndpointBuilder {
     registry_client: Arc<dyn RegistryClient>,
     delegation_from_nns: Option<CertificateDelegation>,
     pprof_collector: Arc<dyn PprofCollector>,
+    tls_config: Arc<dyn TlsConfig + Send + Sync>,
 }
 
 impl HttpEndpointBuilder {
@@ -416,6 +401,7 @@ impl HttpEndpointBuilder {
             registry_client: Arc::new(basic_registry_client()),
             delegation_from_nns: None,
             pprof_collector: Arc::new(Pprof),
+            tls_config: Arc::new(MockTlsConfig::new()),
         }
     }
 
@@ -450,11 +436,16 @@ impl HttpEndpointBuilder {
         self
     }
 
+    pub fn with_tls_config(mut self, tls_config: impl TlsConfig + Send + Sync + 'static) -> Self {
+        self.tls_config = Arc::new(tls_config);
+        self
+    }
+
     pub fn run(
         self,
     ) -> (
         IngressFilterHandle,
-        Receiver<UnvalidatedArtifactMutation<IngressArtifact>>,
+        UnboundedReceiver<UnvalidatedArtifactMutation<IngressArtifact>>,
         QueryExecutionHandle,
     ) {
         let metrics = MetricsRegistry::new();
@@ -469,7 +460,8 @@ impl HttpEndpointBuilder {
         let sig_verifier = Arc::new(temp_crypto_component_with_fake_registry(node_test_id(0)));
         let crypto = Arc::new(CryptoReturningOk::default());
 
-        let (ingress_tx, ingress_rx) = crossbeam::channel::unbounded();
+        #[allow(clippy::disallowed_methods)]
+        let (ingress_tx, ingress_rx) = tokio::sync::mpsc::unbounded_channel();
         let mut ingress_pool_throtller = MockIngressPoolThrottler::new();
         ingress_pool_throtller
             .expect_exceeds_threshold()
@@ -486,6 +478,7 @@ impl HttpEndpointBuilder {
             self.state_manager,
             crypto as Arc<_>,
             self.registry_client,
+            self.tls_config,
             tls_handshake,
             sig_verifier,
             node_id,

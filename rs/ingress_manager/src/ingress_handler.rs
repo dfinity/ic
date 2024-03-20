@@ -160,20 +160,21 @@ mod tests {
     };
     use ic_interfaces_mocks::consensus_pool::MockConsensusTime;
     use ic_interfaces_state_manager::StateManager;
-    use ic_test_utilities::{
-        history::MockIngressHistory,
-        state_manager::FakeStateManager,
-        types::ids::{canister_test_id, node_test_id, user_test_id},
-        types::messages::SignedIngressBuilder,
+    use ic_test_utilities::state_manager::FakeStateManager;
+    use ic_test_utilities_state::MockIngressHistory;
+    use ic_test_utilities_time::FastForwardTimeSource;
+    use ic_test_utilities_types::{
+        ids::{canister_test_id, node_test_id, user_test_id},
+        messages::SignedIngressBuilder,
     };
-    use ic_test_utilities_time::{mock_time, FastForwardTimeSource};
     use ic_types::ingress::{IngressState, IngressStatus};
+    use ic_types::time::UNIX_EPOCH;
     use std::sync::Arc;
     use std::time::Duration;
 
     #[tokio::test]
     async fn test_ingress_on_state_change_valid() {
-        let time = mock_time();
+        let time = UNIX_EPOCH;
         let mut consensus_time = MockConsensusTime::new();
         consensus_time
             .expect_consensus_time()
@@ -221,7 +222,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_ingress_on_state_change_invalid() {
-        let time = mock_time();
+        let time = UNIX_EPOCH;
         let mut consensus_time = MockConsensusTime::new();
         consensus_time
             .expect_consensus_time()
@@ -234,7 +235,7 @@ mod tests {
                 Box::new(|_| IngressStatus::Known {
                     receiver: canister_test_id(0).get(),
                     user_id: user_test_id(0),
-                    time: mock_time(),
+                    time: UNIX_EPOCH,
                     state: IngressState::Received,
                 })
             });
@@ -329,12 +330,12 @@ mod tests {
                 Box::new(|_| IngressStatus::Known {
                     receiver: canister_test_id(0).get(),
                     user_id: user_test_id(0),
-                    time: mock_time(),
+                    time: UNIX_EPOCH,
                     state: IngressState::Received,
                 })
             });
 
-        let time = mock_time();
+        let time = UNIX_EPOCH;
 
         let mut consensus_time = MockConsensusTime::new();
         consensus_time
@@ -382,7 +383,7 @@ mod tests {
         // we can select an appropriate expiry time for the message.
         // Furthermore, the time of choosing needs to be set to the current
         // time so that conversion to SignedIngress does not fail.
-        let current_time = mock_time();
+        let current_time = UNIX_EPOCH;
         let batch_time = current_time + Duration::from_secs(1);
 
         let mut consensus_time = MockConsensusTime::new();
@@ -412,12 +413,12 @@ mod tests {
                     ingress_pool.insert(UnvalidatedArtifact {
                         message: good_msg.clone(),
                         peer_id: node_test_id(0),
-                        timestamp: mock_time(),
+                        timestamp: UNIX_EPOCH,
                     });
                     ingress_pool.insert(UnvalidatedArtifact {
                         message: bad_msg.clone(),
                         peer_id: node_test_id(0),
-                        timestamp: mock_time(),
+                        timestamp: UNIX_EPOCH,
                     });
                     ingress_manager.on_state_change(ingress_pool)
                 });

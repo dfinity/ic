@@ -92,12 +92,12 @@ pub fn operations_to_requests(
             .map_err(|e| op_error(o, e))?;
 
         let validate_neuron_management_op = || {
-            if o.amount.is_some() && o._type.parse::<OperationType>()? != OperationType::Disburse {
+            if o.amount.is_some() && o.type_.parse::<OperationType>()? != OperationType::Disburse {
                 Err(op_error(
                     o,
                     format!(
                         "neuron management {:?} operation cannot have an amount",
-                        o._type
+                        o.type_
                     ),
                 ))
             } else if o.coin_change.is_some() {
@@ -105,7 +105,7 @@ pub fn operations_to_requests(
                     o,
                     format!(
                         "neuron management {:?} operation cannot have a coin change",
-                        o._type
+                        o.type_
                     ),
                 ))
             } else {
@@ -113,7 +113,7 @@ pub fn operations_to_requests(
             }
         };
 
-        match o._type.parse::<OperationType>()? {
+        match o.type_.parse::<OperationType>()? {
             OperationType::Transaction => {
                 let amount = o
                     .amount
@@ -259,7 +259,7 @@ pub fn operations_to_requests(
                 state.list_neurons(account)?;
             }
             OperationType::Burn | OperationType::Mint => {
-                let msg = format!("Unsupported operation type: {:?}", o._type);
+                let msg = format!("Unsupported operation type: {:?}", o.type_);
                 return Err(op_error(o, msg));
             }
             OperationType::Follow => {
@@ -440,9 +440,9 @@ pub fn from_transaction_operation_results(
     for _type in requests.into_iter() {
         let o = match (&_type, &t.operations[op_idx..]) {
             (Request::Transfer(LedgerOperation::Transfer { .. }), [withdraw, deposit, fee, ..])
-                if withdraw._type.parse::<OperationType>()? == OperationType::Transaction
-                    && deposit._type.parse::<OperationType>()? == OperationType::Transaction
-                    && fee._type.parse::<OperationType>()? == OperationType::Fee =>
+                if withdraw.type_.parse::<OperationType>()? == OperationType::Transaction
+                    && deposit.type_.parse::<OperationType>()? == OperationType::Transaction
+                    && fee.type_.parse::<OperationType>()? == OperationType::Fee =>
             {
                 op_idx += 3;
                 fee

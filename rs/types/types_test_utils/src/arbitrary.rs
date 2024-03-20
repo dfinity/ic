@@ -1,15 +1,11 @@
 use crate::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id};
-use ic_canonical_state::encoding::{
-    old_types::{RequestV13 as CanonicalRequestV13, RequestV3 as CanonicalRequestV3},
-    types::Request as CanonicalRequestV14,
-};
-use ic_certification_version::{CertificationVersion, CURRENT_CERTIFICATION_VERSION};
 use ic_types::{
     crypto::{AlgorithmId, KeyPurpose, UserPublicKey},
     messages::{
         CallbackId, Payload, RejectContext, Request, RequestMetadata, RequestOrResponse, Response,
+        NO_DEADLINE,
     },
-    time::UNIX_EPOCH,
+    time::{CoarseTime, UNIX_EPOCH},
     xnet::StreamIndex,
     CanisterId, Cycles, Height, NodeId, RegistryVersion, SubnetId, Time, UserId,
 };
@@ -113,12 +109,22 @@ prop_compose! {
 }
 
 prop_compose! {
-    /// Returns an arbitrary [`Request`].
-    ///
-    /// All fields should be populated here, including those not yet supported by the current
-    /// certification version; this way `request()` below will automatically start producing
-    /// requests including such fields once the current certification is bumped.
-    fn request_impl()(
+    /// Returns an arbitrary deadline that is equal to `NO_DEADLINE` half the time.
+    pub fn deadline() (
+      deadline in any::<u32>(),
+    ) -> CoarseTime {
+        if deadline % 2 == 1 {
+            NO_DEADLINE
+        } else {
+            CoarseTime::from_secs_since_unix_epoch(deadline)
+        }
+    }
+}
+
+prop_compose! {
+    /// Generates an arbitrary [`Request`], with or without populated `metadata` and
+    /// `deadline` fields.
+    pub fn request_with_config(populate_metadata: bool, populate_deadline: bool)(
         receiver in canister_id(),
         sender in canister_id(),
         cycles_payment in any::<u64>(),
@@ -126,6 +132,7 @@ prop_compose! {
         callback in any::<u64>(),
         method_payload in prop::collection::vec(any::<u8>(), 0..16),
         metadata in proptest::option::of(request_metadata()),
+        deadline in deadline(),
     ) -> Request {
         Request {
             receiver,
@@ -134,46 +141,23 @@ prop_compose! {
             payment: Cycles::from(cycles_payment),
             method_name,
             method_payload,
-            metadata,
+            metadata: if populate_metadata { metadata } else { None },
+            deadline: if populate_deadline { deadline } else { NO_DEADLINE },
         }
     }
 }
 
 prop_compose! {
-    /// Returns an arbitrary [`Request`] valid for a given certification version.
-    ///
-    /// A roundtrip to the canonical version and back ensures compatibility for a given
-    /// certification version; e.g. by stripping off certain fields like `metadata` for version 13
-    /// and below.
-    pub fn valid_request_for_certification_version(certification_version: CertificationVersion)(
-        request in request_impl(),
-    ) -> Request {
-        use CertificationVersion::*;
-        match certification_version {
-            V0 | V1 | V2 | V3 => {
-                let req: CanonicalRequestV3 = (&request, certification_version).into();
-                req.try_into().unwrap()
-            }
-            V4 | V5 | V6 | V7 | V8 | V9 | V10 | V11 | V12 | V13 => {
-                let req: CanonicalRequestV13 = (&request, certification_version).into();
-                req.try_into().unwrap()
-            }
-            V14 | V15 => {
-                let req: CanonicalRequestV14 = (&request, certification_version).into();
-                req.try_into().unwrap()
-            }
-        }
-    }
-}
-
-prop_compose! {
-    /// Returns an arbitrary [`Request`] valid for the current certification version.
+    /// Returns an arbitrary [`Request`].
     ///
     /// This is what should be used for generating arbitrary requests almost everywhere;
     /// the only exception is when specifically testing for a certain certification version,
-    /// in which case `valid_request_for_certification_version()` should be used.
+    /// in which case `request_with_config()` should be used.
     pub fn request()(
-        request in valid_request_for_certification_version(CURRENT_CERTIFICATION_VERSION),
+        // Always populate all fields, regardless of e.g. current certification version.
+        // `ic_canonical_state` should not be using this generator; and all other crates /
+        // proptests should be able to deal with all fields being populated.
+        request in request_with_config(true, true),
     ) -> Request {
         request
     }
@@ -192,39 +176,56 @@ pub fn response_payload() -> impl Strategy<Value = Payload> {
 }
 
 prop_compose! {
-    /// Returns an arbitrary [`Response`].
-    pub fn response()(
+    /// Returns an arbitrary [`Response`], with or without a populated `deadline` field.
+    pub fn response_with_config(populate_deadline: bool)(
         originator in canister_id(),
         respondent in canister_id(),
         callback in any::<u64>(),
         cycles_refund in any::<u64>(),
         response_payload in response_payload(),
+        deadline in deadline(),
     ) -> Response {
         Response {
             originator,
             respondent,
             originator_reply_callback: CallbackId::from(callback),
             refund: Cycles::from(cycles_refund),
-            response_payload
+            response_payload,
+            deadline: if populate_deadline { deadline } else { NO_DEADLINE },
         }
     }
+}
+
+prop_compose! {
+    /// Returns an arbitrary [`Response`].
+    ///
+    /// This is what should be used for generating arbitrary requests almost everywhere;
+    /// the only exception is when specifically testing for a certain certification version,
+    /// in which case `request_with_config()` should be used.
+    pub fn response()(
+        response in response_with_config(true),
+    ) -> Response {
+        response
+    }
+}
+
+/// Produces an arbitrary [`RequestOrResponse`], with the respective fields
+/// populated or not.
+pub fn request_or_response_with_config(
+    populate_request_metadata: bool,
+    populate_deadline: bool,
+) -> impl Strategy<Value = RequestOrResponse> {
+    prop_oneof![
+        request_with_config(populate_request_metadata, populate_deadline)
+            .prop_flat_map(|req| Just(req.into())),
+        response_with_config(populate_deadline).prop_flat_map(|rep| Just(rep.into())),
+    ]
 }
 
 /// Produces an arbitrary [`RequestOrResponse`].
 pub fn request_or_response() -> impl Strategy<Value = RequestOrResponse> {
     prop_oneof![
         request().prop_flat_map(|req| Just(req.into())),
-        response().prop_flat_map(|rep| Just(rep.into())),
-    ]
-}
-
-/// Returns an arbitrary [`RequestOrResponse`] valid for a given certification version.
-pub fn valid_request_or_response_for_certification_version(
-    certification_version: CertificationVersion,
-) -> impl Strategy<Value = RequestOrResponse> {
-    prop_oneof![
-        valid_request_for_certification_version(certification_version)
-            .prop_flat_map(|req| Just(req.into())),
         response().prop_flat_map(|rep| Just(rep.into())),
     ]
 }

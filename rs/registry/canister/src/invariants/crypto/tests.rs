@@ -600,11 +600,11 @@ fn run_test_orphaned_crypto_keys(
 mod ecdsa_signing_subnet_lists {
     use super::*;
     use ic_base_types::{subnet_id_into_protobuf, SubnetId};
-    use ic_ic00_types::{EcdsaCurve, EcdsaKeyId};
+    use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId};
     use ic_protobuf::registry::crypto::v1::EcdsaSigningSubnetList;
     use ic_protobuf::registry::subnet::v1::{EcdsaConfig, SubnetRecord};
     use ic_registry_transport::pb::v1::RegistryMutation;
-    use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use rand::Rng;
 
     #[test]
@@ -645,21 +645,13 @@ mod ecdsa_signing_subnet_lists {
     }
 
     #[test]
-    fn should_fail_if_same_key_configured_for_multiple_subnets() {
+    fn should_succeed_if_same_key_configured_for_multiple_subnets() {
         let setup = Setup::builder()
             .with_default_curve_and_key_id_and_subnet_record_ecdsa_config()
             .with_same_key_on_additional_subnet(subnet_test_id(2))
             .build();
 
-        assert_matches!(
-            check_node_crypto_keys_invariants(&setup.snapshot),
-            Err(InvariantCheckError{msg: error_message, source: _})
-            if error_message.contains(format!(
-                "key_id {}{} ended up with more than one ECDSA signing subnet",
-                ic_registry_keys::ECDSA_SIGNING_SUBNET_LIST_KEY_PREFIX,
-                setup.key_id.expect("a valid EcdsaKeyId should be set")
-            ).as_str())
-        );
+        assert_matches!(check_node_crypto_keys_invariants(&setup.snapshot), Ok(()));
     }
 
     #[test]
@@ -859,13 +851,25 @@ mod ecdsa_signing_subnet_lists {
                         ));
                 let subnet_record = SubnetRecord {
                     membership: vec![node_id.get().into_vec()],
-                    ecdsa_config,
+                    ecdsa_config: ecdsa_config.clone(),
                     ..Default::default()
                 };
                 mutations.push(ic_registry_transport::insert(
                     make_subnet_record_key(subnet_id),
                     encode_or_panic(&subnet_record),
                 ));
+                if let Some(another_subnet_id) = self.additional_subnet_id {
+                    let node_id = node_test_id(2);
+                    let subnet_record = SubnetRecord {
+                        membership: vec![node_id.get().into_vec()],
+                        ecdsa_config,
+                        ..Default::default()
+                    };
+                    mutations.push(ic_registry_transport::insert(
+                        make_subnet_record_key(another_subnet_id),
+                        encode_or_panic(&subnet_record),
+                    ));
+                }
             }
             for m in mutations {
                 snapshot.insert(m.key, m.value);

@@ -60,10 +60,10 @@ impl TransactionOperationResults {
             token_name,
         )?;
 
-        let merge_metadata = |o: &mut Operation, rr: &RequestResult| {
+        let merge_metadata = |o: &mut Operation, rr: &RequestResult| -> Result<(), ApiError> {
             let mut metadata = o.metadata.take().unwrap_or_default();
             let rrmd = convert_to_request_result_metadata(rr);
-            let rrmd = ObjectMap::from(rrmd);
+            let rrmd = ObjectMap::try_from(rrmd)?;
             for (k, v) in rrmd {
                 metadata.insert(k, v);
             }
@@ -79,6 +79,7 @@ impl TransactionOperationResults {
                 Some(metadata)
             };
             o.status = Some(rr.status.name().to_owned());
+            Ok(())
         };
 
         let mut op_idx = 0;
@@ -90,17 +91,17 @@ impl TransactionOperationResults {
                         ..
                     },
                     [withdraw, deposit, fee, ..],
-                ) if withdraw._type.parse::<OperationType>()? == OperationType::Transaction
-                    && deposit._type.parse::<OperationType>()? == OperationType::Transaction
-                    && fee._type.parse::<OperationType>()? == OperationType::Fee =>
+                ) if withdraw.type_.parse::<OperationType>()? == OperationType::Transaction
+                    && deposit.type_.parse::<OperationType>()? == OperationType::Transaction
+                    && fee.type_.parse::<OperationType>()? == OperationType::Fee =>
                 {
-                    merge_metadata(withdraw, rr);
-                    merge_metadata(deposit, rr);
-                    merge_metadata(fee, rr);
+                    merge_metadata(withdraw, rr)?;
+                    merge_metadata(deposit, rr)?;
+                    merge_metadata(fee, rr)?;
                     op_idx += 3;
                 }
                 (rr, [o, ..]) => {
-                    merge_metadata(o, rr);
+                    merge_metadata(o, rr)?;
                     op_idx += 1
                 }
                 _ => {

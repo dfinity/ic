@@ -113,7 +113,7 @@ impl ManageNeuronRequestHandler<manage_neuron::Merge>
         if source_neuron.is_a_neurons_fund_member() || target_neuron.is_a_neurons_fund_member() {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
-                "Cannot merge neurons that have been dedicated to the community fund",
+                "Cannot merge neurons that have been dedicated to the Neurons' Fund",
             ));
         }
 
@@ -229,12 +229,8 @@ impl ManageNeuronRequestHandler<manage_neuron::Merge>
             }
         };
 
-        let source_neuron = gov_proxy
-            .with_neuron(&source_neuron_id, |n| n.clone())?
-            .without_deprecated_topics_from_followees();
-        let target_neuron = gov_proxy
-            .with_neuron(&target_neuron_id, |n| n.clone())?
-            .without_deprecated_topics_from_followees();
+        let source_neuron = gov_proxy.with_neuron(&source_neuron_id, |n| n.clone())?;
+        let target_neuron = gov_proxy.with_neuron(&target_neuron_id, |n| n.clone())?;
 
         let now = gov_proxy.now();
         let source_neuron_info = source_neuron.get_neuron_info(now);

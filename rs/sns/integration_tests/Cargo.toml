@@ -19,10 +19,11 @@ path = "test_canisters/sns_governance_mem_test_canister.rs"
 async-trait = "0.1.42"
 canister-test = { path = "../../rust_canisters/canister_test" }
 candid = { workspace = true }
+cycles-minting-canister = { path = "../../nns/cmc" }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_core = { path = "../../rust_canisters/dfn_core" }
 ic-base-types = { path = "../../types/base_types" }
-ic-ic00-types = { path = "../../types/ic00_types" }
+ic-management-canister-types = { path = "../../types/management_canister_types" }
 ic-icrc1 = { path = "../../rosetta-api/icrc1" }
 ic-icrc1-ledger = { path = "../../rosetta-api/icrc1/ledger" }
 ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
@@ -70,7 +71,7 @@ ic-test-utilities-load-wasm = { path = "../../test_utilities/load_wasm" }
 ic-types = { path = "../../types/types" }
 itertools = { workspace = true }
 lazy_static = "1.4.0"
-num-traits = "0.2.14"
+num-traits = { workspace = true }
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 pretty_assertions = { workspace = true }
 on_wire = { path = "../../rust_canisters/on_wire" }

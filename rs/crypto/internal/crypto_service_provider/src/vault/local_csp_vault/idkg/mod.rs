@@ -150,12 +150,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         transcript: IDkgTranscriptInternalBytes,
     ) -> Result<BTreeMap<NodeIndex, IDkgComplaintInternal>, IDkgLoadTranscriptError> {
         let start_time = self.metrics.now();
-        let internal_dealings =
-            idkg_internal_dealings_from_verified_dealings(&dealings).map_err(|e| {
-                IDkgLoadTranscriptError::SerializationError {
-                    internal_error: format!("failed to deserialize internal dealing: {:?}", e),
-                }
-            })?;
+        let internal_dealings = idkg_internal_dealings_from_verified_dealings(&dealings)?;
         let internal_transcript = IDkgTranscriptInternal::deserialize(transcript.as_ref())
             .map_err(|e| IDkgLoadTranscriptError::SerializationError {
                 internal_error: format!("failed to deserialize internal transcript: {:?}", e.0),
@@ -190,7 +185,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         let internal_dealings = idkg_internal_dealings_from_verified_dealings(&dealings)?;
         let internal_transcript = IDkgTranscriptInternal::deserialize(transcript.as_ref())
             .map_err(|e| IDkgLoadTranscriptError::SerializationError {
-                internal_error: e.0,
+                internal_error: format!("failed to deserialize internal transcript: {:?}", e.0),
             })?;
         let result = self.idkg_load_transcript_with_openings_internal(
             &internal_dealings,
@@ -467,16 +462,16 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                             .to_string(),
                     })
                 }
-                Err(IDkgComputeSecretSharesInternalError::InsufficientOpenings(_, _)) => {
+                Err(e @ IDkgComputeSecretSharesInternalError::InsufficientOpenings(_, _)) => {
                     Err(IDkgLoadTranscriptError::InsufficientOpenings {
-                        internal_error: format!("{:?}", compute_secret_shares_with_openings_result),
+                        internal_error: format!("{:?}", e),
                     })
                 }
-                Err(IDkgComputeSecretSharesInternalError::InvalidCiphertext(_))
-                | Err(IDkgComputeSecretSharesInternalError::UnableToReconstruct(_))
-                | Err(IDkgComputeSecretSharesInternalError::UnableToCombineOpenings(_)) => {
+                Err(e @ IDkgComputeSecretSharesInternalError::InvalidCiphertext(_))
+                | Err(e @ IDkgComputeSecretSharesInternalError::UnableToReconstruct(_))
+                | Err(e @ IDkgComputeSecretSharesInternalError::UnableToCombineOpenings(_)) => {
                     Err(IDkgLoadTranscriptError::InvalidArguments {
-                        internal_error: format!("{:?}", compute_secret_shares_with_openings_result),
+                        internal_error: format!("{:?}", e),
                     })
                 }
             }
@@ -556,9 +551,11 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                         key_id: opener_key_id.to_string(),
                     }
                 }
-                _ => IDkgOpenTranscriptError::InternalError {
-                    internal_error: format!("{:?}", e),
-                },
+                deser_err @ MEGaKeysetFromSksError::DeserializationError(_) => {
+                    IDkgOpenTranscriptError::InternalError {
+                        internal_error: format!("{:?}", deser_err),
+                    }
+                }
             })?;
         open_dealing(
             &dealing,

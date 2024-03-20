@@ -58,17 +58,19 @@ mod tests {
             },
             ExecutionState, ExportedFunctions, Global, NumWasmPages,
         },
-        metadata_state::SubnetTopology,
+        metadata_state::{ApiBoundaryNodeEntry, SubnetTopology},
         page_map::PageMap,
         testing::ReplicatedStateTesting,
         Memory,
     };
-    use ic_test_utilities::{
-        state::new_canister_state,
-        types::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id},
+    use ic_test_utilities_state::new_canister_state;
+    use ic_test_utilities_types::ids::{
+        canister_test_id, node_test_id, subnet_test_id, user_test_id,
     };
-    use ic_test_utilities_time::mock_time;
-    use ic_types::{xnet::StreamHeader, CanisterId, Cycles, ExecutionRound};
+    use ic_types::{
+        xnet::{StreamFlags, StreamHeader},
+        CanisterId, Cycles, ExecutionRound,
+    };
     use ic_wasm_types::CanisterModule;
     use maplit::{btreemap, btreeset};
     use std::collections::{BTreeSet, VecDeque};
@@ -101,28 +103,38 @@ mod tests {
             let visitor = TracingVisitor::new(NoopVisitor);
 
             let expected_traversal = vec![
-                E::StartSubtree,
-                edge("canister"),
-                E::StartSubtree,
-                E::EndSubtree, // canisters
-                edge("metadata"),
-                E::VisitBlob(encode_metadata(SystemMetadata {
-                    id_counter: (certification_version <= V9).then_some(0),
-                    prev_state_hash: None,
-                })),
-                edge("request_status"),
-                E::StartSubtree,
-                E::EndSubtree, // request_status
-                edge("streams"),
-                E::StartSubtree,
-                E::EndSubtree, // streams
-                edge("subnet"),
-                E::StartSubtree,
-                E::EndSubtree, // subnets
-                edge("time"),
-                leb_num(0),
-                E::EndSubtree, // global
-            ];
+                Some(vec![E::StartSubtree]), // global
+                (certification_version >= V16).then_some(vec![
+                    edge("api_boundary_nodes"),
+                    E::StartSubtree,
+                    E::EndSubtree, // api_boundary_nodes
+                ]),
+                Some(vec![
+                    edge("canister"),
+                    E::StartSubtree,
+                    E::EndSubtree, // canisters
+                    edge("metadata"),
+                    E::VisitBlob(encode_metadata(SystemMetadata {
+                        id_counter: (certification_version <= V9).then_some(0),
+                        prev_state_hash: None,
+                    })),
+                    edge("request_status"),
+                    E::StartSubtree,
+                    E::EndSubtree, // request_status
+                    edge("streams"),
+                    E::StartSubtree,
+                    E::EndSubtree, // streams
+                    edge("subnet"),
+                    E::StartSubtree,
+                    E::EndSubtree, // subnets
+                    edge("time"),
+                    leb_num(0),
+                    E::EndSubtree, // global
+                ]),
+            ]
+            .into_iter()
+            .flat_map(Option::unwrap_or_default)
+            .collect::<Vec<_>>();
 
             assert_eq!(
                 expected_traversal,
@@ -156,8 +168,13 @@ mod tests {
             let visitor = TracingVisitor::new(NoopVisitor);
 
             let expected_traversal = vec![
+                Some(vec![E::StartSubtree]), // global
+                (certification_version >= V16).then_some(vec![
+                    edge("api_boundary_nodes"),
+                    E::StartSubtree,
+                    E::EndSubtree, // api_boundary_nodes
+                ]),
                 Some(vec![
-                    E::StartSubtree, // global
                     edge("canister"),
                     E::StartSubtree,
                     E::EnterEdge(canister_id.get().into_vec()),
@@ -254,8 +271,13 @@ mod tests {
             let visitor = TracingVisitor::new(NoopVisitor);
 
             let expected_traversal = vec![
-                Some(vec![
+                Some(vec![E::StartSubtree]), // global
+                (certification_version >= V16).then_some(vec![
+                    edge("api_boundary_nodes"),
                     E::StartSubtree,
+                    E::EndSubtree, // api_boundary_nodes
+                ]),
+                Some(vec![
                     edge("canister"),
                     E::StartSubtree,
                     E::EnterEdge(canister_id.get().into_vec()),
@@ -326,12 +348,13 @@ mod tests {
         use ic_replicated_state::metadata_state::Stream;
         use ic_types::xnet::{StreamIndex, StreamIndexedQueue};
 
-        let header = StreamHeader {
-            begin: StreamIndex::from(4),
-            end: StreamIndex::from(4),
-            signals_end: StreamIndex::new(11),
-            reject_signals: VecDeque::new(),
-        };
+        let header = StreamHeader::new(
+            4.into(),
+            4.into(),
+            11.into(),
+            VecDeque::default(),
+            StreamFlags::default(),
+        );
 
         let stream = Stream::new(
             StreamIndexedQueue::with_begin(StreamIndex::from(4)),
@@ -349,36 +372,46 @@ mod tests {
             let visitor = TracingVisitor::new(NoopVisitor);
 
             let expected_traversal = vec![
-                E::StartSubtree,
-                edge("canister"),
-                E::StartSubtree,
-                E::EndSubtree, // canisters
-                edge("metadata"),
-                E::VisitBlob(encode_metadata(SystemMetadata {
-                    id_counter: (certification_version <= V9).then_some(0),
-                    prev_state_hash: None,
-                })),
-                edge("request_status"),
-                E::StartSubtree,
-                E::EndSubtree, // request_status
-                edge("streams"),
-                E::StartSubtree,
-                edge(subnet_test_id(5).get_ref().to_vec()),
-                E::StartSubtree,
-                edge("header"),
-                E::VisitBlob(encode_stream_header(&header, certification_version)),
-                edge("messages"),
-                E::StartSubtree,
-                E::EndSubtree, // messages
-                E::EndSubtree, // stream
-                E::EndSubtree, // streams
-                edge("subnet"),
-                E::StartSubtree,
-                E::EndSubtree, // subnets
-                edge("time"),
-                leb_num(0),
-                E::EndSubtree, // global
-            ];
+                Some(vec![E::StartSubtree]), // global
+                (certification_version >= V16).then_some(vec![
+                    edge("api_boundary_nodes"),
+                    E::StartSubtree,
+                    E::EndSubtree, // api_boundary_nodes
+                ]),
+                Some(vec![
+                    edge("canister"),
+                    E::StartSubtree,
+                    E::EndSubtree, // canisters
+                    edge("metadata"),
+                    E::VisitBlob(encode_metadata(SystemMetadata {
+                        id_counter: (certification_version <= V9).then_some(0),
+                        prev_state_hash: None,
+                    })),
+                    edge("request_status"),
+                    E::StartSubtree,
+                    E::EndSubtree, // request_status
+                    edge("streams"),
+                    E::StartSubtree,
+                    edge(subnet_test_id(5).get_ref().to_vec()),
+                    E::StartSubtree,
+                    edge("header"),
+                    E::VisitBlob(encode_stream_header(&header, certification_version)),
+                    edge("messages"),
+                    E::StartSubtree,
+                    E::EndSubtree, // messages
+                    E::EndSubtree, // stream
+                    E::EndSubtree, // streams
+                    edge("subnet"),
+                    E::StartSubtree,
+                    E::EndSubtree, // subnets
+                    edge("time"),
+                    leb_num(0),
+                    E::EndSubtree, // global
+                ]),
+            ]
+            .into_iter()
+            .flat_map(Option::unwrap_or_default)
+            .collect::<Vec<_>>();
 
             assert_eq!(
                 expected_traversal,
@@ -393,12 +426,13 @@ mod tests {
     fn test_traverse_ingress_history() {
         use crate::subtree_visitor::{Pattern, SubtreeVisitor};
         use ic_error_types::{ErrorCode, UserError};
-        use ic_test_utilities::types::ids::{message_test_id, subnet_test_id, user_test_id};
+        use ic_test_utilities_types::ids::{message_test_id, subnet_test_id, user_test_id};
         use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
+        use ic_types::time::UNIX_EPOCH;
 
         let user_id = user_test_id(1);
         let canister_id = canister_test_id(1);
-        let time = mock_time();
+        let time = UNIX_EPOCH;
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
         state.set_ingress_status(
             message_test_id(1),
@@ -524,7 +558,7 @@ mod tests {
                     E::StartSubtree,
                 ]),
                 (certification_version >= V11)
-                    .then_some(vec![edge("error_code"), E::VisitBlob(b"IC0516".to_vec())]),
+                    .then_some(vec![edge("error_code"), E::VisitBlob(b"IC0406".to_vec())]),
                 Some(vec![
                     edge("reject_code"),
                     leb_num(4),
@@ -568,28 +602,38 @@ mod tests {
             let visitor = TracingVisitor::new(NoopVisitor);
 
             let expected_traversal = vec![
-                E::StartSubtree,
-                edge("canister"),
-                E::StartSubtree,
-                E::EndSubtree, // canisters
-                edge("metadata"),
-                E::VisitBlob(encode_metadata(SystemMetadata {
-                    id_counter: (certification_version <= V9).then_some(0),
-                    prev_state_hash: None,
-                })),
-                edge("request_status"),
-                E::StartSubtree,
-                E::EndSubtree, // request_status
-                edge("streams"),
-                E::StartSubtree,
-                E::EndSubtree, // streams
-                edge("subnet"),
-                E::StartSubtree,
-                E::EndSubtree, // subnets
-                edge("time"),
-                leb_num(1123456789),
-                E::EndSubtree, // global
-            ];
+                Some(vec![E::StartSubtree]), // global
+                (certification_version >= V16).then_some(vec![
+                    edge("api_boundary_nodes"),
+                    E::StartSubtree,
+                    E::EndSubtree, // api_boundary_nodes
+                ]),
+                Some(vec![
+                    edge("canister"),
+                    E::StartSubtree,
+                    E::EndSubtree, // canisters
+                    edge("metadata"),
+                    E::VisitBlob(encode_metadata(SystemMetadata {
+                        id_counter: (certification_version <= V9).then_some(0),
+                        prev_state_hash: None,
+                    })),
+                    edge("request_status"),
+                    E::StartSubtree,
+                    E::EndSubtree, // request_status
+                    edge("streams"),
+                    E::StartSubtree,
+                    E::EndSubtree, // streams
+                    edge("subnet"),
+                    E::StartSubtree,
+                    E::EndSubtree, // subnets
+                    edge("time"),
+                    leb_num(1123456789),
+                    E::EndSubtree, // global
+                ]),
+            ]
+            .into_iter()
+            .flat_map(Option::unwrap_or_default)
+            .collect::<Vec<_>>();
 
             assert_eq!(
                 expected_traversal,
@@ -643,8 +687,13 @@ mod tests {
             let visitor = TracingVisitor::new(NoopVisitor);
 
             let expected_traversal = vec![
-                Some(vec![
+                Some(vec![E::StartSubtree]), // global
+                (certification_version >= V16).then_some(vec![
+                    edge("api_boundary_nodes"),
                     E::StartSubtree,
+                    E::EndSubtree, // api_boundary_nodes
+                ]),
+                Some(vec![
                     edge("canister"),
                     E::StartSubtree,
                     E::EndSubtree, // canisters
@@ -734,6 +783,96 @@ mod tests {
                     leb_num(0),
                     E::EndSubtree, // global
                 ])
+            ]
+            .into_iter()
+            .flat_map(Option::unwrap_or_default)
+            .collect::<Vec<_>>();
+
+            assert_eq!(
+                expected_traversal,
+                traverse(&state, visitor).0,
+                "unexpected traversal for certification_version: {:?}",
+                certification_version
+            );
+        }
+    }
+
+    #[test]
+    fn test_traverse_api_boundary_nodes() {
+        let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
+        state.metadata.api_boundary_nodes = btreemap! {
+            node_test_id(11) => ApiBoundaryNodeEntry {
+                domain: "api-bn11-example.com".to_string(),
+                ipv4_address: Some("127.0.0.1".to_string()),
+                ipv6_address: "2001:0db8:85a3:0000:0000:8a2e:0370:7334".to_string(),
+                pubkey: None,
+            },
+            node_test_id(12) => ApiBoundaryNodeEntry {
+                domain: "api-bn12-example.com".to_string(),
+                ipv4_address: None,
+                ipv6_address: "2001:0db8:85a3:0000:0000:8a2e:0370:7335".to_string(),
+                pubkey: None,
+            },
+        };
+
+        // Test all certification versions.
+        for certification_version in all_supported_versions() {
+            state.metadata.certification_version = certification_version;
+            let visitor = TracingVisitor::new(NoopVisitor);
+
+            let expected_traversal = vec![
+                Some(vec![E::StartSubtree]), // global
+                (certification_version >= V16).then_some(vec![
+                    edge("api_boundary_nodes"),
+                    E::StartSubtree,
+                    E::EnterEdge(node_test_id(11).get().into_vec()),
+                    E::StartSubtree,
+                    edge("domain"),
+                    E::VisitBlob("api-bn11-example.com".to_string().into_bytes()),
+                    edge("ipv4_address"),
+                    E::VisitBlob("127.0.0.1".to_string().into_bytes()),
+                    edge("ipv6_address"),
+                    E::VisitBlob(
+                        "2001:0db8:85a3:0000:0000:8a2e:0370:7334"
+                            .to_string()
+                            .into_bytes(),
+                    ),
+                    E::EndSubtree, // api boundary node 11
+                    E::EnterEdge(node_test_id(12).get().into_vec()),
+                    E::StartSubtree,
+                    edge("domain"),
+                    E::VisitBlob("api-bn12-example.com".to_string().into_bytes()),
+                    edge("ipv6_address"),
+                    E::VisitBlob(
+                        "2001:0db8:85a3:0000:0000:8a2e:0370:7335"
+                            .to_string()
+                            .into_bytes(),
+                    ),
+                    E::EndSubtree, // api boundary node 12
+                    E::EndSubtree, // api_boundary_nodes
+                ]),
+                Some(vec![
+                    edge("canister"),
+                    E::StartSubtree,
+                    E::EndSubtree, // canisters
+                    edge("metadata"),
+                    E::VisitBlob(encode_metadata(SystemMetadata {
+                        id_counter: (certification_version <= V9).then_some(0),
+                        prev_state_hash: None,
+                    })),
+                    edge("request_status"),
+                    E::StartSubtree,
+                    E::EndSubtree, // request_status
+                    edge("streams"),
+                    E::StartSubtree,
+                    E::EndSubtree, // streams
+                    edge("subnet"),
+                    E::StartSubtree,
+                    E::EndSubtree, // subnets
+                    edge("time"),
+                    leb_num(0),
+                    E::EndSubtree, // global
+                ]),
             ]
             .into_iter()
             .flat_map(Option::unwrap_or_default)

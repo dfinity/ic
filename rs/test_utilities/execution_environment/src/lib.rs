@@ -1,10 +1,5 @@
-use ic_test_utilities::{
-    crypto::mock_random_number_generator,
-    types::messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder},
-};
-use ic_test_utilities_time::mock_time;
-
 use ic_base_types::{NumBytes, NumSeconds, PrincipalId, SubnetId};
+use ic_config::embedders::MeteringType;
 use ic_config::{
     embedders::Config as EmbeddersConfig, execution_environment::Config, flag_status::FlagStatus,
     subnet_config::SchedulerConfig, subnet_config::SubnetConfig,
@@ -19,18 +14,17 @@ use ic_execution_environment::{
     Hypervisor, IngressFilterMetrics, IngressHistoryWriterImpl, InternalHttpQueryHandler,
     RoundInstructions, RoundLimits,
 };
-use ic_ic00_types::{
-    CanisterIdRecord, CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgs,
-    CanisterSettingsArgsBuilder, CanisterStatusType, EcdsaKeyId, EmptyBlob, InstallCodeArgs,
-    InstallCodeArgsV2, LogVisibility, Method, Payload, ProvisionalCreateCanisterWithCyclesArgs,
-    SkipPreUpgrade, UpdateSettingsArgs,
-};
 use ic_interfaces::execution_environment::{
-    ExecutionMode, IngressHistoryWriter, QueryHandler, RegistryExecutionSettings,
-    SubnetAvailableMemory,
+    ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings, SubnetAvailableMemory,
 };
 use ic_interfaces_state_manager::Labeled;
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
+use ic_management_canister_types::{
+    CanisterIdRecord, CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgs,
+    CanisterSettingsArgsBuilder, CanisterStatusType, CanisterUpgradeOptions, EcdsaKeyId, EmptyBlob,
+    InstallCodeArgs, InstallCodeArgsV2, LogVisibility, Method, Payload,
+    ProvisionalCreateCanisterWithCyclesArgs, UpdateSettingsArgs,
+};
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{
@@ -47,6 +41,8 @@ use ic_replicated_state::{
 };
 use ic_replicated_state::{page_map::TestPageAllocatorFileDescriptorImpl, PageMap};
 use ic_system_api::InstructionLimits;
+use ic_test_utilities::crypto::mock_random_number_generator;
+use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder};
 use ic_types::{
     batch::QueryStats,
     crypto::{canister_threshold_sig::MasterEcdsaPublicKey, AlgorithmId},
@@ -55,13 +51,12 @@ use ic_types::{
         AnonymousQuery, CallbackId, CanisterCall, CanisterMessage, CanisterTask, MessageId,
         RequestOrResponse, Response, UserQuery, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
     },
+    time::UNIX_EPOCH,
     CanisterId, Cycles, Height, NumInstructions, NumPages, QueryStatsEpoch, Time, UserId,
 };
 use ic_types_test_utils::ids::{node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::UNIVERSAL_CANISTER_WASM;
 use ic_wasm_types::BinaryEncodedWasm;
-
-use ic_config::embedders::MeteringType;
 use maplit::{btreemap, btreeset};
 use std::convert::TryFrom;
 use std::sync::Arc;
@@ -476,6 +471,12 @@ impl ExecutionTest {
             .get_canister_id()
     }
 
+    /// Deletes the specified canister.
+    pub fn delete_canister(&mut self, canister_id: CanisterId) -> Result<WasmResult, UserError> {
+        let payload = CanisterIdRecord::from(canister_id).encode();
+        self.subnet_message(Method::DeleteCanister, payload)
+    }
+
     pub fn create_canister_with_allocation(
         &mut self,
         cycles: Cycles,
@@ -791,16 +792,16 @@ impl ExecutionTest {
         Ok(())
     }
 
-    /// Upgrades the given canister with the given Wasm binary,
-    /// in the mode specified by value of 'skip_pre_upgrade' field.
+    /// Upgrades the given canister with the given Wasm binary and
+    /// upgrade options.
     pub fn upgrade_canister_v2(
         &mut self,
         canister_id: CanisterId,
         wasm_binary: Vec<u8>,
-        skip_pre_upgrade: Option<SkipPreUpgrade>,
+        upgrade_options: CanisterUpgradeOptions,
     ) -> Result<(), UserError> {
         let args = InstallCodeArgsV2::new(
-            CanisterInstallModeV2::Upgrade(skip_pre_upgrade),
+            CanisterInstallModeV2::Upgrade(Some(upgrade_options)),
             canister_id,
             wasm_binary,
             vec![],
@@ -1068,7 +1069,7 @@ impl ExecutionTest {
             canister,
             Arc::new(response),
             self.instruction_limits.clone(),
-            mock_time(),
+            UNIX_EPOCH,
             network_topology,
             &mut round_limits,
             self.subnet_size(),
@@ -1079,6 +1080,7 @@ impl ExecutionTest {
                 response,
                 instructions_used,
                 heap_delta,
+                call_duration: _,
             } => (canister, response, instructions_used, heap_delta),
             ExecuteMessageResult::Paused { .. } => {
                 unreachable!("Unexpected paused execution")
@@ -1598,8 +1600,6 @@ impl Default for ExecutionTestBuilder {
                 rate_limiting_of_instructions: FlagStatus::Disabled,
                 canister_sandboxing_flag: FlagStatus::Enabled,
                 composite_queries: FlagStatus::Disabled,
-                query_caching: FlagStatus::Disabled,
-                query_cache_capacity: NumBytes::new(100_000_000), // 100MB
                 allocatable_compute_capacity_in_percent: 100,
                 ..Config::default()
             },
@@ -1623,7 +1623,7 @@ impl Default for ExecutionTestBuilder {
             manual_execution: false,
             subnet_features: String::default(),
             bitcoin_get_successors_follow_up_responses: BTreeMap::default(),
-            time: mock_time(),
+            time: UNIX_EPOCH,
             resource_saturation_scaling: 1,
             heap_delta_rate_limit: scheduler_config.heap_delta_rate_limit,
             upload_wasm_chunk_instructions: scheduler_config.upload_wasm_chunk_instructions,
@@ -1813,11 +1813,6 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_query_caching(mut self) -> Self {
-        self.execution_config.query_caching = FlagStatus::Enabled;
-        self
-    }
-
     pub fn with_query_cache_capacity(mut self, capacity_bytes: u64) -> Self {
         self.execution_config.query_cache_capacity = capacity_bytes.into();
         self
@@ -1927,8 +1922,8 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_fetch_canister_logs(mut self, status: FlagStatus) -> Self {
-        self.execution_config.fetch_canister_logs = status;
+    pub fn with_canister_logging(mut self, status: FlagStatus) -> Self {
+        self.execution_config.canister_logging = status;
         self
     }
 

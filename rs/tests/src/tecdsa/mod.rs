@@ -7,14 +7,17 @@ use canister_test::{Canister, Cycles};
 use ic_agent::AgentError;
 use ic_base_types::{NodeId, SubnetId};
 use ic_canister_client::Sender;
-use ic_ic00_types::{
+use ic_management_canister_types::{
     DerivationPath, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId, Payload,
     SignWithECDSAArgs, SignWithECDSAReply,
 };
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nns_common::types::NeuronId;
-use ic_nns_governance::pb::v1::{NnsFunction, ProposalStatus};
-use ic_nns_test_utils::{governance::submit_external_update_proposal, ids::TEST_NEURON_1_ID};
+use ic_nns_governance::{
+    init::TEST_NEURON_1_ID,
+    pb::v1::{NnsFunction, ProposalStatus},
+};
+use ic_nns_test_utils::governance::submit_external_update_proposal;
 use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{p2p, ReplicaVersion};
@@ -30,6 +33,7 @@ pub mod tecdsa_add_nodes_test;
 pub mod tecdsa_complaint_test;
 pub mod tecdsa_remove_nodes_test;
 pub mod tecdsa_signature_test;
+pub mod tecdsa_two_signing_subnets_test;
 
 pub(crate) const KEY_ID1: &str = "secp256k1";
 pub(crate) const KEY_ID2: &str = "some_other_key";
@@ -135,7 +139,7 @@ pub(crate) async fn get_public_key_with_logger(
     msg_can: &MessageCanister<'_>,
     logger: &Logger,
 ) -> Result<VerifyingKey, AgentError> {
-    get_public_key_with_retries(key_id, msg_can, logger, /*retries=*/ 10).await
+    get_public_key_with_retries(key_id, msg_can, logger, /*retries=*/ 300).await
 }
 
 pub(crate) async fn execute_update_subnet_proposal(

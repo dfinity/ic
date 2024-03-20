@@ -6,11 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-axum = "0.7.0"
+axum = { workspace = true }
 backoff = { workspace = true }
 bytes = { workspace = true }
-crossbeam-channel = { workspace = true }
-futures = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-interfaces = { path = "../../interfaces" }
 ic-logger = { path = "../../monitoring/logger" }
@@ -20,14 +18,17 @@ ic-protobuf = { path = "../../protobuf" }
 ic-types = { path = "../../types/types" }
 phantom_newtype = { path = "../../phantom_newtype" }
 prometheus = { workspace = true }
-rand = "0.8.5"
+rand = { workspace = true }
 slog = { workspace = true }
 tokio = { workspace = true }
+tokio-util = { workspace = true }
 
 [dev-dependencies]
+anyhow = { workspace = true }
+futures = { workspace = true }
 ic-p2p-test-utils = { path = "../test_utils" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
 mockall = { workspace = true }
-tokio-util = { workspace = true }
+tower = { workspace = true }
 turmoil = { workspace = true }

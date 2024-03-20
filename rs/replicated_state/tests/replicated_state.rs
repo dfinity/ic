@@ -5,7 +5,7 @@ use ic_btc_types_internal::{
     GetSuccessorsRequestInitial, GetSuccessorsResponseComplete, SendTransactionRequest,
 };
 use ic_error_types::RejectCode;
-use ic_ic00_types::{
+use ic_management_canister_types::{
     BitcoinGetSuccessorsResponse, CanisterChange, CanisterChangeDetails, CanisterChangeOrigin,
     Payload as _,
 };
@@ -20,16 +20,16 @@ use ic_replicated_state::{
     replicated_state::{MemoryTaken, PeekableOutputIterator, ReplicatedStateMessageRouting},
     CanisterState, IngressHistoryState, ReplicatedState, SchedulerState, StateError, SystemState,
 };
-use ic_test_utilities::state::{arb_replicated_state_with_queues, ExecutionStateBuilder};
-use ic_test_utilities::types::ids::{canister_test_id, message_test_id, user_test_id, SUBNET_1};
-use ic_test_utilities::types::messages::{RequestBuilder, ResponseBuilder};
-use ic_test_utilities_time::mock_time;
+use ic_test_utilities_state::{arb_replicated_state_with_queues, ExecutionStateBuilder};
+use ic_test_utilities_types::ids::{canister_test_id, message_test_id, user_test_id, SUBNET_1};
+use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::messages::RejectContext;
 use ic_types::{
     messages::{
         CanisterMessage, Payload, Request, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES,
     },
+    time::UNIX_EPOCH,
     CountBytes, Cycles, MemoryAllocation, Time,
 };
 use maplit::btreemap;
@@ -565,7 +565,7 @@ fn insert_bitcoin_response() {
                 anchor: vec![],
                 processed_block_hashes: vec![],
             },
-            time: mock_time(),
+            time: UNIX_EPOCH,
         }),
     );
 
@@ -599,7 +599,7 @@ fn insert_bitcoin_get_successor_reject_response() {
                 anchor: vec![],
                 processed_block_hashes: vec![],
             },
-            time: mock_time(),
+            time: UNIX_EPOCH,
         }),
     );
 
@@ -632,7 +632,7 @@ fn insert_bitcoin_send_transaction_reject_response() {
                 network: Network::Regtest,
                 transaction: vec![],
             },
-            time: mock_time(),
+            time: UNIX_EPOCH,
         }),
     );
 
@@ -665,7 +665,7 @@ fn time_out_requests_updates_subnet_input_schedules_correctly() {
     let remote_canister_id = CanisterId::from_u64(123);
     for receiver in [CANISTER_ID, OTHER_CANISTER_ID, remote_canister_id] {
         fixture
-            .push_output_request(request_to(receiver), mock_time())
+            .push_output_request(request_to(receiver), UNIX_EPOCH)
             .unwrap();
     }
 
@@ -723,10 +723,10 @@ fn split() {
                     IngressStatus::Known {
                         receiver: canister.get(),
                         user_id: user_test_id(i as u64),
-                        time: mock_time(),
+                        time: UNIX_EPOCH,
                         state: IngressState::Received,
                     },
-                    mock_time(),
+                    UNIX_EPOCH,
                     NumBytes::from(u64::MAX),
                 );
             }

@@ -372,9 +372,8 @@ mod tests {
     use ic_interfaces::messaging::XNetPayloadValidationError;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
-    use ic_test_utilities::types::ids::node_test_id;
-    use ic_test_utilities_time::mock_time;
-    use ic_types::{batch::ValidationContext, RegistryVersion};
+    use ic_test_utilities_types::ids::node_test_id;
+    use ic_types::{batch::ValidationContext, time::UNIX_EPOCH, RegistryVersion};
 
     struct TestXNetPayloadBuilder {
         return_size: u64,
@@ -410,7 +409,7 @@ mod tests {
         let validation_context = ValidationContext {
             registry_version: RegistryVersion::new(1),
             certified_height: Height::new(0),
-            time: mock_time(),
+            time: UNIX_EPOCH,
         };
         let proposal_context = ProposalContext {
             proposer: node_test_id(0),

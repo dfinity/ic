@@ -2,21 +2,21 @@
 mod tests;
 
 use crate::StateError;
-use ic_ic00_types::IC_00;
 use ic_interfaces::execution_environment::HypervisorError;
+use ic_management_canister_types::IC_00;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::canister_state_bits::v1 as pb;
 use ic_protobuf::types::v1 as pb_types;
-use ic_types::NumInstructions;
 use ic_types::{
     ingress::WasmResult,
     messages::{
         CallContextId, CallbackId, CanisterCall, CanisterCallOrTask, MessageId, RequestMetadata,
-        Response,
+        Response, NO_DEADLINE,
     },
     methods::Callback,
-    user_id_into_protobuf, user_id_try_from_protobuf, CanisterId, Cycles, Funds, PrincipalId, Time,
-    UserId,
+    time::CoarseTime,
+    user_id_into_protobuf, user_id_try_from_protobuf, CanisterId, Cycles, Funds, NumInstructions,
+    PrincipalId, Time, UserId,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -82,14 +82,12 @@ impl CallContext {
     /// Updates the available cycles in the `CallContext` based on how much
     /// cycles the canister requested to keep.
     ///
-    /// Returns a `CallContextError::InsufficientCyclesInCall` if `cycles` is
-    /// more than what's available in the call context.
-    pub fn withdraw_cycles(&mut self, cycles: Cycles) -> Result<(), CallContextError> {
+    /// Returns an error if `cycles` is more than what's available in the call
+    /// context.
+    #[allow(clippy::result_unit_err)]
+    pub fn withdraw_cycles(&mut self, cycles: Cycles) -> Result<(), ()> {
         if self.available_cycles < cycles {
-            return Err(CallContextError::InsufficientCyclesInCall {
-                available: self.available_cycles,
-                requested: cycles,
-            });
+            return Err(());
         }
         self.available_cycles -= cycles;
         Ok(())
@@ -133,6 +131,12 @@ impl CallContext {
     pub fn instructions_executed(&self) -> NumInstructions {
         self.instructions_executed
     }
+
+    /// Returns the deadline of the originating call if it's a `CanisterUpdate`;
+    /// `NO_DEADLINE` for all other origins.
+    pub fn deadline(&self) -> CoarseTime {
+        self.call_origin.deadline()
+    }
 }
 
 impl From<&CallContext> for pb::CallContext {
@@ -170,28 +174,6 @@ impl TryFrom<pb::CallContext> for CallContext {
                 )),
             instructions_executed: value.instructions_executed.into(),
         })
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum CallContextError {
-    InsufficientCyclesInCall {
-        available: Cycles,
-        requested: Cycles,
-    },
-}
-
-impl From<CallContextError> for HypervisorError {
-    fn from(val: CallContextError) -> Self {
-        match val {
-            CallContextError::InsufficientCyclesInCall {
-                available,
-                requested,
-            } => HypervisorError::InsufficientCyclesInCall {
-                available,
-                requested,
-            },
-        }
     }
 }
 
@@ -249,7 +231,7 @@ pub struct CallContextManager {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CallOrigin {
     Ingress(UserId, MessageId),
-    CanisterUpdate(CanisterId, CallbackId),
+    CanisterUpdate(CanisterId, CallbackId, CoarseTime),
     Query(UserId),
     CanisterQuery(CanisterId, CallbackId),
     /// System task is either a `Heartbeat` or a `GlobalTimer`.
@@ -261,10 +243,22 @@ impl CallOrigin {
     pub fn get_principal(&self) -> PrincipalId {
         match self {
             CallOrigin::Ingress(user_id, _) => user_id.get(),
-            CallOrigin::CanisterUpdate(canister_id, _) => canister_id.get(),
+            CallOrigin::CanisterUpdate(canister_id, _, _) => canister_id.get(),
             CallOrigin::Query(user_id) => user_id.get(),
             CallOrigin::CanisterQuery(canister_id, _) => canister_id.get(),
             CallOrigin::SystemTask => IC_00.get(),
+        }
+    }
+
+    /// Returns the deadline of the originating call if it's a `CanisterUpdate`;
+    /// `NO_DEADLINE` for all other origins.
+    pub fn deadline(&self) -> CoarseTime {
+        match self {
+            CallOrigin::CanisterUpdate(_, _, deadline) => *deadline,
+            CallOrigin::Ingress(..)
+            | CallOrigin::Query(..)
+            | CallOrigin::CanisterQuery(..)
+            | CallOrigin::SystemTask => NO_DEADLINE,
         }
     }
 }
@@ -276,10 +270,11 @@ impl From<&CallOrigin> for pb::call_context::CallOrigin {
                 user_id: Some(user_id_into_protobuf(*user_id)),
                 message_id: message_id.as_bytes().to_vec(),
             }),
-            CallOrigin::CanisterUpdate(canister_id, callback_id) => {
+            CallOrigin::CanisterUpdate(canister_id, callback_id, deadline) => {
                 Self::CanisterUpdate(pb::call_context::CanisterUpdateOrQuery {
                     canister_id: Some(pb_types::CanisterId::from(*canister_id)),
                     callback_id: callback_id.get(),
+                    deadline_seconds: deadline.as_secs_since_unix_epoch(),
                 })
             }
             CallOrigin::Query(user_id) => Self::Query(user_id_into_protobuf(*user_id)),
@@ -287,6 +282,7 @@ impl From<&CallOrigin> for pb::call_context::CallOrigin {
                 Self::CanisterQuery(pb::call_context::CanisterUpdateOrQuery {
                     canister_id: Some(pb_types::CanisterId::from(*canister_id)),
                     callback_id: callback_id.get(),
+                    deadline_seconds: NO_DEADLINE.as_secs_since_unix_epoch(),
                 })
             }
             CallOrigin::SystemTask => Self::SystemTask(pb::call_context::SystemTask {}),
@@ -312,10 +308,12 @@ impl TryFrom<pb::call_context::CallOrigin> for CallOrigin {
                 pb::call_context::CanisterUpdateOrQuery {
                     canister_id,
                     callback_id,
+                    deadline_seconds,
                 },
             ) => Self::CanisterUpdate(
                 try_from_option_field(canister_id, "CallOrigin::CanisterUpdate::canister_id")?,
                 callback_id.into(),
+                CoarseTime::from_secs_since_unix_epoch(deadline_seconds),
             ),
             pb::call_context::CallOrigin::Query(user_id) => {
                 Self::Query(user_id_try_from_protobuf(user_id)?)
@@ -324,6 +322,7 @@ impl TryFrom<pb::call_context::CallOrigin> for CallOrigin {
                 pb::call_context::CanisterUpdateOrQuery {
                     canister_id,
                     callback_id,
+                    deadline_seconds: _,
                 },
             ) => Self::CanisterQuery(
                 try_from_option_field(canister_id, "CallOrigin::CanisterQuery::canister_id")?,
@@ -426,14 +425,14 @@ impl CallContextManager {
     }
 
     /// Accepts a canister result and produces an action that should be taken
-    /// by the caller.
+    /// by the caller; and the call context, if completed.
     pub fn on_canister_result(
         &mut self,
         call_context_id: CallContextId,
         callback_id: Option<CallbackId>,
         result: Result<Option<WasmResult>, HypervisorError>,
         instructions_used: NumInstructions,
-    ) -> CallContextAction {
+    ) -> (CallContextAction, Option<CallContext>) {
         enum OutstandingCalls {
             Yes,
             No,
@@ -473,50 +472,60 @@ impl CallContextManager {
         // the compiler to tell us if we handled all the possible cases.
         match (result, responded, outstanding_calls) {
             (Ok(None), Responded::No, OutstandingCalls::Yes)
-            | (Err(_), Responded::No, OutstandingCalls::Yes) => CallContextAction::NotYetResponded,
+            | (Err(_), Responded::No, OutstandingCalls::Yes) => {
+                (CallContextAction::NotYetResponded, None)
+            }
 
             (Ok(None), Responded::Yes, OutstandingCalls::Yes)
             | (Err(_), Responded::Yes, OutstandingCalls::Yes) => {
-                CallContextAction::AlreadyResponded
+                (CallContextAction::AlreadyResponded, None)
             }
             (Ok(None), Responded::Yes, OutstandingCalls::No)
-            | (Err(_), Responded::Yes, OutstandingCalls::No) => {
-                self.call_contexts.remove(&call_context_id);
-                CallContextAction::AlreadyResponded
-            }
+            | (Err(_), Responded::Yes, OutstandingCalls::No) => (
+                CallContextAction::AlreadyResponded,
+                self.call_contexts.remove(&call_context_id),
+            ),
 
             (Ok(None), Responded::No, OutstandingCalls::No) => {
                 let refund = context.available_cycles;
-                self.call_contexts.remove(&call_context_id);
-                CallContextAction::NoResponse { refund }
+                (
+                    CallContextAction::NoResponse { refund },
+                    self.call_contexts.remove(&call_context_id),
+                )
             }
 
             (Ok(Some(WasmResult::Reply(payload))), Responded::No, OutstandingCalls::No) => {
                 let refund = context.available_cycles;
-                self.call_contexts.remove(&call_context_id);
-                CallContextAction::Reply { payload, refund }
+                (
+                    CallContextAction::Reply { payload, refund },
+                    self.call_contexts.remove(&call_context_id),
+                )
             }
             (Ok(Some(WasmResult::Reply(payload))), Responded::No, OutstandingCalls::Yes) => {
                 let refund = context.available_cycles;
                 context.mark_responded();
-                CallContextAction::Reply { payload, refund }
+                (CallContextAction::Reply { payload, refund }, None)
             }
 
             (Ok(Some(WasmResult::Reject(payload))), Responded::No, OutstandingCalls::No) => {
                 let refund = context.available_cycles;
-                self.call_contexts.remove(&call_context_id);
-                CallContextAction::Reject { payload, refund }
+                (
+                    CallContextAction::Reject { payload, refund },
+                    self.call_contexts.remove(&call_context_id),
+                )
             }
             (Ok(Some(WasmResult::Reject(payload))), Responded::No, OutstandingCalls::Yes) => {
                 let refund = context.available_cycles;
                 context.mark_responded();
-                CallContextAction::Reject { payload, refund }
+                (CallContextAction::Reject { payload, refund }, None)
             }
 
             (Err(error), Responded::No, OutstandingCalls::No) => {
                 let refund = context.available_cycles;
-                self.call_contexts.remove(&call_context_id);
-                CallContextAction::Fail { error, refund }
+                (
+                    CallContextAction::Fail { error, refund },
+                    self.call_contexts.remove(&call_context_id),
+                )
             }
 
             // The following can never happen since we handle at the SystemApi level if a canister
@@ -601,9 +610,11 @@ impl CallContextManager {
 impl From<&CanisterCall> for CallOrigin {
     fn from(msg: &CanisterCall) -> Self {
         match msg {
-            CanisterCall::Request(request) => {
-                CallOrigin::CanisterUpdate(request.sender, request.sender_reply_callback)
-            }
+            CanisterCall::Request(request) => CallOrigin::CanisterUpdate(
+                request.sender,
+                request.sender_reply_callback,
+                request.deadline,
+            ),
             CanisterCall::Ingress(ingress) => {
                 CallOrigin::Ingress(ingress.source, ingress.message_id.clone())
             }

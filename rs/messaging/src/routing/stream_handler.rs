@@ -46,6 +46,8 @@ struct StreamHandlerMetrics {
     pub gced_xnet_messages: IntCounter,
     /// Garbage collected XNet reject signals.
     pub gced_xnet_reject_signals: IntCounter,
+    /// Change in stream flags observed.
+    pub stream_flags_changes: IntCounter,
     /// Backlog of XNet messages based on end in stream header and last message
     /// in slice, per subnet.
     pub xnet_message_backlog: IntGaugeVec,
@@ -69,6 +71,7 @@ const METRIC_INDUCTED_XNET_MESSAGES: &str = "mr_inducted_xnet_message_count";
 const METRIC_INDUCTED_XNET_PAYLOAD_SIZES: &str = "mr_inducted_xnet_payload_size_bytes";
 const METRIC_GCED_XNET_MESSAGES: &str = "mr_gced_xnet_message_count";
 const METRIC_GCED_XNET_REJECT_SIGNALS: &str = "mr_gced_xnet_reject_signal_count";
+const METRIC_STREAM_FLAGS_CHANGES: &str = "mr_stream_flags_changes_count";
 
 const METRIC_XNET_MESSAGE_BACKLOG: &str = "mr_xnet_message_backlog";
 
@@ -111,6 +114,10 @@ impl StreamHandlerMetrics {
             METRIC_GCED_XNET_REJECT_SIGNALS,
             "Garbage collected XNet reject signals.",
         );
+        let stream_flags_changes = metrics_registry.int_counter(
+            METRIC_STREAM_FLAGS_CHANGES,
+            "Change in stream flags observed.",
+        );
         let xnet_message_backlog = metrics_registry.int_gauge_vec(
             METRIC_XNET_MESSAGE_BACKLOG,
             "Backlog of XNet messages, by sending subnet.",
@@ -150,6 +157,7 @@ impl StreamHandlerMetrics {
             inducted_xnet_payload_sizes,
             gced_xnet_messages,
             gced_xnet_reject_signals,
+            stream_flags_changes,
             xnet_message_backlog,
             critical_error_reject_signals_for_request,
             critical_error_induct_response_failed,
@@ -184,10 +192,6 @@ pub(crate) struct StreamHandlerImpl {
     /// existence of a message from an incoming stream header; and inducting it.
     time_in_backlog_metrics: RefCell<LatencyMetrics>,
     log: ReplicaLogger,
-
-    /// Testing-only flag that forces generation of reject signals even if
-    /// `CURRENT_CERTIFICATION_VERSION` is less than 9.
-    testing_flag_generate_reject_signals: bool,
 }
 
 impl StreamHandlerImpl {
@@ -207,7 +211,6 @@ impl StreamHandlerImpl {
                 metrics_registry,
             )),
             log,
-            testing_flag_generate_reject_signals: false,
         }
     }
 }
@@ -360,10 +363,15 @@ impl StreamHandlerImpl {
                     let rejected_messages = self.garbage_collect_messages(
                         &mut stream,
                         *remote_subnet,
-                        stream_slice.header().signals_end,
-                        &stream_slice.header().reject_signals,
+                        stream_slice.header().signals_end(),
+                        stream_slice.header().reject_signals(),
                     );
                     self.garbage_collect_signals(&mut stream, *remote_subnet, stream_slice);
+
+                    if stream.reverse_stream_flags() != stream_slice.header().flags() {
+                        stream.set_reverse_stream_flags(*stream_slice.header().flags());
+                        self.metrics.stream_flags_changes.inc();
+                    }
 
                     // Reroute any rejected responses.
                     self.reroute_rejected_messages(
@@ -376,22 +384,22 @@ impl StreamHandlerImpl {
                 None => {
                     // New stream.
                     assert_eq!(
-                        stream_slice.header().signals_end,
+                        stream_slice.header().signals_end(),
                         StreamIndex::from(0),
                         "Cannot garbage collect a stream for subnet {} that does not exist",
                         remote_subnet
                     );
                     assert_eq!(
-                        stream_slice.header().begin, StreamIndex::from(0),
+                        stream_slice.header().begin(), StreamIndex::from(0),
                         "Signals from subnet {} do not start from 0 in the first communication attempt",
                         remote_subnet
                     );
                 }
             }
             let backlog = if let Some(messages) = stream_slice.messages() {
-                stream_slice.header().end - messages.end()
+                stream_slice.header().end() - messages.end()
             } else {
-                stream_slice.header().end - stream_slice.header().begin
+                stream_slice.header().end() - stream_slice.header().begin()
             };
             self.metrics
                 .xnet_message_backlog
@@ -462,11 +470,11 @@ impl StreamHandlerImpl {
         );
         assert_valid_signals_for_messages(
             stream.signals_end(),
-            stream_slice.header().begin,
+            stream_slice.header().begin(),
             stream_slice
                 .messages()
                 .map(|q| q.end())
-                .unwrap_or_else(|| stream_slice.header().end),
+                .unwrap_or_else(|| stream_slice.header().end()),
             StreamComponent::MessagesFrom(remote_subnet),
         );
         assert_valid_slice_messages_for_stream(
@@ -475,7 +483,7 @@ impl StreamHandlerImpl {
             remote_subnet,
         );
 
-        self.discard_signals_before(stream, stream_slice.header().begin);
+        self.discard_signals_before(stream, stream_slice.header().begin());
     }
 
     /// Wrapper around `Stream::discard_signals_before()` plus telemetry.
@@ -676,9 +684,7 @@ impl StreamHandlerImpl {
                         }
 
                         RequestOrResponse::Response(_) => {
-                            if state.metadata.certification_version >= CertificationVersion::V9
-                                || self.testing_flag_generate_reject_signals
-                            {
+                            if state.metadata.certification_version >= CertificationVersion::V9 {
                                 debug!(self.log, "Canister {} is being migrated, generating reject signal for {:?}", msg.receiver(), msg);
                                 stream.push_reject_signal(stream_index);
                             } else {
@@ -875,6 +881,7 @@ fn generate_reject_response(
                 message,
                 MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
             )),
+            deadline: msg.deadline,
         }
         .into()
     } else {

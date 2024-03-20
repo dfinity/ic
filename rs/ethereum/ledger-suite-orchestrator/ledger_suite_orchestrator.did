@@ -4,13 +4,49 @@ type OrchestratorArg = variant {
     AddErc20Arg : AddErc20Arg;
 };
 
-type InitArg = record {};
+type InitArg = record {
+    // All canisters that will be spawned off by the orchestrator will be controlled by the orchestrator
+    // and *additionally* by the following controllers.
+    more_controller_ids : vec principal;
 
-type UpgradeArg = record {};
+    // Canister ID of the minter that will be notified when new ERC-20 tokens are added.
+    minter_id: opt principal;
+};
+
+type UpgradeArg = record {
+    // Hexadecimal encoding of the SHA-1 git commit hash used for this upgrade, e.g.,
+    // "51d01d3936498d4010de54505d6433e9ad5cc62b", corresponding to a git revision in the
+    // [IC repository](https://github.com/dfinity/ic).
+    // This field is expected to be present, if any of the wasm hashes below is present.
+    git_commit_hash: opt text;
+
+   // Hexadecimal encoding of the SHA2-256 ledger compressed wasm hash, e.g.,
+   // "3148f7a9f1b0ee39262c8abe3b08813480cf78551eee5a60ab1cf38433b5d9b0".
+   // This exact version will be used for upgrading all existing ledger canisters managed by the orchestrator.
+   // Leaving this field empty will not upgrade the ledger canisters.
+   ledger_compressed_wasm_hash: opt text;
+
+   // Hexadecimal encoding of the SHA2-256 index compressed wasm hash, e.g.,
+   // "3a6d39b5e94cdef5203bca62720e75a28cd071ff434d22b9746403ac7ae59614".
+   // This exact version will be used for upgrading all existing index canisters managed by the orchestrator.
+   // Leaving this field empty will not upgrade the index canisters.
+   index_compressed_wasm_hash: opt text;
+
+   // Hexadecimal encoding of the SHA2-256 archive compressed wasm hash, e.g.,
+   // "b24812976b2cc64f12faf813cf592631f3062bfda837334f77ab807361d64e82".
+   // This exact version will be used for upgrading all existing archive canisters managed by the orchestrator.
+   // Leaving this field empty will not upgrade the archive canisters.
+   archive_compressed_wasm_hash: opt text;
+};
 
 type AddErc20Arg = record {
    contract: Erc20Contract;
    ledger_init_arg: LedgerInitArg;
+
+    // Hexadecimal encoding of the SHA-1 git commit hash used for this upgrade, e.g.,
+    // "51d01d3936498d4010de54505d6433e9ad5cc62b", corresponding to a git revision in the
+    // [IC repository](https://github.com/dfinity/ic).
+    git_commit_hash: text;
 
    // Hexadecimal encoding of the SHA2-256 ledger compressed wasm hash, e.g.,
    // "3148f7a9f1b0ee39262c8abe3b08813480cf78551eee5a60ab1cf38433b5d9b0".

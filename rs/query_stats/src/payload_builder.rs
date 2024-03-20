@@ -1,4 +1,6 @@
-use crate::metrics::QueryStatsPayloadBuilderMetrics;
+use crate::{
+    metrics::QueryStatsPayloadBuilderMetrics, state_machine::get_stats_for_node_id_and_epoch,
+};
 use crossbeam_channel::{Receiver, TryRecvError};
 use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, PastPayload, ProposalContext},
@@ -237,8 +239,8 @@ impl QueryStatsPayloadBuilderImpl {
         if payload.epoch > max_valid_epoch {
             return Err(permanent_error(
                 QueryStatsPermanentValidationError::EpochTooHigh {
-                    expected: max_valid_epoch,
-                    reported: payload.epoch,
+                    max_valid_epoch,
+                    payload_epoch: payload.epoch,
                 },
             ));
         }
@@ -321,33 +323,36 @@ impl QueryStatsPayloadBuilderImpl {
         let mut previous_ids = BTreeSet::<CanisterId>::new();
 
         // Check that the epoch we are requesting has not been aggregated yet
-        if epoch < state_stats.epoch.unwrap_or(0.into()) {
+        // If there is no `highest_aggregated_epoch` in the state, we have not aggregated
+        // any epochs, therefore we unwrap to `false`
+        if state_stats
+            .highest_aggregated_epoch
+            .map(|highest_aggregated_epoch| epoch <= highest_aggregated_epoch)
+            .unwrap_or(false)
+        {
             warn!(
                 every_n_seconds => 5,
                 self.log,
                 "QueryStats: requesting previous_ids for epoch {:?} that is below aggregated epoch {:?}",
                 epoch,
-                state_stats.epoch
+                state_stats.highest_aggregated_epoch
             );
 
             return Err(permanent_error(
                 QueryStatsPermanentValidationError::EpochAlreadyAggregated {
-                    expected: state_stats.epoch.unwrap_or(0.into()),
-                    reported: epoch,
+                    highest_aggregated_epoch: state_stats
+                        .highest_aggregated_epoch
+                        .unwrap_or(0.into()),
+                    payload_epoch: epoch,
                 },
             ));
         }
 
-        // Check the certified state for stats already sent
-        // Skip if certified state is not the same epoch
-        if state_stats.epoch == Some(epoch) {
-            previous_ids.extend(
-                state_stats
-                    .stats
-                    .iter()
-                    .filter(|(_, stat_map)| stat_map.contains_key(&node_id))
-                    .map(|(canister_id, _)| canister_id),
-            );
+        // Check the certified state for stats that we have already sent
+        if let Some(state_stats) = get_stats_for_node_id_and_epoch(state_stats, &node_id, &epoch)
+            .map(|record| record.iter().map(|(canister_id, _)| canister_id))
+        {
+            previous_ids.extend(state_stats);
         }
 
         // Check past payloads for stats already sent
@@ -395,11 +400,11 @@ mod tests {
     use super::*;
     use ic_interfaces_state_manager_mocks::MockStateManager;
     use ic_logger::replica_logger::no_op_logger;
-    use ic_test_utilities::state::ReplicatedStateBuilder;
-    use ic_test_utilities_time::mock_time;
+    use ic_test_utilities_state::ReplicatedStateBuilder;
     use ic_types::{
         batch::{CanisterQueryStats, QueryStats, RawQueryStats},
         crypto::{CryptoHash, CryptoHashOf},
+        time::UNIX_EPOCH,
         RegistryVersion,
     };
     use ic_types_test_utils::ids::{canister_test_id, node_test_id};
@@ -409,7 +414,7 @@ mod tests {
 
     /// Test simple inclusion of a stat
     ///
-    /// - Put statistics of one canister into `current_stats`  
+    /// - Put statistics of one canister into `current_stats`
     /// - Build a payload
     /// - Check that the statistic is in the build payload
     #[test]
@@ -475,7 +480,12 @@ mod tests {
     #[test]
     fn past_payload_test() {
         let test_stats = test_epoch_stats(0, 500);
-        let state = test_state(epoch_stats_for_state(&test_stats, 0..200, node_test_id(1)));
+        let state = test_state(epoch_stats_for_state(
+            &test_stats,
+            0..200,
+            node_test_id(1),
+            None,
+        ));
         let payload_builder = setup_payload_builder_impl(state, test_stats.clone());
         let validation_context = test_validation_context();
         let proposal_context = test_proposal_context(&validation_context);
@@ -517,8 +527,8 @@ mod tests {
     fn node_id_check_test() {
         let test_stats = test_epoch_stats(0, 500);
 
-        let stats1 = epoch_stats_for_state(&test_stats, 0..100, node_test_id(1));
-        let stats2 = epoch_stats_for_state(&test_stats, 100..200, node_test_id(2));
+        let stats1 = epoch_stats_for_state(&test_stats, 0..100, node_test_id(1), None);
+        let stats2 = epoch_stats_for_state(&test_stats, 100..200, node_test_id(2), None);
         let stats = merge_raw_query_stats(stats1, stats2);
         let state = test_state(stats);
 
@@ -594,7 +604,12 @@ mod tests {
     #[test]
     fn epoch_too_low_test() {
         let test_stats = test_epoch_stats(1234, 100);
-        let state = test_state(epoch_stats_for_state(&test_stats, 0..100, node_test_id(1)));
+        let state = test_state(epoch_stats_for_state(
+            &test_stats,
+            0..100,
+            node_test_id(1),
+            Some(1234),
+        ));
         let payload_builder = setup_payload_builder_impl(state, test_stats);
         let validation_context = test_validation_context();
         let proposal_context = test_proposal_context(&validation_context);
@@ -616,12 +631,12 @@ mod tests {
             Err(ValidationError::Permanent(
                 PayloadPermanentError::QueryStatsPayloadValidationError(
                     QueryStatsPermanentValidationError::EpochAlreadyAggregated {
-                        expected,
-                        reported,
+                        highest_aggregated_epoch,
+                        payload_epoch,
                     },
                 ),
-            )) if expected == QueryStatsEpoch::new(1234) && reported == QueryStatsEpoch::new(0) => {
-            }
+            )) if highest_aggregated_epoch == QueryStatsEpoch::new(1234)
+                && payload_epoch == QueryStatsEpoch::new(0) => {}
             Err(err) => panic!(
                 "QueryStatsPayload had epoch too low, yet instead got error {:?}",
                 err
@@ -655,7 +670,10 @@ mod tests {
         match validation_result {
             Err(ValidationError::Permanent(
                 PayloadPermanentError::QueryStatsPayloadValidationError(
-                    QueryStatsPermanentValidationError::EpochTooHigh { expected, reported },
+                    QueryStatsPermanentValidationError::EpochTooHigh {
+                        max_valid_epoch: expected,
+                        payload_epoch: reported,
+                    },
                 ),
             )) if expected == QueryStatsEpoch::new(0) && reported == QueryStatsEpoch::new(1234) => {
             }
@@ -676,7 +694,12 @@ mod tests {
     #[test]
     fn duplicate_id_test() {
         let test_stats = test_epoch_stats(0, 4);
-        let state = test_state(epoch_stats_for_state(&test_stats, 0..1, node_test_id(1)));
+        let state = test_state(epoch_stats_for_state(
+            &test_stats,
+            0..1,
+            node_test_id(1),
+            None,
+        ));
         let payload_builder = setup_payload_builder_impl(state, test_stats.clone());
         let validation_context = test_validation_context();
         let proposal_context = test_proposal_context(&validation_context);
@@ -725,7 +748,7 @@ mod tests {
         ValidationContext {
             registry_version: RegistryVersion::new(0),
             certified_height: Height::new(0),
-            time: mock_time(),
+            time: UNIX_EPOCH,
         }
     }
 
@@ -800,23 +823,34 @@ mod tests {
         query_stats: &LocalQueryStats,
         range: Range<usize>,
         node: NodeId,
+        highest_aggregated_epoch: Option<u64>,
     ) -> RawQueryStats {
+        let stats = vec![(
+            node,
+            vec![(
+                query_stats.epoch,
+                query_stats.stats[range]
+                    .iter()
+                    .map(|stat| (stat.canister_id, stat.stats.clone()))
+                    .collect(),
+            )]
+            .into_iter()
+            .collect(),
+        )]
+        .into_iter()
+        .collect();
+
         RawQueryStats {
-            epoch: Some(query_stats.epoch),
-            stats: query_stats.stats[range]
-                .iter()
-                .map(|stat| {
-                    (
-                        stat.canister_id,
-                        [(node, stat.stats.clone())].into_iter().collect(),
-                    )
-                })
-                .collect(),
+            highest_aggregated_epoch: highest_aggregated_epoch.map(QueryStatsEpoch::new),
+            stats,
         }
     }
 
     fn merge_raw_query_stats(mut stats1: RawQueryStats, stats2: RawQueryStats) -> RawQueryStats {
-        assert_eq!(stats1.epoch, stats2.epoch);
+        assert_eq!(
+            stats1.highest_aggregated_epoch,
+            stats2.highest_aggregated_epoch
+        );
 
         for (canister_id, stat2) in stats2.stats {
             stats1
@@ -846,7 +880,7 @@ mod tests {
     fn as_past_payload(payload: &[u8], height: u64) -> PastPayload {
         PastPayload {
             height: Height::from(height),
-            time: mock_time() + Duration::from_nanos(10 * height),
+            time: UNIX_EPOCH + Duration::from_nanos(10 * height),
             block_hash: CryptoHashOf::from(CryptoHash(vec![])),
             payload,
         }

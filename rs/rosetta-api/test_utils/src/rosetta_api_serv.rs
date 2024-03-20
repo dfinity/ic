@@ -223,7 +223,8 @@ impl RosettaApiHandle {
                 ConstructionDeriveRequestMetadata {
                     account_type: AccountType::Neuron { neuron_index: 0 },
                 }
-                .into(),
+                .try_into()
+                .unwrap(),
             ),
         };
         to_rosetta_response(
@@ -292,7 +293,7 @@ impl RosettaApiHandle {
     ) -> Result<Result<ConstructionMetadataResponse, RosettaError>, String> {
         let req = ConstructionMetadataRequest {
             network_identifier: self.network_id(),
-            options: options.map(|op| op.into()),
+            options: options.map(|op| op.try_into().unwrap()),
             public_keys,
         };
         to_rosetta_response(
@@ -331,7 +332,7 @@ impl RosettaApiHandle {
     ) -> Result<Result<ConstructionPayloadsResponse, RosettaError>, String> {
         let req = ConstructionPayloadsRequest {
             network_identifier: self.network_id(),
-            metadata: metadata.map(|m| m.into()),
+            metadata: metadata.map(|m| m.try_into().unwrap()),
             operations,
             public_keys,
         };
@@ -413,7 +414,7 @@ impl RosettaApiHandle {
             network_identifier: self.network_id(),
             account_identifier: ic_rosetta_api::convert::to_model_account_identifier(&acc),
             block_identifier: None,
-            metadata: Some(account_balance_metadata),
+            metadata: Some(account_balance_metadata.into()),
         };
 
         to_rosetta_response(
@@ -429,10 +430,12 @@ impl RosettaApiHandle {
         &self,
         acc: AccountIdentifier,
     ) -> Result<Result<AccountBalanceResponse, RosettaError>, String> {
-        let req = AccountBalanceRequest::new(
-            self.network_id(),
-            ic_rosetta_api::convert::to_model_account_identifier(&acc),
-        );
+        let req = AccountBalanceRequest {
+            network_identifier: self.network_id(),
+            account_identifier: ic_rosetta_api::convert::to_model_account_identifier(&acc),
+            block_identifier: None,
+            metadata: None,
+        };
 
         to_rosetta_response(
             self.post_json_request(

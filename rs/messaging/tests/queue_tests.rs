@@ -7,8 +7,8 @@ use ic_registry_routing_table::{routing_table_insert_subnet, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, UserError, WasmResult};
-use ic_test_utilities::types::ids::subnet_test_id;
 use ic_test_utilities_metrics::fetch_int_counter_vec;
+use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types::{
     messages::{CallbackId, Payload, RequestOrResponse},
     xnet::{StreamHeader, StreamIndexedQueue},
@@ -751,9 +751,9 @@ fn induct_messages_and_track_callback_ids(
             let (reverse_header, _) = stream_snapshot(into_subnet, from_subnet).unwrap();
             for (stream_index, msg) in messages
                 .iter()
-                .take_while(|(stream_index, _)| *stream_index < reverse_header.signals_end)
+                .take_while(|(stream_index, _)| *stream_index < reverse_header.signals_end())
             {
-                if !reverse_header.reject_signals.contains(&stream_index) {
+                if !reverse_header.reject_signals().contains(&stream_index) {
                     update_callback_id_trackers(
                         msg,
                         add_callback_id_tracker,
@@ -874,7 +874,7 @@ fn induct_and_observe_until_stale(
 ///   +----> {Q, Q, P', Q} ------------------------------------+       Requests can be rejected,
 ///             stream            |            [ .. ]                  but responses receive reject
 ///                               |        reject_signals              signals and are rerouted.
-///                                                                 
+///
 ///
 /// Note that inductions on `old_subnets_proxy` can only lead to removing messages from the system
 /// if a response is consumed successfully or else responses that are routed to streams found on

@@ -285,39 +285,11 @@ fn test_archive_duplicate_controllers() {
 #[cfg_attr(feature = "u256-tokens", ignore)]
 #[test]
 fn test_block_transformation() {
-    fn encode_legacy_init_args(args: ic_icrc1_ledger_sm_tests::InitArgs) -> LegacyLedgerArgument {
-        LegacyLedgerArgument::Init(LegacyInitArgs {
-            minting_account: args.minting_account,
-            fee_collector_account: args.fee_collector_account,
-            initial_balances: args
-                .initial_balances
-                .into_iter()
-                .map(|(account, value)| {
-                    (
-                        account,
-                        value
-                            .0
-                            .to_u64()
-                            .expect("initial balance doesn't fit into u64"),
-                    )
-                })
-                .collect(),
-            transfer_fee: args
-                .transfer_fee
-                .0
-                .to_u64()
-                .expect("transfer fee doesn't fit into u64"),
-            token_name: args.token_name,
-            token_symbol: args.token_symbol,
-            metadata: args.metadata,
-            archive_options: args.archive_options,
-        })
-    }
     ic_icrc1_ledger_sm_tests::icrc1_test_block_transformation(
         std::fs::read(std::env::var("IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap())
             .unwrap(),
         ledger_wasm(),
-        encode_legacy_init_args,
+        encode_init_args,
     );
 }
 
@@ -805,15 +777,15 @@ mod verify_written_blocks {
                 length: 1u8.into(),
             };
 
-            let wasm_result_bytes = match {
-                self.env
-                    .query(
-                        self.ledger_id,
-                        "get_transactions",
-                        Encode!(&request).unwrap(),
-                    )
-                    .expect("failed to query get_transactions on the ledger")
-            } {
+            let wasm_result_bytes = match self
+                .env
+                .query(
+                    self.ledger_id,
+                    "get_transactions",
+                    Encode!(&request).unwrap(),
+                )
+                .expect("failed to query get_transactions on the ledger")
+            {
                 WasmResult::Reply(bytes) => bytes,
                 WasmResult::Reject(reject) => {
                     panic!("Expected a successful reply, got a reject: {}", reject)

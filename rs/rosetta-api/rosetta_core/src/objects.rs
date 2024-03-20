@@ -1,3 +1,6 @@
+use crate::models::EdKeypair;
+use crate::models::RosettaSupportedKeyPair;
+use crate::models::Secp256k1KeyPair;
 use crate::{
     identifiers::{
         AccountIdentifier, BlockIdentifier, CoinIdentifier, NetworkIdentifier, OperationIdentifier,
@@ -5,7 +8,13 @@ use crate::{
     },
     miscellaneous::*,
 };
+use anyhow::bail;
+use anyhow::Context;
+use candid::Nat;
+use candid::Principal;
+use ic_types::PrincipalId;
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 
 pub type Object = serde_json::Value;
 pub type ObjectMap = serde_json::map::Map<String, Object>;
@@ -100,7 +109,7 @@ pub struct Operation {
     /// This can be very useful to downstream consumers that parse all block
     /// data.
     #[serde(rename = "type")]
-    pub _type: String,
+    pub type_: String,
 
     /// The network-specific status of the operation. Status is not defined on
     /// the transaction object because blockchains with smart contracts may have
@@ -137,7 +146,7 @@ impl Operation {
         Operation {
             operation_identifier: OperationIdentifier::new(op_id),
             related_operations,
-            _type,
+            type_: _type,
             status: None,
             account,
             amount,
@@ -313,6 +322,17 @@ impl Amount {
     }
 }
 
+impl TryFrom<Amount> for Nat {
+    type Error = anyhow::Error;
+    fn try_from(value: Amount) -> std::prelude::v1::Result<Self, Self::Error> {
+        Nat::from_str(match value.value.strip_prefix('-') {
+            Some(value) => value,
+            None => &value.value,
+        })
+        .with_context(|| format!("Failed to convert Amount to Nat: {:?}", value))
+    }
+}
+
 /// Allow specifies supported Operation status, Operation types, and all possible error statuses.
 /// This Allow object is used by clients to validate the correctness of a Rosetta Server implementation.
 /// It is expected that these clients will error if they receive some response that contains any of
@@ -479,6 +499,38 @@ impl PublicKey {
             curve_type,
         }
     }
+
+    pub fn get_der_encoding(&self) -> anyhow::Result<Vec<u8>> {
+        match self.curve_type {
+            CurveType::Edwards25519 => {
+                EdKeypair::der_encode_pk(EdKeypair::hex_decode_pk(&self.hex_bytes)?)
+            }
+            CurveType::Secp256K1 => {
+                Secp256k1KeyPair::der_encode_pk(Secp256k1KeyPair::hex_decode_pk(&self.hex_bytes)?)
+            }
+            _ => bail!("Curve Type {:?} is not supported", self.curve_type),
+        }
+    }
+
+    pub fn get_principal(&self) -> anyhow::Result<Principal> {
+        Ok(PrincipalId::new_self_authenticating(&self.get_der_encoding()?).0)
+    }
+
+    pub fn get_public_key(&self) -> anyhow::Result<Vec<u8>> {
+        Ok(hex::decode(&self.hex_bytes)?)
+    }
+}
+
+impl<T> From<&T> for PublicKey
+where
+    T: RosettaSupportedKeyPair,
+{
+    fn from(keypair: &T) -> Self {
+        PublicKey {
+            hex_bytes: keypair.hex_encode_pk(),
+            curve_type: keypair.get_curve_type(),
+        }
+    }
 }
 
 /// CurveType is the type of cryptographic curve associated with a PublicKey.  * secp256k1: SEC compressed - `33 bytes` (https://secg.org/sec1-v2.pdf#subsubsection.2.3.3) * secp256r1: SEC compressed - `33 bytes` (https://secg.org/sec1-v2.pdf#subsubsection.2.3.3) * edwards25519: `y (255-bits) || x-sign-bit (1-bit)` - `32 bytes` (https://ed25519.cr.yp.to/ed25519-20110926.pdf) * tweedle: 1st pk : Fq.t (32 bytes) || 2nd pk : Fq.t (32 bytes) (https://github.com/CodaProtocol/coda/blob/develop/rfcs/0038-rosetta-construction-api.md#marshal-keys)
@@ -524,7 +576,7 @@ impl ::std::fmt::Display for CurveType {
 }
 
 impl ::std::str::FromStr for CurveType {
-    type Err = ();
+    type Err = anyhow::Error;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "secp256k1" => Ok(CurveType::Secp256K1),
@@ -532,7 +584,7 @@ impl ::std::str::FromStr for CurveType {
             "edwards25519" => Ok(CurveType::Edwards25519),
             "tweedle" => Ok(CurveType::Tweedle),
             "pallas" => Ok(CurveType::Pallas),
-            _ => Err(()),
+            _ => bail!("Invalid curve type: {}", s),
         }
     }
 }
@@ -594,6 +646,18 @@ pub enum SignatureType {
     SchnorrPoseidon,
 }
 
+impl From<CurveType> for SignatureType {
+    fn from(curve_type: CurveType) -> Self {
+        match curve_type {
+            CurveType::Secp256K1 => SignatureType::Ecdsa,
+            CurveType::Secp256R1 => SignatureType::Ecdsa,
+            CurveType::Edwards25519 => SignatureType::Ed25519,
+            CurveType::Tweedle => SignatureType::Schnorr1,
+            CurveType::Pallas => SignatureType::SchnorrPoseidon,
+        }
+    }
+}
+
 impl ::std::fmt::Display for SignatureType {
     fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
         match *self {
@@ -637,4 +701,39 @@ pub struct Signature {
     pub signature_type: SignatureType,
 
     pub hex_bytes: String,
+}
+
+/// BlockTransaction contains a populated Transaction and the BlockIdentifier that contains it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+pub struct BlockTransaction {
+    /// The block_identifier uniquely identifies a block in a particular network.
+    pub block_identifier: BlockIdentifier,
+
+    /// Transactions contain an array of Operations that are attributable to the same TransactionIdentifier.
+    pub transaction: Transaction,
+}
+
+/// Operator is used by query-related endpoints to determine how to apply
+/// conditions. If this field is not populated, the default and value will be
+/// used.
+#[allow(non_camel_case_types)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[cfg_attr(feature = "conversion", derive(LabelledGenericEnum))]
+pub enum Operator {
+    /// If any condition is satisfied, it is considered a match.
+    #[serde(rename = "or")]
+    Or,
+    /// If all conditions are satisfied, it is considered a match.
+    #[serde(rename = "and")]
+    And,
+}
+
+impl ::std::fmt::Display for Operator {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        match *self {
+            Operator::Or => write!(f, "or"),
+            Operator::And => write!(f, "and"),
+        }
+    }
 }

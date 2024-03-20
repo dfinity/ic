@@ -6,6 +6,7 @@ mod storage;
 use bit_vec::BitVec;
 pub use checkpoint::{CheckpointSerialization, MappingSerialization};
 use ic_config::flag_status::FlagStatus;
+use ic_config::state_manager::LsmtConfig;
 use ic_metrics::buckets::{decimal_buckets, linear_buckets};
 use ic_metrics::MetricsRegistry;
 use ic_sys::{fs::write_all_vectored, PageBytes};
@@ -16,8 +17,8 @@ pub use page_allocator::{
     PageDeltaSerialization, PageSerialization,
 };
 pub use storage::{
-    MergeCandidate, OverlayFileSerialization, OverlayIndicesSerialization, StorageSerialization,
-    MAX_NUMBER_OF_FILES,
+    BaseFileSerialization, MergeCandidate, OverlayFileSerialization, Shard, StorageLayout,
+    StorageResult, StorageSerialization, MAX_NUMBER_OF_FILES,
 };
 use storage::{OverlayFile, OverlayVersion, Storage};
 
@@ -187,11 +188,6 @@ impl PageDelta {
     fn max_page_index(&self) -> Option<PageIndex> {
         self.0.max_key().map(PageIndex::from)
     }
-
-    /// Number of pages in the PageDelta.
-    fn num_pages(&self) -> usize {
-        self.0.len()
-    }
 }
 
 impl<I> From<I> for PageDelta
@@ -330,30 +326,6 @@ pub type MemoryInstruction<'a> = (Range<PageIndex>, MemoryMapOrData<'a>);
 pub enum MemoryMapOrData<'a> {
     MemoryMap(FileDescriptor, usize),
     Data(&'a [u8]),
-}
-
-/// For write operations, whether the delta should be written to a base file or an overlay file.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum PersistDestination {
-    BaseFile(PathBuf),
-    OverlayFile(PathBuf),
-}
-
-impl PersistDestination {
-    /// Helper function to simplify the typical match statement to construct this enum
-    pub fn new(base_file: PathBuf, overlay_file: PathBuf, lsmt_storage: FlagStatus) -> Self {
-        match lsmt_storage {
-            FlagStatus::Enabled => PersistDestination::OverlayFile(overlay_file),
-            FlagStatus::Disabled => PersistDestination::BaseFile(base_file),
-        }
-    }
-
-    pub fn raw_path(&self) -> &Path {
-        match self {
-            PersistDestination::BaseFile(path) => path,
-            PersistDestination::OverlayFile(path) => path,
-        }
-    }
 }
 
 /// `PageMap` is a data structure that represents an image of a canister virtual
@@ -520,14 +492,20 @@ impl PageMap {
     /// destination.
     pub fn persist_delta(
         &self,
-        dst: PersistDestination,
+        storage_layout: &dyn StorageLayout,
+        height: Height,
+        lsmt_config: &LsmtConfig,
         metrics: &StorageMetrics,
     ) -> Result<(), PersistenceError> {
-        match dst {
-            PersistDestination::BaseFile(dst) => self.persist_to_file(&self.page_delta, &dst),
-            PersistDestination::OverlayFile(dst) => {
-                self.persist_to_overlay(&self.page_delta, &dst, metrics)
-            }
+        match lsmt_config.lsmt_status {
+            FlagStatus::Disabled => self.persist_to_file(&self.page_delta, &storage_layout.base()),
+            FlagStatus::Enabled => self.persist_to_overlay(
+                &self.page_delta,
+                storage_layout,
+                height,
+                lsmt_config,
+                metrics,
+            ),
         }
     }
 
@@ -535,25 +513,35 @@ impl PageMap {
     /// destination.
     pub fn persist_unflushed_delta(
         &self,
-        dst: PersistDestination,
+        storage_layout: &dyn StorageLayout,
+        height: Height,
+        lsmt_config: &LsmtConfig,
         metrics: &StorageMetrics,
     ) -> Result<(), PersistenceError> {
-        match dst {
-            PersistDestination::BaseFile(dst) => self.persist_to_file(&self.unflushed_delta, &dst),
-            PersistDestination::OverlayFile(dst) => {
-                self.persist_to_overlay(&self.unflushed_delta, &dst, metrics)
+        match lsmt_config.lsmt_status {
+            FlagStatus::Disabled => {
+                self.persist_to_file(&self.unflushed_delta, &storage_layout.base())
             }
+            FlagStatus::Enabled => self.persist_to_overlay(
+                &self.unflushed_delta,
+                storage_layout,
+                height,
+                lsmt_config,
+                metrics,
+            ),
         }
     }
 
     fn persist_to_overlay(
         &self,
         page_delta: &PageDelta,
-        dst: &Path,
+        storage_layout: &dyn StorageLayout,
+        height: Height,
+        lsmt_config: &LsmtConfig,
         metrics: &StorageMetrics,
     ) -> Result<(), PersistenceError> {
         if !page_delta.is_empty() {
-            OverlayFile::write(page_delta, dst, metrics)
+            OverlayFile::write(page_delta, storage_layout, height, lsmt_config, metrics)
         } else {
             metrics.empty_delta_writes.inc();
             Ok(())

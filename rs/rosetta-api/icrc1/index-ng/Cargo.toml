@@ -28,7 +28,7 @@ ic-ledger-core = { path = "../../ledger_core" }
 ic-metrics-encoder = "1.1"
 ic-stable-structures = { workspace = true }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
-num-traits = "0.2.14"
+num-traits = { workspace = true }
 scopeguard = "1.1.0"
 serde = { workspace = true }
 serde_json = { workspace = true }

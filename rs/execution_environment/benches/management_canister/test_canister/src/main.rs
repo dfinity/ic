@@ -38,6 +38,7 @@ async fn create_canisters(args: CreateCanistersArgs) -> Vec<Principal> {
                             compute_allocation: None,
                             memory_allocation: None,
                             freezing_threshold: None,
+                            reserved_cycles_limit: None,
                         }),
                     },
                     args.initial_cycles,
@@ -114,6 +115,7 @@ async fn update_settings(args: UpdateSettingsArgs) {
                     compute_allocation: None,
                     memory_allocation: None,
                     freezing_threshold: None,
+                    reserved_cycles_limit: None,
                 },
             })
         })

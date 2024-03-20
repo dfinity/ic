@@ -6,9 +6,6 @@ use ic_nns_common::pb::v1::ProposalId;
 use lazy_static::lazy_static;
 use pretty_assertions::assert_eq;
 
-// TODO(NNS1-2497): Add tests that fail if our BoundedStorage types grow. This
-// way, people are very aware of how they might be eating into our headroom.
-
 lazy_static! {
     static ref MODEL_NEURON: Neuron = Neuron {
         id: Some(NeuronId { id: 42 }),
@@ -438,7 +435,6 @@ fn test_store_as_neuron_deserialized_as_abridged() {
     assert_eq!(
         abridged,
         AbridgedNeuron {
-            id: Some(NeuronId { id: 1 }),
             account: vec![u8::MAX; 32],
             controller: Some(PrincipalId::new_user_test_id(1)),
             cached_neuron_stake_e8s: 1,
@@ -467,7 +463,6 @@ fn test_abridged_neuron_size() {
     // 0u64). Therefore, we make the numbers below as large as possible even though they aren't
     // realistic.
     let abridged_neuron = AbridgedNeuron {
-        id: Some(NeuronId { id: u64::MAX }),
         account: vec![u8::MAX; 32],
         controller: Some(PrincipalId::new(
             PrincipalId::MAX_LENGTH_IN_BYTES,
@@ -493,5 +488,5 @@ fn test_abridged_neuron_size() {
     assert!(abridged_neuron.encoded_len() as u32 <= AbridgedNeuron::BOUND.max_size());
     // This size can be updated. This assertion is created so that we are aware of the available
     // headroom.
-    assert_eq!(abridged_neuron.encoded_len(), 197);
+    assert_eq!(abridged_neuron.encoded_len(), 184);
 }

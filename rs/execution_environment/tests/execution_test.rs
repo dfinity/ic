@@ -4,7 +4,7 @@ use ic_config::{
     execution_environment::Config as HypervisorConfig,
     subnet_config::{CyclesAccountManagerConfig, SubnetConfig},
 };
-use ic_ic00_types::{
+use ic_management_canister_types::{
     CanisterIdRecord, CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
     CreateCanisterArgs, EmptyBlob, Method, Payload, UpdateSettingsArgs, IC_00,
 };
@@ -217,6 +217,18 @@ fn test_canister_uninstall_restart() {
     assert_eq!(
         env.query(canister_id, "read", vec![]).unwrap_err().code(),
         ErrorCode::CanisterWasmModuleNotFound
+    );
+}
+
+#[test]
+fn query_nonexisting_canister() {
+    let env = StateMachine::new();
+    env.tick(); // needed to create a certified state
+
+    let canister_id = CanisterId::from_u64(0);
+    assert_eq!(
+        env.query(canister_id, "read", vec![]).unwrap_err().code(),
+        ErrorCode::CanisterNotFound
     );
 }
 
@@ -870,7 +882,7 @@ fn subnet_memory_reservation_works() {
             "update",
             call_args()
                 .other_side(b)
-                .on_reject(wasm().reject_code().reject_message().reject())
+                .on_reject(wasm().reject_message().reject())
                 .on_reply(
                     wasm()
                         .stable_grow(800 / num_cores as u32)
@@ -928,7 +940,7 @@ fn subnet_memory_reservation_scales_with_number_of_cores() {
             "update",
             call_args()
                 .other_side(b)
-                .on_reject(wasm().reject_code().reject_message().reject())
+                .on_reject(wasm().reject_message().reject())
                 .on_reply(
                     wasm()
                         .stable_grow(800)

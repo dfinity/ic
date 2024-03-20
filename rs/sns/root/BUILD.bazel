@@ -19,7 +19,7 @@ DEPENDENCIES = [
     "//rs/rust_canisters/canister_log",
     "//rs/rust_canisters/http_types",
     "//rs/types/base_types",
-    "//rs/types/ic00_types",
+    "//rs/types/management_canister_types",
     "//rs/sns/swap",  # TODO[NNS1-2282]
     "@crate_index//:build-info",
     "@crate_index//:candid",
@@ -107,7 +107,6 @@ generated_files_check(
 DEV_DEPENDENCIES = [
     "//rs/sns/root/protobuf_generator:lib",
     "@crate_index//:maplit",
-    "@crate_index//:lazy_static",
     "@crate_index//:tokio",
 ]
 

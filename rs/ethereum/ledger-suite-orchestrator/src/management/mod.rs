@@ -1,14 +1,16 @@
-use crate::state::Wasm;
+use crate::logs::DEBUG;
 use async_trait::async_trait;
 use candid::{CandidType, Principal};
 use ic_base_types::PrincipalId;
+use ic_canister_log::log;
 use ic_cdk::api::call::RejectionCode;
-use ic_ic00_types::{
+use ic_management_canister_types::{
     CanisterIdRecord, CanisterInstallMode, CanisterSettingsArgsBuilder, CreateCanisterArgs,
     InstallCodeArgs,
 };
 use serde::de::DeserializeOwned;
 use std::fmt;
+use std::fmt::Debug;
 
 // TODO: extract to common crate since copied form ckETH
 
@@ -97,6 +99,7 @@ pub trait CanisterRuntime {
     /// Creates a new canister with the given cycles.
     async fn create_canister(
         &self,
+        controllers: Vec<Principal>,
         cycles_for_canister_creation: u64,
     ) -> Result<Principal, CallError>;
 
@@ -104,9 +107,23 @@ pub trait CanisterRuntime {
     async fn install_code(
         &self,
         canister_id: Principal,
-        wasm_module: Wasm,
+        wasm_module: Vec<u8>,
         arg: Vec<u8>,
     ) -> Result<(), CallError>;
+
+    async fn canister_cycles(&self, canister_id: Principal) -> Result<u128, CallError>;
+
+    fn send_cycles(&self, canister_id: Principal, cycles: u128) -> Result<(), CallError>;
+
+    async fn call_canister<I, O>(
+        &self,
+        canister_id: Principal,
+        method: &str,
+        args: I,
+    ) -> Result<O, CallError>
+    where
+        I: CandidType + Debug + Send + 'static,
+        O: CandidType + DeserializeOwned + Debug + 'static;
 }
 
 pub struct IcCanisterRuntime {}
@@ -151,12 +168,19 @@ impl CanisterRuntime for IcCanisterRuntime {
 
     async fn create_canister(
         &self,
+        controllers: Vec<Principal>,
         cycles_for_canister_creation: u64,
     ) -> Result<Principal, CallError> {
+        // See https://internetcomputer.org/docs/current/references/ic-interface-spec#ic-create_canister
+        assert!(
+            controllers.len() <= 10,
+            "BUG: too many controllers. Expected at most 10, got {}",
+            controllers.len()
+        );
         let create_args = CreateCanisterArgs {
             settings: Some(
                 CanisterSettingsArgsBuilder::new()
-                    .with_controllers(vec![ic_cdk::id().into()])
+                    .with_controllers(controllers.into_iter().map(|p| p.into()).collect())
                     .build(),
             ),
             ..Default::default()
@@ -175,13 +199,13 @@ impl CanisterRuntime for IcCanisterRuntime {
     async fn install_code(
         &self,
         canister_id: Principal,
-        wasm_module: Wasm,
+        wasm_module: Vec<u8>,
         arg: Vec<u8>,
     ) -> Result<(), CallError> {
         let install_code = InstallCodeArgs {
             mode: CanisterInstallMode::Install,
             canister_id: PrincipalId::from(canister_id),
-            wasm_module: wasm_module.to_bytes(),
+            wasm_module,
             arg,
             compute_allocation: None,
             memory_allocation: None,
@@ -192,5 +216,77 @@ impl CanisterRuntime for IcCanisterRuntime {
         self.call("install_code", 0, &install_code).await?;
 
         Ok(())
+    }
+
+    async fn canister_cycles(&self, canister_id: Principal) -> Result<u128, CallError> {
+        let result = ic_cdk::api::management_canister::main::canister_status(
+            ic_cdk::api::management_canister::main::CanisterIdRecord { canister_id },
+        )
+        .await
+        .map_err(|(code, msg)| CallError {
+            method: "canister_status".to_string(),
+            reason: Reason::from_reject(code, msg),
+        })?
+        .0
+        .cycles
+        .0
+        .try_into()
+        .unwrap();
+
+        Ok(result)
+    }
+
+    fn send_cycles(&self, canister_id: Principal, cycles: u128) -> Result<(), CallError> {
+        #[derive(CandidType)]
+        struct DepositCyclesArgs {
+            canister_id: Principal,
+        }
+
+        ic_cdk::api::call::notify_with_payment128(
+            Principal::management_canister(),
+            "deposit_cycles",
+            (DepositCyclesArgs { canister_id },),
+            cycles,
+        )
+        .map_err(|reject_code| CallError {
+            method: "send_cycles".to_string(),
+            reason: Reason::from_reject(reject_code, String::default()),
+        })
+    }
+
+    async fn call_canister<I, O>(
+        &self,
+        canister_id: Principal,
+        method: &str,
+        args: I,
+    ) -> Result<O, CallError>
+    where
+        I: CandidType + Debug + Send + 'static,
+        O: CandidType + DeserializeOwned + Debug + 'static,
+    {
+        log!(
+            DEBUG,
+            "Calling canister '{}' with method '{}' and payload '{:?}'",
+            canister_id,
+            method,
+            args
+        );
+        let res: Result<(O,), _> = ic_cdk::api::call::call(canister_id, method, (&args,)).await;
+        log!(
+            DEBUG,
+            "Result of calling canister '{}' with method '{}' and payload '{:?}': {:?}",
+            canister_id,
+            method,
+            args,
+            res
+        );
+
+        match res {
+            Ok((output,)) => Ok(output),
+            Err((code, msg)) => Err(CallError {
+                method: method.to_string(),
+                reason: Reason::from_reject(code, msg),
+            }),
+        }
     }
 }

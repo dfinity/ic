@@ -10,6 +10,7 @@ mod ecdsa_sign_share {
         IDkgTranscriptInternal, PolynomialCommitment, SimpleCommitment,
         ThresholdEcdsaSigShareInternal,
     };
+    use ic_crypto_secrets_containers::SecretArray;
     use ic_types::crypto::canister_threshold_sig::error::ThresholdEcdsaSignShareError;
     use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
     use ic_types::crypto::AlgorithmId;
@@ -359,6 +360,148 @@ mod ecdsa_sign_share {
         assert_matches!(result, Ok(_))
     }
 
+    #[test]
+    fn should_fail_on_invalid_serialiation_of_transcript() {
+        let parameters = EcdsaSignShareParameters::default();
+        let vault = LocalCspVault::builder_for_test().build();
+
+        let invalid_serialization = vec![0xFF; 100];
+
+        for i in 0..5 {
+            let mut transcript_key = transcript_to_bytes(&parameters.key);
+            let mut transcript_kappa_unmasked = transcript_to_bytes(&parameters.kappa_unmasked);
+            let mut transcript_lambda_masked = transcript_to_bytes(&parameters.lambda_masked);
+            let mut transcript_kappa_times_lambda =
+                transcript_to_bytes(&parameters.kappa_times_lambda);
+            let mut transcript_key_times_lambda = transcript_to_bytes(&parameters.key_times_lambda);
+            // `IDkgTranscriptInternalBytes` is neither `Copy` nor `Clone`, so
+            // we can't use a `Vec` to store them.
+            let transcripts = [
+                &mut transcript_key,
+                &mut transcript_kappa_unmasked,
+                &mut transcript_lambda_masked,
+                &mut transcript_kappa_times_lambda,
+                &mut transcript_key_times_lambda,
+            ];
+
+            *transcripts[i] = IDkgTranscriptInternalBytes::from(invalid_serialization.clone());
+
+            assert_matches!(
+                vault.ecdsa_sign_share(
+                    parameters.derivation_path.clone(),
+                    parameters.hashed_message.clone(),
+                    parameters.nonce,
+                    transcript_key,
+                    transcript_kappa_unmasked,
+                    transcript_lambda_masked,
+                    transcript_kappa_times_lambda,
+                    transcript_key_times_lambda,
+                    parameters.algorithm_id,
+                ),
+                Err(ThresholdEcdsaSignShareError::SerializationError { .. })
+            );
+        }
+    }
+
+    #[test]
+    fn should_fail_if_cant_deserialize_commitment_opening_bytes() {
+        let parameters = EcdsaSignShareParameters::default();
+
+        let keys_openings = parameters.keys_openings();
+
+        let invalid_scalar_encoding = EccScalarBytes::K256(Box::new([0xFFu8; 32]));
+        let invalid_commitment_opening_encoding =
+            CommitmentOpeningBytes::Simple(invalid_scalar_encoding);
+        let invalid_commitment_opening =
+            CspSecretKey::IDkgCommitmentOpening(invalid_commitment_opening_encoding);
+
+        for invalidate_key_index in 0..keys_openings.len() {
+            let mut canister_sks = MockSecretKeyStore::new();
+            for (key_index, (key_id, opening)) in keys_openings.iter().cloned().enumerate() {
+                let return_value = if key_index == invalidate_key_index {
+                    invalid_commitment_opening.clone()
+                } else {
+                    opening.clone()
+                };
+
+                canister_sks
+                    .expect_get()
+                    .times(1)
+                    .withf(move |this_key_id| *this_key_id == key_id)
+                    .return_const(Some(return_value));
+
+                if key_index == invalidate_key_index {
+                    // We return after the first deserializations failure and
+                    // thus don't try to fetch and deserialize subsequent
+                    // commitment openings, so we need to expect them to not
+                    // happen.
+                    break;
+                }
+            }
+
+            let vault = LocalCspVault::builder_for_test()
+                .with_mock_stores()
+                .with_canister_secret_key_store(canister_sks)
+                .build();
+
+            assert_matches!(
+                parameters.ecdsa_sign_share(&vault),
+                Err(ThresholdEcdsaSignShareError::InternalError { internal_error })
+                if internal_error == "ThresholdEcdsaSerializationError(\"Invalid point encoding\")"
+            );
+        }
+    }
+
+    #[test]
+    fn should_fail_if_secret_shares_not_found_for_opening() {
+        use ic_crypto_internal_basic_sig_ed25519::types::SecretKeyBytes as Ed25519SecretKeyBytes;
+
+        let parameters = EcdsaSignShareParameters::default();
+
+        let invalid_secret_key = Some(CspSecretKey::Ed25519(Ed25519SecretKeyBytes(
+            SecretArray::new_and_dont_zeroize_argument(&[0u8; 32]),
+        )));
+        let no_secret_key = None;
+        let invalid_representations = vec![invalid_secret_key, no_secret_key];
+
+        let keys_openings = parameters.keys_openings();
+
+        for invalidate_key_index in 0..keys_openings.len() {
+            for invalid_representation in invalid_representations.iter() {
+                let mut canister_sks = MockSecretKeyStore::new();
+                for (key_index, (key_id, opening)) in keys_openings.iter().cloned().enumerate() {
+                    let return_value = if key_index == invalidate_key_index {
+                        invalid_representation.clone()
+                    } else {
+                        Some(opening.clone())
+                    };
+
+                    canister_sks
+                        .expect_get()
+                        .times(1)
+                        .withf(move |this_key_id| *this_key_id == key_id)
+                        .return_const(return_value);
+
+                    if key_index == invalidate_key_index {
+                        // We return after the first failure and thus don't
+                        // fetch subsequent commitment openings after the first
+                        // failure, so we need to expect them to not happen.
+                        break;
+                    }
+                }
+                let vault = LocalCspVault::builder_for_test()
+                    .with_mock_stores()
+                    .with_canister_secret_key_store(canister_sks)
+                    .build();
+
+                assert_matches!(
+                    parameters.ecdsa_sign_share(&vault),
+                    Err(ThresholdEcdsaSignShareError::SecretSharesNotFound { .. })
+                );
+            }
+        }
+    }
+
     fn some_derivation_path() -> ExtendedDerivationPath {
         ExtendedDerivationPath {
             caller: Default::default(),
@@ -489,6 +632,28 @@ mod ecdsa_sign_share {
                 .times(1)
                 .withf(move |key_id| *key_id == key_times_lambda_key_id)
                 .return_const(Some(self.key_times_lambda_commitment.clone()));
+        }
+
+        /// Returns key-opening pairs for the transcripts of `lambda_masked`,
+        /// `kappa_times_lambda`, and `key_times_lambda`. For these transcripts
+        /// we fetch the openings from the canister secret key store.
+        fn keys_openings(&self) -> Vec<(KeyId, CspSecretKey)> {
+            [
+                (&self.lambda_masked, &self.lambda_masked_commitment),
+                (
+                    &self.kappa_times_lambda,
+                    &self.kappa_times_lambda_commitment,
+                ),
+                (&self.key_times_lambda, &self.key_times_lambda_commitment),
+            ]
+            .into_iter()
+            .map(|(transcript, opening)| {
+                (
+                    KeyId::from(transcript.combined_commitment.commitment()),
+                    opening.clone(),
+                )
+            })
+            .collect()
         }
     }
 

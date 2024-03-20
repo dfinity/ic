@@ -1,0 +1,27 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//rs/nervous_system:default_visibility"])
+
+DEPENDENCIES = [
+    "//rs/nervous_system/proto",
+    "//rs/types/base_types",
+    "@crate_index//:candid",
+    "@crate_index//:comparable",
+    "@crate_index//:prost",
+    "@crate_index//:serde",
+]
+
+LIB_SRCS = glob(
+    ["src/**"],
+    # Ensures that we do not need to rebuild just because a _test.rs file
+    # changed.
+    exclude = ["**/*tests.rs"],
+)
+
+rust_library(
+    name = "proto_library",
+    srcs = LIB_SRCS,
+    crate_name = "ic_sns_swap_proto_library",
+    version = "0.0.1",
+    deps = DEPENDENCIES,
+)

@@ -17,21 +17,22 @@ use ic_replicated_state::{
     testing::ReplicatedStateTesting,
     CanisterState, ReplicatedState, Stream,
 };
-use ic_test_utilities::{
-    state::{new_canister_state, register_callback},
-    types::ids::{user_test_id, SUBNET_12, SUBNET_23, SUBNET_27},
-    types::messages::{RequestBuilder, ResponseBuilder},
-    types::xnet::{StreamHeaderBuilder, StreamSliceBuilder},
-};
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
     fetch_histogram_stats, fetch_histogram_vec_count, fetch_int_counter, fetch_int_counter_vec,
     fetch_int_gauge_vec, metric_vec, nonzero_values, HistogramStats, MetricVec,
 };
-use ic_test_utilities_time::mock_time;
+use ic_test_utilities_state::{new_canister_state, register_callback};
+use ic_test_utilities_types::ids::{user_test_id, SUBNET_12, SUBNET_23, SUBNET_27};
+use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
+use ic_test_utilities_types::xnet::{StreamHeaderBuilder, StreamSliceBuilder};
 use ic_types::{
     messages::{CallbackId, Payload, Request, MAX_RESPONSE_COUNT_BYTES},
-    xnet::{testing::StreamSliceTesting, StreamIndex, StreamIndexedQueue},
+    time::UNIX_EPOCH,
+    xnet::{
+        testing::{StreamHeaderTesting, StreamSliceTesting},
+        StreamFlags, StreamIndex, StreamIndexedQueue,
+    },
     CanisterId, CountBytes, Cycles,
 };
 use lazy_static::lazy_static;
@@ -254,8 +255,7 @@ fn induct_loopback_stream_reject_response() {
 #[test]
 fn induct_loopback_stream_reroute_response() {
     with_test_replica_logger(|log| {
-        let (mut stream_handler, mut initial_state, metrics_registry) = new_fixture(&log);
-        stream_handler.testing_flag_generate_reject_signals = true;
+        let (stream_handler, mut initial_state, metrics_registry) = new_fixture(&log);
 
         let initial_canister_state = new_canister_state(
             *LOCAL_CANISTER,
@@ -873,6 +873,7 @@ fn garbage_collect_signals_success() {
             message_count: 10,
             signals_end: 33,
             reject_signals: None,
+            flags: Default::default(),
         });
 
         let expected_stream = generate_outgoing_stream(StreamConfig {
@@ -920,6 +921,7 @@ fn garbage_collect_signals_in_wrong_order() {
             message_count: 10,
             signals_end: 33,
             reject_signals: None,
+            flags: Default::default(),
         });
 
         let mut stats = Default::default();
@@ -953,6 +955,7 @@ fn garbage_collect_signals_with_invalid_slice_messages() {
             message_count: 5,
             signals_end: 33,
             reject_signals: None,
+            flags: Default::default(),
         });
 
         let mut stats = Default::default();
@@ -986,6 +989,7 @@ fn garbage_collect_signals_with_invalid_empty_slice() {
             message_count: 0,
             signals_end: 33,
             reject_signals: None,
+            flags: Default::default(),
         });
 
         let mut stats = Default::default();
@@ -1072,6 +1076,7 @@ fn garbage_collect_local_state_signals_for_inexistent_stream() {
             message_count: 2,
             signals_end: 1,
             reject_signals: None,
+            flags: Default::default(),
         });
 
         stream_handler
@@ -1094,6 +1099,7 @@ fn garbage_collect_local_state_inexistent_stream() {
             message_count: 2,
             signals_end: 0,
             reject_signals: None,
+            flags: Default::default(),
         });
 
         // Stream state should be unchanged.
@@ -1118,7 +1124,8 @@ fn garbage_collect_local_state_inexistent_stream() {
 
 /// Tests that garbage collecting a provided `ReplicatedState` results in all
 /// messages with matching signals being garbage collected appropriately. And
-/// that message memory usage is updated correctly.
+/// that message memory usage is updated correctly. Also check that stream flags
+/// were observed.
 #[test]
 fn garbage_collect_local_state_success() {
     with_test_replica_logger(|log| {
@@ -1146,9 +1153,12 @@ fn garbage_collect_local_state_success() {
         let request: RequestOrResponse = test_request(*LOCAL_CANISTER, *REMOTE_CANISTER).into();
         initial_stream.push(response.clone());
         initial_stream.push(request.clone());
+        initial_stream.set_reverse_stream_flags(StreamFlags {
+            responses_only: false,
+        });
         initial_state.with_streams(btreemap![REMOTE_SUBNET => initial_stream]);
 
-        // 2 incoming messages, 2 new incoming signals.
+        // 2 incoming messages, 2 new incoming signals, stream flag set.
         let stream_slice = generate_stream_slice(StreamSliceConfig {
             header_begin: 42,
             header_end: None,
@@ -1156,6 +1166,9 @@ fn garbage_collect_local_state_success() {
             message_count: 2,
             signals_end: 33,
             reject_signals: None,
+            flags: StreamFlags {
+                responses_only: true,
+            },
         });
 
         // The expected state must contain only messages past the last signal (index
@@ -1167,6 +1180,9 @@ fn garbage_collect_local_state_success() {
             reject_signals: None,
         });
         expected_stream.push(request);
+        expected_stream.set_reverse_stream_flags(StreamFlags {
+            responses_only: true,
+        });
         expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_stream]);
 
         let initial_subnet_available_memory =
@@ -1190,6 +1206,10 @@ fn garbage_collect_local_state_success() {
         assert_eq!(
             0,
             fetch_int_counter(&metrics_registry, METRIC_GCED_XNET_REJECT_SIGNALS).unwrap()
+        );
+        assert_eq!(
+            1,
+            fetch_int_counter(&metrics_registry, METRIC_STREAM_FLAGS_CHANGES).unwrap()
         );
         assert_eq_critical_error_reject_signals_for_request(0, &metrics_registry);
     });
@@ -1225,6 +1245,7 @@ fn garbage_collect_local_state_with_reject_signals_for_response_success() {
             message_count: 2,
             signals_end: 34,
             reject_signals: Some(vec![33]),
+            flags: Default::default(),
         });
 
         let mut pruned_stream = generate_outgoing_stream(StreamConfig {
@@ -1295,6 +1316,7 @@ fn garbage_collect_local_state_with_reject_signals_for_request() {
             message_count: 2,
             signals_end: 33,
             reject_signals: Some(vec![31]),
+            flags: Default::default(),
         });
 
         initial_state = simulate_canister_migration(
@@ -1373,6 +1395,7 @@ fn generate_reject_response_queue_full() {
             originator_reply_callback: msg.sender_reply_callback,
             refund: msg.payment,
             response_payload: Payload::Reject(RejectContext::new(RejectCode::SysTransient, &err)),
+            deadline: msg.deadline,
         }
         .into(),
     );
@@ -1413,6 +1436,7 @@ fn generate_reject_response_canister_not_found() {
                 RejectCode::DestinationInvalid,
                 &err,
             )),
+            deadline: msg.deadline,
         }
         .into(),
     );
@@ -1461,6 +1485,7 @@ fn induct_stream_slices_partial_success() {
             message_count: 2,
             signals_end: 33,
             reject_signals: None,
+            flags: Default::default(),
         });
 
         // ...and one incoming response.
@@ -1625,6 +1650,7 @@ fn induct_stream_slices_response_to_missing_canister() {
             message_count: 0,
             signals_end: 21,
             reject_signals: None,
+            flags: Default::default(),
         });
         stream_slice.push_message(test_response(*REMOTE_CANISTER, *LOCAL_CANISTER).into());
 
@@ -1709,6 +1735,7 @@ fn induct_stream_slices_sender_subnet_mismatch() {
             message_count: 0,
             signals_end: 21,
             reject_signals: None,
+            flags: Default::default(),
         });
         // Canister hosted by some other subnet (this one).
         stream_slice.push_message(test_request(*OTHER_LOCAL_CANISTER, *LOCAL_CANISTER).into());
@@ -1798,6 +1825,7 @@ fn induct_stream_slices_receiver_subnet_mismatch() {
             message_count: 0,
             signals_end: 21,
             reject_signals: None,
+            flags: Default::default(),
         });
         // Canister hosted by some other subnet.
         stream_slice.push_message(test_request(*REMOTE_CANISTER, *OTHER_REMOTE_CANISTER).into());
@@ -1860,8 +1888,7 @@ fn induct_stream_slices_receiver_subnet_mismatch() {
 #[test]
 fn induct_stream_slices_with_messages_to_migrating_canister() {
     with_test_replica_logger(|log| {
-        let (mut stream_handler, mut initial_state, metrics_registry) = new_fixture(&log);
-        stream_handler.testing_flag_generate_reject_signals = true;
+        let (stream_handler, mut initial_state, metrics_registry) = new_fixture(&log);
 
         // `REMOTE_CANISTER` is hosted by `CANISTER_MIGRATION_SUBNET` but in the process
         // of being migrated to `LOCAL_SUBNET`.
@@ -1897,6 +1924,7 @@ fn induct_stream_slices_with_messages_to_migrating_canister() {
             message_count: 0,
             signals_end: 21,
             reject_signals: None,
+            flags: Default::default(),
         });
         // ...with one incoming request...
         stream_slice.push_message(test_request(*OTHER_REMOTE_CANISTER, *REMOTE_CANISTER).into());
@@ -1996,8 +2024,7 @@ fn induct_stream_slices_with_messages_to_migrating_canister() {
 #[test]
 fn induct_stream_slices_with_messages_to_migrated_canister() {
     with_test_replica_logger(|log| {
-        let (mut stream_handler, mut initial_state, metrics_registry) = new_fixture(&log);
-        stream_handler.testing_flag_generate_reject_signals = true;
+        let (stream_handler, mut initial_state, metrics_registry) = new_fixture(&log);
 
         // `LOCAL_CANISTER` was hosted by the `LOCAL_SUBNET` but then migrated.
         initial_state = simulate_canister_migration(
@@ -2030,6 +2057,7 @@ fn induct_stream_slices_with_messages_to_migrated_canister() {
             message_count: 1,
             signals_end: 21,
             reject_signals: None,
+            flags: Default::default(),
         });
         // ...and one incoming response.
         stream_slice.push_message(test_response(*REMOTE_CANISTER, *LOCAL_CANISTER).into());
@@ -2128,8 +2156,7 @@ fn induct_stream_slices_with_messages_to_migrated_canister() {
 #[test]
 fn induct_stream_slices_with_messages_from_migrating_canister() {
     with_test_replica_logger(|log| {
-        let (mut stream_handler, mut initial_state, metrics_registry) = new_fixture(&log);
-        stream_handler.testing_flag_generate_reject_signals = true;
+        let (stream_handler, mut initial_state, metrics_registry) = new_fixture(&log);
 
         // Canister with a reservation for one incoming response.
         let mut initial_canister_state = new_canister_state(
@@ -2167,6 +2194,7 @@ fn induct_stream_slices_with_messages_from_migrating_canister() {
             message_count: 1,
             signals_end: 21,
             reject_signals: None,
+            flags: Default::default(),
         });
         // ...and one incoming response.
         stream_slice.push_message(test_response(*REMOTE_CANISTER, *LOCAL_CANISTER).into());
@@ -2237,8 +2265,7 @@ fn induct_stream_slices_with_messages_from_migrating_canister() {
 #[test]
 fn induct_stream_slices_with_messages_from_migrated_canister() {
     with_test_replica_logger(|log| {
-        let (mut stream_handler, mut initial_state, metrics_registry) = new_fixture(&log);
-        stream_handler.testing_flag_generate_reject_signals = true;
+        let (stream_handler, mut initial_state, metrics_registry) = new_fixture(&log);
 
         // Canister with a reservation for one incoming response.
         let mut initial_canister_state = new_canister_state(
@@ -2276,6 +2303,7 @@ fn induct_stream_slices_with_messages_from_migrated_canister() {
             message_count: 1,
             signals_end: 21,
             reject_signals: None,
+            flags: Default::default(),
         });
         // ...and one incoming response.
         stream_slice.push_message(test_response(*REMOTE_CANISTER, *LOCAL_CANISTER).into());
@@ -2517,6 +2545,7 @@ fn induct_stream_slices_with_memory_limit_setup(
         message_count: 0,
         signals_end: 31,
         reject_signals: None,
+        flags: Default::default(),
     });
     let request1 = request_with_callback(13);
     stream_slice.push_message(request1.clone());
@@ -2533,8 +2562,7 @@ fn induct_stream_slices_with_memory_limit_setup(
 #[test]
 fn process_stream_slices_with_reject_signals_partial_success() {
     with_test_replica_logger(|log| {
-        let (mut stream_handler, mut initial_state, metrics_registry) = new_fixture(&log);
-        stream_handler.testing_flag_generate_reject_signals = true;
+        let (stream_handler, mut initial_state, metrics_registry) = new_fixture(&log);
         let mut expected_state = initial_state.clone();
 
         // The initial state consists of a blank CanisterState...
@@ -2582,6 +2610,7 @@ fn process_stream_slices_with_reject_signals_partial_success() {
             message_count: 1,
             signals_end: 34,
             reject_signals: Some(vec![33]),
+            flags: Default::default(),
         });
         // ...and a second message from a canister not mapped in the routing table.
         stream_slice.push_message(test_request(*UNKNOWN_CANISTER, *LOCAL_CANISTER).into());
@@ -2720,8 +2749,7 @@ fn process_stream_slices_with_reject_signals_partial_success() {
 #[test]
 fn process_stream_slices_canister_migration_in_both_subnets_success() {
     with_test_replica_logger(|log| {
-        let (mut stream_handler, mut initial_state, metrics_registry) = new_fixture(&log);
-        stream_handler.testing_flag_generate_reject_signals = true;
+        let (stream_handler, mut initial_state, metrics_registry) = new_fixture(&log);
 
         //
         // Initial state with canister migrations happening in both sending and
@@ -2800,6 +2828,7 @@ fn process_stream_slices_canister_migration_in_both_subnets_success() {
             message_count: 1,
             signals_end: 34,
             reject_signals: Some(vec![33]),
+            flags: Default::default(),
         });
         // ...one incoming request to the migrated canister....
         stream_slice
@@ -2994,6 +3023,7 @@ fn process_stream_slices_with_invalid_messages() {
             message_count: 2,
             signals_end: 33,
             reject_signals: None,
+            flags: Default::default(),
         });
 
         stream_handler
@@ -3015,6 +3045,7 @@ fn new_fixture_with_config(
     hypervisor_config: HypervisorConfig,
 ) -> (StreamHandlerImpl, ReplicatedState, MetricsRegistry) {
     let mut state = ReplicatedState::new(LOCAL_SUBNET, SubnetType::Application);
+    state.metadata.certification_version = ic_certification_version::CURRENT_CERTIFICATION_VERSION;
     let metrics_registry = MetricsRegistry::new();
     let stream_handler = StreamHandlerImpl::new(
         LOCAL_SUBNET,
@@ -3065,9 +3096,10 @@ fn make_input_queue_reservations(canister: &mut CanisterState, count: usize, rem
             msg.sender,
             msg.receiver,
             msg.sender_reply_callback,
+            msg.deadline,
         );
         canister
-            .push_output_request(msg.into(), mock_time())
+            .push_output_request(msg.into(), UNIX_EPOCH)
             .unwrap();
     }
     canister.output_into_iter().count();
@@ -3088,15 +3120,16 @@ struct MessageConfig {
 }
 
 fn generate_stream(msg_config: MessageConfig, signal_config: SignalConfig) -> Stream {
-    let stream_header_builder = StreamHeaderBuilder::new()
-        .begin(StreamIndex::from(msg_config.begin))
-        .end(StreamIndex::from(msg_config.begin + msg_config.count))
-        .signals_end(StreamIndex::from(signal_config.end));
+    let stream_header = StreamHeaderBuilder::new()
+        .begin(msg_config.begin.into())
+        .end((msg_config.begin + msg_config.count).into())
+        .signals_end(signal_config.end.into())
+        .build();
 
     let msg_begin = StreamIndex::from(msg_config.begin);
 
     let slice = StreamSliceBuilder::new()
-        .header(stream_header_builder.build())
+        .header(stream_header)
         .generate_messages(
             msg_begin,
             msg_config.count,
@@ -3115,9 +3148,9 @@ fn generate_stream(msg_config: MessageConfig, signal_config: SignalConfig) -> St
             .iter()
             .map(|x| StreamIndex::from(*x))
             .collect();
-        Stream::with_signals(messages, slice.header().signals_end, reject_signals)
+        Stream::with_signals(messages, slice.header().signals_end(), reject_signals)
     } else {
-        Stream::new(messages, slice.header().signals_end)
+        Stream::new(messages, slice.header().signals_end())
     }
 }
 
@@ -3167,6 +3200,7 @@ struct StreamSliceConfig {
     message_count: u64,
     signals_end: u64,
     reject_signals: Option<Vec<u64>>,
+    flags: StreamFlags,
 }
 
 fn generate_stream_slice(config: StreamSliceConfig) -> StreamSlice {
@@ -3183,10 +3217,11 @@ fn generate_stream_slice(config: StreamSliceConfig) -> StreamSlice {
         },
     );
     let mut slice: StreamSlice = stream.into();
-    slice.header_mut().begin = StreamIndex::from(config.header_begin);
+    slice.header_mut().set_begin(config.header_begin.into());
     if let Some(end) = config.header_end {
-        slice.header_mut().end = StreamIndex::from(end);
+        slice.header_mut().set_end(end.into());
     }
+    slice.header_mut().set_flags(config.flags);
     slice
 }
 

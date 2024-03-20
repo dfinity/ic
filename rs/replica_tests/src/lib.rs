@@ -1,19 +1,20 @@
 use core::future::Future;
-use crossbeam_channel::Sender as CrossbeamSender;
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_canister_client_sender::Sender;
 use ic_config::Config;
 use ic_config::{crypto::CryptoConfig, transport::TransportConfig};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_execution_environment::IngressHistoryReaderImpl;
-use ic_ic00_types::CanisterInstallMode;
-use ic_ic00_types::{
+use ic_interfaces::execution_environment::{
+    IngressHistoryReader, QueryExecutionError, QueryExecutionService,
+};
+use ic_interfaces_registry::RegistryClient;
+use ic_interfaces_state_manager::StateReader;
+use ic_management_canister_types::CanisterInstallMode;
+use ic_management_canister_types::{
     CanisterIdRecord, InstallCodeArgs, Method, Payload, ProvisionalCreateCanisterWithCyclesArgs,
     IC_00,
 };
-use ic_interfaces::execution_environment::{IngressHistoryReader, QueryHandler};
-use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::StateReader;
 use ic_metrics::MetricsRegistry;
 use ic_prep_lib::internet_computer::{IcConfig, TopologyConfig};
 use ic_prep_lib::node::{NodeConfiguration, NodeIndex, NodeSecretKeyStore};
@@ -26,16 +27,16 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replica::setup::setup_crypto_provider;
 use ic_replicated_state::{CanisterState, ReplicatedState};
 use ic_state_machine_tests::StateMachine;
-use ic_test_utilities::{
-    types::ids::node_test_id, types::ids::user_anonymous_id, types::messages::SignedIngressBuilder,
-    universal_canister::UNIVERSAL_CANISTER_WASM,
-};
+use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
 use ic_test_utilities_logger::with_test_replica_logger;
+use ic_test_utilities_types::{
+    ids::node_test_id, ids::user_anonymous_id, messages::SignedIngressBuilder,
+};
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
     artifact_kind::IngressArtifact,
     ingress::{IngressState, IngressStatus, WasmResult},
-    messages::{SignedIngress, UserQuery},
+    messages::{CertificateDelegation, SignedIngress, UserQuery},
     replica_config::NODE_INDEX_DEFAULT,
     time::expiry_time_from_now,
     CanisterId, Height, NodeId, ReplicaVersion, Time,
@@ -52,6 +53,9 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
+use tokio::sync::mpsc::UnboundedSender;
+use tower::buffer::Buffer as TowerBuffer;
+use tower::ServiceExt;
 
 const CYCLES_BALANCE: u128 = 1 << 120;
 
@@ -62,7 +66,7 @@ const CYCLES_BALANCE: u128 = 1 << 120;
 /// time.
 #[allow(clippy::await_holding_lock)]
 fn process_ingress(
-    ingress_tx: &CrossbeamSender<UnvalidatedArtifactMutation<IngressArtifact>>,
+    ingress_tx: &UnboundedSender<UnvalidatedArtifactMutation<IngressArtifact>>,
     ingress_hist_reader: &dyn IngressHistoryReader,
     msg: SignedIngress,
     time_limit: Duration,
@@ -148,8 +152,9 @@ where
 /// The code of the replica is the real one, only the interface is changed, with
 /// function calls instead of http calls.
 pub struct LocalTestRuntime {
-    pub query_handler: Arc<dyn QueryHandler<State = ReplicatedState>>,
-    pub ingress_sender: CrossbeamSender<UnvalidatedArtifactMutation<IngressArtifact>>,
+    pub query_handler:
+        tower::buffer::Buffer<QueryExecutionService, (UserQuery, Option<CertificateDelegation>)>,
+    pub ingress_sender: UnboundedSender<UnvalidatedArtifactMutation<IngressArtifact>>,
     pub ingress_history_reader: Arc<dyn IngressHistoryReader>,
     pub state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     pub node_id: NodeId,
@@ -328,7 +333,7 @@ where
             ..Default::default()
         };
         let temp_node = node_id;
-        let (state_manager, query_handler, _p2p_thread_joiner, ingress_tx, _) =
+        let (state_reader, query_handler, ingress_tx, _p2p_thread_joiner, _) =
             ic_replica::setup_ic_stack::construct_ic_stack(
                 &logger,
                 &metrics_registry,
@@ -346,7 +351,7 @@ where
             .expect("Failed to setup p2p");
 
         let ingress_history_reader =
-            IngressHistoryReaderImpl::new(Arc::clone(&state_manager) as Arc<_>);
+            IngressHistoryReaderImpl::new(Arc::clone(&state_reader) as Arc<_>);
 
         std::thread::sleep(std::time::Duration::from_millis(1000));
         // Before height 1 the replica hasn't figured out what
@@ -355,7 +360,7 @@ where
         // before height 1 and after height 1 or above.
         //
         // So, loop until we're at height 1 or above.
-        while state_manager.get_latest_state().height().get() < 1 {
+        while state_reader.get_latest_state().height().get() < 1 {
             // either this requires only few iterations, so
             // waiting a bit is not an issue. Or, it requires
             // a lot of iterations and then we don't want to
@@ -366,10 +371,11 @@ where
         }
 
         let runtime = LocalTestRuntime {
-            query_handler,
+            query_handler: tokio::runtime::Handle::current()
+                .block_on(async { TowerBuffer::new(query_handler, 1) }),
             ingress_sender: ingress_tx,
             ingress_history_reader: Arc::new(ingress_history_reader),
-            state_reader: state_manager,
+            state_reader,
             node_id,
             nonce: Mutex::new(0),
             ingress_time_limit: Duration::from_secs(300),
@@ -604,7 +610,7 @@ impl LocalTestRuntime {
             .unwrap()
     }
 
-    pub fn query<M: Into<String>, P: Into<Vec<u8>>>(
+    pub async fn query<M: Into<String>, P: Into<Vec<u8>>>(
         &self,
         canister_id: CanisterId,
         method_name: M,
@@ -618,9 +624,24 @@ impl LocalTestRuntime {
             ingress_expiry: 0,
             nonce: None,
         };
-        let result =
-            self.query_handler
-                .query(query, self.state_reader.get_latest_state(), Vec::new());
+
+        let latest = self.state_reader.latest_state_height();
+        while self.state_reader.latest_certified_height() < latest {
+            thread::sleep(Duration::from_millis(100));
+        }
+
+        let result = match self
+            .query_handler
+            .clone()
+            .oneshot((query, None))
+            .await
+            .unwrap()
+        {
+            Ok((result, _)) => result,
+            Err(QueryExecutionError::CertifiedStateUnavailable) => {
+                panic!("Certified state unavailable for query call.")
+            }
+        };
         if let Ok(WasmResult::Reply(result)) = result.clone() {
             info!(
                 "Response{}: {}",
@@ -727,9 +748,10 @@ impl UniversalCanister {
         self.runtime.node_id
     }
 
-    pub fn query<P: Into<Vec<u8>>>(&self, payload: P) -> Result<WasmResult, UserError> {
+    pub async fn query<P: Into<Vec<u8>>>(&self, payload: P) -> Result<WasmResult, UserError> {
         self.runtime
             .query(self.canister_id(), "query", payload.into())
+            .await
     }
 
     pub fn update<P: Into<Vec<u8>>>(&self, payload: P) -> Result<WasmResult, UserError> {

@@ -6,18 +6,16 @@ use super::{
 use crate::{CanisterState, SchedulerState, SystemState};
 use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
-use ic_test_utilities::{
-    state::arb_num_receivers,
-    types::{
-        arbitrary,
-        ids::{canister_test_id, message_test_id, user_test_id},
-        messages::{IngressBuilder, RequestBuilder, ResponseBuilder},
-    },
+use ic_test_utilities_state::arb_num_receivers;
+use ic_test_utilities_types::{
+    arbitrary,
+    ids::{canister_test_id, message_test_id, user_test_id},
+    messages::{IngressBuilder, RequestBuilder, ResponseBuilder},
 };
-use ic_test_utilities_time::mock_time;
 use ic_types::{
-    messages::{CallbackId, CanisterMessage},
+    messages::{CallbackId, CanisterMessage, NO_DEADLINE},
     time::expiry_time_from_now,
+    time::UNIX_EPOCH,
 };
 use maplit::btreemap;
 use proptest::prelude::*;
@@ -74,7 +72,7 @@ impl CanisterQueuesFixture {
                     .receiver(self.other)
                     .build(),
             ),
-            mock_time(),
+            UNIX_EPOCH,
         )
     }
 
@@ -398,7 +396,7 @@ impl CanisterQueuesMultiFixture {
                     .receiver(other)
                     .build(),
             ),
-            mock_time(),
+            UNIX_EPOCH,
         )
     }
 
@@ -580,7 +578,7 @@ fn test_split_input_schedules() {
     // After the split we only have `other_1` (and `this`) on the subnet.
     let system_state =
         SystemState::new_running_for_testing(other_1, other_1.get(), Cycles::zero(), 0.into());
-    let scheduler_state = SchedulerState::new(mock_time());
+    let scheduler_state = SchedulerState::new(UNIX_EPOCH);
     let local_canisters = btreemap! {
         other_1 => CanisterState::new(system_state, None, scheduler_state)
     };
@@ -767,7 +765,7 @@ fn test_output_into_iter() {
                     .method_payload(vec![i as u8])
                     .build()
                     .into(),
-                mock_time(),
+                UNIX_EPOCH,
             )
             .expect("could not push");
     }
@@ -1068,7 +1066,7 @@ fn test_stats() {
         .payment(Cycles::new(5))
         .build();
     msg_size[4] = msg.count_bytes();
-    queues.push_output_request(msg.into(), mock_time()).unwrap();
+    queues.push_output_request(msg.into(), UNIX_EPOCH).unwrap();
     // One more reserved slot, no reserved response bytes, oversized request.
     expected_iq_stats.reserved_slots += 1;
     expected_mu_stats.reserved_slots += 1;
@@ -1251,7 +1249,7 @@ fn test_stats_induct_message_to_self() {
         .build();
     let request_size = request.count_bytes();
     queues
-        .push_output_request(request.into(), mock_time())
+        .push_output_request(request.into(), UNIX_EPOCH)
         .expect("could not push");
 
     // New input queue was created, with one reservation.
@@ -1372,7 +1370,7 @@ fn test_garbage_collect() {
 
     // Push output request.
     queues
-        .push_output_request(request.into(), mock_time())
+        .push_output_request(request.into(), UNIX_EPOCH)
         .unwrap();
     // No-op.
     queues.garbage_collect();
@@ -1500,16 +1498,16 @@ fn test_output_queues_for_each() {
 
     let mut queues = CanisterQueues::default();
     queues
-        .push_output_request(request_1.into(), mock_time())
+        .push_output_request(request_1.into(), UNIX_EPOCH)
         .unwrap();
     queues
-        .push_output_request(request_2.into(), mock_time())
+        .push_output_request(request_2.into(), UNIX_EPOCH)
         .unwrap();
     queues
-        .push_output_request(request_3.into(), mock_time())
+        .push_output_request(request_3.into(), UNIX_EPOCH)
         .unwrap();
     queues
-        .push_output_request(request_4.into(), mock_time())
+        .push_output_request(request_4.into(), UNIX_EPOCH)
         .unwrap();
 
     // Should have 2 queue pairs (one for `other_1`, one for `other_2`).
@@ -1811,6 +1809,7 @@ fn time_out_requests_pushes_correct_reject_responses() {
                     method_name: "No-Op".to_string(),
                     method_payload: vec![],
                     metadata: None,
+                    deadline: NO_DEADLINE,
                 }),
                 deadline,
             )
@@ -1866,7 +1865,8 @@ fn time_out_requests_pushes_correct_reject_responses() {
                     RejectCode::SysTransient,
                     "Request timed out.",
                     MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN
-                ))
+                )),
+                deadline: NO_DEADLINE,
             }),
             *reject_response,
         );

@@ -4,8 +4,7 @@ use crate::payload_builder::tests::{
 };
 use ic_error_types::RejectCode;
 use ic_interfaces::batch_payload::{BatchPayloadBuilder, PastPayload};
-use ic_test_utilities::types::ids::canister_test_id;
-use ic_test_utilities_time::mock_time;
+use ic_test_utilities_types::ids::canister_test_id;
 use ic_types::{
     canister_http::{
         CanisterHttpReject, CanisterHttpResponse, CanisterHttpResponseContent,
@@ -13,6 +12,7 @@ use ic_types::{
     },
     crypto::{crypto_hash, CryptoHash, CryptoHashOf},
     messages::CallbackId,
+    time::UNIX_EPOCH,
     Height, NumBytes, RegistryVersion,
 };
 use proptest::{arbitrary::any, prelude::*};
@@ -67,7 +67,7 @@ fn run_proptest(
                 .enumerate()
                 .map(|(height, payload)| PastPayload {
                     height: Height::new(height as u64 + 1),
-                    time: mock_time(),
+                    time: UNIX_EPOCH,
                     block_hash: CryptoHashOf::new(CryptoHash([0; 32].to_vec())),
                     payload,
                 })
@@ -191,7 +191,7 @@ fn prop_response(max_timeout: u64, max_size: usize) -> impl Strategy<Value = Can
         .prop_map(
             |((id, canister_id), timeout, content)| CanisterHttpResponse {
                 id: CallbackId::new(id),
-                timeout: mock_time() + Duration::from_millis(timeout),
+                timeout: UNIX_EPOCH + Duration::from_millis(timeout),
                 canister_id: canister_test_id(canister_id),
                 content,
             },
@@ -204,7 +204,7 @@ fn prop_random_metadata(max_timeout: u64) -> impl Strategy<Value = CanisterHttpR
     (any::<(u64, [u8; 32])>(), 100..max_timeout).prop_map(|((id, hash), timeout)| {
         CanisterHttpResponseMetadata {
             id: CallbackId::new(id),
-            timeout: mock_time() + Duration::from_millis(timeout),
+            timeout: UNIX_EPOCH + Duration::from_millis(timeout),
             content_hash: CryptoHashOf::new(CryptoHash(hash.to_vec())),
             registry_version: RegistryVersion::new(1),
         }

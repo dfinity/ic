@@ -2,14 +2,15 @@ use ic_icrc1::blocks::{
     encoded_block_to_generic_block, generic_block_to_encoded_block,
     generic_transaction_from_generic_block,
 };
-use ic_icrc1::{Block, Transaction};
-use ic_icrc1_test_utils::{arb_block, arb_small_amount, blocks_strategy};
+use ic_icrc1::{hash, Block, Transaction};
+use ic_icrc1_test_utils::{arb_amount, arb_block, arb_small_amount, blocks_strategy};
 use ic_icrc1_tokens_u256::U256;
 use ic_icrc1_tokens_u64::U64;
 use ic_ledger_canister_core::ledger::LedgerTransaction;
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::tokens::TokensType;
 use ic_ledger_core::Tokens;
+use ic_ledger_hash_of::HashOf;
 use proptest::prelude::*;
 
 fn arb_u256() -> impl Strategy<Value = U256> {
@@ -68,6 +69,21 @@ fn check_tx_hash<T: TokensType>(block: Block<T>) -> Result<(), TestCaseError> {
     Ok(())
 }
 
+fn check_block_hash<T: TokensType>(block: Block<T>) -> Result<(), TestCaseError> {
+    // Convert the encoded block into bytes, to ciborium::value::Value and then to GenericBlock;
+    let generic_block = encoded_block_to_generic_block(&block.clone().encode());
+
+    let encoded_block_hash = hash::hash_cbor(block.encode().as_slice())
+        .map(HashOf::<T>::new)
+        .unwrap();
+    let generic_block_hash = generic_block.hash().to_vec();
+
+    //Check that the hash of the generic block and the encoded block are the same
+    prop_assert_eq!(encoded_block_hash.as_slice(), &generic_block_hash);
+
+    Ok(())
+}
+
 proptest! {
     #[test]
     fn test_generic_block_to_encoded_block_conversion(block in blocks_strategy(arb_small_amount())) {
@@ -92,6 +108,26 @@ proptest! {
     #[test]
     fn test_generic_transaction_hash_u256(block in blocks_strategy(arb_u256())) {
         check_tx_hash::<U256>(block)?;
+    }
+
+    #[test]
+    fn test_generic_block_and_encoded_block_hash_parity(block in blocks_strategy(arb_u256())) {
+        check_block_hash::<U256>(block)?;
+    }
+
+    #[test]
+    fn test_generic_block_and_encoded_block_hash_parity_u64(block in blocks_strategy(arb_amount())) {
+        check_block_hash::<U64>(block)?;
+    }
+
+    #[test]
+    fn test_generic_block_and_encoded_block_hash_parity_u128(block in blocks_strategy(large_u128_amount())) {
+        check_block_hash::<U256>(block)?;
+    }
+
+    #[test]
+    fn test_generic_block_and_encoded_block_hash_parity_u256(block in blocks_strategy(large_u256_amount())) {
+        check_block_hash::<U256>(block)?;
     }
 }
 

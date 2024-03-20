@@ -31,7 +31,7 @@ docker build --iidfile ${TMPDIR}/iidfile - <<<"
     RUN mkdir -p /build/boot/efi/EFI/Boot
     RUN grub-mkimage --version
     RUN apt list --installed | grep grub
-    RUN faketime '1970-1-1 0' grub-mkimage -p '(,gpt2)/' -O x86_64-efi -o /build/boot/efi/EFI/Boot/bootx64.efi \
+    RUN faketime -f '1970-1-1 0:0:0' grub-mkimage -p '(,gpt2)/' -O x86_64-efi -o /build/boot/efi/EFI/Boot/bootx64.efi \
         boot linux search normal configfile \
         part_gpt btrfs ext2 fat iso9660 loopback \
         test keystatus gfxmenu regexp probe \

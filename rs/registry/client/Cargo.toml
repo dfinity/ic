@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-crossbeam-channel = "0.5.5"
+crossbeam-channel = { workspace = true }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-registry-common-proto = { path = "../proto" }

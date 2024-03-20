@@ -35,8 +35,21 @@ system_test(
     name = "node_registration_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "k8s",
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
+    deps = DEPENDENCIES + ["//rs/tests"],
+)
+
+system_test(
+    name = "cup_compatibility_test",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = [
+        "//rs/tests:cup_compatibility/binaries",
+    ],
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
@@ -235,6 +248,9 @@ system_test(
     name = "ssh_access_to_nodes_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "k8s",
+    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
@@ -245,6 +261,7 @@ system_test(
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
+        "k8s",
         "system_test_hourly",
         "system_test_nightly",
     ],
@@ -256,9 +273,12 @@ system_test(
 
 system_test(
     name = "upgrade_downgrade_app_subnet_test",
-    flaky = True,
+    colocated_test_driver_vm_resources = {
+        "vcpus": 24,
+    },
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
+        "experimental_system_test_colocation",
         "system_test_hourly",
         "system_test_nightly",
     ],
@@ -340,6 +360,7 @@ system_test(
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
+        "k8s",
         "system_test_hourly",
         "system_test_nightly",
     ],

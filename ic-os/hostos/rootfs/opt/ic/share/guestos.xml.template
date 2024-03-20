@@ -38,7 +38,7 @@
   <devices>
     <emulator>/usr/local/bin/qemu-system-x86_64</emulator>
     <disk type='block' device='disk'>
-      <driver name='qemu' type='raw' cache='none'/>
+      <driver name='qemu' type='raw' cache='none' discard='unmap'/>
       <source dev='/dev/hostlvm/guestos' index='1'/>
       <backingStore/>
       <target dev='vda' bus='virtio'/>

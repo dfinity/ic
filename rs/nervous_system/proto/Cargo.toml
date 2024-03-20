@@ -11,6 +11,7 @@ candid = { workspace = true }
 comparable = { version = "0.5.1", features = ["derive"] }
 ic-base-types = { path = "../../types/base_types" }
 prost = { workspace = true }
+rust_decimal = "1.25"
 serde = { workspace = true }
 
 [dev-dependencies]

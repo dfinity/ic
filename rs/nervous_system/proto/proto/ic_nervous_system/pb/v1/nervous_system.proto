@@ -39,3 +39,13 @@ message Countries {
   // ISO 3166-1 alpha-2 codes
   repeated string iso_codes = 1;
 }
+
+// Features:
+//   1. Sign ('+' is optional).
+//   2. Smallest positive value: 10^-28.
+//   3. 96 bits of significand.
+//   4. Decimal point character: '.' (dot/period).
+message Decimal {
+  // E.g. "3.14".
+  optional string human_readable = 1;
+}

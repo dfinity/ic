@@ -45,13 +45,10 @@ pub fn get_subnet_list_record(registry: &Registry) -> SubnetListRecord {
             make_subnet_list_record_key().as_bytes(),
             registry.latest_version(),
         )
-        .map_or(
-            Err(format!(
-                "{}do_remove_nodes: Subnet List not found in the registry, aborting node removal.",
-                LOG_PREFIX
-            )),
-            Ok,
-        )
+        .ok_or(format!(
+            "{}do_remove_nodes: Subnet List not found in the registry, aborting node removal.",
+            LOG_PREFIX
+        ))
         .unwrap();
 
     decode_registry_value::<SubnetListRecord>(subnet_list_record_vec.to_vec())

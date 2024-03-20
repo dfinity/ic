@@ -10,7 +10,7 @@ documentation.workspace = true
 hex = "0.4.2"
 ic-base-types = { path = "../types/base_types" }
 ic-config = { path = "../config" }
-ic-ic00-types = { path = "../types/ic00_types" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-protobuf = { path = "../protobuf" }
@@ -27,9 +27,9 @@ slog = { workspace = true }
 
 [dev-dependencies]
 ic-interfaces = { path = "../interfaces" }
-ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }
 ic-test-utilities-tmpdir = { path = "../test_utilities/tmpdir" }
 ic-test-utilities-time = { path = "../test_utilities/time" }
+ic-test-utilities-types = { path = "../test_utilities/types" }
 itertools = { workspace = true }
 proptest = "1.0"

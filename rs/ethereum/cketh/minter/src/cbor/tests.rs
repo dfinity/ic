@@ -46,6 +46,12 @@ struct PrincipalContainer {
 }
 
 #[derive(Debug, PartialEq, Eq, Encode, Decode)]
+struct OptPrincipalContainer {
+    #[cbor(n(0), with = "crate::cbor::principal::option")]
+    pub value: Option<Principal>,
+}
+
+#[derive(Debug, PartialEq, Eq, Encode, Decode)]
 struct U256NewtypeContainer {
     #[cbor(n(0))]
     pub value: U256Newtype,
@@ -104,6 +110,13 @@ proptest! {
     fn principal_encoding_roundtrip(p in pvec(any::<u8>(), 0..30)) {
         check_roundtrip(&PrincipalContainer {
             value: Principal::from_slice(&p),
+        })?;
+    }
+
+    #[test]
+    fn opt_principal_encoding_roundtrip(p in proptest::option::of(pvec(any::<u8>(), 0..30))) {
+        check_roundtrip(&OptPrincipalContainer {
+            value: p.map(|principal| Principal::from_slice(&principal)),
         })?;
     }
 }

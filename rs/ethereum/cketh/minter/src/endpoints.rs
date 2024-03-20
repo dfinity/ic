@@ -1,16 +1,19 @@
+use crate::ledger_client::LedgerBurnError;
 use crate::state::transactions::EthWithdrawalRequest;
 use crate::tx::{SignedEip1559TransactionRequest, TransactionPrice};
-use candid::{CandidType, Deserialize, Nat};
-use icrc_ledger_types::icrc2::transfer_from::TransferFromError;
+use candid::{CandidType, Deserialize, Nat, Principal};
 use minicbor::{Decode, Encode};
 use std::fmt::{Display, Formatter};
 
-#[derive(CandidType, Deserialize, Clone, Debug)]
+pub mod ckerc20;
+
+#[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
 pub struct Eip1559TransactionPrice {
     pub gas_limit: Nat,
     pub max_fee_per_gas: Nat,
     pub max_priority_fee_per_gas: Nat,
     pub max_transaction_fee: Nat,
+    pub timestamp: Option<u64>,
 }
 
 impl From<TransactionPrice> for Eip1559TransactionPrice {
@@ -20,9 +23,48 @@ impl From<TransactionPrice> for Eip1559TransactionPrice {
             max_fee_per_gas: value.max_fee_per_gas.into(),
             max_priority_fee_per_gas: value.max_priority_fee_per_gas.into(),
             max_transaction_fee: value.max_transaction_fee().into(),
+            timestamp: None,
         }
     }
 }
+
+#[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+pub struct CkErc20Token {
+    pub ckerc20_token_symbol: String,
+    pub erc20_contract_address: String,
+    pub ledger_canister_id: Principal,
+}
+
+impl From<crate::erc20::CkErc20Token> for CkErc20Token {
+    fn from(value: crate::erc20::CkErc20Token) -> Self {
+        Self {
+            ckerc20_token_symbol: value.ckerc20_token_symbol.to_string(),
+            erc20_contract_address: value.erc20_contract_address.to_string(),
+            ledger_canister_id: value.ckerc20_ledger_id,
+        }
+    }
+}
+
+#[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
+pub struct MinterInfo {
+    pub minter_address: Option<String>,
+    pub eth_helper_contract_address: Option<String>,
+    pub erc20_helper_contract_address: Option<String>,
+    pub supported_ckerc20_tokens: Vec<CkErc20Token>,
+    pub minimum_withdrawal_amount: Option<Nat>,
+    pub ethereum_block_height: Option<CandidBlockTag>,
+    pub last_observed_block_number: Option<Nat>,
+    pub eth_balance: Option<Nat>,
+    pub last_gas_fee_estimate: Option<GasFeeEstimate>,
+}
+
+#[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
+pub struct GasFeeEstimate {
+    pub max_fee_per_gas: Nat,
+    pub max_priority_fee_per_gas: Nat,
+    pub timestamp: u64,
+}
+
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct EthTransaction {
     pub transaction_hash: String,
@@ -129,40 +171,28 @@ pub enum WithdrawalError {
     TemporarilyUnavailable(String),
 }
 
-impl From<TransferFromError> for WithdrawalError {
-    fn from(transfer_from_error: TransferFromError) -> Self {
-        match transfer_from_error {
-            TransferFromError::BadFee { expected_fee } => {
-                panic!("bug: bad fee, expected fee: {expected_fee}")
+impl From<LedgerBurnError> for WithdrawalError {
+    fn from(error: LedgerBurnError) -> Self {
+        match error {
+            LedgerBurnError::TemporarilyUnavailable { message, .. } => {
+                Self::TemporarilyUnavailable(message)
             }
-            TransferFromError::BadBurn { min_burn_amount } => {
-                panic!("bug: bad burn, minimum burn amount: {min_burn_amount}")
+            LedgerBurnError::InsufficientFunds { balance, .. } => {
+                Self::InsufficientFunds { balance }
             }
-            TransferFromError::InsufficientFunds { balance } => Self::InsufficientFunds { balance },
-            TransferFromError::InsufficientAllowance { allowance } => {
+            LedgerBurnError::InsufficientAllowance { allowance, .. } => {
                 Self::InsufficientAllowance { allowance }
             }
-            TransferFromError::TooOld => panic!("bug: transfer too old"),
-            TransferFromError::CreatedInFuture { ledger_time } => {
-                panic!("bug: created in future, ledger time: {ledger_time}")
-            }
-            TransferFromError::Duplicate { duplicate_of } => {
-                panic!("bug: duplicate transfer of: {duplicate_of}")
-            }
-            TransferFromError::TemporarilyUnavailable => Self::TemporarilyUnavailable(
-                "ckETH ledger temporarily unavailable, try again".to_string(),
-            ),
-            TransferFromError::GenericError {
-                error_code,
-                message,
-            } => Self::TemporarilyUnavailable(
-                format!(
-                    "ckETH ledger unreachable, error code: {error_code}, with message: {message}"
-                )
-                .to_string(),
-            ),
         }
     }
+}
+
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
+pub struct AddCkErc20Token {
+    pub chain_id: Nat,
+    pub address: String,
+    pub ckerc20_token_symbol: String,
+    pub ckerc20_ledger_id: Principal,
 }
 
 pub mod events {
@@ -242,6 +272,15 @@ pub mod events {
             value: Nat,
             principal: Principal,
         },
+        AcceptedErc20Deposit {
+            transaction_hash: String,
+            block_number: Nat,
+            log_index: Nat,
+            from_address: String,
+            value: Nat,
+            principal: Principal,
+            erc20_contract_address: String,
+        },
         InvalidDeposit {
             event_source: EventSource,
             reason: String,
@@ -285,6 +324,29 @@ pub mod events {
         },
         SkippedBlock {
             block_number: Nat,
+        },
+        AddedCkErc20Token {
+            chain_id: Nat,
+            address: String,
+            ckerc20_token_symbol: String,
+            ckerc20_ledger_id: Principal,
+        },
+        AcceptedErc20WithdrawalRequest {
+            max_transaction_fee: Nat,
+            withdrawal_amount: Nat,
+            erc20_contract_address: String,
+            destination: String,
+            cketh_ledger_burn_index: Nat,
+            ckerc20_ledger_burn_index: Nat,
+            from: Principal,
+            from_subaccount: Option<[u8; 32]>,
+            created_at: u64,
+        },
+        MintedCkErc20 {
+            event_source: EventSource,
+            mint_block_index: Nat,
+            ckerc20_token_symbol: String,
+            erc20_contract_address: String,
         },
     }
 }

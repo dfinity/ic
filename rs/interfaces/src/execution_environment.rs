@@ -4,8 +4,7 @@ mod errors;
 pub use errors::{CanisterOutOfCyclesError, HypervisorError, TrapCode};
 use ic_base_types::NumBytes;
 use ic_error_types::UserError;
-use ic_ic00_types::EcdsaKeyId;
-use ic_interfaces_state_manager::Labeled;
+use ic_management_canister_types::{CanisterLog, EcdsaKeyId};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_sys::{PageBytes, PageIndex};
@@ -14,13 +13,12 @@ use ic_types::{
     crypto::canister_threshold_sig::MasterEcdsaPublicKey,
     ingress::{IngressStatus, WasmResult},
     messages::{
-        AnonymousQuery, AnonymousQueryResponse, CertificateDelegation, HttpQueryResponse,
-        MessageId, SignedIngressContent, UserQuery,
+        AnonymousQuery, AnonymousQueryResponse, CertificateDelegation, MessageId,
+        SignedIngressContent, UserQuery,
     },
     Cycles, ExecutionRound, Height, NumInstructions, NumPages, Randomness, Time,
 };
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use std::{collections::BTreeMap, ops};
 use std::{collections::BTreeSet, convert::TryFrom};
 use std::{convert::Infallible, fmt};
@@ -201,8 +199,6 @@ pub enum SystemApiCallId {
 pub struct SystemApiCallCounters {
     /// Counter for `ic0.data_certificate_copy()`
     pub data_certificate_copy: usize,
-    /// Counter for `ic0.call_perform()`
-    pub call_perform: usize,
     /// Counter for `ic0.canister_cycle_balance()`
     pub canister_cycle_balance: usize,
     /// Counter for `ic0.canister_cycle_balance128()`
@@ -216,7 +212,6 @@ impl SystemApiCallCounters {
         self.data_certificate_copy = self
             .data_certificate_copy
             .saturating_add(rhs.data_certificate_copy);
-        self.call_perform = self.call_perform.saturating_add(rhs.call_perform);
         self.canister_cycle_balance = self
             .canister_cycle_balance
             .saturating_add(rhs.canister_cycle_balance);
@@ -432,29 +427,12 @@ pub enum QueryExecutionError {
 
 /// The response type to a `call()` request in [`QueryExecutionService`].
 /// An Ok response contains the response from the canister and the batch time at the time of execution.
-pub type QueryExecutionResponse = Result<(HttpQueryResponse, Time), QueryExecutionError>;
+pub type QueryExecutionResponse =
+    Result<(Result<WasmResult, UserError>, Time), QueryExecutionError>;
 
 /// Interface for the component to execute queries.
 pub type QueryExecutionService =
     BoxCloneService<(UserQuery, Option<CertificateDelegation>), QueryExecutionResponse, Infallible>;
-
-/// Interface for the component to execute queries on canisters.  It can be used
-/// by the HttpHandler and other system components to execute queries.
-pub trait QueryHandler: Send + Sync {
-    /// Type of state managed by StateReader.
-    ///
-    /// Should typically be `ic_replicated_state::ReplicatedState`.
-    // Note [Associated Types in Interfaces]
-    type State;
-
-    /// Handle a query of type `UserQuery` which was sent by an end user.
-    fn query(
-        &self,
-        query: UserQuery,
-        state: Labeled<Arc<Self::State>>,
-        data_certificate: Vec<u8>,
-    ) -> Result<WasmResult, UserError>;
-}
 
 /// Errors that can be returned when reading/writing from/to ingress history.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1175,23 +1153,10 @@ pub trait Scheduler: Send {
         ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
         ecdsa_quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<QuadrupleId>>,
         current_round: ExecutionRound,
+        next_checkpoint_round: Option<ExecutionRound>,
         current_round_type: ExecutionRoundType,
         registry_settings: &RegistryExecutionSettings,
     ) -> Self::State;
-}
-
-/// Synchronous interface for use in testing
-/// to filter out ingress messages that
-/// the canister is not willing to accept.
-pub trait IngressFilter: Send + Sync {
-    type State;
-
-    fn should_accept_ingress_message(
-        &self,
-        state: Arc<Self::State>,
-        provisional_whitelist: &ProvisionalWhitelist,
-        ingress: &SignedIngressContent,
-    ) -> Result<(), UserError>;
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -1203,6 +1168,7 @@ pub struct WasmExecutionOutput {
     pub instance_stats: InstanceStats,
     /// How many times each tracked System API call was invoked.
     pub system_api_call_counters: SystemApiCallCounters,
+    pub canister_log: CanisterLog,
 }
 
 impl fmt::Display for WasmExecutionOutput {

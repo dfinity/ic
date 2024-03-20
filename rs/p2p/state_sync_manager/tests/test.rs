@@ -380,7 +380,6 @@ fn test_single_advert_between_two_nodes() {
             topology_watcher.clone(),
             None,
             None,
-            None,
             Some(Arc::new(state_sync_n1)),
             None,
             waiter_fut(),
@@ -392,7 +391,6 @@ fn test_single_advert_between_two_nodes() {
             NODE_2,
             registry_handle.clone(),
             topology_watcher,
-            None,
             None,
             None,
             Some(Arc::new(state_sync_n2)),
@@ -507,7 +505,6 @@ fn test_multiple_advert_between_two_nodes() {
             topology_watcher.clone(),
             None,
             None,
-            None,
             Some(Arc::new(state_sync_n1)),
             None,
             waiter_fut(),
@@ -519,7 +516,6 @@ fn test_multiple_advert_between_two_nodes() {
             NODE_2,
             registry_handle.clone(),
             topology_watcher,
-            None,
             None,
             None,
             Some(Arc::new(state_sync_n2)),
@@ -582,7 +578,6 @@ fn test_state_sync_abortion() {
             topology_watcher.clone(),
             Some(ConnectivityChecker::router()),
             None,
-            None,
             Some(Arc::new(s1.clone())),
             None,
             conn_checker.check_fut(),
@@ -596,7 +591,6 @@ fn test_state_sync_abortion() {
             topology_watcher.clone(),
             Some(ConnectivityChecker::router()),
             None,
-            None,
             Some(Arc::new(s2.clone())),
             None,
             conn_checker.check_fut(),
@@ -609,7 +603,6 @@ fn test_state_sync_abortion() {
             registry_handle.clone(),
             topology_watcher,
             Some(ConnectivityChecker::router()),
-            None,
             None,
             Some(Arc::new(s3.clone())),
             None,
@@ -669,7 +662,7 @@ fn test_state_sync_abortion() {
             .expect_chunks_to_download()
             .returning(|| Box::new(vec![ChunkId::from(1)].into_iter()) as Box<_>);
         c2.get_mut().expect_add_chunk().return_const(Ok(()));
-        c2.get_mut().expect_completed().return_const(None);
+        c2.get_mut().expect_completed().return_const(false);
         {
             let c2 = c2.clone();
             s2.get_mut()

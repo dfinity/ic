@@ -17,9 +17,9 @@ use crate::execution::install_code::{
 use crate::execution_environment::{RoundContext, RoundLimits};
 use ic_base_types::PrincipalId;
 use ic_embedders::wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult};
-use ic_ic00_types::{CanisterInstallModeV2, SkipPreUpgrade};
 use ic_interfaces::execution_environment::{HypervisorError, WasmExecutionOutput};
 use ic_logger::{info, warn, ReplicaLogger};
+use ic_management_canister_types::CanisterInstallModeV2;
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::{
     metadata_state::subnet_call_context_manager::InstallCodeCallId, CanisterState, SystemState,
@@ -129,9 +129,14 @@ pub(crate) fn execute_upgrade(
     };
 
     let method = WasmMethod::System(SystemMethod::CanisterPreUpgrade);
-    if context.mode == CanisterInstallModeV2::Upgrade(Some(SkipPreUpgrade(Some(true))))
-        || !execution_state.exports_method(&method)
-    {
+    let skip_pre_upgrade = match context.mode {
+        CanisterInstallModeV2::Upgrade(Some(upgrade_option)) => {
+            upgrade_option.skip_pre_upgrade.unwrap_or(false)
+        }
+        _ => false,
+    };
+
+    if skip_pre_upgrade || !execution_state.exports_method(&method) {
         // If the Wasm module does not export the method, or skip_pre_upgrade
         // is enabled then this execution succeeds as a no-op.
         upgrade_stage_2_and_3a_create_execution_state_and_call_start(

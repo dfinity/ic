@@ -10,7 +10,7 @@ pub fn derive_tecdsa_public_key(
     master_public_key: &MasterEcdsaPublicKey,
     extended_derivation_path: &ExtendedDerivationPath,
 ) -> Result<EcdsaPublicKey, ThresholdEcdsaGetPublicKeyError> {
-    ic_crypto_internal_threshold_sig_ecdsa::derive_public_key(
+    ic_crypto_internal_threshold_sig_ecdsa::derive_ecdsa_public_key(
         master_public_key,
         &extended_derivation_path.into(),
     )

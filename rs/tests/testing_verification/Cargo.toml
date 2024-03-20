@@ -1,0 +1,37 @@
+[package]
+name = "testing-verifcation-tests"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+ic-registry-subnet-type = { path = "../../registry/subnet_type" }
+tests = { path = ".." }
+spec-compliance = { path = "./spec_compliance" }
+
+[[bin]]
+name = "ic-systest-spec-compliance-application-subnet"
+path = "spec_compliance_application_subnet_test.rs"
+
+[[bin]]
+name = "ic-systest-spec-compliance-system-subnet"
+path = "spec_compliance_system_subnet_test.rs"
+
+[[bin]]
+name = "ic-systest-spec-compliance-group-01-application-subnet"
+path = "spec_compliance_group_01_application_subnet_test.rs"
+
+[[bin]]
+name = "ic-systest-spec-compliance-group-01-system-subnet"
+path = "spec_compliance_group_01_system_subnet_test.rs"
+
+[[bin]]
+name = "ic-systest-spec-compliance-group-02-application-subnet"
+path = "spec_compliance_group_02_application_subnet_test.rs"
+
+[[bin]]
+name = "ic-systest-spec-compliance-group-02-system-subnet"
+path = "spec_compliance_group_02_system_subnet_test.rs"

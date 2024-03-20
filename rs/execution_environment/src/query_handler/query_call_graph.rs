@@ -99,6 +99,8 @@ pub(super) fn evaluate_query_call_graph(
                 unreachable!("Unexpected user response for canister query call.");
             }
             Some(QueryResponse::CanisterResponse(response)) => {
+                // This catches both responses from `handle_response()` and `handle_request()`.
+                query_context.accumulate_transient_errors_from_payload(&response.response_payload);
                 match query_context.handle_response(canister, response, requests, measurement_scope)
                 {
                     ExecutionResult::Calls(canister, used_call_origin, requests) => {

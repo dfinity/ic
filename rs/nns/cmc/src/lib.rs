@@ -1,5 +1,5 @@
 use candid::{CandidType, Nat};
-use ic_ic00_types::CanisterSettingsArgs;
+use ic_management_canister_types::CanisterSettingsArgs;
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
 use ic_xrc_types::ExchangeRate;
@@ -26,6 +26,8 @@ pub const MINT_CYCLES_REFUND_FEE: Tokens = Tokens::from_e8s(DEFAULT_TRANSFER_FEE
 
 /// Cycles penalty charged for sending bad requests that incur a lot of work.
 pub const BAD_REQUEST_CYCLES_PENALTY: u128 = 100_000_000; // TODO(SDK-1248) revisit fair pricing. Currently costs significantly more than an update call
+
+pub const DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS: u64 = 1620633600; // 10 May 2021 10:00:00 AM CEST
 
 #[derive(Serialize, Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
 pub enum ExchangeRateCanister {

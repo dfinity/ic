@@ -1,15 +1,12 @@
 //! Utilities to submit proposals to the governance canister and to upgrade it
 //! (in tests).
-use crate::{
-    ids::TEST_NEURON_1_ID,
-    itest_helpers::{NnsCanisters, UpgradeTestingScenario},
-};
+use crate::itest_helpers::{NnsCanisters, UpgradeTestingScenario};
 use candid::{CandidType, Encode};
 use canister_test::{Canister, Wasm};
 use dfn_candid::{candid, candid_one};
 use ic_btc_interface::SetConfigRequest;
 use ic_canister_client_sender::Sender;
-use ic_ic00_types::CanisterInstallMode;
+use ic_management_canister_types::CanisterInstallMode;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::{CanisterStatusResult, CanisterStatusType},
@@ -20,6 +17,7 @@ use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_constants::ROOT_CANISTER_ID;
 use ic_nns_governance::{
     governance::{BitcoinNetwork, BitcoinSetConfigProposal},
+    init::TEST_NEURON_1_ID,
     pb::v1::{
         add_or_remove_node_provider::Change,
         manage_neuron::{Command, NeuronIdOrSubaccount},

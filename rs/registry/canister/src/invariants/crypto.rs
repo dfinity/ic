@@ -267,16 +267,6 @@ fn check_ecdsa_signing_subnet_lists(
     get_all_ecdsa_signing_subnet_list_records(snapshot)
         .iter()
         .try_for_each(|(key_id, ecdsa_signing_subnet_list)| {
-            if ecdsa_signing_subnet_list.subnets.len() > 1 {
-                return Err(InvariantCheckError {
-                    msg: format!(
-                        "key_id {} ended up with more than one ECDSA signing subnet",
-                        key_id
-                    ),
-                    source: None,
-                });
-            }
-
             let ecdsa_key_id =  match get_ecdsa_key_id_from_signing_subnet_list_key(key_id) {
                 Ok(ecdsa_key_id) => ecdsa_key_id,
                 Err(error) => {

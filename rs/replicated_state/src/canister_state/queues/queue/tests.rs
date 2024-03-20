@@ -1,11 +1,10 @@
 use super::*;
-use ic_test_utilities::types::{
+use ic_test_utilities_types::{
     arbitrary,
     ids::{canister_test_id, message_test_id, user_test_id},
     messages::{IngressBuilder, RequestBuilder, ResponseBuilder},
 };
-use ic_test_utilities_time::mock_time;
-use ic_types::{messages::RequestOrResponse, Time};
+use ic_types::{messages::RequestOrResponse, time::UNIX_EPOCH, Time};
 use proptest::prelude::*;
 
 #[test]
@@ -152,7 +151,7 @@ fn output_queue_with_message_is_not_empty() {
     let mut queue = OutputQueue::new(14);
 
     queue
-        .push_request(RequestBuilder::default().build().into(), mock_time())
+        .push_request(RequestBuilder::default().build().into(), UNIX_EPOCH)
         .expect("could push");
     assert_eq!(queue.num_messages(), 1);
     assert!(queue.has_used_slots());
@@ -175,7 +174,7 @@ fn output_queue_push_request_succeeds() {
 
     assert_eq!(output_queue.queue.available_request_slots(), 1);
     output_queue
-        .push_request(RequestBuilder::default().build().into(), mock_time())
+        .push_request(RequestBuilder::default().build().into(), UNIX_EPOCH)
         .unwrap();
     assert_eq!(output_queue.queue.available_request_slots(), 0);
     assert!(output_queue.check_has_request_slot().is_err());
@@ -208,7 +207,7 @@ fn output_queue_push_to_full_queue_fails() {
     let mut output_queue = OutputQueue::new(capacity);
     for _index in 0..capacity {
         output_queue
-            .push_request(RequestBuilder::default().build().into(), mock_time())
+            .push_request(RequestBuilder::default().build().into(), UNIX_EPOCH)
             .unwrap();
     }
     for _index in 0..capacity {
@@ -219,7 +218,7 @@ fn output_queue_push_to_full_queue_fails() {
     // Now push an extraneous message in
     assert_eq!(
         output_queue
-            .push_request(RequestBuilder::default().build().into(), mock_time(),)
+            .push_request(RequestBuilder::default().build().into(), UNIX_EPOCH,)
             .map_err(|(err, _)| err),
         Err(StateError::QueueFull { capacity })
     );
@@ -591,7 +590,7 @@ fn output_queue_decode_with_deadlines_index_out_of_bounds_fails() {
 fn output_queue_decode_with_none_head_fails() {
     let mut q = OutputQueue::new(super::super::DEFAULT_QUEUE_CAPACITY);
     for _ in 0..2 {
-        q.push_request(RequestBuilder::default().build().into(), mock_time())
+        q.push_request(RequestBuilder::default().build().into(), UNIX_EPOCH)
             .unwrap();
     }
     q.queue.queue.front_mut().unwrap().take();

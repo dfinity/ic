@@ -194,6 +194,7 @@ mod tests {
     #[test]
     fn uninterrupted_empty_task_sends_no_events() {
         let expected_task_id = TaskId::Test("test-id".to_string());
+        #[allow(clippy::disallowed_methods)]
         let (evt_send, evt_rcv) = unbounded();
 
         let t = EmptyTask::new(expected_task_id);

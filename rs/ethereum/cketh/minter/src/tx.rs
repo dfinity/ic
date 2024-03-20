@@ -8,7 +8,7 @@ use crate::state::{lazy_call_ecdsa_public_key, read_state};
 use ethnum::u256;
 use ic_crypto_ecdsa_secp256k1::RecoveryId;
 use ic_ethereum_types::Address;
-use ic_ic00_types::DerivationPath;
+use ic_management_canister_types::DerivationPath;
 use minicbor::{Decode, Encode};
 use rlp::RlpStream;
 
@@ -84,6 +84,92 @@ pub struct Eip1559TransactionRequest {
     pub data: Vec<u8>,
     #[n(8)]
     pub access_list: AccessList,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Resubmittable<T> {
+    pub transaction: T,
+    pub resubmission: ResubmissionStrategy,
+}
+
+pub type TransactionRequest = Resubmittable<Eip1559TransactionRequest>;
+pub type SignedTransactionRequest = Resubmittable<SignedEip1559TransactionRequest>;
+
+impl<T> Resubmittable<T> {
+    pub fn clone_resubmission_strategy<V>(&self, other: V) -> Resubmittable<V> {
+        Resubmittable {
+            transaction: other,
+            resubmission: self.resubmission.clone(),
+        }
+    }
+}
+
+impl<T> AsRef<T> for Resubmittable<T> {
+    fn as_ref(&self) -> &T {
+        &self.transaction
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ResubmissionStrategy {
+    ReduceEthAmount { withdrawal_amount: Wei },
+    GuaranteeEthAmount { allowed_max_transaction_fee: Wei },
+}
+
+impl ResubmissionStrategy {
+    pub fn allowed_max_transaction_fee(&self) -> Wei {
+        match self {
+            ResubmissionStrategy::ReduceEthAmount { withdrawal_amount } => *withdrawal_amount,
+            ResubmissionStrategy::GuaranteeEthAmount {
+                allowed_max_transaction_fee,
+            } => *allowed_max_transaction_fee,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ResubmitTransactionError {
+    InsufficientTransactionFee {
+        allowed_max_transaction_fee: Wei,
+        actual_max_transaction_fee: Wei,
+    },
+}
+
+impl SignedTransactionRequest {
+    pub fn resubmit(
+        &self,
+        new_gas_fee: TransactionPriceEstimate,
+    ) -> Result<Option<Eip1559TransactionRequest>, ResubmitTransactionError> {
+        let transaction_request = self.transaction.transaction();
+        let new_tx_price = new_gas_fee.clone().to_price(transaction_request.gas_limit);
+        let last_tx_price = transaction_request.transaction_price();
+        if !last_tx_price.is_fee_increased(&new_tx_price) {
+            return Ok(None);
+        }
+        let new_tx_price = last_tx_price
+            .increase_by_10_percent()
+            .max(new_tx_price.clone());
+        if new_tx_price.max_transaction_fee() > self.resubmission.allowed_max_transaction_fee() {
+            return Err(ResubmitTransactionError::InsufficientTransactionFee {
+                allowed_max_transaction_fee: self.resubmission.allowed_max_transaction_fee(),
+                actual_max_transaction_fee: new_tx_price.max_transaction_fee(),
+            });
+        }
+        let new_amount = match self.resubmission {
+            ResubmissionStrategy::ReduceEthAmount { withdrawal_amount } => {
+                withdrawal_amount.checked_sub(new_tx_price.max_transaction_fee())
+                    .expect("BUG: withdrawal_amount covers new transaction fee because it was checked before")
+            }
+            ResubmissionStrategy::GuaranteeEthAmount { .. } => transaction_request.amount,
+        };
+        Ok(Some(Eip1559TransactionRequest {
+            max_priority_fee_per_gas: new_tx_price.max_priority_fee_per_gas,
+            max_fee_per_gas: new_tx_price.max_fee_per_gas,
+            gas_limit: new_tx_price.gas_limit,
+            amount: new_amount,
+            ..transaction_request.clone()
+        }))
+    }
 }
 
 impl rlp::Encodable for Eip1559TransactionRequest {
@@ -385,6 +471,22 @@ async fn compute_recovery_id(digest: &Hash, signature: &[u8]) -> RecoveryId {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TransactionPriceEstimate {
+    pub max_fee_per_gas: WeiPerGas,
+    pub max_priority_fee_per_gas: WeiPerGas,
+}
+
+impl TransactionPriceEstimate {
+    pub fn to_price(self, gas_limit: GasAmount) -> TransactionPrice {
+        TransactionPrice {
+            gas_limit,
+            max_fee_per_gas: self.max_fee_per_gas,
+            max_priority_fee_per_gas: self.max_priority_fee_per_gas,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TransactionPrice {
     pub gas_limit: GasAmount,
     pub max_fee_per_gas: WeiPerGas,
@@ -439,12 +541,11 @@ pub enum TransactionPriceEstimationError {
 }
 pub fn estimate_transaction_price(
     fee_history: &FeeHistory,
-) -> Result<TransactionPrice, TransactionPriceEstimationError> {
+) -> Result<TransactionPriceEstimate, TransactionPriceEstimationError> {
     // average value between the `minSuggestedMaxPriorityFeePerGas`
     // used by Metamask, see
     // https://github.com/MetaMask/core/blob/f5a4f52e17f407c6411e4ef9bd6685aab184b91d/packages/gas-fee-controller/src/fetchGasEstimatesViaEthFeeHistory/calculateGasFeeEstimatesForPriorityLevels.ts#L14
     const MIN_MAX_PRIORITY_FEE_PER_GAS: WeiPerGas = WeiPerGas::new(1_500_000_000); //1.5 gwei
-    const TRANSACTION_GAS_LIMIT: GasAmount = GasAmount::new(21_000);
     let base_fee_of_next_finalized_block = *fee_history.base_fee_per_gas.last().ok_or(
         TransactionPriceEstimationError::InvalidFeeHistory(
             "base_fee_per_gas should not be empty to be able to evaluate transaction price"
@@ -465,8 +566,7 @@ pub fn estimate_transaction_price(
         .ok_or(TransactionPriceEstimationError::Overflow(
             "ERROR: overflow during transaction price estimation".to_string(),
         ))?;
-    Ok(TransactionPrice {
-        gas_limit: TRANSACTION_GAS_LIMIT,
+    Ok(TransactionPriceEstimate {
         max_fee_per_gas,
         max_priority_fee_per_gas,
     })

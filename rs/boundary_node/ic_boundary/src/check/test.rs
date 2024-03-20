@@ -5,10 +5,10 @@ use std::{
 };
 
 use arc_swap::ArcSwapOption;
+use candid::Principal;
 use ic_crypto_test_utils_keys::public_keys::valid_tls_certificate_and_validation_time;
 use ic_registry_subnet_type::SubnetType;
-use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
-use mockall::{predicate::*, *};
+use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 
 use super::*;
 use crate::{
@@ -92,55 +92,64 @@ fn node_id(id: u64) -> Principal {
     node_test_id(NODE_ID_OFFSET + id).get().0
 }
 
-fn check_result_ver(height: u64, lat: u64, ver: &str) -> CheckResult {
+fn check_result(height: u64) -> CheckResult {
     CheckResult {
         height,
-        latency: Duration::from_millis(lat),
-        replica_version: ver.to_string(),
+        replica_version: "foobar".into(),
     }
-}
-
-fn check_result(height: u64, lat: u64) -> CheckResult {
-    check_result_ver(height, lat, "a17247bd86c7aa4e87742bf74d108614580f216d")
 }
 
 // Ensure that nodes that have failed healthcheck or lag behind are excluded
 #[tokio::test(flavor = "multi_thread")]
 async fn test_check_some_unhealthy() -> Result<(), Error> {
     let routes = Arc::new(ArcSwapOption::empty());
-    let persist = Persister::new(Arc::clone(&routes));
-    let routing_table = Arc::new(ArcSwapOption::from_pointee(
-        generate_custom_registry_snapshot(2, 2, 0),
-    ));
+    let persister = Arc::new(Persister::new(Arc::clone(&routes)));
 
-    let mut check = MockCheck::new();
-
-    check
+    let mut checker = MockCheck::new();
+    checker
         .expect_check()
         .withf(|x: &Node| x.id == node_id(0))
-        .times(1)
-        .returning(|_| Ok(check_result(1000, 0)));
+        .returning(|_| Ok(check_result(1000)));
 
-    check
+    checker
         .expect_check()
         .withf(|x: &Node| x.id == node_id(1))
-        .times(1)
         .returning(|_| Err(CheckError::Health));
 
-    check
+    checker
         .expect_check()
         .withf(|x: &Node| x.id == node_id(100))
-        .times(1)
-        .returning(|_| Ok(check_result(1010, 0)));
+        .returning(|_| Ok(check_result(1010)));
 
-    check
+    checker
         .expect_check()
         .withf(|x: &Node| x.id == node_id(101))
-        .times(1)
-        .returning(|_| Ok(check_result(500, 0)));
+        .returning(|_| Ok(check_result(500)));
 
-    let mut check_runner = Runner::new(Arc::clone(&routing_table), 1, 10, persist, check);
-    check_runner.run().await.expect("run should succeed");
+    let (channel_send, channel_recv) = watch::channel(None);
+    let mut runner = Runner::new(
+        channel_recv,
+        10,
+        persister,
+        Arc::new(checker),
+        Duration::from_millis(100),
+        Duration::from_millis(1),
+    );
+    tokio::spawn(async move {
+        let _ = runner.run().await;
+    });
+
+    let snapshot = generate_custom_registry_snapshot(2, 2, 0);
+    channel_send.send(Some(Arc::new(snapshot))).unwrap();
+
+    // Wait until the routing table is published
+    // TODO improve
+    for _ in 1..10 {
+        if routes.load().is_some() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
 
     let rt = routes.load_full().unwrap();
 
@@ -157,49 +166,83 @@ async fn test_check_some_unhealthy() -> Result<(), Error> {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_check_nodes_gone() -> Result<(), Error> {
     let routes = Arc::new(ArcSwapOption::empty());
-    let persist = Persister::new(Arc::clone(&routes));
-    let mut check = MockCheck::new();
+    let persister = Arc::new(Persister::new(Arc::clone(&routes)));
 
-    check
+    let mut checker = MockCheck::new();
+    checker
         .expect_check()
         .withf(|x: &Node| [node_id(0), node_id(1), node_id(100), node_id(101)].contains(&x.id))
-        .times(10) // called 4 times for big table and 2 times for small one and 4 again
-        .returning(|_| Ok(check_result(1000, 0)));
+        .returning(|_| Ok(check_result(1000)));
 
-    // Generate a table with 4 nodes first
-    let routing_table = Arc::new(ArcSwapOption::from_pointee(
-        generate_custom_registry_snapshot(2, 2, 0),
-    ));
-    let mut check_runner = Runner::new(Arc::clone(&routing_table), 1, 10, persist, check);
-    check_runner.run().await.expect("run should succeed");
+    let (channel_send, channel_recv) = watch::channel(None);
+    let mut runner = Runner::new(
+        channel_recv,
+        10,
+        persister,
+        Arc::new(checker),
+        Duration::from_millis(100),
+        Duration::from_millis(1),
+    );
+    tokio::spawn(async move {
+        let _ = runner.run().await;
+    });
+
+    // Generate & apply snapshot with 4 nodes first
+    let snapshot = generate_custom_registry_snapshot(2, 2, 0);
+    channel_send.send(Some(Arc::new(snapshot.clone()))).unwrap();
+
+    // Wait until the routing table is published
+    // TODO improve
+    for _ in 1..10 {
+        if routes.load().is_some() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
 
     let rt = routes.load_full().unwrap();
+    assert_eq!(rt.node_count, 4);
     assert!(rt.node_exists(node_id(0)));
     assert!(rt.node_exists(node_id(1)));
     assert!(rt.node_exists(node_id(100)));
     assert!(rt.node_exists(node_id(101)));
 
-    // Generate a smaller table with 2 nodes now and store it
-    let new_table = Arc::new(generate_custom_registry_snapshot(2, 1, 0));
-    routing_table.store(Some(new_table));
-
-    check_runner.run().await.expect("run should succeed");
+    routes.store(None);
+    // Generate a smaller snapshot with 2 nodes
+    let snapshot = generate_custom_registry_snapshot(2, 1, 0);
+    channel_send.send(Some(Arc::new(snapshot.clone()))).unwrap();
+    // Wait until the routing table is published
+    // TODO improve
+    for _ in 1..10 {
+        if routes.load().is_some() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
 
     // Check that only 2 nodes left
     let rt = routes.load_full().unwrap();
+    assert_eq!(rt.node_count, 2);
     assert!(rt.node_exists(node_id(0)));
     assert!(!rt.node_exists(node_id(1)));
     assert!(rt.node_exists(node_id(100)));
     assert!(!rt.node_exists(node_id(101)));
 
+    routes.store(None);
     // Generate a bigger table with 4 nodes again
-    let new_table = Arc::new(generate_custom_registry_snapshot(2, 2, 0));
-    routing_table.store(Some(new_table));
-
-    check_runner.run().await.expect("run should succeed");
+    let snapshot = generate_custom_registry_snapshot(2, 2, 0);
+    channel_send.send(Some(Arc::new(snapshot.clone()))).unwrap();
+    // Wait until the routing table is published
+    for _ in 1..10 {
+        if routes.load().is_some() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
 
     // Check that nodes are back
     let rt = routes.load_full().unwrap();
+    assert_eq!(rt.node_count, 4);
     assert!(rt.node_exists(node_id(0)));
     assert!(rt.node_exists(node_id(1)));
     assert!(rt.node_exists(node_id(100)));
@@ -208,116 +251,45 @@ async fn test_check_nodes_gone() -> Result<(), Error> {
     Ok(())
 }
 
-// Ensure that min_ok_count is respected
 #[tokio::test(flavor = "multi_thread")]
-async fn test_check_min_ok() -> Result<(), Error> {
+async fn test_runner() -> Result<(), Error> {
+    let mut checker = MockCheck::new();
+    checker.expect_check().returning(|_| Ok(check_result(1000)));
+
     let routes = Arc::new(ArcSwapOption::empty());
-    let persist = Persister::new(Arc::clone(&routes));
-    let mut check = MockCheck::new();
-    let mut seq1 = Sequence::new();
+    let persister = Arc::new(Persister::new(Arc::clone(&routes)));
 
-    check
-        .expect_check()
-        .withf(|x: &Node| [node_id(0), node_id(1), node_id(100), node_id(101)].contains(&x.id))
-        .times(4)
-        .returning(|_| Ok(check_result(1000, 0)))
-        .in_sequence(&mut seq1);
+    let (channel_send, channel_recv) = watch::channel(None);
+    let mut runner = Runner::new(
+        channel_recv,
+        10,
+        persister,
+        Arc::new(checker),
+        Duration::from_millis(100),
+        Duration::from_millis(1),
+    );
 
-    check
-        .expect_check()
-        .withf(|x: &Node| [node_id(0), node_id(1), node_id(100), node_id(101)].contains(&x.id))
-        .times(4)
-        .returning(|_| Err(CheckError::Health))
-        .in_sequence(&mut seq1);
+    tokio::spawn(async move {
+        let _ = runner.run().await;
+    });
 
-    check
-        .expect_check()
-        .withf(|x: &Node| [node_id(0), node_id(1), node_id(100), node_id(101)].contains(&x.id))
-        .times(20)
-        .returning(|_| Ok(check_result(1000, 0)))
-        .in_sequence(&mut seq1);
+    // Send the snapshot
+    let snapshot = generate_custom_registry_snapshot(2, 2, 0);
+    channel_send.send(Some(Arc::new(snapshot.clone()))).unwrap();
 
-    // Generate a table
-    let routing_table = Arc::new(ArcSwapOption::from_pointee(
-        generate_custom_registry_snapshot(2, 2, 0),
-    ));
-    let mut check_runner = Runner::new(Arc::clone(&routing_table), 5, 10, persist, check);
-
-    for i in 0..7 {
-        check_runner.run().await.expect("run should succeed");
-
-        let rt = routes.load_full().unwrap();
-
-        // Nodes should be up on 1st iteration and then gone until 5 oks are gathered
-        if i == 0 || i == 6 {
-            assert!(rt.node_exists(node_id(0)));
-            assert!(rt.node_exists(node_id(1)));
-            assert!(rt.node_exists(node_id(100)));
-            assert!(rt.node_exists(node_id(101)));
-        } else {
-            assert!(!rt.node_exists(node_id(0)));
-            assert!(!rt.node_exists(node_id(1)));
-            assert!(!rt.node_exists(node_id(100)));
-            assert!(!rt.node_exists(node_id(101)));
+    // Wait until the routing table is published
+    // TODO improve
+    for _ in 1..10 {
+        if routes.load().is_some() {
+            break;
         }
+        tokio::time::sleep(Duration::from_millis(20)).await;
     }
 
-    Ok(())
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn test_check_node_upgrade() -> Result<(), Error> {
-    let routes = Arc::new(ArcSwapOption::empty());
-    let persist = Persister::new(Arc::clone(&routes));
-    let mut check = MockCheck::new();
-    let mut seq1 = Sequence::new();
-
-    check
-        .expect_check()
-        .withf(|x: &Node| [node_id(0), node_id(1), node_id(100), node_id(101)].contains(&x.id))
-        .times(4)
-        .returning(|_| Ok(check_result_ver(1000, 0, "ver1")))
-        .in_sequence(&mut seq1);
-
-    check
-        .expect_check()
-        .withf(|x: &Node| [node_id(0), node_id(1), node_id(100), node_id(101)].contains(&x.id))
-        .times(4)
-        .returning(|_| Err(CheckError::Health))
-        .in_sequence(&mut seq1);
-
-    check
-        .expect_check()
-        .withf(|x: &Node| [node_id(0), node_id(1), node_id(100), node_id(101)].contains(&x.id))
-        .times(4)
-        .returning(|_| Ok(check_result_ver(1000, 0, "ver2")))
-        .in_sequence(&mut seq1);
-
-    // Generate a table
-    let routing_table = Arc::new(ArcSwapOption::from_pointee(
-        generate_custom_registry_snapshot(2, 2, 0),
-    ));
-    let mut check_runner = Runner::new(Arc::clone(&routing_table), 5, 10, persist, check);
-
-    for i in 0..3 {
-        check_runner.run().await.expect("run should succeed");
-
-        let rt = routes.load_full().unwrap();
-
-        // Nodes should be up on 1st run, then gone on 2nd due to errors
-        // and then back again on 3rd when the version changes
-        if i == 1 {
-            assert!(!rt.node_exists(node_id(0)));
-            assert!(!rt.node_exists(node_id(1)));
-            assert!(!rt.node_exists(node_id(100)));
-            assert!(!rt.node_exists(node_id(101)));
-        } else {
-            assert!(rt.node_exists(node_id(0)));
-            assert!(rt.node_exists(node_id(1)));
-            assert!(rt.node_exists(node_id(100)));
-            assert!(rt.node_exists(node_id(101)));
-        }
-    }
+    let rt = routes.load_full().unwrap();
+    assert_eq!(rt.node_count, snapshot.nodes.len() as u32);
+    assert_eq!(rt.subnets[0].nodes, snapshot.subnets[1].nodes);
+    assert_eq!(rt.subnets[1].nodes, snapshot.subnets[0].nodes);
 
     Ok(())
 }

@@ -661,7 +661,7 @@ mod tests {
                     network_index: None,
                 },
                 related_operations: None,
-                _type: OperationType::Transaction.to_string(),
+                type_: OperationType::Transaction.to_string(),
                 status: None,
                 account: account.clone(),
                 amount: Some(Amount {
@@ -678,7 +678,7 @@ mod tests {
                     network_index: None,
                 },
                 related_operations: None,
-                _type: OperationType::Transaction.to_string(),
+                type_: OperationType::Transaction.to_string(),
                 status: None,
                 account: account.clone(),
                 amount: Some(Amount {
@@ -695,7 +695,7 @@ mod tests {
                     network_index: None,
                 },
                 related_operations: None,
-                _type: OperationType::Fee.to_string(),
+                type_: OperationType::Fee.to_string(),
                 status: None,
                 account,
                 amount: Some(Amount {
@@ -780,7 +780,7 @@ mod tests {
             let construction_payloads_result = handler.construction_payloads(ConstructionPayloadsRequest {
                 network_identifier: network_identifier.clone(),
                 operations: operations.clone(),
-                metadata: metadata.clone().map(|m|m.into()),
+                metadata: metadata.clone().map(|m|m.try_into().unwrap()),
                 public_keys: Some(vec![pub_key.clone()]),
             }).unwrap();
             let unsigned_transaction = construction_payloads_result.unsigned_transaction;
@@ -810,7 +810,7 @@ mod tests {
             let construction_payloads_result = handler.construction_payloads(ConstructionPayloadsRequest {
                 network_identifier: network_identifier.clone(),
                 operations: operations.clone(),
-                metadata: metadata.clone().map(|m|m.into()),
+                metadata: metadata.clone().map(|m|m.try_into().unwrap()),
                 public_keys: Some(vec![pub_key.clone()]),
             }).unwrap();
             let unsigned_transaction = construction_payloads_result.unsigned_transaction;

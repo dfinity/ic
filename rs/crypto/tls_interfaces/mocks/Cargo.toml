@@ -12,3 +12,4 @@ ic-base-types = { path = "../../../types/base_types" }
 ic-crypto-tls-interfaces = { path = "../" }
 mockall = "0.11.2"
 tokio = { workspace = true }
+tokio-rustls = { workspace = true }

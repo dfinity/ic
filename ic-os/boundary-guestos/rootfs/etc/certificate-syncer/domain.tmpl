@@ -7,6 +7,8 @@ server {
     ssl_certificate     {ssl_certificate_path};
     ssl_certificate_key {ssl_certificate_key_path};
 
+    include "includes/error_pages.conf";
+
     # Match all requests to /sw.js that also have the header 'Service-Worker: script' and deliver the service worker uninstall script instead.
     location /sw.js {
         if ($http_service_worker = "script") {
@@ -36,7 +38,7 @@ server {
         include "includes/request_id.conf";
 
         include "includes/method_get.conf";
-        return 307 $scheme://$primary_domain$request_uri;
+        return 307 $scheme://$primary_application_domain$request_uri;
     }
 
     location ~ /api/v2/canister/[0-9a-zA-Z\-]+/query {
@@ -44,7 +46,7 @@ server {
         include "includes/request_id.conf";
 
         include "includes/method_post.conf";
-        return 307 $scheme://$primary_domain$request_uri;
+        return 307 $scheme://$primary_application_domain$request_uri;
     }
 
     location ~ /api/v2/canister/[0-9a-zA-Z\-]+/call {
@@ -52,7 +54,7 @@ server {
         include "includes/request_id.conf";
 
         include "includes/method_post.conf";
-        return 307 $scheme://$primary_domain$request_uri;
+        return 307 $scheme://$primary_application_domain$request_uri;
     }
 
     location ~ /api/v2/canister/[0-9a-zA-Z\-]+/read_state {
@@ -60,15 +62,12 @@ server {
         include "includes/request_id.conf";
 
         include "includes/method_post.conf";
-        return 307 $scheme://$primary_domain$request_uri;
+        return 307 $scheme://$primary_application_domain$request_uri;
     }
 
     location @raw {
         # Observability
         include "includes/request_id.conf";
-
-        # Prereqs
-        include "includes/denylist_451.conf";
 
         # CORS
         set $cors_allow_methods "HEAD, GET, OPTIONS";
@@ -76,14 +75,10 @@ server {
         include "includes/options.conf";
 
         # Update the Host header so that icx-proxy is able to process the request
-        proxy_set_header Host "$inferred_canister_id.$primary_domain";
+        proxy_set_header Host "{canister_id}.$primary_application_domain";
 
         # Cache
-        proxy_buffering       "on";
-        proxy_cache           "cache_static";
-        proxy_cache_key       "$scheme$host$request_uri";
-        proxy_cache_valid     "10s";
-        proxy_cache_use_stale "off";
+        include "includes/cache.conf";
 
         proxy_pass http://icx_proxy;
         include "includes/proxy_headers.conf";

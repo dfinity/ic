@@ -168,7 +168,6 @@ pub mod tests {
 
     #[test]
     fn test_generate_mac_address() {
-        // Test cases derived from generate-deterministic-mac.sh
         assert_eq!(
             generate_mac_address_internal(
                 &FormattedMacAddress::try_from("de:ad:de:ad:de:ad").unwrap(),
@@ -217,7 +216,6 @@ pub mod tests {
 
     #[test]
     fn test_get_mac_address_from_ipmitool_output() {
-        // Test cases derived from generate-deterministic-mac.sh
         assert_eq!(
             get_mac_address_from_ipmitool_output(" MAC Address             : de:ad:be:ef:be:ef  ")
                 .unwrap()

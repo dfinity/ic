@@ -43,15 +43,18 @@ ic-registry-client-fake = { path = "../../registry/fake" }
 ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
 ic-state-manager = { path = "../../state_manager" }
 ic-test-utilities = { path = "../../test_utilities" }
+ic-test-utilities-consensus = { path = "../../test_utilities/consensus" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }
 ic-test-utilities-metrics = { path = "../../test_utilities/metrics" }
 ic-test-utilities-registry = { path = "../../test_utilities/registry" }
+ic-test-utilities-state = { path = "../../test_utilities/state" }
 ic-test-utilities-time = { path = "../../test_utilities/time" }
+ic-test-utilities-types = { path = "../../test_utilities/types" }
 maplit = "1.0.2"
 mockall = { workspace = true }
 nix = { workspace = true }
 proptest = "1.0"
 reqwest = { workspace = true }
 tempfile = "3.1.0"
-tiny_http = "0.10.0"
+axum = "^0.7.4"
 url = "2.1.1"

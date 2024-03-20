@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-crossbeam-channel = "0.5.5"
+crossbeam-channel = { workspace = true }
 ic-async-utils = { path = "../async_utils" }
 ic-btc-service = { path = "../bitcoin/service" }
 ic-btc-interface = { workspace = true }
@@ -16,7 +16,7 @@ ic-config = { path = "../config" }
 ic-canister-client-sender = { path = "../canister_client/sender" }
 ic-error-types = { path = "../types/error_types" }
 ic-execution-environment = { path = "../execution_environment" }
-ic-ic00-types = { path = "../types/ic00_types" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-replica = { path = "../replica" }
 ic-registry-client-fake = { path = "../registry/fake" }
 ic-registry-keys = { path = "../registry/keys" }
@@ -33,6 +33,7 @@ ic-replicated-state = { path = "../replicated_state" }
 ic-state-machine-tests = { path = "../state_machine_tests" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }
+ic-test-utilities-types = { path = "../test_utilities/types" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 ic-base-types = { path = "../types/base_types" }
@@ -44,6 +45,7 @@ tonic = { workspace = true }
 tokio = { workspace = true }
 prost = { workspace = true }
 wat = "1.0.52"
+tower = { workspace = true }
 
 [dev-dependencies]
 assert_matches = "1.3.0"

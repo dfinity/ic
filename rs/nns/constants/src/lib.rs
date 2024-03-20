@@ -84,7 +84,7 @@ pub const ALL_NNS_CANISTER_IDS: [&CanisterId; 10] = [
 // (4GiB)
 const NNS_MAX_CANISTER_MEMORY_ALLOCATION_IN_BYTES: u64 = 4 * 1024 * 1024 * 1024;
 
-// We preallocate 4GB stable memory for NNS governance so that pre_upgrade never fails trying to
+// We preallocate 10GB stable memory for NNS governance so that pre_upgrade never fails trying to
 // grow stable memory, and we might also have some other data occupying stable memory.
 const NNS_GOVERNANCE_CANISTER_MEMORY_ALLOCATION_IN_BYTES: u64 = 10 * 1024 * 1024 * 1024;
 
@@ -101,11 +101,3 @@ pub fn memory_allocation_of(canister_id: CanisterId) -> u64 {
         NNS_DEFAULT_CANISTER_MEMORY_ALLOCATION_IN_BYTES
     }
 }
-
-/// Returns whether the Matched Funding feature is enabled.
-/// TODO[NNS1-2610]: Enabled Matched Funding on mainnet
-pub const IS_MATCHED_FUNDING_ENABLED: bool = true;
-
-/// Returns whether the UpdateAllowedPrincipals NnsFunction is enabled. Currently, the
-/// proposals should be disabled in non-test builds.
-pub const IS_UPDATE_ALLOWED_PRINCIPALS_ENABLED: bool = cfg! { any(test, feature = "test") };

@@ -217,8 +217,9 @@ pub mod stats;
 pub(crate) mod test_utils;
 pub(crate) mod utils;
 
-pub use payload_builder::make_bootstrap_summary;
-pub(crate) use payload_builder::{create_data_payload, create_summary_payload};
+pub(crate) use payload_builder::{
+    create_data_payload, create_summary_payload, make_bootstrap_summary,
+};
 pub(crate) use payload_verifier::{validate_payload, PermanentError, TransientError};
 pub use stats::EcdsaStatsImpl;
 
@@ -228,7 +229,7 @@ use self::utils::get_context_request_id;
 const LOOK_AHEAD: u64 = 10;
 
 /// Frequency for clearing the inactive key transcripts.
-pub const INACTIVE_TRANSCRIPT_PURGE_SECS: Duration = Duration::from_secs(60);
+pub(crate) const INACTIVE_TRANSCRIPT_PURGE_SECS: Duration = Duration::from_secs(60);
 
 /// `EcdsaImpl` is the consensus component responsible for processing threshold
 /// ECDSA payloads.

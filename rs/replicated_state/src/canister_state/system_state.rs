@@ -10,8 +10,10 @@ use crate::page_map::PageAllocatorFileDescriptor;
 use crate::{CanisterQueues, CanisterState, InputQueueType, PageMap, StateError};
 pub use call_context_manager::{CallContext, CallContextAction, CallContextManager, CallOrigin};
 use ic_base_types::NumSeconds;
-use ic_ic00_types::{CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, LogVisibility};
 use ic_logger::{error, ReplicaLogger};
+use ic_management_canister_types::{
+    CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterLog, LogVisibility,
+};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::canister_state_bits::v1 as pb,
@@ -334,6 +336,15 @@ pub struct SystemState {
 
     /// Log visibility of the canister.
     pub log_visibility: LogVisibility,
+
+    /// Log records of the canister.
+    pub canister_log: CanisterLog,
+
+    /// The Wasm memory limit. This is a field in developer-visible canister
+    /// settings that allows the developer to limit the usage of the Wasm memory
+    /// by the canister to leave some room in 4GiB for upgrade calls.
+    /// See the interface specification for more information.
+    pub wasm_memory_limit: Option<NumBytes>,
 }
 
 /// A wrapper around the different canister statuses.
@@ -704,6 +715,8 @@ impl SystemState {
             canister_history: CanisterHistory::default(),
             wasm_chunk_store,
             log_visibility: LogVisibility::default(),
+            canister_log: Default::default(),
+            wasm_memory_limit: None,
         }
     }
 
@@ -748,6 +761,8 @@ impl SystemState {
         wasm_chunk_store_data: PageMap,
         wasm_chunk_store_metadata: WasmChunkStoreMetadata,
         log_visibility: LogVisibility,
+        canister_log: CanisterLog,
+        wasm_memory_limit: Option<NumBytes>,
     ) -> Self {
         Self {
             controllers,
@@ -771,6 +786,8 @@ impl SystemState {
                 wasm_chunk_store_metadata,
             ),
             log_visibility,
+            canister_log,
+            wasm_memory_limit,
         }
     }
 

@@ -2,7 +2,7 @@ use canister_test::Project;
 use dfn_candid::{candid, candid_one};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_client_sender::Sender;
-use ic_ic00_types::CanisterInstallMode;
+use ic_management_canister_types::CanisterInstallMode;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::{CanisterStatusResult, CanisterStatusType},
@@ -13,6 +13,7 @@ use ic_nervous_system_common_test_keys::{
 use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
 use ic_nns_constants::{LIFELINE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance::{
+    init::{TEST_NEURON_1_ID, TEST_NEURON_2_ID},
     pb::v1::{
         manage_neuron::{Command, NeuronIdOrSubaccount},
         manage_neuron_response::Command as CommandResponse,
@@ -23,7 +24,6 @@ use ic_nns_governance::{
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     governance::{get_pending_proposals, wait_for_final_state, UpgradeRootProposal},
-    ids::{TEST_NEURON_1_ID, TEST_NEURON_2_ID},
     itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
     state_test_helpers::{nns_governance_make_proposal, setup_nns_canisters, update_with_sender},
 };
@@ -351,7 +351,7 @@ fn test_lifeline_canister_restarts_root_on_stop_canister_timeout() {
         LIFELINE_CANISTER_ID,
         "canister_status",
         candid_one,
-        ic_ic00_types::CanisterIdRecord::from(ROOT_CANISTER_ID),
+        ic_management_canister_types::CanisterIdRecord::from(ROOT_CANISTER_ID),
         PrincipalId::new_anonymous(),
     )
     .unwrap();
@@ -366,7 +366,7 @@ fn test_lifeline_canister_restarts_root_on_stop_canister_timeout() {
         LIFELINE_CANISTER_ID,
         "canister_status",
         candid_one,
-        ic_ic00_types::CanisterIdRecord::from(ROOT_CANISTER_ID),
+        ic_management_canister_types::CanisterIdRecord::from(ROOT_CANISTER_ID),
         PrincipalId::new_anonymous(),
     )
     .unwrap();
@@ -383,7 +383,7 @@ fn test_lifeline_canister_restarts_root_on_stop_canister_timeout() {
         LIFELINE_CANISTER_ID,
         "canister_status",
         candid_one,
-        ic_ic00_types::CanisterIdRecord::from(ROOT_CANISTER_ID),
+        ic_management_canister_types::CanisterIdRecord::from(ROOT_CANISTER_ID),
         PrincipalId::new_anonymous(),
     )
     .unwrap();

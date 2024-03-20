@@ -1,19 +1,22 @@
 [package]
 name = "pocket-ic-server"
-version = "3.0.0"
+version = "3.0.1"
 edition = "2021"
 
 [dependencies]
 axum-extra = { version = "^0.9.2", features = ["typed-header"] }
 axum = { version = "^0.7.4" }
+backoff = { workspace = true }
 candid = { workspace = true }
+ed25519-consensus = "2.0.1"
+hyper = { version = "1.2.0", features = ["full"] }
 rand = "^0.8.5"
 itertools = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }
 pocket-ic = { path = "../../packages/pocket-ic" }
 ic-state-machine-tests = { path = "../state_machine_tests" }
-ic-ic00-types = { path = "../types/ic00_types" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-config = { path = "../config" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-types = { path = "../types/types" }
@@ -24,19 +27,26 @@ ic-utils = { path = "../utils" }
 ic-registry-routing-table = { path = "../registry/routing_table" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
+ic-boundary = { path = "../boundary_node/ic_boundary" }
+ic-interfaces = { path = "../interfaces" }
+ic-http-endpoints-public = { path = "../http_endpoints/public" }
+ic-validator-ingress-message = { path = "../validator/ingress_message" }
 hex = "0.4.2"
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
-clap = { workspace = true }
+clap = { version = "3.2.25", features = ["derive"] }
 time = "^0.3.20"
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 tracing-appender = { workspace = true }
+tower = { workspace = true }
 tower-http = { version = "^0.5.1", features = ["trace", "request-id", "util"] }
 tempfile = "*"
 base64 = { workspace = true }
 wat = "1.0.52"
 flate2 = "1.0.27"
 aide = { version = "^0.13.0", features = ["axum"] }
+serde_cbor = { workspace = true }
 
 [dev-dependencies]
 reqwest = { workspace = true }
+spec-compliance = { path = "../tests/testing_verification/spec_compliance" }

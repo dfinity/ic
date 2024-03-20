@@ -15,7 +15,9 @@ DEPENDENCIES = [
     "//rs/registry/helpers",
     "//rs/replicated_state",
     "//rs/test_utilities",
+    "//rs/test_utilities/consensus",
     "//rs/test_utilities/time",
+    "//rs/test_utilities/types",
     "//rs/types/types",
 ]
 

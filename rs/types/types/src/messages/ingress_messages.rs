@@ -10,7 +10,7 @@ use crate::{
     CanisterId, CountBytes, PrincipalId, SubnetId, Time, UserId,
 };
 use ic_error_types::{ErrorCode, UserError};
-use ic_ic00_types::{
+use ic_management_canister_types::{
     CanisterIdRecord, CanisterInfoRequest, ClearChunkStoreArgs, FetchCanisterLogsRequest,
     InstallChunkedCodeArgs, InstallCodeArgsV2, Method, Payload, StoredChunksArgs,
     UpdateSettingsArgs, UploadChunkArgs, IC_00,
@@ -555,7 +555,7 @@ mod test {
     };
     use crate::{CanisterId, SubnetId, UserId};
     use ic_base_types::PrincipalId;
-    use ic_ic00_types::IC_00;
+    use ic_management_canister_types::IC_00;
     use std::convert::From;
 
     #[test]

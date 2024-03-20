@@ -10,22 +10,23 @@ use ic_interfaces_state_manager::Labeled;
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
-use ic_test_utilities::consensus::batch::MockBatchPayloadBuilder;
 use ic_test_utilities::{
-    consensus::make_genesis,
-    crypto::CryptoReturningOk,
-    ingress_selector::FakeIngressSelector,
+    crypto::CryptoReturningOk, ingress_selector::FakeIngressSelector,
     message_routing::FakeMessageRouting,
     self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
-    state::get_initial_state,
-    types::ids::{node_test_id, subnet_test_id},
-    types::messages::SignedIngressBuilder,
     xnet_payload_builder::FakeXNetPayloadBuilder,
 };
+use ic_test_utilities_consensus::batch::MockBatchPayloadBuilder;
+use ic_test_utilities_consensus::{make_genesis, EcdsaStatsNoOp};
 use ic_test_utilities_registry::{
     setup_registry, FakeLocalStoreCertifiedTimeReader, SubnetRecordBuilder,
 };
+use ic_test_utilities_state::get_initial_state;
 use ic_test_utilities_time::FastForwardTimeSource;
+use ic_test_utilities_types::{
+    ids::{node_test_id, subnet_test_id},
+    messages::SignedIngressBuilder,
+};
 use ic_types::{
     crypto::CryptoHash, malicious_flags::MaliciousFlags, replica_config::ReplicaConfig,
     CryptoHashOfState, Height,
@@ -37,6 +38,7 @@ use std::time::Duration;
 /// numbers and payloads
 #[test]
 fn consensus_produces_expected_batches() {
+    const DKG_INTERVAL_LENGTH: u64 = 4;
     ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
         let ingress0 = SignedIngressBuilder::new().nonce(0).build();
         let ingress1 = SignedIngressBuilder::new().nonce(1).build();
@@ -92,7 +94,7 @@ fn consensus_produces_expected_batches() {
         let fake_crypto = CryptoReturningOk::default();
         let fake_crypto = Arc::new(fake_crypto);
         let metrics_registry = MetricsRegistry::new();
-        let time = FastForwardTimeSource::new();
+        let time_source = FastForwardTimeSource::new();
         let dkg_pool = Arc::new(RwLock::new(dkg_pool::DkgPoolImpl::new(
             metrics_registry.clone(),
             no_op_logger(),
@@ -101,11 +103,17 @@ fn consensus_produces_expected_batches() {
             pool_config.clone(),
             no_op_logger(),
             metrics_registry.clone(),
+            Box::new(EcdsaStatsNoOp {}),
         )));
 
         let registry_client = setup_registry(
             replica_config.subnet_id,
-            vec![(1, SubnetRecordBuilder::from(&[node_test_id(0)]).build())],
+            vec![(
+                1,
+                SubnetRecordBuilder::from(&[node_test_id(0)])
+                    .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
+                    .build(),
+            )],
         );
         let summary = dkg::make_genesis_summary(&*registry_client, replica_config.subnet_id, None);
         let consensus_pool = Arc::new(RwLock::new(consensus_pool::ConsensusPoolImpl::new(
@@ -115,6 +123,7 @@ fn consensus_produces_expected_batches() {
             pool_config.clone(),
             MetricsRegistry::new(),
             no_op_logger(),
+            time_source.clone(),
         )));
         let consensus_cache = consensus_pool.read().unwrap().get_cache();
         let membership = Membership::new(
@@ -130,7 +139,7 @@ fn consensus_produces_expected_batches() {
             &PoolReader::new(&*consensus_pool.read().unwrap()),
         )));
         let fake_local_store_certified_time_reader =
-            Arc::new(FakeLocalStoreCertifiedTimeReader::new(time.clone()));
+            Arc::new(FakeLocalStoreCertifiedTimeReader::new(time_source.clone()));
 
         let (consensus, consensus_gossip) = ic_consensus::consensus::setup(
             replica_config.clone(),
@@ -147,7 +156,7 @@ fn consensus_produces_expected_batches() {
             dkg_key_manager.clone(),
             Arc::clone(&router) as Arc<_>,
             Arc::clone(&state_manager) as Arc<_>,
-            Arc::clone(&time) as Arc<_>,
+            Arc::clone(&time_source) as Arc<_>,
             MaliciousFlags::default(),
             metrics_registry.clone(),
             no_op_logger(),
@@ -196,14 +205,46 @@ fn consensus_produces_expected_batches() {
             metrics_registry,
         );
         driver.step(); // this stops before notary timeout expires after making 1st block
-        time.advance_time(Duration::from_millis(2000));
+        time_source.advance_time(Duration::from_millis(2000));
         driver.step(); // this stops before notary timeout expires after making 2nd block
-        time.advance_time(Duration::from_millis(2000));
+        time_source.advance_time(Duration::from_millis(2000));
         driver.step(); // this stops before notary timeout expires after making 3rd block
+
+        // Make a few more batches past the summary.
+        for _ in 0..=DKG_INTERVAL_LENGTH {
+            time_source.advance_time(Duration::from_millis(2000));
+            driver.step();
+        }
         let batches = router.batches.read().unwrap().clone();
         *router.batches.write().unwrap() = Vec::new();
-        assert_eq!(batches.len(), 2);
+        // Plus 2 initial driver steps.
+        assert_eq!(batches.len(), DKG_INTERVAL_LENGTH as usize + 2);
         assert_ne!(batches[0].batch_number, batches[1].batch_number);
+        assert_eq!(
+            batches[0].next_checkpoint_height.unwrap(),
+            batches[0].batch_number + DKG_INTERVAL_LENGTH.into()
+        );
+        // Assert the `next_checkpoint_height` is strictly greater than the `batch_number`.
+        for b in &batches {
+            assert!(b.next_checkpoint_height.unwrap() > b.batch_number);
+        }
+        // Assert the summary batch numbers.
+        let last_batch = &batches[DKG_INTERVAL_LENGTH as usize - 1];
+        assert_eq!(last_batch.batch_number.get(), DKG_INTERVAL_LENGTH);
+        assert_eq!(
+            last_batch.next_checkpoint_height.unwrap().get(),
+            DKG_INTERVAL_LENGTH + 1
+        );
+        let summary_batch = &batches[DKG_INTERVAL_LENGTH as usize];
+        assert_eq!(summary_batch.batch_number.get(), DKG_INTERVAL_LENGTH + 1);
+        assert_eq!(
+            summary_batch.next_checkpoint_height.unwrap().get(),
+            (DKG_INTERVAL_LENGTH + 1) * 2
+        );
+        assert_eq!(
+            batches[0].next_checkpoint_height,
+            batches[1].next_checkpoint_height
+        );
         let mut msgs: Vec<_> = batches[0].messages.signed_ingress_msgs.clone();
         assert_eq!(msgs.pop(), Some(ingress0));
         let mut msgs: Vec<_> = batches[1].messages.signed_ingress_msgs.clone();

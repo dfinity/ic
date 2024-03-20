@@ -19,10 +19,11 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{routing_table_insert_subnet, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_manager::StateManagerImpl;
-use ic_test_utilities::{consensus::fake::FakeVerifier, types::ids::subnet_test_id};
+use ic_test_utilities_consensus::fake::FakeVerifier;
 use ic_test_utilities_registry::{
     add_subnet_record, insert_initial_dkg_transcript, SubnetRecordBuilder,
 };
+use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types::{
     malicious_flags::MaliciousFlags, replica_config::ReplicaConfig, NodeId, PrincipalId,
     RegistryVersion, SubnetId,

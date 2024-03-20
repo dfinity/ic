@@ -1,9 +1,9 @@
 [package]
 name = "pocket-ic"
-version = "2.1.0"
+version = "2.2.0"
 license = "Apache-2.0"
 description = "PocketIC: A Canister Smart Contract Testing Platform"
-repository = "https://github.com/dfinity/ic/packages/pocket-ic"
+repository = "https://github.com/dfinity/ic"
 documentation = "https://docs.rs/pocket-ic/latest/pocket_ic/"
 readme = "README.md"
 categories = ["emulators", "development-tools::testing", "wasm"]
@@ -20,13 +20,19 @@ authors.workspace = true
 edition.workspace = true
 
 [dependencies]
-candid = { workspace = true }
-reqwest = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
-serde_bytes = { workspace = true }
-ic-cdk = { workspace = true }
-base64 = { workspace = true }
+candid = "^0.10.2"
+reqwest = { version = "0.11.22", default-features = false, features = [
+    "blocking",
+    "json",
+    "multipart",
+    "rustls-tls-webpki-roots",
+    "stream",
+] }
+serde = { version = "^1.0", features = ["derive"] }
+serde_json = "^1.0.107"
+serde_bytes = "^0.11"
+ic-cdk = "0.13.1"
+base64 = "^0.13.1"
 hex = "^0.4.2"
 async-trait = "^0.1.73"
 tracing = { workspace = true }
@@ -39,3 +45,4 @@ flate2 = "1.0.27"
 ic-universal-canister = { path = "../../rs/universal_canister/lib" }
 ic-base-types = { path = "../../rs/types/base_types" }
 icp-ledger = { path = "../../rs/rosetta-api/icp_ledger" }
+wat = "1.0.57"

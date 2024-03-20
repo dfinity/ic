@@ -1,10 +1,11 @@
 use super::*;
 use crate::{DeserializableFunction, SerializableFunction, E8};
 use assert_matches::assert_matches;
+use ic_nervous_system_common::WIDE_RANGE_OF_U64_VALUES;
 use lazy_static::lazy_static;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
-use std::{collections::BTreeSet, num::NonZeroU64};
+use std::num::NonZeroU64;
 
 const ERROR_TOLERANCE_ICP: Decimal = dec!(0.05);
 
@@ -43,33 +44,18 @@ fn known_values_test() {
 
 #[test]
 fn polynomial_matching_function_viability_test() {
-    let interesting_u64_values: BTreeSet<u64> = (0..=64)
-        .flat_map(|i| {
-            let pow_of_two: u128 = 2_u128.pow(i);
-            vec![
-                pow_of_two.saturating_sub(42), // ensure we don't always hit (2^N), (2^N)+/-1
-                pow_of_two.saturating_sub(7),  // add even more diverse values
-                pow_of_two - 1,                // this means we also reach `0`
-                pow_of_two,
-                pow_of_two.saturating_add(1),
-                pow_of_two.saturating_add(7), // add even more diverse values
-                pow_of_two.saturating_add(42), // ensure we don't always hit (2^N), (2^N)+/-1
-            ]
-            .into_iter()
-            .map(|x| x.min(u64::MAX as u128) as u64)
-        })
-        .collect();
-    // smoke checks
-    assert!(interesting_u64_values.contains(&0));
-    assert!(interesting_u64_values.contains(&1));
-    assert!(interesting_u64_values.contains(&8));
-    assert!(interesting_u64_values.contains(&43));
-    assert!(interesting_u64_values.contains(&57));
-    assert!(interesting_u64_values.contains(&u64::MAX));
-    // actual tests
-    for total_maturity_equivalent_icp_e8s in interesting_u64_values.iter() {
+    let neurons_fund_participation_limits = NeuronsFundParticipationLimits {
+        max_theoretical_neurons_fund_participation_amount_icp: dec!(333_000.0),
+        contribution_threshold_icp: dec!(75_000.0),
+        one_third_participation_milestone_icp: dec!(225_000.0),
+        full_participation_milestone_icp: dec!(375_000.0),
+    };
+    for total_maturity_equivalent_icp_e8s in &*WIDE_RANGE_OF_U64_VALUES {
         // Check that the function can be created.
-        let f = assert_matches!(PolynomialMatchingFunction::new(*total_maturity_equivalent_icp_e8s), Ok(f) => f);
+        let f = assert_matches!(PolynomialMatchingFunction::new(
+            *total_maturity_equivalent_icp_e8s,
+            neurons_fund_participation_limits,
+        ), Ok(f) => f);
         // Check that the function can be serialized / deserialized.
         let f1: Box<PolynomialMatchingFunction> = assert_matches!(
             DeserializableFunction::from_repr(&f.serialize()),
@@ -82,7 +68,7 @@ fn polynomial_matching_function_viability_test() {
         // Check that the maximum value is defined.
         let _max_argument_icp_e8s = assert_matches!(f.max_argument_icp_e8s(), Ok(max_argument_icp_e8s) => max_argument_icp_e8s);
         // Test that it is safe to apply the function over a broad range of values.
-        for x_icp_e8s in interesting_u64_values.iter() {
+        for x_icp_e8s in &*WIDE_RANGE_OF_U64_VALUES {
             // Check that the function can be applied to `x_icp_e8s`.
             let y_icp = assert_matches!(f.apply(*x_icp_e8s), Ok(y_icp) => y_icp);
             // Check that the result can be rescaled back to ICP e8s.

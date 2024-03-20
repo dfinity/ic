@@ -38,12 +38,12 @@ def untar_to_vfat(tf, fs_basedir, out_file, path_transform):
             if path == "":
                 continue
             os.mkdir(os.path.join(fs_basedir, path))
-            subprocess.run(["faketime", "1970-1-1 0", "mmd", "-i", out_file, "::/" + path], check=True)
+            subprocess.run(["faketime", "-f", "1970-1-1 0:0:0", "mmd", "-i", out_file, "::/" + path], check=True)
         elif member.type == tarfile.REGTYPE or member.type == tarfile.AREGTYPE:
             with open(os.path.join(fs_basedir, path), "wb") as f:
                 f.write(tf.extractfile(member).read())
             subprocess.run(
-                ["faketime", "1970-1-1 0", "mcopy", "-o", "-i", out_file, os.path.join(fs_basedir, path), "::/" + path],
+                ["faketime", "-f", "1970-1-1 0:0:0", "mcopy", "-o", "-i", out_file, os.path.join(fs_basedir, path), "::/" + path],
                 check=True,
             )
         else:
@@ -58,7 +58,8 @@ def install_extra_files(out_file, extra_files, path_transform):
         subprocess.run(
             [
                 "faketime",
-                "1970-1-1 0",
+                "-f",
+                "1970-1-1 0:0:0",
                 "mcopy",
                 "-o",
                 "-i",

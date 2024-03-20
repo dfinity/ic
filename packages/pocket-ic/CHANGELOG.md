@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+- New functions `auto_progress` and `stop_progress` to make IC instances
+  progress (updating time and executing rounds) automatically.
+- New subnet specification allowing to set very high instruction limits for (asymptotic) benchmarking canister code.
+
+## Changed
+- `get` and `post` helpers which are used by all server-facing functions now poll on results, because 1) instances can be busy with other computations and 2) the `post`ed computations may take longer than the specified timeout or the `reqwest` client's own timeout. With this change, very long-running computations can be handled by the library. 
+
+## 2.2.0 - 2024-02-14
+
+### Added
+- a new `canister_status` function to request a canister's status
+
+### Fixed
+- `reqwest` dependency does not use the default features
+
+
 ## 2.1.0 - 2024-02-06
 
 ### Added

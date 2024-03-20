@@ -59,9 +59,7 @@
         {% if !managed_canisters.is_empty() -%}
         <h1 id="managed-canisters">Managed Canisters</h1>
         {%- for (contract, canisters) in managed_canisters %}
-        {% if !canisters.is_empty() -%}
-        <!-- TODO XC-37: ckUSDC should not be hardcoded. We should record the ledger token symbol as well. -->
-        <h2 id="managed-canisters-{{contract.chain_id().as_ref()}}-{{contract.address()}}">ckUSDC({% call etherscan_address_link(contract.chain_id().as_ref(), contract.address()) %})</h2>
+        <h2 id="managed-canisters-{{contract.chain_id().as_ref()}}-{{contract.address()}}">{{canisters.ckerc20_token_symbol.clone()}}({% call etherscan_address_link(contract.chain_id().as_ref(), contract.address()) %})</h2>
         <table>
             <thead>
             <tr>
@@ -80,7 +78,6 @@
             </tr>
             {% endfor %}
         </table>
-        {%- endif %}
         {% endfor %}
         {%- endif %}
     </div>

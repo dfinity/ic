@@ -7,6 +7,7 @@ use ic_nns_common::pb::v1::{self as nns_common_pb, ProposalId};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID};
 use ic_nns_governance::{
     governance::test_data::CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING,
+    init::{TEST_NEURON_1_ID, TEST_NEURON_2_ID},
     pb::v1::{
         governance_error::ErrorType,
         manage_neuron::{self, RegisterVote},
@@ -24,7 +25,6 @@ use ic_nns_governance::{
 use ic_nns_test_utils::state_test_helpers::setup_nns_canisters_with_features;
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    ids::{TEST_NEURON_1_ID, TEST_NEURON_2_ID},
     sns_wasm::add_real_wasms_to_sns_wasms,
     state_test_helpers::{
         create_canister_id_at_position, list_deployed_snses, nns_governance_make_proposal,

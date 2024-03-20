@@ -1,6 +1,7 @@
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use ic_canister_sandbox_backend_lib::{
-    canister_sandbox_main, launcher::sandbox_launcher_main, RUN_AS_CANISTER_SANDBOX_FLAG,
+    canister_sandbox_main, compiler_sandbox::compiler_sandbox_main,
+    launcher::sandbox_launcher_main, RUN_AS_CANISTER_SANDBOX_FLAG, RUN_AS_COMPILER_SANDBOX_FLAG,
     RUN_AS_SANDBOX_LAUNCHER_FLAG,
 };
 use ic_config::{embedders::MeteringType, flag_status::FlagStatus, Config, ConfigSource};
@@ -29,6 +30,9 @@ fn main() -> Result<(), String> {
     } else if std::env::args().any(|arg| arg == RUN_AS_SANDBOX_LAUNCHER_FLAG) {
         sandbox_launcher_main();
         Ok(())
+    } else if std::env::args().any(|arg| arg == RUN_AS_COMPILER_SANDBOX_FLAG) {
+        compiler_sandbox_main();
+        Ok(())
     } else {
         drun_main()
     }
@@ -37,7 +41,7 @@ fn main() -> Result<(), String> {
 #[tokio::main]
 async fn drun_main() -> Result<(), String> {
     let matches = get_arg_matches();
-    Config::run_with_temp_config(|mut default_config| {
+    Config::run_with_temp_config(|mut default_config| async {
         let source = matches
             .value_of(ARG_CONF)
             .map(|arg| ConfigSource::File(PathBuf::from(arg)))
@@ -101,8 +105,9 @@ async fn drun_main() -> Result<(), String> {
             instruction_limit,
             subnet_type,
         };
-        run_drun(uo)
+        run_drun(uo).await
     })
+    .await
 }
 
 fn get_arg_matches() -> ArgMatches {

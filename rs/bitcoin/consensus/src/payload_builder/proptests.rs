@@ -8,7 +8,7 @@ use ic_btc_types_internal::{
 use ic_interfaces::batch_payload::BatchPayloadBuilder;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
-use ic_test_utilities::{mock_time, types::ids::subnet_test_id};
+use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types::{batch::ValidationContext, Height, NumBytes};
 use proptest::{prelude::*, proptest};
 
@@ -73,7 +73,7 @@ fn proptest_round(
     let validation_context = ValidationContext {
         registry_version: REGISTRY_VERSION,
         certified_height: CERTIFIED_HEIGHT,
-        time: mock_time(),
+        time: UNIX_EPOCH,
     };
 
     let payload = bitcoin_payload_builder.build_payload(height, max_size, &[], &validation_context);

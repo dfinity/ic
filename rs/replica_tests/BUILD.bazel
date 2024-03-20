@@ -26,9 +26,10 @@ DEPENDENCIES = [
     "//rs/state_machine_tests",
     "//rs/test_utilities",
     "//rs/test_utilities/logger",
+    "//rs/test_utilities/types",
     "//rs/types/base_types",
     "//rs/types/error_types",
-    "//rs/types/ic00_types",
+    "//rs/types/management_canister_types",
     "//rs/types/types",
     "//rs/utils",
     "@crate_index//:crossbeam-channel",
@@ -40,6 +41,7 @@ DEPENDENCIES = [
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
     "@crate_index//:tonic",
+    "@crate_index//:tower",
     "@crate_index//:wat",
 ]
 

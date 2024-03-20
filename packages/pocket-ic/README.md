@@ -3,7 +3,7 @@
 [PocketIC](https://github.com/dfinity/pocketic) is a local canister testing solution for the [Internet Computer](https://internetcomputer.org/).  
 This testing library works together with the **PocketIC server**, allowing you to interact with your local IC instances and the canisters thereon. 
 
-With PocketIC Rust, testing canisters is as simple as calling rust functions.
+With PocketIC Rust, testing canisters is as simple as calling Rust functions.
 Here is a simple example:
 
 ```rust
@@ -41,17 +41,21 @@ fn call_counter_canister(pic: &PocketIc, canister_id: CanisterId, method: &str) 
 * Import PocketIC with `use pocket_ic::PocketIc`, and create a new PocketIC instance with `let pic = PocketIc::new()` in your Rust code and start testing!
 
 ### Examples
-For a simple but complete example with the counter canister, see [here](tests/tests.rs#L19).
-For an example with cross canister calls on two different subnets with the ledger canister, see [here](tests/tests.rs#L57).
+For a simple but complete example with the counter canister, see [here](tests/tests.rs#L24).
+For an example with cross canister calls on two different subnets with the ledger canister, see [here](tests/tests.rs#L62).
+
+To see a minimalistic setup of PocketIC in a Rust project, check out the [ICP Hello World Rust](https://github.com/dfinity/icp-hello-world-rust/blob/main/README.md#testing-your-project) repository.
 
 For larger test suites with more complex test setups, consider the [OpenChat](https://github.com/open-chat-labs/open-chat/tree/master/backend/integration_tests/src) integration test suite.
 Note that instances are shared among test cases there, which is not recommended in general.
 
 ## Documentation
 * [How to use this library](HOWTO.md)
+* [API documentation](https://docs.rs/pocket-ic/)
 * [PocketIC repo](https://github.com/dfinity/pocketic)
 * [Why PocketIC](https://github.com/dfinity/pocketic#why-pocketic)
-* [Changelog of PocketIC Rust](CHANGELOG.md)
+* [Changelog](CHANGELOG.md)
+* [Source code](.)
 
 ## Contributing
 If you decide to contribute, we encourage you to announce it on the [Forum](https://forum.dfinity.org/)!

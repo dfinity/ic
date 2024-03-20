@@ -95,7 +95,7 @@ mod tests {
     };
     use ic_registry_keys::{make_canister_migrations_record_key, make_routing_table_record_key};
     use ic_registry_routing_table::{CanisterIdRange, CanisterMigrations, RoutingTable};
-    use ic_test_utilities::types::ids::subnet_test_id;
+    use ic_test_utilities_types::ids::subnet_test_id;
     use maplit::btreemap;
     use std::convert::TryFrom;
 

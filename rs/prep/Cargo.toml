@@ -7,9 +7,9 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-anyhow = "1.0"
+anyhow = { workspace = true }
 base64 = { workspace = true }
-clap = { workspace = true }
+clap = { version = "3.2.25", features = ["derive"] }
 fs_extra = "1.2.0"
 ic-nns-common = { path = "../nns/common" }
 ic-crypto-node-key-generation = { path = "../crypto/node_key_generation" }
@@ -18,7 +18,7 @@ ic-crypto-test-utils-ni-dkg = { path = "../crypto/test_utils/ni-dkg" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 ic-config = { path = "../config" }
 ic-constants = { path = "../constants" }
-ic-ic00-types = { path = "../types/ic00_types" }
+ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-client = { path = "../registry/client" }
@@ -40,7 +40,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }
 tempfile = "3.1.0"
-thiserror = "1.0"
+thiserror = { workspace = true }
 url = "2.1.1"
 x509-cert = { workspace = true }
 

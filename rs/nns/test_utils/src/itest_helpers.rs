@@ -7,7 +7,6 @@ use crate::{
         get_pending_proposals, submit_external_update_proposal,
         submit_external_update_proposal_binary, wait_for_final_state,
     },
-    ids::TEST_NEURON_1_ID,
 };
 use candid::Encode;
 use canister_test::{
@@ -20,7 +19,7 @@ use futures::future::join_all;
 use ic_base_types::CanisterId;
 use ic_canister_client_sender::Sender;
 use ic_config::Config;
-use ic_ic00_types::CanisterInstallMode;
+use ic_management_canister_types::CanisterInstallMode;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::{CanisterStatusResult, CanisterStatusType},
@@ -32,6 +31,7 @@ use ic_nns_common::{
     types::{NeuronId, ProposalId},
 };
 use ic_nns_constants::*;
+use ic_nns_governance::init::TEST_NEURON_1_ID;
 use ic_nns_governance::{
     governance::TimeWarp,
     pb::v1::{Governance, NnsFunction, ProposalStatus},

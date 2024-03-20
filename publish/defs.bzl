@@ -82,6 +82,17 @@ release_strip_binary = rule(
     },
 )
 
+release_strip_binary_test = rule(
+    implementation = _release_strip_impl,
+    test = True,
+    attrs = {
+        "_allowlist_function_transition": attr.label(
+            default = "@bazel_tools//tools/allowlists/function_transition_allowlist",
+        ),
+        "binary": attr.label(mandatory = True, cfg = release_strip_transition, allow_single_file = True),
+    },
+)
+
 def _malicious_code_transition(_settings, _attr):
     return {
         "//bazel:enable_malicious_code": True,

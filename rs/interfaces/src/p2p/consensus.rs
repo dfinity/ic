@@ -34,11 +34,16 @@ pub trait ChangeSetProducer<Pool>: Send {
 /// indicates if the mutation changed the pool's state at all.
 pub struct ChangeResult<Artifact: ArtifactKind> {
     pub purged: Vec<Artifact::Id>,
-    pub adverts: Vec<Advert<Artifact>>,
+    pub artifacts_with_opt: Vec<ArtifactWithOpt<Artifact>>,
     /// The field instructs the polling component (the one that calls `on_state_change` + `apply_changes`)
     /// that polling immediately can be benefitial. For example, polling consensus when the field is set to
     /// true results in lower consensus latencies.
     pub poll_immediately: bool,
+}
+
+pub struct ArtifactWithOpt<Artifact: ArtifactKind> {
+    pub advert: Advert<Artifact>,
+    pub is_latency_sensitive: bool,
 }
 
 /// Defines the canonical way for mutating an artifact pool.

@@ -9,7 +9,7 @@ use ic_agent::{
     AgentError,
 };
 use ic_base_types::CanisterId;
-use ic_ic00_types::{
+use ic_management_canister_types::{
     CanisterInstallModeV2, InstallChunkedCodeArgs, Payload, UploadChunkArgs, UploadChunkReply,
 };
 use ic_registry_subnet_type::SubnetType;
@@ -54,7 +54,7 @@ pub fn install_large_wasm(env: TestEnv) {
                 .update(
                     wasm().call_with_cycles(
                         CanisterId::ic_00(),
-                        ic_ic00_types::Method::UploadChunk,
+                        ic_management_canister_types::Method::UploadChunk,
                         call_args()
                             .other_side(
                                 UploadChunkArgs {
@@ -77,7 +77,7 @@ pub fn install_large_wasm(env: TestEnv) {
                 .update(
                     wasm().call_with_cycles(
                         CanisterId::ic_00(),
-                        ic_ic00_types::Method::UploadChunk,
+                        ic_management_canister_types::Method::UploadChunk,
                         call_args()
                             .other_side(
                                 UploadChunkArgs {
@@ -100,7 +100,7 @@ pub fn install_large_wasm(env: TestEnv) {
                 .update(
                     wasm().call_with_cycles(
                         CanisterId::ic_00(),
-                        ic_ic00_types::Method::InstallChunkedCode,
+                        ic_management_canister_types::Method::InstallChunkedCode,
                         call_args()
                             .other_side(
                                 InstallChunkedCodeArgs::new(
@@ -164,7 +164,7 @@ pub fn install_large_wasm_with_other_store(env: TestEnv) {
                 .update(
                     wasm().call_with_cycles(
                         CanisterId::ic_00(),
-                        ic_ic00_types::Method::UploadChunk,
+                        ic_management_canister_types::Method::UploadChunk,
                         call_args()
                             .other_side(
                                 UploadChunkArgs {
@@ -187,7 +187,7 @@ pub fn install_large_wasm_with_other_store(env: TestEnv) {
                 .update(
                     wasm().call_with_cycles(
                         CanisterId::ic_00(),
-                        ic_ic00_types::Method::InstallChunkedCode,
+                        ic_management_canister_types::Method::InstallChunkedCode,
                         call_args()
                             .other_side(
                                 InstallChunkedCodeArgs::new(
@@ -263,7 +263,7 @@ pub fn install_large_wasm_with_other_store_fails_cross_subnet(env: TestEnv) {
                 .update(
                     wasm().call_with_cycles(
                         CanisterId::ic_00(),
-                        ic_ic00_types::Method::UploadChunk,
+                        ic_management_canister_types::Method::UploadChunk,
                         call_args()
                             .other_side(
                                 UploadChunkArgs {
@@ -286,7 +286,7 @@ pub fn install_large_wasm_with_other_store_fails_cross_subnet(env: TestEnv) {
                 .update(
                     wasm().call_with_cycles(
                         CanisterId::ic_00(),
-                        ic_ic00_types::Method::InstallChunkedCode,
+                        ic_management_canister_types::Method::InstallChunkedCode,
                         call_args()
                             .other_side(
                                 InstallChunkedCodeArgs::new(

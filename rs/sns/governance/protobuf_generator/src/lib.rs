@@ -5,7 +5,7 @@ pub struct ProtoPaths<'a> {
     pub governance: &'a Path,
     pub base_types: &'a Path,
     pub nervous_system: &'a Path,
-    pub ic00_types: &'a Path,
+    pub management_canister_types: &'a Path,
     pub ledger: &'a Path,
 }
 
@@ -88,7 +88,7 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
                 proto.governance,
                 proto.base_types,
                 proto.nervous_system,
-                proto.ic00_types,
+                proto.management_canister_types,
                 proto.ledger,
             ],
         )

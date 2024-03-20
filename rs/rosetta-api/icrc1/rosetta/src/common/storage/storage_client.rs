@@ -1,9 +1,7 @@
-use super::{
-    storage_operations,
-    types::{MetadataEntry, RosettaBlock, Tokens},
-};
+use super::storage_operations;
+use crate::common::storage::types::{MetadataEntry, RosettaBlock};
 use anyhow::{bail, Result};
-use ic_icrc1::Transaction;
+use candid::Nat;
 use icrc_ledger_types::icrc1::account::Account;
 use rusqlite::Connection;
 use serde_bytes::ByteBuf;
@@ -87,21 +85,33 @@ impl StorageClient {
 
     // Gets a transaction with a certain hash. Returns [] if no transaction exists in the database with that hash. Returns a vector with multiple entries if more than one transaction
     // with the given transaction hash exists
-    pub fn get_transaction_by_hash(
+    pub fn get_transactions_by_hash(
         &self,
         hash: ByteBuf,
-    ) -> anyhow::Result<Vec<Transaction<Tokens>>> {
+    ) -> anyhow::Result<Vec<crate::common::storage::types::IcrcTransaction>> {
+        Ok(self
+            .get_blocks_by_transaction_hash(hash)?
+            .into_iter()
+            .map(|block| block.get_transaction())
+            .collect::<Vec<crate::common::storage::types::IcrcTransaction>>())
+    }
+
+    pub fn get_blocks_by_transaction_hash(
+        &self,
+        hash: ByteBuf,
+    ) -> anyhow::Result<Vec<RosettaBlock>> {
         let open_connection = self.storage_connection.lock().unwrap();
-        storage_operations::get_transactions_by_hash(&open_connection, hash)
+        storage_operations::get_blocks_by_transaction_hash(&open_connection, hash)
     }
 
     // Gets a transaction with a certain index. Returns None if no transaction exists in the database with that index. Returns an error if multiple transactions with that index exist.
     pub fn get_transaction_at_idx(
         &self,
         block_idx: u64,
-    ) -> anyhow::Result<Option<Transaction<Tokens>>> {
-        let open_connection = self.storage_connection.lock().unwrap();
-        storage_operations::get_transaction_at_idx(&open_connection, block_idx)
+    ) -> anyhow::Result<Option<crate::common::storage::types::IcrcTransaction>> {
+        Ok(self
+            .get_block_at_idx(block_idx)?
+            .map(|block| block.get_transaction()))
     }
 
     pub fn read_metadata(&self) -> anyhow::Result<Vec<MetadataEntry>> {
@@ -110,8 +120,8 @@ impl StorageClient {
     }
 
     pub fn write_metadata(&self, metadata: Vec<MetadataEntry>) -> anyhow::Result<()> {
-        let open_connection = self.storage_connection.lock().unwrap();
-        storage_operations::store_metadata(&open_connection, metadata)
+        let mut open_connection = self.storage_connection.lock().unwrap();
+        storage_operations::store_metadata(&mut open_connection, metadata)
     }
 
     fn create_tables(&self) -> Result<(), rusqlite::Error> {
@@ -133,14 +143,7 @@ impl StorageClient {
                 serialized_block BLOB NOT NULL,
                 parent_hash BLOB,
                 timestamp INTEGER,
-                verified BOOLEAN)
-            "#,
-            [],
-        )?;
-        open_connection.execute(
-            r#"
-            CREATE TABLE IF NOT EXISTS transactions (
-                block_idx INTEGER NOT NULL,
+                verified BOOLEAN,
                 tx_hash BLOB NOT NULL,
                 operation_type VARCHAR(255) NOT NULL,
                 from_principal BLOB,
@@ -154,9 +157,7 @@ impl StorageClient {
                 expected_allowance TEXT,
                 fee TEXT,
                 transaction_created_at_time INTEGER,
-                approval_expires_at INTEGER,
-                PRIMARY KEY(block_idx),
-                FOREIGN KEY(block_idx) REFERENCES blocks(idx)
+                approval_expires_at INTEGER
             )
             "#,
             [],
@@ -187,8 +188,8 @@ impl StorageClient {
     // Populates the blocks and transactions table by the Rosettablocks provided
     // This function does NOT populate the account_balance table.
     pub fn store_blocks(&self, blocks: Vec<RosettaBlock>) -> anyhow::Result<()> {
-        let open_connection = self.storage_connection.lock().unwrap();
-        storage_operations::store_blocks(&open_connection, blocks)
+        let mut open_connection = self.storage_connection.lock().unwrap();
+        storage_operations::store_blocks(&mut open_connection, blocks)
     }
 
     // Extracts the information from the transaction and blocks table and fills the account balance table with that information
@@ -207,14 +208,14 @@ impl StorageClient {
         &self,
         account: &Account,
         block_idx: u64,
-    ) -> anyhow::Result<Option<Tokens>> {
+    ) -> anyhow::Result<Option<Nat>> {
         let open_connection = self.storage_connection.lock().unwrap();
         storage_operations::get_account_balance_at_block_idx(&open_connection, account, block_idx)
     }
 
     // Retrieves the account balance at the heighest block height in the database
     // Returns None if the account does not exist in the database
-    pub fn get_account_balance(&self, account: &Account) -> anyhow::Result<Option<Tokens>> {
+    pub fn get_account_balance(&self, account: &Account) -> anyhow::Result<Option<Nat>> {
         let open_connection = self.storage_connection.lock().unwrap();
         storage_operations::get_account_balance_at_highest_block_idx(&open_connection, account)
     }
@@ -224,13 +225,16 @@ impl StorageClient {
 mod tests {
     use super::*;
     use crate::Metadata;
-    use ic_icrc1::{Block, Operation, Transaction};
+    use ic_icrc1::blocks::encoded_block_to_generic_block;
+    use ic_icrc1::blocks::generic_block_to_encoded_block;
+    use ic_icrc1::Block;
     use ic_icrc1_test_utils::{
         arb_amount, blocks_strategy, metadata_strategy, valid_blockchain_with_gaps_strategy,
     };
     use ic_icrc1_tokens_u256::U256;
     use ic_icrc1_tokens_u64::U64;
-    use ic_ledger_core::{block::BlockType, tokens::TokensType};
+    use ic_ledger_canister_core::ledger::LedgerTransaction;
+    use ic_ledger_core::block::BlockType;
     use proptest::prelude::*;
 
     fn create_tmp_dir() -> tempfile::TempDir {
@@ -238,89 +242,6 @@ mod tests {
             .prefix("test_tmp_")
             .tempdir_in(".")
             .unwrap()
-    }
-
-    fn convert_operation_type<A, B>(value: Operation<A>) -> Operation<B>
-    where
-        A: TokensType,
-        B: TokensType,
-        A: TryInto<B>,
-        <A as TryInto<B>>::Error: std::fmt::Debug,
-    {
-        match value {
-            Operation::Mint { to, amount } => Operation::Mint {
-                to,
-                amount: amount.try_into().unwrap(),
-            },
-            Operation::Transfer {
-                from,
-                to,
-                spender,
-                amount,
-                fee,
-            } => Operation::Transfer {
-                from,
-                to,
-                spender,
-                amount: amount.try_into().unwrap(),
-                fee: fee.map(|x| x.try_into().unwrap()),
-            },
-            Operation::Burn {
-                from,
-                spender,
-                amount,
-            } => Operation::Burn {
-                from,
-                spender,
-                amount: amount.try_into().unwrap(),
-            },
-            Operation::Approve {
-                from,
-                spender,
-                amount,
-                expected_allowance,
-                expires_at,
-                fee,
-            } => Operation::Approve {
-                from,
-                spender,
-                amount: amount.try_into().unwrap(),
-                expected_allowance: expected_allowance.map(|x| x.try_into().unwrap()),
-                expires_at,
-                fee: fee.map(|x| x.try_into().unwrap()),
-            },
-        }
-    }
-
-    fn convert_transaction_type<A, B>(value: Transaction<A>) -> Transaction<B>
-    where
-        A: TokensType,
-        B: TokensType,
-        A: TryInto<B>,
-        <A as TryInto<B>>::Error: std::fmt::Debug,
-    {
-        Transaction {
-            operation: convert_operation_type(value.operation),
-            created_at_time: value.created_at_time,
-            memo: value.memo,
-        }
-    }
-
-    fn convert_block_type<A, B>(value: Block<A>) -> Block<B>
-    where
-        A: TokensType,
-        B: TokensType,
-        A: TryInto<B>,
-        <A as TryInto<B>>::Error: std::fmt::Debug,
-    {
-        Block {
-            transaction: convert_transaction_type(value.transaction),
-            parent_hash: value.parent_hash,
-            effective_fee: value.effective_fee.map(|x| x.try_into().unwrap()),
-            timestamp: value.timestamp,
-            fee_collector: value.fee_collector,
-            fee_collector_block_index: value.fee_collector_block_index,
-        }
     }
 
     #[test]
@@ -339,16 +260,15 @@ mod tests {
            let storage_client_memory = StorageClient::new_in_memory().unwrap();
            let mut rosetta_blocks = vec![];
            for (index,block) in blockchain.into_iter().enumerate(){
-               // Make sure the conversion functions work
-               assert_eq!(convert_block_type::<Tokens,U64>(convert_block_type::<U64,Tokens>(block.clone())),block);
-               // Make sure the block decoding Block<U64> -> Block<Tokens> works
-               let decoded_rosetta_token_block = Block::<Tokens>::decode(block.clone().encode()).unwrap();
-               assert_eq!(decoded_rosetta_token_block.clone(),convert_block_type::<U64,Tokens>(block.clone()));
-
                // Make sure rosetta blocks store the correct transactions
-               let rosetta_block = RosettaBlock::from_encoded_block(block.clone().encode(),index as u64).unwrap();
-               assert_eq!(rosetta_block.block_hash,ByteBuf::from(<Block<U64> as BlockType>::block_hash(&block.clone().encode()).as_slice().to_vec()));
-               assert_eq!(rosetta_block.get_transaction().unwrap(),decoded_rosetta_token_block.clone().transaction.clone());
+               let rosetta_block = RosettaBlock::from_encoded_block(&block.clone().encode(),index as u64).unwrap();
+               // Assert the block hashes match up
+               assert_eq!(rosetta_block.clone().get_block_hash(),ByteBuf::from(<Block<U64> as BlockType>::block_hash(&block.clone().encode()).as_slice().to_vec()));
+               let derived_encoded_block = generic_block_to_encoded_block(rosetta_block.get_generic_block()).unwrap();
+               let derived_block = Block::<U64>::decode(derived_encoded_block.clone()).unwrap();
+               // Assert that the transactions from the original U64 block and the derived one from rosetta block match up
+               assert_eq!(derived_block.transaction,block.transaction.clone());
+               assert_eq!(rosetta_block.clone().get_transaction_hash(),ByteBuf::from(block.transaction.hash().as_slice()));
                // Make sure the encoding and decoding works
                rosetta_blocks.push(rosetta_block)
            }
@@ -357,7 +277,7 @@ mod tests {
            for rosetta_block in rosetta_blocks.into_iter(){
                let block_read = storage_client_memory.get_block_at_idx(rosetta_block.clone().index).unwrap().unwrap();
                assert_eq!(block_read,rosetta_block);
-               let block_read = storage_client_memory.get_block_by_hash(rosetta_block.clone().block_hash).unwrap().unwrap();
+               let block_read = storage_client_memory.get_block_by_hash(rosetta_block.clone().get_block_hash()).unwrap().unwrap();
                assert_eq!(block_read,rosetta_block);
            }
        }
@@ -367,40 +287,39 @@ mod tests {
         let storage_client_memory = StorageClient::new_in_memory().unwrap();
         let mut rosetta_blocks = vec![];
         for (index,block) in blockchain.into_iter().enumerate(){
-            // Make sure the conversion functions work
-            assert_eq!(convert_block_type::<Tokens,U256>(convert_block_type::<U256,Tokens>(block.clone())),block);
-            // Make sure the block decoding Block<U256> -> Block<Tokens> works
-            let decoded_rosetta_token_block = Block::<Tokens>::decode(block.clone().encode()).unwrap();
-            assert_eq!(decoded_rosetta_token_block.clone(),convert_block_type::<U256,Tokens>(block.clone()));
-
-            // Make sure rosetta blocks store the correct transactions
-            let rosetta_block = RosettaBlock::from_encoded_block(block.clone().encode(),index as u64).unwrap();
-            assert_eq!(rosetta_block.get_transaction().unwrap(),decoded_rosetta_token_block.clone().transaction.clone());
-            assert_eq!(rosetta_block.block_hash,ByteBuf::from(<Block<U256> as BlockType>::block_hash(&block.clone().encode()).as_slice().to_vec()));
-            // Make sure the encoding and decoding works
-            rosetta_blocks.push(rosetta_block)
+               // Make sure rosetta blocks store the correct transactions
+               let rosetta_block = RosettaBlock::from_encoded_block(&block.clone().encode(),index as u64).unwrap();
+               // Assert the block hashes match up
+               assert_eq!(rosetta_block.clone().get_block_hash(),ByteBuf::from(<Block<U256> as BlockType>::block_hash(&block.clone().encode()).as_slice().to_vec()));
+               let derived_encoded_block = generic_block_to_encoded_block(rosetta_block.get_generic_block()).unwrap();
+               let derived_block = Block::<U256>::decode(derived_encoded_block.clone()).unwrap();
+               // Assert that the transactions from the original U256 block and the derived one from rosetta block match up
+               assert_eq!(derived_block.transaction,block.transaction.clone());
+               assert_eq!(rosetta_block.clone().get_transaction_hash(),ByteBuf::from(block.transaction.hash().as_slice()));
+               // Make sure the encoding and decoding works
+               rosetta_blocks.push(rosetta_block)
         }
         storage_client_memory.store_blocks(rosetta_blocks.clone()).unwrap();
         for rosetta_block in rosetta_blocks.into_iter(){
             let block_read = storage_client_memory.get_block_at_idx(rosetta_block.clone().index).unwrap().unwrap();
             assert_eq!(block_read,rosetta_block);
-            let block_read = storage_client_memory.get_block_by_hash(rosetta_block.clone().block_hash).unwrap().unwrap();
+            let block_read = storage_client_memory.get_block_by_hash(rosetta_block.clone().get_block_hash()).unwrap().unwrap();
             assert_eq!(block_read,rosetta_block);
         }
     }
 
           #[test]
-          fn test_read_and_write_transactions(blockchain in valid_blockchain_with_gaps_strategy::<Tokens>(1000)){
+          fn test_read_and_write_transactions(blockchain in valid_blockchain_with_gaps_strategy::<U256>(1000)){
               let storage_client_memory = StorageClient::new_in_memory().unwrap();
               let rosetta_blocks: Vec<_> = blockchain.0.iter().zip(blockchain.1.iter())
-                  .map(|(block, index)| RosettaBlock::from_icrc_ledger_block(block.clone(), *index as u64).unwrap())
+                  .map(|(block, index)| RosettaBlock::from_generic_block(encoded_block_to_generic_block(&block.clone().encode()), *index as u64).unwrap())
                   .collect();
               storage_client_memory.store_blocks(rosetta_blocks.clone()).unwrap();
               for block in rosetta_blocks.clone(){
-                  let tx0 = Block::decode(block.encoded_block).unwrap().transaction;
-                  let tx1 = Block::decode(storage_client_memory.get_block_at_idx(block.index).unwrap().unwrap().encoded_block).unwrap().transaction;
+                  let tx0 = block.get_transaction();
+                  let tx1 = storage_client_memory.get_block_at_idx(block.index).unwrap().unwrap().get_transaction();
                   let tx2 = storage_client_memory.get_transaction_at_idx(block.index).unwrap().unwrap();
-                  let tx3 = &storage_client_memory.get_transaction_by_hash(block.transaction_hash).unwrap().clone()[0];
+                  let tx3 = &storage_client_memory.get_transactions_by_hash(block.clone().get_transaction_hash()).unwrap().clone()[0];
                   assert_eq!(tx0,tx1);
                   assert_eq!(tx1,tx2);
                   assert_eq!(tx2,*tx3);
@@ -412,20 +331,20 @@ mod tests {
               assert!(storage_client_memory.get_transaction_at_idx(last_block.index+1).unwrap().is_none());
 
               // Duplicate the last transaction generated
-              let duplicate_tx_block = RosettaBlock::from_icrc_ledger_block::<Tokens>(Block::decode(last_block.encoded_block.clone()).unwrap(), last_block.index + 1).unwrap();
+              let duplicate_tx_block = RosettaBlock::from_generic_block(last_block.get_generic_block(), last_block.index + 1).unwrap();
               storage_client_memory.store_blocks([duplicate_tx_block.clone()].to_vec()).unwrap();
 
               // The hash of the duplicated transaction should still be the same --> There should be two transactions with the same transaction hash.
-              assert_eq!(storage_client_memory.get_transaction_by_hash(duplicate_tx_block.transaction_hash).unwrap().len(),2  );
+              assert_eq!(storage_client_memory.get_transactions_by_hash(duplicate_tx_block.clone().get_transaction_hash()).unwrap().len(),2);
               }
            }
 
           #[test]
-          fn test_highest_lowest_block_index(blocks in prop::collection::vec(blocks_strategy::<Tokens>(arb_amount::<Tokens>()),1..100)){
+          fn test_highest_lowest_block_index(blocks in prop::collection::vec(blocks_strategy::<U256>(arb_amount::<U256>()),1..100)){
               let storage_client_memory = StorageClient::new_in_memory().unwrap();
               let mut rosetta_blocks = vec![];
               for (index,block) in blocks.clone().into_iter().enumerate(){
-                  rosetta_blocks.push(RosettaBlock::from_icrc_ledger_block(block,index as u64).unwrap());
+                  rosetta_blocks.push(RosettaBlock::from_generic_block(encoded_block_to_generic_block(&block.encode()),index as u64).unwrap());
               }
               storage_client_memory.store_blocks(rosetta_blocks).unwrap();
               let block_read = storage_client_memory.get_block_with_highest_block_idx().unwrap().unwrap();
@@ -445,11 +364,11 @@ mod tests {
            }
 
           #[test]
-          fn test_deriving_gaps_from_storage(blockchain in valid_blockchain_with_gaps_strategy::<Tokens>(1000)){
+          fn test_deriving_gaps_from_storage(blockchain in valid_blockchain_with_gaps_strategy::<U256>(1000)){
               let storage_client_memory = StorageClient::new_in_memory().unwrap();
               let mut rosetta_blocks = vec![];
               for i in 0..blockchain.0.len() {
-               rosetta_blocks.push(RosettaBlock::from_icrc_ledger_block(blockchain.0[i].clone(),blockchain.1[i] as u64).unwrap());
+               rosetta_blocks.push(RosettaBlock::from_generic_block(encoded_block_to_generic_block(&blockchain.0[i].clone().encode()),blockchain.1[i] as u64).unwrap());
               }
 
               storage_client_memory.store_blocks(rosetta_blocks.clone()).unwrap();
@@ -496,11 +415,11 @@ mod tests {
            }
 
            #[test]
-           fn test_updating_account_balances_for_blockchain_with_gaps(blockchain in valid_blockchain_with_gaps_strategy::<Tokens>(1000)){
+           fn test_updating_account_balances_for_blockchain_with_gaps(blockchain in valid_blockchain_with_gaps_strategy::<U256>(1000)){
                let storage_client_memory = StorageClient::new_in_memory().unwrap();
                let mut rosetta_blocks = vec![];
                for i in 0..blockchain.0.len() {
-                rosetta_blocks.push(RosettaBlock::from_encoded_block(blockchain.0[i].clone().encode(),blockchain.1[i] as u64).unwrap());
+                rosetta_blocks.push(RosettaBlock::from_encoded_block(&blockchain.0[i].clone().encode(),blockchain.1[i] as u64).unwrap());
                }
 
                storage_client_memory.store_blocks(rosetta_blocks.clone()).unwrap();

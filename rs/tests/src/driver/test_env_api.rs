@@ -140,6 +140,8 @@ use crate::driver::constants::{self, kibana_link, SSH_USERNAME};
 use crate::driver::farm::{Farm, GroupSpec};
 use crate::driver::log_events;
 use crate::driver::test_env::{HasIcPrepDir, SshKeyGen, TestEnv, TestEnvAttribute};
+use crate::k8s::tnet::TNet;
+use crate::k8s::virtualmachine::{delete_vm, restart_vm, start_vm};
 use crate::util::{block_on, create_agent};
 use anyhow::{anyhow, bail, Context, Result};
 use async_trait::async_trait;
@@ -483,6 +485,22 @@ impl TopologySnapshot {
         result
     }
 
+    /// Like `block_for_newer_registry_version` but with a custom `duration` and `backoff`.
+    pub async fn block_for_newer_registry_version_within_duration(
+        &self,
+        duration: Duration,
+        backoff: Duration,
+    ) -> Result<TopologySnapshot> {
+        let minimum_version = self.local_registry.get_latest_version() + RegistryVersion::from(1);
+        let result = self
+            .block_for_min_registry_version_within_duration(minimum_version, duration, backoff)
+            .await;
+        if let Ok(ref topology) = result {
+            info!(self.env.logger(), "{}", topology);
+        }
+        result
+    }
+
     /// This method blocks and repeatedly fetches updates from the registry
     /// canister until the latest available registry version is higher or equal
     /// to `min_version`.
@@ -503,6 +521,17 @@ impl TopologySnapshot {
     ) -> Result<TopologySnapshot> {
         let duration = Duration::from_secs(180);
         let backoff = Duration::from_secs(2);
+        self.block_for_min_registry_version_within_duration(min_version, duration, backoff)
+            .await
+    }
+
+    /// Like `block_for_min_registry_version` but with a custom `duration` and `backoff`.
+    pub async fn block_for_min_registry_version_within_duration(
+        &self,
+        min_version: RegistryVersion,
+        duration: Duration,
+        backoff: Duration,
+    ) -> Result<TopologySnapshot> {
         let mut latest_version = self.local_registry.get_latest_version();
         if min_version > latest_version {
             latest_version = retry_async(&self.env.logger(), duration, backoff, || async move {
@@ -1141,10 +1170,17 @@ impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
     }
 }
 
-fn fetch_sha256(base_url: String, file: &str, logger: Logger) -> Result<String> {
-    let sha256sums_url = format!("{base_url}/SHA256SUMS");
+pub const FETCH_SHA256SUMS_RETRY_TIMEOUT: Duration = Duration::from_secs(120);
+pub const FETCH_SHA256SUMS_RETRY_BACKOFF: Duration = Duration::from_secs(5);
 
-    let response = reqwest::blocking::get(sha256sums_url)?;
+fn fetch_sha256(base_url: String, file: &str, logger: Logger) -> Result<String> {
+    let response = retry(
+        logger.clone(),
+        FETCH_SHA256SUMS_RETRY_TIMEOUT,
+        FETCH_SHA256SUMS_RETRY_BACKOFF,
+        || reqwest::blocking::get(format!("{base_url}/SHA256SUMS")).map_err(|e| anyhow!("{:?}", e)),
+    )?;
+
     if !response.status().is_success() {
         error!(
             logger,
@@ -1185,7 +1221,7 @@ impl HasGroupSetup for TestEnv {
                 "Group {} already set up.", group_setup.infra_group_name
             );
         } else {
-            let group_setup = GroupSetup::new(group_base_name);
+            let group_setup = GroupSetup::new(group_base_name.clone());
             match InfraProvider::read_attribute(self) {
                 InfraProvider::Farm => {
                     let farm_base_url = FarmBaseUrl::read_attribute(self);
@@ -1205,7 +1241,12 @@ impl HasGroupSetup for TestEnv {
                     )
                     .unwrap();
                 }
-                InfraProvider::K8s => {}
+                InfraProvider::K8s => {
+                    let mut tnet =
+                        TNet::new(&group_base_name.replace('_', "-")).expect("new tnet failed");
+                    block_on(tnet.create()).expect("failed creating tnet");
+                    tnet.write_attribute(self);
+                }
             };
             group_setup.write_attribute(self);
             self.ssh_keygen().expect("ssh key generation failed");
@@ -1862,32 +1903,45 @@ pub trait VmControl {
     fn start(&self);
 }
 
-pub struct FarmHostedVm {
+pub struct HostedVm {
     farm: Farm,
     group_name: String,
     vm_name: String,
+    k8s: bool,
 }
 
 /// VmControl enables a user to interact with VMs, i.e. change their state.
 /// All functions belonging to this trait crash if a respective operation is for any reason
 /// unsuccessful.
-impl VmControl for FarmHostedVm {
+impl VmControl for HostedVm {
     fn kill(&self) {
-        self.farm
-            .destroy_vm(&self.group_name, &self.vm_name)
-            .expect("could not kill VM")
+        if self.k8s {
+            block_on(delete_vm(&self.vm_name)).expect("could not kill VM");
+        } else {
+            self.farm
+                .destroy_vm(&self.group_name, &self.vm_name)
+                .expect("could not kill VM");
+        }
     }
 
     fn reboot(&self) {
-        self.farm
-            .reboot_vm(&self.group_name, &self.vm_name)
-            .expect("could not reboot VM")
+        if self.k8s {
+            block_on(restart_vm(&self.vm_name)).expect("could not reboot VM");
+        } else {
+            self.farm
+                .reboot_vm(&self.group_name, &self.vm_name)
+                .expect("could not reboot VM");
+        }
     }
 
     fn start(&self) {
-        self.farm
-            .start_vm(&self.group_name, &self.vm_name)
-            .expect("could not start VM")
+        if self.k8s {
+            block_on(start_vm(&self.vm_name)).expect("could not start VM");
+        } else {
+            self.farm
+                .start_vm(&self.group_name, &self.vm_name)
+                .expect("could not start VM");
+        }
     }
 }
 
@@ -1906,10 +1960,26 @@ where
         let pot_setup = GroupSetup::read_attribute(&env);
         let farm_base_url = env.get_farm_url().unwrap();
         let farm = Farm::new(farm_base_url, env.logger());
-        Box::new(FarmHostedVm {
+
+        let mut vm_name = self.vm_name();
+        let mut k8s = false;
+        if InfraProvider::read_attribute(&env) == InfraProvider::K8s {
+            k8s = true;
+            let tnet = TNet::read_attribute(&env);
+            let tnet_node = tnet
+                .nodes
+                .iter()
+                .find(|n| n.node_id.clone().expect("node_id missing") == vm_name.clone())
+                .expect("tnet doesn't have this node")
+                .clone();
+            vm_name = tnet_node.name.expect("nameless node");
+        }
+
+        Box::new(HostedVm {
             farm,
             group_name: pot_setup.infra_group_name,
-            vm_name: self.vm_name(),
+            vm_name,
+            k8s,
         })
     }
 }

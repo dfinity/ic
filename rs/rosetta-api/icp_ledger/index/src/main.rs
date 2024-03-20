@@ -7,7 +7,7 @@ use ic_icp_index::logs::{P0, P1};
 use ic_icp_index::{
     GetAccountIdentifierTransactionsArgs, GetAccountIdentifierTransactionsResponse,
     GetAccountIdentifierTransactionsResult, GetAccountTransactionsResult, InitArg, Log, LogEntry,
-    Priority, Status, TransactionWithId,
+    Priority, SettledTransaction, SettledTransactionWithId, Status,
 };
 use ic_icrc1_index_ng::GetAccountTransactionsArgs;
 use ic_ledger_core::block::{BlockType, EncodedBlock};
@@ -593,7 +593,7 @@ fn get_account_identifier_transactions(
     // TODO: deal with the user setting start to u64::MAX
     let start = arg.start.map_or(u64::MAX, |n| n);
     let key = account_identifier_block_ids_key(arg.account_identifier, start);
-    let mut transactions = vec![];
+    let mut settled_transactions = vec![];
     let indices = with_account_identifier_block_ids(|account_identifier_block_ids| {
         account_identifier_block_ids
             .range(key..)
@@ -613,21 +613,22 @@ fn get_account_identifier_transactions(
                 ));
             })
         });
-        let transaction = decode_encoded_block(id, block.into())
+        let settled_transaction = SettledTransaction::from(decode_encoded_block(id, EncodedBlock::from(block))
             .unwrap_or_else(|_| {
                 ic_cdk::api::trap(&format!(
-                "Block {} not found in the block log, account_identifier blocks map is corrupted!",id
-            ));
-            })
-            .transaction;
-        let transaction_with_idx = TransactionWithId { id, transaction };
-        transactions.push(transaction_with_idx);
+                    "Block {} not found in the block log, account_identifier blocks map is corrupted!",id))
+            }));
+        let transaction_with_idx = SettledTransactionWithId {
+            id,
+            transaction: settled_transaction,
+        };
+        settled_transactions.push(transaction_with_idx);
     }
     let oldest_tx_id = get_oldest_tx_id(arg.account_identifier);
     let balance = get_balance(arg.account_identifier);
     Ok(GetAccountIdentifierTransactionsResponse {
         balance,
-        transactions,
+        transactions: settled_transactions,
         oldest_tx_id,
     })
 }
@@ -636,7 +637,7 @@ fn get_account_identifier_transactions(
 #[candid_method(query)]
 fn get_account_transactions(arg: GetAccountTransactionsArgs) -> GetAccountTransactionsResult {
     get_account_identifier_transactions(GetAccountIdentifierTransactionsArgs {
-        account_identifier: arg.account.into(),
+        account_identifier: AccountIdentifier::from(arg.account),
         max_results: arg
             .max_results
             .0
@@ -705,7 +706,7 @@ fn get_account_identifier_balance(account_identifier: AccountIdentifier) -> u64 
 #[query]
 #[candid_method(query)]
 fn icrc1_balance_of(account: Account) -> u64 {
-    get_balance(account.into())
+    get_balance(AccountIdentifier::from(account))
 }
 
 #[query]

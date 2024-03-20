@@ -28,16 +28,16 @@ use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_keys::make_subnet_record_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_utilities::{
-    artifact_pool_config::with_test_pool_config,
-    crypto::temp_crypto_component_with_fake_registry,
+    artifact_pool_config::with_test_pool_config, crypto::temp_crypto_component_with_fake_registry,
     cycles_account_manager::CyclesAccountManagerBuilder,
-    history::MockIngressHistory,
-    state::{CanisterStateBuilder, ReplicatedStateBuilder},
-    types::ids::{node_test_id, subnet_test_id},
-    types::messages::SignedIngressBuilder,
 };
 use ic_test_utilities_registry::test_subnet_record;
+use ic_test_utilities_state::{CanisterStateBuilder, MockIngressHistory, ReplicatedStateBuilder};
 use ic_test_utilities_time::FastForwardTimeSource;
+use ic_test_utilities_types::{
+    ids::{node_test_id, subnet_test_id},
+    messages::SignedIngressBuilder,
+};
 use ic_types::{
     artifact::IngressMessageId, batch::ValidationContext, ingress::IngressStatus,
     malicious_flags::MaliciousFlags, CanisterId, Cycles, Height, NumBytes, PrincipalId,

@@ -7,13 +7,13 @@ use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
-use ic_test_utilities::types::ids::{
+use ic_test_utilities_logger::with_test_replica_logger;
+use ic_test_utilities_types::ids::{
     canister_test_id, message_test_id, subnet_test_id, user_test_id,
 };
-use ic_test_utilities_logger::with_test_replica_logger;
-use ic_test_utilities_time::mock_time;
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
+    time::UNIX_EPOCH,
     Height,
 };
 use IngressStatus::*;
@@ -46,7 +46,7 @@ fn received() -> IngressStatus {
     Known {
         receiver: canister_test_id(0).get(),
         user_id: user_test_id(0),
-        time: mock_time(),
+        time: UNIX_EPOCH,
         state: IngressState::Received,
     }
 }
@@ -55,7 +55,7 @@ fn processing() -> IngressStatus {
     Known {
         receiver: canister_test_id(0).get(),
         user_id: user_test_id(0),
-        time: mock_time(),
+        time: UNIX_EPOCH,
         state: IngressState::Processing,
     }
 }
@@ -64,7 +64,7 @@ fn completed() -> IngressStatus {
     Known {
         receiver: canister_test_id(0).get(),
         user_id: user_test_id(0),
-        time: mock_time(),
+        time: UNIX_EPOCH,
         state: IngressState::Completed(WasmResult::Reply(vec![])),
     }
 }
@@ -73,7 +73,7 @@ fn failed() -> IngressStatus {
     Known {
         receiver: canister_test_id(0).get(),
         user_id: user_test_id(0),
-        time: mock_time(),
+        time: UNIX_EPOCH,
         state: IngressState::Failed(UserError::new(CanisterNotFound, "")),
     }
 }

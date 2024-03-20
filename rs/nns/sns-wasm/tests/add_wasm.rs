@@ -13,7 +13,7 @@ pub mod common;
 
 #[test]
 fn test_sns_wasms_can_be_added_via_nns_proposal() {
-    let machine = set_up_state_machine_with_nns(vec![]);
+    let machine = set_up_state_machine_with_nns();
 
     let root_wasm = build_root_sns_wasm();
     let root_hash = root_wasm.sha256_hash();
@@ -26,7 +26,7 @@ fn test_sns_wasms_can_be_added_via_nns_proposal() {
 
 #[test]
 fn test_add_wasm_cannot_be_called_directly() {
-    let machine = set_up_state_machine_with_nns(vec![]);
+    let machine = set_up_state_machine_with_nns();
 
     let root_wasm = build_root_sns_wasm();
     let root_hash = root_wasm.sha256_hash();

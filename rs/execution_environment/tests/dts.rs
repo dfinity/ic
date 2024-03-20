@@ -8,7 +8,7 @@ use ic_config::{
     flag_status::FlagStatus,
     subnet_config::{SchedulerConfig, SubnetConfig},
 };
-use ic_ic00_types::{
+use ic_management_canister_types::{
     CanisterIdRecord, CanisterSettingsArgsBuilder, EmptyBlob, InstallCodeArgs, Method, Payload,
     IC_00,
 };
@@ -92,13 +92,16 @@ fn wat2wasm(wat: &str) -> Vec<u8> {
 /// and sandboxing if it cannot find the sandboxing binaries, which happens in
 /// local builds with `cargo`.
 fn should_skip_test_due_to_disabled_dts() -> bool {
-    if !(std::env::var("SANDBOX_BINARY").is_ok() && std::env::var("LAUNCHER_BINARY").is_ok()) {
+    if !(std::env::var("SANDBOX_BINARY").is_ok()
+        && std::env::var("LAUNCHER_BINARY").is_ok()
+        && std::env::var("COMPILER_BINARY").is_ok())
+    {
         eprintln!(
             "Skipping the test because DTS is not supported without \
              canister sandboxing binaries.\n\
              To fix this:\n\
              - either run the test with `bazel test`\n\
-             - or define the SANDBOX_BINARY and LAUNCHER_BINARY environment variables \
+             - or define the SANDBOX_BINARY and LAUNCHER_BINARY and COMPILER_BINARY environment variables \
              with the paths to the corresponding binaries."
         );
         return true;

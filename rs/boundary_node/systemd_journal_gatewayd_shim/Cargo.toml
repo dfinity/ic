@@ -7,13 +7,13 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-anyhow = "1.0.75"
+anyhow = { workspace = true }
 async-trait = "0.1.73"
 axum = "0.6.20"
-clap = { version = "4.4.0", features = ["derive"] }
+clap = { workspace = true }
 http = "0.2.9"
 itertools = { workspace = true }
 reqwest = { workspace = true }
-thiserror = "1.0.47"
+thiserror = { workspace = true }
 tokio = { workspace = true }
 url = "2.4.0"

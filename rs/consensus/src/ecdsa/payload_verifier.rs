@@ -32,7 +32,6 @@ use crate::ecdsa::payload_builder::{create_data_payload_helper, create_summary_p
 use crate::ecdsa::utils::build_signature_inputs;
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_consensus_utils::pool_reader::PoolReader;
-use ic_crypto::MegaKeyFromRegistryError;
 use ic_interfaces::validation::{ValidationError, ValidationResult};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{StateManager, StateManagerError};
@@ -55,7 +54,7 @@ use ic_types::{
         ThresholdEcdsaCombinedSignature,
     },
     registry::RegistryClientError,
-    Height, RegistryVersion, SubnetId,
+    Height, SubnetId,
 };
 use prometheus::HistogramVec;
 use std::collections::BTreeMap;
@@ -63,16 +62,14 @@ use std::convert::TryFrom;
 
 #[allow(clippy::enum_variant_names)]
 #[derive(Debug)]
-pub enum TransientError {
+pub(crate) enum TransientError {
     RegistryClientError(RegistryClientError),
-    EcdsaPayloadError(EcdsaPayloadError),
     StateManagerError(StateManagerError),
 }
 
 #[derive(Debug)]
-pub enum PermanentError {
+pub(crate) enum PermanentError {
     // wrapper of other errors
-    RegistryClientError(RegistryClientError),
     UnexpectedSummaryPayload(EcdsaPayloadError),
     UnexpectedDataPayload(Option<EcdsaPayloadError>),
     InvalidChainCacheError(InvalidChainCacheError),
@@ -81,20 +78,16 @@ pub enum PermanentError {
     ThresholdEcdsaVerifyCombinedSignatureError(ThresholdEcdsaVerifyCombinedSignatureError),
     IDkgVerifyTranscriptError(IDkgVerifyTranscriptError),
     IDkgVerifyInitialDealingsError(IDkgVerifyInitialDealingsError),
-    MegaKeyFromRegistryError(MegaKeyFromRegistryError),
     // local errors
     ConsensusRegistryVersionNotFound(Height),
-    SubnetWithNoNodes(SubnetId, RegistryVersion),
     EcdsaConfigNotFound,
     SummaryPayloadMismatch,
     DataPayloadMismatch,
     MissingEcdsaDataPayload,
-    MissingParentDataPayload,
     NewTranscriptRefWrongHeight(TranscriptRef, Height),
     NewTranscriptNotFound(IDkgTranscriptId),
     NewTranscriptMiscount(u64),
     NewTranscriptMissingParams(IDkgTranscriptId),
-    NewTranscriptHeightMismatch(IDkgTranscriptId),
     NewSignatureUnexpected(ecdsa::PseudoRandomId),
     NewSignatureMissingInput(ecdsa::PseudoRandomId),
     NewSignatureMissingContext(ecdsa::PseudoRandomId),
@@ -157,10 +150,10 @@ impl From<StateManagerError> for TransientError {
     }
 }
 
-pub type EcdsaValidationError = ValidationError<PermanentError, TransientError>;
+pub(crate) type EcdsaValidationError = ValidationError<PermanentError, TransientError>;
 
 #[allow(clippy::too_many_arguments)]
-pub fn validate_payload(
+pub(crate) fn validate_payload(
     subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
     crypto: &dyn ConsensusCrypto,
@@ -210,7 +203,7 @@ pub fn validate_payload(
 /// Validates a threshold ECDSA summary payload.
 /// This is an entirely deterministic operation, so we can just check if
 /// the given summary payload matches what we would have created locally.
-pub fn validate_summary_payload(
+fn validate_summary_payload(
     subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
     pool_reader: &PoolReader<'_>,
@@ -264,7 +257,7 @@ pub fn validate_summary_payload(
 
 #[allow(clippy::too_many_arguments)]
 /// Validates a threshold ECDSA data payload.
-pub fn validate_data_payload(
+fn validate_data_payload(
     subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
     crypto: &dyn ConsensusCrypto,
@@ -503,7 +496,7 @@ fn validate_reshare_dealings(
     for (request, config) in prev_payload.ongoing_xnet_reshares.iter() {
         if curr_payload.ongoing_xnet_reshares.get(request).is_none() {
             if let Some(response) = new_reshare_agreement.get(request) {
-                use ic_ic00_types::ComputeInitialEcdsaDealingsResponse;
+                use ic_management_canister_types::ComputeInitialEcdsaDealingsResponse;
                 if let ic_types::messages::Payload::Data(data) = &response.response_payload {
                     let dealings_response = ComputeInitialEcdsaDealingsResponse::decode(data)
                         .map_err(|err| PermanentError::DecodingError(format!("{:?}", err)))?;
@@ -550,7 +543,7 @@ fn validate_new_signature_agreements(
     for (random_id, completed) in curr_payload.signature_agreements.iter() {
         if let ecdsa::CompletedSignature::Unreported(response) = completed {
             if let ic_types::messages::Payload::Data(data) = &response.response_payload {
-                use ic_ic00_types::{Payload, SignWithECDSAReply};
+                use ic_management_canister_types::{Payload, SignWithECDSAReply};
                 let reply = SignWithECDSAReply::decode(data)
                     .map_err(|err| PermanentError::DecodingError(format!("{:?}", err)))?;
                 let signature = ThresholdEcdsaCombinedSignature {
@@ -616,9 +609,10 @@ mod test {
         generate_key_transcript, CanisterThresholdSigTestEnvironment, IDkgParticipants,
     };
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-    use ic_ic00_types::{EcdsaKeyId, Payload, SignWithECDSAReply};
     use ic_logger::replica_logger::no_op_logger;
-    use ic_test_utilities::{crypto::CryptoReturningOk, types::ids::subnet_test_id};
+    use ic_management_canister_types::{EcdsaKeyId, Payload, SignWithECDSAReply};
+    use ic_test_utilities::crypto::CryptoReturningOk;
+    use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
         consensus::ecdsa::{CompletedSignature, TranscriptAttributes},
         crypto::AlgorithmId,
@@ -664,7 +658,7 @@ mod test {
             .idkg_transcripts
             .insert(transcript_id_0, transcript_0);
         // Error because transcript is not referenced
-        assert!(matches!(
+        assert_matches!(
             validate_transcript_refs(
                 crypto,
                 &block_reader,
@@ -675,7 +669,7 @@ mod test {
             Err(ValidationError::Permanent(
                 PermanentError::NewTranscriptMiscount(_)
             ))
-        ));
+        );
 
         // Add the reference
         prev_payload.key_transcript.next_in_creation =
@@ -700,7 +694,7 @@ mod test {
         assert!(res.is_ok());
 
         // Error because of height mismatch
-        assert!(matches!(
+        assert_matches!(
             validate_transcript_refs(
                 crypto,
                 &block_reader,
@@ -711,7 +705,7 @@ mod test {
             Err(ValidationError::Permanent(
                 PermanentError::NewTranscriptRefWrongHeight(_, _)
             ))
-        ));
+        );
 
         // Add another reference
         let transcript_1 =
@@ -720,7 +714,7 @@ mod test {
             ecdsa::UnmaskedTranscript::try_from((Height::new(100), &transcript_1)).unwrap();
         curr_payload.key_transcript.next_in_creation =
             ecdsa::KeyTranscriptCreation::Created(transcript_ref_1);
-        assert!(matches!(
+        assert_matches!(
             validate_transcript_refs(
                 crypto,
                 &block_reader,
@@ -731,7 +725,7 @@ mod test {
             Err(ValidationError::Permanent(
                 PermanentError::NewTranscriptNotFound(_)
             ))
-        ));
+        );
 
         curr_payload.idkg_transcripts = BTreeMap::new();
         block_reader.add_transcript(*transcript_ref_1.as_ref(), transcript_1);
@@ -749,7 +743,7 @@ mod test {
         _request: &ecdsa::EcdsaReshareRequest,
         initial_dealings: &InitialIDkgDealings,
     ) -> Option<ic_types::messages::Response> {
-        use ic_ic00_types::ComputeInitialEcdsaDealingsResponse;
+        use ic_management_canister_types::ComputeInitialEcdsaDealingsResponse;
         let mut response = empty_response();
         response.response_payload = ic_types::messages::Payload::Data(
             ComputeInitialEcdsaDealingsResponse {
@@ -806,10 +800,10 @@ mod test {
             &no_op_logger(),
         );
         assert_eq!(payload.xnet_reshare_agreements.len(), 1);
-        assert!(matches!(
+        assert_matches!(
             payload.xnet_reshare_agreements.get(&req_1).unwrap(),
             ecdsa::CompletedReshareRequest::Unreported(_)
-        ));
+        );
 
         // The payload should verify, and should return 1 dealing.
         let result = validate_reshare_dealings(crypto, &block_reader, &prev_payload, &payload);
@@ -820,12 +814,12 @@ mod test {
         let mut payload_ = payload.clone();
         payload_.ongoing_xnet_reshares.remove(&req_2);
         let result = validate_reshare_dealings(crypto, &block_reader, &prev_payload, &payload_);
-        assert!(matches!(
+        assert_matches!(
             result,
             Err(ValidationError::Permanent(
                 PermanentError::XNetReshareRequestDisappeared(_)
             ))
-        ));
+        );
 
         // Create another request and dealings
         let reshare_params = payload.ongoing_xnet_reshares.get(&req_2).unwrap().as_ref();
@@ -849,12 +843,12 @@ mod test {
         // to validate.
         prev_payload.ongoing_xnet_reshares.remove(&req_2);
         let result = validate_reshare_dealings(crypto, &block_reader, &prev_payload, &payload);
-        assert!(matches!(
+        assert_matches!(
             result,
             Err(ValidationError::Permanent(
                 PermanentError::XNetReshareAgreementWithoutRequest(_)
             ))
-        ));
+        );
     }
 
     #[test]
@@ -1014,12 +1008,12 @@ mod test {
             &ecdsa_payload,
             false,
         );
-        assert!(matches!(
+        assert_matches!(
             res,
             Err(ValidationError::Permanent(
                 PermanentError::NewSignatureUnexpected(_)
             ))
-        ));
+        );
     }
 
     #[test]
@@ -1226,6 +1220,7 @@ mod test {
             response_payload: ic_types::messages::Payload::Data(
                 SignWithECDSAReply { signature: vec![] }.encode(),
             ),
+            deadline: fake_context.request.deadline,
         });
 
         // Insert agreement for incomplete context
@@ -1349,7 +1344,7 @@ mod test {
                     lambda_masked_ref: masked_transcript_1,
                     kappa_times_lambda_ref: masked_transcript_1,
                     key_times_lambda_ref: masked_transcript_1,
-                    key_unmasked_ref: Some(transcript_ref_0),
+                    key_unmasked_ref: transcript_ref_0,
                 },
             );
         }
@@ -1365,14 +1360,10 @@ mod test {
 
         // Previously it would report NewTranscriptMiscount error as a proof that
         // the same transcripts have been verified many times.
-        assert!(!matches!(
-            error,
-            ValidationError::Permanent(PermanentError::NewTranscriptMiscount(_))
-        ));
         // Now that we fixed the problem, it reports NewTranscriptRefWrongHeight instead.
-        assert!(matches!(
+        assert_matches!(
             error,
             ValidationError::Permanent(PermanentError::NewTranscriptRefWrongHeight(_, _))
-        ));
+        );
     }
 }

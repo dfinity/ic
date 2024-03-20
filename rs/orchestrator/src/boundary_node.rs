@@ -116,12 +116,19 @@ impl BoundaryNodeManager {
             .as_path()
             .display()
             .to_string();
+
         // TODO: Should these values be settable via config?
+        // TODO: Add --hostname argument for prod usage
         let args = vec![
-            format!("--local-store-path=/var/lib/ic/data/ic_registry_local_store"),
-            format!("--http-port=4444"),
-            format!("--metrics-addr=[::]:9324"),
+            format!("--http-port=80"),
+            format!("--https-port=443"),
+            format!("--tls-cert-path=/var/lib/ic/data/ic-boundary-tls.crt"),
+            format!("--tls-pkey-path=/var/lib/ic/data/ic-boundary-tls.key"),
+            format!("--acme-credentials-path=/var/lib/ic/data/ic-boundary-acme.json"),
             format!("--disable-registry-replicator"),
+            format!("--local-store-path=/var/lib/ic/data/ic_registry_local_store"),
+            format!("--log-journald"),
+            format!("--metrics-addr=[::]:9324"),
         ];
 
         process
