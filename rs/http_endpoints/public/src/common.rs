@@ -59,39 +59,6 @@ pub(crate) fn make_plaintext_response(status: StatusCode, message: String) -> Re
     resp
 }
 
-/// Converts a user error into an HTTP response.
-///
-/// We need this conversion because we validate user requests twice:
-///
-///   1. Ingress filter checks user messages before including them in blocks
-///      so that we don't have to reach a consensus on payloads that we will
-///      throw away in the execution.
-///      We cannot put UserErrors produced at this stage in the state tree;
-///      We have to return them in the  HTTP body.
-///
-///   2. Once messages reach execution, we include UserErrors into the state tree.
-///      Users can fetch the details via the read_state endpoint.
-///
-/// make_response conversion applies the first case.
-pub(crate) fn make_response(user_error: UserError) -> Response<Body> {
-    let reject_response: CBOR = CBOR::Map(BTreeMap::from([
-        (
-            CBOR::Text("error_code".to_string()),
-            CBOR::Text(user_error.code().to_string()),
-        ),
-        (
-            CBOR::Text("reject_message".to_string()),
-            CBOR::Text(user_error.description().to_string()),
-        ),
-        (
-            CBOR::Text("reject_code".to_string()),
-            CBOR::Integer(user_error.reject_code() as i128),
-        ),
-    ]));
-
-    cbor_response(&reject_response).0
-}
-
 pub(crate) async fn map_box_error_to_response(err: BoxError) -> Response<Body> {
     if err.is::<Overloaded>() {
         make_plaintext_response(
@@ -162,6 +129,42 @@ where
             )
                 .into_response(),
         }
+    }
+}
+
+/// Converts a user error into an HTTP response.
+///
+/// We need this conversion because we validate user requests twice:
+///
+///   1. Ingress filter checks user messages before including them in blocks
+///      so that we don't have to reach a consensus on payloads that we will
+///      throw away in the execution.
+///      We cannot put UserErrors produced at this stage in the state tree;
+///      We have to return them in the  HTTP body.
+///
+///   2. Once messages reach execution, we include UserErrors into the state tree.
+///      Users can fetch the details via the read_state endpoint.
+///
+/// make_response conversion applies the first case.
+pub struct CborUserError(pub UserError);
+
+impl IntoResponse for CborUserError {
+    fn into_response(self) -> axum::response::Response {
+        let reject_response: CBOR = CBOR::Map(BTreeMap::from([
+            (
+                CBOR::Text("error_code".to_string()),
+                CBOR::Text(self.0.code().to_string()),
+            ),
+            (
+                CBOR::Text("reject_message".to_string()),
+                CBOR::Text(self.0.description().to_string()),
+            ),
+            (
+                CBOR::Text("reject_code".to_string()),
+                CBOR::Integer(self.0.reject_code() as i128),
+            ),
+        ]));
+        Cbor(reject_response).into_response()
     }
 }
 

@@ -216,7 +216,7 @@ fn new_call_service(
                     ingress_tx,
                 )
                 .with_logger(log.clone())
-                .build(),
+                .build_service(),
             ),
     );
     (ingress_filter_handle, call_service)
