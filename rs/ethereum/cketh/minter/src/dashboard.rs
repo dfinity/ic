@@ -117,7 +117,7 @@ impl DashboardTemplate {
             .collect();
         pending_transactions.extend(state.eth_transactions.sent_transactions_iter().flat_map(
             |(_nonce, ledger_burn_index, txs)| {
-                txs.iter().map(|tx| DashboardPendingTransaction {
+                txs.into_iter().map(|tx| DashboardPendingTransaction {
                     ledger_burn_index: *ledger_burn_index,
                     destination: tx.transaction().destination,
                     transaction_amount: tx.transaction().amount,
