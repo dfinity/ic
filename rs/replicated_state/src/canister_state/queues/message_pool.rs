@@ -12,8 +12,7 @@ use std::sync::Arc;
 use crate::canister_state::queues::REQUEST_LIFETIME;
 
 pub struct MessageIdTag;
-/// A value used as an opaque nonce to couple outgoing calls with their
-/// callbacks.
+/// A generated identifier for messages held in a `MessagePool`.
 pub type MessageId = Id<MessageIdTag, u64>;
 
 /// A pool of best-effort messages, with built-in support for time-based expiration
