@@ -15,8 +15,9 @@ use ic_icrc1_test_utils::{
     DEFAULT_TRANSFER_FEE,
 };
 use ic_icrc1_tokens_u256::U256;
-
+use ic_icrc_rosetta::common::constants::STATUS_COMPLETED;
 use ic_icrc_rosetta::common::types::Error;
+use ic_icrc_rosetta::common::types::OperationType;
 use ic_icrc_rosetta::common::utils::utils::icrc1_rosetta_block_to_rosetta_core_transaction;
 use ic_icrc_rosetta::common::utils::utils::{
     icrc1_operation_to_rosetta_core_operations, icrc1_rosetta_block_to_rosetta_core_block,
@@ -43,6 +44,7 @@ use proptest::strategy::Strategy;
 use proptest::test_runner::Config as TestRunnerConfig;
 use proptest::test_runner::TestRunner;
 use rosetta_core::identifiers::*;
+use rosetta_core::miscellaneous::OperationStatus;
 use rosetta_core::models::RosettaSupportedKeyPair;
 use rosetta_core::objects::*;
 use rosetta_core::request_types::*;
@@ -55,6 +57,7 @@ use std::{
     sync::Arc,
     time::{Duration, SystemTime},
 };
+use strum::IntoEnumIterator;
 use tokio::runtime::Runtime;
 
 pub mod common;
@@ -264,6 +267,32 @@ async fn test_network_list() {
     assert_eq!(network_list, vec![expected]);
 }
 
+#[tokio::test]
+async fn test_network_options() {
+    let env = RosettaTestingEnvironmentBuilder::new()
+        .with_offline_rosetta(true)
+        .build()
+        .await;
+    let network_options = env
+        .rosetta_client
+        .network_options(env.network_identifier.clone())
+        .await
+        .expect("Unable to call network_options");
+
+    assert_eq!(
+        network_options.allow.operation_statuses,
+        vec![OperationStatus::new("COMPLETED".to_string(), true)]
+    );
+    assert_eq!(
+        network_options.allow.operation_types,
+        OperationType::iter()
+            .map(|op| op.to_string())
+            .collect::<Vec<String>>()
+    );
+    assert_eq!(network_options.allow.errors.len(), 13);
+    assert!(network_options.allow.historical_balance_lookup);
+}
+
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(*NUM_TEST_CASES))]
     #[test]
@@ -356,7 +385,7 @@ proptest! {
         if !args_with_caller.is_empty(){
 
     for block in get_rosetta_blocks_from_icrc1_ledger(env.icrc1_agent,0,*MAX_BLOCKS_PER_REQUEST).await.into_iter(){
-        let expected_block_response = BlockResponse::new(
+        let mut expected_block_response = BlockResponse::new(
             Some(
                 icrc1_rosetta_block_to_rosetta_core_block(block.clone(), Currency {
                     symbol: env.icrc1_ledger_init_args.token_symbol.clone(),
@@ -366,6 +395,11 @@ proptest! {
                     ..Default::default()
                 }).unwrap(),
             ));
+            expected_block_response.block.iter_mut().for_each(|block| block.transactions.iter_mut().for_each(|tx| {
+                tx.operations.iter_mut().for_each(|op| {
+                    op.status = Some(STATUS_COMPLETED.to_string());
+                })
+            }));
 
         assert_eq!(hex::encode(block.clone().get_block_hash().clone()),expected_block_response.clone().block.unwrap().block_identifier.hash);
                 // Rosetta should be able to handle blockidentifieres with both the hash and the block index set
@@ -429,7 +463,7 @@ proptest! {
         if !args_with_caller.is_empty(){
 
     for block in get_rosetta_blocks_from_icrc1_ledger(env.icrc1_agent,0,*MAX_BLOCKS_PER_REQUEST).await.into_iter(){
-        let expected_block_transaction_response =   rosetta_core::response_types::BlockTransactionResponse {
+        let mut expected_block_transaction_response =   rosetta_core::response_types::BlockTransactionResponse {
             transaction: icrc1_rosetta_block_to_rosetta_core_transaction(block.clone(), Currency {
                 symbol: env.icrc1_ledger_init_args.token_symbol.clone(),
                 decimals: env.icrc1_ledger_init_args
@@ -437,6 +471,10 @@ proptest! {
                 .unwrap_or(DEFAULT_DECIMAL_PLACES) as u32,
                 ..Default::default()
             }).unwrap()};
+
+            expected_block_transaction_response.transaction.operations.iter_mut().for_each(|op| {
+                    op.status = Some(STATUS_COMPLETED.to_string());
+                });
 
         assert_eq!(hex::encode(block.clone().get_transaction_hash().clone()),expected_block_transaction_response.clone().transaction.transaction_identifier.hash);
 
