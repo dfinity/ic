@@ -118,15 +118,15 @@ impl OngoingStateSyncMetrics {
     }
 
     /// Utility to record metrics for download result.
-    pub fn record_chunk_download_result<T>(&self, res: &Result<Option<T>, DownloadChunkError>) {
+    pub fn record_chunk_download_result(&self, res: &Result<bool, DownloadChunkError>) {
         match res {
             // Received chunk
-            Ok(Some(_)) => {
+            Ok(true) => {
                 self.chunk_download_results_total
                     .with_label_values(&[CHUNK_DOWNLOAD_STATUS_SUCCESS])
                     .inc();
             }
-            Ok(None) => {
+            Ok(false) => {
                 self.chunk_download_results_total
                     .with_label_values(&[CHUNK_DOWNLOAD_STATUS_MORE_NEEDED])
                     .inc();

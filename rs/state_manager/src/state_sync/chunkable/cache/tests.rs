@@ -86,23 +86,9 @@ fn fake_loading(
     (state, manifest, fetch_chunks, state_sync_file_group)
 }
 
-/// Creates a fake DownloadState::Completed for an empty state.
+/// Creates a fake DownloadState::Complete for an empty state.
 fn fake_complete() -> DownloadState {
-    let manifest = Manifest::new(StateSyncVersion::V0, vec![], vec![]);
-    let meta_manifest = MetaManifest {
-        version: StateSyncVersion::V0,
-        sub_manifest_hashes: vec![],
-    };
-    let artifact = StateSyncMessage {
-        height: Height::new(0),
-        root_hash: CryptoHashOfState::from(CryptoHash(vec![0; 32])),
-        checkpoint_root: PathBuf::new(),
-        manifest,
-        meta_manifest: Arc::new(meta_manifest),
-        state_sync_file_group: Default::default(),
-        malicious_flags: Default::default(),
-    };
-    DownloadState::Complete(Box::new(artifact))
+    DownloadState::Complete
 }
 
 fn ungroup_fetch_chunks(

@@ -45,7 +45,7 @@ pub type ChunkId = Id<ChunkIdTag, u32>;
 pub trait Chunkable<T> {
     fn chunks_to_download(&self) -> Box<dyn Iterator<Item = ChunkId>>;
     fn add_chunk(&mut self, chunk_id: ChunkId, chunk: Chunk) -> Result<(), AddChunkError>;
-    fn completed(&self) -> Option<T>;
+    fn completed(&self) -> bool;
 }
 
 pub trait StateSyncClient: Send + Sync {
