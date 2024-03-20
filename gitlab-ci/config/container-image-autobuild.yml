@@ -90,8 +90,8 @@ container-autobuild:
       popd
 
       # update github CI docker image
-      pushd .github/workflows
-      sed -i -E "s|$IMG_BAZEL_DOCKER_HUB:[^\"]{5,}|$IMG_BAZEL_DOCKER_HUB_FULL|g" -- *
+      pushd .github
+      sed -i -E "s|$IMG_BAZEL_DOCKER_HUB:[^\"]{5,}|$IMG_BAZEL_DOCKER_HUB_FULL|g" -- workflow*/*
       popd
 
       # commit and push the change upstream
