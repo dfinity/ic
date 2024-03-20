@@ -14,6 +14,7 @@ MACRO_DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     "//packages/icrc-ledger-types",
+    "//rs/nervous_system/common",
     "//rs/types/base_types",
     "@crate_index//:candid",
     "@crate_index//:lazy_static",

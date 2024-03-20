@@ -795,7 +795,7 @@ impl TokenProposalAction for TransferSnsTreasuryFunds {
     }
 
     fn recent_amount_total_upper_bound_tokens(valuation: &Valuation) -> Result<Decimal, String> {
-        transfer_sns_treasury_funds_7_day_total_upper_bound_tokens(valuation)
+        transfer_sns_treasury_funds_7_day_total_upper_bound_tokens(*valuation)
             // Err is most likely a bug.
             .map_err(|treasury_limit_error| {
                 format!("Unable to validate amount: {:?}", treasury_limit_error,)
@@ -960,7 +960,7 @@ impl TokenProposalAction for MintSnsTokens {
     }
 
     fn recent_amount_total_upper_bound_tokens(valuation: &Valuation) -> Result<Decimal, String> {
-        mint_sns_tokens_7_day_total_upper_bound_tokens(valuation)
+        mint_sns_tokens_7_day_total_upper_bound_tokens(*valuation)
             // Err is most likely a bug.
             .map_err(|treasury_limit_error| {
                 format!("Unable to validate amount: {:?}", treasury_limit_error,)
@@ -2121,7 +2121,7 @@ impl ProposalRewardStatus {
 
 pub(crate) fn transfer_sns_treasury_funds_amount_is_small_enough_at_execution_time_or_err<'a>(
     transfer: &TransferSnsTreasuryFunds,
-    valuation: &Valuation,
+    valuation: Valuation,
     proposals: impl Iterator<Item = &'a ProposalData>,
     now_timestamp_seconds: u64,
 ) -> Result<(), GovernanceError> {

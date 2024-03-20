@@ -2569,7 +2569,7 @@ impl Governance {
     ) -> Result<(), GovernanceError> {
         transfer_sns_treasury_funds_amount_is_small_enough_at_execution_time_or_err(
             transfer,
-            &valuation?,
+            valuation?,
             self.proto.proposals.values(),
             self.env.now(),
         )?;

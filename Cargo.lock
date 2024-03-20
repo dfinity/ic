@@ -10729,6 +10729,7 @@ version = "0.0.1"
 dependencies = [
  "candid",
  "ic-base-types",
+ "ic-nervous-system-common",
  "ic-sns-governance-token-valuation",
  "icrc-ledger-types",
  "lazy_static",
