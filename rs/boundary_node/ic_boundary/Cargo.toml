@@ -74,6 +74,7 @@ rcgen = { workspace = true }
 regex = "1.3.9"
 reqwest = { workspace = true }
 rustls = { workspace = true }
+rustls-pemfile = "^1"
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }

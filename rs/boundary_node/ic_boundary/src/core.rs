@@ -65,7 +65,10 @@ use {crate::socket::UnixServerExt, std::os::unix::fs::PermissionsExt};
 
 #[cfg(feature = "tls")]
 use {
-    crate::tls::{acme_challenge, prepare_tls, redirect_to_https},
+    crate::{
+        socket::listen_tcp_backlog,
+        tls::{acme_challenge, prepare_tls, redirect_to_https},
+    },
     axum_server::Server,
 };
 
@@ -231,10 +234,10 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
 
     // HTTPS
     #[cfg(feature = "tls")]
-    let srvs_https = Server::bind(SocketAddr::new(
-        Ipv6Addr::UNSPECIFIED.into(),
-        cli.listen.https_port,
-    ))
+    let srvs_https = Server::from_tcp(listen_tcp_backlog(
+        SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), cli.listen.https_port),
+        cli.listen.backlog,
+    )?)
     .acceptor(tls_acceptor.clone())
     .serve(
         routers_https

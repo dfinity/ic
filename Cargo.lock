@@ -5320,6 +5320,7 @@ dependencies = [
  "regex",
  "reqwest",
  "rustls",
+ "rustls-pemfile 1.0.4",
  "serde",
  "serde_bytes",
  "serde_cbor",
