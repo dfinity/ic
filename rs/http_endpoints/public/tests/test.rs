@@ -240,7 +240,7 @@ fn test_unauthorized_query() {
         .unwrap();
     let expected_resp = AgentError::HttpError(HttpErrorPayload {
         status: 400,
-        content_type: Some("text/plain".to_string()),
+        content_type: Some("text/plain; charset=utf-8".to_string()),
         content: format!(
             "Specified CanisterId {} does not match effective canister id in URL {}",
             canister1, canister2
