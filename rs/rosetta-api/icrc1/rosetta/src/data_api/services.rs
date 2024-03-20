@@ -1,5 +1,6 @@
 use crate::common::constants::DEFAULT_BLOCKCHAIN;
 use crate::common::constants::MAX_TRANSACTIONS_PER_SEARCH_TRANSACTIONS_REQUEST;
+use crate::common::constants::STATUS_COMPLETED;
 use crate::common::storage::types::IcrcOperation;
 use crate::common::storage::types::RosettaBlock;
 use crate::common::types::OperationType;
@@ -18,9 +19,11 @@ use candid::Principal;
 use ic_ledger_core::tokens::Zero;
 use icrc_ledger_types::icrc1::account::Account;
 use num_bigint::BigUint;
+use rosetta_core::miscellaneous::OperationStatus;
 use rosetta_core::request_types::SearchTransactionsRequest;
 use rosetta_core::response_types::SearchTransactionsResponse;
 use rosetta_core::{identifiers::*, miscellaneous::Version, objects::*, response_types::*};
+use strum::IntoEnumIterator;
 
 pub fn network_list(ledger_id: &Principal) -> NetworkListResponse {
     NetworkListResponse {
@@ -40,13 +43,30 @@ pub fn network_options(ledger_id: &Principal) -> NetworkOptionsResponse {
             metadata: None,
         },
         allow: Allow {
-            operation_statuses: vec![],
-            operation_types: vec![],
-            errors: vec![Error::invalid_network_id(&format!(
-                "Invalid NetworkIdentifier. Expected Identifier: {:?} ",
-                NetworkIdentifier::new(DEFAULT_BLOCKCHAIN.to_owned(), ledger_id.to_string())
-            ))
-            .into()],
+            operation_statuses:vec![OperationStatus::new("COMPLETED".to_string(), true)],
+            operation_types: OperationType::iter().map(|op| op.to_string()).collect(),
+            errors: vec![
+                Error::invalid_network_id(&format!(
+                    "Invalid NetworkIdentifier. Expected Identifier: {:?} ",
+                    NetworkIdentifier::new(DEFAULT_BLOCKCHAIN.to_owned(), ledger_id.to_string())
+                ))
+                .into(),
+                Error::unable_to_find_block(&"Unable to find block".to_owned()).into(),
+                Error::invalid_block_identifier(&"Unable to find block".to_owned()).into(),
+                Error::failed_to_build_block_response(
+                    &"Faild to create a response for fetching blocks.".to_owned(),
+                )
+                .into(),
+                Error::invalid_transaction_identifier().into(),
+                Error::mempool_transaction_missing().into(),
+                Error::parsing_unsuccessful(&"Failed to parse in between types.".to_owned()).into(),
+                Error::unsupported_operation(OperationType::Transfer).into(),
+                Error::ledger_communication_unsuccessful(&"Rosetta could not communicate with the ICRC-1 Ledger successfully.".to_owned()).into(),
+                Error::unable_to_find_account_balance(&"The balance for the given account could not be fetched.".to_owned()).into(),
+                Error::request_processing_error(&"The input of the user resulted in an error while trying to process the request.".to_owned()).into(),
+                Error::processing_construction_failed(&"An error while processing an construction api endpoint occured.".to_owned()).into(),
+                Error::invalid_metadata(&"The metadata provided by the user is invalid.".to_owned()).into(),
+            ],
             historical_balance_lookup: true,
             timestamp_start_index: None,
             call_methods: vec![],
@@ -111,11 +131,13 @@ pub fn block_transaction(
         decimals: decimals.into(),
         ..Default::default()
     };
+    let mut transaction = icrc1_rosetta_block_to_rosetta_core_transaction(rosetta_block, currency)
+        .map_err(|err| Error::failed_to_build_block_response(&err))?;
+    transaction.operations.iter_mut().for_each(|op| {
+        op.status = Some(STATUS_COMPLETED.to_string());
+    });
 
-    Ok(rosetta_core::response_types::BlockTransactionResponse {
-        transaction: icrc1_rosetta_block_to_rosetta_core_transaction(rosetta_block, currency)
-            .map_err(|e| Error::failed_to_build_block_response(&e))?,
-    })
+    Ok(rosetta_core::response_types::BlockTransactionResponse { transaction })
 }
 
 pub fn block(
@@ -133,10 +155,15 @@ pub fn block(
         ..Default::default()
     };
 
-    Ok(BlockResponse::new(Some(
-        icrc1_rosetta_block_to_rosetta_core_block(rosetta_block, currency)
-            .map_err(|err| Error::parsing_unsuccessful(&err))?,
-    )))
+    let mut block = icrc1_rosetta_block_to_rosetta_core_block(rosetta_block, currency)
+        .map_err(|err| Error::parsing_unsuccessful(&err))?;
+    block.transactions.iter_mut().for_each(|tx| {
+        tx.operations.iter_mut().for_each(|op| {
+            op.status = Some(STATUS_COMPLETED.to_string());
+        });
+    });
+
+    Ok(BlockResponse::new(Some(block)))
 }
 
 pub fn account_balance(
@@ -395,6 +422,12 @@ pub fn search_transactions(
         start = start.saturating_sub(limit);
     }
 
+    transactions.iter_mut().for_each(|tx| {
+        tx.transaction.operations.iter_mut().for_each(|op| {
+            op.status = Some(STATUS_COMPLETED.to_string());
+        })
+    });
+
     Ok(SearchTransactionsResponse {
         total_count: transactions.len() as i64,
         transactions,
@@ -547,7 +580,7 @@ mod test {
 
                         // If the block identifier index is valid the service should return the block
                         let block_res = block(&storage_client_memory,&block_identifier,metadata.decimals,metadata.symbol.clone()).unwrap();
-                        let expected_block_res = BlockResponse {
+                        let mut expected_block_res = BlockResponse {
                             block: Some(
                                 icrc1_rosetta_block_to_rosetta_core_block(rosetta_blocks[valid_block_idx as usize].clone(), Currency {
                                     symbol: metadata.symbol.clone(),
@@ -556,6 +589,11 @@ mod test {
                                 }).unwrap(),
                             ),
                             other_transactions:None};
+                            expected_block_res.block.iter_mut().for_each(|block| block.transactions.iter_mut().for_each(|tx| {
+                                tx.operations.iter_mut().for_each(|op| {
+                                    op.status = Some(STATUS_COMPLETED.to_string());
+                                })
+                            }));
 
                             compare_blocks(block_res.block.unwrap(),expected_block_res.clone().block.unwrap());
 
@@ -648,11 +686,14 @@ mod test {
 
                     // If the block identifier index and hash are valid the service should return the block
                     let block_transaction_res = block_transaction(&storage_client_memory,&block_identifier,&transaction_identifier,metadata.decimals,metadata.symbol.clone()).unwrap();
-                    let expected_block_transaction_res = rosetta_core::response_types::BlockTransactionResponse { transaction: icrc1_rosetta_block_to_rosetta_core_transaction(rosetta_blocks[valid_block_idx as usize].clone(), Currency {
+                    let mut expected_block_transaction_res = rosetta_core::response_types::BlockTransactionResponse { transaction: icrc1_rosetta_block_to_rosetta_core_transaction(rosetta_blocks[valid_block_idx as usize].clone(), Currency {
                         symbol: metadata.symbol.clone(),
                         decimals: metadata.decimals.into(),
                         ..Default::default()
                     }).unwrap() };
+                    expected_block_transaction_res.transaction.operations.iter_mut().for_each(|op| {
+                            op.status = Some(STATUS_COMPLETED.to_string());
+                        });
 
                     // Sort the related operations so the equality check passes
                     compare_transaction(block_transaction_res.transaction.clone(),expected_block_transaction_res.transaction.clone());
@@ -776,8 +817,7 @@ mod test {
                             // The total count should be the number of transactions with the same transaction identifier
                             assert_eq!(result.total_count, num_of_transactions_with_hash as i64);
                             // If we provide a transaction identifier the service should return the transactions that match the transaction identifier
-                            compare_transaction(
-                                result.transactions[0].transaction.clone(),
+                            let mut expected_transaction =
                                 icrc1_rosetta_block_to_rosetta_core_transaction(
                                     rosetta_block.clone(),
                                     Currency {
@@ -786,7 +826,13 @@ mod test {
                                         metadata: None,
                                     },
                                 )
-                                .unwrap(),
+                                .unwrap();
+                            expected_transaction.operations.iter_mut().for_each(|op| {
+                                op.status = Some(STATUS_COMPLETED.to_string());
+                            });
+                            compare_transaction(
+                                result.transactions[0].transaction.clone(),
+                                expected_transaction,
                             );
                             // If the transaction identifier is provided the next offset should be None
                             assert_eq!(result.next_offset, None);

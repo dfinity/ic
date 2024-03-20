@@ -366,6 +366,20 @@ impl RosettaClient {
         .await
     }
 
+    pub async fn network_options(
+        &self,
+        network_identifier: NetworkIdentifier,
+    ) -> Result<NetworkOptionsResponse, Error> {
+        self.call_endpoint(
+            "/network/options",
+            &NetworkRequest {
+                network_identifier,
+                metadata: None,
+            },
+        )
+        .await
+    }
+
     pub async fn block(
         &self,
         network_identifier: NetworkIdentifier,
