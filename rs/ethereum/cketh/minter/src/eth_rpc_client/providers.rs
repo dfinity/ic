@@ -1,7 +1,7 @@
 pub(crate) const MAINNET_PROVIDERS: [RpcNodeProvider; 3] = [
     RpcNodeProvider::Ethereum(EthereumProvider::Ankr),
     RpcNodeProvider::Ethereum(EthereumProvider::PublicNode),
-    RpcNodeProvider::Ethereum(EthereumProvider::Cloudflare),
+    RpcNodeProvider::Ethereum(EthereumProvider::LlamaNodes),
 ];
 
 pub(crate) const SEPOLIA_PROVIDERS: [RpcNodeProvider; 2] = [
@@ -30,8 +30,8 @@ pub(crate) enum EthereumProvider {
     Ankr,
     // https://publicnode.com/
     PublicNode,
-    // https://developers.cloudflare.com/web3/ethereum-gateway/
-    Cloudflare,
+    // https://llamanodes.com/
+    LlamaNodes,
 }
 
 impl EthereumProvider {
@@ -39,7 +39,7 @@ impl EthereumProvider {
         match self {
             EthereumProvider::Ankr => "https://rpc.ankr.com/eth",
             EthereumProvider::PublicNode => "https://ethereum.publicnode.com",
-            EthereumProvider::Cloudflare => "https://cloudflare-eth.com",
+            EthereumProvider::LlamaNodes => "https://eth.llamarpc.com",
         }
     }
 }

@@ -29,7 +29,7 @@ mod eth_rpc_client {
             &[
                 RpcNodeProvider::Ethereum(EthereumProvider::Ankr),
                 RpcNodeProvider::Ethereum(EthereumProvider::PublicNode),
-                RpcNodeProvider::Ethereum(EthereumProvider::Cloudflare)
+                RpcNodeProvider::Ethereum(EthereumProvider::LlamaNodes)
             ]
         );
     }
@@ -40,7 +40,7 @@ mod multi_call_results {
 
     const ANKR: RpcNodeProvider = RpcNodeProvider::Ethereum(EthereumProvider::Ankr);
     const PUBLIC_NODE: RpcNodeProvider = RpcNodeProvider::Ethereum(EthereumProvider::PublicNode);
-    const CLOUDFLARE: RpcNodeProvider = RpcNodeProvider::Ethereum(EthereumProvider::Cloudflare);
+    const LLAMA_NODES: RpcNodeProvider = RpcNodeProvider::Ethereum(EthereumProvider::LlamaNodes);
 
     mod reduce_with_equality {
         use crate::eth_rpc::{HttpOutcallError, JsonRpcResult};
@@ -228,7 +228,7 @@ mod multi_call_results {
 
     mod reduce_with_stable_majority_by_key {
         use crate::eth_rpc::{FeeHistory, JsonRpcResult};
-        use crate::eth_rpc_client::tests::multi_call_results::{ANKR, CLOUDFLARE, PUBLIC_NODE};
+        use crate::eth_rpc_client::tests::multi_call_results::{ANKR, LLAMA_NODES, PUBLIC_NODE};
         use crate::eth_rpc_client::MultiCallError::ConsistentJsonRpcError;
         use crate::eth_rpc_client::{MultiCallError, MultiCallResults};
         use crate::numeric::{BlockNumber, WeiPerGas};
@@ -239,7 +239,7 @@ mod multi_call_results {
                 MultiCallResults::from_non_empty_iter(vec![
                     (ANKR, Ok(JsonRpcResult::Result(fee_history()))),
                     (PUBLIC_NODE, Ok(JsonRpcResult::Result(fee_history()))),
-                    (CLOUDFLARE, Ok(JsonRpcResult::Result(fee_history()))),
+                    (LLAMA_NODES, Ok(JsonRpcResult::Result(fee_history()))),
                 ]);
 
             let reduced =
@@ -259,13 +259,13 @@ mod multi_call_results {
                     fees[index_majority].oldest_block
                 );
                 let majority_fee = fees[index_majority].clone();
-                let [ankr_fee_history, cloudflare_fee_history, public_node_fee_history] = fees;
+                let [ankr_fee_history, llama_nodes_fee_history, public_node_fee_history] = fees;
                 let results: MultiCallResults<FeeHistory> =
                     MultiCallResults::from_non_empty_iter(vec![
                         (ANKR, Ok(JsonRpcResult::Result(ankr_fee_history))),
                         (
-                            CLOUDFLARE,
-                            Ok(JsonRpcResult::Result(cloudflare_fee_history)),
+                            LLAMA_NODES,
+                            Ok(JsonRpcResult::Result(llama_nodes_fee_history)),
                         ),
                         (
                             PUBLIC_NODE,
@@ -286,7 +286,7 @@ mod multi_call_results {
                 oldest_block: BlockNumber::new(0x10f73fd),
                 ..fee_history()
             };
-            let cloudflare_fee_history = FeeHistory {
+            let llama_nodes_fee_history = FeeHistory {
                 oldest_block: BlockNumber::new(0x10f73fc),
                 ..fee_history()
             };
@@ -325,7 +325,7 @@ mod multi_call_results {
                     (ANKR, Ok(JsonRpcResult::Result(ankr_fee_history.clone()))),
                     (
                         PUBLIC_NODE,
-                        Ok(JsonRpcResult::Result(cloudflare_fee_history.clone())),
+                        Ok(JsonRpcResult::Result(llama_nodes_fee_history.clone())),
                     ),
                 ]);
 
@@ -340,7 +340,7 @@ mod multi_call_results {
                         (ANKR, Ok(JsonRpcResult::Result(ankr_fee_history))),
                         (
                             PUBLIC_NODE,
-                            Ok(JsonRpcResult::Result(cloudflare_fee_history))
+                            Ok(JsonRpcResult::Result(llama_nodes_fee_history))
                         ),
                     ])
                 ))
@@ -471,7 +471,7 @@ mod multi_call_results {
                 MultiCallError::InconsistentResults(MultiCallResults::from_non_empty_iter(vec![
                     (ANKR, Ok(JsonRpcResult::Result(1))),
                     (
-                        CLOUDFLARE,
+                        LLAMA_NODES,
                         Ok(JsonRpcResult::Error {
                             code: -32700,
                             message: "error".to_string(),
@@ -485,7 +485,7 @@ mod multi_call_results {
                 MultiCallError::InconsistentResults(MultiCallResults::from_non_empty_iter(vec![
                     (ANKR, Ok(JsonRpcResult::Result(1))),
                     (
-                        CLOUDFLARE,
+                        LLAMA_NODES,
                         Err(HttpOutcallError::IcError {
                             code: RejectionCode::SysTransient,
                             message: "message".to_string(),
