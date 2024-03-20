@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -8,18 +8,19 @@ rust_library(
     crate_name = "ic_crypto_utils_threshold_sig_der",
     version = "0.9.0",
     deps = [
-        "//rs/crypto/internal/crypto_lib/threshold_sig/bls12_381",
-        "//rs/crypto/internal/crypto_lib/threshold_sig/bls12_381/der_utils",
         "//rs/crypto/internal/crypto_lib/types",
         "//rs/types/types",
         "@crate_index//:base64",
+        "@crate_index//:simple_asn1",
     ],
 )
 
-rust_test(
-    name = "threshold_sig_der_test",
-    crate = ":threshold_sig_der",
+rust_test_suite(
+    name = "threshold_sig_der_integration",
+    srcs = glob(["tests/**/*.rs"]),
     deps = [
+        ":threshold_sig_der",
+        "//rs/crypto/internal/crypto_lib/types",
         "@crate_index//:hex",
         "@crate_index//:tempfile",
     ],

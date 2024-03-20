@@ -6780,7 +6780,6 @@ dependencies = [
  "hex",
  "ic-crypto-internal-bls12-381-type",
  "ic-crypto-internal-seed",
- "ic-crypto-internal-threshold-sig-bls12381-der",
  "ic-crypto-internal-types",
  "ic-crypto-secrets-containers",
  "ic-crypto-sha2",
@@ -6798,13 +6797,6 @@ dependencies = [
  "strum_macros 0.25.3",
  "subtle",
  "zeroize",
-]
-
-[[package]]
-name = "ic-crypto-internal-threshold-sig-bls12381-der"
-version = "0.9.0"
-dependencies = [
- "simple_asn1",
 ]
 
 [[package]]
@@ -7375,10 +7367,9 @@ version = "0.9.0"
 dependencies = [
  "base64 0.13.1",
  "hex",
- "ic-crypto-internal-threshold-sig-bls12381",
- "ic-crypto-internal-threshold-sig-bls12381-der",
  "ic-crypto-internal-types",
  "ic-types",
+ "simple_asn1",
  "tempfile",
 ]
 
