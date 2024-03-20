@@ -4,7 +4,7 @@ pub mod types;
 use super::StateManagerImpl;
 use crate::{
     manifest::build_file_group_chunks,
-    state_sync::types::{FileGroupChunks, StateSyncMessage},
+    state_sync::types::{FileGroupChunks, Manifest, MetaManifest, StateSyncMessage},
     StateSyncRefs, EXTRA_CHECKPOINTS_TO_KEEP, NUMBER_OF_CHECKPOINT_THREADS,
 };
 use ic_interfaces::p2p::state_sync::{
@@ -66,9 +66,14 @@ impl StateSync {
 
     /// Loads the synced checkpoint and gets the corresponding replicated state.
     /// Delivers both to the state manager and updates the internals of the state manager.
-    fn deliver_state_sync(&self, message: StateSyncMessage) {
-        let height = message.height;
-        info!(self.log, "Received state {} at height", message.height);
+    fn deliver_state_sync(
+        &self,
+        height: Height,
+        root_hash: CryptoHashOfState,
+        manifest: Manifest,
+        meta_manifest: Arc<MetaManifest>,
+    ) {
+        info!(self.log, "Received state {} at height", height);
         let ro_layout = self
             .state_manager
             .state_layout
@@ -82,13 +87,8 @@ impl StateSync {
         )
         .expect("failed to recover checkpoint");
 
-        self.state_manager.on_synced_checkpoint(
-            state,
-            height,
-            message.manifest,
-            message.meta_manifest,
-            message.root_hash,
-        );
+        self.state_manager
+            .on_synced_checkpoint(state, height, manifest, meta_manifest, root_hash);
 
         let height = self.state_manager.states.read().last_advertised;
         let ids = self.get_all_validated_ids_by_height(height);

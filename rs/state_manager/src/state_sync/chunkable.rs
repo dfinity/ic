@@ -64,9 +64,8 @@ enum DownloadState {
         /// The manifest chunks are not part of `fetch_chunks` because they are fetched in the `Prep` phase.
         fetch_chunks: HashSet<usize>,
     },
-    /// Successfully completed and returned the artifact to P2P, nothing else to
-    /// do.
-    Complete(Box<StateSyncMessage>),
+    /// Successfully completed and delivered the state sync, nothing else to do.
+    Complete,
 }
 
 /// An implementation of Chunkable trait that represents a (on-disk) state under
@@ -146,7 +145,7 @@ impl Drop for IncompleteState {
                     .remaining
                     .sub(dropped_chunks as i64);
             }
-            DownloadState::Complete(_) => {
+            DownloadState::Complete => {
                 // state sync duration already recorded earlier in make_checkpoint
             }
         }
@@ -157,7 +156,7 @@ impl Drop for IncompleteState {
             DownloadState::Blank => "aborted before receiving any chunks",
             DownloadState::Prep { .. } => "aborted before receiving the entire manifest",
             DownloadState::Loading { .. } => "aborted before receiving all the chunks",
-            DownloadState::Complete(_) => "completed successfully",
+            DownloadState::Complete => "completed successfully",
         };
 
         info!(self.log, "State sync @{} {}", self.height, description);
@@ -778,30 +777,6 @@ impl IncompleteState {
         metrics.remaining.sub(1);
     }
 
-    fn build_artifact(
-        state_layout: &StateLayout,
-        height: Height,
-        root_hash: CryptoHashOfState,
-        manifest: &Manifest,
-        meta_manifest: &MetaManifest,
-    ) -> StateSyncMessage {
-        StateSyncMessage {
-            height,
-            root_hash,
-            checkpoint_root: state_layout
-                .checkpoint(height)
-                .unwrap()
-                .raw_path()
-                .to_path_buf(),
-            meta_manifest: Arc::new(meta_manifest.clone()),
-            manifest: manifest.clone(),
-            // `state_sync_file_group` and `checkpoint_root` are not included in the integrity hash of this artifact.
-            // Therefore it is OK to pass a default value here as it is only used when fetching chunks.
-            state_sync_file_group: Default::default(),
-            malicious_flags: Default::default(),
-        }
-    }
-
     fn make_checkpoint(
         log: &ReplicaLogger,
         metrics: &StateManagerMetrics,
@@ -1218,7 +1193,7 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                     .collect();
                 Box::new(ids.into_iter())
             }
-            DownloadState::Complete(_) => Box::new(std::iter::empty()),
+            DownloadState::Complete => Box::new(std::iter::empty()),
         }
     }
 
@@ -1228,7 +1203,7 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
         let ix = chunk_id.get();
         let payload = &chunk;
         match &mut self.state {
-            DownloadState::Complete(_) => {
+            DownloadState::Complete => {
                 debug!(
                     self.log,
                     "Received chunk {} on completed state {}", chunk_id, self.height
@@ -1395,16 +1370,13 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                             Arc::clone(&self.fd_factory),
                         );
 
-                        let artifact = Self::build_artifact(
-                            &self.state_layout,
+                        self.state_sync.deliver_state_sync(
                             self.height,
                             self.root_hash.clone(),
-                            &manifest,
-                            &meta_manifest,
+                            manifest.clone(),
+                            Arc::new(meta_manifest.clone()),
                         );
-
-                        self.state_sync.deliver_state_sync(artifact.clone());
-                        self.state = DownloadState::Complete(Box::new(artifact.clone()));
+                        self.state = DownloadState::Complete;
                         self.state_sync_refs
                             .cache
                             .write()
@@ -1577,16 +1549,13 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                         Arc::clone(&self.fd_factory),
                     );
 
-                    let artifact = Self::build_artifact(
-                        &self.state_layout,
+                    self.state_sync.deliver_state_sync(
                         self.height,
                         self.root_hash.clone(),
-                        manifest,
-                        meta_manifest,
+                        manifest.clone(),
+                        Arc::new(meta_manifest.clone()),
                     );
-
-                    self.state_sync.deliver_state_sync(artifact.clone());
-                    self.state = DownloadState::Complete(Box::new(artifact));
+                    self.state = DownloadState::Complete;
                     self.state_sync_refs
                         .cache
                         .write()
@@ -1604,10 +1573,7 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
         }
     }
 
-    fn completed(&self) -> Option<StateSyncMessage> {
-        if let DownloadState::Complete(state) = &self.state {
-            return Some(*state.clone());
-        }
-        None
+    fn completed(&self) -> bool {
+        matches!(self.state, DownloadState::Complete)
     }
 }

@@ -1260,8 +1260,7 @@ pub(crate) fn compute_bundled_manifest(manifest: Manifest) -> BundledManifest {
     }
 }
 
-// This method will be used when replicas start fetching meta-manifest in future versions.
-#[allow(dead_code)]
+/// Checks that the hash of the meta-manifest matches the expected root hash.
 pub fn validate_meta_manifest(
     meta_manifest: &MetaManifest,
     root_hash: &CryptoHashOfState,

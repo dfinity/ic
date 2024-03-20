@@ -1,7 +1,6 @@
 use std::{
     collections::{hash_map::DefaultHasher, BTreeMap, HashSet},
     hash::{Hash, Hasher},
-    path::PathBuf,
     sync::{
         atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc, Mutex, MutexGuard,
@@ -17,11 +16,8 @@ use ic_memory_transport::TransportRouter;
 use ic_metrics::MetricsRegistry;
 use ic_p2p_test_utils::mocks::{MockChunkable, MockStateSync};
 use ic_quic_transport::Shutdown;
-use ic_state_manager::state_sync::types::{Manifest, MetaManifest, StateSyncMessage};
-use ic_types::{
-    crypto::CryptoHash, state_sync::StateSyncVersion, CryptoHashOfState, Height, NodeId,
-    PrincipalId,
-};
+use ic_state_manager::state_sync::types::StateSyncMessage;
+use ic_types::{crypto::CryptoHash, Height, NodeId, PrincipalId};
 use tokio::runtime::Handle;
 
 const META_MANIFEST_ID: u32 = u32::MAX - 1;
@@ -302,12 +298,8 @@ impl Chunkable<StateSyncMessage> for FakeChunkable {
         Ok(())
     }
 
-    fn completed(&self) -> Option<StateSyncMessage> {
-        if self.is_completed {
-            Some(state_sync_artifact(self.syncing_state.clone()))
-        } else {
-            None
-        }
+    fn completed(&self) -> bool {
+        self.is_completed
     }
 }
 
@@ -347,7 +339,7 @@ impl Chunkable<StateSyncMessage> for SharableMockChunkable {
         self.mock.lock().unwrap().add_chunk(chunk_id, chunk)
     }
 
-    fn completed(&self) -> Option<StateSyncMessage> {
+    fn completed(&self) -> bool {
         self.mock.lock().unwrap().completed()
     }
 }
@@ -414,24 +406,6 @@ pub fn latency_50ms_throughput_300mbits() -> (Duration, usize) {
 /// Returns tuple of link latency and capacity in bytes for the described link
 pub fn latency_30ms_throughput_1000mbits() -> (Duration, usize) {
     (Duration::from_millis(30), 3_750_000)
-}
-
-fn state_sync_artifact(id: StateSyncArtifactId) -> StateSyncMessage {
-    let manifest = Manifest::new(StateSyncVersion::V0, vec![], vec![]);
-    let meta_manifest = MetaManifest {
-        version: StateSyncVersion::V0,
-        sub_manifest_hashes: vec![],
-    };
-
-    StateSyncMessage {
-        height: id.height,
-        root_hash: CryptoHashOfState::from(id.hash),
-        checkpoint_root: PathBuf::new(),
-        manifest,
-        meta_manifest: Arc::new(meta_manifest),
-        state_sync_file_group: Default::default(),
-        malicious_flags: Default::default(),
-    }
 }
 
 pub fn create_node(

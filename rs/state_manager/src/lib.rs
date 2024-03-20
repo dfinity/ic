@@ -579,8 +579,6 @@ type CertificationsMetadata = BTreeMap<Height, CertificationMetadata>;
 pub(crate) struct BundledManifest {
     root_hash: CryptoHashOfState,
     manifest: Manifest,
-    // `meta_manifest` will be used during state sync in future replica versions.
-    #[allow(dead_code)]
     meta_manifest: Arc<MetaManifest>,
 }
 
@@ -607,8 +605,7 @@ impl StateMetadata {
             .as_ref()
             .map(|bundled_manifest| &bundled_manifest.manifest)
     }
-    // `meta_manifest` will be used during state sync in future replica versions.
-    #[allow(dead_code)]
+
     pub fn meta_manifest(&self) -> Option<Arc<MetaManifest>> {
         self.bundled_manifest
             .as_ref()
