@@ -4,10 +4,12 @@ use std::{
     path::Path,
 };
 
+#[cfg(feature = "tls")]
+use anyhow::Error;
+
 use axum::extract::connect_info::Connected;
 use futures_util::ready;
-use hyper::server::accept::Accept;
-use hyper::server::{Builder, Server};
+use hyper::server::{accept::Accept, Builder, Server};
 use std::{
     pin::Pin,
     task::{Context, Poll},
@@ -19,7 +21,6 @@ const DEFAULT_IP_ADDR: IpAddr = IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0));
 const DEFAULT_SOCK_ADDR: SocketAddr = SocketAddr::new(DEFAULT_IP_ADDR, 0);
 
 // Custom extractor of ConnectInfo for our Tcp listener, default does not work with it
-// TODO support TLS also
 #[derive(Clone)]
 pub struct TcpConnectInfo(pub SocketAddr);
 
@@ -83,7 +84,7 @@ impl Accept for SocketTcp {
     }
 }
 
-// Convenience method for constructing a Hyper Server listening on a Unix socket.
+// Convenience methods for constructing a Hyper Server listening on TCP/Unix sockets with a backlog set
 pub trait UnixServerExt {
     fn bind_unix(path: impl AsRef<Path>, backlog: u32) -> Result<Builder<SocketUnix>, io::Error>;
 }
@@ -104,4 +105,19 @@ impl TcpServerExt for Server<SocketTcp, ()> {
         let incoming = SocketTcp::bind(addr, backlog)?;
         Ok(Server::builder(incoming))
     }
+}
+
+#[cfg(feature = "tls")]
+pub fn listen_tcp_backlog(addr: SocketAddr, backlog: u32) -> Result<std::net::TcpListener, Error> {
+    // Create tokio TcpListener that can set the backlog
+    let socket = TcpSocket::new_v6()?;
+    socket.bind(addr)?;
+    let listener = socket.listen(backlog)?;
+
+    // Turn it into a std TcpListener that axum_server can consume
+    let listener = listener.into_std()?;
+    // It's returned with non-blocking mode on, disable it
+    listener.set_nonblocking(false)?;
+
+    Ok(listener)
 }
