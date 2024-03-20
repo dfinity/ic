@@ -195,18 +195,6 @@ RUN mkdir -p /var/www/html && chown www-data:www-data /var/www/html
 COPY var/www/html /var/www/html
 RUN chmod 0644 /var/www/html/*
 
-# Install cgi-scripts
-RUN mkdir -p /var/www/cgi-bin && \
-    chown www-data:www-data /var/www/cgi-bin
-COPY var/www/cgi-bin/* /var/www/cgi-bin/
-RUN mkdir -p /var/www/cgi-bin/artifacts && \
-    mkdir -p /var/www/cgi-bin/artifacts/certs && \
-    chown www-data:www-data /var/www/cgi-bin/artifacts && \
-    chown www-data:www-data /var/www/cgi-bin/artifacts/certs && \
-    touch /var/www/cgi-bin/cgi.log && \
-    chown www-data:www-data /var/www/cgi-bin/* && \
-    chmod 0755 /var/www/cgi-bin/*
-
 # Clear all files that may lead to indeterministic build.
 RUN apt-get clean && \
     rm -rf \
@@ -236,7 +224,3 @@ RUN chmod 0755 /etc/nginx/* && \
 
 # Increase the default limit on the number of open files for all systemd services
 RUN sed -i '/^#DefaultLimitNOFILE=/c\DefaultLimitNOFILE=1048576:1048576' /etc/systemd/system.conf
-
-# Configure incron
-COPY --chmod=644 etc/incron.tb /etc/incron.d/incron.tb
-RUN echo root >> /etc/incron.allow

@@ -420,10 +420,6 @@ name = "ic-systest-boundary-node-integration-on-playnet"
 path = "boundary_nodes/boundary_node_integration_on_playnet_test.rs"
 
 [[bin]]
-name = "ic-systest-boundary-node-snp"
-path = "boundary_nodes/boundary_nodes_snp_test.rs"
-
-[[bin]]
 name = "ic-systest-boundary-node-update-workload-test"
 path = "boundary_nodes/boundary_node_update_workload_test.rs"
 

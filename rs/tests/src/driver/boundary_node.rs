@@ -81,7 +81,6 @@ pub struct BoundaryNodeCustomDomainsConfig {
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct BoundaryNode {
     pub name: String,
-    pub is_sev: bool,
     pub vm_resources: VmResources,
     pub qemu_cli_args: Vec<String>,
     pub vm_allocation: Option<VmAllocationStrategy>,
@@ -360,7 +359,6 @@ impl BoundaryNode {
     pub fn new(name: String) -> Self {
         Self {
             name,
-            is_sev: false,
             vm_resources: Default::default(),
             qemu_cli_args: Default::default(),
             vm_allocation: Default::default(),
@@ -368,24 +366,6 @@ impl BoundaryNode {
             has_ipv4: true,
             boot_image: Default::default(),
         }
-    }
-
-    pub fn enable_sev(mut self) -> Self {
-        self.is_sev = true;
-        self.with_required_host_features(vec![HostFeature::AmdSevSnp])
-            .with_qemu_cli_args(
-                ["-cpu",
-            "EPYC-v4",
-            "-machine",
-            "memory-encryption=sev0,vmport=off",
-            "-object",
-            "sev-snp-guest,id=sev0,cbitpos=51,reduced-phys-bits=1",
-            "-append",
-            "root=/dev/vda5 console=ttyS0 dfinity.system=A dfinity.boot_state=stable swiotlb=2621"]
-                .iter()
-                .map(|s| s.to_string())
-                .collect(),
-            )
     }
 
     pub fn with_vm_resources(mut self, vm_resources: VmResources) -> Self {
@@ -416,11 +396,7 @@ impl BoundaryNode {
 
         let create_vm_req = CreateVmRequest::new(
             self.name.clone(),
-            if self.is_sev {
-                VmType::Sev
-            } else {
-                VmType::Production
-            },
+            VmType::Production,
             self.vm_resources.vcpus.unwrap_or_else(|| {
                 pot_setup
                     .default_vm_resources
@@ -487,19 +463,6 @@ impl BoundaryNode {
             has_ipv4: self.has_ipv4,
             custom_domains_config: Default::default(),
         })
-    }
-
-    pub fn with_snp_boot_img(mut self, env: &TestEnv) -> Self {
-        let boundary_node_snp_img_url = env.get_boundary_node_snp_img_url().unwrap();
-        let boundary_node_snp_img_sha256 = env.get_boundary_node_snp_img_sha256().unwrap();
-        let snp_image = DiskImage {
-            image_type: ImageType::IcOsImage,
-            url: boundary_node_snp_img_url,
-            sha256: boundary_node_snp_img_sha256,
-        };
-
-        self.boot_image = Some(snp_image);
-        self
     }
 }
 

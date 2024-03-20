@@ -240,10 +240,6 @@ pub struct NodeConfiguration {
     /// directory chosen by ic-prep.
     #[serde(skip_serializing, skip_deserializing)]
     pub secret_key_store: Option<NodeSecretKeyStore>,
-
-    /// The SEV-SNP chip_identifier for this node.
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub chip_id: Option<Vec<u8>>,
 }
 
 impl From<NodeConfiguration> for pbNodeRecord {
@@ -377,7 +373,6 @@ mod node_configuration {
             public_api: SocketAddr::from_str("1.2.3.4:8081").unwrap(),
             node_operator_principal_id: None,
             secret_key_store: None,
-            chip_id: None,
         };
 
         let got = pbNodeRecord::from(node_configuration);

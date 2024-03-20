@@ -972,8 +972,6 @@ pub trait HasIcDependencies {
     fn get_ic_os_update_img_test_sha256(&self) -> Result<String>;
     fn get_malicious_ic_os_update_img_url(&self) -> Result<Url>;
     fn get_malicious_ic_os_update_img_sha256(&self) -> Result<String>;
-    fn get_boundary_node_snp_img_url(&self) -> Result<Url>;
-    fn get_boundary_node_snp_img_sha256(&self) -> Result<String>;
     fn get_boundary_node_img_url(&self) -> Result<Url>;
     fn get_boundary_node_img_sha256(&self) -> Result<String>;
     fn get_mainnet_ic_os_img_url(&self) -> Result<Url>;
@@ -1091,19 +1089,6 @@ impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
             "ENV_DEPS__DEV_MALICIOUS_UPDATE_IMG_TAR_ZST_SHA256",
         )?;
         bail_if_sha256_invalid(&sha256, "ic_os_update_img_sha256")?;
-        Ok(sha256)
-    }
-
-    fn get_boundary_node_snp_img_url(&self) -> Result<Url> {
-        let dep_rel_path = "ic-os/boundary-guestos/envs/dev-sev/disk-img.tar.zst.cas-url";
-        let result = self.read_dependency_to_string(dep_rel_path)?;
-        Ok(Url::parse(&result)?)
-    }
-
-    fn get_boundary_node_snp_img_sha256(&self) -> Result<String> {
-        let dep_rel_path = "ic-os/boundary-guestos/envs/dev-sev/disk-img.tar.zst.sha256";
-        let sha256 = self.read_dependency_to_string(dep_rel_path)?;
-        bail_if_sha256_invalid(&sha256, "boundary_node_snp_img_sha256")?;
         Ok(sha256)
     }
 

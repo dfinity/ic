@@ -931,10 +931,6 @@ struct ProposeToUpdateElectedReplicaVersionsCmd {
     pub replica_version_to_elect: Option<String>,
 
     #[clap(long)]
-    /// The launch measurement of the replica version to elect.
-    pub guest_launch_measurement: Option<String>,
-
-    #[clap(long)]
     /// The hex-formatted SHA-256 hash of the archive served by
     /// 'release_package_urls'.
     pub release_package_sha256_hex: Option<String>,
@@ -970,7 +966,7 @@ impl ProposalPayload<UpdateElectedReplicaVersionsPayload>
             replica_version_to_elect: self.replica_version_to_elect.clone(),
             release_package_sha256_hex: self.release_package_sha256_hex.clone(),
             release_package_urls: self.release_package_urls.clone(),
-            guest_launch_measurement_sha256_hex: self.guest_launch_measurement.clone(),
+            guest_launch_measurement_sha256_hex: None,
             replica_versions_to_unelect: self.replica_versions_to_unelect.clone(),
         };
         payload.validate().expect("Failed to validate payload");

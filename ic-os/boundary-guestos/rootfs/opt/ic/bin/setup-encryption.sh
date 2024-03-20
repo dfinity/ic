@@ -2,16 +2,7 @@
 
 set -e
 
-if [[ -e /dev/sev-guest ]]; then
-    # sev-snp enabled
-    KEYFILE=/run/key.snp
-    if [[ ! -f "${KEYFILE}" ]]; then
-        # Derive a sealing key based on the VM's measurement if it hasn't been created already
-        /opt/ic/bin/sev-guest-kdf -m "${KEYFILE}"
-    fi
-else
-    KEYFILE=/boot/grub/store.keyfile
-fi
+KEYFILE=/boot/grub/store.keyfile
 
 if [ -e /dev/vda10 ]; then
     #Fix for crypttab
@@ -24,7 +15,6 @@ partprobe /dev/vda
 
 # Generate a key and initialize encrypted store with it.
 if [[ ! -f "${KEYFILE}" ]]; then
-    # Only in the non-sev case
     umask 0077
     dd if=/dev/random of="$KEYFILE" bs=16 count=1
 fi

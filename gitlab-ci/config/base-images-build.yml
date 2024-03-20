@@ -73,17 +73,6 @@ build-boundaryos-base:
     IMAGE: "boundaryos-base"
     REF_FILE: "ic-os/boundary-guestos/rootfs/docker-base.prod"
 
-build-boundaryos-base-snp:
-  extends:
-    - .build-base-image-job
-  variables:
-    CONTEXT: "${CI_PROJECT_DIR}/ic-os/boundary-guestos/rootfs"
-    IMAGE: "boundaryos-base-snp"
-    REF_FILE: "ic-os/boundary-guestos/rootfs/docker-base.snp"
-  script:
-  - BUILD_ARGS=(--build-arg "CPU_SUPPORT=snp")
-  - *build-base-image
-
 build-hostos-base:
   extends:
     - .build-base-image-job
@@ -129,7 +118,6 @@ build-base-images-ref-update:
     - build-guestos-base
     - build-guestos-base-dev
     - build-boundaryos-base
-    - build-boundaryos-base-snp
     - build-hostos-base
     - build-hostos-base-dev
     - build-setupos-base
@@ -138,7 +126,6 @@ build-base-images-ref-update:
     - build-guestos-base
     - build-guestos-base-dev
     - build-boundaryos-base
-    - build-boundaryos-base-snp
     - build-hostos-base
     - build-hostos-base-dev
     - build-setupos-base

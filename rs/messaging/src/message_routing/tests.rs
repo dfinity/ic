@@ -720,7 +720,7 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             features: SubnetFeatures {
                 canister_sandboxing: true,
                 http_requests: true,
-                sev_enabled: false,
+                ..Default::default()
             },
             ecdsa_config: EcdsaConfig {
                 key_ids: vec![
@@ -1681,7 +1681,7 @@ fn process_batch_updates_subnet_metrics() {
             features: SubnetFeatures {
                 canister_sandboxing: true,
                 http_requests: true,
-                sev_enabled: false,
+                ..Default::default()
             },
             ecdsa_config: EcdsaConfig {
                 key_ids: vec![
