@@ -52,7 +52,7 @@ pub enum JsonRpcProvider {
     //order is top-to-bottom and must match order used in production
     Ankr,
     PublicNode,
-    Cloudflare,
+    LlamaNodes,
 }
 
 impl JsonRpcProvider {
@@ -60,7 +60,7 @@ impl JsonRpcProvider {
         match self {
             JsonRpcProvider::Ankr => "https://rpc.ankr.com/eth",
             JsonRpcProvider::PublicNode => "https://ethereum.publicnode.com",
-            JsonRpcProvider::Cloudflare => "https://cloudflare-eth.com",
+            JsonRpcProvider::LlamaNodes => "https://eth.llamarpc.com",
         }
     }
 }
