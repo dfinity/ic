@@ -409,7 +409,11 @@ fn merge_assert_num_files(
             .sum::<usize>(),
         merge_files
     );
-    assert_eq!(before_len - after_len + 1, merge_files);
+    if merge_files == 0 {
+        assert_eq!(before_len, after_len);
+    } else {
+        assert_eq!(before_len - after_len + 1, merge_files);
+    }
 }
 
 /// An instruction to modify a storage.
@@ -741,16 +745,13 @@ fn can_merge_large_overlay_file() {
 
 #[test]
 fn can_overwrite_and_merge_based_on_number_of_files() {
-    let mut instructions = Vec::new();
-    for i in 0..MAX_NUMBER_OF_FILES {
-        // Create a pyramid.
-        instructions.push(WriteOverlay(
-            (0..2u64.pow((MAX_NUMBER_OF_FILES - i) as u32)).collect(),
-        ));
-    }
+    let mut instructions: Vec<_> = make_pyramid(MAX_NUMBER_OF_FILES)
+        .into_iter()
+        .map(|size| WriteOverlay((0..size).collect::<Vec<_>>()))
+        .collect();
 
     instructions.push(Merge {
-        assert_files_merged: None,
+        assert_files_merged: Some(0),
         is_downgrade: false,
     });
 
@@ -821,17 +822,23 @@ fn can_merge_all() {
     assert!(storage_files.base.is_none());
 }
 
+fn make_pyramid(levels: usize) -> Vec<u64> {
+    let mut result = Vec::new();
+    if levels > 0 {
+        result.push(1_u64 << (levels + 2));
+    }
+    for i in 1..levels {
+        result.push(1 << (levels - i));
+    }
+    result
+}
+
 #[test]
 fn test_num_files_to_merge() {
     assert_eq!(MergeCandidate::num_files_to_merge(&[1, 2]), Some(2));
-    assert_eq!(MergeCandidate::num_files_to_merge(&[2, 1]), None);
-    let make_pyramid = |levels| {
-        let mut result = Vec::new();
-        for i in 0..levels {
-            result.push(1 << (levels - i));
-        }
-        result
-    };
+    assert_eq!(MergeCandidate::num_files_to_merge(&[2, 1]), Some(2));
+    assert_eq!(MergeCandidate::num_files_to_merge(&[5, 1]), None);
+
     assert_eq!(
         MergeCandidate::num_files_to_merge(&make_pyramid(MAX_NUMBER_OF_FILES)),
         None
@@ -896,7 +903,7 @@ fn test_make_merge_candidates_to_overlay() {
     // 000000 |xxxxxxxxxx|
     // Need to merge top two to reach pyramid.
     let instructions = vec![
-        WriteOverlay((0..10).collect()),
+        WriteOverlay((0..15).collect()),
         WriteOverlay((0..1).collect()),
         WriteOverlay((0..2).collect()),
     ];
@@ -967,7 +974,7 @@ fn test_two_same_length_files_are_a_pyramid() {
     // 000000 |xx|
     // No need to merge.
     let instructions = vec![
-        WriteOverlay((0..2).collect()),
+        WriteOverlay((0..9).collect()),
         WriteOverlay((0..2).collect()),
     ];
 

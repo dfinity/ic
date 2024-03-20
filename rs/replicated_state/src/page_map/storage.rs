@@ -921,11 +921,12 @@ impl MergeCandidate {
     /// either `dst_base` or `dst_overlay` depending on if we decided to make a partial (overlay) or a
     /// full (base) merge.
     /// If we apply the `MergeCandidate`, we must have up to `MAX_NUMBER_OF_FILES` files, forming a
-    /// pyramid, each file size being greater or equal to sum of newer files on top. For example:
+    /// pyramid, each file size being greater or equal to sum of newer files on top, with the base file
+    /// having to be 4 times the size of the newer files on top. For example:
     ///     Overlay_3   |x|
     ///     Overlay_2   |xx|
     ///     Overlay_1   |xxxxxx|
-    ///     Base        |xxxxxxxxxxxxxxxxxxxxxxxxxxxx|
+    ///     Base        |xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|
     pub fn new(
         layout: &dyn StorageLayout,
         height: Height,
@@ -1221,14 +1222,21 @@ impl MergeCandidate {
             .collect()
     }
 
-    /// Number of files to merge to achieve the `MergeCandidate` criteria (see `MergeCandidate::new`
-    /// documentation).
+    /// Number of files to merge to achieve the `MergeCandidate` criteria.
+    /// The criteria is that each file has to be larger than the sum of the sizes of the newer files,
+    /// with the base file having to be at least 4 times as large as the sum of the overlays.
+    /// Also see the `MergeCandidate::new` documentation.
     /// If no merge is required, return `None`.
     fn num_files_to_merge(existing_lengths: &[u64]) -> Option<usize> {
         let mut merge_to_get_pyramid = 0;
         let mut sum = 0;
         for (i, len) in existing_lengths.iter().rev().enumerate() {
-            if sum > *len {
+            let factor = if i == existing_lengths.len() - 1 {
+                4
+            } else {
+                1
+            };
+            if sum * factor > *len {
                 merge_to_get_pyramid = i + 1;
             }
             sum += len;

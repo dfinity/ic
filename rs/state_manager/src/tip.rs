@@ -543,11 +543,13 @@ fn merge(
 
     merge_candidates.sort_by_key(|m| -(m.num_files_before() as i64));
     let storage_to_merge_for_filenum = storage_info.mem_size / 4;
+    let min_storage_to_merge = storage_info.mem_size / 50;
     let merges_by_filenum = merge_candidates
         .iter()
         .scan(0, |state, m| {
             if *state >= storage_to_merge_for_filenum
-                || m.num_files_before() <= MAX_NUMBER_OF_FILES as u64
+                || (m.num_files_before() <= MAX_NUMBER_OF_FILES as u64
+                    && (*state + m.page_map_size_bytes() >= min_storage_to_merge))
             {
                 None
             } else {
