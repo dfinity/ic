@@ -409,6 +409,31 @@ symlink_dir = rule(
     },
 )
 
+def _symlink_dir_test(ctx):
+    # Use the no-op script as the executable
+    no_op_output = ctx.actions.declare_file("no_op")
+    ctx.actions.write(output = no_op_output, content = ":")
+
+    dirname = ctx.attr.name
+    lns = []
+    for target, canister_name in ctx.attr.targets.items():
+        ln = ctx.actions.declare_file(dirname + "/" + canister_name)
+        file = target[DefaultInfo].files.to_list()[0]
+        ctx.actions.symlink(
+            output = ln,
+            target_file = file,
+        )
+        lns.append(ln)
+    return [DefaultInfo(files = depset(direct = lns), executable = no_op_output)]
+
+symlink_dir_test = rule(
+    implementation = _symlink_dir_test,
+    test = True,
+    attrs = {
+        "targets": attr.label_keyed_string_dict(allow_files = True),
+    },
+)
+
 def _symlink_dirs(ctx):
     dirname = ctx.attr.name
     lns = []

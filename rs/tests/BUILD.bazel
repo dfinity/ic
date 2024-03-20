@@ -4,7 +4,7 @@ load("@bazel_skylib//rules:run_binary.bzl", "run_binary")
 load("@io_bazel_rules_docker//docker/package_managers:download_pkgs.bzl", "download_pkgs")
 load("@io_bazel_rules_docker//docker/package_managers:install_pkgs.bzl", "install_pkgs")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
-load("//rs/tests:common.bzl", "DEPENDENCIES", "MACRO_DEPENDENCIES", "mainnet_nns_canisters", "mainnet_sns_canisters", "qualifying_nns_canisters", "qualifying_sns_canisters", "symlink_dir", "symlink_dirs", "tip_nns_canisters", "tip_sns_canisters")
+load("//rs/tests:common.bzl", "DEPENDENCIES", "MACRO_DEPENDENCIES", "mainnet_nns_canisters", "mainnet_sns_canisters", "qualifying_nns_canisters", "qualifying_sns_canisters", "symlink_dir", "symlink_dir_test", "symlink_dirs", "tip_nns_canisters", "tip_sns_canisters")
 load(":system_tests.bzl", "uvm_config_image")
 
 package(default_visibility = ["//visibility:public"])
@@ -144,6 +144,13 @@ symlink_dir(
         "//rs/canister_sandbox:compiler_sandbox": "compiler_sandbox",
         "//rs/canister_sandbox:sandbox_launcher": "sandbox_launcher",
         "//rs/canister_sandbox:canister_sandbox": "canister_sandbox",
+    },
+)
+
+symlink_dir_test(
+    name = "cup_compatibility/binaries",
+    targets = {
+        "//rs/types/types:types_test": "types_test",
     },
 )
 

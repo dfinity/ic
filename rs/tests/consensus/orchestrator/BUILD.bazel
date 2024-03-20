@@ -44,6 +44,16 @@ system_test(
 )
 
 system_test(
+    name = "cup_compatibility_test",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = [
+        "//rs/tests:cup_compatibility/binaries",
+    ],
+    deps = DEPENDENCIES + ["//rs/tests"],
+)
+
+system_test(
     name = "sr_app_same_nodes_test",
     flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
