@@ -1,17 +1,20 @@
 //! Module that deals with requests to /api/v2/canister/.../query
 
 use crate::{
-    common::{cbor_response, make_plaintext_response, remove_effective_principal_id},
-    receive_request_body,
-    validator_executor::ValidatorExecutor,
+    common::Cbor, validator_executor::ValidatorExecutor, verify_cbor_content_header,
     ReplicaHealthStatus,
 };
 
-use axum::body::Body;
+use axum::{
+    body::Body,
+    extract::State,
+    response::{IntoResponse, Response},
+    Router,
+};
+use bytes::Bytes;
 use crossbeam::atomic::AtomicCell;
-use futures_util::FutureExt;
 use http::Request;
-use hyper::{Response, StatusCode};
+use hyper::StatusCode;
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_error_types::{ErrorCode, RejectCode};
 use ic_interfaces::{
@@ -31,12 +34,12 @@ use ic_types::{
     },
     CanisterId, NodeId,
 };
-use std::convert::{Infallible, TryFrom};
-use std::future::Future;
-use std::pin::Pin;
 use std::sync::{Arc, RwLock};
-use std::task::{Context, Poll};
-use tower::Service;
+use std::{
+    convert::{Infallible, TryFrom},
+    sync::Mutex,
+};
+use tower::{util::BoxCloneService, ServiceBuilder, ServiceExt};
 
 #[derive(Clone)]
 pub struct QueryService {
@@ -47,7 +50,7 @@ pub struct QueryService {
     delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
     validator_executor: ValidatorExecutor<UserQuery>,
     registry_client: Arc<dyn RegistryClient>,
-    query_execution_service: QueryExecutionService,
+    query_execution_service: Arc<Mutex<QueryExecutionService>>,
 }
 
 pub struct QueryServiceBuilder {
@@ -60,6 +63,12 @@ pub struct QueryServiceBuilder {
     ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
     query_execution_service: QueryExecutionService,
+}
+
+impl QueryService {
+    pub(crate) fn route() -> &'static str {
+        "/api/v2/canister/:effective_canister_id/query"
+    }
 }
 
 impl QueryServiceBuilder {
@@ -102,10 +111,10 @@ impl QueryServiceBuilder {
         self
     }
 
-    pub fn build(self) -> QueryService {
+    pub fn build_router(self) -> Router {
         let log = self.log.unwrap_or(no_op_logger());
         let _default_metrics_registry = MetricsRegistry::default();
-        QueryService {
+        let state = QueryService {
             log: log.clone(),
             node_id: self.node_id,
             signer: self.signer,
@@ -120,214 +129,157 @@ impl QueryServiceBuilder {
                 log,
             ),
             registry_client: self.registry_client,
-            query_execution_service: self.query_execution_service,
-        }
+            query_execution_service: Arc::new(Mutex::new(self.query_execution_service)),
+        };
+        Router::new().route_service(
+            QueryService::route(),
+            axum::routing::post(query).with_state(state).layer(
+                ServiceBuilder::new().layer(axum::middleware::from_fn(verify_cbor_content_header)),
+            ),
+        )
+    }
+
+    pub fn build_service(self) -> BoxCloneService<Request<Body>, Response, Infallible> {
+        let router = self.build_router();
+        BoxCloneService::new(router.into_service())
     }
 }
 
-impl Service<Request<Body>> for QueryService {
-    type Response = Response<Body>;
-    type Error = Infallible;
-    #[allow(clippy::type_complexity)]
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
-
-    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.query_execution_service.poll_ready(cx)
-    }
-
-    fn call(&mut self, request: Request<Body>) -> Self::Future {
-        if self.health_status.load() != ReplicaHealthStatus::Healthy {
-            let res = make_plaintext_response(
-                StatusCode::SERVICE_UNAVAILABLE,
-                format!(
-                    "Replica is unhealthy: {}. Check the /api/v2/status for more information.",
-                    self.health_status.load(),
-                ),
-            );
-            return Box::pin(async move { Ok(res) });
-        }
-        let delegation_from_nns = self.delegation_from_nns.read().unwrap().clone();
-
-        let (mut parts, body) = request.into_parts();
-
-        let effective_principal_id = match remove_effective_principal_id(&mut parts) {
-            Ok(principal_id) => principal_id,
-            Err(res) => {
-                error!(
-                    self.log,
-                    "Effective canister ID is not attached to call request. This is a bug."
-                );
-                return Box::pin(async move { Ok(res) });
-            }
-        };
-
-        let effective_canister_id = CanisterId::unchecked_from_principal(effective_principal_id);
-
-        // Reject requests where `canister_id` != `effective_canister_id` for non mgmt canister calls.
-        // This needs to be enforced because boundary nodes block access based on the `effective_canister_id`
-        // in the url and the replica processes the request based on the `canister_id`.
-        // If this is not enforced, a blocked canisters can still be accessed by specifying
-        // a non-blocked `effective_canister_id` and a blocked `canister_id`.
-
-        // In case the inner service has state that's driven to readiness and
-        // not tracked by clones (such as `Buffer`), pass the version we have
-        // already called `poll_ready` on into the future, and leave its clone
-        // behind.
-        //
-        // The types implementing the Service trait are not necessary thread-safe.
-        // So the unless the caller is sure that the service implementation is
-        // thread-safe we must make sure 'poll_ready' is always called before 'call'
-        // on the same object. Hence if 'poll_ready' is called and not tracked by
-        // the 'Clone' implementation the following sequence of events may panic.
-        //
-        //  s1.call_ready()
-        //  s2 = s1.clone()
-        //  s2.call()
-        //
-        // NOTE: Buffer::Clone does not track readiness across clones.
-
-        let new_query_execution_service = self.query_execution_service.clone();
-        // Pass old query execution service to future that has already been driven to readiness (called ready() on).
-        // Replace query service stored in struct with cloned version of query_service.
-        let mut old_query_execution_service = std::mem::replace(
-            &mut self.query_execution_service,
-            new_query_execution_service,
+pub(crate) async fn query(
+    axum::extract::Path(effective_canister_id): axum::extract::Path<CanisterId>,
+    State(QueryService {
+        log,
+        node_id,
+        registry_client,
+        validator_executor,
+        health_status,
+        signer,
+        delegation_from_nns,
+        query_execution_service,
+    }): State<QueryService>,
+    body: Bytes,
+) -> impl IntoResponse {
+    if health_status.load() != ReplicaHealthStatus::Healthy {
+        let status = StatusCode::SERVICE_UNAVAILABLE;
+        let text = format!(
+            "Replica is unhealthy: {}. Check the /api/v2/status for more information.",
+            health_status.load(),
         );
+        return (status, text).into_response();
+    }
+    let delegation_from_nns = delegation_from_nns.read().unwrap().clone();
 
-        let registry_version = self.registry_client.get_latest_version();
-        let signer_clone = self.signer.clone();
+    let registry_version = registry_client.get_latest_version();
 
-        let validator_executor = self.validator_executor.clone();
-        let node_id = self.node_id;
-        let logger = self.log.clone();
-
-        async move {
-            let body = match receive_request_body(body).await {
-                Ok(bytes) => bytes,
-                Err(e) => return Ok(e),
-            };
-            let request = match <HttpRequestEnvelope<HttpQueryContent>>::try_from(
-                &SignedRequestBytes::from(body.to_vec()),
-            ) {
-                Ok(request) => request,
-                Err(e) => {
-                    let res = make_plaintext_response(
-                        StatusCode::BAD_REQUEST,
-                        format!("Could not parse body as read request: {}", e),
-                    );
-                    return Ok(res);
-                }
-            };
-
-            // Convert the message to a strongly-typed struct, making structural validations
-            // on the way.
-            let request = match HttpRequest::<UserQuery>::try_from(request) {
-                Ok(request) => request,
-                Err(e) => {
-                    let res = make_plaintext_response(
-                        StatusCode::BAD_REQUEST,
-                        format!("Malformed request: {:?}", e),
-                    );
-                    return Ok(res);
-                }
-            };
-            let canister_id = request.content().canister_id();
-            if canister_id != CanisterId::ic_00() && canister_id != effective_canister_id {
-                let res = make_plaintext_response(
-                    StatusCode::BAD_REQUEST,
-                    format!(
-                        "Specified CanisterId {} does not match effective canister id in URL {}",
-                        canister_id, effective_canister_id
-                    ),
-                );
-                return Ok(res);
-            }
-            if let Err(http_err) = validator_executor
-                .validate_request(request.clone(), registry_version)
-                .await
-            {
-                let res = make_plaintext_response(http_err.status, http_err.message);
-                return Ok(res);
-            };
-
-            let user_query = request.take_content();
-
-            let query_execution_response = old_query_execution_service
-                .call((user_query.clone(), delegation_from_nns))
-                .await?;
-
-            let (response, timestamp) = match query_execution_response {
-                Err(QueryExecutionError::CertifiedStateUnavailable) => {
-                    return Ok(make_plaintext_response(
-                        StatusCode::SERVICE_UNAVAILABLE,
-                        "Certified state unavailable. Please try again.".to_string(),
-                    ))
-                }
-                Ok((response, time)) => (response, time),
-            };
-
-            let query_response = match response {
-                Ok(res) => match res {
-                    WasmResult::Reply(vec) => HttpQueryResponse::Replied {
-                        reply: HttpQueryResponseReply { arg: Blob(vec) },
-                    },
-                    WasmResult::Reject(message) => HttpQueryResponse::Rejected {
-                        error_code: ErrorCode::CanisterRejectedMessage.to_string(),
-                        reject_code: RejectCode::CanisterReject as u64,
-                        reject_message: message,
-                    },
-                },
-
-                Err(user_error) => HttpQueryResponse::Rejected {
-                    error_code: user_error.code().to_string(),
-                    reject_code: user_error.reject_code() as u64,
-                    reject_message: user_error.to_string(),
-                },
-            };
-
-            let response_hash = QueryResponseHash::new(&query_response, &user_query, timestamp);
-
-            // We wrap `sign_basic` into `spawn_blocking`, otherwise calling `sign_basic` will panic
-            // if called from the tokio runtime.
-            let signature = tokio::task::spawn_blocking(move || {
-                signer_clone.sign_basic(&response_hash, node_id, registry_version)
-            })
-            .await
-            .expect("Panicked while attempting to sign the query response.");
-
-            let response = match signature {
-                Ok(signature) => {
-                    let signature_bytes = signature.get().0;
-                    let signature_blob = Blob(signature_bytes);
-
-                    let node_signature = NodeSignature {
-                        signature: signature_blob,
-                        timestamp,
-                        identity: node_id,
-                    };
-
-                    let signed_query_response = HttpSignedQueryResponse {
-                        response: query_response,
-                        node_signature,
-                    };
-
-                    let (resp, _body_size) = cbor_response(&signed_query_response);
-                    resp
-                }
-                Err(signing_error) => {
-                    error!(
-                        logger,
-                        "Failed to sign the Query response: `{:?}`.", signing_error
-                    );
-                    make_plaintext_response(
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "Failed to sign the Query response.".to_string(),
-                    )
-                }
-            };
-
-            Ok(response)
+    let request = match <HttpRequestEnvelope<HttpQueryContent>>::try_from(
+        &SignedRequestBytes::from(body.to_vec()),
+    ) {
+        Ok(request) => request,
+        Err(e) => {
+            let status = StatusCode::BAD_REQUEST;
+            let text = format!("Could not parse body as read request: {}", e);
+            return (status, text).into_response();
         }
-        .boxed()
+    };
+
+    // Convert the message to a strongly-typed struct, making structural validations
+    // on the way.
+    let request = match HttpRequest::<UserQuery>::try_from(request) {
+        Ok(request) => request,
+        Err(e) => {
+            let status = StatusCode::BAD_REQUEST;
+            let text = format!("Malformed request: {:?}", e);
+            return (status, text).into_response();
+        }
+    };
+    let canister_id = request.content().canister_id();
+    if canister_id != CanisterId::ic_00() && canister_id != effective_canister_id {
+        let status = StatusCode::BAD_REQUEST;
+        let text = format!(
+            "Specified CanisterId {} does not match effective canister id in URL {}",
+            canister_id, effective_canister_id
+        );
+        return (status, text).into_response();
+    }
+    if let Err(http_err) = validator_executor
+        .validate_request(request.clone(), registry_version)
+        .await
+    {
+        return (http_err.status, http_err.message).into_response();
+    };
+
+    let user_query = request.take_content();
+
+    let query_execution_service = query_execution_service.lock().unwrap().clone();
+    let query_execution_response = query_execution_service
+        .oneshot((user_query.clone(), delegation_from_nns))
+        .await
+        .unwrap();
+
+    let (response, timestamp) = match query_execution_response {
+        Err(QueryExecutionError::CertifiedStateUnavailable) => {
+            let status = StatusCode::SERVICE_UNAVAILABLE;
+            let text = "Certified state unavailable. Please try again.".to_string();
+            return (status, text).into_response();
+        }
+        Ok((response, time)) => (response, time),
+    };
+
+    let query_response = match response {
+        Ok(res) => match res {
+            WasmResult::Reply(vec) => HttpQueryResponse::Replied {
+                reply: HttpQueryResponseReply { arg: Blob(vec) },
+            },
+            WasmResult::Reject(message) => HttpQueryResponse::Rejected {
+                error_code: ErrorCode::CanisterRejectedMessage.to_string(),
+                reject_code: RejectCode::CanisterReject as u64,
+                reject_message: message,
+            },
+        },
+
+        Err(user_error) => HttpQueryResponse::Rejected {
+            error_code: user_error.code().to_string(),
+            reject_code: user_error.reject_code() as u64,
+            reject_message: user_error.to_string(),
+        },
+    };
+
+    let response_hash = QueryResponseHash::new(&query_response, &user_query, timestamp);
+
+    // We wrap `sign_basic` into `spawn_blocking`, otherwise calling `sign_basic` will panic
+    // if called from the tokio runtime.
+    let signature = tokio::task::spawn_blocking(move || {
+        signer.sign_basic(&response_hash, node_id, registry_version)
+    })
+    .await
+    .expect("Panicked while attempting to sign the query response.");
+
+    match signature {
+        Ok(signature) => {
+            let signature_bytes = signature.get().0;
+            let signature_blob = Blob(signature_bytes);
+
+            let node_signature = NodeSignature {
+                signature: signature_blob,
+                timestamp,
+                identity: node_id,
+            };
+
+            let signed_query_response = HttpSignedQueryResponse {
+                response: query_response,
+                node_signature,
+            };
+
+            Cbor(signed_query_response).into_response()
+        }
+        Err(signing_error) => {
+            error!(
+                log,
+                "Failed to sign the Query response: `{:?}`.", signing_error
+            );
+            let status = StatusCode::INTERNAL_SERVER_ERROR;
+            let text = "Failed to sign the Query response.".to_string();
+            (status, text).into_response()
+        }
     }
 }

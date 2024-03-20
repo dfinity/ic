@@ -147,7 +147,7 @@ pub(crate) type EndpointService = BoxCloneService<Request<Body>, Response<Body>,
 #[derive(Clone)]
 struct HttpHandler {
     call_router: Router,
-    query_service: EndpointService,
+    query_router: Router,
     catchup_service: EndpointService,
     dashboard_service: EndpointService,
     status_method: MethodRouter,
@@ -327,20 +327,18 @@ pub fn start_server(
     .with_logger(log.clone())
     .with_malicious_flags(malicious_flags.clone())
     .build_router();
-    let query_service = BoxCloneService::new(
-        QueryServiceBuilder::builder(
-            node_id,
-            query_signer,
-            registry_client.clone(),
-            ingress_verifier.clone(),
-            delegation_from_nns.clone(),
-            query_execution_service,
-        )
-        .with_logger(log.clone())
-        .with_health_status(health_status.clone())
-        .with_malicious_flags(malicious_flags.clone())
-        .build(),
-    );
+    let query_router = QueryServiceBuilder::builder(
+        node_id,
+        query_signer,
+        registry_client.clone(),
+        ingress_verifier.clone(),
+        delegation_from_nns.clone(),
+        query_execution_service,
+    )
+    .with_logger(log.clone())
+    .with_health_status(health_status.clone())
+    .with_malicious_flags(malicious_flags.clone())
+    .build_router();
 
     let canister_read_state_service = BoxCloneService::new(
         CanisterReadStateServiceBuilder::builder(
@@ -408,7 +406,7 @@ pub fn start_server(
 
     let http_handler = HttpHandler {
         call_router,
-        query_service,
+        query_router,
         status_method,
         catchup_service,
         dashboard_service,
@@ -667,7 +665,6 @@ fn make_router(
     metrics: HttpHandlerMetrics,
     health_status_refresher: HealthStatusRefreshLayer,
 ) -> Router {
-    let query_service = http_handler.query_service.clone();
     let catch_up_package_service = http_handler.catchup_service.clone();
     let dashboard_service = http_handler.dashboard_service.clone();
     let canister_read_state_service = http_handler.canister_read_state_service.clone();
@@ -677,20 +674,6 @@ fn make_router(
     let pprof_flamegraph_service = http_handler.pprof_flamegraph_service.clone();
 
     let post_router: Router = Router::new()
-        .route(
-            "/api/v2/canister/:effective_canister_id/query",
-            post_service(
-                ServiceBuilder::new()
-                    .layer(HandleErrorLayer::new(map_box_error_to_response))
-                    .load_shed()
-                    .layer(GlobalConcurrencyLimitLayer::new(
-                        config.max_query_concurrent_requests,
-                    ))
-                    .layer(axum::middleware::from_fn(verify_cbor_content_header))
-                    .layer(axum::middleware::from_fn(attach_effective_canister_id))
-                    .service(query_service),
-            ),
-        )
         .route(
             "/api/v2/canister/:effective_canister_id/read_state",
             post_service(
@@ -796,16 +779,28 @@ fn make_router(
             make_plaintext_response(StatusCode::NOT_FOUND, "Endpoint not found.".to_string())
         });
 
-    let final_router = get_router.merge(post_router).merge(
-        http_handler.call_router.layer(
-            ServiceBuilder::new()
-                .layer(HandleErrorLayer::new(map_box_error_to_response))
-                .load_shed()
-                .layer(GlobalConcurrencyLimitLayer::new(
-                    config.max_call_concurrent_requests,
-                )),
-        ),
-    );
+    let final_router = get_router
+        .merge(post_router)
+        .merge(
+            http_handler.call_router.layer(
+                ServiceBuilder::new()
+                    .layer(HandleErrorLayer::new(map_box_error_to_response))
+                    .load_shed()
+                    .layer(GlobalConcurrencyLimitLayer::new(
+                        config.max_call_concurrent_requests,
+                    )),
+            ),
+        )
+        .merge(
+            http_handler.query_router.layer(
+                ServiceBuilder::new()
+                    .layer(HandleErrorLayer::new(map_box_error_to_response))
+                    .load_shed()
+                    .layer(GlobalConcurrencyLimitLayer::new(
+                        config.max_query_concurrent_requests,
+                    )),
+            ),
+        );
 
     final_router.layer(
         ServiceBuilder::new()
@@ -1224,7 +1219,7 @@ mod tests {
     use ic_logger::replica_logger::no_op_logger;
     use ic_types::{CanisterId, Height};
 
-    use crate::call::CallService;
+    use crate::{call::CallService, query::QueryService};
 
     use super::*;
 
@@ -1240,7 +1235,10 @@ mod tests {
                 CallService::route(),
                 axum::routing::post_service(dummy_service.clone()),
             ),
-            query_service: dummy_service.clone(),
+            query_router: Router::new().route(
+                QueryService::route(),
+                axum::routing::post_service(dummy_service.clone()),
+            ),
             catchup_service: dummy_service.clone(),
             dashboard_service: dummy_service.clone(),
             status_method: MethodRouter::new().get_service(dummy_service.clone()),
