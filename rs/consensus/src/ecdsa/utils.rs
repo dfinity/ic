@@ -766,15 +766,12 @@ mod tests {
     fn add_available_quadruples_with_key_transcript(
         ecdsa_payload: &mut EcdsaPayload,
         key_transcript: UnmaskedTranscript,
-        key_id: &EcdsaKeyId,
+        _key_id: &EcdsaKeyId,
     ) -> Vec<QuadrupleId> {
         let mut quadruple_ids = vec![];
         for i in 0..10 {
             let sig_inputs = create_sig_inputs(i);
-            let mut quadruple_id = ecdsa_payload
-                .uid_generator
-                .next_quadruple_id(key_id.clone());
-            quadruple_id.1 = Some(key_id.clone());
+            let quadruple_id = ecdsa_payload.uid_generator.next_quadruple_id();
             quadruple_ids.push(quadruple_id.clone());
             let mut quadruple_ref = sig_inputs.sig_inputs_ref.presig_quadruple_ref.clone();
             quadruple_ref.key_unmasked_ref = key_transcript;

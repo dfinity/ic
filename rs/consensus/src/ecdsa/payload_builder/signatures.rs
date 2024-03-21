@@ -584,9 +584,7 @@ mod tests {
         let quadruple_ids = (0..4)
             .map(|i| create_available_quadruple(&mut ecdsa_payload, key_id.clone(), i as u8))
             .collect::<Vec<_>>();
-        let missing_quadruple = ecdsa_payload
-            .uid_generator
-            .next_quadruple_id(key_id.clone());
+        let missing_quadruple = ecdsa_payload.uid_generator.next_quadruple_id();
 
         let contexts = BTreeMap::from([
             // insert request without completed signature

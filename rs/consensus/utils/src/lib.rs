@@ -844,6 +844,7 @@ mod tests {
         key_unmasked.transcript_id = fake_transcript_id(id + 4);
         let h = Height::from(0);
         PreSignatureQuadrupleRef {
+            key_id: EcdsaKeyId::from_str("Secp256k1:some_key").ok(),
             kappa_unmasked_ref: UnmaskedTranscript::try_from((h, &kappa_unmasked)).unwrap(),
             lambda_masked_ref: MaskedTranscript::try_from((h, &lambda_masked)).unwrap(),
             kappa_times_lambda_ref: MaskedTranscript::try_from((h, &kappa_times_lambda)).unwrap(),
@@ -881,7 +882,6 @@ mod tests {
     // Create an ECDSA payload with 10 quadruples, each using registry version 2, 3 or 4.
     fn ecdsa_payload_with_quadruples() -> EcdsaPayload {
         let mut ecdsa = empty_ecdsa_payload();
-        let key_id = ecdsa.key_transcript.key_id.clone();
         let mut rvs = [
             RegistryVersion::from(2),
             RegistryVersion::from(3),
@@ -899,7 +899,7 @@ mod tests {
             }
             ecdsa
                 .available_quadruples
-                .insert(QuadrupleId(i as u64, Some(key_id.clone())), quadruple);
+                .insert(QuadrupleId::new(i as u64), quadruple);
         }
         ecdsa
     }

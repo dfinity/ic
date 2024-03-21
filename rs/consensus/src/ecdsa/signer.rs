@@ -915,8 +915,8 @@ mod tests {
     use std::ops::Deref;
 
     fn create_request_id(generator: &mut EcdsaUIDGenerator, height: Height) -> RequestId {
-        let quadruple_id = generator.next_quadruple_id(fake_ecdsa_key_id());
-        let pseudo_random_id = [quadruple_id.0 as u8; 32];
+        let quadruple_id = generator.next_quadruple_id();
+        let pseudo_random_id = [quadruple_id.id() as u8; 32];
         RequestId {
             quadruple_id,
             pseudo_random_id,
@@ -1170,19 +1170,19 @@ mod tests {
         );
         let transcript_loader: TestEcdsaTranscriptLoader = Default::default();
 
-        let key_id = id_1.quadruple_id.1.clone().unwrap();
+        let key_id = fake_ecdsa_key_id();
         let state = fake_state_with_ecdsa_contexts(
             height,
             [
                 // One context without matched quadruple
                 fake_sign_with_ecdsa_context_with_quadruple(
-                    id_1.quadruple_id.0 as u8,
+                    id_1.quadruple_id.id() as u8,
                     key_id.clone(),
                     None,
                 ),
                 // One context without nonce
                 fake_sign_with_ecdsa_context_with_quadruple(
-                    id_2.quadruple_id.0 as u8,
+                    id_2.quadruple_id.id() as u8,
                     key_id.clone(),
                     Some(id_2.quadruple_id.clone()),
                 ),
@@ -1497,19 +1497,19 @@ mod tests {
                 (id_3.clone(), create_sig_inputs(3)),
             ],
         );
-        let key_id = id_1.quadruple_id.1.clone().unwrap();
+        let key_id = fake_ecdsa_key_id();
         let state = fake_state_with_ecdsa_contexts(
             height,
             [
                 // One context without matched quadruple
                 fake_sign_with_ecdsa_context_with_quadruple(
-                    id_1.quadruple_id.0 as u8,
+                    id_1.quadruple_id.id() as u8,
                     key_id.clone(),
                     None,
                 ),
                 // One context without nonce
                 fake_sign_with_ecdsa_context_with_quadruple(
-                    id_2.quadruple_id.0 as u8,
+                    id_2.quadruple_id.id() as u8,
                     key_id.clone(),
                     Some(id_2.quadruple_id.clone()),
                 ),
@@ -1834,7 +1834,7 @@ mod tests {
                 let quadruple_id = req_id.quadruple_id.clone();
                 let context = SignWithEcdsaContext {
                     request: RequestBuilder::new().sender(canister_test_id(1)).build(),
-                    key_id: quadruple_id.1.clone().unwrap(),
+                    key_id: fake_ecdsa_key_id(),
                     pseudo_random_id: req_id.pseudo_random_id,
                     message_hash: [0; 32],
                     derivation_path: vec![],

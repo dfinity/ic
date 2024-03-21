@@ -132,13 +132,13 @@ pub fn fake_sign_with_ecdsa_context_from_request_id(
 ) -> (CallbackId, SignWithEcdsaContext) {
     let height = request_id.height;
     let quadruple_id = request_id.quadruple_id.clone();
-    let callback_id = CallbackId::from(quadruple_id.0);
+    let callback_id = CallbackId::from(quadruple_id.id());
     let context = SignWithEcdsaContext {
         request: RequestBuilder::new().build(),
         message_hash: [0; 32],
         derivation_path: vec![],
         batch_time: UNIX_EPOCH,
-        key_id: quadruple_id.key_id().unwrap().clone(),
+        key_id: fake_ecdsa_key_id(),
         pseudo_random_id: request_id.pseudo_random_id,
         matched_quadruple: Some((quadruple_id, height)),
         nonce: Some([0; 32]),
@@ -256,6 +256,7 @@ impl From<&ThresholdEcdsaSigInputs> for TestSigInputs {
             hashed_message: inputs.hashed_message().try_into().unwrap(),
             nonce: *inputs.nonce(),
             presig_quadruple_ref: PreSignatureQuadrupleRef {
+                key_id: Some(fake_ecdsa_key_id()),
                 kappa_unmasked_ref: UnmaskedTranscript::try_from((height, quad.kappa_unmasked()))
                     .unwrap(),
                 lambda_masked_ref: MaskedTranscript::try_from((height, quad.lambda_masked()))
@@ -1499,7 +1500,7 @@ pub(crate) fn add_available_quadruple_to_payload(
     quadruple_id: QuadrupleId,
     registry_version: RegistryVersion,
 ) {
-    let sig_inputs = create_sig_inputs(quadruple_id.0 as u8);
+    let sig_inputs = create_sig_inputs(quadruple_id.id() as u8);
     let quadruple_ref = sig_inputs.sig_inputs_ref.presig_quadruple_ref.clone();
     ecdsa_payload
         .available_quadruples
@@ -1553,7 +1554,7 @@ pub(crate) fn set_up_ecdsa_payload(
 
 pub(crate) trait EcdsaPayloadTestHelper {
     fn peek_next_transcript_id(&self) -> IDkgTranscriptId;
-    fn peek_next_quadruple_id(&self, key_id: EcdsaKeyId) -> QuadrupleId;
+    fn peek_next_quadruple_id(&self) -> QuadrupleId;
 }
 
 impl EcdsaPayloadTestHelper for EcdsaPayload {
@@ -1561,7 +1562,7 @@ impl EcdsaPayloadTestHelper for EcdsaPayload {
         self.uid_generator.clone().next_transcript_id()
     }
 
-    fn peek_next_quadruple_id(&self, key_id: EcdsaKeyId) -> QuadrupleId {
-        self.uid_generator.clone().next_quadruple_id(key_id)
+    fn peek_next_quadruple_id(&self) -> QuadrupleId {
+        self.uid_generator.clone().next_quadruple_id()
     }
 }

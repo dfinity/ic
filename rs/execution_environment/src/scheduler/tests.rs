@@ -4912,7 +4912,7 @@ fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples() {
     let mut test = SchedulerTestBuilder::new()
         .with_ecdsa_key(key_id.clone())
         .build();
-    let quadruple_id = QuadrupleId(0, Some(key_id.clone()));
+    let quadruple_id = QuadrupleId::new(0);
     let quadruple_ids = BTreeSet::from_iter([quadruple_id.clone()]);
 
     inject_ecdsa_signing_request(&mut test, &key_id);
@@ -4974,11 +4974,8 @@ fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys() {
         .build();
 
     // Deliver 2 quadruples for the first key, 1 for the second, 0 for the third
-    let quadruple_ids0 = BTreeSet::from_iter([
-        QuadrupleId(0, Some(key_ids[0].clone())),
-        QuadrupleId(1, Some(key_ids[0].clone())),
-    ]);
-    let quadruple_ids1 = BTreeSet::from_iter([QuadrupleId(2, Some(key_ids[1].clone()))]);
+    let quadruple_ids0 = BTreeSet::from_iter([QuadrupleId::new(0), QuadrupleId::new(1)]);
+    let quadruple_ids1 = BTreeSet::from_iter([QuadrupleId::new(2)]);
     let quadruple_id_map = BTreeMap::from_iter([
         (key_ids[0].clone(), quadruple_ids0.clone()),
         (key_ids[1].clone(), quadruple_ids1.clone()),
