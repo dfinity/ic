@@ -2,10 +2,9 @@ use crate::{state_reader_executor::StateReaderExecutor, HttpError};
 use axum::{body::Body, response::IntoResponse};
 use http::{
     header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE},
-    request::Parts,
     HeaderValue, Method,
 };
-use http_body_util::{BodyExt, Empty, Full};
+use http_body_util::{BodyExt, Empty};
 use hyper::{header, Response, StatusCode};
 use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path, TooLongPathError};
 use ic_error_types::UserError;
@@ -14,8 +13,7 @@ use ic_logger::{info, warn, ReplicaLogger};
 use ic_registry_client_helpers::crypto::CryptoRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    crypto::threshold_sig::ThresholdSigPublicKey, messages::MessageId, PrincipalId,
-    RegistryVersion, SubnetId,
+    crypto::threshold_sig::ThresholdSigPublicKey, messages::MessageId, RegistryVersion, SubnetId,
 };
 use ic_validator::RequestValidationError;
 use serde::Serialize;
@@ -168,19 +166,6 @@ impl IntoResponse for CborUserError {
     }
 }
 
-/// Write the "self describing" CBOR tag and serialize the response
-pub(crate) fn cbor_response<R: Serialize>(r: &R) -> (Response<Body>, usize) {
-    let cbor = into_cbor(r);
-    let body_size_bytes = cbor.len();
-    let mut response = Response::new(Body::new(Full::from(cbor).map_err(BoxError::from)));
-    *response.status_mut() = StatusCode::OK;
-    response.headers_mut().insert(
-        header::CONTENT_TYPE,
-        header::HeaderValue::from_static(CONTENT_TYPE_CBOR),
-    );
-    (response, body_size_bytes)
-}
-
 /// Empty response.
 pub(crate) fn empty_response() -> Response<Body> {
     let mut response = Response::new(Body::new(Empty::new().map_err(BoxError::from)));
@@ -231,21 +216,6 @@ pub(crate) async fn get_latest_certified_state(
         .map(|r| r.0)
 }
 
-/// Remove the effective principal id from the request parts.
-/// The effective principal id is added to the request during routing by looking at the url.
-/// Returns an BAD_REQUEST response if the effective principal id is not found in the request parts.
-pub(crate) fn remove_effective_principal_id(
-    parts: &mut Parts,
-) -> Result<PrincipalId, Response<Body>> {
-    match parts.extensions.remove::<PrincipalId>() {
-        Some(principal_id) => Ok(principal_id),
-        _ => Err(make_plaintext_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Failed to get effective principal id from request. This is a bug.".to_string(),
-        )),
-    }
-}
-
 // A few test helpers, improving readability in the tests
 #[cfg(test)]
 pub(crate) mod test {
@@ -260,7 +230,7 @@ pub(crate) mod test {
 
     #[test]
     fn test_cbor_response() {
-        let response = cbor_response(b"").0;
+        let response = Cbor(b"").into_response();
         assert_eq!(response.headers().len(), 1);
         assert_eq!(
             response
