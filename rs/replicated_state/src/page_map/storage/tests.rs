@@ -144,7 +144,7 @@ fn files_as_delta(base: &Option<Checkpoint>, overlays: &[OverlayFile]) -> PageDe
     let mut pages = Vec::default();
     let num_logical_pages = overlays
         .iter()
-        .map(|f| f.num_logical_pages())
+        .map(|f| f.end_logical_pages())
         .chain(base.iter().map(|b| b.num_pages()))
         .max()
         .unwrap_or(0);
@@ -167,21 +167,29 @@ fn files_as_delta(base: &Option<Checkpoint>, overlays: &[OverlayFile]) -> PageDe
 
 /// Check that we have at most MAX_NUMBER_OF_FILES files and they form a pyramid, i.e.
 /// each files size is bigger or equal than sum of files on top of it.
-fn check_post_merge_criteria(storage_files: &StorageFiles) {
-    let file_lengths = storage_files
+fn check_post_merge_criteria(storage_files: &StorageFiles, layout: &ShardedTestStorageLayout) {
+    let base_length: Vec<u64> = storage_files
         .base
         .iter()
-        .chain(storage_files.overlays.iter())
         .map(|p| std::fs::metadata(p).unwrap().len())
-        .collect::<Vec<_>>();
-    assert!(file_lengths.len() <= MAX_NUMBER_OF_FILES);
-    file_lengths
-        .iter()
-        .rev()
-        .fold(0, |size_on_top, current_size| {
-            assert!(size_on_top <= *current_size);
-            size_on_top + current_size
-        });
+        .collect();
+    let mut file_lengths_by_shard: BTreeMap<Shard, Vec<u64>> = BTreeMap::new();
+    for p in storage_files.overlays.iter() {
+        file_lengths_by_shard
+            .entry(layout.overlay_shard(p).unwrap())
+            .or_insert(base_length.clone())
+            .push(std::fs::metadata(p).unwrap().len());
+    }
+    for file_lengths in file_lengths_by_shard.values() {
+        assert!(file_lengths.len() <= MAX_NUMBER_OF_FILES);
+        file_lengths
+            .iter()
+            .rev()
+            .fold(0, |size_on_top, current_size| {
+                assert!(size_on_top <= *current_size);
+                size_on_top + current_size
+            });
+    }
 }
 
 /// Verify that the data in `new_base` is the same as in `old_base` + `old_files`.
@@ -206,14 +214,6 @@ fn verify_merge_to_base(
     }
 }
 
-fn is_none_or_zeroes(pagemap: Option<&[u8; PAGE_SIZE]>) -> bool {
-    if let Some(data) = pagemap {
-        !data.iter().any(|c| *c != 0)
-    } else {
-        true
-    }
-}
-
 /// Verify that the data in `new_overlay` is the same as in `old_base` + `old_files`.
 fn verify_merge_to_overlay(
     new_overlay: &[PathBuf],
@@ -225,6 +225,7 @@ fn verify_merge_to_overlay(
     let delta = files_as_delta(old_base, old_overlays);
     let dst: BTreeMap<Shard, OverlayFile> = new_overlay
         .iter()
+        .filter(|p| p.exists())
         .map(|p| {
             (
                 layout.overlay_shard(p).unwrap(),
@@ -232,22 +233,24 @@ fn verify_merge_to_overlay(
             )
         })
         .collect();
-    let num_logical_pages = dst.values().map(|o| o.num_logical_pages()).max().unwrap() as u64;
+    let num_logical_pages = dst
+        .values()
+        .map(|o| o.end_logical_pages() as u64)
+        .max()
+        .unwrap();
     assert_eq!(delta.iter().last().unwrap().0.get() + 1, num_logical_pages);
+    let zeroes = [0; PAGE_SIZE];
     for i in 0..num_logical_pages {
         let page_index = PageIndex::new(i);
         let shard = Shard::new(page_index.get() / lsmt_config.shard_num_pages);
-        if delta.get_page(page_index).is_none() {
-            assert!(is_none_or_zeroes(
-                dst.get(&shard).and_then(|o| o.get_page(page_index))
-            ));
-        } else {
-            assert_eq!(
-                delta.get_page(page_index),
-                dst.get(&shard).unwrap().get_page(page_index),
-                "Failed for idx {:#?}",
-                page_index
-            );
+        match (
+            delta.get_page(page_index),
+            dst.get(&shard).and_then(|o| o.get_page(page_index)),
+        ) {
+            (Some(data_delta), Some(data_dst)) => assert_eq!(data_delta, data_dst),
+            (None, Some(data_dst)) => assert_eq!(&zeroes, data_dst),
+            (Some(data_delta), None) => assert_eq!(&zeroes, data_delta),
+            (None, None) => (),
         }
     }
 }
@@ -460,6 +463,13 @@ fn lsmt_config_unsharded() -> LsmtConfig {
     }
 }
 
+fn lsmt_config_sharded() -> LsmtConfig {
+    LsmtConfig {
+        lsmt_status: FlagStatus::Enabled,
+        shard_num_pages: 3,
+    }
+}
+
 /// This function applies `instructions` to a new `Storage` in a temporary directory.
 /// At the same time, we apply the same instructions to a `PageDelta`, which acts as the reference
 /// implementation. After each operation, we check that all overlay files are as expected and
@@ -538,17 +548,20 @@ fn write_overlays_and_verify_with_tempdir(
                         &storage_layout,
                         Height::from(round as u64),
                         num_pages,
-                        &lsmt_config_unsharded(),
+                        lsmt_config,
                     )
                     .unwrap()
                 };
                 // Open the files before they might get deleted.
-                let merged_overlays: Vec<_> = merges
+                let merged_overlays: Vec<(Shard, OverlayFile)> = merges
                     .iter()
                     .flat_map(|m| {
-                        m.overlays
-                            .iter()
-                            .map(|path| OverlayFile::load(path).unwrap())
+                        m.overlays.iter().map(|path| {
+                            (
+                                storage_layout.overlay_shard(path).unwrap(),
+                                OverlayFile::load(path).unwrap(),
+                            )
+                        })
                     })
                     .collect();
                 let merged_base = if merges.len() == 1 {
@@ -579,23 +592,38 @@ fn write_overlays_and_verify_with_tempdir(
                 for merge in merges.iter() {
                     match &merge.dst {
                         MergeDestination::MultiShardOverlay { shard_paths, .. } => {
-                            assert_eq!(shard_paths.len(), 1);
                             verify_merge_to_overlay(
                                 shard_paths,
                                 &merged_base,
-                                &merged_overlays,
+                                &merged_overlays
+                                    .iter()
+                                    .map(|(_, o)| o.clone())
+                                    .collect::<Vec<_>>(),
                                 &storage_layout,
                                 lsmt_config,
                             );
                         }
                         MergeDestination::BaseFile(ref path) => {
-                            verify_merge_to_base(path, &merged_base, &merged_overlays);
+                            verify_merge_to_base(
+                                path,
+                                &merged_base,
+                                &merged_overlays
+                                    .iter()
+                                    .map(|(_, o)| o.clone())
+                                    .collect::<Vec<_>>(),
+                            );
                         }
                         MergeDestination::SingleShardOverlay(path) => {
                             verify_merge_to_overlay(
                                 &[path.clone()],
                                 &merged_base,
-                                &merged_overlays,
+                                &merged_overlays
+                                    .iter()
+                                    .filter(|(s, _)| {
+                                        *s == storage_layout.overlay_shard(path).unwrap()
+                                    })
+                                    .map(|(_, o)| o.clone())
+                                    .collect::<Vec<_>>(),
                                 &storage_layout,
                                 lsmt_config,
                             );
@@ -603,7 +631,7 @@ fn write_overlays_and_verify_with_tempdir(
                     }
                 }
 
-                check_post_merge_criteria(&files_after);
+                check_post_merge_criteria(&files_after, &storage_layout);
 
                 // The directory merge should not cause any changes to the combined data.
                 verify_storage(tempdir.path(), &combined_delta);
@@ -616,9 +644,25 @@ fn write_overlays_and_verify_with_tempdir(
 
 /// Apply a list of `Instruction` to a new temporary directory and check correctness of the sequence
 /// after every step.
-fn write_overlays_and_verify(instructions: Vec<Instruction>) -> MetricsRegistry {
+/// Use unsharded LSMT config.
+fn write_overlays_and_verify_unsharded(instructions: Vec<Instruction>) -> MetricsRegistry {
     let tempdir = tempdir().unwrap();
     write_overlays_and_verify_with_tempdir(instructions, &lsmt_config_unsharded(), &tempdir)
+}
+
+/// Apply a list of `Instruction` to a new temporary directory and check correctness of the sequence
+/// after every step.
+/// Use sharded LSMT config
+fn write_overlays_and_verify_sharded(instructions: Vec<Instruction>) -> MetricsRegistry {
+    let tempdir = tempdir().unwrap();
+    write_overlays_and_verify_with_tempdir(instructions, &lsmt_config_sharded(), &tempdir)
+}
+
+/// Apply a list of `Instruction` to a new temporary directory and check correctness of the sequence
+/// after every step for both sharded and unsharded config
+fn write_overlays_and_verify(instructions: Vec<Instruction>) {
+    write_overlays_and_verify_sharded(instructions.clone());
+    write_overlays_and_verify_unsharded(instructions);
 }
 
 #[test]
@@ -721,7 +765,7 @@ fn can_write_large_overlay_file() {
     // The index is specifically chosen to ensure the index is larger than a page, as this used to be
     // a bug. 1000 ranges of 16 bytes each is roughly 4 pages.
     let indices = (0..2000).step_by(2).collect();
-    let metrics = write_overlays_and_verify(vec![WriteOverlay(indices)]);
+    let metrics = write_overlays_and_verify_unsharded(vec![WriteOverlay(indices)]);
 
     let metrics_index =
         maplit::btreemap!("op".into() => "flush".into(), "type".into() => "index".into());
@@ -740,7 +784,7 @@ fn can_merge_large_overlay_file() {
         assert_files_merged: Some(8),
         is_downgrade: false,
     });
-    write_overlays_and_verify(instructions);
+    write_overlays_and_verify_unsharded(instructions);
 }
 
 #[test]
@@ -764,7 +808,7 @@ fn can_overwrite_and_merge_based_on_number_of_files() {
         });
     }
 
-    write_overlays_and_verify(instructions);
+    write_overlays_and_verify_unsharded(instructions);
 }
 
 #[test]
