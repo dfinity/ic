@@ -1,6 +1,6 @@
 use crate::http::headers::IC_CERTIFICATE_HEADER_NAME;
+use axum::body::Body;
 use futures::{stream, Stream, StreamExt, TryStreamExt};
-use hyper::Body;
 use ic_agent::{Agent, AgentError};
 use ic_http_certification::HttpResponse as Response;
 use ic_utils::{
@@ -135,7 +135,7 @@ impl HttpResponse {
         let chunks_stream = HttpResponse::create_stream(agent, callback, token)
             .map(|chunk| chunk.map(|(body, _)| body));
 
-        Body::wrap_stream(
+        Body::from_stream(
             stream::once(async move { Ok(initial_body) })
                 .chain(chunks_stream)
                 .take(MAX_HTTP_REQUEST_STREAM_CALLBACK_CALL_COUNT)

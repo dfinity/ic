@@ -512,6 +512,13 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "http2",
                 ],
             ),
+            "hyper-rustls_0_26_0": crate.spec(
+                package = "hyper-rustls",
+                version = "^0.26.0",
+                features = [
+                    "http2",
+                ],
+            ),
             "hyper-socks2": crate.spec(
                 version = "^0.8.0",
                 default_features = False,
@@ -519,8 +526,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "rustls",
                 ],
             ),
-            "hyperlocal": crate.spec(
-                version = "^0.8.0",
+            "hyperlocal-next": crate.spec(
+                version = "^0.9.0",
             ),
             "ic0": crate.spec(
                 version = "^0.18.11",
@@ -964,7 +971,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "ring": crate.spec(
-                version = "^0.16.11",
+                version = "^0.17.7",
                 features = [
                     "std",
                 ],
@@ -1011,8 +1018,12 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "dangerous_configuration",
                 ],
             ),
+            "rustls_0_22_2": crate.spec(
+                package = "rustls",
+                version = "^0.22.2",
+            ),
             "rustls-native-certs": crate.spec(
-                version = "^0.6.2",
+                version = "^0.7.0",
             ),
             "rustls-pemfile": crate.spec(
                 version = "^1",

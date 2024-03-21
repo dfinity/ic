@@ -1,5 +1,5 @@
 {
-  "checksum": "e1a8d7d312809f68f71b13489e8b0857279899eafc1ebe0e6150cd1ea410572f",
+  "checksum": "f2c6b5ef8854d91670aba58b2f4bba5697086c4b4385543791955921e7fc234f",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -14723,6 +14723,11 @@
               "target": "hyper_rustls"
             },
             {
+              "id": "hyper-rustls 0.26.0",
+              "target": "hyper_rustls",
+              "alias": "hyper_rustls_0_26_0"
+            },
+            {
               "id": "hyper-socks2 0.8.0",
               "target": "hyper_socks2"
             },
@@ -14731,8 +14736,8 @@
               "target": "hyper_util"
             },
             {
-              "id": "hyperlocal 0.8.0",
-              "target": "hyperlocal"
+              "id": "hyperlocal-next 0.9.0",
+              "target": "hyperlocal_next"
             },
             {
               "id": "ic-agent 0.33.0",
@@ -15167,7 +15172,7 @@
               "target": "rgb"
             },
             {
-              "id": "ring 0.16.20",
+              "id": "ring 0.17.7",
               "target": "ring"
             },
             {
@@ -15215,7 +15220,12 @@
               "target": "rustls"
             },
             {
-              "id": "rustls-native-certs 0.6.3",
+              "id": "rustls 0.22.2",
+              "target": "rustls",
+              "alias": "rustls_0_22_2"
+            },
+            {
+              "id": "rustls-native-certs 0.7.0",
               "target": "rustls_native_certs"
             },
             {
@@ -22032,6 +22042,53 @@
       },
       "license": "MIT"
     },
+    "http-body-to-bytes 0.2.0": {
+      "name": "http-body-to-bytes",
+      "version": "0.2.0",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/http-body-to-bytes/0.2.0/download",
+          "sha256": "17a08236c6f51c2ee95d840f45acf8fa9e339390e00b4ef640857b2f2a534d70"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "http_body_to_bytes",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "http_body_to_bytes",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "bytes 1.5.0",
+              "target": "bytes"
+            },
+            {
+              "id": "http-body 1.0.0",
+              "target": "http_body"
+            },
+            {
+              "id": "http-body-util 0.1.0",
+              "target": "http_body_util"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.2.0"
+      },
+      "license": "Apache-2.0 OR MIT"
+    },
     "http-body-util 0.1.0": {
       "name": "http-body-util",
       "version": "0.1.0",
@@ -22769,6 +22826,87 @@
             "tls12",
             "tokio-runtime"
           ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "futures-util 0.3.30",
+              "target": "futures_util"
+            },
+            {
+              "id": "http 0.2.9",
+              "target": "http"
+            },
+            {
+              "id": "hyper 0.14.27",
+              "target": "hyper"
+            },
+            {
+              "id": "log 0.4.20",
+              "target": "log"
+            },
+            {
+              "id": "rustls 0.21.10",
+              "target": "rustls"
+            },
+            {
+              "id": "rustls-native-certs 0.6.3",
+              "target": "rustls_native_certs"
+            },
+            {
+              "id": "tokio 1.36.0",
+              "target": "tokio"
+            },
+            {
+              "id": "tokio-rustls 0.24.1",
+              "target": "tokio_rustls"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.24.2"
+      },
+      "license": "Apache-2.0 OR ISC OR MIT"
+    },
+    "hyper-rustls 0.26.0": {
+      "name": "hyper-rustls",
+      "version": "0.26.0",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/hyper-rustls/0.26.0/download",
+          "sha256": "a0bea761b46ae2b24eb4aef630d8d1c398157b6fc29e6350ecf090a0b70c952c"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "hyper_rustls",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "hyper_rustls",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "http1",
+            "http2",
+            "log",
+            "logging",
+            "native-tokio",
+            "ring",
+            "rustls-native-certs",
+            "tls12"
+          ],
           "selects": {
             "aarch64-apple-darwin": [
               "webpki-roots"
@@ -22872,42 +23010,55 @@
               "target": "futures_util"
             },
             {
-              "id": "http 0.2.9",
+              "id": "http 1.0.0",
               "target": "http"
             },
             {
-              "id": "hyper 0.14.27",
+              "id": "hyper 1.1.0",
               "target": "hyper"
+            },
+            {
+              "id": "hyper-util 0.1.3",
+              "target": "hyper_util"
             },
             {
               "id": "log 0.4.20",
               "target": "log"
             },
             {
-              "id": "rustls 0.21.10",
+              "id": "rustls 0.22.2",
               "target": "rustls"
             },
             {
-              "id": "rustls-native-certs 0.6.3",
+              "id": "rustls-native-certs 0.7.0",
               "target": "rustls_native_certs"
+            },
+            {
+              "id": "rustls-pki-types 1.3.1",
+              "target": "rustls_pki_types",
+              "alias": "pki_types"
             },
             {
               "id": "tokio 1.36.0",
               "target": "tokio"
             },
             {
-              "id": "tokio-rustls 0.24.1",
+              "id": "tokio-rustls 0.25.0",
               "target": "tokio_rustls"
             },
             {
-              "id": "webpki-roots 0.25.2",
+              "id": "tower-service 0.3.2",
+              "target": "tower_service"
+            },
+            {
+              "id": "webpki-roots 0.26.1",
               "target": "webpki_roots"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.24.2"
+        "version": "0.26.0"
       },
       "license": "Apache-2.0 OR ISC OR MIT"
     },
@@ -23141,19 +23292,19 @@
       },
       "license": "MIT"
     },
-    "hyperlocal 0.8.0": {
-      "name": "hyperlocal",
-      "version": "0.8.0",
+    "hyperlocal-next 0.9.0": {
+      "name": "hyperlocal-next",
+      "version": "0.9.0",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/hyperlocal/0.8.0/download",
-          "sha256": "0fafdf7b2b2de7c9784f76e02c0935e65a8117ec3b768644379983ab333ac98c"
+          "url": "https://static.crates.io/crates/hyperlocal-next/0.9.0/download",
+          "sha256": "acf569d43fa9848e510358c07b80f4adf34084ddc28c6a4a651ee8474c070dcc"
         }
       },
       "targets": [
         {
           "Library": {
-            "crate_name": "hyperlocal",
+            "crate_name": "hyperlocal_next",
             "crate_root": "src/lib.rs",
             "srcs": [
               "**/*.rs"
@@ -23161,7 +23312,7 @@
           }
         }
       ],
-      "library_target_name": "hyperlocal",
+      "library_target_name": "hyperlocal_next",
       "common_attrs": {
         "compile_data_glob": [
           "**"
@@ -23170,37 +23321,47 @@
           "common": [
             "client",
             "default",
-            "server"
+            "http-body-util",
+            "hyper-util",
+            "tower-service"
           ],
           "selects": {}
         },
         "deps": {
           "common": [
             {
-              "id": "futures-util 0.3.30",
-              "target": "futures_util"
-            },
-            {
               "id": "hex 0.4.3",
               "target": "hex"
             },
             {
-              "id": "hyper 0.14.27",
+              "id": "http-body-util 0.1.0",
+              "target": "http_body_util"
+            },
+            {
+              "id": "hyper 1.1.0",
               "target": "hyper"
             },
             {
-              "id": "pin-project 1.1.3",
-              "target": "pin_project"
+              "id": "hyper-util 0.1.3",
+              "target": "hyper_util"
+            },
+            {
+              "id": "pin-project-lite 0.2.13",
+              "target": "pin_project_lite"
             },
             {
               "id": "tokio 1.36.0",
               "target": "tokio"
+            },
+            {
+              "id": "tower-service 0.3.2",
+              "target": "tower_service"
             }
           ],
           "selects": {}
         },
-        "edition": "2018",
-        "version": "0.8.0"
+        "edition": "2021",
+        "version": "0.9.0"
       },
       "license": "MIT"
     },
@@ -23345,9 +23506,12 @@
       "name": "ic-agent",
       "version": "0.33.0",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ic-agent/0.33.0/download",
-          "sha256": "f32c4711ca94eee9b7966116698b69ca99e7e24cba68c1f3dd86f2ed70218a7e"
+        "Git": {
+          "remote": "https://github.com/dfinity/agent-rs",
+          "commitish": {
+            "Rev": "5c34d88"
+          },
+          "strip_prefix": "ic-agent"
         }
       },
       "targets": [
@@ -23402,15 +23566,15 @@
               "target": "hex"
             },
             {
-              "id": "http 0.2.9",
+              "id": "http 1.0.0",
               "target": "http"
             },
             {
-              "id": "http-body 0.4.5",
+              "id": "http-body 1.0.0",
               "target": "http_body"
             },
             {
-              "id": "hyper 0.14.27",
+              "id": "hyper 1.1.0",
               "target": "hyper"
             },
             {
@@ -23458,7 +23622,7 @@
               "target": "reqwest"
             },
             {
-              "id": "ring 0.16.20",
+              "id": "ring 0.17.7",
               "target": "ring"
             },
             {
@@ -23501,8 +23665,20 @@
           "selects": {
             "cfg(not(target_family = \"wasm\"))": [
               {
-                "id": "hyper-rustls 0.24.2",
+                "id": "http-body-to-bytes 0.2.0",
+                "target": "http_body_to_bytes"
+              },
+              {
+                "id": "http-body-util 0.1.0",
+                "target": "http_body_util"
+              },
+              {
+                "id": "hyper-rustls 0.26.0",
                 "target": "hyper_rustls"
+              },
+              {
+                "id": "hyper-util 0.1.3",
+                "target": "hyper_util"
               },
               {
                 "id": "rustls-webpki 0.101.7",
@@ -23511,6 +23687,10 @@
               {
                 "id": "tokio 1.36.0",
                 "target": "tokio"
+              },
+              {
+                "id": "tower 0.4.13",
+                "target": "tower"
               }
             ]
           }
@@ -24449,9 +24629,12 @@
       "name": "ic-transport-types",
       "version": "0.33.0",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ic-transport-types/0.33.0/download",
-          "sha256": "d595b9f72e5952bcb22e5cda37ae1c8d6579a24aaa224b63b8d245f386bdcbb2"
+        "Git": {
+          "remote": "https://github.com/dfinity/agent-rs",
+          "commitish": {
+            "Rev": "5c34d88"
+          },
+          "strip_prefix": "ic-transport-types"
         }
       },
       "targets": [
@@ -44044,7 +44227,8 @@
           "common": [
             "alloc",
             "default",
-            "dev_urandom_fallback"
+            "dev_urandom_fallback",
+            "std"
           ],
           "selects": {}
         },
@@ -45551,6 +45735,103 @@
       },
       "license": "Apache-2.0 OR ISC OR MIT"
     },
+    "rustls 0.22.2": {
+      "name": "rustls",
+      "version": "0.22.2",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/rustls/0.22.2/download",
+          "sha256": "e87c9956bd9807afa1f77e0f7594af32566e830e088a5576d27c5b6f30f49d41"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "rustls",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "rustls",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "log",
+            "logging",
+            "ring",
+            "tls12"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "log 0.4.20",
+              "target": "log"
+            },
+            {
+              "id": "ring 0.17.7",
+              "target": "ring"
+            },
+            {
+              "id": "rustls 0.22.2",
+              "target": "build_script_build"
+            },
+            {
+              "id": "rustls-pki-types 1.3.1",
+              "target": "rustls_pki_types",
+              "alias": "pki_types"
+            },
+            {
+              "id": "rustls-webpki 0.102.2",
+              "target": "webpki"
+            },
+            {
+              "id": "subtle 2.5.0",
+              "target": "subtle"
+            },
+            {
+              "id": "zeroize 1.7.0",
+              "target": "zeroize"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.22.2"
+      },
+      "build_script_attrs": {
+        "data_glob": [
+          "**"
+        ],
+        "link_deps": {
+          "common": [
+            {
+              "id": "ring 0.17.7",
+              "target": "ring"
+            }
+          ],
+          "selects": {}
+        }
+      },
+      "license": "Apache-2.0 OR ISC OR MIT"
+    },
     "rustls-native-certs 0.6.3": {
       "name": "rustls-native-certs",
       "version": "0.6.3",
@@ -45606,6 +45887,69 @@
         },
         "edition": "2021",
         "version": "0.6.3"
+      },
+      "license": "Apache-2.0 OR ISC OR MIT"
+    },
+    "rustls-native-certs 0.7.0": {
+      "name": "rustls-native-certs",
+      "version": "0.7.0",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/rustls-native-certs/0.7.0/download",
+          "sha256": "8f1fb85efa936c42c6d5fc28d2629bb51e4b2f4b8a5211e297d599cc5a093792"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "rustls_native_certs",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "rustls_native_certs",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "rustls-pemfile 2.0.0",
+              "target": "rustls_pemfile"
+            },
+            {
+              "id": "rustls-pki-types 1.3.1",
+              "target": "rustls_pki_types",
+              "alias": "pki_types"
+            }
+          ],
+          "selects": {
+            "cfg(all(unix, not(target_os = \"macos\")))": [
+              {
+                "id": "openssl-probe 0.1.5",
+                "target": "openssl_probe"
+              }
+            ],
+            "cfg(target_os = \"macos\")": [
+              {
+                "id": "security-framework 2.9.2",
+                "target": "security_framework"
+              }
+            ],
+            "cfg(windows)": [
+              {
+                "id": "schannel 0.1.22",
+                "target": "schannel"
+              }
+            ]
+          }
+        },
+        "edition": "2021",
+        "version": "0.7.0"
       },
       "license": "Apache-2.0 OR ISC OR MIT"
     },
@@ -45687,7 +46031,7 @@
               "target": "base64"
             },
             {
-              "id": "rustls-pki-types 1.1.0",
+              "id": "rustls-pki-types 1.3.1",
               "target": "rustls_pki_types",
               "alias": "pki_types"
             }
@@ -45699,13 +46043,13 @@
       },
       "license": "Apache-2.0 OR ISC OR MIT"
     },
-    "rustls-pki-types 1.1.0": {
+    "rustls-pki-types 1.3.1": {
       "name": "rustls-pki-types",
-      "version": "1.1.0",
+      "version": "1.3.1",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/rustls-pki-types/1.1.0/download",
-          "sha256": "9e9d979b3ce68192e42760c7810125eb6cf2ea10efae545a156063e61f314e2a"
+          "url": "https://static.crates.io/crates/rustls-pki-types/1.3.1/download",
+          "sha256": "5ede67b28608b4c60685c7d54122d4400d90f62b40caee7700e700380a390fa8"
         }
       },
       "targets": [
@@ -45727,12 +46071,13 @@
         "crate_features": {
           "common": [
             "alloc",
-            "default"
+            "default",
+            "std"
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.1.0"
+        "version": "1.3.1"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -45784,6 +46129,62 @@
         },
         "edition": "2021",
         "version": "0.101.7"
+      },
+      "license": "ISC"
+    },
+    "rustls-webpki 0.102.2": {
+      "name": "rustls-webpki",
+      "version": "0.102.2",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/rustls-webpki/0.102.2/download",
+          "sha256": "faaa0a62740bedb9b2ef5afa303da42764c012f743917351dc9a237ea1663610"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "webpki",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "webpki",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "alloc",
+            "ring",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "ring 0.17.7",
+              "target": "ring"
+            },
+            {
+              "id": "rustls-pki-types 1.3.1",
+              "target": "rustls_pki_types",
+              "alias": "pki_types"
+            },
+            {
+              "id": "untrusted 0.9.0",
+              "target": "untrusted"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.102.2"
       },
       "license": "ISC"
     },
@@ -53439,6 +53840,61 @@
       },
       "license": "MIT/Apache-2.0"
     },
+    "tokio-rustls 0.25.0": {
+      "name": "tokio-rustls",
+      "version": "0.25.0",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/tokio-rustls/0.25.0/download",
+          "sha256": "775e0c0f0adb3a2f22a00c4745d728b479985fc15ee7ca6a2608388c5569860f"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "tokio_rustls",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "tokio_rustls",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "logging",
+            "tls12"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "rustls 0.22.2",
+              "target": "rustls"
+            },
+            {
+              "id": "rustls-pki-types 1.3.1",
+              "target": "rustls_pki_types",
+              "alias": "pki_types"
+            },
+            {
+              "id": "tokio 1.36.0",
+              "target": "tokio"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.25.0"
+      },
+      "license": "MIT/Apache-2.0"
+    },
     "tokio-serde 0.8.0": {
       "name": "tokio-serde",
       "version": "0.8.0",
@@ -59874,6 +60330,46 @@
       },
       "license": "MPL-2.0"
     },
+    "webpki-roots 0.26.1": {
+      "name": "webpki-roots",
+      "version": "0.26.1",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/webpki-roots/0.26.1/download",
+          "sha256": "b3de34ae270483955a94f4b21bdaaeb83d508bb84a01435f393818edb0012009"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "webpki_roots",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "webpki_roots",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "rustls-pki-types 1.3.1",
+              "target": "rustls_pki_types",
+              "alias": "pki_types"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.26.1"
+      },
+      "license": "MPL-2.0"
+    },
     "wee_alloc 0.4.5": {
       "name": "wee_alloc",
       "version": "0.4.5",
@@ -64283,9 +64779,10 @@
     "hyper 0.14.27",
     "hyper 1.1.0",
     "hyper-rustls 0.24.2",
+    "hyper-rustls 0.26.0",
     "hyper-socks2 0.8.0",
     "hyper-util 0.1.3",
-    "hyperlocal 0.8.0",
+    "hyperlocal-next 0.9.0",
     "ic-agent 0.33.0",
     "ic-btc-interface 0.1.0",
     "ic-btc-test-utils 0.1.0",
@@ -64400,7 +64897,7 @@
     "regex 1.10.2",
     "reqwest 0.11.22",
     "rgb 0.8.37",
-    "ring 0.16.20",
+    "ring 0.17.7",
     "ripemd 0.1.3",
     "rlp 0.5.2",
     "rocksdb 0.21.0",
@@ -64413,7 +64910,8 @@
     "rust_decimal_macros 1.32.0",
     "rustc-hash 1.1.0",
     "rustls 0.21.10",
-    "rustls-native-certs 0.6.3",
+    "rustls 0.22.2",
+    "rustls-native-certs 0.7.0",
     "rustls-pemfile 1.0.3",
     "rustversion 1.0.14",
     "rusty-fork 0.3.0",
