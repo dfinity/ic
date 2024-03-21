@@ -1,7 +1,39 @@
-load("//rs/tests:common.bzl", "DEPENDENCIES", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "NNS_CANISTER_RUNTIME_DEPS")
+load("@rules_rust//rust:defs.bzl", "rust_library")
+load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "NNS_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test")
 
 package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "//rs/canister_client",
+    "//rs/nervous_system/common/test_keys",
+    "//rs/nns/common",
+    "//rs/nns/governance",
+    "//rs/nns/test_utils",
+    "//rs/registry/subnet_type",
+    "//rs/rust_canisters/canister_test",
+    "//rs/tests",
+    "//rs/types/types",
+    "@crate_index//:anyhow",
+    "@crate_index//:slog",
+]
+
+RUNNER_DEPENDENCIES = [
+    "nested",
+    "//rs/tests",
+    "@crate_index//:anyhow",
+]
+
+MACRO_DEPENDENCIES = [
+]
+
+rust_library(
+    name = "nested",
+    srcs = glob(["src/**/*.rs"]),
+    crate_name = "nested",
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    deps = DEPENDENCIES,
+)
 
 system_test(
     name = "registration",
@@ -16,7 +48,7 @@ system_test(
     uses_guestos_dev = True,
     uses_setupos_dev = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = RUNNER_DEPENDENCIES,
 )
 
 system_test(
@@ -33,5 +65,5 @@ system_test(
     uses_hostos_dev_test = True,
     uses_setupos_dev = True,
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = RUNNER_DEPENDENCIES,
 )
