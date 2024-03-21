@@ -334,7 +334,7 @@ impl InstallCodeContext {
                 chunk_hashes_list: args
                     .chunk_hashes_list
                     .into_iter()
-                    .map(|h| h.to_vec())
+                    .map(|h| h.hash.to_vec())
                     .collect(),
                 wasm_module_hash,
             },
