@@ -394,7 +394,7 @@ pub fn icrc1_operation_to_rosetta_core_operations(
                 OperationType::Burn.to_string(),
                 Some(from.into()),
                 Some(rosetta_core::objects::Amount::new(
-                    amount.to_string(),
+                    format!("-{}", amount),
                     currency,
                 )),
                 None,
@@ -532,8 +532,8 @@ pub fn icrc1_operation_to_rosetta_core_operations(
                 operations.push(rosetta_core::objects::Operation::new(
                     FEE_OPERATION_IDENTIFIER,
                     OperationType::Fee.to_string(),
-                    Some(spender.into()),
-                    Some(Amount::new(fee_paid.to_string(), currency)),
+                    Some(from.into()),
+                    Some(Amount::new(format!("-{}", fee_paid), currency)),
                     None,
                     // If the fee inside the operation is set that means the User set the fee and the Ledger did nothing
                     Some(
