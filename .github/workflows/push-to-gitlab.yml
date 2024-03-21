@@ -1,0 +1,25 @@
+name: Push To Gitlab
+# This workflow pushes new commits to GitLab, but only for merged pull requests
+
+on:
+  pull_request:
+    branches:
+      - mirroring
+    types:
+      - closed
+
+jobs:
+  push_to_gitlab:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: Push to GitLab
+        run: |
+          url="https://push-from-github:${{ secrets.GITLAB_TOKEN }}@gitlab.com/dfinity-lab/public/ic.git"
+          ((git remote | grep gitlab) && git remote set-url gitlab "$url") \
+            || git remote add gitlab "$url"
+          git push gitlab mirroring
