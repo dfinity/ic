@@ -3,11 +3,14 @@ pub mod test_fixtures;
 #[cfg(test)]
 mod tests;
 
+use crate::scheduler::{Task, TaskExecution};
 use crate::state::{
     Archive, ArchiveWasm, GitCommitHash, Index, IndexWasm, Ledger, LedgerWasm, Wasm, WasmHash,
     ARCHIVE_NODE_BYTECODE, INDEX_BYTECODE, LEDGER_BYTECODE,
 };
-use crate::storage::memory::{wasm_store_memory, StableMemory};
+use crate::storage::memory::{
+    deadline_by_task_memory, task_queue_memory, wasm_store_memory, StableMemory,
+};
 use candid::Deserialize;
 use ic_stable_structures::storable::Bound;
 use ic_stable_structures::{BTreeMap, Storable};
@@ -17,8 +20,17 @@ use std::cell::RefCell;
 
 pub(crate) type WasmStore = BTreeMap<WasmHash, StoredWasm, StableMemory>;
 
+pub struct TaskQueue {
+    pub queue: BTreeMap<TaskExecution, (), StableMemory>,
+    pub deadline_by_task: BTreeMap<Task, u64, StableMemory>,
+}
+
 thread_local! {
     static WASM_STORE: RefCell<WasmStore> = RefCell::new(WasmStore::init(wasm_store_memory()));
+    pub static TASKS: RefCell<TaskQueue> = RefCell::new(TaskQueue {
+        queue: BTreeMap::init(task_queue_memory()),
+        deadline_by_task: BTreeMap::init(deadline_by_task_memory()),
+    });
 }
 
 pub(crate) mod memory {
@@ -34,6 +46,8 @@ pub(crate) mod memory {
 
     const STATE_MEMORY_ID: MemoryId = MemoryId::new(0);
     const WASM_STORE_MEMORY_ID: MemoryId = MemoryId::new(1);
+    const TASK_QUEUE_ID: MemoryId = MemoryId::new(2);
+    const DEADLINE_BY_TASK_ID: MemoryId = MemoryId::new(3);
 
     pub type StableMemory = VirtualMemory<DefaultMemoryImpl>;
 
@@ -43,6 +57,14 @@ pub(crate) mod memory {
 
     pub fn wasm_store_memory() -> StableMemory {
         MEMORY_MANAGER.with(|m| m.borrow().get(WASM_STORE_MEMORY_ID))
+    }
+
+    pub fn task_queue_memory() -> StableMemory {
+        MEMORY_MANAGER.with(|m| m.borrow().get(TASK_QUEUE_ID))
+    }
+
+    pub fn deadline_by_task_memory() -> StableMemory {
+        MEMORY_MANAGER.with(|m| m.borrow().get(DEADLINE_BY_TASK_ID))
     }
 }
 
@@ -91,6 +113,41 @@ impl Storable for StoredWasm {
                 hex::encode(bytes)
             )
         })
+    }
+
+    const BOUND: Bound = Bound::Unbounded;
+}
+
+impl Storable for TaskExecution {
+    fn to_bytes(&self) -> Cow<[u8]> {
+        let mut buf = vec![];
+        ciborium::ser::into_writer(&self, &mut buf)
+            .expect("failed to encode a TaskExecution to bytes");
+        Cow::Owned(buf)
+    }
+
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        ciborium::de::from_reader(bytes.as_ref()).unwrap_or_else(|e| {
+            panic!(
+                "failed to decode TaskExecution bytes {}: {e}",
+                hex::encode(bytes)
+            )
+        })
+    }
+
+    const BOUND: Bound = Bound::Unbounded;
+}
+
+impl Storable for Task {
+    fn to_bytes(&self) -> Cow<[u8]> {
+        let mut buf = vec![];
+        ciborium::ser::into_writer(&self, &mut buf).expect("failed to encode a Task to bytes");
+        Cow::Owned(buf)
+    }
+
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        ciborium::de::from_reader(bytes.as_ref())
+            .unwrap_or_else(|e| panic!("failed to decode Task bytes {}: {e}", hex::encode(bytes)))
     }
 
     const BOUND: Bound = Bound::Unbounded;

@@ -4,7 +4,7 @@ pub mod test_fixtures;
 mod tests;
 
 use crate::candid::InitArg;
-use crate::scheduler::{Erc20Token, Task, Tasks};
+use crate::scheduler::{Erc20Token, Task};
 use crate::storage::memory::{state_memory, StableMemory};
 use candid::Principal;
 use ic_cdk::trap;
@@ -406,39 +406,19 @@ impl Storable for ConfigState {
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct State {
     managed_canisters: ManagedCanisters,
-    tasks: Tasks,
-    processing_tasks_guard: bool,
     more_controller_ids: Vec<Principal>,
     minter_id: Option<Principal>,
+    /// Locks preventing concurrent execution timer tasks
+    pub active_tasks: BTreeSet<Task>,
 }
 
 impl State {
-    pub fn tasks(&self) -> &Tasks {
-        &self.tasks
-    }
-
     pub fn more_controller_ids(&self) -> &[Principal] {
         &self.more_controller_ids
     }
 
     pub fn minter_id(&self) -> Option<&Principal> {
         self.minter_id.as_ref()
-    }
-
-    pub fn add_task(&mut self, task: Task) {
-        self.tasks.add_task(task);
-    }
-
-    pub fn set_tasks(&mut self, tasks: Tasks) {
-        self.tasks = tasks;
-    }
-
-    pub fn maybe_set_timer_guard(&mut self) -> bool {
-        if self.processing_tasks_guard {
-            return false;
-        }
-        self.processing_tasks_guard = true;
-        true
     }
 
     pub fn managed_canisters_iter(&self) -> impl Iterator<Item = (&Erc20Token, &Canisters)> {
@@ -451,10 +431,6 @@ impl State {
 
     fn managed_canisters_mut(&mut self, contract: &Erc20Token) -> Option<&mut Canisters> {
         self.managed_canisters.canisters.get_mut(contract)
-    }
-
-    pub fn unset_timer_guard(&mut self) {
-        self.processing_tasks_guard = false;
     }
 
     pub fn managed_status<'a, T: 'a>(
@@ -623,10 +599,9 @@ impl TryFrom<InitArg> for State {
     ) -> Result<Self, Self::Error> {
         let state = Self {
             managed_canisters: Default::default(),
-            tasks: Default::default(),
-            processing_tasks_guard: false,
             more_controller_ids,
             minter_id,
+            active_tasks: Default::default(),
         };
         state.validate_config()?;
         Ok(state)

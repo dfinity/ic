@@ -14,12 +14,12 @@ candid = { workspace = true }
 ciborium = { workspace = true }
 futures = { workspace = true }
 hex = "0.4"
+ic0 = "0.21.1"
 ic-canister-log = "0.2.0"
 ic-base-types = { path = "../../types/base_types" }
 ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
-ic-cdk-timers = { workspace = true }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-ethereum-types = { path = "../types"}
 ic-management-canister-types = { path = "../../types/management_canister_types" }

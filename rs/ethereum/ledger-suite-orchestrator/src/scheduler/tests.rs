@@ -3,7 +3,7 @@ use crate::management::{CallError, Reason};
 use crate::scheduler::test_fixtures::{usdc, usdc_metadata};
 use crate::scheduler::tests::mock::MockCanisterRuntime;
 use crate::scheduler::{
-    InstallLedgerSuiteArgs, Task, TaskError, Tasks, MINIMUM_MONITORED_CANISTER_CYCLES,
+    InstallLedgerSuiteArgs, Task, TaskError, TaskExecution, MINIMUM_MONITORED_CANISTER_CYCLES,
     MINIMUM_ORCHESTRATOR_CYCLES,
 };
 use crate::state::test_fixtures::new_state;
@@ -22,8 +22,6 @@ const MINTER_PRINCIPAL: Principal = Principal::from_slice(&[3_u8; 29]);
 #[tokio::test]
 async fn should_install_ledger_suite() {
     init_state();
-    let mut tasks = Tasks::default();
-    tasks.add_task(Task::InstallLedgerSuite(usdc_install_args()));
     let mut runtime = MockCanisterRuntime::new();
 
     runtime.expect_id().return_const(ORCHESTRATOR_PRINCIPAL);
@@ -34,7 +32,11 @@ async fn should_install_ledger_suite() {
     );
     runtime.expect_install_code().times(2).return_const(Ok(()));
 
-    assert_eq!(tasks.execute(&runtime).await, Ok(()));
+    let task = TaskExecution {
+        task_type: Task::InstallLedgerSuite(usdc_install_args()),
+        execute_at_ns: 0,
+    };
+    assert_eq!(task.execute(&runtime).await, Ok(()));
 
     assert_eq!(
         read_state(|s| s.managed_canisters(&usdc()).cloned()),
@@ -57,8 +59,6 @@ async fn should_install_ledger_suite() {
 async fn should_top_up_canister() {
     use mockall::Sequence;
     init_state();
-    let mut tasks = Tasks::default();
-    tasks.add_task(Task::InstallLedgerSuite(usdc_install_args()));
     let mut runtime = MockCanisterRuntime::new();
 
     runtime.expect_id().return_const(ORCHESTRATOR_PRINCIPAL);
@@ -69,9 +69,16 @@ async fn should_top_up_canister() {
     );
     runtime.expect_install_code().times(2).return_const(Ok(()));
 
-    assert_eq!(tasks.execute(&runtime).await, Ok(()));
+    let task = TaskExecution {
+        task_type: Task::InstallLedgerSuite(usdc_install_args()),
+        execute_at_ns: 0,
+    };
+    assert_eq!(task.execute(&runtime).await, Ok(()));
 
-    tasks.add_task(Task::MaybeTopUp);
+    let task = TaskExecution {
+        task_type: Task::MaybeTopUp,
+        execute_at_ns: 0,
+    };
     let mut seq = Sequence::new();
     runtime
         .expect_canister_cycles()
@@ -91,9 +98,7 @@ async fn should_top_up_canister() {
         })
         .times(2)
         .return_const(Ok(()));
-    assert_eq!(tasks.execute(&runtime).await, Ok(()));
-
-    tasks.add_task(Task::MaybeTopUp);
+    assert_eq!(task.execute(&runtime).await, Ok(()));
 
     let mut seq = Sequence::new();
     runtime
@@ -116,9 +121,7 @@ async fn should_top_up_canister() {
         }));
     runtime.expect_send_cycles().times(1).return_const(Ok(()));
 
-    assert_eq!(tasks.execute(&runtime).await, Ok(()));
-
-    tasks.add_task(Task::MaybeTopUp);
+    assert_eq!(task.execute(&runtime).await, Ok(()));
 
     runtime
         .expect_canister_cycles()
@@ -126,7 +129,7 @@ async fn should_top_up_canister() {
         .return_const(Ok(MINIMUM_MONITORED_CANISTER_CYCLES as u128));
     runtime.expect_send_cycles().never();
 
-    assert_eq!(tasks.execute(&runtime).await, Ok(()));
+    assert_eq!(task.execute(&runtime).await, Ok(()));
 }
 
 #[tokio::test]
@@ -140,8 +143,7 @@ async fn should_install_ledger_suite_with_additional_controllers() {
         .unwrap(),
     );
     register_embedded_wasms();
-    let mut tasks = Tasks::default();
-    tasks.add_task(Task::InstallLedgerSuite(usdc_install_args()));
+
     let mut runtime = MockCanisterRuntime::new();
 
     runtime.expect_id().return_const(ORCHESTRATOR_PRINCIPAL);
@@ -152,7 +154,11 @@ async fn should_install_ledger_suite_with_additional_controllers() {
     );
     runtime.expect_install_code().times(2).return_const(Ok(()));
 
-    assert_eq!(tasks.execute(&runtime).await, Ok(()));
+    let task = TaskExecution {
+        task_type: Task::InstallLedgerSuite(usdc_install_args()),
+        execute_at_ns: 0,
+    };
+    assert_eq!(task.execute(&runtime).await, Ok(()));
 
     assert_eq!(
         read_state(|s| s.managed_canisters(&usdc()).cloned()),
@@ -174,8 +180,6 @@ async fn should_install_ledger_suite_with_additional_controllers() {
 #[tokio::test]
 async fn should_not_retry_successful_operation_after_failing_one() {
     init_state();
-    let mut tasks = Tasks::default();
-    tasks.add_task(Task::InstallLedgerSuite(usdc_install_args()));
     let mut runtime = MockCanisterRuntime::new();
 
     runtime.expect_id().return_const(ORCHESTRATOR_PRINCIPAL);
@@ -193,8 +197,12 @@ async fn should_not_retry_successful_operation_after_failing_one() {
         .times(1)
         .return_const(Err(expected_error.clone()));
 
+    let task = TaskExecution {
+        task_type: Task::InstallLedgerSuite(usdc_install_args()),
+        execute_at_ns: 0,
+    };
     assert_eq!(
-        tasks.execute(&runtime).await,
+        task.execute(&runtime).await,
         Err(TaskError::InstallCodeError(expected_error))
     );
     assert_eq!(
@@ -223,7 +231,7 @@ async fn should_not_retry_successful_operation_after_failing_one() {
     );
 
     assert_eq!(
-        tasks.execute(&runtime).await,
+        task.execute(&runtime).await,
         Err(TaskError::CanisterCreationError(expected_error))
     );
     assert_eq!(
@@ -256,7 +264,7 @@ async fn should_not_retry_successful_operation_after_failing_one() {
         .return_const(Err(expected_error.clone()));
 
     assert_eq!(
-        tasks.execute(&runtime).await,
+        task.execute(&runtime).await,
         Err(TaskError::InstallCodeError(expected_error))
     );
     assert_eq!(
@@ -277,7 +285,7 @@ async fn should_not_retry_successful_operation_after_failing_one() {
     runtime.checkpoint();
     runtime.expect_id().return_const(ORCHESTRATOR_PRINCIPAL);
     runtime.expect_install_code().times(1).return_const(Ok(()));
-    assert_eq!(tasks.execute(&runtime).await, Ok(()));
+    assert_eq!(task.execute(&runtime).await, Ok(()));
     assert_eq!(
         read_state(|s| s.managed_canisters(&usdc()).cloned()),
         Some(Canisters {
@@ -298,12 +306,14 @@ async fn should_not_retry_successful_operation_after_failing_one() {
 #[tokio::test]
 async fn should_discard_add_erc20_task_when_ledger_wasm_not_found() {
     init_state();
-    let mut tasks = Tasks::default();
     let mut runtime = MockCanisterRuntime::new();
     let mut install_args = usdc_install_args();
     let unknown_wasm_hash = WasmHash::from([0_u8; 32]);
     install_args.ledger_compressed_wasm_hash = unknown_wasm_hash.clone();
-    tasks.add_task(Task::InstallLedgerSuite(install_args));
+    let task = TaskExecution {
+        task_type: Task::InstallLedgerSuite(install_args),
+        execute_at_ns: 0,
+    };
 
     runtime.expect_id().return_const(ORCHESTRATOR_PRINCIPAL);
     expect_create_canister_returning(
@@ -313,13 +323,11 @@ async fn should_discard_add_erc20_task_when_ledger_wasm_not_found() {
     );
 
     assert_eq!(
-        tasks.execute(&runtime).await,
+        task.execute(&runtime).await,
         Err(TaskError::WasmHashNotFound(unknown_wasm_hash))
     );
     runtime.checkpoint();
 
-    assert_eq!(tasks.execute(&runtime).await, Ok(()));
-    assert_eq!(tasks.0.len(), 0);
     assert_eq!(
         read_state(|s| s.managed_canisters(&usdc()).cloned()),
         Some(Canisters {
@@ -336,13 +344,14 @@ async fn should_discard_add_erc20_task_when_ledger_wasm_not_found() {
 #[tokio::test]
 async fn should_discard_add_erc20_task_when_index_wasm_not_found() {
     init_state();
-    let mut tasks = Tasks::default();
     let mut runtime = MockCanisterRuntime::new();
     let mut install_args = usdc_install_args();
     let unknown_wasm_hash = WasmHash::from([0_u8; 32]);
     install_args.index_compressed_wasm_hash = unknown_wasm_hash.clone();
-    tasks.add_task(Task::InstallLedgerSuite(install_args));
-
+    let task = TaskExecution {
+        task_type: Task::InstallLedgerSuite(install_args),
+        execute_at_ns: 0,
+    };
     runtime.expect_id().return_const(ORCHESTRATOR_PRINCIPAL);
     expect_create_canister_returning(
         &mut runtime,
@@ -352,13 +361,11 @@ async fn should_discard_add_erc20_task_when_index_wasm_not_found() {
     runtime.expect_install_code().times(1).return_const(Ok(()));
 
     assert_eq!(
-        tasks.execute(&runtime).await,
+        task.execute(&runtime).await,
         Err(TaskError::WasmHashNotFound(unknown_wasm_hash))
     );
     runtime.checkpoint();
 
-    assert_eq!(tasks.execute(&runtime).await, Ok(()));
-    assert_eq!(tasks.0.len(), 0);
     assert_eq!(
         read_state(|s| s.managed_canisters(&usdc()).cloned()),
         Some(Canisters {
@@ -383,28 +390,30 @@ mod notify_erc_20_added {
     use crate::scheduler::tests::{
         expect_call_canister_add_ckerc20_token, init_state, LEDGER_PRINCIPAL, MINTER_PRINCIPAL,
     };
-    use crate::scheduler::{Task, TaskError, Tasks};
+    use crate::scheduler::{Task, TaskError, TaskExecution};
     use crate::state::{mutate_state, Ledger};
     use candid::Nat;
 
     #[tokio::test]
     async fn should_retry_when_ledger_not_yet_created() {
         init_state();
-        let mut tasks = Tasks::default();
         let usdc = usdc();
-        tasks.add_task(Task::NotifyErc20Added {
-            erc20_token: usdc.clone(),
-            minter_id: MINTER_PRINCIPAL,
-        });
+        let task = TaskExecution {
+            task_type: Task::NotifyErc20Added {
+                erc20_token: usdc.clone(),
+                minter_id: MINTER_PRINCIPAL,
+            },
+            execute_at_ns: 0,
+        };
         let runtime = MockCanisterRuntime::new();
 
         assert_eq!(
-            tasks.execute(&runtime).await,
+            task.execute(&runtime).await,
             Err(TaskError::LedgerNotFound(usdc.clone()))
         );
 
         assert_eq!(
-            tasks.execute(&runtime).await,
+            task.execute(&runtime).await,
             Err(TaskError::LedgerNotFound(usdc.clone()))
         );
 
@@ -412,7 +421,7 @@ mod notify_erc_20_added {
             s.record_new_erc20_token(usdc.clone(), usdc_metadata());
         });
         assert_eq!(
-            tasks.execute(&runtime).await,
+            task.execute(&runtime).await,
             Err(TaskError::LedgerNotFound(usdc))
         );
     }
@@ -420,17 +429,19 @@ mod notify_erc_20_added {
     #[tokio::test]
     async fn should_notify_erc20_added() {
         init_state();
-        let mut tasks = Tasks::default();
         let usdc = usdc();
         let usdc_metadata = usdc_metadata();
         mutate_state(|s| {
             s.record_new_erc20_token(usdc.clone(), usdc_metadata.clone());
             s.record_created_canister::<Ledger>(&usdc, LEDGER_PRINCIPAL);
         });
-        tasks.add_task(Task::NotifyErc20Added {
-            erc20_token: usdc.clone(),
-            minter_id: MINTER_PRINCIPAL,
-        });
+        let task = TaskExecution {
+            task_type: Task::NotifyErc20Added {
+                erc20_token: usdc.clone(),
+                minter_id: MINTER_PRINCIPAL,
+            },
+            execute_at_ns: 0,
+        };
         let mut runtime = MockCanisterRuntime::new();
         expect_call_canister_add_ckerc20_token(
             &mut runtime,
@@ -444,13 +455,12 @@ mod notify_erc_20_added {
             Ok(()),
         );
 
-        assert_eq!(tasks.execute(&runtime).await, Ok(()));
+        assert_eq!(task.execute(&runtime).await, Ok(()));
     }
 
     #[tokio::test]
     async fn should_not_retry_when_error_unrecoverable() {
         init_state();
-        let mut tasks = Tasks::default();
         let usdc = usdc();
         let usdc_metadata = usdc_metadata();
         mutate_state(|s| {
@@ -463,10 +473,13 @@ mod notify_erc_20_added {
             Reason::Rejected("rejected".to_string()),
             Reason::InternalError("internal".to_string()),
         ] {
-            tasks.add_task(Task::NotifyErc20Added {
-                erc20_token: usdc.clone(),
-                minter_id: MINTER_PRINCIPAL,
-            });
+            let task = TaskExecution {
+                task_type: Task::NotifyErc20Added {
+                    erc20_token: usdc.clone(),
+                    minter_id: MINTER_PRINCIPAL,
+                },
+                execute_at_ns: 0,
+            };
             let expected_error = CallError {
                 method: "error".to_string(),
                 reason: unrecoverable_reason,
@@ -481,17 +494,15 @@ mod notify_erc_20_added {
                 .return_const(Err(expected_error.clone()));
 
             assert_eq!(
-                tasks.execute(&runtime).await,
+                task.execute(&runtime).await,
                 Err(TaskError::InterCanisterCallError(expected_error))
             );
-            assert!(tasks.is_empty());
         }
     }
 
     #[tokio::test]
     async fn should_retry_when_error_is_recoverable() {
         init_state();
-        let mut tasks = Tasks::default();
         let usdc = usdc();
         let usdc_metadata = usdc_metadata();
         mutate_state(|s| {
@@ -503,10 +514,13 @@ mod notify_erc_20_added {
             Reason::OutOfCycles,
             Reason::TransientInternalError("transient".to_string()),
         ] {
-            tasks.add_task(Task::NotifyErc20Added {
-                erc20_token: usdc.clone(),
-                minter_id: MINTER_PRINCIPAL,
-            });
+            let task = TaskExecution {
+                task_type: Task::NotifyErc20Added {
+                    erc20_token: usdc.clone(),
+                    minter_id: MINTER_PRINCIPAL,
+                },
+                execute_at_ns: 0,
+            };
             let expected_error = CallError {
                 method: "error".to_string(),
                 reason: recoverable_reason,
@@ -521,7 +535,7 @@ mod notify_erc_20_added {
                 .return_const(Err(expected_error.clone()));
 
             assert_eq!(
-                tasks.execute(&runtime).await,
+                task.execute(&runtime).await,
                 Err(TaskError::InterCanisterCallError(expected_error))
             );
             runtime.checkpoint();
@@ -538,7 +552,7 @@ mod notify_erc_20_added {
                 Ok(()),
             );
 
-            assert_eq!(tasks.execute(&runtime).await, Ok(()));
+            assert_eq!(task.execute(&runtime).await, Ok(()));
         }
     }
 }
@@ -694,11 +708,13 @@ mod install_ledger_suite_args {
     use crate::scheduler::{ChainId, Erc20Token, InstallLedgerSuiteArgs, InvalidAddErc20ArgError};
     use crate::state::test_fixtures::new_state;
     use crate::state::{GitCommitHash, IndexWasm, LedgerWasm, State};
+    use crate::storage::test_fixtures::empty_task_queue;
     use crate::storage::test_fixtures::empty_wasm_store;
     use crate::storage::{record_icrc1_ledger_suite_wasms, WasmStore};
     use assert_matches::assert_matches;
     use candid::{Nat, Principal};
-    use proptest::proptest;
+    use proptest::collection::vec;
+    use proptest::{prop_assert_eq, proptest};
 
     const ERC20_CONTRACT_ADDRESS: &str = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
 
@@ -719,6 +735,34 @@ mod install_ledger_suite_args {
     }
 
     proptest! {
+        #[test]
+        fn queue_holds_one_copy_of_each_task(
+            timestamps in vec(1_000_000_u64..1_000_000_000, 2..100),
+        ) {
+            use crate::scheduler::{TaskExecution, Task};
+            use crate::storage::TaskQueue;
+
+            let mut task_queue: TaskQueue = empty_task_queue();
+            let mut min_ts = u64::MAX;
+            for (i, ts) in timestamps.iter().enumerate() {
+                min_ts = min_ts.min(*ts);
+                assert_eq!(task_queue.schedule_at(*ts, Task::MaybeTopUp), min_ts);
+                prop_assert_eq!(task_queue.len(), 1, "queue len: {}", task_queue.len());
+
+                let task = task_queue.pop_if_ready(u64::MAX).unwrap();
+
+                prop_assert_eq!(task_queue.len(), 0);
+
+                prop_assert_eq!(&task, &TaskExecution{
+                    execute_at_ns: timestamps[0..=i].iter().cloned().min().unwrap(),
+                    task_type: Task::MaybeTopUp
+                });
+                task_queue.schedule_at(task.execute_at_ns, task.task_type);
+
+                prop_assert_eq!(task_queue.len(), 1);
+            }
+        }
+
         #[test]
         fn should_error_on_invalid_ethereum_address(invalid_address in "0x[0-9a-fA-F]{0,39}|[0-9a-fA-F]{41,}") {
             let state = new_state();
