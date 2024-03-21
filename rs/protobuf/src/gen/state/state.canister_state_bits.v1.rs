@@ -634,6 +634,9 @@ pub struct CanisterStateBits {
     /// See the interface specification for more information.
     #[prost(uint64, optional, tag = "45")]
     pub wasm_memory_limit: ::core::option::Option<u64>,
+    /// The next local snapshot ID.
+    #[prost(uint64, tag = "46")]
+    pub next_snapshot_id: u64,
     #[prost(oneof = "canister_state_bits::CanisterStatus", tags = "11, 12, 13")]
     pub canister_status: ::core::option::Option<canister_state_bits::CanisterStatus>,
 }

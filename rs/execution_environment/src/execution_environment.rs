@@ -47,7 +47,6 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_snapshots::SnapshotId,
     canister_state::system_state::PausedExecutionId,
     canister_state::{system_state::CyclesUseCase, NextExecution},
     metadata_state::subnet_call_context_manager::{
@@ -1907,7 +1906,7 @@ impl ExecutionEnvironment {
 
         let resource_saturation =
             self.subnet_memory_saturation(&round_limits.subnet_available_memory);
-        let replace_snapshot = args.replace_snapshot().map(SnapshotId::new);
+        let replace_snapshot = args.replace_snapshot();
         let result = self
             .canister_manager
             .take_canister_snapshot(

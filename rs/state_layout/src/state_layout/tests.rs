@@ -54,6 +54,7 @@ fn default_canister_state_bits() -> CanisterStateBits {
         log_visibility: LogVisibility::default(),
         canister_log: Default::default(),
         wasm_memory_limit: None,
+        next_snapshot_id: 0,
     }
 }
 
@@ -196,9 +197,10 @@ fn test_encode_decode_non_empty_history() {
 
 #[test]
 fn test_canister_snapshots_decode() {
+    let canister_id = canister_test_id(7);
     let canister_snapshot_bits = CanisterSnapshotBits {
-        snapshot_id: SnapshotId::new(5),
-        canister_id: canister_test_id(7),
+        snapshot_id: SnapshotId::from((canister_id, 5)),
+        canister_id,
         taken_at_timestamp: UNIX_EPOCH,
         canister_version: 3,
         binary_hash: Some(WasmHash::from(&CanisterModule::new(vec![2, 3, 4]))),
