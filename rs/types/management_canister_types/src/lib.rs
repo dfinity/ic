@@ -11,7 +11,9 @@ pub use http::{
     BoundedHttpHeaders, CanisterHttpRequestArgs, CanisterHttpResponsePayload, HttpHeader,
     HttpMethod, TransformArgs, TransformContext, TransformFunc,
 };
-use ic_base_types::{CanisterId, NodeId, NumBytes, PrincipalId, RegistryVersion, SubnetId};
+use ic_base_types::{
+    CanisterId, NodeId, NumBytes, PrincipalId, RegistryVersion, SnapshotId, SubnetId,
+};
 use ic_error_types::{ErrorCode, UserError};
 use ic_protobuf::proxy::{try_decode_hash, try_from_option_field};
 use ic_protobuf::registry::crypto::v1::PublicKey;
@@ -2698,21 +2700,20 @@ impl Payload<'_> for StoredChunksReply {}
 /// Struct used for encoding/decoding
 /// `(record {
 ///     canister_id: principal;
-///     replace_snapshot: opt nat;
+///     replace_snapshot: opt blob;
 /// })`
 #[derive(Default, Clone, CandidType, Deserialize, Debug, PartialEq, Eq)]
 pub struct TakeCanisterSnapshotArgs {
     pub canister_id: PrincipalId,
-    pub replace_snapshot: Option<candid::Nat>,
+    pub replace_snapshot: Option<serde_bytes::ByteBuf>,
 }
 
-impl Payload<'_> for TakeCanisterSnapshotArgs {}
-
 impl TakeCanisterSnapshotArgs {
-    pub fn new(canister_id: CanisterId, replace_snapshot: Option<u64>) -> Self {
+    pub fn new(canister_id: CanisterId, replace_snapshot: Option<SnapshotId>) -> Self {
         Self {
             canister_id: canister_id.get(),
-            replace_snapshot: replace_snapshot.map(candid::Nat::from),
+            replace_snapshot: replace_snapshot
+                .map(|snapshot_id| ByteBuf::from(snapshot_id.to_vec())),
         }
     }
 
@@ -2720,23 +2721,43 @@ impl TakeCanisterSnapshotArgs {
         CanisterId::unchecked_from_principal(self.canister_id)
     }
 
-    pub fn replace_snapshot(&self) -> Option<u64> {
-        match self.replace_snapshot.clone() {
-            Some(nat) => Some(nat.0.to_u64().unwrap()),
-            None => None,
+    pub fn replace_snapshot(&self) -> Option<SnapshotId> {
+        self.replace_snapshot
+            .as_ref()
+            .map(|bytes| SnapshotId::try_from(&bytes.clone().into_vec()).unwrap())
+    }
+}
+
+impl<'a> Payload<'a> for TakeCanisterSnapshotArgs {
+    fn decode(blob: &'a [u8]) -> Result<Self, UserError> {
+        let args = Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error)?;
+
+        match &args.replace_snapshot {
+            Some(replace_snapshot) => {
+                // Verify that snapshot ID has the correct format.
+                if let Err(err) = SnapshotId::try_from(&replace_snapshot.clone().into_vec()) {
+                    return Err(UserError::new(
+                        ErrorCode::InvalidManagementPayload,
+                        format!("Payload deserialization error: {err:?}"),
+                    ));
+                }
+            }
+            None => {}
         }
+        Ok(args)
     }
 }
 
 /// Struct to be returned when taking a canister snapshot.
 /// `(record {
-///      id: nat;
+///      id: blob;
 ///      taken_at_timestamp: nat64;
 ///      total_size: nat;
 /// })`
 #[derive(Default, Clone, CandidType, Deserialize, Debug, PartialEq, Eq)]
 pub struct TakeCanisterSnapshotResponse {
-    pub snapshot_id: candid::Nat,
+    #[serde(with = "serde_bytes")]
+    pub snapshot_id: Vec<u8>,
     pub taken_at_timestamp: u64,
     pub total_size: candid::Nat,
 }
@@ -2744,16 +2765,16 @@ pub struct TakeCanisterSnapshotResponse {
 impl Payload<'_> for TakeCanisterSnapshotResponse {}
 
 impl TakeCanisterSnapshotResponse {
-    pub fn new(snapshot_id: u64, taken_at_timestamp: u64, total_size: NumBytes) -> Self {
+    pub fn new(snapshot_id: &SnapshotId, taken_at_timestamp: u64, total_size: NumBytes) -> Self {
         Self {
-            snapshot_id: candid::Nat::from(snapshot_id),
+            snapshot_id: snapshot_id.to_vec(),
             taken_at_timestamp,
             total_size: candid::Nat::from(total_size.get()),
         }
     }
 
-    pub fn snapshot_id(&self) -> u64 {
-        self.snapshot_id.0.to_u64().unwrap()
+    pub fn snapshot_id(&self) -> SnapshotId {
+        SnapshotId::try_from(&self.snapshot_id).unwrap()
     }
 
     pub fn total_size(&self) -> u64 {
@@ -2764,21 +2785,20 @@ impl TakeCanisterSnapshotResponse {
 /// Struct used for encoding/decoding
 /// `(record {
 ///     canister_id: principal;
-///     snapshot_id: nat;
+///     snapshot_id: blob;
 /// })`
 #[derive(Default, Clone, CandidType, Deserialize, Debug, PartialEq, Eq)]
 pub struct DeleteCanisterSnapshotArgs {
     pub canister_id: PrincipalId,
-    pub snapshot_id: candid::Nat,
+    #[serde(with = "serde_bytes")]
+    pub snapshot_id: Vec<u8>,
 }
 
-impl Payload<'_> for DeleteCanisterSnapshotArgs {}
-
 impl DeleteCanisterSnapshotArgs {
-    pub fn new(canister_id: CanisterId, snapshot_id: u64) -> Self {
+    pub fn new(canister_id: CanisterId, snapshot_id: SnapshotId) -> Self {
         Self {
             canister_id: canister_id.get(),
-            snapshot_id: candid::Nat::from(snapshot_id),
+            snapshot_id: snapshot_id.to_vec(),
         }
     }
 
@@ -2786,7 +2806,22 @@ impl DeleteCanisterSnapshotArgs {
         CanisterId::unchecked_from_principal(self.canister_id)
     }
 
-    pub fn get_snapshot_id(&self) -> u64 {
-        self.snapshot_id.0.to_u64().unwrap()
+    pub fn get_snapshot_id(&self) -> SnapshotId {
+        SnapshotId::try_from(&self.snapshot_id).unwrap()
+    }
+}
+
+impl<'a> Payload<'a> for DeleteCanisterSnapshotArgs {
+    fn decode(blob: &'a [u8]) -> Result<Self, UserError> {
+        let args = Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error)?;
+
+        // Verify that snapshot ID has the correct format.
+        if let Err(err) = SnapshotId::try_from(&args.snapshot_id) {
+            return Err(UserError::new(
+                ErrorCode::InvalidManagementPayload,
+                format!("Payload deserialization error: {err:?}"),
+            ));
+        }
+        Ok(args)
     }
 }

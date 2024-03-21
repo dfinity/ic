@@ -28,7 +28,7 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::ReservationError;
 use ic_replicated_state::{
-    canister_snapshots::{CanisterSnapshot, SnapshotId},
+    canister_snapshots::CanisterSnapshot,
     canister_state::system_state::{
         wasm_chunk_store::{self, WasmChunkStore},
         CyclesUseCase,
@@ -48,7 +48,7 @@ use ic_types::{
     nominal_cycles::NominalCycles,
     CanisterId, CanisterTimer, ComputeAllocation, Cycles, InvalidComputeAllocationError,
     InvalidMemoryAllocationError, MemoryAllocation, NumBytes, NumInstructions, PrincipalId,
-    SubnetId, Time,
+    SnapshotId, SubnetId, Time,
 };
 use ic_wasm_types::{CanisterModule, WasmHash};
 use num_traits::cast::ToPrimitive;
@@ -1938,9 +1938,13 @@ impl CanisterManager {
             canister.scheduler_state.heap_delta_debit += NumBytes::from(new_snapshot_size);
         }
 
-        let snapshot_id = state.canister_snapshots.push(Arc::new(new_snapshot));
+        let snapshot_id =
+            SnapshotId::from((canister.canister_id(), canister.new_local_snapshot_id()));
+        state
+            .canister_snapshots
+            .push(snapshot_id, Arc::new(new_snapshot));
         Ok(TakeCanisterSnapshotResponse::new(
-            snapshot_id.get(),
+            &snapshot_id,
             state.time().as_nanos_since_unix_epoch(),
             new_snapshot_size,
         ))

@@ -391,4 +391,6 @@ message CanisterStateBits {
   // by the canister to leave some room in 4GiB for upgrade calls.
   // See the interface specification for more information.
   optional uint64 wasm_memory_limit = 45;
+  // The next local snapshot ID.
+  uint64 next_snapshot_id = 46;
 }

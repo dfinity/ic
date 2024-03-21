@@ -15,7 +15,6 @@ use ic_protobuf::{
     },
 };
 use ic_replicated_state::{
-    canister_snapshots::SnapshotId,
     canister_state::{
         execution_state::{NextScheduledMethod, WasmMetadata},
         system_state::{wasm_chunk_store::WasmChunkStoreMetadata, CanisterHistory, CyclesUseCase},
@@ -27,7 +26,7 @@ use ic_sys::{fs::sync_path, mmap::ScopedMmap};
 use ic_types::{
     batch::TotalQueryStats, nominal_cycles::NominalCycles, AccumulatedPriority, CanisterId,
     ComputeAllocation, Cycles, ExecutionRound, Height, MemoryAllocation, NumInstructions,
-    PrincipalId, Time,
+    PrincipalId, SnapshotId, Time,
 };
 use ic_utils::thread::parallel_map;
 use ic_wasm_types::{CanisterModule, WasmHash};
@@ -168,6 +167,7 @@ pub struct CanisterStateBits {
     pub log_visibility: LogVisibility,
     pub canister_log: CanisterLog,
     pub wasm_memory_limit: Option<NumBytes>,
+    pub next_snapshot_id: u64,
 }
 
 /// This struct contains bits of the `CanisterSnapshot` that are not already
@@ -1905,6 +1905,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
                 .collect(),
             next_canister_log_record_idx: item.canister_log.next_idx(),
             wasm_memory_limit: item.wasm_memory_limit.map(|v| v.get()),
+            next_snapshot_id: item.next_snapshot_id,
         }
     }
 }
@@ -2034,6 +2035,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
                     .collect(),
             ),
             wasm_memory_limit: value.wasm_memory_limit.map(NumBytes::from),
+            next_snapshot_id: value.next_snapshot_id,
         })
     }
 }
@@ -2105,7 +2107,7 @@ impl TryFrom<pb_canister_state_bits::ExecutionStateBits> for ExecutionStateBits 
 impl From<&CanisterSnapshotBits> for pb_canister_snapshot_bits::CanisterSnapshotBits {
     fn from(item: &CanisterSnapshotBits) -> Self {
         Self {
-            snapshot_id: item.snapshot_id.get(),
+            snapshot_id: item.snapshot_id.get_local_snapshot_id(),
             canister_id: Some((item.canister_id).into()),
             taken_at_timestamp: item.taken_at_timestamp.as_nanos_since_unix_epoch(),
             canister_version: item.canister_version,
@@ -2139,7 +2141,7 @@ impl TryFrom<pb_canister_snapshot_bits::CanisterSnapshotBits> for CanisterSnapsh
             None => None,
         };
         Ok(Self {
-            snapshot_id: SnapshotId::new(item.snapshot_id),
+            snapshot_id: SnapshotId::from((canister_id, item.snapshot_id)),
             canister_id,
             taken_at_timestamp: Time::from_nanos_since_unix_epoch(item.taken_at_timestamp),
             canister_version: item.canister_version,

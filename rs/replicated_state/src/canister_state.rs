@@ -174,6 +174,10 @@ impl CanisterState {
         )
     }
 
+    pub fn new_local_snapshot_id(&mut self) -> u64 {
+        self.system_state.new_local_snapshot_id()
+    }
+
     /// See `SystemState::push_input` for documentation.
     ///
     /// The function is public as we push directly to the Canister state in

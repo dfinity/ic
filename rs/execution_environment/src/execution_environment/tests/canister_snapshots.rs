@@ -8,9 +8,7 @@ use ic_management_canister_types::{
     self as ic00, DeleteCanisterSnapshotArgs, Method, Payload as Ic00Payload,
     TakeCanisterSnapshotArgs, TakeCanisterSnapshotResponse, UploadChunkArgs,
 };
-use ic_replicated_state::{
-    canister_snapshots::SnapshotId, canister_state::system_state::CyclesUseCase,
-};
+use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_test_utilities_execution_environment::{
     get_output_messages, ExecutionTest, ExecutionTestBuilder,
 };
@@ -19,14 +17,16 @@ use ic_types::{
     ingress::WasmResult,
     messages::{Payload, RejectContext, RequestOrResponse},
     time::UNIX_EPOCH,
-    CanisterId, Cycles,
+    CanisterId, Cycles, SnapshotId,
 };
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+use serde_bytes::ByteBuf;
 
 #[test]
 fn take_canister_snapshot_decode_round_trip() {
-    let snapshot_id = SnapshotId::new(6);
-    let args = ic00::TakeCanisterSnapshotArgs::new(canister_test_id(4), Some(snapshot_id.get()));
+    let canister_id = canister_test_id(4);
+    let snapshot_id = SnapshotId::from((canister_id, 6));
+    let args = ic00::TakeCanisterSnapshotArgs::new(canister_test_id(4), Some(snapshot_id));
     let encoded_args = args.encode();
     assert_eq!(
         args,
@@ -34,7 +34,7 @@ fn take_canister_snapshot_decode_round_trip() {
     );
 
     let response = TakeCanisterSnapshotResponse::new(
-        snapshot_id.get(),
+        &snapshot_id,
         UNIX_EPOCH.as_nanos_since_unix_epoch(),
         NumBytes::from(65),
     );
@@ -43,6 +43,18 @@ fn take_canister_snapshot_decode_round_trip() {
         response,
         TakeCanisterSnapshotResponse::decode(encoded_response.as_slice()).unwrap()
     );
+}
+
+#[test]
+fn take_canister_snapshot_decode_fails() {
+    let canister_id = canister_test_id(4);
+    let args = ic00::TakeCanisterSnapshotArgs {
+        canister_id: canister_id.get(),
+        replace_snapshot: Some(ByteBuf::from(vec![4, 5, 6, 6])), // Invalid snapshot ID.
+    };
+    let encoded_args = args.encode();
+    let err = TakeCanisterSnapshotArgs::decode(encoded_args.as_slice()).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidManagementPayload,);
 }
 
 #[test]
@@ -152,9 +164,10 @@ fn list_canister_snapshot_request_rejected_because_feature_is_not_implemented() 
         .with_caller(own_subnet, caller_canister)
         .build();
 
-    let snapshot_id = SnapshotId::new(6);
+    let canister_id = canister_test_id(4);
+    let snapshot_id = SnapshotId::from((canister_id, 6));
     let args: TakeCanisterSnapshotArgs =
-        TakeCanisterSnapshotArgs::new(canister_test_id(4), Some(snapshot_id.get()));
+        TakeCanisterSnapshotArgs::new(canister_id, Some(snapshot_id));
     // Inject a list canister snapshots request.
     test.inject_call_to_ic00(
         Method::ListCanisterSnapshots,
@@ -189,10 +202,10 @@ fn take_canister_snapshot_fails_canister_not_found() {
         .with_caller(own_subnet, caller_canister)
         .build();
 
-    let snapshot_id = SnapshotId::new(6);
     let canister_id = canister_test_id(4);
+    let snapshot_id = SnapshotId::from((canister_id, 6));
     let args: TakeCanisterSnapshotArgs =
-        TakeCanisterSnapshotArgs::new(canister_id, Some(snapshot_id.get()));
+        TakeCanisterSnapshotArgs::new(canister_id, Some(snapshot_id));
     // Inject a take_canister_snapshot request.
     test.inject_call_to_ic00(
         Method::TakeCanisterSnapshot,
@@ -233,9 +246,9 @@ fn take_canister_snapshot_fails_invalid_controller() {
         .unwrap();
 
     // Create `TakeCanisterSnapshot`.
-    let snapshot_id = SnapshotId::new(6);
+    let snapshot_id = SnapshotId::from((canister_id, 6));
     let args: TakeCanisterSnapshotArgs =
-        TakeCanisterSnapshotArgs::new(canister_id, Some(snapshot_id.get()));
+        TakeCanisterSnapshotArgs::new(canister_id, Some(snapshot_id));
     // Inject a take_canister_snapshot request.
     test.inject_call_to_ic00(
         Method::TakeCanisterSnapshot,
@@ -289,9 +302,9 @@ fn take_canister_snapshot_fails_invalid_replace_snapshot_id() {
         .unwrap();
 
     // Create `TakeCanisterSnapshot` request with non-existent snapshot ID.
-    let snapshot_id = SnapshotId::new(6);
+    let snapshot_id = SnapshotId::from((canister_id, 6));
     let args: TakeCanisterSnapshotArgs =
-        TakeCanisterSnapshotArgs::new(canister_id, Some(snapshot_id.get()));
+        TakeCanisterSnapshotArgs::new(canister_id, Some(snapshot_id));
     // Inject a take_canister_snapshot request.
     test.inject_call_to_ic00(
         Method::TakeCanisterSnapshot,
@@ -345,11 +358,11 @@ fn take_canister_snapshot_fails_canister_does_not_own_replace_snapshot() {
     let result = test.subnet_message("take_canister_snapshot", args.encode());
     assert!(result.is_ok());
     let response = TakeCanisterSnapshotResponse::decode(&result.unwrap().bytes()).unwrap();
-    let snapshot_id = SnapshotId::new(response.snapshot_id());
+    let snapshot_id = response.snapshot_id();
 
     // Take a snapshot for the canister_2. Provide replace snapshot.
     let args: TakeCanisterSnapshotArgs =
-        TakeCanisterSnapshotArgs::new(canister_id_2, Some(snapshot_id.get()));
+        TakeCanisterSnapshotArgs::new(canister_id_2, Some(snapshot_id));
     let error = test
         .subnet_message("take_canister_snapshot", args.encode())
         .unwrap_err();
@@ -400,7 +413,7 @@ fn canister_request_take_canister_snapshot_creates_new_snapshots() {
     let result = test.subnet_message("take_canister_snapshot", args.encode());
     assert!(result.is_ok());
     let response = TakeCanisterSnapshotResponse::decode(&result.unwrap().bytes()).unwrap();
-    let snapshot_id = SnapshotId::new(response.snapshot_id());
+    let snapshot_id = response.snapshot_id();
 
     assert!(test.state().canister_snapshots.contains(&snapshot_id));
     assert!(test.state().canister_snapshots.contains(&snapshot_id));
@@ -426,7 +439,7 @@ fn canister_request_take_canister_snapshot_creates_new_snapshots() {
 
     // Take a new snapshot for the canister, and provide a replacement snapshot ID.
     let args: TakeCanisterSnapshotArgs =
-        TakeCanisterSnapshotArgs::new(canister_id, Some(snapshot_id.get()));
+        TakeCanisterSnapshotArgs::new(canister_id, Some(snapshot_id));
     let result = test.subnet_message("take_canister_snapshot", args.encode());
     assert!(result.is_ok());
     let new_snapshot_id = TakeCanisterSnapshotResponse::decode(&result.unwrap().bytes())
@@ -434,12 +447,9 @@ fn canister_request_take_canister_snapshot_creates_new_snapshots() {
         .snapshot_id();
 
     // Check that old snapshot ID was deleted.
-    assert_ne!(new_snapshot_id, snapshot_id.get());
+    assert_ne!(new_snapshot_id, snapshot_id);
     assert!(!test.state().canister_snapshots.contains(&snapshot_id));
-    assert!(test
-        .state()
-        .canister_snapshots
-        .contains(&SnapshotId::new(new_snapshot_id)));
+    assert!(test.state().canister_snapshots.contains(&new_snapshot_id));
 }
 
 fn grow_stable_memory(
@@ -715,11 +725,24 @@ fn take_canister_snapshot_fails_when_canister_would_be_frozen() {
 
 #[test]
 fn test_delete_canister_snapshot_decode_round_trip() {
-    let snapshot_id = SnapshotId::new(6);
-    let args = ic00::DeleteCanisterSnapshotArgs::new(canister_test_id(4), snapshot_id.get());
+    let canister_id = canister_test_id(4);
+    let snapshot_id = SnapshotId::from((canister_id, 6));
+    let args = ic00::DeleteCanisterSnapshotArgs::new(canister_id, snapshot_id);
     let encoded_args = args.encode();
     assert_eq!(
         args,
         DeleteCanisterSnapshotArgs::decode(encoded_args.as_slice()).unwrap()
     );
+}
+
+#[test]
+fn test_delete_canister_snapshot_decode_fails() {
+    let canister_id = canister_test_id(4);
+    let args = ic00::DeleteCanisterSnapshotArgs {
+        canister_id: canister_id.get(),
+        snapshot_id: vec![4, 5, 6, 6], // Invalid snapshot ID.
+    };
+    let encoded_args = args.encode();
+    let err = DeleteCanisterSnapshotArgs::decode(encoded_args.as_slice()).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidManagementPayload,);
 }
