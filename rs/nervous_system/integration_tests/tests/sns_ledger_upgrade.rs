@@ -3,16 +3,17 @@ use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
+    pocket_ic_helpers,
     pocket_ic_helpers::{
         add_wasm_via_nns_proposal, add_wasms_to_sns_wasm, install_canister, install_nns_canisters,
-        nns, sns, upgrade_root_controlled_nns_canister_to_tip_of_master_or_panic,
+        nns, sns, upgrade_nns_canister_to_tip_of_master_or_panic,
     },
 };
 use ic_nns_constants::{self, GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID};
 use ic_nns_governance::governance::ONE_MONTH_SECONDS;
 use ic_nns_test_utils::sns_wasm::{
     build_archive_sns_wasm, build_index_ng_sns_wasm, build_ledger_sns_wasm, build_swap_sns_wasm,
-    create_modified_wasm,
+    create_modified_sns_wasm,
 };
 use ic_sns_wasm::pb::v1::{DeployedSns, SnsCanisterType};
 use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
@@ -43,46 +44,25 @@ fn test_deploy_fresh_sns() {
         .collect();
 
     // 1. Prepare the world (use mainnet WASMs for all NNS and SNS canisters).
-    let pocket_ic = {
-        let pocket_ic = PocketIcBuilder::new()
-            .with_nns_subnet()
-            .with_sns_subnet()
-            .build();
+    let pocket_ic = pocket_ic_helpers::pocket_ic_for_sns_tests_with_mainnet_versions();
 
-        // Install the test dapp.
-        for dapp_canister_id in dapp_canister_ids.clone() {
-            install_canister(
-                &pocket_ic,
-                "My Test Dapp",
-                dapp_canister_id,
-                vec![],
-                Wasm::from_bytes(UNIVERSAL_CANISTER_WASM),
-                None,
-            );
-        }
-
-        // Install the (mainnet) NNS canisters.
-        let with_mainnet_nns_canisters = true;
-        install_nns_canisters(&pocket_ic, vec![], with_mainnet_nns_canisters);
-
-        // Publish (mainnet) SNS Wasms to SNS-W.
-        let with_mainnet_sns_wasms = true;
-        add_wasms_to_sns_wasm(&pocket_ic, with_mainnet_sns_wasms).unwrap();
-
-        pocket_ic
-    };
+    // Install the test dapp.
+    for dapp_canister_id in dapp_canister_ids.clone() {
+        install_canister(
+            &pocket_ic,
+            "My Test Dapp",
+            dapp_canister_id,
+            vec![],
+            Wasm::from_bytes(UNIVERSAL_CANISTER_WASM),
+            None,
+        );
+    }
 
     // Step 1. Upgrade NNS Governance and SNS-W to the latest version.
 
-    upgrade_root_controlled_nns_canister_to_tip_of_master_or_panic(
-        &pocket_ic,
-        GOVERNANCE_CANISTER_ID,
-    );
+    upgrade_nns_canister_to_tip_of_master_or_panic(&pocket_ic, GOVERNANCE_CANISTER_ID);
 
-    upgrade_root_controlled_nns_canister_to_tip_of_master_or_panic(
-        &pocket_ic,
-        SNS_WASM_CANISTER_ID,
-    );
+    upgrade_nns_canister_to_tip_of_master_or_panic(&pocket_ic, SNS_WASM_CANISTER_ID);
 
     // Publish the newest Swap. This needs to happen here due to a recent breaking change in sns_init
     {
@@ -224,14 +204,8 @@ fn test_upgrade_existing_sns() {
     // Step 3. Upgrade SNS to the tip of master
 
     // Step 4. Upgrade NNS Governance and SNS-W to the latest version.
-    upgrade_root_controlled_nns_canister_to_tip_of_master_or_panic(
-        &pocket_ic,
-        GOVERNANCE_CANISTER_ID,
-    );
-    upgrade_root_controlled_nns_canister_to_tip_of_master_or_panic(
-        &pocket_ic,
-        SNS_WASM_CANISTER_ID,
-    );
+    upgrade_nns_canister_to_tip_of_master_or_panic(&pocket_ic, GOVERNANCE_CANISTER_ID);
+    upgrade_nns_canister_to_tip_of_master_or_panic(&pocket_ic, SNS_WASM_CANISTER_ID);
 
     // Publish the newest Swap.
     {
@@ -424,22 +398,22 @@ fn test_upgrade_existing_sns() {
 
     // Publish modified versions of all the wasms and ensure we can upgrade a second time (pre-upgrade smoke test)
     {
-        let wasm = create_modified_wasm(&build_swap_sns_wasm(), Some("foo"));
+        let wasm = create_modified_sns_wasm(&build_swap_sns_wasm(), Some("foo"));
         let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm).unwrap();
         assert_eq!(proposal_info.failure_reason, None);
     }
     {
-        let wasm = create_modified_wasm(&build_index_ng_sns_wasm(), Some("foo"));
+        let wasm = create_modified_sns_wasm(&build_index_ng_sns_wasm(), Some("foo"));
         let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm).unwrap();
         assert_eq!(proposal_info.failure_reason, None);
     }
     {
-        let wasm = create_modified_wasm(&build_ledger_sns_wasm(), Some("foo"));
+        let wasm = create_modified_sns_wasm(&build_ledger_sns_wasm(), Some("foo"));
         let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm).unwrap();
         assert_eq!(proposal_info.failure_reason, None);
     }
     {
-        let wasm = create_modified_wasm(&build_archive_sns_wasm(), Some("foo"));
+        let wasm = create_modified_sns_wasm(&build_archive_sns_wasm(), Some("foo"));
         let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm).unwrap();
         assert_eq!(proposal_info.failure_reason, None);
     }

@@ -37,7 +37,7 @@ use std::{
 /// Get a valid tiny WASM for use in tests of a particular SnsCanisterType
 pub fn test_wasm(canister_type: SnsCanisterType, modify_with: Option<u8>) -> SnsWasm {
     let id_byte = modify_with.unwrap_or(1);
-    create_modified_wasm(
+    create_modified_sns_wasm(
         &SnsWasm {
             wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
             canister_type: canister_type.into(),
@@ -531,10 +531,8 @@ pub fn build_mainnet_index_ng_sns_wasm() -> SnsWasm {
     }
 }
 
-/// Returns a slightly modified version of original_wasm that has the same behavior.
-///
-/// Specifically, sets a WASM custom section.
-pub fn create_modified_wasm(original_wasm: &SnsWasm, modify_with: Option<&str>) -> SnsWasm {
+/// Create an SnsWasm with custom metadata
+pub fn create_modified_sns_wasm(original_wasm: &SnsWasm, modify_with: Option<&str>) -> SnsWasm {
     let original_hash = original_wasm.sha256_hash();
     let mut wasm_to_add = original_wasm.wasm.clone();
 

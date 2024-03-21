@@ -10,7 +10,7 @@ use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    sns_wasm::{self, create_modified_wasm, ensure_sns_wasm_gzipped},
+    sns_wasm::{self, create_modified_sns_wasm, ensure_sns_wasm_gzipped},
     state_test_helpers,
     state_test_helpers::{query, set_controllers, setup_nns_canisters, update, update_with_sender},
 };
@@ -155,7 +155,7 @@ fn test_governance_restarts_root_if_root_cannot_stop_during_upgrade() {
 
     let original_hash = wasm_map.get(&canister_type).unwrap().sha256_hash();
 
-    let sns_wasm_to_add = create_modified_wasm(wasm_map.get(&canister_type).unwrap(), None);
+    let sns_wasm_to_add = create_modified_sns_wasm(wasm_map.get(&canister_type).unwrap(), None);
     let new_wasm_hash = sns_wasm_to_add.sha256_hash();
 
     assert_ne!(new_wasm_hash, original_hash);
@@ -299,7 +299,7 @@ fn run_upgrade_test(canister_type: SnsCanisterType) {
 
     let original_hash = wasm_map.get(&canister_type).unwrap().sha256_hash();
 
-    let sns_wasm_to_add = ensure_sns_wasm_gzipped(sns_wasm::create_modified_wasm(
+    let sns_wasm_to_add = ensure_sns_wasm_gzipped(create_modified_sns_wasm(
         wasm_map.get(&canister_type).unwrap(),
         Some("Preserve behavior 673_351_772."),
     ));
@@ -417,7 +417,7 @@ fn upgrade_swap(
     let original_swap_hash = wasm_map.get(&SnsCanisterType::Swap).unwrap().sha256_hash();
 
     let swap_wasm_to_add =
-        create_modified_wasm(wasm_map.get(&SnsCanisterType::Swap).unwrap(), None);
+        create_modified_sns_wasm(wasm_map.get(&SnsCanisterType::Swap).unwrap(), None);
     let new_swap_hash = swap_wasm_to_add.sha256_hash();
 
     assert_ne!(new_swap_hash, original_swap_hash);
@@ -680,7 +680,7 @@ fn upgrade_archive_sns_canister_via_sns_wasms() {
     let original_hash = current_wasm.sha256_hash();
 
     // We add a new WASM to the SNS-WASMs (for whatever canister we want to test)
-    let sns_wasm_to_add = sns_wasm::create_modified_wasm(current_wasm, None);
+    let sns_wasm_to_add = create_modified_sns_wasm(current_wasm, None);
     let new_wasm_hash = sns_wasm_to_add.sha256_hash();
 
     assert_ne!(new_wasm_hash, original_hash);
@@ -734,8 +734,7 @@ fn test_out_of_sync_version_still_allows_upgrade_to_succeed() {
 
     fn filter_wasm(mut sns_wasm: SnsWasm) -> SnsWasm {
         if sns_wasm.canister_type == SnsCanisterType::Archive as i32 {
-            sns_wasm =
-                sns_wasm::create_modified_wasm(&sns_wasm, Some("Preserve behavior 160_036_541."))
+            sns_wasm = create_modified_sns_wasm(&sns_wasm, Some("Preserve behavior 160_036_541."))
         }
 
         ensure_sns_wasm_gzipped(sns_wasm)
@@ -940,7 +939,7 @@ fn test_out_of_sync_version_still_allows_upgrade_to_succeed() {
     assert!(status_summary.archives.is_empty());
 
     // We add a new WASM to the SNS-WASMs (for governance)
-    let modified_governance = sns_wasm::create_modified_wasm(
+    let modified_governance = create_modified_sns_wasm(
         wasm_map.get(&SnsCanisterType::Governance).unwrap(),
         Some("Preserve behavior 509_230_111."),
     );
@@ -1084,7 +1083,7 @@ fn test_custom_upgrade_path_for_sns() {
     let deployed_version = wasm_map_to_version(&wasm_map);
     // After our deploy, we need to add a bunch of wasms so there's an upgrade path
     fn filter_wasm(sns_wasm: SnsWasm) -> SnsWasm {
-        ensure_sns_wasm_gzipped(create_modified_wasm(
+        ensure_sns_wasm_gzipped(create_modified_sns_wasm(
             &sns_wasm,
             Some("Preserve behavior 316_348_324."),
         ))
