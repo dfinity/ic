@@ -4,15 +4,20 @@ use ic_base_types::PrincipalId;
 use ic_cketh_minter::endpoints::events::{EventPayload, EventSource};
 use ic_cketh_minter::endpoints::CandidBlockTag::Finalized;
 use ic_cketh_minter::endpoints::{AddCkErc20Token, CkErc20Token, MinterInfo};
+use ic_cketh_minter::eth_rpc::FixedSizeData;
 use ic_cketh_minter::memo::MintMemo;
+use ic_cketh_minter::numeric::BlockNumber;
+use ic_cketh_minter::SCRAPPING_ETH_LOGS_INTERVAL;
 use ic_cketh_test_utils::ckerc20::{CkErc20Setup, Erc20Token};
 use ic_cketh_test_utils::flow::DepositParams;
-use ic_cketh_test_utils::response::EthLogEntry;
+use ic_cketh_test_utils::mock::{JsonRpcMethod, MockJsonRpcProviders};
+use ic_cketh_test_utils::response::{block_response, empty_logs, EthLogEntry};
 use ic_cketh_test_utils::{
     format_ethereum_address_to_eip_55, CkEthSetup, CKETH_TRANSFER_FEE,
     DEFAULT_DEPOSIT_FROM_ADDRESS, DEFAULT_DEPOSIT_LOG_INDEX, DEFAULT_DEPOSIT_TRANSACTION_HASH,
     DEFAULT_PRINCIPAL_ID, ERC20_HELPER_CONTRACT_ADDRESS, ETH_HELPER_CONTRACT_ADDRESS,
-    MINTER_ADDRESS,
+    LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MAX_ETH_LOGS_BLOCK_RANGE, MINTER_ADDRESS,
+    RECEIVED_ERC20_EVENT_TOPIC, RECEIVED_ETH_EVENT_TOPIC,
 };
 use ic_ethereum_types::Address;
 use ic_ledger_suite_orchestrator_test_utils::supported_erc20_tokens;
@@ -20,6 +25,7 @@ use ic_state_machine_tests::{CanisterId, ErrorCode};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
 use icrc_ledger_types::icrc3::transactions::Mint;
+use serde_json::json;
 use std::str::FromStr;
 
 #[test]
@@ -397,4 +403,130 @@ fn should_retrieve_minter_info() {
             last_gas_fee_estimate: None,
         }
     );
+}
+
+#[test]
+fn should_scrape_from_last_scraped_after_upgrade() {
+    let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
+    let cketh = &ckerc20.cketh;
+
+    // Set latest_finalized_block so that we scrapped twice each time.
+    let latest_finalized_block =
+        LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + MAX_ETH_LOGS_BLOCK_RANGE * 2;
+    cketh.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
+    MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+        .respond_for_all_with(block_response(latest_finalized_block))
+        .build()
+        .expect_rpc_calls(cketh);
+    let erc20_topics = ckerc20
+        .supported_erc20_tokens
+        .iter()
+        .map(|token| {
+            FixedSizeData((&Address::from_str(&token.contract.address).unwrap()).into()).to_string()
+        })
+        .collect::<Vec<_>>();
+
+    // ckETH event logs
+    let first_from_block = BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1);
+    let first_to_block = first_from_block
+        .checked_add(BlockNumber::from(MAX_ETH_LOGS_BLOCK_RANGE))
+        .unwrap();
+    MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
+        .with_request_params(json!([{
+            "fromBlock": first_from_block,
+            "toBlock": first_to_block,
+            "address": [ETH_HELPER_CONTRACT_ADDRESS],
+            "topics": [RECEIVED_ETH_EVENT_TOPIC]
+        }]))
+        .respond_for_all_with(empty_logs())
+        .build()
+        .expect_rpc_calls(cketh);
+
+    let second_from_block = first_to_block
+        .checked_add(BlockNumber::from(1_u64))
+        .unwrap();
+    let second_to_block = BlockNumber::from(latest_finalized_block);
+    MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
+        .with_request_params(json!([{
+            "fromBlock": second_from_block,
+            "toBlock": second_to_block,
+            "address": [ETH_HELPER_CONTRACT_ADDRESS],
+            "topics": [RECEIVED_ETH_EVENT_TOPIC]
+        }]))
+        .respond_for_all_with(empty_logs())
+        .build()
+        .expect_rpc_calls(cketh);
+
+    // ckERC20 event logs
+    MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
+        .with_request_params(json!([{
+            "fromBlock": first_from_block,
+            "toBlock": first_to_block,
+            "address": [ERC20_HELPER_CONTRACT_ADDRESS],
+            "topics": [RECEIVED_ERC20_EVENT_TOPIC, erc20_topics.clone()]
+        }]))
+        .respond_for_all_with(empty_logs())
+        .build()
+        .expect_rpc_calls(cketh);
+
+    MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
+        .with_request_params(json!([{
+            "fromBlock": second_from_block,
+            "toBlock": second_to_block,
+            "address": [ERC20_HELPER_CONTRACT_ADDRESS],
+            "topics": [RECEIVED_ERC20_EVENT_TOPIC, erc20_topics]
+        }]))
+        .respond_for_all_with(empty_logs())
+        .build()
+        .expect_rpc_calls(cketh);
+
+    // Upgrade to see if everything works
+    let cketh = &ckerc20
+        .cketh
+        .check_audit_logs_and_upgrade(Default::default())
+        .assert_has_unique_events_in_order(&vec![
+            EventPayload::SyncedToBlock {
+                block_number: latest_finalized_block.into(),
+            },
+            EventPayload::SyncedErc20ToBlock {
+                block_number: latest_finalized_block.into(),
+            },
+        ]);
+
+    // Advance block height and scrape again
+    let latest_finalized_block =
+        u64::try_from(second_to_block.into_inner()).unwrap() + MAX_ETH_LOGS_BLOCK_RANGE;
+    cketh.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
+    MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+        .respond_for_all_with(block_response(latest_finalized_block))
+        .build()
+        .expect_rpc_calls(cketh);
+
+    // ckETH event logs
+    let first_from_block = second_to_block
+        .checked_add(BlockNumber::from(1_u64))
+        .unwrap();
+    let first_to_block = BlockNumber::from(latest_finalized_block);
+    MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
+        .with_request_params(json!([{
+            "fromBlock": first_from_block,
+            "toBlock": first_to_block,
+            "address": [ETH_HELPER_CONTRACT_ADDRESS],
+            "topics": [RECEIVED_ETH_EVENT_TOPIC]
+        }]))
+        .respond_for_all_with(empty_logs())
+        .build()
+        .expect_rpc_calls(cketh);
+
+    // ckERC20 event logs
+    MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
+        .with_request_params(json!([{
+            "fromBlock": first_from_block,
+            "toBlock": first_to_block,
+            "address": [ERC20_HELPER_CONTRACT_ADDRESS],
+            "topics": [RECEIVED_ERC20_EVENT_TOPIC, erc20_topics]
+        }]))
+        .respond_for_all_with(empty_logs())
+        .build()
+        .expect_rpc_calls(cketh);
 }

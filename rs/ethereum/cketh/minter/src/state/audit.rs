@@ -50,6 +50,9 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
         EventType::SyncedToBlock { block_number } => {
             state.last_scraped_block_number = *block_number;
         }
+        EventType::SyncedErc20ToBlock { block_number } => {
+            state.last_erc20_scraped_block_number = *block_number;
+        }
         EventType::AcceptedEthWithdrawalRequest(request) => {
             state
                 .eth_transactions

@@ -321,6 +321,9 @@ type Event = record {
         SyncedToBlock : record {
             block_number : nat;
         };
+        SyncedErc20ToBlock : record {
+            block_number : nat;
+        };
         AcceptedEthWithdrawalRequest : record {
             withdrawal_amount : nat;
             destination : text;
