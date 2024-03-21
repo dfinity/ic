@@ -21,7 +21,6 @@ pub mod k8s;
 pub mod ledger_tests;
 pub mod mainnet_tests;
 pub mod message_routing;
-pub mod nested;
 pub mod networking;
 pub mod nns;
 pub mod nns_dapp;

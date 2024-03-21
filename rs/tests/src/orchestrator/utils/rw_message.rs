@@ -313,7 +313,7 @@ pub fn install_nns_with_customizations_and_check_progress(
     }
 }
 
-pub(crate) fn install_nns_and_check_progress(topology: TopologySnapshot) {
+pub fn install_nns_and_check_progress(topology: TopologySnapshot) {
     install_nns_with_customizations_and_check_progress(
         topology,
         NnsCanisterWasmStrategy::TakeBuiltFromSources,
