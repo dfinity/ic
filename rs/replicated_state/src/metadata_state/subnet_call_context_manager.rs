@@ -742,7 +742,7 @@ impl TryFrom<pb_metadata::SignWithEcdsaContext> for SignWithEcdsaContext {
             batch_time: Time::from_nanos_since_unix_epoch(context.batch_time),
             matched_quadruple: context
                 .quadruple_id
-                .map(|q| QuadrupleId(q, Some(key_id)))
+                .map(QuadrupleId::new)
                 .zip(context.height)
                 .map(|(q, h)| (q, Height::from(h))),
             nonce: if let Some(nonce) = context.nonce.as_ref() {

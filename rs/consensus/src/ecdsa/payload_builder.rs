@@ -1318,7 +1318,7 @@ mod tests {
         assert!(signing_requets.is_empty());
 
         // Add two quadruples in creation
-        let quadruple_id_0 = ecdsa_payload.peek_next_quadruple_id(key_id.clone());
+        let quadruple_id_0 = ecdsa_payload.peek_next_quadruple_id();
         let (_kappa_config_ref, _lambda_config_ref) =
             quadruples::test_utils::create_new_quadruple_in_creation(
                 &subnet_nodes,
@@ -1327,7 +1327,7 @@ mod tests {
                 key_id.clone(),
                 &mut ecdsa_payload.quadruples_in_creation,
             );
-        let quadruple_id_1 = ecdsa_payload.peek_next_quadruple_id(key_id.clone());
+        let quadruple_id_1 = ecdsa_payload.peek_next_quadruple_id();
         let (_kappa_config_ref, _lambda_config_ref) =
             quadruples::test_utils::create_new_quadruple_in_creation(
                 &subnet_nodes,
@@ -1426,9 +1426,7 @@ mod tests {
             create_available_quadruple(&mut ecdsa_payload, valid_key_id.clone(), 10);
         let quadruple_for_disabled_key =
             create_available_quadruple(&mut ecdsa_payload, disabled_key_id.clone(), 11);
-        let non_existant_quadruple_for_valid_key = ecdsa_payload
-            .uid_generator
-            .next_quadruple_id(valid_key_id.clone());
+        let non_existant_quadruple_for_valid_key = ecdsa_payload.uid_generator.next_quadruple_id();
 
         let contexts = set_up_sign_with_ecdsa_contexts(vec![
             // Two request contexts without quadruple
@@ -2313,12 +2311,8 @@ mod tests {
             let key_id = ecdsa_payload.key_transcript.key_id.clone();
             ecdsa_payload.key_transcript.current = Some(current_key_transcript.clone());
             let (quadruple_id_1, quadruple_id_2) = (
-                ecdsa_payload
-                    .uid_generator
-                    .next_quadruple_id(key_id.clone()),
-                ecdsa_payload
-                    .uid_generator
-                    .next_quadruple_id(key_id.clone()),
+                ecdsa_payload.uid_generator.next_quadruple_id(),
+                ecdsa_payload.uid_generator.next_quadruple_id(),
             );
             let req_id_1 = ecdsa::RequestId {
                 quadruple_id: quadruple_id_1.clone(),
@@ -2604,8 +2598,8 @@ mod tests {
             let mut ecdsa_payload = empty_ecdsa_payload(subnet_id);
             let uid_generator = &mut ecdsa_payload.uid_generator;
             let key_id = ecdsa_payload.key_transcript.key_id.clone();
-            let quadruple_id_1 = uid_generator.next_quadruple_id(key_id.clone());
-            let quadruple_id_2 = uid_generator.next_quadruple_id(key_id.clone());
+            let quadruple_id_1 = uid_generator.next_quadruple_id();
+            let quadruple_id_2 = uid_generator.next_quadruple_id();
             ecdsa_payload.key_transcript.current = Some(current_key_transcript.clone());
             let req_id_1 = ecdsa::RequestId {
                 quadruple_id: quadruple_id_1.clone(),
@@ -2778,7 +2772,8 @@ mod tests {
             // Convert to proto format and back
             let new_summary_height = Height::new(parent_block_height.get() + 1234);
             let mut summary_proto: pb::EcdsaPayload = (&summary).into();
-            let summary_from_proto = (&summary_proto, new_summary_height).try_into().unwrap();
+            let summary_from_proto: EcdsaPayload =
+                (&summary_proto, new_summary_height).try_into().unwrap();
             summary.update_refs(new_summary_height); // expected
             assert_eq!(summary, summary_from_proto);
 
@@ -3060,7 +3055,7 @@ mod tests {
             );
             let test_inputs = TestSigInputs::from(&sig_inputs);
             payload_0.available_quadruples.insert(
-                payload_0.uid_generator.next_quadruple_id(key_id.clone()),
+                payload_0.uid_generator.next_quadruple_id(),
                 test_inputs.sig_inputs_ref.presig_quadruple_ref.clone(),
             );
             for (transcript_ref, transcript) in test_inputs.idkg_transcripts {

@@ -74,7 +74,6 @@ fn match_quadruples_by_key_id(
         .filter(|context| context.key_id == key_id)
         .flat_map(|context| context.matched_quadruple.as_ref())
     {
-        debug_assert_eq!(Some(&key_id), quadruple_id.key_id());
         quadruple_ids.remove(quadruple_id);
         matched += 1;
     }
@@ -90,7 +89,6 @@ fn match_quadruples_by_key_id(
         let Some(quadruple_id) = quadruple_ids.pop_first() else {
             break;
         };
-        debug_assert_eq!(Some(&key_id), quadruple_id.key_id());
         context.matched_quadruple = Some((quadruple_id, height));
         matched += 1;
     }
@@ -117,8 +115,7 @@ mod tests {
                 message_hash: [0; 32],
                 derivation_path: vec![],
                 batch_time: UNIX_EPOCH,
-                matched_quadruple: matched_quadruple
-                    .map(|(id, h)| (QuadrupleId(id, Some(key_id)), h)),
+                matched_quadruple: matched_quadruple.map(|(id, h)| (QuadrupleId::new(id), h)),
                 nonce: None,
             },
         )
@@ -158,7 +155,7 @@ mod tests {
         let key_id1 = make_key_id(1);
         let key_id2 = make_key_id(2);
         // 2 quadruples for key 1
-        let ids = BTreeSet::from_iter((1..3).map(|i| QuadrupleId(i, Some(key_id1.clone()))));
+        let ids = BTreeSet::from_iter((1..3).map(QuadrupleId::new));
         // 3 contexts for key 2
         let contexts = BTreeMap::from_iter((1..4).map(|i| fake_context(i, key_id2.clone(), None)));
         // No contexts should be matched
@@ -169,7 +166,7 @@ mod tests {
     fn test_match_quadruples_doesnt_match_more_than_delivered() {
         let key_id = make_key_id(1);
         // 2 quadruples for key 1
-        let ids = BTreeSet::from_iter((1..3).map(|i| QuadrupleId(i, Some(key_id.clone()))));
+        let ids = BTreeSet::from_iter((1..3).map(QuadrupleId::new));
         // 4 contexts for key 1
         let contexts = BTreeMap::from_iter((1..5).map(|i| fake_context(i, key_id.clone(), None)));
         // The first 2 contexts should be matched
@@ -180,7 +177,7 @@ mod tests {
     fn test_match_quadruples_doesnt_match_more_than_requested() {
         let key_id = make_key_id(1);
         // 3 quadruples for key 1
-        let ids = BTreeSet::from_iter((1..4).map(|i| QuadrupleId(i, Some(key_id.clone()))));
+        let ids = BTreeSet::from_iter((1..4).map(QuadrupleId::new));
         // 2 contexts for key 1
         let contexts = BTreeMap::from_iter((1..3).map(|i| fake_context(i, key_id.clone(), None)));
         // The first 2 contexts should be matched
@@ -191,7 +188,7 @@ mod tests {
     fn test_match_quadruples_respects_max() {
         let key_id = make_key_id(1);
         // 4 quadruples for key 1
-        let ids = BTreeSet::from_iter((1..5).map(|i| QuadrupleId(i, Some(key_id.clone()))));
+        let ids = BTreeSet::from_iter((1..5).map(QuadrupleId::new));
         // 4 contexts for key 1
         let contexts = BTreeMap::from_iter((1..5).map(|i| fake_context(i, key_id.clone(), None)));
         // The first 3 contexts (up to max_ongoing_signatures) should be matched
@@ -204,10 +201,10 @@ mod tests {
         let key_id2 = make_key_id(2);
         // 4 quadruples for key 1
         let ids = BTreeSet::from_iter([
-            QuadrupleId(1, Some(key_id1.clone())),
-            QuadrupleId(3, Some(key_id1.clone())),
-            QuadrupleId(4, Some(key_id1.clone())),
-            QuadrupleId(5, Some(key_id1.clone())),
+            QuadrupleId::new(1),
+            QuadrupleId::new(3),
+            QuadrupleId::new(4),
+            QuadrupleId::new(5),
         ]);
         let height = Height::from(1);
         // 4 contexts for key 1 and 1 context for key 2
@@ -226,7 +223,7 @@ mod tests {
     fn test_matched_quadruples_arent_matched_again() {
         let key_id = make_key_id(1);
         // 4 quadruples for key 1
-        let ids = BTreeSet::from_iter((1..5).map(|i| QuadrupleId(i, Some(key_id.clone()))));
+        let ids = BTreeSet::from_iter((1..5).map(QuadrupleId::new));
         let height = Height::from(1);
         // 5 contexts for key 1, 2 are already matched
         let contexts = BTreeMap::from_iter([
@@ -244,7 +241,7 @@ mod tests {
     fn test_matched_quadruples_arent_overwritten() {
         let key_id = make_key_id(1);
         // 4 quadruples for key 1
-        let ids = BTreeSet::from_iter((3..7).map(|i| QuadrupleId(i, Some(key_id.clone()))));
+        let ids = BTreeSet::from_iter((3..7).map(QuadrupleId::new));
         let height = Height::from(2);
         // 4 contexts for key 1, the first 3 are already matched
         let contexts = BTreeMap::from_iter([
@@ -261,10 +258,7 @@ mod tests {
     fn test_match_quadruples_doesnt_update_height() {
         let key_id = make_key_id(1);
         // 2 quadruples for key 1
-        let ids = BTreeSet::from_iter([
-            QuadrupleId(5, Some(key_id.clone())),
-            QuadrupleId(6, Some(key_id.clone())),
-        ]);
+        let ids = BTreeSet::from_iter([QuadrupleId::new(5), QuadrupleId::new(6)]);
         // 2 contexts for key 1, the first was already matched to the first quadruple
         // in the previous round.
         let mut contexts = BTreeMap::from_iter([
@@ -276,14 +270,14 @@ mod tests {
 
         // The first context should still be matched at the height of the previous round (height 2).
         let first_context = contexts.pop_first().unwrap().1;
-        assert!(first_context.matched_quadruple.is_some_and(|(qid, h)| {
-            qid == QuadrupleId(5, Some(key_id.clone())) && h == Height::from(2)
-        }));
+        assert!(first_context
+            .matched_quadruple
+            .is_some_and(|(qid, h)| { qid == QuadrupleId::new(5) && h == Height::from(2) }));
 
         // The second context should have been matched to the second quadruple at height 3.
         let second_context = contexts.pop_first().unwrap().1;
-        assert!(second_context.matched_quadruple.is_some_and(|(qid, h)| {
-            qid == QuadrupleId(6, Some(key_id.clone())) && h == Height::from(3)
-        }));
+        assert!(second_context
+            .matched_quadruple
+            .is_some_and(|(qid, h)| { qid == QuadrupleId::new(6) && h == Height::from(3) }));
     }
 }

@@ -86,9 +86,14 @@ impl TryFrom<&pb::RequestId> for RequestId {
 
 #[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
-pub struct QuadrupleId(pub u64, pub Option<EcdsaKeyId>);
+// TODO(kpop): remove the second field
+pub struct QuadrupleId(pub(crate) u64, pub(crate) Option<EcdsaKeyId>);
 
 impl QuadrupleId {
+    pub fn new(id: u64) -> Self {
+        Self(id, None)
+    }
+
     pub fn id(&self) -> u64 {
         self.0
     }
@@ -651,6 +656,8 @@ impl TryFrom<&pb::UnmaskedTimesMaskedParams> for UnmaskedTimesMaskedParams {
 /// ECDSA Quadruple in creation.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct QuadrupleInCreation {
+    pub key_id: Option<EcdsaKeyId>,
+
     pub kappa_masked_config: Option<RandomTranscriptParams>,
     pub kappa_masked: Option<MaskedTranscript>,
 
@@ -670,6 +677,9 @@ pub struct QuadrupleInCreation {
 
 impl Hash for QuadrupleInCreation {
     fn hash<H: Hasher>(&self, state: &mut H) {
+        if let Some(key_id) = &self.key_id {
+            key_id.hash(state);
+        }
         if let Some(config) = &self.kappa_masked_config {
             config.hash(state);
         }
@@ -691,10 +701,12 @@ impl Hash for QuadrupleInCreation {
 impl QuadrupleInCreation {
     /// Initialization with the given random param pair.
     pub fn new(
+        _key_id: EcdsaKeyId,
         kappa_masked_config: RandomTranscriptParams,
         lambda_config: RandomTranscriptParams,
     ) -> Self {
-        QuadrupleInCreation {
+        Self {
+            key_id: None,
             kappa_masked_config: Some(kappa_masked_config),
             kappa_masked: None,
             lambda_config,
@@ -715,6 +727,7 @@ impl QuadrupleInCreation {
         lambda_config: RandomTranscriptParams,
     ) -> Self {
         QuadrupleInCreation {
+            key_id: None,
             kappa_masked_config: None,
             kappa_masked: None,
             lambda_config,
@@ -840,6 +853,7 @@ impl QuadrupleInCreation {
 impl From<&QuadrupleInCreation> for pb::QuadrupleInCreation {
     fn from(quadruple: &QuadrupleInCreation) -> Self {
         Self {
+            key_id: quadruple.key_id.as_ref().map(Into::into),
             kappa_masked_config: quadruple
                 .kappa_masked_config
                 .as_ref()
@@ -963,7 +977,14 @@ impl TryFrom<&pb::QuadrupleInCreation> for QuadrupleInCreation {
                 (None, None)
             };
 
+        let key_id = quadruple
+            .key_id
+            .clone()
+            .map(TryInto::try_into)
+            .transpose()?;
+
         Ok(Self {
+            key_id,
             kappa_masked_config,
             kappa_masked,
             lambda_config,
@@ -1311,14 +1332,28 @@ impl IDkgTranscriptParamsRef {
 
 /// Counterpart of PreSignatureQuadruple that holds transcript references,
 /// instead of the transcripts.
-#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(test, derive(ExhaustiveSet))]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PreSignatureQuadrupleRef {
+    pub key_id: Option<EcdsaKeyId>,
     pub kappa_unmasked_ref: UnmaskedTranscript,
     pub lambda_masked_ref: MaskedTranscript,
     pub kappa_times_lambda_ref: MaskedTranscript,
     pub key_times_lambda_ref: MaskedTranscript,
     pub key_unmasked_ref: UnmaskedTranscript,
+}
+
+impl Hash for PreSignatureQuadrupleRef {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        if let Some(key_id) = &self.key_id {
+            key_id.hash(state);
+        }
+
+        self.kappa_unmasked_ref.hash(state);
+        self.lambda_masked_ref.hash(state);
+        self.kappa_times_lambda_ref.hash(state);
+        self.key_times_lambda_ref.hash(state);
+        self.key_unmasked_ref.hash(state);
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -1339,6 +1374,7 @@ impl PreSignatureQuadrupleRef {
         key_unmasked_ref: UnmaskedTranscript,
     ) -> Self {
         Self {
+            key_id: None,
             kappa_unmasked_ref,
             lambda_masked_ref,
             kappa_times_lambda_ref,
@@ -1397,6 +1433,7 @@ impl PreSignatureQuadrupleRef {
 impl From<&PreSignatureQuadrupleRef> for pb::PreSignatureQuadrupleRef {
     fn from(quadruple: &PreSignatureQuadrupleRef) -> Self {
         Self {
+            key_id: quadruple.key_id.as_ref().map(Into::into),
             kappa_unmasked_ref: Some((&quadruple.kappa_unmasked_ref).into()),
             lambda_masked_ref: Some((&quadruple.lambda_masked_ref).into()),
             kappa_times_lambda_ref: Some((&quadruple.kappa_times_lambda_ref).into()),
@@ -1434,13 +1471,20 @@ impl TryFrom<&pb::PreSignatureQuadrupleRef> for PreSignatureQuadrupleRef {
             "PreSignatureQuadrupleRef::quadruple::key_unmasked_ref",
         )?;
 
-        Ok(Self::new(
+        let key_id = quadruple
+            .key_id
+            .clone()
+            .map(TryInto::try_into)
+            .transpose()?;
+
+        Ok(Self {
+            key_id,
             kappa_unmasked_ref,
             lambda_masked_ref,
             kappa_times_lambda_ref,
             key_times_lambda_ref,
             key_unmasked_ref,
-        ))
+        })
     }
 }
 

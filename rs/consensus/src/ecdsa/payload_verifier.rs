@@ -893,12 +893,8 @@ mod test {
             key_transcript.to_attributes(),
             key_transcript_ref,
         ));
-        let quadruple_id_1 = ecdsa_payload
-            .uid_generator
-            .next_quadruple_id(key_id.clone());
-        let quadruple_id_2 = ecdsa_payload
-            .uid_generator
-            .next_quadruple_id(key_id.clone());
+        let quadruple_id_1 = ecdsa_payload.uid_generator.next_quadruple_id();
+        let quadruple_id_2 = ecdsa_payload.uid_generator.next_quadruple_id();
         // Fill in the ongoing signatures
         let sig_inputs_1 = create_sig_inputs_with_args(
             13,
@@ -1034,15 +1030,9 @@ mod test {
         valid_keys.insert(key_id.clone());
 
         let mut ecdsa_payload = empty_ecdsa_payload(subnet_id);
-        let quadruple_id1 = ecdsa_payload
-            .uid_generator
-            .next_quadruple_id(key_id.clone());
-        let quadruple_id2 = ecdsa_payload
-            .uid_generator
-            .next_quadruple_id(key_id.clone());
-        let quadruple_id3 = ecdsa_payload
-            .uid_generator
-            .next_quadruple_id(key_id.clone());
+        let quadruple_id1 = ecdsa_payload.uid_generator.next_quadruple_id();
+        let quadruple_id2 = ecdsa_payload.uid_generator.next_quadruple_id();
+        let quadruple_id3 = ecdsa_payload.uid_generator.next_quadruple_id();
 
         // There are three requests in state, two are completed, one is still
         // missing its nonce.
@@ -1201,7 +1191,7 @@ mod test {
         valid_keys.insert(key_id.clone());
 
         let mut prev_payload = empty_ecdsa_payload(subnet_id);
-        let quadruple_id = prev_payload.uid_generator.next_quadruple_id(key_id.clone());
+        let quadruple_id = prev_payload.uid_generator.next_quadruple_id();
 
         let sign_with_ecdsa_contexts =
             BTreeMap::from_iter([fake_sign_with_ecdsa_context_with_quadruple(
@@ -1336,10 +1326,9 @@ mod test {
                 ecdsa::UnmaskedTranscript::try_from((Height::new(i as u64), &transcript_0))
                     .unwrap();
             curr_payload.available_quadruples.insert(
-                curr_payload
-                    .uid_generator
-                    .next_quadruple_id(curr_payload.key_transcript.key_id.clone()),
+                curr_payload.uid_generator.next_quadruple_id(),
                 PreSignatureQuadrupleRef {
+                    key_id: Some(curr_payload.key_transcript.key_id.clone()),
                     kappa_unmasked_ref: malicious_transcript_ref,
                     lambda_masked_ref: masked_transcript_1,
                     kappa_times_lambda_ref: masked_transcript_1,
