@@ -2561,7 +2561,7 @@ impl UploadChunkArgs {
 /// `(record {
 ///      hash: blob;
 /// })`
-#[derive(CandidType, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(CandidType, Clone, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ChunkHash {
     #[serde(with = "serde_bytes")]
     pub hash: Vec<u8>,
@@ -2586,7 +2586,7 @@ pub type UploadChunkReply = ChunkHash;
 ///     };
 ///     target_canister_id: principal;
 ///     store_canister_id: opt principal;
-///     chunk_hashes_list: vec blob;
+///     chunk_hashes_list: vec chunk_hash;
 ///     wasm_module_hash: blob;
 ///     arg: blob;
 ///     sender_canister_version : opt nat64;
@@ -2596,7 +2596,7 @@ pub struct InstallChunkedCodeArgs {
     pub mode: CanisterInstallModeV2,
     pub target_canister: PrincipalId,
     pub store_canister: Option<PrincipalId>,
-    pub chunk_hashes_list: Vec<serde_bytes::ByteBuf>,
+    pub chunk_hashes_list: Vec<ChunkHash>,
     #[serde(with = "serde_bytes")]
     pub wasm_module_hash: Vec<u8>,
     #[serde(with = "serde_bytes")]
@@ -2615,7 +2615,16 @@ impl std::fmt::Display for InstallChunkedCodeArgs {
     }
 }
 
-impl Payload<'_> for InstallChunkedCodeArgs {}
+impl Payload<'_> for InstallChunkedCodeArgs {
+    fn decode(blob: &'_ [u8]) -> Result<Self, UserError> {
+        let args = match Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error)
+        {
+            Ok(record) => record,
+            Err(_) => InstallChunkedCodeArgsLegacy::decode(blob)?.into(),
+        };
+        Ok(args)
+    }
+}
 
 impl InstallChunkedCodeArgs {
     pub fn new(
@@ -2632,7 +2641,7 @@ impl InstallChunkedCodeArgs {
             store_canister: store_canister.map(|p| p.into()),
             chunk_hashes_list: chunk_hashes_list
                 .into_iter()
-                .map(serde_bytes::ByteBuf::from)
+                .map(|hash| ChunkHash { hash })
                 .collect(),
             wasm_module_hash,
             arg,
@@ -2651,6 +2660,77 @@ impl InstallChunkedCodeArgs {
     pub fn store_canister_id(&self) -> Option<CanisterId> {
         self.store_canister
             .map(CanisterId::unchecked_from_principal)
+    }
+}
+
+/// Struct used for encoding/decoding of legacy version of `InstallChunkedCodeArgs`,
+/// it is used to preserve backward compatibility.
+/// `(record {
+///     mode : variant {
+///         install;
+///         reinstall;
+///         upgrade: opt record {
+///             skip_pre_upgrade: opt bool
+///         }
+///     };
+///     target_canister_id: principal;
+///     store_canister_id: opt principal;
+///     chunk_hashes_list: vec blob;
+///     wasm_module_hash: blob;
+///     arg: blob;
+///     sender_canister_version : opt nat64;
+/// })`
+#[derive(Clone, CandidType, Deserialize, Debug)]
+pub struct InstallChunkedCodeArgsLegacy {
+    pub mode: CanisterInstallModeV2,
+    pub target_canister: PrincipalId,
+    pub store_canister: Option<PrincipalId>,
+    pub chunk_hashes_list: Vec<Vec<u8>>,
+    #[serde(with = "serde_bytes")]
+    pub wasm_module_hash: Vec<u8>,
+    #[serde(with = "serde_bytes")]
+    pub arg: Vec<u8>,
+    pub sender_canister_version: Option<u64>,
+}
+
+impl From<InstallChunkedCodeArgsLegacy> for InstallChunkedCodeArgs {
+    fn from(value: InstallChunkedCodeArgsLegacy) -> Self {
+        Self {
+            mode: value.mode,
+            target_canister: value.target_canister,
+            store_canister: value.store_canister,
+            chunk_hashes_list: value
+                .chunk_hashes_list
+                .into_iter()
+                .map(|hash| ChunkHash { hash })
+                .collect(),
+            wasm_module_hash: value.wasm_module_hash,
+            arg: value.arg,
+            sender_canister_version: value.sender_canister_version,
+        }
+    }
+}
+
+impl Payload<'_> for InstallChunkedCodeArgsLegacy {}
+
+impl InstallChunkedCodeArgsLegacy {
+    pub fn new(
+        mode: CanisterInstallModeV2,
+        target_canister: CanisterId,
+        store_canister: Option<CanisterId>,
+        chunk_hashes_list: Vec<Vec<u8>>,
+        wasm_module_hash: Vec<u8>,
+        arg: Vec<u8>,
+    ) -> Self {
+        Self {
+            mode,
+            target_canister: target_canister.into(),
+            store_canister: store_canister.map(|p| p.into()),
+            chunk_hashes_list,
+            wasm_module_hash,
+            arg,
+            sender_canister_version: None,
+        }
     }
 }
 

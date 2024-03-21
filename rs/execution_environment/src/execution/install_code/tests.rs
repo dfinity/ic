@@ -10,6 +10,7 @@ use ic_types::{
     CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
 };
 
+use ic_management_canister_types::InstallChunkedCodeArgsLegacy;
 use ic_management_canister_types::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode,
     CanisterInstallModeV2, EmptyBlob, InstallChunkedCodeArgs, InstallCodeArgs, InstallCodeArgsV2,
@@ -1627,6 +1628,55 @@ fn install_chunked_works_from_other_canister() {
         test.subnet_message(
             "install_chunked_code",
             InstallChunkedCodeArgs::new(
+                CanisterInstallModeV2::Install,
+                target_canister,
+                Some(store_canister),
+                vec![hash.clone()],
+                hash,
+                vec![],
+            )
+            .encode(),
+        ),
+    );
+
+    // Check the canister is working
+    let wasm = ic_universal_canister::wasm().reply().build();
+
+    let result = test.ingress(target_canister, "update", wasm);
+    assert_matches!(result, Ok(WasmResult::Reply(_)));
+}
+
+#[test]
+fn install_chunked_works_with_legacy_args() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_wasm_chunk_store(FlagStatus::Enabled)
+        .build();
+
+    let target_canister = test.create_canister(CYCLES);
+    let store_canister = test.create_canister(CYCLES);
+
+    // Upload universal canister chunk.
+    let uc_wasm = UNIVERSAL_CANISTER_WASM;
+    let hash = UploadChunkReply::decode(&get_reply(
+        test.subnet_message(
+            "upload_chunk",
+            UploadChunkArgs {
+                canister_id: store_canister.into(),
+                chunk: uc_wasm.to_vec(),
+            }
+            .encode(),
+        ),
+    ))
+    .unwrap()
+    .hash;
+
+    // Install the universal canister using legacy args.
+    let _install_response = get_reply(
+        test.subnet_message(
+            "install_chunked_code",
+            InstallChunkedCodeArgsLegacy::new(
                 CanisterInstallModeV2::Install,
                 target_canister,
                 Some(store_canister),
