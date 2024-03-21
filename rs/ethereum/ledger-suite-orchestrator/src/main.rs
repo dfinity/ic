@@ -14,6 +14,11 @@ async fn canister_ids(contract: CandidErc20Contract) -> Option<ManagedCanisterId
     read_state(|s| s.managed_canisters(&contract).cloned()).map(ManagedCanisterIds::from)
 }
 
+#[export_name = "canister_global_timer"]
+fn timer() {
+    ic_ledger_suite_orchestrator::scheduler::timer();
+}
+
 #[init]
 fn init(arg: OrchestratorArg) {
     match arg {

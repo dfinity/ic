@@ -177,7 +177,8 @@ fn should_top_up_spawned_canisters() {
 
     orchestrator
         .env
-        .advance_time(std::time::Duration::from_secs(60 * 60));
+        .advance_time(std::time::Duration::from_secs(60 * 60 + 1));
+    orchestrator.env.tick();
     orchestrator.env.tick();
     orchestrator.env.tick();
     orchestrator.env.tick();
@@ -186,6 +187,28 @@ fn should_top_up_spawned_canisters() {
     let post_top_up_balance_ledger = orchestrator.canister_status_of(ledger_canister_id).cycles();
     let post_top_up_balance_index = orchestrator.canister_status_of(index_canister_id).cycles();
 
+    assert_eq!(
+        post_top_up_balance_index - pre_top_up_balance_index,
+        TEN_TRILLIONS as u128
+    );
+    assert_eq!(
+        post_top_up_balance_ledger - pre_top_up_balance_ledger,
+        TEN_TRILLIONS as u128
+    );
+
+    orchestrator
+        .env
+        .advance_time(std::time::Duration::from_secs(60 * 60 + 1));
+    orchestrator.env.tick();
+    orchestrator.env.tick();
+    orchestrator.env.tick();
+    orchestrator.env.tick();
+    orchestrator.env.tick();
+
+    let post_top_up_balance_ledger = orchestrator.canister_status_of(ledger_canister_id).cycles();
+    let post_top_up_balance_index = orchestrator.canister_status_of(index_canister_id).cycles();
+
+    // No new top-ups are expected.
     assert_eq!(
         post_top_up_balance_index - pre_top_up_balance_index,
         TEN_TRILLIONS as u128
