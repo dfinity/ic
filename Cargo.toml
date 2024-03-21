@@ -415,6 +415,8 @@ opt-level = 3
 opt-level = 3
 
 [patch.crates-io]
+# TODO(BOUN-1083): drop this patch and use an official release of ic-agent once available
+ic-agent = { git = "https://github.com/dfinity/agent-rs", rev = "5c34d88" }
 # Current jsonrpc version (0.12.1) does not support ipv6 addressing. When new version is
 # released this can be removed.
 jsonrpc = { git = "https://github.com/apoelstra/rust-jsonrpc", rev = "e42044d" }

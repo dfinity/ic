@@ -7,11 +7,12 @@ use std::{
 };
 
 use anyhow::bail;
+use axum::body::Body;
 use axum::extract::{FromRef, State};
 use bytes::Bytes;
 use candid::Principal;
 use http::header::{HeaderValue, HOST};
-use hyper::{Body, Request, Response, StatusCode, Uri};
+use hyper::{Request, Response, StatusCode, Uri};
 use ic_agent::{
     agent::{Agent, RejectCode, RejectResponse},
     AgentError,

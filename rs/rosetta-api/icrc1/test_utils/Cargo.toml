@@ -22,5 +22,5 @@ rand_chacha = "0.3"
 ed25519-consensus = "2.0.1"
 ic-canister-client-sender = { path = "../../../canister_client/sender" }
 ic-agent = { workspace = true }
-ring = { version = "0.16.11", features = ["std"] }
+ring = { version = "0.17.7", features = ["std"] }
 ic-constants = { path = "../../../constants" }

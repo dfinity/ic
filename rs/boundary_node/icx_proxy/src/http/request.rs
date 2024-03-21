@@ -2,8 +2,9 @@ use crate::error::ErrorFactory;
 use crate::http::body::read_streaming_body;
 use crate::http::headers::REQUIRE_CERTIFICATION_HEADER_NAME;
 use crate::proxy::REQUEST_BODY_SIZE_LIMIT;
+use axum::body::Body;
 use hyper::http::request::Parts;
-use hyper::{Body, Uri};
+use hyper::Uri;
 use ic_http_certification::HttpRequest as Request;
 use tracing::trace;
 

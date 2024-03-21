@@ -1,19 +1,19 @@
 use crate::error::ErrorFactory;
-use http_body::{LengthLimitError, Limited};
-use hyper::{body, Body};
+use axum::body::{self, Body};
+use axum::extract::rejection::LengthLimitError;
 
 /// Read the body from the available stream enforcing a size limit.
 pub async fn read_streaming_body(
     body_stream: Body,
     size_limit: usize,
 ) -> Result<Vec<u8>, ErrorFactory> {
-    let limited_body = Limited::new(body_stream, size_limit);
-
-    match body::to_bytes(limited_body).await {
+    match body::to_bytes(body_stream, size_limit).await {
         Ok(data) => Ok(data.to_vec()),
         Err(err) => {
-            if err.downcast_ref::<LengthLimitError>().is_some() {
-                return Err(ErrorFactory::PayloadTooLarge);
+            if let Some(source) = std::error::Error::source(&err) {
+                if source.is::<LengthLimitError>() {
+                    return Err(ErrorFactory::PayloadTooLarge);
+                }
             }
             Err(ErrorFactory::BodyReadFailed(err.to_string()))
         }
@@ -24,7 +24,7 @@ pub async fn read_streaming_body(
 mod tests {
     use crate::error::ErrorFactory;
     use crate::http::body::read_streaming_body;
-    use hyper::Body;
+    use axum::body::Body;
 
     macro_rules! aw {
         ($e:expr) => {
