@@ -228,12 +228,12 @@ impl Storage {
     pub(crate) fn num_logical_pages(&self) -> usize {
         let base = match &self.base {
             BaseFile::Base(base) => base.num_pages(),
-            BaseFile::Overlay(overlay) => overlay.num_logical_pages(),
+            BaseFile::Overlay(overlay) => overlay.end_logical_pages(),
         };
         let overlays = self
             .overlays
             .iter()
-            .map(|overlay| overlay.num_logical_pages())
+            .map(|overlay| overlay.end_logical_pages())
             .max()
             .unwrap_or(0);
         base.max(overlays)
@@ -286,7 +286,7 @@ impl OverlayFile {
             .map(|(index, offset)| {
                 let page = get_page_in_mapping(&self.mapping, offset);
                 // In a validated mapping, all file_indices from the index are within range.
-                debug_assert!(page.is_some());
+                assert!(page.is_some());
                 (index, page.unwrap().as_slice())
             })
     }
@@ -408,7 +408,7 @@ impl OverlayFile {
 
     /// The number of logical pages covered by this overlay file, i.e. the largest `PageIndex`
     /// contained + 1.
-    fn num_logical_pages(&self) -> usize {
+    fn end_logical_pages(&self) -> usize {
         PageIndexRange::from(self.index_slice().iter().last().unwrap())
             .end_page
             .get() as usize
