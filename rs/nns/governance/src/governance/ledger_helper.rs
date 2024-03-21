@@ -7,7 +7,7 @@ use crate::{
 use ic_nervous_system_common::ledger::IcpLedger;
 
 /// An object that represents the burning of neuron fees.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct BurnNeuronFees {
     pub amount_e8s: u64,
 }
@@ -28,7 +28,7 @@ impl BurnNeuronFees {
     pub fn burn_neuron_fees_without_ledger(self, neuron: &mut Neuron) {}
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct NeuronStakeTransfer {
     pub amount_to_target_e8s: u64,
     pub transaction_fee_e8s: u64,
