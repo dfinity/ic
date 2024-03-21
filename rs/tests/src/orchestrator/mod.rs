@@ -1,5 +1,4 @@
 pub mod backup_manager;
-pub mod cup_compatibility;
 pub mod node_assign_test;
 pub mod node_reassignment_test;
 pub mod node_registration_test;
