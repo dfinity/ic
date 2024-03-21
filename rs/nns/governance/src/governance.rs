@@ -6,7 +6,6 @@ use crate::{
         },
         merge_neurons::{
             build_merge_neurons_response, calculate_merge_neurons_effect, MergeNeuronsEffect,
-            ValidMergeNeuronsRequest,
         },
     },
     heap_governance_data::{
@@ -2704,31 +2703,34 @@ impl Governance {
         caller: &PrincipalId,
         merge: &manage_neuron::Merge,
     ) -> Result<ManageNeuronResponse, GovernanceError> {
-        let request = ValidMergeNeuronsRequest::try_new(id, merge, caller)?;
         let now = self.env.now();
         let in_flight_command = NeuronInFlightCommand {
             timestamp: now,
             command: Some(InFlightCommand::Merge(merge.clone())),
         };
 
-        // Step 1: Locking the neurons.
-        let _target_lock =
-            self.lock_neuron_for_command(request.target_neuron_id().id, in_flight_command.clone())?;
-        let _source_lock =
-            self.lock_neuron_for_command(request.source_neuron_id().id, in_flight_command.clone())?;
-
-        // Step 2: calculates the effect of the merge.
+        // Step 1: calculates the effect of the merge.
         let MergeNeuronsEffect {
+            source_neuron_id,
+            target_neuron_id,
             source_burn_fees,
             stake_transfer,
             source_effect,
             target_effect,
         } = calculate_merge_neurons_effect(
-            &request,
+            id,
+            merge,
+            caller,
             &self.neuron_store,
             self.transaction_fee(),
             now,
         )?;
+
+        // Step 2: Locking the neurons.
+        let _target_lock =
+            self.lock_neuron_for_command(target_neuron_id.id, in_flight_command.clone())?;
+        let _source_lock =
+            self.lock_neuron_for_command(source_neuron_id.id, in_flight_command.clone())?;
 
         // Step 3: burn neuron fees if needed.
         if let Some(source_burn_fees) = source_burn_fees {
@@ -2747,14 +2749,14 @@ impl Governance {
         // Step 5: applying the internal effect of the merge.
         let source_neuron = self
             .neuron_store
-            .with_neuron_mut(&request.source_neuron_id(), |source| {
+            .with_neuron_mut(&source_neuron_id, |source| {
                 source_effect.apply(source);
                 source.clone()
             })
             .expect("Expected the source neuron to exist");
         let target_neuron = self
             .neuron_store
-            .with_neuron_mut(&request.target_neuron_id(), |target| {
+            .with_neuron_mut(&target_neuron_id, |target| {
                 target_effect.apply(target);
                 target.clone()
             })
@@ -2772,17 +2774,20 @@ impl Governance {
         caller: &PrincipalId,
         merge: manage_neuron::Merge,
     ) -> Result<ManageNeuronResponse, GovernanceError> {
-        let request = ValidMergeNeuronsRequest::try_new(id, &merge, caller)?;
         let now = self.env.now();
 
         // Step 1: calculates the effect of the merge.
         let MergeNeuronsEffect {
+            source_neuron_id,
+            target_neuron_id,
             source_burn_fees,
             stake_transfer,
             source_effect,
             target_effect,
         } = calculate_merge_neurons_effect(
-            &request,
+            id,
+            &merge,
+            caller,
             &self.neuron_store,
             self.transaction_fee(),
             now,
@@ -2791,10 +2796,10 @@ impl Governance {
         // Step 2: reads the neurons.
         let mut source_neuron = self
             .neuron_store
-            .with_neuron(&request.source_neuron_id(), |neuron| neuron.clone())?;
+            .with_neuron(&source_neuron_id, |neuron| neuron.clone())?;
         let mut target_neuron = self
             .neuron_store
-            .with_neuron(&request.target_neuron_id(), |neuron| neuron.clone())?;
+            .with_neuron(&target_neuron_id, |neuron| neuron.clone())?;
 
         // Step 3: applies the effect of the merge.
         if let Some(source_burn_fees) = source_burn_fees {
