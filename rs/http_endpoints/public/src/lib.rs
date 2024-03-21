@@ -46,7 +46,7 @@ use axum::{
     error_handling::HandleErrorLayer,
     extract::{DefaultBodyLimit, MatchedPath, State},
     middleware::Next,
-    response::{IntoResponse, Redirect},
+    response::Redirect,
     routing::{get, get_service, post_service, MethodRouter},
     Router,
 };
@@ -91,7 +91,7 @@ use ic_types::{
         HttpReadStateResponse, HttpRequestEnvelope, QueryResponseHash, ReplicaHealthStatus,
     },
     time::expiry_time_from_now,
-    NodeId, PrincipalId, SubnetId,
+    NodeId, SubnetId,
 };
 use metrics::{HttpHandlerMetrics, LABEL_UNKNOWN};
 pub use query::QueryServiceBuilder;
@@ -103,7 +103,6 @@ use std::{
     io::Write,
     net::SocketAddr,
     path::PathBuf,
-    str::FromStr,
     sync::{Arc, RwLock},
     time::Duration,
 };
@@ -151,8 +150,8 @@ struct HttpHandler {
     catchup_service: EndpointService,
     dashboard_service: EndpointService,
     status_method: MethodRouter,
-    canister_read_state_service: EndpointService,
-    subnet_read_state_service: EndpointService,
+    canister_read_state_router: Router,
+    subnet_read_state_router: Router,
     pprof_home_service: EndpointService,
     pprof_profile_service: EndpointService,
     pprof_flamegraph_service: EndpointService,
@@ -340,21 +339,18 @@ pub fn start_server(
     .with_malicious_flags(malicious_flags.clone())
     .build_router();
 
-    let canister_read_state_service = BoxCloneService::new(
-        CanisterReadStateServiceBuilder::builder(
-            state_reader_clone,
-            registry_client.clone(),
-            ingress_verifier,
-            delegation_from_nns.clone(),
-        )
-        .with_logger(log.clone())
-        .with_health_status(health_status.clone())
-        .with_malicious_flags(malicious_flags)
-        .build(),
-    );
+    let canister_read_state_router = CanisterReadStateServiceBuilder::builder(
+        state_reader_clone,
+        registry_client.clone(),
+        ingress_verifier,
+        delegation_from_nns.clone(),
+    )
+    .with_logger(log.clone())
+    .with_health_status(health_status.clone())
+    .with_malicious_flags(malicious_flags)
+    .build_router();
 
-    let subnet_read_state_service = SubnetReadStateService::new_service(
-        log.clone(),
+    let subnet_read_state_router = SubnetReadStateService::new_router(
         Arc::clone(&health_status),
         Arc::clone(&delegation_from_nns),
         state_reader_executor.clone(),
@@ -410,8 +406,8 @@ pub fn start_server(
         status_method,
         catchup_service,
         dashboard_service,
-        canister_read_state_service,
-        subnet_read_state_service,
+        canister_read_state_router,
+        subnet_read_state_router,
         pprof_home_service,
         pprof_profile_service,
         pprof_flamegraph_service,
@@ -667,54 +663,23 @@ fn make_router(
 ) -> Router {
     let catch_up_package_service = http_handler.catchup_service.clone();
     let dashboard_service = http_handler.dashboard_service.clone();
-    let canister_read_state_service = http_handler.canister_read_state_service.clone();
-    let subnet_read_state_service = http_handler.subnet_read_state_service.clone();
     let pprof_home_service = http_handler.pprof_home_service.clone();
     let pprof_profile_service = http_handler.pprof_profile_service.clone();
     let pprof_flamegraph_service = http_handler.pprof_flamegraph_service.clone();
 
-    let post_router: Router = Router::new()
-        .route(
-            "/api/v2/canister/:effective_canister_id/read_state",
-            post_service(
-                ServiceBuilder::new()
-                    .layer(HandleErrorLayer::new(map_box_error_to_response))
-                    .load_shed()
-                    .layer(GlobalConcurrencyLimitLayer::new(
-                        config.max_read_state_concurrent_requests,
-                    ))
-                    .layer(axum::middleware::from_fn(verify_cbor_content_header))
-                    .layer(axum::middleware::from_fn(attach_effective_canister_id))
-                    .service(canister_read_state_service),
-            ),
-        )
-        .route(
-            "/api/v2/subnet/:effective_canister_id/read_state",
-            post_service(
-                ServiceBuilder::new()
-                    .layer(HandleErrorLayer::new(map_box_error_to_response))
-                    .load_shed()
-                    .layer(GlobalConcurrencyLimitLayer::new(
-                        config.max_read_state_concurrent_requests,
-                    ))
-                    .layer(axum::middleware::from_fn(verify_cbor_content_header))
-                    .layer(axum::middleware::from_fn(attach_effective_canister_id))
-                    .service(subnet_read_state_service),
-            ),
-        )
-        .route(
-            "/_/catch_up_package",
-            post_service(
-                ServiceBuilder::new()
-                    .layer(HandleErrorLayer::new(map_box_error_to_response))
-                    .load_shed()
-                    .layer(GlobalConcurrencyLimitLayer::new(
-                        config.max_catch_up_package_concurrent_requests,
-                    ))
-                    .layer(axum::middleware::from_fn(verify_cbor_content_header))
-                    .service(catch_up_package_service),
-            ),
-        );
+    let post_router: Router = Router::new().route(
+        "/_/catch_up_package",
+        post_service(
+            ServiceBuilder::new()
+                .layer(HandleErrorLayer::new(map_box_error_to_response))
+                .load_shed()
+                .layer(GlobalConcurrencyLimitLayer::new(
+                    config.max_catch_up_package_concurrent_requests,
+                ))
+                .layer(axum::middleware::from_fn(verify_cbor_content_header))
+                .service(catch_up_package_service),
+        ),
+    );
 
     let pprof_concurrency_limiter =
         GlobalConcurrencyLimitLayer::new(config.max_pprof_concurrent_requests);
@@ -800,6 +765,26 @@ fn make_router(
                         config.max_query_concurrent_requests,
                     )),
             ),
+        )
+        .merge(
+            http_handler.canister_read_state_router.layer(
+                ServiceBuilder::new()
+                    .layer(HandleErrorLayer::new(map_box_error_to_response))
+                    .load_shed()
+                    .layer(GlobalConcurrencyLimitLayer::new(
+                        config.max_read_state_concurrent_requests,
+                    )),
+            ),
+        )
+        .merge(
+            http_handler.subnet_read_state_router.layer(
+                ServiceBuilder::new()
+                    .layer(HandleErrorLayer::new(map_box_error_to_response))
+                    .load_shed()
+                    .layer(GlobalConcurrencyLimitLayer::new(
+                        config.max_read_state_concurrent_requests,
+                    )),
+            ),
         );
 
     final_router.layer(
@@ -843,27 +828,6 @@ async fn verify_cbor_content_header(
     }
 
     next.run(request).await
-}
-
-async fn attach_effective_canister_id(
-    axum::extract::Path(effective_canister_id): axum::extract::Path<String>,
-    mut request: axum::extract::Request,
-    next: Next,
-) -> axum::response::Response {
-    match PrincipalId::from_str(&effective_canister_id) {
-        Err(e) => (
-            StatusCode::BAD_REQUEST,
-            format!(
-                "Malformed request: Invalid efffective principal id {}: {}",
-                effective_canister_id, e
-            ),
-        )
-            .into_response(),
-        Ok(eci) => {
-            request.extensions_mut().insert(eci);
-            next.run(request).await
-        }
-    }
 }
 
 async fn collect_timer_metric(
@@ -1242,8 +1206,14 @@ mod tests {
             catchup_service: dummy_service.clone(),
             dashboard_service: dummy_service.clone(),
             status_method: MethodRouter::new().get_service(dummy_service.clone()),
-            canister_read_state_service: dummy_service.clone(),
-            subnet_read_state_service: dummy_service.clone(),
+            canister_read_state_router: Router::new().route(
+                CanisterReadStateService::route(),
+                axum::routing::post_service(dummy_service.clone()),
+            ),
+            subnet_read_state_router: Router::new().route(
+                SubnetReadStateService::route(),
+                axum::routing::post_service(dummy_service.clone()),
+            ),
             pprof_home_service: dummy_service.clone(),
             pprof_profile_service: dummy_service.clone(),
             pprof_flamegraph_service: dummy_service.clone(),

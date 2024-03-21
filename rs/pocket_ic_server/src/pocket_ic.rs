@@ -995,10 +995,15 @@ impl Operation for ReadStateRequest {
                     Arc::new(StandaloneIngressSigVerifier),
                     Arc::new(RwLock::new(delegation)),
                 )
-                .build();
+                .build_service();
 
                 let request = axum::http::Request::builder()
-                    .extension(PrincipalId(self.effective_canister_id.get().into()))
+                    .method(Method::POST)
+                    .header(CONTENT_TYPE, CONTENT_TYPE_CBOR)
+                    .uri(format!(
+                        "/api/v2/canister/{}/read_state",
+                        PrincipalId(self.effective_canister_id.get().into())
+                    ))
                     .body(self.bytes.clone().into())
                     .unwrap();
                 let resp = self.runtime.block_on(svc.oneshot(request)).unwrap();

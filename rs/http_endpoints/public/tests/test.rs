@@ -171,7 +171,7 @@ fn test_unauthorized_controller() {
 
     let expected_error = AgentError::HttpError(HttpErrorPayload {
         status: 400,
-        content_type: Some("text/plain".to_string()),
+        content_type: Some("text/plain; charset=utf-8".to_string()),
         content: format!(
             "Effective principal id in URL {} does not match requested principal id: {}.",
             canister1, canister2
@@ -621,7 +621,7 @@ fn test_too_long_paths_are_rejected() {
 
     let expected_error_response = AgentError::HttpError(HttpErrorPayload {
         status: 404,
-        content_type: Some("text/plain".to_string()),
+        content_type: Some("text/plain; charset=utf-8".to_string()),
         content: b"Invalid path requested.".to_vec(),
     });
 
