@@ -707,6 +707,8 @@ fn arb_event_type() -> impl Strategy<Value = EventType> {
             }
         }),
         arb_checked_amount_of().prop_map(|block_number| EventType::SyncedToBlock { block_number }),
+        arb_checked_amount_of()
+            .prop_map(|block_number| EventType::SyncedErc20ToBlock { block_number }),
         (any::<u64>(), arb_unsigned_tx()).prop_map(|(withdrawal_id, transaction)| {
             EventType::CreatedTransaction {
                 withdrawal_id: withdrawal_id.into(),

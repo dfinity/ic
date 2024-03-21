@@ -44,7 +44,7 @@ pub enum EventType {
     /// The minter processed the helper smart contract logs up to the specified height.
     #[n(6)]
     SyncedToBlock {
-        /// The last processed block number (inclusive).
+        /// The last processed block number for ETH helper contract (inclusive).
         #[n(0)]
         block_number: BlockNumber,
     },
@@ -116,6 +116,13 @@ pub enum EventType {
         ckerc20_token_symbol: String,
         #[n(3)]
         erc20_contract_address: Address,
+    },
+    /// The minter processed the helper smart contract logs up to the specified height.
+    #[n(18)]
+    SyncedErc20ToBlock {
+        /// The last processed block number for ERC20 helper contract (inclusive).
+        #[n(0)]
+        block_number: BlockNumber,
     },
 }
 

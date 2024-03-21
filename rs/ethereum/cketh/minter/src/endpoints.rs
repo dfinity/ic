@@ -292,6 +292,9 @@ pub mod events {
         SyncedToBlock {
             block_number: Nat,
         },
+        SyncedErc20ToBlock {
+            block_number: Nat,
+        },
         AcceptedEthWithdrawalRequest {
             withdrawal_amount: Nat,
             destination: String,

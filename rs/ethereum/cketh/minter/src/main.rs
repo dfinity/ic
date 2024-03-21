@@ -97,6 +97,9 @@ fn emit_preupgrade_events() {
         storage::record_event(EventType::SyncedToBlock {
             block_number: s.last_scraped_block_number,
         });
+        storage::record_event(EventType::SyncedErc20ToBlock {
+            block_number: s.last_erc20_scraped_block_number,
+        });
     });
 }
 
@@ -520,6 +523,9 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     mint_block_index: mint_block_index.get().into(),
                 },
                 EventType::SyncedToBlock { block_number } => EP::SyncedToBlock {
+                    block_number: block_number.into(),
+                },
+                EventType::SyncedErc20ToBlock { block_number } => EP::SyncedErc20ToBlock {
                     block_number: block_number.into(),
                 },
                 EventType::AcceptedEthWithdrawalRequest(EthWithdrawalRequest {
