@@ -466,6 +466,9 @@ pre-commit:
   extends:
     - .rules-master-pipeline-and-merge-request
   needs: [] # don't wait on other jobs
+  tags:
+    - dfinity-ic
+    - bazel
   script:
     - |
       set -eEuo pipefail

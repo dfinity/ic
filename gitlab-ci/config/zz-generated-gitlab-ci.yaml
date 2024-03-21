@@ -3271,6 +3271,9 @@ pre-commit:
         echo "And then commit the changes."
         exit 1
       fi
+  tags:
+    - dfinity-ic
+    - bazel
   variables:
     PRE_COMMIT_HOME: "/cache/pre-commit/$CI_CONCURRENT_ID"
 python-ci-tests:
