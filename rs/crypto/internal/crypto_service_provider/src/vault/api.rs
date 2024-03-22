@@ -889,6 +889,65 @@ impl AsRef<[u8]> for IDkgDealingInternalBytes {
     }
 }
 
+/// Operations of `CspVault` related to threshold Schnorr (cf.
+/// [`ic_interfaces::crypto::sign::canister_threshold_sig::ThresholdSchnorrSigner`]).
+pub trait ThresholdSchnorrSignerCspVault {
+    /// Generate a signature share.
+    fn create_schnorr_sig_share(
+        &self,
+        derivation_path: ExtendedDerivationPath,
+        message: Vec<u8>,
+        nonce: Randomness,
+        key_raw: IDkgTranscriptInternalBytes,
+        presignature_transcript_raw: IDkgTranscriptInternalBytes,
+        algorithm_id: AlgorithmId,
+    ) -> Result<ThresholdSchnorrSigShareBytes, ThresholdSchnorrCreateSigShareVaultError>;
+}
+
+/// Type-safe serialization of a threshold Schnorr signature share, e.g., a
+/// threshold BIP340 signature share.
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ThresholdSchnorrSigShareBytes(#[serde(with = "serde_bytes")] Vec<u8>);
+
+impl ThresholdSchnorrSigShareBytes {
+    /// Move out the internal `Vec<u8>`.
+    #[inline]
+    pub fn into_vec(self) -> Vec<u8> {
+        self.0
+    }
+}
+
+impl From<Vec<u8>> for ThresholdSchnorrSigShareBytes {
+    #[inline]
+    fn from(bytes: Vec<u8>) -> Self {
+        Self(bytes)
+    }
+}
+
+impl AsRef<[u8]> for ThresholdSchnorrSigShareBytes {
+    #[inline]
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+}
+
+/// Vault-level error for threshold Schnorr signature share creation.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum ThresholdSchnorrCreateSigShareVaultError {
+    /// If some arguments are invalid, e.g., the algorithm ID is invalid.
+    InvalidArguments(String),
+    /// For example, if commitments have different curve types.
+    InconsistentCommitments,
+    /// On serialization errors.
+    SerializationError(String),
+    /// If secret shares for a commitment could not be found in secret key store.
+    SecretSharesNotFound { commitment_string: String },
+    /// On other internal errors than described above, e.g., invalid points.
+    InternalError(String),
+    /// If a transient internal error occurs, e.g., an RPC error communicating with the remote vault
+    TransientInternalError(String),
+}
+
 /// An error returned by failing to generate a public seed from [`CspVault`].
 #[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
 pub enum PublicRandomSeedGeneratorError {
