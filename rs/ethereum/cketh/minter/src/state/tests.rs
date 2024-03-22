@@ -7,8 +7,8 @@ use crate::lifecycle::init::InitArg;
 use crate::lifecycle::upgrade::UpgradeArg;
 use crate::lifecycle::EthereumNetwork;
 use crate::numeric::{
-    wei_from_milli_ether, BlockNumber, Erc20Value, GasAmount, LedgerBurnIndex, LedgerMintIndex,
-    LogIndex, TransactionNonce, Wei, WeiPerGas,
+    wei_from_milli_ether, BlockNumber, CkTokenAmount, Erc20Value, GasAmount, LedgerBurnIndex,
+    LedgerMintIndex, LogIndex, TransactionNonce, Wei, WeiPerGas,
 };
 use crate::state::event::{Event, EventType};
 use crate::state::State;
@@ -913,8 +913,8 @@ fn state_equivalence() {
                 transaction_hash: Some("0x06afc3c693dc2ba2c19b5c287c4dddce040d766bea5fd13c8a7268b04aa94f2d"
                 .parse()
                 .unwrap()),
-                withdrawal_id: LedgerBurnIndex::new(3),
-                reimbursed_amount: Wei::new(100_000_000_000),
+                ledger_burn_index: LedgerBurnIndex::new(3),
+                reimbursed_amount: CkTokenAmount::new(100_000_000_000),
                 to: "ezu3d-2mifu-k3bh4-oqhrj-mbrql-5p67r-pp6pr-dbfra-unkx5-sxdtv-rae".parse().unwrap(),
                 to_subaccount: None,
             }
@@ -923,8 +923,8 @@ fn state_equivalence() {
             LedgerBurnIndex::new(6) => Reimbursed {
                 transaction_hash: Some("0x06afc3c693dc2ba2c19b5c287c4dddce040d766bea5fd13c8a7268b04aa94f2d".parse().unwrap()),
                 reimbursed_in_block: LedgerMintIndex::new(150),
-                reimbursed_amount: Wei::new(10_000_000_000_000),
-                withdrawal_id: LedgerBurnIndex::new(6),
+                reimbursed_amount: CkTokenAmount::new(10_000_000_000_000),
+                burn_in_block: LedgerBurnIndex::new(6),
             },
         },
     };

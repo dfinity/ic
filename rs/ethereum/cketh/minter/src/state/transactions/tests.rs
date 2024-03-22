@@ -1,8 +1,10 @@
+use crate::checked_amount::CheckedAmountOf;
 use crate::eth_rpc::Hash;
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::lifecycle::EthereumNetwork;
 use crate::numeric::{
-    BlockNumber, Erc20Value, GasAmount, LedgerBurnIndex, TransactionNonce, Wei, WeiPerGas,
+    BlockNumber, CkTokenAmount, Erc20Value, GasAmount, LedgerBurnIndex, TransactionNonce, Wei,
+    WeiPerGas,
 };
 use crate::state::transactions::{
     create_transaction, Erc20WithdrawalRequest, EthTransactions, EthWithdrawalRequest, Subaccount,
@@ -1502,7 +1504,7 @@ mod eth_transactions {
                 reimbursement_request,
                 &ReimbursementRequest {
                     transaction_hash: Some(receipt.transaction_hash),
-                    withdrawal_id: cketh_ledger_burn_index,
+                    ledger_burn_index: cketh_ledger_burn_index,
                     to: withdrawal_request.from(),
                     to_subaccount: withdrawal_request.from_subaccount().clone(),
                     reimbursed_amount: expected_cketh_reimbursed_amount(
@@ -2413,11 +2415,12 @@ fn transaction_receipt(
 fn expected_cketh_reimbursed_amount(
     withdrawal_request: &WithdrawalRequest,
     effective_fee_paid: Wei,
-) -> Option<Wei> {
-    match withdrawal_request {
+) -> Option<CkTokenAmount> {
+    let wei_amount = match withdrawal_request {
         WithdrawalRequest::CkEth(req) => req.withdrawal_amount.checked_sub(effective_fee_paid),
         WithdrawalRequest::CkErc20(req) => req.max_transaction_fee.checked_sub(effective_fee_paid),
-    }
+    };
+    wei_amount.map(CheckedAmountOf::change_units)
 }
 
 fn sign_transaction(transaction: Eip1559TransactionRequest) -> SignedEip1559TransactionRequest {

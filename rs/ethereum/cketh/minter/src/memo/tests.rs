@@ -3,7 +3,7 @@ use crate::eth_logs::{ReceivedEthEvent, ReceivedEvent};
 use crate::eth_rpc::Hash;
 use crate::memo::Address;
 use crate::memo::BurnMemo;
-use crate::numeric::{BlockNumber, LedgerBurnIndex, LogIndex, Wei};
+use crate::numeric::{BlockNumber, CkTokenAmount, LedgerBurnIndex, LogIndex, Wei};
 use crate::state::transactions::ReimbursementRequest;
 use arbitrary::{arb_burn_memo, arb_mint_memo};
 use candid::Principal;
@@ -69,8 +69,8 @@ fn encode_mint_reimburse_memo_is_stable() {
             .parse()
             .unwrap();
     let reimbursment_request = ReimbursementRequest {
-        withdrawal_id: LedgerBurnIndex::from(1234_u64),
-        reimbursed_amount: Wei::from(100_u64),
+        ledger_burn_index: LedgerBurnIndex::from(1234_u64),
+        reimbursed_amount: CkTokenAmount::from(100_u64),
         to: Principal::anonymous(),
         to_subaccount: None,
         transaction_hash: Some(transaction_hash),

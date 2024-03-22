@@ -105,7 +105,7 @@ impl From<&ReceivedEvent> for Memo {
 impl From<ReimbursementRequest> for Memo {
     fn from(reimbursement_request: ReimbursementRequest) -> Self {
         Memo::from(MintMemo::Reimburse {
-            withdrawal_id: reimbursement_request.withdrawal_id.get(),
+            withdrawal_id: reimbursement_request.ledger_burn_index.get(),
             tx_hash: reimbursement_request
                 .transaction_hash
                 .expect("A hash should be set for reimbursement memos."),

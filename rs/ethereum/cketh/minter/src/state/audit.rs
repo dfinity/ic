@@ -89,7 +89,7 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
             state.record_finalized_transaction(withdrawal_id, transaction_receipt);
         }
         EventType::ReimbursedEthWithdrawal(Reimbursed {
-            withdrawal_id,
+            burn_in_block: withdrawal_id,
             reimbursed_in_block,
             reimbursed_amount: _,
             transaction_hash: _,
