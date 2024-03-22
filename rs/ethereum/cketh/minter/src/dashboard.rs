@@ -145,7 +145,7 @@ impl DashboardTemplate {
 
         let mut reimbursed_transactions = state.eth_transactions.get_reimbursed_transactions();
         reimbursed_transactions
-            .sort_unstable_by_key(|reimbursed_tx| std::cmp::Reverse(reimbursed_tx.withdrawal_id));
+            .sort_unstable_by_key(|reimbursed_tx| std::cmp::Reverse(reimbursed_tx.burn_in_block));
 
         DashboardTemplate {
             ethereum_network: state.ethereum_network,

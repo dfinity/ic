@@ -573,7 +573,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     transaction_receipt: map_transaction_receipt(transaction_receipt),
                 },
                 EventType::ReimbursedEthWithdrawal(Reimbursed {
-                    withdrawal_id,
+                    burn_in_block: withdrawal_id,
                     reimbursed_in_block,
                     reimbursed_amount,
                     transaction_hash,

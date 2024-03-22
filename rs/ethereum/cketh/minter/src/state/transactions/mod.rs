@@ -8,7 +8,8 @@ use crate::eth_rpc_client::responses::TransactionStatus;
 use crate::lifecycle::EthereumNetwork;
 use crate::map::MultiKeyMap;
 use crate::numeric::{
-    Erc20Value, LedgerBurnIndex, LedgerMintIndex, TransactionCount, TransactionNonce, Wei,
+    CkTokenAmount, Erc20Value, LedgerBurnIndex, LedgerMintIndex, TransactionCount,
+    TransactionNonce, Wei,
 };
 use crate::tx::{
     Eip1559TransactionRequest, FinalizedEip1559Transaction, ResubmissionStrategy,
@@ -144,17 +145,14 @@ pub struct Erc20WithdrawalRequest {
     pub created_at: u64,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct ReimbursementRequest {
-    #[cbor(n(0), with = "crate::cbor::id")]
-    pub withdrawal_id: LedgerBurnIndex,
-    #[n(1)]
-    pub reimbursed_amount: Wei,
-    #[cbor(n(2), with = "crate::cbor::principal")]
+    /// Burn index on the ledger that should be reimbursed.
+    pub ledger_burn_index: LedgerBurnIndex,
+    /// The amount that should be reimbursed in the smallest denomination.
+    pub reimbursed_amount: CkTokenAmount,
     pub to: Principal,
-    #[n(3)]
     pub to_subaccount: Option<Subaccount>,
-    #[n(4)]
     /// Transaction hash of the failed ETH transaction.
     /// We use this hash to link the mint reimbursement transaction
     /// on the ledger with the failed ETH transaction.
@@ -166,9 +164,10 @@ pub struct Reimbursed {
     #[cbor(n(0), with = "crate::cbor::id")]
     pub reimbursed_in_block: LedgerMintIndex,
     #[cbor(n(1), with = "crate::cbor::id")]
-    pub withdrawal_id: LedgerBurnIndex,
+    pub burn_in_block: LedgerBurnIndex,
+    /// The amount reimbursed in the smallest denomination.
     #[n(2)]
-    pub reimbursed_amount: Wei,
+    pub reimbursed_amount: CkTokenAmount,
     #[n(3)]
     pub transaction_hash: Option<Hash>,
 }
@@ -584,10 +583,10 @@ impl EthTransactions {
             self.reimbursement_requests.insert(
                 ledger_burn_index,
                 ReimbursementRequest {
-                    withdrawal_id: ledger_burn_index,
+                    ledger_burn_index,
                     to: maybe_reimburse.from(),
                     to_subaccount: maybe_reimburse.from_subaccount().clone(),
-                    reimbursed_amount,
+                    reimbursed_amount: reimbursed_amount.change_units(),
                     transaction_hash: Some(receipt.transaction_hash),
                 },
             );
@@ -607,7 +606,7 @@ impl EthTransactions {
             self.reimbursed.insert(
                 withdrawal_id,
                 Reimbursed {
-                    withdrawal_id,
+                    burn_in_block: withdrawal_id,
                     reimbursed_in_block,
                     reimbursed_amount: reimbursement_request.reimbursed_amount,
                     transaction_hash: reimbursement_request.transaction_hash,

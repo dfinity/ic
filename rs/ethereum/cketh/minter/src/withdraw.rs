@@ -91,7 +91,7 @@ pub async fn process_reimbursement() {
             process_event(
                 s,
                 EventType::ReimbursedEthWithdrawal(Reimbursed {
-                    withdrawal_id: reimbursement_request.withdrawal_id,
+                    burn_in_block: reimbursement_request.ledger_burn_index,
                     reimbursed_in_block: LedgerMintIndex::new(block_index),
                     reimbursed_amount: reimbursement_request.reimbursed_amount,
                     transaction_hash: reimbursement_request.transaction_hash,

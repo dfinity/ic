@@ -352,7 +352,7 @@
                 <tbody>
                     {% for r in reimbursed_transactions %}
                     <tr>
-                        <td class="numeric">{{ r.withdrawal_id }}</td>
+                        <td class="numeric">{{ r.burn_in_block }}</td>
                         <td class="numeric">{{ r.reimbursed_in_block }}</td>
                         <td class="numeric">{{ r.reimbursed_amount }}</td>
                         <td>{% if r.transaction_hash.is_some() %}{% call etherscan_tx_link(r.transaction_hash.unwrap()) %}{% else%}N/A{% endif %}</td>

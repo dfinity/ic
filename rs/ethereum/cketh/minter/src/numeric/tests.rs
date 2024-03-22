@@ -75,3 +75,40 @@ mod wei {
         );
     }
 }
+
+mod cbor {
+    use crate::checked_amount::CheckedAmountOf;
+    use proptest::{array::uniform32, prelude::any, prop_assert_eq, proptest};
+
+    proptest! {
+        #[test]
+        fn should_preserve_value_but_not_tag_during_deser(bytes in uniform32(any::<u8>())) {
+            let amount_a = AmountA::from_be_bytes(bytes);
+            let amount_b = AmountB::from_be_bytes(bytes);
+
+            let mut encoded_amount_a = vec![];
+            minicbor::encode(amount_a, &mut encoded_amount_a).unwrap();
+            let mut encoded_amount_b = vec![];
+            minicbor::encode(amount_b, &mut encoded_amount_b).unwrap();
+            prop_assert_eq!(&encoded_amount_a, &encoded_amount_b);
+
+            let decoded_amount_b_from_a: AmountB = minicbor::decode(&encoded_amount_a).unwrap();
+            prop_assert_eq!(
+                amount_a.to_be_bytes(),
+                decoded_amount_b_from_a.to_be_bytes()
+            );
+
+            let decoded_amount_a_from_b: AmountA = minicbor::decode(&encoded_amount_b).unwrap();
+            prop_assert_eq!(
+                amount_b.to_be_bytes(),
+                decoded_amount_a_from_b.to_be_bytes()
+            );
+        }
+    }
+
+    enum AmountATag {}
+    type AmountA = CheckedAmountOf<AmountATag>;
+
+    enum AmountBTag {}
+    type AmountB = CheckedAmountOf<AmountBTag>;
+}
