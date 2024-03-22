@@ -25,14 +25,9 @@ def image_deps(mode, _malicious = False):
     deps = {
         "base_dockerfile": "//ic-os/setupos:rootfs/Dockerfile.base",
 
-        # Define rootfs and bootfs
-        "bootfs": {
-            # base layer
-            ":rootfs-tree.tar": "/",
-        },
+        # Extra files to be added to rootfs and bootfs
+        "bootfs": {},
         "rootfs": {
-            # base layer
-            ":rootfs-tree.tar": "/",
             "//publish/binaries:setupos_tool": "/opt/ic/bin/setupos_tool:0755",
         },
 

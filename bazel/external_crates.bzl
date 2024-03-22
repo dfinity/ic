@@ -1424,6 +1424,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "zstd": crate.spec(
                 version = "^0.13.0",
             ),
+            "pcre2": crate.spec(
+                version = "^0.2.6",
+            ),
         },
         splicing_config = splicing_config(
             resolver_version = "2",

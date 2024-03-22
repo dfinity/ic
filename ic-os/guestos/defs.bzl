@@ -21,15 +21,9 @@ def image_deps(mode, malicious = False):
     deps = {
         "base_dockerfile": "//ic-os/guestos:rootfs/Dockerfile.base",
 
-        # Define rootfs and bootfs
-        "bootfs": {
-            # base layer
-            ":rootfs-tree.tar": "/",
-        },
+        # Extra files to be added to rootfs and bootfs
+        "bootfs": {},
         "rootfs": {
-            # base layer
-            ":rootfs-tree.tar": "/",
-
             # additional files to install
             "//publish/binaries:canister_sandbox": "/opt/ic/bin/canister_sandbox:0755",
             "//publish/binaries:compiler_sandbox": "/opt/ic/bin/compiler_sandbox:0755",

@@ -7,7 +7,7 @@ use tokio::process::Command;
 #[async_trait]
 pub trait Partition: Sized {
     /// Open a partition for writing
-    async fn open(image: PathBuf, index: usize) -> Result<Self>;
+    async fn open(image: PathBuf, index: Option<usize>) -> Result<Self>;
 
     /// Close an partition, and write back to the input disk
     async fn close(self) -> Result<()>;

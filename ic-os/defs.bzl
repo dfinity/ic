@@ -7,7 +7,7 @@ load("//bazel:defs.bzl", "gzip_compress", "sha256sum2url", "zstd_compress")
 load("//bazel:output_files.bzl", "output_files")
 load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
 load("//ic-os/bootloader:defs.bzl", "build_grub_partition")
-load("//toolchains/sysimage:toolchain.bzl", "build_container_base_image", "build_container_filesystem", "disk_image", "ext4_image", "sha256sum", "tar_extract", "upgrade_image")
+load("//toolchains/sysimage:toolchain.bzl", "build_container_base_image", "build_container_filesystem", "disk_image", "ext4_image", "inject_files", "sha256sum", "tar_extract", "upgrade_image")
 
 def icos_build(
         name,
@@ -118,16 +118,8 @@ def icos_build(
     # -------------------- Extract root partition --------------------
 
     ext4_image(
-        name = "partition-root-unsigned.tar",
-        src = _dict_value_search(image_deps["rootfs"], "/"),
-        # Take the dependency list declared above, and add in the "version.txt"
-        # at the correct place.
-        extra_files = {
-            k: v
-            for k, v in (image_deps["rootfs"].items() + [(":version.txt", "/opt/ic/share/version.txt:0644")])
-            # Skip over special entries
-            if v != "/"
-        },
+        name = "static-partition-root-unsigned.tar",
+        src = ":rootfs-tree.tar",
         file_contexts = ":file_contexts",
         partition_size = image_deps["rootfs_size"],
         strip_paths = [
@@ -141,32 +133,47 @@ def icos_build(
         tags = ["manual"],
     )
 
+    # -------------------- Extract boot partition --------------------
+
+    ext4_image(
+        name = "static-partition-boot.tar",
+        src = ":rootfs-tree.tar",
+        file_contexts = ":file_contexts",
+        partition_size = image_deps["bootfs_size"],
+        subdir = "boot/",
+        target_compatible_with = [
+            "@platforms//os:linux",
+        ],
+        tags = ["manual"],
+    )
+
+    # Defer injection to this point to allow caching most of the built images
+    # -------------------- Inject extra files --------------------
+
+    inject_files(
+        name = "partition-root-unsigned.tar",
+        base = "static-partition-root-unsigned.tar",
+        file_contexts = ":file_contexts",
+        extra_files = {
+            k: v
+            for k, v in (image_deps["rootfs"].items() + [(":version.txt", "/opt/ic/share/version.txt:0644")])
+        },
+        tags = ["manual"],
+    )
+
     if upgrades:
-        ext4_image(
+        inject_files(
             name = "partition-root-test-unsigned.tar",
-            src = _dict_value_search(image_deps["rootfs"], "/"),
-            # Take the dependency list declared above, and add in the "version.txt"
-            # at the correct place.
+            base = "static-partition-root-unsigned.tar",
+            file_contexts = ":file_contexts",
             extra_files = {
                 k: v
                 for k, v in (image_deps["rootfs"].items() + [(":version-test.txt", "/opt/ic/share/version.txt:0644")])
-                # Skip over special entries
-                if v != "/"
             },
-            file_contexts = ":file_contexts",
-            partition_size = image_deps["rootfs_size"],
-            strip_paths = [
-                "/run",
-                "/boot",
-            ],
-            target_compatible_with = [
-                "@platforms//os:linux",
-            ],
             tags = ["manual"],
         )
 
-    # -------------------- Extract boot partition --------------------
-
+    # When boot_args are fixed, don't bother signing
     if "boot_args_template" not in image_deps:
         native.alias(name = "partition-root.tar", actual = ":partition-root-unsigned.tar", tags = ["manual"])
         native.alias(name = "extra_boot_args", actual = image_deps["extra_boot_args"], tags = ["manual"])
@@ -219,54 +226,38 @@ def icos_build(
                 tags = ["manual"],
             )
 
-    ext4_image(
+    inject_files(
         name = "partition-boot.tar",
-        src = _dict_value_search(image_deps["bootfs"], "/"),
-        # Take the dependency list declared above, and add in the "version.txt"
-        # as well as the generated extra_boot_args file in the correct place.
+        base = "static-partition-boot.tar",
+        file_contexts = ":file_contexts",
+        prefix = "/boot",
         extra_files = {
             k: v
             for k, v in (
                 image_deps["bootfs"].items() + [
-                    (":version.txt", "/boot/version.txt:0644"),
-                    (":extra_boot_args", "/boot/extra_boot_args:0644"),
+                    (":version.txt", "/version.txt:0644"),
+                    (":extra_boot_args", "/extra_boot_args:0644"),
                 ]
             )
-            # Skip over special entries
-            if v != "/"
         },
-        file_contexts = ":file_contexts",
-        partition_size = image_deps["bootfs_size"],
-        subdir = "boot/",
-        target_compatible_with = [
-            "@platforms//os:linux",
-        ],
         tags = ["manual"],
     )
 
     if upgrades:
-        ext4_image(
+        inject_files(
             name = "partition-boot-test.tar",
-            src = _dict_value_search(image_deps["rootfs"], "/"),
-            # Take the dependency list declared above, and add in the "version.txt"
-            # as well as the generated extra_boot_args file in the correct place.
+            base = "static-partition-boot.tar",
+            file_contexts = ":file_contexts",
+            prefix = "/boot",
             extra_files = {
                 k: v
                 for k, v in (
                     image_deps["bootfs"].items() + [
-                        (":version-test.txt", "/boot/version.txt:0644"),
-                        (":extra_boot_test_args", "/boot/extra_boot_args:0644"),
+                        (":version-test.txt", "/version.txt:0644"),
+                        (":extra_boot_test_args", "/extra_boot_args:0644"),
                     ]
                 )
-                # Skip over special entries
-                if v != "/"
             },
-            file_contexts = ":file_contexts",
-            partition_size = image_deps["bootfs_size"],
-            subdir = "boot/",
-            target_compatible_with = [
-                "@platforms//os:linux",
-            ],
             tags = ["manual"],
         )
 
@@ -668,22 +659,8 @@ def boundary_node_icos_build(
     )
 
     ext4_image(
-        name = "partition-boot.tar",
-        src = _dict_value_search(image_deps["rootfs"], "/"),
-        # Take the dependency list declared above, and add in the "version.txt"
-        # as well as the generated extra_boot_args file in the correct place.
-        extra_files = {
-            k: v
-            for k, v in (
-                image_deps["bootfs"].items() + [
-                    ("version.txt", "/boot/version.txt:0644"),
-                    ("extra_boot_args", "/boot/extra_boot_args:0644"),
-                ]
-            )
-            # Skip over special entries
-            if ":bootloader/extra_boot_args.template" not in k
-            if v != "/"
-        },
+        name = "static-partition-boot.tar",
+        src = ":rootfs-tree.tar",
         partition_size = "1G",
         subdir = "boot/",
         target_compatible_with = [
@@ -692,17 +669,25 @@ def boundary_node_icos_build(
         tags = ["manual"],
     )
 
-    ext4_image(
-        name = "partition-root-unsigned.tar",
-        src = _dict_value_search(image_deps["rootfs"], "/"),
-        # Take the dependency list declared above, and add in the "version.txt"
-        # at the correct place.
+    inject_files(
+        name = "partition-boot.tar",
+        base = "static-partition-boot.tar",
+        prefix = "/boot",
         extra_files = {
             k: v
-            for k, v in (image_deps["rootfs"].items() + [(":version.txt", "/opt/ic/share/version.txt:0644")])
-            # Skip over special entries
-            if v != "/"
+            for k, v in (
+                image_deps["bootfs"].items() + [
+                    ("version.txt", "/version.txt:0644"),
+                    ("extra_boot_args", "/extra_boot_args:0644"),
+                ]
+            )
         },
+        tags = ["manual"],
+    )
+
+    ext4_image(
+        name = "static-partition-root-unsigned.tar",
+        src = ":rootfs-tree.tar",
         partition_size = "3G",
         strip_paths = [
             "/run",
@@ -712,6 +697,16 @@ def boundary_node_icos_build(
         target_compatible_with = [
             "@platforms//os:linux",
         ],
+    )
+
+    inject_files(
+        name = "partition-root-unsigned.tar",
+        base = "static-partition-root-unsigned.tar",
+        extra_files = {
+            k: v
+            for k, v in (image_deps["rootfs"].items() + [(":version.txt", "/opt/ic/share/version.txt:0644")])
+        },
+        tags = ["manual"],
     )
 
     native.genrule(
@@ -814,12 +809,3 @@ def boundary_node_icos_build(
         srcs = [":disk-img.tar.zst", ":disk-img.tar.gz"],
         visibility = visibility,
     )
-
-# NOTE: Really, we should be using a string keyed label dict, but this is not
-# a built in. Use this hack until I switch our implementation.
-def _dict_value_search(dict, value):
-    for k, v in dict.items():
-        if v == value:
-            return k
-
-    return None
