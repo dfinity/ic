@@ -121,23 +121,26 @@ pub struct Erc20WithdrawalRequest {
     /// The recipient's address of the sent ERC-20 tokens.
     #[n(2)]
     pub destination: Address,
-    /// The transaction ID of the ckETH burn operation.
+    /// The transaction ID of the ckETH burn operation on the ckETH ledger.
     #[cbor(n(3), with = "crate::cbor::id")]
     pub cketh_ledger_burn_index: LedgerBurnIndex,
     /// Address of the ERC-20 smart contract that is the message call's recipient.
     #[n(4)]
     pub erc20_contract_address: Address,
-    /// The transaction ID of the ckERC20 burn operation.
-    #[cbor(n(5), with = "crate::cbor::id")]
+    /// The ckERC20 ledger on which the minter burned the ckERC20 tokens.
+    #[cbor(n(5), with = "crate::cbor::principal")]
+    pub ckerc20_ledger_id: Principal,
+    /// The transaction ID of the ckERC20 burn operation on the ckERC20 ledger.
+    #[cbor(n(6), with = "crate::cbor::id")]
     pub ckerc20_ledger_burn_index: LedgerBurnIndex,
     /// The owner of the account from which the minter burned ckETH.
-    #[cbor(n(6), with = "crate::cbor::principal")]
+    #[cbor(n(7), with = "crate::cbor::principal")]
     pub from: Principal,
     /// The subaccount from which the minter burned ckETH.
-    #[n(7)]
+    #[n(8)]
     pub from_subaccount: Option<Subaccount>,
     /// The IC time at which the withdrawal request arrived.
-    #[n(8)]
+    #[n(9)]
     pub created_at: u64,
 }
 
@@ -217,6 +220,7 @@ impl fmt::Debug for Erc20WithdrawalRequest {
             destination,
             cketh_ledger_burn_index,
             erc20_contract_address,
+            ckerc20_ledger_id,
             ckerc20_ledger_burn_index,
             from,
             from_subaccount,
@@ -228,6 +232,7 @@ impl fmt::Debug for Erc20WithdrawalRequest {
             .field("erc20_contract_address", erc20_contract_address)
             .field("destination", destination)
             .field("cketh_ledger_burn_index", cketh_ledger_burn_index)
+            .field("ckerc20_ledger_id", &DebugPrincipal(ckerc20_ledger_id))
             .field("ckerc20_ledger_burn_index", ckerc20_ledger_burn_index)
             .field("from", &DebugPrincipal(from))
             .field("from_subaccount", from_subaccount)

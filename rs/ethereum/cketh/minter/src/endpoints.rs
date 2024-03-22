@@ -340,6 +340,7 @@ pub mod events {
             erc20_contract_address: String,
             destination: String,
             cketh_ledger_burn_index: Nat,
+            ckerc20_ledger_id: Principal,
             ckerc20_ledger_burn_index: Nat,
             from: Principal,
             from_subaccount: Option<[u8; 32]>,
