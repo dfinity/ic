@@ -704,7 +704,7 @@ pub fn managing_a_canister_with_wrong_controller_fails(env: TestEnv) {
             assert_http_submit_fails(
                 mgr.install_code(&wallet_canister.canister_id(), UNIVERSAL_CANISTER_WASM)
                     .with_mode(InstallMode::Upgrade {
-                        skip_pre_upgrade: false,
+                        skip_pre_upgrade: Some(false),
                     })
                     .call()
                     .await,

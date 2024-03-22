@@ -191,7 +191,7 @@ async fn tests_for_illegal_data_buffer_access(agent: &ic_agent::Agent, canister_
     assert!(
         matches!(
             ret_val,
-            Err(AgentError::ReplicaError(RejectResponse {reject_message, .. })) if reject_message.contains(containing_str)
+            Err(AgentError::UncertifiedReject(RejectResponse {reject_message, .. })) if reject_message.contains(containing_str)
         ),
         "Should return error if try to read input buffer on no input",
     );
@@ -218,7 +218,7 @@ async fn tests_for_illegal_data_buffer_access(agent: &ic_agent::Agent, canister_
     assert!(
         matches!(
             ret_val,
-            Err(AgentError::ReplicaError(RejectResponse {reject_message, .. })) if reject_message.contains(containing_str)
+            Err(AgentError::UncertifiedReject(RejectResponse {reject_message, .. })) if reject_message.contains(containing_str)
         ),
         "Should return error if input data is copied to out of bound internal buffer"
     );
@@ -242,7 +242,7 @@ async fn tests_for_illegal_data_buffer_access(agent: &ic_agent::Agent, canister_
     assert!(
         matches!(
             ret_val,
-            Err(AgentError::ReplicaError(RejectResponse {reject_message, .. })) if reject_message.contains(containing_str)
+            Err(AgentError::UncertifiedReject(RejectResponse {reject_message, .. })) if reject_message.contains(containing_str)
         ),
         "msg_caller with caller large length 128 was accepted"
     );
@@ -348,7 +348,7 @@ async fn tests_for_illegal_wasm_memory_access(
     assert!(
         matches!(
             ret_val,
-            Err(AgentError::ReplicaError(RejectResponse {reject_message, .. })) if reject_message.contains(containing_str)
+            Err(AgentError::UncertifiedReject(RejectResponse {reject_message, .. })) if reject_message.contains(containing_str)
         ),
         "expected msg_reply_data_append(0, 65537) to fail"
     );
@@ -364,7 +364,7 @@ async fn tests_for_illegal_wasm_memory_access(
     assert!(
         matches!(
             ret_val,
-            Err(AgentError::ReplicaError(RejectResponse {reject_message, .. })) if reject_message.contains(containing_str)
+            Err(AgentError::UncertifiedReject(RejectResponse {reject_message, .. })) if reject_message.contains(containing_str)
         ),
         "expected msg_reply_data_append(65536, 10) to fail"
     );
