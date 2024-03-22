@@ -24,6 +24,7 @@ const DEFAULT_CREATED_AT: u64 = 1699527697000000000;
 
 const DEFAULT_MAX_TRANSACTION_FEE: u128 = 30_000_000_000_000_000;
 const DEFAULT_ERC20_CONTRACT_ADDRESS: &str = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
+const DEFAULT_CKERC20_LEDGER_ID: &str = "sa4so-piaaa-aaaar-qacnq-cai";
 
 mod eth_transactions {
     use crate::numeric::{LedgerBurnIndex, TransactionNonce};
@@ -1823,7 +1824,7 @@ mod erc_20_withdrawal_request {
             LedgerBurnIndex::new(131),
             LedgerBurnIndex::new(2),
         );
-        let expected_debug = "Erc20WithdrawalRequest { max_transaction_fee: 30_000_000_000_000_000, withdrawal_amount: 1_100_000_000_000_000, erc20_contract_address: 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48, destination: 0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34, cketh_ledger_burn_index: 131, ckerc20_ledger_burn_index: 2, from: k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae, from_subaccount: Some(1111111111111111111111111111111111111111111111111111111111111111), created_at: 1699527697000000000 }";
+        let expected_debug = "Erc20WithdrawalRequest { max_transaction_fee: 30_000_000_000_000_000, withdrawal_amount: 1_100_000_000_000_000, erc20_contract_address: 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48, destination: 0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34, cketh_ledger_burn_index: 131, ckerc20_ledger_id: sa4so-piaaa-aaaar-qacnq-cai, ckerc20_ledger_burn_index: 2, from: k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae, from_subaccount: Some(1111111111111111111111111111111111111111111111111111111111111111), created_at: 1699527697000000000 }";
         assert_eq!(format!("{:?}", request), expected_debug);
     }
 }
@@ -2121,6 +2122,7 @@ pub mod arbitrary {
             arb_address(),
             arb_u64_id(),
             arb_address(),
+            arb_principal(),
             arb_u64_id(),
             arb_principal(),
             proptest::option::of(arb_subaccount()),
@@ -2133,6 +2135,7 @@ pub mod arbitrary {
                     destination,
                     cketh_ledger_burn_index,
                     erc20_contract_address,
+                    ckerc20_ledger_id,
                     ckerc20_ledger_burn_index,
                     from,
                     from_subaccount,
@@ -2144,6 +2147,7 @@ pub mod arbitrary {
                         destination,
                         cketh_ledger_burn_index,
                         erc20_contract_address,
+                        ckerc20_ledger_id,
                         ckerc20_ledger_burn_index,
                         from,
                         from_subaccount,
@@ -2259,6 +2263,7 @@ fn ckerc20_withdrawal_request_with_index(
         destination: Address::from_str(DEFAULT_RECIPIENT_ADDRESS).unwrap(),
         cketh_ledger_burn_index,
         erc20_contract_address: DEFAULT_ERC20_CONTRACT_ADDRESS.parse().unwrap(),
+        ckerc20_ledger_id: candid::Principal::from_str(DEFAULT_CKERC20_LEDGER_ID).unwrap(),
         ckerc20_ledger_burn_index,
         withdrawal_amount: Erc20Value::new(DEFAULT_WITHDRAWAL_AMOUNT),
         from: candid::Principal::from_str(DEFAULT_PRINCIPAL).unwrap(),

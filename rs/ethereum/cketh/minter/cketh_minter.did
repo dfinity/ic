@@ -378,6 +378,7 @@ type Event = record {
             erc20_contract_address : text;
             destination : text;
             cketh_ledger_burn_index : nat;
+            ckerc20_ledger_id : principal;
             ckerc20_ledger_burn_index : nat;
             from : principal;
             from_subaccount : opt blob;
