@@ -2047,6 +2047,58 @@ fn ecdsa_key_id_round_trip() {
     }
 }
 
+/// Types of algorithms that can be used for Schnorr signing.
+/// ```text
+/// (variant { bip340secp256k1; ed25519 })
+/// ```
+#[derive(
+    CandidType,
+    Copy,
+    Clone,
+    Debug,
+    PartialOrd,
+    Ord,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    Hash,
+    EnumIter,
+)]
+pub enum SchnorrAlgorithm {
+    #[serde(rename = "bip340secp256k1")]
+    Bip340Secp256k1,
+    #[serde(rename = "ed25519")]
+    Ed25519,
+}
+
+/// Unique identifier for a key that can be used for Schnorr signatures. The name
+/// is just a identifier, but it may be used to convey some information about
+/// the key (e.g. that the key is meant to be used for testing purposes).
+/// ```text
+/// (record { algorithm: schnorr_algorithm; name: text})
+/// ```
+#[derive(
+    CandidType, Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize, Hash,
+)]
+pub struct SchnorrKeyId {
+    pub algorithm: SchnorrAlgorithm,
+    pub name: String,
+}
+
+/// Unique identifier for a key that can be used for one of the signature schemes
+/// supported on the IC.
+/// ```text
+/// (variant { EcdsaKeyId; SchnorrKeyId })
+/// ```
+#[derive(
+    CandidType, Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize, Hash,
+)]
+pub enum MasterPublicKeyId {
+    EcdsaKeyId(EcdsaKeyId),
+    SchnorrKeyId(SchnorrKeyId),
+}
+
 pub type DerivationPath = BoundedVec<MAXIMUM_DERIVATION_PATH_LENGTH, UNBOUNDED, UNBOUNDED, ByteBuf>;
 
 impl Payload<'_> for DerivationPath {}

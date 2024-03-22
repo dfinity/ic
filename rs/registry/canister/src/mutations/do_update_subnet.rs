@@ -542,6 +542,7 @@ mod tests {
             ssh_readonly_access: vec![],
             ssh_backup_access: vec![],
             ecdsa_config: None,
+            chain_key_config: None,
         };
 
         let payload = UpdateSubnetPayload {
@@ -643,6 +644,9 @@ mod tests {
                     }
                     .into()
                 ),
+                // TODO[NNS1-2969]: use this field rather than ecdsa_config.
+                chain_key_config: None,
+
                 max_number_of_canisters: 10,
                 ssh_readonly_access: vec!["pub_key_0".to_string()],
                 ssh_backup_access: vec!["pub_key_1".to_string()],
@@ -684,6 +688,7 @@ mod tests {
             ssh_readonly_access: vec![],
             ssh_backup_access: vec![],
             ecdsa_config: None,
+            chain_key_config: None,
         };
 
         let payload = UpdateSubnetPayload {
@@ -759,10 +764,12 @@ mod tests {
                 ssh_readonly_access: vec![],
                 ssh_backup_access: vec![],
                 ecdsa_config: None,
+                chain_key_config: None,
             }
         );
     }
 
+    // TODO[NNS1-2969]: Add test `panic_on_removing_chain_key_config`.
     #[test]
     #[should_panic]
     fn panic_on_removing_ecdsa_config() {
@@ -812,6 +819,7 @@ mod tests {
             ssh_readonly_access: vec![],
             ssh_backup_access: vec![],
             ecdsa_config: None,
+            chain_key_config: None,
         };
 
         let payload = UpdateSubnetPayload {
@@ -881,6 +889,7 @@ mod tests {
             ssh_readonly_access: vec![],
             ssh_backup_access: vec![],
             ecdsa_config: None,
+            chain_key_config: None,
         };
 
         let payload = UpdateSubnetPayload {
@@ -956,6 +965,7 @@ mod tests {
                 ssh_readonly_access: vec![],
                 ssh_backup_access: vec![],
                 ecdsa_config: None,
+                chain_key_config: None,
             }
         );
     }
@@ -994,6 +1004,7 @@ mod tests {
             ssh_readonly_access: vec![],
             ssh_backup_access: vec![],
             ecdsa_config: None,
+            chain_key_config: None,
         };
 
         let payload = UpdateSubnetPayload {
@@ -1069,6 +1080,7 @@ mod tests {
                 ssh_readonly_access: vec![],
                 ssh_backup_access: vec![],
                 ecdsa_config: None,
+                chain_key_config: None,
             }
         );
     }

@@ -18,7 +18,7 @@ use ic_registry_local_registry::LocalRegistry;
 use ic_registry_local_store::{compact_delta_to_changelog, LocalStoreImpl, LocalStoreWriter};
 use ic_registry_proto_data_provider::{ProtoRegistryDataProvider, ProtoRegistryDataProviderError};
 use ic_registry_routing_table::{routing_table_insert_subnet, CanisterMigrations, RoutingTable};
-use ic_registry_subnet_features::EcdsaConfig;
+use ic_registry_subnet_features::{ChainKeyConfig, EcdsaConfig};
 use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{fetch_int_counter_vec, metric_vec};
@@ -259,6 +259,10 @@ struct SubnetRecord<'a> {
     subnet_type: SubnetType,
     features: SubnetFeatures,
     ecdsa_config: EcdsaConfig,
+    /// This field will replace ecdsa_config.
+    /// TODO[NNS1-2969]: Remove allow unused.
+    #[allow(unused)]
+    chain_key_config: ChainKeyConfig,
     max_number_of_canisters: u64,
 }
 
@@ -736,6 +740,9 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
                 max_queue_size: Some(891),
                 ..Default::default()
             },
+            // TODO[NNS1-2969]: Use this field rather than ecdsa_config.
+            chain_key_config: ChainKeyConfig::default(),
+
             max_number_of_canisters: 387,
         };
 
@@ -1697,6 +1704,9 @@ fn process_batch_updates_subnet_metrics() {
                 max_queue_size: Some(891),
                 ..Default::default()
             },
+            // TODO[NNS1-2969]: Use this field rather than ecdsa_config.
+            chain_key_config: ChainKeyConfig::default(),
+
             max_number_of_canisters: 387,
         };
 

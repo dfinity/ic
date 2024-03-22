@@ -61,3 +61,22 @@ message EcdsaKeyId {
   EcdsaCurve curve = 1;
   string name = 2;
 }
+
+// Types of curves that can be used for Schnorr signatures.
+enum SchnorrAlgorithm {
+  SCHNORR_ALGORITHM_UNSPECIFIED = 0;
+  SCHNORR_ALGORITHM_BIP340SECP256K1 = 1;
+  SCHNORR_ALGORITHM_ED25519 = 2;
+}
+
+message SchnorrKeyId {
+  SchnorrAlgorithm algorithm = 1;
+  string name = 2;
+}
+
+message MasterPublicKeyId {
+  oneof key_id {
+    EcdsaKeyId ecdsa_key_id = 1;
+    SchnorrKeyId schnorr_key_id = 2;
+  }
+}

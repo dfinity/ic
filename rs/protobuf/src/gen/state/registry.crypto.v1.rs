@@ -37,6 +37,31 @@ pub struct EcdsaKeyId {
     #[prost(string, tag = "2")]
     pub name: ::prost::alloc::string::String,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SchnorrKeyId {
+    #[prost(enumeration = "SchnorrAlgorithm", tag = "1")]
+    pub algorithm: i32,
+    #[prost(string, tag = "2")]
+    pub name: ::prost::alloc::string::String,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct MasterPublicKeyId {
+    #[prost(oneof = "master_public_key_id::KeyId", tags = "1, 2")]
+    pub key_id: ::core::option::Option<master_public_key_id::KeyId>,
+}
+/// Nested message and enum types in `MasterPublicKeyId`.
+pub mod master_public_key_id {
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum KeyId {
+        #[prost(message, tag = "1")]
+        EcdsaKeyId(super::EcdsaKeyId),
+        #[prost(message, tag = "2")]
+        SchnorrKeyId(super::SchnorrKeyId),
+    }
+}
 /// An algorithm ID. This is used to specify the signature algorithm associated with a public key.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
@@ -141,6 +166,36 @@ impl EcdsaCurve {
         match value {
             "ECDSA_CURVE_UNSPECIFIED" => Some(Self::Unspecified),
             "ECDSA_CURVE_SECP256K1" => Some(Self::Secp256k1),
+            _ => None,
+        }
+    }
+}
+/// Types of curves that can be used for Schnorr signatures.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum SchnorrAlgorithm {
+    Unspecified = 0,
+    Bip340secp256k1 = 1,
+    Ed25519 = 2,
+}
+impl SchnorrAlgorithm {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            SchnorrAlgorithm::Unspecified => "SCHNORR_ALGORITHM_UNSPECIFIED",
+            SchnorrAlgorithm::Bip340secp256k1 => "SCHNORR_ALGORITHM_BIP340SECP256K1",
+            SchnorrAlgorithm::Ed25519 => "SCHNORR_ALGORITHM_ED25519",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "SCHNORR_ALGORITHM_UNSPECIFIED" => Some(Self::Unspecified),
+            "SCHNORR_ALGORITHM_BIP340SECP256K1" => Some(Self::Bip340secp256k1),
+            "SCHNORR_ALGORITHM_ED25519" => Some(Self::Ed25519),
             _ => None,
         }
     }

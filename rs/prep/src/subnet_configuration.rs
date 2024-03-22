@@ -311,6 +311,8 @@ impl SubnetConfig {
             ssh_readonly_access: self.ssh_readonly_access,
             ssh_backup_access: self.ssh_backup_access,
             ecdsa_config: self.ecdsa_config,
+            // TODO[NNS1-2969]: Use this field rather than ecdsa_config.
+            chain_key_config: None,
         };
 
         let dkg_dealing_encryption_pubkeys: BTreeMap<_, _> = initialized_nodes
