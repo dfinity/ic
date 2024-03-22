@@ -23,12 +23,14 @@ use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::RegistryVersion;
 use tokio::sync::watch;
 use tracing::info;
+use url::{ParseError, Url};
 use x509_parser::{certificate::X509Certificate, prelude::FromDer};
 
 use crate::{
     core::Run,
     firewall::{FirewallGenerator, SystemdReloader},
     metrics::{MetricParamsSnapshot, WithMetricsSnapshot},
+    routes::RequestType,
 };
 
 // Some magical prefix that the public key should have
@@ -57,6 +59,28 @@ impl Eq for Node {}
 impl fmt::Display for Node {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "[{:?}]:{:?}", self.addr, self.port)
+    }
+}
+
+impl Node {
+    pub fn build_url(
+        &self,
+        request_type: RequestType,
+        principal: Principal,
+    ) -> Result<Url, ParseError> {
+        let node_id = &self.id;
+        let node_port = &self.port;
+        match request_type {
+            RequestType::Unknown => {
+                panic!("can't construct url for unknown request type")
+            }
+            RequestType::ReadStateSubnet => Url::from_str(&format!(
+                "https://{node_id}:{node_port}/api/v2/subnet/{principal}/read_state",
+            )),
+            _ => Url::from_str(&format!(
+                "https://{node_id}:{node_port}/api/v2/canister/{principal}/{request_type}",
+            )),
+        }
     }
 }
 

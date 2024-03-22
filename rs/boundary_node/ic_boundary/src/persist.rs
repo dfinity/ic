@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
@@ -75,11 +75,12 @@ pub struct Routes {
     pub node_count: u32,
     // subnets should be sorted by `range_start` field for the binary search to work
     pub subnets: Vec<Arc<RouteSubnet>>,
+    pub subnet_map: HashMap<Principal, Arc<RouteSubnet>>,
 }
 
 impl Routes {
     // Look up the subnet by canister_id
-    pub fn lookup(&self, canister_id: Principal) -> Option<Arc<RouteSubnet>> {
+    pub fn lookup_by_canister_id(&self, canister_id: Principal) -> Option<Arc<RouteSubnet>> {
         let canister_id_u256 = principal_bytes_to_u256(canister_id.as_slice());
 
         let idx = match self
@@ -110,6 +111,11 @@ impl Routes {
         }
 
         Some(subnet)
+    }
+
+    // Look up the subnet by subnet_id
+    pub fn lookup_by_id(&self, subnet_id: Principal) -> Option<Arc<RouteSubnet>> {
+        self.subnet_map.get(&subnet_id).cloned()
     }
 }
 
@@ -156,12 +162,18 @@ impl Persist for Persister {
             })
             .collect::<Vec<_>>();
 
+        let subnet_map = rt_subnets
+            .iter()
+            .map(|subnet| (Principal::from_text(&subnet.id).unwrap(), subnet.clone()))
+            .collect::<HashMap<_, _>>();
+
         // Sort subnets by range_start for the binary search to work in lookup()
         rt_subnets.sort_by_key(|x| x.range_start);
 
         let rt = Arc::new(Routes {
             node_count,
             subnets: rt_subnets,
+            subnet_map,
         });
 
         // Load old subnet to get previous numbers

@@ -506,7 +506,7 @@ pub fn setup_router(
 
     let query_route = Router::new()
         .route(routes::PATH_QUERY, {
-            post(routes::handle_call).with_state(proxy.clone())
+            post(routes::handle_canister).with_state(proxy.clone())
         })
         .layer(option_layer(cache.map(|x| {
             middleware::from_fn_with_state(x.clone(), cache_middleware)
@@ -514,7 +514,7 @@ pub fn setup_router(
 
     let call_route = {
         let mut route = Router::new().route(routes::PATH_CALL, {
-            post(routes::handle_call).with_state(proxy.clone())
+            post(routes::handle_canister).with_state(proxy.clone())
         });
 
         // will panic if ip_rate_limit is Some(0)
@@ -532,10 +532,6 @@ pub fn setup_router(
         route
     };
 
-    let read_state_route = Router::new().route(routes::PATH_READ_STATE, {
-        post(routes::handle_call).with_state(proxy.clone())
-    });
-
     let status_route = Router::new()
         .route(routes::PATH_STATUS, {
             get(routes::status).with_state((root_key.clone(), health.clone()))
@@ -549,80 +545,111 @@ pub fn setup_router(
         get(routes::health).with_state(health.clone())
     });
 
+    let middleware_geoip = option_layer(cli.monitoring.geoip_db.as_ref().map(|x| {
+        middleware::from_fn_with_state(
+            Arc::new(geoip::GeoIp::new(x).expect("unable to load GeoIP")),
+            geoip::middleware,
+        )
+    }));
+
+    let middleware_metrics = option_layer((!cli.monitoring.disable_request_logging).then_some(
+        middleware::from_fn_with_state(
+            HttpMetricParams::new(
+                metrics_registry,
+                "http_request_in",
+                cli.monitoring.log_failed_requests_only,
+            ),
+            metrics::metrics_middleware,
+        ),
+    ));
+
+    let middleware_concurrency =
+        option_layer(cli.listen.max_concurrency.map(ConcurrencyLimitLayer::new));
+
+    let middleware_retry = middleware::from_fn_with_state(
+        RetryParams {
+            retry_count: cli.retry.retry_count as usize,
+            retry_update_call: cli.retry.retry_update_call,
+        },
+        retry_request,
+    );
+
+    let middleware_shedding = option_layer(cli.listen.shed_ewma_param.map(|x| {
+        if !(0.0..=1.0).contains(&x) {
+            panic!("Shed EWMA param must be in range 0.0..1.0");
+        }
+
+        if cli.listen.shed_target_latency == 0 {
+            panic!("Shed taget latency should be > 0");
+        }
+
+        warn!(
+            "Load shedding enabled: EWMA param {}, target latency {}ms",
+            x, cli.listen.shed_target_latency
+        );
+
+        ServiceBuilder::new()
+            .layer(HandleErrorLayer::new(handle_shed_error))
+            .layer(LoadShedLayer::new(
+                x,
+                Duration::from_millis(cli.listen.shed_target_latency),
+            ))
+    }));
+
+    let middleware_ledger_rate_limiting =
+        option_layer(cli.rate_limiting.rate_limit_ledger_transfer.map(|x| {
+            middleware::from_fn_with_state(
+                Arc::new(management::LedgerRatelimitState::new(x)),
+                management::ledger_ratelimit_transfer_mw,
+            )
+        }));
+
+    let middleware_subnet_lookup = middleware::from_fn_with_state(lookup, routes::lookup_subnet);
+
     // Layers under ServiceBuilder are executed top-down (opposite to that under Router)
     // 1st layer wraps 2nd layer and so on
-    let base_service_builder = ServiceBuilder::new()
-        .layer(middleware::from_fn(routes::validate_request))
-        .layer(option_layer(cli.monitoring.geoip_db.as_ref().map(|x| {
-            middleware::from_fn_with_state(
-                Arc::new(geoip::GeoIp::new(x).expect("unable to load GeoIP")),
-                geoip::middleware,
-            )
-        })))
+    let common_service_layers = ServiceBuilder::new()
+        .layer(middleware_geoip)
         .set_x_request_id(MakeRequestUuid)
-        .layer(option_layer(
-            (!cli.monitoring.disable_request_logging).then_some(middleware::from_fn_with_state(
-                HttpMetricParams::new(
-                    metrics_registry,
-                    "http_request_in",
-                    cli.monitoring.log_failed_requests_only,
-                ),
-                metrics::metrics_middleware,
-            )),
-        ))
-        .layer(option_layer(
-            cli.listen.max_concurrency.map(ConcurrencyLimitLayer::new),
-        ))
-        .layer(option_layer(cli.listen.shed_ewma_param.map(|x| {
-            if !(0.0..=1.0).contains(&x) {
-                panic!("Shed EWMA param must be in range 0.0..1.0");
-            }
-
-            if cli.listen.shed_target_latency == 0 {
-                panic!("Shed taget latency should be > 0");
-            }
-
-            warn!(
-                "Load shedding enabled: EWMA param {}, target latency {}ms",
-                x, cli.listen.shed_target_latency
-            );
-
-            ServiceBuilder::new()
-                .layer(HandleErrorLayer::new(handle_shed_error))
-                .layer(LoadShedLayer::new(
-                    x,
-                    Duration::from_millis(cli.listen.shed_target_latency),
-                ))
-        })))
+        .layer(middleware_metrics)
+        .layer(middleware_concurrency)
+        .layer(middleware_shedding)
         .layer(middleware::from_fn(routes::postprocess_response))
-        .layer(middleware::from_fn(routes::preprocess_request))
+        .layer(middleware::from_fn(routes::preprocess_request));
+
+    let service_canister_read_call_query = ServiceBuilder::new()
+        .layer(middleware::from_fn(routes::validate_request))
+        .layer(middleware::from_fn(routes::validate_canister_request))
+        .layer(common_service_layers.clone())
         .layer(middleware::from_fn(management::btc_mw))
-        .layer(option_layer(
-            cli.rate_limiting.rate_limit_ledger_transfer.map(|x| {
-                middleware::from_fn_with_state(
-                    Arc::new(management::LedgerRatelimitState::new(x)),
-                    management::ledger_ratelimit_transfer_mw,
-                )
-            }),
-        ))
-        .layer(middleware::from_fn_with_state(
-            lookup.clone(),
-            routes::lookup_subnet,
-        ));
+        .layer(middleware_ledger_rate_limiting)
+        .layer(middleware_subnet_lookup.clone())
+        .layer(middleware_retry.clone());
 
-    let read_call_query_routes =
-        query_route
-            .merge(call_route)
-            .merge(read_state_route)
-            .layer(base_service_builder.layer(middleware::from_fn_with_state(
-                RetryParams {
-                    retry_count: cli.retry.retry_count as usize,
-                    retry_update_call: cli.retry.retry_update_call,
-                },
-                retry_request,
-            )));
+    let service_subnet_read = ServiceBuilder::new()
+        .layer(middleware::from_fn(routes::validate_request))
+        .layer(middleware::from_fn(routes::validate_subnet_request))
+        .layer(common_service_layers)
+        .layer(middleware_subnet_lookup)
+        .layer(middleware_retry);
 
-    read_call_query_routes
+    let canister_read_state_route = Router::new().route(routes::PATH_READ_STATE, {
+        post(routes::handle_canister).with_state(proxy.clone())
+    });
+
+    let canister_read_call_query_routes = query_route
+        .merge(call_route)
+        .merge(canister_read_state_route)
+        .layer(service_canister_read_call_query);
+
+    let subnet_read_state_route = Router::new()
+        .route(routes::PATH_SUBNET_READ_STATE, {
+            post(routes::handle_subnet).with_state(proxy.clone())
+        })
+        .layer(service_subnet_read);
+
+    canister_read_call_query_routes
+        .merge(subnet_read_state_route)
         .merge(status_route)
         .merge(health_route)
 }
