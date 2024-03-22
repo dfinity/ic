@@ -944,6 +944,7 @@ fn sns_can_mint_funds_via_proposals() {
         },
     );
 
+    /* TODO(NNS1-2982): Uncomment.
     let err = doomed_make_proposal_result.unwrap_err();
     let SnsGovernanceError {
         error_type,
@@ -966,6 +967,8 @@ fn sns_can_mint_funds_via_proposals() {
     ] {
         assert!(error_message.contains(snip), "{:#?}", err);
     }
+    */
+    doomed_make_proposal_result.unwrap(); // TODO(NNS1-2982): Delete this line.
 
     // Whale's balance is not affected by the second proposal.
     let balance = icrc1_balance(
@@ -976,5 +979,11 @@ fn sns_can_mint_funds_via_proposals() {
             subaccount: None,
         },
     );
-    assert_eq!(balance, Tokens::new(2_222, 0).unwrap());
+    let expected_balance_tokens = Tokens::new(
+        2 * // TODO(NNS1-2982): Delete this line.
+        2_222,
+        0,
+    )
+    .unwrap();
+    assert_eq!(balance, expected_balance_tokens);
 }

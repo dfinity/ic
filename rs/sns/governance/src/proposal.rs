@@ -38,7 +38,7 @@ use ic_nervous_system_common::{
 };
 use ic_nervous_system_proto::pb::v1::Percentage;
 use ic_sns_governance_proposals_amount_total_limit::{
-    mint_sns_tokens_7_day_total_upper_bound_tokens,
+    // TODO(NNS1-2982): Uncomment. mint_sns_tokens_7_day_total_upper_bound_tokens,
     transfer_sns_treasury_funds_7_day_total_upper_bound_tokens,
 };
 use ic_sns_governance_token_valuation::{Token, Valuation};
@@ -959,12 +959,22 @@ impl TokenProposalAction for MintSnsTokens {
         total_minting_amount_tokens(proposals, now_timestamp_seconds - 7 * SECONDS_PER_DAY)
     }
 
+    /* TODO(NNS1-2982): Uncomment.
     fn recent_amount_total_upper_bound_tokens(valuation: &Valuation) -> Result<Decimal, String> {
         mint_sns_tokens_7_day_total_upper_bound_tokens(*valuation)
             // Err is most likely a bug.
             .map_err(|treasury_limit_error| {
                 format!("Unable to validate amount: {:?}", treasury_limit_error,)
             })
+    }
+    */
+
+    // TODO(NNS1-2982): Delete.
+    fn recent_amount_total_upper_bound_tokens(_valuation: &Valuation) -> Result<Decimal, String> {
+        // Ideally, we'd return infinity, but Decimal does not have that. This is the next best
+        // thing, and should be good enough, because we have already planned the obselences of this
+        // code (see tickets NNS1-298(1|2)).
+        Ok(Decimal::MAX)
     }
 }
 
