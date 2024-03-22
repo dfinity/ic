@@ -57,7 +57,7 @@ server {
         return 307 $scheme://$primary_application_domain$request_uri;
     }
 
-    location ~ /api/v2/canister/[0-9a-zA-Z\-]+/read_state {
+    location ~ /api/v2/(canister|subnet)/[0-9a-zA-Z\-]+/read_state {
         # Observability
         include "includes/request_id.conf";
 

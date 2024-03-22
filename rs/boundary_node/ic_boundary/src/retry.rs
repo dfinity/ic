@@ -3,7 +3,7 @@ use std::sync::Arc;
 use axum::{body::Body, extract::State, middleware::Next, response::IntoResponse, Extension};
 use http::{request::Parts, Request};
 use hyper::body;
-use ic_types::CanisterId;
+use ic_types::{CanisterId, SubnetId};
 
 use crate::{
     http::AxumResponse,
@@ -59,14 +59,17 @@ fn request_clone(parts: &Parts, body: &[u8]) -> Request<Body> {
             .clone(),
     );
 
-    request
-        .extensions_mut()
-        .insert(parts.extensions.get::<CanisterId>().cloned().unwrap());
+    if let Some(canister_id) = parts.extensions.get::<CanisterId>().cloned() {
+        request.extensions_mut().insert(canister_id);
+    };
+    if let Some(subnet_id) = parts.extensions.get::<SubnetId>().cloned() {
+        request.extensions_mut().insert(subnet_id);
+    }
 
     request
 }
 
-/// Middleware that optionally retries the request according to the predefined conditions
+// Middleware that optionally retries the request according to the predefined conditions
 pub async fn retry_request(
     State(params): State<RetryParams>,
     Extension(ctx): Extension<Arc<RequestContext>>,

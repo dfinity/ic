@@ -9,11 +9,12 @@ use ic_tests::{
             denylist_test, direct_to_replica_options_test, direct_to_replica_rosetta_test,
             direct_to_replica_test, http_canister_test, http_endpoint_test, icx_proxy_test,
             nginx_valid_config_test, prefix_canister_id_test, proxy_http_canister_test,
-            reboot_test, redirect_http_to_https_test, redirect_to_dashboard_test,
-            redirect_to_non_raw_test, seo_test,
+            read_state_via_subnet_path_test, reboot_test, redirect_http_to_https_test,
+            redirect_to_dashboard_test, redirect_to_non_raw_test, seo_test,
         },
+        constants::BOUNDARY_NODE_NAME,
+        helpers::BoundaryNodeHttpsConfig,
         setup::setup_ic_with_bn,
-        {constants::BOUNDARY_NODE_NAME, helpers::BoundaryNodeHttpsConfig},
     },
     driver::group::{SystemTestGroup, SystemTestSubGroup},
     systest,
@@ -46,7 +47,8 @@ fn main() -> Result<()> {
                 .add_test(systest!(direct_to_replica_rosetta_test))
                 .add_test(systest!(direct_to_replica_options_test))
                 .add_test(systest!(seo_test))
-                .add_test(systest!(canister_routing_test)),
+                .add_test(systest!(canister_routing_test))
+                .add_test(systest!(read_state_via_subnet_path_test)),
         )
         .add_test(systest!(denylist_test))
         .add_test(systest!(canister_allowlist_test))

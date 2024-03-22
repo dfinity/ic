@@ -20,7 +20,7 @@ use bytes::Buf;
 use futures::task::{Context as FutContext, Poll};
 use http::header::{HeaderMap, HeaderValue, CONTENT_LENGTH, CONTENT_TYPE};
 use http_body::Body as HttpBody;
-use ic_types::{messages::ReplicaHealthStatus, CanisterId};
+use ic_types::{messages::ReplicaHealthStatus, CanisterId, SubnetId};
 use jemalloc_ctl::{epoch, stats};
 use prometheus::{
     proto::MetricFamily, register_histogram_vec_with_registry,
@@ -36,6 +36,7 @@ use crate::{
     cache::{Cache, CacheStatus},
     core::Run,
     geoip,
+    persist::RouteSubnet,
     retry::RetryResult,
     routes::{ErrorCause, RequestContext, RequestType},
     snapshot::{Node, RegistrySnapshot},
@@ -614,11 +615,10 @@ pub async fn metrics_middleware_status(
     response
 }
 
-// middleware to log and measure proxied requests
+// middleware to log and measure proxied canister and subnet requests
 pub async fn metrics_middleware(
     State(metric_params): State<HttpMetricParams>,
     Extension(request_id): Extension<RequestId>,
-    Extension(canister_id): Extension<CanisterId>,
     request: Request<Body>,
     next: Next<Body>,
 ) -> impl IntoResponse {
@@ -648,10 +648,28 @@ pub async fn metrics_middleware(
         .map(|x| x.country_code.clone())
         .unwrap_or("N/A".into());
 
+    // for canister requests we extract canister_id
+    let canister_id = request
+        .extensions()
+        .get::<CanisterId>()
+        .map(|x| x.to_string());
+
+    // for /api/v2/subnet requests we extract subnet_id directly from extension
+    let subnet_id = request
+        .extensions()
+        .get::<SubnetId>()
+        .map(|x| x.to_string());
+
     // Perform the request & measure duration
     let start_time = Instant::now();
     let response = next.run(request).await;
     let proc_duration = start_time.elapsed().as_secs_f64();
+
+    // in case subnet_id=None (i.e. for /api/v2/canister/... request), we get the target subnet_id from the RouteSubnet extension
+    let subnet_id = subnet_id.or(response
+        .extensions()
+        .get::<Arc<RouteSubnet>>()
+        .map(|x| x.id.clone()));
 
     // Extract extensions
     let ctx = response
@@ -675,8 +693,7 @@ pub async fn metrics_middleware(
     // Prepare fields
     let status_code = response.status();
     let sender = ctx.sender.map(|x| x.to_string());
-    let node_id = node.map(|x| x.id.to_string());
-    let subnet_id = node.map(|x| x.subnet_id.to_string());
+    let node_id = node.as_ref().map(|x| x.id.to_string());
 
     let HttpMetricParams {
         action,
@@ -753,7 +770,7 @@ pub async fn metrics_middleware(
                 subnet_id,
                 node_id,
                 country_code,
-                canister_id = canister_id.to_string(),
+                canister_id,
                 canister_id_actual = canister_id_actual.map(|x| x.to_string()),
                 canister_id_cbor = ctx.canister_id.map(|x| x.to_string()),
                 sender,
