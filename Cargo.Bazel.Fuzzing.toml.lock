@@ -4677,8 +4677,9 @@ dependencies = [
 
 [[package]]
 name = "ic-agent"
-version = "0.33.0"
-source = "git+https://github.com/dfinity/agent-rs?rev=5c34d88#5c34d880c5eeb5e372ace5c46514f672c970a420"
+version = "0.34.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "555eda283b8ba1a996d44d80b6c9a6d38a6cbb81797a7b7bbee134fdde64ce48"
 dependencies = [
  "backoff",
  "cached 0.46.1",
@@ -4929,8 +4930,9 @@ dependencies = [
 
 [[package]]
 name = "ic-transport-types"
-version = "0.33.0"
-source = "git+https://github.com/dfinity/agent-rs?rev=5c34d88#5c34d880c5eeb5e372ace5c46514f672c970a420"
+version = "0.34.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7c06d3c1292368c813f8104d9d8294bda5577ea6fe4501a65997d0b7f155f15f"
 dependencies = [
  "candid",
  "hex",
@@ -4945,9 +4947,9 @@ dependencies = [
 
 [[package]]
 name = "ic-utils"
-version = "0.33.0"
+version = "0.34.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a8e26bd17f2f188a608deae41b8c269a85e1e98118c9a7aa0803ad252552c0b2"
+checksum = "c83e1b5aea342fd6209b2de903eaf11c98f9724131f906da090cc14ec8329d0e"
 dependencies = [
  "async-trait",
  "candid",

@@ -546,7 +546,7 @@ fn test_status_code_when_ingress_filter_fails() {
             .await
     });
 
-    let expected_response = Err(AgentError::ReplicaError(RejectResponse {
+    let expected_response = Err(AgentError::UncertifiedReject(RejectResponse {
         reject_code: ic_agent::agent::RejectCode::SysTransient,
         reject_message: "Test reject message".to_string(),
         error_code: Some("IC0204".to_string()),

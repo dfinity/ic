@@ -31,7 +31,7 @@ pub fn is_called_if_reply_traps(env: TestEnv) {
                         ),
                     )
                     .await,
-                Err(AgentError::ReplicaError(RejectResponse{
+                Err(AgentError::CertifiedReject(RejectResponse{
                     reject_code,
                     reject_message,
                     ..
@@ -115,7 +115,7 @@ pub fn changes_are_discarded_if_trapped(env: TestEnv) {
                             )
                     )
                     .await,
-                Err(AgentError::ReplicaError(RejectResponse {
+                Err(AgentError::CertifiedReject(RejectResponse {
                     reject_code,
                     reject_message,
                     ..

@@ -80,7 +80,7 @@ pub fn mint_cycles_supported_only_on_cycles_minting_canister(env: TestEnv) {
 
         assert_eq!(
             res,
-            AgentError::ReplicaError(
+            AgentError::CertifiedReject(
                 RejectResponse {
                     reject_code: RejectCode::CanisterError,
                     reject_message: format!(

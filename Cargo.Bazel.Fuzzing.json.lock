@@ -1,5 +1,5 @@
 {
-  "checksum": "45f1496c1faed8e6585646eeaf74c4a9211b0a3f027a0d8a08b7438832370e3d",
+  "checksum": "c42be3beff9565fe9ae2d526b5f16cbdac6b2b1cba94f41f027c42d16c5dabca",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -14740,7 +14740,7 @@
               "target": "hyperlocal_next"
             },
             {
-              "id": "ic-agent 0.33.0",
+              "id": "ic-agent 0.34.0",
               "target": "ic_agent"
             },
             {
@@ -14800,7 +14800,7 @@
               "target": "ic_test_state_machine_client"
             },
             {
-              "id": "ic-utils 0.33.0",
+              "id": "ic-utils 0.34.0",
               "target": "ic_utils"
             },
             {
@@ -23506,16 +23506,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "ic-agent 0.33.0": {
+    "ic-agent 0.34.0": {
       "name": "ic-agent",
-      "version": "0.33.0",
+      "version": "0.34.0",
       "repository": {
-        "Git": {
-          "remote": "https://github.com/dfinity/agent-rs",
-          "commitish": {
-            "Rev": "5c34d88"
-          },
-          "strip_prefix": "ic-agent"
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-agent/0.34.0/download",
+          "sha256": "555eda283b8ba1a996d44d80b6c9a6d38a6cbb81797a7b7bbee134fdde64ce48"
         }
       },
       "targets": [
@@ -23586,7 +23583,7 @@
               "target": "ic_certification"
             },
             {
-              "id": "ic-transport-types 0.33.0",
+              "id": "ic-transport-types 0.34.0",
               "target": "ic_transport_types"
             },
             {
@@ -23709,7 +23706,7 @@
           ],
           "selects": {}
         },
-        "version": "0.33.0"
+        "version": "0.34.0"
       },
       "license": "Apache-2.0"
     },
@@ -24629,16 +24626,13 @@
       },
       "license": "Apache-2.0"
     },
-    "ic-transport-types 0.33.0": {
+    "ic-transport-types 0.34.0": {
       "name": "ic-transport-types",
-      "version": "0.33.0",
+      "version": "0.34.0",
       "repository": {
-        "Git": {
-          "remote": "https://github.com/dfinity/agent-rs",
-          "commitish": {
-            "Rev": "5c34d88"
-          },
-          "strip_prefix": "ic-transport-types"
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-transport-types/0.34.0/download",
+          "sha256": "7c06d3c1292368c813f8104d9d8294bda5577ea6fe4501a65997d0b7f155f15f"
         }
       },
       "targets": [
@@ -24704,17 +24698,17 @@
           ],
           "selects": {}
         },
-        "version": "0.33.0"
+        "version": "0.34.0"
       },
       "license": "Apache-2.0"
     },
-    "ic-utils 0.33.0": {
+    "ic-utils 0.34.0": {
       "name": "ic-utils",
-      "version": "0.33.0",
+      "version": "0.34.0",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-utils/0.33.0/download",
-          "sha256": "a8e26bd17f2f188a608deae41b8c269a85e1e98118c9a7aa0803ad252552c0b2"
+          "url": "https://static.crates.io/crates/ic-utils/0.34.0/download",
+          "sha256": "c83e1b5aea342fd6209b2de903eaf11c98f9724131f906da090cc14ec8329d0e"
         }
       },
       "targets": [
@@ -24750,7 +24744,7 @@
               "target": "futures_util"
             },
             {
-              "id": "ic-agent 0.33.0",
+              "id": "ic-agent 0.34.0",
               "target": "ic_agent"
             },
             {
@@ -24802,7 +24796,7 @@
           ],
           "selects": {}
         },
-        "version": "0.33.0"
+        "version": "0.34.0"
       },
       "license": "Apache-2.0"
     },
@@ -64904,7 +64898,7 @@
     "hyper-socks2 0.8.0",
     "hyper-util 0.1.3",
     "hyperlocal-next 0.9.0",
-    "ic-agent 0.33.0",
+    "ic-agent 0.34.0",
     "ic-btc-interface 0.1.0",
     "ic-btc-test-utils 0.1.0",
     "ic-btc-validation 0.1.0",
@@ -64920,7 +64914,7 @@
     "ic-response-verification 2.3.0",
     "ic-stable-structures 0.6.2",
     "ic-test-state-machine-client 3.0.1",
-    "ic-utils 0.33.0",
+    "ic-utils 0.34.0",
     "ic-wasm 0.7.0",
     "ic-xrc-types 1.2.0",
     "ic0 0.18.11",
