@@ -33,6 +33,7 @@ use crate::driver::{
 };
 use crate::k8s::config::TNET_DNS_SUFFIX;
 use crate::k8s::tnet::TNet;
+use crate::retry_with_msg;
 
 use super::boundary_node::BoundaryNodeVm;
 
@@ -308,12 +309,18 @@ impl HasPrometheus for TestEnv {
             let from = prometheus_config_dir.join(file);
             let to = Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(file);
             let size = fs::metadata(&from).unwrap().len();
-            retry(self.logger(), SCP_RETRY_TIMEOUT, SCP_RETRY_BACKOFF, || {
-                let mut remote_file = session.scp_send(&to, 0o644, size, None)?;
-                let mut from_file = File::open(&from)?;
-                std::io::copy(&mut from_file, &mut remote_file)?;
-                Ok(())
-            })
+            retry_with_msg!(
+                format!("scp {from:?} to {vm_name}:{to:?}"),
+                self.logger(),
+                SCP_RETRY_TIMEOUT,
+                SCP_RETRY_BACKOFF,
+                || {
+                    let mut remote_file = session.scp_send(&to, 0o644, size, None)?;
+                    let mut from_file = File::open(&from)?;
+                    std::io::copy(&mut from_file, &mut remote_file)?;
+                    Ok(())
+                }
+            )
             .unwrap_or_else(|e| {
                 panic!("Failed to scp {from:?} to {vm_name}:{to:?} because: {e:?}!")
             });

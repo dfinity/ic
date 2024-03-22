@@ -14,6 +14,7 @@ use crate::{
     canister_api::{CallMode, Request, Response},
     driver::test_env_api::{retry_async, HasPublicApiUrl, IcNodeSnapshot},
     generic_workload_engine::metrics::RequestOutcome,
+    retry_with_msg_async,
     util::{assert_create_agent, assert_create_agent_with_identity},
 };
 
@@ -134,7 +135,7 @@ impl CanisterAgent {
         let label = request.signature();
         let start_time = Instant::now();
         let attempts = Arc::new(AtomicUsize::new(0));
-        let result = retry_async(&log, timeout, backoff_delay, {
+        let result = retry_with_msg_async!("call_with_retries", &log, timeout, backoff_delay, {
             let attempts = attempts.clone();
             let request = request.clone();
             move || {

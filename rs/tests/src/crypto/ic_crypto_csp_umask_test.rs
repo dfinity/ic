@@ -35,6 +35,7 @@ use crate::driver::test_env_api::{
     retry, GetFirstHealthyNodeSnapshot, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
     SshSession, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
 };
+use crate::retry_with_msg;
 use anyhow::bail;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
@@ -160,15 +161,21 @@ fn await_updated_secret_key_store_metadata(
     current_sks_metadata: &SecretKeyStoreMetadata,
     logger: Logger,
 ) -> SecretKeyStoreMetadata {
-    retry(logger.clone(), READY_WAIT_TIMEOUT, RETRY_BACKOFF, || {
-        let sks_metadata = retrieve_secret_key_store_metadata(node, &logger);
-        match sks_metadata.has_been_updated(current_sks_metadata) {
-            true => Ok(sks_metadata),
-            false => {
-                bail!("secret key store has not been updated yet")
+    retry_with_msg!(
+        "check if secret key store metadata has been updated",
+        logger.clone(),
+        READY_WAIT_TIMEOUT,
+        RETRY_BACKOFF,
+        || {
+            let sks_metadata = retrieve_secret_key_store_metadata(node, &logger);
+            match sks_metadata.has_been_updated(current_sks_metadata) {
+                true => Ok(sks_metadata),
+                false => {
+                    bail!("secret key store has not been updated yet")
+                }
             }
         }
-    })
+    )
     .expect("The secret key store was not updated in time")
 }
 

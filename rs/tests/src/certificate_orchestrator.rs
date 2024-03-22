@@ -22,6 +22,7 @@ use crate::{
             IcNodeContainer, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
         },
     },
+    retry_with_msg_async,
     util::agent_observes_canister_module,
 };
 
@@ -108,12 +109,22 @@ pub fn access_control_test(env: TestEnv) {
 
     rt.block_on(async move {
         // wait for canister to finish installing
-        retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
-            match agent_observes_canister_module(&agent, &cid).await {
-                true => Ok(()),
-                false => panic!("Canister module not available yet"),
+        retry_with_msg_async!(
+            format!(
+                "agent of {} observes canister module {}",
+                app_node.get_public_url().to_string(),
+                cid.to_string()
+            ),
+            &logger,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                match agent_observes_canister_module(&agent, &cid).await {
+                    true => Ok(()),
+                    false => panic!("Canister module not available yet"),
+                }
             }
-        })
+        )
         .await
         .unwrap();
 
@@ -254,13 +265,22 @@ pub fn registration_test(env: TestEnv) {
 
     rt.block_on(async move {
         // wait for canister to finish installing
-        retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
-            match agent_observes_canister_module(&agent, &cid).await {
-                true => Ok(()),
-                false => panic!("Canister module not available yet"),
+        retry_with_msg_async!(
+            format!(
+                "agent of {} observes canister module {}",
+                app_node.get_public_url().to_string(),
+                cid.to_string()
+            ),
+            &logger,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                match agent_observes_canister_module(&agent, &cid).await {
+                    true => Ok(()),
+                    false => panic!("Canister module not available yet"),
+                }
             }
-        })
-        .await
+        ).await
         .unwrap();
 
         info!(&logger, "created canister={cid}");
@@ -278,29 +298,39 @@ pub fn registration_test(env: TestEnv) {
         };
 
         // Check the state of the registration
-        retry_async(&logger, CHECK_TIMEOUT, CHECK_SLEEP, || async {
-            match check_registration(
-                agent.clone(),
-                ident_a.clone(),
-                cid,
-                registration_a_id.clone(),
-                domain_a.clone(),
-                canister_a,
-                State::PendingOrder,
-                false
-            )
-            .await
-            {
-                Ok(_) => Ok(()),
-                Err(v) => bail!("registration is in the wrong state: {:?}", v),
+        retry_with_msg_async!(
+            "check_registration".to_string(),
+            &logger,
+            CHECK_TIMEOUT,
+            CHECK_SLEEP,
+            || async {
+                match check_registration(
+                    agent.clone(),
+                    ident_a.clone(),
+                    cid,
+                    registration_a_id.clone(),
+                    domain_a.clone(),
+                    canister_a,
+                    State::PendingOrder,
+                    false
+                )
+                .await
+                {
+                    Ok(_) => Ok(()),
+                    Err(v) => bail!("registration is in the wrong state: {:?}", v),
+                }
             }
-        })
-        .await
+        ).await
         .expect("failed to check the registration state");
 
         // Check the state of an inexistent registration
-        retry_async(&logger, CHECK_TIMEOUT, CHECK_SLEEP, || async {
-            match check_registration(
+        retry_with_msg_async!(
+            "check_registration".to_string(),
+            &logger,
+            CHECK_TIMEOUT,
+            CHECK_SLEEP,
+            || async {
+                match check_registration(
                 agent.clone(),
                 ident_a.clone(),
                 cid,
@@ -334,23 +364,28 @@ pub fn registration_test(env: TestEnv) {
         };
 
         // Check the state of the registration
-        retry_async(&logger, CHECK_TIMEOUT, CHECK_SLEEP, || async {
-            match check_registration(
-                agent.clone(),
-                ident_a.clone(),
-                cid,
-                registration_b_id.clone(),
-                domain_b.clone(),
-                canister_b,
-                State::PendingOrder,
-                false
-            )
-            .await
-            {
-                Ok(_) => Ok(()),
-                Err(v) => bail!("registration is in the wrong state: {:?}", v),
-            }
-        })
+        retry_with_msg_async!(
+            "check_registration".to_string(),
+            &logger,
+            CHECK_TIMEOUT,
+            CHECK_SLEEP,
+            || async {
+                match check_registration(
+                    agent.clone(),
+                    ident_a.clone(),
+                    cid,
+                    registration_b_id.clone(),
+                    domain_b.clone(),
+                    canister_b,
+                    State::PendingOrder,
+                    false
+                )
+                .await
+                {
+                    Ok(_) => Ok(()),
+                    Err(v) => bail!("registration is in the wrong state: {:?}", v),
+                }
+            })
         .await
         .expect("failed to check the registration state");
 
@@ -360,23 +395,28 @@ pub fn registration_test(env: TestEnv) {
             UpdateRegistrationResponse::Ok(()) => {},
             v => panic!("updateRegistration failed: {v:?}, expected ok"),
         };
-        retry_async(&logger, CHECK_TIMEOUT, CHECK_SLEEP, || async {
-            match check_registration(
-                agent.clone(),
-                ident_a.clone(),
-                cid,
-                registration_a_id.clone(),
-                domain_a.clone(),
-                canister_a,
-                State::PendingChallengeResponse,
-                false
-            )
-            .await
-            {
-                Ok(_) => Ok(()),
-                Err(v) => bail!("registration is in the wrong state: {:?}", v),
-            }
-        })
+        retry_with_msg_async!(
+            "check_registration".to_string(),
+            &logger,
+            CHECK_TIMEOUT,
+            CHECK_SLEEP,
+            || async {
+                match check_registration(
+                    agent.clone(),
+                    ident_a.clone(),
+                    cid,
+                    registration_a_id.clone(),
+                    domain_a.clone(),
+                    canister_a,
+                    State::PendingChallengeResponse,
+                    false
+                )
+                .await
+                {
+                    Ok(_) => Ok(()),
+                    Err(v) => bail!("registration is in the wrong state: {:?}", v),
+                }
+            })
         .await
         .expect("failed to check the registration state");
 
@@ -385,23 +425,28 @@ pub fn registration_test(env: TestEnv) {
             UpdateRegistrationResponse::Ok(()) => {},
             v => panic!("updateRegistration failed: {v:?}, expected ok"),
         };
-        retry_async(&logger, CHECK_TIMEOUT, CHECK_SLEEP, || async {
-            match check_registration(
-                agent.clone(),
-                ident_a.clone(),
-                cid,
-                registration_a_id.clone(),
-                domain_a.clone(),
-                canister_a,
-                State::PendingAcmeApproval,
-                false
-            )
-            .await
-            {
-                Ok(_) => Ok(()),
-                Err(v) => bail!("registration is in the wrong state: {:?}", v),
-            }
-        })
+        retry_with_msg_async!(
+            "check_registration".to_string(),
+            &logger,
+            CHECK_TIMEOUT,
+            CHECK_SLEEP,
+            || async {
+                match check_registration(
+                    agent.clone(),
+                    ident_a.clone(),
+                    cid,
+                    registration_a_id.clone(),
+                    domain_a.clone(),
+                    canister_a,
+                    State::PendingAcmeApproval,
+                    false
+                )
+                .await
+                {
+                    Ok(_) => Ok(()),
+                    Err(v) => bail!("registration is in the wrong state: {:?}", v),
+                }
+            })
         .await
         .expect("failed to check the registration state");
 
@@ -410,23 +455,28 @@ pub fn registration_test(env: TestEnv) {
             UpdateRegistrationResponse::Ok(()) => {},
             v => panic!("updateRegistration failed: {v:?}, expected ok"),
         };
-        retry_async(&logger, CHECK_TIMEOUT, CHECK_SLEEP, || async {
-            match check_registration(
-                agent.clone(),
-                ident_a.clone(),
-                cid,
-                registration_a_id.clone(),
-                domain_a.clone(),
-                canister_a,
-                State::Available,
-                false
-            )
-            .await
-            {
-                Ok(_) => Ok(()),
-                Err(v) => bail!("registration is in the wrong state: {:?}", v),
-            }
-        })
+        retry_with_msg_async!(
+            "check_registration".to_string(),
+            &logger,
+            CHECK_TIMEOUT,
+            CHECK_SLEEP,
+            || async {
+                match check_registration(
+                    agent.clone(),
+                    ident_a.clone(),
+                    cid,
+                    registration_a_id.clone(),
+                    domain_a.clone(),
+                    canister_a,
+                    State::Available,
+                    false
+                )
+                .await
+                {
+                    Ok(_) => Ok(()),
+                    Err(v) => bail!("registration is in the wrong state: {:?}", v),
+                }
+            })
         .await
         .expect("failed to check the registration state");
 
@@ -435,23 +485,28 @@ pub fn registration_test(env: TestEnv) {
             UpdateRegistrationResponse::Ok(()) => {},
             v => panic!("updateRegistration failed: {v:?}, expected ok"),
         };
-        retry_async(&logger, CHECK_TIMEOUT, CHECK_SLEEP, || async {
-            match check_registration(
-                agent.clone(),
-                ident_a.clone(),
-                cid,
-                registration_a_id.clone(),
-                domain_a.clone(),
-                canister_b,
-                State::Available,
-                false
-            )
-            .await
-            {
-                Ok(_) => Ok(()),
-                Err(v) => bail!("registration is in the wrong state: {:?}", v),
-            }
-        })
+        retry_with_msg_async!(
+            "check_registration".to_string(),
+            &logger,
+            CHECK_TIMEOUT,
+            CHECK_SLEEP,
+            || async {
+                match check_registration(
+                    agent.clone(),
+                    ident_a.clone(),
+                    cid,
+                    registration_a_id.clone(),
+                    domain_a.clone(),
+                    canister_b,
+                    State::Available,
+                    false
+                )
+                .await
+                {
+                    Ok(_) => Ok(()),
+                    Err(v) => bail!("registration is in the wrong state: {:?}", v),
+                }
+            })
         .await
         .expect("failed to check the registration state");
 
@@ -476,23 +531,28 @@ pub fn registration_test(env: TestEnv) {
             v => panic!("updateRegistration failed: {v:?}, expected ok"),
         };
 
-        retry_async(&logger, CHECK_TIMEOUT, CHECK_SLEEP, || async {
-            match check_registration(
-                agent.clone(),
-                ident_a.clone(),
-                cid,
-                registration_b_id.clone(),
-                domain_b.clone(),
-                canister_b,
-                State::Failed(BoundedString::<127>::from("Test")),
-                false
-            )
-            .await
-            {
-                Ok(_) => Ok(()),
-                Err(v) => bail!("registration is in the wrong state: {:?}", v),
-            }
-        })
+        retry_with_msg_async!(
+            "check_registration".to_string(),
+            &logger,
+            CHECK_TIMEOUT,
+            CHECK_SLEEP,
+            || async {
+                match check_registration(
+                    agent.clone(),
+                    ident_a.clone(),
+                    cid,
+                    registration_b_id.clone(),
+                    domain_b.clone(),
+                    canister_b,
+                    State::Failed(BoundedString::<127>::from("Test")),
+                    false
+                )
+                .await
+                {
+                    Ok(_) => Ok(()),
+                    Err(v) => bail!("registration is in the wrong state: {:?}", v),
+                }
+            })
         .await
         .expect("failed to check the registration state");
 
@@ -565,12 +625,22 @@ pub fn expiration_test(env: TestEnv) {
 
     rt.block_on(async move {
         // wait for canister to finish installing
-        retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
-            match agent_observes_canister_module(&agent, &cid).await {
-                true => Ok(()),
-                false => panic!("Canister module not available yet"),
+        retry_with_msg_async!(
+            format!(
+                "agent of {} observes canister module {}",
+                app_node.get_public_url().to_string(),
+                cid.to_string()
+            ),
+            &logger,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                match agent_observes_canister_module(&agent, &cid).await {
+                    true => Ok(()),
+                    false => panic!("Canister module not available yet"),
+                }
             }
-        })
+        )
         .await
         .unwrap();
 
@@ -597,23 +667,29 @@ pub fn expiration_test(env: TestEnv) {
         };
 
         // Check the state of the registration
-        retry_async(&logger, CHECK_TIMEOUT, CHECK_SLEEP, || async {
-            match check_registration(
-                agent.clone(),
-                ident_a.clone(),
-                cid,
-                registration_a_id.clone(),
-                domain_a.clone(),
-                canister_a,
-                State::PendingOrder,
-                false,
-            )
-            .await
-            {
-                Ok(_) => Ok(()),
-                Err(v) => bail!("registration does not exist: {:?}", v),
+        retry_with_msg_async!(
+            "check_registration".to_string(),
+            &logger,
+            CHECK_TIMEOUT,
+            CHECK_SLEEP,
+            || async {
+                match check_registration(
+                    agent.clone(),
+                    ident_a.clone(),
+                    cid,
+                    registration_a_id.clone(),
+                    domain_a.clone(),
+                    canister_a,
+                    State::PendingOrder,
+                    false,
+                )
+                .await
+                {
+                    Ok(_) => Ok(()),
+                    Err(v) => bail!("registration does not exist: {:?}", v),
+                }
             }
-        })
+        )
         .await
         .expect("failed to check the registration state");
 
@@ -632,23 +708,29 @@ pub fn expiration_test(env: TestEnv) {
         };
 
         // Check the state of the registration
-        retry_async(&logger, CHECK_TIMEOUT, CHECK_SLEEP, || async {
-            match check_registration(
-                agent.clone(),
-                ident_a.clone(),
-                cid,
-                registration_b_id.clone(),
-                domain_b.clone(),
-                canister_b,
-                State::PendingOrder,
-                false,
-            )
-            .await
-            {
-                Ok(_) => Ok(()),
-                Err(v) => bail!("registration is in the wrong state: {:?}", v),
+        retry_with_msg_async!(
+            "check_registration".to_string(),
+            &logger,
+            CHECK_TIMEOUT,
+            CHECK_SLEEP,
+            || async {
+                match check_registration(
+                    agent.clone(),
+                    ident_a.clone(),
+                    cid,
+                    registration_b_id.clone(),
+                    domain_b.clone(),
+                    canister_b,
+                    State::PendingOrder,
+                    false,
+                )
+                .await
+                {
+                    Ok(_) => Ok(()),
+                    Err(v) => bail!("registration is in the wrong state: {:?}", v),
+                }
             }
-        })
+        )
         .await
         .expect("failed to check the registration state");
 
@@ -666,68 +748,86 @@ pub fn expiration_test(env: TestEnv) {
             v => panic!("updateRegistration failed: {v:?}, expected ok"),
         };
 
-        retry_async(&logger, CHECK_TIMEOUT, CHECK_SLEEP, || async {
-            match check_registration(
-                agent.clone(),
-                ident_a.clone(),
-                cid,
-                registration_b_id.clone(),
-                domain_b.clone(),
-                canister_b,
-                State::Available,
-                false,
-            )
-            .await
-            {
-                Ok(_) => Ok(()),
-                Err(v) => bail!("registration is in the wrong state: {:?}", v),
+        retry_with_msg_async!(
+            "check_registration".to_string(),
+            &logger,
+            CHECK_TIMEOUT,
+            CHECK_SLEEP,
+            || async {
+                match check_registration(
+                    agent.clone(),
+                    ident_a.clone(),
+                    cid,
+                    registration_b_id.clone(),
+                    domain_b.clone(),
+                    canister_b,
+                    State::Available,
+                    false,
+                )
+                .await
+                {
+                    Ok(_) => Ok(()),
+                    Err(v) => bail!("registration is in the wrong state: {:?}", v),
+                }
             }
-        })
+        )
         .await
         .expect("failed to check the registration state");
 
         // Check that the "in-progress" registration request has been expired
-        retry_async(&logger, CHECK_TIMEOUT, CHECK_SLEEP, || async {
-            match check_registration(
-                agent.clone(),
-                ident_a.clone(),
-                cid,
-                registration_a_id.clone(),
-                domain_a.clone(),
-                canister_a,
-                State::PendingOrder,
-                true,
-            )
-            .await
-            {
-                Ok(_) => Ok(()),
-                Err(v) => bail!(
-                    "'in-progress' registration request has not been expired (removed): {:?}",
-                    v
-                ),
+        retry_with_msg_async!(
+            "check_registration".to_string(),
+            &logger,
+            CHECK_TIMEOUT,
+            CHECK_SLEEP,
+            || async {
+                match check_registration(
+                    agent.clone(),
+                    ident_a.clone(),
+                    cid,
+                    registration_a_id.clone(),
+                    domain_a.clone(),
+                    canister_a,
+                    State::PendingOrder,
+                    true,
+                )
+                .await
+                {
+                    Ok(_) => Ok(()),
+                    Err(v) => bail!(
+                        "'in-progress' registration request has not been expired (removed): {:?}",
+                        v
+                    ),
+                }
             }
-        })
+        )
         .await
         .expect("failed to check the registration state");
 
         // Check that the successful registration request is still available
-        retry_async(&logger, CHECK_TIMEOUT, CHECK_SLEEP, || async {
-            match check_registration(
-                agent.clone(),
-                ident_a.clone(),
-                cid,
-                registration_b_id.clone(),
-                domain_b.clone(),
-                canister_b,
-                State::Available,
-                false,
-            )
-            .await
-            {
-                Ok(_) => Ok(()),
-                Err(v) => bail!("registration is in the wrong state: {:?}", v),
+        retry_with_msg_async!(
+            "check_registration".to_string(),
+            &logger,
+            CHECK_TIMEOUT,
+            CHECK_SLEEP,
+            || async {
+                match check_registration(
+                    agent.clone(),
+                    ident_a.clone(),
+                    cid,
+                    registration_b_id.clone(),
+                    domain_b.clone(),
+                    canister_b,
+                    State::Available,
+                    false,
+                )
+                .await
+                {
+                    Ok(_) => Ok(()),
+                    Err(v) => bail!("registration is in the wrong state: {:?}", v),
+                }
             }
-        })
+        )
         .await
         .expect("failed to check the registration state");
     });
@@ -779,12 +879,22 @@ pub fn renewal_expiration_test(env: TestEnv) {
 
     rt.block_on(async move {
         // wait for canister to finish installing
-        retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
-            match agent_observes_canister_module(&agent, &cid).await {
-                true => Ok(()),
-                false => panic!("Canister module not available yet"),
+        retry_with_msg_async!(
+            format!(
+                "agent of {} observes canister module {}",
+                app_node.get_public_url().to_string(),
+                cid.to_string()
+            ),
+            &logger,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                match agent_observes_canister_module(&agent, &cid).await {
+                    true => Ok(()),
+                    false => panic!("Canister module not available yet"),
+                }
             }
-        })
+        )
         .await
         .unwrap();
 
@@ -811,23 +921,29 @@ pub fn renewal_expiration_test(env: TestEnv) {
         };
 
         // Check the state of the registration
-        retry_async(&logger, CHECK_TIMEOUT, CHECK_SLEEP, || async {
-            match check_registration(
-                agent.clone(),
-                ident_a.clone(),
-                cid,
-                registration_a_id.clone(),
-                domain_a.clone(),
-                canister_a,
-                State::PendingOrder,
-                false,
-            )
-            .await
-            {
-                Ok(_) => Ok(()),
-                Err(v) => bail!("registration is in the wrong state: {:?}", v),
+        retry_with_msg_async!(
+            "check_registration".to_string(),
+            &logger,
+            CHECK_TIMEOUT,
+            CHECK_SLEEP,
+            || async {
+                match check_registration(
+                    agent.clone(),
+                    ident_a.clone(),
+                    cid,
+                    registration_a_id.clone(),
+                    domain_a.clone(),
+                    canister_a,
+                    State::PendingOrder,
+                    false,
+                )
+                .await
+                {
+                    Ok(_) => Ok(()),
+                    Err(v) => bail!("registration is in the wrong state: {:?}", v),
+                }
             }
-        })
+        )
         .await
         .expect("failed to check the registration state");
 
@@ -845,23 +961,29 @@ pub fn renewal_expiration_test(env: TestEnv) {
             v => panic!("updateRegistration failed: {v:?}, expected ok"),
         };
 
-        retry_async(&logger, CHECK_TIMEOUT, CHECK_SLEEP, || async {
-            match check_registration(
-                agent.clone(),
-                ident_a.clone(),
-                cid,
-                registration_a_id.clone(),
-                domain_a.clone(),
-                canister_a,
-                State::Available,
-                false,
-            )
-            .await
-            {
-                Ok(_) => Ok(()),
-                Err(v) => bail!("registration is in the wrong state: {:?}", v),
+        retry_with_msg_async!(
+            "check_registration".to_string(),
+            &logger,
+            CHECK_TIMEOUT,
+            CHECK_SLEEP,
+            || async {
+                match check_registration(
+                    agent.clone(),
+                    ident_a.clone(),
+                    cid,
+                    registration_a_id.clone(),
+                    domain_a.clone(),
+                    canister_a,
+                    State::Available,
+                    false,
+                )
+                .await
+                {
+                    Ok(_) => Ok(()),
+                    Err(v) => bail!("registration is in the wrong state: {:?}", v),
+                }
             }
-        })
+        )
         .await
         .expect("failed to check the registration state");
 
@@ -879,44 +1001,56 @@ pub fn renewal_expiration_test(env: TestEnv) {
             v => panic!("updateRegistration failed: {v:?}, expected ok"),
         };
 
-        retry_async(&logger, CHECK_TIMEOUT, CHECK_SLEEP, || async {
-            match check_registration(
-                agent.clone(),
-                ident_a.clone(),
-                cid,
-                registration_a_id.clone(),
-                domain_a.clone(),
-                canister_a,
-                State::PendingOrder,
-                false,
-            )
-            .await
-            {
-                Ok(_) => Ok(()),
-                Err(v) => bail!("registration is in the wrong state: {:?}", v),
+        retry_with_msg_async!(
+            "check_registration".to_string(),
+            &logger,
+            CHECK_TIMEOUT,
+            CHECK_SLEEP,
+            || async {
+                match check_registration(
+                    agent.clone(),
+                    ident_a.clone(),
+                    cid,
+                    registration_a_id.clone(),
+                    domain_a.clone(),
+                    canister_a,
+                    State::PendingOrder,
+                    false,
+                )
+                .await
+                {
+                    Ok(_) => Ok(()),
+                    Err(v) => bail!("registration is in the wrong state: {:?}", v),
+                }
             }
-        })
+        )
         .await
         .expect("failed to check the registration state");
 
         // Check that renewal registration has been expired
-        retry_async(&logger, CHECK_TIMEOUT, CHECK_SLEEP, || async {
-            match check_registration(
-                agent.clone(),
-                ident_a.clone(),
-                cid,
-                registration_a_id.clone(),
-                domain_a.clone(),
-                canister_a,
-                State::PendingOrder,
-                true,
-            )
-            .await
-            {
-                Ok(_) => Ok(()),
-                Err(v) => bail!("registration has not been expired (removed): {:?}", v),
+        retry_with_msg_async!(
+            "check_registration".to_string(),
+            &logger,
+            CHECK_TIMEOUT,
+            CHECK_SLEEP,
+            || async {
+                match check_registration(
+                    agent.clone(),
+                    ident_a.clone(),
+                    cid,
+                    registration_a_id.clone(),
+                    domain_a.clone(),
+                    canister_a,
+                    State::PendingOrder,
+                    true,
+                )
+                .await
+                {
+                    Ok(_) => Ok(()),
+                    Err(v) => bail!("registration has not been expired (removed): {:?}", v),
+                }
             }
-        })
+        )
         .await
         .expect("failed to check the registration state");
     });
@@ -969,12 +1103,22 @@ pub fn task_queue_test(env: TestEnv) {
 
     rt.block_on(async move {
         // wait for canister to finish installing
-        retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
-            match agent_observes_canister_module(&agent, &cid).await {
-                true => Ok(()),
-                false => panic!("Canister module not available yet"),
+        retry_with_msg_async!(
+            format!(
+                "agent of {} observes canister module {}",
+                app_node.get_public_url().to_string(),
+                cid.to_string()
+            ),
+            &logger,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                match agent_observes_canister_module(&agent, &cid).await {
+                    true => Ok(()),
+                    false => panic!("Canister module not available yet"),
+                }
             }
-        })
+        )
         .await
         .unwrap();
 
@@ -1017,32 +1161,44 @@ pub fn task_queue_test(env: TestEnv) {
 
         // Test the task queue
         // peek empty task queue
-        retry_async(&logger, CHECK_TIMEOUT, CHECK_SLEEP, || async {
-            match peek_task(agent.clone(), ident_a.clone(), cid).await {
-                PeekTaskResponse::Err(PeekTaskError::NoTasksAvailable) => Ok(()),
-                PeekTaskResponse::Err(err) => {
-                    bail!("peekTask failed: {err:?} expected PeekTaskError::NoTasksAvailable")
-                }
-                PeekTaskResponse::Ok(_) => {
-                    bail!("peekTask failed: got Ok(), expected PeekTaskError::NoTasksAvailable")
+        retry_with_msg_async!(
+            "peek task".to_string(),
+            &logger,
+            CHECK_TIMEOUT,
+            CHECK_SLEEP,
+            || async {
+                match peek_task(agent.clone(), ident_a.clone(), cid).await {
+                    PeekTaskResponse::Err(PeekTaskError::NoTasksAvailable) => Ok(()),
+                    PeekTaskResponse::Err(err) => {
+                        bail!("peekTask failed: {err:?} expected PeekTaskError::NoTasksAvailable")
+                    }
+                    PeekTaskResponse::Ok(_) => {
+                        bail!("peekTask failed: got Ok(), expected PeekTaskError::NoTasksAvailable")
+                    }
                 }
             }
-        })
+        )
         .await
         .expect("retry failed");
 
         // peek without authorisation
-        retry_async(&logger, CHECK_TIMEOUT, CHECK_SLEEP, || async {
-            match peek_task(agent.clone(), ident_b.clone(), cid).await {
-                PeekTaskResponse::Err(PeekTaskError::Unauthorized) => Ok(()),
-                PeekTaskResponse::Err(err) => {
-                    bail!("peekTask failed: {err:?} expected PeekTaskError::Unauthorized")
-                }
-                PeekTaskResponse::Ok(_) => {
-                    bail!("peekTask failed: got Ok(), expected PeekTaskError::Unauthorized")
+        retry_with_msg_async!(
+            "peek task".to_string(),
+            &logger,
+            CHECK_TIMEOUT,
+            CHECK_SLEEP,
+            || async {
+                match peek_task(agent.clone(), ident_b.clone(), cid).await {
+                    PeekTaskResponse::Err(PeekTaskError::Unauthorized) => Ok(()),
+                    PeekTaskResponse::Err(err) => {
+                        bail!("peekTask failed: {err:?} expected PeekTaskError::Unauthorized")
+                    }
+                    PeekTaskResponse::Ok(_) => {
+                        bail!("peekTask failed: got Ok(), expected PeekTaskError::Unauthorized")
+                    }
                 }
             }
-        })
+        )
         .await
         .expect("retry failed");
 
@@ -1093,54 +1249,78 @@ pub fn task_queue_test(env: TestEnv) {
         };
 
         // check if new task appears
-        retry_async(&logger, CHECK_TIMEOUT, CHECK_SLEEP, || async {
-            match peek_task(agent.clone(), ident_a.clone(), cid).await {
-                PeekTaskResponse::Ok(id) => {
-                    if id != registration_a_id {
-                        bail!("peekTask failed: expected {registration_a_id:?}, but got {id:?}")
+        retry_with_msg_async!(
+            "peek task".to_string(),
+            &logger,
+            CHECK_TIMEOUT,
+            CHECK_SLEEP,
+            || async {
+                match peek_task(agent.clone(), ident_a.clone(), cid).await {
+                    PeekTaskResponse::Ok(id) => {
+                        if id != registration_a_id {
+                            bail!("peekTask failed: expected {registration_a_id:?}, but got {id:?}")
+                        }
+                        Ok(())
                     }
-                    Ok(())
+                    v => bail!("peekTask failed: {v:?}, expected ok with a registration id"),
                 }
-                v => bail!("peekTask failed: {v:?}, expected ok with a registration id"),
             }
-        })
+        )
         .await
         .expect("retry failed");
 
         // dispense task
-        retry_async(&logger, CHECK_TIMEOUT, CHECK_SLEEP, || async {
-            match dispense_task(agent.clone(), ident_a.clone(), cid).await {
-                DispenseTaskResponse::Ok(id) => {
-                    if id != registration_a_id {
-                        bail!("dispenseTask failed: expected {registration_a_id:?}, but got {id:?}")
+        retry_with_msg_async!(
+            "dispense task".to_string(),
+            &logger,
+            CHECK_TIMEOUT,
+            CHECK_SLEEP,
+            || async {
+                match dispense_task(agent.clone(), ident_a.clone(), cid).await {
+                    DispenseTaskResponse::Ok(id) => {
+                        if id != registration_a_id {
+                            bail!("dispenseTask failed: expected {registration_a_id:?}, but got {id:?}")
+                        }
+                        Ok(())
                     }
-                    Ok(())
+                    v => bail!("dispenseTask failed: {v:?}, expected ok with a registration id"),
                 }
-                v => bail!("dispenseTask failed: {v:?}, expected ok with a registration id"),
             }
-        })
+        )
         .await
         .expect("retry failed");
 
         // try to dispense a task from empty queue
-        retry_async(&logger, CHECK_TIMEOUT, CHECK_SLEEP, || async {
-            match dispense_task(agent.clone(), ident_a.clone(), cid).await {
-                DispenseTaskResponse::Err(DispenseTaskError::NoTasksAvailable) => Ok(()),
-                v => bail!(
-                    "dispenseTask failed: {v:?}, expected DispenseTaskError::NoTasksAvailable"
-                ),
+        retry_with_msg_async!(
+            "dispense task".to_string(),
+            &logger,
+            CHECK_TIMEOUT,
+            CHECK_SLEEP,
+            || async {
+                match dispense_task(agent.clone(), ident_a.clone(), cid).await {
+                    DispenseTaskResponse::Err(DispenseTaskError::NoTasksAvailable) => Ok(()),
+                    v => bail!(
+                        "dispenseTask failed: {v:?}, expected DispenseTaskError::NoTasksAvailable"
+                    ),
+                }
             }
-        })
+        )
         .await
         .expect("retry failed");
 
         // try to dispense a task without authorization
-        retry_async(&logger, CHECK_TIMEOUT, CHECK_SLEEP, || async {
-            match dispense_task(agent.clone(), ident_b.clone(), cid).await {
-                DispenseTaskResponse::Err(DispenseTaskError::Unauthorized) => Ok(()),
-                v => bail!("dispenseTask failed: {v:?}, expected DispenseTaskError::Unauthorized"),
+        retry_with_msg_async!(
+            "dispense task".to_string(),
+            &logger,
+            CHECK_TIMEOUT,
+            CHECK_SLEEP,
+            || async {
+                match dispense_task(agent.clone(), ident_b.clone(), cid).await {
+                    DispenseTaskResponse::Err(DispenseTaskError::Unauthorized) => Ok(()),
+                    v => bail!("dispenseTask failed: {v:?}, expected DispenseTaskError::Unauthorized"),
+                }
             }
-        })
+        )
         .await
         .expect("retry failed");
 
@@ -1159,24 +1339,36 @@ pub fn task_queue_test(env: TestEnv) {
         };
 
         // peek task queue with only future tasks
-        retry_async(&logger, CHECK_TIMEOUT, CHECK_SLEEP, || async {
-            match peek_task(agent.clone(), ident_a.clone(), cid).await {
-                PeekTaskResponse::Err(PeekTaskError::NoTasksAvailable) => Ok(()),
-                v => bail!("peekTask failed: {v:?} expected PeekTaskError::NoTasksAvailable"),
+        retry_with_msg_async!(
+            "peek task".to_string(),
+            &logger,
+            CHECK_TIMEOUT,
+            CHECK_SLEEP,
+            || async {
+                match peek_task(agent.clone(), ident_a.clone(), cid).await {
+                    PeekTaskResponse::Err(PeekTaskError::NoTasksAvailable) => Ok(()),
+                    v => bail!("peekTask failed: {v:?} expected PeekTaskError::NoTasksAvailable"),
+                }
             }
-        })
+        )
         .await
         .expect("retry failed");
 
         // try to dispense a task from a queue with only future tasks
-        retry_async(&logger, CHECK_TIMEOUT, CHECK_SLEEP, || async {
-            match dispense_task(agent.clone(), ident_a.clone(), cid).await {
-                DispenseTaskResponse::Err(DispenseTaskError::NoTasksAvailable) => Ok(()),
-                v => bail!(
-                    "dispenseTask failed: {v:?}, expected DispenseTaskError::NoTasksAvailable"
-                ),
+        retry_with_msg_async!(
+            "dispense task".to_string(),
+            &logger,
+            CHECK_TIMEOUT,
+            CHECK_SLEEP,
+            || async {
+                match dispense_task(agent.clone(), ident_a.clone(), cid).await {
+                    DispenseTaskResponse::Err(DispenseTaskError::NoTasksAvailable) => Ok(()),
+                    v => bail!(
+                        "dispenseTask failed: {v:?}, expected DispenseTaskError::NoTasksAvailable"
+                    ),
+                }
             }
-        })
+        )
         .await
         .expect("retry failed");
 
@@ -1195,17 +1387,23 @@ pub fn task_queue_test(env: TestEnv) {
         };
 
         // check if the task appears
-        retry_async(&logger, CHECK_TIMEOUT, CHECK_SLEEP, || async {
-            match peek_task(agent.clone(), ident_a.clone(), cid).await {
-                PeekTaskResponse::Ok(id) => {
-                    if id != registration_b_id {
-                        bail!("peekTask failed: expected {registration_b_id:?}, but got {id:?}")
+        retry_with_msg_async!(
+            "peek task".to_string(),
+            &logger,
+            CHECK_TIMEOUT,
+            CHECK_SLEEP,
+            || async {
+                match peek_task(agent.clone(), ident_a.clone(), cid).await {
+                    PeekTaskResponse::Ok(id) => {
+                        if id != registration_b_id {
+                            bail!("peekTask failed: expected {registration_b_id:?}, but got {id:?}")
+                        }
+                        Ok(())
                     }
-                    Ok(())
+                    v => bail!("peekTask failed: {v:?}, expected ok with a registration id"),
                 }
-                v => bail!("peekTask failed: {v:?}, expected ok with a registration id"),
             }
-        })
+        )
         .await
         .expect("retry failed");
 
@@ -1224,12 +1422,18 @@ pub fn task_queue_test(env: TestEnv) {
         };
 
         // peek task queue with only future tasks - should be empty
-        retry_async(&logger, CHECK_TIMEOUT, CHECK_SLEEP, || async {
-            match peek_task(agent.clone(), ident_a.clone(), cid).await {
-                PeekTaskResponse::Err(PeekTaskError::NoTasksAvailable) => Ok(()),
-                v => bail!("peekTask failed: {v:?} expected PeekTaskError::NoTasksAvailable"),
+        retry_with_msg_async!(
+            "peek task".to_string(),
+            &logger,
+            CHECK_TIMEOUT,
+            CHECK_SLEEP,
+            || async {
+                match peek_task(agent.clone(), ident_a.clone(), cid).await {
+                    PeekTaskResponse::Err(PeekTaskError::NoTasksAvailable) => Ok(()),
+                    v => bail!("peekTask failed: {v:?} expected PeekTaskError::NoTasksAvailable"),
+                }
             }
-        })
+        )
         .await
         .expect("retry failed");
     });
@@ -1280,12 +1484,22 @@ pub fn retry_test(env: TestEnv) {
 
     rt.block_on(async move {
         // wait for canister to finish installing
-        retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
-            match agent_observes_canister_module(&agent, &cid).await {
-                true => Ok(()),
-                false => panic!("Canister module not available yet"),
+        retry_with_msg_async!(
+            format!(
+                "agent of {} observes canister module {}",
+                app_node.get_public_url().to_string(),
+                cid.to_string()
+            ),
+            &logger,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                match agent_observes_canister_module(&agent, &cid).await {
+                    true => Ok(()),
+                    false => panic!("Canister module not available yet"),
+                }
             }
-        })
+        )
         .await
         .unwrap();
 
@@ -1312,23 +1526,29 @@ pub fn retry_test(env: TestEnv) {
         };
 
         // Check the state of the registration
-        retry_async(&logger, CHECK_TIMEOUT, CHECK_SLEEP, || async {
-            match check_registration(
-                agent.clone(),
-                ident_a.clone(),
-                cid,
-                registration_a_id.clone(),
-                domain_a.clone(),
-                canister_a,
-                State::PendingOrder,
-                false,
-            )
-            .await
-            {
-                Ok(_) => Ok(()),
-                Err(v) => bail!("registration is in the wrong state: {:?}", v),
+        retry_with_msg_async!(
+            "check_registration".to_string(),
+            &logger,
+            CHECK_TIMEOUT,
+            CHECK_SLEEP,
+            || async {
+                match check_registration(
+                    agent.clone(),
+                    ident_a.clone(),
+                    cid,
+                    registration_a_id.clone(),
+                    domain_a.clone(),
+                    canister_a,
+                    State::PendingOrder,
+                    false,
+                )
+                .await
+                {
+                    Ok(_) => Ok(()),
+                    Err(v) => bail!("registration is in the wrong state: {:?}", v),
+                }
             }
-        })
+        )
         .await
         .expect("failed to check the registration state");
 
@@ -1350,32 +1570,44 @@ pub fn retry_test(env: TestEnv) {
         };
 
         // dispense task
-        retry_async(&logger, CHECK_TIMEOUT, CHECK_SLEEP, || async {
-            match dispense_task(agent.clone(), ident_a.clone(), cid).await {
-                DispenseTaskResponse::Ok(id) => {
-                    if id != registration_a_id {
-                        bail!("dispenseTask failed: expected {registration_a_id:?}, but got {id:?}")
+        retry_with_msg_async!(
+            "dispense task".to_string(),
+            &logger,
+            CHECK_TIMEOUT,
+            CHECK_SLEEP,
+            || async {
+                match dispense_task(agent.clone(), ident_a.clone(), cid).await {
+                    DispenseTaskResponse::Ok(id) => {
+                        if id != registration_a_id {
+                            bail!("dispenseTask failed: expected {registration_a_id:?}, but got {id:?}")
+                        }
+                        Ok(())
                     }
-                    Ok(())
+                    v => bail!("dispenseTask failed: {v:?}, expected ok with a registration id"),
                 }
-                v => bail!("dispenseTask failed: {v:?}, expected ok with a registration id"),
             }
-        })
+        )
         .await
         .expect("retry failed");
 
         // Check that the task gets rescheduled after some time
-        retry_async(&logger, CHECK_TIMEOUT, CHECK_SLEEP, || async {
-            match peek_task(agent.clone(), ident_a.clone(), cid).await {
-                PeekTaskResponse::Ok(id) => {
-                    if id != registration_a_id {
-                        bail!("peekTask failed: expected {registration_a_id:?}, but got {id:?}")
+        retry_with_msg_async!(
+            "peek task".to_string(),
+            &logger,
+            CHECK_TIMEOUT,
+            CHECK_SLEEP,
+            || async {
+                match peek_task(agent.clone(), ident_a.clone(), cid).await {
+                    PeekTaskResponse::Ok(id) => {
+                        if id != registration_a_id {
+                            bail!("peekTask failed: expected {registration_a_id:?}, but got {id:?}")
+                        }
+                        Ok(())
                     }
-                    Ok(())
+                    v => bail!("peekTask failed: {v:?}, expected ok with a registration id"),
                 }
-                v => bail!("peekTask failed: {v:?}, expected ok with a registration id"),
             }
-        })
+        )
         .await
         .expect("retry failed");
     });
@@ -1427,12 +1659,22 @@ pub fn certificate_export_test(env: TestEnv) {
 
     rt.block_on(async move {
         // wait for canister to finish installing
-        retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
-            match agent_observes_canister_module(&agent, &cid).await {
-                true => Ok(()),
-                false => panic!("Canister module not available yet"),
+        retry_with_msg_async!(
+            format!(
+                "agent of {} observes canister module {}",
+                app_node.get_public_url().to_string(),
+                cid.to_string()
+            ),
+            &logger,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                match agent_observes_canister_module(&agent, &cid).await {
+                    true => Ok(()),
+                    false => panic!("Canister module not available yet"),
+                }
             }
-        })
+        )
         .await
         .unwrap();
 

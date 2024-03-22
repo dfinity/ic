@@ -29,6 +29,7 @@ use crate::{
         test_env_api::*,
     },
     orchestrator::utils::upgrade::get_assigned_replica_version,
+    retry_with_msg,
 };
 use anyhow::bail;
 use ic_registry_subnet_type::SubnetType;
@@ -94,15 +95,19 @@ pub fn test(test_env: TestEnv) {
         let session = nns_node
             .block_on_ssh_session()
             .expect("Failed to establish SSH session");
-
-        info!(logger, "Wait for 'hash mismatch' in the replica's log.");
-        retry(test_env.logger(), secs(600), secs(20), || {
-            if have_sha_errors(&session) {
-                Ok(())
-            } else {
-                bail!("Waiting for hash mismatch!")
+        retry_with_msg!(
+            "check for 'hash mismatch' in the replica's log",
+            test_env.logger(),
+            secs(600),
+            secs(20),
+            || {
+                if have_sha_errors(&session) {
+                    Ok(())
+                } else {
+                    bail!("Waiting for hash mismatch!")
+                }
             }
-        })
+        )
         .expect("No hash mismatch in the logs");
     }
 
@@ -154,7 +159,8 @@ pub fn test(test_env: TestEnv) {
     info!(logger, "Waiting for update to finish on all 3 nodes...");
     let updated_version = format!("{}-test", target_version);
     for n in &nodes {
-        retry(
+        retry_with_msg!(
+            format!("check if all 3 nodes have version {}", updated_version),
             test_env.logger(),
             secs(1800),
             secs(60),
@@ -171,7 +177,7 @@ pub fn test(test_env: TestEnv) {
                     }
                 }
                 Err(err) => bail!("Can't read version: {}", err),
-            },
+            }
         )
         .expect("Node hasn't upgraded");
     }

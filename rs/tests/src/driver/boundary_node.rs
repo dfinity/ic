@@ -27,6 +27,7 @@ use crate::{
     },
     k8s::images::upload_image,
     k8s::tnet::TNet,
+    retry_with_msg,
     util::{block_on, create_agent, create_agent_mapping},
 };
 
@@ -782,9 +783,13 @@ impl SshSession for BoundaryNodeSnapshot {
     }
 
     fn block_on_ssh_session(&self) -> Result<Session> {
-        retry(self.env.logger(), SSH_RETRY_TIMEOUT, RETRY_BACKOFF, || {
-            self.get_ssh_session()
-        })
+        retry_with_msg!(
+            format!("get_ssh_session to {}", self.vm.ipv6.to_string()),
+            self.env.logger(),
+            SSH_RETRY_TIMEOUT,
+            RETRY_BACKOFF,
+            || self.get_ssh_session()
+        )
     }
 }
 

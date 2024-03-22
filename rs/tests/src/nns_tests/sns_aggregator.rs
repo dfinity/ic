@@ -15,6 +15,7 @@ use crate::{
         engine::Engine,
         metrics::{LoadTestMetrics, RequestOutcome},
     },
+    retry_with_msg_async,
     sns_client::{openchat_create_service_nervous_system_proposal, SnsClient},
 };
 use anyhow::{bail, Context};
@@ -233,25 +234,26 @@ impl AggregatorClient {
     {
         let start_time = Instant::now();
         let attempts = Arc::new(AtomicUsize::new(0));
-        let result = retry_async(log, timeout, Duration::from_secs(5), {
-            let log = log.clone();
-            let attempts = attempts.clone();
-            let canister = canister.clone();
-            move || {
+        let result =
+            retry_with_msg_async!("http_get_asset", log, timeout, Duration::from_secs(5), {
                 let log = log.clone();
                 let attempts = attempts.clone();
                 let canister = canister.clone();
-                attempts.fetch_add(1, Ordering::Relaxed);
-                async move {
-                    let asset_bytes = Self::http_get_asset(&log, &canister).await?;
-                    info!(&log, "Try parsing the response body ...");
-                    let asset: Value = serde_json::from_slice(asset_bytes.as_slice())?;
-                    extract_sub_asset(asset)
+                move || {
+                    let log = log.clone();
+                    let attempts = attempts.clone();
+                    let canister = canister.clone();
+                    attempts.fetch_add(1, Ordering::Relaxed);
+                    async move {
+                        let asset_bytes = Self::http_get_asset(&log, &canister).await?;
+                        info!(&log, "Try parsing the response body ...");
+                        let asset: Value = serde_json::from_slice(asset_bytes.as_slice())?;
+                        extract_sub_asset(asset)
+                    }
                 }
-            }
-        })
-        .await
-        .map_err(|e| format!("{e:?}"));
+            })
+            .await
+            .map_err(|e| format!("{e:?}"));
         RequestOutcome::new(
             result,
             "aggregator_sub_asset".to_string(),

@@ -23,6 +23,7 @@ end::catalog[] */
 use anyhow::Result;
 use ic_recovery::file_sync_helper::download_binary;
 use ic_tests::driver::{group::SystemTestGroup, test_env::TestEnv, test_env_api::*};
+use ic_tests::retry_with_msg_async;
 use ic_tests::systest;
 use ic_tests::util::block_on;
 use ic_types::ReplicaVersion;
@@ -69,7 +70,7 @@ fn call_unit_test(log: &Logger, binary: &PathBuf, action: Action) {
             error!(
                 log,
                 r#"
-Deserialization of artifacts failed. Modifications to data types that may be part of the CUP 
+Deserialization of artifacts failed. Modifications to data types that may be part of the CUP
 artifact usually need to be performed in three stages. Please ensure the following:
 
 - If you tried to add a new enum variant, make sure that it cannot be used by the replica during
@@ -88,7 +89,7 @@ Afterwards, adapt the `ExhaustiveSet` implementation of your modified data type 
 creates instances in line with the behavior described above. In your custom `ExhaustiveSet`
 implementation, link the ticket tracking the next rollout step of your change.
 
-For instance, when adding a field as `Option` (first rollout), your `ExhaustiveSet` implementation 
+For instance, when adding a field as `Option` (first rollout), your `ExhaustiveSet` implementation
 should link to a ticket implementing the second step, during which the field is set to `Some(_)`
 and the custom `ExhaustiveSet` implementation is removed at the same time.
 "#
@@ -106,7 +107,8 @@ and the custom `ExhaustiveSet` implementation is removed at the same time.
 /// 2. There is a way to automatically update the version of this dependency,
 ///    Ideally such that it is in sync with testnet/mainnet_revisions.json
 fn download_mainnet_binary(log: &Logger, target_dir: &Path) -> PathBuf {
-    block_on(retry_async(
+    block_on(retry_with_msg_async!(
+        "download mainnet binary",
         log,
         READY_WAIT_TIMEOUT,
         RETRY_BACKOFF,
@@ -118,7 +120,7 @@ fn download_mainnet_binary(log: &Logger, target_dir: &Path) -> PathBuf {
                 target_dir,
             )
             .await?)
-        },
+        }
     ))
     .expect("Failed to Download")
 }

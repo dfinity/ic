@@ -30,7 +30,7 @@ use ic_tests::{
         test_env::TestEnv,
         test_env_api::*,
     },
-    systest,
+    retry_with_msg, systest,
 };
 
 use ic_nns_constants::REGISTRY_CANISTER_ID;
@@ -208,21 +208,33 @@ EOT
 
         info!(log, "SSH into both nodes and check that the IP address is configured on the interface ...");
         info!(log, "Check that the orchestrator applied the IPv4 config on both nodes ...");
-        retry(log.clone(), CONFIG_CHECK_TIMEOUT, CONFIG_CHECK_SLEEP, || {
-            wait_for_expected_node_ipv4_config(unassigned_node.clone(), Some(IPv4Config {
-                ip_addr: "193.118.59.142".into(),
-                gateway_ip_addr: "193.118.59.137".into(),
-                prefix_length: 29,
-            }))
-        }).expect("Failed to check the applied IPv4 configuration on the unassigned node");
+        retry_with_msg!(
+            "check that the orchestrator applied the IPv4 config on the unassigned node",
+            log.clone(),
+            CONFIG_CHECK_TIMEOUT,
+            CONFIG_CHECK_SLEEP,
+            || {
+                wait_for_expected_node_ipv4_config(unassigned_node.clone(), Some(IPv4Config {
+                    ip_addr: "193.118.59.142".into(),
+                    gateway_ip_addr: "193.118.59.137".into(),
+                    prefix_length: 29,
+                }))
+            }
+        ).expect("Failed to check the applied IPv4 configuration on the unassigned node");
 
-        retry(log.clone(), CONFIG_CHECK_TIMEOUT, CONFIG_CHECK_SLEEP, || {
-            wait_for_expected_node_ipv4_config(app_node.clone(), Some(IPv4Config {
-                ip_addr: "193.118.59.140".into(),
-                gateway_ip_addr: "193.118.59.137".into(),
-                prefix_length: 29,
-            }))
-        }).expect("Failed to check the applied IPv4 configuration on the app node");
+        retry_with_msg!(
+            "check that the orchestrator applied the IPv4 config on the app node",
+            log.clone(),
+            CONFIG_CHECK_TIMEOUT,
+            CONFIG_CHECK_SLEEP,
+            || {
+                wait_for_expected_node_ipv4_config(app_node.clone(), Some(IPv4Config {
+                    ip_addr: "193.118.59.140".into(),
+                    gateway_ip_addr: "193.118.59.137".into(),
+                    prefix_length: 29,
+                }))
+            }
+        ).expect("Failed to check the applied IPv4 configuration on the app node");
 
         info!(log, "Modifying the IPv4 configuration on the unassigned node ...");
         let payload = UpdateNodeIPv4ConfigDirectlyPayload {
@@ -253,13 +265,19 @@ EOT
         assert_eq!(ipv4_config.prefix_length, 28, "prefix length in the registry is incorrect");
 
         info!(log, "SSH into the node and check that the IP address is configured on the interface ...");
-        retry(log.clone(), CONFIG_CHECK_TIMEOUT, CONFIG_CHECK_SLEEP, || {
-            wait_for_expected_node_ipv4_config(unassigned_node.clone(), Some(IPv4Config {
-                ip_addr: "196.156.107.201".into(),
-                gateway_ip_addr: "196.156.107.193".into(),
-                prefix_length: 28,
-            }))
-        }).expect("Failed to check the applied IPv4 configuration on the unassigned node");
+        retry_with_msg!(
+            "SSH into the node and check that the IP address is configured on the interface",
+            log.clone(),
+            CONFIG_CHECK_TIMEOUT,
+            CONFIG_CHECK_SLEEP,
+            || {
+                wait_for_expected_node_ipv4_config(unassigned_node.clone(), Some(IPv4Config {
+                    ip_addr: "196.156.107.201".into(),
+                    gateway_ip_addr: "196.156.107.193".into(),
+                    prefix_length: 28,
+                }))
+            }
+        ).expect("Failed to check the applied IPv4 configuration on the unassigned node");
 
         info!(log, "Removing the IPv4 configuration on both nodes ...");
         let payload = UpdateNodeIPv4ConfigDirectlyPayload {
@@ -308,12 +326,24 @@ EOT
         assert!(ipv4_config.is_none(), "Failed to remove the IPv4 configuration of the node in the application subnet");
 
         info!(log, "SSH into both nodes and check that no IPv4 address is configured on the interface ...");
-        retry(log.clone(), CONFIG_CHECK_TIMEOUT, CONFIG_CHECK_SLEEP, || {
-            wait_for_expected_node_ipv4_config(unassigned_node.clone(), None)
-        }).expect("Failed to check the applied IPv4 configuration on the unassigned node");
-        retry(log.clone(), CONFIG_CHECK_TIMEOUT, CONFIG_CHECK_SLEEP, || {
-            wait_for_expected_node_ipv4_config(app_node.clone(), None, )
-        }).expect("Failed to check the applied IPv4 configuration on the app node");
+        retry_with_msg!(
+            "SSH into the unassigned node and check that no IPv4 address is configured on the interface",
+            log.clone(),
+            CONFIG_CHECK_TIMEOUT,
+            CONFIG_CHECK_SLEEP,
+            || {
+                wait_for_expected_node_ipv4_config(unassigned_node.clone(), None)
+            }
+        ).expect("Failed to check the applied IPv4 configuration on the unassigned node");
+        retry_with_msg!(
+            "SSH into the app node and check that no IPv4 address is configured on the interface",
+            log.clone(),
+            CONFIG_CHECK_TIMEOUT,
+            CONFIG_CHECK_SLEEP,
+            || {
+                wait_for_expected_node_ipv4_config(app_node.clone(), None, )
+            }
+        ).expect("Failed to check the applied IPv4 configuration on the app node");
     });
 }
 

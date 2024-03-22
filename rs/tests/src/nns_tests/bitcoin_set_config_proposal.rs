@@ -7,6 +7,7 @@ use crate::driver::test_env_api::{
     retry_async, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
     READY_WAIT_TIMEOUT, RETRY_BACKOFF,
 };
+use crate::retry_with_msg_async;
 use crate::util::{block_on, runtime_from_url};
 use candid::{Decode, Encode};
 use canister_test::Canister;
@@ -81,18 +82,24 @@ pub fn test(env: TestEnv) {
         // Check that the config has been updated per the proposal.
         block_on(async {
             // We retry several times in case the proposal took some time to be executed.
-            retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
-                let config = get_bitcoin_config(&agent, network).await;
-                info!(&logger, "Bitcoin config: {:?}", config);
+            retry_with_msg_async!(
+                "check if the bitcoin config has been updated per proposal",
+                &logger,
+                READY_WAIT_TIMEOUT,
+                RETRY_BACKOFF,
+                || async {
+                    let config = get_bitcoin_config(&agent, network).await;
+                    info!(&logger, "Bitcoin config: {:?}", config);
 
-                if config.stability_threshold == NEW_STABILITY_THRESHOLD
-                    && config.api_access == NEW_API_ACCESS_FLAG
-                {
-                    Ok(())
-                } else {
-                    anyhow::bail!("Bitcoin config not updated as expected.")
+                    if config.stability_threshold == NEW_STABILITY_THRESHOLD
+                        && config.api_access == NEW_API_ACCESS_FLAG
+                    {
+                        Ok(())
+                    } else {
+                        anyhow::bail!("Bitcoin config not updated as expected.")
+                    }
                 }
-            })
+            )
             .await
             .unwrap();
         });
