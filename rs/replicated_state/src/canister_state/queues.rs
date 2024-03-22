@@ -183,6 +183,12 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
     ///
     /// Consumes all encountered stale references. Removes all consumed queues from
     /// the iteration order.
+    ///
+    /// Note: While it is slightly unusual to pass a mutable reference to an
+    /// apparently read-only operation such as `peek()`, we need to be able to prune
+    /// stale queue entries whenever we see them or else risk turning this into an
+    /// `O(N)` time operation. We could instead fall back on internal mutability,
+    /// but the additional complexity is unnecessary given the current uses.
     pub fn peek(&mut self) -> Option<(QueueId, &RequestOrResponse)> {
         while let Some((receiver, queue)) = self.queues.front_mut() {
             while let Some(reference) = queue.peek() {
@@ -560,6 +566,12 @@ impl CanisterQueues {
 
     /// Peeks the next inter-canister or ingress message (round-robin) from
     /// `self.subnet_queues`.
+    ///
+    /// Note: While it is slightly unusual to pass a mutable reference to an
+    /// apparently read-only operation such as `peek()`, we need to be able to prune
+    /// stale queue entries whenever we see them or else risk turning this into an
+    /// `O(N)` time operation. We could instead fall back on internal mutability,
+    /// but the additional complexity is unnecessary given the current uses.
     pub(crate) fn peek_input(&mut self) -> Option<CanisterMessage> {
         // Try all 3 inputs: Ingress, Local, and Remote subnets
         for _ in 0..3 {
@@ -779,6 +791,12 @@ impl CanisterQueues {
 
     /// Returns a reference to the first non-stale message in the respective output
     /// queue, if any.
+    ///
+    /// Note: While it is slightly unusual to pass a mutable reference to an
+    /// apparently read-only operation such as `peek()`, we need to be able to prune
+    /// stale queue entries whenever we see them or else risk turning this into an
+    /// `O(N)` time operation. We could instead fall back on internal mutability,
+    /// but the additional complexity is unnecessary given the current uses.
     pub(super) fn peek_output(&mut self, canister_id: &CanisterId) -> Option<&RequestOrResponse> {
         // Get the message queue of this canister.
         let output_queue = &mut self.canister_queues.get_mut(canister_id)?.1;
@@ -1041,7 +1059,7 @@ impl CanisterQueues {
     /// Computes input queues stats from scratch. Used when deserializing and
     /// in `debug_assert!()` checks.
     ///
-    /// Time complexity: `O(num_messages)``.
+    /// Time complexity: `O(num_messages)`.
     fn calculate_input_queues_stats(
         canister_queues: &BTreeMap<CanisterId, (CanisterQueue, CanisterQueue)>,
         pool: &MessagePool,
@@ -1063,7 +1081,7 @@ impl CanisterQueues {
     /// Computes output queues stats from scratch. Used when deserializing and
     /// in `debug_assert!()` checks.
     ///
-    /// Time complexity: `O(num_messages)``.
+    /// Time complexity: `O(num_messages)`.
     fn calculate_output_queues_stats(
         canister_queues: &BTreeMap<CanisterId, (CanisterQueue, CanisterQueue)>,
         pool: &MessagePool,
@@ -1080,7 +1098,7 @@ impl CanisterQueues {
     /// Computes memory usage stats from scratch. Used when deserializing and in
     /// `debug_assert!()` checks.
     ///
-    /// Time complexity: `O(num_messages)``.
+    /// Time complexity: `O(num_messages)`.
     fn calculate_memory_usage_stats(
         canister_queues: &BTreeMap<CanisterId, (CanisterQueue, CanisterQueue)>,
         pool: &MessagePool,
@@ -1116,7 +1134,7 @@ impl CanisterQueues {
 
     /// Queries whether the deadline of any message in the pool has expired.
     ///
-    /// Time complexity: `O(1)``.
+    /// Time complexity: `O(1)`.
     pub fn has_expired_deadlines(&self, current_time: Time) -> bool {
         self.pool.has_expired_deadlines(current_time)
     }

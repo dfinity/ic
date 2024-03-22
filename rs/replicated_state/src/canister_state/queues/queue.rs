@@ -1,9 +1,7 @@
 #![allow(unused)]
 
+use super::message_pool::{MessageId, MessagePool, MessagePoolReference};
 use crate::StateError;
-#[cfg(test)]
-mod tests;
-
 use ic_base_types::CanisterId;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::state::{ingress::v1 as pb_ingress, queues::v1 as pb_queues};
@@ -18,7 +16,8 @@ use std::{
     sync::Arc,
 };
 
-use super::message_pool::{MessageId, MessagePool, MessagePoolReference};
+#[cfg(test)]
+mod tests;
 
 /// Trait for queue items in `InputQueue` and `OutputQueue`. Such items must
 /// either be a response or a request (including timed out requests).
@@ -412,7 +411,7 @@ impl TryFrom<&MessageReference> for MessagePoolReference {
 /// already reserved for it.
 ///
 /// Backpressure should implicitly limit the number of requests (since there
-/// canot be more live requests than callbacks). It is however possible for
+/// cannot be more live requests than callbacks). It is however possible for
 /// requests to time out; produce a reject response in the reverse queue; and
 /// for that response to be consumed while the request still consumes a slot in
 /// the queue; so we must additionally explicitly limit the number of slots used
