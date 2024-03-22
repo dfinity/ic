@@ -1,0 +1,30 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//rs/nervous_system:default_visibility"])
+
+DEPENDENCIES = [
+]
+
+DEV_DEPENDENCIES = DEPENDENCIES + [
+    "@crate_index//:futures",
+    "@crate_index//:tokio",
+]
+
+LIB_SRCS = glob(
+    ["src/**"],
+    exclude = ["src/**/*tests.rs"],
+)
+
+rust_library(
+    name = "lock",
+    srcs = LIB_SRCS,
+    crate_name = "ic_nervous_system_lock",
+    version = "0.0.1",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "lock_test",
+    srcs = glob(["src/**"]),
+    deps = DEV_DEPENDENCIES,
+)

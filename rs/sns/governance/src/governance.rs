@@ -95,6 +95,7 @@ use ic_nervous_system_common::{
 use ic_nervous_system_governance::maturity_modulation::{
     apply_maturity_modulation, MIN_MATURITY_MODULATION_PERMYRIAD,
 };
+use ic_nervous_system_lock::acquire;
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
 use ic_sns_governance_proposal_criticality::ProposalCriticality;
@@ -2056,7 +2057,7 @@ impl Governance {
                         .and_then(|action_auxiliary| {
                             action_auxiliary.unwrap_transfer_sns_treasury_funds_or_err()
                         });
-                self.perform_transfer_sns_treasury_funds(valuation, &transfer)
+                self.perform_transfer_sns_treasury_funds(proposal_id, valuation, &transfer)
                     .await
             }
             Action::MintSnsTokens(mint) => self.perform_mint_sns_tokens(mint).await,
@@ -2564,9 +2565,25 @@ impl Governance {
 
     async fn perform_transfer_sns_treasury_funds(
         &mut self,
+        proposal_id: u64, // This is just to control concurrency.
         valuation: Result<Valuation, GovernanceError>,
         transfer: &TransferSnsTreasuryFunds,
     ) -> Result<(), GovernanceError> {
+        // Only execute one proposal of this type at a time.
+        thread_local! {
+            static IN_PROGRESS_PROPOSAL_ID: RefCell<Option<u64>> = RefCell::new(None);
+        }
+        let release_on_drop = acquire(&IN_PROGRESS_PROPOSAL_ID, proposal_id);
+        if let Err(already_in_progress_proposal_id) = release_on_drop {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                format!(
+                    "Another TransferSnsTreasuryFunds proposal (ID = {}) is already in progress.",
+                    already_in_progress_proposal_id,
+                ),
+            ));
+        }
+
         transfer_sns_treasury_funds_amount_is_small_enough_at_execution_time_or_err(
             transfer,
             valuation?,
@@ -5536,7 +5553,8 @@ mod tests {
     };
     use assert_matches::assert_matches;
     use async_trait::async_trait;
-    use futures::FutureExt;
+    use candid::Principal;
+    use futures::{join, FutureExt};
     use ic_base_types::NumBytes;
     use ic_canister_client_sender::Sender;
     use ic_nervous_system_clients::{
@@ -5552,12 +5570,16 @@ mod tests {
     };
     use ic_nns_constants::SNS_WASM_CANISTER_ID;
     use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
+    use ic_sns_governance_token_valuation::{Token, ValuationFactors};
     use ic_sns_test_utils::itest_helpers::UserInfo;
     use ic_test_utilities_types::ids::canister_test_id;
     use maplit::{btreemap, btreeset};
     use pretty_assertions::assert_eq;
     use proptest::prelude::{prop_assert, proptest};
-    use std::sync::{Arc, Mutex};
+    use std::{
+        sync::{Arc, Mutex},
+        time::{Duration, SystemTime},
+    };
 
     mod fail_stuck_upgrade_in_progress_tests;
 
@@ -5712,6 +5734,139 @@ mod tests {
             "{:#?}",
             g
         );
+    }
+
+    #[tokio::test]
+    async fn test_perform_transfer_sns_treasury_funds_execution_fails_when_another_call_is_in_progress(
+    ) {
+        // Step 0: Define helpers.
+
+        // This expects a transfer_funds call. That call takes 10 ms to complete. This allows us to
+        // make concurrent calls to code under test.
+        struct StubLedger {}
+
+        #[async_trait]
+        impl ICRC1Ledger for StubLedger {
+            async fn transfer_funds(
+                &self,
+                _amount_e8s: u64,
+                _fee_e8s: u64,
+                _from_subaccount: Option<Subaccount>,
+                _to: Account,
+                _memo: u64,
+            ) -> Result<u64, NervousSystemError> {
+                tokio::time::sleep(Duration::from_millis(200)).await;
+                Ok(1)
+            }
+
+            // The rest are unimplemented.
+
+            async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
+                unimplemented!()
+            }
+
+            async fn account_balance(
+                &self,
+                _account: Account,
+            ) -> Result<Tokens, NervousSystemError> {
+                unimplemented!()
+            }
+
+            fn canister_id(&self) -> CanisterId {
+                unimplemented!()
+            }
+        }
+
+        let governance_proto = basic_governance_proto();
+        let mut governance = Governance::new(
+            ValidGovernanceProto::try_from(governance_proto).unwrap(),
+            Box::new(NativeEnvironment::new(None)),
+            Box::new(DoNothingLedger {}), // SNS token ledger.
+            Box::new(StubLedger {}),      // ICP ledger.
+            Box::new(FakeCmc::new()),
+        );
+
+        // Step 2: Run code under test.
+
+        // No need to be aware of the particular values in here; they should not affect the outcome
+        // of this test.
+        let transfer_sns_treasury_funds = TransferSnsTreasuryFunds {
+            amount_e8s: 272,
+            from_treasury: TransferFrom::IcpTreasury as i32,
+            to_principal: Some(PrincipalId::new_user_test_id(181_931_560)),
+            to_subaccount: None,
+            memo: None,
+        };
+        let valuation = Valuation {
+            token: Token::Icp,
+            account: Account {
+                owner: Principal::from(PrincipalId::new_user_test_id(104_622_969)),
+                subaccount: None,
+            },
+            timestamp: SystemTime::now(),
+            valuation_factors: ValuationFactors {
+                tokens: Decimal::from(314),
+                icps_per_token: Decimal::from(2),
+                xdrs_per_icp: Decimal::from(5),
+            },
+        };
+
+        // This lets us (later) make a second manage_neuron method call
+        // while one is in flight, which is essential for this test.
+        let raw_governance = &mut governance as *mut Governance;
+
+        let (result_1, result_2) = join! {
+            // Call the code under test with 0 delay.
+            governance.perform_transfer_sns_treasury_funds(
+                7, // proposal_id,
+                Ok(valuation),
+                &transfer_sns_treasury_funds,
+            ),
+
+            // Make the same call, except this one is delayed by 5 ms. Later, we assert that this
+            // fails with the right Err.
+            async {
+                tokio::time::sleep(Duration::from_millis(100)).await;
+                unsafe {
+                    raw_governance.as_mut().unwrap().perform_transfer_sns_treasury_funds(
+                        7, // proposal_id,
+                        Ok(valuation),
+                        &transfer_sns_treasury_funds,
+                    )
+                    .await
+                }
+            }
+        };
+
+        // Step 3: Inspect results.
+
+        // First call works.
+        assert_eq!(result_1, Ok(()));
+
+        // Second call fails.
+        let err = result_2.unwrap_err();
+        let GovernanceError {
+            error_type,
+            error_message,
+        } = &err;
+
+        assert_eq!(
+            ErrorType::try_from(*error_type),
+            Ok(ErrorType::PreconditionFailed),
+            "{:#?}",
+            err
+        );
+
+        let error_message = error_message.to_lowercase();
+        for term in [
+            "another",
+            "transfersnstreasuryfunds",
+            "7",
+            "already",
+            "in progress",
+        ] {
+            assert!(error_message.contains(term), "{:#?}", err);
+        }
     }
 
     #[tokio::test]
