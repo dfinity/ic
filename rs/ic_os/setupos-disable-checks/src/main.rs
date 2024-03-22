@@ -24,7 +24,7 @@ async fn main() -> Result<(), Error> {
 
     // Open rootfs partition
     println!("Opening root partition");
-    let mut rootfs = ExtPartition::open(cli.image_path, 6).await?;
+    let mut rootfs = ExtPartition::open(cli.image_path, Some(6)).await?;
 
     // Overwrite hardware checks
     println!("Clearing hardware checks");

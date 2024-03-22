@@ -16,24 +16,10 @@ def image_deps(mode):
     Returns:
       A dict containing all file inputs to build this image.
     """
-
     deps = {
-        "bootfs": {
-            # base layer
-            ":rootfs-tree.tar": "/",
-
-            # We will install extra_boot_args onto the system, after substituting the
-            # hash of the root filesystem into it. Track the template (before
-            # substitution) as a dependency so that changes to the template file are
-            # reflected in the overall version hash (the root_hash must include the
-            # version hash, it cannot be the other way around).
-            "//ic-os/boundary-guestos:bootloader/extra_boot_args.template": "/boot/extra_boot_args.template:0644",
-        },
+        # Extra files to be added to rootfs and bootfs
+        "bootfs": {},
         "rootfs": {
-            # base layer
-            ":rootfs-tree.tar": "/",
-
-            # additional files to install
             "//publish/binaries:canary-proxy": "/opt/ic/bin/canary-proxy:0755",
             "//publish/binaries:boundary-node-prober": "/opt/ic/bin/boundary-node-prober:0755",
             "//publish/binaries:certificate-issuer": "/opt/ic/bin/certificate-issuer:0755",

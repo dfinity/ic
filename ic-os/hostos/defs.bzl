@@ -23,15 +23,9 @@ def image_deps(mode, _malicious = False):
     deps = {
         "base_dockerfile": "//ic-os/hostos:rootfs/Dockerfile.base",
 
-        # Define rootfs and bootfs
-        "bootfs": {
-            # base layer
-            ":rootfs-tree.tar": "/",
-        },
+        # Extra files to be added to rootfs and bootfs
+        "bootfs": {},
         "rootfs": {
-            # base layer
-            ":rootfs-tree.tar": "/",
-
             # additional files to install
             "//publish/binaries:vsock_host": "/opt/ic/bin/vsock_host:0755",
             "//publish/binaries:hostos_tool": "/opt/ic/bin/hostos_tool:0755",

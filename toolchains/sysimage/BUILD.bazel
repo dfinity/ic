@@ -11,6 +11,7 @@ exports_files([
     "build_lvm_image.py",
     "build_upgrade_image.py",
     "build_vfat_image.py",
+    "inject_files.py",
     "verity_sign.py",
 ])
 

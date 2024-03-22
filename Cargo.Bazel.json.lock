@@ -1,5 +1,5 @@
 {
-  "checksum": "6e7a8bc26f1567e2cb340365fdfbd0ec84a056dec52301030bca758f89e88fd5",
+  "checksum": "ca222df49230d54ff47a9120bd3301142947c197e289fe07c7161d1d23dbb796",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -14914,6 +14914,10 @@
             {
               "id": "pathdiff 0.2.1",
               "target": "pathdiff"
+            },
+            {
+              "id": "pcre2 0.2.6",
+              "target": "pcre2"
             },
             {
               "id": "pem 1.1.1",
@@ -37011,6 +37015,123 @@
         "version": "0.12.2"
       },
       "license": "MIT OR Apache-2.0"
+    },
+    "pcre2 0.2.6": {
+      "name": "pcre2",
+      "version": "0.2.6",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/pcre2/0.2.6/download",
+          "sha256": "4c9d53a8ea5fc3d3568d3de4bebc12606fd0eb8234c602576f1f1ee4880488a7"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "pcre2",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "pcre2",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "libc 0.2.150",
+              "target": "libc"
+            },
+            {
+              "id": "log 0.4.20",
+              "target": "log"
+            },
+            {
+              "id": "pcre2-sys 0.2.8",
+              "target": "pcre2_sys"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.2.6"
+      },
+      "license": "Unlicense OR MIT"
+    },
+    "pcre2-sys 0.2.8": {
+      "name": "pcre2-sys",
+      "version": "0.2.8",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/pcre2-sys/0.2.8/download",
+          "sha256": "25b8a7b5253a4465b873a21ee7e8d6ec561a57eed5d319621bec36bea35c86ae"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "pcre2_sys",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "pcre2_sys",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "libc 0.2.150",
+              "target": "libc"
+            },
+            {
+              "id": "pcre2-sys 0.2.8",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.2.8"
+      },
+      "build_script_attrs": {
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "cc 1.0.83",
+              "target": "cc"
+            },
+            {
+              "id": "pkg-config 0.3.27",
+              "target": "pkg_config"
+            }
+          ],
+          "selects": {}
+        }
+      },
+      "license": "Unlicense OR MIT"
     },
     "peeking_take_while 0.1.2": {
       "name": "peeking_take_while",
@@ -64789,6 +64910,7 @@
     "parking_lot 0.12.1",
     "paste 1.0.14",
     "pathdiff 0.2.1",
+    "pcre2 0.2.6",
     "pem 1.1.1",
     "pin-project-lite 0.2.13",
     "ping 0.5.0",
