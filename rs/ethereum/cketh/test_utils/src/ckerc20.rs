@@ -58,6 +58,7 @@ impl CkErc20Setup {
             LedgerSuiteOrchestratorInitArg {
                 more_controller_ids: vec![],
                 minter_id: Some(cketh.minter_id.get_ref().0),
+                cycles_management: None,
             },
         );
         Self {

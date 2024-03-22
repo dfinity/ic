@@ -139,6 +139,7 @@ async fn should_install_ledger_suite_with_additional_controllers() {
         State::try_from(InitArg {
             more_controller_ids: vec![OTHER_PRINCIPAL],
             minter_id: None,
+            cycles_management: None,
         })
         .unwrap(),
     );
