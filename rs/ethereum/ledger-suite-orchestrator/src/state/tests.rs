@@ -211,7 +211,7 @@ mod git_commit_hash {
 }
 
 mod validate_config {
-    use crate::candid::InitArg;
+    use crate::candid::{CyclesManagement, InitArg};
     use crate::state::{InvalidStateError, State};
     use candid::Principal;
     use proptest::arbitrary::any;
@@ -232,6 +232,7 @@ mod validate_config {
             let init_arg = InitArg {
                 more_controller_ids: additional_controllers.clone(),
                 minter_id: None,
+                cycles_management: None,
             };
 
             let result = State::try_from(init_arg);
@@ -242,16 +243,42 @@ mod validate_config {
 
     pub fn arb_init_arg(size: impl Into<SizeRange>) -> impl Strategy<Value = InitArg> {
         // at most 10 principals, including the orchestrator's principal
-        (vec(arb_principal(), size), option::of(arb_principal())).prop_map(
-            |(more_controller_ids, minter_id)| InitArg {
-                more_controller_ids,
-                minter_id,
-            },
+        (
+            vec(arb_principal(), size),
+            option::of(arb_principal()),
+            option::of(arb_cycles_management()),
         )
+            .prop_map(
+                |(more_controller_ids, minter_id, cycles_management)| InitArg {
+                    more_controller_ids,
+                    minter_id,
+                    cycles_management,
+                },
+            )
     }
 
     fn arb_principal() -> impl Strategy<Value = Principal> {
         vec(any::<u8>(), 0..=29).prop_map(|bytes| Principal::from_slice(&bytes))
+    }
+
+    fn arb_cycles_management() -> impl Strategy<Value = CyclesManagement> {
+        (arb_nat(), arb_nat(), arb_nat(), arb_nat()).prop_map(
+            |(
+                cycles_for_ledger_creation,
+                cycles_for_archive_creation,
+                cycles_for_index_creation,
+                cycles_top_up_increment,
+            )| CyclesManagement {
+                cycles_for_ledger_creation,
+                cycles_for_archive_creation,
+                cycles_for_index_creation,
+                cycles_top_up_increment,
+            },
+        )
+    }
+
+    fn arb_nat() -> impl Strategy<Value = candid::Nat> {
+        any::<u64>().prop_map(candid::Nat::from)
     }
 }
 

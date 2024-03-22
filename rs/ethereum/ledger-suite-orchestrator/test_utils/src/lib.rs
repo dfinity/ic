@@ -33,6 +33,7 @@ impl Default for LedgerSuiteOrchestrator {
             InitArg {
                 more_controller_ids: vec![],
                 minter_id: None,
+                cycles_management: None,
             },
         )
     }

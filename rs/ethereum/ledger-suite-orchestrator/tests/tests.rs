@@ -184,15 +184,17 @@ fn should_top_up_spawned_canisters() {
     orchestrator.env.tick();
     orchestrator.env.tick();
 
-    let post_top_up_balance_ledger = orchestrator.canister_status_of(ledger_canister_id).cycles();
-    let post_top_up_balance_index = orchestrator.canister_status_of(index_canister_id).cycles();
+    let balance_ledger_after_first_top_up =
+        orchestrator.canister_status_of(ledger_canister_id).cycles();
+    let balance_index_after_first_top_up =
+        orchestrator.canister_status_of(index_canister_id).cycles();
 
     assert_eq!(
-        post_top_up_balance_index - pre_top_up_balance_index,
+        balance_index_after_first_top_up - pre_top_up_balance_index,
         TEN_TRILLIONS as u128
     );
     assert_eq!(
-        post_top_up_balance_ledger - pre_top_up_balance_ledger,
+        balance_ledger_after_first_top_up - pre_top_up_balance_ledger,
         TEN_TRILLIONS as u128
     );
 
@@ -205,16 +207,17 @@ fn should_top_up_spawned_canisters() {
     orchestrator.env.tick();
     orchestrator.env.tick();
 
-    let post_top_up_balance_ledger = orchestrator.canister_status_of(ledger_canister_id).cycles();
-    let post_top_up_balance_index = orchestrator.canister_status_of(index_canister_id).cycles();
+    let balance_ledger_after_second_top_up =
+        orchestrator.canister_status_of(ledger_canister_id).cycles();
+    let balance_index_after_second_top_up =
+        orchestrator.canister_status_of(index_canister_id).cycles();
 
-    // No new top-ups are expected.
     assert_eq!(
-        post_top_up_balance_index - pre_top_up_balance_index,
+        balance_index_after_second_top_up - balance_index_after_first_top_up,
         TEN_TRILLIONS as u128
     );
     assert_eq!(
-        post_top_up_balance_ledger - pre_top_up_balance_ledger,
+        balance_ledger_after_second_top_up - balance_ledger_after_first_top_up,
         TEN_TRILLIONS as u128
     );
 }

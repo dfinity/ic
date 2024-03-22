@@ -16,6 +16,7 @@ pub enum OrchestratorArg {
 pub struct InitArg {
     pub more_controller_ids: Vec<Principal>,
     pub minter_id: Option<Principal>,
+    pub cycles_management: Option<CyclesManagement>,
 }
 
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -126,4 +127,46 @@ pub struct AddCkErc20Token {
     pub address: String,
     pub ckerc20_token_symbol: String,
     pub ckerc20_ledger_id: Principal,
+}
+
+#[derive(
+    CandidType, serde::Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Ord, PartialOrd,
+)]
+pub struct CyclesManagement {
+    pub cycles_for_ledger_creation: Nat,
+    pub cycles_for_archive_creation: Nat,
+    pub cycles_for_index_creation: Nat,
+    pub cycles_top_up_increment: Nat,
+}
+
+impl Default for CyclesManagement {
+    fn default() -> Self {
+        const TEN_TRILLIONS: u64 = 10_000_000_000_000;
+        const HUNDRED_TRILLIONS: u64 = 100_000_000_000_000;
+
+        Self {
+            cycles_for_ledger_creation: Nat::from(HUNDRED_TRILLIONS),
+            cycles_for_archive_creation: Nat::from(HUNDRED_TRILLIONS),
+            cycles_for_index_creation: Nat::from(HUNDRED_TRILLIONS),
+            cycles_top_up_increment: Nat::from(TEN_TRILLIONS),
+        }
+    }
+}
+
+impl CyclesManagement {
+    /// Minimum amount of cycles the orchestrator should always have and some slack.
+    ///
+    /// The chosen amount must ensure that the orchestrator is always able to spawn a new ICRC1 ledger suite.
+    pub fn minimum_orchestrator_cycles(&self) -> Nat {
+        self.cycles_for_ledger_creation.clone()
+            + self.cycles_for_index_creation.clone()
+            + 2_u8 * self.cycles_top_up_increment.clone()
+    }
+
+    /// Minimum amount of cycles all monitored canisters should always have and some slack.
+    ///
+    /// The chosen amount must ensure that the ledger should be able to spawn an archive canister at any time.
+    pub fn minimum_monitored_canister_cycles(&self) -> Nat {
+        self.cycles_for_archive_creation.clone() + 2_u8 * self.cycles_top_up_increment.clone()
+    }
 }

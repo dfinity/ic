@@ -3,7 +3,7 @@ pub mod test_fixtures;
 #[cfg(test)]
 mod tests;
 
-use crate::candid::{AddCkErc20Token, AddErc20Arg, LedgerInitArg, UpgradeArg};
+use crate::candid::{AddCkErc20Token, AddErc20Arg, CyclesManagement, LedgerInitArg, UpgradeArg};
 use crate::logs::DEBUG;
 use crate::logs::INFO;
 use crate::management::IcCanisterRuntime;
@@ -24,6 +24,7 @@ use ic_canister_log::log;
 use ic_ethereum_types::Address;
 use ic_icrc1_index_ng::{IndexArg, InitArg as IndexInitArg};
 use ic_icrc1_ledger::{ArchiveOptions, InitArgs as LedgerInitArgs, LedgerArgument};
+use num_traits::ToPrimitive;
 use serde::{Deserialize, Serialize};
 use std::cell::Cell;
 use std::cmp::Ordering;
@@ -381,16 +382,23 @@ async fn maybe_top_up<R: CanisterRuntime>(runtime: &R) -> Result<(), TaskError> 
     };
     principals.pop();
 
+    let cycles_management = read_state(|s| s.cycles_management().clone());
+    let minimum_orchestrator_cycles =
+        cycles_to_u128(cycles_management.minimum_orchestrator_cycles());
+    let minimum_monitored_canister_cycles =
+        cycles_to_u128(cycles_management.minimum_monitored_canister_cycles());
+    let top_up_amount = cycles_to_u128(cycles_management.cycles_top_up_increment);
+
     log!(INFO, "[maybe_top_up] ",);
     for (canister_id, cycles_result) in principals.iter().zip(results) {
         match cycles_result {
             Ok(balance) => {
-                if balance < MINIMUM_MONITORED_CANISTER_CYCLES as u128
-                    && orchestrator_cycle_balance > MINIMUM_ORCHESTRATOR_CYCLES as u128
+                if balance < minimum_monitored_canister_cycles
+                    && orchestrator_cycle_balance > minimum_orchestrator_cycles
                 {
-                    match runtime.send_cycles(*canister_id, TEN_TRILLIONS.into()) {
+                    match runtime.send_cycles(*canister_id, top_up_amount) {
                         Ok(()) => {
-                            orchestrator_cycle_balance -= TEN_TRILLIONS as u128;
+                            orchestrator_cycle_balance -= top_up_amount;
                             log!(
                                 DEBUG,
                                 "[maybe_top_up] topped up canister {canister_id} with previous balance {balance}"
@@ -421,6 +429,13 @@ async fn maybe_top_up<R: CanisterRuntime>(runtime: &R) -> Result<(), TaskError> 
     Ok(())
 }
 
+fn cycles_to_u128(cycles: Nat) -> u128 {
+    cycles
+        .0
+        .to_u128()
+        .expect("BUG: cycles does not fit in a u128")
+}
+
 async fn install_ledger_suite<R: CanisterRuntime>(
     args: &InstallLedgerSuiteArgs,
     runtime: &R,
@@ -431,19 +446,30 @@ async fn install_ledger_suite<R: CanisterRuntime>(
             ckerc20_token_symbol: args.ledger_init_arg.token_symbol.clone(),
         },
     );
-    let ledger_canister_id = create_canister_once::<Ledger, _>(&args.contract, runtime).await?;
+    let CyclesManagement {
+        cycles_for_ledger_creation,
+        cycles_for_index_creation,
+        cycles_for_archive_creation,
+        ..
+    } = read_state(|s| s.cycles_management().clone());
+    let ledger_canister_id =
+        create_canister_once::<Ledger, _>(&args.contract, runtime, cycles_for_ledger_creation)
+            .await?;
     install_canister_once::<Ledger, _, _>(
         &args.contract,
         &args.ledger_compressed_wasm_hash,
         &LedgerArgument::Init(icrc1_ledger_init_arg(
             args.ledger_init_arg.clone(),
             runtime.id().into(),
+            cycles_for_archive_creation,
         )),
         runtime,
     )
     .await?;
 
-    let _index_principal = create_canister_once::<Index, _>(&args.contract, runtime).await?;
+    let _index_principal =
+        create_canister_once::<Index, _>(&args.contract, runtime, cycles_for_index_creation)
+            .await?;
     let index_arg = Some(IndexArg::Init(IndexInitArg {
         ledger_id: ledger_canister_id,
     }));
@@ -478,6 +504,7 @@ fn record_new_erc20_token_once(contract: Erc20Token, metadata: CanistersMetadata
 fn icrc1_ledger_init_arg(
     ledger_init_arg: LedgerInitArg,
     archive_controller_id: PrincipalId,
+    cycles_for_archive_creation: Nat,
 ) -> LedgerInitArgs {
     use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as LedgerMetadataValue;
 
@@ -493,7 +520,7 @@ fn icrc1_ledger_init_arg(
             "icrc1:logo".to_string(),
             LedgerMetadataValue::from(ledger_init_arg.token_logo),
         )],
-        archive_options: icrc1_archive_options(archive_controller_id),
+        archive_options: icrc1_archive_options(archive_controller_id, cycles_for_archive_creation),
         max_memo_length: ledger_init_arg.max_memo_length,
         feature_flags: ledger_init_arg.feature_flags,
         maximum_number_of_accounts: ledger_init_arg.maximum_number_of_accounts,
@@ -501,7 +528,10 @@ fn icrc1_ledger_init_arg(
     }
 }
 
-fn icrc1_archive_options(archive_controller_id: PrincipalId) -> ArchiveOptions {
+fn icrc1_archive_options(
+    archive_controller_id: PrincipalId,
+    cycles_for_archive_creation: Nat,
+) -> ArchiveOptions {
     ArchiveOptions {
         trigger_threshold: 2_000,
         num_blocks_to_archive: 1_000,
@@ -509,7 +539,12 @@ fn icrc1_archive_options(archive_controller_id: PrincipalId) -> ArchiveOptions {
         max_message_size_bytes: None,
         controller_id: archive_controller_id,
         more_controller_ids: None,
-        cycles_for_archive_creation: Some(HUNDRED_TRILLIONS),
+        cycles_for_archive_creation: Some(
+            cycles_for_archive_creation
+                .0
+                .to_u64()
+                .expect("BUG: cycles for archive creation does not fit in a u64"),
+        ),
         max_transactions_per_response: None,
     }
 }
@@ -517,6 +552,7 @@ fn icrc1_archive_options(archive_controller_id: PrincipalId) -> ArchiveOptions {
 async fn create_canister_once<C, R>(
     contract: &Erc20Token,
     runtime: &R,
+    cycles_for_canister_creation: Nat,
 ) -> Result<Principal, TaskError>
 where
     C: Debug,
@@ -533,7 +569,10 @@ where
     let canister_id = match runtime
         .create_canister(
             controllers_of_children_canisters(runtime),
-            HUNDRED_TRILLIONS,
+            cycles_for_canister_creation
+                .0
+                .to_u64()
+                .expect("BUG: cycles for canister creation does not fit in a u64"),
         )
         .await
     {
@@ -710,8 +749,6 @@ impl TryFrom<crate::candid::Erc20Contract> for Erc20Token {
     type Error = String;
 
     fn try_from(contract: crate::candid::Erc20Contract) -> Result<Self, Self::Error> {
-        use num_traits::cast::ToPrimitive;
-
         Ok(Self(
             ChainId(contract.chain_id.0.to_u64().ok_or("chain_id is not u64")?),
             Address::from_str(&contract.address)?,

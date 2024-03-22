@@ -79,6 +79,7 @@ pub fn ic_xc_ledger_suite_orchestrator_test(env: TestEnv) {
         let init_args = OrchestratorArg::InitArg(InitArg {
             more_controller_ids: vec![ROOT_CANISTER_ID.get().0],
             minter_id: None,
+            cycles_management: None,
         });
         let canister = install_nns_controlled_canister(
             &logger,

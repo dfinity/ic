@@ -3,7 +3,7 @@ pub mod test_fixtures;
 #[cfg(test)]
 mod tests;
 
-use crate::candid::InitArg;
+use crate::candid::{CyclesManagement, InitArg};
 use crate::scheduler::{Erc20Token, Task};
 use crate::storage::memory::{state_memory, StableMemory};
 use candid::Principal;
@@ -406,6 +406,7 @@ impl Storable for ConfigState {
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct State {
     managed_canisters: ManagedCanisters,
+    cycles_management: CyclesManagement,
     more_controller_ids: Vec<Principal>,
     minter_id: Option<Principal>,
     /// Locks preventing concurrent execution timer tasks
@@ -419,6 +420,10 @@ impl State {
 
     pub fn minter_id(&self) -> Option<&Principal> {
         self.minter_id.as_ref()
+    }
+
+    pub fn cycles_management(&self) -> &CyclesManagement {
+        &self.cycles_management
     }
 
     pub fn managed_canisters_iter(&self) -> impl Iterator<Item = (&Erc20Token, &Canisters)> {
@@ -595,10 +600,12 @@ impl TryFrom<InitArg> for State {
         InitArg {
             more_controller_ids,
             minter_id,
+            cycles_management,
         }: InitArg,
     ) -> Result<Self, Self::Error> {
         let state = Self {
             managed_canisters: Default::default(),
+            cycles_management: cycles_management.unwrap_or_default(),
             more_controller_ids,
             minter_id,
             active_tasks: Default::default(),

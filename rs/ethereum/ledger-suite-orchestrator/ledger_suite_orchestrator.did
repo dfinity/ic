@@ -11,6 +11,9 @@ type InitArg = record {
 
     // Canister ID of the minter that will be notified when new ERC-20 tokens are added.
     minter_id: opt principal;
+
+    // Controls the cycles management of the canisters managed by the orchestrator.
+    cycles_management: opt CyclesManagement;
 };
 
 type UpgradeArg = record {
@@ -97,6 +100,20 @@ type ManagedCanisterIds = record {
    index: opt principal;
    archives: vec principal;
 };
+
+type CyclesManagement = record {
+   //Number of cycles when creating a new ICRC1 ledger canister.
+   cycles_for_ledger_creation: nat;
+
+   //Number of cycles when creating a new ICRC1 archive canister.
+   cycles_for_archive_creation: nat;
+
+   //Number of cycles when creating a new ICRC1 index canister.
+   cycles_for_index_creation: nat;
+
+   //Number of cycles to add to a canister managed by the orchestrator whose cycles balance is running low.
+   cycles_top_up_increment: nat;
+}
 
 service : (OrchestratorArg) -> {
 
