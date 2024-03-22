@@ -2,7 +2,7 @@ use candid::{candid_method, Decode};
 use dfn_candid::{candid, candid_one};
 use dfn_core::{
     api::{arg_data, data_certificate, reply},
-    over, over_async, over_may_reject, stable,
+    over, over_async, stable,
 };
 use ic_base_types::NodeId;
 use ic_certified_map::{AsHashTree, HashTree};
@@ -761,55 +761,49 @@ fn update_unassigned_nodes_config_(payload: UpdateUnassignedNodesConfigPayload) 
 #[export_name = "canister_update prepare_canister_migration"]
 fn prepare_canister_migration() {
     check_caller_is_governance_and_log("prepare_canister_migration");
-    over_may_reject(candid_one, |payload: PrepareCanisterMigrationPayload| {
+    over(candid_one, |payload: PrepareCanisterMigrationPayload| {
         prepare_canister_migration_(payload)
     });
 }
 
 #[candid_method(update, rename = "prepare_canister_migration")]
-fn prepare_canister_migration_(payload: PrepareCanisterMigrationPayload) -> Result<(), String> {
+fn prepare_canister_migration_(payload: PrepareCanisterMigrationPayload) {
     if let Err(msg) = registry_mut().prepare_canister_migration(payload) {
-        println!("{} Reject: {}", LOG_PREFIX, msg);
-        return Err(msg.to_string());
+        panic!("{} Prepare canister migration failed: {}", LOG_PREFIX, msg);
     }
     recertify_registry();
-    Ok(())
 }
 
 #[export_name = "canister_update reroute_canister_ranges"]
 fn reroute_canister_ranges() {
     check_caller_is_governance_and_log("reroute_canister_ranges");
-    over_may_reject(candid_one, |payload: RerouteCanisterRangesPayload| {
+    over(candid_one, |payload: RerouteCanisterRangesPayload| {
         reroute_canister_ranges_(payload)
     });
 }
 
 #[candid_method(update, rename = "reroute_canister_ranges")]
-fn reroute_canister_ranges_(payload: RerouteCanisterRangesPayload) -> Result<(), String> {
+fn reroute_canister_ranges_(payload: RerouteCanisterRangesPayload) {
     if let Err(msg) = registry_mut().reroute_canister_ranges(payload) {
-        println!("{} Reject: {}", LOG_PREFIX, msg);
-        return Err(msg);
+        panic!("{} Reroute canister ranges failed: {}", LOG_PREFIX, msg);
     }
     recertify_registry();
-    Ok(())
 }
 
 #[export_name = "canister_update complete_canister_migration"]
 fn complete_canister_migration() {
     check_caller_is_governance_and_log("complete_canister_migration");
-    over_may_reject(candid_one, |payload: CompleteCanisterMigrationPayload| {
+    over(candid_one, |payload: CompleteCanisterMigrationPayload| {
         complete_canister_migration_(payload)
     });
 }
 
 #[candid_method(update, rename = "complete_canister_migration")]
-fn complete_canister_migration_(payload: CompleteCanisterMigrationPayload) -> Result<(), String> {
+fn complete_canister_migration_(payload: CompleteCanisterMigrationPayload) {
     if let Err(msg) = registry_mut().complete_canister_migration(payload) {
-        println!("{} Reject: {}", LOG_PREFIX, msg);
-        return Err(msg);
+        panic!("{} Complete canister migration failed: {}", LOG_PREFIX, msg);
     }
     recertify_registry();
-    Ok(())
 }
 
 #[export_name = "canister_query get_node_providers_monthly_xdr_rewards"]
@@ -878,14 +872,17 @@ fn add_node() {
         LOG_PREFIX,
         dfn_core::api::caller()
     );
-    over_may_reject(candid_one, add_node_);
+    over(candid_one, add_node_);
 }
 
 #[candid_method(update, rename = "add_node")]
-fn add_node_(payload: AddNodePayload) -> Result<NodeId, String> {
-    let result = registry_mut().do_add_node(payload);
+fn add_node_(payload: AddNodePayload) -> NodeId {
+    let node_id = match registry_mut().do_add_node(payload) {
+        Ok(node_id) => node_id,
+        Err(msg) => panic!("{} Add node failed: {}", LOG_PREFIX, msg),
+    };
     recertify_registry();
-    result
+    node_id
 }
 
 #[export_name = "canister_update update_node_directly"]
@@ -896,14 +893,15 @@ fn update_node_directly() {
         LOG_PREFIX,
         dfn_core::api::caller()
     );
-    over_may_reject(candid_one, update_node_directly_);
+    over(candid_one, update_node_directly_);
 }
 
 #[candid_method(update, rename = "update_node_directly")]
-fn update_node_directly_(payload: UpdateNodeDirectlyPayload) -> Result<(), String> {
-    let result = registry_mut().do_update_node_directly(payload);
+fn update_node_directly_(payload: UpdateNodeDirectlyPayload) {
+    if let Err(msg) = registry_mut().do_update_node_directly(payload) {
+        panic!("{} Update node directly failed: {}", LOG_PREFIX, msg);
+    }
     recertify_registry();
-    result
 }
 
 #[candid_method(update, rename = "update_node_domain_directly")]
