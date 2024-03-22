@@ -1,16 +1,10 @@
-use std::{
-    collections::{BTreeSet, HashSet, VecDeque},
-    time::Duration,
-};
-
-use crate::canister_state::queues::queue::MessageReference;
-
 use super::*;
-use assert_matches::assert_matches;
 use core::fmt::Debug;
 use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
-use ic_types::{crypto::threshold_sig::ni_dkg::id, messages::Payload};
+use ic_types::messages::Payload;
 use maplit::btreeset;
+use std::collections::{BTreeSet, VecDeque};
+use std::time::Duration;
 
 #[test]
 fn test_insert() {
@@ -112,7 +106,7 @@ fn test_insert_outbound_request_deadline_rounding() {
 
 #[test]
 fn test_get() {
-    use MessageReference::*;
+    use MessagePoolReference::*;
 
     let mut pool = MessagePool::default();
 
@@ -137,12 +131,12 @@ fn test_get() {
     for (id, msg) in messages.iter() {
         match msg {
             RequestOrResponse::Request(_) => {
-                assert_eq!(Some(msg), pool.get(&Request(*id)));
-                assert_eq!(None, pool.get(&Response(*id)));
+                assert_eq!(Some(msg), pool.get(Request(*id)));
+                assert_eq!(None, pool.get(Response(*id)));
             }
             RequestOrResponse::Response(_) => {
-                assert_eq!(None, pool.get(&Request(*id)));
-                assert_eq!(Some(msg), pool.get(&Response(*id)));
+                assert_eq!(None, pool.get(Request(*id)));
+                assert_eq!(Some(msg), pool.get(Response(*id)));
             }
         }
     }
@@ -163,8 +157,8 @@ fn test_get() {
 
     // Also do a negative test.
     let nonexistemt_id = pool.next_message_id();
-    assert_eq!(None, pool.get(&MessageReference::Request(nonexistemt_id)));
-    assert_eq!(None, pool.get(&MessageReference::Response(nonexistemt_id)));
+    assert_eq!(None, pool.get(Request(nonexistemt_id)));
+    assert_eq!(None, pool.get(Response(nonexistemt_id)));
 }
 
 #[test]
@@ -453,8 +447,7 @@ fn test_take_trims_queues() {
     assert_eq!(ids.len(), pool.deadline_queue.len());
     assert_eq!(ids.len(), pool.size_queue.len());
 
-    while !ids.is_empty() {
-        let id = ids.pop().unwrap();
+    while let Some(id) = ids.pop() {
         assert!(pool.take(MessagePoolReference::Request(id)).is_some());
 
         // Sanity check.
@@ -501,7 +494,7 @@ fn test_shed_message_trims_queues() {
 
     // Insert a bunch of expiring best-effort messages.
     let request = request(time(10));
-    let mut ids: Vec<_> = (0..100)
+    let ids: Vec<_> = (0..100)
         .map(|_| {
             let id = pool.next_message_id();
             pool.insert_inbound(id, request.clone().into());

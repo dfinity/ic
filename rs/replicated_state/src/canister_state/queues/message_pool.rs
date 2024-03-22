@@ -1,4 +1,4 @@
-#![allow(unused)]
+#![allow(dead_code)]
 
 use crate::canister_state::queues::REQUEST_LIFETIME;
 use ic_types::messages::{Request, RequestOrResponse, Response, NO_DEADLINE};
@@ -28,7 +28,7 @@ pub(super) enum MessagePoolReference {
 }
 
 impl MessagePoolReference {
-    /// Returns the ID inside the reference.
+    /// Returns the ID within the reference.
     pub fn id(&self) -> MessageId {
         match self {
             Self::Request(id) => *id,
@@ -315,13 +315,15 @@ impl MessagePool {
             if deadline.0 >= now {
                 break;
             }
-            let id = id.clone();
+            let id = *id;
 
             // Pop the deadline queue entry.
             self.deadline_queue.pop();
 
             // Drop the message, if present.
-            self.take_by_id(id).map(|msg| expired.push((id, msg)));
+            if let Some(msg) = self.take_by_id(id) {
+                expired.push((id, msg))
+            }
         }
 
         self.maybe_trim_queues();
