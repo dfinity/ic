@@ -494,14 +494,15 @@ pub(super) mod tests {
     use super::*;
 
     use crate::ecdsa::test_utils::{
-        fake_sign_with_ecdsa_context_with_quadruple, set_up_ecdsa_payload, EcdsaPayloadTestHelper,
-        TestEcdsaBlockReader, TestEcdsaTranscriptBuilder,
+        fake_ecdsa_key_id, fake_sign_with_ecdsa_context_with_quadruple, set_up_ecdsa_payload,
+        EcdsaPayloadTestHelper, TestEcdsaBlockReader, TestEcdsaTranscriptBuilder,
     };
     use ic_crypto_test_utils_canister_threshold_sigs::{
         generate_key_transcript, CanisterThresholdSigTestEnvironment, IDkgParticipants,
     };
     use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
     use ic_logger::replica_logger::no_op_logger;
+    use ic_management_canister_types::EcdsaKeyId;
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
         consensus::ecdsa::{EcdsaPayload, UnmaskedTranscript},
@@ -512,6 +513,7 @@ pub(super) mod tests {
     fn set_up(
         rng: &mut ReproducibleRng,
         subnet_id: SubnetId,
+        ecdsa_key_ids: Vec<EcdsaKeyId>,
         height: Height,
     ) -> (
         EcdsaPayload,
@@ -519,7 +521,11 @@ pub(super) mod tests {
         TestEcdsaBlockReader,
     ) {
         let (mut ecdsa_payload, env, block_reader) = set_up_ecdsa_payload(
-            rng, subnet_id, /*nodes_count=*/ 4, /*should_create_key_transcript=*/ true,
+            rng,
+            subnet_id,
+            /*nodes_count=*/ 4,
+            ecdsa_key_ids,
+            /*should_create_key_transcript=*/ true,
         );
         ecdsa_payload
             .uid_generator
@@ -534,8 +540,9 @@ pub(super) mod tests {
         let mut rng = reproducible_rng();
         let subnet_id = subnet_test_id(1);
         let height = Height::new(10);
-        let (mut ecdsa_payload, env, _block_reader) = set_up(&mut rng, subnet_id, height);
-        let key_id = ecdsa_payload.key_transcript.key_id.clone();
+        let key_id = fake_ecdsa_key_id();
+        let (mut ecdsa_payload, env, _block_reader) =
+            set_up(&mut rng, subnet_id, vec![key_id.clone()], height);
 
         // 4 Quadruples should be created in advance (in creation + unmatched available = 4)
         let quadruples_to_create_in_advance = 4;
@@ -601,7 +608,9 @@ pub(super) mod tests {
     fn test_ecdsa_update_quadruples_in_creation() {
         let mut rng = reproducible_rng();
         let subnet_id = subnet_test_id(1);
-        let (mut payload, env, mut block_reader) = set_up(&mut rng, subnet_id, Height::from(100));
+        let key_id = fake_ecdsa_key_id();
+        let (mut payload, env, mut block_reader) =
+            set_up(&mut rng, subnet_id, vec![key_id.clone()], Height::from(100));
         let transcript_builder = TestEcdsaTranscriptBuilder::new();
 
         // Start quadruple creation
@@ -609,7 +618,7 @@ pub(super) mod tests {
             &env.nodes.ids::<Vec<_>>(),
             env.newest_registry_version,
             &mut payload.uid_generator,
-            payload.key_transcript.key_id.clone(),
+            key_id,
             &mut payload.quadruples_in_creation,
         );
 
@@ -802,7 +811,9 @@ pub(super) mod tests {
     fn test_ecdsa_update_quadruples_in_creation_unmasked_kappa() {
         let mut rng = reproducible_rng();
         let subnet_id = subnet_test_id(1);
-        let (mut payload, env, mut block_reader) = set_up(&mut rng, subnet_id, Height::from(100));
+        let key_id = fake_ecdsa_key_id();
+        let (mut payload, env, mut block_reader) =
+            set_up(&mut rng, subnet_id, vec![key_id.clone()], Height::from(100));
         let transcript_builder = TestEcdsaTranscriptBuilder::new();
 
         // Start quadruple creation
@@ -811,7 +822,7 @@ pub(super) mod tests {
                 &env.nodes.ids::<Vec<_>>(),
                 env.newest_registry_version,
                 &mut payload.uid_generator,
-                payload.key_transcript.key_id.clone(),
+                key_id,
                 &mut payload.quadruples_in_creation,
             );
 
@@ -964,15 +975,20 @@ pub(super) mod tests {
     }
 
     fn get_current_unmasked_key_transcript(payload: &EcdsaPayload) -> UnmaskedTranscript {
-        let transcript = payload.key_transcript.current.clone();
+        let transcript = payload.single_key_transcript().current.clone();
         transcript.unwrap().unmasked_transcript()
     }
 
     #[test]
     fn test_matched_quadruples_are_not_purged() {
         let mut rng = reproducible_rng();
-        let (mut payload, env, _) = set_up(&mut rng, subnet_test_id(1), Height::from(100));
-        let key_id = payload.key_transcript.key_id.clone();
+        let key_id = fake_ecdsa_key_id();
+        let (mut payload, env, _) = set_up(
+            &mut rng,
+            subnet_test_id(1),
+            vec![key_id.clone()],
+            Height::from(100),
+        );
         let key_transcript = get_current_unmasked_key_transcript(&payload);
 
         let (dealers, receivers) = env.choose_dealers_and_receivers(
@@ -1020,8 +1036,13 @@ pub(super) mod tests {
     #[test]
     fn test_unmatched_quadruples_of_current_key_are_not_purged() {
         let mut rng = reproducible_rng();
-        let (mut payload, _, _) = set_up(&mut rng, subnet_test_id(1), Height::from(100));
-        let key_id = payload.key_transcript.key_id.clone();
+        let key_id = fake_ecdsa_key_id();
+        let (mut payload, _, _) = set_up(
+            &mut rng,
+            subnet_test_id(1),
+            vec![key_id.clone()],
+            Height::from(100),
+        );
         let key_transcript = get_current_unmasked_key_transcript(&payload);
 
         // Create three quadruples of the current key transcript
@@ -1050,8 +1071,13 @@ pub(super) mod tests {
     #[test]
     fn test_unmatched_quadruples_of_different_key_are_purged() {
         let mut rng = reproducible_rng();
-        let (mut payload, env, _) = set_up(&mut rng, subnet_test_id(1), Height::from(100));
-        let key_id = payload.key_transcript.key_id.clone();
+        let key_id = fake_ecdsa_key_id();
+        let (mut payload, env, _) = set_up(
+            &mut rng,
+            subnet_test_id(1),
+            vec![key_id.clone()],
+            Height::from(100),
+        );
 
         let (dealers, receivers) = env.choose_dealers_and_receivers(
             &IDkgParticipants::AllNodesAsDealersAndReceivers,
