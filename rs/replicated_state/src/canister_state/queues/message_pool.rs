@@ -315,13 +315,15 @@ impl MessagePool {
             if deadline.0 >= now {
                 break;
             }
-            let id = id.clone();
+            let id = *id;
 
             // Pop the deadline queue entry.
             self.deadline_queue.pop();
 
             // Drop the message, if present.
-            self.take_by_id(id).map(|msg| expired.push((id, msg)));
+            if let Some(msg) = self.take_by_id(id) {
+                expired.push((id, msg))
+            }
         }
 
         self.maybe_trim_queues();

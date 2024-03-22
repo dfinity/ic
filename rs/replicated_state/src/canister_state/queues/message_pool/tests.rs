@@ -447,8 +447,7 @@ fn test_take_trims_queues() {
     assert_eq!(ids.len(), pool.deadline_queue.len());
     assert_eq!(ids.len(), pool.size_queue.len());
 
-    while !ids.is_empty() {
-        let id = ids.pop().unwrap();
+    while let Some(id) = ids.pop() {
         assert!(pool.take(MessagePoolReference::Request(id)).is_some());
 
         // Sanity check.
