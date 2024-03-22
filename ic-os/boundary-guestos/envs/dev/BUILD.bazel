@@ -11,6 +11,5 @@ boundary_node_icos_build(
     name = "dev",
     ic_version = "//bazel:rc_only_version.txt",
     image_deps_func = image_deps,
-    sev = False,
     visibility = ["//visibility:public"],
 )

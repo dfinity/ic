@@ -166,6 +166,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_a_subnets_co
             ssh_readonly_access: vec![],
             ssh_backup_access: vec![],
             ecdsa_config: None,
+            chain_key_config: None,
         };
 
         // An attacker got a canister that is trying to pass for the governance
@@ -294,6 +295,7 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
                             ssh_readonly_access: vec![],
                             ssh_backup_access: vec![],
                             ecdsa_config: None,
+                            chain_key_config: None,
                         }),
                     )],
                     preconditions: vec![],
@@ -398,6 +400,7 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
                 ssh_readonly_access: vec!["pub_key_0".to_string()],
                 ssh_backup_access: vec!["pub_key_1".to_string()],
                 ecdsa_config: None,
+                chain_key_config: None,
             }
         );
 
@@ -452,6 +455,7 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
             ssh_readonly_access: vec![],
             ssh_backup_access: vec![],
             ecdsa_config: None,
+            chain_key_config: None,
         };
 
         // Just create the registry canister and wait until the subnet_handler ID is
@@ -584,6 +588,8 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
                     }
                     .into()
                 ),
+                // TODO[NNS1-2969]: Use this field rather than ecdsa_config.
+                chain_key_config: None,
                 ..subnet_record
             }
         );

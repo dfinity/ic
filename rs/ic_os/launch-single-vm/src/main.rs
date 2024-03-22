@@ -127,7 +127,6 @@ fn main() {
             public_api: SocketAddr::new(ipv6_addr, 8080),
             node_operator_principal_id: None,
             secret_key_store: None,
-            chip_id: None,
         },
     )]);
 
@@ -148,7 +147,6 @@ fn main() {
         None,
         None,
         Vec::new(),
-        None,
     );
     let initialized_ic = ic_config.initialize().unwrap();
     // The first node from the first subnet will be our only node.

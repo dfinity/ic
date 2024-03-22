@@ -53,6 +53,8 @@ fn default_canister_state_bits() -> CanisterStateBits {
         total_query_stats: TotalQueryStats::default(),
         log_visibility: LogVisibility::default(),
         canister_log: Default::default(),
+        wasm_memory_limit: None,
+        next_snapshot_id: 0,
     }
 }
 
@@ -195,9 +197,10 @@ fn test_encode_decode_non_empty_history() {
 
 #[test]
 fn test_canister_snapshots_decode() {
+    let canister_id = canister_test_id(7);
     let canister_snapshot_bits = CanisterSnapshotBits {
-        snapshot_id: SnapshotId::new(5),
-        canister_id: canister_test_id(7),
+        snapshot_id: SnapshotId::from((canister_id, 5)),
+        canister_id,
         taken_at_timestamp: UNIX_EPOCH,
         canister_version: 3,
         binary_hash: Some(WasmHash::from(&CanisterModule::new(vec![2, 3, 4]))),
@@ -386,20 +389,34 @@ fn random_sorted_unique_heights(max_length: usize) -> impl Strategy<Value = Vec<
 
 #[test]
 fn overlay_height_test() {
+    let page_map_layout = PageMapLayout::<WriteOnly> {
+        canister_root: PathBuf::new(),
+        name_stem: "42".into(),
+        permissions_tag: PhantomData,
+    };
+
     assert_eq!(
-        overlay_height(&PathBuf::from(
-            "/a/b/c/0000000000001000_0000_vmemory.overlay"
-        ))
-        .unwrap(),
+        page_map_layout
+            .overlay_height(&PathBuf::from(
+                "/a/b/c/0000000000001000_0000_vmemory.overlay"
+            ))
+            .unwrap(),
         Height::new(4096)
     );
-    assert!(overlay_height(&PathBuf::from("/a/b/c/vmemory.overlay")).is_err());
+    assert!(page_map_layout
+        .overlay_height(&PathBuf::from("/a/b/c/vmemory.overlay"))
+        .is_err());
     // Test that parsing is consistent with encoding.
     let tmp = tmpdir("canister");
     let canister_layout: CanisterLayout<WriteOnly> =
         CanisterLayout::new(tmp.path().to_owned()).unwrap();
     assert_eq!(
-        overlay_height(&canister_layout.stable_memory_overlay(Height::new(100), Shard::new(3)))
+        page_map_layout
+            .overlay_height(
+                &canister_layout
+                    .stable_memory()
+                    .overlay(Height::new(100), Shard::new(3))
+            )
             .unwrap(),
         Height::new(100)
     );
@@ -407,23 +424,36 @@ fn overlay_height_test() {
 
 #[test]
 fn overlay_shard_test() {
+    let page_map_layout = PageMapLayout::<WriteOnly> {
+        canister_root: PathBuf::new(),
+        name_stem: "42".into(),
+        permissions_tag: PhantomData,
+    };
+
     assert_eq!(
-        overlay_shard(&PathBuf::from(
-            "/a/b/c/0000000000001000_0010_vmemory.overlay"
-        ))
-        .unwrap(),
+        page_map_layout
+            .overlay_shard(&PathBuf::from(
+                "/a/b/c/0000000000001000_0010_vmemory.overlay"
+            ))
+            .unwrap(),
         Shard::new(16)
     );
-    assert!(overlay_shard(&PathBuf::from(
-        "/a/b/c/0000000000001000_0Q10_vmemory.overlay"
-    ))
-    .is_err());
+    assert!(page_map_layout
+        .overlay_shard(&PathBuf::from(
+            "/a/b/c/0000000000001000_0Q10_vmemory.overlay"
+        ))
+        .is_err());
     // Test that parsing is consistent with encoding.
     let tmp = tmpdir("canister");
     let canister_layout: CanisterLayout<WriteOnly> =
         CanisterLayout::new(tmp.path().to_owned()).unwrap();
     assert_eq!(
-        overlay_shard(&canister_layout.stable_memory_overlay(Height::new(100), Shard::new(30)))
+        page_map_layout
+            .overlay_shard(
+                &canister_layout
+                    .stable_memory()
+                    .overlay(Height::new(100), Shard::new(30))
+            )
             .unwrap(),
         Shard::new(30)
     );
@@ -437,7 +467,7 @@ fn read_back_wasm_memory_overlay_file_names(heights in random_sorted_unique_heig
         CanisterLayout::new(tmp.path().to_owned()).unwrap();
     let overlay_names: Vec<PathBuf> = heights
         .iter()
-        .map(|h| canister_layout.vmemory_0_overlay(*h, Shard::new(0)))
+        .map(|h| canister_layout.vmemory_0().overlay(*h, Shard::new(0)))
         .collect();
 
     // Create the overlay files in the directory.
@@ -447,11 +477,11 @@ fn read_back_wasm_memory_overlay_file_names(heights in random_sorted_unique_heig
 
     // Create some other files that should be ignored.
     File::create(canister_layout.raw_path().join("otherfile")).unwrap();
-    File::create(canister_layout.stable_memory_overlay(Height::new(42), Shard::new(0))).unwrap();
-    File::create(canister_layout.wasm_chunk_store_overlay(Height::new(42), Shard::new(0))).unwrap();
-    File::create(canister_layout.vmemory_0()).unwrap();
+    File::create(canister_layout.stable_memory().overlay(Height::new(42), Shard::new(0))).unwrap();
+    File::create(canister_layout.wasm_chunk_store().overlay(Height::new(42), Shard::new(0))).unwrap();
+    File::create(canister_layout.vmemory_0().base()).unwrap();
 
-    let existing_overlays = canister_layout.vmemory_0_overlays().unwrap();
+    let existing_overlays = canister_layout.vmemory_0().existing_overlays().unwrap();
 
     // We expect the list of paths to be the same including ordering.
     prop_assert_eq!(overlay_names, existing_overlays);
@@ -464,7 +494,7 @@ fn read_back_stable_memory_overlay_file_names(heights in random_sorted_unique_he
         CanisterLayout::new(tmp.path().to_owned()).unwrap();
     let overlay_names: Vec<PathBuf> = heights
         .iter()
-        .map(|h| canister_layout.stable_memory_overlay(*h, Shard::new(0)))
+        .map(|h| canister_layout.stable_memory().overlay(*h, Shard::new(0)))
         .collect();
 
     // Create the overlay files in the directory.
@@ -474,11 +504,11 @@ fn read_back_stable_memory_overlay_file_names(heights in random_sorted_unique_he
 
     // Create some other files that should be ignored.
     File::create(canister_layout.raw_path().join("otherfile")).unwrap();
-    File::create(canister_layout.vmemory_0_overlay(Height::new(42), Shard::new(0))).unwrap();
-    File::create(canister_layout.wasm_chunk_store_overlay(Height::new(42), Shard::new(0))).unwrap();
-    File::create(canister_layout.stable_memory_blob()).unwrap();
+    File::create(canister_layout.vmemory_0().overlay(Height::new(42), Shard::new(0))).unwrap();
+    File::create(canister_layout.wasm_chunk_store().overlay(Height::new(42), Shard::new(0))).unwrap();
+    File::create(canister_layout.stable_memory().base()).unwrap();
 
-    let existing_overlays = canister_layout.stable_memory_overlays().unwrap();
+    let existing_overlays = canister_layout.stable_memory().existing_overlays().unwrap();
 
     // We expect the list of paths to be the same including ordering.
     prop_assert_eq!(overlay_names, existing_overlays);
@@ -491,7 +521,7 @@ fn read_back_wasm_chunk_store_overlay_file_names(heights in random_sorted_unique
         CanisterLayout::new(tmp.path().to_owned()).unwrap();
     let overlay_names: Vec<PathBuf> = heights
         .iter()
-        .map(|h| canister_layout.wasm_chunk_store_overlay(*h, Shard::new(0)))
+        .map(|h| canister_layout.wasm_chunk_store().overlay(*h, Shard::new(0)))
         .collect();
 
     // Create the overlay files in the directory.
@@ -501,11 +531,11 @@ fn read_back_wasm_chunk_store_overlay_file_names(heights in random_sorted_unique
 
     // Create some other files that should be ignored.
     File::create(canister_layout.raw_path().join("otherfile")).unwrap();
-    File::create(canister_layout.vmemory_0_overlay(Height::new(42), Shard::new(0))).unwrap();
-    File::create(canister_layout.stable_memory_overlay(Height::new(42), Shard::new(0))).unwrap();
-    File::create(canister_layout.wasm_chunk_store()).unwrap();
+    File::create(canister_layout.vmemory_0().overlay(Height::new(42), Shard::new(0))).unwrap();
+    File::create(canister_layout.stable_memory().overlay(Height::new(42), Shard::new(0))).unwrap();
+    File::create(canister_layout.wasm_chunk_store().base()).unwrap();
 
-    let existing_overlays = canister_layout.wasm_chunk_store_overlays().unwrap();
+    let existing_overlays = canister_layout.wasm_chunk_store().existing_overlays().unwrap();
 
     // We expect the list of paths to be the same including ordering.
     prop_assert_eq!(overlay_names, existing_overlays);

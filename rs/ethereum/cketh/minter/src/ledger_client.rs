@@ -1,4 +1,4 @@
-use crate::erc20::CkTokenSymbol;
+use crate::erc20::{CkErc20Token, CkTokenSymbol};
 use crate::logs::DEBUG;
 use crate::memo::BurnMemo;
 use crate::numeric::LedgerBurnIndex;
@@ -51,16 +51,14 @@ impl LedgerClient {
         }
     }
 
-    pub fn ckerc20_ledger_from_state(state: &State, token_symbol: &CkTokenSymbol) -> Option<Self> {
-        state
-            .find_ck_erc20_ledger(token_symbol)
-            .map(|ledger_canister_id| Self {
-                token_symbol: token_symbol.clone(),
-                client: ICRC1Client {
-                    runtime: CdkRuntime,
-                    ledger_canister_id,
-                },
-            })
+    pub fn ckerc20_ledger(token: &CkErc20Token) -> Self {
+        Self {
+            token_symbol: token.ckerc20_token_symbol.clone(),
+            client: ICRC1Client {
+                runtime: CdkRuntime,
+                ledger_canister_id: token.ckerc20_ledger_id,
+            },
+        }
     }
 
     pub async fn burn_from<A: Into<Nat>>(

@@ -9,7 +9,6 @@ package(default_visibility = [
 DEPENDENCIES = [
     "//rs/config",
     "//rs/crypto/tls_interfaces",
-    "//rs/ic_os/sev",
     "//rs/interfaces",
     "//rs/interfaces/registry",
     "//rs/interfaces/transport",

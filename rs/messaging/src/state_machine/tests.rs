@@ -37,6 +37,7 @@ mock! {
             ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
             ecdsa_quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<QuadrupleId>>,
             current_round: ExecutionRound,
+            next_checkpoint_round: Option<ExecutionRound>,
             current_round_type: ExecutionRoundType,
             registry_settings: &RegistryExecutionSettings,
         ) -> ReplicatedState;
@@ -92,10 +93,11 @@ fn test_fixture(provided_batch: &Batch) -> StateMachineTestFixture {
             eq(provided_batch.ecdsa_subnet_public_keys.clone()),
             eq(provided_batch.ecdsa_quadruple_ids.clone()),
             eq(round),
+            eq(None),
             eq(round_type),
             eq(test_registry_settings()),
         )
-        .returning(|state, _, _, _, _, _, _| state);
+        .returning(|state, _, _, _, _, _, _, _| state);
 
     let mut stream_builder = Box::new(MockStreamBuilder::new());
     stream_builder
@@ -156,7 +158,6 @@ fn state_machine_populates_network_topology() {
             fixture.stream_builder,
             log,
             fixture.metrics,
-            ic_config::execution_environment::QUERY_STATS_EPOCH_LENGTH,
         ));
 
         assert_ne!(
@@ -191,7 +192,6 @@ fn test_delivered_batch(provided_batch: Batch) -> ReplicatedState {
             fixture.stream_builder,
             log,
             fixture.metrics,
-            ic_config::execution_environment::QUERY_STATS_EPOCH_LENGTH,
         ));
 
         state_machine.execute_round(
@@ -292,7 +292,6 @@ fn test_batch_time_impl(
             fixture.stream_builder,
             log,
             fixture.metrics,
-            ic_config::execution_environment::QUERY_STATS_EPOCH_LENGTH,
         );
 
         assert_eq!(

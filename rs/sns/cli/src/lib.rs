@@ -17,13 +17,13 @@ use ic_nns_governance::{
     proposals::create_service_nervous_system::ExecutedCreateServiceNervousSystemProposal,
 };
 use ic_sns_init::pb::v1::SnsInitPayload;
-use std::sync::Once;
 use std::{
     fmt::{Debug, Display},
     io::Write,
     path::{Path, PathBuf},
     process::{exit, Command, Output},
     str::FromStr,
+    sync::Once,
     time::{SystemTime, UNIX_EPOCH},
 };
 use tempfile::NamedTempFile;
@@ -623,9 +623,19 @@ impl<'a> RunCommandError<'a> {
 }
 
 fn run_command<'a>(command: &'a [&'a str]) -> Result<(String, String), RunCommandError<'a>> {
-    let output = std::process::Command::new(command[0])
+    let child = std::process::Command::new(command[0])
         .args(&command[1..command.len()])
-        .output()
+        // STDOUT contains data that needs to be processed by the parent.
+        .stdout(std::process::Stdio::piped())
+        // STDERR may contain information for the end user (e.g., password prompt).
+        .stderr(std::process::Stdio::inherit())
+        // STDIN may be required for the end user to type in their DFX identity password.
+        .stdin(std::process::Stdio::inherit())
+        .spawn()
+        .map_err(|error| RunCommandError::UnableToRunCommand { command, error })?;
+
+    let output = child
+        .wait_with_output()
         .map_err(|error| RunCommandError::UnableToRunCommand { command, error })?;
 
     let std::process::Output {

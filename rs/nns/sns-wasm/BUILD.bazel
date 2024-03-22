@@ -190,7 +190,7 @@ rust_ic_test_suite_with_extra_srcs(
         "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister)",
         "SNS_SWAP_CANISTER_WASM_PATH": "$(rootpath //rs/sns/swap:sns-swap-canister)",
         "IC_ICRC1_ARCHIVE_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/archive:archive_canister)",
-        "LIFELINE_WASM_PATH": "$(rootpath //rs/nns/handlers/lifeline/impl:lifeline_canister)",
+        "LIFELINE_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/lifeline/impl:lifeline_canister)",
         "UNSTOPPABLE_SNS_ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/integration_tests:unstoppable-sns-root-canister)",
     },
     extra_srcs = ["tests/common/mod.rs"],

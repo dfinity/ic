@@ -35,7 +35,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryInto;
 use std::sync::Arc;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct InvalidChainCacheError(String);
 
 pub(super) struct EcdsaBlockReaderImpl {
@@ -544,7 +544,7 @@ mod tests {
         time::UNIX_EPOCH,
     };
 
-    use crate::ecdsa::test_utils::{create_sig_inputs, set_up_ecdsa_payload};
+    use crate::ecdsa::test_utils::{create_sig_inputs, fake_ecdsa_key_id, set_up_ecdsa_payload};
 
     use super::*;
 
@@ -766,15 +766,12 @@ mod tests {
     fn add_available_quadruples_with_key_transcript(
         ecdsa_payload: &mut EcdsaPayload,
         key_transcript: UnmaskedTranscript,
-        key_id: &EcdsaKeyId,
+        _key_id: &EcdsaKeyId,
     ) -> Vec<QuadrupleId> {
         let mut quadruple_ids = vec![];
         for i in 0..10 {
             let sig_inputs = create_sig_inputs(i);
-            let mut quadruple_id = ecdsa_payload
-                .uid_generator
-                .next_quadruple_id(key_id.clone());
-            quadruple_id.1 = Some(key_id.clone());
+            let quadruple_id = ecdsa_payload.uid_generator.next_quadruple_id();
             quadruple_ids.push(quadruple_id.clone());
             let mut quadruple_ref = sig_inputs.sig_inputs_ref.presig_quadruple_ref.clone();
             quadruple_ref.key_unmasked_ref = key_transcript;
@@ -808,19 +805,20 @@ mod tests {
     #[test]
     fn test_get_quadruple_ids_to_deliver() {
         let mut rng = reproducible_rng();
+        let key_id = fake_ecdsa_key_id();
         let (mut ecdsa_payload, env, _) = set_up_ecdsa_payload(
             &mut rng,
             subnet_test_id(1),
             /*nodes_count=*/ 8,
+            vec![key_id.clone()],
             /*should_create_key_transcript=*/ true,
         );
         let current_key_transcript = ecdsa_payload.key_transcript.current.clone().unwrap();
-        let key_id = &ecdsa_payload.key_transcript.key_id.clone();
 
         let quadruple_ids_to_be_delivered = add_available_quadruples_with_key_transcript(
             &mut ecdsa_payload,
             current_key_transcript.unmasked_transcript(),
-            key_id,
+            &key_id,
         );
 
         let (dealers, receivers) = env.choose_dealers_and_receivers(
@@ -840,13 +838,13 @@ mod tests {
         let quadruple_ids_not_to_be_delivered = add_available_quadruples_with_key_transcript(
             &mut ecdsa_payload,
             old_key_transcript,
-            key_id,
+            &key_id,
         );
 
         let block = make_block(Some(ecdsa_payload));
         let mut delivered_map = get_quadruple_ids_to_deliver(&block);
         assert_eq!(delivered_map.len(), 1);
-        let delivered_ids = delivered_map.remove(key_id).unwrap();
+        let delivered_ids = delivered_map.remove(&key_id).unwrap();
 
         assert!(!quadruple_ids_not_to_be_delivered
             .into_iter()
@@ -868,10 +866,12 @@ mod tests {
     #[test]
     fn test_block_without_key_should_not_deliver_quadruples() {
         let mut rng = reproducible_rng();
+        let key_id = fake_ecdsa_key_id();
         let (mut ecdsa_payload, env, _) = set_up_ecdsa_payload(
             &mut rng,
             subnet_test_id(1),
             /*nodes_count=*/ 8,
+            vec![key_id.clone()],
             /*should_create_key_transcript=*/ false,
         );
 
@@ -888,7 +888,6 @@ mod tests {
         );
         let key_transcript_ref =
             UnmaskedTranscript::try_from((Height::from(0), &key_transcript)).unwrap();
-        let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
         add_available_quadruples_with_key_transcript(
             &mut ecdsa_payload,
             key_transcript_ref,

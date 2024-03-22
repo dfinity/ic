@@ -1603,7 +1603,8 @@ impl Validator {
                         Some(timestamp) if now > timestamp + CATCH_UP_HOLD_OF_TIME => {
                             warn!(
                                 self.log,
-                                "Validating CUP after holding it back for {} seconds",
+                                "Validating CUP at height {} after holding it back for {} seconds",
+                                cup_height,
                                 CATCH_UP_HOLD_OF_TIME.as_secs()
                             );
                             Ok(())
@@ -1903,9 +1904,9 @@ pub mod test {
 
             let key_id = fake_ecdsa_key_id();
             // Create three quadruple Ids and contexts, quadruple "2" will remain unmatched.
-            let quadruple_id1 = QuadrupleId(1, Some(key_id.clone()));
-            let quadruple_id2 = QuadrupleId(2, Some(key_id.clone()));
-            let quadruple_id3 = QuadrupleId(3, Some(key_id.clone()));
+            let quadruple_id1 = QuadrupleId::new(1);
+            let quadruple_id2 = QuadrupleId::new(2);
+            let quadruple_id3 = QuadrupleId::new(3);
 
             let contexts = vec![
                 fake_sign_with_ecdsa_context_with_quadruple(

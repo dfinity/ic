@@ -78,7 +78,6 @@ members = [
   "rs/crypto/internal/crypto_lib/sha2",
   "rs/crypto/secrets_containers",
   "rs/crypto/internal/crypto_lib/threshold_sig/bls12_381",
-  "rs/crypto/internal/crypto_lib/threshold_sig/bls12_381/der_utils",
   "rs/crypto/internal/crypto_lib/threshold_sig/tecdsa",
   "rs/crypto/internal/crypto_lib/threshold_sig/tecdsa/test_utils",
   "rs/crypto/internal/crypto_lib/tls",
@@ -130,6 +129,7 @@ members = [
   "rs/ic_os/fstrim_tool",
   "rs/ic_os/guestos_tool",
   "rs/ic_os/hostos_tool",
+  "rs/ic_os/inject_files",
   "rs/ic_os/launch-single-vm",
   "rs/ic_os/network",
   "rs/ic_os/nss_icos",
@@ -137,13 +137,10 @@ members = [
   "rs/ic_os/partition_tools",
   "rs/ic_os/setupos-disable-checks",
   "rs/ic_os/setupos_tool",
-  "rs/ic_os/sev",
   "rs/ic_os/utils",
-  "rs/ic_os/snptool",
   "rs/ic_os/vsock/guest",
   "rs/ic_os/vsock/host",
   "rs/ic_os/vsock/vsock_lib",
-  "rs/identity",
   "rs/ingress_manager",
   "rs/interfaces",
   "rs/interfaces/adapter_client",
@@ -340,6 +337,7 @@ members = [
   "rs/test_utilities/tmpdir",
   "rs/tests",
   "rs/tests/httpbin-rs",
+  "rs/tests/nested",
   "rs/tests/nns/sns",
   "rs/tests/nns/ic_mainnet_nns_recovery",
   "rs/tests/test_canisters/http_counter",
@@ -443,7 +441,7 @@ chrono = { version = "0.4.31", default-features = false, features = [
   "serde",
 ] }
 ciborium = "0.2.1"
-clap = { version = "3.2.25", features = ["derive"] }
+clap = { version = "4.4.6", features = ["derive", "string"] }
 cloudflare = { version = "0.9.1", default_features = false, features = [
   "rustls-tls",
 ] }
@@ -456,7 +454,7 @@ hyper-rustls = { version = "0.24.2", features = ["http2"] }
 hyper-socks2 = { version = "0.8.0", default_features = false, features = [
   "rustls",
 ] }
-ic-agent = { version = "0.33.0", features = ["hyper"] }
+ic-agent = { version = "0.34.0", features = ["hyper"] }
 ic-cdk = "0.13.1"
 ic-cdk-macros = "0.9.0"
 ic-cdk-timers = "0.7.0"
@@ -466,7 +464,7 @@ ic-http-certification = "2.3.0"
 ic-certification = "2.3.0"
 ic-cbor = "2.3.0"
 ic-stable-structures = "0.6.2"
-ic-utils = { version = "0.33.0", features = ["raw"] }
+ic-utils = { version = "0.34.0", features = ["raw"] }
 ic-btc-interface = { git = "https://github.com/dfinity/bitcoin-canister", rev = "9b239d1d67253eb14a35be6061e3967d5ec9db9d" }
 indexmap = "2.1.0"
 itertools = "0.12.0"
@@ -486,6 +484,7 @@ mockito = "1.2.0"
 minicbor = { version = "0.19.1", features = ["alloc", "derive"] }
 minicbor-derive = "0.13.0"
 nix = "0.24.3"
+num-traits = { version = "0.2.14", features = ["libm"] }
 p256 = { version = "0.13", default_features = false, features = [
   "arithmetic",
   "ecdsa",

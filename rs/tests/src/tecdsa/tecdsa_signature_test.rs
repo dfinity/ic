@@ -287,7 +287,7 @@ pub fn test_threshold_ecdsa_signature_fails_without_cycles(env: TestEnv) {
         .unwrap_err();
         assert_eq!(
             error,
-            AgentError::ReplicaError(RejectResponse {
+            AgentError::CertifiedReject(RejectResponse {
                 reject_code: RejectCode::CanisterReject,
                 reject_message: format!(
                     "sign_with_ecdsa request sent with {} cycles, but {} cycles are required.",
@@ -362,7 +362,7 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
             get_public_key_with_retries(make_key(KEY_ID2), &msg_can, log, 20)
                 .await
                 .unwrap_err(),
-            AgentError::ReplicaError(RejectResponse {
+            AgentError::CertifiedReject(RejectResponse {
                 reject_code: RejectCode::CanisterReject,
                 reject_message: "Unable to route management canister request ecdsa_public_key: EcdsaKeyError(\"Requested ECDSA key: Secp256k1:some_other_key, existing keys: []\")".to_string(),
                 error_code: None,
@@ -378,7 +378,7 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
             )
             .await
             .unwrap_err(),
-            AgentError::ReplicaError(RejectResponse {
+            AgentError::CertifiedReject(RejectResponse {
                 reject_code: RejectCode::CanisterReject,
                 reject_message: "Unable to route management canister request sign_with_ecdsa: EcdsaKeyError(\"Requested ECDSA key: Secp256k1:some_other_key, existing keys with signing enabled: []\")".to_string(),
                 error_code: None,
@@ -480,7 +480,7 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
             if let Err(sig_err) = sig_result {
                 assert_eq!(
                     sig_err,
-                    AgentError::ReplicaError(RejectResponse {
+                    AgentError::CertifiedReject(RejectResponse {
                         reject_code: RejectCode::CanisterReject,
                         reject_message: "Unable to route management canister request sign_with_ecdsa: EcdsaKeyError(\"Requested ECDSA key: Secp256k1:some_other_key, existing keys with signing enabled: []\")".to_string(),
                         error_code: None
@@ -572,7 +572,7 @@ pub fn test_threshold_ecdsa_signature_timeout(env: TestEnv) {
         .unwrap_err();
         assert_eq!(
             error,
-            AgentError::ReplicaError(RejectResponse {
+            AgentError::CertifiedReject(RejectResponse {
                 reject_code: RejectCode::CanisterReject,
                 reject_message: "Signature request expired".to_string(),
                 error_code: None

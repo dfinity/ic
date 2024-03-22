@@ -17,8 +17,8 @@ use bytes::Buf;
 use candid::Principal;
 use clap::Args;
 use futures::task::{Context as FutContext, Poll};
-use http::header::{HeaderMap, HeaderValue, CONTENT_LENGTH};
-use http_body::Body as HttpBody;
+use http::header::{HeaderValue, CONTENT_LENGTH};
+use http_body::{Body as HttpBody, Frame};
 use hyper::{self, StatusCode};
 use ic_agent::Agent;
 use ic_response_verification::types::VerificationInfo;
@@ -196,7 +196,7 @@ impl Runner {
             }))),
         );
 
-        axum::Server::bind(&self.metrics_addr.unwrap())
+        axum_server::bind(self.metrics_addr.unwrap())
             .serve(add_trace_layer(metrics_router).into_make_service())
             .await
             .context("failed to start metrics server")?;
@@ -257,22 +257,26 @@ where
     type Data = D;
     type Error = E;
 
-    fn poll_data(
-        mut self: Pin<&mut Self>,
+    fn poll_frame(
+        self: Pin<&mut Self>,
         cx: &mut FutContext<'_>,
-    ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
-        let poll = self.inner.as_mut().poll_data(cx);
+    ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
+        let self_mut = Pin::get_mut(self);
+        let poll = self_mut.inner.as_mut().poll_frame(cx);
 
         match &poll {
             // There is still some data available
             Poll::Ready(Some(v)) => match v {
                 Ok(buf) => {
-                    self.bytes_sent += buf.remaining() as u64;
+                    self_mut.bytes_sent += buf
+                        .data_ref()
+                        .map(|d| d.remaining() as u64)
+                        .unwrap_or_default();
 
                     // Check if we already got what was expected
-                    if let Some(v) = self.content_length {
-                        if self.bytes_sent >= v {
-                            (self.callback)(self.bytes_sent, Ok(()));
+                    if let Some(v) = self_mut.content_length {
+                        if self_mut.bytes_sent >= v {
+                            (self_mut.callback)(self_mut.bytes_sent, Ok(()));
                         }
                     }
                 }
@@ -280,13 +284,13 @@ where
                 // Error occured, execute callback
                 Err(e) => {
                     // Error is not Copy/Clone so use string instead
-                    (self.callback)(self.bytes_sent, Err(e.to_string()));
+                    (self_mut.callback)(self_mut.bytes_sent, Err(e.to_string()));
                 }
             },
 
             // Nothing left, execute callback
             Poll::Ready(None) => {
-                (self.callback)(self.bytes_sent, Ok(()));
+                (self_mut.callback)(self_mut.bytes_sent, Ok(()));
             }
 
             // Do nothing
@@ -294,13 +298,6 @@ where
         }
 
         poll
-    }
-
-    fn poll_trailers(
-        mut self: Pin<&mut Self>,
-        cx: &mut FutContext<'_>,
-    ) -> Poll<Result<Option<HeaderMap>, Self::Error>> {
-        self.inner.as_mut().poll_trailers(cx)
     }
 
     fn size_hint(&self) -> http_body::SizeHint {
@@ -345,7 +342,7 @@ impl HttpMetricParams {
 pub async fn with_metrics_middleware(
     State(metric_params): State<HttpMetricParams>,
     request: Request<Body>,
-    next: Next<Body>,
+    next: Next,
 ) -> impl IntoResponse {
     let start = Instant::now();
     let response = next.run(request).await;

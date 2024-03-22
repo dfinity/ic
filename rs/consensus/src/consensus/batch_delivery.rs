@@ -202,8 +202,22 @@ pub fn deliver_batches(
             failed_blockmakers: blockmaker_ranking[0..(block.rank.0 as usize)].to_vec(),
         };
 
+        let Some(summary_block) = pool.dkg_summary_block_for_finalized_height(height) else {
+            warn!(
+                every_n_seconds => 30,
+                log,
+                "Do not deliver height {} because no summary block was found. \
+                Finalized height: {}",
+                height,
+                finalized_height
+            );
+            break;
+        };
+        let dkg_summary = &summary_block.payload.as_ref().as_summary().dkg;
+        let next_checkpoint_height = dkg_summary.get_next_start_height();
         let batch = Batch {
             batch_number: height,
+            next_checkpoint_height: Some(next_checkpoint_height),
             requires_full_state_hash,
             messages: batch_messages,
             randomness,

@@ -3,8 +3,8 @@ pub mod test_fixtures;
 #[cfg(test)]
 mod tests;
 
-use crate::candid::InitArg;
-use crate::scheduler::{Erc20Token, Task, Tasks};
+use crate::candid::{CyclesManagement, InitArg};
+use crate::scheduler::{Erc20Token, Task};
 use crate::storage::memory::{state_memory, StableMemory};
 use candid::Principal;
 use ic_cdk::trap;
@@ -250,6 +250,18 @@ impl Canisters {
     pub fn archive_canister_ids(&self) -> &[Principal] {
         &self.archives
     }
+
+    pub fn collect_principals(&self) -> Vec<Principal> {
+        let mut result: Vec<Principal> = vec![];
+        if let Some(ledger_principal) = self.ledger_canister_id() {
+            result.push(*ledger_principal);
+        }
+        if let Some(index_principal) = self.index_canister_id() {
+            result.push(*index_principal);
+        }
+        result.extend(self.archives.clone());
+        result
+    }
 }
 
 #[derive(Debug)]
@@ -394,17 +406,14 @@ impl Storable for ConfigState {
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct State {
     managed_canisters: ManagedCanisters,
-    tasks: Tasks,
-    processing_tasks_guard: bool,
+    cycles_management: CyclesManagement,
     more_controller_ids: Vec<Principal>,
     minter_id: Option<Principal>,
+    /// Locks preventing concurrent execution timer tasks
+    pub active_tasks: BTreeSet<Task>,
 }
 
 impl State {
-    pub fn tasks(&self) -> &Tasks {
-        &self.tasks
-    }
-
     pub fn more_controller_ids(&self) -> &[Principal] {
         &self.more_controller_ids
     }
@@ -413,20 +422,8 @@ impl State {
         self.minter_id.as_ref()
     }
 
-    pub fn add_task(&mut self, task: Task) {
-        self.tasks.add_task(task);
-    }
-
-    pub fn set_tasks(&mut self, tasks: Tasks) {
-        self.tasks = tasks;
-    }
-
-    pub fn maybe_set_timer_guard(&mut self) -> bool {
-        if self.processing_tasks_guard {
-            return false;
-        }
-        self.processing_tasks_guard = true;
-        true
+    pub fn cycles_management(&self) -> &CyclesManagement {
+        &self.cycles_management
     }
 
     pub fn managed_canisters_iter(&self) -> impl Iterator<Item = (&Erc20Token, &Canisters)> {
@@ -439,10 +436,6 @@ impl State {
 
     fn managed_canisters_mut(&mut self, contract: &Erc20Token) -> Option<&mut Canisters> {
         self.managed_canisters.canisters.get_mut(contract)
-    }
-
-    pub fn unset_timer_guard(&mut self) {
-        self.processing_tasks_guard = false;
     }
 
     pub fn managed_status<'a, T: 'a>(
@@ -607,14 +600,15 @@ impl TryFrom<InitArg> for State {
         InitArg {
             more_controller_ids,
             minter_id,
+            cycles_management,
         }: InitArg,
     ) -> Result<Self, Self::Error> {
         let state = Self {
             managed_canisters: Default::default(),
-            tasks: Default::default(),
-            processing_tasks_guard: false,
+            cycles_management: cycles_management.unwrap_or_default(),
             more_controller_ids,
             minter_id,
+            active_tasks: Default::default(),
         };
         state.validate_config()?;
         Ok(state)

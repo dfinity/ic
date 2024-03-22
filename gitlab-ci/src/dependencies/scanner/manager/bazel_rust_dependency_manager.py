@@ -376,7 +376,8 @@ class BazelRustDependencyManager(DependencyManager):
         # 5nns-dapp v2.0.29 (/Users/tmu/Projects/nns-dapp/rs/backend)
         # 4nns-dapp v2.0.29 (/Users/tmu/Projects/nns-dapp/rs/backend)
         if not tree:
-            logging.error(f"cargo tree is empty for {vulnerable_dependency}")
+            logging.error("cargo tree is empty for a vulnerable dependency.")
+            logging.debug(f"cargo tree is empty for {vulnerable_dependency}")
             return [], []
         while tree[0] != "0":
             _, tree = tree.split("\n", 1)
@@ -419,7 +420,8 @@ class BazelRustDependencyManager(DependencyManager):
                     current_chain.append(dependency_or_project)
                 current_depth = depth
         except (RuntimeError, ValueError):
-            logging.error(f"error while parsing 1st level deps & projects from cargo tree {tree}\n{traceback.format_exc()}")
+            logging.error("error while parsing 1st level deps & projects from cargo tree.")
+            logging.debug(f"error while parsing 1st level deps & projects from cargo tree {tree}\n{traceback.format_exc()}")
 
         return list(first_level_dependencies.values()), list(projects)
 

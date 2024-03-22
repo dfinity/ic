@@ -8,7 +8,7 @@ use std::str::FromStr;
 
 /// The network_identifier specifies which network a particular object is
 /// associated with.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
 pub struct NetworkIdentifier {
     pub blockchain: String,
@@ -222,16 +222,6 @@ pub struct AccountIdentifier {
     pub metadata: Option<ObjectMap>,
 }
 
-impl AccountIdentifier {
-    pub fn new(address: String, subaccount: Option<String>) -> AccountIdentifier {
-        AccountIdentifier {
-            address,
-            sub_account: subaccount.map(SubAccountIdentifier::new),
-            metadata: None,
-        }
-    }
-}
-
 impl TryFrom<AccountIdentifier> for icrc_ledger_types::icrc1::account::Account {
     type Error = anyhow::Error;
     fn try_from(value: AccountIdentifier) -> Result<Self, Self::Error> {
@@ -260,8 +250,8 @@ impl From<icrc_ledger_types::icrc1::account::Account> for AccountIdentifier {
     fn from(value: icrc_ledger_types::icrc1::account::Account) -> Self {
         Self {
             address: value.owner.to_string(),
-            sub_account: value.subaccount.map(|s| SubAccountIdentifier {
-                address: hex::encode(s),
+            sub_account: Some(SubAccountIdentifier {
+                address: hex::encode(value.effective_subaccount()),
                 metadata: None,
             }),
             metadata: None,
@@ -285,15 +275,6 @@ pub struct SubAccountIdentifier {
     /// differing metadata will not be considered equal by clients.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<ObjectMap>,
-}
-
-impl SubAccountIdentifier {
-    pub fn new(address: String) -> SubAccountIdentifier {
-        SubAccountIdentifier {
-            address,
-            metadata: None,
-        }
-    }
 }
 
 /// CoinIdentifier uniquely identifies a Coin.

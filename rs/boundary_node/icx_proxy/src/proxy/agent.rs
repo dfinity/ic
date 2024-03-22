@@ -7,11 +7,12 @@ use std::{
 };
 
 use anyhow::bail;
+use axum::body::Body;
 use axum::extract::{FromRef, State};
 use bytes::Bytes;
 use candid::Principal;
 use http::header::{HeaderValue, HOST};
-use hyper::{Body, Request, Response, StatusCode, Uri};
+use hyper::{Request, Response, StatusCode, Uri};
 use ic_agent::{
     agent::{Agent, RejectCode, RejectResponse},
     AgentError,
@@ -419,7 +420,7 @@ async fn process_request<V: Validate + 'static>(
 fn handle_result(
     result: Result<(AgentResponseAny,), AgentError>,
 ) -> Result<AgentResponseAny, Result<Response<Body>, anyhow::Error>> {
-    use AgentError::{ReplicaError, ResponseSizeExceededLimit};
+    use AgentError::{CertifiedReject, ResponseSizeExceededLimit, UncertifiedReject};
     use RejectCode::DestinationInvalid;
 
     let result = match result {
@@ -433,7 +434,7 @@ fn handle_result(
 
     let response = match result {
         // Turn all `DestinationInvalid`s into 404
-        ReplicaError(RejectResponse {
+        CertifiedReject(RejectResponse {
             reject_code: DestinationInvalid,
             reject_message,
             ..
@@ -448,7 +449,36 @@ fn handle_result(
 
         // If the result is a Replica error, returns the 500 code and message. There is no information
         // leak here because a user could use `dfx` to get the same reply.
-        ReplicaError(response) => {
+        CertifiedReject(response) => {
+            let msg = format!(
+                "Replica Error: reject code {:?}, message {}, error code {:?}",
+                response.reject_code, response.reject_message, response.error_code,
+            );
+
+            span.record("error", &msg);
+
+            Response::builder()
+                .status(StatusCode::BAD_GATEWAY)
+                .body(msg.into())
+                .unwrap()
+        }
+
+        UncertifiedReject(RejectResponse {
+            reject_code: DestinationInvalid,
+            reject_message,
+            ..
+        }) => {
+            span.record("error", format!("Destination invalid: {reject_message}"));
+
+            Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .body(reject_message.into())
+                .unwrap()
+        }
+
+        // If the result is a Replica error, returns the 500 code and message. There is no information
+        // leak here because a user could use `dfx` to get the same reply.
+        UncertifiedReject(response) => {
             let msg = format!(
                 "Replica Error: reject code {:?}, message {}, error code {:?}",
                 response.reject_code, response.reject_message, response.error_code,

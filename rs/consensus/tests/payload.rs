@@ -38,6 +38,7 @@ use std::time::Duration;
 /// numbers and payloads
 #[test]
 fn consensus_produces_expected_batches() {
+    const DKG_INTERVAL_LENGTH: u64 = 4;
     ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
         let ingress0 = SignedIngressBuilder::new().nonce(0).build();
         let ingress1 = SignedIngressBuilder::new().nonce(1).build();
@@ -107,7 +108,12 @@ fn consensus_produces_expected_batches() {
 
         let registry_client = setup_registry(
             replica_config.subnet_id,
-            vec![(1, SubnetRecordBuilder::from(&[node_test_id(0)]).build())],
+            vec![(
+                1,
+                SubnetRecordBuilder::from(&[node_test_id(0)])
+                    .with_dkg_interval_length(DKG_INTERVAL_LENGTH)
+                    .build(),
+            )],
         );
         let summary = dkg::make_genesis_summary(&*registry_client, replica_config.subnet_id, None);
         let consensus_pool = Arc::new(RwLock::new(consensus_pool::ConsensusPoolImpl::new(
@@ -203,10 +209,42 @@ fn consensus_produces_expected_batches() {
         driver.step(); // this stops before notary timeout expires after making 2nd block
         time_source.advance_time(Duration::from_millis(2000));
         driver.step(); // this stops before notary timeout expires after making 3rd block
+
+        // Make a few more batches past the summary.
+        for _ in 0..=DKG_INTERVAL_LENGTH {
+            time_source.advance_time(Duration::from_millis(2000));
+            driver.step();
+        }
         let batches = router.batches.read().unwrap().clone();
         *router.batches.write().unwrap() = Vec::new();
-        assert_eq!(batches.len(), 2);
+        // Plus 2 initial driver steps.
+        assert_eq!(batches.len(), DKG_INTERVAL_LENGTH as usize + 2);
         assert_ne!(batches[0].batch_number, batches[1].batch_number);
+        assert_eq!(
+            batches[0].next_checkpoint_height.unwrap(),
+            batches[0].batch_number + DKG_INTERVAL_LENGTH.into()
+        );
+        // Assert the `next_checkpoint_height` is strictly greater than the `batch_number`.
+        for b in &batches {
+            assert!(b.next_checkpoint_height.unwrap() > b.batch_number);
+        }
+        // Assert the summary batch numbers.
+        let last_batch = &batches[DKG_INTERVAL_LENGTH as usize - 1];
+        assert_eq!(last_batch.batch_number.get(), DKG_INTERVAL_LENGTH);
+        assert_eq!(
+            last_batch.next_checkpoint_height.unwrap().get(),
+            DKG_INTERVAL_LENGTH + 1
+        );
+        let summary_batch = &batches[DKG_INTERVAL_LENGTH as usize];
+        assert_eq!(summary_batch.batch_number.get(), DKG_INTERVAL_LENGTH + 1);
+        assert_eq!(
+            summary_batch.next_checkpoint_height.unwrap().get(),
+            (DKG_INTERVAL_LENGTH + 1) * 2
+        );
+        assert_eq!(
+            batches[0].next_checkpoint_height,
+            batches[1].next_checkpoint_height
+        );
         let mut msgs: Vec<_> = batches[0].messages.signed_ingress_msgs.clone();
         assert_eq!(msgs.pop(), Some(ingress0));
         let mut msgs: Vec<_> = batches[1].messages.signed_ingress_msgs.clone();

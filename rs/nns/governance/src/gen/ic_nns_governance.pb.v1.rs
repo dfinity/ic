@@ -3194,12 +3194,6 @@ pub enum Topic {
     Kyc = 9,
     /// Topic for proposals to reward node providers.
     NodeProviderRewards = 10,
-    /// Superseded by SNS_COMMUNITY_FUND.
-    ///
-    /// TODO(NNS1-1787): Delete this. In addition to clients wiping this from their
-    /// memory, I think we'll need Candid support in order to safely delete
-    /// this. There is no rush to delete this though.
-    SnsDecentralizationSale = 11,
     /// Proposals handling updates of a subnet's replica version.
     /// The only proposal in this topic is UpdateSubnetReplicaVersion.
     SubnetReplicaVersionManagement = 12,
@@ -3228,7 +3222,6 @@ impl Topic {
             Topic::NetworkCanisterManagement => "TOPIC_NETWORK_CANISTER_MANAGEMENT",
             Topic::Kyc => "TOPIC_KYC",
             Topic::NodeProviderRewards => "TOPIC_NODE_PROVIDER_REWARDS",
-            Topic::SnsDecentralizationSale => "TOPIC_SNS_DECENTRALIZATION_SALE",
             Topic::SubnetReplicaVersionManagement => "TOPIC_SUBNET_REPLICA_VERSION_MANAGEMENT",
             Topic::ReplicaVersionManagement => "TOPIC_REPLICA_VERSION_MANAGEMENT",
             Topic::SnsAndCommunityFund => "TOPIC_SNS_AND_COMMUNITY_FUND",
@@ -3249,7 +3242,6 @@ impl Topic {
             "TOPIC_NETWORK_CANISTER_MANAGEMENT" => Some(Self::NetworkCanisterManagement),
             "TOPIC_KYC" => Some(Self::Kyc),
             "TOPIC_NODE_PROVIDER_REWARDS" => Some(Self::NodeProviderRewards),
-            "TOPIC_SNS_DECENTRALIZATION_SALE" => Some(Self::SnsDecentralizationSale),
             "TOPIC_SUBNET_REPLICA_VERSION_MANAGEMENT" => Some(Self::SubnetReplicaVersionManagement),
             "TOPIC_REPLICA_VERSION_MANAGEMENT" => Some(Self::ReplicaVersionManagement),
             "TOPIC_SNS_AND_COMMUNITY_FUND" => Some(Self::SnsAndCommunityFund),

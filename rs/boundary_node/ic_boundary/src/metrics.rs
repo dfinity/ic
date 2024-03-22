@@ -10,7 +10,7 @@ use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use axum::{
     body::Body,
-    extract::{ConnectInfo, RawQuery, State},
+    extract::{ConnectInfo, State},
     http::Request,
     middleware::Next,
     response::{IntoResponse, Response},
@@ -18,11 +18,9 @@ use axum::{
 };
 use bytes::Buf;
 use futures::task::{Context as FutContext, Poll};
-use http::header::{
-    HeaderMap, HeaderValue, CONTENT_LENGTH, CONTENT_TYPE, HOST, ORIGIN, REFERER, USER_AGENT,
-};
+use http::header::{HeaderMap, HeaderValue, CONTENT_LENGTH, CONTENT_TYPE};
 use http_body::Body as HttpBody;
-use ic_types::{messages::ReplicaHealthStatus, CanisterId};
+use ic_types::{messages::ReplicaHealthStatus, CanisterId, SubnetId};
 use jemalloc_ctl::{epoch, stats};
 use prometheus::{
     proto::MetricFamily, register_histogram_vec_with_registry,
@@ -38,9 +36,11 @@ use crate::{
     cache::{Cache, CacheStatus},
     core::Run,
     geoip,
+    persist::RouteSubnet,
     retry::RetryResult,
     routes::{ErrorCause, RequestContext, RequestType},
     snapshot::{Node, RegistrySnapshot},
+    socket::TcpConnectInfo,
 };
 
 const KB: f64 = 1024.0;
@@ -615,26 +615,25 @@ pub async fn metrics_middleware_status(
     response
 }
 
-// middleware to log and measure proxied requests
+// middleware to log and measure proxied canister and subnet requests
 pub async fn metrics_middleware(
     State(metric_params): State<HttpMetricParams>,
-    RawQuery(query_string): RawQuery,
-    headers: HeaderMap,
     Extension(request_id): Extension<RequestId>,
-    Extension(canister_id): Extension<CanisterId>,
     request: Request<Body>,
     next: Next<Body>,
 ) -> impl IntoResponse {
-    let request_id = request_id
-        .header_value()
-        .to_str()
-        .unwrap_or("bad_request_id")
-        .to_string();
+    let request_id = request_id.header_value().to_str().unwrap_or("").to_string();
 
-    let connect_info = request
+    let ip_family = request
         .extensions()
-        .get::<ConnectInfo<SocketAddr>>()
-        .cloned();
+        .get::<ConnectInfo<TcpConnectInfo>>()
+        .map(|x| (x.0).0)
+        .or(request
+            .extensions()
+            .get::<ConnectInfo<SocketAddr>>()
+            .map(|x| x.0))
+        .map(|x| if x.is_ipv4() { "4" } else { "6" })
+        .unwrap_or("0");
 
     let request_type = &request
         .extensions()
@@ -646,13 +645,31 @@ pub async fn metrics_middleware(
     let country_code = request
         .extensions()
         .get::<geoip::GeoData>()
-        .cloned()
-        .map(|x| x.country_code);
+        .map(|x| x.country_code.clone())
+        .unwrap_or("N/A".into());
+
+    // for canister requests we extract canister_id
+    let canister_id = request
+        .extensions()
+        .get::<CanisterId>()
+        .map(|x| x.to_string());
+
+    // for /api/v2/subnet requests we extract subnet_id directly from extension
+    let subnet_id = request
+        .extensions()
+        .get::<SubnetId>()
+        .map(|x| x.to_string());
 
     // Perform the request & measure duration
     let start_time = Instant::now();
     let response = next.run(request).await;
     let proc_duration = start_time.elapsed().as_secs_f64();
+
+    // in case subnet_id=None (i.e. for /api/v2/canister/... request), we get the target subnet_id from the RouteSubnet extension
+    let subnet_id = subnet_id.or(response
+        .extensions()
+        .get::<Arc<RouteSubnet>>()
+        .map(|x| x.id.clone()));
 
     // Extract extensions
     let ctx = response
@@ -661,10 +678,12 @@ pub async fn metrics_middleware(
         .cloned()
         .unwrap_or_default();
 
+    // Actual canister id is the one the request was routed to
+    // Might be different because of e.g. Bitcoin middleware
     let canister_id_actual = response.extensions().get::<CanisterId>().cloned();
     let error_cause = response.extensions().get::<ErrorCause>().cloned();
     let retry_result = response.extensions().get::<RetryResult>().cloned();
-    let node = response.extensions().get::<Arc<Node>>().cloned();
+    let node = response.extensions().get::<Arc<Node>>();
     let cache_status = response
         .extensions()
         .get::<CacheStatus>()
@@ -675,10 +694,6 @@ pub async fn metrics_middleware(
     let status_code = response.status();
     let sender = ctx.sender.map(|x| x.to_string());
     let node_id = node.as_ref().map(|x| x.id.to_string());
-    let subnet_id = node.as_ref().map(|x| x.subnet_id.to_string());
-    let ip_family = connect_info
-        .map(|x| if x.is_ipv4() { "4" } else { "6" })
-        .unwrap_or("0");
 
     let HttpMetricParams {
         action,
@@ -690,7 +705,7 @@ pub async fn metrics_middleware(
     } = metric_params;
 
     // Closure that gets called when the response body is fully read (or an error occurs)
-    let record_metrics = move |response_size: u64, body_result: Result<(), String>| {
+    let record_metrics = move |response_size: u64, _body_result: Result<(), String>| {
         let full_duration = start_time.elapsed().as_secs_f64();
         let failed = error_cause.is_some() || !status_code.is_success();
 
@@ -744,19 +759,6 @@ pub async fn metrics_middleware(
             .with_label_values(labels)
             .observe(response_size as f64);
 
-        let header_host = headers
-            .get(HOST)
-            .map(|v| v.to_str().unwrap_or("parsing_error"));
-        let header_origin = headers
-            .get(ORIGIN)
-            .map(|v| v.to_str().unwrap_or("parsing_error"));
-        let header_referer = headers
-            .get(REFERER)
-            .map(|v| v.to_str().unwrap_or("parsing_error"));
-        let header_user_agent = headers
-            .get(USER_AGENT)
-            .map(|v| v.to_str().unwrap_or("parsing_error"));
-
         if !log_failed_requests_only || failed {
             info!(
                 action,
@@ -768,7 +770,7 @@ pub async fn metrics_middleware(
                 subnet_id,
                 node_id,
                 country_code,
-                canister_id = canister_id.to_string(),
+                canister_id,
                 canister_id_actual = canister_id_actual.map(|x| x.to_string()),
                 canister_id_cbor = ctx.canister_id.map(|x| x.to_string()),
                 sender,
@@ -778,18 +780,10 @@ pub async fn metrics_middleware(
                 request_size = ctx.request_size,
                 response_size,
                 retry_count = &retry_result.as_ref().map(|x| x.retries),
-                retry_success = &retry_result.map(|x| x.success.to_string()),
-                body_error = body_result.err(),
+                retry_success = &retry_result.map(|x| x.success),
                 %cache_status,
                 cache_bypass_reason = cache_bypass_reason.map(|x| x.to_string()),
-                nonce_len = ctx.nonce.clone().map(|x| x.len()),
-                arg_len = ctx.arg.clone().map(|x| x.len()),
                 ip_family,
-                query_string,
-                header_host,
-                header_origin,
-                header_referer,
-                header_user_agent,
             );
         }
     };

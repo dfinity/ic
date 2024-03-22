@@ -27,7 +27,7 @@ ic-ledger-canister-core = { path = "../../../ledger_canister_core" }
 ic-ledger-core = { path = "../../../ledger_core" }
 ic-metrics-encoder = "1"
 icrc-ledger-types = { path = "../../../../../packages/icrc-ledger-types" }
-num-traits = "0.2.14"
+num-traits = { workspace = true }
 rand = { version = "0.8.5", features = ["small_rng"]}
 rand_core = "0.6.4"
 rand_chacha = "0.3.1"

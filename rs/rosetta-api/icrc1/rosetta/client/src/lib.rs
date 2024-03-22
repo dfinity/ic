@@ -101,7 +101,7 @@ impl RosettaClient {
             .await
     }
 
-    pub async fn make_and_submit_transaction<T: RosettaSupportedKeyPair>(
+    pub async fn make_submit_and_wait_for_transaction<T: RosettaSupportedKeyPair>(
         &self,
         signer_keypair: &T,
         network_identifier: NetworkIdentifier,
@@ -141,7 +141,36 @@ impl RosettaClient {
             )
             .await?;
 
-        Ok(submit_response)
+        // We need to wait for the transaction to be added to the blockchain
+        let mut tries = 0;
+        while tries < 10 {
+            let transaction = self
+                .search_transactions(
+                    network_identifier.clone(),
+                    Some(submit_response.transaction_identifier.clone()),
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                )
+                .await?;
+            println!("Transaction: {:?}", transaction);
+            println!(
+                "Transaction hash looked for: {:?}",
+                submit_response.transaction_identifier
+            );
+            if !transaction.transactions.is_empty() {
+                return Ok(submit_response);
+            }
+
+            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+            tries += 1;
+        }
+
+        Err(Error::unable_to_find_block(
+            &"Transaction was not added to the blockchain after 10 seconds".to_owned(),
+        ))
     }
 
     pub async fn build_transfer_operations<T: RosettaSupportedKeyPair>(
@@ -337,6 +366,20 @@ impl RosettaClient {
         .await
     }
 
+    pub async fn network_options(
+        &self,
+        network_identifier: NetworkIdentifier,
+    ) -> Result<NetworkOptionsResponse, Error> {
+        self.call_endpoint(
+            "/network/options",
+            &NetworkRequest {
+                network_identifier,
+                metadata: None,
+            },
+        )
+        .await
+    }
+
     pub async fn block(
         &self,
         network_identifier: NetworkIdentifier,
@@ -364,6 +407,37 @@ impl RosettaClient {
                 network_identifier,
                 block_identifier,
                 transaction_identifier,
+            },
+        )
+        .await
+    }
+
+    pub async fn search_transactions(
+        &self,
+        network_identifier: NetworkIdentifier,
+        transaction_identifier: Option<TransactionIdentifier>,
+        account_identifier: Option<AccountIdentifier>,
+        type_: Option<String>,
+        max_block: Option<i64>,
+        limit: Option<i64>,
+        offset: Option<i64>,
+    ) -> Result<SearchTransactionsResponse, Error> {
+        self.call_endpoint(
+            "/search/transactions",
+            &SearchTransactionsRequest {
+                network_identifier,
+                transaction_identifier,
+                account_identifier,
+                coin_identifier: None,
+                address: None,
+                type_,
+                success: None,
+                currency: None,
+                operator: None,
+                status: None,
+                offset,
+                max_block,
+                limit,
             },
         )
         .await

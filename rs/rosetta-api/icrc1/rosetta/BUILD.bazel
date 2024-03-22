@@ -106,6 +106,7 @@ rust_binary(
 
 rust_test(
     name = "ic-icrc-rosetta-unit-tests",
+    size = "large",
     aliases = ALIASES,
     crate = ":ic-icrc-rosetta",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,

@@ -1,6 +1,7 @@
 use super::{principal_bytes_to_u256, Persist, PersistStatus, Persister, RouteSubnet, Routes};
 
 use std::{
+    collections::HashMap,
     net::{IpAddr, Ipv4Addr},
     sync::Arc,
 };
@@ -135,7 +136,7 @@ pub fn generate_test_subnets(offset: u64) -> Vec<Subnet> {
     vec![subnet1, subnet2, subnet3]
 }
 
-fn generate_test_routes(offset: u64) -> Routes {
+pub fn generate_test_routes(offset: u64) -> Routes {
     let subnet_id_1 =
         Principal::from_text("tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe")
             .unwrap();
@@ -181,15 +182,23 @@ fn generate_test_routes(offset: u64) -> Routes {
         nodes: vec![node(2 + offset, subnet_id_2)],
     };
 
+    let subnets = vec![
+        Arc::new(subnet1),
+        Arc::new(subnet2),
+        Arc::new(subnet3),
+        Arc::new(subnet4),
+        Arc::new(subnet5),
+    ];
+
+    let subnet_map = subnets
+        .iter()
+        .map(|subnet| (Principal::from_text(&subnet.id).unwrap(), subnet.clone()))
+        .collect::<HashMap<_, _>>();
+
     Routes {
         node_count: 3,
-        subnets: vec![
-            Arc::new(subnet1),
-            Arc::new(subnet2),
-            Arc::new(subnet3),
-            Arc::new(subnet4),
-            Arc::new(subnet5),
-        ],
+        subnets,
+        subnet_map,
     }
 }
 
@@ -231,49 +240,49 @@ fn test_lookup() -> Result<(), Error> {
     let r = generate_test_routes(0);
 
     assert_eq!(
-        r.lookup(Principal::from_text("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap())
+        r.lookup_by_canister_id(Principal::from_text("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap())
             .unwrap()
             .id,
         "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"
     );
 
     assert_eq!(
-        r.lookup(Principal::from_text("qjdve-lqaaa-aaaaa-aaaeq-cai").unwrap())
+        r.lookup_by_canister_id(Principal::from_text("qjdve-lqaaa-aaaaa-aaaeq-cai").unwrap())
             .unwrap()
             .id,
         "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"
     );
 
     assert_eq!(
-        r.lookup(Principal::from_text("2b2k4-rqaaa-aaaaa-qaatq-cai").unwrap())
+        r.lookup_by_canister_id(Principal::from_text("2b2k4-rqaaa-aaaaa-qaatq-cai").unwrap())
             .unwrap()
             .id,
         "snjp4-xlbw4-mnbog-ddwy6-6ckfd-2w5a2-eipqo-7l436-pxqkh-l6fuv-vae"
     );
 
     assert_eq!(
-        r.lookup(Principal::from_text("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap())
+        r.lookup_by_canister_id(Principal::from_text("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap())
             .unwrap()
             .id,
         "uzr34-akd3s-xrdag-3ql62-ocgoh-ld2ao-tamcv-54e7j-krwgb-2gm4z-oqe"
     );
 
     assert_eq!(
-        r.lookup(Principal::from_text("sqjm4-qahae-aq").unwrap())
+        r.lookup_by_canister_id(Principal::from_text("sqjm4-qahae-aq").unwrap())
             .unwrap()
             .id,
         "uzr34-akd3s-xrdag-3ql62-ocgoh-ld2ao-tamcv-54e7j-krwgb-2gm4z-oqe"
     );
 
     assert_eq!(
-        r.lookup(Principal::from_text("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap())
+        r.lookup_by_canister_id(Principal::from_text("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap())
             .unwrap()
             .id,
         "uzr34-akd3s-xrdag-3ql62-ocgoh-ld2ao-tamcv-54e7j-krwgb-2gm4z-oqe"
     );
 
     assert_eq!(
-        r.lookup(Principal::from_text("uc7f6-kaaaa-aaaaq-qaaaa-cai").unwrap())
+        r.lookup_by_canister_id(Principal::from_text("uc7f6-kaaaa-aaaaq-qaaaa-cai").unwrap())
             .unwrap()
             .id,
         "uzr34-akd3s-xrdag-3ql62-ocgoh-ld2ao-tamcv-54e7j-krwgb-2gm4z-oqe"
@@ -281,10 +290,10 @@ fn test_lookup() -> Result<(), Error> {
 
     // Test failure
     assert!(r
-        .lookup(Principal::from_text("32fn4-qqaaa-aaaak-ad65a-cai").unwrap())
+        .lookup_by_canister_id(Principal::from_text("32fn4-qqaaa-aaaak-ad65a-cai").unwrap())
         .is_none());
     assert!(r
-        .lookup(Principal::from_text("3we4s-lyaaa-aaaak-aegrq-cai").unwrap())
+        .lookup_by_canister_id(Principal::from_text("3we4s-lyaaa-aaaak-aegrq-cai").unwrap())
         .is_none());
 
     Ok(())

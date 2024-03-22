@@ -17,7 +17,8 @@ type Action = variant {
   Motion : Motion;
 };
 type ActionAuxiliary = variant {
-  TransferSnsTreasuryFunds : TransferSnsTreasuryFundsActionAuxiliary;
+  TransferSnsTreasuryFunds : MintSnsTokensActionAuxiliary;
+  MintSnsTokens : MintSnsTokensActionAuxiliary;
 };
 type AddNeuronPermissions = record {
   permissions_to_add : opt NeuronPermissionList;
@@ -268,6 +269,7 @@ type MintSnsTokens = record {
   memo : opt nat64;
   amount_e8s : opt nat64;
 };
+type MintSnsTokensActionAuxiliary = record { valuation : opt Valuation };
 type Motion = record { motion_text : text };
 type NervousSystemFunction = record {
   id : nat64;
@@ -412,9 +414,6 @@ type TransferSnsTreasuryFunds = record {
   to_subaccount : opt Subaccount;
   memo : opt nat64;
   amount_e8s : nat64;
-};
-type TransferSnsTreasuryFundsActionAuxiliary = record {
-  valuation : opt Valuation;
 };
 type UpgradeInProgress = record {
   mark_failed_at_seconds : nat64;

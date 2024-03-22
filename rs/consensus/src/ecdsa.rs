@@ -636,7 +636,7 @@ mod tests {
         let height = Height::from(100);
         let key_id = fake_ecdsa_key_id();
         // Add two contexts to state, one with, and one without quadruple
-        let quadruple_id = QuadrupleId(0, Some(key_id.clone()));
+        let quadruple_id = QuadrupleId::new(0);
         let context_with_quadruple =
             fake_completed_sign_with_ecdsa_context(0, quadruple_id.clone());
         let context_without_quadruple =
@@ -757,22 +757,22 @@ mod tests {
         let subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(2));
         let mut uid_generator = EcdsaUIDGenerator::new(subnet_id, Height::new(0));
         let request_id_fetch_1 = RequestId {
-            quadruple_id: uid_generator.next_quadruple_id(fake_ecdsa_key_id()),
+            quadruple_id: uid_generator.next_quadruple_id(),
             pseudo_random_id: [1; 32],
             height: Height::from(80),
         };
         let request_id_drop = RequestId {
-            quadruple_id: uid_generator.next_quadruple_id(fake_ecdsa_key_id()),
+            quadruple_id: uid_generator.next_quadruple_id(),
             pseudo_random_id: [2; 32],
             height: Height::from(70),
         };
         let request_id_fetch_2 = RequestId {
-            quadruple_id: uid_generator.next_quadruple_id(fake_ecdsa_key_id()),
+            quadruple_id: uid_generator.next_quadruple_id(),
             pseudo_random_id: [3; 32],
             height: Height::from(102),
         };
         let request_id_stash = RequestId {
-            quadruple_id: uid_generator.next_quadruple_id(fake_ecdsa_key_id()),
+            quadruple_id: uid_generator.next_quadruple_id(),
             pseudo_random_id: [4; 32],
             height: Height::from(200),
         };

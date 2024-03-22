@@ -62,6 +62,7 @@ fn test_invalid_get_requests(env: TestEnv) {
     for e in ENDPOINTS {
         let res = client
             .get(format!("{}api/v2/canister/{}/{}", node_url, canister_id, e))
+            .header("Content-Type", "application/cbor")
             .send()
             .unwrap();
         assert_eq!(res.status(), StatusCode::METHOD_NOT_ALLOWED);

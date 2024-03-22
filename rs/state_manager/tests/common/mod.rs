@@ -382,18 +382,15 @@ pub fn replace_wasm(state: &mut ReplicatedState, canister_id: CanisterId) {
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum StateSyncErrorCode {
-    ChunksMoreNeeded,
     MetaManifestVerificationFailed,
     ManifestVerificationFailed,
     OtherChunkVerificationFailed,
 }
 
-pub fn pipe_state_sync(
-    src: StateSyncMessage,
-    mut dst: Box<dyn Chunkable<StateSyncMessage>>,
-) -> StateSyncMessage {
-    pipe_partial_state_sync(&src, &mut *dst, &Default::default(), false)
-        .expect("State sync not completed.")
+pub fn pipe_state_sync(src: StateSyncMessage, mut dst: Box<dyn Chunkable<StateSyncMessage>>) {
+    let is_finished = pipe_partial_state_sync(&src, &mut *dst, &Default::default(), false)
+        .expect("State sync chunk verification failed.");
+    assert!(is_finished, "State sync not completed");
 }
 
 fn alter_chunk_data(chunk: &mut Chunk) {
@@ -417,7 +414,7 @@ pub fn pipe_meta_manifest(
     src: &StateSyncMessage,
     dst: &mut dyn Chunkable<StateSyncMessage>,
     use_bad_chunk: bool,
-) -> Result<StateSyncMessage, StateSyncErrorCode> {
+) -> Result<bool, StateSyncErrorCode> {
     let ids: Vec<_> = dst.chunks_to_download().collect();
 
     // Only the meta-manifest should be requested
@@ -435,10 +432,7 @@ pub fn pipe_meta_manifest(
     }
 
     match dst.add_chunk(id, chunk) {
-        Ok(()) => match dst.completed() {
-            Some(artifact) => Ok(artifact),
-            None => Err(StateSyncErrorCode::ChunksMoreNeeded),
-        },
+        Ok(()) => Ok(dst.completed()),
         Err(_) => Err(StateSyncErrorCode::MetaManifestVerificationFailed),
     }
 }
@@ -450,7 +444,7 @@ pub fn pipe_manifest(
     src: &StateSyncMessage,
     dst: &mut dyn Chunkable<StateSyncMessage>,
     use_bad_chunk: bool,
-) -> Result<StateSyncMessage, StateSyncErrorCode> {
+) -> Result<bool, StateSyncErrorCode> {
     let ids: Vec<_> = dst.chunks_to_download().collect();
 
     // Only the manifest chunks should be requested
@@ -472,8 +466,8 @@ pub fn pipe_manifest(
 
         match dst.add_chunk(*id, chunk) {
             Ok(()) => {
-                if let Some(msg) = dst.completed() {
-                    return Ok(msg);
+                if dst.completed() {
+                    return Ok(true);
                 }
             }
             Err(_) => {
@@ -481,7 +475,7 @@ pub fn pipe_manifest(
             }
         }
     }
-    Err(StateSyncErrorCode::ChunksMoreNeeded)
+    Ok(false)
 }
 
 /// Pipe chunks from src to dst, but omit any chunks in omit
@@ -491,7 +485,7 @@ pub fn pipe_partial_state_sync(
     dst: &mut dyn Chunkable<StateSyncMessage>,
     omit: &HashSet<ChunkId>,
     use_bad_chunk: bool,
-) -> Result<StateSyncMessage, StateSyncErrorCode> {
+) -> Result<bool, StateSyncErrorCode> {
     loop {
         let ids: Vec<_> = dst.chunks_to_download().collect();
 
@@ -516,15 +510,15 @@ pub fn pipe_partial_state_sync(
 
             match dst.add_chunk(*id, chunk) {
                 Ok(()) => {
-                    if let Some(msg) = dst.completed() {
-                        return Ok(msg);
+                    if dst.completed() {
+                        return Ok(true);
                     }
                 }
                 Err(_) => return Err(StateSyncErrorCode::OtherChunkVerificationFailed),
             }
         }
         if omitted_chunks {
-            return Err(StateSyncErrorCode::ChunksMoreNeeded);
+            return Ok(false);
         }
     }
     unreachable!()

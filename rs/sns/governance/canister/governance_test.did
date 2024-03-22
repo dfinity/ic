@@ -17,7 +17,8 @@ type Action = variant {
   Motion : Motion;
 };
 type ActionAuxiliary = variant {
-  TransferSnsTreasuryFunds : TransferSnsTreasuryFundsActionAuxiliary;
+  TransferSnsTreasuryFunds : MintSnsTokensActionAuxiliary;
+  MintSnsTokens : MintSnsTokensActionAuxiliary;
 };
 type AddMaturityRequest = record { id : opt NeuronId; amount_e8s : opt nat64 };
 type AddMaturityResponse = record { new_maturity_e8s : opt nat64 };
@@ -270,6 +271,7 @@ type MintSnsTokens = record {
   memo : opt nat64;
   amount_e8s : opt nat64;
 };
+type MintSnsTokensActionAuxiliary = record { valuation : opt Valuation };
 type MintTokensRequest = record {
   recipient : opt Account;
   amount_e8s : opt nat64;
@@ -418,9 +420,6 @@ type TransferSnsTreasuryFunds = record {
   to_subaccount : opt Subaccount;
   memo : opt nat64;
   amount_e8s : nat64;
-};
-type TransferSnsTreasuryFundsActionAuxiliary = record {
-  valuation : opt Valuation;
 };
 type UpgradeInProgress = record {
   mark_failed_at_seconds : nat64;

@@ -1,6 +1,6 @@
 # https://hub.docker.com/_/ubuntu
-# focal-20230605
-FROM ubuntu@sha256:554e40b15453c788ec799badf0f1ad05c3e5c735b53f940feb8f27cf2ec570c5
+# focal-20240216
+FROM ubuntu@sha256:48c35f3de33487442af224ed4aabac19fd9bfbd91ee90e9471d412706b20ba73
 ENV TZ=UTC
 
 COPY --chown=0700 ./gitlab-ci/container/files/known_hosts /etc/ssh/ssh_known_hosts
@@ -116,6 +116,10 @@ RUN curl --fail https://sh.rustup.rs -sSf \
     rustup target add wasm32-unknown-unknown && \
     rustup component add clippy
 
+# Add cargo-audit
+ARG CARGO_AUDIT_VERSION=0.20.0
+RUN cargo install cargo-audit --version ${CARGO_AUDIT_VERSION}
+
 # Add buf
 ARG BUF_BIN="/usr/local/bin/buf"
 ARG BUF_VERSION="1.28.1"
@@ -145,9 +149,9 @@ COPY ./gitlab-ci/container/files/entrypoint.sh /entrypoint.sh
 
 # Add mold linker
 ARG MOLD_BIN="/usr/local/bin/mold"
-ARG MOLD_VERSION=2.0.0
+ARG MOLD_VERSION=2.4.1
 RUN curl -sSL "https://github.com/rui314/mold/releases/download/v${MOLD_VERSION}/mold-${MOLD_VERSION}-$(uname -m)-linux.tar.gz" | tar -C /usr/local --strip-components=1 -xzf - && \
-    echo "4d17d89e0c6a7c4c08ba5e0d3bbe9fd9c01ba227212307e157722c910e9a88be  ${MOLD_BIN}" | shasum -a 256 -c - && \
+    echo "4d34b489a0810e71a937103f38e4b6c951abac36b5b60c58bc07b73efa7139cd  ${MOLD_BIN}" | shasum -a 256 -c - && \
     ln -sf "${MOLD_BIN}" "$(realpath /usr/bin/ld)"
 
 

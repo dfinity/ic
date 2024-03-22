@@ -22,10 +22,11 @@ use ic_nns_governance::{
 use ic_nns_test_utils::{
     common::{
         build_governance_wasm, build_ledger_wasm, build_lifeline_wasm,
-        build_mainnet_governance_wasm, build_mainnet_ledger_wasm, build_mainnet_root_wasm,
-        build_mainnet_sns_wasms_wasm, build_root_wasm, build_sns_wasms_wasm,
-        NnsInitPayloadsBuilder,
+        build_mainnet_governance_wasm, build_mainnet_ledger_wasm, build_mainnet_lifeline_wasm,
+        build_mainnet_root_wasm, build_mainnet_sns_wasms_wasm, build_root_wasm,
+        build_sns_wasms_wasm, NnsInitPayloadsBuilder,
     },
+    governance::UpgradeRootProposal,
     sns_wasm::{
         build_archive_sns_wasm, build_governance_sns_wasm, build_index_ng_sns_wasm,
         build_ledger_sns_wasm, build_mainnet_archive_sns_wasm, build_mainnet_governance_sns_wasm,
@@ -54,7 +55,7 @@ use icrc_ledger_types::icrc1::{
     transfer::{TransferArg, TransferError},
 };
 use maplit::btreemap;
-use pocket_ic::{CanisterSettings, PocketIc, WasmResult};
+use pocket_ic::{CanisterSettings, ErrorCode, PocketIc, PocketIcBuilder, UserError, WasmResult};
 use prost::Message;
 use rust_decimal::prelude::ToPrimitive;
 use std::{collections::BTreeMap, fmt::Write, time::Duration};
@@ -83,6 +84,25 @@ pub fn extract_sns_canister_version(
             panic!("Unspecified canister type to upgrade.");
         }
     }
+}
+
+/// Creates a new PocketIc instance with NNS and SNS and application subnet
+///
+pub fn pocket_ic_for_sns_tests_with_mainnet_versions() -> PocketIc {
+    let pocket_ic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_sns_subnet()
+        .build();
+
+    // Install the (mainnet) NNS canisters.
+    let with_mainnet_nns_canisters = true;
+    install_nns_canisters(&pocket_ic, vec![], with_mainnet_nns_canisters);
+
+    // Publish (mainnet) SNS Wasms to SNS-W.
+    let with_mainnet_sns_wasms = true;
+    add_wasms_to_sns_wasm(&pocket_ic, with_mainnet_sns_wasms).unwrap();
+
+    pocket_ic
 }
 
 pub fn install_canister(
@@ -116,6 +136,7 @@ pub fn install_canister(
     );
 }
 
+// TODO migrate this to nns::governance
 pub fn add_wasm_via_nns_proposal(
     pocket_ic: &PocketIc,
     wasm: SnsWasm,
@@ -236,19 +257,21 @@ pub fn install_nns_canisters(
 
     let nns_init_payload = nns_init_payload_builder.build();
 
-    let (ledger_wasm, root_wasm, governance_wasm, sns_wasm_wasm) =
+    let (governance_wasm, ledger_wasm, root_wasm, lifeline_wasm, sns_wasm_wasm) =
         if with_mainnet_nns_canister_versions {
             (
+                build_mainnet_governance_wasm(),
                 build_mainnet_ledger_wasm(),
                 build_mainnet_root_wasm(),
-                build_mainnet_governance_wasm(),
+                build_mainnet_lifeline_wasm(),
                 build_mainnet_sns_wasms_wasm(),
             )
         } else {
             (
+                build_governance_wasm(),
                 build_ledger_wasm(),
                 build_root_wasm(),
-                build_governance_wasm(),
+                build_lifeline_wasm(),
                 build_sns_wasms_wasm(),
             )
         };
@@ -279,6 +302,14 @@ pub fn install_nns_canisters(
     );
     install_canister(
         pocket_ic,
+        "Lifeline",
+        LIFELINE_CANISTER_ID,
+        Encode!(&nns_init_payload.lifeline).unwrap(),
+        lifeline_wasm,
+        Some(ROOT_CANISTER_ID.get()),
+    );
+    install_canister(
+        pocket_ic,
         "NNS SNS-W",
         SNS_WASM_CANISTER_ID,
         Encode!(&nns_init_payload.sns_wasms).unwrap(),
@@ -297,12 +328,12 @@ pub fn install_nns_canisters(
 }
 
 #[track_caller]
-pub fn upgrade_root_controlled_nns_canister_to_tip_of_master_or_panic(
+pub fn upgrade_nns_canister_to_tip_of_master_or_panic(
     pocket_ic: &PocketIc,
     canister_id: CanisterId,
 ) {
     // What we really want here is `match canister_id { ... }`, but this does not work because
-    // `CanisterId` incapsulates `PrincipalId` which has a manual implementation for `PartialEq`,
+    // `CanisterId` encapsulates `PrincipalId` which has a manual implementation for `PartialEq`,
     // whereas Rust requires constants used in match expressions to **derive** `PartialEq`.
     let (wasm, controller, label) = if canister_id == GOVERNANCE_CANISTER_ID {
         (
@@ -322,20 +353,44 @@ pub fn upgrade_root_controlled_nns_canister_to_tip_of_master_or_panic(
         panic!("ID {} does not identify a known NNS canister.", canister_id);
     };
 
+    let expected_hash = wasm.sha256_hash();
+
     let pre_upgrade_module_hash = pocket_ic
         .canister_status(canister_id.into(), Some(controller.0))
         .unwrap()
         .module_hash
         .unwrap();
 
-    let stop_before_installing = true;
-    let request = ChangeCanisterRequest::new(
-        stop_before_installing,
-        CanisterInstallMode::Upgrade,
-        canister_id,
-    )
-    .with_memory_allocation(ic_nns_constants::memory_allocation_of(canister_id))
-    .with_wasm(wasm.bytes());
+    if pre_upgrade_module_hash == expected_hash.to_vec() {
+        println!(
+            "The {} canister is already at the tip of the master branch.",
+            label
+        );
+
+        return;
+    }
+
+    let (payload, nns_function) = if canister_id == ROOT_CANISTER_ID {
+        let payload = UpgradeRootProposal {
+            wasm_module: wasm.bytes(),
+            module_arg: vec![],
+            stop_upgrade_start: true,
+        };
+        (
+            Encode!(&payload).unwrap(),
+            NnsFunction::NnsRootUpgrade as i32,
+        )
+    } else {
+        let payload = ChangeCanisterRequest::new(true, CanisterInstallMode::Upgrade, canister_id)
+            .with_memory_allocation(ic_nns_constants::memory_allocation_of(canister_id))
+            .with_wasm(wasm.bytes());
+        (
+            Encode!(&payload).unwrap(),
+            NnsFunction::NnsCanisterUpgrade as i32,
+        )
+    };
+
+    println!("Upgrading {} to the latest version.", label);
     let proposal_info = nns::governance::propose_and_wait(
         pocket_ic,
         Proposal {
@@ -343,8 +398,8 @@ pub fn upgrade_root_controlled_nns_canister_to_tip_of_master_or_panic(
             summary: "".to_string(),
             url: "".to_string(),
             action: Some(proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
-                nns_function: NnsFunction::NnsCanisterUpgrade as i32,
-                payload: Encode!(&request).unwrap(),
+                nns_function,
+                payload,
             })),
         },
     )
@@ -381,7 +436,6 @@ pub mod nns {
     use super::*;
     pub mod governance {
         use super::*;
-        use pocket_ic::{ErrorCode, UserError};
 
         pub fn list_neurons(pocket_ic: &PocketIc, sender: PrincipalId) -> ListNeuronsResponse {
             let result = pocket_ic
@@ -501,7 +555,6 @@ pub mod nns {
             for _attempt_count in 1..=100 {
                 pocket_ic.tick();
                 pocket_ic.advance_time(Duration::from_secs(1));
-
                 let proposal_info_result =
                     nns_get_proposal_info(pocket_ic, proposal_id, PrincipalId::new_anonymous());
 
@@ -588,7 +641,7 @@ pub mod nns {
             .unwrap();
             let nns_proposal_id = proposal_info.id.unwrap();
             let Some(GetDeployedSnsByProposalIdResult::DeployedSns(deployed_sns)) =
-                nns::sns_wasm::get_deployed_sns_by_proposal_id(pocket_ic, nns_proposal_id)
+                sns_wasm::get_deployed_sns_by_proposal_id(pocket_ic, nns_proposal_id)
                     .get_deployed_sns_by_proposal_id_result
             else {
                 panic!(
@@ -624,6 +677,7 @@ pub mod nns {
 
     pub mod ledger {
         use super::*;
+        use icp_ledger::{Memo, TransferArgs};
 
         pub fn icrc1_transfer(
             pocket_ic: &PocketIc,
@@ -662,6 +716,37 @@ pub mod nns {
                 WasmResult::Reject(s) => panic!("Call to account_balance failed: {:#?}", s),
             };
             Decode!(&result, Tokens).unwrap()
+        }
+
+        // Test method to mint ICP to a principal
+        pub fn mint_icp(pocket_ic: &PocketIc, destination: AccountIdentifier, amount: Tokens) {
+            // Construct request.
+            let transfer_request = TransferArgs {
+                to: destination.to_address(),
+                // An overwhelmingly large number, but not so large as to cause serious risk of
+                // addition overflow.
+                amount,
+
+                // Non-Operative
+                // -------------
+                fee: Tokens::ZERO, // Because we are minting.
+                memo: Memo(0),
+                from_subaccount: None,
+                created_at_time: None,
+            };
+            // Call ledger.
+            let result = pocket_ic.update_call(
+                LEDGER_CANISTER_ID.into(),
+                GOVERNANCE_CANISTER_ID.get().0,
+                "transfer",
+                Encode!(&transfer_request).unwrap(),
+            );
+
+            // Assert result is ok.
+            match result {
+                Ok(WasmResult::Reply(_reply)) => (), // Ok,
+                _ => panic!("{:?}", result),
+            }
         }
     }
 
@@ -873,6 +958,7 @@ pub mod sns {
     pub mod governance {
         use super::*;
         use ic_sns_governance::pb::v1::GetRunningSnsVersionResponse;
+        use pocket_ic::ErrorCode;
 
         pub fn get_mode(pocket_ic: &PocketIc, canister_id: PrincipalId) -> sns_pb::GetModeResponse {
             let result = pocket_ic
@@ -995,12 +1081,26 @@ pub mod sns {
             for _attempt_count in 1..=50 {
                 pocket_ic.tick();
                 pocket_ic.advance_time(Duration::from_secs(1));
-                let proposal = get_proposal(
+                let proposal_result = get_proposal(
                     pocket_ic,
                     canister_id,
                     proposal_id,
                     PrincipalId::new_anonymous(),
                 );
+
+                let proposal = match proposal_result {
+                    Ok(proposal) => proposal,
+                    Err(user_error) => {
+                        if [ErrorCode::CanisterStopped, ErrorCode::CanisterStopping]
+                            .contains(&user_error.code)
+                        {
+                            continue;
+                        } else {
+                            panic!("Error getting proposal: {:#?}", user_error);
+                        }
+                    }
+                };
+
                 let proposal = proposal
                     .result
                     .expect("GetProposalResponse.result must be set.");
@@ -1027,8 +1127,8 @@ pub mod sns {
             canister_id: PrincipalId,
             proposal_id: sns_pb::ProposalId,
             sender: PrincipalId,
-        ) -> sns_pb::GetProposalResponse {
-            let result = pocket_ic
+        ) -> Result<sns_pb::GetProposalResponse, UserError> {
+            pocket_ic
                 .query_call(
                     canister_id.into(),
                     Principal::from(sender),
@@ -1038,17 +1138,17 @@ pub mod sns {
                     })
                     .unwrap(),
                 )
-                .unwrap();
-            let result = match result {
-                WasmResult::Reply(reply) => reply,
-                WasmResult::Reject(reject) => {
-                    panic!(
-                        "get_proposal was rejected by the SNS governance canister: {:#?}",
-                        reject
-                    )
-                }
-            };
-            Decode!(&result, sns_pb::GetProposalResponse).unwrap()
+                .map(|result| match result {
+                    WasmResult::Reply(reply) => {
+                        Decode!(&reply, sns_pb::GetProposalResponse).unwrap()
+                    }
+                    WasmResult::Reject(reject) => {
+                        panic!(
+                            "get_proposal was rejected by the SNS governance canister: {:#?}",
+                            reject
+                        )
+                    }
+                })
         }
 
         pub fn list_neurons(
@@ -1708,6 +1808,10 @@ pub mod sns {
 
     pub mod swap {
         use super::*;
+        use assert_matches::assert_matches;
+        use ic_nns_governance::pb::v1::create_service_nervous_system::SwapParameters;
+        use ic_sns_swap::{pb::v1::BuyerState, swap::principal_to_subaccount};
+        use icp_ledger::DEFAULT_TRANSFER_FEE;
 
         pub fn get_init(pocket_ic: &PocketIc, canister_id: PrincipalId) -> GetInitResponse {
             let result = pocket_ic
@@ -2088,6 +2192,109 @@ pub mod sns {
                 "Looks like the expected SNS auto-finalization status is never going to be reached: {:#?}",
                 last_auto_finalization_status,
             ))
+        }
+
+        pub fn participate_in_swap(
+            pocket_ic: &PocketIc,
+            swap_canister_id: PrincipalId,
+            direct_participant: PrincipalId,
+            amount_icp_excluding_fees: Tokens,
+        ) {
+            let direct_participant_swap_subaccount =
+                Some(principal_to_subaccount(&direct_participant));
+
+            let direct_participant_swap_account = Account {
+                owner: swap_canister_id.0,
+                subaccount: direct_participant_swap_subaccount,
+            };
+
+            let participation_amount = amount_icp_excluding_fees.get_e8s();
+            nns::ledger::icrc1_transfer(
+                pocket_ic,
+                direct_participant,
+                TransferArg {
+                    from_subaccount: None,
+                    to: direct_participant_swap_account,
+                    fee: None,
+                    created_at_time: None,
+                    memo: None,
+                    amount: Nat::from(participation_amount),
+                },
+            )
+            .unwrap();
+
+            let response =
+                refresh_buyer_tokens(pocket_ic, swap_canister_id, direct_participant, None);
+
+            assert_eq!(
+                response,
+                Ok(RefreshBuyerTokensResponse {
+                    icp_ledger_account_balance_e8s: amount_icp_excluding_fees.get_e8s(),
+                    icp_accepted_participation_e8s: amount_icp_excluding_fees.get_e8s(),
+                })
+            );
+
+            let response = get_buyer_state(pocket_ic, swap_canister_id, direct_participant)
+                .expect("Swap.get_buyer_state response should be Ok.");
+            let (icp, has_created_neuron_recipes) = assert_matches!(
+                response.buyer_state,
+                Some(BuyerState {
+                    icp,
+                    has_created_neuron_recipes,
+                }) => (
+                    icp.expect("buyer_state.icp must be specified."),
+                    has_created_neuron_recipes
+                        .expect("buyer_state.has_created_neuron_recipes must be specified.")
+                )
+            );
+            assert!(
+                !has_created_neuron_recipes,
+                "Neuron recipes are expected to be created only after the swap is adopted"
+            );
+            assert_eq!(icp.amount_e8s, amount_icp_excluding_fees.get_e8s());
+        }
+
+        pub fn smoke_test_participate_and_finalize(
+            pocket_ic: &PocketIc,
+            swap_canister_id: PrincipalId,
+            swap_parameters: SwapParameters,
+        ) {
+            let SwapParameters {
+                minimum_participants,
+                maximum_direct_participation_icp,
+                ..
+            } = swap_parameters;
+
+            let icp_needed_to_immediately_close_e8s =
+                maximum_direct_participation_icp.unwrap().e8s.unwrap();
+            let minimum_participants_to_close = minimum_participants.unwrap();
+            let per_participant_amount_e8s =
+                icp_needed_to_immediately_close_e8s / minimum_participants_to_close;
+            let remainder = icp_needed_to_immediately_close_e8s % minimum_participants_to_close;
+
+            for i in 0..minimum_participants_to_close {
+                let amount = per_participant_amount_e8s + if i == 0 { remainder } else { 0 };
+                let amount = Tokens::from_e8s(amount);
+                let participant_id = PrincipalId::new_user_test_id(1000 + i);
+                nns::ledger::mint_icp(
+                    pocket_ic,
+                    AccountIdentifier::new(participant_id, None),
+                    amount.saturating_add(DEFAULT_TRANSFER_FEE),
+                );
+                participate_in_swap(
+                    pocket_ic,
+                    swap_canister_id,
+                    PrincipalId::new_user_test_id(1000 + i),
+                    amount,
+                );
+            }
+
+            await_swap_finalization_status(
+                pocket_ic,
+                swap_canister_id,
+                SwapFinalizationStatus::Committed,
+            )
+            .unwrap();
         }
     }
 }

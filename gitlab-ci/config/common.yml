@@ -22,7 +22,7 @@ default:
     expire_in: 3 days
     when: always
   image:
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:b4c69bc09c7128dc2b1ba13e9dc20e2839a31c9957580ff36f41a6b89f5e6af5"
+    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:e95ed63e9addda1b335c50fde800a8d9f0aad91a0d0cbe7da2fa782dc6ac1d4c"
   tags:
     - dfinity-ic
 
@@ -134,6 +134,7 @@ after_script:
         - "**/*.lock"
         - "**/*.rs"
         - "**/*.toml"
+        - "gitlab-ci/container/Dockerfile"
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/'
 

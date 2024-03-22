@@ -42,12 +42,15 @@ use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_protobuf::proxy::{ProtoProxy, ProxyDecodeError};
 use ic_protobuf::{messaging::xnet::v1, state::v1 as pb};
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::{
     canister_state::execution_state::SandboxMemory,
     page_map::{PersistenceError, StorageMetrics},
     PageIndex, PageMap, ReplicatedState,
 };
-use ic_state_layout::{error::LayoutError, AccessPolicy, CheckpointLayout, ReadOnly, StateLayout};
+use ic_state_layout::{
+    error::LayoutError, AccessPolicy, CheckpointLayout, PageMapLayout, ReadOnly, StateLayout,
+};
 use ic_types::{
     consensus::certification::Certification,
     crypto::CryptoHash,
@@ -62,6 +65,8 @@ use prost::Message;
 use std::convert::{From, TryFrom};
 use std::fs::File;
 use std::fs::OpenOptions;
+use std::os::unix::io::RawFd;
+use std::os::unix::prelude::IntoRawFd;
 use std::path::{Path, PathBuf};
 use std::sync::{
     atomic::{AtomicU64, Ordering},
@@ -72,10 +77,6 @@ use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
     sync::Mutex,
 };
-
-use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
-use std::os::unix::io::RawFd;
-use std::os::unix::prelude::IntoRawFd;
 use tempfile::tempfile;
 use uuid::Uuid;
 
@@ -578,8 +579,6 @@ type CertificationsMetadata = BTreeMap<Height, CertificationMetadata>;
 pub(crate) struct BundledManifest {
     root_hash: CryptoHashOfState,
     manifest: Manifest,
-    // `meta_manifest` will be used during state sync in future replica versions.
-    #[allow(dead_code)]
     meta_manifest: Arc<MetaManifest>,
 }
 
@@ -606,8 +605,7 @@ impl StateMetadata {
             .as_ref()
             .map(|bundled_manifest| &bundled_manifest.manifest)
     }
-    // `meta_manifest` will be used during state sync in future replica versions.
-    #[allow(dead_code)]
+
     pub fn meta_manifest(&self) -> Option<Arc<MetaManifest>> {
         self.bundled_manifest
             .as_ref()
@@ -1043,22 +1041,17 @@ impl PageMapType {
         result
     }
 
-    fn id(&self) -> CanisterId {
-        match &self {
-            PageMapType::WasmMemory(id) => *id,
-            PageMapType::StableMemory(id) => *id,
-            PageMapType::WasmChunkStore(id) => *id,
-        }
-    }
-
-    /// Maps a PageMapType to its location in a checkpoint according to `layout`
-    fn base<Access>(&self, layout: &CheckpointLayout<Access>) -> Result<PathBuf, LayoutError>
+    /// The layout of the files on disk for this PageMap.
+    fn layout<Access>(
+        &self,
+        layout: &CheckpointLayout<Access>,
+    ) -> Result<PageMapLayout<Access>, LayoutError>
     where
         Access: AccessPolicy,
     {
         match &self {
             PageMapType::WasmMemory(id) => Ok(layout.canister(id)?.vmemory_0()),
-            PageMapType::StableMemory(id) => Ok(layout.canister(id)?.stable_memory_blob()),
+            PageMapType::StableMemory(id) => Ok(layout.canister(id)?.stable_memory()),
             PageMapType::WasmChunkStore(id) => Ok(layout.canister(id)?.wasm_chunk_store()),
         }
     }

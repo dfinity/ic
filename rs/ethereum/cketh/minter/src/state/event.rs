@@ -5,6 +5,7 @@ use crate::lifecycle::{init::InitArg, upgrade::UpgradeArg};
 use crate::numeric::{BlockNumber, LedgerBurnIndex, LedgerMintIndex};
 use crate::state::transactions::{Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed};
 use crate::tx::{Eip1559TransactionRequest, SignedEip1559TransactionRequest};
+use ic_ethereum_types::Address;
 use minicbor::{Decode, Encode};
 
 /// The event describing the ckETH minter state transition.
@@ -43,7 +44,7 @@ pub enum EventType {
     /// The minter processed the helper smart contract logs up to the specified height.
     #[n(6)]
     SyncedToBlock {
-        /// The last processed block number (inclusive).
+        /// The last processed block number for ETH helper contract (inclusive).
         #[n(0)]
         block_number: BlockNumber,
     },
@@ -103,6 +104,26 @@ pub enum EventType {
     /// The minter accepted a new ERC-20 withdrawal request.
     #[n(16)]
     AcceptedErc20WithdrawalRequest(#[n(0)] Erc20WithdrawalRequest),
+    #[n(17)]
+    MintedCkErc20 {
+        /// The unique identifier of the deposit on the Ethereum network.
+        #[n(0)]
+        event_source: EventSource,
+        /// The transaction index on the ckETH ledger.
+        #[cbor(n(1), with = "crate::cbor::id")]
+        mint_block_index: LedgerMintIndex,
+        #[n(2)]
+        ckerc20_token_symbol: String,
+        #[n(3)]
+        erc20_contract_address: Address,
+    },
+    /// The minter processed the helper smart contract logs up to the specified height.
+    #[n(18)]
+    SyncedErc20ToBlock {
+        /// The last processed block number for ERC20 helper contract (inclusive).
+        #[n(0)]
+        block_number: BlockNumber,
+    },
 }
 
 impl ReceivedEvent {

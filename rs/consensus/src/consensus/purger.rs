@@ -226,24 +226,24 @@ impl Purger {
         changeset: &mut ChangeSet,
     ) -> bool {
         if let Some(purge_height) = get_purge_height(pool_reader) {
-            if purge_height < self.state_manager.latest_state_height() {
-                changeset.push(ChangeAction::PurgeValidatedBelow(purge_height));
-                trace!(self.log, "Purge validated pool below {:?}", purge_height);
-                self.metrics
-                    .validated_pool_purge_height
-                    .set(purge_height.get() as i64);
-                true
-            } else {
+            changeset.push(ChangeAction::PurgeValidatedBelow(purge_height));
+            trace!(self.log, "Purge validated pool below {:?}", purge_height);
+            self.metrics
+                .validated_pool_purge_height
+                .set(purge_height.get() as i64);
+
+            if purge_height > self.state_manager.latest_state_height() {
                 warn!(
                     every_n_seconds => 30,
                     self.log,
-                    "Execution state is not yet available at {:?} that is below \
-                    CUP height at {:?}. Cancel purge.",
+                    "Execution state is not yet available at height {} that is below \
+                    CUP height at {}. Purging anyways.",
                     purge_height,
                     pool_reader.get_catch_up_height()
                 );
-                false
             }
+
+            true
         } else {
             false
         }
@@ -374,10 +374,6 @@ impl Purger {
 /// validated pool. Usually things with height less than a min_length below the
 /// latest catch up height can be purged, but if there is nothing to purge,
 /// this function will return None.
-///
-/// Note that for actual purging, we must also consider execution state
-/// so that we don't purge below latest known state height. Otherwise
-/// we cannot replay past blocks to catch up state during a replica restart.
 fn get_purge_height(pool_reader: &PoolReader<'_>) -> Option<Height> {
     pool_reader
         .pool()

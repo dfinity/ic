@@ -197,7 +197,7 @@ fn test_initial_wasmtime_config() {
             "component_model",
             "https://github.com/WebAssembly/component-model/",
             "(component (core module (func $f)))",
-            "component model feature is not enabled",
+            "component passed to module validation",
         ),
         (
             "function_references",

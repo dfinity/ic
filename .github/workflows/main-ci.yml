@@ -32,11 +32,11 @@ jobs:
     runs-on:
       labels: bazel-runner-large
     container:
-      image: dfinity/ic-build:b4c69bc09c7128dc2b1ba13e9dc20e2839a31c9957580ff36f41a6b89f5e6af5
+      image: dfinity/ic-build:e95ed63e9addda1b335c50fde800a8d9f0aad91a0d0cbe7da2fa782dc6ac1d4c
     timeout-minutes: 90
     if: ${{ vars.RUN_CI == 'true' }} # needed to avoid running on public dfinity org until published
     steps:
-      - name: Checkout PR
+      - name: Checkout
         uses: actions/checkout@v3
         if: ${{ github.event_name == 'pull_request' }}
         with:
@@ -60,24 +60,24 @@ jobs:
       - name: After script
         run: |
           bazel clean
-      - name: Upload Bazel artifacts
-        uses: actions/upload-artifact@v3
-        if: success() || failure() # don't run if CI job is cancelled
-        with:
-          name: bazel-artifacts
-          retention-days: 2
-          if-no-files-found: ignore
-          compression-level: 7
-          path: |
-            bazel-build-log*.json*
-            bazel-bep.pb
-            bazel-testlogs/**/test.xml
+        # - name: Upload Bazel artifacts
+        #   uses: actions/upload-artifact@v3
+        #   if: success() || failure() # don't run if CI job is cancelled
+        #   with:
+        #     name: bazel-artifacts
+        #     retention-days: 2
+        #     if-no-files-found: ignore
+        #     compression-level: 7
+        #     path: |
+        #       bazel-build-log*.json*
+        #       bazel-bep.pb
+        #       bazel-testlogs/**/test.xml
   bazel-build-fuzzers:
     name: Bazel-Build-Fuzzers
     runs-on:
       labels: bazel-runner-small
     container:
-      image: dfinity/ic-build:b4c69bc09c7128dc2b1ba13e9dc20e2839a31c9957580ff36f41a6b89f5e6af5
+      image: dfinity/ic-build:e95ed63e9addda1b335c50fde800a8d9f0aad91a0d0cbe7da2fa782dc6ac1d4c
     timeout-minutes: 30
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
@@ -96,7 +96,7 @@ jobs:
     runs-on:
       labels: bazel-runner-small
     container:
-      image: dfinity/ic-build:b4c69bc09c7128dc2b1ba13e9dc20e2839a31c9957580ff36f41a6b89f5e6af5
+      image: dfinity/ic-build:e95ed63e9addda1b335c50fde800a8d9f0aad91a0d0cbe7da2fa782dc6ac1d4c
     timeout-minutes: 30
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
@@ -115,7 +115,7 @@ jobs:
     runs-on:
       labels: bazel-runner-small
     container:
-      image: dfinity/ic-build:b4c69bc09c7128dc2b1ba13e9dc20e2839a31c9957580ff36f41a6b89f5e6af5
+      image: dfinity/ic-build:e95ed63e9addda1b335c50fde800a8d9f0aad91a0d0cbe7da2fa782dc6ac1d4c
     if: ${{ vars.RUN_CI == 'true' }}
     timeout-minutes: 60
     steps:

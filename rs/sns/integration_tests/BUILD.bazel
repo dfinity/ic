@@ -10,6 +10,7 @@ BASE_DEPENDENCIES = [
     "//rs/crypto/sha2",
     "//rs/nervous_system/common",
     "//rs/nervous_system/common/test_keys",
+    "//rs/nns/cmc",
     "//rs/registry/subnet_type:subnet_type",
     "//rs/rosetta-api/icrc1",
     "//rs/rosetta-api/icrc1/ledger",

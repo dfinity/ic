@@ -8,7 +8,8 @@ use crate::response::{
 use crate::{
     assert_reply, CkEthSetup, DEFAULT_BLOCK_NUMBER, DEFAULT_DEPOSIT_BLOCK_NUMBER,
     DEFAULT_DEPOSIT_FROM_ADDRESS, DEFAULT_DEPOSIT_LOG_INDEX, DEFAULT_DEPOSIT_TRANSACTION_HASH,
-    DEFAULT_PRINCIPAL_ID, EXPECTED_BALANCE, MAX_TICKS, MINTER_ADDRESS,
+    DEFAULT_PRINCIPAL_ID, EXPECTED_BALANCE, LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MAX_TICKS,
+    MINTER_ADDRESS,
 };
 use candid::{Decode, Nat, Principal};
 use ethers_core::utils::{hex, rlp};
@@ -34,11 +35,15 @@ use std::time::Duration;
 pub struct DepositParams {
     pub from_address: Address,
     pub recipient: Principal,
+    pub token_contract_address: Option<Address>,
     pub amount: u64,
     pub override_rpc_eth_get_block_by_number:
         Box<dyn FnMut(MockJsonRpcProvidersBuilder) -> MockJsonRpcProvidersBuilder>,
     pub override_rpc_eth_get_logs:
         Box<dyn FnMut(MockJsonRpcProvidersBuilder) -> MockJsonRpcProvidersBuilder>,
+    pub override_rpc_erc20_get_logs:
+        Box<dyn FnMut(MockJsonRpcProvidersBuilder) -> MockJsonRpcProvidersBuilder>,
+    pub override_eth_log_entry: Box<dyn Fn(EthLogEntry) -> EthLogEntry>,
 }
 
 impl Default for DepositParams {
@@ -46,16 +51,19 @@ impl Default for DepositParams {
         Self {
             from_address: DEFAULT_DEPOSIT_FROM_ADDRESS.parse().unwrap(),
             recipient: PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID).into(),
+            token_contract_address: None,
             amount: EXPECTED_BALANCE,
             override_rpc_eth_get_block_by_number: Box::new(identity),
             override_rpc_eth_get_logs: Box::new(identity),
+            override_rpc_erc20_get_logs: Box::new(identity),
+            override_eth_log_entry: Box::new(identity),
         }
     }
 }
 
 impl DepositParams {
     fn eth_log(&self) -> ethers_core::types::Log {
-        ethers_core::types::Log::from(self.eth_log_entry())
+        ethers_core::types::Log::from((self.override_eth_log_entry)(self.eth_log_entry()))
     }
 
     pub fn eth_log_entry(&self) -> EthLogEntry {
@@ -64,7 +72,18 @@ impl DepositParams {
             amount: self.amount,
             from_address: self.from_address,
             transaction_hash: DEFAULT_DEPOSIT_TRANSACTION_HASH.to_string(),
+            token_contract_address: self.token_contract_address,
         }
+    }
+
+    pub fn is_erc20_deposit(&self) -> bool {
+        self.token_contract_address.is_some()
+    }
+
+    pub fn with_erc20_token(mut self, token_contract_address: Address, amount: u64) -> Self {
+        self.token_contract_address = Some(token_contract_address);
+        self.amount = amount;
+        self
     }
 
     pub fn with_mock_eth_get_block_by_number<
@@ -86,11 +105,22 @@ impl DepositParams {
         self.override_rpc_eth_get_logs = Box::new(override_mock);
         self
     }
+
+    pub fn with_mock_erc20_get_logs<
+        F: FnMut(MockJsonRpcProvidersBuilder) -> MockJsonRpcProvidersBuilder + 'static,
+    >(
+        mut self,
+        override_mock: F,
+    ) -> Self {
+        self.override_rpc_erc20_get_logs = Box::new(override_mock);
+        self
+    }
 }
 
 pub struct DepositFlow {
     pub(crate) setup: CkEthSetup,
     pub(crate) params: DepositParams,
+    pub(crate) minter_supports_erc20_deposit: bool,
 }
 
 impl DepositFlow {
@@ -127,6 +157,52 @@ impl DepositFlow {
         self.setup
     }
 
+    pub fn expect_erc20_mint(
+        mut self,
+        token_contract_address: Address,
+        token_symbol: &str,
+    ) -> CkEthSetup {
+        // Set a custom block to make sure the ETH scraper makes only one RPC request.
+        self.handle_deposit_until_block(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 50);
+
+        // TODO XC-77: check changes in minter's erc20 balance
+
+        // Pass extra time to make sure the minter finishes minting.
+        for _ in 0..10 {
+            self.setup.env.advance_time(Duration::from_secs(1));
+            self.setup.env.tick();
+        }
+
+        self.setup.check_audit_log();
+
+        let events = self.setup.get_all_events();
+        assert_contains_unique_event(
+            &events,
+            EventPayload::AcceptedErc20Deposit {
+                transaction_hash: DEFAULT_DEPOSIT_TRANSACTION_HASH.to_string(),
+                block_number: Nat::from(DEFAULT_DEPOSIT_BLOCK_NUMBER),
+                log_index: Nat::from(DEFAULT_DEPOSIT_LOG_INDEX),
+                from_address: self.params.from_address.to_string(),
+                value: Nat::from(self.params.amount),
+                principal: self.params.recipient,
+                erc20_contract_address: token_contract_address.to_string(),
+            },
+        );
+        assert_contains_unique_event(
+            &events,
+            EventPayload::MintedCkErc20 {
+                event_source: EventSource {
+                    transaction_hash: DEFAULT_DEPOSIT_TRANSACTION_HASH.to_string(),
+                    log_index: Nat::from(DEFAULT_DEPOSIT_LOG_INDEX),
+                },
+                ckerc20_token_symbol: token_symbol.to_string(),
+                erc20_contract_address: token_contract_address.to_string(),
+                mint_block_index: Nat::from(0_u8),
+            },
+        );
+        self.setup
+    }
+
     fn updated_balance(&self, balance_before: &Nat) -> Nat {
         let mut current_balance = balance_before.clone();
         for _ in 0..10 {
@@ -148,23 +224,53 @@ impl DepositFlow {
         self.setup
     }
 
+    pub fn expect_no_erc20_mint(mut self) -> CkEthSetup {
+        self.handle_deposit();
+        // TODO XC-77: check changes in minter's erc20 balance
+        self.setup
+    }
+
     fn handle_deposit(&mut self) {
+        self.handle_deposit_until_block(DEFAULT_BLOCK_NUMBER)
+    }
+
+    fn handle_deposit_until_block(&mut self, block_number: u64) {
         self.setup.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
 
         let default_get_block_by_number =
             MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
-                .respond_for_all_with(block_response(DEFAULT_BLOCK_NUMBER));
+                .respond_for_all_with(block_response(block_number));
         (self.params.override_rpc_eth_get_block_by_number)(default_get_block_by_number)
             .build()
             .expect_rpc_calls(&self.setup);
 
         self.setup.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
 
-        let default_eth_get_logs = MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
-            .respond_for_all_with(vec![self.params.eth_log()]);
+        let mut eth_logs = vec![];
+        let mut erc20_logs = vec![];
+
+        // The deposit is either for eth or erc20, so we only push it to the right log.
+        if self.params.is_erc20_deposit() {
+            erc20_logs.push(self.params.eth_log())
+        } else {
+            eth_logs.push(self.params.eth_log())
+        };
+
+        let default_eth_get_logs =
+            MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs).respond_for_all_with(eth_logs);
         (self.params.override_rpc_eth_get_logs)(default_eth_get_logs)
             .build()
             .expect_rpc_calls(&self.setup);
+
+        // Only minter upgraded with ERC20 helper contract will make RPC call that needs to be
+        // fed with the ERC20 event logs.
+        if self.minter_supports_erc20_deposit {
+            let default_erc20_get_logs = MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
+                .respond_for_all_with(erc20_logs);
+            (self.params.override_rpc_erc20_get_logs)(default_erc20_get_logs)
+                .build()
+                .expect_rpc_calls(&self.setup);
+        }
     }
 }
 

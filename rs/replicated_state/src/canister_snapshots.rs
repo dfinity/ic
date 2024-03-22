@@ -1,4 +1,4 @@
-use ic_types::{CanisterId, Time};
+use ic_types::{CanisterId, SnapshotId, Time};
 use ic_wasm_types::CanisterModule;
 
 use crate::{
@@ -7,40 +7,21 @@ use crate::{
     PageMap,
 };
 
-use phantom_newtype::Id;
 use std::{collections::BTreeMap, sync::Arc};
-
-pub struct SnapshotIdTag;
-pub type SnapshotId = Id<SnapshotIdTag, u64>;
 
 /// A collection of canister snapshots and their IDs.
 ///
 /// Additionally, keeps track of all the accumulated changes
 /// since the last flush to the disk.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct CanisterSnapshots {
-    next_snapshot_id: SnapshotId,
     pub(crate) snapshots: BTreeMap<SnapshotId, Arc<CanisterSnapshot>>,
     pub(crate) unflushed_changes: Vec<SnapshotOperation>,
 }
 
-impl Default for CanisterSnapshots {
-    fn default() -> Self {
-        Self {
-            next_snapshot_id: SnapshotId::new(0),
-            snapshots: BTreeMap::new(),
-            unflushed_changes: vec![],
-        }
-    }
-}
-
 impl CanisterSnapshots {
-    pub fn new(
-        next_snapshot_id: SnapshotId,
-        snapshots: BTreeMap<SnapshotId, Arc<CanisterSnapshot>>,
-    ) -> Self {
+    pub fn new(snapshots: BTreeMap<SnapshotId, Arc<CanisterSnapshot>>) -> Self {
         Self {
-            next_snapshot_id,
             snapshots,
             unflushed_changes: vec![],
         }
@@ -50,9 +31,7 @@ impl CanisterSnapshots {
     ///
     /// Additionally, adds a new item to the `unflushed_changes`
     /// which represents the new backup accumulated since the last flush to the disk.
-    pub fn push(&mut self, snapshot: Arc<CanisterSnapshot>) -> SnapshotId {
-        let snapshot_id = self.next_snapshot_id;
-        self.next_snapshot_id = SnapshotId::new(self.next_snapshot_id.get() + 1);
+    pub fn push(&mut self, snapshot_id: SnapshotId, snapshot: Arc<CanisterSnapshot>) -> SnapshotId {
         self.unflushed_changes.push(SnapshotOperation::Backup(
             snapshot.canister_id(),
             snapshot_id,
@@ -265,7 +244,8 @@ mod tests {
         assert_eq!(snapshot_manager.unflushed_changes.len(), 0);
 
         // Pushing new snapshot updates the `unflushed_changes` collection.
-        let snapshot_id = snapshot_manager.push(Arc::<CanisterSnapshot>::new(snapshot));
+        let snapshot_id = SnapshotId::from((canister_test_id(0), 1));
+        snapshot_manager.push(snapshot_id, Arc::<CanisterSnapshot>::new(snapshot));
         assert_eq!(snapshot_manager.snapshots.len(), 1);
         assert_eq!(snapshot_manager.unflushed_changes.len(), 1);
 

@@ -10,10 +10,10 @@ use ic_cketh_minter::endpoints::events::{
     Event as CandidEvent, EventSource as CandidEventSource, GetEventsArg, GetEventsResult,
 };
 use ic_cketh_minter::endpoints::{
-    AddCkErc20Token, Eip1559TransactionPrice, GasFeeEstimate, MinterInfo, RetrieveEthRequest,
-    RetrieveEthStatus, WithdrawalArg, WithdrawalError,
+    AddCkErc20Token, CkErc20Token, Eip1559TransactionPrice, GasFeeEstimate, MinterInfo,
+    RetrieveEthRequest, RetrieveEthStatus, WithdrawalArg, WithdrawalError,
 };
-use ic_cketh_minter::erc20::{CkErc20Token, CkTokenSymbol};
+use ic_cketh_minter::erc20;
 use ic_cketh_minter::eth_logs::{EventSource, ReceivedErc20Event, ReceivedEthEvent};
 use ic_cketh_minter::guard::retrieve_withdraw_guard;
 use ic_cketh_minter::ledger_client::LedgerClient;
@@ -97,6 +97,9 @@ fn emit_preupgrade_events() {
         storage::record_event(EventType::SyncedToBlock {
             block_number: s.last_scraped_block_number,
         });
+        storage::record_event(EventType::SyncedErc20ToBlock {
+            block_number: s.last_erc20_scraped_block_number,
+        });
     });
 }
 
@@ -154,7 +157,17 @@ async fn eip_1559_transaction_price() -> Eip1559TransactionPrice {
 async fn get_minter_info() -> MinterInfo {
     read_state(|s| MinterInfo {
         minter_address: s.minter_address().map(|a| a.to_string()),
-        smart_contract_address: s.eth_helper_contract_address.map(|a| a.to_string()),
+        eth_helper_contract_address: s.eth_helper_contract_address.map(|a| a.to_string()),
+        erc20_helper_contract_address: s.erc20_helper_contract_address.map(|a| a.to_string()),
+        supported_ckerc20_tokens: s
+            .ckerc20_tokens
+            .iter()
+            .map(|(symbol, addr, canister)| CkErc20Token {
+                ckerc20_token_symbol: erc20::CkTokenSymbol::to_string(symbol),
+                erc20_contract_address: addr.to_string(),
+                ledger_canister_id: *canister,
+            })
+            .collect::<Vec<_>>(),
         minimum_withdrawal_amount: Some(s.minimum_withdrawal_amount.into()),
         ethereum_block_height: Some(s.ethereum_block_height.into()),
         last_observed_block_number: s.last_observed_block_number.map(|n| n.into()),
@@ -250,7 +263,7 @@ async fn retrieve_eth_status(block_index: u64) -> RetrieveEthStatus {
 async fn withdraw_erc20(
     WithdrawErc20Arg {
         amount,
-        ckerc20_token_symbol,
+        ckerc20_ledger_id,
         recipient,
     }: WithdrawErc20Arg,
 ) -> Result<RetrieveErc20Request, WithdrawErc20Error> {
@@ -274,22 +287,17 @@ async fn withdraw_erc20(
     let ckerc20_withdrawal_amount =
         Erc20Value::try_from(amount).expect("ERROR: failed to convert Nat to u256");
 
-    let ckerc20_token_symbol = CkTokenSymbol::from_str(&ckerc20_token_symbol).unwrap_or_else(|e| {
-        ic_cdk::trap(&e.to_string());
-    });
-
-    let ckerc20_ledger =
-        read_state(|s| LedgerClient::ckerc20_ledger_from_state(s, &ckerc20_token_symbol))
-            .ok_or_else(|| {
-                let supported_ckerc20_tokens: BTreeSet<_> = read_state(|s| {
-                    s.supported_ck_erc20_token_symbols()
-                        .map(|token| token.to_string())
-                        .collect()
-                });
-                WithdrawErc20Error::TokenNotSupported {
-                    supported_tokens: Vec::from_iter(supported_ckerc20_tokens),
-                }
-            })?;
+    let ckerc20_token = read_state(|s| s.find_ck_erc20_token_by_ledger_id(&ckerc20_ledger_id))
+        .ok_or_else(|| {
+            let supported_ckerc20_tokens: BTreeSet<_> = read_state(|s| {
+                s.supported_ck_erc20_tokens()
+                    .map(|token| token.into())
+                    .collect()
+            });
+            WithdrawErc20Error::TokenNotSupported {
+                supported_tokens: Vec::from_iter(supported_ckerc20_tokens),
+            }
+        })?;
     let cketh_ledger = read_state(LedgerClient::cketh_ledger_from_state);
     let erc20_tx_fee = estimate_erc20_transaction_fee();
     let now = ic_cdk::api::time();
@@ -299,7 +307,7 @@ async fn withdraw_erc20(
             caller.into(),
             erc20_tx_fee,
             BurnMemo::Erc20GasFee {
-                ckerc20_token_symbol: ckerc20_token_symbol.clone(),
+                ckerc20_token_symbol: ckerc20_token.ckerc20_token_symbol.clone(),
                 ckerc20_withdrawal_amount,
                 to_address: destination,
             },
@@ -311,9 +319,9 @@ async fn withdraw_erc20(
                 INFO,
                 "[withdraw_erc20]: burning {} {}",
                 ckerc20_withdrawal_amount,
-                ckerc20_token_symbol
+                ckerc20_token.ckerc20_token_symbol
             );
-            match ckerc20_ledger
+            match LedgerClient::ckerc20_ledger(&ckerc20_token)
                 .burn_from(
                     caller.into(),
                     ckerc20_withdrawal_amount,
@@ -330,8 +338,9 @@ async fn withdraw_erc20(
                         withdrawal_amount: ckerc20_withdrawal_amount,
                         destination,
                         cketh_ledger_burn_index,
+                        ckerc20_ledger_id: ckerc20_token.ckerc20_ledger_id,
                         ckerc20_ledger_burn_index,
-                        ckerc20_token_symbol,
+                        erc20_contract_address: ckerc20_token.erc20_contract_address,
                         from: caller,
                         from_subaccount: None,
                         created_at: now,
@@ -379,7 +388,7 @@ async fn add_ckerc20_token(erc20_token: AddCkErc20Token) {
             orchestrator_id
         ));
     }
-    let ckerc20_token = CkErc20Token::try_from(erc20_token)
+    let ckerc20_token = erc20::CkErc20Token::try_from(erc20_token)
         .unwrap_or_else(|e| ic_cdk::trap(&format!("ERROR: {}", e)));
     mutate_state(|s| process_event(s, EventType::AddedCkErc20Token(ckerc20_token)));
 }
@@ -517,6 +526,9 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                 EventType::SyncedToBlock { block_number } => EP::SyncedToBlock {
                     block_number: block_number.into(),
                 },
+                EventType::SyncedErc20ToBlock { block_number } => EP::SyncedErc20ToBlock {
+                    block_number: block_number.into(),
+                },
                 EventType::AcceptedEthWithdrawalRequest(EthWithdrawalRequest {
                     withdrawal_amount,
                     destination,
@@ -561,7 +573,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     transaction_receipt: map_transaction_receipt(transaction_receipt),
                 },
                 EventType::ReimbursedEthWithdrawal(Reimbursed {
-                    withdrawal_id,
+                    burn_in_block: withdrawal_id,
                     reimbursed_in_block,
                     reimbursed_amount,
                     transaction_hash,
@@ -585,7 +597,8 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     withdrawal_amount,
                     destination,
                     cketh_ledger_burn_index,
-                    ckerc20_token_symbol,
+                    erc20_contract_address,
+                    ckerc20_ledger_id,
                     ckerc20_ledger_burn_index,
                     from,
                     from_subaccount,
@@ -593,13 +606,25 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                 }) => EP::AcceptedErc20WithdrawalRequest {
                     max_transaction_fee: max_transaction_fee.into(),
                     withdrawal_amount: withdrawal_amount.into(),
-                    ckerc20_token_symbol: ckerc20_token_symbol.to_string(),
+                    erc20_contract_address: erc20_contract_address.to_string(),
                     destination: destination.to_string(),
                     cketh_ledger_burn_index: cketh_ledger_burn_index.get().into(),
+                    ckerc20_ledger_id,
                     ckerc20_ledger_burn_index: ckerc20_ledger_burn_index.get().into(),
                     from,
                     from_subaccount: from_subaccount.map(|s| s.0),
                     created_at,
+                },
+                EventType::MintedCkErc20 {
+                    event_source,
+                    mint_block_index,
+                    ckerc20_token_symbol,
+                    erc20_contract_address,
+                } => EP::MintedCkErc20 {
+                    event_source: map_event_source(event_source),
+                    mint_block_index: mint_block_index.get().into(),
+                    ckerc20_token_symbol,
+                    erc20_contract_address: erc20_contract_address.to_string(),
                 },
             },
         }

@@ -11,6 +11,6 @@ documentation.workspace = true
 [dependencies]
 axum = { workspace = true }
 axum-server = { version = "^0.6.0", features = ["tls-rustls"] }
-clap = { version = "4.0", features = ["derive"] }
+clap = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }

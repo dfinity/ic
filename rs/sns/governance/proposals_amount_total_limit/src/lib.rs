@@ -6,13 +6,13 @@ use rust_decimal_macros::dec;
 const ONE_QUARTER: Decimal = dec!(0.25);
 
 pub fn transfer_sns_treasury_funds_7_day_total_upper_bound_tokens(
-    valuation: &Valuation,
+    valuation: Valuation,
 ) -> Result<Decimal, ProposalsAmountTotalLimitError> {
     ProposalsAmountTotalUpperBound::in_tokens(valuation)
 }
 
 pub fn mint_sns_tokens_7_day_total_upper_bound_tokens(
-    valuation: &Valuation,
+    valuation: Valuation,
 ) -> Result<Decimal, ProposalsAmountTotalLimitError> {
     ProposalsAmountTotalUpperBound::in_tokens(valuation)
 }
@@ -40,16 +40,41 @@ impl ProposalsAmountTotalUpperBound {
     // window).
     const MAX_XDR: Decimal = dec!(300_000);
 
-    fn in_tokens(valuation: &Valuation) -> Result<Decimal, ProposalsAmountTotalLimitError> {
+    /// A price quote less than this is considered "unrealistically" low. When that happens, we use
+    /// this instead of the quoted value.
+    ///
+    /// # Motivation
+    ///
+    /// Low XDRs per ICP quotes would tend to cause our valuations to be in the "small" regime,
+    /// where an SNS is allowed to take the biggest actions relative to their size. This is to
+    /// minmize the damage caused by wacky price quotes.
+    ///
+    /// # What Value to Use
+    ///
+    /// Currently, the minimum XDRs per ICP used by NNS governance is 1. This is simply copied from
+    /// there, specifically from the minimum_icp_xdr_rate field in NetworkEconomics.
+    ///
+    /// As of Mar 2024, the price of ICP is around 10 XDR. The lowest it has ever been is around 2.2
+    /// XDR. FWIW, this is less than that.
+    ///
+    /// # Why Not Also Define MAX?
+    ///
+    /// Currently, we do not have/enforce a MAX_XDRS_PER_ICP, because this would tend to cause our
+    /// valuations to be in the "large" regime, where actions are more limited.
+    const MIN_XDRS_PER_ICP: Decimal = dec!(1);
+
+    fn in_tokens(mut valuation: Valuation) -> Result<Decimal, ProposalsAmountTotalLimitError> {
+        Self::clamp_xdrs_per_icp(&mut valuation);
+
         let ValuationFactors {
             tokens: balance_tokens,
             icps_per_token,
             xdrs_per_icp,
-        } = &valuation.valuation_factors;
+        } = valuation.valuation_factors;
 
         let self_ = Self::from_valuation_xdr(valuation.to_xdr());
         let result_tokens = match self_ {
-            Self::NoLimit => *balance_tokens,
+            Self::NoLimit => balance_tokens,
 
             Self::Fraction(fraction) => balance_tokens
                 .checked_mul(fraction)
@@ -62,13 +87,12 @@ impl ProposalsAmountTotalUpperBound {
                 })?,
 
             Self::Xdr(max_xdr) => {
-                let xdrs_per_token =
-                    xdrs_per_icp.checked_mul(*icps_per_token).ok_or_else(|| {
-                        ProposalsAmountTotalLimitError::new_arithmetic(format!(
-                            "XDRs per token could not be calculated from valuation: {:?}",
-                            valuation
-                        ))
-                    })?;
+                let xdrs_per_token = xdrs_per_icp.checked_mul(icps_per_token).ok_or_else(|| {
+                    ProposalsAmountTotalLimitError::new_arithmetic(format!(
+                        "XDRs per token could not be calculated from valuation: {:?}",
+                        valuation
+                    ))
+                })?;
 
                 // Calculate the inverse conversion rate.
                 if xdrs_per_token == Decimal::from(0) {
@@ -112,6 +136,11 @@ impl ProposalsAmountTotalUpperBound {
         }
 
         Self::Xdr(Self::MAX_XDR)
+    }
+
+    fn clamp_xdrs_per_icp(valuation: &mut Valuation) {
+        let xdrs_per_icp = &mut valuation.valuation_factors.xdrs_per_icp;
+        *xdrs_per_icp = (*xdrs_per_icp).max(Self::MIN_XDRS_PER_ICP);
     }
 }
 

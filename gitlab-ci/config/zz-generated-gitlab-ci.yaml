@@ -301,6 +301,7 @@
         - "**/*.lock"
         - "**/*.rs"
         - "**/*.toml"
+        - gitlab-ci/container/Dockerfile
       if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
     - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/
@@ -668,6 +669,7 @@ bazel-config-check-all-rebuild:
           - "**/*.lock"
           - "**/*.rs"
           - "**/*.toml"
+          - gitlab-ci/container/Dockerfile
         if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"
       - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
       - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/
@@ -1196,13 +1198,14 @@ bazel-test-all-rebuild:
     when: always
   extends:
     - ".bazel-test-all"
-    - ".rules-post-master"
   needs: []
   rules:
     - allow_failure: true
       if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"
       when: manual
-    - if: $SCHEDULE_NAME == "run-all-master"
+    - allow_failure: true
+      if: $SCHEDULE_NAME == "run-all-master"
+      when: manual
   script:
     - "./gitlab-ci/src/bazel-ci/main.sh"
   tags:
@@ -1385,6 +1388,7 @@ bazel-test-macos:
           - "**/*.lock"
           - "**/*.rs"
           - "**/*.toml"
+          - gitlab-ci/container/Dockerfile
         if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"
       - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
       - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/
@@ -1616,7 +1620,6 @@ build-base-images-ref-update:
     - build-guestos-base
     - build-guestos-base-dev
     - build-boundaryos-base
-    - build-boundaryos-base-snp
     - build-hostos-base
     - build-hostos-base-dev
     - build-setupos-base
@@ -1627,7 +1630,6 @@ build-base-images-ref-update:
     - build-guestos-base
     - build-guestos-base-dev
     - build-boundaryos-base
-    - build-boundaryos-base-snp
     - build-hostos-base
     - build-hostos-base-dev
     - build-setupos-base
@@ -1730,54 +1732,6 @@ build-boundaryos-base:
     CONTEXT: "${CI_PROJECT_DIR}/ic-os/boundary-guestos/rootfs"
     IMAGE: boundaryos-base
     REF_FILE: ic-os/boundary-guestos/rootfs/docker-base.prod
-build-boundaryos-base-snp:
-  artifacts:
-    paths:
-      - digestfile*
-  extends:
-    - ".build-base-image-job"
-  needs: []
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "build-push-base-images"
-    - allow_failure: true
-      if: $CI_COMMIT_BRANCH == "master" && $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
-      when: manual
-    - changes:
-        - gitlab-ci/config/base-images-build.yml
-        - ic-os/boundary-guestos/rootfs/Dockerfile.base
-        - ic-os/guestos/rootfs/Dockerfile.base
-        - ic-os/guestos/rootfs/packages.common
-        - ic-os/guestos/rootfs/packages.dev
-        - ic-os/hostos/rootfs/Dockerfile.base
-        - ic-os/hostos/rootfs/packages.common
-        - ic-os/hostos/rootfs/packages.dev
-        - ic-os/setupos/rootfs/Dockerfile.base
-        - ic-os/setupos/rootfs/packages.common
-        - ic-os/setupos/rootfs/packages.dev
-      if: $CI_PIPELINE_SOURCE == "merge_request_event"
-  script:
-    - BUILD_ARGS=(--build-arg "CPU_SUPPORT=snp")
-    - |
-      set -euo pipefail
-
-      TAG=$(date '+%Y-%m-%d-%H%M')
-      echo -e "\e[0Ksection_start:$(date +%s):${IMAGE}[collapsed=true]\r\e[0KClick here to see the ${IMAGE} build"
-      pushd "$CONTEXT"
-      podman build "${BUILD_ARGS[@]}" --squash-all --no-cache -t "docker.io/dfinity/${IMAGE}:${TAG}" -f Dockerfile.base .
-      popd
-      echo -e "\e[0Ksection_end:$(date +%s):${IMAGE}\r\e[0K"
-
-      if [ "${CI_COMMIT_REF_NAME:-}" == "master" ]; then
-          podman login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD" docker.io
-          podman push "dfinity/${IMAGE}:${TAG}" --digestfile digestfile
-          echo "dfinity/${IMAGE}@$(cat digestfile)" > "digestfile-${IMAGE}"
-          echo "$REF_FILE" >> "digestfile-${IMAGE}"
-          rm -f digestfile
-      fi
-  variables:
-    CONTEXT: "${CI_PROJECT_DIR}/ic-os/boundary-guestos/rootfs"
-    IMAGE: boundaryos-base-snp
-    REF_FILE: ic-os/boundary-guestos/rootfs/docker-base.snp
 build-determinism:
   extends:
     - ".rules-master-pipeline-no-merge-train"
@@ -1796,7 +1750,7 @@ build-determinism:
         TARGET: "//publish/canisters:upload"
       - PATH0: guest-os/update-img
         PATH1: build-ic/guest-os
-        TARGET: "//ic-os/guestos/envs/prod:upload_disk-img"
+        TARGET: "//ic-os/guestos/envs/prod:upload_update-img"
       - PATH0: host-os/update-img
         PATH1: build-ic/host-os
         TARGET: "//ic-os/hostos/envs/prod:upload_update-img"
@@ -2443,8 +2397,8 @@ container-autobuild:
       popd
 
       # update github CI docker image
-      pushd .github/workflows
-      sed -i -E "s|$IMG_BAZEL_DOCKER_HUB:[^\"]{5,}|$IMG_BAZEL_DOCKER_HUB_FULL|g" -- *
+      pushd .github
+      sed -i -E "s|$IMG_BAZEL_DOCKER_HUB:[^\"]{5,}|$IMG_BAZEL_DOCKER_HUB_FULL|g" -- workflow*/*
       popd
 
       # commit and push the change upstream
@@ -2509,7 +2463,7 @@ default:
     expire_in: 3 days
     when: always
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:b4c69bc09c7128dc2b1ba13e9dc20e2839a31c9957580ff36f41a6b89f5e6af5
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:e95ed63e9addda1b335c50fde800a8d9f0aad91a0d0cbe7da2fa782dc6ac1d4c
   interruptible: true
   retry:
     max: 2
@@ -2571,6 +2525,7 @@ dependencies-check:
         - "**/*.lock"
         - "**/*.rs"
         - "**/*.toml"
+        - gitlab-ci/container/Dockerfile
       if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
     - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/
@@ -2578,11 +2533,9 @@ dependencies-check:
     - |
       set -euo pipefail
       pip3 install --ignore-installed -r requirements.txt
-      $SHELL_WRAPPER cargo install cargo-audit --version "${CARGO_AUDIT_VERSION}"
       cd "${CI_PROJECT_DIR}"/gitlab-ci/src/dependencies/
       $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_merge_job.py
   variables:
-    CARGO_AUDIT_VERSION: 0.18.3
     PYTHONPATH: "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
     SHELL_WRAPPER: "/usr/bin/time"
 dependency-scan-nightly:
@@ -2594,7 +2547,6 @@ dependency-scan-nightly:
     - |
       set -euo pipefail
       pip3 install --ignore-installed -r requirements.txt
-      $SHELL_WRAPPER cargo install cargo-audit --version "${CARGO_AUDIT_VERSION}"
       $SHELL_WRAPPER cargo install wasm-pack --version "${CARGO_WASMPACK_VERSION}"
       # shellcheck disable=SC1090
       source "${NVM_DIR}/nvm.sh"
@@ -2606,7 +2558,6 @@ dependency-scan-nightly:
       $SHELL_WRAPPER python3 job/npm_scanner_periodic_job.py
       $SHELL_WRAPPER python3 job/bazel_trivy_container_ic_scanner_periodic_job.py
   variables:
-    CARGO_AUDIT_VERSION: 0.18.3
     CARGO_WASMPACK_VERSION: 0.12.1
     DEFAULT_NODE_VERSION: '20'
     PYTHONPATH: "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
@@ -2620,11 +2571,9 @@ dependency-scan-release-cut:
     - |
       set -euo pipefail
       pip3 install --ignore-installed -r requirements.txt
-      $SHELL_WRAPPER cargo install cargo-audit --version "${CARGO_AUDIT_VERSION}"
       cd "${CI_PROJECT_DIR}"/gitlab-ci/src/dependencies
       $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_release_job.py
   variables:
-    CARGO_AUDIT_VERSION: 0.18.3
     PYTHONPATH: "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
     SHELL_WRAPPER: "/usr/bin/time"
 heavy-memory-update-performance-test-nightly:
@@ -3322,6 +3271,9 @@ pre-commit:
         echo "And then commit the changes."
         exit 1
       fi
+  tags:
+    - dfinity-ic
+    - bazel
   variables:
     PRE_COMMIT_HOME: "/cache/pre-commit/$CI_CONCURRENT_ID"
 python-ci-tests:

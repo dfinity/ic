@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-clap = { workspace = true }
+clap = { version = "3.2.25", features = ["derive"] }
 hex = "0.4.2"
 ic-artifact-pool = { path = "../artifact_pool" }
 ic-async-utils = { path = "../async_utils" }
@@ -49,8 +49,8 @@ libc = "0.2.91"
 nix = { workspace = true }
 num_cpus = "1.13.1"
 pprof = { version = "0.13", default-features = false, features = [
-  "flamegraph",
-  "prost-codec",
+    "flamegraph",
+    "prost-codec",
 ], optional = true }
 prometheus = { workspace = true }
 rand = "0.8"
@@ -84,6 +84,6 @@ path = "src/main.rs"
 [features]
 profiler = ["pprof"]
 malicious_code = [
-  "ic-consensus/malicious_code",
-  "ic-state-manager/malicious_code",
+    "ic-consensus/malicious_code",
+    "ic-state-manager/malicious_code",
 ]

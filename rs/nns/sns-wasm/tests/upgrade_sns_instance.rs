@@ -10,11 +10,7 @@ use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    sns_wasm,
-    sns_wasm::{
-        build_archive_sns_wasm, build_governance_sns_wasm, build_index_ng_sns_wasm,
-        build_ledger_sns_wasm, build_root_sns_wasm, build_swap_sns_wasm, create_modified_wasm,
-    },
+    sns_wasm::{self, create_modified_sns_wasm, ensure_sns_wasm_gzipped},
     state_test_helpers,
     state_test_helpers::{query, set_controllers, setup_nns_canisters, update, update_with_sender},
 };
@@ -44,7 +40,6 @@ use icrc_ledger_types::icrc1::{
     account::Account,
     transfer::{NumTokens, TransferArg, TransferError},
 };
-use maplit::btreemap;
 use std::{collections::BTreeMap, convert::TryInto, time::Duration};
 
 pub mod common;
@@ -160,7 +155,7 @@ fn test_governance_restarts_root_if_root_cannot_stop_during_upgrade() {
 
     let original_hash = wasm_map.get(&canister_type).unwrap().sha256_hash();
 
-    let sns_wasm_to_add = create_modified_wasm(wasm_map.get(&canister_type).unwrap(), None);
+    let sns_wasm_to_add = create_modified_sns_wasm(wasm_map.get(&canister_type).unwrap(), None);
     let new_wasm_hash = sns_wasm_to_add.sha256_hash();
 
     assert_ne!(new_wasm_hash, original_hash);
@@ -232,7 +227,7 @@ fn run_upgrade_test(canister_type: SnsCanisterType) {
     // Add cycles to the SNS-W canister to deploy an SNS.
     machine.add_cycles(SNS_WASM_CANISTER_ID, EXPECTED_SNS_CREATION_FEE);
 
-    let wasm_map = sns_wasm::add_real_wasms_to_sns_wasms(&machine);
+    let wasm_map = sns_wasm::add_freshly_built_sns_wasms(&machine, ensure_sns_wasm_gzipped);
 
     // To get an SNS neuron, we airdrop our new tokens to this user.
     let user = PrincipalId::new_user_test_id(0);
@@ -304,15 +299,17 @@ fn run_upgrade_test(canister_type: SnsCanisterType) {
 
     let original_hash = wasm_map.get(&canister_type).unwrap().sha256_hash();
 
-    let sns_wasm_to_add =
-        sns_wasm::create_modified_wasm(wasm_map.get(&canister_type).unwrap(), None);
+    let sns_wasm_to_add = ensure_sns_wasm_gzipped(create_modified_sns_wasm(
+        wasm_map.get(&canister_type).unwrap(),
+        Some("Preserve behavior 673_351_772."),
+    ));
     let new_wasm_hash = sns_wasm_to_add.sha256_hash();
 
     assert_ne!(new_wasm_hash, original_hash);
 
     sns_wasm::add_wasm_via_proposal(&machine, sns_wasm_to_add);
 
-    // Make a proposal to upgrade (that is auto-executed) with the neuron for our user.
+    // Instantly pass an SNS upgrade proposal.
     let proposal_id = state_test_helpers::sns_make_proposal(
         &machine,
         governance,
@@ -420,7 +417,7 @@ fn upgrade_swap(
     let original_swap_hash = wasm_map.get(&SnsCanisterType::Swap).unwrap().sha256_hash();
 
     let swap_wasm_to_add =
-        create_modified_wasm(wasm_map.get(&SnsCanisterType::Swap).unwrap(), None);
+        create_modified_sns_wasm(wasm_map.get(&SnsCanisterType::Swap).unwrap(), None);
     let new_swap_hash = swap_wasm_to_add.sha256_hash();
 
     assert_ne!(new_swap_hash, original_swap_hash);
@@ -683,7 +680,7 @@ fn upgrade_archive_sns_canister_via_sns_wasms() {
     let original_hash = current_wasm.sha256_hash();
 
     // We add a new WASM to the SNS-WASMs (for whatever canister we want to test)
-    let sns_wasm_to_add = sns_wasm::create_modified_wasm(current_wasm, None);
+    let sns_wasm_to_add = create_modified_sns_wasm(current_wasm, None);
     let new_wasm_hash = sns_wasm_to_add.sha256_hash();
 
     assert_ne!(new_wasm_hash, original_hash);
@@ -735,33 +732,14 @@ fn test_out_of_sync_version_still_allows_upgrade_to_succeed() {
 
     setup_nns_canisters(&machine, nns_init_payload);
 
-    let root_wasm = build_root_sns_wasm();
-    sns_wasm::add_wasm_via_proposal(&machine, root_wasm.clone());
+    fn filter_wasm(mut sns_wasm: SnsWasm) -> SnsWasm {
+        if sns_wasm.canister_type == SnsCanisterType::Archive as i32 {
+            sns_wasm = create_modified_sns_wasm(&sns_wasm, Some("Preserve behavior 160_036_541."))
+        }
 
-    let gov_wasm = build_governance_sns_wasm();
-    sns_wasm::add_wasm_via_proposal(&machine, gov_wasm.clone());
-
-    let ledger_wasm = build_ledger_sns_wasm();
-    sns_wasm::add_wasm_via_proposal(&machine, ledger_wasm.clone());
-
-    let swap_wasm = build_swap_sns_wasm();
-    sns_wasm::add_wasm_via_proposal(&machine, swap_wasm.clone());
-
-    // we are intentionally creating the archive to have a different hash than the one deployed by ledger
-    let archive_wasm = sns_wasm::create_modified_wasm(&build_archive_sns_wasm(), None);
-    sns_wasm::add_wasm_via_proposal(&machine, archive_wasm.clone());
-
-    let index_wasm = build_index_ng_sns_wasm();
-    sns_wasm::add_wasm_via_proposal(&machine, index_wasm.clone());
-
-    let wasm_map = btreemap! {
-        SnsCanisterType::Root => root_wasm,
-        SnsCanisterType::Governance =>gov_wasm,
-        SnsCanisterType::Ledger =>  ledger_wasm,
-        SnsCanisterType::Swap =>  swap_wasm,
-        SnsCanisterType::Archive =>  archive_wasm,
-        SnsCanisterType::Index =>  index_wasm,
-    };
+        ensure_sns_wasm_gzipped(sns_wasm)
+    }
+    let wasm_map = sns_wasm::add_freshly_built_sns_wasms(&machine, filter_wasm);
 
     // To get an SNS neuron, we airdrop our new tokens to this user.
     let user = PrincipalId::new_user_test_id(0);
@@ -961,15 +939,15 @@ fn test_out_of_sync_version_still_allows_upgrade_to_succeed() {
     assert!(status_summary.archives.is_empty());
 
     // We add a new WASM to the SNS-WASMs (for governance)
-    let modified_governance =
-        sns_wasm::create_modified_wasm(wasm_map.get(&SnsCanisterType::Governance).unwrap(), None);
-
+    let modified_governance = create_modified_sns_wasm(
+        wasm_map.get(&SnsCanisterType::Governance).unwrap(),
+        Some("Preserve behavior 509_230_111."),
+    );
     sns_wasm::add_wasm_via_proposal(&machine, modified_governance.clone());
 
     // Make a proposal to upgrade (that is auto-executed) with the neuron for our user.
     let neuron_id =
         state_test_helpers::sns_claim_staked_neuron(&machine, governance, user, 0, Some(1_000_000));
-
     let proposal_id = state_test_helpers::sns_make_proposal(
         &machine,
         governance,
@@ -982,7 +960,6 @@ fn test_out_of_sync_version_still_allows_upgrade_to_succeed() {
         },
     )
     .unwrap();
-
     sns_wait_for_pending_upgrade(&machine, governance);
 
     // advance time so proposal can possibly fail
@@ -990,15 +967,16 @@ fn test_out_of_sync_version_still_allows_upgrade_to_succeed() {
 
     state_test_helpers::sns_wait_for_proposal_executed_or_failed(&machine, governance, proposal_id);
 
-    // Get governance canister hash and ensure it works.
+    // Assert that the governance canister is running the new code.
     let statuses = sns_wait_for_upgrade_finished(SnsCanisterType::Governance, &machine, root);
-    assert!(!statuses.is_empty());
-
-    // Our selected module has the new hash.
-    let upgraded_gov_hash = modified_governance.sha256_hash().to_vec();
-    assert!(statuses
-        .iter()
-        .all(|s| s.module_hash().unwrap() == upgraded_gov_hash));
+    let expected_governance_hash = modified_governance.sha256_hash().to_vec();
+    assert_eq!(
+        statuses
+            .iter()
+            .map(|s| s.module_hash().unwrap())
+            .collect::<Vec<_>>(),
+        vec![expected_governance_hash],
+    );
 
     // Assert that our recorded version has advanced
     let version_response = Decode!(
@@ -1044,7 +1022,7 @@ fn test_custom_upgrade_path_for_sns() {
     setup_nns_canisters(&machine, nns_init_payload);
     machine.add_cycles(SNS_WASM_CANISTER_ID, EXPECTED_SNS_CREATION_FEE);
 
-    let wasm_map = sns_wasm::add_real_wasms_to_sns_wasms(&machine);
+    let wasm_map = sns_wasm::add_freshly_built_sns_wasms(&machine, ensure_sns_wasm_gzipped);
 
     // To get an SNS neuron, we airdrop our new tokens to this user.
     let user = PrincipalId::new_user_test_id(0);
@@ -1104,7 +1082,13 @@ fn test_custom_upgrade_path_for_sns() {
 
     let deployed_version = wasm_map_to_version(&wasm_map);
     // After our deploy, we need to add a bunch of wasms so there's an upgrade path
-    let modified_map = sns_wasm::add_modified_wasms_to_sns_wasms(&machine, "foo");
+    fn filter_wasm(sns_wasm: SnsWasm) -> SnsWasm {
+        ensure_sns_wasm_gzipped(create_modified_sns_wasm(
+            &sns_wasm,
+            Some("Preserve behavior 316_348_324."),
+        ))
+    }
+    let modified_map = sns_wasm::add_freshly_built_sns_wasms(&machine, filter_wasm);
 
     // Normal path: Original -> + root -> + governance -> +ledger
     // Modified path: Original -> + governance -> + root -> +ledger

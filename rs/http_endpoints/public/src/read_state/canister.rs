@@ -1,21 +1,26 @@
 use super::{parse_principal_id, verify_principal_ids};
 use crate::{
-    common::{cbor_response, into_cbor, make_plaintext_response, remove_effective_principal_id},
-    receive_request_body,
+    common::{into_cbor, Cbor},
     state_reader_executor::StateReaderExecutor,
     validator_executor::ValidatorExecutor,
-    HttpError, ReplicaHealthStatus,
+    verify_cbor_content_header, HttpError, ReplicaHealthStatus,
 };
 
-use axum::body::Body;
+use axum::{
+    body::Body,
+    extract::State,
+    response::{IntoResponse, Response},
+    Router,
+};
+use bytes::Bytes;
 use crossbeam::atomic::AtomicCell;
 use http::Request;
-use hyper::{Response, StatusCode};
+use hyper::StatusCode;
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path, TooLongPathError};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::{error, replica_logger::no_op_logger, ReplicaLogger};
+use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_replicated_state::{canister_state::execution_state::CustomSectionType, ReplicatedState};
 use ic_types::{
     malicious_flags::MaliciousFlags,
@@ -28,15 +33,11 @@ use ic_types::{
 };
 use ic_validator::CanisterIdSet;
 use std::convert::{Infallible, TryFrom};
-use std::future::Future;
-use std::pin::Pin;
 use std::sync::{Arc, RwLock};
-use std::task::{Context, Poll};
-use tower::Service;
+use tower::{util::BoxCloneService, ServiceBuilder};
 
 #[derive(Clone)]
 pub struct CanisterReadStateService {
-    log: ReplicaLogger,
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
     delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
     state_reader_executor: StateReaderExecutor,
@@ -52,6 +53,12 @@ pub struct CanisterReadStateServiceBuilder {
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
+}
+
+impl CanisterReadStateService {
+    pub(crate) fn route() -> &'static str {
+        "/api/v2/canister/:effective_canister_id/read_state"
+    }
 }
 
 impl CanisterReadStateServiceBuilder {
@@ -90,10 +97,9 @@ impl CanisterReadStateServiceBuilder {
         self
     }
 
-    pub fn build(self) -> CanisterReadStateService {
+    pub(crate) fn build_router(self) -> Router {
         let log = self.log.unwrap_or(no_op_logger());
-        CanisterReadStateService {
-            log: log.clone(),
+        let state = CanisterReadStateService {
             health_status: self
                 .health_status
                 .unwrap_or_else(|| Arc::new(AtomicCell::new(ReplicaHealthStatus::Healthy))),
@@ -106,150 +112,129 @@ impl CanisterReadStateServiceBuilder {
                 log,
             ),
             registry_client: self.registry_client,
-        }
+        };
+        Router::new().route(
+            CanisterReadStateService::route(),
+            axum::routing::post(canister_read_state)
+                .with_state(state)
+                .layer(
+                    ServiceBuilder::new()
+                        .layer(axum::middleware::from_fn(verify_cbor_content_header)),
+                ),
+        )
+    }
+
+    pub fn build_service(self) -> BoxCloneService<Request<Body>, Response, Infallible> {
+        let router = self.build_router();
+        BoxCloneService::new(router.into_service())
     }
 }
 
-impl Service<Request<Body>> for CanisterReadStateService {
-    type Response = Response<Body>;
-    type Error = Infallible;
-    #[allow(clippy::type_complexity)]
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
-
-    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        Poll::Ready(Ok(()))
+pub(crate) async fn canister_read_state(
+    axum::extract::Path(effective_canister_id): axum::extract::Path<CanisterId>,
+    State(CanisterReadStateService {
+        health_status,
+        delegation_from_nns,
+        state_reader_executor,
+        validator_executor,
+        registry_client,
+    }): State<CanisterReadStateService>,
+    body: Bytes,
+) -> impl IntoResponse {
+    if health_status.load() != ReplicaHealthStatus::Healthy {
+        let status = StatusCode::SERVICE_UNAVAILABLE;
+        let text = format!(
+            "Replica is unhealthy: {}. Check the /api/v2/status for more information.",
+            health_status.load(),
+        );
+        return (status, text).into_response();
     }
 
-    fn call(&mut self, request: Request<Body>) -> Self::Future {
-        if self.health_status.load() != ReplicaHealthStatus::Healthy {
-            let res = make_plaintext_response(
-                StatusCode::SERVICE_UNAVAILABLE,
-                format!(
-                    "Replica is unhealthy: {}. Check the /api/v2/status for more information.",
-                    self.health_status.load(),
-                ),
-            );
-            return Box::pin(async move { Ok(res) });
+    let delegation_from_nns = delegation_from_nns.read().unwrap().clone();
+
+    let request = match <HttpRequestEnvelope<HttpReadStateContent>>::try_from(
+        &SignedRequestBytes::from(body.to_vec()),
+    ) {
+        Ok(request) => request,
+        Err(e) => {
+            let status = StatusCode::BAD_REQUEST;
+            let text = format!("Could not parse body as read request: {}", e);
+            return (status, text).into_response();
         }
-        let (mut parts, body) = request.into_parts();
-        // By removing the principal id we get ownership and avoid having to clone it when creating the future.
-        let effective_principal_id = match remove_effective_principal_id(&mut parts) {
-            Ok(canister_id) => canister_id,
-            Err(res) => {
-                error!(
-                    self.log,
-                    "Effective principal ID is not attached to read state request. This is a bug."
-                );
-                return Box::pin(async move { Ok(res) });
-            }
-        };
+    };
 
-        let delegation_from_nns = self.delegation_from_nns.read().unwrap().clone();
+    // Convert the message to a strongly-typed struct.
+    let request = match HttpRequest::<ReadState>::try_from(request) {
+        Ok(request) => request,
+        Err(e) => {
+            let status = StatusCode::BAD_REQUEST;
+            let text = format!("Malformed request: {:?}", e);
+            return (status, text).into_response();
+        }
+    };
+    let read_state = request.content().clone();
+    let registry_version = registry_client.get_latest_version();
+    let targets_fut = validator_executor.validate_request(request.clone(), registry_version);
 
-        let registry_version = self.registry_client.get_latest_version();
-        let state_reader_executor = self.state_reader_executor.clone();
-        let validator_executor = self.validator_executor.clone();
-        Box::pin(async move {
-            let body = match receive_request_body(body).await {
-                Ok(bytes) => bytes,
-                Err(e) => return Ok(e),
-            };
-            let request = match <HttpRequestEnvelope<HttpReadStateContent>>::try_from(
-                &SignedRequestBytes::from(body.to_vec()),
-            ) {
-                Ok(request) => request,
-                Err(e) => {
-                    let res = make_plaintext_response(
-                        StatusCode::BAD_REQUEST,
-                        format!("Could not parse body as read request: {}", e),
-                    );
-                    return Ok(res);
-                }
-            };
+    let targets = match targets_fut.await {
+        Ok(targets) => targets,
+        Err(http_err) => {
+            return (http_err.status, http_err.message).into_response();
+        }
+    };
+    let make_service_unavailable_response = || {
+        let status = StatusCode::SERVICE_UNAVAILABLE;
+        let text = "Certified state is not available yet. Please try again...".to_string();
+        (status, text).into_response()
+    };
+    let certified_state_reader = match state_reader_executor.get_certified_state_snapshot().await {
+        Ok(Some(reader)) => reader,
+        Ok(None) => return make_service_unavailable_response(),
+        Err(HttpError { status, message }) => {
+            return (status, message).into_response();
+        }
+    };
 
-            // Convert the message to a strongly-typed struct.
-            let request = match HttpRequest::<ReadState>::try_from(request) {
-                Ok(request) => request,
-                Err(e) => {
-                    let res = make_plaintext_response(
-                        StatusCode::BAD_REQUEST,
-                        format!("Malformed request: {:?}", e),
-                    );
-                    return Ok(res);
-                }
-            };
-            let read_state = request.content().clone();
-            let targets_fut =
-                validator_executor.validate_request(request.clone(), registry_version);
-
-            let targets = match targets_fut.await {
-                Ok(targets) => targets,
-                Err(http_err) => {
-                    let res = make_plaintext_response(http_err.status, http_err.message);
-                    return Ok(res);
-                }
-            };
-            let make_service_unavailable_response = || {
-                make_plaintext_response(
-                    StatusCode::SERVICE_UNAVAILABLE,
-                    "Certified state is not available yet. Please try again...".to_string(),
-                )
-            };
-            let certified_state_reader =
-                match state_reader_executor.get_certified_state_snapshot().await {
-                    Ok(Some(reader)) => reader,
-                    Ok(None) => return Ok(make_service_unavailable_response()),
-                    Err(HttpError { status, message }) => {
-                        return Ok(make_plaintext_response(status, message))
-                    }
-                };
-
-            // Verify authorization for requested paths.
-            if let Err(HttpError { status, message }) = verify_paths(
-                certified_state_reader.get_state(),
-                &read_state.source,
-                &read_state.paths,
-                &targets,
-                effective_principal_id,
-            ) {
-                return Ok(make_plaintext_response(status, message));
-            }
-
-            // Create labeled tree. This may be an expensive operation and by
-            // creating the labeled tree after verifying the paths we know that
-            // the depth is max 4.
-            // Always add "time" to the paths even if not explicitly requested.
-            let mut paths: Vec<Path> = read_state.paths;
-            paths.push(Path::from(Label::from("time")));
-            let labeled_tree = match sparse_labeled_tree_from_paths(&paths) {
-                Ok(tree) => tree,
-                Err(TooLongPathError) => {
-                    let res = make_plaintext_response(
-                        StatusCode::BAD_REQUEST,
-                        "Failed to parse requested paths: path is too long.".to_string(),
-                    );
-                    return Ok(res);
-                }
-            };
-
-            let (tree, certification) =
-                match certified_state_reader.read_certified_state(&labeled_tree) {
-                    Some(r) => r,
-                    None => return Ok(make_service_unavailable_response()),
-                };
-
-            let signature = certification.signed.signature.signature.get().0;
-            let res = HttpReadStateResponse {
-                certificate: Blob(into_cbor(&Certificate {
-                    tree,
-                    signature: Blob(signature),
-                    delegation: delegation_from_nns,
-                })),
-            };
-            let (resp, _body_size) = cbor_response(&res);
-            Ok(resp)
-        })
+    // Verify authorization for requested paths.
+    if let Err(HttpError { status, message }) = verify_paths(
+        certified_state_reader.get_state(),
+        &read_state.source,
+        &read_state.paths,
+        &targets,
+        effective_canister_id.into(),
+    ) {
+        return (status, message).into_response();
     }
+
+    // Create labeled tree. This may be an expensive operation and by
+    // creating the labeled tree after verifying the paths we know that
+    // the depth is max 4.
+    // Always add "time" to the paths even if not explicitly requested.
+    let mut paths: Vec<Path> = read_state.paths;
+    paths.push(Path::from(Label::from("time")));
+    let labeled_tree = match sparse_labeled_tree_from_paths(&paths) {
+        Ok(tree) => tree,
+        Err(TooLongPathError) => {
+            let status = StatusCode::BAD_REQUEST;
+            let text = "Failed to parse requested paths: path is too long.".to_string();
+            return (status, text).into_response();
+        }
+    };
+
+    let (tree, certification) = match certified_state_reader.read_certified_state(&labeled_tree) {
+        Some(r) => r,
+        None => return make_service_unavailable_response(),
+    };
+
+    let signature = certification.signed.signature.signature.get().0;
+    let res = HttpReadStateResponse {
+        certificate: Blob(into_cbor(&Certificate {
+            tree,
+            signature: Blob(signature),
+            delegation: delegation_from_nns,
+        })),
+    };
+    Cbor(res).into_response()
 }
 
 // Verifies that the `user` is authorized to retrieve the `paths` requested.

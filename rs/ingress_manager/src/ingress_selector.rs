@@ -1517,6 +1517,11 @@ mod tests {
             None,
             Some(
                 ReplicatedStateBuilder::default()
+                    .with_node_ids(
+                        (1..=SMALL_APP_SUBNET_MAX_SIZE as u64)
+                            .map(node_test_id)
+                            .collect(),
+                    )
                     .with_canister(
                         CanisterStateBuilder::default()
                             .with_canister_id(canister_test_id(0))

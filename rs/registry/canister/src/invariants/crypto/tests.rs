@@ -852,6 +852,7 @@ mod ecdsa_signing_subnet_lists {
                 let subnet_record = SubnetRecord {
                     membership: vec![node_id.get().into_vec()],
                     ecdsa_config: ecdsa_config.clone(),
+                    // TODO[NNS1-2969]: Use chain_key_config rather than ecdsa_config.
                     ..Default::default()
                 };
                 mutations.push(ic_registry_transport::insert(
@@ -863,6 +864,7 @@ mod ecdsa_signing_subnet_lists {
                     let subnet_record = SubnetRecord {
                         membership: vec![node_id.get().into_vec()],
                         ecdsa_config,
+                        // TODO[NNS1-2969]: Use chain_key_config rather than ecdsa_config.
                         ..Default::default()
                     };
                     mutations.push(ic_registry_transport::insert(

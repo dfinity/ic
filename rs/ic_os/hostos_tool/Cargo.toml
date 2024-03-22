@@ -9,7 +9,7 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = { workspace = true }
-clap = {version = "^4", features = ["derive"]}
+clap = { workspace = true }
 config = { path = "../config" }
 network = { path = "../network" }
 utils = { path = "../utils" }

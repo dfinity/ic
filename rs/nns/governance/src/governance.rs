@@ -1,6 +1,12 @@
 use crate::{
-    governance::manage_neuron_request::{
-        execute_manage_neuron, simulate_manage_neuron, ManageNeuronRequest,
+    decoder_config,
+    governance::{
+        manage_neuron_request::{
+            execute_manage_neuron, simulate_manage_neuron, ManageNeuronRequest,
+        },
+        merge_neurons::{
+            build_merge_neurons_response, calculate_merge_neurons_effect, MergeNeuronsEffect,
+        },
     },
     heap_governance_data::{
         reassemble_governance_proto, split_governance_proto, HeapGovernanceData, XdrConversionRate,
@@ -102,7 +108,9 @@ use std::{
     string::ToString,
 };
 
+mod ledger_helper;
 mod manage_neuron_request;
+mod merge_neurons;
 pub mod test_data;
 #[cfg(test)]
 mod tests;
@@ -209,12 +217,6 @@ pub const KNOWN_NEURON_DESCRIPTION_MAX_LEN: usize = 3000;
 const NODE_PROVIDER_REWARD_PERIOD_SECONDS: u64 = 2629800;
 
 const VALID_MATURITY_MODULATION_BASIS_POINTS_RANGE: RangeInclusive<i32> = -500..=500;
-
-// Constant set of deprecated but not yet deleted topics. These topics should
-// not be allowed to be followed on. They are represented as a constant array
-// instead of a static HashSet for brevity, and because search time is equivalent
-// on small arrays.
-pub const DEPRECATED_TOPICS: [Topic; 1] = [Topic::SnsDecentralizationSale];
 
 impl NetworkEconomics {
     /// The multiplier applied to minimum_icp_xdr_rate to convert the XDR unit to basis_points
@@ -765,14 +767,9 @@ impl Proposal {
                 Action::SetDefaultFollowees(_) | Action::RegisterKnownNeuron(_) => {
                     Topic::Governance
                 }
-                Action::SetSnsTokenSwapOpenTimeWindow(_) | Action::OpenSnsTokenSwap(_) => {
-                    println!(
-                        "{}ERROR: Obsolete proposal type used: {:?}",
-                        LOG_PREFIX, action
-                    );
-                    Topic::SnsAndCommunityFund
-                }
-                Action::CreateServiceNervousSystem(_) => Topic::SnsAndCommunityFund,
+                Action::SetSnsTokenSwapOpenTimeWindow(_)
+                | Action::OpenSnsTokenSwap(_)
+                | Action::CreateServiceNervousSystem(_) => Topic::SnsAndCommunityFund,
             }
         } else {
             println!("{}ERROR: No action -> no topic.", LOG_PREFIX);
@@ -2616,6 +2613,19 @@ impl Governance {
         caller: &PrincipalId,
         merge: &manage_neuron::Merge,
     ) -> Result<ManageNeuronResponse, GovernanceError> {
+        if crate::should_use_new_merge_neurons_flow() {
+            self.merge_neurons_new(id, caller, merge).await
+        } else {
+            self.merge_neurons_old(id, caller, merge).await
+        }
+    }
+
+    async fn merge_neurons_old(
+        &mut self,
+        id: &NeuronId,
+        caller: &PrincipalId,
+        merge: &manage_neuron::Merge,
+    ) -> Result<ManageNeuronResponse, GovernanceError> {
         let source_neuron_id = merge.source_neuron_id.as_ref().ok_or_else(|| {
             GovernanceError::new_with_message(
                 ErrorType::InvalidCommand,
@@ -2648,24 +2658,164 @@ impl Governance {
             Err(e) => return ManageNeuronResponse::error(e),
         };
 
-        let action = match manage_neuron.command {
-            Some(Command::Merge(merge)) => ManageNeuronRequest::new(merge, id, *caller),
-            Some(_) => {
-                return ManageNeuronResponse::error(GovernanceError::new_with_message(
-                    ErrorType::InvalidCommand,
-                    "Simulating manage_neuron is not supported for this request type",
-                ));
-            }
-            None => {
-                return ManageNeuronResponse::error(GovernanceError::new_with_message(
-                    ErrorType::InvalidCommand,
-                    "No Command given in simulate_manage_neuron request",
-                ));
-            }
+        match manage_neuron.command {
+            Some(Command::Merge(merge)) => self
+                .simulate_merge_neurons(&id, caller, merge)
+                .await
+                .unwrap_or_else(ManageNeuronResponse::error),
+            Some(_) => ManageNeuronResponse::error(GovernanceError::new_with_message(
+                ErrorType::InvalidCommand,
+                "Simulating manage_neuron is not supported for this request type",
+            )),
+            None => ManageNeuronResponse::error(GovernanceError::new_with_message(
+                ErrorType::InvalidCommand,
+                "No Command given in simulate_manage_neuron request",
+            )),
+        }
+    }
+
+    async fn simulate_merge_neurons(
+        &self,
+        id: &NeuronId,
+        caller: &PrincipalId,
+        merge: manage_neuron::Merge,
+    ) -> Result<ManageNeuronResponse, GovernanceError> {
+        if crate::should_use_new_merge_neurons_flow() {
+            self.simulate_merge_neurons_new(id, caller, merge)
+        } else {
+            self.simulate_merge_neurons_old(id, caller, merge).await
+        }
+    }
+
+    async fn simulate_merge_neurons_old(
+        &self,
+        id: &NeuronId,
+        caller: &PrincipalId,
+        merge: manage_neuron::Merge,
+    ) -> Result<ManageNeuronResponse, GovernanceError> {
+        let request = ManageNeuronRequest::new(merge, *id, *caller);
+        simulate_manage_neuron(self, request).await
+    }
+
+    async fn merge_neurons_new(
+        &mut self,
+        id: &NeuronId,
+        caller: &PrincipalId,
+        merge: &manage_neuron::Merge,
+    ) -> Result<ManageNeuronResponse, GovernanceError> {
+        let now = self.env.now();
+        let in_flight_command = NeuronInFlightCommand {
+            timestamp: now,
+            command: Some(InFlightCommand::Merge(merge.clone())),
         };
-        simulate_manage_neuron(self, action)
-            .await
-            .unwrap_or_else(ManageNeuronResponse::error)
+
+        // Step 1: calculates the effect of the merge.
+        let MergeNeuronsEffect {
+            source_neuron_id,
+            target_neuron_id,
+            source_burn_fees,
+            stake_transfer,
+            source_effect,
+            target_effect,
+        } = calculate_merge_neurons_effect(
+            id,
+            merge,
+            caller,
+            &self.neuron_store,
+            self.transaction_fee(),
+            now,
+        )?;
+
+        // Step 2: Locking the neurons.
+        let _target_lock =
+            self.lock_neuron_for_command(target_neuron_id.id, in_flight_command.clone())?;
+        let _source_lock =
+            self.lock_neuron_for_command(source_neuron_id.id, in_flight_command.clone())?;
+
+        // Step 3: burn neuron fees if needed.
+        if let Some(source_burn_fees) = source_burn_fees {
+            source_burn_fees
+                .burn_neuron_fees_with_ledger(&*self.ledger, &mut self.neuron_store, now)
+                .await?;
+        }
+
+        // Step 4: transfer the stake if needed.
+        if let Some(stake_transfer) = stake_transfer {
+            stake_transfer
+                .transfer_neuron_stake_with_ledger(&*self.ledger, &mut self.neuron_store, now)
+                .await?;
+        }
+
+        // Step 5: applying the internal effect of the merge.
+        let source_neuron = self
+            .neuron_store
+            .with_neuron_mut(&source_neuron_id, |source| {
+                source_effect.apply(source);
+                source.clone()
+            })
+            .expect("Expected the source neuron to exist");
+        let target_neuron = self
+            .neuron_store
+            .with_neuron_mut(&target_neuron_id, |target| {
+                target_effect.apply(target);
+                target.clone()
+            })
+            .expect("Expected the target neuron to exist");
+
+        // Step 6: builds the response.
+        Ok(ManageNeuronResponse::merge_response(
+            build_merge_neurons_response(&source_neuron, &target_neuron, now),
+        ))
+    }
+
+    fn simulate_merge_neurons_new(
+        &self,
+        id: &NeuronId,
+        caller: &PrincipalId,
+        merge: manage_neuron::Merge,
+    ) -> Result<ManageNeuronResponse, GovernanceError> {
+        let now = self.env.now();
+
+        // Step 1: calculates the effect of the merge.
+        let MergeNeuronsEffect {
+            source_neuron_id,
+            target_neuron_id,
+            source_burn_fees,
+            stake_transfer,
+            source_effect,
+            target_effect,
+        } = calculate_merge_neurons_effect(
+            id,
+            &merge,
+            caller,
+            &self.neuron_store,
+            self.transaction_fee(),
+            now,
+        )?;
+
+        // Step 2: reads the neurons.
+        let mut source_neuron = self
+            .neuron_store
+            .with_neuron(&source_neuron_id, |neuron| neuron.clone())?;
+        let mut target_neuron = self
+            .neuron_store
+            .with_neuron(&target_neuron_id, |neuron| neuron.clone())?;
+
+        // Step 3: applies the effect of the merge.
+        if let Some(source_burn_fees) = source_burn_fees {
+            source_burn_fees.burn_neuron_fees_without_ledger(&mut source_neuron);
+        }
+        if let Some(stake_transfer) = stake_transfer {
+            stake_transfer
+                .transfer_neuron_stake_without_ledger(&mut source_neuron, &mut target_neuron);
+        }
+        source_effect.apply(&mut source_neuron);
+        target_effect.apply(&mut target_neuron);
+
+        // Step 4: builds the response.
+        Ok(ManageNeuronResponse::merge_response(
+            build_merge_neurons_response(&source_neuron, &target_neuron, now),
+        ))
     }
 
     /// Spawn an neuron from an existing neuron's maturity.
@@ -3282,7 +3432,7 @@ impl Governance {
                 return Err(GovernanceError::new(ErrorType::NotAuthorized));
             }
         }
-        Ok(neuron_clone.without_deprecated_topics_from_followees())
+        Ok(neuron_clone)
     }
 
     /// Returns the complete neuron data for a given neuron `id` after
@@ -4688,7 +4838,7 @@ impl Governance {
                     update.payload.len(),
                 )
             } else if update.nns_function == NnsFunction::IcpXdrConversionRate as i32 {
-                match Decode!(&update.payload, UpdateIcpXdrConversionRatePayload) {
+                match Decode!([decoder_config()]; &update.payload, UpdateIcpXdrConversionRatePayload) {
                     Ok(payload) => {
                         if payload.xdr_permyriad_per_icp
                             < self.heap_data
@@ -4711,7 +4861,7 @@ impl Governance {
                     ),
                 }
             } else if update.nns_function == NnsFunction::AssignNoid as i32 {
-                match Decode!(&update.payload, AddNodeOperatorPayload) {
+                match Decode!([decoder_config()]; &update.payload, AddNodeOperatorPayload) {
                     Ok(payload) => match payload.node_provider_principal_id {
                         Some(id) => {
                             let is_registered = self
@@ -4735,7 +4885,7 @@ impl Governance {
                     ),
                 }
             } else if update.nns_function == NnsFunction::AddOrRemoveDataCenters as i32 {
-                match Decode!(&update.payload, AddOrRemoveDataCentersProposalPayload) {
+                match Decode!([decoder_config()]; &update.payload, AddOrRemoveDataCentersProposalPayload) {
                     Ok(payload) => match payload.validate() {
                         Ok(_) => {
                             return Ok(());
@@ -5242,12 +5392,7 @@ impl Governance {
                                 );
                                 // Default following doesn't apply to governance or SNS
                                 // decentralization sale proposals.
-                                if ![
-                                    Topic::Governance,
-                                    Topic::SnsDecentralizationSale,
-                                    Topic::SnsAndCommunityFund,
-                                ]
-                                .contains(&topic)
+                                if ![Topic::Governance, Topic::SnsAndCommunityFund].contains(&topic)
                                 {
                                     // Insert followers from 'Unspecified' (default followers)
                                     all_followers.extend(
@@ -5484,23 +5629,12 @@ impl Governance {
         }
 
         // Validate topic exists
-        let topic = Topic::try_from(follow_request.topic).map_err(|_| {
+        Topic::try_from(follow_request.topic).map_err(|_| {
             GovernanceError::new_with_message(
                 ErrorType::InvalidCommand,
                 format!("Not a known topic number. Follow:\n{:#?}", follow_request),
             )
         })?;
-
-        // Validate topic is not deprecated
-        if DEPRECATED_TOPICS.iter().any(|t| t == &topic) {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::InvalidCommand,
-                format!(
-                    "Topic {:?}({}) is deprecated and cannot be followed on",
-                    topic, follow_request.topic
-                ),
-            ));
-        }
 
         self.with_neuron_mut(id, |neuron| {
             if follow_request.followees.is_empty() {

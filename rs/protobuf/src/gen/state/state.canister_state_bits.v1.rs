@@ -628,6 +628,15 @@ pub struct CanisterStateBits {
     /// The index of the next log record to be created.
     #[prost(uint64, tag = "44")]
     pub next_canister_log_record_idx: u64,
+    /// The Wasm memory limit. This is a field in developer-visible canister
+    /// settings that allows the developer to limit the usage of the Wasm memory
+    /// by the canister to leave some room in 4GiB for upgrade calls.
+    /// See the interface specification for more information.
+    #[prost(uint64, optional, tag = "45")]
+    pub wasm_memory_limit: ::core::option::Option<u64>,
+    /// The next local snapshot ID.
+    #[prost(uint64, tag = "46")]
+    pub next_snapshot_id: u64,
     #[prost(oneof = "canister_state_bits::CanisterStatus", tags = "11, 12, 13")]
     pub canister_status: ::core::option::Option<canister_state_bits::CanisterStatus>,
 }

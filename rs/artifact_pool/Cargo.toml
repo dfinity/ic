@@ -9,7 +9,7 @@ documentation.workspace = true
 [dependencies]
 bincode = "1.2.1"
 byteorder = "1.3.4"
-clap = { workspace = true }
+clap = { version = "3.2.25", features = ["derive"] }
 ic-config = { path = "../config" }
 ic-constants = { path = "../constants" }
 ic-interfaces = { path = "../interfaces" }

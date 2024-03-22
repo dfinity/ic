@@ -4,8 +4,6 @@ load("//publish:defs.bzl", "release_nostrip_binary", "release_strip_binary", "re
 
 LINUX_ONLY = [
     "metrics-proxy",
-    "sevctl",
-    "snptool",
     "vsock_guest",
     "vsock_host",
     "fstrim_tool",
@@ -17,7 +15,6 @@ LINUX_ONLY = [
 NO_STRIP = [
     "canister_sandbox",
     "ic-btc-adapter",
-    "ic-https-outcalls-adapter",
     "replica",
 ]
 
@@ -65,7 +62,6 @@ BINARIES = {
     "orchestrator": "//rs/orchestrator",
     "sandbox_launcher": "//rs/canister_sandbox:sandbox_launcher",
     "setupos_tool": "//rs/ic_os/setupos_tool:setupos_tool",
-    "snptool": "//rs/ic_os/snptool:snptool",
     "sns": "//rs/sns/cli:sns",
     "sns-audit": "//rs/sns/audit:sns-audit",
     "sns-test-feature": "//rs/sns/cli:sns--test_feature",
@@ -120,8 +116,28 @@ LIBRARIES = {
         ],
     )
     for name in BINARIES
-    if name not in TEST_BINARIES
+    if name not in TEST_BINARIES and name != "ic-https-outcalls-adapter"
 ]
+
+# TODO: remove "ic-https-outcalls-adapter" exception
+# once transition rules are functioning as expected
+genrule(
+    name = "ic-https-outcalls-adapter_cleaned",
+    testonly = True,
+    srcs = ["ic-https-outcalls-adapter_bin"],
+    outs = ["ic-https-outcalls-adapter"],
+    cmd = select({
+        "@platforms//os:linux": "objcopy --strip-unneeded -R .comment -R .note -R .note.gnu.build-id $< $@",
+        "@platforms//os:osx": "cp $< $@",
+    }),
+    executable = True,
+    visibility = [
+        "//ic-os/boundary-guestos/envs:__subpackages__",
+        "//ic-os/guestos/envs:__subpackages__",
+        "//ic-os/hostos/envs:__subpackages__",
+        "//ic-os/setupos/envs:__subpackages__",
+    ],
+)
 
 [
     genrule(

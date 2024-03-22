@@ -111,6 +111,10 @@ pub trait CanisterRuntime {
         arg: Vec<u8>,
     ) -> Result<(), CallError>;
 
+    async fn canister_cycles(&self, canister_id: Principal) -> Result<u128, CallError>;
+
+    fn send_cycles(&self, canister_id: Principal, cycles: u128) -> Result<(), CallError>;
+
     async fn call_canister<I, O>(
         &self,
         canister_id: Principal,
@@ -212,6 +216,42 @@ impl CanisterRuntime for IcCanisterRuntime {
         self.call("install_code", 0, &install_code).await?;
 
         Ok(())
+    }
+
+    async fn canister_cycles(&self, canister_id: Principal) -> Result<u128, CallError> {
+        let result = ic_cdk::api::management_canister::main::canister_status(
+            ic_cdk::api::management_canister::main::CanisterIdRecord { canister_id },
+        )
+        .await
+        .map_err(|(code, msg)| CallError {
+            method: "canister_status".to_string(),
+            reason: Reason::from_reject(code, msg),
+        })?
+        .0
+        .cycles
+        .0
+        .try_into()
+        .unwrap();
+
+        Ok(result)
+    }
+
+    fn send_cycles(&self, canister_id: Principal, cycles: u128) -> Result<(), CallError> {
+        #[derive(CandidType)]
+        struct DepositCyclesArgs {
+            canister_id: Principal,
+        }
+
+        ic_cdk::api::call::notify_with_payment128(
+            Principal::management_canister(),
+            "deposit_cycles",
+            (DepositCyclesArgs { canister_id },),
+            cycles,
+        )
+        .map_err(|reject_code| CallError {
+            method: "send_cycles".to_string(),
+            reason: Reason::from_reject(reject_code, String::default()),
+        })
     }
 
     async fn call_canister<I, O>(

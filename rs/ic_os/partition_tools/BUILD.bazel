@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -7,6 +7,7 @@ DEPENDENCIES = [
     "@crate_index//:clap",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
+    "@crate_index//:pcre2",
 ]
 
 MACRO_DEPENDENCIES = [
@@ -19,5 +20,12 @@ rust_library(
     srcs = glob(["src/**/*.rs"]),
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.1.0",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "partition_tools_test",
+    crate = ":partition_tools",
+    proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )

@@ -827,7 +827,16 @@ pub(crate) fn assert_reject<T: std::fmt::Debug>(res: Result<T, AgentError>, code
     match res {
         Ok(val) => panic!("Expected call to fail but it succeeded with {:?}", val),
         Err(agent_error) => match agent_error {
-            AgentError::ReplicaError(RejectResponse {
+            AgentError::UncertifiedReject(RejectResponse {
+                reject_code,
+                reject_message,
+                ..
+            }) => assert_eq!(
+                code, reject_code,
+                "Expect code {:?} did not match {:?}. Reject message: {}",
+                code, reject_code, reject_message
+            ),
+            AgentError::CertifiedReject(RejectResponse {
                 reject_code,
                 reject_message,
                 ..
@@ -852,7 +861,23 @@ pub(crate) fn assert_reject_msg<T: std::fmt::Debug>(
     match res {
         Ok(val) => panic!("Expected call to fail but it succeeded with {:?}", val),
         Err(agent_error) => match agent_error {
-            AgentError::ReplicaError(RejectResponse {
+            AgentError::CertifiedReject(RejectResponse {
+                reject_code,
+                reject_message,
+                ..
+            }) => {
+                assert_eq!(
+                    code, reject_code,
+                    "Expect code {:?} did not match {:?}. Reject message: {}",
+                    code, reject_code, reject_message
+                );
+                assert!(
+                    reject_message.contains(partial_message),
+                    "Actual reject message: {}",
+                    reject_message
+                );
+            }
+            AgentError::UncertifiedReject(RejectResponse {
                 reject_code,
                 reject_message,
                 ..
@@ -914,7 +939,7 @@ pub(crate) fn assert_nodes_health_statuses(
 }
 
 /// Asserts that the response from an agent call is rejected by the replica
-/// resulting in a [`AgentError::ReplicaError`], and an expected [`RejectCode`].
+/// resulting in a [`AgentError::UncertifiedReject`], and an expected [`RejectCode`].
 pub(crate) fn assert_http_submit_fails(
     result: Result<RequestId, AgentError>,
     expected_reject_code: RejectCode,
@@ -922,13 +947,13 @@ pub(crate) fn assert_http_submit_fails(
     match result {
         Ok(val) => panic!("Expected call to fail but it succeeded with {:?}.", val),
         Err(agent_error) => match agent_error {
-            AgentError::ReplicaError(RejectResponse{reject_code, ..}) => assert_eq!(
+            AgentError::UncertifiedReject(RejectResponse{reject_code, ..}) => assert_eq!(
                 expected_reject_code, reject_code,
                 "Unexpected reject_code: `{:?}`.",
                 reject_code
             ),
             others => panic!(
-                "Expected agent call to replica to fail with AgentError::ReplicaError, but got {:?} instead.",
+                "Expected agent call to replica to fail with AgentError::UncertifiedReject, but got {:?} instead.",
                 others
             ),
         },

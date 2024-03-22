@@ -58,7 +58,7 @@ ic-types = { path = "../../types/types" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
 ic-xrc-types = "1.0.0"
 maplit = "1.0.2"
-num-traits = "0.2.14"
+num-traits = { workspace = true }
 registry-canister = { path = "../../registry/canister" }
 rustc-hash = "1.1.0"
 serde = { workspace = true }

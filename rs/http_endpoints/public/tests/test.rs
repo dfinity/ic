@@ -171,7 +171,7 @@ fn test_unauthorized_controller() {
 
     let expected_error = AgentError::HttpError(HttpErrorPayload {
         status: 400,
-        content_type: Some("text/plain".to_string()),
+        content_type: Some("text/plain; charset=utf-8".to_string()),
         content: format!(
             "Effective principal id in URL {} does not match requested principal id: {}.",
             canister1, canister2
@@ -240,7 +240,7 @@ fn test_unauthorized_query() {
         .unwrap();
     let expected_resp = AgentError::HttpError(HttpErrorPayload {
         status: 400,
-        content_type: Some("text/plain".to_string()),
+        content_type: Some("text/plain; charset=utf-8".to_string()),
         content: format!(
             "Specified CanisterId {} does not match effective canister id in URL {}",
             canister1, canister2
@@ -312,7 +312,7 @@ fn test_unauthorized_call() {
         .unwrap();
     let expected_resp = AgentError::HttpError(HttpErrorPayload {
         status: 400,
-        content_type: Some("text/plain".to_string()),
+        content_type: Some("text/plain; charset=utf-8".to_string()),
         content: format!(
             "Specified CanisterId {} does not match effective canister id in URL {}",
             canister1, canister2
@@ -546,7 +546,7 @@ fn test_status_code_when_ingress_filter_fails() {
             .await
     });
 
-    let expected_response = Err(AgentError::ReplicaError(RejectResponse {
+    let expected_response = Err(AgentError::UncertifiedReject(RejectResponse {
         reject_code: ic_agent::agent::RejectCode::SysTransient,
         reject_message: "Test reject message".to_string(),
         error_code: Some("IC0204".to_string()),
@@ -621,7 +621,7 @@ fn test_too_long_paths_are_rejected() {
 
     let expected_error_response = AgentError::HttpError(HttpErrorPayload {
         status: 404,
-        content_type: Some("text/plain".to_string()),
+        content_type: Some("text/plain; charset=utf-8".to_string()),
         content: b"Invalid path requested.".to_vec(),
     });
 

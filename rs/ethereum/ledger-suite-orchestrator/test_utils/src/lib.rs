@@ -33,6 +33,7 @@ impl Default for LedgerSuiteOrchestrator {
             InitArg {
                 more_controller_ids: vec![],
                 minter_id: None,
+                cycles_management: None,
             },
         )
     }
@@ -150,25 +151,32 @@ fn index_wasm() -> IndexWasm {
 }
 
 pub fn supported_erc20_tokens(
+    minter: Principal,
     ledger_compressed_wasm_hash: WasmHash,
     index_compressed_wasm_hash: WasmHash,
 ) -> Vec<AddErc20Arg> {
     vec![
         usdc(
+            minter,
             ledger_compressed_wasm_hash.clone(),
             index_compressed_wasm_hash.clone(),
         ),
-        usdt(ledger_compressed_wasm_hash, index_compressed_wasm_hash),
+        usdt(
+            minter,
+            ledger_compressed_wasm_hash,
+            index_compressed_wasm_hash,
+        ),
     ]
 }
 
 pub fn usdc(
+    minter: Principal,
     ledger_compressed_wasm_hash: WasmHash,
     index_compressed_wasm_hash: WasmHash,
 ) -> AddErc20Arg {
     AddErc20Arg {
         contract: usdc_erc20_contract(),
-        ledger_init_arg: ledger_init_arg("Chain-Key USD Coin", "ckUSDC"),
+        ledger_init_arg: ledger_init_arg(minter, "Chain-Key USD Coin", "ckUSDC"),
         git_commit_hash: GIT_COMMIT_HASH.to_string(),
         ledger_compressed_wasm_hash: ledger_compressed_wasm_hash.to_string(),
         index_compressed_wasm_hash: index_compressed_wasm_hash.to_string(),
@@ -183,6 +191,7 @@ pub fn usdc_erc20_contract() -> Erc20Contract {
 }
 
 fn usdt(
+    minter: Principal,
     ledger_compressed_wasm_hash: WasmHash,
     index_compressed_wasm_hash: WasmHash,
 ) -> AddErc20Arg {
@@ -191,7 +200,7 @@ fn usdt(
             chain_id: Nat::from(1_u8),
             address: "0xdAC17F958D2ee523a2206206994597C13D831ec7".to_string(),
         },
-        ledger_init_arg: ledger_init_arg("Chain-Key Tether USD", "ckUSDT"),
+        ledger_init_arg: ledger_init_arg(minter, "Chain-Key Tether USD", "ckUSDT"),
         git_commit_hash: GIT_COMMIT_HASH.to_string(),
         ledger_compressed_wasm_hash: ledger_compressed_wasm_hash.to_string(),
         index_compressed_wasm_hash: index_compressed_wasm_hash.to_string(),
@@ -199,12 +208,13 @@ fn usdt(
 }
 
 fn ledger_init_arg<U: Into<String>, V: Into<String>>(
+    minter: Principal,
     token_name: U,
     token_symbol: V,
 ) -> LedgerInitArg {
     LedgerInitArg {
         minting_account: LedgerAccount {
-            owner: Principal::anonymous(),
+            owner: minter,
             subaccount: None,
         },
         fee_collector_account: None,
@@ -214,7 +224,7 @@ fn ledger_init_arg<U: Into<String>, V: Into<String>>(
         token_name: token_name.into(),
         token_symbol: token_symbol.into(),
         token_logo: "".to_string(),
-        max_memo_length: None,
+        max_memo_length: Some(80),
         feature_flags: None,
         maximum_number_of_accounts: None,
         accounts_overflow_trim_quantity: None,

@@ -1,9 +1,11 @@
 use candid::{Decode, Encode, Principal};
+use cycles_minting_canister::DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::{tokens::CheckedSub, Tokens};
 use ic_nervous_system_common::{
     ledger::compute_distribution_subaccount, ExplosiveTokens, E8, SECONDS_PER_DAY,
 };
+use ic_nervous_system_proto::pb::v1::Percentage;
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
 use ic_nns_test_utils::{
@@ -19,8 +21,9 @@ use ic_sns_governance::{
     pb::v1::{
         governance_error::ErrorType as SnsErrorType, proposal::Action,
         transfer_sns_treasury_funds::TransferFrom, GovernanceError as SnsGovernanceError,
-        MintSnsTokens, NervousSystemParameters, NeuronId as SnsNeuronId, NeuronPermissionList,
-        NeuronPermissionType, Proposal, TransferSnsTreasuryFunds, Vote,
+        MintSnsTokens, Motion, NervousSystemParameters, NeuronId as SnsNeuronId,
+        NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData,
+        TransferSnsTreasuryFunds, Vote,
     },
     types::{DEFAULT_TRANSFER_FEE, E8S_PER_TOKEN},
 };
@@ -77,6 +80,10 @@ impl FromAccount for AccountIdentifier {
     }
 }
 
+// The value here is used by the cycles-minting canister (CMC). We need to sync up with CMC in order
+// for set_icp_xdr_conversion_rate to have the effect indicated by the name.
+const START_TIMESTAMP_SECONDS: u64 = DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS + 1;
+
 lazy_static! {
     /// In new_treasury_scenario, this has a neuron with overwhelming voting power, such that it can
     /// instantly pass any proposal it wants.
@@ -106,13 +113,8 @@ lazy_static! {
 fn new_treasury_scenario(
     state_machine: &mut StateMachine,
 ) -> (/* whale */ SnsNeuronId, SnsTestCanisterIds) {
-    // What is special about this value: 1 second after the default value of
-    // State.icp_xdr_conversion_rate.timestamp_seconds. This is
-    // 10 May 2021 10 AM CEST + 1 second. We need to sync up with that in order for the
-    // set_icp_xdr_conversion_rate call that we do later to have the intended effect.
-    let start_timestamp_seconds = 1620633600 + 1;
     let start_time = SystemTime::UNIX_EPOCH
-        .checked_add(Duration::from_secs(start_timestamp_seconds))
+        .checked_add(Duration::from_secs(START_TIMESTAMP_SECONDS))
         .unwrap();
     state_machine.set_time(start_time);
 
@@ -194,8 +196,8 @@ fn new_treasury_scenario(
             dissolve_delay_interval_seconds: 1,
         }),
 
-        swap_start_timestamp_seconds: Some(start_timestamp_seconds),
-        swap_due_timestamp_seconds: Some(start_timestamp_seconds + SECONDS_PER_DAY),
+        swap_start_timestamp_seconds: Some(START_TIMESTAMP_SECONDS),
+        swap_due_timestamp_seconds: Some(START_TIMESTAMP_SECONDS + SECONDS_PER_DAY),
 
         // Misc.
         nns_proposal_id: Some(42),
@@ -361,7 +363,7 @@ fn test_sns_treasury_can_transfer_funds_via_proposals() {
         &state_machine,
         governance_canister_id,
         *WHALE,
-        whale_neuron_id,
+        whale_neuron_id.clone(),
         Proposal {
             title: "Transfer treasury SNS".to_string(),
             summary: "Transfer treasury to user".to_string(),
@@ -403,6 +405,108 @@ fn test_sns_treasury_can_transfer_funds_via_proposals() {
     let treasury_icp_balance = nns_ledger_balance(&state_machine, treasury_icp_account);
     assert_eq!(treasury_sns_token_balance, Tokens::new(0, 0).unwrap());
     assert_eq!(treasury_icp_balance, Tokens::new(0, 0).unwrap());
+
+    // Side quest: TransferSnsTreasuryFunds is a "critical" proposal. As such, a higher bar needs to
+    // be met in order to pass such proposals. Here, we inspect the fields that specify this higher
+    // bar.
+    {
+        fn select_interesting_fields(proposal_data: &ProposalData) -> ProposalData {
+            let ProposalData {
+                minimum_yes_proportion_of_total,
+                minimum_yes_proportion_of_exercised,
+                initial_voting_period_seconds,
+                wait_for_quiet_deadline_increase_seconds,
+                ..
+            } = proposal_data.clone();
+
+            ProposalData {
+                minimum_yes_proportion_of_total,
+                minimum_yes_proportion_of_exercised,
+                initial_voting_period_seconds,
+                wait_for_quiet_deadline_increase_seconds,
+                ..Default::default()
+            }
+        }
+
+        let proposal = sns_get_proposal(
+            &state_machine,
+            governance_canister_id,
+            transfer_icp_proposal_id,
+        )
+        .unwrap();
+        assert_eq!(
+            select_interesting_fields(&proposal),
+            ProposalData {
+                minimum_yes_proportion_of_total: Some(
+                    // 20%
+                    Percentage {
+                        basis_points: Some(2000)
+                    },
+                ),
+                minimum_yes_proportion_of_exercised: Some(
+                    // 67%
+                    Percentage {
+                        basis_points: Some(6700)
+                    },
+                ),
+                initial_voting_period_seconds: 5 * SECONDS_PER_DAY,
+                wait_for_quiet_deadline_increase_seconds: 5 * SECONDS_PER_DAY / 2, // 2.5 days
+                ..Default::default()
+            },
+            "{:#?}",
+            proposal,
+        );
+
+        // Assert that the bar to pass other proposal types is lower.
+
+        // First, we have to make such a proposal. Here, we call the proposal "benign".
+        let benign_proposal_id = sns_make_proposal(
+            &state_machine,
+            governance_canister_id,
+            *WHALE,
+            whale_neuron_id,
+            Proposal {
+                title: "Transfer treasury SNS".to_string(),
+                summary: "Transfer treasury to user".to_string(),
+                url: "".to_string(),
+                action: Some(Action::Motion(Motion {
+                    motion_text: "Nothing to see here.".to_string(),
+                })),
+            },
+        )
+        .unwrap();
+        sns_wait_for_proposal_execution(
+            &state_machine,
+            governance_canister_id,
+            transfer_token_proposal_id,
+        );
+
+        // Now, we inspect the benign proposal.
+        let proposal =
+            sns_get_proposal(&state_machine, governance_canister_id, benign_proposal_id).unwrap();
+        assert_eq!(
+            select_interesting_fields(&proposal),
+            ProposalData {
+                minimum_yes_proportion_of_total: Some(
+                    // 3%
+                    Percentage {
+                        basis_points: Some(300)
+                    },
+                ),
+                minimum_yes_proportion_of_exercised: Some(
+                    // 50%
+                    Percentage {
+                        basis_points: Some(5000)
+                    },
+                ),
+                initial_voting_period_seconds: 4 * SECONDS_PER_DAY,
+                wait_for_quiet_deadline_increase_seconds: SECONDS_PER_DAY,
+                ..Default::default()
+            },
+            "{:#?}",
+            proposal,
+        );
+    }
 }
 
 #[test]
@@ -748,134 +852,129 @@ fn nns_ledger_balance(state_machine: &StateMachine, account: Account) -> Tokens 
 
 #[test]
 fn sns_can_mint_funds_via_proposals() {
+    // Step 1: Prepare the world.
+
     state_test_helpers::reduce_state_machine_logging_unless_env_set();
-    let state_machine = StateMachine::new();
+    let mut state_machine = StateMachine::new();
 
-    let user = PrincipalId::new_user_test_id(1000);
-    let user_account = Account {
-        owner: user.0,
-        subaccount: None,
-    };
-    let user_account_identifier = icrc1_account_to_icp_accountidentifier(user_account);
+    let (whale_neuron_id, sns_test_canister_ids) = new_treasury_scenario(&mut state_machine);
 
-    let first_sns_canister_id = 11;
-    let governance = CanisterId::from(first_sns_canister_id + 1);
+    let SnsTestCanisterIds {
+        governance_canister_id,
+        ledger_canister_id: sns_ledger_canister_id,
 
-    let treasury_icp_account = Account {
-        owner: governance.get().0,
-        subaccount: None,
-    };
+        root_canister_id: _,
+        swap_canister_id: _,
+        index_canister_id: _,
+    } = sns_test_canister_ids;
 
-    let treasury_sns_token_account = Account {
-        owner: governance.get().0,
-        subaccount: Some(
-            compute_distribution_subaccount(governance.get(), TREASURY_SUBACCOUNT_NONCE).0,
-        ),
-    };
+    let start_timestamp_seconds = state_machine
+        .time()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
 
-    let treasury_icp_account_identifier =
-        icrc1_account_to_icp_accountidentifier(treasury_icp_account);
-
-    let nns_init_payloads = NnsInitPayloadsBuilder::new()
-        .with_ledger_accounts(vec![
-            (user_account_identifier, Tokens::new(10000, 0).unwrap()),
-            (
-                treasury_icp_account_identifier,
-                Tokens::new(10000, 0).unwrap(),
-            ),
-        ])
-        .with_test_neurons()
-        .build();
-
-    let system_params = NervousSystemParameters {
-        neuron_claimer_permissions: Some(NeuronPermissionList {
-            permissions: NeuronPermissionType::all(),
-        }),
-        ..NervousSystemParameters::with_default_values()
-    };
-
-    let sns_init_payload = SnsTestsInitPayloadBuilder::new()
-        .with_ledger_account(treasury_sns_token_account, Tokens::new(10000, 0).unwrap())
-        // User needs majority of the voting power to pass proposals
-        .with_ledger_account(user_account, Tokens::new(10001, 0).unwrap())
-        .with_nervous_system_parameters(system_params)
-        .build();
-
-    setup_nns_canisters(&state_machine, nns_init_payloads);
-    let sns_canisters = setup_sns_canisters(&state_machine, sns_init_payload);
-
-    // Ensure we lined up canisters correctly or the transfers won't work.
-    assert_eq!(sns_canisters.governance_canister_id, governance);
-
-    let user_sns_balance = icrc1_balance(
-        &state_machine,
-        sns_canisters.ledger_canister_id,
-        user_account,
-    );
-    assert_eq!(user_sns_balance, Tokens::new(10001, 0).unwrap());
-
-    let treasury_sns_token_balance = icrc1_balance(
-        &state_machine,
-        sns_canisters.ledger_canister_id,
-        treasury_sns_token_account,
-    );
-    assert_eq!(treasury_sns_token_balance, Tokens::new(10000, 0).unwrap());
-
-    let neuron_nonce = 0;
-    sns_stake_neuron(
-        &state_machine,
-        sns_canisters.governance_canister_id,
-        sns_canisters.ledger_canister_id,
-        user,
-        Tokens::new(10001, 0)
-            .unwrap()
-            .checked_sub(&DEFAULT_TRANSFER_FEE)
+    // Populate ICP price data in the Cycles Minting Canister. This is needed to verify that the
+    // amount in MintSnsTokens proposals is not too big. This results in a treasury where the SNS
+    // tokens in the treasury is worth a little bit less than 42 * 10_000 XDR, which would be
+    // considered "medium" for the purposes of limiting MintSnsTokens proposals. Because the amount
+    // of ICP treasury is "medium", up to 25% of the ICP in the treasury can be disbursed within a 7
+    // day window.
+    state_machine
+        .execute_ingress_as(
+            PrincipalId::from(GOVERNANCE_CANISTER_ID), // sender
+            CYCLES_MINTING_CANISTER_ID,                // destination
+            "set_icp_xdr_conversion_rate",
+            Encode!(&UpdateIcpXdrConversionRatePayload {
+                data_source: "STONE TABLETS FROM HEAVEN".to_string(),
+                timestamp_seconds: start_timestamp_seconds,
+                xdr_permyriad_per_icp: 42 * 10_000, // 42 XDR per ICP.
+                reason: None,
+            })
             .unwrap(),
-        neuron_nonce,
-    );
-    // User claims neuron
-    let neuron = sns_claim_staked_neuron(
-        &state_machine,
-        governance,
-        user,
-        neuron_nonce,
-        Some(100_000_000),
-    );
+        )
+        .unwrap();
+
+    // Step 2: Run the code under test.
 
     // User proposes to mint himself SNS tokens
-    let transfer_token_proposal_id = sns_make_proposal(
+    let proposal = Proposal {
+        title: "First Mint".to_string(),
+        summary: "".to_string(),
+        url: "".to_string(),
+        action: Some(Action::MintSnsTokens(MintSnsTokens {
+            amount_e8s: Some(2_222 * E8),
+            to_principal: Some(*WHALE),
+            to_subaccount: None,
+            memo: None,
+        })),
+    };
+    let first_proposal_id = sns_make_proposal(
         &state_machine,
-        governance,
-        user,
-        neuron,
-        Proposal {
-            title: "Mint SNS tokens".to_string(),
-            summary: "Mint tokens to user".to_string(),
-            url: "".to_string(),
-            action: Some(Action::MintSnsTokens(MintSnsTokens {
-                amount_e8s: Some(10000 * E8S_PER_TOKEN),
-                memo: None,
-                to_principal: Some(user),
-                to_subaccount: None,
-            })),
-        },
+        governance_canister_id,
+        *WHALE,
+        whale_neuron_id.clone(),
+        proposal.clone(),
     )
     .unwrap();
+    sns_wait_for_proposal_execution(&state_machine, governance_canister_id, first_proposal_id);
 
-    sns_wait_for_proposal_execution(&state_machine, governance, transfer_token_proposal_id);
+    // Step 3: Inspect the result(s).
 
-    // Show that our treasuries are not affected, and our user has expected funds
-    let user_sns_balance = icrc1_balance(
+    // Assert that whale got his SNS tokens.
+    let balance = icrc1_balance(
         &state_machine,
-        sns_canisters.ledger_canister_id,
-        user_account,
+        sns_ledger_canister_id,
+        Account {
+            owner: Principal::from(*WHALE),
+            subaccount: None,
+        },
     );
-    assert_eq!(user_sns_balance, Tokens::new(10000, 0).unwrap());
+    assert_eq!(balance, Tokens::new(2_222, 0).unwrap());
 
-    let treasury_sns_token_balance = icrc1_balance(
+    // Whale tries again, but this time, it doesn't work, because of minting limits.
+    let doomed_make_proposal_result = sns_make_proposal(
         &state_machine,
-        sns_canisters.ledger_canister_id,
-        treasury_sns_token_account,
+        governance_canister_id,
+        *WHALE,
+        whale_neuron_id,
+        Proposal {
+            title: "Second Mint".to_string(),
+            ..proposal
+        },
     );
-    assert_eq!(treasury_sns_token_balance, Tokens::new(10000, 0).unwrap());
+
+    let err = doomed_make_proposal_result.unwrap_err();
+    let SnsGovernanceError {
+        error_type,
+        error_message,
+    } = &err;
+    assert_eq!(
+        SnsErrorType::try_from(*error_type),
+        Ok(SnsErrorType::InvalidProposal),
+        "{:#?}",
+        err,
+    );
+    let error_message = error_message.to_lowercase();
+    for snip in [
+        "amount",
+        "too large",
+        "2222",
+        "upper bound",
+        "exceeded",
+        "try again",
+    ] {
+        assert!(error_message.contains(snip), "{:#?}", err);
+    }
+
+    // Whale's balance is not affected by the second proposal.
+    let balance = icrc1_balance(
+        &state_machine,
+        sns_ledger_canister_id,
+        Account {
+            owner: Principal::from(*WHALE),
+            subaccount: None,
+        },
+    );
+    assert_eq!(balance, Tokens::new(2_222, 0).unwrap());
 }

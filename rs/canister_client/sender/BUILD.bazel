@@ -4,11 +4,9 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "//rs/crypto/ecdsa_secp256k1",
-    "//rs/crypto/internal/crypto_lib/types",
-    "//rs/crypto/utils/basic_sig",
+    "//rs/crypto/ed25519",
     "//rs/types/base_types",
     "//rs/types/types",
-    "@crate_index//:ed25519-consensus",
     "@crate_index//:rand",
     "@crate_index//:rand_chacha",
 ]

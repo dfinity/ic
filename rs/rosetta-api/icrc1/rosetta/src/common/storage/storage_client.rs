@@ -85,7 +85,7 @@ impl StorageClient {
 
     // Gets a transaction with a certain hash. Returns [] if no transaction exists in the database with that hash. Returns a vector with multiple entries if more than one transaction
     // with the given transaction hash exists
-    pub fn get_transaction_by_hash(
+    pub fn get_transactions_by_hash(
         &self,
         hash: ByteBuf,
     ) -> anyhow::Result<Vec<crate::common::storage::types::IcrcTransaction>> {
@@ -319,7 +319,7 @@ mod tests {
                   let tx0 = block.get_transaction();
                   let tx1 = storage_client_memory.get_block_at_idx(block.index).unwrap().unwrap().get_transaction();
                   let tx2 = storage_client_memory.get_transaction_at_idx(block.index).unwrap().unwrap();
-                  let tx3 = &storage_client_memory.get_transaction_by_hash(block.clone().get_transaction_hash()).unwrap().clone()[0];
+                  let tx3 = &storage_client_memory.get_transactions_by_hash(block.clone().get_transaction_hash()).unwrap().clone()[0];
                   assert_eq!(tx0,tx1);
                   assert_eq!(tx1,tx2);
                   assert_eq!(tx2,*tx3);
@@ -335,7 +335,7 @@ mod tests {
               storage_client_memory.store_blocks([duplicate_tx_block.clone()].to_vec()).unwrap();
 
               // The hash of the duplicated transaction should still be the same --> There should be two transactions with the same transaction hash.
-              assert_eq!(storage_client_memory.get_transaction_by_hash(duplicate_tx_block.clone().get_transaction_hash()).unwrap().len(),2  );
+              assert_eq!(storage_client_memory.get_transactions_by_hash(duplicate_tx_block.clone().get_transaction_hash()).unwrap().len(),2);
               }
            }
 

@@ -24,7 +24,7 @@ use http::{
 };
 use ic_types::{
     messages::{Blob, HttpStatusResponse, ReplicaHealthStatus},
-    CanisterId,
+    CanisterId, PrincipalId, SubnetId,
 };
 
 use lazy_static::lazy_static;
@@ -94,6 +94,7 @@ pub const PATH_STATUS: &str = "/api/v2/status";
 pub const PATH_QUERY: &str = "/api/v2/canister/:canister_id/query";
 pub const PATH_CALL: &str = "/api/v2/canister/:canister_id/call";
 pub const PATH_READ_STATE: &str = "/api/v2/canister/:canister_id/read_state";
+pub const PATH_SUBNET_READ_STATE: &str = "/api/v2/subnet/:subnet_id/read_state";
 pub const PATH_HEALTH: &str = "/health";
 
 lazy_static! {
@@ -102,7 +103,7 @@ lazy_static! {
 }
 
 // Type of IC request
-#[derive(Default, Clone, Copy, PartialEq, Eq, Hash, Display, IntoStaticStr)]
+#[derive(Default, Clone, Copy, Display, PartialEq, Eq, Hash, IntoStaticStr)]
 #[strum(serialize_all = "snake_case")]
 pub enum RequestType {
     #[default]
@@ -111,6 +112,7 @@ pub enum RequestType {
     Query,
     Call,
     ReadState,
+    ReadStateSubnet,
 }
 
 #[derive(Debug, Clone, Display)]
@@ -325,18 +327,13 @@ pub struct ICRequestEnvelope {
 
 #[async_trait]
 pub trait Proxy: Sync + Send {
-    async fn proxy(
-        &self,
-        request_type: RequestType,
-        request: Request<Body>,
-        node: Arc<Node>,
-        canister_id: CanisterId,
-    ) -> Result<Response, ErrorCause>;
+    async fn proxy(&self, request: Request<Body>, url: Url) -> Result<Response, ErrorCause>;
 }
 
-#[async_trait]
 pub trait Lookup: Sync + Send {
-    async fn lookup_subnet(&self, id: &CanisterId) -> Result<Arc<RouteSubnet>, ErrorCause>;
+    fn lookup_subnet_by_canister_id(&self, id: &CanisterId)
+        -> Result<Arc<RouteSubnet>, ErrorCause>;
+    fn lookup_subnet_by_id(&self, id: &SubnetId) -> Result<Arc<RouteSubnet>, ErrorCause>;
 }
 
 #[async_trait]
@@ -374,24 +371,11 @@ impl ProxyRouter {
 
 #[async_trait]
 impl Proxy for ProxyRouter {
-    async fn proxy(
-        &self,
-        request_type: RequestType,
-        request: Request<Body>,
-        node: Arc<Node>,
-        canister_id: CanisterId,
-    ) -> Result<Response, ErrorCause> {
+    async fn proxy(&self, request: Request<Body>, url: Url) -> Result<Response, ErrorCause> {
         // Prepare the request
         let (parts, body) = request.into_parts();
 
-        // Create request
-        let u = Url::from_str(&format!(
-            "https://{}:{}/api/v2/canister/{canister_id}/{request_type}",
-            node.id, node.port,
-        ))
-        .map_err(|e| ErrorCause::Other(format!("failed to build request url: {e}")))?;
-
-        let mut request = reqwest::Request::new(Method::POST, u);
+        let mut request = reqwest::Request::new(Method::POST, url);
         *request.headers_mut() = parts.headers;
         *request.body_mut() = Some(body.into());
 
@@ -416,7 +400,7 @@ impl Proxy for ProxyRouter {
 
 #[async_trait]
 impl Lookup for ProxyRouter {
-    async fn lookup_subnet(
+    fn lookup_subnet_by_canister_id(
         &self,
         canister_id: &CanisterId,
     ) -> Result<Arc<RouteSubnet>, ErrorCause> {
@@ -424,8 +408,19 @@ impl Lookup for ProxyRouter {
             .published_routes
             .load_full()
             .ok_or(ErrorCause::NoRoutingTable)? // No routing table present
-            .lookup(canister_id.get_ref().0)
+            .lookup_by_canister_id(canister_id.get_ref().0)
             .ok_or(ErrorCause::SubnetNotFound)?; // Requested canister route wasn't found
+
+        Ok(subnet)
+    }
+
+    fn lookup_subnet_by_id(&self, subnet_id: &SubnetId) -> Result<Arc<RouteSubnet>, ErrorCause> {
+        let subnet = self
+            .published_routes
+            .load_full()
+            .ok_or(ErrorCause::NoRoutingTable)? // No routing table present
+            .lookup_by_id(subnet_id.get_ref().0)
+            .ok_or(ErrorCause::SubnetNotFound)?; // Requested subnet_id route wasn't found
 
         Ok(subnet)
     }
@@ -514,7 +509,7 @@ impl From<BoxError> for ApiError {
     }
 }
 
-pub async fn validate_request(
+pub async fn validate_canister_request(
     matched_path: MatchedPath,
     canister_id: Path<String>,
     mut request: Request<Body>,
@@ -536,6 +531,48 @@ pub async fn validate_request(
 
     request.extensions_mut().insert(canister_id);
 
+    let mut resp = next.run(request).await;
+
+    resp.headers_mut().insert(
+        HEADER_IC_CANISTER_ID,
+        HeaderValue::from_maybe_shared(Bytes::from(canister_id.to_string())).unwrap(),
+    );
+
+    Ok(resp)
+}
+
+pub async fn validate_subnet_request(
+    matched_path: MatchedPath,
+    subnet_id: Path<String>,
+    mut request: Request<Body>,
+    next: Next<Body>,
+) -> Result<impl IntoResponse, ApiError> {
+    let request_type = match matched_path.as_str() {
+        PATH_SUBNET_READ_STATE => RequestType::ReadStateSubnet,
+        _ => panic!("unknown path, should never happen"),
+    };
+
+    request.extensions_mut().insert(request_type);
+
+    // Decode canister_id from URL
+    let principal_id: PrincipalId = Principal::from_text(subnet_id.as_str())
+        .map_err(|err| {
+            ErrorCause::MalformedRequest(format!("Unable to decode subnet_id from URL: {err}"))
+        })?
+        .into();
+    let subnet_id = SubnetId::from(principal_id);
+
+    request.extensions_mut().insert(subnet_id);
+
+    let resp = next.run(request).await;
+
+    Ok(resp)
+}
+
+pub async fn validate_request(
+    request: Request<Body>,
+    next: Next<Body>,
+) -> Result<impl IntoResponse, ApiError> {
     if let Some(id_header) = request.headers().get(HEADER_X_REQUEST_ID) {
         let is_valid_id = id_header
             .to_str()
@@ -551,11 +588,7 @@ pub async fn validate_request(
         }
     }
 
-    let mut resp = next.run(request).await;
-    resp.headers_mut().insert(
-        HEADER_IC_CANISTER_ID,
-        HeaderValue::from_maybe_shared(Bytes::from(canister_id.to_string())).unwrap(),
-    );
+    let resp = next.run(request).await;
 
     Ok(resp)
 }
@@ -633,12 +666,17 @@ pub async fn preprocess_request(
 // Middleware: looks up the target subnet in the routing table
 pub async fn lookup_subnet(
     State(lk): State<Arc<dyn Lookup>>,
-    Extension(canister_id): Extension<CanisterId>,
     mut request: Request<Body>,
     next: Next<Body>,
 ) -> Result<impl IntoResponse, ApiError> {
-    // Try to look up a target subnet using the canister id
-    let subnet = lk.lookup_subnet(&canister_id).await?;
+    let subnet: Arc<RouteSubnet> =
+        if let Some(canister_id) = request.extensions().get::<CanisterId>() {
+            lk.lookup_subnet_by_canister_id(canister_id)?
+        } else if let Some(subnet_id) = request.extensions().get::<SubnetId>() {
+            lk.lookup_subnet_by_id(subnet_id)?
+        } else {
+            panic!("canister_id and subnet_id can't be both empty for a request")
+        };
 
     // Inject subnet into request
     request.extensions_mut().insert(Arc::clone(&subnet));
@@ -690,17 +728,19 @@ pub async fn postprocess_response(request: Request<Body>, next: Next<Body>) -> i
         }
     }
 
+    if let Some(v) = response.extensions().get::<Arc<RouteSubnet>>().cloned() {
+        response.headers_mut().insert(
+            HEADER_IC_SUBNET_ID,
+            HeaderValue::from_maybe_shared(Bytes::from(v.id.clone())).unwrap(),
+        );
+    }
+
     let node = response.extensions().get::<Arc<Node>>().cloned();
     if let Some(v) = node {
         // Principals and subnet type are always ASCII printable, so unwrap is safe
         response.headers_mut().insert(
             HEADER_IC_NODE_ID,
             HeaderValue::from_maybe_shared(Bytes::from(v.id.to_string())).unwrap(),
-        );
-
-        response.headers_mut().insert(
-            HEADER_IC_SUBNET_ID,
-            HeaderValue::from_maybe_shared(Bytes::from(v.subnet_id.to_string())).unwrap(),
         );
 
         response.headers_mut().insert(
@@ -790,17 +830,34 @@ pub async fn status(
 }
 
 // Handler: Unified handler for query/call/read_state calls
-pub async fn handle_call(
+pub async fn handle_canister(
     State(p): State<Arc<dyn Proxy>>,
     Extension(ctx): Extension<Arc<RequestContext>>,
     Extension(canister_id): Extension<CanisterId>,
     Extension(node): Extension<Arc<Node>>,
     request: Request<Body>,
 ) -> Result<impl IntoResponse, ApiError> {
+    let url = node
+        .build_url(ctx.request_type, canister_id.into())
+        .map_err(|e| ErrorCause::Other(format!("failed to build request url: {e}")))?;
     // Proxy the request
-    let resp = p
-        .proxy(ctx.request_type, request, node, canister_id)
-        .await?;
+    let resp = p.proxy(request, url).await?;
+
+    Ok(resp)
+}
+
+pub async fn handle_subnet(
+    State(p): State<Arc<dyn Proxy>>,
+    Extension(ctx): Extension<Arc<RequestContext>>,
+    Extension(subnet_id): Extension<SubnetId>,
+    Extension(node): Extension<Arc<Node>>,
+    request: Request<Body>,
+) -> Result<impl IntoResponse, ApiError> {
+    let url = node
+        .build_url(ctx.request_type, subnet_id.get().into())
+        .map_err(|e| ErrorCause::Other(format!("failed to build request url: {e}")))?;
+    // Proxy the request
+    let resp = p.proxy(request, url).await?;
 
     Ok(resp)
 }

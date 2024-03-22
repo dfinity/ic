@@ -28,10 +28,29 @@ impl From<TransactionPrice> for Eip1559TransactionPrice {
     }
 }
 
+#[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+pub struct CkErc20Token {
+    pub ckerc20_token_symbol: String,
+    pub erc20_contract_address: String,
+    pub ledger_canister_id: Principal,
+}
+
+impl From<crate::erc20::CkErc20Token> for CkErc20Token {
+    fn from(value: crate::erc20::CkErc20Token) -> Self {
+        Self {
+            ckerc20_token_symbol: value.ckerc20_token_symbol.to_string(),
+            erc20_contract_address: value.erc20_contract_address.to_string(),
+            ledger_canister_id: value.ckerc20_ledger_id,
+        }
+    }
+}
+
 #[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
 pub struct MinterInfo {
     pub minter_address: Option<String>,
-    pub smart_contract_address: Option<String>,
+    pub eth_helper_contract_address: Option<String>,
+    pub erc20_helper_contract_address: Option<String>,
+    pub supported_ckerc20_tokens: Vec<CkErc20Token>,
     pub minimum_withdrawal_amount: Option<Nat>,
     pub ethereum_block_height: Option<CandidBlockTag>,
     pub last_observed_block_number: Option<Nat>,
@@ -273,6 +292,9 @@ pub mod events {
         SyncedToBlock {
             block_number: Nat,
         },
+        SyncedErc20ToBlock {
+            block_number: Nat,
+        },
         AcceptedEthWithdrawalRequest {
             withdrawal_amount: Nat,
             destination: String,
@@ -315,13 +337,20 @@ pub mod events {
         AcceptedErc20WithdrawalRequest {
             max_transaction_fee: Nat,
             withdrawal_amount: Nat,
-            ckerc20_token_symbol: String,
+            erc20_contract_address: String,
             destination: String,
             cketh_ledger_burn_index: Nat,
+            ckerc20_ledger_id: Principal,
             ckerc20_ledger_burn_index: Nat,
             from: Principal,
             from_subaccount: Option<[u8; 32]>,
             created_at: u64,
+        },
+        MintedCkErc20 {
+            event_source: EventSource,
+            mint_block_index: Nat,
+            ckerc20_token_symbol: String,
+            erc20_contract_address: String,
         },
     }
 }

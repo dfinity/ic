@@ -22,7 +22,7 @@ ic-icrc1-ledger = { path = "../ledger" }
 ic-icrc1-tokens-u64 = { path = "../tokens_u64" }
 ic-metrics-encoder = "1.1"
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
-num-traits = "0.2.14"
+num-traits = { workspace = true }
 scopeguard = "1.1.0"
 serde = { workspace = true }
 
@@ -35,7 +35,7 @@ ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
 ic-ledger-core = { path = "../../ledger_core" }
 ic-ledger-canister-core = { path = "../../ledger_canister_core" }
-num-traits = "0.2.14"
+num-traits = { workspace = true }
 proptest = "1.0"
 serde_json = { workspace = true }
 

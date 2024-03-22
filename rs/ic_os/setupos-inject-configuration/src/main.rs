@@ -80,7 +80,7 @@ async fn main() -> Result<(), Error> {
     let cli = Cli::parse();
 
     // Open config partition
-    let mut config = FatPartition::open(cli.image_path.clone(), 3).await?;
+    let mut config = FatPartition::open(cli.image_path.clone(), Some(3)).await?;
 
     // Print previous config.ini
     println!("Previous config.ini:\n---");
@@ -136,7 +136,7 @@ async fn main() -> Result<(), Error> {
     config.close().await?;
 
     // Open data partition
-    let mut data = ExtPartition::open(cli.image_path.clone(), 4).await?;
+    let mut data = ExtPartition::open(cli.image_path.clone(), Some(4)).await?;
 
     // Print previous deployment.json
     println!("Previous deployment.json:\n---");

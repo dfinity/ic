@@ -24,7 +24,7 @@ use ic_cketh_test_utils::{
     CkEthSetup, CKETH_TRANSFER_FEE, DEFAULT_BLOCK_HASH, DEFAULT_BLOCK_NUMBER,
     DEFAULT_DEPOSIT_FROM_ADDRESS, DEFAULT_DEPOSIT_LOG_INDEX, DEFAULT_DEPOSIT_TRANSACTION_HASH,
     DEFAULT_PRINCIPAL_ID, DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS,
-    DEFAULT_WITHDRAWAL_TRANSACTION_HASH, EXPECTED_BALANCE, HELPER_SMART_CONTRACT_ADDRESS,
+    DEFAULT_WITHDRAWAL_TRANSACTION_HASH, ETH_HELPER_CONTRACT_ADDRESS, EXPECTED_BALANCE,
     LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MAX_ETH_LOGS_BLOCK_RANGE, MINTER_ADDRESS,
     RECEIVED_ETH_EVENT_TOPIC,
 };
@@ -205,11 +205,11 @@ fn should_not_mint_when_logs_inconsistent() {
     let deposit_params = DepositParams::default();
     let (ankr_logs, public_node_logs) = {
         let ankr_log_entry = deposit_params.eth_log_entry();
-        let mut cloudflare_log_entry = ankr_log_entry.clone();
-        cloudflare_log_entry.amount += 1;
+        let mut llama_nodes_log_entry = ankr_log_entry.clone();
+        llama_nodes_log_entry.amount += 1;
         (
             vec![ethers_core::types::Log::from(ankr_log_entry)],
-            vec![ethers_core::types::Log::from(cloudflare_log_entry)],
+            vec![ethers_core::types::Log::from(llama_nodes_log_entry)],
         )
     };
     assert_ne!(ankr_logs, public_node_logs);
@@ -218,7 +218,7 @@ fn should_not_mint_when_logs_inconsistent() {
         .deposit(deposit_params.with_mock_eth_get_logs(move |mock| {
             mock.respond_with(JsonRpcProvider::Ankr, ankr_logs.clone())
                 .respond_with(JsonRpcProvider::PublicNode, public_node_logs.clone())
-                .respond_with(JsonRpcProvider::Cloudflare, ankr_logs.clone())
+                .respond_with(JsonRpcProvider::LlamaNodes, ankr_logs.clone())
         }))
         .expect_no_mint();
 }
@@ -374,7 +374,7 @@ fn should_not_send_eth_transaction_when_fee_history_inconsistent() {
                 },
             )
             .modify_response(
-                JsonRpcProvider::Cloudflare,
+                JsonRpcProvider::LlamaNodes,
                 &mut |response: &mut ethers_core::types::FeeHistory| {
                     response.oldest_block = 0x17740744_u64.into()
                 },
@@ -743,7 +743,7 @@ fn should_not_overlap_when_scrapping_logs() {
         .with_request_params(json!([{
             "fromBlock": first_from_block,
             "toBlock": first_to_block,
-            "address": [HELPER_SMART_CONTRACT_ADDRESS],
+            "address": [ETH_HELPER_CONTRACT_ADDRESS],
             "topics": [RECEIVED_ETH_EVENT_TOPIC]
         }]))
         .respond_for_all_with(empty_logs())
@@ -760,7 +760,7 @@ fn should_not_overlap_when_scrapping_logs() {
         .with_request_params(json!([{
             "fromBlock": second_from_block,
             "toBlock": second_to_block,
-            "address": [HELPER_SMART_CONTRACT_ADDRESS],
+            "address": [ETH_HELPER_CONTRACT_ADDRESS],
             "topics": [RECEIVED_ETH_EVENT_TOPIC]
         }]))
         .respond_for_all_with(empty_logs())
@@ -791,7 +791,7 @@ fn should_retry_from_same_block_when_scrapping_fails() {
         .with_request_params(json!([{
             "fromBlock": from_block,
             "toBlock": to_block,
-            "address": [HELPER_SMART_CONTRACT_ADDRESS],
+            "address": [ETH_HELPER_CONTRACT_ADDRESS],
             "topics": [RECEIVED_ETH_EVENT_TOPIC]
         }]))
         .respond_for_all_with(empty_logs())
@@ -814,7 +814,7 @@ fn should_retry_from_same_block_when_scrapping_fails() {
         .with_request_params(json!([{
             "fromBlock": from_block,
             "toBlock": to_block,
-            "address": [HELPER_SMART_CONTRACT_ADDRESS],
+            "address": [ETH_HELPER_CONTRACT_ADDRESS],
             "topics": [RECEIVED_ETH_EVENT_TOPIC]
         }]))
         .respond_for_all_with(empty_logs())
@@ -842,7 +842,7 @@ fn should_scrap_one_block_when_at_boundary_with_last_finalized_block() {
         .with_request_params(json!([{
             "fromBlock": from_block,
             "toBlock": from_block,
-            "address": [HELPER_SMART_CONTRACT_ADDRESS],
+            "address": [ETH_HELPER_CONTRACT_ADDRESS],
             "topics": [RECEIVED_ETH_EVENT_TOPIC]
         }]))
         .respond_for_all_with(empty_logs())
@@ -879,7 +879,7 @@ fn should_panic_when_last_finalized_block_in_the_past() {
         .with_request_params(json!([{
             "fromBlock": first_from_block,
             "toBlock": first_to_block,
-            "address": [HELPER_SMART_CONTRACT_ADDRESS],
+            "address": [ETH_HELPER_CONTRACT_ADDRESS],
             "topics": [RECEIVED_ETH_EVENT_TOPIC]
         }]))
         .respond_for_all_with(empty_logs())
@@ -914,7 +914,7 @@ fn should_skip_scrapping_when_last_seen_block_newer_than_current_height() {
                     mock.with_request_params(json!([{
                         "fromBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1),
                         "toBlock": BlockNumber::from(safe_block_number),
-                        "address": [HELPER_SMART_CONTRACT_ADDRESS],
+                        "address": [ETH_HELPER_CONTRACT_ADDRESS],
                         "topics": [RECEIVED_ETH_EVENT_TOPIC]
                     }]))
                 }),
@@ -973,7 +973,7 @@ fn should_half_range_of_scrapped_logs_when_response_over_two_mega_bytes() {
             .with_request_params(json!([{
                 "fromBlock": from_block,
                 "toBlock": to_block,
-                "address": [HELPER_SMART_CONTRACT_ADDRESS],
+                "address": [ETH_HELPER_CONTRACT_ADDRESS],
                 "topics": [RECEIVED_ETH_EVENT_TOPIC]
             }]))
             .with_max_response_bytes(max_response_bytes)
@@ -986,7 +986,7 @@ fn should_half_range_of_scrapped_logs_when_response_over_two_mega_bytes() {
         .with_request_params(json!([{
             "fromBlock": from_block,
             "toBlock": half_to_block,
-            "address": [HELPER_SMART_CONTRACT_ADDRESS],
+            "address": [ETH_HELPER_CONTRACT_ADDRESS],
             "topics": [RECEIVED_ETH_EVENT_TOPIC]
         }]))
         .with_max_response_bytes(all_eth_get_logs_response_size_estimates()[0])
@@ -1021,7 +1021,7 @@ fn should_skip_single_block_containing_too_many_events() {
             .with_request_params(json!([{
                 "fromBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1),
                 "toBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 3),
-                "address": [HELPER_SMART_CONTRACT_ADDRESS],
+                "address": [ETH_HELPER_CONTRACT_ADDRESS],
                 "topics": [RECEIVED_ETH_EVENT_TOPIC]
             }]))
             .with_max_response_bytes(max_response_bytes)
@@ -1035,7 +1035,7 @@ fn should_skip_single_block_containing_too_many_events() {
             .with_request_params(json!([{
                 "fromBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1),
                 "toBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 2),
-                "address": [HELPER_SMART_CONTRACT_ADDRESS],
+                "address": [ETH_HELPER_CONTRACT_ADDRESS],
                 "topics": [RECEIVED_ETH_EVENT_TOPIC]
             }]))
             .with_max_response_bytes(max_response_bytes)
@@ -1049,7 +1049,7 @@ fn should_skip_single_block_containing_too_many_events() {
             .with_request_params(json!([{
                 "fromBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1),
                 "toBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1),
-                "address": [HELPER_SMART_CONTRACT_ADDRESS],
+                "address": [ETH_HELPER_CONTRACT_ADDRESS],
                 "topics": [RECEIVED_ETH_EVENT_TOPIC]
             }]))
             .with_max_response_bytes(max_response_bytes)
@@ -1062,7 +1062,7 @@ fn should_skip_single_block_containing_too_many_events() {
         .with_request_params(json!([{
             "fromBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 2),
             "toBlock": BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 3),
-            "address": [HELPER_SMART_CONTRACT_ADDRESS],
+            "address": [ETH_HELPER_CONTRACT_ADDRESS],
             "topics": [RECEIVED_ETH_EVENT_TOPIC]
         }]))
         .with_max_response_bytes(all_eth_get_logs_response_size_estimates()[0])
@@ -1094,9 +1094,11 @@ fn should_retrieve_minter_info() {
         info_at_start,
         MinterInfo {
             minter_address: Some(format_ethereum_address_to_eip_55(MINTER_ADDRESS)),
-            smart_contract_address: Some(format_ethereum_address_to_eip_55(
-                HELPER_SMART_CONTRACT_ADDRESS
+            eth_helper_contract_address: Some(format_ethereum_address_to_eip_55(
+                ETH_HELPER_CONTRACT_ADDRESS
             )),
+            erc20_helper_contract_address: None,
+            supported_ckerc20_tokens: vec![],
             minimum_withdrawal_amount: Some(Nat::from(CKETH_TRANSFER_FEE)),
             ethereum_block_height: Some(Finalized),
             last_observed_block_number: None,

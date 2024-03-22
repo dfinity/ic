@@ -1,8 +1,10 @@
+use std::collections::BTreeMap;
+
+use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests_with_params;
 use ic_interfaces::{
     certification::{Verifier, VerifierError},
     validation::ValidationResult,
 };
-use ic_test_utilities_registry::{setup_registry, SubnetRecordBuilder};
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::{
     batch::*,
@@ -10,7 +12,7 @@ use ic_types::{
     consensus::dkg::{Dealings, Summary},
     consensus::*,
     crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
-    crypto::*,
+    crypto::{threshold_sig::ni_dkg::NiDkgTranscript, *},
     signature::*,
     *,
 };
@@ -41,13 +43,48 @@ impl Fake for DataPayload {
 
 impl Fake for Summary {
     fn fake() -> Self {
-        let subnet_id = subnet_test_id(0);
-        let registry = setup_registry(
-            subnet_id,
-            vec![(1, SubnetRecordBuilder::from(&[node_test_id(0)]).build())],
-        );
-        ic_consensus::dkg::make_genesis_summary(&*registry, subnet_id, None)
+        let registry_version = 1;
+
+        Self::new(
+            /*configs=*/ Vec::default(),
+            /*current_transcripts=*/
+            empty_ni_dkg_transcripts_with_committee(registry_version),
+            /*next_transcripts=*/ BTreeMap::default(),
+            /*transcript_for_new_subnets=*/ Vec::default(),
+            RegistryVersion::from(registry_version),
+            /*interval_length=*/ Height::new(59),
+            /*next_interval_length=*/ Height::new(59),
+            /*height=*/ Height::new(0),
+            /*initial_dkg_attempts=*/ BTreeMap::default(),
+        )
     }
+}
+
+fn empty_ni_dkg_transcripts_with_committee(
+    registry_version: u64,
+) -> BTreeMap<NiDkgTag, NiDkgTranscript> {
+    let committee = vec![node_test_id(0)];
+
+    BTreeMap::from([
+        (
+            NiDkgTag::LowThreshold,
+            dummy_transcript_for_tests_with_params(
+                committee.clone(),
+                NiDkgTag::LowThreshold,
+                NiDkgTag::LowThreshold.threshold_for_subnet_of_size(committee.len()) as u32,
+                registry_version,
+            ),
+        ),
+        (
+            NiDkgTag::HighThreshold,
+            dummy_transcript_for_tests_with_params(
+                committee.clone(),
+                NiDkgTag::HighThreshold,
+                NiDkgTag::HighThreshold.threshold_for_subnet_of_size(committee.len()) as u32,
+                registry_version,
+            ),
+        ),
+    ])
 }
 
 impl<T> Fake for MultiSignature<T> {

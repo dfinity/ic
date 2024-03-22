@@ -18,7 +18,7 @@ import (
 )
 
 // This defines timeout on the Bazel level.
-var TESTNET_DEPLOYMENT_TIMEOUT_SEC = 3600
+var TESTNET_DEPLOYMENT_TIMEOUT_SEC = 4200
 
 var FARM_BASE_URL = "https://farm.dfinity.systems"
 var FARM_API = FARM_BASE_URL + "/swagger-ui"

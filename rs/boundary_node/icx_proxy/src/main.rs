@@ -8,7 +8,7 @@ use anyhow::{Context, Error};
 use candid::Principal;
 use clap::{builder::ValueParser, Parser};
 use futures::try_join;
-use hyperlocal::Uri as UnixUri;
+use hyperlocal_next::Uri as UnixUri;
 use jemallocator::Jemalloc;
 use tracing::{error, warn, Instrument};
 

@@ -3113,3 +3113,26 @@ pub fn decentralization_test(env: TestEnv) {
     ));
     assert_eq!(counters, canister_values);
 }
+
+pub fn read_state_via_subnet_path_test(env: TestEnv) {
+    let log = env.logger();
+    let bn_agent = {
+        let boundary_node = env
+            .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
+            .unwrap()
+            .get_snapshot()
+            .unwrap();
+        boundary_node.build_default_agent()
+    };
+    let subnet_id: Principal = env
+        .topology_snapshot()
+        .subnets()
+        .next()
+        .expect("no subnets found")
+        .subnet_id
+        .get()
+        .0;
+    let metrics = block_on(bn_agent.read_state_subnet_metrics(subnet_id))
+        .expect("Call to read_state via /api/v2/subnet/{subnet_id}/read_state failed.");
+    info!(log, "subnet metrics are {:?}", metrics);
+}

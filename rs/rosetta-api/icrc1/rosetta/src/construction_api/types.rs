@@ -6,7 +6,6 @@ use ic_agent::agent::EnvelopeContent;
 use rosetta_core::objects::*;
 use serde::Deserialize;
 use serde::Serialize;
-use std::cmp;
 use std::str::FromStr;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -34,22 +33,11 @@ impl TryFrom<Option<ObjectMap>> for ConstructionMetadataRequestOptions {
     }
 }
 
-// Every transaction that we want to send to the IC consists of two envelopes that we have to send to the IC,
-// the call with the content of our request and the read that fetches the result
-// Each Envelope contains a valid signature of the request to the IC and the content of the request.
-// For the Call request the content is the canister method call and for the State request the content is simply
-// that we want to known whether there exists a result for the Call request yet.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EnvelopePair<'a> {
-    pub call_envelope: Envelope<'a>,
-    pub read_state_envelope: Envelope<'a>,
-}
-
-// A signed transaction contains a list of envelope pairs. The list exists because we do not know when we create the envelope pairs which ingress interval is going to be used by the user
-// To support the 24h window of valid transactions a single signed transaction does not contain a single envelope pair but 24*3600/INGRESS_INTERVAL envelope pairs, one of every possible ingress interval.
+// A signed transaction contains a list of envelopes. The list exists because we do not know when we create the envelopes which ingress interval is going to be used by the user
+// To support the 24h window of valid transactions a single signed transaction does not contain a single envelope but 24*3600/INGRESS_INTERVAL envelopes, one for every possible ingress interval.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SignedTransaction<'a> {
-    pub envelope_pairs: Vec<EnvelopePair<'a>>,
+    pub envelopes: Vec<Envelope<'a>>,
 }
 
 impl<'a> ToString for SignedTransaction<'a> {
@@ -66,26 +54,16 @@ impl<'a> FromStr for SignedTransaction<'a> {
 }
 impl<'a> SignedTransaction<'a> {
     pub fn get_lowest_ingress_expiry(&self) -> Option<u64> {
-        self.envelope_pairs
+        self.envelopes
             .iter()
-            .map(|pair| {
-                cmp::min(
-                    pair.call_envelope.content.ingress_expiry(),
-                    pair.read_state_envelope.content.ingress_expiry(),
-                )
-            })
+            .map(|envelope| envelope.content.ingress_expiry())
             .min()
     }
 
     pub fn get_highest_ingress_expiry(&self) -> Option<u64> {
-        self.envelope_pairs
+        self.envelopes
             .iter()
-            .map(|pair| {
-                cmp::max(
-                    pair.call_envelope.content.ingress_expiry(),
-                    pair.read_state_envelope.content.ingress_expiry(),
-                )
-            })
+            .map(|envelope| envelope.content.ingress_expiry())
             .max()
     }
 }

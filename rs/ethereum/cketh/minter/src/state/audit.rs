@@ -19,8 +19,8 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
         EventType::AcceptedDeposit(eth_event) => {
             state.record_event_to_mint(&eth_event.clone().into());
         }
-        EventType::AcceptedErc20Deposit(eth_event) => {
-            state.record_event_to_mint(&eth_event.clone().into());
+        EventType::AcceptedErc20Deposit(erc20_event) => {
+            state.record_event_to_mint(&erc20_event.clone().into());
         }
         EventType::InvalidDeposit {
             event_source,
@@ -32,10 +32,26 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
             event_source,
             mint_block_index,
         } => {
-            state.record_successful_mint(*event_source, *mint_block_index);
+            state.record_successful_mint(*event_source, "ckETH", *mint_block_index, None);
+        }
+        EventType::MintedCkErc20 {
+            event_source,
+            mint_block_index,
+            ckerc20_token_symbol,
+            erc20_contract_address,
+        } => {
+            state.record_successful_mint(
+                *event_source,
+                ckerc20_token_symbol,
+                *mint_block_index,
+                Some(*erc20_contract_address),
+            );
         }
         EventType::SyncedToBlock { block_number } => {
             state.last_scraped_block_number = *block_number;
+        }
+        EventType::SyncedErc20ToBlock { block_number } => {
+            state.last_erc20_scraped_block_number = *block_number;
         }
         EventType::AcceptedEthWithdrawalRequest(request) => {
             state
@@ -73,7 +89,7 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
             state.record_finalized_transaction(withdrawal_id, transaction_receipt);
         }
         EventType::ReimbursedEthWithdrawal(Reimbursed {
-            withdrawal_id,
+            burn_in_block: withdrawal_id,
             reimbursed_in_block,
             reimbursed_amount: _,
             transaction_hash: _,
@@ -91,7 +107,7 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
         EventType::AcceptedErc20WithdrawalRequest(request) => {
             state
                 .eth_transactions
-                .record_erc20_withdrawal_request(request.clone());
+                .record_withdrawal_request(request.clone());
         }
     }
 }

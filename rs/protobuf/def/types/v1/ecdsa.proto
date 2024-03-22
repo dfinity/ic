@@ -39,12 +39,14 @@ message OngoingSignature {
 message AvailableQuadruple {
   uint64 quadruple_id = 1;
   PreSignatureQuadrupleRef quadruple = 2;
+  // Deprecated. Use `quadruple.key_id` instead.
   registry.crypto.v1.EcdsaKeyId key_id = 3;
 }
 
 message QuadrupleInProgress {
   uint64 quadruple_id = 1;
   QuadrupleInCreation quadruple = 2;
+  // Deprecated. Use `quadruple.key_id` instead.
   registry.crypto.v1.EcdsaKeyId key_id = 3;
 }
 
@@ -142,6 +144,8 @@ message QuadrupleInCreation {
 
   UnmaskedTimesMaskedParams kappa_times_lambda_config = 9;
   MaskedTranscript kappa_times_lambda = 10;
+
+  registry.crypto.v1.EcdsaKeyId key_id = 12;
 }
 
 message PreSignatureQuadrupleRef {
@@ -150,6 +154,7 @@ message PreSignatureQuadrupleRef {
   MaskedTranscript kappa_times_lambda_ref = 3;
   MaskedTranscript key_times_lambda_ref = 4;
   UnmaskedTranscript key_unmasked_ref = 5;
+  registry.crypto.v1.EcdsaKeyId key_id = 6;
 }
 
 message ThresholdEcdsaSigInputsRef {

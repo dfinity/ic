@@ -1,5 +1,5 @@
 use candid::CandidType;
-use ic_management_canister_types::EcdsaKeyId;
+use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
 use ic_protobuf::{proxy::ProxyDecodeError, registry::subnet::v1 as pb};
 use serde::{Deserialize, Serialize};
 use std::{convert::TryFrom, str::FromStr};
@@ -121,6 +121,20 @@ impl TryFrom<pb::EcdsaConfig> for EcdsaConfig {
             idkg_key_rotation_period_ms: value.idkg_key_rotation_period_ms,
         })
     }
+}
+
+#[derive(CandidType, Clone, Deserialize, Debug, Eq, PartialEq, Serialize)]
+pub struct KeyConfig {
+    pub key_id: MasterPublicKeyId,
+    pub pre_signatures_to_create_in_advance: u32,
+    pub max_queue_size: Option<u32>,
+}
+
+#[derive(CandidType, Clone, Default, Deserialize, Debug, Eq, PartialEq, Serialize)]
+pub struct ChainKeyConfig {
+    pub key_configs: Vec<KeyConfig>,
+    pub signature_request_timeout_ns: Option<u64>,
+    pub idkg_key_rotation_period_ms: Option<u64>,
 }
 
 #[cfg(test)]

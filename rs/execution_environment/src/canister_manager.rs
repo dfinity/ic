@@ -28,7 +28,7 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::ReservationError;
 use ic_replicated_state::{
-    canister_snapshots::{CanisterSnapshot, SnapshotId},
+    canister_snapshots::CanisterSnapshot,
     canister_state::system_state::{
         wasm_chunk_store::{self, WasmChunkStore},
         CyclesUseCase,
@@ -48,7 +48,7 @@ use ic_types::{
     nominal_cycles::NominalCycles,
     CanisterId, CanisterTimer, ComputeAllocation, Cycles, InvalidComputeAllocationError,
     InvalidMemoryAllocationError, MemoryAllocation, NumBytes, NumInstructions, PrincipalId,
-    SubnetId, Time,
+    SnapshotId, SubnetId, Time,
 };
 use ic_wasm_types::{CanisterModule, WasmHash};
 use num_traits::cast::ToPrimitive;
@@ -334,7 +334,7 @@ impl InstallCodeContext {
                 chunk_hashes_list: args
                     .chunk_hashes_list
                     .into_iter()
-                    .map(|h| h.to_vec())
+                    .map(|h| h.hash.to_vec())
                     .collect(),
                 wasm_module_hash,
             },
@@ -631,6 +631,9 @@ impl CanisterManager {
         }
         if let Some(log_visibility) = settings.log_visibility() {
             canister.system_state.log_visibility = log_visibility;
+        }
+        if let Some(wasm_memory_limit) = settings.wasm_memory_limit() {
+            canister.system_state.wasm_memory_limit = Some(wasm_memory_limit);
         }
     }
 
@@ -1177,6 +1180,7 @@ impl CanisterManager {
         let freeze_threshold = canister.system_state.freeze_threshold;
         let reserved_cycles_limit = canister.system_state.reserved_balance_limit();
         let log_visibility = canister.system_state.log_visibility;
+        let wasm_memory_limit = canister.system_state.wasm_memory_limit;
 
         Ok(CanisterStatusResultV2::new(
             canister.status(),
@@ -1213,6 +1217,7 @@ impl CanisterManager {
                 .scheduler_state
                 .total_query_stats
                 .egress_payload_size,
+            wasm_memory_limit.map(|x| x.get()),
         ))
     }
 
@@ -1933,9 +1938,13 @@ impl CanisterManager {
             canister.scheduler_state.heap_delta_debit += NumBytes::from(new_snapshot_size);
         }
 
-        let snapshot_id = state.canister_snapshots.push(Arc::new(new_snapshot));
+        let snapshot_id =
+            SnapshotId::from((canister.canister_id(), canister.new_local_snapshot_id()));
+        state
+            .canister_snapshots
+            .push(snapshot_id, Arc::new(new_snapshot));
         Ok(TakeCanisterSnapshotResponse::new(
-            snapshot_id.get(),
+            &snapshot_id,
             state.time().as_nanos_since_unix_epoch(),
             new_snapshot_size,
         ))

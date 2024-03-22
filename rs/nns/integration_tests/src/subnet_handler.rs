@@ -66,6 +66,7 @@ fn test_submit_and_accept_update_subnet_proposal() {
                 ssh_readonly_access: vec![],
                 ssh_backup_access: vec![],
                 ecdsa_config: None,
+                chain_key_config: None,
             };
 
             let key = make_subnet_record_key(subnet_id);
@@ -189,6 +190,7 @@ fn test_submit_and_accept_update_subnet_proposal() {
                     ssh_readonly_access: vec!["pub_key_0".to_string()],
                     ssh_backup_access: vec!["pub_key_1".to_string()],
                     ecdsa_config: None,
+                    chain_key_config: None,
                 }
             );
             Ok(())

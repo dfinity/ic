@@ -26,6 +26,7 @@ enum AlgorithmId {
   ALGORITHM_ID_MEGA_SECP_256K1 = 16;
   ALGORITHM_ID_THRESHOLD_ECDSA_SECP_256R1 = 17;
   ALGORITHM_ID_THRESHOLD_SCHNORR_BIP340 = 18;
+  ALGORITHM_ID_THRESHOLD_ED25519 = 19;
 }
 
 // A list of subnets that can sign with this ECDSA key.
@@ -59,4 +60,23 @@ enum EcdsaCurve {
 message EcdsaKeyId {
   EcdsaCurve curve = 1;
   string name = 2;
+}
+
+// Types of curves that can be used for Schnorr signatures.
+enum SchnorrAlgorithm {
+  SCHNORR_ALGORITHM_UNSPECIFIED = 0;
+  SCHNORR_ALGORITHM_BIP340SECP256K1 = 1;
+  SCHNORR_ALGORITHM_ED25519 = 2;
+}
+
+message SchnorrKeyId {
+  SchnorrAlgorithm algorithm = 1;
+  string name = 2;
+}
+
+message MasterPublicKeyId {
+  oneof key_id {
+    EcdsaKeyId ecdsa_key_id = 1;
+    SchnorrKeyId schnorr_key_id = 2;
+  }
 }

@@ -6,10 +6,7 @@ use ic_interfaces::{
     consensus_pool::{ChangeAction, ConsensusPoolCache, ConsensusTime},
     validation::*,
 };
-use ic_interfaces_registry::RegistryClient;
 use ic_protobuf::types::v1 as pb;
-use ic_registry_client_helpers::subnet::SubnetRegistry;
-use ic_test_utilities::crypto::empty_ni_dkg_transcripts_with_committee;
 use ic_types::{
     batch::ValidationContext,
     consensus::ecdsa::{EcdsaBlockReader, EcdsaStats, RequestId},
@@ -26,13 +23,10 @@ use ic_types::{
     },
     signature::ThresholdSignature,
     time::UNIX_EPOCH,
-    Height, SubnetId, Time,
+    Height, Time,
 };
 use phantom_newtype::Id;
-use std::{
-    sync::{Arc, RwLock},
-    time::Duration,
-};
+use std::{sync::RwLock, time::Duration};
 
 #[macro_export]
 macro_rules! assert_changeset_matches_pattern {
@@ -134,35 +128,6 @@ impl ConsensusPoolCache for FakeConsensusPoolCache {
     fn summary_block(&self) -> Block {
         self.cache.read().unwrap().summary_block.clone()
     }
-}
-
-/// Return a CatchUpPackage created with empty transcript, from the given
-/// committee.
-pub fn make_catch_up_package_with_empty_transcript(
-    registry_client: Arc<dyn RegistryClient>,
-    subnet_id: SubnetId,
-) -> CatchUpPackage {
-    make_catch_up_package_with_empty_transcript_with_version(registry_client, subnet_id, 1)
-}
-
-pub fn make_catch_up_package_with_empty_transcript_with_version(
-    registry_client: Arc<dyn RegistryClient>,
-    subnet_id: SubnetId,
-    version: u64,
-) -> CatchUpPackage {
-    let version = ic_types::RegistryVersion::from(version);
-    let subnet_members: Vec<_> = registry_client
-        .get_node_ids_on_subnet(subnet_id, version)
-        .expect("Could not get node ids from registry")
-        .expect("Node ids not available at given registry version");
-    let ni_transcripts = empty_ni_dkg_transcripts_with_committee(subnet_members, version.get());
-    let summary = ic_consensus::dkg::make_genesis_summary(
-        &*registry_client,
-        subnet_id,
-        Option::from(version),
-    )
-    .with_current_transcripts(ni_transcripts);
-    make_genesis(summary)
 }
 
 /// Return the genesis BlockProposal and RandomBeacon made for the given height.

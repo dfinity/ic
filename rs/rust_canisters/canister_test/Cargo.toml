@@ -12,6 +12,7 @@ candid = { workspace = true }
 cargo_metadata = "0.14.2"
 dfn_candid={path="../dfn_candid"}
 ic-canister-client = { path = "../../canister_client" }
+ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-config = { path = "../../config" }
 ic-management-canister-types = { path = "../../types/management_canister_types" }
 ic-registry-transport = { path = "../../registry/transport" }

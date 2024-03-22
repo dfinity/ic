@@ -3,7 +3,10 @@ pub fn expect_panic_with_message<F: FnOnce() -> R, R: std::fmt::Debug>(
     expected_message: &str,
 ) {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(f));
-    let error = result.unwrap_err();
+    let error = result.expect_err(&format!(
+        "Expected panic with message containing: {}",
+        expected_message
+    ));
     let panic_message = {
         if let Some(s) = error.downcast_ref::<String>() {
             s.to_string()

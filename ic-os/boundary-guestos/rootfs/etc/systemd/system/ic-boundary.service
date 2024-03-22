@@ -19,6 +19,7 @@ ExecStart=/bin/bash -c ' \
         --nns-urls "${NNS_URL}" \
         --http-unix-socket /run/ic-node/ic-boundary.socket \
         --metrics-addr "[::]:9324" \
+        --log-stdout \
         --log-failed-requests-only \
         --nftables-system-replicas-path /run/ic-node/etc/nftables/system_replicas.ruleset \
         --geoip-db /run/ic-node/etc/ic-boundary/GeoLite2-Country.mmdb \

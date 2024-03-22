@@ -14,7 +14,6 @@ use ic_config::{
     transport::TransportConfig,
     Config,
 };
-use ic_icos_sev::{get_chip_id, SnpError};
 use ic_interfaces::crypto::IDkgKeyRotationResult;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{info, warn, ReplicaLogger};
@@ -135,6 +134,8 @@ impl NodeRegistration {
         let add_node_payload = self.assemble_add_node_message().await;
 
         while !self.is_node_registered().await {
+            warn!(self.log, "Node registration failed. Trying again.");
+            UtilityCommand::notify_host("Node registration failed. Trying again.", 1);
             match self.signer.get() {
                 Ok(signer) => {
                     let nns_url = self
@@ -216,7 +217,7 @@ impl NodeRegistration {
             http_endpoint: http_config_to_endpoint(&self.log, &self.node_config.http_handler)
                 .expect("Invalid endpoints in http handler config."),
             p2p_flow_endpoints: vec![],
-            chip_id: get_snp_chip_id().expect("Failed to retrieve chip_id from snp firmware"),
+            chip_id: None,
             prometheus_metrics_endpoint: "".to_string(),
             public_ipv4_config: process_ipv4_config(
                 &self.log,
@@ -543,9 +544,10 @@ impl NodeRegistration {
         {
             Ok(_) => true,
             Err(e) => {
-                warn!(
-                    self.log,
-                    "Node keys are not setup at version {}: {:?}", latest_version, e
+                warn!(self.log, "Node keys are not setup: {:?}", e);
+                UtilityCommand::notify_host(
+                    format!("Node keys are not setup: {:?}", e).as_str(),
+                    1,
                 );
                 false
             }
@@ -705,27 +707,6 @@ fn generate_nonce() -> Vec<u8> {
         .as_nanos()
         .to_le_bytes()
         .to_vec()
-}
-
-/// Get a chip_id from SNP guest firmware via SEV library.
-/// If SEV-SNP in not enabled on the guest, return None.
-/// In other cases, return the error and notify the Node Provider.
-fn get_snp_chip_id() -> OrchestratorResult<Option<Vec<u8>>> {
-    match get_chip_id() {
-        // Chip_id returned successfully
-        Ok(chip_id) => Ok(Some(chip_id)),
-        // Snp is not enabled on the Guest, return None
-        Err(SnpError::SnpNotEnabled { .. }) => Ok(None),
-        // Propagate any other error
-        Err(error) => {
-            let snp_error = format!(
-                "Failed to retrieve chip_id from snp firmware, error: {}",
-                error
-            );
-            UtilityCommand::notify_host(&snp_error, 1);
-            Err(OrchestratorError::snp_error(snp_error))
-        }
-    }
 }
 
 fn protobuf_to_vec<M: Message>(entry: M) -> Vec<u8> {

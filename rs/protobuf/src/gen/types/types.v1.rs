@@ -414,6 +414,7 @@ pub struct AvailableQuadruple {
     pub quadruple_id: u64,
     #[prost(message, optional, tag = "2")]
     pub quadruple: ::core::option::Option<PreSignatureQuadrupleRef>,
+    /// Deprecated. Use `quadruple.key_id` instead.
     #[prost(message, optional, tag = "3")]
     pub key_id: ::core::option::Option<super::super::registry::crypto::v1::EcdsaKeyId>,
 }
@@ -425,6 +426,7 @@ pub struct QuadrupleInProgress {
     pub quadruple_id: u64,
     #[prost(message, optional, tag = "2")]
     pub quadruple: ::core::option::Option<QuadrupleInCreation>,
+    /// Deprecated. Use `quadruple.key_id` instead.
     #[prost(message, optional, tag = "3")]
     pub key_id: ::core::option::Option<super::super::registry::crypto::v1::EcdsaKeyId>,
 }
@@ -591,6 +593,8 @@ pub struct QuadrupleInCreation {
     pub kappa_times_lambda_config: ::core::option::Option<UnmaskedTimesMaskedParams>,
     #[prost(message, optional, tag = "10")]
     pub kappa_times_lambda: ::core::option::Option<MaskedTranscript>,
+    #[prost(message, optional, tag = "12")]
+    pub key_id: ::core::option::Option<super::super::registry::crypto::v1::EcdsaKeyId>,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -606,6 +610,8 @@ pub struct PreSignatureQuadrupleRef {
     pub key_times_lambda_ref: ::core::option::Option<MaskedTranscript>,
     #[prost(message, optional, tag = "5")]
     pub key_unmasked_ref: ::core::option::Option<UnmaskedTranscript>,
+    #[prost(message, optional, tag = "6")]
+    pub key_id: ::core::option::Option<super::super::registry::crypto::v1::EcdsaKeyId>,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]

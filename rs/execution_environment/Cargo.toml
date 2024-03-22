@@ -43,7 +43,7 @@ ic-wasm-types = { path = "../types/wasm_types" }
 lazy_static = "1.4.0"
 memory_tracker = { path = "../memory_tracker" }
 num-rational = "0.2.2"
-num-traits = "0.2.12"
+num-traits = { workspace = true }
 phantom_newtype = { path = "../phantom_newtype" }
 prometheus = { workspace = true }
 rand = "0.8"

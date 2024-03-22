@@ -5,8 +5,8 @@ use ic_cketh_minter::eth_logs::{EventSource, ReceivedEthEvent};
 use ic_cketh_minter::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use ic_cketh_minter::lifecycle::EthereumNetwork;
 use ic_cketh_minter::numeric::{
-    BlockNumber, GasAmount, LedgerBurnIndex, LedgerMintIndex, LogIndex, TransactionNonce, Wei,
-    WeiPerGas,
+    BlockNumber, CkTokenAmount, GasAmount, LedgerBurnIndex, LedgerMintIndex, LogIndex,
+    TransactionNonce, Wei, WeiPerGas,
 };
 use ic_cketh_minter::state::audit::{apply_state_transition, EventType};
 use ic_cketh_minter::state::transactions::{EthWithdrawalRequest, Subaccount};
@@ -475,7 +475,7 @@ fn should_display_reimbursed_requests() {
         .has_no_elements_matching("#reimbursed-transactions");
 
     let reimbursed_in_block = LedgerMintIndex::new(123);
-    let reimbursed_amount = Wei::new(100_102);
+    let reimbursed_amount = CkTokenAmount::new(100_102);
 
     let dashboard = {
         let mut state = initial_state();
@@ -534,7 +534,7 @@ fn should_display_reimbursed_requests() {
                     &mut state,
                     &EventType::ReimbursedEthWithdrawal(Reimbursed {
                         transaction_hash: Some(receipt.transaction_hash),
-                        withdrawal_id: id,
+                        burn_in_block: id,
                         reimbursed_in_block,
                         reimbursed_amount,
                     }),

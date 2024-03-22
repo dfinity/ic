@@ -678,6 +678,9 @@ class JiraFindingDataSource(FindingDataSource):
             return self.risk_assessors
         except RuntimeError:
             logging.error(
-                f"could not determine risk assessors by ticket, reason:\n{traceback.format_exc()}\nusing default risk assessors instead"
+                "could not determine risk assessors by ticket\nusing default risk assessors instead"
+            )
+            logging.debug(
+                f"could not determine risk assessors by ticket, reason:\n{traceback.format_exc()}"
             )
             return JIRA_DEFAULT_RISK_ASSESSORS

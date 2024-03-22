@@ -281,10 +281,6 @@ def _ext4_image_impl(ctx):
         args += ["-S", ctx.files.file_contexts[0].path]
         inputs += ctx.files.file_contexts
 
-    for input_target, install_target in ctx.attr.extra_files.items():
-        args.append(input_target.files.to_list()[0].path + ":" + install_target)
-        inputs += input_target.files.to_list()
-
     if len(ctx.attr.strip_paths) > 0:
         args += ["--strip-paths"] + ctx.attr.strip_paths
 
@@ -308,10 +304,6 @@ ext4_image = rule(
             allow_files = True,
             mandatory = False,
         ),
-        "extra_files": attr.label_keyed_string_dict(
-            allow_files = True,
-            mandatory = False,
-        ),
         "strip_paths": attr.string_list(),
         "partition_size": attr.string(
             mandatory = True,
@@ -322,6 +314,66 @@ ext4_image = rule(
         "_build_ext4_image": attr.label(
             allow_files = True,
             default = ":build_ext4_image.py",
+        ),
+    },
+)
+
+def _inject_files_impl(ctx):
+    tool = ctx.files._inject_files[0]
+
+    out = ctx.actions.declare_file(ctx.label.name)
+
+    inputs = [ctx.files.base[0]]
+
+    args = [
+        "--input",
+        ctx.files.base[0].path,
+        "--output",
+        out.path,
+    ]
+
+    if len(ctx.files.file_contexts) > 0:
+        args += ["--file-contexts", ctx.files.file_contexts[0].path]
+        inputs += ctx.files.file_contexts
+
+    if ctx.attr.prefix:
+        args += ["--prefix", ctx.attr.prefix]
+
+    for input_target, install_target in ctx.attr.extra_files.items():
+        args.append(input_target.files.to_list()[0].path + ":" + install_target)
+        inputs += input_target.files.to_list()
+
+    ctx.actions.run(
+        executable = tool.path,
+        arguments = args,
+        inputs = inputs,
+        outputs = [out],
+        tools = [tool],
+    )
+
+    return [DefaultInfo(files = depset([out]))]
+
+inject_files = rule(
+    implementation = _inject_files_impl,
+    attrs = {
+        "base": attr.label(
+            allow_files = True,
+            mandatory = True,
+        ),
+        "extra_files": attr.label_keyed_string_dict(
+            allow_files = True,
+            mandatory = True,
+        ),
+        "file_contexts": attr.label(
+            allow_files = True,
+            mandatory = False,
+        ),
+        "prefix": attr.string(
+            mandatory = False,
+        ),
+        "_inject_files": attr.label(
+            allow_files = True,
+            default = "//rs/ic_os/inject_files:inject-files",
         ),
     },
 )
@@ -338,21 +390,19 @@ def _disk_image_impl(ctx):
     for p in partitions:
         partition_files.append(p.path)
 
-    args = "python3 %s -p %s -o %s" % (
-        tool_file.path,
-        in_layout.path,
-        out.path,
-    )
+    args = ["-p", in_layout.path, "-o", out.path]
 
     if expanded_size:
-        args += " -s %s" % expanded_size
+        args += ["-s", expanded_size]
 
-    args += " " + " ".join(partition_files)
+    args += partition_files
 
-    ctx.actions.run_shell(
+    ctx.actions.run(
+        executable = tool_file.path,
+        arguments = args,
         inputs = [in_layout] + partitions,
         outputs = [out],
-        command = args,
+        tools = [tool_file],
     )
 
     return [DefaultInfo(files = depset([out]))]
@@ -389,21 +439,16 @@ def _lvm_image_impl(ctx):
     for p in partitions:
         partition_files.append(p.path)
 
-    args = "python3 %s -v %s -n %s -u %s -p %s -o %s" % (
-        tool_file.path,
-        in_layout.path,
-        vg_name,
-        vg_uuid,
-        pv_uuid,
-        out.path,
-    )
+    args = ["-v", in_layout.path, "-n", vg_name, "-u", vg_uuid, "-p", pv_uuid, "-o", out.path]
 
-    args += " " + " ".join(partition_files)
+    args += partition_files
 
-    ctx.actions.run_shell(
+    ctx.actions.run(
+        executable = tool_file.path,
+        arguments = args,
         inputs = [in_layout] + partitions,
         outputs = [out],
-        command = args,
+        tools = [tool_file],
     )
 
     return [DefaultInfo(files = depset([out]))]
@@ -537,32 +582,3 @@ sha256sum = rule(
         ),
     },
 )
-
-def summary_sha256sum(name, inputs, suffix = ""):
-    """Compute summary sha256 of image inputs.
-
-    Args:
-      name: Name of the target to be built
-      inputs: Input files to hash
-      suffix: Suffix string to append to hash (only chars, numbers and dash allowed)
-
-    This macro expands to individual rules that compute the sha256 of the
-    individual inputs into the filesystem image artifacts, and computes
-    a summary sha256 combining all into a single hash.
-    """
-    all_deps = {}
-    for _, deps in inputs.items():
-        all_deps.update(deps)
-    labels = []
-    for dep in all_deps.keys():
-        label = name + "@" + dep.split(":")[1] + ".sha256"
-        sha256sum(
-            name = label,
-            srcs = [dep],
-        )
-        labels.append(":" + label)
-    sha256sum(
-        name = name,
-        srcs = labels,
-        suffix = suffix,
-    )

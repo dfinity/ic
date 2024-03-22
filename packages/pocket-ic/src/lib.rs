@@ -7,15 +7,16 @@
 //! With PocketIC, testing canisters is as simple as calling rust functions. Here is a minimal example:
 //!
 //! ```rust,no_run
-//! use candid;
-//! use pocket_ic;
+//! use candid::encode_one;
+//! use pocket_ic::PocketIc;
 //!
 //!  #[test]
 //!  fn test_counter_canister() {
 //!     let pic = PocketIc::new();
-//!     // Create an empty canister as the anonymous principal.
-//!     let canister_id = pic.create_canister(None);
-//!     pic.add_cycles(canister_id, 2_000_000_000_000); // 2T cycles
+//!     // Create an empty canister as the anonymous principal and add cycles.
+//!     let canister_id = pic.create_canister();
+//!     pic.add_cycles(canister_id, 2_000_000_000_000);
+//!  
 //!     let wasm_bytes = load_counter_wasm(...);
 //!     pic.install_canister(canister_id, wasm_bytes, vec![], None);
 //!     // 'inc' is a counter canister method.
@@ -56,13 +57,16 @@ use std::{
     process::Command,
     time::{Duration, Instant, SystemTime},
 };
-use tracing::{debug, instrument};
+use tracing::{debug, instrument, warn};
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::EnvFilter;
 pub mod common;
 
-const PROCESSING_TIME_HEADER: &str = "processing-timeout-ms";
-const PROCESSING_TIME_VALUE_MS: u64 = 300_000;
+// how long a get/post request may retry or poll
+const MAX_REQUEST_TIME_MS: u64 = 300_000;
+// wait time between polling requests
+const POLLING_PERIOD_MS: u64 = 10;
+
 const LOCALHOST: &str = "127.0.0.1";
 
 const LOG_DIR_PATH_ENV_NAME: &str = "POCKET_IC_LOG_DIR";
@@ -777,51 +781,103 @@ impl PocketIc {
     }
 
     fn get<T: DeserializeOwned>(&self, endpoint: &str) -> T {
+        // we may have to try several times if the instance is busy
+        let start = std::time::SystemTime::now();
         loop {
             let result = self
                 .reqwest_client
                 .get(self.instance_url().join(endpoint).unwrap())
-                .header(PROCESSING_TIME_HEADER, PROCESSING_TIME_VALUE_MS)
                 .send()
                 .expect("HTTP failure");
-            if let Some(t) = self.check_response(result) {
-                break t;
+            match result.into() {
+                ApiResponse::Success(t) => break t,
+                ApiResponse::Error { message } => panic!("{}", message),
+                ApiResponse::Busy { state_label, op_id } => {
+                    debug!(
+                        "instance_id={} Instance is busy: state_label: {}, op_id: {}",
+                        self.instance_id, state_label, op_id
+                    );
+                }
+                ApiResponse::Started { state_label, op_id } => {
+                    panic!(
+                        "Error: A 'get' should not return Started: state_label: {}, op_id: {}",
+                        state_label, op_id
+                    )
+                }
             }
+            if start.elapsed().unwrap() > Duration::from_millis(MAX_REQUEST_TIME_MS) {
+                panic!("'get' request to PocketIC server timed out.");
+            }
+            std::thread::sleep(Duration::from_millis(POLLING_PERIOD_MS));
         }
     }
 
     fn post<T: DeserializeOwned, B: Serialize>(&self, endpoint: &str, body: B) -> T {
+        // we may have to try several times if the instance is busy
+        let start = std::time::SystemTime::now();
         loop {
             let result = self
                 .reqwest_client
                 .post(self.instance_url().join(endpoint).unwrap())
-                .header(PROCESSING_TIME_HEADER, PROCESSING_TIME_VALUE_MS)
                 .json(&body)
                 .send()
                 .expect("HTTP failure");
-            if let Some(t) = self.check_response(result) {
-                break t;
+            match result.into() {
+                ApiResponse::Success(t) => break t,
+                ApiResponse::Error { message } => panic!("{}", message),
+                ApiResponse::Busy { state_label, op_id } => {
+                    debug!(
+                        "instance_id={} Instance is busy (with a different computation): state_label: {}, op_id: {}",
+                        self.instance_id, state_label, op_id
+                    );
+                }
+                ApiResponse::Started { state_label, op_id } => {
+                    // once we have a Started reply, we only want to query the result to that computation
+                    debug!(
+                        "instance_id={} Instance has Started: state_label: {}, op_id: {}",
+                        self.instance_id, state_label, op_id
+                    );
+                    loop {
+                        std::thread::sleep(Duration::from_millis(POLLING_PERIOD_MS));
+                        let result = self
+                            .reqwest_client
+                            .get(
+                                self.server_url
+                                    .join(&format!("/read_graph/{}/{}", state_label, op_id))
+                                    .unwrap(),
+                            )
+                            .send()
+                            .expect("HTTP failure");
+                        match result.into() {
+                            ApiResponse::Error { message } => {
+                                debug!("Polling has not succeeded yet: {}", message)
+                            }
+                            ApiResponse::Success(t) => {
+                                return t;
+                            }
+                            ApiResponse::Started { state_label, op_id } => {
+                                warn!(
+                                    "instance_id={} unexpected Started({} {})",
+                                    self.instance_id, state_label, op_id
+                                );
+                            }
+                            ApiResponse::Busy { state_label, op_id } => {
+                                warn!(
+                                    "instance_id={} unexpected Busy({} {})",
+                                    self.instance_id, state_label, op_id
+                                );
+                            }
+                        }
+                        if start.elapsed().unwrap() > Duration::from_millis(MAX_REQUEST_TIME_MS) {
+                            panic!("'post' request to PocketIC server timed out.");
+                        }
+                    }
+                }
             }
-        }
-    }
-
-    fn check_response<T: DeserializeOwned>(
-        &self,
-        result: reqwest::blocking::Response,
-    ) -> Option<T> {
-        match result.into() {
-            ApiResponse::Success(t) => Some(t),
-            ApiResponse::Error { message } => panic!("{}", message),
-            ApiResponse::Busy { state_label, op_id } => {
-                debug!(
-                    "instance_id={} Instance is busy: state_label: {}, op_id: {}",
-                    self.instance_id, state_label, op_id
-                );
-                None
+            if start.elapsed().unwrap() > Duration::from_millis(MAX_REQUEST_TIME_MS) {
+                panic!("'post' request to PocketIC server timed out.");
             }
-            ApiResponse::Started { state_label, op_id } => {
-                panic!("Started: state_label: {}, op_id: {}", state_label, op_id)
-            }
+            std::thread::sleep(Duration::from_millis(POLLING_PERIOD_MS));
         }
     }
 

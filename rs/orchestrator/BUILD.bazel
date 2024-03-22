@@ -26,7 +26,6 @@ rust_library(
         "//rs/crypto/tls_interfaces",
         "//rs/http_endpoints/metrics",
         "//rs/http_utils",
-        "//rs/ic_os/sev",
         "//rs/interfaces",
         "//rs/interfaces/registry",
         "//rs/monitoring/logger",

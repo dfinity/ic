@@ -662,7 +662,7 @@ fn test_state_sync_abortion() {
             .expect_chunks_to_download()
             .returning(|| Box::new(vec![ChunkId::from(1)].into_iter()) as Box<_>);
         c2.get_mut().expect_add_chunk().return_const(Ok(()));
-        c2.get_mut().expect_completed().return_const(None);
+        c2.get_mut().expect_completed().return_const(false);
         {
             let c2 = c2.clone();
             s2.get_mut()

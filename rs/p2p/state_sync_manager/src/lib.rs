@@ -27,15 +27,13 @@ use ic_logger::{info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_quic_transport::{Shutdown, Transport};
 use metrics::{StateSyncManagerHandlerMetrics, StateSyncManagerMetrics};
-use ongoing::OngoingStateSyncHandle;
+use ongoing::{start_ongoing_state_sync, OngoingStateSyncHandle};
 use routes::{
     build_advert_handler_request, state_sync_advert_handler, state_sync_chunk_handler,
     StateSyncAdvertHandler, StateSyncChunkHandler, STATE_SYNC_ADVERT_PATH, STATE_SYNC_CHUNK_PATH,
 };
 use tokio::{runtime::Handle, select, task::JoinSet};
 use tokio_util::sync::CancellationToken;
-
-use crate::ongoing::start_ongoing_state_sync;
 
 mod metrics;
 mod ongoing;
@@ -287,9 +285,6 @@ mod tests {
             let mut seq = Sequence::new();
             let mut seq2 = Sequence::new();
             s.expect_should_cancel().returning(move |_| false);
-            s.expect_deliver_state_sync().return_once(move |_| {
-                finished_c.notify_waiters();
-            });
             s.expect_available_states().return_const(vec![]);
             let mut t = MockTransport::default();
             t.expect_rpc().times(50).returning(|p, _| {
@@ -316,15 +311,18 @@ mod tests {
                 .in_sequence(&mut seq);
             c.expect_add_chunk()
                 .once()
-                .return_once(|_, _| Ok(()))
+                .return_once(move |_, _| {
+                    finished_c.notify_waiters();
+                    Ok(())
+                })
                 .in_sequence(&mut seq);
             c.expect_completed()
                 .times(49)
-                .return_const(None)
+                .return_const(false)
                 .in_sequence(&mut seq2);
             c.expect_completed()
                 .once()
-                .return_once(|| Some(TestMessage))
+                .return_once(|| true)
                 .in_sequence(&mut seq2);
             s.expect_start_state_sync()
                 .once()

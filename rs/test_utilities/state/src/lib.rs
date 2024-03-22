@@ -19,22 +19,23 @@ use ic_replicated_state::{
     page_map::PageMap,
     testing::{CanisterQueuesTesting, ReplicatedStateTesting, SystemStateTesting},
     CallContext, CallOrigin, CanisterState, CanisterStatus, ExecutionState, ExportedFunctions,
-    InputQueueType, Memory, NumWasmPages, ReplicatedState, SchedulerState, SystemState,
+    InputQueueType, Memory, NumWasmPages, ReplicatedState, SchedulerState, SubnetTopology,
+    SystemState,
 };
 use ic_test_utilities_types::{
     arbitrary,
-    ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id},
+    ids::{canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id},
     messages::{RequestBuilder, SignedIngressBuilder},
 };
-use ic_types::batch::RawQueryStats;
 use ic_types::methods::{Callback, WasmClosure};
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::{
+    batch::RawQueryStats,
     messages::{CallbackId, Ingress, Request, RequestMetadata, RequestOrResponse},
     nominal_cycles::NominalCycles,
     xnet::{StreamFlags, StreamHeader, StreamIndex, StreamIndexedQueue},
-    CanisterId, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation, NumBytes, PrincipalId,
-    SubnetId, Time,
+    CanisterId, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation, NodeId, NumBytes,
+    PrincipalId, SubnetId, Time,
 };
 use ic_wasm_types::CanisterModule;
 use proptest::prelude::*;
@@ -55,6 +56,7 @@ pub struct ReplicatedStateBuilder {
     canisters: Vec<CanisterState>,
     subnet_type: SubnetType,
     subnet_id: SubnetId,
+    node_ids: Vec<NodeId>,
     batch_time: Time,
     subnet_features: SubnetFeatures,
     bitcoin_adapter_requests: Vec<BitcoinAdapterRequestWrapper>,
@@ -68,6 +70,11 @@ impl ReplicatedStateBuilder {
 
     pub fn with_subnet_id(mut self, subnet_id: SubnetId) -> Self {
         self.subnet_id = subnet_id;
+        self
+    }
+
+    pub fn with_node_ids(mut self, node_ids: Vec<NodeId>) -> Self {
+        self.node_ids = node_ids;
         self
     }
 
@@ -120,7 +127,18 @@ impl ReplicatedStateBuilder {
                 self.subnet_id,
             )
             .unwrap();
+
         state.metadata.network_topology.routing_table = Arc::new(routing_table);
+        state.metadata.network_topology.subnets.insert(
+            self.subnet_id,
+            SubnetTopology {
+                public_key: vec![],
+                nodes: self.node_ids.into_iter().collect(),
+                subnet_type: self.subnet_type,
+                subnet_features: self.subnet_features,
+                ecdsa_keys_held: BTreeSet::new(),
+            },
+        );
 
         state.metadata.batch_time = self.batch_time;
         state.metadata.own_subnet_features = self.subnet_features;
@@ -162,6 +180,7 @@ impl Default for ReplicatedStateBuilder {
             canisters: Vec::new(),
             subnet_type: SubnetType::Application,
             subnet_id: subnet_test_id(1),
+            node_ids: vec![node_test_id(1)],
             batch_time: UNIX_EPOCH,
             subnet_features: SubnetFeatures::default(),
             bitcoin_adapter_requests: Vec::new(),

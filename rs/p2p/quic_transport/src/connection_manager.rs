@@ -208,7 +208,7 @@ pub(crate) fn start_connection_manager(
             SomeOrAllNodes::Some(BTreeSet::new()),
             registry_client.get_latest_version(),
         )
-        .unwrap();
+        .expect("Failed to get rustls server config, so transport can't start.");
 
     let mut transport_config = quinn::TransportConfig::default();
 
@@ -614,14 +614,16 @@ impl ConnectionManager {
                         cause,
                     })?;
 
-            let tls_pub_key = tls_pubkey_cert_from_rustls_certs(
-                &established
-                    .peer_identity()
-                    .ok_or(ConnectionEstablishError::MissingPeerIdentity)?
-                    .downcast::<Vec<tokio_rustls::rustls::Certificate>>()
-                    .unwrap(),
-            )
-            .map_err(|e| {
+            let certs = &established
+                .peer_identity()
+                .ok_or(ConnectionEstablishError::MissingPeerIdentity)?
+                .downcast::<Vec<tokio_rustls::rustls::Certificate>>()
+                .map_err(|_| {
+                    ConnectionEstablishError::MalformedPeerIdentity(MalformedPeerCertificateError {
+                        internal_error: "can't downcast peer identity".to_string(),
+                    })
+                })?;
+            let tls_pub_key = tls_pubkey_cert_from_rustls_certs(certs).map_err(|e| {
                 ConnectionEstablishError::MalformedPeerIdentity(MalformedPeerCertificateError {
                     internal_error: e.to_string(),
                 })

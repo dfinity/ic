@@ -320,7 +320,8 @@ mod tests {
             get_signing_requests, quadruples::test_utils::create_available_quadruple,
         },
         test_utils::{
-            empty_ecdsa_payload, empty_response, fake_completed_sign_with_ecdsa_context,
+            empty_ecdsa_payload_with_key_ids, empty_response,
+            fake_completed_sign_with_ecdsa_context, fake_ecdsa_key_id,
             fake_sign_with_ecdsa_context, fake_sign_with_ecdsa_context_with_quadruple,
             set_up_ecdsa_payload, TestEcdsaSignatureBuilder,
         },
@@ -331,12 +332,14 @@ mod tests {
     fn set_up(
         should_create_key_transcript: bool,
         pseudo_random_ids: Vec<[u8; 32]>,
+        ecdsa_key_id: EcdsaKeyId,
     ) -> (EcdsaPayload, BTreeMap<CallbackId, SignWithEcdsaContext>) {
         let mut rng = reproducible_rng();
         let (ecdsa_payload, _env, _block_reader) = set_up_ecdsa_payload(
             &mut rng,
             subnet_test_id(1),
             /*nodes_count=*/ 4,
+            vec![ecdsa_key_id.clone()],
             should_create_key_transcript,
         );
 
@@ -344,10 +347,7 @@ mod tests {
         for (index, pseudo_random_id) in pseudo_random_ids.into_iter().enumerate() {
             contexts.insert(
                 CallbackId::from(index as u64),
-                fake_sign_with_ecdsa_context(
-                    ecdsa_payload.key_transcript.key_id.clone(),
-                    pseudo_random_id,
-                ),
+                fake_sign_with_ecdsa_context(ecdsa_key_id.clone(), pseudo_random_id),
             );
         }
 
@@ -374,18 +374,19 @@ mod tests {
 
     #[test]
     fn test_get_signing_requests_returns_nothing_when_no_quadruples_available() {
+        let valid_key_id = fake_ecdsa_key_id();
         let (mut ecdsa_payload, contexts) = set_up(
             /*should_create_key_transcript=*/ true,
             /*pseudo_random_ids=*/ vec![],
+            valid_key_id.clone(),
         );
-        let valid_key_ids = BTreeSet::from([ecdsa_payload.key_transcript.key_id.clone()]);
 
         let result = get_signing_requests(
             Height::from(1),
             /*request_expiry_time=*/ None,
             &mut ecdsa_payload,
             &contexts,
-            &valid_key_ids,
+            &BTreeSet::from([valid_key_id]),
             /*ecdsa_payload_metrics=*/ None,
         );
 
@@ -396,12 +397,12 @@ mod tests {
     fn test_get_signing_requests() {
         let height = Height::new(789);
         let pseudo_random_id = pseudo_random_id(0);
+        let valid_key_id = fake_ecdsa_key_id();
         let (mut ecdsa_payload, contexts) = set_up(
             /*should_create_key_transcript=*/ true,
             /*pseudo_random_ids=*/ vec![pseudo_random_id],
+            valid_key_id.clone(),
         );
-        let valid_key_id = ecdsa_payload.key_transcript.key_id.clone();
-        let valid_key_ids = BTreeSet::from([valid_key_id.clone()]);
         // Add a quadruple
         let quadruple_id = create_available_quadruple(&mut ecdsa_payload, valid_key_id.clone(), 10);
         let _quadruple_id_2 =
@@ -412,7 +413,7 @@ mod tests {
             /*request_expiry_time=*/ None,
             &mut ecdsa_payload,
             &contexts,
-            &valid_key_ids,
+            &BTreeSet::from([valid_key_id.clone()]),
             /*ecdsa_payload_metrics=*/ None,
         );
 
@@ -430,11 +431,12 @@ mod tests {
 
     #[test]
     fn test_update_ongoing_signatures_returns_nothing_when_no_created_keys() {
+        let key_id = fake_ecdsa_key_id();
         let (mut ecdsa_payload, contexts) = set_up(
             /*should_create_key_transcript=*/ false,
             /*pseudo_random_ids=*/ vec![pseudo_random_id(0), pseudo_random_id(1)],
+            key_id.clone(),
         );
-        let key_id = ecdsa_payload.key_transcript.key_id.clone();
         let mut requests = BTreeMap::new();
         for context in contexts.values() {
             let request_id = create_request_id_with_available_quadruple(
@@ -462,14 +464,15 @@ mod tests {
     fn test_update_ongoing_signatures_respects_max_ongoing_signatures() {
         let contexts_count: usize = 10;
         let max_ongoing_signatures: usize = 6;
+        let key_id = fake_ecdsa_key_id();
         let (mut ecdsa_payload, contexts) = set_up(
             /*should_create_key_transcript=*/ true,
             /*pseudo_random_ids=*/
             (0..contexts_count)
                 .map(|i| pseudo_random_id(i as u8))
                 .collect(),
+            key_id.clone(),
         );
-        let key_id = ecdsa_payload.key_transcript.key_id.clone();
         let mut requests = BTreeMap::new();
         for context in contexts.values() {
             let request_id = create_request_id_with_available_quadruple(
@@ -507,6 +510,7 @@ mod tests {
         let (mut ecdsa_payload, contexts) = set_up(
             /*should_create_key_transcript=*/ true,
             vec![old_pseudo_random_id, new_pseudo_random_id],
+            fake_ecdsa_key_id(),
         );
         ecdsa_payload.signature_agreements.insert(
             delivered_pseudo_random_id,
@@ -540,9 +544,11 @@ mod tests {
         let delivered_pseudo_random_id = pseudo_random_id(0);
         let old_pseudo_random_id = pseudo_random_id(1);
         let new_pseudo_random_id = pseudo_random_id(2);
+        let key_id = fake_ecdsa_key_id();
         let (mut ecdsa_payload, contexts) = set_up(
             /*should_create_key_transcript=*/ true,
             vec![old_pseudo_random_id, new_pseudo_random_id],
+            key_id.clone(),
         );
         ecdsa_payload.signature_agreements.insert(
             delivered_pseudo_random_id,
@@ -552,7 +558,6 @@ mod tests {
             old_pseudo_random_id,
             ecdsa::CompletedSignature::Unreported(empty_response()),
         );
-        let key_id = ecdsa_payload.key_transcript.key_id.clone();
 
         // old signature in the agreement AND in state is replaced by `ReportedToExecution`
         // old signature in the agreement but NOT in state is removed.
@@ -578,15 +583,13 @@ mod tests {
     #[test]
     fn test_ecdsa_update_signature_agreements_success() {
         let subnet_id = subnet_test_id(0);
-        let mut ecdsa_payload = empty_ecdsa_payload(subnet_id);
-        let key_id = ecdsa_payload.key_transcript.key_id.clone();
+        let key_id = fake_ecdsa_key_id();
+        let mut ecdsa_payload = empty_ecdsa_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
         let valid_keys = BTreeSet::from_iter([key_id.clone()]);
         let quadruple_ids = (0..4)
             .map(|i| create_available_quadruple(&mut ecdsa_payload, key_id.clone(), i as u8))
             .collect::<Vec<_>>();
-        let missing_quadruple = ecdsa_payload
-            .uid_generator
-            .next_quadruple_id(key_id.clone());
+        let missing_quadruple = ecdsa_payload.uid_generator.next_quadruple_id();
 
         let contexts = BTreeMap::from([
             // insert request without completed signature

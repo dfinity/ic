@@ -90,6 +90,8 @@ message SubnetRecord {
   // ECDSA Config. This field cannot be set back to `None` once it has been set
   // to `Some`. To remove a key, the list of `key_ids` can be set to not include a particular key.
   // If a removed key is not held by another subnet, it will be lost.
+  //
+  // Deprecated; please use chain_key_config instead.
   EcdsaConfig ecdsa_config = 27;
 
   // If `true`, the subnet will be halted after reaching the next cup height: it will no longer
@@ -99,6 +101,11 @@ message SubnetRecord {
   // happens, the `is_halted` flag is set to `true`, so the Subnet remains halted until an
   // appropriate proposal which sets `is_halted` to `false` is approved.
   bool halt_at_cup_height = 28;
+
+  // Cryptographic key configuration. This field cannot be set back to `None` once it has been set
+  // to `Some`. To remove a key, the list of `key_configs` can be set to not include a particular
+  // key. If the removed key is not held by another subnet, it will be lost.
+  optional ChainKeyConfig chain_key_config = 29;
 }
 
 message EcdsaInitialization {
@@ -330,6 +337,8 @@ message SubnetFeatures {
 }
 
 // Per subnet ECDSA configuration
+//
+// Deprecated; please use ChainKeyConfig instead.
 message EcdsaConfig {
   // Number of quadruples to create in advance.
   uint32 quadruples_to_create_in_advance = 1;
@@ -343,4 +352,24 @@ message EcdsaConfig {
   // Key rotation period of a single node in milliseconds.
   // If none is specified key rotation is disabled.
   optional uint64 idkg_key_rotation_period_ms = 6;
+}
+
+message KeyConfig {
+  // The key's identifier.
+  optional registry.crypto.v1.MasterPublicKeyId key_id = 1;
+  // Number of pre-signatures to create in advance.
+  optional uint32 pre_signatures_to_create_in_advance = 3;
+  // The maximum number of signature requests that can be enqueued at once.
+  optional uint32 max_queue_size = 4;
+}
+
+// Per-subnet chain key configuration
+message ChainKeyConfig {
+  // Configurations for keys held by the subnet.
+  repeated KeyConfig key_configs = 1;
+  // Signature requests will timeout after the given number of nano seconds.
+  optional uint64 signature_request_timeout_ns = 2;
+  // Key rotation period of a single node in milliseconds.
+  // If none is specified key rotation is disabled.
+  optional uint64 idkg_key_rotation_period_ms = 3;
 }

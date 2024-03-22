@@ -353,6 +353,9 @@ impl From<CreateSubnetPayload> for SubnetRecord {
             ssh_readonly_access: val.ssh_readonly_access,
             ssh_backup_access: val.ssh_backup_access,
             ecdsa_config: val.ecdsa_config.map(|x| x.into()),
+
+            // TODO[NNS1-2969]: Use this field rather than ecdsa_config.
+            chain_key_config: None,
         }
     }
 }

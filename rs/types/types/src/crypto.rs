@@ -147,6 +147,7 @@ pub enum AlgorithmId {
     MegaSecp256k1 = 16,
     ThresholdEcdsaSecp256r1 = 17,
     ThresholdSchnorrBip340 = 18,
+    ThresholdEd25519 = 19,
 }
 
 impl AlgorithmId {
@@ -215,6 +216,7 @@ impl From<i32> for AlgorithmId {
             16 => AlgorithmId::MegaSecp256k1,
             17 => AlgorithmId::ThresholdEcdsaSecp256r1,
             18 => AlgorithmId::ThresholdSchnorrBip340,
+            19 => AlgorithmId::ThresholdEd25519,
             _ => AlgorithmId::Placeholder,
         }
     }

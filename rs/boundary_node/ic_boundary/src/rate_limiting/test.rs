@@ -14,7 +14,7 @@ use http::StatusCode;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use tower::Service;
 
-use crate::routes::test::test_route_subnet_with_id;
+use crate::{routes::test::test_route_subnet_with_id, socket::TcpConnectInfo};
 
 async fn dummy_call(_request: Request<Body>) -> Result<impl IntoResponse, ApiError> {
     Ok("foo".into_response())
@@ -39,10 +39,12 @@ async fn add_ip_to_request(
     mut request: Request<Body>,
     next: Next<Body>,
 ) -> Result<impl IntoResponse, ApiError> {
-    request.extensions_mut().insert(ConnectInfo(SocketAddr::new(
-        IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-        8080,
-    )));
+    request
+        .extensions_mut()
+        .insert(ConnectInfo(TcpConnectInfo(SocketAddr::new(
+            IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+            8080,
+        ))));
     let resp = next.run(request).await;
     Ok(resp)
 }

@@ -35,7 +35,7 @@ icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 minicbor = { workspace = true }
 minicbor-derive = { workspace = true }
 num-bigint = "0.4.3"
-num-traits = "0.2.14"
+num-traits = { workspace = true }
 phantom_newtype = { path = "../../../phantom_newtype" }
 rlp = "0.5.2"
 serde = { workspace = true }
@@ -51,6 +51,7 @@ thousands = "0.2"
 assert_matches = "1.5.0"
 candid_parser = { workspace = true }
 ethers-core = "2.0.8"
+hex = "0.4"
 ic-base-types = { path = "../../../types/base_types" }
 ic-cketh-test-utils = { path = "../test_utils" }
 ic-ledger-suite-orchestrator-test-utils = { path = "../../ledger-suite-orchestrator/test_utils" }

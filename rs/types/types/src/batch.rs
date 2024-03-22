@@ -41,6 +41,15 @@ use std::{
 pub struct Batch {
     /// The sequence number attached to the batch.
     pub batch_number: Height,
+    /// The next start height is always set by the consensus,
+    /// see `deliver_batches()`. But the tests and the `PocketIC`
+    /// might set it to `None`, i.e. "unknown".
+    ///
+    /// In a case of a subnet recovery, the DSM will observe an instant
+    /// jump for the `batch_number` and `next_checkpoint_height` values.
+    /// The `next_checkpoint_height`, if set, should be always greater
+    /// than the `batch_number`.
+    pub next_checkpoint_height: Option<Height>,
     /// Whether the state obtained by executing this batch needs to be fully
     /// hashed to be eligible for StateSync.
     pub requires_full_state_hash: bool,

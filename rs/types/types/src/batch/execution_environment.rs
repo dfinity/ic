@@ -134,8 +134,8 @@ pub struct LocalQueryStats {
 /// node proposing the block.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct RawQueryStats {
-    pub epoch: Option<QueryStatsEpoch>,
-    pub stats: BTreeMap<CanisterId, BTreeMap<NodeId, QueryStats>>,
+    pub highest_aggregated_epoch: Option<QueryStatsEpoch>,
+    pub stats: BTreeMap<NodeId, BTreeMap<QueryStatsEpoch, BTreeMap<CanisterId, QueryStats>>>,
 }
 
 impl RawQueryStats {
@@ -143,21 +143,24 @@ impl RawQueryStats {
         // Serialize BTreeMap as vector
         let mut query_stats = vec![];
 
-        for (canister_id, inner) in &self.stats {
-            for (node_id, stats) in inner {
-                query_stats.push(QueryStatsInner {
-                    proposer: Some(node_id_into_protobuf(*node_id)),
-                    canister: Some(pb::CanisterId::from(*canister_id)),
-                    num_calls: stats.num_calls,
-                    num_instructions: stats.num_instructions,
-                    ingress_payload_size: stats.ingress_payload_size,
-                    egress_payload_size: stats.egress_payload_size,
-                });
+        for (node_id, inner) in &self.stats {
+            for (epoch, inner) in inner {
+                for (canister_id, stats) in inner {
+                    query_stats.push(QueryStatsInner {
+                        proposer: Some(node_id_into_protobuf(*node_id)),
+                        epoch: epoch.get(),
+                        canister: Some(pb::CanisterId::from(*canister_id)),
+                        num_calls: stats.num_calls,
+                        num_instructions: stats.num_instructions,
+                        ingress_payload_size: stats.ingress_payload_size,
+                        egress_payload_size: stats.egress_payload_size,
+                    });
+                }
             }
         }
 
-        self.epoch.map(|epoch| QueryStatsProto {
-            epoch: epoch.get(),
+        self.highest_aggregated_epoch.map(|epoch| QueryStatsProto {
+            highest_aggregated_epoch: epoch.get(),
             query_stats,
         })
     }
@@ -168,21 +171,29 @@ impl TryFrom<QueryStatsProto> for RawQueryStats {
 
     fn try_from(value: QueryStatsProto) -> Result<Self, Self::Error> {
         let mut r = RawQueryStats {
-            epoch: Some(QueryStatsEpoch::from(value.epoch)),
+            highest_aggregated_epoch: Some(QueryStatsEpoch::from(value.highest_aggregated_epoch)),
             stats: BTreeMap::new(),
         };
         for entry in value.query_stats {
             if let Ok(proposer) = node_id_try_from_option(entry.proposer) {
-                let key = try_from_option_field(entry.canister, "QueryStatsInner::canister_id")?;
-                r.stats.entry(key).or_default().insert(
-                    proposer,
-                    QueryStats {
-                        num_calls: entry.num_calls,
-                        num_instructions: entry.num_instructions,
-                        ingress_payload_size: entry.ingress_payload_size,
-                        egress_payload_size: entry.egress_payload_size,
-                    },
-                );
+                let epoch = QueryStatsEpoch::new(entry.epoch);
+                let canister: CanisterId =
+                    try_from_option_field(entry.canister, "QueryStatsInner::canister_id")?;
+
+                r.stats
+                    .entry(proposer)
+                    .or_default()
+                    .entry(epoch)
+                    .or_default()
+                    .insert(
+                        canister,
+                        QueryStats {
+                            num_calls: entry.num_calls,
+                            num_instructions: entry.num_instructions,
+                            ingress_payload_size: entry.ingress_payload_size,
+                            egress_payload_size: entry.egress_payload_size,
+                        },
+                    );
             }
         }
         Ok(r)

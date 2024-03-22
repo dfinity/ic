@@ -9,7 +9,7 @@ edition = "2021"
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
-clap = { version = "4.3.3", features = ["derive"] }
+clap = { workspace = true }
 
 [[bin]]
 name = "deterministic-ips"

@@ -12,6 +12,10 @@ pub type Wei = CheckedAmountOf<WeiTag>;
 pub enum Erc20Tag {}
 pub type Erc20Value = CheckedAmountOf<Erc20Tag>;
 
+/// Amount of CK token using their smallest denomination.
+pub enum CkTokenAmountTag {}
+pub type CkTokenAmount = CheckedAmountOf<CkTokenAmountTag>;
+
 pub enum WeiPerGasUnit {}
 pub type WeiPerGas = CheckedAmountOf<WeiPerGasUnit>;
 

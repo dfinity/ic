@@ -7,6 +7,7 @@ use super::utils::{
     handle_construction_hash, handle_construction_parse, handle_construction_payloads,
     handle_construction_submit,
 };
+use crate::common::constants::INGRESS_INTERVAL_OVERLAP;
 use crate::common::types::Error;
 use candid::Principal;
 use ic_base_types::{CanisterId, PrincipalId};
@@ -111,16 +112,19 @@ pub fn construction_payloads(
     metadata: Option<ConstructionPayloadsRequestMetadata>,
     ledger_id: &Principal,
     public_keys: Vec<PublicKey>,
+    now: SystemTime,
 ) -> Result<ConstructionPayloadsResponse, Error> {
     // The interval between each ingress message
-    let ingress_interval = ic_constants::MAX_INGRESS_TTL.as_nanos() as u64;
+    // The permitted drift makes sure that intervals are overlapping and there are no edge cases when trying to submit to the IC
+    let ingress_interval: u64 =
+        (ic_constants::MAX_INGRESS_TTL - ic_constants::PERMITTED_DRIFT).as_nanos() as u64;
 
-    let now = SystemTime::now()
+    let now = now
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap()
         .as_nanos() as u64;
 
-    let ingress_start = metadata
+    let mut ingress_start = metadata
         .as_ref()
         .and_then(|meta| meta.ingress_start)
         .unwrap_or(now);
@@ -140,11 +144,26 @@ pub fn construction_payloads(
         .and_then(|meta| meta.memo.clone())
         .map(|memo| memo.into());
 
-    // TODO: Support longer intervals than a single interval
-    if ingress_end != ingress_start + ingress_interval {
-        return Err(Error::invalid_metadata(
-            &"ingress_end should be after 4 minutes from ingress_start",
+    if ingress_start >= ingress_end {
+        return Err(Error::processing_construction_failed(&format!(
+            "Ingress start should start before ingress end: Start: {}, End: {}",
+            ingress_start, ingress_end
+        )));
+    }
+
+    if ingress_end < now + ingress_interval {
+        return Err(Error::processing_construction_failed(
+            &format!("Ingress end should be at least one interval from the current time: Current time: {}, End: {}",now, ingress_end),
         ));
+    }
+
+    // Every ingress message sent to the IC has an expiry timestamp until which the signature associated with that message is valid
+    // To support a longer overall timeframe than one interval, we can send multiple ingress messages with two signable contents each
+    let mut ingress_expiries = vec![];
+    while ingress_start < ingress_end {
+        ingress_expiries.push(ingress_start + ingress_interval);
+        ingress_start +=
+            ingress_interval.saturating_sub(INGRESS_INTERVAL_OVERLAP.as_nanos() as u64);
     }
 
     // ICRC Rosetta only supports one transaction per request
@@ -167,9 +186,9 @@ pub fn construction_payloads(
         operations,
         created_at_time,
         memo,
-        ingress_end,
         *ledger_id,
         sender_public_key,
+        ingress_expiries,
     )
     .map_err(|err| Error::processing_construction_failed(&err))
 }
@@ -186,9 +205,9 @@ pub fn construction_parse(
             signed_transaction.get_lowest_ingress_expiry(),
             signed_transaction.get_highest_ingress_expiry(),
             signed_transaction
-                .envelope_pairs
+                .envelopes
                 .into_iter()
-                .map(|envelope_pair| envelope_pair.call_envelope.content.into_owned())
+                .map(|envelope| envelope.content.into_owned())
                 .collect(),
         )
     } else {
@@ -214,14 +233,22 @@ pub fn construction_parse(
 mod tests {
     use super::*;
     use crate::common::utils::utils::icrc1_operation_to_rosetta_core_operations;
+    use crate::construction_api::types::CanisterMethodName;
+    use crate::construction_api::utils::build_icrc1_transaction_from_canister_method_args;
+    use candid::Encode;
+    use ic_agent::agent::EnvelopeContent;
     use ic_agent::Identity;
     use ic_canister_client_sender::{Ed25519KeyPair, Secp256k1KeyPair};
+    use ic_icrc1_test_utils::construction_payloads_request_metadata;
     use ic_icrc1_test_utils::minter_identity;
-    use ic_icrc1_test_utils::valid_construction_payloads_request_metadata;
     use ic_icrc1_test_utils::valid_transactions_strategy;
+    use ic_icrc1_test_utils::LedgerEndpointArg;
     use ic_icrc1_test_utils::DEFAULT_TRANSFER_FEE;
     use ic_icrc1_tokens_u256::U256;
     use ic_icrc_rosetta_client::RosettaClient;
+    use ic_icrc_rosetta_runner::DEFAULT_DECIMAL_PLACES;
+    use ic_icrc_rosetta_runner::DEFAULT_TOKEN_SYMBOL;
+    use ic_ledger_canister_core::ledger::LedgerTransaction;
     use proptest::prelude::any;
     use proptest::proptest;
     use proptest::strategy::Strategy;
@@ -255,7 +282,7 @@ mod tests {
         parse_response: ConstructionParseResponse,
         operations: Vec<Operation>,
         metadata: ConstructionPayloadsRequestMetadata,
-        now: SystemTime,
+        now: u64,
     ) {
         let received_metadata =
             ConstructionPayloadsRequestMetadata::try_from(parse_response.metadata).unwrap();
@@ -271,18 +298,47 @@ mod tests {
             )
         });
 
-        if let Some(_created_at_time) = metadata.created_at_time {
-            assert_eq!(received_metadata.created_at_time, metadata.created_at_time);
+        if let Some(created_at_time) = metadata.created_at_time {
+            assert_eq!(received_metadata.created_at_time.unwrap(), created_at_time);
         } else {
+            assert!(received_metadata.created_at_time.unwrap() >= now);
+        }
+        assert_eq!(received_metadata.memo, metadata.memo);
+
+        if let Some(ingress_start) = metadata.ingress_start {
+            assert_eq!(received_metadata.ingress_start.unwrap(), ingress_start);
+        } else {
+            assert!(received_metadata.ingress_start.unwrap() >= now);
             assert!(
-                received_metadata.created_at_time.unwrap()
-                    >= now
-                        .duration_since(SystemTime::UNIX_EPOCH)
-                        .unwrap()
+                received_metadata.ingress_start.unwrap()
+                    <= now
+                        + (ic_constants::MAX_INGRESS_TTL - ic_constants::PERMITTED_DRIFT).as_nanos()
+                            as u64
+            );
+        }
+
+        if let Some(ingress_end) = metadata.ingress_end {
+            // Ingress end should be within an interval from the set ingress_end.
+            assert!(received_metadata.ingress_end.unwrap() >= ingress_end);
+            assert!(
+                received_metadata.ingress_end.unwrap()
+                    <= ingress_end
+                        + (ic_constants::MAX_INGRESS_TTL - ic_constants::PERMITTED_DRIFT).as_nanos()
+                            as u64
+            );
+        } else {
+            // If no ingress_end is set, it should be within an interval from the ingress start time.
+            assert!(
+                received_metadata.ingress_end.unwrap() >= received_metadata.ingress_start.unwrap()
+            );
+            assert_eq!(
+                received_metadata.ingress_end.unwrap(),
+                received_metadata.ingress_start.unwrap()
+                    + (ic_constants::MAX_INGRESS_TTL - ic_constants::PERMITTED_DRIFT
+                        + INGRESS_INTERVAL_OVERLAP)
                         .as_nanos() as u64
             );
         }
-        assert_eq!(received_metadata.memo, metadata.memo);
     }
 
     proptest! {
@@ -306,7 +362,6 @@ mod tests {
             cases: NUM_TEST_CASES,
             ..Default::default()
         });
-
         runner
             .run(
                 &(
@@ -317,16 +372,15 @@ mod tests {
                         SystemTime::now(),
                     )
                     .no_shrink(),
-                    valid_construction_payloads_request_metadata().no_shrink(),
+                    construction_payloads_request_metadata().no_shrink(),
                 ),
                 |(args_with_caller, construction_payloads_request_metadata)| {
                     for arg_with_caller in args_with_caller.into_iter() {
                         let currency = Currency {
-                            symbol: "ICP".to_string(),
-                            decimals: 8,
+                            symbol: DEFAULT_TOKEN_SYMBOL.to_owned(),
+                            decimals: DEFAULT_DECIMAL_PLACES as u32,
                             metadata: None,
                         };
-                        let now = SystemTime::now();
                         let icrc1_transaction: ic_icrc1::Transaction<U256> = arg_with_caller
                             .to_transaction(minter_identity().sender().unwrap().into());
                         let fee = match icrc1_transaction.operation {
@@ -335,7 +389,7 @@ mod tests {
                             _ => panic!("Invalid operation"),
                         };
                         let rosetta_core_operations = icrc1_operation_to_rosetta_core_operations(
-                            icrc1_transaction.operation.into(),
+                            icrc1_transaction.clone().operation.into(),
                             currency.clone(),
                             fee.map(|fee| fee.into()),
                         )
@@ -354,21 +408,63 @@ mod tests {
                             .into()])
                         );
 
+                        let payloads_metadata: ConstructionPayloadsRequestMetadata =
+                            construction_payloads_request_metadata
+                                .clone()
+                                .try_into()
+                                .unwrap();
+
+                        let now = SystemTime::now();
+
                         let construction_payloads_response = construction_payloads(
                             rosetta_core_operations.clone(),
-                            Some(
-                                construction_payloads_request_metadata
-                                    .clone()
-                                    .try_into()
-                                    .unwrap(),
-                            ),
+                            Some(payloads_metadata.clone()),
                             &PrincipalId::new_anonymous().0,
                             vec![(&arg_with_caller.caller).into()],
-                        )
-                        .unwrap();
+                            now,
+                        );
 
+                        let now = now
+                            .duration_since(SystemTime::UNIX_EPOCH)
+                            .unwrap()
+                            .as_nanos() as u64;
+                        let ingress_interval = (ic_constants::MAX_INGRESS_TTL
+                            - ic_constants::PERMITTED_DRIFT)
+                            .as_nanos() as u64;
+                        match (
+                            payloads_metadata.ingress_end,
+                            payloads_metadata.ingress_start,
+                        ) {
+                            (Some(ingress_end), Some(ingress_start)) => {
+                                if ingress_start >= ingress_end {
+                                    assert!(construction_payloads_response.is_err());
+                                    continue;
+                                }
+                                if ingress_end < now + ingress_interval {
+                                    assert!(construction_payloads_response.is_err());
+                                    continue;
+                                }
+                            }
+                            (Some(ingress_end), _) => {
+                                if ingress_end < now + ingress_interval {
+                                    assert!(construction_payloads_response.is_err());
+                                    continue;
+                                }
+                            }
+                            (_, Some(ingress_start)) => {
+                                let ingress_end = ingress_start + ingress_interval;
+                                if ingress_end < now + ingress_interval {
+                                    assert!(construction_payloads_response.is_err());
+                                    continue;
+                                }
+                            }
+                            (_, _) => {}
+                        }
                         let construction_parse_response = construction_parse(
-                            construction_payloads_response.unsigned_transaction.clone(),
+                            construction_payloads_response
+                                .clone()
+                                .unwrap()
+                                .unsigned_transaction,
                             false,
                             currency.clone(),
                         )
@@ -377,22 +473,19 @@ mod tests {
                         assert_parse_response(
                             construction_parse_response.clone(),
                             rosetta_core_operations.clone(),
-                            construction_payloads_request_metadata
-                                .clone()
-                                .try_into()
-                                .unwrap(),
+                            payloads_metadata,
                             now,
                         );
 
                         let signatures = RosettaClient::sign_transaction(
                             &arg_with_caller.caller,
-                            construction_payloads_response.clone(),
+                            construction_payloads_response.clone().unwrap(),
                         )
                         .unwrap();
 
                         let ConstructionCombineResponse { signed_transaction } =
                             construction_combine(
-                                construction_payloads_response.unsigned_transaction,
+                                construction_payloads_response.unwrap().unsigned_transaction,
                                 signatures,
                             )
                             .unwrap();
@@ -408,6 +501,129 @@ mod tests {
                                 .try_into()
                                 .unwrap(),
                             now,
+                        );
+                    }
+                    Ok(())
+                },
+            )
+            .unwrap();
+    }
+
+    #[test]
+    fn test_construction_hash() {
+        let mut runner = TestRunner::new(TestRunnerConfig {
+            max_shrink_iters: 0,
+            cases: NUM_TEST_CASES,
+            ..Default::default()
+        });
+        runner
+            .run(
+                &(valid_transactions_strategy(
+                    minter_identity().into(),
+                    DEFAULT_TRANSFER_FEE,
+                    NUM_BLOCKS,
+                    SystemTime::now(),
+                )
+                .no_shrink(),),
+                |(args_with_caller,)| {
+                    for arg_with_caller in args_with_caller.into_iter() {
+                        let currency = Currency {
+                            symbol: DEFAULT_TOKEN_SYMBOL.to_owned(),
+                            decimals: DEFAULT_DECIMAL_PLACES as u32,
+                            metadata: None,
+                        };
+
+                        let ledger_transaction: ic_icrc1::Transaction<U256> = arg_with_caller
+                            .to_transaction(minter_identity().sender().unwrap().into());
+
+                        let canister_method_name = match ledger_transaction.operation {
+                            ic_icrc1::Operation::Transfer { .. } => {
+                                CanisterMethodName::Icrc1Transfer
+                            }
+                            ic_icrc1::Operation::Approve { .. } => CanisterMethodName::Icrc2Approve,
+                            ic_icrc1::Operation::Mint { .. } => CanisterMethodName::Icrc1Transfer,
+                            ic_icrc1::Operation::Burn { .. } => CanisterMethodName::Icrc1Transfer,
+                        };
+                        let args = match arg_with_caller.arg {
+                            LedgerEndpointArg::TransferArg(arg) => Encode!(&arg),
+                            LedgerEndpointArg::ApproveArg(arg) => Encode!(&arg),
+                        }
+                        .unwrap();
+
+                        let icrc1_transaction = build_icrc1_transaction_from_canister_method_args(
+                            &canister_method_name,
+                            &arg_with_caller.caller.sender().unwrap(),
+                            args,
+                        )
+                        .unwrap();
+
+                        assert_eq!(
+                            icrc1_transaction.hash(),
+                            ledger_transaction.clone().hash().as_slice()
+                        );
+
+                        let fee = match ledger_transaction.operation {
+                            ic_icrc1::Operation::Transfer { fee, .. } => fee,
+                            ic_icrc1::Operation::Approve { fee, .. } => fee,
+                            _ => panic!("Invalid operation"),
+                        };
+                        let rosetta_core_operations = icrc1_operation_to_rosetta_core_operations(
+                            ledger_transaction.clone().operation.into(),
+                            currency.clone(),
+                            fee.map(|fee| fee.into()),
+                        )
+                        .unwrap();
+
+                        let construction_payloads_response = construction_payloads(
+                            rosetta_core_operations.clone(),
+                            None,
+                            &PrincipalId::new_anonymous().0,
+                            vec![(&arg_with_caller.caller).into()],
+                            SystemTime::now(),
+                        );
+
+                        let signatures = RosettaClient::sign_transaction(
+                            &arg_with_caller.caller,
+                            construction_payloads_response.clone().unwrap(),
+                        )
+                        .unwrap();
+
+                        let ConstructionCombineResponse { signed_transaction } =
+                            construction_combine(
+                                construction_payloads_response.unwrap().unsigned_transaction,
+                                signatures,
+                            )
+                            .unwrap();
+
+                        let ConstructionHashResponse {
+                            transaction_identifier,
+                            ..
+                        } = construction_hash(signed_transaction.clone()).unwrap();
+
+                        let signed_transaction =
+                            SignedTransaction::from_str(&signed_transaction).unwrap();
+
+                        let ledger_icrc1_transaction =
+                            build_icrc1_transaction_from_canister_method_args(
+                                &canister_method_name,
+                                &arg_with_caller.caller.sender().unwrap(),
+                                match signed_transaction
+                                    .envelopes
+                                    .first()
+                                    .unwrap()
+                                    .content
+                                    .clone()
+                                    .into_owned()
+                                {
+                                    EnvelopeContent::Call { arg, .. } => arg.clone(),
+                                    _ => panic!("Invalid envelope content"),
+                                },
+                            )
+                            .unwrap();
+
+                        assert_eq!(
+                            hex::decode(transaction_identifier.hash).unwrap(),
+                            ledger_icrc1_transaction.hash().to_vec()
                         );
                     }
                     Ok(())

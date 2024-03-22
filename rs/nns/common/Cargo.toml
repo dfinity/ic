@@ -23,7 +23,7 @@ ic-registry-transport = { path = "../../registry/transport" }
 ic-stable-structures = { workspace = true }
 ic-types = { path = "../../types/types" }
 lazy_static = "1.4.0"
-num-traits = "0.2.12"
+num-traits = { workspace = true }
 on_wire = { path = "../../rust_canisters/on_wire" }
 prost = { workspace = true }
 serde = { workspace = true }

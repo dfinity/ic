@@ -13,7 +13,6 @@ cached = { version = "0.41", default-features = false }
 parking_lot = "0.12.1"
 ic-crypto-internal-bls12-381-type = { path = "../../bls12_381/type" }
 ic-crypto-internal-seed = { path = "../../seed" }
-ic-crypto-internal-threshold-sig-bls12381-der = { path = "der_utils" }
 ic-crypto-secrets-containers = { path = "../../../../secrets_containers" }
 ic-crypto-internal-types = { path = "../../types" }
 ic-crypto-sha2 = { path = "../../../../sha2" }

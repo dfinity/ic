@@ -23,6 +23,11 @@ use mockall::automock;
 use prometheus::Registry;
 use rcgen::{Certificate, CertificateParams, DistinguishedName};
 use regex::Regex;
+use rustls::{
+    cipher_suite::{TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384},
+    server::{ServerConfig, ServerSessionMemoryCache},
+    version::TLS13,
+};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     sync::RwLock,
@@ -578,6 +583,44 @@ pub async fn prepare_tls(
         WithThrottle(configuration_runner, ThrottleParams::new(600 * SECOND));
 
     Ok((configuration_runner, tls_acceptor, token_owner))
+}
+
+pub fn load_pem(
+    certs: Vec<u8>,
+    key: Vec<u8>,
+) -> Result<(Vec<rustls::Certificate>, rustls::PrivateKey), Error> {
+    use rustls_pemfile::Item;
+
+    // Convert certificate & key from PEM format
+    let certs = rustls_pemfile::certs(&mut certs.as_ref())?;
+    let key = match rustls_pemfile::read_one(&mut key.as_ref())? {
+        Some(Item::RSAKey(v)) | Some(Item::PKCS8Key(v)) | Some(Item::ECKey(v)) => v,
+        _ => return Err(anyhow!("private key format not supported")),
+    };
+
+    // Cast into Rustls types
+    let certs = certs.into_iter().map(rustls::Certificate).collect();
+    let key = rustls::PrivateKey(key);
+
+    Ok((certs, key))
+}
+
+pub fn generate_rustls_config(
+    certs: Vec<rustls::Certificate>,
+    key: rustls::PrivateKey,
+) -> Result<ServerConfig, Error> {
+    let mut cfg = ServerConfig::builder()
+        .with_cipher_suites(&[TLS13_AES_256_GCM_SHA384, TLS13_AES_128_GCM_SHA256])
+        .with_safe_default_kx_groups()
+        .with_protocol_versions(&[&TLS13])?
+        .with_no_client_auth()
+        .with_single_cert(certs, key)?;
+
+    // Create custom session storage with higher limit to allow effective TLS session resumption
+    cfg.session_storage = ServerSessionMemoryCache::new(131072);
+    cfg.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
+
+    Ok(cfg)
 }
 
 #[cfg(test)]

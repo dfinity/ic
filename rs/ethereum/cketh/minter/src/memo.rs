@@ -2,7 +2,7 @@
 mod tests;
 
 use crate::erc20::CkTokenSymbol;
-use crate::eth_logs::ReceivedEthEvent;
+use crate::eth_logs::ReceivedEvent;
 use crate::eth_rpc::Hash;
 use crate::numeric::{Erc20Value, LogIndex};
 use crate::state::transactions::ReimbursementRequest;
@@ -20,10 +20,10 @@ fn encode<T: minicbor::Encode<()>>(t: &T) -> Vec<u8> {
 #[derive(Decode, Encode, Debug, Eq, PartialEq)]
 pub enum MintMemo {
     #[n(0)]
-    /// The minter received some ETH.
+    /// The minter received some ETH or ERC20 token.
     Convert {
         #[n(0)]
-        /// The sender of the ETH.
+        /// The sender of the ETH or ERC20 token.
         from_address: Address,
         #[n(1)]
         /// Hash of the transaction.
@@ -92,12 +92,12 @@ impl From<BurnMemo> for Memo {
     }
 }
 
-impl From<ReceivedEthEvent> for Memo {
-    fn from(event: ReceivedEthEvent) -> Self {
+impl From<&ReceivedEvent> for Memo {
+    fn from(event: &ReceivedEvent) -> Self {
         Memo::from(MintMemo::Convert {
-            from_address: event.from_address,
-            tx_hash: event.transaction_hash,
-            log_index: event.log_index,
+            from_address: *event.from_address(),
+            tx_hash: *event.transaction_hash(),
+            log_index: *event.log_index(),
         })
     }
 }
@@ -105,7 +105,7 @@ impl From<ReceivedEthEvent> for Memo {
 impl From<ReimbursementRequest> for Memo {
     fn from(reimbursement_request: ReimbursementRequest) -> Self {
         Memo::from(MintMemo::Reimburse {
-            withdrawal_id: reimbursement_request.withdrawal_id.get(),
+            withdrawal_id: reimbursement_request.ledger_burn_index.get(),
             tx_hash: reimbursement_request
                 .transaction_hash
                 .expect("A hash should be set for reimbursement memos."),

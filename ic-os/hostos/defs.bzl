@@ -23,15 +23,9 @@ def image_deps(mode, _malicious = False):
     deps = {
         "base_dockerfile": "//ic-os/hostos:rootfs/Dockerfile.base",
 
-        # Define rootfs and bootfs
-        "bootfs": {
-            # base layer
-            ":rootfs-tree.tar": "/",
-        },
+        # Extra files to be added to rootfs and bootfs
+        "bootfs": {},
         "rootfs": {
-            # base layer
-            ":rootfs-tree.tar": "/",
-
             # additional files to install
             "//publish/binaries:vsock_host": "/opt/ic/bin/vsock_host:0755",
             "//publish/binaries:hostos_tool": "/opt/ic/bin/hostos_tool:0755",
@@ -91,7 +85,7 @@ def _custom_partitions():
         vg_uuid = "4c7GVZ-Df82-QEcJ-xXtV-JgRL-IjLE-hK0FgA",
         pv_uuid = "eu0VQE-HlTi-EyRc-GceP-xZtn-3j6t-iqEwyv",
         # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
-        # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
+        # TODO(IDX-2221): remove no-remote-cache when CI jobs and bazel infrastructure will run in the same clusters.
         tags = ["no-remote-cache", "manual"],
         target_compatible_with = [
             "@platforms//os:linux",

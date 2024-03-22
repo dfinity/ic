@@ -1,5 +1,5 @@
 use anyhow::Result;
-use ic_tests::{driver::group::SystemTestGroup, nested, systest};
+use ic_tests::{driver::group::SystemTestGroup, systest};
 use std::time::Duration;
 
 fn main() -> Result<()> {

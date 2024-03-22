@@ -47,11 +47,11 @@ use ic_nns_governance::{
             CREATE_SERVICE_NERVOUS_SYSTEM, CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING,
         },
         validate_proposal_title, Environment, Governance, HeapGrowthPotential, TimeWarp,
-        DEPRECATED_TOPICS, EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX,
-        MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS,
-        MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
-        ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS, PROPOSAL_MOTION_TEXT_BYTES_MAX,
-        REWARD_DISTRIBUTION_PERIOD_SECONDS, WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS,
+        EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX, MAX_DISSOLVE_DELAY_SECONDS,
+        MAX_NEURON_AGE_FOR_AGE_BONUS, MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
+        MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS, ONE_DAY_SECONDS, ONE_MONTH_SECONDS,
+        ONE_YEAR_SECONDS, PROPOSAL_MOTION_TEXT_BYTES_MAX, REWARD_DISTRIBUTION_PERIOD_SECONDS,
+        WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS,
     },
     governance_proto_builder::GovernanceProtoBuilder,
     init::GovernanceCanisterInitPayloadBuilder,
@@ -1744,70 +1744,6 @@ async fn test_follow_negative() {
             .unwrap()
             .neuron_fees_e8s,
         gov.heap_data.economics.unwrap().reject_cost_e8s
-    );
-}
-
-/// Test the mechanism of rejecting ManageNeuron::Follow requests if
-/// the topic is deprecated but not yet deleted.
-#[tokio::test]
-async fn test_follow_fails_on_deprecated_topics() {
-    // Setup the world
-    let driver = fake::FakeDriver::default();
-    let mut gov = Governance::new(
-        fixture_for_following(),
-        driver.get_fake_env(),
-        driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
-    );
-
-    // Test that following still works with a non-deprecated
-    // topic and that all authorization works as intended.
-    let result = fake::follow(
-        &mut gov,
-        principal(1),
-        NeuronId { id: 1 },
-        Topic::Governance,
-        NeuronId { id: 2 },
-    );
-    // Assert the response is correct
-    assert_matches!(
-        result.command,
-        Some(manage_neuron_response::Command::Follow(_))
-    );
-
-    // Assert that the Neuron's followees were updated
-    let actual_followees = gov
-        .neuron_store
-        .with_neuron_mut(&NeuronId { id: 1 }, |n| n.followees.clone())
-        .expect("Neuron not found");
-    assert_eq!(
-        actual_followees,
-        hashmap! {Topic::Governance as i32 => Followees { followees: vec![NeuronId {id : 2}]}}
-    );
-
-    // Test that following on a deprecated topic produces and invalid
-    // command response
-    let result = fake::follow(
-        &mut gov,
-        principal(1),
-        NeuronId { id: 1 },
-        Topic::SnsDecentralizationSale,
-        NeuronId { id: 2 },
-    );
-    assert_matches!(
-        result.command,
-        Some(manage_neuron_response::Command::Error(err))
-            if err.error_type == ErrorType::InvalidCommand as i32
-    );
-
-    // Assert that the Neuron's followees were not updated
-    let actual_followees = gov
-        .neuron_store
-        .with_neuron_mut(&NeuronId { id: 1 }, |n| n.followees.clone())
-        .expect("Neuron not found");
-    assert_eq!(
-        actual_followees,
-        hashmap! {Topic::Governance as i32 => Followees { followees: vec![NeuronId {id : 2}]}}
     );
 }
 
@@ -8667,132 +8603,6 @@ fn test_list_neurons() {
     );
 }
 
-#[test]
-fn test_list_proposals_omits_deprecated_topics_from_followees() {
-    let controller = principal(1);
-    let neuron_id = NeuronId { id: 1 };
-    let deprecated_topic = *DEPRECATED_TOPICS.first().unwrap();
-
-    let proto = GovernanceProto {
-        neurons: btreemap! {
-            1 => Neuron {
-                id: Some(neuron_id),
-                followees: hashmap! {
-                    deprecated_topic as i32 => Followees {
-                        followees: vec![NeuronId {id: 2}],
-                    }
-                },
-                controller: Some(controller),
-                ..Default::default()
-            }
-        },
-        ..Default::default()
-    };
-
-    let driver = fake::FakeDriver::default();
-    let gov = Governance::new(
-        proto,
-        driver.get_fake_env(),
-        driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
-    );
-
-    let list_neurons_response = gov.list_neurons_by_principal(
-        &ListNeurons {
-            neuron_ids: vec![neuron_id.id],
-            include_neurons_readable_by_caller: true,
-        },
-        &controller,
-    );
-    assert_ne!(list_neurons_response.full_neurons, vec![]);
-    let neuron = list_neurons_response
-        .full_neurons
-        .iter()
-        .find(|neuron| neuron.id == Some(neuron_id))
-        .expect("Expected there to be a neuron in the list_neurons_response");
-
-    assert!(!neuron
-        .followees
-        .contains_key(&(Topic::SnsDecentralizationSale as i32)));
-}
-
-#[test]
-fn test_get_full_neuron_omits_deprecated_topics_from_followees() {
-    let controller = principal(1);
-    let neuron_id = NeuronId { id: 1 };
-    let deprecated_topic = *DEPRECATED_TOPICS.first().unwrap();
-
-    let proto = GovernanceProto {
-        neurons: btreemap! {
-            1 => Neuron {
-                id: Some(neuron_id),
-                followees: hashmap! {
-                    deprecated_topic as i32 => Followees {
-                        followees: vec![NeuronId {id: 2}],
-                    }
-                },
-                controller: Some(controller),
-                ..Default::default()
-            }
-        },
-        ..Default::default()
-    };
-
-    let driver = fake::FakeDriver::default();
-    let gov = Governance::new(
-        proto,
-        driver.get_fake_env(),
-        driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
-    );
-
-    let neuron = gov
-        .get_full_neuron(&neuron_id, &controller)
-        .expect("Expected to be able to get neuron from get_full_neuron");
-    assert!(!neuron
-        .followees
-        .contains_key(&(Topic::SnsDecentralizationSale as i32)));
-}
-
-#[test]
-fn test_get_neuron_by_subaccount_or_id_omits_deprecated_topics_from_followees() {
-    let controller = principal(1);
-    let neuron_id = NeuronId { id: 1 };
-    let proto = GovernanceProto {
-        neurons: btreemap! {
-            1 => Neuron {
-                id: Some(neuron_id),
-                followees: hashmap! {
-                    Topic::SnsDecentralizationSale as i32 => Followees {
-                        followees: vec![NeuronId {id: 2}],
-                    }
-                },
-                controller: Some(controller),
-                ..Default::default()
-            }
-        },
-        ..Default::default()
-    };
-
-    let driver = fake::FakeDriver::default();
-    let gov = Governance::new(
-        proto,
-        driver.get_fake_env(),
-        driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
-    );
-
-    let neuron = gov
-        .get_full_neuron_by_id_or_subaccount(
-            &NeuronIdOrSubaccount::NeuronId(neuron_id),
-            &controller,
-        )
-        .expect("Expected to be able to get neuron from get_full_neuron_by_id_or_subaccount");
-    assert!(!neuron
-        .followees
-        .contains_key(&(Topic::SnsDecentralizationSale as i32)));
-}
-
 #[tokio::test]
 async fn test_max_number_of_proposals_with_ballots() {
     let mut fake_driver = fake::FakeDriver::default();
@@ -13852,7 +13662,6 @@ fn voting_period_seconds_topic_dependency() {
 
     assert_eq!(voting_period_fun(Topic::Governance), 3); // any other topic should be 3
     assert_eq!(voting_period_fun(Topic::NetworkCanisterManagement), 3);
-    assert_eq!(voting_period_fun(Topic::SnsDecentralizationSale), 3);
 }
 
 // TODO - remove after migration of neuron_store.topic_follow_index to being stored on upgrade

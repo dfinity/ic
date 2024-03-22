@@ -1,11 +1,12 @@
 use assert_matches::assert_matches;
 use candid::{Encode, Principal};
-use ic_base_types::PrincipalId;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_canisters_http_types::HttpRequest;
 use ic_icrc1_ledger::FeatureFlags as LedgerFeatureFlags;
 use ic_ledger_suite_orchestrator::candid::{
     AddErc20Arg, LedgerInitArg, OrchestratorArg, UpgradeArg,
 };
+use ic_ledger_suite_orchestrator::scheduler::TEN_TRILLIONS;
 use ic_ledger_suite_orchestrator_test_utils::arbitrary::arb_init_arg;
 use ic_ledger_suite_orchestrator_test_utils::{
     new_state_machine, supported_erc20_tokens, usdc, usdc_erc20_contract, LedgerSuiteOrchestrator,
@@ -35,7 +36,7 @@ proptest! {
         let embedded_index_wasm_hash = orchestrator.embedded_index_wasm_hash.clone();
         let controllers: Vec<_> = std::iter::once(orchestrator_principal).chain(more_controllers.into_iter()).collect();
 
-        for token in supported_erc20_tokens(embedded_ledger_wasm_hash, embedded_index_wasm_hash) {
+        for token in supported_erc20_tokens(Principal::anonymous(), embedded_ledger_wasm_hash, embedded_index_wasm_hash) {
             orchestrator = orchestrator
                 .add_erc20_token(token)
                 .expect_new_ledger_and_index_canisters()
@@ -130,7 +131,11 @@ fn should_reject_adding_an_already_managed_erc20_token() {
     let orchestrator = LedgerSuiteOrchestrator::default();
     let embedded_ledger_wasm_hash = orchestrator.embedded_ledger_wasm_hash.clone();
     let embedded_index_wasm_hash = orchestrator.embedded_index_wasm_hash.clone();
-    let usdc = usdc(embedded_ledger_wasm_hash, embedded_index_wasm_hash);
+    let usdc = usdc(
+        Principal::anonymous(),
+        embedded_ledger_wasm_hash,
+        embedded_index_wasm_hash,
+    );
     let orchestrator = orchestrator
         .add_erc20_token(usdc.clone())
         .expect_new_ledger_and_index_canisters()
@@ -140,6 +145,81 @@ fn should_reject_adding_an_already_managed_erc20_token() {
         orchestrator.upgrade_ledger_suite_orchestrator(&OrchestratorArg::AddErc20Arg(usdc));
 
     assert_matches!(result, Err(e) if e.code() == ErrorCode::CanisterCalledTrap && e.description().contains("Erc20ContractAlreadyManaged"));
+}
+
+#[test]
+fn should_top_up_spawned_canisters() {
+    let orchestrator = LedgerSuiteOrchestrator::default();
+    let embedded_ledger_wasm_hash = orchestrator.embedded_ledger_wasm_hash.clone();
+    let embedded_index_wasm_hash = orchestrator.embedded_index_wasm_hash.clone();
+    let usdc = usdc(
+        Principal::anonymous(),
+        embedded_ledger_wasm_hash,
+        embedded_index_wasm_hash,
+    );
+    let orchestrator = orchestrator
+        .add_erc20_token(usdc.clone())
+        .expect_new_ledger_and_index_canisters()
+        .setup;
+
+    let canisters = orchestrator
+        .call_orchestrator_canister_ids(&usdc_erc20_contract())
+        .unwrap();
+
+    let ledger_canister_id =
+        CanisterId::unchecked_from_principal(PrincipalId::from(canisters.ledger.unwrap()));
+
+    let index_canister_id =
+        CanisterId::unchecked_from_principal(PrincipalId::from(canisters.index.unwrap()));
+
+    let pre_top_up_balance_ledger = orchestrator.canister_status_of(ledger_canister_id).cycles();
+    let pre_top_up_balance_index = orchestrator.canister_status_of(index_canister_id).cycles();
+
+    orchestrator
+        .env
+        .advance_time(std::time::Duration::from_secs(60 * 60 + 1));
+    orchestrator.env.tick();
+    orchestrator.env.tick();
+    orchestrator.env.tick();
+    orchestrator.env.tick();
+    orchestrator.env.tick();
+
+    let balance_ledger_after_first_top_up =
+        orchestrator.canister_status_of(ledger_canister_id).cycles();
+    let balance_index_after_first_top_up =
+        orchestrator.canister_status_of(index_canister_id).cycles();
+
+    assert_eq!(
+        balance_index_after_first_top_up - pre_top_up_balance_index,
+        TEN_TRILLIONS as u128
+    );
+    assert_eq!(
+        balance_ledger_after_first_top_up - pre_top_up_balance_ledger,
+        TEN_TRILLIONS as u128
+    );
+
+    orchestrator
+        .env
+        .advance_time(std::time::Duration::from_secs(60 * 60 + 1));
+    orchestrator.env.tick();
+    orchestrator.env.tick();
+    orchestrator.env.tick();
+    orchestrator.env.tick();
+    orchestrator.env.tick();
+
+    let balance_ledger_after_second_top_up =
+        orchestrator.canister_status_of(ledger_canister_id).cycles();
+    let balance_index_after_second_top_up =
+        orchestrator.canister_status_of(index_canister_id).cycles();
+
+    assert_eq!(
+        balance_index_after_second_top_up - balance_index_after_first_top_up,
+        TEN_TRILLIONS as u128
+    );
+    assert_eq!(
+        balance_ledger_after_second_top_up - balance_ledger_after_first_top_up,
+        TEN_TRILLIONS as u128
+    );
 }
 
 #[test]
@@ -158,7 +238,11 @@ fn should_reject_upgrade_with_invalid_args() {
     let orchestrator = LedgerSuiteOrchestrator::default();
     let embedded_ledger_wasm_hash = orchestrator.embedded_ledger_wasm_hash.clone();
     let embedded_index_wasm_hash = orchestrator.embedded_index_wasm_hash.clone();
-    let usdc = usdc(embedded_ledger_wasm_hash.clone(), embedded_index_wasm_hash);
+    let usdc = usdc(
+        Principal::anonymous(),
+        embedded_ledger_wasm_hash.clone(),
+        embedded_index_wasm_hash,
+    );
 
     test_upgrade_with_invalid_args(
         &orchestrator,

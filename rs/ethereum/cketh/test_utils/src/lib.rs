@@ -57,9 +57,12 @@ pub const DEFAULT_WITHDRAWAL_TRANSACTION: &str = "0x02f87301808459682f008507af2c
 pub const MINTER_ADDRESS: &str = "0xfd644a761079369962386f8e4259217c2a10b8d0";
 pub const DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS: &str =
     "0x221E931fbFcb9bd54DdD26cE6f5e29E98AdD01C0";
-pub const HELPER_SMART_CONTRACT_ADDRESS: &str = "0x907b6efc1a398fd88a8161b3ca02eec8eaf72ca1";
+pub const ETH_HELPER_CONTRACT_ADDRESS: &str = "0x907b6efc1a398fd88a8161b3ca02eec8eaf72ca1";
+pub const ERC20_HELPER_CONTRACT_ADDRESS: &str = "0xe1788e4834c896f1932188645cc36c54d1b80ac1";
 pub const RECEIVED_ETH_EVENT_TOPIC: &str =
     "0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435";
+pub const RECEIVED_ERC20_EVENT_TOPIC: &str =
+    "0x4d69d0bd4287b7f66c548f90154dc81bc98f65a1b362775df5ae171a2ccd262b";
 pub const HEADER_SIZE_LIMIT: u64 = 2 * 1024;
 pub const MAX_ETH_LOGS_BLOCK_RANGE: u64 = 799;
 
@@ -118,6 +121,7 @@ impl CkEthSetup {
         DepositFlow {
             setup: self,
             params,
+            minter_supports_erc20_deposit: false,
         }
     }
 
@@ -156,11 +160,16 @@ impl CkEthSetup {
     }
 
     pub fn balance_of(&self, account: impl Into<Account>) -> Nat {
+        let ledger_id = self.ledger_id;
+        self.balance_of_ledger(ledger_id, account)
+    }
+
+    pub fn balance_of_ledger(&self, ledger_id: CanisterId, account: impl Into<Account>) -> Nat {
         Decode!(
             &assert_reply(
                 self.env
                     .query(
-                        self.ledger_id,
+                        ledger_id,
                         "icrc1_balance_of",
                         Encode!(&account.into()).unwrap()
                     )
@@ -260,6 +269,15 @@ impl CkEthSetup {
         self,
         ledger_index: T,
     ) -> LedgerTransactionAssert {
+        let ledger_id = self.ledger_id;
+        self.call_ledger_id_get_transaction(ledger_id, ledger_index)
+    }
+
+    pub fn call_ledger_id_get_transaction<T: Into<Nat>>(
+        self,
+        ledger_id: CanisterId,
+        ledger_index: T,
+    ) -> LedgerTransactionAssert {
         use icrc_ledger_types::icrc3::transactions::{
             GetTransactionsRequest, GetTransactionsResponse,
         };
@@ -271,11 +289,7 @@ impl CkEthSetup {
         let mut response = Decode!(
             &assert_reply(
                 self.env
-                    .query(
-                        self.ledger_id,
-                        "get_transactions",
-                        Encode!(&request).unwrap()
-                    )
+                    .query(ledger_id, "get_transactions", Encode!(&request).unwrap())
                     .expect("failed to query get_transactions on the ledger")
             ),
             GetTransactionsResponse
@@ -470,11 +484,16 @@ impl CkEthSetup {
 
     pub fn upgrade_minter_to_add_orchestrator_id(self, orchestrator_id: Principal) -> Self {
         self.upgrade_minter(UpgradeArg {
-            next_transaction_nonce: None,
-            minimum_withdrawal_amount: None,
-            ethereum_contract_address: None,
-            ethereum_block_height: None,
             ledger_suite_orchestrator_id: Some(orchestrator_id),
+            ..Default::default()
+        });
+        self
+    }
+
+    pub fn upgrade_minter_to_add_erc20_helper_contract(self, contract_address: String) -> Self {
+        self.upgrade_minter(UpgradeArg {
+            erc20_helper_contract_address: Some(contract_address),
+            ..Default::default()
         });
         self
     }
@@ -548,7 +567,7 @@ fn install_minter(env: &StateMachine, ledger_id: CanisterId, minter_id: Canister
         ledger_id: ledger_id.get().0,
         next_transaction_nonce: 0_u8.into(),
         ethereum_block_height: CandidBlockTag::Finalized,
-        ethereum_contract_address: Some(HELPER_SMART_CONTRACT_ADDRESS.to_string()),
+        ethereum_contract_address: Some(ETH_HELPER_CONTRACT_ADDRESS.to_string()),
         minimum_withdrawal_amount: CKETH_TRANSFER_FEE.into(),
         last_scraped_block_number: LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into(),
     };

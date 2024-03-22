@@ -41,6 +41,7 @@ use crate::state_api::state::OpOut;
 use ::pocket_ic::common::rest::{BinaryBlob, BlobId};
 use axum::async_trait;
 use pocket_ic::PocketIc;
+use serde::Deserialize;
 
 /// Represents an identifiable operation on PocketIC.
 pub trait Operation {
@@ -59,8 +60,8 @@ pub trait Operation {
 }
 
 /// Uniquely identifies an operation.
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
-pub struct OpId(String);
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize)]
+pub struct OpId(pub String);
 
 // Index into a vector of PocketIc instances
 pub type InstanceId = usize;

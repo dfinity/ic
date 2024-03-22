@@ -39,10 +39,14 @@ class SlackApi:
             except urllib.error.HTTPError as e:
                 body = e.read().decode()
                 logging.error(
+                    "Slack send_message failed."
+                )
+                logging.debug(
                     f"Slack send_message failed with HTTP response body: {body}\ntraceback:\n{traceback.format_exc()}"
                 )
             except Exception:
-                logging.error(f"Slack send_message could not send the requested message.\n{traceback.format_exc()}")
+                logging.error("Slack send_message could not send the requested message.")
+                logging.debug(f"Slack send_message could not send the requested message.\ntraceback:\n{traceback.format_exc()}")
 
     def try_get_slack_id(self, user: User) -> Optional[str]:
         if user.email is None:
@@ -64,10 +68,16 @@ class SlackApi:
                 return self.slack_id_cache[user.email]
             else:
                 logging.error(
+                    "Slack API users.lookupByEmail for some user returned non ok response."
+                )
+                logging.debug(
                     f"Slack API users.lookupByEmail for user {user} returned non ok response: {api_response['ok']} with error: {api_response['error'] if 'error' in api_response else 'None'}"
                 )
         except Exception:
             logging.error(
+                "There was an exception while calling Slack API users.lookupByEmail."
+            )
+            logging.debug(
                 f"There was an exception while calling Slack API users.lookupByEmail:\n{traceback.format_exc()}"
             )
         return None

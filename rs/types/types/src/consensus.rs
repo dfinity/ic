@@ -1793,17 +1793,7 @@ impl ConsensusMessageHashable for CatchUpPackage {
     }
 
     fn check_integrity(&self) -> bool {
-        let content = &self.content;
-        let block_hash = content.block.get_hash();
-        let block = content.block.as_ref();
-        let random_beacon_hash = content.random_beacon.get_hash();
-        let random_beacon = content.random_beacon.as_ref();
-        let payload_hash = block.payload.get_hash();
-        let block_payload = block.payload.as_ref();
-        block.payload.is_summary() == block_payload.is_summary()
-            && &crypto_hash(random_beacon) == random_beacon_hash
-            && &crypto_hash(block) == block_hash
-            && &crypto_hash(block_payload) == payload_hash
+        self.content.check_integrity()
     }
 }
 

@@ -8,7 +8,7 @@ pub struct Stats {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct QueryStats {
     #[prost(uint64, tag = "1")]
-    pub epoch: u64,
+    pub highest_aggregated_epoch: u64,
     #[prost(message, repeated, tag = "2")]
     pub query_stats: ::prost::alloc::vec::Vec<QueryStatsInner>,
 }
@@ -17,6 +17,8 @@ pub struct QueryStats {
 pub struct QueryStatsInner {
     #[prost(message, optional, tag = "1")]
     pub proposer: ::core::option::Option<super::super::super::types::v1::NodeId>,
+    #[prost(uint64, tag = "7")]
+    pub epoch: u64,
     #[prost(message, optional, tag = "2")]
     pub canister: ::core::option::Option<super::super::super::types::v1::CanisterId>,
     #[prost(uint32, tag = "3")]

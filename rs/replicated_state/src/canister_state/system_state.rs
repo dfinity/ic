@@ -335,6 +335,15 @@ pub struct SystemState {
 
     /// Log records of the canister.
     pub canister_log: CanisterLog,
+
+    /// The Wasm memory limit. This is a field in developer-visible canister
+    /// settings that allows the developer to limit the usage of the Wasm memory
+    /// by the canister to leave some room in 4GiB for upgrade calls.
+    /// See the interface specification for more information.
+    pub wasm_memory_limit: Option<NumBytes>,
+
+    /// Next local snapshot id.
+    pub next_snapshot_id: u64,
 }
 
 /// A wrapper around the different canister statuses.
@@ -706,6 +715,8 @@ impl SystemState {
             wasm_chunk_store,
             log_visibility: LogVisibility::default(),
             canister_log: Default::default(),
+            wasm_memory_limit: None,
+            next_snapshot_id: 0,
         }
     }
 
@@ -751,6 +762,8 @@ impl SystemState {
         wasm_chunk_store_metadata: WasmChunkStoreMetadata,
         log_visibility: LogVisibility,
         canister_log: CanisterLog,
+        wasm_memory_limit: Option<NumBytes>,
+        next_snapshot_id: u64,
     ) -> Self {
         Self {
             controllers,
@@ -775,6 +788,8 @@ impl SystemState {
             ),
             log_visibility,
             canister_log,
+            wasm_memory_limit,
+            next_snapshot_id,
         }
     }
 
@@ -890,6 +905,13 @@ impl SystemState {
     /// Sets `reserved_balance_limit` to `None` for testing.
     pub fn clear_reserved_balance_limit_for_testing(&mut self) {
         self.reserved_balance_limit = None;
+    }
+
+    /// Get new local snapshot ID.
+    pub fn new_local_snapshot_id(&mut self) -> u64 {
+        let local_snapshot_id = self.next_snapshot_id;
+        self.next_snapshot_id += 1;
+        local_snapshot_id
     }
 
     /// Records the given amount as debit that will be charged from the balance

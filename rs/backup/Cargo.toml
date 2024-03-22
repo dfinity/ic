@@ -8,7 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 chrono = { workspace = true }
-clap = { workspace = true }
+clap = { version = "3.2.25", features = ["derive"] }
 ic-config = { path = "../config" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 ic-logger = { path = "../monitoring/logger" }

@@ -8,7 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 bitcoin = { version = "0.28.1", features = ["default", "use-serde", "rand"] }
-clap = { workspace = true }
+clap = { version = "3.2.25", features = ["derive"] }
 futures = { workspace = true }
 hashlink = "0.8.0"
 hex = "0.4.2"

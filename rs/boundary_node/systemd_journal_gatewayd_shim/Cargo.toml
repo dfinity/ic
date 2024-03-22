@@ -10,7 +10,7 @@ documentation.workspace = true
 anyhow = { workspace = true }
 async-trait = "0.1.73"
 axum = "0.6.20"
-clap = { version = "4.4.0", features = ["derive"] }
+clap = { workspace = true }
 http = "0.2.9"
 itertools = { workspace = true }
 reqwest = { workspace = true }

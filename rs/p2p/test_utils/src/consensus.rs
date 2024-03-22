@@ -6,8 +6,8 @@ use std::{
 };
 
 use ic_interfaces::p2p::consensus::{
-    ChangeResult, ChangeSetProducer, MutablePool, PriorityFnAndFilterProducer, UnvalidatedArtifact,
-    ValidatedPoolReader,
+    ArtifactWithOpt, ChangeResult, ChangeSetProducer, MutablePool, PriorityFnAndFilterProducer,
+    UnvalidatedArtifact, ValidatedPoolReader,
 };
 use ic_logger::ReplicaLogger;
 use ic_types::{
@@ -141,10 +141,13 @@ impl MutablePool<U64Artifact> for TestConsensus<U64Artifact> {
         }
         ChangeResult {
             purged: change_set.1,
-            adverts: change_set
+            artifacts_with_opt: change_set
                 .0
                 .into_iter()
-                .map(|m| U64Artifact::message_to_advert(&m))
+                .map(|m| ArtifactWithOpt {
+                    advert: U64Artifact::message_to_advert(&m),
+                    is_latency_sensitive: false,
+                })
                 .collect(),
             poll_immediately,
         }

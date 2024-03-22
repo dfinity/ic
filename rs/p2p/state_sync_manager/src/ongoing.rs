@@ -58,7 +58,7 @@ struct OngoingStateSync<T: Send> {
     allowed_downloads: usize,
     chunks_to_download: Box<dyn Iterator<Item = ChunkId> + Send>,
     // Event tasks
-    downloading_chunks: JoinMap<ChunkId, DownloadResult<T>>,
+    downloading_chunks: JoinMap<ChunkId, DownloadResult>,
     // State sync
     state_sync: Arc<dyn StateSyncClient<Message = T>>,
     tracker: Arc<Mutex<Box<dyn Chunkable<T> + Send>>>,
@@ -72,9 +72,9 @@ pub(crate) struct OngoingStateSyncHandle {
     pub cancellation: CancellationToken,
 }
 
-pub(crate) struct DownloadResult<T> {
+pub(crate) struct DownloadResult {
     peer_id: NodeId,
-    result: Result<Option<T>, DownloadChunkError>,
+    result: Result<bool, DownloadChunkError>,
 }
 
 pub(crate) fn start_ongoing_state_sync<T: Send + 'static>(
@@ -138,9 +138,7 @@ impl<T: 'static + Send> OngoingStateSync<T> {
                             // undercount active downloads for this peer but this is acceptable since everything will be reset anyway every
                             // 5-10min when state sync restarts.
                             self.active_downloads.entry(result.peer_id).and_modify(|v| { *v = v.saturating_sub(1) });
-                            // Usually it is discouraged to use await in the event loop.
-                            // In this case it is ok because the function only is async if state sync completed.
-                            self.handle_downloaded_chunk_result(result).await;
+                            self.handle_downloaded_chunk_result(result);
                             self.spawn_chunk_downloads();
                         }
                         Err(err) => {
@@ -182,26 +180,21 @@ impl<T: 'static + Send> OngoingStateSync<T> {
         }
 
         while let Some(Ok((finished, _))) = self.downloading_chunks.join_next().await {
-            self.handle_downloaded_chunk_result(finished).await;
+            self.handle_downloaded_chunk_result(finished);
         }
     }
 
-    async fn handle_downloaded_chunk_result(
+    fn handle_downloaded_chunk_result(
         &mut self,
-        DownloadResult { peer_id, result }: DownloadResult<T>,
+        DownloadResult { peer_id, result }: DownloadResult,
     ) {
         self.metrics.record_chunk_download_result(&result);
         match result {
             // Received chunk
-            Ok(Some(msg)) => {
-                let state_sync_c = self.state_sync.clone();
-                let _ = self
-                    .rt
-                    .spawn_blocking(move || state_sync_c.deliver_state_sync(msg))
-                    .await;
+            Ok(true) => {
                 self.state_sync_finished = true;
             }
-            Ok(None) => {}
+            Ok(false) => {}
             Err(DownloadChunkError::NoContent) => {
                 if self.active_downloads.remove(&peer_id).is_some() {
                     self.allowed_downloads -= PARALLEL_CHUNK_DOWNLOADS;
@@ -297,7 +290,7 @@ impl<T: 'static + Send> OngoingStateSync<T> {
         chunk_id: ChunkId,
         download_cancel_token: CancellationToken,
         metrics: OngoingStateSyncMetrics,
-    ) -> DownloadResult<T> {
+    ) -> DownloadResult {
         let _timer = metrics.chunk_download_duration.start_timer();
 
         let response_result = select! {
@@ -509,7 +502,7 @@ mod tests {
             c.expect_chunks_to_download()
                 .returning(|| Box::new(std::iter::once(ChunkId::from(1))));
             c.expect_add_chunk().return_const(Ok(()));
-            c.expect_completed().return_const(None);
+            c.expect_completed().return_const(false);
 
             let rt = Runtime::new().unwrap();
             let ongoing = start_ongoing_state_sync(

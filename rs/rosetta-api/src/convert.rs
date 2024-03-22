@@ -298,7 +298,11 @@ pub fn block_id(block: &HashedBlock) -> Result<BlockIdentifier, ApiError> {
 }
 
 pub fn to_model_account_identifier(aid: &icp_ledger::AccountIdentifier) -> AccountIdentifier {
-    AccountIdentifier::new(aid.to_hex(), None)
+    AccountIdentifier {
+        address: aid.to_hex(),
+        sub_account: None,
+        metadata: None,
+    }
 }
 
 pub fn from_model_account_identifier(

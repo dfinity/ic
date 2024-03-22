@@ -10,7 +10,6 @@
 import argparse
 import atexit
 import os
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -100,19 +99,6 @@ def strip_files(fs_basedir, fakeroot_statefile, strip_paths):
         for entry in os.listdir(target_dir):
             del_path = os.path.join(target_dir, entry)
             subprocess.run(["fakeroot", "-s", fakeroot_statefile, "-i", fakeroot_statefile, "rm", "-rf", del_path])
-
-
-def install_extra_files(fs_basedir, fakeroot_statefile, extra_files):
-    for extra_file in extra_files:
-        source_file, install_target, mode = extra_file.split(":")
-        if install_target[0] == "/":
-            install_target = install_target[1:]
-        install_target = os.path.join(fs_basedir, install_target)
-        shutil.copy(source_file, install_target)
-        os.chmod(install_target, int(mode, 8))
-        subprocess.run(
-            ["fakeroot", "-s", fakeroot_statefile, "-i", fakeroot_statefile, "chown", "root.root", install_target]
-        )
 
 
 def prepare_tree_from_tar(in_file, fakeroot_statefile, fs_basedir, dir_to_extract):
@@ -213,13 +199,6 @@ def make_argparser():
         default=[],
         help="Directories to be cleared from the tree; expects a list of full paths",
     )
-    parser.add_argument(
-        "extra_files",
-        metavar="extra_files",
-        type=str,
-        nargs="*",
-        help="Extra files to install; expects list of sourcefile:targetfile:mode",
-    )
     return parser
 
 
@@ -232,7 +211,6 @@ def main():
     limit_prefix = args.path
     file_contexts_file = args.file_contexts
     strip_paths = args.strip_paths
-    extra_files = args.extra_files
     if limit_prefix and limit_prefix[0] == "/":
         limit_prefix = limit_prefix[1:]
 
@@ -255,7 +233,6 @@ def main():
     # ownership will be preserved while unpacking (see below).
     prepare_tree_from_tar(in_file, fakeroot_statefile, fs_basedir, limit_prefix)
     strip_files(fs_basedir, fakeroot_statefile, strip_paths)
-    install_extra_files(fs_basedir, fakeroot_statefile, extra_files)
     subprocess.run(['sync'], check=True)
 
     # Now build the basic filesystem image. Wrap again in fakeroot

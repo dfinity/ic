@@ -1,6 +1,6 @@
-use ic_base_types::PrincipalId;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_common::E8;
-use ic_nervous_system_proto::pb::v1::{Duration as DurationPb, Tokens as TokensPb};
+use ic_nervous_system_proto::pb::v1::{Canister, Duration as DurationPb, Tokens as TokensPb};
 use ic_nns_governance::{
     governance::test_data::CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING,
     pb::v1::{
@@ -111,6 +111,14 @@ impl CreateServiceNervousSystemBuilder {
             .as_mut()
             .unwrap();
         swap_distribution.total = Some(total);
+        self
+    }
+
+    pub fn with_dapp_canisters(mut self, dapp_canisters: Vec<CanisterId>) -> Self {
+        self.0.dapp_canisters = dapp_canisters
+            .into_iter()
+            .map(|id| Canister { id: Some(id.get()) })
+            .collect();
         self
     }
 

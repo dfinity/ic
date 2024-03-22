@@ -5,7 +5,8 @@ use crate::Operation;
 use crate::{copy_dir, BlobStore};
 use axum::{extract::State, response::IntoResponse};
 use hyper::body::Bytes;
-use hyper::header::HeaderValue;
+use hyper::header::{HeaderValue, CONTENT_TYPE};
+use hyper::Method;
 use ic_boundary::{Health, RootKey};
 use ic_config::execution_environment;
 use ic_config::subnet_config::SubnetConfig;
@@ -68,6 +69,9 @@ pub struct PocketIc {
     // where a canister should be created. This value is seeded,
     // so reproducibility is maintained.
     randomness: StdRng,
+    // Used for computing the state label to distinguish PocketIC instances
+    // with different initial configs.
+    subnet_configs: ExtendedSubnetConfigSet,
 }
 
 impl PocketIc {
@@ -96,7 +100,7 @@ impl PocketIc {
         let mut subnet_config_info: Vec<SubnetConfigInfo> = vec![];
         let mut routing_table = RoutingTable::new();
 
-        let mut nns_subnet_id = subnet_configs.nns.and_then(|x| {
+        let mut nns_subnet_id = subnet_configs.nns.as_ref().and_then(|x| {
             x.get_subnet_id()
                 .map(|y| SubnetId::new(PrincipalId(y.into())))
         });
@@ -227,6 +231,7 @@ impl PocketIc {
             routing_table,
             topology,
             randomness: StdRng::seed_from_u64(42),
+            subnet_configs,
         }
     }
 
@@ -327,6 +332,8 @@ impl Default for PocketIc {
 impl HasStateLabel for PocketIc {
     fn get_state_label(&self) -> StateLabel {
         let mut hasher = Sha256::new();
+        let subnet_configs_string = format!("{:?}", self.subnet_configs);
+        hasher.write(subnet_configs_string.as_bytes());
         for subnet in self.subnets.read().unwrap().values() {
             let subnet_state_hash = subnet
                 .state_manager
@@ -711,7 +718,6 @@ const CONTENT_TYPE_CBOR: HeaderValue = HeaderValue::from_static("application/cbo
 pub async fn status(
     State((rk, h)): State<(Arc<dyn RootKey>, Arc<dyn Health>)>,
 ) -> impl IntoResponse {
-    use hyper::header::CONTENT_TYPE;
     use ic_types::messages::HttpStatusResponse;
 
     let health = h.health().await;
@@ -828,10 +834,15 @@ impl Operation for CallRequest {
                     Arc::new(RwLock::new(PocketIngressPoolThrottler)),
                     s,
                 )
-                .build();
+                .build_service();
 
                 let request = axum::http::Request::builder()
-                    .extension(PrincipalId(self.effective_canister_id.get().into()))
+                    .method(Method::POST)
+                    .header(CONTENT_TYPE, CONTENT_TYPE_CBOR)
+                    .uri(format!(
+                        "/api/v2/canister/{}/call",
+                        PrincipalId(self.effective_canister_id.get().into())
+                    ))
                     .body(self.bytes.clone().into())
                     .unwrap();
                 let resp = self.runtime.block_on(svc.oneshot(request)).unwrap();
@@ -920,10 +931,15 @@ impl Operation for QueryRequest {
                         }
                     })),
                 )
-                .build();
+                .build_service();
 
                 let request = axum::http::Request::builder()
-                    .extension(PrincipalId(self.effective_canister_id.get().into()))
+                    .method(Method::POST)
+                    .header(CONTENT_TYPE, CONTENT_TYPE_CBOR)
+                    .uri(format!(
+                        "/api/v2/canister/{}/query",
+                        PrincipalId(self.effective_canister_id.get().into())
+                    ))
                     .body(self.bytes.clone().into())
                     .unwrap();
                 let resp = self.runtime.block_on(svc.oneshot(request)).unwrap();
@@ -979,10 +995,15 @@ impl Operation for ReadStateRequest {
                     Arc::new(StandaloneIngressSigVerifier),
                     Arc::new(RwLock::new(delegation)),
                 )
-                .build();
+                .build_service();
 
                 let request = axum::http::Request::builder()
-                    .extension(PrincipalId(self.effective_canister_id.get().into()))
+                    .method(Method::POST)
+                    .header(CONTENT_TYPE, CONTENT_TYPE_CBOR)
+                    .uri(format!(
+                        "/api/v2/canister/{}/read_state",
+                        PrincipalId(self.effective_canister_id.get().into())
+                    ))
                     .body(self.bytes.clone().into())
                     .unwrap();
                 let resp = self.runtime.block_on(svc.oneshot(request)).unwrap();
@@ -1184,7 +1205,7 @@ pub struct GetStableMemory {
 
 impl Operation for GetStableMemory {
     fn compute(&self, pocket_ic: &mut PocketIc) -> OpOut {
-        OpOut::Bytes(
+        OpOut::StableMemBytes(
             pocket_ic
                 .try_route_canister(self.canister_id)
                 .unwrap()
@@ -1227,12 +1248,12 @@ impl Operation for GetSubnet {
         match sm {
             Some(sm) => {
                 if sm.canister_exists(self.canister_id) {
-                    OpOut::SubnetId(sm.get_subnet_id())
+                    OpOut::MaybeSubnetId(Some(sm.get_subnet_id()))
                 } else {
-                    OpOut::Error(PocketIcError::CanisterNotFound(self.canister_id))
+                    OpOut::MaybeSubnetId(None)
                 }
             }
-            None => OpOut::Error(PocketIcError::CanisterNotFound(self.canister_id)),
+            None => OpOut::MaybeSubnetId(None),
         }
     }
 

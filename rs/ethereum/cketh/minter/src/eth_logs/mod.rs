@@ -178,6 +178,7 @@ impl ReceivedEvent {
 pub async fn last_received_events(
     topic: &[u8; 32],
     contract_address: Address,
+    token_contract_addresses: &[Address],
     from: BlockNumber,
     to: BlockNumber,
 ) -> Result<(Vec<ReceivedEvent>, Vec<ReceivedEventError>), MultiCallError<Vec<LogEntry>>> {
@@ -189,13 +190,25 @@ pub async fn last_received_events(
             from, to
         ));
     }
+    let mut topics: Vec<_> = vec![FixedSizeData(*topic).into()];
+    // We add token contract addresses as additional topics to match.
+    // It has a disjunction semantics, so it will match if event matches any one of these addresses.
+    if !token_contract_addresses.is_empty() {
+        topics.push(
+            token_contract_addresses
+                .iter()
+                .map(|address| FixedSizeData(address.into()))
+                .collect::<Vec<_>>()
+                .into(),
+        )
+    }
 
     let result = read_state(EthRpcClient::from_state)
         .eth_get_logs(GetLogsParam {
             from_block: from.into(),
             to_block: to.into(),
             address: vec![contract_address],
-            topics: vec![FixedSizeData(*topic).into()],
+            topics,
         })
         .await?;
 

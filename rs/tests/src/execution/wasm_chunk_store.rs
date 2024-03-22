@@ -307,7 +307,7 @@ pub fn install_large_wasm_with_other_store_fails_cross_subnet(env: TestEnv) {
                 )
                 .await
                 .unwrap_err();
-            let expected_err = AgentError::ReplicaError(RejectResponse {
+            let expected_err = AgentError::CertifiedReject(RejectResponse {
                 reject_code: RejectCode::CanisterReject,
                 reject_message: format!("InstallChunkedCode Error: Store canister {} was not found on subnet {} of target canister {}", store_canister_id, app_subnet_id, target_canister_id),
                 error_code: None,

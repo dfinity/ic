@@ -2471,7 +2471,9 @@ fn subnet_available_memory_does_not_change_on_cleanup_resume_failure() {
 
 #[test]
 fn cycles_balance_changes_applied_correctly() {
-    let mut test = ExecutionTestBuilder::new().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit(20_000_000_000)
+        .build();
     let a_id = test
         .universal_canister_with_cycles(Cycles::new(10_000_000_000_000))
         .unwrap();

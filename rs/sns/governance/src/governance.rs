@@ -1721,7 +1721,7 @@ impl Governance {
                 ErrorType::PreconditionFailed,
                 "No proposal for given ProposalId.",
             )),
-            Some(pd) => get_proposal_response::Result::Proposal(pd.strip_large_fields()),
+            Some(pd) => get_proposal_response::Result::Proposal(pd.limited_for_get_proposal()),
         };
 
         GetProposalResponse {
@@ -2569,7 +2569,7 @@ impl Governance {
     ) -> Result<(), GovernanceError> {
         transfer_sns_treasury_funds_amount_is_small_enough_at_execution_time_or_err(
             transfer,
-            &valuation?,
+            valuation?,
             self.proto.proposals.values(),
             self.env.now(),
         )?;

@@ -261,7 +261,13 @@ bazel-config-check-all-rebuild:
 bazel-test-all-rebuild:
   extends:
     - .bazel-test-all
-    - .rules-post-master
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
+      when: manual
+      allow_failure: true
+    - if: '$SCHEDULE_NAME == "run-all-master"'
+      when: manual
+      allow_failure: true
   variables:
     BAZEL_CI_CONFIG: "--config=ci"
     BAZEL_COMMAND: "build"
@@ -460,6 +466,9 @@ pre-commit:
   extends:
     - .rules-master-pipeline-and-merge-request
   needs: [] # don't wait on other jobs
+  tags:
+    - dfinity-ic
+    - bazel
   script:
     - |
       set -eEuo pipefail
@@ -598,7 +607,7 @@ build-determinism:
       - TARGET: "//publish/canisters:upload"
         PATH0: "canisters"
         PATH1: "build-ic/canisters"
-      - TARGET: "//ic-os/guestos/envs/prod:upload_disk-img"
+      - TARGET: "//ic-os/guestos/envs/prod:upload_update-img"
         PATH0: "guest-os/update-img"
         PATH1: "build-ic/guest-os"
       - TARGET: "//ic-os/hostos/envs/prod:upload_update-img"

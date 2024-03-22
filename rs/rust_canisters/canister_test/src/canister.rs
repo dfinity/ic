@@ -174,6 +174,10 @@ impl Wasm {
         self.0
     }
 
+    pub fn sha256_hash(&self) -> [u8; 32] {
+        ic_crypto_sha2::Sha256::hash(&self.0)
+    }
+
     /// Installs this wasm onto a pre-existing canister.
     pub async fn install_onto_canister(
         self,
