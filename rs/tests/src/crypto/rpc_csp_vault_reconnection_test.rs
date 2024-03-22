@@ -34,6 +34,7 @@ use crate::driver::test_env_api::{
     retry, GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
     IcNodeSnapshot, SshSession,
 };
+use crate::retry_with_msg;
 use crate::util::{assert_create_agent, block_on, MessageCanister};
 use anyhow::bail;
 use ic_registry_subnet_type::SubnetType;
@@ -148,7 +149,8 @@ impl SystemdCli<'_> {
             .expect("establish SSH session");
         let cmd = format!("journalctl -u {} | grep --count '{}'", self.service, msg);
         self.log_ssh_command(&cmd);
-        retry(
+        retry_with_msg!(
+            "check if log entry contains expected message",
             self.logger.clone(),
             Duration::from_secs(20),
             Duration::from_secs(1),
@@ -169,7 +171,7 @@ impl SystemdCli<'_> {
                         self.service
                     )
                 }
-            },
+            }
         )
         .expect("message in service logs");
     }

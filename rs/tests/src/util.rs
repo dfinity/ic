@@ -3,6 +3,8 @@ use crate::canister_api::GenericRequest;
 use crate::driver::group::{MAX_RUNTIME_BLOCKING_THREADS, MAX_RUNTIME_THREADS};
 use crate::driver::test_env_api::*;
 use crate::generic_workload_engine::{engine::Engine, metrics::LoadTestMetrics};
+use crate::retry_with_msg;
+use crate::retry_with_msg_async;
 use crate::types::*;
 use anyhow::bail;
 use candid::{Decode, Encode};
@@ -130,12 +132,21 @@ impl<'a> UniversalCanister<'a> {
         effective_canister_id: PrincipalId,
         log: &slog::Logger,
     ) -> UniversalCanister<'a> {
-        retry_async(log, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
-            match Self::new_with_params(agent, effective_canister_id, None, None, None).await {
-                Ok(c) => Ok(c),
-                Err(e) => anyhow::bail!(e),
+        retry_with_msg_async!(
+            format!(
+                "install UniversalCanister {}",
+                effective_canister_id.to_string()
+            ),
+            log,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                match Self::new_with_params(agent, effective_canister_id, None, None, None).await {
+                    Ok(c) => Ok(c),
+                    Err(e) => anyhow::bail!(e),
+                }
             }
-        })
+        )
         .await
         .expect("Could not create universal canister.")
     }
@@ -147,12 +158,21 @@ impl<'a> UniversalCanister<'a> {
         log: &slog::Logger,
     ) -> UniversalCanister<'a> {
         let c = cycles.into();
-        retry_async(log, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
-            match Self::new_with_cycles(agent, effective_canister_id, c).await {
-                Ok(c) => Ok(c),
-                Err(e) => anyhow::bail!(e),
+        retry_with_msg_async!(
+            format!(
+                "install UniversalCanister {}",
+                effective_canister_id.to_string()
+            ),
+            log,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                match Self::new_with_cycles(agent, effective_canister_id, c).await {
+                    Ok(c) => Ok(c),
+                    Err(e) => anyhow::bail!(e),
+                }
             }
-        })
+        )
         .await
         .expect("Could not create universal canister with cycles.")
     }
@@ -165,20 +185,29 @@ impl<'a> UniversalCanister<'a> {
         pages: Option<u32>,
         log: &slog::Logger,
     ) -> UniversalCanister<'a> {
-        retry_async(log, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
-            match Self::new_with_params(
-                agent,
-                effective_canister_id,
-                compute_allocation,
-                cycles,
-                pages,
-            )
-            .await
-            {
-                Ok(c) => Ok(c),
-                Err(e) => anyhow::bail!(e),
+        retry_with_msg_async!(
+            format!(
+                "install UniversalCanister {}",
+                effective_canister_id.to_string()
+            ),
+            log,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                match Self::new_with_params(
+                    agent,
+                    effective_canister_id,
+                    compute_allocation,
+                    cycles,
+                    pages,
+                )
+                .await
+                {
+                    Ok(c) => Ok(c),
+                    Err(e) => anyhow::bail!(e),
+                }
             }
-        })
+        )
         .await
         .expect("Could not create universal canister with params.")
     }
@@ -530,12 +559,21 @@ impl<'a> MessageCanister<'a> {
         timeout: Duration,
         backoff: Duration,
     ) -> MessageCanister<'a> {
-        retry_async(log, timeout, backoff, || async {
-            match Self::new_with_params(agent, effective_canister_id, None, None).await {
-                Ok(c) => Ok(c),
-                Err(e) => anyhow::bail!(e),
+        retry_with_msg_async!(
+            format!(
+                "install UniversalCanister {}",
+                effective_canister_id.to_string()
+            ),
+            log,
+            timeout,
+            backoff,
+            || async {
+                match Self::new_with_params(agent, effective_canister_id, None, None).await {
+                    Ok(c) => Ok(c),
+                    Err(e) => anyhow::bail!(e),
+                }
             }
-        })
+        )
         .await
         .expect("Could not create message canister.")
     }
@@ -901,16 +939,22 @@ pub(crate) fn assert_nodes_health_statuses(
         }
     };
 
-    retry(log, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || {
-        let nodes: Vec<&IcNodeSnapshot> = nodes_with_undesired_status();
-        if nodes.is_empty() {
-            Ok(())
-        } else {
-            let nodes_str = nodes.iter().map(|e|format!("[node_id={}, ip={}]", e.node_id, e.get_ip_addr())).join(",\n");
-            let msg = format!("The following nodes have not reached the desired health statuses {status:?}:\n{nodes_str}");
-            bail!(msg);
+    retry_with_msg!(
+        format!("check for desired health status {:?}", status),
+        log,
+        READY_WAIT_TIMEOUT,
+        RETRY_BACKOFF,
+        || {
+            let nodes: Vec<&IcNodeSnapshot> = nodes_with_undesired_status();
+            if nodes.is_empty() {
+                Ok(())
+            } else {
+                let nodes_str = nodes.iter().map(|e|format!("[node_id={}, ip={}]", e.node_id, e.get_ip_addr())).join(",\n");
+                let msg = format!("The following nodes have not reached the desired health statuses {status:?}:\n{nodes_str}");
+                bail!(msg);
+            }
         }
-    }).unwrap_or_else(|err| panic!("Retry function failed within the timeout of {} sec, {err}", READY_WAIT_TIMEOUT.as_secs()));
+    ).unwrap_or_else(|err| panic!("Retry function failed within the timeout of {} sec, {err}", READY_WAIT_TIMEOUT.as_secs()));
 }
 
 /// Asserts that the response from an agent call is rejected by the replica

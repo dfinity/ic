@@ -3,6 +3,7 @@ use crate::{
         retry_async, GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTestEnv, READY_WAIT_TIMEOUT,
         RETRY_BACKOFF,
     },
+    retry_with_msg_async,
     util::agent_observes_canister_module,
 };
 use anyhow::{Context, Result};
@@ -47,12 +48,22 @@ where
         .await
         .context("failed to create asset canister agent")?;
 
-        retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
-            match agent_observes_canister_module(&agent, &canister_id).await {
-                true => Ok(()),
-                false => panic!("Canister module not available yet"),
+        retry_with_msg_async!(
+            format!(
+                "agent of {} observes canister module {}",
+                app_node.get_public_url().to_string(),
+                canister_id.to_string()
+            ),
+            &logger,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                match agent_observes_canister_module(&agent, &canister_id).await {
+                    true => Ok(()),
+                    false => panic!("Canister module not available yet"),
+                }
             }
-        })
+        )
         .await
         .context("failed to wait for asset canister to install")?;
 

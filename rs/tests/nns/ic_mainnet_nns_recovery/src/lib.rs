@@ -46,6 +46,7 @@ use ic_tests::{
         rw_message::install_nns_with_customizations_and_check_progress,
         subnet_recovery::set_sandbox_env_vars,
     },
+    retry_with_msg,
     util::{block_on, runtime_from_url},
 };
 use ic_types::{CanisterId, NodeId, PrincipalId, ReplicaVersion, SubnetId};
@@ -869,11 +870,12 @@ fn wait_until_ready_for_interaction(logger: Logger, node: IcNodeSnapshot) {
         logger.clone(),
         "Waiting until node {node_ip:?} is ready for interaction ..."
     );
-    retry(
+    retry_with_msg!(
+        format!("Check if node {node_ip:?} is ready for interaction"),
         logger.clone(),
         Duration::from_secs(500),
         Duration::from_secs(5),
-        || node.block_on_bash_script("journalctl | grep -q 'Ready for interaction'"),
+        || node.block_on_bash_script("journalctl | grep -q 'Ready for interaction'")
     )
     .unwrap_or_else(|e| {
         panic!("Node {node_ip:?} didn't become ready for interaction in time because {e:?}")
@@ -917,7 +919,8 @@ fn test_recovered_nns(env: TestEnv, neuron_id: NeuronId, nns_node: IcNodeSnapsho
 }
 
 fn package_registry_local_store(logger: Logger, recovered_nns_node: IcNodeSnapshot) {
-    retry(
+    retry_with_msg!(
+        "package registry local store",
         logger,
         Duration::from_secs(120),
         Duration::from_secs(5),
@@ -930,7 +933,7 @@ fn package_registry_local_store(logger: Logger, recovered_nns_node: IcNodeSnapsh
                         ic_registry_local_store
                 "#
             ))
-        },
+        }
     )
     .unwrap_or_else(|e| panic!("Could not create ic_registry_local_store.tar.zst because {e:?}",));
 }
@@ -1073,7 +1076,8 @@ fn create_subnet(
         logger,
         "Waiting until the new subnet with node {new_subnet_node_id} appears in the registry local store ..."
     );
-    retry(
+    retry_with_msg!(
+        "checl if the new subnet with node {new_subnet_node_id} appears in the registry local store",
         logger.clone(),
         Duration::from_secs(500),
         Duration::from_secs(5),
@@ -1087,7 +1091,7 @@ fn create_subnet(
                     done
                 "#
             )
-        ),
+        )
     )
     .unwrap_or_else(|e| {
         panic!("Node {new_subnet_node_id} did not become a member of a new subnet in time. Error: {e:?}")

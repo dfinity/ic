@@ -19,7 +19,7 @@ use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{retry, READY_WAIT_TIMEOUT, RETRY_BACKOFF};
 use crate::driver::test_env_api::{HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer};
 use crate::util;
-use crate::{canister_http::lib::*, driver::test_env_api::HasWasm};
+use crate::{canister_http::lib::*, driver::test_env_api::HasWasm, retry_with_msg};
 use anyhow::bail;
 use candid::Principal;
 use canister_test::Canister;
@@ -169,14 +169,18 @@ pub fn test(env: TestEnv) {
         .expect("Could not build reqwest client.");
 
     let killed_app_endpoint_url = killed_app_endpoint.get_public_url();
-    retry(
+    retry_with_msg!(
+        format!(
+            "check if node {} is killed",
+            killed_app_endpoint_url.to_string()
+        ),
         env.logger(),
         READY_WAIT_TIMEOUT,
         RETRY_BACKOFF,
         || match http_client.get(killed_app_endpoint_url.clone()).send() {
             Ok(_) => bail!("Node not yet killed"),
             Err(_) => Ok("Node not yet killed"),
-        },
+        }
     )
     .expect("Failed to kill node.");
     info!(&logger, "Node successfully killed");
@@ -199,14 +203,18 @@ pub fn test(env: TestEnv) {
         .build()
         .expect("Could not build reqwest client.");
     let killed_app_endpoint_url = killed_app_endpoint.get_public_url();
-    retry(
+    retry_with_msg!(
+        format!(
+            "check if node {} is killed",
+            killed_app_endpoint_url.to_string()
+        ),
         env.logger(),
         READY_WAIT_TIMEOUT,
         RETRY_BACKOFF,
         || match http_client.get(killed_app_endpoint_url.clone()).send() {
             Ok(_) => Ok("Node has recovered"),
             Err(e) => bail!("Killed not is not yet healthy {e}"),
-        },
+        }
     )
     .expect("Failed to restart killed node.");
     info!(&logger, "Killed node successfully recovered.");
@@ -214,13 +222,19 @@ pub fn test(env: TestEnv) {
     // Make sure that we do at least one additional backgroundi request. This is needed
     // to make sure that a potential timeout (consensus) issue is collected in the proxy canister.
     let current_requests_num = requests.load(Ordering::SeqCst);
-    retry(env.logger(), READY_WAIT_TIMEOUT, RETRY_BACKOFF, || {
-        if current_requests_num + 1 == requests.load(Ordering::SeqCst) {
-            Ok(())
-        } else {
-            bail!("Waiting for one additional background http request.")
+    retry_with_msg!(
+        "checking if one additional background http request has been made",
+        env.logger(),
+        READY_WAIT_TIMEOUT,
+        RETRY_BACKOFF,
+        || {
+            if current_requests_num + 1 == requests.load(Ordering::SeqCst) {
+                Ok(())
+            } else {
+                bail!("Waiting for one additional background http request.")
+            }
         }
-    })
+    )
     .expect("Failed to do additional http request after node restart.");
 
     // Verify that all stored http responses are successful.

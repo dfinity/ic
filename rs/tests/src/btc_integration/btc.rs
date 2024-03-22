@@ -31,6 +31,7 @@ use crate::util::{block_on, UniversalCanister};
 use crate::{
     driver::ic::{InternetComputer, Subnet},
     driver::universal_vm::UniversalVm,
+    retry_with_msg, retry_with_msg_async,
 };
 use anyhow::bail;
 use bitcoincore_rpc::{Auth, Client, RpcApi};
@@ -129,7 +130,8 @@ pub fn get_balance(env: TestEnv) {
     // Create a wallet.
     // Retry since the bitcoind VM might not be up yet.
     let btc_rpc_c = btc_rpc.clone();
-    retry(
+    retry_with_msg!(
+        "create wallet",
         logger.clone(),
         READY_WAIT_TIMEOUT,
         RETRY_BACKOFF,
@@ -138,7 +140,7 @@ pub fn get_balance(env: TestEnv) {
             Err(err) => {
                 bail!("Connecting to btc rpc failed {err}")
             }
-        },
+        }
     )
     .unwrap();
 
@@ -163,27 +165,36 @@ pub fn get_balance(env: TestEnv) {
         let canister =
             UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
                 .await;
-        retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
-            let res = canister
-                .update(wasm().call(management::bitcoin_get_balance(
-                    btc_address.to_string(),
-                    None,
-                )))
-                .await
-                .map(|res| Decode!(res.as_slice(), u64))
-                .unwrap()
-                .unwrap();
+        retry_with_msg_async!(
+            format!(
+                "check if balance matches expected balance {}",
+                expected_balance_in_satoshis
+            ),
+            &logger,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                let res = canister
+                    .update(wasm().call(management::bitcoin_get_balance(
+                        btc_address.to_string(),
+                        None,
+                    )))
+                    .await
+                    .map(|res| Decode!(res.as_slice(), u64))
+                    .unwrap()
+                    .unwrap();
 
-            if res != expected_balance_in_satoshis {
-                bail!(
-                    "IC balance {:?} does not match bitcoind balance {}",
-                    res,
-                    expected_balance_in_satoshis
-                );
+                if res != expected_balance_in_satoshis {
+                    bail!(
+                        "IC balance {:?} does not match bitcoind balance {}",
+                        res,
+                        expected_balance_in_satoshis
+                    );
+                }
+
+                Ok(res)
             }
-
-            Ok(res)
-        })
+        )
         .await
     });
     // blocks

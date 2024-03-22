@@ -35,6 +35,7 @@ use crate::driver::test_env_api::{
     retry, GetFirstHealthyNodeSnapshot, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
     SshSession,
 };
+use crate::retry_with_msg;
 use ic_fstrim_tool::FsTrimMetrics;
 use ic_registry_subnet_type::SubnetType;
 use slog::{info, Logger};
@@ -85,11 +86,12 @@ pub fn ic_crypto_fstrim_tool_test(env: TestEnv) {
 }
 
 fn wait_for_initial_metrics_existence(node: &IcNodeSnapshot, logger: &Logger) {
-    retry(
+    retry_with_msg!(
+        "check if initial metrics exist",
         logger.clone(),
         Duration::from_secs(500),
         Duration::from_secs(5),
-        || node.block_on_bash_script(format!("[ -f {} ]", FSTRIM_METRICS_FILE).as_str()),
+        || node.block_on_bash_script(format!("[ -f {} ]", FSTRIM_METRICS_FILE).as_str())
     )
     .unwrap_or_else(|e| panic!("Node didn't initialize fstrim metrics in time because {e:?}"));
 }

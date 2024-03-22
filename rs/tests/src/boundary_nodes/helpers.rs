@@ -7,7 +7,7 @@ use crate::driver::{
         TopologySnapshot,
     },
 };
-
+use crate::retry_with_msg_async;
 use anyhow::{anyhow, bail, Error};
 use futures::future::join_all;
 use ic_agent::{export::Principal, Agent};
@@ -146,17 +146,23 @@ pub async fn set_counters_on_counter_canisters(
         let mut requests = vec![];
         let calls_count = counter_values[idx];
         for _ in 0..calls_count {
-            let request_id = retry_async(log, retry_timeout, backoff, || async {
-                let result = agent.update(&canister_id, "write").call().await;
-                if let Ok(id) = result {
-                    Ok(id)
-                } else {
-                    bail!(
-                        "write call on canister={canister_id} failed, err: {:?}",
-                        result.unwrap_err()
-                    )
+            let request_id = retry_with_msg_async!(
+                format!("write call on canister={canister_id}"),
+                log,
+                retry_timeout,
+                backoff,
+                || async {
+                    let result = agent.update(&canister_id, "write").call().await;
+                    if let Ok(id) = result {
+                        Ok(id)
+                    } else {
+                        bail!(
+                            "write call on canister={canister_id} failed, err: {:?}",
+                            result.unwrap_err()
+                        )
+                    }
                 }
-            })
+            )
             .await
             .expect("write call on canister={canister_id} failed");
 
@@ -168,17 +174,23 @@ pub async fn set_counters_on_counter_canisters(
     // Poll all results sequentially.
     // Overall polling duration should be roughly equal to a single polling duration. As all requests were submitted at nearly same time.
     for (canister_id, request_id) in requests_all.into_iter().flatten() {
-        retry_async(log, retry_timeout, backoff, || async {
-            let result = agent.wait(request_id, canister_id).await;
-            if result.is_ok() {
-                Ok(())
-            } else {
-                bail!(
-                    "wait call on canister={canister_id} failed, err: {:?}",
-                    result.unwrap_err()
-                )
+        retry_with_msg_async!(
+            format!("call wait on canister={canister_id}"),
+            log,
+            retry_timeout,
+            backoff,
+            || async {
+                let result = agent.wait(request_id, canister_id).await;
+                if result.is_ok() {
+                    Ok(())
+                } else {
+                    bail!(
+                        "wait call on canister={canister_id} failed, err: {:?}",
+                        result.unwrap_err()
+                    )
+                }
             }
-        })
+        )
         .await
         .expect("wait call on canister={canister_id} failed");
     }
@@ -194,17 +206,23 @@ pub async fn read_counters_on_counter_canisters(
     // Perform query read calls on canisters sequentially.
     let mut results = vec![];
     for canister_id in canisters {
-        let read_result = retry_async(log, retry_timeout, backoff, || async {
-            let read_result = agent.query(&canister_id, "read").call().await;
-            if let Ok(bytes) = read_result {
-                Ok(bytes)
-            } else {
-                bail!(
-                    "read call on canister={canister_id} failed, err: {:?}",
-                    read_result.unwrap_err()
-                )
+        let read_result = retry_with_msg_async!(
+            format!("call read on canister={canister_id}"),
+            log,
+            retry_timeout,
+            backoff,
+            || async {
+                let read_result = agent.query(&canister_id, "read").call().await;
+                if let Ok(bytes) = read_result {
+                    Ok(bytes)
+                } else {
+                    bail!(
+                        "read call on canister={canister_id} failed, err: {:?}",
+                        read_result.unwrap_err()
+                    )
+                }
             }
-        })
+        )
         .await
         .expect("read call on canister={canister_id} failed after {max_attempts} attempts");
 

@@ -20,6 +20,7 @@ use crate::driver::{
     test_env::TestEnv,
     test_env_api::{retry_async, READY_WAIT_TIMEOUT, RETRY_BACKOFF},
 };
+use crate::retry_with_msg_async;
 use crate::util::block_on;
 use anyhow::bail;
 use canister_test::Canister;
@@ -50,10 +51,18 @@ pub fn test(env: TestEnv) {
 }
 
 async fn test_proxy_canister(proxy_canister: &Canister<'_>, url: String, logger: Logger) {
-    retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
-        let context = "There is context to be appended in body";
-        let res =
-            proxy_canister
+    retry_with_msg_async!(
+        format!(
+            "calling send_request of proxy canister {} with URL {}",
+            proxy_canister.canister_id(),
+            url
+        ),
+        &logger,
+        READY_WAIT_TIMEOUT,
+        RETRY_BACKOFF,
+        || async {
+            let context = "There is context to be appended in body";
+            let res = proxy_canister
                 .update_(
                     "send_request",
                     candid_one::<
@@ -80,12 +89,13 @@ async fn test_proxy_canister(proxy_canister: &Canister<'_>, url: String, logger:
                 )
                 .await
                 .expect("Update call to proxy canister failed");
-        if !matches!(res, Ok(ref x) if x.status == 200 && x.body.contains(context)) {
-            bail!("Http request failed response: {:?}", res);
+            if !matches!(res, Ok(ref x) if x.status == 200 && x.body.contains(context)) {
+                bail!("Http request failed response: {:?}", res);
+            }
+            info!(&logger, "Update call succeeded! {:?}", res);
+            Ok(())
         }
-        info!(&logger, "Update call succeeded! {:?}", res);
-        Ok(())
-    })
+    )
     .await
     .expect("Timeout on doing a canister http call to the webserver");
 }

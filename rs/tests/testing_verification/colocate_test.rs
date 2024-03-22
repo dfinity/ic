@@ -19,6 +19,7 @@ use ic_tests::driver::test_env::{TestEnv, TestEnvAttribute};
 use ic_tests::driver::test_env_api::{retry, FarmBaseUrl, HasDependencies, SshSession};
 use ic_tests::driver::test_setup::GroupSetup;
 use ic_tests::driver::universal_vm::{DeployedUniversalVm, UniversalVm, UniversalVms};
+use ic_tests::retry_with_msg;
 use slog::{debug, error, info};
 use ssh2::Session;
 
@@ -122,12 +123,22 @@ fn setup(env: TestEnv) {
         env_tar_path,
         size / 1024,
     );
-    retry(env.logger(), SCP_RETRY_TIMEOUT, SCP_RETRY_BACKOFF, || {
-        let mut remote_file = session.scp_send(&to, 0o644, size, None)?;
-        let mut from_file = File::open(env_tar_path.clone())?;
-        std::io::copy(&mut from_file, &mut remote_file)?;
-        Ok(())
-    })
+    retry_with_msg!(
+        format!(
+            "scp-ing {:?} of {:?} KiB to {UVM_NAME}:{to:?}",
+            env_tar_path,
+            size / 1024,
+        ),
+        env.logger(),
+        SCP_RETRY_TIMEOUT,
+        SCP_RETRY_BACKOFF,
+        || {
+            let mut remote_file = session.scp_send(&to, 0o644, size, None)?;
+            let mut from_file = File::open(env_tar_path.clone())?;
+            std::io::copy(&mut from_file, &mut remote_file)?;
+            Ok(())
+        }
+    )
     .unwrap_or_else(|e| {
         panic!(
             "Failed to scp {:?} to {UVM_NAME}:{to:?} because: {e}",

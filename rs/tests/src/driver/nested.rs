@@ -2,6 +2,7 @@ use crate::driver::port_allocator::AddrType;
 use crate::driver::resource::AllocatedVm;
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::*;
+use crate::retry_with_msg;
 use crate::util::create_agent;
 use ic_agent::{Agent, AgentError};
 
@@ -161,9 +162,14 @@ impl SshSession for NestedVm {
     }
 
     fn block_on_ssh_session(&self) -> Result<Session> {
-        retry(self.env.logger(), SSH_RETRY_TIMEOUT, RETRY_BACKOFF, || {
-            self.get_ssh_session()
-        })
+        let vm = self.get_vm()?;
+        retry_with_msg!(
+            format!("get_ssh_session to {}", vm.ipv6.to_string()),
+            self.env.logger(),
+            SSH_RETRY_TIMEOUT,
+            RETRY_BACKOFF,
+            || { self.get_ssh_session() }
+        )
     }
 }
 

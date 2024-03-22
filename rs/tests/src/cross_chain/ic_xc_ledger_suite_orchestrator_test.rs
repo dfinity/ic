@@ -6,6 +6,7 @@ use crate::driver::test_env_api::{
 };
 use crate::nns::vote_and_execute_proposal;
 use crate::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
+use crate::retry_with_msg_async;
 use crate::util::{block_on, runtime_from_url};
 use anyhow::{anyhow, bail};
 use candid::{Encode, Nat, Principal};
@@ -121,7 +122,7 @@ pub fn ic_xc_ledger_suite_orchestrator_test(env: TestEnv) {
     });
 
     block_on(async {
-        let token_name: String = try_async(&logger, || {
+        let token_name: String = try_async("getting token_name", &logger, || {
             usdc_ledger_suite
                 .ledger
                 .query_("icrc1_name", candid_one, ())
@@ -136,7 +137,7 @@ pub fn ic_xc_ledger_suite_orchestrator_test(env: TestEnv) {
     );
 
     block_on(async {
-        let index_status: ic_icrc1_index_ng::Status = try_async(&logger, || {
+        let index_status: ic_icrc1_index_ng::Status = try_async("getting status", &logger, || {
             usdc_ledger_suite.index.query_("status", candid_one, ())
         })
         .await;
@@ -282,7 +283,8 @@ async fn add_erc_20_by_nns_proposal<'a>(
         "Upgrade finished. Ledger orchestrator is back running"
     );
 
-    let created_canister_ids = retry_async(
+    let created_canister_ids = retry_with_msg_async!(
+        "checking if all canisters are created",
         logger,
         Duration::from_secs(100),
         Duration::from_secs(1),
@@ -296,7 +298,7 @@ async fn add_erc_20_by_nns_proposal<'a>(
                     managed_canister_ids
                 ),
             }
-        },
+        }
     )
     .await
     .unwrap_or_else(|e| {
@@ -378,7 +380,12 @@ async fn status_of_nns_controlled_canister_satisfy<P: Fn(&CanisterStatusResult) 
 ) {
     use dfn_candid::candid;
 
-    retry_async(
+    retry_with_msg_async!(
+        format!(
+            "calling canister_status of {} to check if {} satisfies the predicate",
+            root_canister.canister_id(),
+            target_canister.canister_id()
+        ),
         logger,
         Duration::from_secs(60),
         Duration::from_secs(1),
@@ -401,7 +408,7 @@ async fn status_of_nns_controlled_canister_satisfy<P: Fn(&CanisterStatusResult) 
                     target_canister.canister_id()
                 )
             }
-        },
+        }
     )
     .await
     .unwrap_or_else(|e| {
@@ -455,16 +462,17 @@ impl<'a> ManagedCanisters<'a> {
     }
 }
 
-async fn try_async<F, Fut, R>(logger: &slog::Logger, f: F) -> R
+async fn try_async<S: AsRef<str>, F, Fut, R>(msg: S, logger: &slog::Logger, f: F) -> R
 where
     Fut: Future<Output = Result<R, String>>,
     F: Fn() -> Fut,
 {
-    retry_async(
+    retry_with_msg_async!(
+        msg.as_ref(),
         logger,
         Duration::from_secs(100),
         Duration::from_secs(1),
-        || async { f().await.map_err(|e| anyhow!(e)) },
+        || async { f().await.map_err(|e| anyhow!(e)) }
     )
     .await
     .expect("failed despite retries")

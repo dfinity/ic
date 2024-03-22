@@ -13,6 +13,7 @@ use crate::{
         },
         universal_vm::{DeployedUniversalVm, UniversalVm, UniversalVms},
     },
+    retry_with_msg_async,
     util::{agent_observes_canister_module, block_on},
 };
 use certificate_orchestrator_interface::InitArg;
@@ -446,12 +447,18 @@ async fn setup_certificate_orchestartor(
     .await
     .expect("failed to spawn task");
 
-    retry_async(&env.logger(), READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
-        match agent_observes_canister_module(&agent, &cid).await {
-            true => Ok(()),
-            false => Err(anyhow!("canister not ready")),
+    retry_with_msg_async!(
+        format!("observing canister module {}", cid.to_string()),
+        &env.logger(),
+        READY_WAIT_TIMEOUT,
+        RETRY_BACKOFF,
+        || async {
+            match agent_observes_canister_module(&agent, &cid).await {
+                true => Ok(()),
+                false => Err(anyhow!("canister not ready")),
+            }
         }
-    })
+    )
     .await
     .expect("failed to await orchestrator to become ready");
 
@@ -520,22 +527,28 @@ async fn setup_boundary_node(
     // Await NNS Registry
     let registry = RegistryCanister::new(bn.nns_node_urls);
 
-    retry_async(&env.logger(), READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
-        let (bytes, _) = registry
-            .get_value(
-                make_routing_table_record_key().into(), // key
-                None,                                   // version
-            )
-            .await
-            .context("failed to get routing table from registry")?;
+    retry_with_msg_async!(
+        "getting routing table from registry",
+        &env.logger(),
+        READY_WAIT_TIMEOUT,
+        RETRY_BACKOFF,
+        || async {
+            let (bytes, _) = registry
+                .get_value(
+                    make_routing_table_record_key().into(), // key
+                    None,                                   // version
+                )
+                .await
+                .context("failed to get routing table from registry")?;
 
-        let routes =
-            PbRoutingTable::decode(bytes.as_slice()).context("failed to decode registry routes")?;
+            let routes = PbRoutingTable::decode(bytes.as_slice())
+                .context("failed to decode registry routes")?;
 
-        RoutingTable::try_from(routes).context("failed to convert registry routes")?;
+            RoutingTable::try_from(routes).context("failed to convert registry routes")?;
 
-        Ok(())
-    })
+            Ok(())
+        }
+    )
     .await
     .context("failed to poll registry")?;
 

@@ -42,6 +42,7 @@ use crate::{
             READY_WAIT_TIMEOUT, RETRY_BACKOFF,
         },
     },
+    retry_with_msg,
     util::{block_on, MetricsFetcher},
 };
 use anyhow::{anyhow, bail};
@@ -165,13 +166,22 @@ fn test(env: TestEnv, expect_catch_up: bool) {
     // Wait until the node is available again
     // If the node is not able to catch up, we can't wait until the endpoint
     // reports healthy, therefore we simply await until we can reach the endpoint.
-    let _ = retry(log.clone(), READY_WAIT_TIMEOUT, RETRY_BACKOFF, || {
-        if malicious_node.status().is_err() {
-            bail!("Not ready!")
-        } else {
-            Ok(())
+    let _ = retry_with_msg!(
+        format!(
+            "check if malicious node {} is available",
+            malicious_node.node_id
+        ),
+        log.clone(),
+        READY_WAIT_TIMEOUT,
+        RETRY_BACKOFF,
+        || {
+            if malicious_node.status().is_err() {
+                bail!("Not ready!")
+            } else {
+                Ok(())
+            }
         }
-    });
+    );
 
     block_on(async move {
         info!(log, "Checking node catch up via metrics");
@@ -276,28 +286,43 @@ fn test(env: TestEnv, expect_catch_up: bool) {
 }
 
 pub fn await_node_certified_height(node: &IcNodeSnapshot, target_height: Height, log: Logger) {
-    retry(log, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || {
-        node.status()
-            .and_then(|response| match response.certified_height {
-                Some(height) if height > target_height => Ok(()),
-                Some(height) => bail!(
-                    "Target height not yet reached, height: {}, target: {}",
-                    height,
-                    target_height
-                ),
-                None => bail!("Certified height not available"),
-            })
-    })
+    retry_with_msg!(
+        format!(
+            "check if node {} is at height {}",
+            node.node_id, target_height
+        ),
+        log,
+        READY_WAIT_TIMEOUT,
+        RETRY_BACKOFF,
+        || {
+            node.status()
+                .and_then(|response| match response.certified_height {
+                    Some(height) if height > target_height => Ok(()),
+                    Some(height) => bail!(
+                        "Target height not yet reached, height: {}, target: {}",
+                        height,
+                        target_height
+                    ),
+                    None => bail!("Certified height not available"),
+                })
+        }
+    )
     .expect("The node did not reach the specified height in time")
 }
 
 fn get_certified_height(node: &IcNodeSnapshot, log: Logger) -> Height {
-    retry(log, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || {
-        node.status().and_then(|response| {
-            response
-                .certified_height
-                .ok_or_else(|| anyhow!("Certified height not available"))
-        })
-    })
+    retry_with_msg!(
+        format!("get certified height of node {}", node.node_id),
+        log,
+        READY_WAIT_TIMEOUT,
+        RETRY_BACKOFF,
+        || {
+            node.status().and_then(|response| {
+                response
+                    .certified_height
+                    .ok_or_else(|| anyhow!("Certified height not available"))
+            })
+        }
+    )
     .expect("Should be able to retrieve the certified height")
 }

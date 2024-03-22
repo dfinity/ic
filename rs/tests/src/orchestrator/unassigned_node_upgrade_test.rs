@@ -35,6 +35,7 @@ use crate::{
         wait_until_authentication_is_granted, AuthMean,
     },
     orchestrator::utils::upgrade::{fetch_unassigned_node_version, get_blessed_replica_versions},
+    retry_with_msg,
     util::{block_on, get_nns_node, runtime_from_url},
 };
 use anyhow::bail;
@@ -154,7 +155,11 @@ pub fn test(env: TestEnv) {
     });
 
     // wait for the unassigned node to be updated
-    retry(
+    retry_with_msg!(
+        format!(
+            "check if unassigned node {} is at version {}",
+            unassigned_node.node_id, target_version
+        ),
         env.logger(),
         secs(900),
         secs(10),
@@ -162,7 +167,7 @@ pub fn test(env: TestEnv) {
             Ok(ver) if (ver == target_version) => Ok(()),
             Ok(ver) => bail!("Unassigned node replica version: {}", ver),
             Err(_) => bail!("Waiting for the host to boot..."),
-        },
+        }
     )
     .expect("Unassigned node was not updated!");
     info!(logger, "Unassigned node was updated to: {}", target_version);
