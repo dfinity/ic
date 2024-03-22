@@ -6,7 +6,7 @@ use ic_protobuf::registry::{
     subnet::v1::{GossipConfig as GossipConfigProto, SubnetRecord as SubnetRecordProto},
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
-use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures};
+use ic_registry_subnet_features::{ChainKeyConfig, EcdsaConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::PrincipalId;
 use indexmap::IndexMap;
@@ -70,6 +70,7 @@ pub(crate) struct SubnetRecord {
     pub ssh_readonly_access: Vec<String>,
     pub ssh_backup_access: Vec<String>,
     pub ecdsa_config: Option<EcdsaConfig>,
+    pub chain_key_config: Option<ChainKeyConfig>,
 }
 
 impl SubnetRecord {
@@ -125,6 +126,8 @@ impl From<&SubnetRecordProto> for SubnetRecord {
                 .ecdsa_config
                 .as_ref()
                 .map(|c| c.clone().try_into().unwrap()),
+            // TODO[NNS1-2969]: Use this field rather than ecdsa_config.
+            chain_key_config: None,
         }
     }
 }

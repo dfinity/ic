@@ -218,6 +218,7 @@ pub fn test_subnet_record() -> SubnetRecord {
         ssh_readonly_access: vec![],
         ssh_backup_access: vec![],
         ecdsa_config: None,
+        chain_key_config: None,
     }
 }
 

@@ -75,6 +75,8 @@ pub struct SubnetRecord {
     /// ECDSA Config. This field cannot be set back to `None` once it has been set
     /// to `Some`. To remove a key, the list of `key_ids` can be set to not include a particular key.
     /// If a removed key is not held by another subnet, it will be lost.
+    ///
+    /// Deprecated; please use chain_key_config instead.
     #[prost(message, optional, tag = "27")]
     pub ecdsa_config: ::core::option::Option<EcdsaConfig>,
     /// If `true`, the subnet will be halted after reaching the next cup height: it will no longer
@@ -85,6 +87,11 @@ pub struct SubnetRecord {
     /// appropriate proposal which sets `is_halted` to `false` is approved.
     #[prost(bool, tag = "28")]
     pub halt_at_cup_height: bool,
+    /// Cryptographic key configuration. This field cannot be set back to `None` once it has been set
+    /// to `Some`. To remove a key, the list of `key_configs` can be set to not include a particular
+    /// key. If the removed key is not held by another subnet, it will be lost.
+    #[prost(message, optional, tag = "29")]
+    pub chain_key_config: ::core::option::Option<ChainKeyConfig>,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -363,6 +370,8 @@ pub struct SubnetFeatures {
     pub sev_enabled: ::core::option::Option<bool>,
 }
 /// Per subnet ECDSA configuration
+///
+/// Deprecated; please use ChainKeyConfig instead.
 #[derive(serde::Serialize, serde::Deserialize, candid::CandidType, Eq)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -382,6 +391,36 @@ pub struct EcdsaConfig {
     /// Key rotation period of a single node in milliseconds.
     /// If none is specified key rotation is disabled.
     #[prost(uint64, optional, tag = "6")]
+    pub idkg_key_rotation_period_ms: ::core::option::Option<u64>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct KeyConfig {
+    /// The key's identifier.
+    #[prost(message, optional, tag = "1")]
+    pub key_id: ::core::option::Option<super::super::crypto::v1::MasterPublicKeyId>,
+    /// Number of pre-signatures to create in advance.
+    #[prost(uint32, optional, tag = "3")]
+    pub pre_signatures_to_create_in_advance: ::core::option::Option<u32>,
+    /// The maximum number of signature requests that can be enqueued at once.
+    #[prost(uint32, optional, tag = "4")]
+    pub max_queue_size: ::core::option::Option<u32>,
+}
+/// Per-subnet chain key configuration
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ChainKeyConfig {
+    /// Configurations for keys held by the subnet.
+    #[prost(message, repeated, tag = "1")]
+    pub key_configs: ::prost::alloc::vec::Vec<KeyConfig>,
+    /// Signature requests will timeout after the given number of nano seconds.
+    #[prost(uint64, optional, tag = "2")]
+    pub signature_request_timeout_ns: ::core::option::Option<u64>,
+    /// Key rotation period of a single node in milliseconds.
+    /// If none is specified key rotation is disabled.
+    #[prost(uint64, optional, tag = "3")]
     pub idkg_key_rotation_period_ms: ::core::option::Option<u64>,
 }
 #[derive(

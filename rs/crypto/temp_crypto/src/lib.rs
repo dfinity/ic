@@ -1044,6 +1044,8 @@ impl EcdsaSubnetConfig {
                     idkg_key_rotation_period_ms: key_rotation_period
                         .map(|key_rotation_period| key_rotation_period.as_millis() as u64),
                 }),
+                // TODO[NNS1-2969]: Use this field rather than ecdsa_config.
+                chain_key_config: None,
             },
         }
     }
