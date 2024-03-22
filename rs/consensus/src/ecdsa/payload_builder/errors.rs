@@ -15,7 +15,7 @@ use ic_types::{
 
 use super::InvalidChainCacheError;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) enum EcdsaPayloadError {
     RegistryClientError(RegistryClientError),
     MegaKeyFromRegistryError(MegaKeyFromRegistryError),

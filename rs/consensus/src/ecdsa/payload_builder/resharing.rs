@@ -197,8 +197,6 @@ pub mod test_utils {
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-
     use super::test_utils::*;
     use super::*;
 
@@ -211,15 +209,20 @@ mod tests {
     use ic_types::consensus::ecdsa::EcdsaPayload;
 
     use crate::ecdsa::test_utils::{
-        empty_response, set_up_ecdsa_payload, TestEcdsaBlockReader, TestEcdsaTranscriptBuilder,
+        empty_response, fake_ecdsa_key_id, set_up_ecdsa_payload, TestEcdsaBlockReader,
+        TestEcdsaTranscriptBuilder,
     };
 
-    fn set_up(should_create_key_transcript: bool) -> (EcdsaPayload, TestEcdsaBlockReader) {
+    fn set_up(
+        key_ids: Vec<EcdsaKeyId>,
+        should_create_key_transcript: bool,
+    ) -> (EcdsaPayload, TestEcdsaBlockReader) {
         let mut rng = reproducible_rng();
         let (ecdsa_payload, _env, block_reader) = set_up_ecdsa_payload(
             &mut rng,
             subnet_test_id(1),
             /*nodes_count=*/ 4,
+            key_ids,
             should_create_key_transcript,
         );
 
@@ -228,9 +231,12 @@ mod tests {
 
     #[test]
     fn test_ecdsa_initiate_reshare_requests_should_not_accept_when_key_transcript_not_created() {
-        let (mut payload, _block_reader) = set_up(/*should_create_key_transcript=*/ false);
-        let request =
-            create_reshare_request(EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(), 1, 1);
+        let key_id = fake_ecdsa_key_id();
+        let (mut payload, _block_reader) = set_up(
+            vec![key_id.clone()],
+            /*should_create_key_transcript=*/ false,
+        );
+        let request = create_reshare_request(key_id, 1, 1);
 
         initiate_reshare_requests(&mut payload, BTreeSet::from([request]));
 
@@ -240,9 +246,12 @@ mod tests {
 
     #[test]
     fn test_ecdsa_initiate_reshare_requests_good_path() {
-        let (mut payload, _block_reader) = set_up(/*should_create_key_transcript=*/ true);
-        let request =
-            create_reshare_request(EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(), 1, 1);
+        let key_id = fake_ecdsa_key_id();
+        let (mut payload, _block_reader) = set_up(
+            vec![key_id.clone()],
+            /*should_create_key_transcript=*/ true,
+        );
+        let request = create_reshare_request(key_id, 1, 1);
 
         initiate_reshare_requests(&mut payload, BTreeSet::from([request.clone()]));
 
@@ -252,8 +261,11 @@ mod tests {
 
     #[test]
     fn test_ecdsa_initiate_reshare_requests_incremental() {
-        let (mut payload, _block_reader) = set_up(/*should_create_key_transcript=*/ true);
-        let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
+        let key_id = fake_ecdsa_key_id();
+        let (mut payload, _block_reader) = set_up(
+            vec![key_id.clone()],
+            /*should_create_key_transcript=*/ true,
+        );
         let request = create_reshare_request(key_id.clone(), 1, 1);
         let request_2 = create_reshare_request(key_id.clone(), 2, 2);
 
@@ -267,9 +279,12 @@ mod tests {
 
     #[test]
     fn test_ecdsa_initiate_reshare_requests_should_not_accept_already_completed() {
-        let (mut payload, _block_reader) = set_up(/*should_create_key_transcript=*/ true);
-        let request =
-            create_reshare_request(EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(), 1, 1);
+        let key_id = fake_ecdsa_key_id();
+        let (mut payload, _block_reader) = set_up(
+            vec![key_id.clone()],
+            /*should_create_key_transcript=*/ true,
+        );
+        let request = create_reshare_request(key_id, 1, 1);
         payload.xnet_reshare_agreements.insert(
             request.clone(),
             ecdsa::CompletedReshareRequest::ReportedToExecution,
@@ -283,10 +298,13 @@ mod tests {
 
     #[test]
     fn test_ecdsa_update_completed_reshare_requests() {
-        let (mut payload, block_reader) = set_up(/*should_create_key_transcript=*/ true);
+        let key_id = fake_ecdsa_key_id();
+        let (mut payload, block_reader) = set_up(
+            vec![key_id.clone()],
+            /*should_create_key_transcript=*/ true,
+        );
         let transcript_builder = TestEcdsaTranscriptBuilder::new();
 
-        let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
         let request_1 = create_reshare_request(key_id.clone(), 1, 1);
         let request_2 = create_reshare_request(key_id.clone(), 2, 2);
         initiate_reshare_requests(

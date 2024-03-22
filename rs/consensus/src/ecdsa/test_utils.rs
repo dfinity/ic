@@ -10,8 +10,7 @@ use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_crypto_temp_crypto::TempCryptoComponent;
 use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_idkg_dealing_for_tests;
 use ic_crypto_test_utils_canister_threshold_sigs::{
-    generate_key_transcript, setup_masked_random_params, CanisterThresholdSigTestEnvironment,
-    IDkgParticipants, IntoBuilder,
+    setup_masked_random_params, CanisterThresholdSigTestEnvironment, IDkgParticipants, IntoBuilder,
 };
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
@@ -36,7 +35,7 @@ use ic_types::consensus::ecdsa::{
     IDkgTranscriptOperationRef, IDkgTranscriptParamsRef, KeyTranscriptCreation, MaskedTranscript,
     PreSignatureQuadrupleRef, QuadrupleId, RequestId, ReshareOfMaskedParams,
     ThresholdEcdsaSigInputsRef, TranscriptAttributes, TranscriptLookupError, TranscriptRef,
-    UnmaskedTranscript,
+    UnmaskedTranscript, UnmaskedTranscriptWithAttributes,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgComplaint, IDkgDealing, IDkgDealingSupport, IDkgMaskedTranscriptOrigin, IDkgOpening,
@@ -1462,6 +1461,16 @@ pub(crate) fn is_handle_invalid(change_set: &[EcdsaChangeAction], msg_id: &Ecdsa
 }
 
 pub(crate) fn empty_ecdsa_payload(subnet_id: SubnetId) -> EcdsaPayload {
+    empty_ecdsa_payload_with_key_ids(subnet_id, vec![fake_ecdsa_key_id()])
+}
+
+pub(crate) fn empty_ecdsa_payload_with_key_ids(
+    subnet_id: SubnetId,
+    key_ids: Vec<EcdsaKeyId>,
+) -> EcdsaPayload {
+    assert_eq!(key_ids.len(), 1, "Multiple key ids not support yet");
+    let key_id = key_ids.first().unwrap().clone();
+
     EcdsaPayload {
         signature_agreements: BTreeMap::new(),
         ongoing_signatures: BTreeMap::new(),
@@ -1474,7 +1483,7 @@ pub(crate) fn empty_ecdsa_payload(subnet_id: SubnetId) -> EcdsaPayload {
         key_transcript: EcdsaKeyTranscript {
             current: None,
             next_in_creation: KeyTranscriptCreation::Begin,
-            key_id: fake_ecdsa_key_id(),
+            key_id,
         },
     }
 }
@@ -1517,6 +1526,7 @@ pub(crate) fn set_up_ecdsa_payload(
     rng: &mut ReproducibleRng,
     subnet_id: SubnetId,
     nodes_count: usize,
+    ecdsa_key_ids: Vec<EcdsaKeyId>,
     should_create_key_transcript: bool,
 ) -> (
     EcdsaPayload,
@@ -1524,37 +1534,64 @@ pub(crate) fn set_up_ecdsa_payload(
     TestEcdsaBlockReader,
 ) {
     let env = CanisterThresholdSigTestEnvironment::new(nodes_count, rng);
-    let (dealers, receivers) =
-        env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
 
-    let mut ecdsa_payload = empty_ecdsa_payload(subnet_id);
+    let mut ecdsa_payload = empty_ecdsa_payload_with_key_ids(subnet_id, ecdsa_key_ids);
     let mut block_reader = TestEcdsaBlockReader::new();
 
     if should_create_key_transcript {
-        let key_transcript = generate_key_transcript(
-            &env,
-            &dealers,
-            &receivers,
-            AlgorithmId::ThresholdEcdsaSecp256k1,
-            rng,
-        );
-        let key_transcript_ref =
-            ecdsa::UnmaskedTranscript::try_from((Height::new(100), &key_transcript)).unwrap();
+        let (key_transcript, key_transcript_ref) = ecdsa_payload.generate_current_key(&env, rng);
 
-        ecdsa_payload.key_transcript.current = Some(ecdsa::UnmaskedTranscriptWithAttributes::new(
-            key_transcript.to_attributes(),
-            key_transcript_ref,
-        ));
-
-        block_reader.add_transcript(*key_transcript_ref.as_ref(), key_transcript);
+        block_reader.add_transcript(*key_transcript_ref.as_ref(), key_transcript.clone());
     }
 
     (ecdsa_payload, env, block_reader)
 }
 
+pub(crate) fn generate_key_transcript(
+    env: &CanisterThresholdSigTestEnvironment,
+    rng: &mut ReproducibleRng,
+    height: Height,
+) -> (
+    IDkgTranscript,
+    ecdsa::UnmaskedTranscript,
+    UnmaskedTranscriptWithAttributes,
+) {
+    let (dealers, receivers) =
+        env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
+
+    let key_transcript = ic_crypto_test_utils_canister_threshold_sigs::generate_key_transcript(
+        env,
+        &dealers,
+        &receivers,
+        AlgorithmId::ThresholdEcdsaSecp256k1,
+        rng,
+    );
+    let key_transcript_ref =
+        ecdsa::UnmaskedTranscript::try_from((height, &key_transcript)).unwrap();
+
+    let with_attributes = ecdsa::UnmaskedTranscriptWithAttributes::new(
+        key_transcript.to_attributes(),
+        key_transcript_ref,
+    );
+
+    (key_transcript, key_transcript_ref, with_attributes)
+}
+
 pub(crate) trait EcdsaPayloadTestHelper {
     fn peek_next_transcript_id(&self) -> IDkgTranscriptId;
+
     fn peek_next_quadruple_id(&self) -> QuadrupleId;
+
+    fn generate_current_key(
+        &mut self,
+        env: &CanisterThresholdSigTestEnvironment,
+        rng: &mut ReproducibleRng,
+    ) -> (IDkgTranscript, ecdsa::UnmaskedTranscript);
+
+    /// Retrieves the only key transcript in the ecdsa payload.
+    ///
+    /// Panics if there are multiple or no keys.
+    fn single_key_transcript(&self) -> &EcdsaKeyTranscript;
 }
 
 impl EcdsaPayloadTestHelper for EcdsaPayload {
@@ -1564,5 +1601,22 @@ impl EcdsaPayloadTestHelper for EcdsaPayload {
 
     fn peek_next_quadruple_id(&self) -> QuadrupleId {
         self.uid_generator.clone().next_quadruple_id()
+    }
+
+    fn single_key_transcript(&self) -> &EcdsaKeyTranscript {
+        &self.key_transcript
+    }
+
+    fn generate_current_key(
+        &mut self,
+        env: &CanisterThresholdSigTestEnvironment,
+        rng: &mut ReproducibleRng,
+    ) -> (IDkgTranscript, ecdsa::UnmaskedTranscript) {
+        let (key_transcript, key_transcript_ref, current) =
+            generate_key_transcript(env, rng, Height::new(100));
+
+        self.key_transcript.current = Some(current);
+
+        (key_transcript, key_transcript_ref)
     }
 }
