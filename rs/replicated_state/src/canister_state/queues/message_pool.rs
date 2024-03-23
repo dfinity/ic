@@ -67,16 +67,14 @@ pub struct MessagePool {
 
     /// Deadline priority queue, earliest deadlines first.
     ///
-    /// Message IDs break ties, although this is not necessary to ensure
-    /// determinism: applying the same operations (insert, remove, trim) in the same
-    /// order already does that.
+    /// Message IDs break ties, ensuring deterministic representation across
+    /// replicas.
     deadline_queue: BinaryHeap<(Reverse<CoarseTime>, MessageId)>,
 
     /// Load shedding priority queue: largest message first.
     ///
-    /// Message IDs break ties, although this is not necessary to ensure
-    /// determinism: applying the same operations (insert, remove, trim) in the same
-    /// order already does that.
+    /// Message IDs break ties, ensuring deterministic representation across
+    /// replicas.
     size_queue: BinaryHeap<(usize, MessageId)>,
 
     /// The ID to be assigned to the next message. Bumped every time a new message
