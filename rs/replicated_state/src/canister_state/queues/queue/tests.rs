@@ -8,6 +8,113 @@ use ic_types::{messages::RequestOrResponse, time::UNIX_EPOCH, Time};
 use proptest::prelude::*;
 
 #[test]
+fn canister_queue_constructor_test() {
+    let mut queue = CanisterQueue::new(14);
+    assert_eq!(queue.len(), 0);
+    assert_eq!(queue.pop(), None);
+}
+
+#[test]
+fn canister_queue_with_message_is_not_empty() {
+    let mut queue = CanisterQueue::new(14);
+
+    queue.push_request(MessageId::new(13));
+    assert_eq!(queue.len(), 1);
+    assert!(queue.has_used_slots());
+}
+
+#[test]
+fn canister_queue_with_reservation_is_not_empty() {
+    let mut queue = CanisterQueue::new(14);
+    queue.try_reserve_response_slot().unwrap();
+
+    assert_eq!(queue.len(), 0);
+    assert!(queue.has_used_slots());
+}
+
+// Pushing a request succeeds if there is space.
+#[test]
+fn canister_queue_push_request_succeeds() {
+    let capacity: usize = 1;
+    let mut queue = CanisterQueue::new(capacity);
+
+    assert_eq!(queue.available_request_slots(), 1);
+    queue.push_request(MessageId::new(13));
+    assert_eq!(queue.available_request_slots(), 0);
+    assert!(queue.check_has_request_slot().is_err());
+
+    assert_eq!(1, queue.len());
+}
+
+// Reserving a slot, then pushing a response succeeds if there is space.
+#[test]
+fn canister_queue_push_response_succeeds() {
+    let capacity: usize = 1;
+    let mut queue = CanisterQueue::new(capacity);
+
+    assert_eq!(queue.available_response_slots(), 1);
+    queue.try_reserve_response_slot().unwrap();
+    assert_eq!(queue.available_response_slots(), 0);
+    queue.push_response(MessageId::new(13));
+    assert_eq!(queue.available_response_slots(), 0);
+
+    assert_eq!(1, queue.len());
+}
+
+/// Test that overfilling an output queue with messages results in failed
+/// pushes; also verifies that pushes below capacity succeed.
+#[test]
+#[should_panic(expected = "assertion failed: self.request_slots < self.capacity")]
+fn canister_queue_push_to_full_queue_fails() {
+    // First fill up the queue.
+    let capacity: usize = 2;
+    let mut queue = CanisterQueue::new(capacity);
+    for i in 0..capacity {
+        queue.push_request(MessageId::new(i as u64));
+    }
+    assert_eq!(queue.len(), 2);
+    assert!(queue.has_used_slots());
+    assert_eq!(queue.available_request_slots(), 0);
+    assert_eq!(
+        queue.check_has_request_slot(),
+        Err(StateError::QueueFull { capacity })
+    );
+
+    queue.push_request(MessageId::new(13));
+}
+
+/// Test that overfilling an output queue with reservations results in failed
+/// reservations; also verifies that reservations below capacity succeed.
+#[test]
+fn canister_queue_try_reserve_in_full_queue_fails() {
+    // First fill up the queue.
+    let capacity: usize = 2;
+    let mut queue = CanisterQueue::new(capacity);
+    for _index in 0..capacity {
+        queue.try_reserve_response_slot().unwrap();
+    }
+    assert_eq!(queue.len(), 0);
+    assert_eq!(queue.reserved_slots(), capacity);
+    assert!(queue.has_used_slots());
+    assert_eq!(queue.available_response_slots(), 0);
+
+    // Try to reserve a slot.
+    assert_eq!(
+        queue.try_reserve_response_slot(),
+        Err(StateError::QueueFull { capacity })
+    );
+}
+
+#[test]
+fn canister_queue_push_without_reserved_slot_fails() {
+    let mut queue = CanisterQueue::new(10);
+    assert_eq!(
+        queue.push_response(MessageId::new(13)),
+        Err(StateError::QueueFull { capacity: 10 })
+    );
+}
+
+#[test]
 fn input_queue_constructor_test() {
     let capacity: usize = 14;
     let mut queue = InputQueue::new(capacity);
@@ -141,26 +248,28 @@ fn input_queue_decode_with_non_empty_deadlines_fails() {
 
 #[test]
 fn output_queue_constructor_test() {
-    let mut queue = CanisterQueue::new(14);
-    assert_eq!(queue.len(), 0);
+    let mut queue = OutputQueue::new(14);
+    assert_eq!(queue.num_messages(), 0);
     assert_eq!(queue.pop(), None);
 }
 
 #[test]
 fn output_queue_with_message_is_not_empty() {
-    let mut queue = CanisterQueue::new(14);
+    let mut queue = OutputQueue::new(14);
 
-    queue.push_request(MessageId::new(13));
-    assert_eq!(queue.len(), 1);
+    queue
+        .push_request(RequestBuilder::default().build().into(), UNIX_EPOCH)
+        .expect("could push");
+    assert_eq!(queue.num_messages(), 1);
     assert!(queue.has_used_slots());
 }
 
 #[test]
 fn output_queue_with_reservation_is_not_empty() {
-    let mut queue = CanisterQueue::new(14);
-    queue.try_reserve_response_slot().unwrap();
+    let mut queue = OutputQueue::new(14);
+    queue.reserve_slot().unwrap();
 
-    assert_eq!(queue.len(), 0);
+    assert_eq!(queue.num_messages(), 0);
     assert!(queue.has_used_slots());
 }
 
@@ -168,82 +277,70 @@ fn output_queue_with_reservation_is_not_empty() {
 #[test]
 fn output_queue_push_request_succeeds() {
     let capacity: usize = 1;
-    let mut output_queue = CanisterQueue::new(capacity);
+    let mut output_queue = OutputQueue::new(capacity);
 
-    assert_eq!(output_queue.available_request_slots(), 1);
-    output_queue.push_request(MessageId::new(13));
-    assert_eq!(output_queue.available_request_slots(), 0);
+    assert_eq!(output_queue.queue.available_request_slots(), 1);
+    output_queue
+        .push_request(RequestBuilder::default().build().into(), UNIX_EPOCH)
+        .unwrap();
+    assert_eq!(output_queue.queue.available_request_slots(), 0);
     assert!(output_queue.check_has_request_slot().is_err());
 
-    assert_eq!(1, output_queue.len());
+    assert_eq!(1, output_queue.num_messages());
 }
 
 // Reserving a slot, then pushing a response succeeds if there is space.
 #[test]
 fn output_queue_push_response_succeeds() {
     let capacity: usize = 1;
-    let mut output_queue = CanisterQueue::new(capacity);
+    let mut output_queue = OutputQueue::new(capacity);
 
-    assert_eq!(output_queue.available_response_slots(), 1);
-    output_queue.try_reserve_response_slot().unwrap();
-    assert_eq!(output_queue.available_response_slots(), 0);
-    output_queue.push_response(MessageId::new(13));
-    assert_eq!(output_queue.available_response_slots(), 0);
+    assert_eq!(output_queue.queue.available_response_slots(), 1);
+    output_queue.reserve_slot().unwrap();
+    assert_eq!(output_queue.queue.available_response_slots(), 0);
+    output_queue.push_response(ResponseBuilder::default().build().into());
+    assert_eq!(output_queue.queue.available_response_slots(), 0);
 
-    assert_eq!(1, output_queue.len());
+    assert_eq!(1, output_queue.num_messages());
 }
 
-/// Test that overfilling an output queue with messages results in failed
-/// pushes; also verifies that pushes below capacity succeed.
+/// Test that overfilling an output queue with messages and reservations
+/// results in failed pushes and reservations; also verifies that
+/// pushes and reservations below capacity succeeds.
 #[test]
-#[should_panic(expected = "assertion failed: self.request_slots < self.capacity")]
 fn output_queue_push_to_full_queue_fails() {
     // First fill up the queue.
     let capacity: usize = 2;
-    let mut output_queue = CanisterQueue::new(capacity);
-    for i in 0..capacity {
-        output_queue.push_request(MessageId::new(i as u64));
-    }
-    assert_eq!(output_queue.len(), 2);
-    assert!(output_queue.has_used_slots());
-    assert_eq!(output_queue.available_request_slots(), 0);
-    assert_eq!(
-        output_queue.check_has_request_slot(),
-        Err(StateError::QueueFull { capacity })
-    );
-
-    output_queue.push_request(MessageId::new(13));
-}
-
-/// Test that overfilling an output queue with reservations results in failed
-/// reservations; also verifies that reservations below capacity succeed.
-#[test]
-fn output_queue_try_reserve_in_full_queue_fails() {
-    // First fill up the queue.
-    let capacity: usize = 2;
-    let mut output_queue = CanisterQueue::new(capacity);
+    let mut output_queue = OutputQueue::new(capacity);
     for _index in 0..capacity {
-        output_queue.try_reserve_response_slot().unwrap();
+        output_queue
+            .push_request(RequestBuilder::default().build().into(), UNIX_EPOCH)
+            .unwrap();
     }
-    assert_eq!(output_queue.len(), 0);
-    assert_eq!(output_queue.reserved_slots(), capacity);
-    assert!(output_queue.has_used_slots());
-    assert_eq!(output_queue.available_response_slots(), 0);
+    for _index in 0..capacity {
+        output_queue.reserve_slot().unwrap();
+    }
+    assert_eq!(output_queue.num_messages(), capacity);
 
-    // Try to reserve a slot.
+    // Now push an extraneous message in
     assert_eq!(
-        output_queue.try_reserve_response_slot(),
+        output_queue
+            .push_request(RequestBuilder::default().build().into(), UNIX_EPOCH,)
+            .map_err(|(err, _)| err),
+        Err(StateError::QueueFull { capacity })
+    );
+    // Or try to reserve a slot.
+    assert_eq!(
+        output_queue.reserve_slot(),
         Err(StateError::QueueFull { capacity })
     );
 }
 
 #[test]
+#[should_panic(expected = "called `Result::unwrap()` on an `Err` value")]
 fn output_push_without_reserved_slot_fails() {
-    let mut queue = CanisterQueue::new(10);
-    assert_eq!(
-        queue.push_response(MessageId::new(13)),
-        Err(StateError::QueueFull { capacity: 10 })
-    );
+    let mut queue = OutputQueue::new(10);
+    queue.push_response(ResponseBuilder::default().build().into());
 }
 
 /// An explicit example of deadlines in OutputQueue, where we manually fill
