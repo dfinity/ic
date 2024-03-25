@@ -263,7 +263,7 @@ fn test_appending_logs_in_trapped_update_call(#[strategy("\\PC*")] message: Stri
                 CanisterLogRecord {
                     idx: 1,
                     timestamp_nanos: 1620328630000000000,
-                    content: b"Canister explicitly called trap without a message".to_vec()
+                    content: b"[TRAP]: (no message)".to_vec()
                 }
             ]
         }
@@ -314,7 +314,7 @@ fn test_appending_logs_in_trapped_replicated_query_call(#[strategy("\\PC*")] mes
                 CanisterLogRecord {
                     idx: 1,
                     timestamp_nanos: 1620328630000000000,
-                    content: b"Canister explicitly called trap without a message".to_vec()
+                    content: b"[TRAP]: (no message)".to_vec()
                 }
             ]
         }
@@ -451,7 +451,7 @@ fn test_logging_in_trapped_wasm_execution() {
             canister_log_records: vec![CanisterLogRecord {
                 idx: 0,
                 timestamp_nanos: 1620328630000000000,
-                content: b"Canister trapped: stable memory out of bounds".to_vec()
+                content: b"[TRAP]: stable memory out of bounds".to_vec()
             }]
         }
     );
@@ -468,7 +468,7 @@ fn test_logging_explicit_canister_trap_without_message() {
             canister_log_records: vec![CanisterLogRecord {
                 idx: 0,
                 timestamp_nanos: 1620328630000000000,
-                content: b"Canister explicitly called trap without a message".to_vec()
+                content: b"[TRAP]: (no message)".to_vec()
             }]
         }
     );
@@ -489,7 +489,7 @@ fn test_logging_explicit_canister_trap_with_message() {
             canister_log_records: vec![CanisterLogRecord {
                 idx: 0,
                 timestamp_nanos: 1620328630000000000,
-                content: b"Canister explicitly called trap: some text".to_vec()
+                content: b"[TRAP]: some text".to_vec()
             }]
         }
     );
