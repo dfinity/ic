@@ -763,15 +763,11 @@ pub fn process(
         }
         Err(err) => {
             if let Some(log_message) = match err {
-                HypervisorError::Trapped(trap_code) => {
-                    Some(format!("Canister trapped: {}", trap_code))
-                }
+                HypervisorError::Trapped(trap_code) => Some(format!("[TRAP]: {}", trap_code)),
                 HypervisorError::CalledTrap(text) if text.is_empty() => {
-                    Some("Canister explicitly called trap without a message".to_string())
+                    Some("[TRAP]: (no message)".to_string())
                 }
-                HypervisorError::CalledTrap(text) => {
-                    Some(format!("Canister explicitly called trap: {}", text))
-                }
+                HypervisorError::CalledTrap(text) => Some(format!("[TRAP]: {}", text)),
                 _ => None,
             } {
                 canister_log.add_record(timestamp_nanos, log_message.as_bytes());
