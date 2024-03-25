@@ -176,7 +176,7 @@ use ic_utils::interfaces::ManagementCanister;
 use icp_ledger::{AccountIdentifier, LedgerCanisterInitPayload, Tokens};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use slog::{error, info, warn, Logger};
+use slog::{debug, error, info, warn, Logger};
 use ssh2::Session;
 use std::cmp::max;
 use std::collections::{HashMap, HashSet};
@@ -2028,7 +2028,7 @@ impl SshSession for IcNodeSnapshot {
 macro_rules! retry_with_msg {
     ($msg:expr, $log:expr, $timeout:expr, $backoff:expr, $f:expr) => {
         retry(
-            format!("{} ({}:{})", $msg, file!(), line!()),
+            format!("{} [{}:{}]", $msg, file!(), line!()),
             $log,
             $timeout,
             $backoff,
@@ -2050,24 +2050,31 @@ where
     let msg = msg.as_ref();
     let mut attempt = 1;
     let start = Instant::now();
-    info!(
+    debug!(
         log,
-        "Retrying {} for a maximum of {:?} with a linear backoff of {:?}", msg, timeout, backoff
+        "Func=\"{msg}\" is being retried for the maximum of {timeout:?} with a linear backoff of {backoff:?}"
     );
     loop {
         match f() {
-            Ok(v) => break Ok(v),
-            Err(e) => {
-                if start.elapsed() > timeout {
-                    let err_msg = e.to_string();
-                    break Err(e.context(format!("{} timed out! Last error: {}", msg, err_msg)));
-                }
-                info!(
+            Ok(v) => {
+                debug!(
                     log,
-                    "{} attempt {} failed. Error: {}",
-                    msg,
-                    attempt,
-                    trunc_error(e.to_string())
+                    "Func=\"{msg}\" succeeded after {:?} on attempt {attempt}",
+                    start.elapsed()
+                );
+                break Ok(v);
+            }
+            Err(err) => {
+                let err_msg = err.to_string();
+                if start.elapsed() > timeout {
+                    break Err(err.context(format!(
+                        "Func=\"{msg}\" timed out after {:?} on attempt {attempt}. Last error: {err_msg}", start.elapsed()
+                    )));
+                }
+                debug!(
+                    log,
+                    "Func=\"{msg}\" failed on attempt {attempt}. Error: {}",
+                    trunc_error(err_msg)
                 );
                 std::thread::sleep(backoff);
                 attempt += 1;
@@ -2087,7 +2094,7 @@ fn trunc_error(err_str: String) -> String {
 macro_rules! retry_with_msg_async {
     ($msg:expr, $log:expr, $timeout:expr, $backoff:expr, $f:expr) => {
         retry_async(
-            format!("{} ({}:{})", $msg, file!(), line!()),
+            format!("{} [{}:{}]", $msg, file!(), line!()),
             $log,
             $timeout,
             $backoff,
@@ -2110,19 +2117,33 @@ where
     let msg = msg.as_ref();
     let mut attempt = 1;
     let start = Instant::now();
-    info!(
+    debug!(
         log,
-        "Retrying {} for a maximum of {:?} with a linear backoff of {:?}", msg, timeout, backoff
+        "Func=\"{msg}\" is being retried for the maximum of {timeout:?} with a linear backoff of {backoff:?}"
     );
     loop {
         match f().await {
-            Ok(v) => break Ok(v),
-            Err(e) => {
+            Ok(v) => {
+                debug!(
+                    log,
+                    "Func=\"{msg}\" succeeded after {:?} on attempt {attempt}",
+                    start.elapsed()
+                );
+                break Ok(v);
+            }
+            Err(err) => {
+                let err_msg = err.to_string();
                 if start.elapsed() > timeout {
-                    let err_msg = e.to_string();
-                    break Err(e.context(format!("{} timed out! Last error: {}", msg, err_msg)));
+                    break Err(err.context(format!(
+                        "Func=\"{msg}\" timed out after {:?} on attempt {attempt}. Last error: {err_msg}",
+                        start.elapsed(),
+                    )));
                 }
-                info!(log, "{} attempt {} failed. Error: {:?}", msg, attempt, e);
+                debug!(
+                    log,
+                    "Func=\"{msg}\" failed on attempt {attempt}. Error: {}",
+                    trunc_error(err_msg)
+                );
                 tokio::time::sleep(backoff).await;
                 attempt += 1;
             }
