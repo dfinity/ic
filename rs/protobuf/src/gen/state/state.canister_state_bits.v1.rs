@@ -542,6 +542,12 @@ pub struct CanisterLogRecord {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SnapshotId {
+    #[prost(bytes = "vec", tag = "1")]
+    pub content: ::prost::alloc::vec::Vec<u8>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterStateBits {
     #[prost(uint64, tag = "2")]
     pub last_full_execution_round: u64,
@@ -637,6 +643,9 @@ pub struct CanisterStateBits {
     /// The next local snapshot ID.
     #[prost(uint64, tag = "46")]
     pub next_snapshot_id: u64,
+    /// The set of snapshots ids of the canister.
+    #[prost(message, repeated, tag = "47")]
+    pub snapshot_ids: ::prost::alloc::vec::Vec<SnapshotId>,
     #[prost(oneof = "canister_state_bits::CanisterStatus", tags = "11, 12, 13")]
     pub canister_status: ::core::option::Option<canister_state_bits::CanisterStatus>,
 }

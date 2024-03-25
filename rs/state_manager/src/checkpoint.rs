@@ -426,6 +426,7 @@ pub fn load_canister_state<P: ReadPolicy>(
         canister_state_bits.canister_log,
         canister_state_bits.wasm_memory_limit,
         canister_state_bits.next_snapshot_id,
+        canister_state_bits.snapshot_ids,
     );
 
     let canister_state = CanisterState {
