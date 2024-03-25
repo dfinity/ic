@@ -2072,6 +2072,36 @@ pub enum SchnorrAlgorithm {
     Ed25519,
 }
 
+impl TryFrom<pb_registry_crypto::SchnorrAlgorithm> for SchnorrAlgorithm {
+    type Error = ProxyDecodeError;
+
+    fn try_from(item: pb_registry_crypto::SchnorrAlgorithm) -> Result<Self, Self::Error> {
+        match item {
+            pb_registry_crypto::SchnorrAlgorithm::Bip340secp256k1 => {
+                Ok(SchnorrAlgorithm::Bip340Secp256k1)
+            }
+            pb_registry_crypto::SchnorrAlgorithm::Ed25519 => Ok(SchnorrAlgorithm::Ed25519),
+            pb_registry_crypto::SchnorrAlgorithm::Unspecified => {
+                Err(ProxyDecodeError::ValueOutOfRange {
+                    typ: "SchnorrAlgorithm",
+                    err: format!("Unable to convert {:?} to a SchnorrAlgorithm", item),
+                })
+            }
+        }
+    }
+}
+
+impl From<SchnorrAlgorithm> for pb_registry_crypto::SchnorrAlgorithm {
+    fn from(item: SchnorrAlgorithm) -> Self {
+        match item {
+            SchnorrAlgorithm::Bip340Secp256k1 => {
+                pb_registry_crypto::SchnorrAlgorithm::Bip340secp256k1
+            }
+            SchnorrAlgorithm::Ed25519 => pb_registry_crypto::SchnorrAlgorithm::Ed25519,
+        }
+    }
+}
+
 /// Unique identifier for a key that can be used for Schnorr signatures. The name
 /// is just a identifier, but it may be used to convey some information about
 /// the key (e.g. that the key is meant to be used for testing purposes).
@@ -2086,6 +2116,31 @@ pub struct SchnorrKeyId {
     pub name: String,
 }
 
+impl TryFrom<pb_registry_crypto::SchnorrKeyId> for SchnorrKeyId {
+    type Error = ProxyDecodeError;
+    fn try_from(item: pb_registry_crypto::SchnorrKeyId) -> Result<Self, Self::Error> {
+        let pb_registry_crypto::SchnorrKeyId { algorithm, name } = item;
+        let algorithm = SchnorrAlgorithm::try_from(
+            pb_registry_crypto::SchnorrAlgorithm::try_from(algorithm).map_err(|_| {
+                ProxyDecodeError::ValueOutOfRange {
+                    typ: "SchnorrKeyId",
+                    err: format!("Unable to convert {} to a SchnorrAlgorithm", algorithm),
+                }
+            })?,
+        )?;
+        Ok(Self { algorithm, name })
+    }
+}
+
+impl From<SchnorrKeyId> for pb_registry_crypto::SchnorrKeyId {
+    fn from(item: SchnorrKeyId) -> Self {
+        Self {
+            algorithm: pb_registry_crypto::SchnorrAlgorithm::from(item.algorithm) as i32,
+            name: item.name,
+        }
+    }
+}
+
 /// Unique identifier for a key that can be used for one of the signature schemes
 /// supported on the IC.
 /// ```text
@@ -2095,8 +2150,47 @@ pub struct SchnorrKeyId {
     CandidType, Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize, Hash,
 )]
 pub enum MasterPublicKeyId {
-    EcdsaKeyId(EcdsaKeyId),
-    SchnorrKeyId(SchnorrKeyId),
+    Ecdsa(EcdsaKeyId),
+    Schnorr(SchnorrKeyId),
+}
+
+impl TryFrom<pb_registry_crypto::MasterPublicKeyId> for MasterPublicKeyId {
+    type Error = ProxyDecodeError;
+    fn try_from(item: pb_registry_crypto::MasterPublicKeyId) -> Result<Self, Self::Error> {
+        use pb_registry_crypto::master_public_key_id::KeyId;
+        let Some(key_id) = item.key_id else {
+            return Err(ProxyDecodeError::MissingField("MasterPublicKeyId::key_id"));
+        };
+        Ok(match key_id {
+            KeyId::Schnorr(schnorr_key_id_pb) => {
+                let schnorr_key_id = SchnorrKeyId::try_from(schnorr_key_id_pb)?;
+                MasterPublicKeyId::Schnorr(schnorr_key_id)
+            }
+            KeyId::Ecdsa(ecdsa_key_id_pb) => {
+                let ecdsa_key_id = EcdsaKeyId::try_from(ecdsa_key_id_pb)?;
+                MasterPublicKeyId::Ecdsa(ecdsa_key_id)
+            }
+        })
+    }
+}
+
+impl From<MasterPublicKeyId> for pb_registry_crypto::MasterPublicKeyId {
+    fn from(item: MasterPublicKeyId) -> Self {
+        use pb_registry_crypto::master_public_key_id::KeyId;
+        let key_id = match item {
+            MasterPublicKeyId::Schnorr(schnorr_key_id) => {
+                let schnorr_key_id_pb = pb_registry_crypto::SchnorrKeyId::from(schnorr_key_id);
+                KeyId::Schnorr(schnorr_key_id_pb)
+            }
+            MasterPublicKeyId::Ecdsa(ecdsa_key_id) => {
+                let ecdsa_key_id_pb = pb_registry_crypto::EcdsaKeyId::from(&ecdsa_key_id);
+                KeyId::Ecdsa(ecdsa_key_id_pb)
+            }
+        };
+        Self {
+            key_id: Some(key_id),
+        }
+    }
 }
 
 pub type DerivationPath = BoundedVec<MAXIMUM_DERIVATION_PATH_LENGTH, UNBOUNDED, UNBOUNDED, ByteBuf>;
