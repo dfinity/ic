@@ -31,7 +31,7 @@ use ic_types::{
     consensus::ecdsa::QuadrupleId,
     crypto::canister_threshold_sig::MasterEcdsaPublicKey,
     ingress::{IngressState, IngressStatus},
-    messages::{CanisterMessage, Ingress, MessageId, StopCanisterContext},
+    messages::{CanisterMessage, Ingress, MessageId, Response, StopCanisterContext, NO_DEADLINE},
     AccumulatedPriority, CanisterId, ComputeAllocation, Cycles, ExecutionRound, LongExecutionMode,
     MemoryAllocation, NumBytes, NumInstructions, NumSlices, Randomness, SubnetId, Time,
 };
@@ -1560,7 +1560,20 @@ impl Scheduler for SchedulerImpl {
             // state. That can be changed in the future as we optimize scheduling.
             while let Some(response) = state.consensus_queue.pop() {
                 let (new_state, _) = self.execute_subnet_message(
-                    CanisterMessage::Response(response.into()),
+                    // Wrap the callback ID and payload into a Response, to make it easier for
+                    // `execute_subnet_message()` to deal with. All other fields will be ignored by
+                    // `execute_subnet_message()`.
+                    CanisterMessage::Response(
+                        Response {
+                            originator: CanisterId::ic_00(),
+                            respondent: CanisterId::ic_00(),
+                            originator_reply_callback: response.callback,
+                            refund: Cycles::zero(),
+                            response_payload: response.payload,
+                            deadline: NO_DEADLINE,
+                        }
+                        .into(),
+                    ),
                     state,
                     &mut csprng,
                     &mut subnet_round_limits,

@@ -32,8 +32,9 @@ use ic_test_utilities_metrics::{
 use ic_test_utilities_state::{get_running_canister, get_stopped_canister, get_stopping_canister};
 use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::{
+    batch::ConsensusResponse,
     messages::{
-        CallbackId, Payload, RejectContext, Response, StopCanisterCallId, MAX_RESPONSE_COUNT_BYTES,
+        CallbackId, Payload, RejectContext, StopCanisterCallId, MAX_RESPONSE_COUNT_BYTES,
         NO_DEADLINE,
     },
     methods::SystemMethod,
@@ -3035,13 +3036,13 @@ fn ecdsa_signature_agreements_metric_is_updated() {
 
     // reject the first one
     let (callback_id, context) = sign_with_ecdsa_contexts.iter().next().unwrap();
-    let response = Response {
-        originator: context.request.sender,
-        respondent: ic_types::CanisterId::ic_00(),
-        originator_reply_callback: *callback_id,
-        refund: context.request.payment,
-        response_payload: Payload::Reject(RejectContext::new(RejectCode::SysFatal, "")),
-        deadline: context.request.deadline,
+    let response = ConsensusResponse {
+        callback: *callback_id,
+        payload: Payload::Reject(RejectContext::new(RejectCode::SysFatal, "")),
+        originator: Some(context.request.sender),
+        respondent: Some(CanisterId::ic_00()),
+        refund: Some(context.request.payment),
+        deadline: Some(context.request.deadline),
     };
 
     test.state_mut().consensus_queue.push(response);
@@ -3079,18 +3080,18 @@ fn ecdsa_signature_agreements_metric_is_updated() {
 
     // send a reply to the second request
     let (callback_id, context) = sign_with_ecdsa_contexts.iter().next().unwrap();
-    let response = Response {
-        originator: context.request.sender,
-        respondent: ic_types::CanisterId::ic_00(),
-        originator_reply_callback: *callback_id,
-        refund: context.request.payment,
-        response_payload: Payload::Data(
+    let response = ConsensusResponse {
+        callback: *callback_id,
+        payload: Payload::Data(
             ic00::SignWithECDSAReply {
                 signature: vec![1, 2, 3],
             }
             .encode(),
         ),
-        deadline: NO_DEADLINE,
+        originator: Some(context.request.sender),
+        respondent: Some(CanisterId::ic_00()),
+        refund: Some(context.request.payment),
+        deadline: Some(NO_DEADLINE),
     };
 
     test.state_mut().consensus_queue.push(response);

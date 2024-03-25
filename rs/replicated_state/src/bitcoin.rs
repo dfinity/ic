@@ -6,7 +6,8 @@ use ic_btc_types_internal::{
 use ic_error_types::RejectCode;
 use ic_management_canister_types::{BitcoinGetSuccessorsResponse, EmptyBlob, Payload as _};
 use ic_types::{
-    messages::{CallbackId, Payload, RejectContext, Response},
+    batch::ConsensusResponse,
+    messages::{CallbackId, Payload, RejectContext},
     CanisterId,
 };
 use std::cmp::min;
@@ -38,7 +39,7 @@ pub fn push_response(
                     callback_id: callback_id.get(),
                 })?;
 
-            let response_payload = match maybe_split_response(r) {
+            let payload = match maybe_split_response(r) {
                 Ok((initial_response, follow_ups)) => {
                     // Store the follow-ups for later (overwrites previous ones).
                     state
@@ -55,15 +56,15 @@ pub fn push_response(
             };
 
             // Add response to the consensus queue.
-            state.consensus_queue.push(Response {
-                originator: context.request.sender(),
-                respondent: CanisterId::ic_00(),
-                originator_reply_callback: callback_id,
-                refund: context.request.take_cycles(),
-                response_payload,
+            state.consensus_queue.push(ConsensusResponse {
+                callback: callback_id,
+                payload,
+                originator: Some(context.request.sender()),
+                respondent: Some(CanisterId::ic_00()),
+                refund: Some(context.request.take_cycles()),
                 // Not relevant, the consensus queue is flushed every round by the
                 // scheduler, which uses only the payload and originator callback.
-                deadline: context.request.deadline,
+                deadline: Some(context.request.deadline),
             });
 
             Ok(())
@@ -81,18 +82,18 @@ pub fn push_response(
                 })?;
 
             // The response to a `send_transaction` call is always the empty blob.
-            let response_payload = Payload::Data(EmptyBlob.encode());
+            let payload = Payload::Data(EmptyBlob.encode());
 
             // Add response to the consensus queue.
-            state.consensus_queue.push(Response {
-                originator: context.request.sender(),
-                respondent: CanisterId::ic_00(),
-                originator_reply_callback: callback_id,
-                refund: context.request.take_cycles(),
-                response_payload,
+            state.consensus_queue.push(ConsensusResponse {
+                callback: callback_id,
+                payload,
+                originator: Some(context.request.sender()),
+                respondent: Some(CanisterId::ic_00()),
+                refund: Some(context.request.take_cycles()),
                 // Not relevant, the consensus queue is flushed every round by the
                 // scheduler, which uses only the payload and originator callback.
-                deadline: context.request.deadline,
+                deadline: Some(context.request.deadline),
             });
 
             Ok(())
@@ -113,15 +114,15 @@ pub fn push_response(
                 Payload::Reject(RejectContext::new(reject.reject_code, reject.message));
 
             // Add response to the consensus queue.
-            state.consensus_queue.push(Response {
-                originator: context.request.sender(),
-                respondent: CanisterId::ic_00(),
-                originator_reply_callback: callback_id,
-                refund: context.request.take_cycles(),
-                response_payload: reject_payload,
+            state.consensus_queue.push(ConsensusResponse {
+                callback: callback_id,
+                payload: reject_payload,
+                originator: Some(context.request.sender()),
+                respondent: Some(CanisterId::ic_00()),
+                refund: Some(context.request.take_cycles()),
                 // Not relevant, the consensus queue is flushed every round by the
                 // scheduler, which uses only the payload and originator callback.
-                deadline: context.request.deadline,
+                deadline: Some(context.request.deadline),
             });
 
             Ok(())
@@ -142,15 +143,15 @@ pub fn push_response(
                 Payload::Reject(RejectContext::new(reject.reject_code, reject.message));
 
             // Add response to the consensus queue.
-            state.consensus_queue.push(Response {
-                originator: context.request.sender(),
-                respondent: CanisterId::ic_00(),
-                originator_reply_callback: callback_id,
-                refund: context.request.take_cycles(),
-                response_payload: reject_payload,
+            state.consensus_queue.push(ConsensusResponse {
+                callback: callback_id,
+                payload: reject_payload,
+                originator: Some(context.request.sender()),
+                respondent: Some(CanisterId::ic_00()),
+                refund: Some(context.request.take_cycles()),
                 // Not relevant, the consensus queue is flushed every round by the
                 // scheduler, which uses only the payload and originator callback.
-                deadline: context.request.deadline,
+                deadline: Some(context.request.deadline),
             });
 
             Ok(())

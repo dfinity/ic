@@ -582,7 +582,7 @@ fn insert_bitcoin_response() {
         .unwrap();
 
     assert_eq!(
-        state.consensus_queue[0].response_payload,
+        state.consensus_queue[0].payload,
         Payload::Data(BitcoinGetSuccessorsResponse::Complete(response).encode())
     );
 }
@@ -616,7 +616,7 @@ fn insert_bitcoin_get_successor_reject_response() {
         })
         .unwrap();
     assert_eq!(
-        state.consensus_queue[0].response_payload,
+        state.consensus_queue[0].payload,
         Payload::Reject(RejectContext::new(RejectCode::SysTransient, error_message))
     );
 }
@@ -649,7 +649,7 @@ fn insert_bitcoin_send_transaction_reject_response() {
         })
         .unwrap();
     assert_eq!(
-        state.consensus_queue[0].response_payload,
+        state.consensus_queue[0].payload,
         Payload::Reject(RejectContext::new(RejectCode::SysTransient, error_message))
     );
 }

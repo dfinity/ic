@@ -389,6 +389,37 @@ pub struct EcdsaPayload {
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ConsensusResponse {
+    #[prost(message, optional, tag = "1")]
+    pub originator: ::core::option::Option<CanisterId>,
+    #[prost(message, optional, tag = "2")]
+    pub respondent: ::core::option::Option<CanisterId>,
+    #[prost(uint64, tag = "3")]
+    pub callback: u64,
+    #[prost(message, optional, tag = "4")]
+    pub refund: ::core::option::Option<super::super::state::queues::v1::Funds>,
+    #[prost(message, optional, tag = "7")]
+    pub cycles_refund: ::core::option::Option<super::super::state::queues::v1::Cycles>,
+    #[prost(uint32, optional, tag = "8")]
+    pub deadline_seconds: ::core::option::Option<u32>,
+    #[prost(oneof = "consensus_response::Payload", tags = "5, 6")]
+    pub payload: ::core::option::Option<consensus_response::Payload>,
+}
+/// Nested message and enum types in `ConsensusResponse`.
+pub mod consensus_response {
+    #[derive(serde::Serialize, serde::Deserialize)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Payload {
+        #[prost(bytes, tag = "5")]
+        Data(::prost::alloc::vec::Vec<u8>),
+        #[prost(message, tag = "6")]
+        Reject(super::super::super::state::queues::v1::RejectContext),
+    }
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EcdsaKeyTranscript {
     #[prost(message, optional, tag = "1")]
     pub key_id: ::core::option::Option<super::super::registry::crypto::v1::EcdsaKeyId>,
@@ -446,7 +477,7 @@ pub struct XnetReshareAgreement {
     #[prost(message, optional, tag = "1")]
     pub request: ::core::option::Option<EcdsaReshareRequest>,
     #[prost(message, optional, tag = "4")]
-    pub initial_dealings: ::core::option::Option<super::super::state::queues::v1::Response>,
+    pub initial_dealings: ::core::option::Option<ConsensusResponse>,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -634,7 +665,7 @@ pub struct ThresholdEcdsaSigInputsRef {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CompletedSignature {
     #[prost(message, optional, tag = "3")]
-    pub unreported: ::core::option::Option<super::super::state::queues::v1::Response>,
+    pub unreported: ::core::option::Option<ConsensusResponse>,
     #[prost(bytes = "vec", tag = "4")]
     pub pseudo_random_id: ::prost::alloc::vec::Vec<u8>,
 }
