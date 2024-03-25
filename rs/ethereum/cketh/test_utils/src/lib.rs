@@ -36,7 +36,8 @@ pub mod response;
 #[cfg(test)]
 mod tests;
 
-pub const CKETH_TRANSFER_FEE: u64 = 10;
+pub const CKETH_TRANSFER_FEE: u64 = 2_000_000_000_000;
+pub const CKETH_MINIMUM_WITHDRAWAL_AMOUNT: u64 = 30_000_000_000_000_000;
 pub const MAX_TICKS: usize = 10;
 pub const DEFAULT_PRINCIPAL_ID: u64 = 10352385;
 pub const DEFAULT_DEPOSIT_BLOCK_NUMBER: u64 = 0x9;
@@ -48,7 +49,8 @@ pub const DEFAULT_BLOCK_HASH: &str =
     "0x82005d2f17b251900968f01b0ed482cb49b7e1d797342bc504904d442b64dbe4";
 pub const LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL: u64 = 3_956_206;
 pub const DEFAULT_BLOCK_NUMBER: u64 = 0x4132ec;
-pub const EXPECTED_BALANCE: u64 = 100_000_000_000_000_000;
+pub const EXPECTED_BALANCE: u64 = 100_000_000_000_000_000 + CKETH_TRANSFER_FEE - 10_u64;
+pub const CKETH_WITHDRAWAL_AMOUNT: u64 = EXPECTED_BALANCE - CKETH_TRANSFER_FEE;
 pub const EFFECTIVE_GAS_PRICE: u64 = 4_277_923_390;
 
 pub const DEFAULT_WITHDRAWAL_TRANSACTION_HASH: &str =
@@ -568,7 +570,7 @@ fn install_minter(env: &StateMachine, ledger_id: CanisterId, minter_id: Canister
         next_transaction_nonce: 0_u8.into(),
         ethereum_block_height: CandidBlockTag::Finalized,
         ethereum_contract_address: Some(ETH_HELPER_CONTRACT_ADDRESS.to_string()),
-        minimum_withdrawal_amount: CKETH_TRANSFER_FEE.into(),
+        minimum_withdrawal_amount: CKETH_MINIMUM_WITHDRAWAL_AMOUNT.into(),
         last_scraped_block_number: LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into(),
     };
     let minter_arg = MinterArg::InitArg(args);

@@ -13,7 +13,7 @@ use ic_cketh_test_utils::flow::DepositParams;
 use ic_cketh_test_utils::mock::{JsonRpcMethod, MockJsonRpcProviders};
 use ic_cketh_test_utils::response::{block_response, empty_logs, EthLogEntry};
 use ic_cketh_test_utils::{
-    format_ethereum_address_to_eip_55, CkEthSetup, CKETH_TRANSFER_FEE,
+    format_ethereum_address_to_eip_55, CkEthSetup, CKETH_MINIMUM_WITHDRAWAL_AMOUNT,
     DEFAULT_DEPOSIT_FROM_ADDRESS, DEFAULT_DEPOSIT_LOG_INDEX, DEFAULT_DEPOSIT_TRANSACTION_HASH,
     DEFAULT_PRINCIPAL_ID, ERC20_HELPER_CONTRACT_ADDRESS, ETH_HELPER_CONTRACT_ADDRESS,
     LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MAX_ETH_LOGS_BLOCK_RANGE, MINTER_ADDRESS,
@@ -211,7 +211,7 @@ mod withdraw_erc20 {
             )
             .expect_error(WithdrawErc20Error::InsufficientAllowance {
                 allowance: Nat::from(0_u8),
-                failed_burn_amount: Nat::from(CKETH_TRANSFER_FEE),
+                failed_burn_amount: Nat::from(CKETH_MINIMUM_WITHDRAWAL_AMOUNT),
                 token_symbol: "ckETH".to_string(),
                 ledger_id: cketh_ledger,
             });
@@ -226,10 +226,10 @@ mod withdraw_erc20 {
 
         ckerc20
             .deposit_cketh(DepositParams {
-                amount: 10,
+                amount: CKETH_MINIMUM_WITHDRAWAL_AMOUNT,
                 ..DepositParams::default()
             })
-            .call_cketh_ledger_approve_minter(caller, 100, None)
+            .call_cketh_ledger_approve_minter(caller, CKETH_MINIMUM_WITHDRAWAL_AMOUNT, None)
             .call_minter_withdraw_erc20(
                 caller,
                 0_u8,
@@ -237,8 +237,8 @@ mod withdraw_erc20 {
                 DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS,
             )
             .expect_error(WithdrawErc20Error::InsufficientFunds {
-                balance: Nat::from(0_u8),
-                failed_burn_amount: Nat::from(CKETH_TRANSFER_FEE),
+                balance: Nat::from(CKETH_MINIMUM_WITHDRAWAL_AMOUNT - CKETH_TRANSFER_FEE),
+                failed_burn_amount: Nat::from(CKETH_MINIMUM_WITHDRAWAL_AMOUNT),
                 token_symbol: "ckETH".to_string(),
                 ledger_id: cketh_ledger,
             });
@@ -252,7 +252,7 @@ mod withdraw_erc20 {
 
         ckerc20
             .deposit_cketh(DepositParams::default())
-            .call_cketh_ledger_approve_minter(caller, 100, None)
+            .call_cketh_ledger_approve_minter(caller, CKETH_MINIMUM_WITHDRAWAL_AMOUNT, None)
             .call_minter_withdraw_erc20(
                 caller,
                 ONE_USDC,
@@ -396,7 +396,7 @@ fn should_retrieve_minter_info() {
                 ERC20_HELPER_CONTRACT_ADDRESS
             )),
             supported_ckerc20_tokens,
-            minimum_withdrawal_amount: Some(Nat::from(CKETH_TRANSFER_FEE)),
+            minimum_withdrawal_amount: Some(Nat::from(CKETH_MINIMUM_WITHDRAWAL_AMOUNT)),
             ethereum_block_height: Some(Finalized),
             last_observed_block_number: None,
             eth_balance: Some(Nat::from(0_u8)),
