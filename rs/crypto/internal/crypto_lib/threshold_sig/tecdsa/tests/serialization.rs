@@ -22,7 +22,7 @@ fn verify_data(tag: String, expected_hash: &str, serialized: &[u8]) {
     let hash = ic_crypto_sha2::Sha256::hash(serialized);
     let computed_hash = hex::encode(&hash[0..8]);
 
-    if UPDATING_TEST_VECTORS {
+    if !UPDATING_TEST_VECTORS {
         assert_eq!(computed_hash, expected_hash, "{}", tag);
     } else if computed_hash != expected_hash {
         println!(
