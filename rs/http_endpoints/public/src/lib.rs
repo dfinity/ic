@@ -47,7 +47,7 @@ use axum::{
     extract::{DefaultBodyLimit, MatchedPath, State},
     middleware::Next,
     response::Redirect,
-    routing::{get, get_service, post_service, MethodRouter},
+    routing::{get, post_service, MethodRouter},
     Router,
 };
 use bytes::Bytes;
@@ -123,7 +123,6 @@ use tower::{
 };
 use tower_http::limit::RequestBodyLimitLayer;
 
-const HTTP_DASHBOARD_URL_PATH: &str = "/_/dashboard";
 const CONTENT_TYPE_CBOR: &str = "application/cbor";
 
 /// [TLS Application-Layer Protocol Negotiation (ALPN) Protocol `HTTP/2 over TLS` ID][spec]
@@ -148,13 +147,13 @@ struct HttpHandler {
     call_router: Router,
     query_router: Router,
     catchup_service: EndpointService,
-    dashboard_service: EndpointService,
+    dashboard_router: Router,
     status_method: MethodRouter,
     canister_read_state_router: Router,
     subnet_read_state_router: Router,
-    pprof_home_service: EndpointService,
-    pprof_profile_service: EndpointService,
-    pprof_flamegraph_service: EndpointService,
+    pprof_home_router: Router,
+    pprof_profile_router: Router,
+    pprof_flamegraph_router: Router,
 }
 
 // Crates a detached tokio blocking task that initializes the server (reading
@@ -365,18 +364,13 @@ pub fn start_server(
                 Arc::clone(&health_status),
                 state_reader_executor.clone(),
             ));
-    let dashboard_service =
-        DashboardService::new_service(config.clone(), subnet_type, state_reader_executor.clone());
+    let dashboard_router =
+        DashboardService::new_router(config.clone(), subnet_type, state_reader_executor.clone());
     let catchup_service = CatchUpPackageService::new_service(consensus_pool_cache.clone());
 
-    let pprof_concurrency_buffer =
-        GlobalConcurrencyLimitLayer::new(config.max_pprof_concurrent_requests);
-
-    let pprof_home_service = PprofHomeService::new_service(pprof_concurrency_buffer.clone());
-    let pprof_profile_service =
-        PprofProfileService::new_service(pprof_collector.clone(), pprof_concurrency_buffer.clone());
-    let pprof_flamegraph_service =
-        PprofFlamegraphService::new_service(pprof_collector, pprof_concurrency_buffer);
+    let pprof_home_router = PprofHomeService::new_router();
+    let pprof_profile_router = PprofProfileService::new_router(pprof_collector.clone());
+    let pprof_flamegraph_router = PprofFlamegraphService::new_router(pprof_collector);
 
     let health_status_refresher = HealthStatusRefreshLayer::new(
         log.clone(),
@@ -405,12 +399,12 @@ pub fn start_server(
         query_router,
         status_method,
         catchup_service,
-        dashboard_service,
+        dashboard_router,
         canister_read_state_router,
         subnet_read_state_router,
-        pprof_home_service,
-        pprof_profile_service,
-        pprof_flamegraph_service,
+        pprof_home_router,
+        pprof_profile_router,
+        pprof_flamegraph_router,
     };
     let main_service = create_main_service(
         metrics.clone(),
@@ -662,10 +656,6 @@ fn make_router(
     health_status_refresher: HealthStatusRefreshLayer,
 ) -> Router {
     let catch_up_package_service = http_handler.catchup_service.clone();
-    let dashboard_service = http_handler.dashboard_service.clone();
-    let pprof_home_service = http_handler.pprof_home_service.clone();
-    let pprof_profile_service = http_handler.pprof_profile_service.clone();
-    let pprof_flamegraph_service = http_handler.pprof_flamegraph_service.clone();
 
     let post_router: Router = Router::new().route(
         "/_/catch_up_package",
@@ -697,48 +687,13 @@ fn make_router(
             ),
         )
         // TODO this is 303 instead of 302
-        .route("/", get(|| async { Redirect::to(HTTP_DASHBOARD_URL_PATH) }))
+        .route(
+            "/",
+            get(|| async { Redirect::to(DashboardService::route()) }),
+        )
         .route(
             "/_/",
-            get(|| async { Redirect::to(HTTP_DASHBOARD_URL_PATH) }),
-        )
-        .route_service(
-            "/_/pprof",
-            get_service(pprof_home_service).layer(
-                ServiceBuilder::new()
-                    .layer(HandleErrorLayer::new(map_box_error_to_response))
-                    .load_shed()
-                    .layer(pprof_concurrency_limiter.clone()),
-            ),
-        )
-        .route_service(
-            "/_/pprof/profile",
-            get_service(pprof_profile_service).layer(
-                ServiceBuilder::new()
-                    .layer(HandleErrorLayer::new(map_box_error_to_response))
-                    .load_shed()
-                    .layer(pprof_concurrency_limiter.clone()),
-            ),
-        )
-        .route_service(
-            "/_/pprof/flamegraph",
-            get_service(pprof_flamegraph_service).layer(
-                ServiceBuilder::new()
-                    .layer(HandleErrorLayer::new(map_box_error_to_response))
-                    .load_shed()
-                    .layer(pprof_concurrency_limiter),
-            ),
-        )
-        .route_service(
-            HTTP_DASHBOARD_URL_PATH,
-            get_service(dashboard_service).layer(
-                ServiceBuilder::new()
-                    .layer(HandleErrorLayer::new(map_box_error_to_response))
-                    .load_shed()
-                    .layer(GlobalConcurrencyLimitLayer::new(
-                        config.max_dashboard_concurrent_requests,
-                    )),
-            ),
+            get(|| async { Redirect::to(DashboardService::route()) }),
         )
         .fallback(|| async {
             make_plaintext_response(StatusCode::NOT_FOUND, "Endpoint not found.".to_string())
@@ -767,6 +722,16 @@ fn make_router(
             ),
         )
         .merge(
+            http_handler.subnet_read_state_router.layer(
+                ServiceBuilder::new()
+                    .layer(HandleErrorLayer::new(map_box_error_to_response))
+                    .load_shed()
+                    .layer(GlobalConcurrencyLimitLayer::new(
+                        config.max_read_state_concurrent_requests,
+                    )),
+            ),
+        )
+        .merge(
             http_handler.canister_read_state_router.layer(
                 ServiceBuilder::new()
                     .layer(HandleErrorLayer::new(map_box_error_to_response))
@@ -777,13 +742,37 @@ fn make_router(
             ),
         )
         .merge(
-            http_handler.subnet_read_state_router.layer(
+            http_handler.dashboard_router.layer(
                 ServiceBuilder::new()
                     .layer(HandleErrorLayer::new(map_box_error_to_response))
                     .load_shed()
                     .layer(GlobalConcurrencyLimitLayer::new(
-                        config.max_read_state_concurrent_requests,
+                        config.max_dashboard_concurrent_requests,
                     )),
+            ),
+        )
+        .merge(
+            http_handler.pprof_home_router.layer(
+                ServiceBuilder::new()
+                    .layer(HandleErrorLayer::new(map_box_error_to_response))
+                    .load_shed()
+                    .layer(pprof_concurrency_limiter.clone()),
+            ),
+        )
+        .merge(
+            http_handler.pprof_flamegraph_router.layer(
+                ServiceBuilder::new()
+                    .layer(HandleErrorLayer::new(map_box_error_to_response))
+                    .load_shed()
+                    .layer(pprof_concurrency_limiter.clone()),
+            ),
+        )
+        .merge(
+            http_handler.pprof_profile_router.layer(
+                ServiceBuilder::new()
+                    .layer(HandleErrorLayer::new(map_box_error_to_response))
+                    .load_shed()
+                    .layer(pprof_concurrency_limiter.clone()),
             ),
         );
 
@@ -1204,7 +1193,10 @@ mod tests {
                 axum::routing::post_service(dummy_service.clone()),
             ),
             catchup_service: dummy_service.clone(),
-            dashboard_service: dummy_service.clone(),
+            dashboard_router: Router::new().route(
+                DashboardService::route(),
+                axum::routing::get_service(dummy_service.clone()),
+            ),
             status_method: MethodRouter::new().get_service(dummy_service.clone()),
             canister_read_state_router: Router::new().route(
                 CanisterReadStateService::route(),
@@ -1214,9 +1206,18 @@ mod tests {
                 SubnetReadStateService::route(),
                 axum::routing::post_service(dummy_service.clone()),
             ),
-            pprof_home_service: dummy_service.clone(),
-            pprof_profile_service: dummy_service.clone(),
-            pprof_flamegraph_service: dummy_service.clone(),
+            pprof_home_router: Router::new().route(
+                PprofHomeService::route(),
+                axum::routing::get_service(dummy_service.clone()),
+            ),
+            pprof_profile_router: Router::new().route(
+                PprofProfileService::route(),
+                axum::routing::get_service(dummy_service.clone()),
+            ),
+            pprof_flamegraph_router: Router::new().route(
+                PprofFlamegraphService::route(),
+                axum::routing::get_service(dummy_service.clone()),
+            ),
         };
 
         let metrics = HttpHandlerMetrics::new(&MetricsRegistry::default());
