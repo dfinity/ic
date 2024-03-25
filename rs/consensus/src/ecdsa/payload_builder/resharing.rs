@@ -8,6 +8,7 @@ use ic_types::{
         error::InitialIDkgDealingsValidationError, idkg::InitialIDkgDealings,
     },
     messages::CallbackId,
+    CanisterId,
 };
 
 use crate::ecdsa::pre_signer::EcdsaTranscriptBuilder;
@@ -54,7 +55,10 @@ pub(crate) fn initiate_reshare_requests(
 
 pub(super) fn make_reshare_dealings_response(
     ecdsa_dealings_contexts: &'_ BTreeMap<CallbackId, EcdsaDealingsContext>,
-) -> impl Fn(&ecdsa::EcdsaReshareRequest, &InitialIDkgDealings) -> Option<ic_types::messages::Response>
+) -> impl Fn(
+    &ecdsa::EcdsaReshareRequest,
+    &InitialIDkgDealings,
+) -> Option<ic_types::batch::ConsensusResponse>
        + '_ {
     Box::new(
         move |request: &ecdsa::EcdsaReshareRequest, initial_dealings: &InitialIDkgDealings| {
@@ -67,20 +71,18 @@ pub(super) fn make_reshare_dealings_response(
                     })
                 {
                     use ic_management_canister_types::ComputeInitialEcdsaDealingsResponse;
-                    return Some(ic_types::messages::Response {
-                        originator: context.request.sender,
-                        respondent: ic_types::CanisterId::ic_00(),
-                        originator_reply_callback: *callback_id,
-                        refund: context.request.payment,
-                        response_payload: ic_types::messages::Payload::Data(
+                    return Some(ic_types::batch::ConsensusResponse {
+                        callback: *callback_id,
+                        payload: ic_types::messages::Payload::Data(
                             ComputeInitialEcdsaDealingsResponse {
                                 initial_dkg_dealings: initial_dealings.into(),
                             }
                             .encode(),
                         ),
-                        // Not relevant, the consensus queue is flushed every round by the
-                        // scheduler, which uses only the payload and originator callback.
-                        deadline: context.request.deadline,
+                        originator: Some(context.request.sender),
+                        respondent: Some(CanisterId::ic_00()),
+                        refund: Some(context.request.payment),
+                        deadline: Some(context.request.deadline),
                     });
                 }
             }
@@ -99,7 +101,7 @@ pub(crate) fn update_completed_reshare_requests(
     make_reshare_dealings_response: &dyn Fn(
         &ecdsa::EcdsaReshareRequest,
         &InitialIDkgDealings,
-    ) -> Option<ic_types::messages::Response>,
+    ) -> Option<ic_types::batch::ConsensusResponse>,
     resolver: &dyn EcdsaBlockReader,
     transcript_builder: &dyn EcdsaTranscriptBuilder,
     log: &ReplicaLogger,

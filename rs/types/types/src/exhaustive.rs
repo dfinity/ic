@@ -1,5 +1,6 @@
 //! Implementations and serialization tests of the ExhaustiveSet trait
 
+use crate::batch::ConsensusResponse;
 use crate::consensus::ecdsa::{
     CompletedReshareRequest, CompletedSignature, EcdsaReshareRequest, MaskedTranscript,
     PreSignatureQuadrupleRef, PseudoRandomId, QuadrupleId, QuadrupleInCreation,
@@ -23,6 +24,7 @@ use crate::crypto::{
     crypto_hash, AlgorithmId, BasicSig, BasicSigOf, CombinedThresholdSig, CombinedThresholdSigOf,
     CryptoHash, CryptoHashOf, CryptoHashable, Signed,
 };
+use crate::messages::Response;
 use crate::signature::{BasicSignature, BasicSignatureBatch, ThresholdSignature};
 use crate::xnet::CertifiedStreamSlice;
 use crate::{CryptoHashOfState, ReplicaVersion};
@@ -714,6 +716,22 @@ impl ExhaustiveSet for PreSignatureQuadrupleRef {
                 kappa_times_lambda_ref: q.kappa_times_lambda_ref,
                 key_times_lambda_ref: q.key_times_lambda_ref,
                 key_unmasked_ref: q.key_unmasked_ref,
+            })
+            .collect()
+    }
+}
+
+impl ExhaustiveSet for ConsensusResponse {
+    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+        Response::exhaustive_set(rng)
+            .into_iter()
+            .map(|r| ConsensusResponse {
+                originator: Some(r.originator),
+                respondent: Some(r.respondent),
+                callback: r.originator_reply_callback,
+                refund: Some(r.refund),
+                payload: r.response_payload,
+                deadline: Some(r.deadline),
             })
             .collect()
     }

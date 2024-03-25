@@ -16,7 +16,7 @@ use ic_interfaces::execution_environment::CanisterOutOfCyclesError;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
-    batch::RawQueryStats,
+    batch::{ConsensusResponse, RawQueryStats},
     ingress::IngressStatus,
     messages::{CallbackId, CanisterMessage, Ingress, MessageId, RequestOrResponse, Response},
     xnet::QueueId,
@@ -383,8 +383,6 @@ impl MemoryTaken {
 //
 // * We don't derive `Serialize` and `Deserialize` because these are handled by
 // our OP layer.
-// * We don't derive `Hash` because `ingress_history` is a Hashmap that doesn't
-// derive `Hash`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ReplicatedState {
     /// States of all canisters, indexed by canister ids.
@@ -402,7 +400,7 @@ pub struct ReplicatedState {
     /// Responses from consensus are to be processed each round.
     /// The queue is, therefore, emptied at the end of every round.
     // TODO(EXE-109): Move this queue into `subnet_queues`
-    pub consensus_queue: Vec<Response>,
+    pub consensus_queue: Vec<ConsensusResponse>,
 
     /// Temporary query stats received during the current epoch.
     /// Reset during the start of each epoch.
