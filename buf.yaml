@@ -20,7 +20,6 @@ lint:
     - DEFAULT
 breaking:
   ignore:
-    - types/v1/ecdsa.proto
   use:
     - WIRE
   except:
