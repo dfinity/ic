@@ -11,6 +11,7 @@ mod pb_internal;
 mod principal_id;
 
 pub use canister_id::{CanisterId, CanisterIdError, CanisterIdError as CanisterIdBlobParseError};
+use ic_protobuf::state::canister_state_bits::v1::SnapshotId as pbSnapshot;
 pub use principal_id::{
     PrincipalId, PrincipalIdError, PrincipalIdError as PrincipalIdBlobParseError,
     PrincipalIdError as PrincipalIdParseError,
@@ -195,6 +196,23 @@ impl std::fmt::Display for SnapshotId {
         let local_id = self.get_local_snapshot_id();
         let canister_id = self.get_canister_id();
         write!(f, "{}-{}", canister_id, local_id)
+    }
+}
+
+impl From<SnapshotId> for pbSnapshot {
+    fn from(id: SnapshotId) -> Self {
+        Self {
+            content: id.to_vec(),
+        }
+    }
+}
+
+impl TryFrom<pbSnapshot> for SnapshotId {
+    type Error = ProxyDecodeError;
+
+    fn try_from(pb_snapshot_id: pbSnapshot) -> Result<Self, Self::Error> {
+        SnapshotId::try_from(&pb_snapshot_id.content)
+            .map_err(|_| ProxyDecodeError::Other("Invalid snapshot ID".to_string()))
     }
 }
 
