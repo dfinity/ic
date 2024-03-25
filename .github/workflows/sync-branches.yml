@@ -27,5 +27,6 @@ jobs:
         run: |
           git fetch origin master mirroring
           git checkout -B mirroring
+          git merge origin/mirroring
           git merge origin/master
           git push origin mirroring
