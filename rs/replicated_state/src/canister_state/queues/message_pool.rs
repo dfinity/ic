@@ -6,8 +6,8 @@ use ic_types::time::CoarseTime;
 use ic_types::{CountBytes, Time};
 use phantom_newtype::Id;
 use std::cmp::Reverse;
-use std::collections::hash_map::Entry;
-use std::collections::{BinaryHeap, HashMap};
+use std::collections::btree_map::Entry;
+use std::collections::{BTreeMap, BinaryHeap};
 use std::sync::Arc;
 
 #[cfg(test)]
@@ -53,11 +53,12 @@ impl MessagePoolReference {
 /// best-effort messages (and only best-effort messages) are added to the load
 /// shedding queue.
 ///
-/// All pool operations execute in at most amortized `O(1)` time.
+/// All pool operations except `expire_messages()` execute in at most `O(log(N))`
+/// time.
 #[derive(Clone, Debug)]
 pub struct MessagePool {
     /// Pool contents.
-    messages: HashMap<MessageId, RequestOrResponse>,
+    messages: BTreeMap<MessageId, RequestOrResponse>,
 
     /// Total size of all messages in the pool, in bytes.
     // FIXME: Figure out whether this should be separated into guaranteed and best
@@ -302,6 +303,8 @@ impl MessagePool {
 
     /// Drops all messages with expired deadlines (i.e. `deadline < now`) and
     /// returns them.
+    ///
+    /// Time complexity: `O(|expired_messages| * log(self.len()))`
     pub(crate) fn expire_messages(&mut self, now: Time) -> Vec<(MessageId, RequestOrResponse)> {
         if self.deadline_queue.is_empty() {
             return Vec::new();
@@ -350,7 +353,7 @@ impl MessagePool {
     }
 
     /// Prunes stale entries from the priority queues if they make up more than half
-    /// of the entries. This ensures amortized constant time.
+    /// of the respective priority queue. This ensures amortized constant time.
     fn maybe_trim_queues(&mut self) {
         let len = self.messages.len();
 
@@ -367,7 +370,7 @@ impl MessagePool {
     /// Computes `size_bytes` from scratch. Used when deserializing and in
     /// `debug_assert!()` checks.
     ///
-    /// Time complexity: `O(num_messages)`.
+    /// Time complexity: `O(N)`.
     fn calculate_size_bytes(&self) -> usize {
         self.messages
             .values()

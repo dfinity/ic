@@ -132,7 +132,6 @@ impl CanisterQueue {
             capacity,
             request_slots: 0,
             response_slots: 0,
-            // response_memory_reservations: 0,
         }
     }
 
@@ -218,7 +217,7 @@ impl CanisterQueue {
         self.queue.front()
     }
 
-    /// Returns the number of reserved slots in the queue.
+    /// Returns the number of reserved response slots in the queue.
     pub(super) fn reserved_slots(&self) -> usize {
         (self.request_slots + self.response_slots)
             .checked_sub(self.queue.len())
@@ -226,11 +225,16 @@ impl CanisterQueue {
     }
 
     /// Returns `true` if the queue has one or more used slots.
+    ///
+    /// This is basically an `is_empty()` test, except it also looks at reserved
+    /// slots, so it is named differently to make it clear it doesn't only check for
+    /// enqueued references.
     pub(super) fn has_used_slots(&self) -> bool {
         !self.queue.is_empty() || self.response_slots > 0
     }
 
-    /// Returns the length of the queue (including stale references).
+    /// Returns the length of the queue (including stale references but not
+    /// including reserved slots).
     pub(super) fn len(&self) -> usize {
         self.queue.len()
     }
