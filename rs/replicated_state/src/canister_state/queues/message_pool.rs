@@ -330,7 +330,7 @@ impl MessagePool {
     }
 
     /// Drops the largest message in the pool and returns it.
-    pub(crate) fn shed_message(&mut self) -> Option<(MessageId, RequestOrResponse)> {
+    pub(crate) fn shed_largest_message(&mut self) -> Option<(MessageId, RequestOrResponse)> {
         // Keep trying until we actually drop a message.
         while let Some((_, id)) = self.size_queue.pop() {
             if let Some(msg) = self.take_by_id(id) {
