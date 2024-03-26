@@ -1,4 +1,4 @@
-type AddWasmRequest = record { hash : vec nat8; wasm : opt SnsWasm };
+type AddWasmRequest = record { hash : blob; wasm : opt SnsWasm };
 type AddWasmResponse = record { result : opt Result };
 type AirdropDistribution = record { airdrop_neurons : vec NeuronDistribution };
 type Canister = record { id : opt principal };
@@ -58,7 +58,7 @@ type GetNextSnsVersionRequest = record {
 };
 type GetNextSnsVersionResponse = record { next_version : opt SnsVersion };
 type GetSnsSubnetIdsResponse = record { sns_subnet_ids : vec principal };
-type GetWasmRequest = record { hash : vec nat8 };
+type GetWasmRequest = record { hash : blob };
 type GetWasmResponse = record { wasm : opt SnsWasm };
 type IdealMatchedParticipationFunction = record {
   serialized_representation : opt text;
@@ -115,7 +115,7 @@ type PrettySnsVersion = record {
   governance_wasm_hash : text;
   index_wasm_hash : text;
 };
-type Result = variant { Error : SnsWasmError; Hash : vec nat8 };
+type Result = variant { Error : SnsWasmError; Hash : blob };
 type SnsCanisterIds = record {
   root : opt principal;
   swap : opt principal;
@@ -169,14 +169,14 @@ type SnsUpgrade = record {
   current_version : opt SnsVersion;
 };
 type SnsVersion = record {
-  archive_wasm_hash : vec nat8;
-  root_wasm_hash : vec nat8;
-  swap_wasm_hash : vec nat8;
-  ledger_wasm_hash : vec nat8;
-  governance_wasm_hash : vec nat8;
-  index_wasm_hash : vec nat8;
+  archive_wasm_hash : blob;
+  root_wasm_hash : blob;
+  swap_wasm_hash : blob;
+  ledger_wasm_hash : blob;
+  governance_wasm_hash : blob;
+  index_wasm_hash : blob;
 };
-type SnsWasm = record { wasm : vec nat8; canister_type : int32 };
+type SnsWasm = record { wasm : blob; canister_type : int32 };
 type SnsWasmCanisterInitPayload = record {
   allowed_principals : vec principal;
   access_controls_enabled : bool;
