@@ -217,6 +217,15 @@ async fn sync_blocks_interval(
             );
         }
 
+        // Verify that the indices that are returned by the replica match those that were requested (Block Indices are not part of the block hash)
+        if !blocks_verifier::indices_are_valid(&fetched_blocks, next_index_interval.clone()) {
+            bail!(
+                "The fetched blockchain is not a left bound subset of the requested indices in index range {} to {}",
+                next_index_interval.start(),
+                next_index_interval.end()
+            );
+        }
+
         leading_block_hash = fetched_blocks[0].get_parent_hash().clone();
         let number_of_blocks_fetched = fetched_blocks.len();
         if let Some(ref pb) = pb {
@@ -413,6 +422,7 @@ async fn fetch_blocks_interval(
 pub mod blocks_verifier {
     use crate::common::storage::types::RosettaBlock;
     use serde_bytes::ByteBuf;
+    use std::ops::RangeInclusive;
 
     pub fn is_valid_blockchain(blockchain: &[RosettaBlock], leading_block_hash: &ByteBuf) -> bool {
         if blockchain.is_empty() {
@@ -438,6 +448,27 @@ pub mod blocks_verifier {
         // No invalid blocks were found return true.
         true
     }
+
+    /// Checks whether the blocks in the blockchain are a continous subset of the requested indices
+    pub fn indices_are_valid(
+        blockchain: &[RosettaBlock],
+        requested_indices: RangeInclusive<u64>,
+    ) -> bool {
+        if blockchain.is_empty() {
+            return true;
+        }
+
+        let mut current_index = *requested_indices.start();
+        for block in blockchain {
+            // The fetched blockchain should be continous with respect to the requested indices.
+            if block.index != current_index {
+                return false;
+            }
+            current_index += 1;
+        }
+
+        current_index - 1 == *requested_indices.end()
+    }
 }
 
 #[cfg(test)]
@@ -453,23 +484,64 @@ mod tests {
 
     proptest! {
             #[test]
-        fn test_valid_blockchain(blockchain in valid_blockchain_strategy::<U256>(1000)){
-            let num_blocks = blockchain.len();
-            let mut rosetta_blocks = vec![];
-            for (index,block) in blockchain.into_iter().enumerate(){
-                rosetta_blocks.push(RosettaBlock::from_generic_block(encoded_block_to_generic_block(&block.encode()),index as u64).unwrap());
-            }
-            // Blockchain is valid and should thus pass the verification.
-            assert!(blocks_verifier::is_valid_blockchain(&rosetta_blocks,&rosetta_blocks.last().map(|block|block.clone().get_block_hash().clone()).unwrap_or_else(|| ByteBuf::from(r#"TestBytes"#))));
+            fn test_valid_blockchain(blockchain in valid_blockchain_strategy::<U256>(1000)){
+                let num_blocks = blockchain.len();
+                let mut rosetta_blocks = vec![];
+                for (index,block) in blockchain.into_iter().enumerate(){
+                    rosetta_blocks.push(RosettaBlock::from_generic_block(encoded_block_to_generic_block(&block.encode()),index as u64).unwrap());
+                }
+                // Blockchain is valid and should thus pass the verification.
+                assert!(blocks_verifier::is_valid_blockchain(&rosetta_blocks,&rosetta_blocks.last().map(|block|block.clone().get_block_hash().clone()).unwrap_or_else(|| ByteBuf::from(r#"TestBytes"#))));
 
-            // There is no point in shuffling the blockchain if it has length zero.
-            if num_blocks > 0 {
-                // If shuffled, the blockchain is no longer in order and thus no longer valid.
-                rosetta_blocks.shuffle(&mut rand::thread_rng());
-                let shuffled_blocks = rosetta_blocks.to_vec();
-                assert!(!blocks_verifier::is_valid_blockchain(&shuffled_blocks,&rosetta_blocks.last().unwrap().clone().get_block_hash().clone())|| num_blocks<=1||rosetta_blocks==shuffled_blocks);
+                // There is no point in shuffling the blockchain if it has length zero.
+                if num_blocks > 0 {
+                    // If shuffled, the blockchain is no longer in order and thus no longer valid.
+                    rosetta_blocks.shuffle(&mut rand::thread_rng());
+                    let shuffled_blocks = rosetta_blocks.to_vec();
+                    assert!(!blocks_verifier::is_valid_blockchain(&shuffled_blocks,&rosetta_blocks.last().unwrap().clone().get_block_hash().clone())|| num_blocks<=1||rosetta_blocks==shuffled_blocks);
+                }
+
             }
 
+            #[test]
+            fn test_indices_are_valid(blockchain in valid_blockchain_strategy::<U256>(1000)) {
+                let mut rosetta_blocks = vec![];
+                for (index,block) in blockchain.into_iter().enumerate(){
+                    rosetta_blocks.push(RosettaBlock::from_generic_block(encoded_block_to_generic_block(&block.encode()),index as u64).unwrap());
+                }
+                if !rosetta_blocks.is_empty() {
+                let requested_indices = RangeInclusive::new(0, (rosetta_blocks.len()-1) as u64);
+                assert!(blocks_verifier::indices_are_valid(
+                    &rosetta_blocks,
+                    requested_indices
+                ));
+                let requested_indices = RangeInclusive::new(0, rosetta_blocks.len()as u64);
+                assert!(!blocks_verifier::indices_are_valid(
+                    &rosetta_blocks,
+                    requested_indices
+                ));
+                let requested_indices = RangeInclusive::new(1, (rosetta_blocks.len()-1) as u64);
+                assert!(!blocks_verifier::indices_are_valid(
+                    &rosetta_blocks,
+                    requested_indices
+                ));
+
+                // Simulate a replica that returns a block with an invalid index
+                let mid_index:usize = rosetta_blocks.len()/2;
+                rosetta_blocks[mid_index].index += 1;
+                let requested_indices = RangeInclusive::new(0, (rosetta_blocks.len()-1) as u64);
+                assert!(!blocks_verifier::indices_are_valid(
+                    &rosetta_blocks,
+                    requested_indices
+                ));
+            }
+        else{
+            let requested_indices = RangeInclusive::new(0,  rosetta_blocks.len() as u64);
+            assert!(blocks_verifier::indices_are_valid(
+                &rosetta_blocks,
+                requested_indices
+            ));
+        }
         }
     }
 }
