@@ -149,7 +149,8 @@ impl PocketIc {
             },
         ) in subnet_config_info.into_iter().enumerate()
         {
-            let mut subnet_config = SubnetConfig::new(conv_type(subnet_kind));
+            let subnet_type = conv_type(subnet_kind);
+            let mut subnet_config = SubnetConfig::new(subnet_type);
             let mut hypervisor_config = execution_environment::Config::default();
             if let SubnetInstructionConfig::Benchmarking = instruction_config {
                 let instruction_limit = NumInstructions::new(99_999_999_999_999);
@@ -169,6 +170,7 @@ impl PocketIc {
                 .with_config(Some(sm_config))
                 .with_subnet_seq_no(subnet_seq_no as u8)
                 .with_subnet_size(subnet_size.try_into().unwrap())
+                .with_subnet_type(subnet_type)
                 .with_registry_data_provider(registry_data_provider.clone())
                 .with_multisubnet_ecdsa_key()
                 .with_use_cost_scaling_flag(true);

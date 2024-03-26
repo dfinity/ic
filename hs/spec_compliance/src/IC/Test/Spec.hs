@@ -585,6 +585,54 @@ icTests my_sub other_sub =
                                                                                          assertBool "random blobs are different" $ r1 /= r2,
                                                                                        testGroup "canister http outcalls" $ canister_http_calls my_sub,
                                                                                        testGroup
+                                                                                         "large calls"
+                                                                                         $ let arg n = BS.pack $ take n $ repeat 0
+                                                                                            in let prog n = ignore (stableGrow (int 666)) >>> stableWrite (int 0) (bytes $ arg n) >>> replyData "ok"
+                                                                                                in let callRec cid n =
+                                                                                                         rec
+                                                                                                           [ "request_type" =: GText "call",
+                                                                                                             "canister_id" =: GBlob cid,
+                                                                                                             "sender" =: GBlob anonymousUser,
+                                                                                                             "method_name" =: GText "update",
+                                                                                                             "arg" =: GBlob (run $ prog n)
+                                                                                                           ]
+                                                                                                    in let queryRec cid n =
+                                                                                                             rec
+                                                                                                               [ "request_type" =: GText "query",
+                                                                                                                 "canister_id" =: GBlob cid,
+                                                                                                                 "sender" =: GBlob anonymousUser,
+                                                                                                                 "method_name" =: GText "query",
+                                                                                                                 "arg" =: GBlob (run $ prog n)
+                                                                                                               ]
+                                                                                                        in [ simpleTestCase "Large update call" ecid $ \cid ->
+                                                                                                               do
+                                                                                                                 let size = case my_type of
+                                                                                                                       System -> 3600000 -- registry setting for system subnets: 3.5MiB
+                                                                                                                       _ -> 2000000 -- registry setting for app subnets: 2MiB
+                                                                                                                 addNonceExpiryEnv (callRec cid size)
+                                                                                                                   >>= postCallCBOR cid
+                                                                                                                   >>= code202
+                                                                                                                 call cid (prog size) >>= is "ok",
+                                                                                                             simpleTestCase "Too large update call" ecid $ \cid ->
+                                                                                                               do
+                                                                                                                 let size = case my_type of
+                                                                                                                       System -> 3700000
+                                                                                                                       _ -> 2100000
+                                                                                                                 addNonceExpiryEnv (callRec cid size)
+                                                                                                                 >>= postCallCBOR cid
+                                                                                                                 >>= code4xx,
+                                                                                                             simpleTestCase "Large query call" ecid $ \cid -> do
+                                                                                                               let size = 4100000 -- BN limits all requests to 4MiB
+                                                                                                               addNonceExpiryEnv (queryRec cid size)
+                                                                                                                 >>= postQueryCBOR cid
+                                                                                                                 >>= code2xx
+                                                                                                               query cid (prog size) >>= is "ok",
+                                                                                                             simpleTestCase "Too large query call" ecid $ \cid ->
+                                                                                                               addNonceExpiryEnv (queryRec cid 4200000)
+                                                                                                                 >>= postQueryCBOR cid
+                                                                                                                 >>= code4xx
+                                                                                                           ],
+                                                                                       testGroup
                                                                                          "simple calls"
                                                                                          [ simpleTestCase "Call" ecid $ \cid ->
                                                                                              call cid (replyData "ABCD") >>= is "ABCD",
