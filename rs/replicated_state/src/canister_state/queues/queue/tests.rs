@@ -9,76 +9,111 @@ use proptest::prelude::*;
 
 #[test]
 fn canister_queue_constructor_test() {
-    let mut queue = CanisterQueue::new(14);
-    assert_eq!(queue.len(), 0);
+    const CAPACITY: usize = 14;
+    let mut queue = CanisterQueue::new(CAPACITY);
+
+    assert_eq!(0, queue.len());
+    assert!(!queue.has_used_slots());
+    assert_eq!(CAPACITY, queue.capacity);
+    assert_eq!(CAPACITY, queue.available_request_slots());
+    assert_eq!(CAPACITY, queue.available_response_slots());
+    assert_eq!(Ok(()), queue.check_has_request_slot());
+    assert_eq!(0, queue.reserved_slots());
+    assert_eq!(queue.peek(), None);
     assert_eq!(queue.pop(), None);
-}
-
-#[test]
-fn canister_queue_with_message_is_not_empty() {
-    let mut queue = CanisterQueue::new(14);
-
-    queue.push_request(MessageId::new(13));
-    assert_eq!(queue.len(), 1);
-    assert!(queue.has_used_slots());
-}
-
-#[test]
-fn canister_queue_with_reservation_is_not_empty() {
-    let mut queue = CanisterQueue::new(14);
-    queue.try_reserve_response_slot().unwrap();
-
-    assert_eq!(queue.len(), 0);
-    assert!(queue.has_used_slots());
 }
 
 // Pushing a request succeeds if there is space.
 #[test]
 fn canister_queue_push_request_succeeds() {
-    let capacity: usize = 1;
-    let mut queue = CanisterQueue::new(capacity);
+    const CAPACITY: usize = 1;
+    let mut queue = CanisterQueue::new(CAPACITY);
 
-    assert_eq!(queue.available_request_slots(), 1);
-    queue.push_request(MessageId::new(13));
-    assert_eq!(queue.available_request_slots(), 0);
-    assert!(queue.check_has_request_slot().is_err());
+    let id = MessageId::new(13);
+    queue.push_request(id);
 
     assert_eq!(1, queue.len());
+    assert!(queue.has_used_slots());
+    assert_eq!(CAPACITY - 1, queue.available_request_slots());
+    assert_eq!(
+        Err(StateError::QueueFull { capacity: CAPACITY }),
+        queue.check_has_request_slot()
+    );
+    assert_eq!(CAPACITY, queue.available_response_slots());
+    assert_eq!(0, queue.reserved_slots());
+
+    // Peek, then pop the request reference.
+    assert_eq!(Some(&MessageReference::Request(id)), queue.peek());
+    assert_eq!(Some(MessageReference::Request(id)), queue.pop());
+
+    assert_eq!(0, queue.len());
+    assert!(!queue.has_used_slots());
+    assert_eq!(CAPACITY, queue.available_request_slots());
+    assert_eq!(Ok(()), queue.check_has_request_slot());
+    assert_eq!(CAPACITY, queue.available_response_slots());
+    assert_eq!(0, queue.reserved_slots());
 }
 
 // Reserving a slot, then pushing a response succeeds if there is space.
 #[test]
 fn canister_queue_push_response_succeeds() {
-    let capacity: usize = 1;
-    let mut queue = CanisterQueue::new(capacity);
+    const CAPACITY: usize = 1;
+    let mut queue = CanisterQueue::new(CAPACITY);
 
-    assert_eq!(queue.available_response_slots(), 1);
+    // Reserve a slot.
     queue.try_reserve_response_slot().unwrap();
-    assert_eq!(queue.available_response_slots(), 0);
-    queue.push_response(MessageId::new(13));
-    assert_eq!(queue.available_response_slots(), 0);
+
+    assert_eq!(0, queue.len());
+    assert!(queue.has_used_slots());
+    assert_eq!(CAPACITY, queue.available_request_slots());
+    assert_eq!(Ok(()), queue.check_has_request_slot());
+    assert_eq!(CAPACITY - 1, queue.available_response_slots());
+    assert_eq!(1, queue.reserved_slots());
+
+    // Push response into reseerved slot.
+    let id = MessageId::new(13);
+    assert_eq!(Ok(()), queue.push_response(id));
 
     assert_eq!(1, queue.len());
+    assert!(queue.has_used_slots());
+    assert_eq!(CAPACITY, queue.available_request_slots());
+    assert_eq!(Ok(()), queue.check_has_request_slot());
+    assert_eq!(CAPACITY - 1, queue.available_response_slots());
+    assert_eq!(0, queue.reserved_slots());
+
+    // Peek, then pop the response reference.
+    assert_eq!(Some(&MessageReference::Response(id)), queue.peek());
+    assert_eq!(Some(MessageReference::Response(id)), queue.pop());
+
+    assert_eq!(0, queue.len());
+    assert!(!queue.has_used_slots());
+    assert_eq!(CAPACITY, queue.available_request_slots());
+    assert_eq!(Ok(()), queue.check_has_request_slot());
+    assert_eq!(CAPACITY, queue.available_response_slots());
+    assert_eq!(0, queue.reserved_slots());
 }
 
-/// Test that overfilling an output queue with messages results in failed
+/// Test that overfilling an output queue with requests results in failed
 /// pushes; also verifies that pushes below capacity succeed.
 #[test]
 #[should_panic(expected = "assertion failed: self.request_slots < self.capacity")]
-fn canister_queue_push_to_full_queue_fails() {
+fn canister_queue_push_request_to_full_queue_fails() {
     // First fill up the queue.
-    let capacity: usize = 2;
-    let mut queue = CanisterQueue::new(capacity);
-    for i in 0..capacity {
+    const CAPACITY: usize = 2;
+    let mut queue = CanisterQueue::new(CAPACITY);
+    for i in 0..CAPACITY {
         queue.push_request(MessageId::new(i as u64));
     }
-    assert_eq!(queue.len(), 2);
+
+    assert_eq!(CAPACITY, queue.len());
     assert!(queue.has_used_slots());
-    assert_eq!(queue.available_request_slots(), 0);
+    assert_eq!(0, queue.available_request_slots());
     assert_eq!(
-        queue.check_has_request_slot(),
-        Err(StateError::QueueFull { capacity })
+        Err(StateError::QueueFull { capacity: CAPACITY }),
+        queue.check_has_request_slot()
     );
+    assert_eq!(CAPACITY, queue.available_response_slots());
+    assert_eq!(0, queue.reserved_slots());
 
     queue.push_request(MessageId::new(13));
 }
@@ -87,21 +122,75 @@ fn canister_queue_push_to_full_queue_fails() {
 /// reservations; also verifies that reservations below capacity succeed.
 #[test]
 fn canister_queue_try_reserve_in_full_queue_fails() {
-    // First fill up the queue.
-    let capacity: usize = 2;
-    let mut queue = CanisterQueue::new(capacity);
-    for _index in 0..capacity {
+    const CAPACITY: usize = 2;
+    let mut queue = CanisterQueue::new(CAPACITY);
+
+    // Reserve all response slots.
+    for _index in 0..CAPACITY {
         queue.try_reserve_response_slot().unwrap();
     }
-    assert_eq!(queue.len(), 0);
-    assert_eq!(queue.reserved_slots(), capacity);
-    assert!(queue.has_used_slots());
-    assert_eq!(queue.available_response_slots(), 0);
 
-    // Try to reserve a slot.
+    assert_eq!(0, queue.len());
+    assert!(queue.has_used_slots());
+    assert_eq!(CAPACITY, queue.available_request_slots());
+    assert_eq!(Ok(()), queue.check_has_request_slot());
+    assert_eq!(0, queue.available_response_slots());
+    assert_eq!(CAPACITY, queue.reserved_slots());
+
+    // Trying to reserve a slot fails.
     assert_eq!(
+        Err(StateError::QueueFull { capacity: CAPACITY }),
+        queue.try_reserve_response_slot()
+    );
+
+    // Fill the queue with responses.
+    for i in 0..CAPACITY {
+        queue.push_response(MessageId::new(i as u64));
+    }
+
+    assert_eq!(2, queue.len());
+    assert!(queue.has_used_slots());
+    assert_eq!(CAPACITY, queue.available_request_slots());
+    assert_eq!(Ok(()), queue.check_has_request_slot());
+    assert_eq!(0, queue.available_response_slots());
+    assert_eq!(0, queue.reserved_slots());
+
+    // Trying to reserve a slot still fails.
+    assert_eq!(
+        Err(StateError::QueueFull { capacity: CAPACITY }),
+        queue.try_reserve_response_slot()
+    );
+    // Pushing a response also fails.
+    assert_eq!(
+        Err(StateError::QueueFull { capacity: CAPACITY }),
+        queue.push_response(MessageId::new(13))
+    );
+}
+
+/// Test that a queue can be filled with both requests and responses at the
+/// same time.
+#[test]
+fn canister_queue_full_duplex() {
+    // First fill up the queue.
+    const CAPACITY: usize = 2;
+    let mut queue = CanisterQueue::new(CAPACITY);
+    for i in 0..CAPACITY {
+        queue.push_request(MessageId::new(i as u64 * 2));
+        queue.try_reserve_response_slot().unwrap();
+        queue.push_response(MessageId::new(i as u64 * 2 + 1));
+    }
+
+    assert_eq!(2 * CAPACITY, queue.len());
+    assert!(queue.has_used_slots());
+    assert_eq!(0, queue.available_request_slots());
+    assert_eq!(
+        Err(StateError::QueueFull { capacity: CAPACITY }),
+        queue.check_has_request_slot()
+    );
+    assert_eq!(0, queue.available_response_slots());
+    assert_eq!(
+        Err(StateError::QueueFull { capacity: CAPACITY }),
         queue.try_reserve_response_slot(),
-        Err(StateError::QueueFull { capacity })
     );
 }
 
@@ -111,6 +200,52 @@ fn canister_queue_push_without_reserved_slot_fails() {
     assert_eq!(
         queue.push_response(MessageId::new(13)),
         Err(StateError::QueueFull { capacity: 10 })
+    );
+}
+
+#[test]
+fn canister_queue_contains() {
+    const CAPACITY: usize = 2;
+    let mut queue = CanisterQueue::new(CAPACITY);
+
+    let id1 = MessageId::new(1);
+    let id2 = MessageId::new(2);
+    assert!(!queue.contains(id1));
+    assert!(!queue.contains(id2));
+
+    // Push a request with ID `id1`.
+    queue.push_request(id1);
+    assert!(queue.contains(id1));
+    assert!(!queue.contains(id2));
+
+    // Push a response with ID `id2`.
+    queue.try_reserve_response_slot().unwrap();
+    queue.push_response(id2);
+    assert!(queue.contains(id1));
+    assert!(queue.contains(id2));
+
+    // Pop the request.
+    assert_eq!(Some(MessageReference::Request(id1)), queue.pop());
+    assert!(!queue.contains(id1));
+    assert!(queue.contains(id2));
+
+    // Pop the response.
+    assert_eq!(Some(MessageReference::Response(id2)), queue.pop());
+    assert!(!queue.contains(id1));
+    assert!(!queue.contains(id2));
+}
+
+#[test]
+fn canister_queue_empty_size_bytes() {
+    let pool = MessagePool::default();
+
+    assert_eq!(
+        CanisterQueue::new(1).calculate_size_bytes(&pool),
+        CanisterQueue::empty_size_bytes()
+    );
+    assert_eq!(
+        CanisterQueue::new(10).calculate_size_bytes(&pool),
+        CanisterQueue::empty_size_bytes()
     );
 }
 
