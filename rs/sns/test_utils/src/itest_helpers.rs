@@ -281,24 +281,14 @@ impl SnsTestsInitPayloadBuilder {
 }
 
 pub fn populate_canister_ids(
-    root_canister_id: CanisterId,
-    governance_canister_id: CanisterId,
-    ledger_canister_id: CanisterId,
-    swap_canister_id: CanisterId,
-    index_canister_id: CanisterId,
-    archive_canister_ids: Vec<CanisterId>,
+    root_canister_id: PrincipalId,
+    governance_canister_id: PrincipalId,
+    ledger_canister_id: PrincipalId,
+    swap_canister_id: PrincipalId,
+    index_canister_id: PrincipalId,
+    archive_canister_ids: Vec<PrincipalId>,
     sns_canister_init_payloads: &mut SnsCanisterInitPayloads,
 ) {
-    let root_canister_id = PrincipalId::from(root_canister_id);
-    let governance_canister_id = PrincipalId::from(governance_canister_id);
-    let ledger_canister_id = PrincipalId::from(ledger_canister_id);
-    let swap_canister_id = Some(PrincipalId::from(swap_canister_id));
-    let index_canister_id = Some(PrincipalId::from(index_canister_id));
-    let archive_canister_ids = archive_canister_ids
-        .into_iter()
-        .map(|c_id| c_id.get())
-        .collect();
-
     // Root.
     {
         let root = &mut sns_canister_init_payloads.root;
@@ -309,10 +299,10 @@ pub fn populate_canister_ids(
             root.ledger_canister_id = Some(ledger_canister_id);
         }
         if root.swap_canister_id.is_none() {
-            root.swap_canister_id = swap_canister_id;
+            root.swap_canister_id = Some(swap_canister_id);
         }
         if root.index_canister_id.is_none() {
-            root.index_canister_id = index_canister_id;
+            root.index_canister_id = Some(index_canister_id);
         }
         if root.archive_canister_ids.is_empty() {
             root.archive_canister_ids = archive_canister_ids;
@@ -324,7 +314,7 @@ pub fn populate_canister_ids(
         let governance = &mut sns_canister_init_payloads.governance;
         governance.ledger_canister_id = Some(ledger_canister_id);
         governance.root_canister_id = Some(root_canister_id);
-        governance.swap_canister_id = swap_canister_id;
+        governance.swap_canister_id = Some(swap_canister_id);
     }
 
     // Ledger
@@ -405,11 +395,11 @@ impl SnsCanisters<'_> {
         let index_canister_id = index.canister_id();
 
         populate_canister_ids(
-            root_canister_id,
-            governance_canister_id,
-            ledger_canister_id,
-            swap_canister_id,
-            index_canister_id,
+            root_canister_id.get(),
+            governance_canister_id.get(),
+            ledger_canister_id.get(),
+            swap_canister_id.get(),
+            index_canister_id.get(),
             vec![],
             &mut init_payloads,
         );
