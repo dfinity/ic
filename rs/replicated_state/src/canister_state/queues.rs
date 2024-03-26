@@ -1356,14 +1356,12 @@ fn get_message(
     match reference {
         Request(id) => pool.get_request(id).cloned(),
         Response(id) => pool.get_response(id).cloned(),
-        TimeoutRejectResponse(callback) | DropRejectResponse(callback) => {
-            Some(generate_reject_response(
-                callback,
-                callbacks,
-                RejectCode::SysTransient,
-                "Timed out".into(),
-            ))
-        }
+        LocalRejectResponse(callback) => Some(generate_reject_response(
+            callback,
+            callbacks,
+            RejectCode::SysTransient,
+            "Timed out".into(),
+        )),
     }
 }
 

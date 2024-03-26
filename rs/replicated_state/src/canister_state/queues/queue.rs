@@ -39,20 +39,18 @@ pub(super) enum MessageReference {
     /// Best-effort responses in output queues may time out and be dropped from the
     /// pool. Stale response references in output queues can be safely ignored.
     ///
-    /// A stale response reference is enqueued into an input queue as a
+    /// A dangling response reference is enqueued into an input queue as a
     /// `SYS_UNKNOWN` reject response marker. A matching response may or may not be
     /// inserted into the pool while the reference is backlogged in the input queue.
-    /// Meaning that stale response references in input queues are `SYS_UNKNOWN`
+    /// Meaning that dangling response references in input queues are `SYS_UNKNOWN`
     /// reject responses.
     ///
     /// Guaranteed responses never time out.
     Response(MessageId),
 
-    /// Local known (i.e. `SYS_TRANSIENT`) timeout reject response.
-    TimeoutRejectResponse(CallbackId),
-
-    /// Local known (i.e. `SYS_TRANSIENT`) drop reject response.
-    DropRejectResponse(CallbackId),
+    /// Local known (i.e. `SYS_TRANSIENT`) reject response: "timeout" if deadline
+    /// has expired, "drop" otherwise.
+    LocalRejectResponse(CallbackId),
 }
 
 impl MessageReference {
@@ -61,9 +59,7 @@ impl MessageReference {
         match self {
             Self::Request(_) => false,
 
-            Self::Response(_) | Self::TimeoutRejectResponse(_) | Self::DropRejectResponse(_) => {
-                true
-            }
+            Self::Response(_) | Self::LocalRejectResponse(_) => true,
         }
     }
 }
@@ -77,7 +73,7 @@ impl TryFrom<&MessageReference> for MessagePoolReference {
         match reference {
             Request(id) => Ok(Self::Request(*id)),
             Response(id) => Ok(Self::Response(*id)),
-            TimeoutRejectResponse(_) | DropRejectResponse(_) => Err(()),
+            LocalRejectResponse(_) => Err(()),
         }
     }
 }
@@ -262,8 +258,7 @@ impl CanisterQueue {
         self.calculate_reference_stat_sum(|reference| match reference {
             Request(id) => pool.get_request(*id).is_some() as usize,
             Response(id) => pool.get_response(*id).is_some() as usize,
-            TimeoutRejectResponse(_) => 1,
-            DropRejectResponse(_) => 1,
+            LocalRejectResponse(_) => 1,
         })
     }
 
@@ -277,8 +272,7 @@ impl CanisterQueue {
         self.calculate_reference_stat_sum(|reference| match reference {
             Request(_) => 0,
             Response(id) => pool.get_response(*id).is_some() as usize,
-            TimeoutRejectResponse(_) => 1,
-            DropRejectResponse(_) => 1,
+            LocalRejectResponse(_) => 1,
         })
     }
 
