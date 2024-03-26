@@ -36,7 +36,7 @@ slog = { workspace = true }
 strum_macros = { workspace = true }
 
 [dev-dependencies]
-assert_matches = "1.3.0"
+assert_matches = { workspace = true }
 criterion = "0.5"
 ic-artifact-pool = { path = "../artifact_pool" }
 ic-btc-types-internal = { path = "../bitcoin/types/internal" }

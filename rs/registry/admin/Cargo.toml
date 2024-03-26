@@ -68,7 +68,7 @@ chrono = { workspace = true }
 indexmap = { workspace = true }
 
 [dev-dependencies]
-assert_matches = "1.4.0"
+assert_matches = { workspace = true }
 
 [[bin]]
 name = "ic-admin"

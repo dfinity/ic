@@ -22,7 +22,7 @@ serde_json = { workspace = true }
 time = { workspace = true }
 
 [dev-dependencies]
-assert_matches = "1.5.0"
+assert_matches = { workspace = true }
 candid_parser = { workspace = true }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }

@@ -9,7 +9,7 @@ documentation.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 assert-json-diff = "2.0.1"
-assert_matches = "1.3.0"
+assert_matches = { workspace = true }
 async-recursion = { workspace = true }
 async-trait = "0.1.41"
 backon = "0.4.1"
