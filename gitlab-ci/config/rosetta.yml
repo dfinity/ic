@@ -112,7 +112,6 @@ icrc-rosetta-api-docker-image:
 
       docker run --rm bazel/rs/rosetta-api/icrc1/rosetta:ic_icrc_rosetta_image --help
 
-      ICRC_ROSETTA_API_DATE=$(date +"%Y%m%d")
       ICRC_ROSETTA_API_VERSION=$(grep -e '^version' "$CI_PROJECT_DIR"/rs/rosetta-api/icrc1/rosetta/Cargo.toml | sed -e 's|^version[ ]*=[ ]*"\([^"]*\)"|\1|g')
 
       docker tag dfinity/icrc-rosetta-api:"$CI_COMMIT_SHA" dfinity/icrc-rosetta-api:v"$ICRC_ROSETTA_API_VERSION"
