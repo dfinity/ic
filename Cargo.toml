@@ -523,8 +523,8 @@ slog = { version = "2.7.0", features = [
   "release_max_level_debug",
   "release_max_level_trace",
 ] }
-strum = { version = "0.25.0", features = ["derive"] }
-strum_macros = "0.25.3"
+strum = { version = "0.26.2", features = ["derive"] }
+strum_macros = "0.26.2"
 syn = { version = "1.0.109", features = ["fold", "full"] }
 thiserror = "1.0.57"
 time = { version = "0.3.20", features = ["formatting"] }
