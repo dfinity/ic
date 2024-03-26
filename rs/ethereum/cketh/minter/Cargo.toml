@@ -19,7 +19,7 @@ ethnum = { workspace = true }
 futures = { workspace = true }
 hex = "0.4"
 hex-literal = "0.4.1"
-ic-canister-log = "0.2.0"
+ic-canister-log = { path = "../../../rust_canisters/canister_log" }
 ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
