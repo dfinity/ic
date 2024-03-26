@@ -1,11 +1,11 @@
 use crate::cbor::tests::check_roundtrip;
 use crate::eth_logs::{ReceivedEthEvent, ReceivedEvent};
 use crate::eth_rpc::Hash;
-use crate::memo::Address;
 use crate::memo::BurnMemo;
+use crate::memo::{Address, MintMemo};
 use crate::numeric::{BlockNumber, CkTokenAmount, LedgerBurnIndex, LogIndex, Wei};
 use crate::state::transactions::ReimbursementRequest;
-use arbitrary::{arb_burn_memo, arb_mint_memo};
+use arbitrary::{arb_burn_memo, arb_mint_memo, arb_reimbursement_request};
 use candid::Principal;
 use icrc_ledger_types::icrc1::transfer::Memo;
 use proptest::prelude::*;
@@ -29,6 +29,23 @@ proptest! {
 
         let encoded_burn_memo = Memo::from(burn_memo);
         prop_assert!(encoded_burn_memo.0.len() <= 80, "encoded burn memo is too large: {:?}", encoded_burn_memo);
+    }
+
+
+    #[test]
+    fn should_convert_reimbursement_request_to_mint_memo(reimbursement_request in arb_reimbursement_request()) {
+        let mint_memo = MintMemo::from(reimbursement_request.clone());
+
+        match mint_memo {
+            MintMemo::Convert{ .. } => panic!("BUG: unexpected mint memo variant"),
+            MintMemo::ReimburseTransaction{withdrawal_id,tx_hash  } => {
+                prop_assert_eq!(withdrawal_id, reimbursement_request.ledger_burn_index.get());
+                prop_assert_eq!(tx_hash, reimbursement_request.transaction_hash.unwrap());
+            }
+            MintMemo::ReimburseWithdrawal{withdrawal_id } => {
+                prop_assert_eq!(withdrawal_id, reimbursement_request.ledger_burn_index.get());
+            }
+        }
     }
 }
 
@@ -108,10 +125,14 @@ mod arbitrary {
     use crate::checked_amount::CheckedAmountOf;
     use crate::eth_rpc::Hash;
     use crate::memo::{BurnMemo, MintMemo};
-    use crate::numeric::LogIndex;
+    use crate::numeric::{LedgerBurnIndex, LogIndex};
+    use crate::state::transactions::{ReimbursementRequest, Subaccount};
+    use candid::Principal;
     use ic_ethereum_types::Address;
     use proptest::arbitrary::any;
     use proptest::array::{uniform20, uniform32};
+    use proptest::collection::vec as pvec;
+    use proptest::option;
     use proptest::prelude::{BoxedStrategy, Strategy};
     use proptest::prop_oneof;
 
@@ -128,7 +149,12 @@ mod arbitrary {
     }
 
     pub fn arb_mint_memo() -> BoxedStrategy<MintMemo> {
-        prop_oneof![arb_mint_convert_memo(), arb_mint_reimburse_memo()].boxed()
+        prop_oneof![
+            arb_mint_convert_memo(),
+            arb_mint_reimburse_transaction_memo(),
+            arb_mint_reimburse_withdrawal_memo()
+        ]
+        .boxed()
     }
 
     fn arb_mint_convert_memo() -> impl Strategy<Value = MintMemo> {
@@ -141,13 +167,18 @@ mod arbitrary {
         })
     }
 
-    fn arb_mint_reimburse_memo() -> impl Strategy<Value = MintMemo> {
-        (arb_hash(), any::<u64>()).prop_map(|(tx_hash, withdrawal_id)| MintMemo::Reimburse {
-            withdrawal_id,
-            tx_hash,
+    fn arb_mint_reimburse_transaction_memo() -> impl Strategy<Value = MintMemo> {
+        (arb_hash(), any::<u64>()).prop_map(|(tx_hash, withdrawal_id)| {
+            MintMemo::ReimburseTransaction {
+                withdrawal_id,
+                tx_hash,
+            }
         })
     }
 
+    fn arb_mint_reimburse_withdrawal_memo() -> impl Strategy<Value = MintMemo> {
+        (any::<u64>()).prop_map(|withdrawal_id| MintMemo::ReimburseWithdrawal { withdrawal_id })
+    }
     pub fn arb_burn_memo() -> BoxedStrategy<BurnMemo> {
         prop_oneof![
             arb_burn_cketh_memo(),
@@ -189,15 +220,45 @@ mod arbitrary {
         })
     }
 
+    pub fn arb_reimbursement_request() -> impl Strategy<Value = ReimbursementRequest> {
+        (
+            any::<u64>(),
+            arb_checked_amount_of(),
+            arb_principal(),
+            option::of(arb_subaccount()),
+            option::of(arb_hash()),
+        )
+            .prop_map(
+                |(ledger_burn_index, reimbursed_amount, to, to_subaccount, transaction_hash)| {
+                    ReimbursementRequest {
+                        ledger_burn_index: LedgerBurnIndex::from(ledger_burn_index),
+                        reimbursed_amount,
+                        to,
+                        to_subaccount,
+                        transaction_hash,
+                    }
+                },
+            )
+    }
+
+    fn arb_principal() -> impl Strategy<Value = Principal> {
+        pvec(any::<u8>(), 0..=29).prop_map(|bytes| Principal::from_slice(&bytes))
+    }
+
+    fn arb_subaccount() -> impl Strategy<Value = Subaccount> {
+        uniform32(any::<u8>()).prop_map(Subaccount)
+    }
+
     #[test]
     fn should_have_a_strategy_for_each_mint_memo_variant() {
-        let memo_to_match = MintMemo::Reimburse {
+        let memo_to_match = MintMemo::ReimburseTransaction {
             withdrawal_id: 0,
             tx_hash: Hash(Default::default()),
         };
         let _ = match memo_to_match {
             MintMemo::Convert { .. } => arb_mint_convert_memo().boxed(),
-            MintMemo::Reimburse { .. } => arb_mint_reimburse_memo().boxed(),
+            MintMemo::ReimburseTransaction { .. } => arb_mint_reimburse_transaction_memo().boxed(),
+            MintMemo::ReimburseWithdrawal { .. } => arb_mint_reimburse_withdrawal_memo().boxed(),
         };
     }
 

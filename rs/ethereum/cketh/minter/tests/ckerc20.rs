@@ -97,7 +97,7 @@ mod withdraw_erc20 {
     use ic_cketh_minter::endpoints::ckerc20::WithdrawErc20Error;
     use ic_cketh_test_utils::ckerc20::{DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS, ONE_USDC};
     use ic_cketh_test_utils::flow::DepositParams;
-    use ic_cketh_test_utils::CKETH_TRANSFER_FEE;
+    use ic_cketh_test_utils::{CKETH_MINIMUM_WITHDRAWAL_AMOUNT, CKETH_TRANSFER_FEE};
     use ic_ledger_suite_orchestrator_test_utils::new_state_machine;
     use num_bigint::BigUint;
     use std::sync::Arc;
@@ -245,14 +245,17 @@ mod withdraw_erc20 {
     }
 
     #[test]
-    fn should_error_when_minter_not_allowed_to_burn_ckerc20() {
-        let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
+    fn should_error_when_minter_not_allowed_to_burn_ckerc20_and_reimburse_cketh() {
+        let mut ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
         let caller = ckerc20.caller();
         let ckusdc = ckerc20.find_ckerc20_token("ckUSDC");
 
-        ckerc20
+        ckerc20 = ckerc20
             .deposit_cketh(DepositParams::default())
-            .call_cketh_ledger_approve_minter(caller, CKETH_MINIMUM_WITHDRAWAL_AMOUNT, None)
+            .call_cketh_ledger_approve_minter(caller, CKETH_MINIMUM_WITHDRAWAL_AMOUNT, None);
+        let balance_before_withdrawal = ckerc20.cketh.balance_of(caller);
+
+        ckerc20 = ckerc20
             .call_minter_withdraw_erc20(
                 caller,
                 ONE_USDC,
@@ -265,6 +268,13 @@ mod withdraw_erc20 {
                 token_symbol: "ckUSDC".to_string(),
                 ledger_id: ckusdc.ledger_canister_id,
             });
+
+        let balance_after_withdrawal = ckerc20.cketh.balance_of(caller);
+        assert_eq!(
+            balance_after_withdrawal,
+            balance_before_withdrawal - Nat::from(CKETH_MINIMUM_WITHDRAWAL_AMOUNT),
+        );
+        //TODO XC-59: check for ckETH reimbursement
     }
 }
 

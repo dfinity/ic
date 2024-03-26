@@ -1,6 +1,6 @@
 pub use super::event::{Event, EventType};
 use super::State;
-use crate::state::transactions::Reimbursed;
+use crate::state::transactions::{Reimbursed, ReimbursementIndex};
 use crate::storage::{record_event, with_event_iter};
 
 /// Updates the state to reflect the given state transition.
@@ -94,9 +94,12 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
             reimbursed_amount: _,
             transaction_hash: _,
         }) => {
-            state
-                .eth_transactions
-                .record_finalized_reimbursement(*withdrawal_id, *reimbursed_in_block);
+            state.eth_transactions.record_finalized_reimbursement(
+                ReimbursementIndex::CkEth {
+                    ledger_burn_index: *withdrawal_id,
+                },
+                *reimbursed_in_block,
+            );
         }
         EventType::SkippedBlock(block_number) => {
             state.record_skipped_block(*block_number);
@@ -108,6 +111,28 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
             state
                 .eth_transactions
                 .record_withdrawal_request(request.clone());
+        }
+        EventType::ReimbursedErc20Withdrawal {
+            cketh_ledger_burn_index,
+            ckerc20_ledger_id,
+            reimbursed,
+        } => {
+            state.eth_transactions.record_finalized_reimbursement(
+                ReimbursementIndex::CkErc20 {
+                    cketh_ledger_burn_index: *cketh_ledger_burn_index,
+                    ledger_id: *ckerc20_ledger_id,
+                    ckerc20_ledger_burn_index: reimbursed.burn_in_block,
+                },
+                reimbursed.reimbursed_in_block,
+            );
+        }
+        EventType::FailedErc20WithdrawalRequest(cketh_reimbursement_request) => {
+            state.eth_transactions.record_reimbursement_request(
+                ReimbursementIndex::CkEth {
+                    ledger_burn_index: cketh_reimbursement_request.ledger_burn_index,
+                },
+                cketh_reimbursement_request.clone(),
+            )
         }
     }
 }

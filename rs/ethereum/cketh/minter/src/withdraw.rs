@@ -11,7 +11,8 @@ use crate::logs::{DEBUG, INFO};
 use crate::numeric::{GasAmount, LedgerBurnIndex, LedgerMintIndex, TransactionCount};
 use crate::state::audit::{process_event, EventType};
 use crate::state::transactions::{
-    create_transaction, CreateTransactionError, Reimbursed, ReimbursementRequest, WithdrawalRequest,
+    create_transaction, CreateTransactionError, Reimbursed, ReimbursementIndex,
+    ReimbursementRequest, WithdrawalRequest,
 };
 use crate::state::{mutate_state, read_state, State, TaskType};
 use crate::tx::{estimate_transaction_price, TransactionPriceEstimate};
@@ -40,20 +41,27 @@ pub async fn process_reimbursement() {
         }
     };
 
-    let reimbursement_requests: Vec<ReimbursementRequest> =
-        read_state(|s| s.eth_transactions.get_reimbursement_requests());
-    if reimbursement_requests.is_empty() {
+    let reimbursements: Vec<(ReimbursementIndex, ReimbursementRequest)> = read_state(|s| {
+        s.eth_transactions
+            .reimbursement_requests_iter()
+            .map(|(index, request)| (index.clone(), request.clone()))
+            .collect()
+    });
+    if reimbursements.is_empty() {
         return;
     }
 
-    let ledger_canister_id = read_state(|s| s.ledger_id);
-    let client = ICRC1Client {
-        runtime: CdkRuntime,
-        ledger_canister_id,
-    };
     let mut error_count = 0;
 
-    for reimbursement_request in reimbursement_requests {
+    for (index, reimbursement_request) in reimbursements {
+        let ledger_canister_id = match index {
+            ReimbursementIndex::CkEth { .. } => read_state(|s| s.ledger_id),
+            ReimbursementIndex::CkErc20 { ledger_id, .. } => ledger_id,
+        };
+        let client = ICRC1Client {
+            runtime: CdkRuntime,
+            ledger_canister_id,
+        };
         let args = TransferArg {
             from_subaccount: None,
             to: Account {
@@ -87,17 +95,27 @@ pub async fn process_reimbursement() {
                 continue;
             }
         };
-        mutate_state(|s| {
-            process_event(
-                s,
-                EventType::ReimbursedEthWithdrawal(Reimbursed {
-                    burn_in_block: reimbursement_request.ledger_burn_index,
-                    reimbursed_in_block: LedgerMintIndex::new(block_index),
-                    reimbursed_amount: reimbursement_request.reimbursed_amount,
-                    transaction_hash: reimbursement_request.transaction_hash,
-                }),
-            )
-        });
+        let reimbursed = Reimbursed {
+            burn_in_block: reimbursement_request.ledger_burn_index,
+            reimbursed_in_block: LedgerMintIndex::new(block_index),
+            reimbursed_amount: reimbursement_request.reimbursed_amount,
+            transaction_hash: reimbursement_request.transaction_hash,
+        };
+        let event = match index {
+            ReimbursementIndex::CkEth {
+                ledger_burn_index: _,
+            } => EventType::ReimbursedEthWithdrawal(reimbursed),
+            ReimbursementIndex::CkErc20 {
+                cketh_ledger_burn_index,
+                ledger_id,
+                ckerc20_ledger_burn_index: _,
+            } => EventType::ReimbursedErc20Withdrawal {
+                cketh_ledger_burn_index,
+                ckerc20_ledger_id: ledger_id,
+                reimbursed,
+            },
+        };
+        mutate_state(|s| process_event(s, event));
     }
     if error_count > 0 {
         log!(

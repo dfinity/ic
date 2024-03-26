@@ -495,7 +495,7 @@ fn should_reimburse() {
                 owner: PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID).into(),
                 subaccount: None,
             },
-            memo: Some(Memo::from(MintMemo::Reimburse {
+            memo: Some(Memo::from(MintMemo::ReimburseTransaction {
                 withdrawal_id: withdrawal_id.0.to_u64().unwrap(),
                 tx_hash: failed_tx_hash.parse().unwrap(),
             })),
