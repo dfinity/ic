@@ -1380,19 +1380,23 @@ mod eth_transactions {
     }
 
     mod record_finalized_transaction {
+        use crate::eth_rpc_client::responses::TransactionReceipt;
         use crate::map::MultiKeyMap;
-        use crate::numeric::{LedgerBurnIndex, TransactionNonce};
+        use crate::numeric::{GasAmount, LedgerBurnIndex, TransactionNonce, Wei, WeiPerGas};
         use crate::state::transactions::tests::{
+            ckerc20_withdrawal_request_with_index, cketh_withdrawal_request_with_index,
             create_and_record_ck_withdrawal_requests, create_and_record_signed_transaction,
             create_and_record_transaction, dummy_signature, expected_cketh_reimbursed_amount,
             gas_fee_estimate, transaction_receipt,
         };
         use crate::state::transactions::{
-            EthTransactions, ReimbursementRequest, TransactionStatus,
+            Erc20WithdrawalRequest, EthTransactions, ReimbursementIndex, ReimbursementRequest,
+            TransactionStatus, WithdrawalRequest,
         };
         use crate::test_fixtures::expect_panic_with_message;
-        use crate::tx::SignedEip1559TransactionRequest;
+        use crate::tx::{SignedEip1559TransactionRequest, TransactionPriceEstimate};
         use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+        use maplit::btreemap;
 
         #[test]
         fn should_fail_when_sent_transaction_not_found() {
@@ -1441,12 +1445,12 @@ mod eth_transactions {
         }
 
         #[test]
-        fn should_record_finalized_transaction_and_not_reimburse() {
+        fn should_record_cketh_finalized_transaction_and_not_reimburse() {
             let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
-            let mut rng = reproducible_rng();
-            let [withdrawal_request] =
-                create_and_record_ck_withdrawal_requests(&mut transactions, &mut rng);
-            let cketh_ledger_burn_index = withdrawal_request.cketh_ledger_burn_index();
+            let cketh_ledger_burn_index = LedgerBurnIndex::new(15);
+            let withdrawal_request: WithdrawalRequest =
+                cketh_withdrawal_request_with_index(cketh_ledger_burn_index).into();
+            transactions.record_withdrawal_request(withdrawal_request.clone());
             let created_tx = create_and_record_transaction(
                 &mut transactions,
                 withdrawal_request.clone(),
@@ -1465,6 +1469,149 @@ mod eth_transactions {
 
             assert!(transactions.maybe_reimburse.is_empty());
             assert!(transactions.reimbursement_requests.is_empty());
+        }
+
+        #[test]
+        fn should_reimburse_unused_transaction_fee_when_ckerc20_withdrawal_successful() {
+            let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
+            let cketh_ledger_burn_index = LedgerBurnIndex::new(7);
+            let ckerc20_ledger_burn_index = LedgerBurnIndex::new(7);
+            let withdrawal_request = ckerc20_withdrawal_request_with_index(
+                cketh_ledger_burn_index,
+                ckerc20_ledger_burn_index,
+            );
+            transactions.record_withdrawal_request(withdrawal_request.clone());
+            let created_tx = create_and_record_transaction(
+                &mut transactions,
+                withdrawal_request.clone(),
+                gas_fee_estimate(),
+            );
+            let signed_tx = create_and_record_signed_transaction(&mut transactions, created_tx);
+            let receipt = TransactionReceipt {
+                gas_used: GasAmount::from(40_000_u32),
+                effective_gas_price: WeiPerGas::from(100_u16),
+                ..transaction_receipt(&signed_tx, TransactionStatus::Success)
+            };
+            assert_eq!(
+                receipt.effective_transaction_fee(),
+                Wei::from(4_000_000_u32)
+            );
+            transactions.record_finalized_transaction(cketh_ledger_burn_index, receipt.clone());
+            let expected_cketh_reimbursed_amount = withdrawal_request
+                .max_transaction_fee
+                .checked_sub(receipt.effective_transaction_fee())
+                .unwrap();
+
+            assert_eq!(transactions.maybe_reimburse, btreemap! {});
+            assert_eq!(
+                transactions.reimbursement_requests,
+                btreemap! {
+                   ReimbursementIndex::CkEth { ledger_burn_index: cketh_ledger_burn_index } => ReimbursementRequest {
+                        ledger_burn_index: cketh_ledger_burn_index,
+                        reimbursed_amount: expected_cketh_reimbursed_amount.change_units(),
+                        to: withdrawal_request.from,
+                        to_subaccount: withdrawal_request.from_subaccount,
+                        transaction_hash: Some(receipt.transaction_hash),
+                    }
+                }
+            );
+        }
+
+        #[test]
+        fn should_not_reimburse_when_ckerc20_witdrawal_used_up_transaction_fee() {
+            let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
+            let cketh_ledger_burn_index = LedgerBurnIndex::new(7);
+            let ckerc20_ledger_burn_index = LedgerBurnIndex::new(7);
+            let withdrawal_request = Erc20WithdrawalRequest {
+                max_transaction_fee: Wei::from(32_500_000_000_000_000_u128),
+                ..ckerc20_withdrawal_request_with_index(
+                    cketh_ledger_burn_index,
+                    ckerc20_ledger_burn_index,
+                )
+            };
+            transactions.record_withdrawal_request(withdrawal_request.clone());
+            let created_tx = create_and_record_transaction(
+                &mut transactions,
+                withdrawal_request.clone(),
+                TransactionPriceEstimate {
+                    max_fee_per_gas: WeiPerGas::from(500_000_000_000_u128),
+                    max_priority_fee_per_gas: WeiPerGas::ZERO,
+                },
+            );
+            let signed_tx = create_and_record_signed_transaction(&mut transactions, created_tx);
+            let receipt = TransactionReceipt {
+                gas_used: GasAmount::from(65_000_u32),
+                effective_gas_price: WeiPerGas::from(500_000_000_000_u128),
+                ..transaction_receipt(&signed_tx, TransactionStatus::Success)
+            };
+            assert_eq!(
+                receipt.effective_transaction_fee(),
+                withdrawal_request.max_transaction_fee
+            );
+            transactions.record_finalized_transaction(cketh_ledger_burn_index, receipt.clone());
+
+            assert_eq!(transactions.maybe_reimburse, btreemap! {});
+            assert_eq!(transactions.reimbursement_requests, btreemap! {});
+        }
+
+        #[test]
+        fn should_reimburse_unused_transaction_fee_and_tokens_when_ckerc20_withdrawal_fails() {
+            let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
+            let cketh_ledger_burn_index = LedgerBurnIndex::new(7);
+            let ckerc20_ledger_burn_index = LedgerBurnIndex::new(7);
+            let withdrawal_request = ckerc20_withdrawal_request_with_index(
+                cketh_ledger_burn_index,
+                ckerc20_ledger_burn_index,
+            );
+            transactions.record_withdrawal_request(withdrawal_request.clone());
+            let created_tx = create_and_record_transaction(
+                &mut transactions,
+                withdrawal_request.clone(),
+                gas_fee_estimate(),
+            );
+            let signed_tx = create_and_record_signed_transaction(&mut transactions, created_tx);
+            let receipt = TransactionReceipt {
+                gas_used: GasAmount::from(40_000_u32),
+                effective_gas_price: WeiPerGas::from(100_u16),
+                ..transaction_receipt(&signed_tx, TransactionStatus::Failure)
+            };
+            assert_eq!(
+                receipt.effective_transaction_fee(),
+                Wei::from(4_000_000_u32)
+            );
+            transactions.record_finalized_transaction(cketh_ledger_burn_index, receipt.clone());
+            let expected_cketh_reimbursed_amount = withdrawal_request
+                //TODO XC-59: rename max_transaction_fee to burn_cketh_amount
+                .max_transaction_fee
+                .checked_sub(receipt.effective_transaction_fee())
+                .unwrap();
+            let expected_ckerc20_reimbursed_amount = withdrawal_request.withdrawal_amount;
+
+            assert_eq!(transactions.maybe_reimburse, btreemap! {});
+            assert_eq!(
+                transactions.reimbursement_requests,
+                btreemap! {
+                   ReimbursementIndex::CkEth { ledger_burn_index: cketh_ledger_burn_index } =>
+                    ReimbursementRequest {
+                        ledger_burn_index: cketh_ledger_burn_index,
+                        reimbursed_amount: expected_cketh_reimbursed_amount.change_units(),
+                        to: withdrawal_request.from,
+                        to_subaccount: withdrawal_request.from_subaccount.clone(),
+                        transaction_hash: Some(receipt.transaction_hash),
+                    },
+                    ReimbursementIndex::CkErc20 {
+                        cketh_ledger_burn_index,
+                        ledger_id: withdrawal_request.ckerc20_ledger_id,
+                        ckerc20_ledger_burn_index } =>
+                    ReimbursementRequest {
+                        ledger_burn_index: cketh_ledger_burn_index,
+                        reimbursed_amount: expected_ckerc20_reimbursed_amount.change_units(),
+                        to: withdrawal_request.from,
+                        to_subaccount: withdrawal_request.from_subaccount,
+                        transaction_hash: Some(receipt.transaction_hash),
+                    }
+                }
+            );
         }
 
         #[test]
@@ -1495,9 +1642,12 @@ mod eth_transactions {
                 .expect("finalized tx not found");
 
             assert!(transactions.maybe_reimburse.is_empty());
+            let cketh_reimbursement_index = ReimbursementIndex::CkEth {
+                ledger_burn_index: cketh_ledger_burn_index,
+            };
             let reimbursement_request = transactions
                 .reimbursement_requests
-                .get(&cketh_ledger_burn_index)
+                .get(&cketh_reimbursement_index)
                 .expect("reimbursement request not found");
             let effective_fee_paid = finalized_transaction.effective_transaction_fee();
             assert_eq!(
@@ -1514,7 +1664,6 @@ mod eth_transactions {
                     .unwrap(),
                 }
             );
-            //TODO XC-59 also test reimbursement of burned ckERC20 tokens
         }
 
         #[test]
@@ -1592,7 +1741,7 @@ mod eth_transactions {
             expected_cketh_reimbursed_amount, gas_fee_estimate, sign_transaction,
             transaction_receipt,
         };
-        use crate::state::transactions::{EthTransactions, TransactionStatus};
+        use crate::state::transactions::{EthTransactions, ReimbursementIndex, TransactionStatus};
         use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 
         #[test]
@@ -1673,8 +1822,13 @@ mod eth_transactions {
                 ))
             );
 
-            transactions
-                .record_finalized_reimbursement(cketh_ledger_burn_index, LedgerMintIndex::new(16));
+            let cketh_reimbursement_index = ReimbursementIndex::CkEth {
+                ledger_burn_index: cketh_ledger_burn_index,
+            };
+            transactions.record_finalized_reimbursement(
+                cketh_reimbursement_index,
+                LedgerMintIndex::new(16),
+            );
 
             let finalized_transaction = transactions
                 .finalized_tx

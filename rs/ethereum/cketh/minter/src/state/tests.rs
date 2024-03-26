@@ -11,6 +11,7 @@ use crate::numeric::{
     LedgerMintIndex, LogIndex, TransactionNonce, Wei, WeiPerGas,
 };
 use crate::state::event::{Event, EventType};
+use crate::state::transactions::ReimbursementIndex;
 use crate::state::State;
 use crate::tx::{
     AccessList, AccessListItem, Eip1559Signature, Eip1559TransactionRequest, ResubmissionStrategy,
@@ -909,7 +910,7 @@ fn state_equivalence() {
             }.into()
         },
         reimbursement_requests: btreemap! {
-            LedgerBurnIndex::new(3) => ReimbursementRequest {
+            ReimbursementIndex::CkEth { ledger_burn_index: LedgerBurnIndex::new(3) } => ReimbursementRequest {
                 transaction_hash: Some("0x06afc3c693dc2ba2c19b5c287c4dddce040d766bea5fd13c8a7268b04aa94f2d"
                 .parse()
                 .unwrap()),
@@ -920,7 +921,7 @@ fn state_equivalence() {
             }
         },
         reimbursed: btreemap! {
-            LedgerBurnIndex::new(6) => Reimbursed {
+           ReimbursementIndex::CkEth { ledger_burn_index: LedgerBurnIndex::new(6) } => Reimbursed {
                 transaction_hash: Some("0x06afc3c693dc2ba2c19b5c287c4dddce040d766bea5fd13c8a7268b04aa94f2d".parse().unwrap()),
                 reimbursed_in_block: LedgerMintIndex::new(150),
                 reimbursed_amount: CkTokenAmount::new(10_000_000_000_000),
