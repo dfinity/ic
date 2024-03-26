@@ -15,6 +15,7 @@
 
 include:
   - local: /gitlab-ci/config/rosetta.yml
+  - local: /gitlab-ci/config/icrc_rosetta.yml
   - local: /gitlab-ci/config/main.yml
   - local: /gitlab-ci/config/common.yml
   - local: /gitlab-ci/config/container-image-autobuild.yml

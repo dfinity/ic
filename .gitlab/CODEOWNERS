@@ -83,6 +83,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /gitlab-ci/config/child-pipeline--benchmark.yml                         @dfinity-lab/teams/runtime-owners
 /gitlab-ci/config/spawn-pipeline--benchmark.yml                         @dfinity-lab/teams/runtime-owners
 /gitlab-ci/config/rosetta.yml                                           @dfinity-lab/teams/financial-integrations
+/gitlab-ci/config/icrc_rosetta.yml                                      @dfinity-lab/teams/financial-integrations
 
 # [Testnet]
 /testnet/                                                  @dfinity-lab/teams/node-team @dfinity-lab/teams/DRE
