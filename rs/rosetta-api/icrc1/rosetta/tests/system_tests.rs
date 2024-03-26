@@ -245,7 +245,7 @@ async fn assert_rosetta_balance(
         .unwrap()
         .clone()
         .value;
-    assert_eq!(rosetta_balance, Nat::from(balance).to_string());
+    assert_eq!(rosetta_balance, balance.to_string());
 }
 
 #[tokio::test]

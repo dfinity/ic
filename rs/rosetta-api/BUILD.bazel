@@ -50,6 +50,7 @@ DEPENDENCIES = [
     "@crate_index//:tracing-appender",
     "@crate_index//:tracing-subscriber",
     "@crate_index//:url",
+    "@crate_index//:num-bigint",
 ]
 
 MACRO_DEPENDENCIES = [

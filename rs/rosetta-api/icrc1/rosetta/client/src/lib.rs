@@ -8,6 +8,7 @@ use ic_icrc_rosetta::construction_api::types::ConstructionPayloadsRequestMetadat
 use ic_rosetta_api::models::Amount;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::account::Subaccount;
+use num_bigint::BigInt;
 use reqwest::{Client, Url};
 use rosetta_core::identifiers::*;
 use rosetta_core::models::RosettaSupportedKeyPair;
@@ -18,6 +19,7 @@ use rosetta_core::request_types::*;
 use rosetta_core::response_types::*;
 use serde::{Deserialize, Serialize};
 use url::ParseError;
+
 pub struct RosettaClient {
     pub url: Url,
     pub http_client: Client,
@@ -215,11 +217,10 @@ impl RosettaClient {
                 }
                 .into(),
             ),
-            amount: Some(Amount {
-                value: format!("-{}", amount),
-                currency: currency.clone(),
-                metadata: None,
-            }),
+            amount: Some(Amount::new(
+                BigInt::from_biguint(num_bigint::Sign::Minus, amount.0.clone()),
+                currency.clone(),
+            )),
             coin_change: None,
             metadata: None,
         };
@@ -233,11 +234,7 @@ impl RosettaClient {
             type_: "TRANSFER".to_string(),
             status: None,
             account: Some(to_account.into()),
-            amount: Some(Amount {
-                value: amount.to_string(),
-                currency: currency.clone(),
-                metadata: None,
-            }),
+            amount: Some(Amount::new(BigInt::from(amount), currency.clone())),
             coin_change: None,
             metadata: None,
         };
@@ -293,16 +290,9 @@ impl RosettaClient {
             coin_change: None,
             metadata: Some(
                 ApproveMetadata {
-                    expected_allowance: expected_allowance.map(|a| Amount {
-                        value: a.to_string(),
-                        currency: currency.clone(),
-                        metadata: None,
-                    }),
-                    allowance: Amount {
-                        value: allowance.to_string(),
-                        currency: currency.clone(),
-                        metadata: None,
-                    },
+                    expected_allowance: expected_allowance
+                        .map(|a| Amount::new(BigInt::from(a), currency.clone())),
+                    allowance: Amount::new(BigInt::from(allowance), currency.clone()),
                     expires_at,
                 }
                 .try_into()
