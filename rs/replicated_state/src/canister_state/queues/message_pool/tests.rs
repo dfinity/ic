@@ -518,6 +518,68 @@ fn test_shed_message_trims_queues() {
     }
 }
 
+#[test]
+fn test_equality() {
+    let mut pool = MessagePool::default();
+
+    // Insert one message of each kind / class / context.
+    let id1 = pool.next_message_id();
+    pool.insert_inbound(id1, request(NO_DEADLINE).into());
+    let id2 = pool.next_message_id();
+    pool.insert_inbound(id2, request_with_payload(2000, time(20)).into());
+    let id3 = pool.next_message_id();
+    pool.insert_inbound(id3, response(NO_DEADLINE).into());
+    let id4 = pool.next_message_id();
+    pool.insert_inbound(id4, response(time(40)).into());
+    let id5 = pool.next_message_id();
+    pool.insert_outbound_request(id5, request(NO_DEADLINE).into(), time(50).into());
+    let id6 = pool.next_message_id();
+    pool.insert_outbound_request(id6, request(time(60)).into(), time(65).into());
+    let id7 = pool.next_message_id();
+    pool.insert_outbound_response(id7, response(NO_DEADLINE).into());
+    let id8 = pool.next_message_id();
+    pool.insert_outbound_response(id8, response(time(80)).into());
+
+    // Make a clone.
+    let mut other_pool = pool.clone();
+
+    // The two pools should be equal.
+    assert_eq!(pool, other_pool);
+
+    // Pop the same message from either pool.
+    assert!(pool.take(MessagePoolReference::Request(id1)).is_some());
+    assert!(other_pool.take(MessagePoolReference::Request(id1)).is_some());
+    // The two pools should still be equal.
+    assert_eq!(pool, other_pool);
+
+    // Shed a message from either pool.
+    assert_eq!(id2, pool.shed_message().unwrap().0);
+    assert_eq!(id2, other_pool.shed_message().unwrap().0);
+    // The two pools should still be equal.
+    assert_eq!(pool, other_pool);
+
+    // Expire a message from either pool (id6).
+    assert_eq!(1, pool.expire_messages(time(61).into()).len());
+    assert_eq!(1, other_pool.expire_messages(time(61).into()).len());
+    // The two pools should still be equal.
+    assert_eq!(pool, other_pool);
+
+    // Expire a message from one pool (id8), take it from the other.
+    assert_eq!(1, pool.expire_messages(time(81).into()).len());
+    assert!(other_pool.take(MessagePoolReference::Response(id8)).is_some());
+    // The two pools should no longer be equal.
+    assert_ne!(pool, other_pool);
+
+    // Restore the two pools to equality.
+    let mut other_pool = pool.clone();
+    assert_eq!(pool, other_pool);
+
+    // Shed a message from one pool, take it from the other.
+    let id = pool.shed_message().unwrap().0;
+    assert!(other_pool.take_by_id(id).is_some());
+    // The two pools should no longer be equal.
+    assert_ne!(pool, other_pool);
+}
 //
 // Fixtures and helper functions.
 //
