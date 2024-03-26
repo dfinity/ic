@@ -362,7 +362,7 @@ fn test_shed_message() {
     let mut pool = MessagePool::default();
 
     // Nothing to shed.
-    assert_eq!(None, pool.shed_message());
+    assert_eq!(None, pool.shed_largest_message());
 
     // Insert one best-effort message of each kind / context.
     let id1 = pool.next_message_id();
@@ -382,7 +382,7 @@ fn test_shed_message() {
     assert_eq!(4, pool.len());
 
     // Shed the largest message (`msg2`).
-    assert_eq!(Some((id2, msg2.into())), pool.shed_message());
+    assert_eq!(Some((id2, msg2.into())), pool.shed_largest_message());
     assert_eq!(3, pool.len());
 
     // Pop the next largest message ('msg3`).
@@ -392,7 +392,7 @@ fn test_shed_message() {
     );
 
     // Shedding will now produce `msg4`.
-    assert_eq!(Some((id4, msg4.into())), pool.shed_message());
+    assert_eq!(Some((id4, msg4.into())), pool.shed_largest_message());
     assert_eq!(1, pool.len());
 
     // Pop the remaining message ('msg1`).
@@ -402,7 +402,7 @@ fn test_shed_message() {
     );
 
     // Nothing left to shed.
-    assert_eq!(None, pool.shed_message());
+    assert_eq!(None, pool.shed_largest_message());
     assert_eq!(0, pool.len());
     assert_eq!(0, pool.size_queue.len());
 }
@@ -424,7 +424,7 @@ fn test_shed_message_guaranteed_response() {
     assert_eq!(4, pool.len());
 
     // Nothing can be shed.
-    assert_eq!(None, pool.shed_message());
+    assert_eq!(None, pool.shed_largest_message());
     assert_eq!(0, pool.size_queue.len());
 }
 
@@ -508,7 +508,7 @@ fn test_shed_message_trims_queues() {
     assert_eq!(ids.len(), pool.size_queue.len());
 
     for i in (0..ids.len()).rev() {
-        assert!(pool.shed_message().is_some());
+        assert!(pool.shed_largest_message().is_some());
 
         // Sanity check.
         assert_eq!(i, pool.len());
@@ -555,8 +555,8 @@ fn test_equality() {
     assert_eq!(pool, other_pool);
 
     // Shed a message from either pool.
-    assert_eq!(id2, pool.shed_message().unwrap().0);
-    assert_eq!(id2, other_pool.shed_message().unwrap().0);
+    assert_eq!(id2, pool.shed_largest_message().unwrap().0);
+    assert_eq!(id2, other_pool.shed_largest_message().unwrap().0);
     // The two pools should still be equal.
     assert_eq!(pool, other_pool);
 
@@ -579,7 +579,7 @@ fn test_equality() {
     assert_eq!(pool, other_pool);
 
     // Shed a message from one pool, take it from the other.
-    let id = pool.shed_message().unwrap().0;
+    let id = pool.shed_largest_message().unwrap().0;
     assert!(other_pool.take_by_id(id).is_some());
     // The two pools should no longer be equal.
     assert_ne!(pool, other_pool);
