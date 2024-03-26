@@ -136,7 +136,6 @@ async fn try_to_create_and_install_canister(
         arg: request.arg,
         compute_allocation: request.compute_allocation,
         memory_allocation: request.memory_allocation,
-        query_allocation: request.query_allocation,
         sender_canister_version: Some(dfn_core::api::canister_version()),
     };
     let install_res: Result<(), (Option<i32>, String)> = call(

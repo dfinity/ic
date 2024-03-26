@@ -1282,7 +1282,6 @@ impl Payload<'_> for CanisterStatusResultV2 {}
 ///     arg: blob;
 ///     compute_allocation: opt nat;
 ///     memory_allocation: opt nat;
-///     query_allocation: opt nat;
 ///     sender_canister_version : opt nat64;
 /// })`
 #[derive(Clone, CandidType, Deserialize, Debug)]
@@ -1295,7 +1294,6 @@ pub struct InstallCodeArgs {
     pub arg: Vec<u8>,
     pub compute_allocation: Option<candid::Nat>,
     pub memory_allocation: Option<candid::Nat>,
-    pub query_allocation: Option<candid::Nat>,
     pub sender_canister_version: Option<u64>,
 }
 
@@ -1322,14 +1320,6 @@ impl std::fmt::Display for InstallCodeArgs {
                 .as_ref()
                 .map(|value| format!("{}", value))
         )?;
-        writeln!(
-            f,
-            "  query_allocation: {:?}",
-            &self
-                .query_allocation
-                .as_ref()
-                .map(|value| format!("{}", value))
-        )?;
         writeln!(f, "}}")
     }
 }
@@ -1344,7 +1334,6 @@ impl InstallCodeArgs {
         arg: Vec<u8>,
         compute_allocation: Option<u64>,
         memory_allocation: Option<u64>,
-        query_allocation: Option<u64>,
     ) -> Self {
         Self {
             mode,
@@ -1353,7 +1342,6 @@ impl InstallCodeArgs {
             arg,
             compute_allocation: compute_allocation.map(candid::Nat::from),
             memory_allocation: memory_allocation.map(candid::Nat::from),
-            query_allocation: query_allocation.map(candid::Nat::from),
             sender_canister_version: None,
         }
     }
@@ -1377,7 +1365,6 @@ pub struct InstallCodeArgsV2 {
     pub arg: Vec<u8>,
     pub compute_allocation: Option<candid::Nat>,
     pub memory_allocation: Option<candid::Nat>,
-    pub query_allocation: Option<candid::Nat>,
     pub sender_canister_version: Option<u64>,
 }
 
@@ -1404,14 +1391,6 @@ impl std::fmt::Display for InstallCodeArgsV2 {
                 .as_ref()
                 .map(|value| format!("{}", value))
         )?;
-        writeln!(
-            f,
-            "  query_allocation: {:?}",
-            &self
-                .query_allocation
-                .as_ref()
-                .map(|value| format!("{}", value))
-        )?;
         writeln!(f, "}}")
     }
 }
@@ -1426,7 +1405,6 @@ impl InstallCodeArgsV2 {
         arg: Vec<u8>,
         compute_allocation: Option<u64>,
         memory_allocation: Option<u64>,
-        query_allocation: Option<u64>,
     ) -> Self {
         Self {
             mode,
@@ -1435,7 +1413,6 @@ impl InstallCodeArgsV2 {
             arg,
             compute_allocation: compute_allocation.map(candid::Nat::from),
             memory_allocation: memory_allocation.map(candid::Nat::from),
-            query_allocation: query_allocation.map(candid::Nat::from),
             sender_canister_version: None,
         }
     }

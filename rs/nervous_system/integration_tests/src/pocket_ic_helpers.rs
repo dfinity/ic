@@ -905,7 +905,6 @@ pub mod sns {
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
-                query_allocation: None,
             };
             nns::governance::propose_and_wait(
                 pocket_ic,

@@ -1933,7 +1933,6 @@ impl ProposalPayload<ChangeCanisterRequest> for ProposeToChangeNnsCanisterCmd {
             arg,
             compute_allocation: self.compute_allocation.map(candid::Nat::from),
             memory_allocation: self.memory_allocation.map(candid::Nat::from),
-            query_allocation: None,
         }
     }
 }
@@ -2085,7 +2084,6 @@ impl ProposalPayload<AddCanisterRequest> for ProposeToAddNnsCanisterCmd {
             initial_cycles: 1,
             compute_allocation: self.compute_allocation.map(candid::Nat::from),
             memory_allocation: self.memory_allocation.map(candid::Nat::from),
-            query_allocation: None,
         }
     }
 }

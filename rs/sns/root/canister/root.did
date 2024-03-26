@@ -27,7 +27,6 @@ type ChangeCanisterRequest = record {
   stop_before_installing : bool;
   mode : CanisterInstallMode;
   canister_id : principal;
-  query_allocation : opt nat;
   memory_allocation : opt nat;
   compute_allocation : opt nat;
 };

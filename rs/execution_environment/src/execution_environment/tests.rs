@@ -1594,7 +1594,6 @@ fn metrics_are_observed_for_using_deprecated_fields() {
         vec![],
         Some(1),
         Some(100 * 1024 * 1024),
-        None,
     );
 
     test.subnet_message(Method::InstallCode, payload.encode())
