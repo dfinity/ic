@@ -2627,7 +2627,7 @@ icrc-rosetta-api-docker-image:
       job: bazel-test-all
   rules:
     - allow_failure: true
-      if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      if: $CI_COMMIT_REF_PROTECTED == "true" && $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "rosetta-icrc-release"
       when: manual
   script:
     - |
@@ -3382,7 +3382,7 @@ rosetta-api-docker-image:
       docker push dfinity/rosetta-api:latest
 rosetta-icrc-release:
   rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_REF_PROTECTED == "true" && $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "rosetta-icrc-release"
   script:
     - |
       set -euo pipefail
