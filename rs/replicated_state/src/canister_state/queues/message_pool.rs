@@ -61,9 +61,6 @@ pub struct MessagePool {
     messages: BTreeMap<MessageId, RequestOrResponse>,
 
     /// Total size of all messages in the pool, in bytes.
-    // FIXME: Figure out whether this should be separated into guaranteed and best
-    // effort; only tracked for best effort; or dropped (and replaced by
-    // `CanisterQueues` maintained stats).
     size_bytes: usize,
 
     /// Deadline priority queue, earliest deadlines first.
@@ -381,7 +378,34 @@ impl MessagePool {
 
 impl PartialEq for MessagePool {
     fn eq(&self, other: &Self) -> bool {
-        self.messages == other.messages && self.next_message_id == other.next_message_id
+        let Self {
+            messages,
+            size_bytes,
+            deadline_queue,
+            size_queue,
+            next_message_id,
+        } = self;
+        let Self {
+            messages: other_messages,
+            size_bytes: other_size_bytes,
+            deadline_queue: other_deadline_queue,
+            size_queue: other_size_queue,
+            next_message_id: other_next_message_id,
+        } = other;
+
+        messages == other_messages
+            && size_bytes == other_size_bytes
+            && deadline_queue.len() == other_deadline_queue.len()
+            && deadline_queue
+                .iter()
+                .zip(other_deadline_queue.iter())
+                .all(|(entry, other_entry)| entry == other_entry)
+            && size_queue.len() == other_size_queue.len()
+            && size_queue
+                .iter()
+                .zip(other_size_queue.iter())
+                .all(|(entry, other_entry)| entry == other_entry)
+            && next_message_id == other_next_message_id
     }
 }
 impl Eq for MessagePool {}
