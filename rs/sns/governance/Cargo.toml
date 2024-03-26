@@ -35,7 +35,7 @@ clap = { version = "3.2.25", features = ["derive"] }
 comparable = { version = "0.5", features = ["derive"] }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_core = { path = "../../rust_canisters/dfn_core" }
-hex = "0.4.3"
+hex = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
 ic-canister-log = { path = "../../rust_canisters/canister_log" }

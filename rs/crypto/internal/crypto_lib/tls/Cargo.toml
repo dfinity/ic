@@ -23,5 +23,5 @@ ic-crypto-test-utils-reproducible-rng = { path = "../../../test_utils/reproducib
 ic-protobuf = { path = "../../../../protobuf" }
 rand_chacha = "0.3"
 serde_cbor = { workspace = true }
-hex = "0.4"
+hex = { workspace = true }
 x509-parser = { workspace = true }

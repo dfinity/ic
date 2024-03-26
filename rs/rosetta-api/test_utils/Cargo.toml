@@ -8,7 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 base64 = { workspace = true }
-hex = "0.4.2"
+hex = { workspace = true }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-rosetta-api = { path = "../" }
 ic-types = { path = "../../types/types" }

@@ -8,7 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 base64 = { workspace = true }
-hex = "0.4"
+hex = { workspace = true }
 cached = { version = "0.41", default-features = false }
 parking_lot = "0.12.1"
 ic-crypto-internal-bls12-381-type = { path = "../../bls12_381/type" }

@@ -25,4 +25,4 @@ ic-config = { path = "../../config" }
 ic-state-machine-tests = { path = "../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../test_utilities/load_wasm" }
 ic-universal-canister = { path = "../../universal_canister/lib" }
-hex = "0.4.3"
+hex = { workspace = true }

@@ -14,6 +14,6 @@ zeroize = { version = "1.5", features = ["zeroize_derive"] }
 pem = "1"
 
 [dev-dependencies]
-hex = "0.4"
+hex = { workspace = true }
 hex-literal = "0.4"
 wycheproof = "0.5"

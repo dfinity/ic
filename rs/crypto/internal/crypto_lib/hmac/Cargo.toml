@@ -11,4 +11,4 @@ ic-crypto-internal-sha2 = { path = "../sha2" }
 
 [dev-dependencies]
 wycheproof = "0.5"
-hex = "0.4"
+hex = { workspace = true }

@@ -12,7 +12,7 @@ candid = { workspace = true }
 clap = { version = "3.2.25", features = ["derive"] }
 exec = "0.3.1"
 get_if_addrs = "0.5.3"
-hex = "0.4.2"
+hex = { workspace = true }
 ic-async-utils = { path = "../async_utils" }
 ic-canister-client = { path = "../canister_client" }
 ic-canister-client-sender = { path = "../canister_client/sender" }

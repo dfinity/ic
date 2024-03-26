@@ -9,7 +9,7 @@ edition = "2021"
 [dependencies]
 ic-rosetta-test-utils = {path="../test_utils"}
 ed25519-consensus = "2.0.1"
-hex = "0.4.2"
+hex = { workspace = true }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-ledger-core = { path = "../ledger_core" }
 ic-rosetta-api = {path = "../"}
