@@ -31,20 +31,29 @@ env:
   AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
 
 anchors:
+  image: &image
+      image: dfinity/ic-build:e95ed63e9addda1b335c50fde800a8d9f0aad91a0d0cbe7da2fa782dc6ac1d4c
   bazel-large-setup: &bazel-large-setup
     runs-on:
       labels: bazel-runner-large
     container:
-      image: dfinity/ic-build:e95ed63e9addda1b335c50fde800a8d9f0aad91a0d0cbe7da2fa782dc6ac1d4c
+      <<: *image
     timeout-minutes: 90
     if: ${{ vars.RUN_CI == 'true' }} # needed to avoid running on public dfinity org until published
   bazel-small-setup: &bazel-small-setup
     runs-on:
       labels: bazel-runner-small
     container:
-      image: dfinity/ic-build:e95ed63e9addda1b335c50fde800a8d9f0aad91a0d0cbe7da2fa782dc6ac1d4c
+      <<: *image
     timeout-minutes: 30
     if: ${{ vars.RUN_CI == 'true' }}
+  default-setup: &default-setup
+    runs-on:
+      labels: default-runner
+    container:
+      <<: *image
+    timeout-minutes: 30
+    if: ${{ vars.RUN_CI == 'true' }}v
   checkout: &checkout
     name: Checkout
     uses: actions/checkout@v3
@@ -144,3 +153,18 @@ jobs:
       - name: No run
         if: steps.filter.outputs.fuzzers == 'false'
         run: echo "No changes in fuzzers, skipping build"
+
+  python-ci-tests:
+    name: Python-CI-Tests
+    <<: *default-setup
+    steps:
+      - <<: *checkout
+      - name: Run Python CI Tests
+        id: python-ci-tests
+        shell: bash
+        run: |
+          set -xeuo pipefail
+          export PYTHONPATH=$PWD/gitlab-ci/src:$PWD/gitlab-ci/src/dependencies:$PYTHONPATH
+          pip3 install --ignore-installed -r requirements.txt
+          cd gitlab-ci/src
+          pytest --ignore=gitlab_config/ --ignore=git_changes/ -v -o junit_family=xunit1 --junitxml=../../test_report.xml --cov=. --cov-report=term --cov-report=term-missing --cov-report=html --cov-branch

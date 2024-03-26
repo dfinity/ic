@@ -9,7 +9,7 @@ documentation.workspace = true
 [dependencies]
 base64 = { workspace = true }
 dfn_core = { path = "../../rust_canisters/dfn_core" }
-hex = "0.4.2"
+hex = { workspace = true }
 ic-crypto-interfaces-sig-verification = { path = "../../crypto/interfaces/sig_verification" }
 ic-crypto-standalone-sig-verifier = { path = "../../crypto/standalone-sig-verifier" }
 ic-crypto-utils-threshold-sig-der = { path = "../../crypto/utils/threshold_sig_der" }
@@ -17,7 +17,7 @@ ic-types = { path = "../../types/types" }
 ic-validator = { path = "../../validator" }
 
 [dev-dependencies]
-assert_matches = "1.5.0"
+assert_matches = { workspace = true }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-certification-test-utils = { path = "../../certification/test-utils" }
 ic-constants = { path = "../../constants" }

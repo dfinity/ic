@@ -9,7 +9,7 @@ documentation.workspace = true
 [dependencies]
 bit-vec = "0.6.3"
 crossbeam-channel = { workspace = true }
-hex = "0.4.2"
+hex = { workspace = true }
 ic-base-types = { path = "../types/base_types" }
 ic-canonical-state = { path = "../canonical_state" }
 ic-canonical-state-tree-hash = { path = "../canonical_state/tree_hash" }
@@ -50,7 +50,7 @@ uuid = { version = "1.2.1", features = ["v4", "serde"] }
 bench = false
 
 [dev-dependencies]
-assert_matches = "1.3.0"
+assert_matches = { workspace = true }
 criterion = "0.5"
 criterion-time = { path = "../criterion_time" }
 ic-canonical-state-tree-hash-test-utils = { path = "../canonical_state/tree_hash/test_utils" }

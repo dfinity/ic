@@ -65,6 +65,7 @@ mod tests {
         make_replica_version_key,
     };
     use ic_registry_transport::{insert, upsert};
+    use ic_types::ReplicaVersion;
 
     use crate::{
         common::test_helpers::{invariant_compliant_registry, prepare_registry_with_nodes},
@@ -115,7 +116,7 @@ mod tests {
             insert(
                 make_api_boundary_node_record_key(node_id), // key
                 encode_or_panic(&ApiBoundaryNodeRecord {
-                    version: "version".into(),
+                    version: ReplicaVersion::default().to_string(),
                 }),
             ),
         ]);

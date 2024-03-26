@@ -15,7 +15,7 @@ ic-crypto-sha3 = { path = "../../../../sha3" }
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../../test_utils/reproducible_rng" }
-hex = "0.4"
+hex = { workspace = true }
 
 [[bench]]
 name = "vetkd"

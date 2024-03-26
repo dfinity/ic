@@ -12,6 +12,7 @@ use crate::{
 use anyhow::{bail, Context};
 use candid::Nat;
 use indicatif::{ProgressBar, ProgressState, ProgressStyle};
+use num_bigint::BigInt;
 use rosetta_core::identifiers::*;
 use rosetta_core::{
     identifiers::{BlockIdentifier, NetworkIdentifier, PartialBlockIdentifier},
@@ -376,7 +377,7 @@ pub fn icrc1_operation_to_rosetta_core_operations(
                 OperationType::Mint.to_string(),
                 Some(to.into()),
                 Some(rosetta_core::objects::Amount::new(
-                    amount.to_string(),
+                    BigInt::from(amount.0),
                     currency,
                 )),
                 None,
@@ -394,7 +395,7 @@ pub fn icrc1_operation_to_rosetta_core_operations(
                 OperationType::Burn.to_string(),
                 Some(from.into()),
                 Some(rosetta_core::objects::Amount::new(
-                    format!("-{}", amount),
+                    BigInt::from_biguint(num_bigint::Sign::Minus, amount.0),
                     currency,
                 )),
                 None,
@@ -429,7 +430,7 @@ pub fn icrc1_operation_to_rosetta_core_operations(
                 OperationType::Transfer.to_string(),
                 Some(to.into()),
                 Some(rosetta_core::objects::Amount::new(
-                    amount.to_string(),
+                    BigInt::from(amount.0.clone()),
                     currency.clone(),
                 )),
                 None,
@@ -443,7 +444,7 @@ pub fn icrc1_operation_to_rosetta_core_operations(
                 OperationType::Transfer.to_string(),
                 Some(from.into()),
                 Some(rosetta_core::objects::Amount::new(
-                    format!("-{}", amount),
+                    BigInt::from_biguint(num_bigint::Sign::Minus, amount.0),
                     currency.clone(),
                 )),
                 None,
@@ -471,7 +472,10 @@ pub fn icrc1_operation_to_rosetta_core_operations(
                     FEE_OPERATION_IDENTIFIER,
                     OperationType::Fee.to_string(),
                     Some(from.into()),
-                    Some(Amount::new(format!("-{}", fee_paid), currency.clone())),
+                    Some(Amount::new(
+                        BigInt::from_biguint(num_bigint::Sign::Minus, fee_paid.0),
+                        currency.clone(),
+                    )),
                     None,
                     // If the fee inside the operation is set that means the User set the fee and the Ledger did nothing
                     Some(
@@ -505,9 +509,9 @@ pub fn icrc1_operation_to_rosetta_core_operations(
                 None,
                 Some(
                     ApproveMetadata {
-                        allowance: Amount::new(amount.to_string(), currency.clone()),
+                        allowance: Amount::new(BigInt::from(amount.0), currency.clone()),
                         expected_allowance: expected_allowance.map(|expected_allowance| {
-                            Amount::new(expected_allowance.to_string(), currency.clone())
+                            Amount::new(BigInt::from(expected_allowance.0), currency.clone())
                         }),
                         expires_at,
                     }
@@ -533,7 +537,10 @@ pub fn icrc1_operation_to_rosetta_core_operations(
                     FEE_OPERATION_IDENTIFIER,
                     OperationType::Fee.to_string(),
                     Some(from.into()),
-                    Some(Amount::new(format!("-{}", fee_paid), currency)),
+                    Some(Amount::new(
+                        BigInt::from_biguint(num_bigint::Sign::Minus, fee_paid.0),
+                        currency,
+                    )),
                     None,
                     // If the fee inside the operation is set that means the User set the fee and the Ledger did nothing
                     Some(
@@ -612,10 +619,12 @@ pub fn icrc1_rosetta_block_to_rosetta_core_operations(
                 OperationType::FeeCollector.to_string(),
                 Some(fee_collector.into()),
                 Some(rosetta_core::objects::Amount::new(
-                    rosetta_block
-                        .get_fee_paid()?
-                        .context("Fee payed needs to be populated for FeeCollector operation")?
-                        .to_string(),
+                    BigInt::from(
+                        rosetta_block
+                            .get_fee_paid()?
+                            .context("Fee payed needs to be populated for FeeCollector operation")?
+                            .0,
+                    ),
                     currency.clone(),
                 )),
                 Some(

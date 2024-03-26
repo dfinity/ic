@@ -29,7 +29,7 @@ dashmap = "5.3.4"
 ethnum = { workspace = true }
 futures = { workspace = true }
 futures-util = "0.3.28"
-hex = "0.4.3"
+hex = { workspace = true }
 http = "0.2.6"
 http-body = "0.4"
 hyper = "0.14.18"

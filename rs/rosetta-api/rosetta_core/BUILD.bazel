@@ -18,6 +18,7 @@ DEPENDENCIES = [
     "@crate_index//:serde_with",
     "@crate_index//:candid",
     "@crate_index//:ic-agent",
+    "@crate_index//:num-bigint",
 ]
 
 MACRO_DEPENDENCIES = [

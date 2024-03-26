@@ -43,7 +43,7 @@ path = "src/panics.rs"
 [dev-dependencies]
 canister-test = { path = "../../rust_canisters/canister_test" }
 criterion = "0.5"
-assert_matches = "1.3.0"
+assert_matches = { workspace = true }
 on_wire = { path = "../on_wire" }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-error-types = { path = "../../types/error_types" }

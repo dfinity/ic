@@ -28,6 +28,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::SystemTime;
 use tokio::runtime::Runtime;
+use tokio::sync::Mutex as AsyncMutex;
 
 lazy_static! {
     pub static ref TEST_ACCOUNT: Account = test_identity().sender().unwrap().into();
@@ -130,7 +131,7 @@ more_controller_ids: None,
                 current_balances.insert(account,Nat(BigUint::zero()));
             }
 
-            blocks_synchronizer::start_synching_blocks(agent.clone(), storage_client.clone(), 10).await.unwrap();
+            blocks_synchronizer::start_synching_blocks(agent.clone(), storage_client.clone(), 10,Arc::new(AsyncMutex::new(vec![]))).await.unwrap();
             storage_client.update_account_balances().unwrap();
 
             let mut block_indices_iter = block_indices.into_iter().collect::<Vec<u64>>();

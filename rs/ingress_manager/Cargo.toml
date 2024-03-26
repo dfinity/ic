@@ -26,7 +26,7 @@ prometheus = { workspace = true }
 slog = { workspace = true }
 
 [dev-dependencies]
-assert_matches = "1.3.0"
+assert_matches = { workspace = true }
 criterion = "0.5"
 ic-artifact-pool = { path = "../artifact_pool" }
 ic-config = { path = "../config" }

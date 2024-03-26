@@ -115,7 +115,6 @@ async fn install_canister(
             wasm_module,
             arg,
             mode: CanisterInstallMode::Install,
-            query_allocation: None,
             sender_canister_version: None,
             memory_allocation: None,
             compute_allocation: None,

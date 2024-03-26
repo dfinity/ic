@@ -1282,7 +1282,6 @@ impl Payload<'_> for CanisterStatusResultV2 {}
 ///     arg: blob;
 ///     compute_allocation: opt nat;
 ///     memory_allocation: opt nat;
-///     query_allocation: opt nat;
 ///     sender_canister_version : opt nat64;
 /// })`
 #[derive(Clone, CandidType, Deserialize, Debug)]
@@ -1295,7 +1294,6 @@ pub struct InstallCodeArgs {
     pub arg: Vec<u8>,
     pub compute_allocation: Option<candid::Nat>,
     pub memory_allocation: Option<candid::Nat>,
-    pub query_allocation: Option<candid::Nat>,
     pub sender_canister_version: Option<u64>,
 }
 
@@ -1322,14 +1320,6 @@ impl std::fmt::Display for InstallCodeArgs {
                 .as_ref()
                 .map(|value| format!("{}", value))
         )?;
-        writeln!(
-            f,
-            "  query_allocation: {:?}",
-            &self
-                .query_allocation
-                .as_ref()
-                .map(|value| format!("{}", value))
-        )?;
         writeln!(f, "}}")
     }
 }
@@ -1344,7 +1334,6 @@ impl InstallCodeArgs {
         arg: Vec<u8>,
         compute_allocation: Option<u64>,
         memory_allocation: Option<u64>,
-        query_allocation: Option<u64>,
     ) -> Self {
         Self {
             mode,
@@ -1353,7 +1342,6 @@ impl InstallCodeArgs {
             arg,
             compute_allocation: compute_allocation.map(candid::Nat::from),
             memory_allocation: memory_allocation.map(candid::Nat::from),
-            query_allocation: query_allocation.map(candid::Nat::from),
             sender_canister_version: None,
         }
     }
@@ -1377,7 +1365,6 @@ pub struct InstallCodeArgsV2 {
     pub arg: Vec<u8>,
     pub compute_allocation: Option<candid::Nat>,
     pub memory_allocation: Option<candid::Nat>,
-    pub query_allocation: Option<candid::Nat>,
     pub sender_canister_version: Option<u64>,
 }
 
@@ -1404,14 +1391,6 @@ impl std::fmt::Display for InstallCodeArgsV2 {
                 .as_ref()
                 .map(|value| format!("{}", value))
         )?;
-        writeln!(
-            f,
-            "  query_allocation: {:?}",
-            &self
-                .query_allocation
-                .as_ref()
-                .map(|value| format!("{}", value))
-        )?;
         writeln!(f, "}}")
     }
 }
@@ -1426,7 +1405,6 @@ impl InstallCodeArgsV2 {
         arg: Vec<u8>,
         compute_allocation: Option<u64>,
         memory_allocation: Option<u64>,
-        query_allocation: Option<u64>,
     ) -> Self {
         Self {
             mode,
@@ -1435,7 +1413,6 @@ impl InstallCodeArgsV2 {
             arg,
             compute_allocation: compute_allocation.map(candid::Nat::from),
             memory_allocation: memory_allocation.map(candid::Nat::from),
-            query_allocation: query_allocation.map(candid::Nat::from),
             sender_canister_version: None,
         }
     }
@@ -2616,7 +2593,10 @@ impl CanisterLog {
 
     /// Creates a new `CanisterLog` with the given next index and an empty records list.
     pub fn new_with_next_index(next_idx: u64) -> Self {
-        Self::new(next_idx, Default::default())
+        Self {
+            next_idx,
+            records: Default::default(),
+        }
     }
 
     /// Returns the next canister log record index.
@@ -2639,6 +2619,18 @@ impl CanisterLog {
         MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE.saturating_sub(self.records.data_size())
     }
 
+    /// Removes old records to make enough free space for new data within the limit.
+    fn make_free_space_within_limit(&mut self, new_data_size: usize) {
+        let mut total_size = new_data_size + self.records.data_size();
+        while total_size > MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE {
+            if let Some(removed_record) = self.records.pop_front() {
+                total_size -= removed_record.data_size();
+            } else {
+                break; // No more records to pop, limit reached.
+            }
+        }
+    }
+
     /// Adds a new log record.
     pub fn add_record(&mut self, timestamp_nanos: u64, content: &[u8]) {
         // LINT.IfChange
@@ -2647,18 +2639,16 @@ impl CanisterLog {
         let max_content_size =
             MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE - CanisterLogRecord::default().data_size();
         let size = content.len().min(max_content_size);
-        self.records.push_back(CanisterLogRecord {
+        let record = CanisterLogRecord {
             idx: self.next_idx,
             timestamp_nanos,
             content: content[..size].to_vec(),
-        });
+        };
+        self.make_free_space_within_limit(record.data_size());
+        self.records.push_back(record);
         // LINT.ThenChange(logging_charge_bytes_rule)
         // Update the next canister log record index.
         self.next_idx += 1;
-        // Keep the total canister log records size within limit.
-        while self.records.data_size() > MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE {
-            self.records.pop_front();
-        }
     }
 
     /// Moves all the logs from `other` to `self`.
@@ -2668,6 +2658,7 @@ impl CanisterLog {
         if let Some(last) = other.records.back() {
             self.next_idx = last.idx + 1;
         }
+        self.make_free_space_within_limit(other.records.data_size());
         self.records.append(&mut other.records);
     }
 }

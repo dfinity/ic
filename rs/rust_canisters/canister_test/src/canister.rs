@@ -151,7 +151,6 @@ impl Wasm {
             wasm: self,
             compute_allocation: None,
             memory_allocation: None,
-            query_allocation: None,
             // By default, give the max amount of cycles to the created canister.
             num_cycles: Some(u128::MAX),
         }
@@ -860,7 +859,6 @@ pub struct Install<'a> {
     pub wasm: Wasm,
     pub compute_allocation: Option<u64>,
     pub memory_allocation: Option<u64>,
-    pub query_allocation: Option<u64>,
     pub num_cycles: Option<u128>,
 }
 
@@ -1006,7 +1004,6 @@ impl<'a> Install<'a> {
             payload,
             self.compute_allocation,
             self.memory_allocation,
-            self.query_allocation,
         );
         eprintln!("Install args: {}", &install_args);
         match self.runtime {
@@ -1028,11 +1025,6 @@ impl<'a> Install<'a> {
 
     pub fn with_memory_allocation(mut self, memory_allocation: u64) -> Install<'a> {
         self.memory_allocation = Some(memory_allocation);
-        self
-    }
-
-    pub fn with_query_allocation(mut self, query_allocation: u64) -> Install<'a> {
-        self.query_allocation = Some(query_allocation);
         self
     }
 
