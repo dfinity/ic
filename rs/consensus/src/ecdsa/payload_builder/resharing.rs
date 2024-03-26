@@ -199,16 +199,28 @@ pub mod test_utils {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use super::test_utils::*;
     use super::*;
 
     use assert_matches::assert_matches;
-    use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_dealings;
+    use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::{
+        dummy_dealings, dummy_initial_idkg_dealing_for_tests,
+    };
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_logger::replica_logger::no_op_logger;
-    use ic_management_canister_types::EcdsaKeyId;
-    use ic_test_utilities_types::ids::subnet_test_id;
-    use ic_types::consensus::ecdsa::EcdsaPayload;
+    use ic_management_canister_types::{ComputeInitialEcdsaDealingsResponse, EcdsaKeyId};
+    use ic_test_utilities_types::{
+        ids::{node_test_id, subnet_test_id},
+        messages::RequestBuilder,
+    };
+    use ic_types::{
+        consensus::ecdsa::{EcdsaPayload, EcdsaReshareRequest},
+        crypto::AlgorithmId,
+        time::UNIX_EPOCH,
+        RegistryVersion,
+    };
 
     use crate::ecdsa::test_utils::{
         empty_response, fake_ecdsa_key_id, set_up_ecdsa_payload, TestEcdsaBlockReader,
@@ -229,6 +241,55 @@ mod tests {
         );
 
         (ecdsa_payload, block_reader)
+    }
+
+    #[test]
+    fn test_make_reshare_dealings_response() {
+        let make_key_id =
+            |i: u64| EcdsaKeyId::from_str(&format!("Secp256k1:some_key_{i}")).unwrap();
+        let make_reshare_request = |i| EcdsaReshareRequest {
+            key_id: make_key_id(i),
+            receiving_node_ids: vec![node_test_id(i)],
+            registry_version: RegistryVersion::from(i),
+        };
+
+        let max = 5;
+        let mut contexts = BTreeMap::new();
+        for i in 0..max {
+            let request = make_reshare_request(i);
+            let context = EcdsaDealingsContext {
+                request: RequestBuilder::new().build(),
+                key_id: request.key_id.clone(),
+                nodes: BTreeSet::from_iter(request.receiving_node_ids.into_iter()),
+                registry_version: request.registry_version,
+                time: UNIX_EPOCH,
+            };
+            contexts.insert(CallbackId::from(i), context);
+        }
+
+        let initial_dealings = dummy_initial_idkg_dealing_for_tests(
+            AlgorithmId::ThresholdEcdsaSecp256k1,
+            &mut reproducible_rng(),
+        );
+        let func = make_reshare_dealings_response(&contexts);
+
+        for i in 0..max {
+            let request = make_reshare_request(i);
+            let res = func(&request, &initial_dealings).expect("Should get a response");
+            assert_eq!(CallbackId::from(i), res.callback);
+
+            let ic_types::messages::Payload::Data(data) = res.payload else {
+                panic!("Request should have a data response");
+            };
+
+            let response = ComputeInitialEcdsaDealingsResponse::decode(&data)
+                .expect("Failed to decode response");
+            let dealings = InitialIDkgDealings::try_from(&response.initial_dkg_dealings)
+                .expect("Failed to convert dealings");
+            assert_eq!(initial_dealings, dealings);
+        }
+
+        assert_eq!(func(&make_reshare_request(max), &initial_dealings), None);
     }
 
     #[test]
