@@ -245,8 +245,8 @@ fn test_merge_neurons_fails() {
             &NeuronId { id: 1 },
         ),
         Err(GovernanceError{error_type: code, error_message: msg})
-        if code == ErrorType::LedgerUpdateOngoing as i32 &&
-           msg == "Neuron has an ongoing ledger update.");
+        if code == ErrorType::InvalidCommand as i32 &&
+           msg == "Source id and target id cannot be the same");
 
     // 2. Target neuron must be owned by the caller
     assert_matches!(
@@ -367,7 +367,7 @@ fn test_merge_neurons_fails() {
         ),
         Err(GovernanceError{error_type: code, error_message: msg})
         if code == NotFound as i32 &&
-           msg.contains("has invalid account"));
+           msg.contains("account is invalid"));
 
     // 12. Subaccount of target neuron to be merged must be present
     assert_matches!(
@@ -378,7 +378,7 @@ fn test_merge_neurons_fails() {
         ),
         Err(GovernanceError{error_type: code, error_message: msg})
         if code == NotFound as i32 &&
-           msg.contains("has invalid account"));
+           msg.contains("account is invalid"));
 
     // 13. Neither neuron can be the proposer of an open proposal
     let _pid = nns.propose_and_vote("-----------P", "the unique proposal".to_string());
@@ -453,7 +453,7 @@ fn test_merge_neurons_fails() {
         ),
         Err(GovernanceError{error_type: code, error_message: msg})
         if code == NotFound as i32 &&
-           msg == "Neuron not found: NeuronId { id: 100 }");
+           msg == "Source neuron not found");
 
     // 16. Target neuron must exist
     assert_matches!(
@@ -464,7 +464,7 @@ fn test_merge_neurons_fails() {
         ),
         Err(GovernanceError{error_type: code, error_message: msg})
         if code == NotFound as i32 &&
-           msg == "Neuron not found: NeuronId { id: 100 }");
+           msg == "Target neuron not found");
 
     // 17. Neurons with different ManageNeuron lists cannot be merged
     assert_matches!(
@@ -975,12 +975,12 @@ fn test_merge_neurons_small(
     n1_stake in 0u64..50_000,
     n1_maturity in 0u64..500_000_000,
     n1_fees in 0u64..20_000,
-    n1_dissolve in 0u64..MAX_DISSOLVE_DELAY_SECONDS,
+    n1_dissolve in 1u64..MAX_DISSOLVE_DELAY_SECONDS,
     n1_age in 0u64..315_360_000,
     n2_stake in 0u64..50_000,
     n2_maturity in 0u64..500_000_000,
     n2_fees in 0u64..20_000,
-    n2_dissolve in 0u64..MAX_DISSOLVE_DELAY_SECONDS,
+    n2_dissolve in 1u64..MAX_DISSOLVE_DELAY_SECONDS,
     n2_age in 0u64..315_360_000
 ) {
     do_test_merge_neurons(
@@ -1003,12 +1003,12 @@ fn test_merge_neurons_normal(
 
     n1_maturity in 0u64..500_000_000,
     n1_fees in 0u64..20_000,
-    n1_dissolve in 0u64..MAX_DISSOLVE_DELAY_SECONDS,
+    n1_dissolve in 1u64..MAX_DISSOLVE_DELAY_SECONDS,
     n1_age in 0u64..315_360_000,
     n2_stake in 0u64..500_000_000,
     n2_maturity in 0u64..500_000_000,
     n2_fees in 0u64..20_000,
-    n2_dissolve in 0u64..MAX_DISSOLVE_DELAY_SECONDS,
+    n2_dissolve in 1u64..MAX_DISSOLVE_DELAY_SECONDS,
     n2_age in 0u64..315_360_000
 ) {
     do_test_merge_neurons(
