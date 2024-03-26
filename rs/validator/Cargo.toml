@@ -26,5 +26,5 @@ ic-crypto-test-utils-reproducible-rng = { path = "../crypto/test_utils/reproduci
 ic-crypto-test-utils-root-of-trust = { path = "../crypto/test_utils/root_of_trust" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
-mockall = "0.11.4"
+mockall = { workspace = true }
 rand = "0.8"
