@@ -19,6 +19,7 @@ DEPENDENCIES = [
     "@crate_index//:url",
     "@crate_index//:tokio",
     "@crate_index//:clap",  # no clap because feature derive
+    "@crate_index//:num-bigint",
 ]
 
 DEV_DEPENDENCIES = [
