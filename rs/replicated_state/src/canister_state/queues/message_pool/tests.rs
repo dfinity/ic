@@ -87,7 +87,7 @@ fn test_insert_outbound_request_deadline_rounding() {
         Duration::from_secs(REQUEST_LIFETIME.as_secs())
     );
 
-    // Insert an outbounf request for a guaranteed response call (i.e. no deadline)
+    // Insert an outbound request for a guaranteed response call (i.e. no deadline)
     // at a timestamp that is not a round number of seconds.
     let current_time = Time::from_nanos_since_unix_epoch(13_500_000_000);
     // Sanity check that the above is actually 13+ seconds.
@@ -156,9 +156,9 @@ fn test_get() {
     }
 
     // Also do a negative test.
-    let nonexistemt_id = pool.next_message_id();
-    assert_eq!(None, pool.get(Request(nonexistemt_id)));
-    assert_eq!(None, pool.get(Response(nonexistemt_id)));
+    let nonexistent_id = pool.next_message_id();
+    assert_eq!(None, pool.get(Request(nonexistent_id)));
+    assert_eq!(None, pool.get(Response(nonexistent_id)));
 }
 
 #[test]
@@ -369,20 +369,20 @@ fn test_shed_message() {
     let msg1 = request_with_payload(1000, time(10));
     pool.insert_inbound(id1, msg1.clone().into());
     let id2 = pool.next_message_id();
-    let msg2 = response_with_payload(2000, time(20));
+    let msg2 = response_with_payload(4000, time(20));
     pool.insert_inbound(id2, msg2.clone().into());
     let id3 = pool.next_message_id();
     let msg3 = request_with_payload(3000, time(30));
     pool.insert_outbound_request(id3, msg3.clone().into(), time(35).into());
     let id4 = pool.next_message_id();
-    let msg4 = response_with_payload(4000, time(40));
+    let msg4 = response_with_payload(2000, time(40));
     pool.insert_outbound_response(id4, msg4.clone().into());
 
     // Sanity check.
     assert_eq!(4, pool.len());
 
-    // Shed the largest message (`msg4`).
-    assert_eq!(Some((id4, msg4.into())), pool.shed_message());
+    // Shed the largest message (`msg2`).
+    assert_eq!(Some((id2, msg2.into())), pool.shed_message());
     assert_eq!(3, pool.len());
 
     // Pop the next largest message ('msg3`).
@@ -391,8 +391,8 @@ fn test_shed_message() {
         pool.take(MessagePoolReference::Request(id3))
     );
 
-    // Shedding will now produce `msg2`.
-    assert_eq!(Some((id2, msg2.into())), pool.shed_message());
+    // Shedding will now produce `msg4`.
+    assert_eq!(Some((id4, msg4.into())), pool.shed_message());
     assert_eq!(1, pool.len());
 
     // Pop the remaining message ('msg1`).

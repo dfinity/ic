@@ -61,9 +61,6 @@ pub struct MessagePool {
     messages: BTreeMap<MessageId, RequestOrResponse>,
 
     /// Total size of all messages in the pool, in bytes.
-    // FIXME: Figure out whether this should be separated into guaranteed and best
-    // effort; only tracked for best effort; or dropped (and replaced by
-    // `CanisterQueues` maintained stats).
     size_bytes: usize,
 
     /// Deadline priority queue, earliest deadlines first.
