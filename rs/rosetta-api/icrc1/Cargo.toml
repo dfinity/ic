@@ -9,7 +9,7 @@ documentation.workspace = true
 [dependencies]
 candid = { workspace = true }
 ciborium = { workspace = true }
-hex = "0.4.2"
+hex = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-ledger-canister-core = { path = "../ledger_canister_core" }

@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-hex = "0.4.2"
+hex = { workspace = true }
 base64 = { workspace = true }
 ic-certification = { path = "../../../../../certification" }
 ic-crypto-internal-basic-sig-der-utils = { path = "../der_utils" }

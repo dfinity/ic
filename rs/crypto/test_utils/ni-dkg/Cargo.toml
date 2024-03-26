@@ -9,7 +9,7 @@ documentation.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-hex = "0.4.2"
+hex = { workspace = true }
 ic-crypto-internal-bls12-381-type = { path = "../../internal/crypto_lib/bls12_381/type" }
 ic-crypto-internal-types = { path = "../../internal/crypto_lib/types" }
 ic-crypto-temp-crypto = { path = "../../temp_crypto" }

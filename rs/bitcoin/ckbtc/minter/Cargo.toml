@@ -16,7 +16,7 @@ bech32 = "0.9.0"
 bs58 = "0.4.0"
 candid = { workspace = true }
 ciborium = { workspace = true }
-hex = "0.4.3"
+hex = { workspace = true }
 ic0 = "0.18.9"
 ic-base-types = { path = "../../../types/base_types" }
 ic-btc-interface = { workspace = true }

@@ -1,8 +1,8 @@
 use std::collections::BTreeSet;
 
 use crate::invariants::common::{
-    assert_valid_urls_and_hash, get_subnet_ids_from_snapshot, get_value_from_snapshot,
-    InvariantCheckError, RegistrySnapshot,
+    assert_valid_urls_and_hash, get_api_boundary_node_records_from_snapshot,
+    get_subnet_ids_from_snapshot, get_value_from_snapshot, InvariantCheckError, RegistrySnapshot,
 };
 
 use ic_base_types::SubnetId;
@@ -20,8 +20,9 @@ use ic_registry_keys::{
 /// A predicate on the replica version records contained in a registry
 /// snapshot.
 ///
-/// For each replica version that is either referred to in an SubnetRecord
-/// of a subnet that is listed in the subnet list or that is contained
+/// For each replica version that is either referred to in a SubnetRecord
+/// of a subnet listed in the subnet list, that is in use by an API boundary node,
+/// that is used by the unassigned nodes, or that is contained
 /// the BlessedReplicaVersions-List, the following is checked:
 ///
 /// * The corresponding ReplicaVersionRecord exists.
@@ -41,6 +42,7 @@ pub(crate) fn check_replica_version_invariants(
     if let Some(version) = unassigned_version_id {
         versions_in_use.insert(version);
     }
+    versions_in_use.append(&mut get_all_api_boundary_node_versions(snapshot));
 
     let blessed_version_ids = snapshot
         .get(make_blessed_replica_versions_key().as_bytes())
@@ -98,6 +100,14 @@ fn get_all_replica_versions_of_subnets(snapshot: &RegistrySnapshot) -> BTreeSet<
     get_subnet_ids_from_snapshot(snapshot)
         .iter()
         .map(|subnet_id| get_subnet_record(snapshot, *subnet_id).replica_version_id)
+        .collect()
+}
+
+/// Returns the list of all replica versions that are currently in use by the API boundary nodes.
+fn get_all_api_boundary_node_versions(snapshot: &RegistrySnapshot) -> BTreeSet<String> {
+    get_api_boundary_node_records_from_snapshot(snapshot)
+        .values()
+        .map(|node_record| node_record.version.clone())
         .collect()
 }
 

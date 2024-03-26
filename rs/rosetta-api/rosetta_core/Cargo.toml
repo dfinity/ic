@@ -11,7 +11,7 @@ documentation.workspace = true
 
 [dependencies]
 ecdsa-secp256k1 = { path = "../../crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1", package = "ic-crypto-internal-basic-sig-ecdsa-secp256k1" }
-hex = "0.4.2"
+hex = { workspace = true }
 rand = "0.8"
 serde = { workspace = true }
 serde_cbor = { workspace = true }

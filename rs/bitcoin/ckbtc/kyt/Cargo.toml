@@ -10,7 +10,7 @@ documentation.workspace = true
 askama = { workspace = true }
 candid = { workspace = true }
 ciborium = { workspace = true }
-hex = "0.4.3"
+hex = { workspace = true }
 ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }

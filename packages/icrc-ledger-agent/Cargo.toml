@@ -15,7 +15,7 @@ documentation.workspace = true
 [dependencies]
 candid = { workspace = true }
 ciborium = { workspace = true }
-hex = "0.4.2"
+hex = { workspace = true }
 ic-agent = { workspace = true }
 ic-cbor = { workspace = true }
 ic-certification = { workspace = true }

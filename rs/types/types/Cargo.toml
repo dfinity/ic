@@ -11,7 +11,7 @@ base64 = { workspace = true }
 bincode = "1.2.1"
 candid = { workspace = true }
 derive_more = { git = "https://github.com/dfinity-lab/derive_more", rev = "9f1b894e6fde640da4e9ea71a8fc0e4dd98d01da" }
-hex = "0.4.2"
+hex = { workspace = true }
 ic-base-types = { path = "../base_types" }
 ic-btc-types-internal = { path = "../../bitcoin/types/internal" }
 ic-constants = { path = "../../constants" }

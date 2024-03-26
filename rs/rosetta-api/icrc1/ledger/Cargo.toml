@@ -14,7 +14,7 @@ path = "src/main.rs"
 async-trait = "0.1.53"
 candid = { workspace = true }
 ciborium = { workspace = true }
-hex = "0.4.2"
+hex = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
 ic-canister-log = { path = "../../../rust_canisters/canister_log" }
 ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }

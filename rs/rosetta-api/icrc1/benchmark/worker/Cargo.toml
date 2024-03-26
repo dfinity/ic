@@ -15,7 +15,7 @@ dfn_http_metrics = {path = "../../../../rust_canisters/dfn_http_metrics"}
 futures = { workspace = true }
 # !!!! IMPORTANT FOR CANISTERS !!!
 getrandom = { version = "0.2", features = ["custom"] }
-hex = "0.4.2"
+hex = { workspace = true }
 ic-base-types = { path = "../../../../types/base_types" }
 ic-crypto-tree-hash = { path = "../../../../crypto/tree_hash" }
 ic-cdk = { workspace = true }

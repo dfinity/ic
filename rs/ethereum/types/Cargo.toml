@@ -7,7 +7,7 @@ edition.workspace = true
 documentation.workspace = true
 
 [dependencies]
-hex = "0.4"
+hex = { workspace = true }
 ic-crypto-sha3 = { path = "../../crypto/sha3" }
 minicbor = { workspace = true }
 minicbor-derive = { workspace = true }

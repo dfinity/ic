@@ -8,7 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 flate2 = "1.0.20"
-hex = "0.4.2"
+hex = { workspace = true }
 http = "0.2.1"
 tokio = { workspace = true }
 ic-crypto-sha2 = { path = "../crypto/sha2" }

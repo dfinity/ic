@@ -31,7 +31,7 @@ ic-boundary = { path = "../boundary_node/ic_boundary" }
 ic-interfaces = { path = "../interfaces" }
 ic-http-endpoints-public = { path = "../http_endpoints/public" }
 ic-validator-ingress-message = { path = "../validator/ingress_message" }
-hex = "0.4.2"
+hex = { workspace = true }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 clap = { version = "3.2.25", features = ["derive"] }
 time = "^0.3.20"
