@@ -100,12 +100,12 @@ icrc-rosetta-api-docker-image:
       "${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/rclone_download.py --git-rev "$CI_COMMIT_SHA" \
         --remote-path=release --out="artifacts/release"
 
-      gunzip artifacts/release/ic-icrc-rosetta-api.gz
-      chmod +x artifacts/release/ic-icrc-rosetta-api
+      gunzip artifacts/release/ic-icrc-rosetta-bin.gz
+      chmod +x artifacts/release/ic-icrc-rosetta-bin
 
       pushd "$(mktemp -d)"
       cp \
-        "$CI_PROJECT_DIR"/artifacts/release/ic-icrc-rosetta-api \
+        "$CI_PROJECT_DIR"/artifacts/release/ic-icrc-rosetta-bin \
         .
       bazel build //rs/rosetta-api/icrc1/rosetta:ic_icrc_rosetta_image
       popd
