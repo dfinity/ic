@@ -55,10 +55,7 @@ fn test_replace_replace_inbound_timeout_response() {
     let msg: RequestOrResponse = response(time(5)).into();
     pool.replace_inbound_timeout_response(placeholder, msg.clone());
     assert_eq!(1, pool.len());
-    assert_eq!(
-        Some(&response(time(5).into()).into()),
-        pool.get_response(id)
-    );
+    assert_eq!(Some(&response(time(5)).into()), pool.get_response(id));
 
     // Response is in load shedding queue, but not in deadline queue.
     assert!(pool.expire_messages(time(u32::MAX).into()).is_empty());
