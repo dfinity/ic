@@ -548,7 +548,9 @@ fn test_equality() {
 
     // Pop the same message from either pool.
     assert!(pool.take(MessagePoolReference::Request(id1)).is_some());
-    assert!(other_pool.take(MessagePoolReference::Request(id1)).is_some());
+    assert!(other_pool
+        .take(MessagePoolReference::Request(id1))
+        .is_some());
     // The two pools should still be equal.
     assert_eq!(pool, other_pool);
 
@@ -566,7 +568,9 @@ fn test_equality() {
 
     // Expire a message from one pool (id8), take it from the other.
     assert_eq!(1, pool.expire_messages(time(81).into()).len());
-    assert!(other_pool.take(MessagePoolReference::Response(id8)).is_some());
+    assert!(other_pool
+        .take(MessagePoolReference::Response(id8))
+        .is_some());
     // The two pools should no longer be equal.
     assert_ne!(pool, other_pool);
 
