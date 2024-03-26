@@ -35,7 +35,7 @@ ic-test-utilities-types = { path = "../test_utilities/types" }
 ic-utils = { path = "../utils" }
 ic-wasm-types = { path = "../types/wasm_types" }
 ic-sys = { path = "../sys" }
-hex = "0.4.2"
+hex = { workspace = true }
 lazy_static = "1.4.0"
 maplit = "1.0.2"
 proptest = "1.0"

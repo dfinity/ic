@@ -19,7 +19,7 @@ build-info = { workspace = true }
 candid = { workspace = true }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_core = { path = "../../rust_canisters/dfn_core" }
-hex = "0.4.2"
+hex = { workspace = true }
 hex-literal = "0.4.1"
 ic-base-types = { path = "../../types/base_types" }
 ic-crypto-getrandom-for-wasm = { path = "../../crypto/getrandom_for_wasm" }

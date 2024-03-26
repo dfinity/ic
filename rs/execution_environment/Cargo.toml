@@ -8,7 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 candid = { workspace = true }
-hex = "0.4.2"
+hex = { workspace = true }
 ic-base-types = { path = "../types/base_types" }
 ic-btc-interface = { workspace = true }
 ic-canister-sandbox-backend-lib = { path = "../canister_sandbox" }

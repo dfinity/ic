@@ -12,7 +12,7 @@ bincode = "1.2"
 bytes = { workspace = true }
 educe = "0.4"
 futures = "0.3"
-hex = "0.4.2"
+hex = { workspace = true }
 ic-adapter-metrics = { path = "../../../monitoring/adapter_metrics" }
 ic-config = { path = "../../../config" }
 ic-crypto-internal-basic-sig-ecdsa-secp256k1 = { path = "../crypto_lib/basic_sig/ecdsa_secp256k1" }

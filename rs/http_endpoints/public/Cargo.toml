@@ -14,7 +14,7 @@ bytes = { workspace = true }
 byte-unit = "4.0.14"
 cfg-if = "1.0.0"
 crossbeam = "0.8.4"
-hex = "0.4.2"
+hex = { workspace = true }
 http = "1"
 http-body = "1.0.0"
 http-body-util = "0.1.0"

@@ -37,7 +37,7 @@ futures = { workspace = true }
 humantime = "2.0"
 ic-base-types = { path = "../types/base_types" }
 ic-fstrim-tool = { path = "../ic_os/fstrim_tool" }
-hex = "0.4.2"
+hex = { workspace = true }
 ic-artifact-pool = { path = "../artifact_pool" }
 ic-backup = { path = "../backup" }
 ic-btc-interface = { workspace = true }

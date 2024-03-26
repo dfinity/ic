@@ -19,9 +19,9 @@ anyhow = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }
 url = "2.2.1"
-rosetta-core = {path = "../../../rosetta_core"}
+rosetta-core = { path = "../../../rosetta_core" }
 ed25519-consensus = "2.0.1"
-hex = "^0.4.2"
+hex = { workspace = true }
 icrc-ledger-types = { path = "../../../../../packages/icrc-ledger-types" }
 candid = { workspace = true }
 tokio = { workspace = true }

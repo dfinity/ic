@@ -8,7 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 bitcoin = { version = "0.28.1", features = ["default", "use-serde", "rand"] }
-hex = "0.4.2"
+hex = { workspace = true }
 rand = "0.8.3"
 serde_json = "^1.0.40"
 tokio = { workspace = true }

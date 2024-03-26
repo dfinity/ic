@@ -17,5 +17,5 @@ ic-types = { path = "../../../types/types" }
 # heavy-weight crates such as bls12_381.
 
 [dev-dependencies]
-hex = "0.4.2"
+hex = { workspace = true }
 tempfile = "3.1.0"

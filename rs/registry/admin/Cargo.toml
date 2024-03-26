@@ -13,7 +13,7 @@ async-trait = "0.1.51"
 base64 = { workspace = true }
 clap = { version = "3.2.25", features = ["derive"] }
 futures = { workspace = true }
-hex = "0.4"
+hex = { workspace = true }
 cycles-minting-canister = { path = "../../nns/cmc" }
 ic-admin-derive = { path = "../admin-derive" }
 ic-btc-interface = { workspace = true }

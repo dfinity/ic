@@ -18,7 +18,7 @@ anyhow = { workspace = true }
 base64 = { workspace = true }
 candid = { workspace = true }
 clap = { workspace = true }
-hex = "0.4.3"
+hex = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }

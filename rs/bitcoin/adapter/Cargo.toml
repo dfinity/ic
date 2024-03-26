@@ -11,7 +11,7 @@ bitcoin = { version = "0.28.1", features = ["default", "use-serde", "rand"] }
 clap = { version = "3.2.25", features = ["derive"] }
 futures = { workspace = true }
 hashlink = "0.8.0"
-hex = "0.4.2"
+hex = { workspace = true }
 http = "0.2"
 ic-adapter-metrics-server = { path = "../../monitoring/adapter_metrics_server" }
 ic-async-utils = { path = "../../async_utils" }
