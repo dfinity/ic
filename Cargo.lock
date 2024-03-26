@@ -5546,15 +5546,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-canister-log"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cb82c4f617ecff6e452fe65af0489626ec7330ffe3eedd9ea14e6178eea48d1a"
-dependencies = [
- "serde",
-]
-
-[[package]]
 name = "ic-canister-profiler"
 version = "0.9.0"
 dependencies = [
@@ -5663,7 +5654,7 @@ name = "ic-canister-serve"
 version = "0.9.0"
 dependencies = [
  "by_address",
- "ic-canister-log 0.2.0",
+ "ic-canister-log",
  "ic-cdk",
  "ic-metrics-encoder",
  "maplit",
@@ -5958,7 +5949,7 @@ dependencies = [
  "ic-base-types",
  "ic-bitcoin-canister-mock",
  "ic-btc-interface",
- "ic-canister-log 0.2.0",
+ "ic-canister-log",
  "ic-canisters-http-types",
  "ic-cdk",
  "ic-cdk-macros",
@@ -6006,7 +5997,7 @@ dependencies = [
  "hex",
  "hex-literal",
  "ic-base-types",
- "ic-canister-log 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ic-canister-log",
  "ic-canisters-http-types",
  "ic-cdk",
  "ic-cdk-macros",
@@ -7987,7 +7978,7 @@ dependencies = [
  "candid",
  "ciborium",
  "ic-base-types",
- "ic-canister-log 0.2.0",
+ "ic-canister-log",
  "ic-canisters-http-types",
  "ic-cdk",
  "ic-cdk-macros",
@@ -8242,7 +8233,7 @@ dependencies = [
  "ciborium",
  "ic-agent",
  "ic-base-types",
- "ic-canister-log 0.2.0",
+ "ic-canister-log",
  "ic-canister-profiler",
  "ic-canisters-http-types",
  "ic-cdk",
@@ -8280,7 +8271,7 @@ dependencies = [
  "ciborium",
  "hex",
  "ic-base-types",
- "ic-canister-log 0.2.0",
+ "ic-canister-log",
  "ic-canisters-http-types",
  "ic-cdk",
  "ic-cdk-macros",
@@ -8624,7 +8615,7 @@ dependencies = [
  "async-trait",
  "candid",
  "ic-base-types",
- "ic-canister-log 0.2.0",
+ "ic-canister-log",
  "ic-constants",
  "ic-ic00-types",
  "ic-ledger-core",
@@ -8860,7 +8851,7 @@ dependencies = [
  "dfn_core",
  "dfn_protobuf",
  "ic-base-types",
- "ic-canister-log 0.2.0",
+ "ic-canister-log",
  "ic-canisters-http-types",
  "ic-crypto-sha2",
  "ic-ic00-types",
@@ -10720,7 +10711,7 @@ dependencies = [
  "hex",
  "ic-base-types",
  "ic-canister-client-sender",
- "ic-canister-log 0.2.0",
+ "ic-canister-log",
  "ic-canister-profiler",
  "ic-canisters-http-types",
  "ic-crypto-sha2",
@@ -10892,7 +10883,7 @@ dependencies = [
  "comparable",
  "futures",
  "ic-base-types",
- "ic-canister-log 0.2.0",
+ "ic-canister-log",
  "ic-canisters-http-types",
  "ic-cdk",
  "ic-cdk-macros",
@@ -10935,7 +10926,7 @@ dependencies = [
  "futures",
  "hex",
  "ic-base-types",
- "ic-canister-log 0.2.0",
+ "ic-canister-log",
  "ic-canisters-http-types",
  "ic-ledger-core",
  "ic-metrics-encoder",
@@ -13061,7 +13052,7 @@ dependencies = [
  "dfn_protobuf",
  "hex",
  "ic-base-types",
- "ic-canister-log 0.2.0",
+ "ic-canister-log",
  "ic-constants",
  "ic-icrc1",
  "ic-icrc1-ledger-sm-tests",

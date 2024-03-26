@@ -56,7 +56,22 @@ macro_rules! log {
         (&$sink).append($crate::LogEntry {
             timestamp: $crate::now(),
             message,
-            file: std::file!(),
+            file: {
+                let file = std::file!();
+                if file.starts_with("src/") {
+                    file.to_string()
+                }
+                else {
+                    // Rewrite absolute path
+                    format!(
+                        ".../{}",
+                        std::path::Path::new(&std::ffi::OsStr::new(file))
+                            .file_name()
+                            .and_then(|s| s.to_str())
+                            .unwrap_or("<unknown>"),
+                    )
+                }
+            },
             line: std::line!(),
             counter: $crate::entry_counter::increment()
         });
@@ -74,7 +89,7 @@ pub struct LogEntry {
     // The index of this entry starting from the last canister upgrade.
     pub counter: u64,
     pub message: String,
-    pub file: &'static str,
+    pub file: String,
     pub line: u32,
 }
 
