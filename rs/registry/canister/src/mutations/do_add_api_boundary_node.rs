@@ -101,6 +101,7 @@ mod tests {
         make_replica_version_key,
     };
     use ic_registry_transport::{insert, upsert};
+    use ic_types::ReplicaVersion;
 
     use crate::{
         common::test_helpers::{
@@ -150,7 +151,7 @@ mod tests {
 
         let payload = AddApiBoundaryNodePayload {
             node_id,
-            version: "version".into(),
+            version: ReplicaVersion::default().to_string(),
         };
 
         registry.maybe_apply_mutation_internal(vec![

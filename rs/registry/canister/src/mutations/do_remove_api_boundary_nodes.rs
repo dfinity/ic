@@ -45,6 +45,7 @@ mod tests {
     use ic_protobuf::registry::api_boundary_node::v1::ApiBoundaryNodeRecord;
     use ic_registry_keys::make_api_boundary_node_record_key;
     use ic_registry_transport::insert;
+    use ic_types::ReplicaVersion;
 
     use crate::{
         common::test_helpers::{invariant_compliant_registry, prepare_registry_with_nodes},
@@ -93,7 +94,7 @@ mod tests {
             insert(
                 make_api_boundary_node_record_key(node_id), // key
                 encode_or_panic(&ApiBoundaryNodeRecord {
-                    version: "version".into(),
+                    version: ReplicaVersion::default().to_string(),
                 }),
             ),
         ]);
