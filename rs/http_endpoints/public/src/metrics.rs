@@ -7,6 +7,7 @@ pub const LABEL_PROTOCOL: &str = "protocol";
 /// specified request part the CBOR-encoded request body.
 pub const LABEL_REQUEST_TYPE: &str = "request_type";
 pub const LABEL_STATUS: &str = "status";
+pub const LABEL_HTTP_VERSION: &str = "http_version";
 pub const LABEL_HEALTH_STATUS_BEFORE: &str = "before";
 pub const LABEL_HEALTH_STATUS_AFTER: &str = "after";
 
@@ -24,6 +25,7 @@ pub const REQUESTS_LABEL_NAMES: [&str; REQUESTS_NUM_LABELS] = [LABEL_REQUEST_TYP
 #[derive(Clone)]
 pub struct HttpHandlerMetrics {
     pub requests: HistogramVec,
+    pub request_http_version_counts: IntCounterVec,
     pub request_body_size_bytes: HistogramVec,
     pub response_body_size_bytes: HistogramVec,
     pub connections_total: IntCounter,
@@ -54,6 +56,11 @@ impl HttpHandlerMetrics {
                 decimal_buckets(-3, 1),
                 // 1ms, 2ms, 5ms, 10ms, 20ms, ..., 10s, 20s, 50s
                 &REQUESTS_LABEL_NAMES,
+            ),
+            request_http_version_counts: metrics_registry.int_counter_vec(
+                "replica_http_request_http_version_counts",
+                "HTTP/HTTPS request counts by HTTP version.",
+                &[LABEL_HTTP_VERSION],
             ),
             request_body_size_bytes: metrics_registry.histogram_vec(
                 "replica_http_request_body_size_bytes",

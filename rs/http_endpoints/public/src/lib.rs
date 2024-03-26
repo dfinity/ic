@@ -831,6 +831,14 @@ async fn collect_timer_metric(
     } else {
         request.uri().path().to_owned()
     };
+
+    let http_version = format!("{:?}", request.version());
+
+    metrics
+        .request_http_version_counts
+        .with_label_values(&[&http_version])
+        .inc();
+
     metrics
         .request_body_size_bytes
         .with_label_values(&[&path, LABEL_UNKNOWN])
