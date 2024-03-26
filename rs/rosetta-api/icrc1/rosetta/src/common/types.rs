@@ -1,6 +1,7 @@
 use anyhow::Context;
 use axum::{http::StatusCode, response::IntoResponse, Json};
 use candid::Deserialize;
+use num_bigint::BigInt;
 use rosetta_core::identifiers::*;
 use rosetta_core::objects::*;
 use serde::Serialize;
@@ -335,7 +336,7 @@ impl BlockMetadata {
             block_created_at_nano_seconds: block.timestamp,
             effective_fee: block
                 .effective_fee
-                .map(|fee| Amount::new(fee.to_string(), currency)),
+                .map(|fee| Amount::new(BigInt::from(fee), currency)),
         })
     }
 }

@@ -19,7 +19,6 @@ where
         arg,
         compute_allocation: None,
         memory_allocation: None,
-        query_allocation: None,
         sender_canister_version: None,
     };
 

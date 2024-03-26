@@ -45,7 +45,7 @@ url = "2.1.1"
 x509-cert = { workspace = true }
 
 [dev-dependencies]
-assert_matches = "1"
+assert_matches = { workspace = true }
 pretty_assertions = { workspace = true }
 
 [lib]

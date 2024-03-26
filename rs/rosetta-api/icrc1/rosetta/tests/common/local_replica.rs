@@ -140,7 +140,6 @@ async fn install_canister(context: &ReplicaContext, init_arg: Vec<u8>, canister_
                 wasm_module: icrc_ledger_wasm(),
                 arg: init_arg,
                 mode: CanisterInstallMode::Install,
-                query_allocation: None,
                 sender_canister_version: None,
                 memory_allocation: None,
                 compute_allocation: None,

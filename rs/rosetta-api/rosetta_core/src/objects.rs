@@ -13,6 +13,7 @@ use anyhow::Context;
 use candid::Nat;
 use candid::Principal;
 use ic_types::PrincipalId;
+use num_bigint::BigInt;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
@@ -313,9 +314,9 @@ pub struct Amount {
 }
 
 impl Amount {
-    pub fn new(value: String, currency: Currency) -> Self {
+    pub fn new(value: BigInt, currency: Currency) -> Self {
         Self {
-            value,
+            value: value.to_string(),
             currency,
             metadata: None,
         }

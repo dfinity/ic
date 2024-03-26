@@ -17,7 +17,7 @@ ic-types = { path = "../../types/types" }
 ic-validator = { path = "../../validator" }
 
 [dev-dependencies]
-assert_matches = "1.5.0"
+assert_matches = { workspace = true }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-certification-test-utils = { path = "../../certification/test-utils" }
 ic-constants = { path = "../../constants" }

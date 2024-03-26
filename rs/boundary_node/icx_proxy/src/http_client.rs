@@ -235,7 +235,7 @@ pub fn setup(opts: HttpClientOpts) -> Result<impl HyperService<Body>, Error> {
 
         let mut root_cert_store = RootCertStore::empty();
 
-        if !ssl_root_certificate.is_empty() {
+        if ssl_root_certificate.is_empty() {
             match rustls_native_certs::load_native_certs() {
                 Err(e) => tracing::warn!("Could not load native certs: {}", e),
                 Ok(certs) => {

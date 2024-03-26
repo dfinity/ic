@@ -21,6 +21,6 @@ serde_cbor = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
-assert_matches = "1.5.0"
+assert_matches = { workspace = true }
 ic-registry-client-fake = { path = "../fake" }
 ic-registry-proto-data-provider = { path = "../proto_data_provider" }

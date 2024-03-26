@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-assert_matches = "1.3.0"
+assert_matches = { workspace = true }
 candid = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
 cycles-minting-canister = { path = "../../nns/cmc" }

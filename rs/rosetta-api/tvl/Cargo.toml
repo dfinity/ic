@@ -28,7 +28,7 @@ serde = { workspace = true }
 serde_bytes = { workspace = true }
 
 [dev-dependencies]
-assert_matches = "1.3.0"
+assert_matches = { workspace = true }
 candid_parser = { workspace = true }
 ic-nns-test-utils = { path = "../../nns/test_utils" }
 ic-state-machine-tests = { path = "../../state_machine_tests" }

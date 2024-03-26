@@ -57,6 +57,7 @@ tracing = { workspace = true }
 tracing-appender = { workspace = true }
 tracing-subscriber = { workspace = true }
 anyhow = { workspace = true }
+num-bigint = "0.4.4"
 
 [dev-dependencies]
 ed25519-consensus = "2.0.1"

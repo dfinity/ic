@@ -54,8 +54,6 @@ pub struct ChangeCanisterRequest {
     pub compute_allocation: Option<candid::Nat>,
     #[serde(serialize_with = "serialize_optional_nat")]
     pub memory_allocation: Option<candid::Nat>,
-    #[serde(serialize_with = "serialize_optional_nat")]
-    pub query_allocation: Option<candid::Nat>,
 }
 
 impl ChangeCanisterRequest {
@@ -75,7 +73,6 @@ impl ChangeCanisterRequest {
             .field("arg_sha256", &format!("{:x?}", arg_sha))
             .field("compute_allocation", &self.compute_allocation)
             .field("memory_allocation", &self.memory_allocation)
-            .field("query_allocation", &self.query_allocation)
             .finish()
     }
 }
@@ -106,7 +103,6 @@ impl ChangeCanisterRequest {
             arg: Encode!().unwrap(),
             compute_allocation: None,
             memory_allocation: None,
-            query_allocation: None,
         }
     }
 
@@ -147,8 +143,6 @@ pub struct AddCanisterRequest {
     pub compute_allocation: Option<candid::Nat>,
     #[serde(serialize_with = "serialize_optional_nat")]
     pub memory_allocation: Option<candid::Nat>,
-    #[serde(serialize_with = "serialize_optional_nat")]
-    pub query_allocation: Option<candid::Nat>,
 
     pub initial_cycles: u64,
 }
@@ -168,7 +162,6 @@ impl AddCanisterRequest {
             .field("arg_sha256", &format!("{:x?}", arg_sha))
             .field("compute_allocation", &self.compute_allocation)
             .field("memory_allocation", &self.memory_allocation)
-            .field("query_allocation", &self.query_allocation)
             .field("initial_cycles", &self.initial_cycles)
             .finish()
     }
@@ -255,7 +248,6 @@ async fn install_code(request: ChangeCanisterRequest) -> ic_cdk::api::call::Call
         arg,
         compute_allocation,
         memory_allocation,
-        query_allocation,
 
         stop_before_installing: _,
     } = request;
@@ -270,7 +262,6 @@ async fn install_code(request: ChangeCanisterRequest) -> ic_cdk::api::call::Call
         arg,
         compute_allocation,
         memory_allocation,
-        query_allocation,
         sender_canister_version,
     };
     // Warning: despite dfn_core::call returning a Result, it actually traps when

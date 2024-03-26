@@ -19,7 +19,7 @@ prost = { workspace = true }
 serde = { workspace = true }
 
 [dev-dependencies]
-assert_matches = "1.3.0"
+assert_matches = { workspace = true }
 ic-base-types-protobuf-generator = { path = "./protobuf_generator" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
 proptest = "1.0"

@@ -425,6 +425,7 @@ jsonrpc = { git = "https://github.com/apoelstra/rust-jsonrpc", rev = "e42044d" }
 anyhow = "1.0.80"
 arrayvec = "0.7.4"
 askama = { version = "0.12.1", features = ["serde-json"] }
+assert_matches = "1.5.0"
 async-recursion = "1.0.5"
 async-scoped = { version = "0.8", features = ["use-tokio"] }
 axum = "0.7.4"

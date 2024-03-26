@@ -18,7 +18,7 @@ use candid::Nat;
 use candid::Principal;
 use ic_ledger_core::tokens::Zero;
 use icrc_ledger_types::icrc1::account::Account;
-use num_bigint::BigUint;
+use num_bigint::{BigInt, BigUint};
 use rosetta_core::miscellaneous::OperationStatus;
 use rosetta_core::request_types::SearchTransactionsRequest;
 use rosetta_core::response_types::SearchTransactionsResponse;
@@ -193,15 +193,14 @@ pub fn account_balance(
 
     Ok(AccountBalanceResponse {
         block_identifier: rosetta_block.get_block_identifier(),
-        balances: vec![Amount {
-            value: balance.to_string(),
-            currency: Currency {
+        balances: vec![Amount::new(
+            BigInt::from(balance),
+            Currency {
                 symbol,
                 decimals: decimals.into(),
                 metadata: None,
             },
-            metadata: None,
-        }],
+        )],
         metadata: None,
     })
 }
