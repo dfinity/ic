@@ -184,7 +184,6 @@ fn install_canister(
                 vec![],
                 None,
                 None,
-                None,
             )
             .encode(),
         )

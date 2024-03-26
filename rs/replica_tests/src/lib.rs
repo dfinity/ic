@@ -407,7 +407,6 @@ impl LocalTestRuntime {
             payload,
             None,
             None,
-            None,
         ))
     }
 
@@ -466,7 +465,6 @@ impl LocalTestRuntime {
             payload,
             None,
             None,
-            None,
         )
     }
 
@@ -478,7 +476,6 @@ impl LocalTestRuntime {
         payload: Vec<u8>,
         compute_allocation: Option<u64>,
         memory_allocation: Option<u64>,
-        query_allocation: Option<u64>,
     ) -> Result<WasmResult, UserError> {
         let args = InstallCodeArgs::new(
             CanisterInstallMode::Install,
@@ -487,7 +484,6 @@ impl LocalTestRuntime {
             payload,
             compute_allocation,
             memory_allocation,
-            query_allocation,
         );
 
         self.install_canister_helper(args)
@@ -506,7 +502,6 @@ impl LocalTestRuntime {
         let (canister_id, res) = self.create_and_install_canister_wasm(
             UNIVERSAL_CANISTER_WASM.to_vec(),
             payload.into(),
-            None,
             None,
             None,
             num_cycles,
@@ -534,7 +529,6 @@ impl LocalTestRuntime {
         payload: Vec<u8>,
         compute_allocation: Option<u64>,
         memory_allocation: Option<u64>,
-        query_allocation: Option<u64>,
         num_cycles: u128,
     ) -> (CanisterId, Result<WasmResult, UserError>) {
         let canister_id = self.create_canister_with_cycles(num_cycles).unwrap();
@@ -546,7 +540,6 @@ impl LocalTestRuntime {
                 payload,
                 compute_allocation,
                 memory_allocation,
-                query_allocation,
             ),
         )
     }

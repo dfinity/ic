@@ -395,7 +395,6 @@ impl SchedulerTest {
             arg: encode_message_id_as_payload(message_id),
             compute_allocation: None,
             memory_allocation: None,
-            query_allocation: None,
             sender_canister_version: None,
         };
 

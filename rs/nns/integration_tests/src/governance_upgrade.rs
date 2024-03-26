@@ -132,7 +132,6 @@ fn test_root_restarts_canister_during_upgrade_canister_with_stop_canister_timeou
         arg: vec![],
         compute_allocation: None,
         memory_allocation: None,
-        query_allocation: None,
     };
 
     let _: () = update_with_sender(

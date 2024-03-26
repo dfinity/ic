@@ -7335,7 +7335,6 @@ mod tests {
                         arg: Encode!().unwrap(),
                         compute_allocation: None,
                         memory_allocation: None, // local const in install_code()
-                        query_allocation: None,
                         sender_canister_version: None,
                     })
                     .unwrap(),
