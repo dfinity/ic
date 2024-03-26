@@ -21,7 +21,7 @@ hex = { workspace = true }
 slog = { workspace = true }
 
 [dev-dependencies]
-assert_matches = "1.3.0"
+assert_matches = { workspace = true }
 ic-consensus = { path = "../" }
 ic-consensus-mocks = { path = "../mocks" }
 ic-test-utilities = { path = "../../test_utilities" }

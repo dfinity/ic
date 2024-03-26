@@ -8,7 +8,7 @@ documentation.workspace = true
 
 # Dependencies required to compile the test canisters.
 [dependencies]
-assert_matches = "1.4.0"
+assert_matches = { workspace = true }
 candid = { workspace = true }
 cycles-minting-canister = { path = "../../nns/cmc" }
 dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
@@ -65,5 +65,5 @@ serde = { workspace = true }
 ic-icrc1 = { path = "../../rosetta-api/icrc1/" }
 ic-icrc1-index-ng = { path = "../../rosetta-api/icrc1/index-ng" }
 ic-icrc1-tokens-u64 = { path = "../../rosetta-api/icrc1/tokens_u64" }
-assert_matches = "1.3.0"
+assert_matches = { workspace = true }
 xrc-mock = { path = "../../rosetta-api/tvl/xrc_mock" }

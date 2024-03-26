@@ -34,7 +34,7 @@ serde_bytes = { workspace = true }
 
 [dev-dependencies]
 ic-ledger-suite-orchestrator-test-utils = { path = "test_utils" }
-assert_matches = "1.5.0"
+assert_matches = { workspace = true }
 proptest = "1.0"
 candid_parser = { workspace = true }
 ic-state-machine-tests = { path = "../../state_machine_tests" }

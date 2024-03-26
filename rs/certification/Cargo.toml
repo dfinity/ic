@@ -17,7 +17,7 @@ serde_cbor = { workspace = true }
 tree-deserializer = { path = "../tree_deserializer" }
 
 [dev-dependencies]
-assert_matches = "1.5.0"
+assert_matches = { workspace = true }
 criterion = { version = "0.5", features = ["html_reports"] }
 ic-base-types = { path = "../types/base_types" }
 ic-certification-test-utils = { path = "test-utils" }

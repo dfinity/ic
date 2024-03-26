@@ -24,7 +24,7 @@ simple_asn1 = { workspace = true }
 zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
 
 [dev-dependencies]
-assert_matches = "1.5.0"
+assert_matches = { workspace = true }
 ic-crypto-internal-test-vectors = { path = "../../../test_vectors" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../../test_utils/reproducible_rng" }
 num-bigint = "0.4.3"

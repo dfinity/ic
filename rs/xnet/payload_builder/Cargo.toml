@@ -35,7 +35,7 @@ slog = { workspace = true }
 tokio = { workspace = true }
 
 [dev-dependencies]
-assert_matches = "1.3.0"
+assert_matches = { workspace = true }
 ic-config = { path = "../../config" }
 ic-interfaces-certified-stream-store-mocks = { path = "../../interfaces/certified_stream_store/mocks" }
 ic-interfaces-state-manager-mocks = { path = "../../interfaces/state_manager/mocks" }
