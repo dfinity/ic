@@ -1,6 +1,6 @@
 icrc-rosetta-api-docker-image:
   rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
       when: manual
       allow_failure: true
   needs:
@@ -39,7 +39,7 @@ icrc-rosetta-api-docker-image:
 
 rosetta-icrc-release:
   rules:
-    - if: $CI_COMMIT_REF_PROTECTED == "true" && $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "rosetta-icrc-release"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
   script:
     - |
       set -euo pipefail
