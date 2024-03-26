@@ -5,10 +5,12 @@ use crate::common::{
 use anyhow::{bail, Context};
 use candid::{Decode, Encode, Nat};
 use icrc_ledger_agent::Icrc1Agent;
+use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 use icrc_ledger_types::icrc3::blocks::{BlockRange, GetBlocksRequest, GetBlocksResponse};
 use num_traits::ToPrimitive;
 use serde_bytes::ByteBuf;
 use std::{cmp, collections::HashMap, ops::RangeInclusive, sync::Arc};
+use tokio::sync::Mutex as AsyncMutex;
 use tracing::info;
 
 // The Range of indices to be synchronized.
@@ -95,6 +97,7 @@ pub async fn start_synching_blocks(
     agent: Arc<Icrc1Agent>,
     storage_client: Arc<StorageClient>,
     maximum_blocks_per_request: u64,
+    archive_canister_ids: Arc<AsyncMutex<Vec<ArchiveInfo>>>,
 ) -> anyhow::Result<()> {
     // Determine whether there are any synchronization gaps in the database that need to be filled.
     let sync_gaps = derive_synchronization_gaps(storage_client.clone())?;
@@ -105,13 +108,20 @@ pub async fn start_synching_blocks(
             agent.clone(),
             storage_client.clone(),
             maximum_blocks_per_request,
+            archive_canister_ids.clone(),
             gap,
         )
         .await?;
     }
 
     // After all the gaps have been filled continue with a synchronization from the top of the blockchain.
-    sync_from_the_tip(agent, storage_client.clone(), maximum_blocks_per_request).await?;
+    sync_from_the_tip(
+        agent,
+        storage_client.clone(),
+        maximum_blocks_per_request,
+        archive_canister_ids.clone(),
+    )
+    .await?;
 
     storage_client.update_account_balances()?;
 
@@ -123,6 +133,7 @@ pub async fn sync_from_the_tip(
     agent: Arc<Icrc1Agent>,
     storage_client: Arc<StorageClient>,
     maximum_blocks_per_request: u64,
+    archive_canister_ids: Arc<AsyncMutex<Vec<ArchiveInfo>>>,
 ) -> anyhow::Result<()> {
     let (tip_block_hash, tip_block_index) = match agent
         .get_certified_chain_tip()
@@ -162,6 +173,7 @@ pub async fn sync_from_the_tip(
             agent.clone(),
             storage_client.clone(),
             maximum_blocks_per_request,
+            archive_canister_ids,
             sync_range,
         )
         .await?;
@@ -175,6 +187,7 @@ async fn sync_blocks_interval(
     agent: Arc<Icrc1Agent>,
     storage_client: Arc<StorageClient>,
     maximum_blocks_per_request: u64,
+    archive_canister_ids: Arc<AsyncMutex<Vec<ArchiveInfo>>>,
     sync_range: SyncRange,
 ) -> anyhow::Result<()> {
     // Create a progress bar for visualization.
@@ -200,8 +213,12 @@ async fn sync_blocks_interval(
     // database.
     loop {
         // The fetch_blocks_interval function guarantees that all blocks that were asked for are fetched if they exist on the ledger.
-        let fetched_blocks =
-            fetch_blocks_interval(agent.clone(), next_index_interval.clone()).await?;
+        let fetched_blocks = fetch_blocks_interval(
+            agent.clone(),
+            next_index_interval.clone(),
+            archive_canister_ids.clone(),
+        )
+        .await?;
 
         // Verify that the fetched blocks are valid.
         // Leading block hash of a non empty fetched blocks can never be `None` -> Unwrap is safe.
@@ -270,6 +287,7 @@ async fn sync_blocks_interval(
 async fn fetch_blocks_interval(
     agent: Arc<Icrc1Agent>,
     index_range: RangeInclusive<u64>,
+    archive_canister_ids: Arc<AsyncMutex<Vec<ArchiveInfo>>>,
 ) -> anyhow::Result<Vec<RosettaBlock>> {
     // Construct a hashmap which maps block indices to blocks. Blocks that have not been fetched are `None`.
     let mut fetched_blocks_result: HashMap<u64, Option<RosettaBlock>> = HashMap::new();
@@ -364,6 +382,25 @@ async fn fetch_blocks_interval(
                     start: archive_query.start.clone(),
                     length: archive_query.length,
                 })?;
+                // Check if the provided archive canister id is in the list of trusted canister ids
+                let mut trusted_archive_canisters = archive_canister_ids.lock().await;
+                if !trusted_archive_canisters.iter().any(|archive_info| {
+                    archive_info.canister_id == archive_query.callback.canister_id
+                }) {
+                    *trusted_archive_canisters =
+                        fetch_archive_canister_infos(agent.clone()).await?;
+
+                    // Check again after updating the list of archive canister ids whether the provided archive canister id is in the list
+                    if !trusted_archive_canisters.iter().any(|archive_info| {
+                        archive_info.canister_id == archive_query.callback.canister_id
+                    }) {
+                        bail!(
+                            "Archive canister id {} is not in the list of trusted canister ids",
+                            archive_query.callback.canister_id
+                        );
+                    }
+                }
+
                 let archive_response = agent
                     .agent
                     .query(
@@ -408,6 +445,22 @@ async fn fetch_blocks_interval(
     result.sort_by(|a, b| a.index.partial_cmp(&b.index).unwrap());
 
     Ok(result)
+}
+
+pub async fn fetch_archive_canister_infos(
+    icrc1_agent: Arc<Icrc1Agent>,
+) -> anyhow::Result<Vec<ArchiveInfo>> {
+    Decode!(
+        &icrc1_agent
+            .agent
+            .update(&icrc1_agent.ledger_canister_id, "archives")
+            .with_arg(Encode!().context("Failed to encode empty argument")?)
+            .call_and_wait()
+            .await
+            .context("Failed to fetch list of archives from ledger")?,
+        Vec<ArchiveInfo>
+    )
+    .context("Failed to decode list of archives from ledger")
 }
 
 pub mod blocks_verifier {
