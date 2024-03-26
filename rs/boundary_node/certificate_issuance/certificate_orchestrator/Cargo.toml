@@ -24,7 +24,7 @@ ic-cdk-timers = { workspace = true }
 ic-cdk-macros = { workspace = true }
 ic-certified-map = "0.3.2"
 ic-stable-structures = { workspace = true }
-mockall = "0.11.3"
+mockall = { workspace = true }
 priority-queue = { version = "1.3.0", features = ["serde"] }
 prometheus = { workspace = true }
 publicsuffix = "2.2.3"

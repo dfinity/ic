@@ -22,7 +22,7 @@ humantime = "2.1.0"
 hyper = "0.14.18"
 ic-agent = { workspace = true }
 indoc = "1.0.9"
-mockall = "0.11.1"
+mockall = { workspace = true }
 opentelemetry = { version = "0.20", features = ["metrics"] }
 opentelemetry-prometheus = "0.13.0"
 prometheus = { workspace = true }

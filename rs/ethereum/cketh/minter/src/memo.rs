@@ -32,13 +32,21 @@ pub enum MintMemo {
         log_index: LogIndex,
     },
     #[n(1)]
-    Reimburse {
+    ReimburseTransaction {
         #[n(0)]
         /// The id corresponding to the withdrawal request.
         withdrawal_id: u64,
         #[n(1)]
         /// Hash of the failed transaction.
         tx_hash: Hash,
+    },
+    /// The minter failed to process a withdrawal request,
+    /// so no transaction was issued, but some reimbursement was made.
+    #[n(2)]
+    ReimburseWithdrawal {
+        #[n(0)]
+        /// The id corresponding to the withdrawal request.
+        withdrawal_id: u64,
     },
 }
 
@@ -102,13 +110,22 @@ impl From<&ReceivedEvent> for Memo {
     }
 }
 
+impl From<ReimbursementRequest> for MintMemo {
+    fn from(reimbursement_request: ReimbursementRequest) -> Self {
+        match reimbursement_request.transaction_hash {
+            Some(tx_hash) => MintMemo::ReimburseTransaction {
+                withdrawal_id: reimbursement_request.ledger_burn_index.get(),
+                tx_hash,
+            },
+            None => MintMemo::ReimburseWithdrawal {
+                withdrawal_id: reimbursement_request.ledger_burn_index.get(),
+            },
+        }
+    }
+}
+
 impl From<ReimbursementRequest> for Memo {
     fn from(reimbursement_request: ReimbursementRequest) -> Self {
-        Memo::from(MintMemo::Reimburse {
-            withdrawal_id: reimbursement_request.ledger_burn_index.get(),
-            tx_hash: reimbursement_request
-                .transaction_hash
-                .expect("A hash should be set for reimbursement memos."),
-        })
+        Memo::from(MintMemo::from(reimbursement_request))
     }
 }

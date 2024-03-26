@@ -1,5 +1,5 @@
 {
-  "checksum": "c42be3beff9565fe9ae2d526b5f16cbdac6b2b1cba94f41f027c42d16c5dabca",
+  "checksum": "794a1602b4ffd7696ac13b8498b7d0b1cdaaf411c82706541c567bbc0a9fdb6e",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -15346,7 +15346,7 @@
               "target": "ssh2"
             },
             {
-              "id": "strum 0.25.0",
+              "id": "strum 0.26.2",
               "target": "strum"
             },
             {
@@ -15669,7 +15669,7 @@
               "target": "slog_derive"
             },
             {
-              "id": "strum_macros 0.25.3",
+              "id": "strum_macros 0.26.2",
               "target": "strum_macros"
             },
             {
@@ -51291,6 +51291,54 @@
       },
       "license": "MIT"
     },
+    "strum 0.26.2": {
+      "name": "strum",
+      "version": "0.26.2",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/strum/0.26.2/download",
+          "sha256": "5d8cec3501a5194c432b2b7976db6b7d10ec95c253208b45f83f7136aa985e29"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "strum",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "strum",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "derive",
+            "std",
+            "strum_macros"
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "strum_macros 0.26.2",
+              "target": "strum_macros"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.26.2"
+      },
+      "license": "MIT"
+    },
     "strum_macros 0.24.3": {
       "name": "strum_macros",
       "version": "0.24.3",
@@ -51408,6 +51456,66 @@
           "selects": {}
         },
         "version": "0.25.3"
+      },
+      "license": "MIT"
+    },
+    "strum_macros 0.26.2": {
+      "name": "strum_macros",
+      "version": "0.26.2",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/strum_macros/0.26.2/download",
+          "sha256": "c6cf59daf282c0a494ba14fd21610a0325f9f90ec9d1231dea26bcb1d696c946"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "strum_macros",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "strum_macros",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "heck 0.4.1",
+              "target": "heck"
+            },
+            {
+              "id": "proc-macro2 1.0.76",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.35",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.48",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "rustversion 1.0.14",
+              "target": "rustversion"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.26.2"
       },
       "license": "MIT"
     },
@@ -65059,8 +65167,8 @@
     "slog_derive 0.2.0",
     "socket2 0.5.5",
     "ssh2 0.9.4",
-    "strum 0.25.0",
-    "strum_macros 0.25.3",
+    "strum 0.26.2",
+    "strum_macros 0.26.2",
     "stubborn-io 0.3.2",
     "substring 1.4.5",
     "subtle 2.5.0",

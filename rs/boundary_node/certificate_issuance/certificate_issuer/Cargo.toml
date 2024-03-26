@@ -26,7 +26,7 @@ ic-http-certification = { workspace = true }
 idna = "0.3.0"
 instant-acme = "0.3.2"
 leb128 = "0.2.5"
-mockall = "0.11.3"
+mockall = { workspace = true }
 opentelemetry = { version = "0.20", features = ["metrics"] }
 opentelemetry-prometheus = "0.13.0"
 pem = "1.1.0"
