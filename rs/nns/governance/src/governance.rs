@@ -1650,8 +1650,8 @@ impl Governance {
             split_governance_proto(governance_proto);
 
         assert!(
-            topic_followee_index.num_entries() == 0,
-            "Topic followee index should not be empty when initializing for the first time"
+            topic_followee_index.is_empty(),
+            "Topic followee index should be empty when initializing for the first time"
         );
 
         // Step 3: Final assembly.
