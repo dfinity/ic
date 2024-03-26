@@ -180,18 +180,12 @@ impl CanisterQueue {
 
     /// Enqueues a response into a reserved slot, consuming a slot reservation.
     ///
-    /// Returns `Err(StateError::QueueFull)` if no response slot is available.
-    pub(super) fn push_response(&mut self, id: MessageId) -> Result<(), StateError> {
-        if self.reserved_slots() == 0 {
-            return Err(StateError::QueueFull {
-                capacity: self.capacity,
-            });
-        }
+    /// Panics if there is no response slot reservation.
+    pub(super) fn push_response(&mut self, id: MessageId) {
+        assert!(self.reserved_slots() > 0);
 
         self.queue.push_back(MessageReference::Response(id));
         debug_assert!(self.check_invariants());
-
-        Ok(())
     }
 
     /// Pops a reference from the queue. Returns `None` if the queue is empty.
@@ -219,6 +213,17 @@ impl CanisterQueue {
         (self.request_slots + self.response_slots)
             .checked_sub(self.queue.len())
             .unwrap()
+    }
+
+    /// Returns `Ok(())` if there exists at least one reserved response slot,
+    /// `Err(StateError::QueueFull)` otherwise.
+    pub(super) fn check_has_reserved_slot(&self) -> Result<(), StateError> {
+        if self.reserved_slots() == 0 {
+            return Err(StateError::QueueFull {
+                capacity: self.capacity,
+            });
+        }
+        Ok(())
     }
 
     /// Returns `true` if the queue has one or more used slots.

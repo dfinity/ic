@@ -72,7 +72,7 @@ fn canister_queue_push_response_succeeds() {
 
     // Push response into reseerved slot.
     let id = MessageId::new(13);
-    assert_eq!(Ok(()), queue.push_response(id));
+    queue.push_response(id);
 
     assert_eq!(1, queue.len());
     assert!(queue.has_used_slots());
@@ -160,11 +160,6 @@ fn canister_queue_try_reserve_in_full_queue_fails() {
         Err(StateError::QueueFull { capacity: CAPACITY }),
         queue.try_reserve_response_slot()
     );
-    // Pushing a response also fails.
-    assert_eq!(
-        Err(StateError::QueueFull { capacity: CAPACITY }),
-        queue.push_response(MessageId::new(13))
-    );
 }
 
 /// Test that a queue can be filled with both requests and responses at the
@@ -195,12 +190,10 @@ fn canister_queue_full_duplex() {
 }
 
 #[test]
+#[should_panic(expected = "assertion failed: self.reserved_slots() > 0")]
 fn canister_queue_push_without_reserved_slot_fails() {
     let mut queue = CanisterQueue::new(10);
-    assert_eq!(
-        queue.push_response(MessageId::new(13)),
-        Err(StateError::QueueFull { capacity: 10 })
-    );
+    queue.push_response(MessageId::new(13));
 }
 
 #[test]

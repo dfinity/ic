@@ -421,7 +421,12 @@ impl CanisterQueues {
                 &mut self.canister_queues.get_mut(&sender).unwrap().0
             }
             RequestOrResponse::Response(_) => match self.canister_queues.get_mut(&sender) {
-                Some((queue, _)) => queue,
+                Some((queue, _)) => {
+                    if let Err(e) = queue.check_has_reserved_slot() {
+                        return Err((e, msg));
+                    }
+                    queue
+                }
                 None => return Err((StateError::QueueFull { capacity: 0 }, msg)),
             },
         };
@@ -429,14 +434,16 @@ impl CanisterQueues {
         let mu_stats_delta = MemoryUsageStats::stats_delta(QueueOp::Push, &msg);
 
         // FIXME: Try looking up the message ID first.
-        let id = self.pool.next_message_id();
         match msg {
-            RequestOrResponse::Request(_) => input_queue.push_request(id),
-            RequestOrResponse::Response(_) => input_queue
-                .push_response(id)
-                .map_err(|err| (err, msg.clone()))?,
+            RequestOrResponse::Request(_) => {
+                let id = self.pool.insert_inbound(msg);
+                input_queue.push_request(id)
+            }
+            RequestOrResponse::Response(_) => {
+                let id = self.pool.insert_inbound(msg);
+                input_queue.push_response(id)
+            }
         }
-        self.pool.insert_inbound(id, msg);
 
         // Add sender canister ID to the input schedule queue if it isn't already there.
         // Sender was not scheduled iff its input queue was empty before the push (i.e.
@@ -690,9 +697,8 @@ impl CanisterQueues {
         let oq_stats_delta =
             OutputQueuesStats::stats_delta(&RequestOrResponse::Request(request.clone()));
 
-        let id = self.pool.next_message_id();
+        let id = self.pool.insert_outbound_request(request, time);
         output_queue.push_request(id);
-        self.pool.insert_outbound_request(id, request, time);
 
         self.input_queues_stats.reserved_slots += 1;
         self.output_queues_stats += oq_stats_delta;
@@ -772,17 +778,16 @@ impl CanisterQueues {
         let oq_stats_delta =
             OutputQueuesStats::stats_delta(&RequestOrResponse::Response(response.clone()));
 
-        let id = self.pool.next_message_id();
         // Since we make an output queue reservation whenever we induct a request; and
         // we would never garbage collect a non-empty queue (including one with just a
         // reservation); we are guaranteed that the output queue exists.
-        self.canister_queues
+        let output_queue = &mut self
+            .canister_queues
             .get_mut(&response.originator)
             .expect("pushing response into inexistent output queue")
-            .1
-            .push_response(id)
-            .unwrap();
-        self.pool.insert_outbound_response(id, response);
+            .1;
+        let id = self.pool.insert_outbound_response(response);
+        output_queue.push_response(id);
 
         self.memory_usage_stats += mu_stats_delta;
         self.output_queues_stats += oq_stats_delta;
@@ -964,8 +969,10 @@ impl CanisterQueues {
         // persist it explicitly).
         if self.canister_queues.is_empty() && self.ingress_queue.is_empty() {
             // The schedules and stats will already have default (zero) values, only
-            // `next_input_queue` must be reset explicitly.
+            // `next_input_queue` and `pool` must be reset explicitly.
             self.next_input_queue = Default::default();
+            assert!(self.pool.len() == 0);
+            self.pool = MessagePool::default();
 
             // Trust but verify. Ensure everything is actually set to default.
             debug_assert_eq!(CanisterQueues::default(), *self);
@@ -1239,9 +1246,8 @@ impl CanisterQueues {
                 let iq_stats_delta = InputQueuesStats::stats_delta(QueueOp::Push, &msg);
                 let mu_stats_delta = MemoryUsageStats::stats_delta(QueueOp::Push, &msg);
 
-                let id = self.pool.next_message_id();
-                input_queue.push_response(id).unwrap();
-                self.pool.insert_inbound(id, msg);
+                let id = self.pool.insert_inbound(msg);
+                input_queue.push_response(id);
 
                 self.input_queues_stats += iq_stats_delta;
                 self.memory_usage_stats += mu_stats_delta;
@@ -1260,9 +1266,8 @@ impl CanisterQueues {
                 let oq_stats_delta =
                     OutputQueuesStats::stats_delta(&RequestOrResponse::Response(response.clone()));
 
-                let id = self.pool.next_message_id();
-                output_queue.push_response(id).unwrap();
-                self.pool.insert_outbound_response(id, response);
+                let id = self.pool.insert_outbound_response(response);
+                output_queue.push_response(id);
 
                 self.memory_usage_stats += mu_stats_delta;
                 self.output_queues_stats += oq_stats_delta;
