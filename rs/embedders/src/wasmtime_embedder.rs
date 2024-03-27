@@ -13,8 +13,8 @@ use std::{
 
 use ic_system_api::{ModificationTracking, SystemApiImpl};
 use wasmtime::{
-    unix::StoreExt, Engine, Instance, InstancePre, Linker, Memory, Module, Mutability, Store, Val,
-    ValType,
+    unix::StoreExt, Engine, Instance, InstancePre, Linker, Memory, Module, Mutability, Store,
+    StoreLimits, StoreLimitsBuilder, Val, ValType,
 };
 
 pub use host_memory::WasmtimeMemoryCreator;
@@ -30,7 +30,7 @@ use ic_replicated_state::{
 use ic_sys::PAGE_SIZE;
 use ic_types::{
     methods::{FuncRef, WasmMethod},
-    CanisterId, NumInstructions, NumPages,
+    CanisterId, NumInstructions, NumPages, MAX_STABLE_MEMORY_IN_BYTES,
 };
 use ic_wasm_types::{BinaryEncodedWasm, WasmEngineError};
 use memory_tracker::{DirtyPageTracking, PageBitmap, SigsegvMemoryTracker};
@@ -56,6 +56,9 @@ pub(crate) const WASM_HEAP_MEMORY_NAME: &str = "memory";
 pub(crate) const WASM_HEAP_BYTEMAP_MEMORY_NAME: &str = "bytemap_memory";
 pub(crate) const STABLE_MEMORY_NAME: &str = "stable_memory";
 pub(crate) const STABLE_BYTEMAP_MEMORY_NAME: &str = "stable_bytemap_memory";
+
+pub(crate) const MAX_STORE_TABLES: usize = 10;
+pub(crate) const MAX_STORE_TABLE_ELEMENTS: u32 = 1_000_000;
 
 fn wasmtime_error_to_hypervisor_error(err: anyhow::Error) -> HypervisorError {
     match err.downcast::<wasmtime::Trap>() {
@@ -342,8 +345,14 @@ impl WasmtimeEmbedder {
                 num_instructions_global: None,
                 log: self.log.clone(),
                 num_stable_dirty_pages_from_non_native_writes: NumPages::from(0),
+                limits: StoreLimitsBuilder::new()
+                    .memory_size(MAX_STABLE_MEMORY_IN_BYTES as usize)
+                    .tables(MAX_STORE_TABLES)
+                    .table_elements(MAX_STORE_TABLE_ELEMENTS)
+                    .build(),
             },
         );
+        store.limiter(|state| &mut state.limits);
 
         let instance = match instance_pre.instantiate(&mut store) {
             Ok(instance) => instance,
@@ -648,6 +657,7 @@ pub struct StoreData {
     pub log: ReplicaLogger,
     /// Tracks the number of dirty pages in stable memory in non-native stable mode
     pub num_stable_dirty_pages_from_non_native_writes: NumPages,
+    pub limits: StoreLimits,
 }
 
 impl StoreData {

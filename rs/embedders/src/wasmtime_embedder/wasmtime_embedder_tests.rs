@@ -24,7 +24,7 @@ use ic_types::{
 use ic_wasm_types::BinaryEncodedWasm;
 
 use lazy_static::lazy_static;
-use wasmtime::{Engine, Module, Store, Val};
+use wasmtime::{Engine, Module, Store, StoreLimits, Val};
 
 const SUBNET_MEMORY_CAPACITY: i64 = i64::MAX / 2;
 
@@ -93,6 +93,7 @@ fn test_wasmtime_system_api() {
             num_instructions_global: None,
             log: no_op_logger(),
             num_stable_dirty_pages_from_non_native_writes: ic_types::NumPages::from(0),
+            limits: StoreLimits::default(),
         },
     );
 
