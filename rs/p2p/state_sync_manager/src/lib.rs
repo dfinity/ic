@@ -21,6 +21,7 @@ use std::{
 };
 
 use axum::{routing::any, Router};
+use futures::future::join_all;
 use ic_base_types::NodeId;
 use ic_interfaces::p2p::state_sync::{StateSyncArtifactId, StateSyncClient};
 use ic_logger::{info, ReplicaLogger};
@@ -32,7 +33,7 @@ use routes::{
     build_advert_handler_request, state_sync_advert_handler, state_sync_chunk_handler,
     StateSyncAdvertHandler, StateSyncChunkHandler, STATE_SYNC_ADVERT_PATH, STATE_SYNC_CHUNK_PATH,
 };
-use tokio::{runtime::Handle, select, task::JoinSet};
+use tokio::{runtime::Handle, select, task::JoinSet, time::MissedTickBehavior};
 use tokio_util::sync::CancellationToken;
 
 mod metrics;
@@ -113,6 +114,7 @@ struct StateSyncManager<T> {
 impl<T: 'static + Send> StateSyncManager<T> {
     async fn run(mut self, cancellation: CancellationToken) {
         let mut interval = tokio::time::interval(ADVERT_BROADCAST_INTERVAL);
+        interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
         let mut advertise_task = JoinSet::new();
         loop {
             select! {
@@ -127,6 +129,7 @@ impl<T: 'static + Send> StateSyncManager<T> {
                             self.state_sync.clone(),
                             self.transport.clone(),
                             self.metrics.clone(),
+                            cancellation.clone(),
                         ),
                         &self.rt
                     );
@@ -197,15 +200,22 @@ impl<T: 'static + Send> StateSyncManager<T> {
         }
     }
 
+    // The future should be cancelled and awaited instead of aborted in order to guarantee a graceful shutdown.
     async fn send_state_adverts(
         rt: Handle,
         state_sync: Arc<dyn StateSyncClient<Message = T>>,
         transport: Arc<dyn Transport>,
         metrics: StateSyncManagerMetrics,
+        cancellation: CancellationToken,
     ) {
-        let available_states = tokio::task::spawn_blocking(move || state_sync.available_states())
+        let available_states = match rt
+            .spawn_blocking(move || state_sync.available_states())
             .await
-            .expect("Will not be cancelled");
+        {
+            Ok(states) => states,
+            Err(_) => return,
+        };
+
         metrics.lowest_state_broadcasted.set(
             available_states
                 .iter()
@@ -221,21 +231,24 @@ impl<T: 'static + Send> StateSyncManager<T> {
                 .unwrap_or_default() as i64,
         );
 
+        let mut futures = vec![];
         for state_id in available_states {
             // Unreliable broadcast of adverts to all current peers.
             for (peer_id, _) in transport.peers() {
                 let request = build_advert_handler_request(state_id.clone());
                 let transport_c = transport.clone();
-
-                rt.spawn(async move {
-                    tokio::time::timeout(
-                        ADVERT_BROADCAST_TIMEOUT,
-                        transport_c.push(&peer_id, request),
-                    )
-                    .await
+                let cancellation_c = cancellation.clone();
+                futures.push(async move {
+                    select! {
+                        _ = tokio::time::timeout(
+                            ADVERT_BROADCAST_TIMEOUT,
+                            transport_c.push(&peer_id, request)) => {}
+                        () = cancellation_c.cancelled() => {}
+                    }
                 });
             }
         }
+        let _ = join_all(futures).await;
     }
 }
 

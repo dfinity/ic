@@ -11290,6 +11290,7 @@ version = "0.1.0"
 dependencies = [
  "axum 0.7.4",
  "bytes",
+ "futures",
  "ic-async-utils",
  "ic-base-types",
  "ic-interfaces",
