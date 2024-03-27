@@ -61,7 +61,6 @@ struct OngoingStateSync<T: Send> {
     downloading_chunks: JoinMap<ChunkId, DownloadResult>,
     // State sync
     state_sync: Arc<dyn StateSyncClient<Message = T>>,
-    tracker: Arc<Mutex<Box<dyn Chunkable<T> + Send>>>,
     state_sync_finished: bool,
 }
 
@@ -101,11 +100,10 @@ pub(crate) fn start_ongoing_state_sync<T: Send + 'static>(
         chunks_to_download: Box::new(std::iter::empty()),
         downloading_chunks: JoinMap::new(),
         state_sync,
-        tracker,
         state_sync_finished: false,
     };
 
-    let jh = rt.spawn(ongoing.run());
+    let jh = rt.spawn(ongoing.run(tracker));
     OngoingStateSyncHandle {
         sender: new_peers_tx,
         artifact_id,
@@ -115,7 +113,7 @@ pub(crate) fn start_ongoing_state_sync<T: Send + 'static>(
 }
 
 impl<T: 'static + Send> OngoingStateSync<T> {
-    pub async fn run(mut self) {
+    pub async fn run(mut self, tracker: Arc<Mutex<Box<dyn Chunkable<T> + Send>>>) {
         loop {
             select! {
                 () = self.cancellation.cancelled() => {
@@ -126,7 +124,7 @@ impl<T: 'static + Send> OngoingStateSync<T> {
                         info!(self.log, "Adding peer {} to ongoing state sync of height {}.", new_peer, self.artifact_id.height);
                         e.insert(0);
                         self.allowed_downloads += PARALLEL_CHUNK_DOWNLOADS;
-                        self.spawn_chunk_downloads();
+                        self.spawn_chunk_downloads(tracker.clone());
                     }
                 }
                 Some(download_result) = self.downloading_chunks.join_next() => {
@@ -139,7 +137,7 @@ impl<T: 'static + Send> OngoingStateSync<T> {
                             // 5-10min when state sync restarts.
                             self.active_downloads.entry(result.peer_id).and_modify(|v| { *v = v.saturating_sub(1) });
                             self.handle_downloaded_chunk_result(result);
-                            self.spawn_chunk_downloads();
+                            self.spawn_chunk_downloads(tracker.clone());
                         }
                         Err(err) => {
                             // If task panic we propagate but we allow tasks to be cancelled.
@@ -215,7 +213,7 @@ impl<T: 'static + Send> OngoingStateSync<T> {
         }
     }
 
-    fn spawn_chunk_downloads(&mut self) {
+    fn spawn_chunk_downloads(&mut self, tracker: Arc<Mutex<Box<dyn Chunkable<T> + Send>>>) {
         let available_download_capacity = self
             .allowed_downloads
             .saturating_sub(self.downloading_chunks.len());
@@ -253,7 +251,7 @@ impl<T: 'static + Send> OngoingStateSync<T> {
                             .instrument(Self::download_chunk_task(
                                 peer_id,
                                 self.transport.clone(),
-                                self.tracker.clone(),
+                                tracker.clone(),
                                 self.artifact_id.clone(),
                                 chunk,
                                 self.cancellation.child_token(),
@@ -269,7 +267,7 @@ impl<T: 'static + Send> OngoingStateSync<T> {
                     // TODO: Evaluate performance impact of this since on mainnet it is possible
                     // that `chunks_to_download` returns 1Million elements.
                     let mut v = Vec::new();
-                    for c in self.tracker.lock().unwrap().chunks_to_download() {
+                    for c in tracker.lock().unwrap().chunks_to_download() {
                         if !self.downloading_chunks.contains(&c) {
                             v.push(c);
                         }

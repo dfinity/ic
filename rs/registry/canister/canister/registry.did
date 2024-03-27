@@ -16,15 +16,15 @@ type AddNodeOperatorPayload = record {
 type AddNodePayload = record {
   prometheus_metrics_endpoint : text;
   http_endpoint : text;
-  idkg_dealing_encryption_pk : opt vec nat8;
+  idkg_dealing_encryption_pk : opt blob;
   domain : opt text;
   public_ipv4_config : opt IPv4Config;
   xnet_endpoint : text;
-  chip_id : opt vec nat8;
-  committee_signing_pk : vec nat8;
-  node_signing_pk : vec nat8;
-  transport_tls_cert : vec nat8;
-  ni_dkg_dealing_encryption_pk : vec nat8;
+  chip_id : opt blob;
+  committee_signing_pk : blob;
+  node_signing_pk : blob;
+  transport_tls_cert : blob;
+  ni_dkg_dealing_encryption_pk : blob;
   p2p_flow_endpoints : vec text;
 };
 type AddNodesToSubnetPayload = record {
@@ -140,10 +140,10 @@ type IPv4Config = record {
 };
 type NodeOperatorRecord = record {
   ipv6 : opt text;
-  node_operator_principal_id : vec nat8;
+  node_operator_principal_id : blob;
   node_allowance : nat64;
   rewardable_nodes : vec record { text; nat32 };
-  node_provider_principal_id : vec nat8;
+  node_provider_principal_id : blob;
   dc_id : text;
 };
 type NodeProvidersMonthlyXdrRewards = record {
@@ -165,7 +165,7 @@ type RecoverSubnetPayload = record {
   subnet_id : principal;
   registry_store_uri : opt record { text; text; nat64 };
   ecdsa_config : opt EcdsaInitialConfig;
-  state_hash : vec nat8;
+  state_hash : blob;
   time_ns : nat64;
 };
 type RemoveApiBoundaryNodesPayload = record { node_ids : vec principal };
@@ -176,7 +176,7 @@ type RemoveFirewallRulesPayload = record {
 };
 type RemoveNodeDirectlyPayload = record { node_id : principal };
 type RemoveNodeOperatorsPayload = record {
-  node_operators_to_remove : vec vec nat8;
+  node_operators_to_remove : vec blob;
 };
 type RemoveNodesPayload = record { node_ids : vec principal };
 type RerouteCanisterRangesPayload = record {
@@ -221,7 +221,7 @@ type UpdateElectedReplicaVersionsPayload = record {
   release_package_sha256_hex : opt text;
 };
 type UpdateNodeDirectlyPayload = record {
-  idkg_dealing_encryption_pk : opt vec nat8;
+  idkg_dealing_encryption_pk : opt blob;
 };
 type UpdateNodeDomainDirectlyPayload = record {
   node_id : principal;

@@ -15,7 +15,6 @@ BASE_DEPENDENCIES = [
     "//rs/rosetta-api/icrc1",
     "//rs/rosetta-api/icrc1/index-ng",
     "//rs/rosetta-api/icrc1/tokens_u64",
-    "//rs/sns/governance",
     "//rs/sns/root",
     "//rs/test_utilities/load_wasm",
     "//rs/types/base_types",
@@ -30,6 +29,7 @@ BASE_DEPENDENCIES = [
     "//conditions:default": [
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//packages/pocket-ic",
+        "//rs/crypto/sha2",
         "//rs/nervous_system/common/test_keys",
         "//rs/protobuf",
         "//rs/registry/canister",
@@ -70,6 +70,7 @@ DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
     "//rs/nns/governance:governance--test_feature",
     "//rs/nns/sns-wasm:sns-wasm--test_feature",
     "//rs/nns/handlers/root/impl:root--test_feature",
+    "//rs/sns/governance:governance--test_feature",
     "//rs/sns/swap:swap--test_feature",
 ] + select({
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
@@ -77,6 +78,7 @@ DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
         "//rs/nns/constants:constants--test_feature",
         "//rs/nns/test_utils:test_utils--test_feature",
         "//rs/nns/gtc:gtc--test_feature",
+        "//rs/sns/test_utils:test_utils--test_feature",
     ],
 })
 

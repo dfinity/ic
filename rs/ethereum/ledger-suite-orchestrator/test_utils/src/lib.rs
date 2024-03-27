@@ -18,6 +18,7 @@ pub mod flow;
 
 const MAX_TICKS: usize = 10;
 const GIT_COMMIT_HASH: &str = "6a8e5fca2c6b4e12966638c444e994e204b42989";
+pub const CKERC20_TRANSFER_FEE: u64 = 4_000; //0.004 USD for ckUSDC/ckUSDT
 
 pub struct LedgerSuiteOrchestrator {
     pub env: Arc<StateMachine>,
@@ -219,7 +220,7 @@ fn ledger_init_arg<U: Into<String>, V: Into<String>>(
         },
         fee_collector_account: None,
         initial_balances: vec![],
-        transfer_fee: 10_000_u32.into(),
+        transfer_fee: CKERC20_TRANSFER_FEE.into(),
         decimals: None,
         token_name: token_name.into(),
         token_symbol: token_symbol.into(),

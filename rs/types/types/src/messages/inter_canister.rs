@@ -459,6 +459,20 @@ impl RequestOrResponse {
             RequestOrResponse::Response(resp) => resp.refund,
         }
     }
+
+    /// Returns the deadline of this message, `NO_DEADLINE` if not set.
+    pub fn deadline(&self) -> CoarseTime {
+        match self {
+            RequestOrResponse::Request(req) => req.deadline,
+            RequestOrResponse::Response(resp) => resp.deadline,
+        }
+    }
+
+    /// Returns `true` if this is the request or response of a best-effort call
+    /// (i.e. if it has a non-zero deadline).
+    pub fn is_best_effort(&self) -> bool {
+        self.deadline() != NO_DEADLINE
+    }
 }
 
 /// Convenience `CountBytes` implementation that returns the same value as

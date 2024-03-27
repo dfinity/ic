@@ -844,6 +844,30 @@ impl Neuron {
         self.dissolve_state = stored.dissolve_state;
         self.aging_since_timestamp_seconds = stored.aging_since_timestamp_seconds;
     }
+
+    pub fn subtract_staked_maturity(&mut self, amount_e8s: u64) {
+        let new_staked_maturity_e8s = self
+            .staked_maturity_e8s_equivalent
+            .unwrap_or(0)
+            .saturating_sub(amount_e8s);
+        self.staked_maturity_e8s_equivalent = if new_staked_maturity_e8s == 0 {
+            None
+        } else {
+            Some(new_staked_maturity_e8s)
+        };
+    }
+
+    pub fn add_staked_maturity(&mut self, amount_e8s: u64) {
+        let new_staked_maturity_e8s = self
+            .staked_maturity_e8s_equivalent
+            .unwrap_or(0)
+            .saturating_add(amount_e8s);
+        self.staked_maturity_e8s_equivalent = if new_staked_maturity_e8s == 0 {
+            None
+        } else {
+            Some(new_staked_maturity_e8s)
+        };
+    }
 }
 
 /// Convert a RangeBounds<NeuronId> to RangeBounds<u64> which is useful for methods

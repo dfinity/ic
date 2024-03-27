@@ -398,73 +398,59 @@ fn test_with_neuron_mut_inactive_neuron() {
 }
 
 #[test]
-fn test_neuron_store_builds_index_unless_provided() {
-    let mut neuron3 = simple_neuron(3);
-    neuron3.followees = hashmap! {
-        2 => Followees {
-            followees: vec![NeuronId { id: 1 }],
-        },
-        3 => Followees {
-            followees: vec![NeuronId { id: 2 }],
-        }
-    };
-    let mut neuron1 = simple_neuron(1);
-    neuron1.followees = hashmap! {
-        2 => Followees {
-            followees: vec![NeuronId { id: 1 }],
-        },
-        3 => Followees {
-            followees: vec![NeuronId { id: 2 }],
-        }
-    };
-    let neurons = btreemap! {
-        1 => neuron1,
-        3 => neuron3,
-        7 => simple_neuron(7),
-        12 => simple_neuron(12),
-    };
-    let neuron_store = NeuronStore::new(neurons.clone());
-    assert_eq!(neuron_store.topic_followee_index.num_entries(), 4);
-    assert_eq!(
-        neuron_store
-            .get_followers_by_followee_and_topic(NeuronId { id: 2 }, Topic::try_from(3).unwrap())
-            .into_iter()
-            .collect::<HashSet<_>>(),
-        hashset! {NeuronId { id: 3 }, NeuronId { id: 1 }}
-    );
-
-    let empty_topic_followee_index = HeapNeuronFollowingIndex::new(BTreeMap::new());
-    let neuron_store = NeuronStore::new_restored((neurons, empty_topic_followee_index));
-
-    assert_eq!(neuron_store.topic_followee_index.num_entries(), 0);
-    assert_eq!(
-        neuron_store
-            .get_followers_by_followee_and_topic(NeuronId { id: 2 }, Topic::try_from(3).unwrap()),
-        vec![]
-    );
-}
-
-#[test]
 fn test_neuron_store_new_then_restore() {
-    // Creating a NeuronStore for the first time.
-    let neurons: BTreeMap<_, _> = (0..10).map(|i| (i, simple_neuron(i))).collect();
+    // Step 1: create a NeuronStore for the first time with 10 neurons with following.
+    let neurons: BTreeMap<_, _> = (0..10)
+        .map(|i| {
+            let neuron = Neuron {
+                followees: hashmap! {
+                    Topic::Governance as i32 => Followees {
+                        followees: vec![NeuronId { id: 10 }],
+                    },
+                },
+                ..simple_neuron(i)
+            };
+            (i, neuron)
+        })
+        .collect();
     let neuron_store = NeuronStore::new(neurons.clone());
 
-    // Taking its states (simulating how it's called by Governance).
-    let (heap_neurons, heap_topic_followee_index) = neuron_store.take();
+    // Step 2: verify the neurons and followee index are in the neuron store.
+    for neuron in neurons.values() {
+        assert_eq!(
+            neuron_store
+                .with_neuron(&neuron.id.unwrap(), |neuron| neuron.clone())
+                .unwrap(),
+            neuron.clone()
+        );
+    }
+    assert_eq!(
+        neuron_store
+            .get_followers_by_followee_and_topic(NeuronId { id: 10 }, Topic::Governance)
+            .len(),
+        10
+    );
 
-    // Restoring from those states.
+    // Step 3: take its state and restore from it.
+    let (heap_neurons, heap_topic_followee_index) = neuron_store.take();
     let restored_neuron_store =
         NeuronStore::new_restored((heap_neurons, heap_topic_followee_index));
 
-    for neuron in neurons.into_values() {
+    // Step 4: verify again the neurons and followee index are in the restored neuron store.
+    for neuron in neurons.values() {
         assert_eq!(
             restored_neuron_store
                 .with_neuron(&neuron.id.unwrap(), |neuron| neuron.clone())
                 .unwrap(),
-            neuron
+            neuron.clone()
         );
     }
+    assert_eq!(
+        restored_neuron_store
+            .get_followers_by_followee_and_topic(NeuronId { id: 10 }, Topic::Governance)
+            .len(),
+        10
+    );
 }
 
 #[test]

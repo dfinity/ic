@@ -1664,9 +1664,9 @@ dependencies = [
 
 [[package]]
 name = "candid"
-version = "0.10.5"
+version = "0.10.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "088c2e3d22a0fb1ada78b968946b0f7b96027ac8669973fe7c0815a98e8d13ef"
+checksum = "965e86b1bd1c0c26df70cf0c92ae16c56204ab402eb915c26a541cf949d841cf"
 dependencies = [
  "anyhow",
  "binread",
@@ -5186,13 +5186,13 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "axum 0.6.20",
+ "axum 0.7.4",
  "candid",
  "clap 3.2.25",
  "dashmap",
  "futures",
  "humantime",
- "hyper 0.14.26",
+ "hyper 1.2.0",
  "ic-agent",
  "indoc",
  "mockall",
@@ -7940,8 +7940,6 @@ dependencies = [
  "ic-cdk",
  "ic-cdk-macros",
  "ic-cdk-timers",
- "ic-icp-index",
- "ic-icrc1",
  "ic-icrc1-index-ng",
  "ic-ledger-canister-core",
  "ic-ledger-core",
@@ -8998,6 +8996,7 @@ dependencies = [
  "cycles-minting-canister",
  "dfn_protobuf",
  "ic-base-types",
+ "ic-crypto-sha2",
  "ic-error-types",
  "ic-icrc1",
  "ic-icrc1-index-ng",
@@ -9026,6 +9025,7 @@ dependencies = [
  "ic-sns-init",
  "ic-sns-root",
  "ic-sns-swap",
+ "ic-sns-test-utils",
  "ic-sns-wasm",
  "ic-test-utilities",
  "ic-test-utilities-load-wasm",
@@ -11290,6 +11290,7 @@ version = "0.1.0"
 dependencies = [
  "axum 0.7.4",
  "bytes",
+ "futures",
  "ic-async-utils",
  "ic-base-types",
  "ic-interfaces",

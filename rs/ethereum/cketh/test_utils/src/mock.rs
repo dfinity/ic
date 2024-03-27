@@ -171,7 +171,13 @@ impl StubOnce {
             .canister_http_request_contexts()
             .into_iter()
             .find(|(_id, context)| self.matcher.matches(context))
-            .unwrap_or_else(|| panic!("no request found matching the stub {:?}", self));
+            .unwrap_or_else(|| {
+                panic!(
+                    "no request found matching the stub {:?}. Current requests {}",
+                    self,
+                    debug_http_outcalls(env)
+                )
+            });
         let request_id = {
             let request_body = context
                 .body
@@ -281,6 +287,22 @@ impl StubOnce {
     }
 }
 
+fn debug_http_outcalls(env: &StateMachine) -> String {
+    let mut debug_str = vec![];
+    for context in env.canister_http_request_contexts().values() {
+        let request_body = context
+            .body
+            .as_ref()
+            .map(|body| std::str::from_utf8(body).unwrap())
+            .expect("BUG: missing request body");
+        debug_str.push(format!(
+            "{:?} {} {}",
+            context.http_method, context.url, request_body
+        ));
+    }
+    debug_str.join("\n")
+}
+
 impl MockJsonRpcProviders {
     pub fn when(json_rpc_method: JsonRpcMethod) -> MockJsonRpcProvidersBuilder {
         MockJsonRpcProvidersBuilder {
@@ -291,7 +313,8 @@ impl MockJsonRpcProviders {
         }
     }
 
-    pub fn expect_rpc_calls(self, cketh: &CkEthSetup) {
+    pub fn expect_rpc_calls<T: AsRef<CkEthSetup>>(self, cketh: T) {
+        let cketh = cketh.as_ref();
         for stub in self.stubs {
             stub.expect_rpc_call(&cketh.env, cketh.minter_id);
         }
