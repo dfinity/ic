@@ -8,12 +8,12 @@ use std::{
 
 use anyhow::{anyhow, Context, Error};
 use async_trait::async_trait;
-use axum::{handler::Handler, routing::get, Extension, Router};
+use axum::{body::Body, handler::Handler, routing::get, Extension, Router};
 use candid::{CandidType, Decode, DecoderConfig, Encode, Principal};
 use clap::Parser;
 use dashmap::DashMap;
-use futures::{future::TryFutureExt, stream::FuturesUnordered};
-use hyper::{Body, Request, Response, StatusCode};
+use futures::stream::FuturesUnordered;
+use hyper::{Request, Response, StatusCode};
 use ic_agent::{
     agent::http_transport::reqwest_transport::ReqwestHttpReplicaV2Transport,
     identity::BasicIdentity, Agent,
@@ -23,7 +23,7 @@ use opentelemetry::{metrics::MeterProvider as _, sdk::metrics::MeterProvider, Ke
 use opentelemetry_prometheus::exporter;
 use prometheus::{labels, Encoder, Registry, TextEncoder};
 use serde::Deserialize;
-use tokio::{task, time::Instant};
+use tokio::{net::TcpListener, task, time::Instant};
 use tracing::info;
 
 mod metrics;
@@ -135,11 +135,12 @@ async fn main() -> Result<(), Error> {
                 let _ = runner.run().await;
             }
         }),
-        task::spawn(
-            axum::Server::bind(&cli.metrics_addr)
-                .serve(metrics_router.into_make_service())
+        task::spawn(async move {
+            let listener = TcpListener::bind(&cli.metrics_addr).await.unwrap();
+            axum::serve(listener, metrics_router.into_make_service())
+                .await
                 .map_err(|err| anyhow!("server failed: {:?}", err))
-        )
+        })
     )
     .context("service failed to run")?;
 
