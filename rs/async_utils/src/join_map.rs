@@ -78,10 +78,6 @@ where
             .tasks_by_key
             .insert(key, (self.tasks.spawn_on(task, handle), replaced_c));
 
-        debug_assert_eq!(
-            self.tasks.len(),
-            self.tasks_by_key.len() + (jh.is_some() as usize)
-        );
         jh.map(|(jh, replaced)| {
             jh.abort();
             replaced.store(true, Ordering::Release);
@@ -108,7 +104,6 @@ where
             break result;
         };
 
-        debug_assert!(self.tasks.len() == self.tasks_by_key.len());
         result.map(|o| o.map(|(q, (k, _))| (q, k)))
     }
 

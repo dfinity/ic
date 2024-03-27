@@ -16,6 +16,7 @@ DEPENDENCIES = [
     "//rs/types/base_types",
     "@crate_index//:axum_0_7_0",
     "@crate_index//:bytes",
+    "@crate_index//:futures",
     "@crate_index//:prometheus",
     "@crate_index//:prost",
     "@crate_index//:rand",
