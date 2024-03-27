@@ -99,8 +99,7 @@ rosetta-icrc-release:
       readonly VERSION_TAG="v$ICRC_ROSETTA_RELEASE_VERSION"
 
       # - Abort the release if the image with that version was already published.
-      if docker manifest inspect "docker.io/dfinity/ic-icrc-rosetta-api
-:$VERSION_TAG"; then
+      if docker manifest inspect "docker.io/dfinity/ic-icrc-rosetta-api:$VERSION_TAG"; then
           echo Rosetta version "$ICRC_ROSETTA_RELEASE_VERSION" is already published on DockerHub
           exit 0
       fi
