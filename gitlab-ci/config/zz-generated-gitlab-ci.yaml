@@ -177,10 +177,6 @@
       set -euo pipefail
       VERSION=$(git rev-parse HEAD)
 
-      if [[ "${CI_MERGE_REQUEST_TITLE:-}" == *"[RUN_ALL_BAZEL_TARGETS]"* ]]; then
-          RUN_ON_DIFF_ONLY="false"
-      fi
-
       if [ "$CI_JOB_NAME" == "build-ic-release" ]; then
           # read NNS release version from git tree
           NNS_RELEASE_VERSION="$(jq -r '.subnets["tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"]' testnet/mainnet_revisions.json)"
@@ -1148,7 +1144,6 @@ bazel-test-all:
       - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "tnet-test"
       - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^(rc--|hotfix-.+-rc--).+/
     - if: $CI_COMMIT_REF_PROTECTED == "true" && $CI_COMMIT_TAG =~ /^release-.+/
-    - if: $CI_COMMIT_REF_PROTECTED == "true" && $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "rosetta-icrc-release"
   script:
     - "./gitlab-ci/src/bazel-ci/main.sh"
   tags:
@@ -2026,10 +2021,6 @@ build-ic:
       set -euo pipefail
       VERSION=$(git rev-parse HEAD)
 
-      if [[ "${CI_MERGE_REQUEST_TITLE:-}" == *"[RUN_ALL_BAZEL_TARGETS]"* ]]; then
-          RUN_ON_DIFF_ONLY="false"
-      fi
-
       if [ "$CI_JOB_NAME" == "build-ic-release" ]; then
           # read NNS release version from git tree
           NNS_RELEASE_VERSION="$(jq -r '.subnets["tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"]' testnet/mainnet_revisions.json)"
@@ -2128,10 +2119,6 @@ build-ic-release:
     - |
       set -euo pipefail
       VERSION=$(git rev-parse HEAD)
-
-      if [[ "${CI_MERGE_REQUEST_TITLE:-}" == *"[RUN_ALL_BAZEL_TARGETS]"* ]]; then
-          RUN_ON_DIFF_ONLY="false"
-      fi
 
       if [ "$CI_JOB_NAME" == "build-ic-release" ]; then
           # read NNS release version from git tree
@@ -3380,7 +3367,7 @@ rosetta-icrc-release:
       readonly VERSION_TAG="v$ICRC_ROSETTA_RELEASE_VERSION"
 
       # - Abort the release if the image with that version was already published.
-      if docker manifest inspect "docker.io/dfinity/icrc-rosetta-api:$VERSION_TAG"; then
+      if docker manifest inspect "docker.io/dfinity/ic-icrc-rosetta-api:$VERSION_TAG"; then
           echo Rosetta version "$ICRC_ROSETTA_RELEASE_VERSION" is already published on DockerHub
           exit 0
       fi
