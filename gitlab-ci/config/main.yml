@@ -300,6 +300,9 @@ bazel-test-macos:
       dotenv: nns.release.env
     paths:
       - bazel-build-log*.json*
+  tags:
+    - dfinity-ic
+    - bazel
   script:
     - |
       set -euo pipefail

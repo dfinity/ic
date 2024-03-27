@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "dfx": "0.15.1",
+  "canisters": {
+    "minter": {
+      "type": "custom",
+      "build": [
+        "bazel build //rs/ethereum/cketh/minter:cketh_minter"
+      ],
+      "wasm": "../../../../bazel-bin/rs/ethereum/cketh/minter/cketh_minter.wasm",
+      "candid": "../minter/cketh_minter.did",
+      "shrink": false
+    },
+    "ledger": {
+      "type": "custom",
+      "build": [
+        "bazel build //rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm"
+      ],
+      "wasm": "../../../../bazel-bin/rs/rosetta-api/icrc1/ledger/ledger_canister_u256.wasm",
+      "candid": "../../../rosetta-api/icrc1/ledger/ledger.did",
+      "shrink": false
+    },
+    "ckusdc_ledger": {
+      "type": "custom",
+      "build": [
+        "bazel build //rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm"
+      ],
+      "wasm": "../../../../bazel-bin/rs/rosetta-api/icrc1/ledger/ledger_canister_u256.wasm",
+      "candid": "../../../rosetta-api/icrc1/ledger/ledger.did",
+      "shrink": false
+    },
+    "index": {
+      "type": "custom",
+      "build": [
+        "bazel build //rs/rosetta-api/icrc1/index-ng:index_ng_canister_u256.wasm"
+      ],
+      "wasm": "../../../../bazel-bin/rs/rosetta-api/icrc1/index-ng/index_ng_canister_u256.wasm",
+      "candid": "../../../rosetta-api/icrc1/index-ng/index-ng.did",
+      "shrink": false
+    },
+    "orchestrator": {
+      "type": "custom",
+      "build": [
+        "bazel build //rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm"
+      ],
+      "wasm": "../../../../bazel-bin/rs/ethereum/ledger-suite-orchestrator/ledger_suite_orchestrator_canister.wasm",
+      "candid": "../../ledger-suite-orchestrator/ledger_suite_orchestrator.did",
+      "shrink": false
+    }
+  },
+  "defaults": {
+    "build": {
+      "packtool": "",
+      "args": ""
+    }
+  },
+  "networks": {
+    "local": {
+      "bind": "127.0.0.1:8000",
+      "type": "ephemeral"
+    }
+  }
+}

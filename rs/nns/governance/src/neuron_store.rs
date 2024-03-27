@@ -3,7 +3,11 @@ use crate::{
         Environment, TimeWarp, LOG_PREFIX, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
     },
     neuron::neuron_id_range_to_u64_range,
-    pb::v1::{governance_error::ErrorType, GovernanceError, Neuron, NeuronState, Topic},
+    pb::v1::{
+        governance::{followers_map::Followers, FollowersMap},
+        governance_error::ErrorType,
+        GovernanceError, Neuron, NeuronState, Topic,
+    },
     storage::{
         neuron_indexes::{CorruptedNeuronIndexes, NeuronIndex},
         with_stable_neuron_indexes, with_stable_neuron_indexes_mut, with_stable_neuron_store,
@@ -23,7 +27,7 @@ use ic_nns_common::pb::v1::NeuronId;
 use icp_ledger::{AccountIdentifier, Subaccount};
 use std::{
     borrow::Cow,
-    collections::{BTreeMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     fmt::{Debug, Display, Formatter},
     ops::{Deref, RangeBounds},
 };
@@ -171,10 +175,54 @@ enum StorageLocation {
     Stable,
 }
 
-pub type NeuronStoreState = (
-    BTreeMap<u64, Neuron>,
-    HeapNeuronFollowingIndex<NeuronId, Topic>,
-);
+pub type NeuronStoreState = (BTreeMap<u64, Neuron>, HashMap<i32, FollowersMap>);
+
+fn proto_to_heap_topic_followee_index(
+    proto: HashMap<i32, FollowersMap>,
+) -> HeapNeuronFollowingIndex<NeuronId, Topic> {
+    let map = proto
+        .into_iter()
+        .map(|(topic_i32, followers_map)| {
+            // The potential panic is OK to be called in post_upgrade.
+            let topic = Topic::try_from(topic_i32).expect("Invalid topic");
+
+            let followers_map = followers_map
+                .followers_map
+                .into_iter()
+                .map(|(neuron_id, followers)| {
+                    let followers = followers.followers.into_iter().collect();
+                    (NeuronId { id: neuron_id }, followers)
+                })
+                .collect();
+            (topic, followers_map)
+        })
+        .collect();
+    HeapNeuronFollowingIndex::new(map)
+}
+
+fn heap_topic_followee_index_to_proto(
+    heap: HeapNeuronFollowingIndex<NeuronId, Topic>,
+) -> HashMap<i32, FollowersMap> {
+    heap.into_inner()
+        .into_iter()
+        .map(|(topic, followers_map)| {
+            let topic_i32 = topic as i32;
+            let followers_map = followers_map
+                .into_iter()
+                .map(|(followee, followers)| {
+                    let followers = Followers {
+                        followers: followers.into_iter().collect(),
+                    };
+                    (followee.id, followers)
+                })
+                .collect();
+
+            let followers_map = FollowersMap { followers_map };
+
+            (topic_i32, followers_map)
+        })
+        .collect()
+}
 
 /// This struct stores and provides access to all neurons within NNS Governance, which can live
 /// in either heap memory or stable memory.
@@ -280,16 +328,20 @@ impl NeuronStore {
     pub fn new_restored(state: NeuronStoreState) -> Self {
         let clock = Box::new(IcClock::new());
         let (heap_neurons, topic_followee_index) = state;
+
         Self {
             heap_neurons,
-            topic_followee_index,
+            topic_followee_index: proto_to_heap_topic_followee_index(topic_followee_index),
             clock,
         }
     }
 
     /// Takes the neuron store state which should be persisted through upgrades.
     pub fn take(self) -> NeuronStoreState {
-        (self.heap_neurons, self.topic_followee_index)
+        (
+            self.heap_neurons,
+            heap_topic_followee_index_to_proto(self.topic_followee_index),
+        )
     }
 
     /// If there is a bug (related to lock acquisition), this could return u64::MAX.
@@ -332,8 +384,8 @@ impl NeuronStore {
         self.heap_neurons.clone()
     }
 
-    pub fn clone_topic_followee_index(&self) -> HeapNeuronFollowingIndex<NeuronId, Topic> {
-        self.topic_followee_index.clone()
+    pub fn clone_topic_followee_index(&self) -> HashMap<i32, FollowersMap> {
+        heap_topic_followee_index_to_proto(self.topic_followee_index.clone())
     }
 
     /// Returns if store contains a Neuron by id
