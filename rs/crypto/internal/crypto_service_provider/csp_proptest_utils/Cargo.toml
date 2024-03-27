@@ -7,7 +7,7 @@ edition.workspace = true
 documentation.workspace = true
 
 [dependencies]
-hex = "0.4.2"
+hex = { workspace = true }
 ic-crypto-internal-basic-sig-ecdsa-secp256k1 = { path = "../../crypto_lib/basic_sig/ecdsa_secp256k1" }
 ic-crypto-internal-basic-sig-ecdsa-secp256r1 = { path = "../../crypto_lib/basic_sig/ecdsa_secp256r1" }
 ic-crypto-internal-basic-sig-ed25519 = { path = "../../crypto_lib/basic_sig/ed25519" }

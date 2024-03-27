@@ -1,13 +1,14 @@
 use anyhow::Context;
 use axum::{http::StatusCode, response::IntoResponse, Json};
 use candid::Deserialize;
+use num_bigint::BigInt;
 use rosetta_core::identifiers::*;
 use rosetta_core::objects::*;
 use serde::Serialize;
 use serde_bytes::ByteBuf;
 use strum_macros::Display;
 use strum_macros::EnumIter;
-use strum_macros::{EnumString, EnumVariantNames};
+use strum_macros::{EnumString, VariantNames};
 
 // Generated from the [Rosetta API specification v1.4.13](https://github.com/coinbase/rosetta-specifications/blob/v1.4.13/api.json)
 // Documentation for the Rosetta API can be found at https://www.rosetta-api.org/docs/1.4.13/welcome.html
@@ -192,7 +193,7 @@ impl Error {
     }
 }
 
-#[derive(Display, Debug, Clone, PartialEq, Eq, EnumIter, EnumString, EnumVariantNames)]
+#[derive(Display, Debug, Clone, PartialEq, Eq, EnumIter, EnumString, VariantNames)]
 #[strum(serialize_all = "SCREAMING_SNAKE_CASE")]
 pub enum OperationType {
     Mint,
@@ -335,22 +336,13 @@ impl BlockMetadata {
             block_created_at_nano_seconds: block.timestamp,
             effective_fee: block
                 .effective_fee
-                .map(|fee| Amount::new(fee.to_string(), currency)),
+                .map(|fee| Amount::new(BigInt::from(fee), currency)),
         })
     }
 }
 
 #[derive(
-    Display,
-    Debug,
-    Clone,
-    PartialEq,
-    Eq,
-    EnumIter,
-    EnumString,
-    EnumVariantNames,
-    Serialize,
-    Deserialize,
+    Display, Debug, Clone, PartialEq, Eq, EnumIter, EnumString, VariantNames, Serialize, Deserialize,
 )]
 #[strum(serialize_all = "SCREAMING_SNAKE_CASE")]
 pub enum FeeSetter {

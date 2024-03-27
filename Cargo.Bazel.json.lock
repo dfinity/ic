@@ -1,5 +1,5 @@
 {
-  "checksum": "feb5ab14c8f0e05834c50268167203c4f41f0bf74235b3f6992da99d0190225e",
+  "checksum": "3096d8258baa4bc9d2f91e230c1cd7e3e1842ed413a9fe1d639da8f2be0d49b0",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -8012,13 +8012,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "candid 0.10.5": {
+    "candid 0.10.6": {
       "name": "candid",
-      "version": "0.10.5",
+      "version": "0.10.6",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/candid/0.10.5/download",
-          "sha256": "088c2e3d22a0fb1ada78b968946b0f7b96027ac8669973fe7c0815a98e8d13ef"
+          "url": "https://static.crates.io/crates/candid/0.10.6/download",
+          "sha256": "965e86b1bd1c0c26df70cf0c92ae16c56204ab402eb915c26a541cf949d841cf"
         }
       },
       "targets": [
@@ -8122,7 +8122,7 @@
           ],
           "selects": {}
         },
-        "version": "0.10.5"
+        "version": "0.10.6"
       },
       "license": "Apache-2.0"
     },
@@ -8218,7 +8218,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.5",
+              "id": "candid 0.10.6",
               "target": "candid"
             },
             {
@@ -14350,7 +14350,7 @@
               "target": "cached"
             },
             {
-              "id": "candid 0.10.5",
+              "id": "candid 0.10.6",
               "target": "candid"
             },
             {
@@ -15222,7 +15222,7 @@
               "target": "ssh2"
             },
             {
-              "id": "strum 0.25.0",
+              "id": "strum 0.26.2",
               "target": "strum"
             },
             {
@@ -15545,7 +15545,7 @@
               "target": "slog_derive"
             },
             {
-              "id": "strum_macros 0.25.3",
+              "id": "strum_macros 0.26.2",
               "target": "strum_macros"
             },
             {
@@ -23452,7 +23452,7 @@
               "target": "cached"
             },
             {
-              "id": "candid 0.10.5",
+              "id": "candid 0.10.6",
               "target": "candid"
             },
             {
@@ -23642,7 +23642,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.5",
+              "id": "candid 0.10.6",
               "target": "candid"
             },
             {
@@ -23812,7 +23812,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.5",
+              "id": "candid 0.10.6",
               "target": "candid"
             },
             {
@@ -23867,7 +23867,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.5",
+              "id": "candid 0.10.6",
               "target": "candid"
             },
             {
@@ -23927,7 +23927,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.5",
+              "id": "candid 0.10.6",
               "target": "candid"
             },
             {
@@ -24049,7 +24049,7 @@
               "target": "cached"
             },
             {
-              "id": "candid 0.10.5",
+              "id": "candid 0.10.6",
               "target": "candid"
             },
             {
@@ -24230,7 +24230,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.5",
+              "id": "candid 0.10.6",
               "target": "candid"
             },
             {
@@ -24370,7 +24370,7 @@
               "target": "base64"
             },
             {
-              "id": "candid 0.10.5",
+              "id": "candid 0.10.6",
               "target": "candid"
             },
             {
@@ -24504,7 +24504,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.5",
+              "id": "candid 0.10.6",
               "target": "candid"
             },
             {
@@ -24555,7 +24555,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.5",
+              "id": "candid 0.10.6",
               "target": "candid"
             },
             {
@@ -24637,7 +24637,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.5",
+              "id": "candid 0.10.6",
               "target": "candid"
             },
             {
@@ -24802,7 +24802,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.5",
+              "id": "candid 0.10.6",
               "target": "candid"
             },
             {
@@ -24865,7 +24865,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.5",
+              "id": "candid 0.10.6",
               "target": "candid"
             },
             {
@@ -25124,7 +25124,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.5",
+              "id": "candid 0.10.6",
               "target": "candid"
             },
             {
@@ -25187,7 +25187,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.5",
+              "id": "candid 0.10.6",
               "target": "candid"
             },
             {
@@ -51262,6 +51262,54 @@
       },
       "license": "MIT"
     },
+    "strum 0.26.2": {
+      "name": "strum",
+      "version": "0.26.2",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/strum/0.26.2/download",
+          "sha256": "5d8cec3501a5194c432b2b7976db6b7d10ec95c253208b45f83f7136aa985e29"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "strum",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "strum",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "derive",
+            "std",
+            "strum_macros"
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "strum_macros 0.26.2",
+              "target": "strum_macros"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.26.2"
+      },
+      "license": "MIT"
+    },
     "strum_macros 0.24.3": {
       "name": "strum_macros",
       "version": "0.24.3",
@@ -51379,6 +51427,66 @@
           "selects": {}
         },
         "version": "0.25.3"
+      },
+      "license": "MIT"
+    },
+    "strum_macros 0.26.2": {
+      "name": "strum_macros",
+      "version": "0.26.2",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/strum_macros/0.26.2/download",
+          "sha256": "c6cf59daf282c0a494ba14fd21610a0325f9f90ec9d1231dea26bcb1d696c946"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "strum_macros",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "strum_macros",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "heck 0.4.1",
+              "target": "heck"
+            },
+            {
+              "id": "proc-macro2 1.0.76",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.35",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.48",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "rustversion 1.0.14",
+              "target": "rustversion"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.26.2"
       },
       "license": "MIT"
     },
@@ -64758,7 +64866,7 @@
     "byteorder 1.5.0",
     "bytes 1.5.0",
     "cached 0.41.0",
-    "candid 0.10.5",
+    "candid 0.10.6",
     "candid_parser 0.1.2",
     "cargo_metadata 0.14.2",
     "cc 1.0.83",
@@ -64986,8 +65094,8 @@
     "slog_derive 0.2.0",
     "socket2 0.5.5",
     "ssh2 0.9.4",
-    "strum 0.25.0",
-    "strum_macros 0.25.3",
+    "strum 0.26.2",
+    "strum_macros 0.26.2",
     "stubborn-io 0.3.2",
     "substring 1.4.5",
     "subtle 2.5.0",

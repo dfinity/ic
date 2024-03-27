@@ -25,6 +25,7 @@ use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_features::EcdsaConfig;
 use ic_replicated_state::{metadata_state::subnet_call_context_manager::*, ReplicatedState};
 use ic_types::consensus::ecdsa::ECDSA_IMPROVED_LATENCY;
+use ic_types::CanisterId;
 use ic_types::{
     batch::ValidationContext,
     consensus::{
@@ -847,21 +848,19 @@ pub(crate) fn get_signing_requests<'a>(
         if !valid_keys.contains(&context.key_id) {
             // Reject new requests with unknown key Ids.
             // Note that no quadruples are consumed at this stage.
-            let response = ic_types::messages::Response {
-                originator: context.request.sender,
-                respondent: ic_types::CanisterId::ic_00(),
-                originator_reply_callback: *callback_id,
-                refund: context.request.payment,
-                response_payload: ic_types::messages::Payload::Reject(RejectContext::new(
+            let response = ic_types::batch::ConsensusResponse {
+                callback: *callback_id,
+                payload: ic_types::messages::Payload::Reject(RejectContext::new(
                     RejectCode::CanisterReject,
                     format!(
                         "Invalid or disabled key_id in signature request: {:?}",
                         context.key_id
                     ),
                 )),
-                // Not relevant, the consensus queue is flushed every round by the
-                // scheduler, which uses only the payload and originator callback.
-                deadline: context.request.deadline,
+                originator: Some(context.request.sender),
+                respondent: Some(CanisterId::ic_00()),
+                refund: Some(context.request.payment),
+                deadline: Some(context.request.deadline),
             };
             ecdsa_payload.signature_agreements.insert(
                 context.pseudo_random_id,
@@ -909,18 +908,16 @@ pub(crate) fn get_signing_requests<'a>(
         // the expiry of its corresponding request. This leads to the creation of a new quadruple.
         if let Some(expiry) = request_expiry_time {
             if context.batch_time < expiry {
-                let response = ic_types::messages::Response {
-                    originator: context.request.sender,
-                    respondent: ic_types::CanisterId::ic_00(),
-                    originator_reply_callback: *callback_id,
-                    refund: context.request.payment,
-                    response_payload: ic_types::messages::Payload::Reject(RejectContext::new(
+                let response = ic_types::batch::ConsensusResponse {
+                    callback: *callback_id,
+                    payload: ic_types::messages::Payload::Reject(RejectContext::new(
                         RejectCode::CanisterError,
                         "Signature request expired",
                     )),
-                    // Not relevant, the consensus queue is flushed every round by the
-                    // scheduler, which uses only the payload and originator callback.
-                    deadline: context.request.deadline,
+                    originator: Some(context.request.sender),
+                    respondent: Some(CanisterId::ic_00()),
+                    refund: Some(context.request.payment),
+                    deadline: Some(context.request.deadline),
                 };
                 ecdsa_payload.signature_agreements.insert(
                     context.pseudo_random_id,
@@ -1603,7 +1600,7 @@ mod tests {
             panic!("Request 1 should have a response");
         };
         assert_matches!(
-            &response.response_payload,
+            &response.payload,
             ic_types::messages::Payload::Reject(context)
             if context.message().contains("request expired")
         );
@@ -1656,10 +1653,7 @@ mod tests {
         assert_eq!(ecdsa_payload.signature_agreements.len(), 1);
         let (_, response) = ecdsa_payload.signature_agreements.iter().next().unwrap();
         if let ecdsa::CompletedSignature::Unreported(response) = response {
-            assert_matches!(
-                response.response_payload,
-                ic_types::messages::Payload::Reject(..)
-            );
+            assert_matches!(response.payload, ic_types::messages::Payload::Reject(..));
         } else {
             panic!("Unexpected response");
         }
@@ -1710,7 +1704,7 @@ mod tests {
             panic!("Request 2 should have a response");
         };
         assert_matches!(
-            &response_1.response_payload,
+            &response_1.payload,
             ic_types::messages::Payload::Reject(context)
             if context.message().contains("Invalid or disabled key_id")
         );
@@ -1721,7 +1715,7 @@ mod tests {
             panic!("Request 3 should have a response");
         };
         assert_matches!(
-            &response_2.response_payload,
+            &response_2.payload,
             ic_types::messages::Payload::Reject(context)
             if context.message().contains("Invalid or disabled key_id")
         );

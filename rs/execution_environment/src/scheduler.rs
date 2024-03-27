@@ -31,7 +31,7 @@ use ic_types::{
     consensus::ecdsa::QuadrupleId,
     crypto::canister_threshold_sig::MasterEcdsaPublicKey,
     ingress::{IngressState, IngressStatus},
-    messages::{CanisterMessage, Ingress, MessageId, StopCanisterContext},
+    messages::{CanisterMessage, Ingress, MessageId, Response, StopCanisterContext, NO_DEADLINE},
     AccumulatedPriority, CanisterId, ComputeAllocation, Cycles, ExecutionRound, LongExecutionMode,
     MemoryAllocation, NumBytes, NumInstructions, NumSlices, Randomness, SubnetId, Time,
 };
@@ -1400,7 +1400,7 @@ impl Scheduler for SchedulerImpl {
         ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
         ecdsa_quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<QuadrupleId>>,
         current_round: ExecutionRound,
-        _next_checkpoint_round: Option<ExecutionRound>,
+        next_checkpoint_round: Option<ExecutionRound>,
         current_round_type: ExecutionRoundType,
         registry_settings: &RegistryExecutionSettings,
     ) -> ReplicatedState {
@@ -1472,16 +1472,22 @@ impl Scheduler for SchedulerImpl {
                 self.purge_expired_ingress_messages(&mut state);
             }
 
-            // See documentation around definition of `heap_delta_estimate` for an
-            // explanation.
-            if state.metadata.heap_delta_estimate >= self.config.subnet_heap_delta_capacity {
+            let current_heap_delta_reserve = current_heap_delta_reserve(
+                current_round,
+                next_checkpoint_round,
+                self.config.heap_delta_reserve_per_round,
+            );
+            if state.metadata.heap_delta_estimate + current_heap_delta_reserve
+                >= self.config.subnet_heap_delta_capacity
+            {
                 warn!(
                     round_log,
-                    "At Round {} @ time {}, current heap delta {} exceeds allowed capacity {}, so not executing any messages.",
+                    "At Round {} @ time {}, current heap delta estimate {} with reserve {} exceeds the subnet heap delta capacity {}, so not executing any messages.",
                     current_round,
                     state.time(),
                     state.metadata.heap_delta_estimate,
-                    self.config.subnet_heap_delta_capacity
+                    current_heap_delta_reserve,
+                    self.config.subnet_heap_delta_capacity,
                 );
                 self.finish_round(&mut state, current_round_type);
                 self.metrics
@@ -1560,7 +1566,20 @@ impl Scheduler for SchedulerImpl {
             // state. That can be changed in the future as we optimize scheduling.
             while let Some(response) = state.consensus_queue.pop() {
                 let (new_state, _) = self.execute_subnet_message(
-                    CanisterMessage::Response(response.into()),
+                    // Wrap the callback ID and payload into a Response, to make it easier for
+                    // `execute_subnet_message()` to deal with. All other fields will be ignored by
+                    // `execute_subnet_message()`.
+                    CanisterMessage::Response(
+                        Response {
+                            originator: CanisterId::ic_00(),
+                            respondent: CanisterId::ic_00(),
+                            originator_reply_callback: response.callback,
+                            refund: Cycles::zero(),
+                            response_payload: response.payload,
+                            deadline: NO_DEADLINE,
+                        }
+                        .into(),
+                    ),
                     state,
                     &mut csprng,
                     &mut subnet_round_limits,
@@ -2407,4 +2426,25 @@ fn enqueue_tasks(
     }
 
     canister.system_state.task_queue.push_front(task);
+}
+
+/// Estimates the minimum amount of heap delta required to be available
+/// until the next checkpoint.
+fn current_heap_delta_reserve(
+    current_round: ExecutionRound,
+    next_checkpoint_round: Option<ExecutionRound>,
+    heap_delta_reserve_per_round: NumBytes,
+) -> NumBytes {
+    match next_checkpoint_round {
+        // This might happen only in tests
+        None => NumBytes::from(0),
+        Some(next_checkpoint_round) => {
+            let remaining_rounds = next_checkpoint_round
+                .get()
+                .saturating_sub(current_round.get());
+            remaining_rounds
+                .saturating_mul(heap_delta_reserve_per_round.get())
+                .into()
+        }
+    }
 }

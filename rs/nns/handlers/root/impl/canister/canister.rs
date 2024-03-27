@@ -305,7 +305,7 @@ mod tests {
             *DECLARED_INTERFACE, *IMPLEMENTED_INTERFACE,
             "Generated candid definition does not match canister/root.did. \
              Run `bazel run :generate_did > canister/root.did` (no nix and/or direnv) in \
-             rs/sns/root to update canister/root.did."
+             rs/nns/handlers/root/impl/ to update canister/root.did."
         );
     }
 

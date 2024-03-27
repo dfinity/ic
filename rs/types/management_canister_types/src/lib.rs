@@ -1282,7 +1282,6 @@ impl Payload<'_> for CanisterStatusResultV2 {}
 ///     arg: blob;
 ///     compute_allocation: opt nat;
 ///     memory_allocation: opt nat;
-///     query_allocation: opt nat;
 ///     sender_canister_version : opt nat64;
 /// })`
 #[derive(Clone, CandidType, Deserialize, Debug)]
@@ -1295,7 +1294,6 @@ pub struct InstallCodeArgs {
     pub arg: Vec<u8>,
     pub compute_allocation: Option<candid::Nat>,
     pub memory_allocation: Option<candid::Nat>,
-    pub query_allocation: Option<candid::Nat>,
     pub sender_canister_version: Option<u64>,
 }
 
@@ -1322,14 +1320,6 @@ impl std::fmt::Display for InstallCodeArgs {
                 .as_ref()
                 .map(|value| format!("{}", value))
         )?;
-        writeln!(
-            f,
-            "  query_allocation: {:?}",
-            &self
-                .query_allocation
-                .as_ref()
-                .map(|value| format!("{}", value))
-        )?;
         writeln!(f, "}}")
     }
 }
@@ -1344,7 +1334,6 @@ impl InstallCodeArgs {
         arg: Vec<u8>,
         compute_allocation: Option<u64>,
         memory_allocation: Option<u64>,
-        query_allocation: Option<u64>,
     ) -> Self {
         Self {
             mode,
@@ -1353,7 +1342,6 @@ impl InstallCodeArgs {
             arg,
             compute_allocation: compute_allocation.map(candid::Nat::from),
             memory_allocation: memory_allocation.map(candid::Nat::from),
-            query_allocation: query_allocation.map(candid::Nat::from),
             sender_canister_version: None,
         }
     }
@@ -1377,7 +1365,6 @@ pub struct InstallCodeArgsV2 {
     pub arg: Vec<u8>,
     pub compute_allocation: Option<candid::Nat>,
     pub memory_allocation: Option<candid::Nat>,
-    pub query_allocation: Option<candid::Nat>,
     pub sender_canister_version: Option<u64>,
 }
 
@@ -1404,14 +1391,6 @@ impl std::fmt::Display for InstallCodeArgsV2 {
                 .as_ref()
                 .map(|value| format!("{}", value))
         )?;
-        writeln!(
-            f,
-            "  query_allocation: {:?}",
-            &self
-                .query_allocation
-                .as_ref()
-                .map(|value| format!("{}", value))
-        )?;
         writeln!(f, "}}")
     }
 }
@@ -1426,7 +1405,6 @@ impl InstallCodeArgsV2 {
         arg: Vec<u8>,
         compute_allocation: Option<u64>,
         memory_allocation: Option<u64>,
-        query_allocation: Option<u64>,
     ) -> Self {
         Self {
             mode,
@@ -1435,7 +1413,6 @@ impl InstallCodeArgsV2 {
             arg,
             compute_allocation: compute_allocation.map(candid::Nat::from),
             memory_allocation: memory_allocation.map(candid::Nat::from),
-            query_allocation: query_allocation.map(candid::Nat::from),
             sender_canister_version: None,
         }
     }
@@ -2072,6 +2049,36 @@ pub enum SchnorrAlgorithm {
     Ed25519,
 }
 
+impl TryFrom<pb_registry_crypto::SchnorrAlgorithm> for SchnorrAlgorithm {
+    type Error = ProxyDecodeError;
+
+    fn try_from(item: pb_registry_crypto::SchnorrAlgorithm) -> Result<Self, Self::Error> {
+        match item {
+            pb_registry_crypto::SchnorrAlgorithm::Bip340secp256k1 => {
+                Ok(SchnorrAlgorithm::Bip340Secp256k1)
+            }
+            pb_registry_crypto::SchnorrAlgorithm::Ed25519 => Ok(SchnorrAlgorithm::Ed25519),
+            pb_registry_crypto::SchnorrAlgorithm::Unspecified => {
+                Err(ProxyDecodeError::ValueOutOfRange {
+                    typ: "SchnorrAlgorithm",
+                    err: format!("Unable to convert {:?} to a SchnorrAlgorithm", item),
+                })
+            }
+        }
+    }
+}
+
+impl From<SchnorrAlgorithm> for pb_registry_crypto::SchnorrAlgorithm {
+    fn from(item: SchnorrAlgorithm) -> Self {
+        match item {
+            SchnorrAlgorithm::Bip340Secp256k1 => {
+                pb_registry_crypto::SchnorrAlgorithm::Bip340secp256k1
+            }
+            SchnorrAlgorithm::Ed25519 => pb_registry_crypto::SchnorrAlgorithm::Ed25519,
+        }
+    }
+}
+
 /// Unique identifier for a key that can be used for Schnorr signatures. The name
 /// is just a identifier, but it may be used to convey some information about
 /// the key (e.g. that the key is meant to be used for testing purposes).
@@ -2086,6 +2093,31 @@ pub struct SchnorrKeyId {
     pub name: String,
 }
 
+impl TryFrom<pb_registry_crypto::SchnorrKeyId> for SchnorrKeyId {
+    type Error = ProxyDecodeError;
+    fn try_from(item: pb_registry_crypto::SchnorrKeyId) -> Result<Self, Self::Error> {
+        let pb_registry_crypto::SchnorrKeyId { algorithm, name } = item;
+        let algorithm = SchnorrAlgorithm::try_from(
+            pb_registry_crypto::SchnorrAlgorithm::try_from(algorithm).map_err(|_| {
+                ProxyDecodeError::ValueOutOfRange {
+                    typ: "SchnorrKeyId",
+                    err: format!("Unable to convert {} to a SchnorrAlgorithm", algorithm),
+                }
+            })?,
+        )?;
+        Ok(Self { algorithm, name })
+    }
+}
+
+impl From<SchnorrKeyId> for pb_registry_crypto::SchnorrKeyId {
+    fn from(item: SchnorrKeyId) -> Self {
+        Self {
+            algorithm: pb_registry_crypto::SchnorrAlgorithm::from(item.algorithm) as i32,
+            name: item.name,
+        }
+    }
+}
+
 /// Unique identifier for a key that can be used for one of the signature schemes
 /// supported on the IC.
 /// ```text
@@ -2095,8 +2127,47 @@ pub struct SchnorrKeyId {
     CandidType, Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize, Hash,
 )]
 pub enum MasterPublicKeyId {
-    EcdsaKeyId(EcdsaKeyId),
-    SchnorrKeyId(SchnorrKeyId),
+    Ecdsa(EcdsaKeyId),
+    Schnorr(SchnorrKeyId),
+}
+
+impl TryFrom<pb_registry_crypto::MasterPublicKeyId> for MasterPublicKeyId {
+    type Error = ProxyDecodeError;
+    fn try_from(item: pb_registry_crypto::MasterPublicKeyId) -> Result<Self, Self::Error> {
+        use pb_registry_crypto::master_public_key_id::KeyId;
+        let Some(key_id) = item.key_id else {
+            return Err(ProxyDecodeError::MissingField("MasterPublicKeyId::key_id"));
+        };
+        Ok(match key_id {
+            KeyId::Schnorr(schnorr_key_id_pb) => {
+                let schnorr_key_id = SchnorrKeyId::try_from(schnorr_key_id_pb)?;
+                MasterPublicKeyId::Schnorr(schnorr_key_id)
+            }
+            KeyId::Ecdsa(ecdsa_key_id_pb) => {
+                let ecdsa_key_id = EcdsaKeyId::try_from(ecdsa_key_id_pb)?;
+                MasterPublicKeyId::Ecdsa(ecdsa_key_id)
+            }
+        })
+    }
+}
+
+impl From<MasterPublicKeyId> for pb_registry_crypto::MasterPublicKeyId {
+    fn from(item: MasterPublicKeyId) -> Self {
+        use pb_registry_crypto::master_public_key_id::KeyId;
+        let key_id = match item {
+            MasterPublicKeyId::Schnorr(schnorr_key_id) => {
+                let schnorr_key_id_pb = pb_registry_crypto::SchnorrKeyId::from(schnorr_key_id);
+                KeyId::Schnorr(schnorr_key_id_pb)
+            }
+            MasterPublicKeyId::Ecdsa(ecdsa_key_id) => {
+                let ecdsa_key_id_pb = pb_registry_crypto::EcdsaKeyId::from(&ecdsa_key_id);
+                KeyId::Ecdsa(ecdsa_key_id_pb)
+            }
+        };
+        Self {
+            key_id: Some(key_id),
+        }
+    }
 }
 
 pub type DerivationPath = BoundedVec<MAXIMUM_DERIVATION_PATH_LENGTH, UNBOUNDED, UNBOUNDED, ByteBuf>;
@@ -2522,7 +2593,10 @@ impl CanisterLog {
 
     /// Creates a new `CanisterLog` with the given next index and an empty records list.
     pub fn new_with_next_index(next_idx: u64) -> Self {
-        Self::new(next_idx, Default::default())
+        Self {
+            next_idx,
+            records: Default::default(),
+        }
     }
 
     /// Returns the next canister log record index.
@@ -2545,6 +2619,18 @@ impl CanisterLog {
         MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE.saturating_sub(self.records.data_size())
     }
 
+    /// Removes old records to make enough free space for new data within the limit.
+    fn make_free_space_within_limit(&mut self, new_data_size: usize) {
+        let mut total_size = new_data_size + self.records.data_size();
+        while total_size > MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE {
+            if let Some(removed_record) = self.records.pop_front() {
+                total_size -= removed_record.data_size();
+            } else {
+                break; // No more records to pop, limit reached.
+            }
+        }
+    }
+
     /// Adds a new log record.
     pub fn add_record(&mut self, timestamp_nanos: u64, content: &[u8]) {
         // LINT.IfChange
@@ -2553,18 +2639,16 @@ impl CanisterLog {
         let max_content_size =
             MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE - CanisterLogRecord::default().data_size();
         let size = content.len().min(max_content_size);
-        self.records.push_back(CanisterLogRecord {
+        let record = CanisterLogRecord {
             idx: self.next_idx,
             timestamp_nanos,
             content: content[..size].to_vec(),
-        });
+        };
+        self.make_free_space_within_limit(record.data_size());
+        self.records.push_back(record);
         // LINT.ThenChange(logging_charge_bytes_rule)
         // Update the next canister log record index.
         self.next_idx += 1;
-        // Keep the total canister log records size within limit.
-        while self.records.data_size() > MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE {
-            self.records.pop_front();
-        }
     }
 
     /// Moves all the logs from `other` to `self`.
@@ -2574,6 +2658,7 @@ impl CanisterLog {
         if let Some(last) = other.records.back() {
             self.next_idx = last.idx + 1;
         }
+        self.make_free_space_within_limit(other.records.data_size());
         self.records.append(&mut other.records);
     }
 }

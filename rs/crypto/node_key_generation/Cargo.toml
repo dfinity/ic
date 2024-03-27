@@ -9,7 +9,7 @@ ic-crypto-internal-csp = { path = "../internal/crypto_service_provider" }
 ic-crypto-internal-logmon = { path = "../internal/logmon" }
 ic-crypto-internal-threshold-sig-ecdsa = { path = "../internal/crypto_lib/threshold_sig/tecdsa" }
 ic-crypto-internal-types = { path = "../internal/crypto_lib/types" }
-ic-crypto-node-key-validation = { path = "../node_key_validation"}
+ic-crypto-node-key-validation = { path = "../node_key_validation" }
 ic-crypto-tls-interfaces = { path = "../tls_interfaces" }
 ic-crypto-utils-basic-sig = { path = "../utils/basic_sig" }
 ic-interfaces = { path = "../../interfaces" }
@@ -18,14 +18,14 @@ ic-types = { path = "../../types/types" }
 tokio = { workspace = true }
 
 [dev-dependencies]
-assert_matches = "1.5.0"
-hex = "0.4.2"
+assert_matches = { workspace = true }
+hex = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-crypto = { path = ".." }
 ic-crypto-internal-csp-test-utils = { path = "../internal/csp_test_utils" }
 ic-crypto-temp-crypto = { path = "../temp_crypto" }
 ic-crypto-test-utils = { path = "../test_utils" }
-ic-crypto-test-utils-csp = {path = "../test_utils/csp" }
+ic-crypto-test-utils-csp = { path = "../test_utils/csp" }
 ic-crypto-test-utils-keys = { path = "../test_utils/keys" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }

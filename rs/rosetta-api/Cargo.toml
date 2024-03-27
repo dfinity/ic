@@ -20,7 +20,7 @@ candid = { workspace = true }
 clap = { version = "3.2.25", features = ["derive"] }
 dfn_candid = { path = "../rust_canisters/dfn_candid" }
 dfn_protobuf = { path = "../rust_canisters/dfn_protobuf" }
-hex = "0.4.2"
+hex = { workspace = true }
 ic-agent = { workspace = true }
 ic-canister-client = { path = "../canister_client" }
 ic-canister-client-sender = { path = "../canister_client/sender" }
@@ -57,6 +57,7 @@ tracing = { workspace = true }
 tracing-appender = { workspace = true }
 tracing-subscriber = { workspace = true }
 anyhow = { workspace = true }
+num-bigint = "0.4.4"
 
 [dev-dependencies]
 ed25519-consensus = "2.0.1"

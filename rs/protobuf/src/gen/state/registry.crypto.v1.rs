@@ -57,9 +57,9 @@ pub mod master_public_key_id {
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum KeyId {
         #[prost(message, tag = "1")]
-        EcdsaKeyId(super::EcdsaKeyId),
+        Ecdsa(super::EcdsaKeyId),
         #[prost(message, tag = "2")]
-        SchnorrKeyId(super::SchnorrKeyId),
+        Schnorr(super::SchnorrKeyId),
     }
 }
 /// An algorithm ID. This is used to specify the signature algorithm associated with a public key.

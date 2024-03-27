@@ -1,14 +1,14 @@
-#![allow(unused)]
 use crate::{
     governance::{
         combine_aged_stakes,
-        ledger_helper::{BurnNeuronFees, NeuronStakeTransfer},
+        ledger_helper::{BurnNeuronFeesOperation, NeuronStakeTransferOperation},
     },
     neuron::types::DissolveStateAndAge,
     neuron_store::NeuronStore,
     pb::v1::{
-        manage_neuron::Merge, manage_neuron_response::MergeResponse, GovernanceError, Neuron,
-        NeuronState,
+        governance_error::ErrorType, manage_neuron::Merge, manage_neuron::NeuronIdOrSubaccount,
+        manage_neuron_response::MergeResponse, GovernanceError, Neuron, NeuronState, ProposalData,
+        ProposalStatus,
     },
 };
 use ic_base_types::PrincipalId;
@@ -19,44 +19,102 @@ use std::collections::BTreeMap;
 #[derive(Clone, Debug, PartialEq)]
 pub struct MergeNeuronsEffect {
     /// The source neuron id.
-    pub source_neuron_id: NeuronId,
+    source_neuron_id: NeuronId,
     /// The target neuron id.
-    pub target_neuron_id: NeuronId,
+    target_neuron_id: NeuronId,
     /// The burning of neuron fees for the source neuron.
-    pub source_burn_fees: Option<BurnNeuronFees>,
+    source_burn_fees_e8s: Option<u64>,
     /// The stake transfer between the source and target neuron.
-    pub stake_transfer: Option<NeuronStakeTransfer>,
-    /// The effect of merge neurons on the source neuron (other than the ones involving ledger).
-    pub source_effect: MergeNeuronsSourceEffect,
-    /// The effect of merge neurons on the target neuron (other than the ones involving ledger).
-    pub target_effect: MergeNeuronsTargetEffect,
+    stake_transfer_to_target_e8s: Option<u64>,
+    /// The maturity to transfer from source to target.
+    transfer_maturity_e8s: u64,
+    /// The staked maturity to transfer from source to target.
+    transfer_staked_maturity_e8s: u64,
+    /// The new dissolve state and age of the source neuron.
+    source_neuron_dissolve_state_and_age: DissolveStateAndAge,
+    /// The new dissolve state and age of the target neuron.
+    target_neuron_dissolve_state_and_age: DissolveStateAndAge,
+    /// The transaction fee as e8s.
+    transaction_fees_e8s: u64,
+}
+
+impl MergeNeuronsEffect {
+    pub fn source_neuron_id(&self) -> NeuronId {
+        self.source_neuron_id
+    }
+
+    pub fn target_neuron_id(&self) -> NeuronId {
+        self.target_neuron_id
+    }
+
+    pub fn source_burn_fees(&self) -> Option<BurnNeuronFeesOperation> {
+        self.source_burn_fees_e8s
+            .map(|amount_e8s| BurnNeuronFeesOperation {
+                neuron_id: self.source_neuron_id,
+                amount_e8s,
+            })
+    }
+
+    pub fn stake_transfer(&self) -> Option<NeuronStakeTransferOperation> {
+        self.stake_transfer_to_target_e8s
+            .map(|amount_to_target_e8s| NeuronStakeTransferOperation {
+                source_neuron_id: self.source_neuron_id,
+                target_neuron_id: self.target_neuron_id,
+                amount_to_target_e8s,
+                transaction_fees_e8s: self.transaction_fees_e8s,
+            })
+    }
+
+    pub fn source_effect(&self) -> MergeNeuronsSourceEffect {
+        MergeNeuronsSourceEffect {
+            dissolve_state_and_age: self.source_neuron_dissolve_state_and_age.clone(),
+            subtract_maturity: self.transfer_maturity_e8s,
+            subtract_staked_maturity: self.transfer_staked_maturity_e8s,
+        }
+    }
+
+    pub fn target_effect(&self) -> MergeNeuronsTargetEffect {
+        MergeNeuronsTargetEffect {
+            dissolve_state_and_age: self.target_neuron_dissolve_state_and_age.clone(),
+            add_maturity: self.transfer_maturity_e8s,
+            add_staked_maturity: self.transfer_staked_maturity_e8s,
+        }
+    }
 }
 
 /// The effect of merge neurons on the source neuron (other than the ones involving ledger).
 #[derive(Clone, Debug, PartialEq)]
 pub struct MergeNeuronsSourceEffect {
-    source_neuron_dissolve_state_and_age: DissolveStateAndAge,
+    dissolve_state_and_age: DissolveStateAndAge,
     subtract_maturity: u64,
     subtract_staked_maturity: u64,
 }
 
 impl MergeNeuronsSourceEffect {
     pub fn apply(self, source_neuron: &mut Neuron) {
-        todo!()
+        source_neuron.set_dissolve_state_and_age(self.dissolve_state_and_age);
+        source_neuron.maturity_e8s_equivalent = source_neuron
+            .maturity_e8s_equivalent
+            .saturating_sub(self.subtract_maturity);
+        source_neuron.subtract_staked_maturity(self.subtract_staked_maturity);
     }
 }
 
 /// The effect of merge neurons on the target neuron (other than the ones involving ledger).
 #[derive(Clone, Debug, PartialEq)]
 pub struct MergeNeuronsTargetEffect {
-    target_neuron_dissolve_state_and_age: DissolveStateAndAge,
+    dissolve_state_and_age: DissolveStateAndAge,
     add_maturity: u64,
     add_staked_maturity: u64,
 }
 
 impl MergeNeuronsTargetEffect {
     pub fn apply(self, target_neuron: &mut Neuron) {
-        todo!()
+        target_neuron.set_dissolve_state_and_age(self.dissolve_state_and_age);
+        target_neuron.maturity_e8s_equivalent = target_neuron
+            .maturity_e8s_equivalent
+            .saturating_add(self.add_maturity);
+        target_neuron.add_staked_maturity(self.add_staked_maturity);
     }
 }
 
@@ -88,7 +146,98 @@ pub enum MergeNeuronsError {
 
 impl From<MergeNeuronsError> for GovernanceError {
     fn from(error: MergeNeuronsError) -> Self {
-        todo!()
+        match error {
+            MergeNeuronsError::SourceAndTargetSame => GovernanceError::new_with_message(
+                ErrorType::InvalidCommand,
+                "Source id and target id cannot be the same",
+            ),
+            MergeNeuronsError::NoSourceNeuronId => GovernanceError::new_with_message(
+                ErrorType::InvalidCommand,
+                "There was no source neuron id",
+            ),
+            MergeNeuronsError::SourceNeuronNotFound => {
+                GovernanceError::new_with_message(ErrorType::NotFound, "Source neuron not found")
+            }
+            MergeNeuronsError::TargetNeuronNotFound => {
+                GovernanceError::new_with_message(ErrorType::NotFound, "Target neuron not found")
+            }
+            MergeNeuronsError::SourceInvalidAccount => GovernanceError::new_with_message(
+                ErrorType::NotFound,
+                "Source neuron's account is invalid",
+            ),
+            MergeNeuronsError::TargetInvalidAccount => GovernanceError::new_with_message(
+                ErrorType::NotFound,
+                "Target neuron's account is invalid",
+            ),
+            MergeNeuronsError::SourceNeuronNotHotKeyOrController => {
+                GovernanceError::new_with_message(
+                    ErrorType::NotAuthorized,
+                    "Caller must be hotkey or controller of the source neuron",
+                )
+            }
+            MergeNeuronsError::TargetNeuronNotHotKeyOrController => {
+                GovernanceError::new_with_message(
+                    ErrorType::NotAuthorized,
+                    "Caller must be hotkey or controller of the target neuron",
+                )
+            }
+            MergeNeuronsError::SourceNeuronSpawning => GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "Can't perform operation on neuron: Source neuron is spawning.",
+            ),
+            MergeNeuronsError::TargetNeuronSpawning => GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "Can't perform operation on neuron: Target neuron is spawning.",
+            ),
+            MergeNeuronsError::SourceNeuronDissolving => GovernanceError::new_with_message(
+                ErrorType::RequiresNotDissolving,
+                "Only two non-dissolving neurons with a dissolve delay greater than 0 \
+                can be merged.",
+            ),
+            MergeNeuronsError::TargetNeuronDissolving => GovernanceError::new_with_message(
+                ErrorType::RequiresNotDissolving,
+                "Only two non-dissolving neurons with a dissolve delay greater than 0 \
+                can be merged.",
+            ),
+            MergeNeuronsError::SourceNeuronInNeuronsFund => GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "Cannot merge neurons that have been dedicated to the Neurons' Fund",
+            ),
+            MergeNeuronsError::TargetNeuronInNeuronsFund => GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "Cannot merge neurons that have been dedicated to the Neurons' Fund",
+            ),
+            MergeNeuronsError::NeuronManagersNotSame => GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "ManageNeuron following of source and target does not match",
+            ),
+            MergeNeuronsError::KycVerifiedNotSame => GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "Source neuron's kyc_verified field does not match target",
+            ),
+            MergeNeuronsError::NotForProfitNotSame => GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "Source neuron's not_for_profit field does not match target",
+            ),
+            MergeNeuronsError::NeuronTypeNotSame => GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "Source neuron's neuron_type field does not match target",
+            ),
+            MergeNeuronsError::SourceNeuronNotController => GovernanceError::new_with_message(
+                ErrorType::NotAuthorized,
+                "Source neuron must be owned by the caller",
+            ),
+            MergeNeuronsError::TargetNeuronNotController => GovernanceError::new_with_message(
+                ErrorType::NotAuthorized,
+                "Target neuron must be owned by the caller",
+            ),
+            MergeNeuronsError::SourceOrTargetInvolvedInProposal => {
+                GovernanceError::new_with_message(
+                    ErrorType::PreconditionFailed,
+                    "Cannot merge neurons that are involved in open proposals",
+                )
+            }
+        }
     }
 }
 
@@ -104,20 +253,15 @@ pub fn calculate_merge_neurons_effect(
     let (source, target) =
         validate_request_and_neurons(id, merge, caller, neuron_store, now_seconds)?;
 
-    let source_burn_fees = if source.fees_e8s > transaction_fees_e8s {
-        Some(BurnNeuronFees {
-            amount_e8s: source.fees_e8s,
-        })
+    let source_burn_fees_e8s = if source.fees_e8s > transaction_fees_e8s {
+        Some(source.fees_e8s)
     } else {
         None
     };
 
     let amount_to_target_e8s = source.minted_stake_e8s.saturating_sub(transaction_fees_e8s);
-    let stake_transfer = if amount_to_target_e8s > 0 {
-        Some(NeuronStakeTransfer {
-            amount_to_target_e8s,
-            transaction_fee_e8s: transaction_fees_e8s,
-        })
+    let stake_transfer_to_target_e8s = if amount_to_target_e8s > 0 {
+        Some(amount_to_target_e8s)
     } else {
         None
     };
@@ -133,9 +277,9 @@ pub fn calculate_merge_neurons_effect(
     debug_assert!(new_target_age_seconds <= std::cmp::max(source.age_seconds, target.age_seconds));
 
     debug_assert!(source.age_seconds <= now_seconds);
-    let source_neuron_state = DissolveStateAndAge::NotDissolving {
+    let source_neuron_dissolve_state_and_age = DissolveStateAndAge::NotDissolving {
         dissolve_delay_seconds: source.dissolve_delay_seconds,
-        aging_since_timestamp_seconds: if stake_transfer.is_some() {
+        aging_since_timestamp_seconds: if stake_transfer_to_target_e8s.is_some() {
             now_seconds
         } else {
             now_seconds.saturating_sub(source.age_seconds)
@@ -146,7 +290,7 @@ pub fn calculate_merge_neurons_effect(
     // target.age_seconds`, and both `source.age_seconds` and `target.age_seconds` are no more than
     // now_seconds, `new_target_age_seconds` should be no more than `now_seconds`.
     debug_assert!(new_target_age_seconds <= now_seconds);
-    let target_neuron_state = DissolveStateAndAge::NotDissolving {
+    let target_neuron_dissolve_state_and_age = DissolveStateAndAge::NotDissolving {
         dissolve_delay_seconds: std::cmp::max(
             source.dissolve_delay_seconds,
             target.dissolve_delay_seconds,
@@ -157,19 +301,49 @@ pub fn calculate_merge_neurons_effect(
     Ok(MergeNeuronsEffect {
         source_neuron_id: source.id,
         target_neuron_id: target.id,
-        source_burn_fees,
-        stake_transfer,
-        source_effect: MergeNeuronsSourceEffect {
-            source_neuron_dissolve_state_and_age: source_neuron_state,
-            subtract_maturity: source.maturity_e8s_equivalent,
-            subtract_staked_maturity: source.staked_maturity_e8s_equivalent,
-        },
-        target_effect: MergeNeuronsTargetEffect {
-            target_neuron_dissolve_state_and_age: target_neuron_state,
-            add_maturity: source.maturity_e8s_equivalent,
-            add_staked_maturity: source.staked_maturity_e8s_equivalent,
-        },
+        source_burn_fees_e8s,
+        stake_transfer_to_target_e8s,
+        source_neuron_dissolve_state_and_age,
+        target_neuron_dissolve_state_and_age,
+        transfer_maturity_e8s: source.maturity_e8s_equivalent,
+        transfer_staked_maturity_e8s: source.staked_maturity_e8s_equivalent,
+        transaction_fees_e8s,
     })
+}
+
+/// Additional validation for merge neurons before executing the merge.
+pub fn validate_merge_neurons_before_commit(
+    source_neuron_id: &NeuronId,
+    target_neuron_id: &NeuronId,
+    caller: &PrincipalId,
+    neuron_store: &NeuronStore,
+    proposals: &BTreeMap<u64, ProposalData>,
+) -> Result<(), MergeNeuronsError> {
+    let source_is_caller_controller = neuron_store
+        .with_neuron(source_neuron_id, |source_neuron| {
+            source_neuron.is_controlled_by(caller)
+        })
+        .map_err(|_| MergeNeuronsError::SourceNeuronNotFound)?;
+    if !source_is_caller_controller {
+        return Err(MergeNeuronsError::SourceNeuronNotController);
+    }
+
+    let target_is_caller_controller = neuron_store
+        .with_neuron(target_neuron_id, |target_neuron| {
+            target_neuron.is_controlled_by(caller)
+        })
+        .map_err(|_| MergeNeuronsError::TargetNeuronNotFound)?;
+    if !target_is_caller_controller {
+        return Err(MergeNeuronsError::TargetNeuronNotController);
+    }
+
+    if is_neuron_involved_with_proposals(source_neuron_id, proposals)
+        || is_neuron_involved_with_proposals(target_neuron_id, proposals)
+    {
+        return Err(MergeNeuronsError::SourceOrTargetInvolvedInProposal);
+    }
+
+    Ok(())
 }
 
 /// Builds merge neurons response.
@@ -178,7 +352,16 @@ pub fn build_merge_neurons_response(
     target: &Neuron,
     now_seconds: u64,
 ) -> MergeResponse {
-    todo!()
+    let source_neuron = Some(source.clone());
+    let target_neuron = Some(target.clone());
+    let source_neuron_info = Some(source.get_neuron_info(now_seconds));
+    let target_neuron_info = Some(target.get_neuron_info(now_seconds));
+    MergeResponse {
+        source_neuron,
+        target_neuron,
+        source_neuron_info,
+        target_neuron_info,
+    }
 }
 
 // Below are helper methods/structs that are private to this module.
@@ -324,22 +507,18 @@ fn validate_request_and_neurons(
             )
         })
         .map_err(|_| MergeNeuronsError::SourceNeuronNotFound)?;
-    check_condition(
-        source_account_valid,
-        MergeNeuronsError::SourceInvalidAccount,
-    )?;
-    check_condition(
-        source_is_caller_authorized,
-        MergeNeuronsError::SourceNeuronNotHotKeyOrController,
-    )?;
-    check_condition(
-        source_is_not_spawning,
-        MergeNeuronsError::SourceNeuronSpawning,
-    )?;
-    check_condition(
-        source_is_not_in_neurons_fund,
-        MergeNeuronsError::SourceNeuronInNeuronsFund,
-    )?;
+    if !source_account_valid {
+        return Err(MergeNeuronsError::SourceInvalidAccount);
+    }
+    if !source_is_caller_authorized {
+        return Err(MergeNeuronsError::SourceNeuronNotHotKeyOrController);
+    }
+    if !source_is_not_spawning {
+        return Err(MergeNeuronsError::SourceNeuronSpawning);
+    }
+    if !source_is_not_in_neurons_fund {
+        return Err(MergeNeuronsError::SourceNeuronInNeuronsFund);
+    }
     let source_neuron_to_merge = source_neuron_to_merge?;
 
     let (
@@ -378,62 +557,71 @@ fn validate_request_and_neurons(
             )
         })
         .map_err(|_| MergeNeuronsError::TargetNeuronNotFound)?;
-    check_condition(
-        target_account_valid,
-        MergeNeuronsError::TargetInvalidAccount,
-    )?;
-    check_condition(
-        target_is_caller_authorized,
-        MergeNeuronsError::TargetNeuronNotHotKeyOrController,
-    )?;
-    check_condition(
-        target_is_not_spawning,
-        MergeNeuronsError::TargetNeuronSpawning,
-    )?;
-    check_condition(
-        target_is_not_in_neurons_fund,
-        MergeNeuronsError::TargetNeuronInNeuronsFund,
-    )?;
+    if !target_account_valid {
+        return Err(MergeNeuronsError::TargetInvalidAccount);
+    }
+    if !target_is_caller_authorized {
+        return Err(MergeNeuronsError::TargetNeuronNotHotKeyOrController);
+    }
+    if !target_is_not_spawning {
+        return Err(MergeNeuronsError::TargetNeuronSpawning);
+    }
+    if !target_is_not_in_neurons_fund {
+        return Err(MergeNeuronsError::TargetNeuronInNeuronsFund);
+    }
     let target_neuron_to_merge = target_neuron_to_merge?;
 
-    check_equal(
-        source_neuron_managers,
-        target_neuron_managers,
-        MergeNeuronsError::NeuronManagersNotSame,
-    )?;
-    check_equal(
-        source_kyc_verified,
-        target_kyc_verified,
-        MergeNeuronsError::KycVerifiedNotSame,
-    )?;
-    check_equal(
-        source_not_for_profit,
-        target_not_for_profit,
-        MergeNeuronsError::NotForProfitNotSame,
-    )?;
-    check_equal(
-        source_neuron_type,
-        target_neuron_type,
-        MergeNeuronsError::NeuronTypeNotSame,
-    )?;
+    if source_neuron_managers != target_neuron_managers {
+        return Err(MergeNeuronsError::NeuronManagersNotSame);
+    }
+    if source_kyc_verified != target_kyc_verified {
+        return Err(MergeNeuronsError::KycVerifiedNotSame);
+    }
+    if source_not_for_profit != target_not_for_profit {
+        return Err(MergeNeuronsError::NotForProfitNotSame);
+    }
+    if source_neuron_type != target_neuron_type {
+        return Err(MergeNeuronsError::NeuronTypeNotSame);
+    }
 
     Ok((source_neuron_to_merge, target_neuron_to_merge))
 }
 
-fn check_condition(condition: bool, error: MergeNeuronsError) -> Result<(), MergeNeuronsError> {
-    if condition {
-        Ok(())
-    } else {
-        Err(error)
+fn is_neuron_involved_with_proposal(neuron_id: &NeuronId, proposal_data: &ProposalData) -> bool {
+    // Only consider proposals that have not been decided yet.
+    if proposal_data.status() != ProposalStatus::Open {
+        return false;
     }
+
+    // For most proposals, the neuron is "involved" exactly when it is the proposer.
+    if proposal_data.proposer.as_ref() == Some(neuron_id) {
+        return true;
+    }
+
+    // The one exception is ManageNeuron proposals. In this case, then a neuron
+    // can be involved if the neuron is the one that the proposal operates on.
+    if !proposal_data.is_manage_neuron() {
+        return false;
+    }
+
+    proposal_data
+        .proposal
+        .as_ref()
+        .map(|proposal| {
+            // TODO(NNS1-2989) explain or fix the discrepancy between NeuronId and Subaccount
+            // (why only check neuron id?).
+            proposal.managed_neuron() == Some(NeuronIdOrSubaccount::NeuronId(*neuron_id))
+        })
+        .unwrap_or(false)
 }
 
-fn check_equal<T: Eq>(
-    neuron_field: T,
-    other_neuron_field: T,
-    error: MergeNeuronsError,
-) -> Result<(), MergeNeuronsError> {
-    check_condition(neuron_field == other_neuron_field, error)
+fn is_neuron_involved_with_proposals(
+    neuron_id: &NeuronId,
+    proposals: &BTreeMap<u64, ProposalData>,
+) -> bool {
+    proposals
+        .values()
+        .any(|proposal_data| is_neuron_involved_with_proposal(neuron_id, proposal_data))
 }
 
 #[cfg(test)]
@@ -447,6 +635,7 @@ mod tests {
     use ic_nervous_system_common::{E8, SECONDS_PER_DAY};
     use lazy_static::lazy_static;
     use maplit::{btreemap, hashmap};
+    use std::collections::BTreeMap;
 
     static NOW_SECONDS: u64 = 1_234_567_890;
     static TRANSACTION_FEES_E8S: u64 = 10_000;
@@ -965,29 +1154,19 @@ mod tests {
             MergeNeuronsEffect {
                 source_neuron_id: NeuronId { id: 1 },
                 target_neuron_id: NeuronId { id: 2 },
-                source_burn_fees: Some(BurnNeuronFees {
-                    amount_e8s: 10 * E8,
-                }),
-                stake_transfer: Some(NeuronStakeTransfer {
-                    amount_to_target_e8s: 300 * E8,
-                    transaction_fee_e8s: TRANSACTION_FEES_E8S,
-                }),
-                source_effect: MergeNeuronsSourceEffect {
-                    source_neuron_dissolve_state_and_age: DissolveStateAndAge::NotDissolving {
-                        dissolve_delay_seconds: 200 * SECONDS_PER_DAY,
-                        aging_since_timestamp_seconds: NOW_SECONDS,
-                    },
-                    subtract_maturity: 50 * E8,
-                    subtract_staked_maturity: 40 * E8,
+                source_burn_fees_e8s: Some(10 * E8,),
+                stake_transfer_to_target_e8s: Some(300 * E8),
+                source_neuron_dissolve_state_and_age: DissolveStateAndAge::NotDissolving {
+                    dissolve_delay_seconds: 200 * SECONDS_PER_DAY,
+                    aging_since_timestamp_seconds: NOW_SECONDS,
                 },
-                target_effect: MergeNeuronsTargetEffect {
-                    target_neuron_dissolve_state_and_age: DissolveStateAndAge::NotDissolving {
-                        dissolve_delay_seconds: 200 * SECONDS_PER_DAY,
-                        aging_since_timestamp_seconds: NOW_SECONDS - 150 * SECONDS_PER_DAY,
-                    },
-                    add_maturity: 50 * E8,
-                    add_staked_maturity: 40 * E8,
+                target_neuron_dissolve_state_and_age: DissolveStateAndAge::NotDissolving {
+                    dissolve_delay_seconds: 200 * SECONDS_PER_DAY,
+                    aging_since_timestamp_seconds: NOW_SECONDS - 150 * SECONDS_PER_DAY,
                 },
+                transfer_maturity_e8s: 50 * E8,
+                transfer_staked_maturity_e8s: 40 * E8,
+                transaction_fees_e8s: TRANSACTION_FEES_E8S,
             }
         );
     }
@@ -1027,26 +1206,19 @@ mod tests {
             MergeNeuronsEffect {
                 source_neuron_id: NeuronId { id: 1 },
                 target_neuron_id: NeuronId { id: 2 },
-                source_burn_fees: Some(BurnNeuronFees {
-                    amount_e8s: 10 * E8,
-                }),
-                stake_transfer: None,
-                source_effect: MergeNeuronsSourceEffect {
-                    source_neuron_dissolve_state_and_age: DissolveStateAndAge::NotDissolving {
-                        dissolve_delay_seconds: 200 * SECONDS_PER_DAY,
-                        aging_since_timestamp_seconds: NOW_SECONDS - 100 * SECONDS_PER_DAY,
-                    },
-                    subtract_maturity: 0,
-                    subtract_staked_maturity: 0,
+                source_burn_fees_e8s: Some(10 * E8,),
+                stake_transfer_to_target_e8s: None,
+                source_neuron_dissolve_state_and_age: DissolveStateAndAge::NotDissolving {
+                    dissolve_delay_seconds: 200 * SECONDS_PER_DAY,
+                    aging_since_timestamp_seconds: NOW_SECONDS - 100 * SECONDS_PER_DAY,
                 },
-                target_effect: MergeNeuronsTargetEffect {
-                    target_neuron_dissolve_state_and_age: DissolveStateAndAge::NotDissolving {
-                        dissolve_delay_seconds: 200 * SECONDS_PER_DAY,
-                        aging_since_timestamp_seconds: NOW_SECONDS - 300 * SECONDS_PER_DAY,
-                    },
-                    add_maturity: 0,
-                    add_staked_maturity: 0,
+                target_neuron_dissolve_state_and_age: DissolveStateAndAge::NotDissolving {
+                    dissolve_delay_seconds: 200 * SECONDS_PER_DAY,
+                    aging_since_timestamp_seconds: NOW_SECONDS - 300 * SECONDS_PER_DAY,
                 },
+                transfer_maturity_e8s: 0,
+                transfer_staked_maturity_e8s: 0,
+                transaction_fees_e8s: TRANSACTION_FEES_E8S,
             }
         );
     }
@@ -1086,27 +1258,19 @@ mod tests {
             MergeNeuronsEffect {
                 source_neuron_id: NeuronId { id: 1 },
                 target_neuron_id: NeuronId { id: 2 },
-                source_burn_fees: None,
-                stake_transfer: Some(NeuronStakeTransfer {
-                    amount_to_target_e8s: 300 * E8,
-                    transaction_fee_e8s: TRANSACTION_FEES_E8S,
-                }),
-                source_effect: MergeNeuronsSourceEffect {
-                    source_neuron_dissolve_state_and_age: DissolveStateAndAge::NotDissolving {
-                        dissolve_delay_seconds: 200 * SECONDS_PER_DAY,
-                        aging_since_timestamp_seconds: NOW_SECONDS,
-                    },
-                    subtract_maturity: 0,
-                    subtract_staked_maturity: 0,
+                source_burn_fees_e8s: None,
+                stake_transfer_to_target_e8s: Some(300 * E8),
+                source_neuron_dissolve_state_and_age: DissolveStateAndAge::NotDissolving {
+                    dissolve_delay_seconds: 200 * SECONDS_PER_DAY,
+                    aging_since_timestamp_seconds: NOW_SECONDS,
                 },
-                target_effect: MergeNeuronsTargetEffect {
-                    target_neuron_dissolve_state_and_age: DissolveStateAndAge::NotDissolving {
-                        dissolve_delay_seconds: 200 * SECONDS_PER_DAY,
-                        aging_since_timestamp_seconds: NOW_SECONDS - 150 * SECONDS_PER_DAY,
-                    },
-                    add_maturity: 0,
-                    add_staked_maturity: 0,
+                target_neuron_dissolve_state_and_age: DissolveStateAndAge::NotDissolving {
+                    dissolve_delay_seconds: 200 * SECONDS_PER_DAY,
+                    aging_since_timestamp_seconds: NOW_SECONDS - 150 * SECONDS_PER_DAY,
                 },
+                transfer_maturity_e8s: 0,
+                transfer_staked_maturity_e8s: 0,
+                transaction_fees_e8s: TRANSACTION_FEES_E8S,
             }
         );
     }
@@ -1155,24 +1319,19 @@ mod tests {
             MergeNeuronsEffect {
                 source_neuron_id: NeuronId { id: 1 },
                 target_neuron_id: NeuronId { id: 2 },
-                source_burn_fees: None,
-                stake_transfer: None,
-                source_effect: MergeNeuronsSourceEffect {
-                    source_neuron_dissolve_state_and_age: DissolveStateAndAge::NotDissolving {
-                        dissolve_delay_seconds: 200 * SECONDS_PER_DAY,
-                        aging_since_timestamp_seconds: NOW_SECONDS - 100 * SECONDS_PER_DAY,
-                    },
-                    subtract_maturity: 50 * E8,
-                    subtract_staked_maturity: 40 * E8,
+                source_burn_fees_e8s: None,
+                stake_transfer_to_target_e8s: None,
+                source_neuron_dissolve_state_and_age: DissolveStateAndAge::NotDissolving {
+                    dissolve_delay_seconds: 200 * SECONDS_PER_DAY,
+                    aging_since_timestamp_seconds: NOW_SECONDS - 100 * SECONDS_PER_DAY,
                 },
-                target_effect: MergeNeuronsTargetEffect {
-                    target_neuron_dissolve_state_and_age: DissolveStateAndAge::NotDissolving {
-                        dissolve_delay_seconds: 200 * SECONDS_PER_DAY,
-                        aging_since_timestamp_seconds: NOW_SECONDS - 300 * SECONDS_PER_DAY,
-                    },
-                    add_maturity: 50 * E8,
-                    add_staked_maturity: 40 * E8,
+                target_neuron_dissolve_state_and_age: DissolveStateAndAge::NotDissolving {
+                    dissolve_delay_seconds: 200 * SECONDS_PER_DAY,
+                    aging_since_timestamp_seconds: NOW_SECONDS - 300 * SECONDS_PER_DAY,
                 },
+                transfer_maturity_e8s: 50 * E8,
+                transfer_staked_maturity_e8s: 40 * E8,
+                transaction_fees_e8s: TRANSACTION_FEES_E8S,
             }
         );
     }
@@ -1247,20 +1406,24 @@ mod tests {
                 }
             };
 
-            if let Some(source_burn_fees) = effect.source_burn_fees {
-                prop_assert!(source_burn_fees.amount_e8s <= source_fees);
+            if let Some(source_burn_fees_e8s) = effect.source_burn_fees_e8s {
+                prop_assert!(source_burn_fees_e8s <= source_fees);
             }
-            if let Some(stake_transfer) = effect.stake_transfer {
+            if let Some(stake_transfer_to_target_e8s) = effect.stake_transfer_to_target_e8s {
                 prop_assert!(
-                    stake_transfer.amount_to_target_e8s + source_fees + transaction_fees_e8s
+                    stake_transfer_to_target_e8s + source_fees + effect.transaction_fees_e8s
                         <= source_cached_stake
                 );
-                prop_assert_eq!(stake_transfer.transaction_fee_e8s, transaction_fees_e8s);
             }
+            prop_assert_eq!(effect.transfer_maturity_e8s, source_maturity);
+            prop_assert_eq!(
+                effect.transfer_staked_maturity_e8s,
+                source_staked_maturity
+            );
             if let DissolveStateAndAge::NotDissolving {
                 dissolve_delay_seconds,
                 aging_since_timestamp_seconds,
-            } = effect.source_effect.source_neuron_dissolve_state_and_age
+            } = effect.source_neuron_dissolve_state_and_age
             {
                 prop_assert!(dissolve_delay_seconds >= source_dissolve_delay_seconds);
                 prop_assert!(aging_since_timestamp_seconds >= source_aging_since_timestamp_seconds);
@@ -1268,12 +1431,7 @@ mod tests {
             } else {
                 panic!("Source neuron should not stop dissolving after merging");
             }
-            prop_assert_eq!(effect.source_effect.subtract_maturity, source_maturity);
-            prop_assert_eq!(
-                effect.source_effect.subtract_staked_maturity,
-                source_staked_maturity
-            );
-            let target_state_and_age = effect.target_effect.target_neuron_dissolve_state_and_age;
+            let target_state_and_age = effect.target_neuron_dissolve_state_and_age;
             if let DissolveStateAndAge::NotDissolving {
                 dissolve_delay_seconds,
                 aging_since_timestamp_seconds,
@@ -1289,11 +1447,6 @@ mod tests {
             } else {
                 panic!("Target neuron should not stop dissolving after merging");
             }
-            prop_assert_eq!(effect.target_effect.add_maturity, source_maturity);
-            prop_assert_eq!(
-                effect.target_effect.add_staked_maturity,
-                source_staked_maturity
-            );
         }
 
     }

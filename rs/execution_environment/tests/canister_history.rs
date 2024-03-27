@@ -163,16 +163,7 @@ fn canister_history_tracks_create_install_reinstall() {
         user_id2,
         ic00::IC_00,
         Method::InstallCode,
-        InstallCodeArgs::new(
-            Install,
-            canister_id,
-            test_canister,
-            vec![],
-            None,
-            None,
-            None,
-        )
-        .encode(),
+        InstallCodeArgs::new(Install, canister_id, test_canister, vec![], None, None).encode(),
     )
     .unwrap();
     // check canister history
@@ -208,7 +199,6 @@ fn canister_history_tracks_create_install_reinstall() {
             canister_id,
             UNIVERSAL_CANISTER_WASM.into(),
             vec![],
-            None,
             None,
             None,
         )
@@ -286,16 +276,7 @@ fn canister_history_tracks_upgrade() {
         user_id2,
         ic00::IC_00,
         Method::InstallCode,
-        InstallCodeArgs::new(
-            Install,
-            canister_id,
-            test_canister,
-            vec![],
-            None,
-            None,
-            None,
-        )
-        .encode(),
+        InstallCodeArgs::new(Install, canister_id, test_canister, vec![], None, None).encode(),
     )
     .unwrap();
     // update reference canister history
@@ -319,7 +300,6 @@ fn canister_history_tracks_upgrade() {
             canister_id,
             UNIVERSAL_CANISTER_WASM.to_vec(),
             vec![],
-            None,
             None,
             None,
         )
@@ -397,16 +377,7 @@ fn canister_history_tracks_uninstall() {
         user_id2,
         ic00::IC_00,
         Method::InstallCode,
-        InstallCodeArgs::new(
-            Install,
-            canister_id,
-            test_canister,
-            vec![],
-            None,
-            None,
-            None,
-        )
-        .encode(),
+        InstallCodeArgs::new(Install, canister_id, test_canister, vec![], None, None).encode(),
     )
     .unwrap();
     // update reference canister history
@@ -592,7 +563,6 @@ fn canister_history_cleared_if_canister_out_of_cycles() {
             vec![],
             Some(1), // set compute allocation to 1 per cent
             None,
-            None,
         )
         .encode(),
     )
@@ -708,16 +678,7 @@ fn canister_history_tracks_changes_from_canister() {
     let ucan_payload = universal_canister_payload(
         &PrincipalId::default(),
         "install_code",
-        InstallCodeArgs::new(
-            Install,
-            canister_id,
-            test_canister,
-            vec![],
-            None,
-            None,
-            None,
-        )
-        .encode(),
+        InstallCodeArgs::new(Install, canister_id, test_canister, vec![], None, None).encode(),
         Cycles::new(0),
     );
     env.execute_ingress(ucan, "update", ucan_payload).unwrap();
@@ -810,7 +771,6 @@ fn canister_history_fails_with_incorrect_sender_version() {
             arg: vec![],
             compute_allocation: None,
             memory_allocation: None,
-            query_allocation: None,
             sender_canister_version: Some(666), // this value of sender_canister_version does not match the actual sender_canister_version
         }
         .encode(),
@@ -891,16 +851,7 @@ fn canister_info_retrieval() {
         user_id2,
         ic00::IC_00,
         Method::InstallCode,
-        InstallCodeArgs::new(
-            Install,
-            canister_id,
-            test_canister,
-            vec![],
-            None,
-            None,
-            None,
-        )
-        .encode(),
+        InstallCodeArgs::new(Install, canister_id, test_canister, vec![], None, None).encode(),
     )
     .unwrap();
     // update reference canister history
@@ -924,7 +875,6 @@ fn canister_info_retrieval() {
             canister_id,
             UNIVERSAL_CANISTER_WASM.to_vec(),
             vec![],
-            None,
             None,
             None,
         )

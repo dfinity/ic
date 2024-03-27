@@ -41,7 +41,7 @@ clap = { workspace = true }
 tokio = { workspace = true }
 ic-agent = { workspace = true }
 icrc-ledger-agent = { path = "../../../../packages/icrc-ledger-agent" }
-hex = "0.4.2"
+hex = { workspace = true }
 ic-crypto-tree-hash = { path = "../../../crypto/tree_hash" }
 lazy_static = "1.4.0"
 http = "0.2.9"

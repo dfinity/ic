@@ -3,8 +3,11 @@ use crate::eth_logs::{EventSource, ReceivedErc20Event, ReceivedEthEvent, Receive
 use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::lifecycle::{init::InitArg, upgrade::UpgradeArg};
 use crate::numeric::{BlockNumber, LedgerBurnIndex, LedgerMintIndex};
-use crate::state::transactions::{Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed};
+use crate::state::transactions::{
+    Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed, ReimbursementRequest,
+};
 use crate::tx::{Eip1559TransactionRequest, SignedEip1559TransactionRequest};
+use candid::Principal;
 use ic_ethereum_types::Address;
 use minicbor::{Decode, Encode};
 
@@ -89,7 +92,8 @@ pub enum EventType {
         #[n(1)]
         transaction_receipt: TransactionReceipt,
     },
-    /// The minter successfully reimbursed a failed withdrawal.
+    /// The minter successfully reimbursed a failed withdrawal
+    /// or the transaction fee associated with a ckERC20 withdrawal.
     #[n(12)]
     ReimbursedEthWithdrawal(#[n(0)] Reimbursed),
     /// The minter could not scrap the logs for that block.
@@ -124,6 +128,18 @@ pub enum EventType {
         #[n(0)]
         block_number: BlockNumber,
     },
+    #[n(19)]
+    ReimbursedErc20Withdrawal {
+        #[cbor(n(0), with = "crate::cbor::id")]
+        cketh_ledger_burn_index: LedgerBurnIndex,
+        #[cbor(n(1), with = "crate::cbor::principal")]
+        ckerc20_ledger_id: Principal,
+        #[n(2)]
+        reimbursed: Reimbursed,
+    },
+    /// The minter could not burn the given amount of ckERC20 tokens.
+    #[n(20)]
+    FailedErc20WithdrawalRequest(#[n(0)] ReimbursementRequest),
 }
 
 impl ReceivedEvent {

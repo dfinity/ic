@@ -497,7 +497,7 @@ fn validate_reshare_dealings(
         if curr_payload.ongoing_xnet_reshares.get(request).is_none() {
             if let Some(response) = new_reshare_agreement.get(request) {
                 use ic_management_canister_types::ComputeInitialEcdsaDealingsResponse;
-                if let ic_types::messages::Payload::Data(data) = &response.response_payload {
+                if let ic_types::messages::Payload::Data(data) = &response.payload {
                     let dealings_response = ComputeInitialEcdsaDealingsResponse::decode(data)
                         .map_err(|err| PermanentError::DecodingError(format!("{:?}", err)))?;
                     let transcript_id = config.as_ref().transcript_id;
@@ -542,7 +542,7 @@ fn validate_new_signature_agreements(
 
     for (random_id, completed) in curr_payload.signature_agreements.iter() {
         if let ecdsa::CompletedSignature::Unreported(response) = completed {
-            if let ic_types::messages::Payload::Data(data) = &response.response_payload {
+            if let ic_types::messages::Payload::Data(data) = &response.payload {
                 use ic_management_canister_types::{Payload, SignWithECDSAReply};
                 let reply = SignWithECDSAReply::decode(data)
                     .map_err(|err| PermanentError::DecodingError(format!("{:?}", err)))?;
@@ -612,7 +612,8 @@ mod test {
     use ic_test_utilities::crypto::CryptoReturningOk;
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
-        consensus::ecdsa::CompletedSignature, crypto::AlgorithmId, messages::CallbackId, Height,
+        consensus::ecdsa::CompletedSignature, crypto::AlgorithmId, messages::CallbackId,
+        CanisterId, Height,
     };
     use std::{collections::BTreeSet, str::FromStr};
 
@@ -730,10 +731,10 @@ mod test {
     fn make_dealings_response(
         _request: &ecdsa::EcdsaReshareRequest,
         initial_dealings: &InitialIDkgDealings,
-    ) -> Option<ic_types::messages::Response> {
+    ) -> Option<ic_types::batch::ConsensusResponse> {
         use ic_management_canister_types::ComputeInitialEcdsaDealingsResponse;
         let mut response = empty_response();
-        response.response_payload = ic_types::messages::Payload::Data(
+        response.payload = ic_types::messages::Payload::Data(
             ComputeInitialEcdsaDealingsResponse {
                 initial_dkg_dealings: initial_dealings.into(),
             }
@@ -1146,15 +1147,15 @@ mod test {
         let state = fake_state_with_ecdsa_contexts(height, sign_with_ecdsa_contexts.clone());
 
         let fake_context = fake_sign_with_ecdsa_context(key_id.clone(), [4; 32]);
-        let fake_response = CompletedSignature::Unreported(ic_types::messages::Response {
-            originator: fake_context.request.sender,
-            respondent: ic_types::CanisterId::ic_00(),
-            originator_reply_callback: CallbackId::from(0),
-            refund: fake_context.request.payment,
-            response_payload: ic_types::messages::Payload::Data(
+        let fake_response = CompletedSignature::Unreported(ic_types::batch::ConsensusResponse {
+            callback: CallbackId::from(0),
+            payload: ic_types::messages::Payload::Data(
                 SignWithECDSAReply { signature: vec![] }.encode(),
             ),
-            deadline: fake_context.request.deadline,
+            originator: Some(fake_context.request.sender),
+            respondent: Some(CanisterId::ic_00()),
+            refund: Some(fake_context.request.payment),
+            deadline: Some(fake_context.request.deadline),
         });
 
         // Insert agreement for incomplete context

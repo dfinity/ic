@@ -129,7 +129,6 @@
 //!
 //! Thus, instead of randomly selecting a node to fetch registry updates, it is
 //! better to let the user select a node.
-//!
 
 use super::config::NODES_INFO;
 use super::driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR;
@@ -142,6 +141,8 @@ use crate::driver::log_events;
 use crate::driver::test_env::{HasIcPrepDir, SshKeyGen, TestEnv, TestEnvAttribute};
 use crate::k8s::tnet::TNet;
 use crate::k8s::virtualmachine::{delete_vm, restart_vm, start_vm};
+use crate::retry_with_msg;
+use crate::retry_with_msg_async;
 use crate::util::{block_on, create_agent};
 use anyhow::{anyhow, bail, Context, Result};
 use async_trait::async_trait;
@@ -175,7 +176,7 @@ use ic_utils::interfaces::ManagementCanister;
 use icp_ledger::{AccountIdentifier, LedgerCanisterInitPayload, Tokens};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use slog::{error, info, warn, Logger};
+use slog::{debug, error, info, warn, Logger};
 use ssh2::Session;
 use std::cmp::max;
 use std::collections::{HashMap, HashSet};
@@ -534,19 +535,28 @@ impl TopologySnapshot {
     ) -> Result<TopologySnapshot> {
         let mut latest_version = self.local_registry.get_latest_version();
         if min_version > latest_version {
-            latest_version = retry_async(&self.env.logger(), duration, backoff, || async move {
-                self.local_registry.sync_with_nns().await?;
-                let latest_version = self.local_registry.get_latest_version();
-                if latest_version >= min_version {
-                    Ok(latest_version)
-                } else {
-                    bail!(
-                        "latest_version: {}, expected minimum version: {}",
-                        latest_version,
-                        min_version
-                    )
+            latest_version = retry_with_msg_async!(
+                format!(
+                    "check if latest registry version >= {}",
+                    min_version.to_string()
+                ),
+                &self.env.logger(),
+                duration,
+                backoff,
+                || async move {
+                    self.local_registry.sync_with_nns().await?;
+                    let latest_version = self.local_registry.get_latest_version();
+                    if latest_version >= min_version {
+                        Ok(latest_version)
+                    } else {
+                        bail!(
+                            "latest_version: {}, expected minimum version: {}",
+                            latest_version,
+                            min_version
+                        )
+                    }
                 }
-            })
+            )
             .await?;
         }
         Ok(Self {
@@ -573,34 +583,40 @@ impl TopologySnapshot {
         let backoff = Duration::from_secs(2);
         let prev_version: Arc<TokioMutex<RegistryVersion>> =
             Arc::new(TokioMutex::new(self.local_registry.get_latest_version()));
-        let version = retry_async(&self.env.logger(), duration, backoff, || {
-            let prev_version = prev_version.clone();
-            async move {
-                let mut prev_version = prev_version.lock().await;
-                self.local_registry.sync_with_nns().await?;
-                let version = self.local_registry.get_latest_version();
-                info!(
-                    &self.env.logger(),
-                    "previous registry version: {}; obtained from NNS: {}",
-                    prev_version,
-                    version.clone()
-                );
-                if version == *prev_version {
+        let version = retry_with_msg_async!(
+            "block_for_newest_mainnet_registry_version",
+            &self.env.logger(),
+            duration,
+            backoff,
+            || {
+                let prev_version = prev_version.clone();
+                async move {
+                    let mut prev_version = prev_version.lock().await;
+                    self.local_registry.sync_with_nns().await?;
+                    let version = self.local_registry.get_latest_version();
                     info!(
                         &self.env.logger(),
-                        "registry version obtained from NNS saturated at {}",
+                        "previous registry version: {}; obtained from NNS: {}",
+                        prev_version,
                         version.clone()
                     );
-                    Ok(version)
-                } else {
-                    *prev_version = version;
-                    bail!(
-                        "latest registry version obtained from NNS: {}; saturating ...",
-                        version
-                    )
+                    if version == *prev_version {
+                        info!(
+                            &self.env.logger(),
+                            "registry version obtained from NNS saturated at {}",
+                            version.clone()
+                        );
+                        Ok(version)
+                    } else {
+                        *prev_version = version;
+                        bail!(
+                            "latest registry version obtained from NNS: {}; saturating ...",
+                            version
+                        )
+                    }
                 }
             }
-        })
+        )
         .await?;
         Ok(Self {
             registry_version: version,
@@ -1159,11 +1175,13 @@ pub const FETCH_SHA256SUMS_RETRY_TIMEOUT: Duration = Duration::from_secs(120);
 pub const FETCH_SHA256SUMS_RETRY_BACKOFF: Duration = Duration::from_secs(5);
 
 fn fetch_sha256(base_url: String, file: &str, logger: Logger) -> Result<String> {
-    let response = retry(
+    let url = &format!("{base_url}/SHA256SUMS");
+    let response = retry_with_msg!(
+        format!("GET {url}"),
         logger.clone(),
         FETCH_SHA256SUMS_RETRY_TIMEOUT,
         FETCH_SHA256SUMS_RETRY_BACKOFF,
-        || reqwest::blocking::get(format!("{base_url}/SHA256SUMS")).map_err(|e| anyhow!("{:?}", e)),
+        || reqwest::blocking::get(url).map_err(|e| anyhow!("{:?}", e))
     )?;
 
     if !response.status().is_success() {
@@ -1502,27 +1520,29 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
 
     /// Waits until the is_healthy() returns true
     fn await_status_is_healthy(&self) -> Result<()> {
-        retry(
+        retry_with_msg!(
+            &format!("await_status_is_healthy of {}", self.get_public_url()),
             self.test_env().logger(),
             READY_WAIT_TIMEOUT,
             RETRY_BACKOFF,
             || {
                 self.status_is_healthy()
                     .and_then(|s| if !s { bail!("Not ready!") } else { Ok(()) })
-            },
+            }
         )
     }
 
     /// Waits until the is_healthy() returns an error
     fn await_status_is_unavailable(&self) -> Result<()> {
-        retry(
+        retry_with_msg!(
+            &format!("await_status_is_unavailable of {}", self.get_public_url()),
             self.test_env().logger(),
             READY_WAIT_TIMEOUT,
             RETRY_BACKOFF,
             || match self.status_is_healthy() {
                 Err(_) => Ok(()),
                 Ok(_) => Err(anyhow!("Status is still available")),
-            },
+            }
         )
     }
 
@@ -1990,37 +2010,71 @@ impl SshSession for IcNodeSnapshot {
     }
 
     fn block_on_ssh_session(&self) -> Result<Session> {
-        retry(self.env.logger(), SSH_RETRY_TIMEOUT, RETRY_BACKOFF, || {
-            self.get_ssh_session()
-        })
+        let node_record = self.raw_node_record();
+        let connection_endpoint = node_record.http.unwrap();
+        let ip_addr = IpAddr::from_str(&connection_endpoint.ip_addr)?;
+        retry_with_msg!(
+            format!("get_ssh_session to {}", ip_addr.to_string()),
+            self.env.logger(),
+            SSH_RETRY_TIMEOUT,
+            RETRY_BACKOFF,
+            || { self.get_ssh_session() }
+        )
     }
 }
 
 /* ### Auxiliary functions & helpers ### */
+#[macro_export]
+macro_rules! retry_with_msg {
+    ($msg:expr, $log:expr, $timeout:expr, $backoff:expr, $f:expr) => {
+        retry(
+            format!("{} [{}:{}]", $msg, file!(), line!()),
+            $log,
+            $timeout,
+            $backoff,
+            $f,
+        )
+    };
+}
 
-pub fn retry<F, R>(log: slog::Logger, timeout: Duration, backoff: Duration, mut f: F) -> Result<R>
+pub fn retry<S: AsRef<str>, F, R>(
+    msg: S,
+    log: slog::Logger,
+    timeout: Duration,
+    backoff: Duration,
+    mut f: F,
+) -> Result<R>
 where
     F: FnMut() -> Result<R>,
 {
+    let msg = msg.as_ref();
     let mut attempt = 1;
     let start = Instant::now();
-    info!(
+    debug!(
         log,
-        "Retrying for a maximum of {:?} with a linear backoff of {:?}", timeout, backoff
+        "Func=\"{msg}\" is being retried for the maximum of {timeout:?} with a linear backoff of {backoff:?}"
     );
     loop {
         match f() {
-            Ok(v) => break Ok(v),
-            Err(e) => {
-                if start.elapsed() > timeout {
-                    let err_msg = e.to_string();
-                    break Err(e.context(format!("Timed out! Last error: {}", err_msg)));
-                }
-                info!(
+            Ok(v) => {
+                debug!(
                     log,
-                    "Attempt {} failed. Error: {}",
-                    attempt,
-                    trunc_error(e.to_string())
+                    "Func=\"{msg}\" succeeded after {:?} on attempt {attempt}",
+                    start.elapsed()
+                );
+                break Ok(v);
+            }
+            Err(err) => {
+                let err_msg = err.to_string();
+                if start.elapsed() > timeout {
+                    break Err(err.context(format!(
+                        "Func=\"{msg}\" timed out after {:?} on attempt {attempt}. Last error: {err_msg}", start.elapsed()
+                    )));
+                }
+                debug!(
+                    log,
+                    "Func=\"{msg}\" failed on attempt {attempt}. Error: {}",
+                    trunc_error(err_msg)
                 );
                 std::thread::sleep(backoff);
                 attempt += 1;
@@ -2036,7 +2090,21 @@ fn trunc_error(err_str: String) -> String {
     short_e
 }
 
-pub async fn retry_async<F, Fut, R>(
+#[macro_export]
+macro_rules! retry_with_msg_async {
+    ($msg:expr, $log:expr, $timeout:expr, $backoff:expr, $f:expr) => {
+        retry_async(
+            format!("{} [{}:{}]", $msg, file!(), line!()),
+            $log,
+            $timeout,
+            $backoff,
+            $f,
+        )
+    };
+}
+
+pub async fn retry_async<S: AsRef<str>, F, Fut, R>(
+    msg: S,
     log: &slog::Logger,
     timeout: Duration,
     backoff: Duration,
@@ -2046,21 +2114,36 @@ where
     Fut: Future<Output = Result<R>>,
     F: Fn() -> Fut,
 {
+    let msg = msg.as_ref();
     let mut attempt = 1;
     let start = Instant::now();
-    info!(
+    debug!(
         log,
-        "Retrying for a maximum of {:?} with a linear backoff of {:?}", timeout, backoff
+        "Func=\"{msg}\" is being retried for the maximum of {timeout:?} with a linear backoff of {backoff:?}"
     );
     loop {
         match f().await {
-            Ok(v) => break Ok(v),
-            Err(e) => {
+            Ok(v) => {
+                debug!(
+                    log,
+                    "Func=\"{msg}\" succeeded after {:?} on attempt {attempt}",
+                    start.elapsed()
+                );
+                break Ok(v);
+            }
+            Err(err) => {
+                let err_msg = err.to_string();
                 if start.elapsed() > timeout {
-                    let err_msg = e.to_string();
-                    break Err(e.context(format!("Timed out! Last error: {}", err_msg)));
+                    break Err(err.context(format!(
+                        "Func=\"{msg}\" timed out after {:?} on attempt {attempt}. Last error: {err_msg}",
+                        start.elapsed(),
+                    )));
                 }
-                info!(log, "Attempt {} failed. Error: {:?}", attempt, e);
+                debug!(
+                    log,
+                    "Func=\"{msg}\" failed on attempt {attempt}. Error: {}",
+                    trunc_error(err_msg)
+                );
                 tokio::time::sleep(backoff).await;
                 attempt += 1;
             }

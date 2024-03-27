@@ -5,34 +5,30 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "//packages/icrc-ledger-types:icrc_ledger_types",
-    "//rs/rosetta-api/icrc1",
-    "//rs/rosetta-api/ledger_core",
     "//rs/rosetta-api/icp_ledger",
-    "//rs/rust_canisters/http_types",
-    "//rs/rust_canisters/canister_log",
     "//rs/rosetta-api/icrc1/index-ng",
+    "//rs/rosetta-api/ledger_core",
+    "//rs/rust_canisters/canister_log",
+    "//rs/rust_canisters/http_types",
     "@crate_index//:candid",
     "@crate_index//:ciborium",
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-cdk-timers",
+    "@crate_index//:ic-metrics-encoder",
+    "@crate_index//:ic-stable-structures",
     "@crate_index//:num-traits",
     "@crate_index//:scopeguard",
     "@crate_index//:serde",
-    "@crate_index//:ic-stable-structures",
-    "@crate_index//:ic-metrics-encoder",
     "@crate_index//:serde_bytes",
     "@crate_index//:serde_json",
 ]
 
 DEV_DEPENDENCIES = [
-    ":ic-icp-index",
     "//rs/rosetta-api/ledger_canister_core",
     "//rs/state_machine_tests",
     "//rs/test_utilities/load_wasm",
     "//rs/types/base_types",
-    "@crate_index//:assert_matches",
     "@crate_index//:candid_parser",
-    "@crate_index//:proptest",
 ]
 
 MACRO_DEPENDENCIES = [
@@ -42,7 +38,7 @@ MACRO_DEPENDENCIES = [
 rust_library(
     name = "ic-icp-index",
     srcs = glob(
-        ["src/**"],
+        ["src/**/*.rs"],
         exclude = ["src/main.rs"],
     ),
     crate_name = "ic_icp_index",
@@ -98,5 +94,5 @@ rust_test(
         "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm)",
         "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method)",
     },
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [":ic-icp-index"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

@@ -12,7 +12,7 @@ bincode = "1.2"
 bytes = { workspace = true }
 educe = "0.4"
 futures = "0.3"
-hex = "0.4.2"
+hex = { workspace = true }
 ic-adapter-metrics = { path = "../../../monitoring/adapter_metrics" }
 ic-config = { path = "../../../config" }
 ic-crypto-internal-basic-sig-ecdsa-secp256k1 = { path = "../crypto_lib/basic_sig/ecdsa_secp256k1" }
@@ -61,7 +61,7 @@ x509-parser = { workspace = true }
 zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
 
 [dev-dependencies]
-assert_matches = "1.5.0"
+assert_matches = { workspace = true }
 ic-crypto-internal-csp-test-utils = { path = "../csp_test_utils" }
 ic-crypto-internal-csp-proptest-utils = { path = "./csp_proptest_utils" }
 ic-crypto-internal-csp-protobuf-generator = { path = "./protobuf_generator" }

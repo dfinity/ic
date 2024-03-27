@@ -39,7 +39,6 @@ fn add_nns_canister_via_governance_proposal() {
             name: name.clone(),
             wasm_module: UNIVERSAL_CANISTER_WASM.to_vec(),
             arg: vec![],
-            query_allocation: Some(Nat::from(34_u8)),
             memory_allocation: Some(Nat::from(12345678_u32)),
             compute_allocation: Some(Nat::from(12_u8)),
             initial_cycles: 1 << 45,

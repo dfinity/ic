@@ -18,7 +18,7 @@ use candid::Nat;
 use candid::Principal;
 use ic_ledger_core::tokens::Zero;
 use icrc_ledger_types::icrc1::account::Account;
-use num_bigint::BigUint;
+use num_bigint::{BigInt, BigUint};
 use rosetta_core::miscellaneous::OperationStatus;
 use rosetta_core::request_types::SearchTransactionsRequest;
 use rosetta_core::response_types::SearchTransactionsResponse;
@@ -193,15 +193,14 @@ pub fn account_balance(
 
     Ok(AccountBalanceResponse {
         block_identifier: rosetta_block.get_block_identifier(),
-        balances: vec![Amount {
-            value: balance.to_string(),
-            currency: Currency {
+        balances: vec![Amount::new(
+            BigInt::from(balance),
+            Currency {
                 symbol,
                 decimals: decimals.into(),
                 metadata: None,
             },
-            metadata: None,
-        }],
+        )],
         metadata: None,
     })
 }
@@ -455,28 +454,9 @@ mod test {
 
     const BLOCKCHAIN_LENGTH: usize = 1000;
 
-    fn compare_transaction(
-        mut a: rosetta_core::objects::Transaction,
-        mut b: rosetta_core::objects::Transaction,
-    ) {
-        a.operations.iter_mut().for_each(|op| {
-            op.related_operations = op.related_operations.clone().map(|mut x| {
-                x.sort_by(|a, b| a.index.cmp(&b.index));
-                x
-            })
-        });
-        b.operations.iter_mut().for_each(|op| {
-            op.related_operations = op.related_operations.clone().map(|mut x| {
-                x.sort_by(|a, b| a.index.cmp(&b.index));
-                x
-            })
-        });
-        assert_eq!(a, b);
-    }
-
     fn compare_blocks(mut a: rosetta_core::objects::Block, mut b: rosetta_core::objects::Block) {
         for (tx_a, tx_b) in a.transactions.iter_mut().zip(b.transactions.iter_mut()) {
-            compare_transaction(tx_a.clone(), tx_b.clone());
+            assert_eq!(tx_a, tx_b);
         }
     }
 
@@ -696,7 +676,7 @@ mod test {
                         });
 
                     // Sort the related operations so the equality check passes
-                    compare_transaction(block_transaction_res.transaction.clone(),expected_block_transaction_res.transaction.clone());
+                    assert_eq!(block_transaction_res.transaction, expected_block_transaction_res.transaction);
 
                     transaction_identifier = TransactionIdentifier{
                         hash: invalid_block_hash.clone()
@@ -830,10 +810,7 @@ mod test {
                             expected_transaction.operations.iter_mut().for_each(|op| {
                                 op.status = Some(STATUS_COMPLETED.to_string());
                             });
-                            compare_transaction(
-                                result.transactions[0].transaction.clone(),
-                                expected_transaction,
-                            );
+                            assert_eq!(result.transactions[0].transaction, expected_transaction);
                             // If the transaction identifier is provided the next offset should be None
                             assert_eq!(result.next_offset, None);
                         }

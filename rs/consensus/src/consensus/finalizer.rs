@@ -527,7 +527,7 @@ mod tests {
         assert_eq!(result.len(), 1);
 
         // Deserialize the `SetupInitialDKGResponse` and check the subnet id
-        let payload = match &result[0].response_payload {
+        let payload = match &result[0].payload {
             Payload::Data(data) => data,
             Payload::Reject(_) => panic!("Payload was rejected unexpectedly"),
         };

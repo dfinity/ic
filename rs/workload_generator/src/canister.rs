@@ -144,7 +144,6 @@ pub(crate) async fn install_canister(
         vec![],
         None,
         REQUESTED_MEMORY_ALLOCATION,
-        None,
     );
 
     agent.install_canister(install_args).await?;

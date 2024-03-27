@@ -67,7 +67,8 @@ pub struct ProxyOpts {
     pub root_key: Option<PathBuf>,
 }
 
-use agent::{handler as agent_handler, Pool};
+pub use agent::{handler as agent_handler, Pool};
+
 trait HandleError {
     type B;
     fn handle_error(self, debug: bool) -> Response<Self::B>;
@@ -264,6 +265,23 @@ struct AppStateInner<V> {
 }
 
 impl<V> AppState<V> {
+    pub fn new_for_testing(
+        replicas: Vec<(Agent, Uri)>,
+        resolver: ResolverState,
+        validator: V,
+    ) -> Self {
+        Self(Arc::new(AppStateInner {
+            agent: None,
+            domain_match: None,
+            geoip: None,
+            denylist: None,
+            replica_pool: Pool::new(replicas),
+            resolver,
+            validator,
+            debug: true,
+        }))
+    }
+
     pub fn pool(&self) -> &Pool {
         &self.0.replica_pool
     }

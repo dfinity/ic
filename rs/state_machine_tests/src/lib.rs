@@ -86,7 +86,9 @@ use ic_test_utilities_registry::{
 };
 use ic_test_utilities_time::FastForwardTimeSource;
 use ic_types::artifact::IngressMessageId;
-use ic_types::batch::{BlockmakerMetrics, QueryStatsPayload, TotalQueryStats, ValidationContext};
+use ic_types::batch::{
+    BlockmakerMetrics, ConsensusResponse, QueryStatsPayload, TotalQueryStats, ValidationContext,
+};
 pub use ic_types::canister_http::{CanisterHttpMethod, CanisterHttpRequestContext};
 use ic_types::consensus::block_maker::SubnetRecords;
 use ic_types::consensus::certification::CertificationContent;
@@ -99,6 +101,7 @@ use ic_types::crypto::{
     CombinedThresholdSigOf, KeyPurpose, Signable, Signed,
 };
 use ic_types::malicious_flags::MaliciousFlags;
+use ic_types::messages::NO_DEADLINE;
 use ic_types::signature::ThresholdSignature;
 use ic_types::time::GENESIS;
 use ic_types::xnet::CertifiedStreamSlice;
@@ -107,8 +110,8 @@ use ic_types::{
     consensus::certification::Certification,
     messages::{
         Blob, CallbackId, Certificate, CertificateDelegation, HttpCallContent, HttpCanisterUpdate,
-        HttpRequestEnvelope, Payload as MsgPayload, RejectContext, Response, SignedIngress,
-        SignedIngressContent, UserQuery, EXPECTED_MESSAGE_ID_LENGTH, NO_DEADLINE,
+        HttpRequestEnvelope, Payload as MsgPayload, RejectContext, SignedIngress,
+        SignedIngressContent, UserQuery, EXPECTED_MESSAGE_ID_LENGTH,
     },
     xnet::StreamIndex,
     CountBytes, CryptoHashOfPartialState, Height, NodeId, Randomness, RegistryVersion,
@@ -984,7 +987,7 @@ impl StateMachine {
             .subnet_call_context_manager
             .sign_with_ecdsa_contexts
             .clone();
-        for (id, ecdsa_context) in sign_with_ecdsa_contexts {
+        for (callback, ecdsa_context) in sign_with_ecdsa_contexts {
             // The chain code is an additional input used during the key derivation process
             // to ensure deterministic generation of child keys from the master key.
             // We are using an array with 32 zeros by default.
@@ -1002,13 +1005,13 @@ impl StateMachine {
 
             let reply = SignWithECDSAReply { signature };
 
-            payload.consensus_responses.push(Response {
-                originator: CanisterId::ic_00(),
-                respondent: CanisterId::ic_00(),
-                originator_reply_callback: id,
-                refund: Cycles::zero(),
-                response_payload: MsgPayload::Data(reply.encode()),
-                deadline: NO_DEADLINE,
+            payload.consensus_responses.push(ConsensusResponse {
+                callback,
+                payload: MsgPayload::Data(reply.encode()),
+                originator: Some(CanisterId::ic_00()),
+                respondent: Some(CanisterId::ic_00()),
+                refund: Some(Cycles::zero()),
+                deadline: Some(NO_DEADLINE),
             });
         }
 
@@ -1501,7 +1504,7 @@ impl StateMachine {
             .subnet_call_context_manager
             .sign_with_ecdsa_contexts
             .clone();
-        for (id, ecdsa_context) in sign_with_ecdsa_contexts {
+        for (callback, ecdsa_context) in sign_with_ecdsa_contexts {
             // The chain code is an additional input used during the key derivation process
             // to ensure deterministic generation of child keys from the master key.
             // We are using an array with 32 zeros by default.
@@ -1520,13 +1523,13 @@ impl StateMachine {
 
             let reply = SignWithECDSAReply { signature };
 
-            payload.consensus_responses.push(Response {
-                originator: CanisterId::ic_00(),
-                respondent: CanisterId::ic_00(),
-                originator_reply_callback: id,
-                refund: Cycles::zero(),
-                response_payload: MsgPayload::Data(reply.encode()),
-                deadline: NO_DEADLINE,
+            payload.consensus_responses.push(ConsensusResponse {
+                callback,
+                payload: MsgPayload::Data(reply.encode()),
+                originator: Some(CanisterId::ic_00()),
+                respondent: Some(CanisterId::ic_00()),
+                refund: Some(Cycles::zero()),
+                deadline: Some(NO_DEADLINE),
             });
         }
         self.execute_payload(payload);
@@ -1927,7 +1930,7 @@ impl StateMachine {
             sender,
             ic00::IC_00,
             Method::InstallCode,
-            InstallCodeArgs::new(mode, canister_id, wasm, payload, None, None, None).encode(),
+            InstallCodeArgs::new(mode, canister_id, wasm, payload, None, None).encode(),
         )
         .map(|_| ())
     }
@@ -2700,7 +2703,7 @@ pub struct PayloadBuilder {
     nonce: Option<u64>,
     ingress_messages: Vec<SignedIngress>,
     xnet_payload: XNetPayload,
-    consensus_responses: Vec<Response>,
+    consensus_responses: Vec<ConsensusResponse>,
     query_stats: Option<QueryStatsPayload>,
 }
 
@@ -2796,31 +2799,35 @@ impl PayloadBuilder {
         self
     }
 
-    pub fn http_response(mut self, id: CallbackId, payload: &CanisterHttpResponsePayload) -> Self {
-        self.consensus_responses.push(Response {
-            originator: CanisterId::ic_00(),
-            respondent: CanisterId::ic_00(),
-            originator_reply_callback: id,
-            refund: Cycles::zero(),
-            response_payload: MsgPayload::Data(payload.encode()),
-            deadline: NO_DEADLINE,
+    pub fn http_response(
+        mut self,
+        callback: CallbackId,
+        payload: &CanisterHttpResponsePayload,
+    ) -> Self {
+        self.consensus_responses.push(ConsensusResponse {
+            callback,
+            payload: MsgPayload::Data(payload.encode()),
+            originator: Some(CanisterId::ic_00()),
+            respondent: Some(CanisterId::ic_00()),
+            refund: Some(Cycles::zero()),
+            deadline: Some(NO_DEADLINE),
         });
         self
     }
 
     pub fn http_response_failure(
         mut self,
-        id: CallbackId,
+        callback: CallbackId,
         code: RejectCode,
         message: impl ToString,
     ) -> Self {
-        self.consensus_responses.push(Response {
-            originator: CanisterId::ic_00(),
-            respondent: CanisterId::ic_00(),
-            originator_reply_callback: id,
-            refund: Cycles::zero(),
-            response_payload: MsgPayload::Reject(RejectContext::new(code, message)),
-            deadline: NO_DEADLINE,
+        self.consensus_responses.push(ConsensusResponse {
+            callback,
+            payload: MsgPayload::Reject(RejectContext::new(code, message)),
+            originator: Some(CanisterId::ic_00()),
+            respondent: Some(CanisterId::ic_00()),
+            refund: Some(Cycles::zero()),
+            deadline: Some(NO_DEADLINE),
         });
         self
     }

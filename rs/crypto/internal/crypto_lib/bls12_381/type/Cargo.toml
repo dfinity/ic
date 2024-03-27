@@ -24,7 +24,7 @@ sha2 = "0.9"
 rand = "0.8"
 rand_chacha = "0.3"
 lazy_static = "1.4"
-hex = "0.4"
+hex = { workspace = true }
 zeroize = { version = "1", features = ["zeroize_derive"] }
 
 [dev-dependencies]

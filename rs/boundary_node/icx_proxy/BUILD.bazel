@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -64,7 +64,7 @@ rust_binary(
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES,
+    deps = DEPENDENCIES + [":icx_proxy"],
 )
 
 rust_binary(
@@ -73,13 +73,37 @@ rust_binary(
     aliases = ALIASES,
     crate_features = ["dev_proxy"],
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES,
+    deps = DEPENDENCIES + [":icx_proxy_dev"],
 )
 
 rust_test(
     name = "icx_proxy_test",
     aliases = ALIASES,
     crate = ":icx-proxy",
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_library(
+    name = "icx_proxy",
+    srcs = glob(
+        ["src/**"],
+        exclude = ["src/main.rs"],
+    ),
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_library(
+    name = "icx_proxy_dev",
+    srcs = glob(
+        ["src/**"],
+        exclude = ["src/main.rs"],
+    ),
+    aliases = ALIASES,
+    crate_features = ["dev_proxy"],
+    crate_name = "icx_proxy",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

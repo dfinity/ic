@@ -17,6 +17,6 @@ ic-utils = { path = "../../utils" }
 prometheus = { workspace = true }
 
 [dev-dependencies]
-assert_matches = "1.3.0"
+assert_matches = { workspace = true }
 ic-registry-proto-data-provider = { path = "../proto_data_provider" }
 ic-test-utilities-metrics = { path = "../../test_utilities/metrics" }

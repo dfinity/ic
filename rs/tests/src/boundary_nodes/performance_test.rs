@@ -21,6 +21,7 @@ use crate::{
             NnsInstallationBuilder, RetrieveIpv4Addr, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
         },
     },
+    retry_with_msg_async,
     util::spawn_round_robin_workload_engine,
 };
 use anyhow::anyhow;
@@ -104,15 +105,21 @@ pub fn setup(bn_https_config: BoundaryNodeHttpsConfig, env: TestEnv) {
     }
     info!(&logger, "Polling registry");
     let registry = RegistryCanister::new(bn.nns_node_urls);
-    let (latest, routes) = block_on(retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
-        let (bytes, latest) = registry.get_value(make_routing_table_record_key().into(), None).await
-            .context("Failed to `get_value` from registry")?;
-        let routes = PbRoutingTable::decode(bytes.as_slice())
-            .context("Failed to decode registry routes")?;
-        let routes = RoutingTable::try_from(routes)
-            .context("Failed to convert registry routes")?;
-        Ok((latest, routes))
-    }))
+    let (latest, routes) = block_on(retry_with_msg_async!(
+        "polling registry",
+        &logger,
+        READY_WAIT_TIMEOUT,
+        RETRY_BACKOFF,
+        || async {
+            let (bytes, latest) = registry.get_value(make_routing_table_record_key().into(), None).await
+                .context("Failed to `get_value` from registry")?;
+            let routes = PbRoutingTable::decode(bytes.as_slice())
+                .context("Failed to decode registry routes")?;
+            let routes = RoutingTable::try_from(routes)
+                .context("Failed to convert registry routes")?;
+            Ok((latest, routes))
+        }
+    ))
     .expect("Failed to poll registry. This is not a Boundary Node error. It is a test environment issue.");
     info!(&logger, "Latest registry {latest}: {routes:?}");
     // Await Boundary Node

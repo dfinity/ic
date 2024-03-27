@@ -76,7 +76,7 @@ message SchnorrKeyId {
 
 message MasterPublicKeyId {
   oneof key_id {
-    EcdsaKeyId ecdsa_key_id = 1;
-    SchnorrKeyId schnorr_key_id = 2;
+    EcdsaKeyId ecdsa = 1;
+    SchnorrKeyId schnorr = 2;
   }
 }

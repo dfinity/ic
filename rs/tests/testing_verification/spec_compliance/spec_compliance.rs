@@ -11,6 +11,7 @@ use ic_tests::driver::test_env_api::{
     TopologySnapshot,
 };
 use ic_tests::driver::universal_vm::UniversalVm;
+use ic_tests::retry_with_msg;
 use ic_types::SubnetId;
 use slog::{info, Logger};
 use std::path::PathBuf;
@@ -105,32 +106,38 @@ pub fn config_impl(env: TestEnv, deploy_bn_and_nns_canisters: bool, http_request
             .start(&env)
             .expect("failed to set up universal VM");
         let log = env.logger();
-        retry(log.clone(), secs(300), secs(10), || {
-            block_on(async {
-                let https_connector = HttpsConnectorBuilder::new()
-                    .with_native_roots()
-                    .https_only()
-                    .enable_http1()
-                    .build();
-                let client = Client::builder().build::<_, hyper::Body>(https_connector);
+        retry_with_msg!(
+            "check if httpbin is responding to requests",
+            log.clone(),
+            secs(300),
+            secs(10),
+            || {
+                block_on(async {
+                    let https_connector = HttpsConnectorBuilder::new()
+                        .with_native_roots()
+                        .https_only()
+                        .enable_http1()
+                        .build();
+                    let client = Client::builder().build::<_, hyper::Body>(https_connector);
 
-                let webserver_ipv6 = get_universal_vm_address(&env);
-                let httpbin = format!("https://[{webserver_ipv6}]:20443");
-                let req = hyper::Request::builder()
-                    .method(hyper::Method::GET)
-                    .uri(httpbin)
-                    .body(hyper::Body::from(""))?;
+                    let webserver_ipv6 = get_universal_vm_address(&env);
+                    let httpbin = format!("https://[{webserver_ipv6}]:20443");
+                    let req = hyper::Request::builder()
+                        .method(hyper::Method::GET)
+                        .uri(httpbin)
+                        .body(hyper::Body::from(""))?;
 
-                let resp = client.request(req).await?;
+                    let resp = client.request(req).await?;
 
-                let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
-                let body = String::from_utf8(body_bytes.to_vec()).unwrap();
+                    let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
+                    let body = String::from_utf8(body_bytes.to_vec()).unwrap();
 
-                info!(log, "response body from httpbin: {}", body);
+                    info!(log, "response body from httpbin: {}", body);
 
-                Ok(())
-            })
-        })
+                    Ok(())
+                })
+            }
+        )
         .expect("Httpbin server should respond to incoming requests!");
     }
     if deploy_bn_and_nns_canisters {

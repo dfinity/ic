@@ -31,6 +31,7 @@ use crate::driver::{test_env::TestEnv, test_env_api::*};
 use crate::orchestrator::utils::subnet_recovery::{
     enable_ecdsa_on_subnet, run_ecdsa_signature_test,
 };
+use crate::retry_with_msg;
 use crate::util::{block_on, get_nns_node, MessageCanister};
 use anyhow::bail;
 use ic_base_types::{NodeId, RegistryVersion};
@@ -111,30 +112,36 @@ pub fn test(env: TestEnv) {
             .unwrap();
 
     // wait until all keys are registered with time stamps for the first time
-    retry(logger.clone(), secs(60), secs(10), || {
-        topology_snapshot.root_subnet().nodes().for_each(|n| {
-            match block_on(get_public_key(&registry_canister, n.node_id)) {
-                Ok((k, ver)) if k.timestamp.is_some() => {
-                    print_key(&logger, n.node_id, &k, ver);
-                    if let Some(prev_key) = init_keys.insert(n.node_id, k.clone()) {
-                        assert_eq!(
-                            k, prev_key,
-                            "Node {} updated its key prematurely during init",
-                            n.node_id
-                        );
+    retry_with_msg!(
+        "check if all keys are registered with time stamps for the first time",
+        logger.clone(),
+        secs(60),
+        secs(10),
+        || {
+            topology_snapshot.root_subnet().nodes().for_each(|n| {
+                match block_on(get_public_key(&registry_canister, n.node_id)) {
+                    Ok((k, ver)) if k.timestamp.is_some() => {
+                        print_key(&logger, n.node_id, &k, ver);
+                        if let Some(prev_key) = init_keys.insert(n.node_id, k.clone()) {
+                            assert_eq!(
+                                k, prev_key,
+                                "Node {} updated its key prematurely during init",
+                                n.node_id
+                            );
+                        }
                     }
+                    Err(e) => warn!(logger, "Failed to get key of node {}: {}", n.node_id, e),
+                    _ => warn!(logger, "Key of node {} doesn't have a timestamp", n.node_id),
                 }
-                Err(e) => warn!(logger, "Failed to get key of node {}: {}", n.node_id, e),
-                _ => warn!(logger, "Key of node {} doesn't have a timestamp", n.node_id),
-            }
-        });
+            });
 
-        if init_keys.len() == SUBNET_SIZE {
-            Ok(())
-        } else {
-            bail!("Not all keys have been initialized yet...")
+            if init_keys.len() == SUBNET_SIZE {
+                Ok(())
+            } else {
+                bail!("Not all keys have been initialized yet...")
+            }
         }
-    })
+    )
     .expect("Failed to collect initial keys");
 
     let topology_snapshot =
@@ -143,69 +150,75 @@ pub fn test(env: TestEnv) {
 
     // Wait until all keys are rotated, verify for each that at least gamma and delta has passed
     // (both wall time and timestamp)
-    retry(logger.clone(), secs(360), secs(10), || {
-        topology_snapshot.root_subnet().nodes().for_each(|n| {
-            if let Ok((k, ver)) = block_on(get_public_key(&registry_canister, n.node_id)) {
-                let prev_key = init_keys.get(&n.node_id).unwrap();
-                if &k == prev_key {
-                    // Key of this node is still equal to the initial key and thus
-                    // has not been rotated yet, continue with the next node.
-                    return;
-                }
-                if let Some(prev_rotated_key) = rotated_keys.insert(n.node_id, k.clone()) {
-                    // If the key of this node has already been rotated it is
-                    // not allowed to change again.
-                    assert_eq!(
-                        k, prev_rotated_key,
-                        "Node {} updated its key prematurely during rotation",
-                        n.node_id
-                    );
+    retry_with_msg!(
+        "check if all keys are rotated and verify for each that at least gamma and delta has passed",
+        logger.clone(),
+        secs(360),
+        secs(10),
+        || {
+            topology_snapshot.root_subnet().nodes().for_each(|n| {
+                if let Ok((k, ver)) = block_on(get_public_key(&registry_canister, n.node_id)) {
+                    let prev_key = init_keys.get(&n.node_id).unwrap();
+                    if &k == prev_key {
+                        // Key of this node is still equal to the initial key and thus
+                        // has not been rotated yet, continue with the next node.
+                        return;
+                    }
+                    if let Some(prev_rotated_key) = rotated_keys.insert(n.node_id, k.clone()) {
+                        // If the key of this node has already been rotated it is
+                        // not allowed to change again.
+                        assert_eq!(
+                            k, prev_rotated_key,
+                            "Node {} updated its key prematurely during rotation",
+                            n.node_id
+                        );
+                    } else {
+                        // Key is not equal to the initial key and no previous rotated key has been found
+                        info!(logger, "Key rotation of node {} detected!", n.node_id);
+                        print_key(&logger, n.node_id, &k, ver);
+                        assert_ne!(
+                            prev_key.key_value, k.key_value,
+                            "Key values haven't changed"
+                        );
+
+                        let init_ts =
+                            SystemTime::UNIX_EPOCH + Duration::from_millis(prev_key.timestamp.unwrap());
+                        let rotation_ts =
+                            SystemTime::UNIX_EPOCH + Duration::from_millis(k.timestamp.unwrap());
+                        let now = SystemTime::now();
+                        assert!(now.duration_since(init_ts).ok() >= Some(delta));
+                        assert!(rotation_ts.duration_since(init_ts).ok() >= Some(delta));
+
+                        let last_init_ts = init_keys
+                            .values()
+                            .filter_map(|k| k.timestamp)
+                            .map(|ts| SystemTime::UNIX_EPOCH + Duration::from_millis(ts))
+                            .max();
+
+                        let last_rotation_ts = rotated_keys
+                            .values()
+                            .filter(|&key| key != &k)
+                            .filter_map(|k| k.timestamp)
+                            .map(|ts| SystemTime::UNIX_EPOCH + Duration::from_millis(ts))
+                            .max();
+
+                        let last_ts = last_init_ts.max(last_rotation_ts).unwrap();
+
+                        assert!(now.duration_since(last_ts).ok() >= Some(gamma));
+                        assert!(rotation_ts.duration_since(last_ts).ok() >= Some(gamma));
+                    }
                 } else {
-                    // Key is not equal to the initial key and no previous rotated key has been found
-                    info!(logger, "Key rotation of node {} detected!", n.node_id);
-                    print_key(&logger, n.node_id, &k, ver);
-                    assert_ne!(
-                        prev_key.key_value, k.key_value,
-                        "Key values haven't changed"
-                    );
-
-                    let init_ts =
-                        SystemTime::UNIX_EPOCH + Duration::from_millis(prev_key.timestamp.unwrap());
-                    let rotation_ts =
-                        SystemTime::UNIX_EPOCH + Duration::from_millis(k.timestamp.unwrap());
-                    let now = SystemTime::now();
-                    assert!(now.duration_since(init_ts).ok() >= Some(delta));
-                    assert!(rotation_ts.duration_since(init_ts).ok() >= Some(delta));
-
-                    let last_init_ts = init_keys
-                        .values()
-                        .filter_map(|k| k.timestamp)
-                        .map(|ts| SystemTime::UNIX_EPOCH + Duration::from_millis(ts))
-                        .max();
-
-                    let last_rotation_ts = rotated_keys
-                        .values()
-                        .filter(|&key| key != &k)
-                        .filter_map(|k| k.timestamp)
-                        .map(|ts| SystemTime::UNIX_EPOCH + Duration::from_millis(ts))
-                        .max();
-
-                    let last_ts = last_init_ts.max(last_rotation_ts).unwrap();
-
-                    assert!(now.duration_since(last_ts).ok() >= Some(gamma));
-                    assert!(rotation_ts.duration_since(last_ts).ok() >= Some(gamma));
+                    warn!(logger, "Failed to get key of node {}", n.node_id);
                 }
-            } else {
-                warn!(logger, "Failed to get key of node {}", n.node_id);
-            }
-        });
+            });
 
-        if rotated_keys.len() == SUBNET_SIZE {
-            Ok(())
-        } else {
-            bail!("Not all keys have been rotated yet...")
+            if rotated_keys.len() == SUBNET_SIZE {
+                Ok(())
+            } else {
+                bail!("Not all keys have been rotated yet...")
+            }
         }
-    })
+    )
     .expect("Failed to collect rotated keys");
 
     block_on(topology_snapshot.block_for_min_registry_version(RegistryVersion::from(9))).unwrap();

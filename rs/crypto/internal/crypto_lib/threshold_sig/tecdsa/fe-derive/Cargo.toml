@@ -15,4 +15,4 @@ quote = "1.0"
 proc-macro2 = "1.0"
 num-bigint-dig = { version = "0.8", features = ["prime"] }
 num-traits = { workspace = true }
-hex = "0.4"
+hex = { workspace = true }

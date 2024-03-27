@@ -36,6 +36,7 @@ use ic_nns_test_utils::{
     },
 };
 use ic_sns_governance::pb::v1::{self as sns_pb, governance::Version};
+use ic_sns_init::SnsCanisterInitPayloads;
 use ic_sns_swap::pb::v1::{
     ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapRequest, FinalizeSwapResponse,
     GetAutoFinalizationStatusRequest, GetAutoFinalizationStatusResponse, GetBuyerStateRequest,
@@ -44,6 +45,7 @@ use ic_sns_swap::pb::v1::{
     ListSnsNeuronRecipesRequest, ListSnsNeuronRecipesResponse, NewSaleTicketRequest,
     NewSaleTicketResponse, RefreshBuyerTokensRequest, RefreshBuyerTokensResponse,
 };
+use ic_sns_test_utils::itest_helpers::populate_canister_ids;
 use ic_sns_wasm::pb::v1::{
     get_deployed_sns_by_proposal_id_response::GetDeployedSnsByProposalIdResult, AddWasmRequest,
     DeployedSns, GetDeployedSnsByProposalIdRequest, GetDeployedSnsByProposalIdResponse,
@@ -325,6 +327,192 @@ pub fn install_nns_canisters(
         .collect();
 
     nns_neurons
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct SnsTestCanisterIds {
+    pub root_canister_id: CanisterId,
+    pub governance_canister_id: CanisterId,
+    pub ledger_canister_id: CanisterId,
+    pub swap_canister_id: CanisterId,
+    pub index_canister_id: CanisterId,
+}
+
+/// Function to allow directly installing and specifying the ids of the canisters
+/// which is only useful when we need to test something that is ID-specific
+pub fn install_sns_directly_with_snsw_versions(
+    pocket_ic: &PocketIc,
+    mut payloads: SnsCanisterInitPayloads,
+    sns_canister_ids: Option<SnsTestCanisterIds>,
+) -> SnsTestCanisterIds {
+    let create_canister = || -> Principal {
+        let id = pocket_ic.create_canister();
+        pocket_ic.add_cycles(id, STARTING_CYCLES_PER_CANISTER);
+        id
+    };
+    let create_canister_at_id = |canister_id: CanisterId| -> Principal {
+        let id = pocket_ic
+            .create_canister_with_id(None, None, canister_id.into())
+            .unwrap();
+        pocket_ic.add_cycles(canister_id.into(), STARTING_CYCLES_PER_CANISTER);
+        id
+    };
+    let install_canister = |canister_id, wasm, payload| {
+        pocket_ic.install_canister(canister_id, wasm, payload, None);
+    };
+
+    let (
+        root_canister_id,
+        governance_canister_id,
+        ledger_canister_id,
+        swap_canister_id,
+        index_canister_id,
+    ) = if let Some(SnsTestCanisterIds {
+        root_canister_id,
+        governance_canister_id,
+        ledger_canister_id,
+        swap_canister_id,
+        index_canister_id,
+    }) = sns_canister_ids
+    {
+        (
+            create_canister_at_id(root_canister_id),
+            create_canister_at_id(governance_canister_id),
+            create_canister_at_id(ledger_canister_id),
+            create_canister_at_id(swap_canister_id),
+            create_canister_at_id(index_canister_id),
+        )
+    } else {
+        (
+            create_canister(),
+            create_canister(),
+            create_canister(),
+            create_canister(),
+            create_canister(),
+        )
+    };
+
+    populate_canister_ids(
+        root_canister_id.into(),
+        governance_canister_id.into(),
+        ledger_canister_id.into(),
+        swap_canister_id.into(),
+        index_canister_id.into(),
+        vec![],
+        &mut payloads,
+    );
+
+    let SnsCanisterInitPayloads {
+        mut governance,
+        ledger,
+        root,
+        swap,
+        index_ng,
+    } = payloads;
+
+    let (
+        root_sns_wasm,
+        governance_sns_wasm,
+        ledger_sns_wasm,
+        swap_sns_wasm,
+        index_sns_wasm,
+        archive_sns_wasm,
+    ) = {
+        let latest_version = nns::sns_wasm::get_lastest_sns_version(pocket_ic);
+        (
+            nns::sns_wasm::get_wasm(pocket_ic, latest_version.root_wasm_hash),
+            nns::sns_wasm::get_wasm(pocket_ic, latest_version.governance_wasm_hash),
+            nns::sns_wasm::get_wasm(pocket_ic, latest_version.ledger_wasm_hash),
+            nns::sns_wasm::get_wasm(pocket_ic, latest_version.swap_wasm_hash),
+            nns::sns_wasm::get_wasm(pocket_ic, latest_version.index_wasm_hash),
+            nns::sns_wasm::get_wasm(pocket_ic, latest_version.archive_wasm_hash),
+        )
+    };
+
+    let deployed_version = Version {
+        root_wasm_hash: root_sns_wasm.sha256_hash().to_vec(),
+        governance_wasm_hash: governance_sns_wasm.sha256_hash().to_vec(),
+        ledger_wasm_hash: ledger_sns_wasm.sha256_hash().to_vec(),
+        swap_wasm_hash: swap_sns_wasm.sha256_hash().to_vec(),
+        archive_wasm_hash: archive_sns_wasm.sha256_hash().to_vec(),
+        index_wasm_hash: index_sns_wasm.sha256_hash().to_vec(),
+    };
+
+    governance.deployed_version = Some(deployed_version);
+
+    install_canister(
+        root_canister_id,
+        root_sns_wasm.wasm,
+        Encode!(&root).unwrap(),
+    );
+    install_canister(
+        governance_canister_id,
+        governance_sns_wasm.wasm,
+        Encode!(&governance).unwrap(),
+    );
+    install_canister(
+        ledger_canister_id,
+        ledger_sns_wasm.wasm,
+        Encode!(&ledger).unwrap(),
+    );
+    install_canister(
+        swap_canister_id,
+        swap_sns_wasm.wasm,
+        Encode!(&swap).unwrap(),
+    );
+    install_canister(
+        index_canister_id,
+        index_sns_wasm.wasm,
+        Encode!(&index_ng.expect("Index payload was None")).unwrap(),
+    );
+
+    pocket_ic
+        .set_controllers(
+            root_canister_id,
+            Some(Principal::anonymous()),
+            vec![governance_canister_id],
+        )
+        .expect("could not set controllers");
+    pocket_ic
+        .set_controllers(
+            governance_canister_id,
+            Some(Principal::anonymous()),
+            vec![root_canister_id],
+        )
+        .expect("could not set controllers");
+    pocket_ic
+        .set_controllers(
+            ledger_canister_id,
+            Some(Principal::anonymous()),
+            vec![root_canister_id],
+        )
+        .expect("could not set controllers");
+    pocket_ic
+        .set_controllers(
+            swap_canister_id,
+            Some(Principal::anonymous()),
+            vec![ROOT_CANISTER_ID.get().0],
+        )
+        .expect("could not set controllers");
+    pocket_ic
+        .set_controllers(
+            index_canister_id,
+            Some(Principal::anonymous()),
+            vec![root_canister_id],
+        )
+        .expect("could not set controllers");
+
+    fn convert_canister_id(canister_id: Principal) -> CanisterId {
+        CanisterId::unchecked_from_principal(PrincipalId::from(canister_id))
+    }
+
+    SnsTestCanisterIds {
+        root_canister_id: convert_canister_id(root_canister_id),
+        governance_canister_id: convert_canister_id(governance_canister_id),
+        ledger_canister_id: convert_canister_id(ledger_canister_id),
+        swap_canister_id: convert_canister_id(swap_canister_id),
+        index_canister_id: convert_canister_id(index_canister_id),
+    }
 }
 
 #[track_caller]
@@ -752,7 +940,9 @@ pub mod nns {
 
     pub mod sns_wasm {
         use super::*;
-        use ic_sns_wasm::pb::v1::{GetWasmRequest, GetWasmResponse};
+        use ic_sns_wasm::pb::v1::{
+            GetWasmRequest, GetWasmResponse, ListUpgradeStepsRequest, ListUpgradeStepsResponse,
+        };
 
         pub fn get_deployed_sns_by_proposal_id(
             pocket_ic: &PocketIc,
@@ -796,6 +986,40 @@ pub mod nns {
                 .unwrap()
                 .wasm
                 .expect("No wasm found for hash provided")
+        }
+
+        /// Get the latest version of SNS from SNS-W
+        pub fn get_lastest_sns_version(pocket_ic: &PocketIc) -> Version {
+            let request = ListUpgradeStepsRequest {
+                starting_at: None,
+                sns_governance_canister_id: None,
+                limit: 0,
+            };
+            let result = pocket_ic
+                .query_call(
+                    SNS_WASM_CANISTER_ID.into(),
+                    Principal::anonymous(),
+                    "list_upgrade_steps",
+                    Encode!(&request).unwrap(),
+                )
+                .unwrap();
+            let result = match result {
+                WasmResult::Reply(result) => result,
+                WasmResult::Reject(s) => {
+                    panic!("Call to get_latest_sns_version failed: {:#?}", s)
+                }
+            };
+            let response = Decode!(&result, ListUpgradeStepsResponse).unwrap();
+            let latest_version = response
+                .steps
+                .last()
+                .cloned()
+                .expect("No upgrade steps found")
+                .version
+                .expect("No version found")
+                .into();
+
+            latest_version
         }
     }
 }
@@ -905,7 +1129,6 @@ pub mod sns {
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
-                query_allocation: None,
             };
             nns::governance::propose_and_wait(
                 pocket_ic,
@@ -957,7 +1180,8 @@ pub mod sns {
 
     pub mod governance {
         use super::*;
-        use ic_sns_governance::pb::v1::GetRunningSnsVersionResponse;
+        use ic_crypto_sha2::Sha256;
+        use ic_sns_governance::pb::v1::{get_neuron_response, GetRunningSnsVersionResponse};
         use pocket_ic::ErrorCode;
 
         pub fn get_mode(pocket_ic: &PocketIc, canister_id: PrincipalId) -> sns_pb::GetModeResponse {
@@ -1252,6 +1476,50 @@ pub mod sns {
 
             // Check 2: The upgrade proposal succeeded.
             assert!(proposal_data.executed_timestamp_seconds > 0);
+        }
+
+        /// Get the neuron with the given ID from the SNS Governance canister.
+        #[allow(dead_code)]
+        fn get_neuron(
+            pocket_ic: &PocketIc,
+            sns_governance_canister_id: PrincipalId,
+            neuron_id: sns_pb::NeuronId,
+        ) -> Result<sns_pb::Neuron, sns_pb::GovernanceError> {
+            let result = pocket_ic
+                .query_call(
+                    sns_governance_canister_id.into(),
+                    Principal::anonymous(),
+                    "get_neuron",
+                    Encode!(&sns_pb::GetNeuron {
+                        neuron_id: Some(neuron_id)
+                    })
+                    .unwrap(),
+                )
+                .unwrap();
+            let result = match result {
+                WasmResult::Reply(result) => result,
+                WasmResult::Reject(s) => panic!("Call to get_neuron failed: {:#?}", s),
+            };
+            let response = Decode!(&result, sns_pb::GetNeuronResponse).unwrap();
+            match response.result.expect("No result in response") {
+                get_neuron_response::Result::Error(e) => Err(e),
+                get_neuron_response::Result::Neuron(neuron) => Ok(neuron),
+            }
+        }
+
+        pub fn new_sns_neuron_id(principal: PrincipalId, nonce: u64) -> sns_pb::NeuronId {
+            let subaccount = {
+                let mut state = Sha256::new();
+                state.write(&[0x0c]);
+                state.write(b"neuron-stake");
+                state.write(principal.as_slice());
+                state.write(&nonce.to_be_bytes());
+                state.finish()
+            };
+
+            sns_pb::NeuronId {
+                id: subaccount.to_vec(),
+            }
         }
     }
 

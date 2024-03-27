@@ -140,8 +140,9 @@ impl QueryServiceBuilder {
     }
 
     pub fn build_service(self) -> BoxCloneService<Request<Body>, Response, Infallible> {
+        use axum::extract::DefaultBodyLimit;
         let router = self.build_router();
-        BoxCloneService::new(router.into_service())
+        BoxCloneService::new(router.layer(DefaultBodyLimit::disable()).into_service())
     }
 }
 

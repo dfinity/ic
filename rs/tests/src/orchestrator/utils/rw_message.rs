@@ -1,4 +1,4 @@
-use crate::{driver::test_env_api::*, util::*};
+use crate::{driver::test_env_api::*, retry_with_msg, util::*};
 use anyhow::bail;
 use candid::Principal;
 use ic_base_types::PrincipalId;
@@ -80,13 +80,23 @@ pub(crate) fn can_store_msg(log: &Logger, url: &Url, canister_id: Principal, msg
 
 /// Try to store the given message. Retry for 300 seconds or until update was unsuccessful
 pub(crate) fn cannot_store_msg(log: Logger, url: &Url, canister_id: Principal, msg: &str) -> bool {
-    retry(log.clone(), secs(300), secs(10), || {
-        if can_store_msg(&log, url, canister_id, msg) {
-            bail!("Message could still be stored.")
-        } else {
-            Ok(())
+    retry_with_msg!(
+        format!(
+            "store message in canister {} via {}",
+            canister_id,
+            url.to_string()
+        ),
+        log.clone(),
+        secs(300),
+        secs(10),
+        || {
+            if can_store_msg(&log, url, canister_id, msg) {
+                bail!("Message could still be stored.")
+            } else {
+                Ok(())
+            }
         }
-    })
+    )
     .is_ok()
 }
 
@@ -182,27 +192,37 @@ pub(crate) fn cert_state_makes_progress_with_retries(
     backoff: Duration,
 ) {
     let mut current_timestamp: Option<u64> = None;
-    retry(logger.clone(), timeout, backoff, || {
-        info!(logger, "Performing read_state request...");
-        let next_timestamp = {
-            let timestamp = get_cert_time(url, effective_canister_id);
-            if let Err(err) = timestamp {
-                bail!("Cannot perform read_state request: {}", err);
+    retry_with_msg!(
+        format!(
+            "checking if the certified time of canister {} on {} has advanced",
+            effective_canister_id.to_string(),
+            url.to_string()
+        ),
+        logger.clone(),
+        timeout,
+        backoff,
+        || {
+            info!(logger, "Performing read_state request...");
+            let next_timestamp = {
+                let timestamp = get_cert_time(url, effective_canister_id);
+                if let Err(err) = timestamp {
+                    bail!("Cannot perform read_state request: {}", err);
+                };
+                timestamp.ok()
             };
-            timestamp.ok()
-        };
-        // Set initial timestamp, if not yet set.
-        if current_timestamp.is_none() {
-            info!(logger, "Initial timestamp recorded!");
-            current_timestamp = next_timestamp;
-            bail!("Timestamp hasn't advanced yet!");
-        } else if next_timestamp > current_timestamp {
-            info!(logger, "Timestamp advanced!");
-            Ok(())
-        } else {
-            bail!("Timestamp hasn't advanced yet!");
+            // Set initial timestamp, if not yet set.
+            if current_timestamp.is_none() {
+                info!(logger, "Initial timestamp recorded!");
+                current_timestamp = next_timestamp;
+                bail!("Timestamp hasn't advanced yet!");
+            } else if next_timestamp > current_timestamp {
+                info!(logger, "Timestamp advanced!");
+                Ok(())
+            } else {
+                bail!("Timestamp hasn't advanced yet!");
+            }
         }
-    })
+    )
     .expect("System should make progress!");
 }
 
@@ -214,28 +234,38 @@ pub(crate) fn cert_state_makes_no_progress_with_retries(
     backoff: Duration,
 ) {
     let mut current_timestamp: Option<u64> = None;
-    retry(logger.clone(), timeout, backoff, || {
-        info!(logger, "Performing read_state request...");
-        let next_timestamp = {
-            let timestamp = get_cert_time(url, effective_canister_id);
-            if timestamp.is_err() {
-                return Ok(());
+    retry_with_msg!(
+        format!(
+            "checking if the certified time of canister {} on {} does not advance",
+            effective_canister_id.to_string(),
+            url.to_string()
+        ),
+        logger.clone(),
+        timeout,
+        backoff,
+        || {
+            info!(logger, "Performing read_state request...");
+            let next_timestamp = {
+                let timestamp = get_cert_time(url, effective_canister_id);
+                if timestamp.is_err() {
+                    return Ok(());
+                };
+                timestamp.ok()
             };
-            timestamp.ok()
-        };
-        if current_timestamp.is_none() {
-            info!(logger, "Initial timestamp recorded!");
-            current_timestamp = next_timestamp;
-            bail!("No timestamp to compare with!");
-        } else if next_timestamp > current_timestamp {
-            info!(logger, "Current timestamp recorded!");
-            current_timestamp = next_timestamp;
-            bail!("Timestamp advanced!");
-        } else {
-            info!(logger, "Timestamp hasn't advanced!");
-            Ok(())
+            if current_timestamp.is_none() {
+                info!(logger, "Initial timestamp recorded!");
+                current_timestamp = next_timestamp;
+                bail!("No timestamp to compare with!");
+            } else if next_timestamp > current_timestamp {
+                info!(logger, "Current timestamp recorded!");
+                current_timestamp = next_timestamp;
+                bail!("Timestamp advanced!");
+            } else {
+                info!(logger, "Timestamp hasn't advanced!");
+                Ok(())
+            }
         }
-    })
+    )
     .expect("System shouldn't make progress!");
 }
 

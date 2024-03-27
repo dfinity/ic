@@ -10,6 +10,6 @@ documentation.workspace = true
 async-trait = "0.1.36"
 ic-base-types = { path = "../../../types/base_types" }
 ic-crypto-tls-interfaces = { path = "../" }
-mockall = "0.11.2"
+mockall = { workspace = true }
 tokio = { workspace = true }
 tokio-rustls = { workspace = true }

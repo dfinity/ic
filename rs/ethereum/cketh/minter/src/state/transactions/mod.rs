@@ -145,17 +145,59 @@ pub struct Erc20WithdrawalRequest {
     pub created_at: u64,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
+pub enum ReimbursementIndex {
+    CkEth {
+        /// Burn index on the ckETH ledger
+        ledger_burn_index: LedgerBurnIndex,
+    },
+
+    CkErc20 {
+        cketh_ledger_burn_index: LedgerBurnIndex,
+        /// The ckERC20 ledger canister ID identifying the ledger on which the burn to be reimbursed was made.
+        ledger_id: Principal,
+        /// Burn index on the ckERC20 ledger
+        ckerc20_ledger_burn_index: LedgerBurnIndex,
+    },
+}
+
+impl ReimbursementIndex {
+    pub fn withdrawal_id(&self) -> LedgerBurnIndex {
+        match self {
+            ReimbursementIndex::CkEth { ledger_burn_index } => *ledger_burn_index,
+            ReimbursementIndex::CkErc20 {
+                cketh_ledger_burn_index,
+                ..
+            } => *cketh_ledger_burn_index,
+        }
+    }
+    pub fn burn_in_block(&self) -> LedgerBurnIndex {
+        match self {
+            ReimbursementIndex::CkEth { ledger_burn_index } => *ledger_burn_index,
+            ReimbursementIndex::CkErc20 {
+                ckerc20_ledger_burn_index,
+                ..
+            } => *ckerc20_ledger_burn_index,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Encode, Decode)]
 pub struct ReimbursementRequest {
     /// Burn index on the ledger that should be reimbursed.
+    #[cbor(n(0), with = "crate::cbor::id")]
     pub ledger_burn_index: LedgerBurnIndex,
     /// The amount that should be reimbursed in the smallest denomination.
+    #[n(1)]
     pub reimbursed_amount: CkTokenAmount,
+    #[cbor(n(2), with = "crate::cbor::principal")]
     pub to: Principal,
+    #[n(3)]
     pub to_subaccount: Option<Subaccount>,
     /// Transaction hash of the failed ETH transaction.
     /// We use this hash to link the mint reimbursement transaction
     /// on the ledger with the failed ETH transaction.
+    #[n(4)]
     pub transaction_hash: Option<Hash>,
 }
 
@@ -266,8 +308,8 @@ pub struct EthTransactions {
     pub(in crate::state) next_nonce: TransactionNonce,
 
     pub(in crate::state) maybe_reimburse: BTreeMap<LedgerBurnIndex, WithdrawalRequest>,
-    pub(in crate::state) reimbursement_requests: BTreeMap<LedgerBurnIndex, ReimbursementRequest>,
-    pub(in crate::state) reimbursed: BTreeMap<LedgerBurnIndex, Reimbursed>,
+    pub(in crate::state) reimbursement_requests: BTreeMap<ReimbursementIndex, ReimbursementRequest>,
+    pub(in crate::state) reimbursed: BTreeMap<ReimbursementIndex, Reimbursed>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -311,8 +353,10 @@ impl EthTransactions {
         self.next_nonce = new_nonce;
     }
 
-    pub fn get_reimbursement_requests(&self) -> Vec<ReimbursementRequest> {
-        self.reimbursement_requests.values().cloned().collect()
+    pub fn reimbursement_requests_iter(
+        &self,
+    ) -> impl Iterator<Item = (&ReimbursementIndex, &ReimbursementRequest)> {
+        self.reimbursement_requests.iter()
     }
 
     pub fn get_reimbursed_transactions(&self) -> Vec<Reimbursed> {
@@ -333,10 +377,6 @@ impl EthTransactions {
             panic!("BUG: duplicate ckETH ledger burn index {burn_index}");
         }
         self.withdrawal_requests.push_back(request);
-    }
-
-    pub fn record_erc20_withdrawal_request(&mut self, _request: Erc20WithdrawalRequest) {
-        unimplemented!("TODO XC-59")
     }
 
     /// Move an existing withdrawal request to the back of the queue.
@@ -570,43 +610,86 @@ impl EthTransactions {
         let maybe_reimburse = self.maybe_reimburse.remove(&ledger_burn_index).expect(
             "failed to remove entry from maybe_reimburse map with block index: {ledger_burn_index}",
         );
-        //TODO XC-60 reimburse unused transaction fee also when transaction successful
-        if receipt.status == TransactionStatus::Failure {
-            //TODO XC-59 also plan reimbursement of burned ckERC20 tokens
-            let reimbursed_amount = match &maybe_reimburse {
-                WithdrawalRequest::CkEth(_) => *finalized_tx.transaction_amount(),
-                WithdrawalRequest::CkErc20(ckerc20) => ckerc20
+        match &maybe_reimburse {
+            WithdrawalRequest::CkEth(request) => {
+                if receipt.status == TransactionStatus::Failure {
+                    self.record_reimbursement_request(
+                        ReimbursementIndex::CkEth { ledger_burn_index },
+                        ReimbursementRequest {
+                            ledger_burn_index,
+                            to: request.from,
+                            to_subaccount: request.from_subaccount.clone(),
+                            reimbursed_amount: finalized_tx.transaction_amount().change_units(),
+                            transaction_hash: Some(receipt.transaction_hash),
+                        },
+                    );
+                }
+            }
+            WithdrawalRequest::CkErc20(request) => {
+                if let Some(unused_tx_fee) = request
                     .max_transaction_fee
                     .checked_sub(finalized_tx.effective_transaction_fee())
-                    .unwrap_or(Wei::ZERO),
-            };
-            self.reimbursement_requests.insert(
-                ledger_burn_index,
-                ReimbursementRequest {
-                    ledger_burn_index,
-                    to: maybe_reimburse.from(),
-                    to_subaccount: maybe_reimburse.from_subaccount().clone(),
-                    reimbursed_amount: reimbursed_amount.change_units(),
-                    transaction_hash: Some(receipt.transaction_hash),
-                },
-            );
+                {
+                    if unused_tx_fee > Wei::ZERO {
+                        self.record_reimbursement_request(
+                            ReimbursementIndex::CkEth { ledger_burn_index },
+                            ReimbursementRequest {
+                                ledger_burn_index,
+                                to: request.from,
+                                to_subaccount: request.from_subaccount.clone(),
+                                reimbursed_amount: unused_tx_fee.change_units(),
+                                transaction_hash: Some(receipt.transaction_hash),
+                            },
+                        );
+                    }
+                }
+                if receipt.status == TransactionStatus::Failure {
+                    self.record_reimbursement_request(
+                        ReimbursementIndex::CkErc20 {
+                            cketh_ledger_burn_index: ledger_burn_index,
+                            ledger_id: request.ckerc20_ledger_id,
+                            ckerc20_ledger_burn_index: request.ckerc20_ledger_burn_index,
+                        },
+                        ReimbursementRequest {
+                            ledger_burn_index: request.ckerc20_ledger_burn_index,
+                            reimbursed_amount: request.withdrawal_amount.change_units(),
+                            to: request.from,
+                            to_subaccount: request.from_subaccount.clone(),
+                            transaction_hash: Some(receipt.transaction_hash),
+                        },
+                    );
+                }
+            }
         }
+    }
+
+    pub fn record_reimbursement_request(
+        &mut self,
+        index: ReimbursementIndex,
+        request: ReimbursementRequest,
+    ) {
+        assert_eq!(
+            self.reimbursement_requests.insert(index.clone(), request),
+            None,
+            "BUG: reimbursement request for withdrawal {index:?} already exists"
+        );
     }
 
     pub fn record_finalized_reimbursement(
         &mut self,
-        withdrawal_id: LedgerBurnIndex,
+        index: ReimbursementIndex,
         reimbursed_in_block: LedgerMintIndex,
     ) {
         let reimbursement_request = self
             .reimbursement_requests
-            .remove(&withdrawal_id)
-            .expect("failed to remove reimbursement request");
+            .remove(&index)
+            .expect("BUG: missing reimbursement request");
+        let burn_in_block = index.burn_in_block();
         assert_eq!(
             self.reimbursed.insert(
-                withdrawal_id,
+                index,
                 Reimbursed {
-                    burn_in_block: withdrawal_id,
+                    burn_in_block,
                     reimbursed_in_block,
                     reimbursed_amount: reimbursement_request.reimbursed_amount,
                     transaction_hash: reimbursement_request.transaction_hash,
@@ -634,13 +717,16 @@ impl EthTransactions {
         }
 
         if let Some(tx) = self.finalized_tx.get_alt(burn_index) {
-            if let Some(reimbursed) = self.reimbursed.get(burn_index) {
+            if let Some(reimbursed) = self.reimbursed.get(&ReimbursementIndex::CkEth {
+                ledger_burn_index: *burn_index,
+            }) {
                 return RetrieveEthStatus::TxFinalized(TxFinalizedStatus::Reimbursed {
                     reimbursed_in_block: reimbursed.reimbursed_in_block.get().into(),
                     transaction_hash: tx.transaction_hash().to_string(),
                     reimbursed_amount: reimbursed.reimbursed_amount.into(),
                 });
             }
+            //TODO XC-78: status for pending transactioon fee reimbursement for ckERC20?
             if tx.transaction_status() == &TransactionStatus::Failure {
                 return RetrieveEthStatus::TxFinalized(TxFinalizedStatus::PendingReimbursement(
                     EthTransaction {

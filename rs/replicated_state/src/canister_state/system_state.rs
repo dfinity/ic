@@ -26,7 +26,7 @@ use ic_types::{
         Request, RequestOrResponse, Response, StopCanisterContext,
     },
     nominal_cycles::NominalCycles,
-    CanisterId, CanisterTimer, Cycles, MemoryAllocation, NumBytes, PrincipalId, Time,
+    CanisterId, CanisterTimer, Cycles, MemoryAllocation, NumBytes, PrincipalId, SnapshotId, Time,
 };
 use lazy_static::lazy_static;
 use maplit::btreeset;
@@ -348,6 +348,9 @@ pub struct SystemState {
 
     /// Next local snapshot id.
     pub next_snapshot_id: u64,
+
+    /// The set of snapshots ids of the canister.
+    pub snapshot_ids: BTreeSet<SnapshotId>,
 }
 
 /// A wrapper around the different canister statuses.
@@ -721,6 +724,7 @@ impl SystemState {
             canister_log: Default::default(),
             wasm_memory_limit: None,
             next_snapshot_id: 0,
+            snapshot_ids: btreeset! {},
         }
     }
 
@@ -768,6 +772,7 @@ impl SystemState {
         canister_log: CanisterLog,
         wasm_memory_limit: Option<NumBytes>,
         next_snapshot_id: u64,
+        snapshot_ids: BTreeSet<SnapshotId>,
     ) -> Self {
         Self {
             controllers,
@@ -794,6 +799,7 @@ impl SystemState {
             canister_log,
             wasm_memory_limit,
             next_snapshot_id,
+            snapshot_ids,
         }
     }
 

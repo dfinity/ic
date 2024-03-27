@@ -19,6 +19,7 @@ end::catalog[] */
 use crate::canister_http::lib::*;
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{retry_async, READY_WAIT_TIMEOUT, RETRY_BACKOFF};
+use crate::retry_with_msg_async;
 use crate::util::*;
 use anyhow::bail;
 use dfn_candid::candid_one;
@@ -62,23 +63,29 @@ pub fn test(env: TestEnv) {
         let p = proxy_canister.clone();
         let r = request.clone();
         // Retry till we get success response
-        retry_async(&env.logger(), READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
-            let succeeded = p
-                .update_(
-                    "send_request",
-                    candid_one::<
-                        Result<RemoteHttpResponse, (RejectionCode, String)>,
-                        RemoteHttpRequest,
-                    >,
-                    r.clone(),
-                )
-                .await
-                .expect("Update call to proxy canister failed");
-            if !matches!(succeeded, Ok(ref x) if x.status == 200) {
-                bail!("Http request failed response: {:?}", succeeded);
+        retry_with_msg_async!(
+            format!("calling send_request of proxy canister {}", p.canister_id()),
+            &env.logger(),
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                let succeeded = p
+                    .update_(
+                        "send_request",
+                        candid_one::<
+                            Result<RemoteHttpResponse, (RejectionCode, String)>,
+                            RemoteHttpRequest,
+                        >,
+                        r.clone(),
+                    )
+                    .await
+                    .expect("Update call to proxy canister failed");
+                if !matches!(succeeded, Ok(ref x) if x.status == 200) {
+                    bail!("Http request failed response: {:?}", succeeded);
+                }
+                Ok(())
             }
-            Ok(())
-        })
+        )
         .await
         .expect("Timeout on doing a canister http call to the webserver");
 
@@ -87,27 +94,33 @@ pub fn test(env: TestEnv) {
         request.request.url = url_to_fail.clone();
         let r = request.clone();
         let p = proxy_canister.clone();
-        retry_async(&env.logger(), READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
-            let failure_update = p
-                .update_(
-                    "send_request",
-                    candid_one::<
-                        Result<RemoteHttpResponse, (RejectionCode, String)>,
-                        RemoteHttpRequest,
-                    >,
-                    r.clone(),
-                )
-                .await
-                .expect("Update call to proxy canister failed");
-            // TODO: Better way to verify timeout
-            if !matches!(failure_update, Err((RejectionCode::SysTransient, _))) {
-                bail!(
-                    "Http request did not timeout response: {:?}",
-                    failure_update
-                );
+        retry_with_msg_async!(
+            format!("calling send_request of proxy canister {}", p.canister_id()),
+            &env.logger(),
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                let failure_update = p
+                    .update_(
+                        "send_request",
+                        candid_one::<
+                            Result<RemoteHttpResponse, (RejectionCode, String)>,
+                            RemoteHttpRequest,
+                        >,
+                        r.clone(),
+                    )
+                    .await
+                    .expect("Update call to proxy canister failed");
+                // TODO: Better way to verify timeout
+                if !matches!(failure_update, Err((RejectionCode::SysTransient, _))) {
+                    bail!(
+                        "Http request did not timeout response: {:?}",
+                        failure_update
+                    );
+                }
+                Ok(())
             }
-            Ok(())
-        })
+        )
         .await
         .expect("Timeout on doing a canister http call to the webserver");
     });

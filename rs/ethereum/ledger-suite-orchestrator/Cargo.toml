@@ -13,7 +13,7 @@ async-trait = "0.1.73"
 candid = { workspace = true }
 ciborium = { workspace = true }
 futures = { workspace = true }
-hex = "0.4"
+hex = { workspace = true }
 ic0 = "0.21.1"
 ic-canister-log = "0.2.0"
 ic-base-types = { path = "../../types/base_types" }
@@ -21,7 +21,7 @@ ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
-ic-ethereum-types = { path = "../types"}
+ic-ethereum-types = { path = "../types" }
 ic-management-canister-types = { path = "../../types/management_canister_types" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 ic-icrc1-index-ng = { path = "../../rosetta-api/icrc1/index-ng" }
@@ -34,7 +34,7 @@ serde_bytes = { workspace = true }
 
 [dev-dependencies]
 ic-ledger-suite-orchestrator-test-utils = { path = "test_utils" }
-assert_matches = "1.5.0"
+assert_matches = { workspace = true }
 proptest = "1.0"
 candid_parser = { workspace = true }
 ic-state-machine-tests = { path = "../../state_machine_tests" }

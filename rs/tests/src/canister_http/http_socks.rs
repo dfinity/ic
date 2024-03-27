@@ -26,6 +26,7 @@ use crate::driver::{
     test_env_api::{retry_async, READY_WAIT_TIMEOUT, RETRY_BACKOFF},
     universal_vm::UniversalVm,
 };
+use crate::retry_with_msg_async;
 use crate::util::block_on;
 use anyhow::bail;
 use dfn_candid::candid_one;
@@ -122,7 +123,12 @@ pub fn test(env: TestEnv) {
     let runtime_system = get_runtime_from_node(&system_node);
     let proxy_canister_system = create_proxy_canister(&env, &runtime_system, &system_node);
 
-    block_on(retry_async(
+    block_on(retry_with_msg_async!(
+        format!(
+            "calling send_request of proxy canister {} with URL {}",
+            proxy_canister_system.canister_id(),
+            webserver_url.to_string()
+        ),
         &logger,
         READY_WAIT_TIMEOUT,
         RETRY_BACKOFF,
@@ -160,7 +166,7 @@ pub fn test(env: TestEnv) {
             }
             info!(&logger, "Update call succeeded! {:?}", res);
             Ok(())
-        },
+        }
     ))
     .expect("Failed to call proxy canister");
 
@@ -170,7 +176,12 @@ pub fn test(env: TestEnv) {
     let runtime_app = get_runtime_from_node(&app_node);
     let proxy_canister_app = create_proxy_canister(&env, &runtime_app, &app_node);
 
-    block_on(retry_async(
+    block_on(retry_with_msg_async!(
+        format!(
+            "calling send_request of proxy canister {} with URL {}",
+            proxy_canister_app.canister_id(),
+            webserver_url.to_string()
+        ),
         &logger,
         READY_WAIT_TIMEOUT,
         RETRY_BACKOFF,
@@ -211,7 +222,7 @@ pub fn test(env: TestEnv) {
             }
             info!(&logger, "Update call failed as expected! {:?}", res);
             Ok(())
-        },
+        }
     ))
     .expect("Failed to call proxy canister");
 }

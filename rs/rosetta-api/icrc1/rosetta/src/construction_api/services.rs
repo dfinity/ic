@@ -13,6 +13,7 @@ use candid::Principal;
 use ic_base_types::{CanisterId, PrincipalId};
 use icrc_ledger_agent::{CallMode, Icrc1Agent};
 use icrc_ledger_types::icrc1::account::Account;
+use num_bigint::BigInt;
 use rosetta_core::objects::{Amount, Currency, Operation, Signature};
 use rosetta_core::response_types::*;
 use rosetta_core::{
@@ -66,7 +67,7 @@ pub async fn construction_metadata(
                 icrc1_agent
                     .fee(CallMode::Query)
                     .await
-                    .map(|fee| vec![Amount::new(fee.0.to_string(), currency)])
+                    .map(|fee| vec![Amount::new(BigInt::from(fee.0), currency)])
                     .map_err(|err| Error::ledger_communication_unsuccessful(&err))?,
             )
         } else {

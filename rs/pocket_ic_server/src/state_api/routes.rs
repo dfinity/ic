@@ -95,19 +95,32 @@ where
     S: Clone + Send + Sync + 'static,
     AppState: extract::FromRef<S>,
 {
+    use tower_http::limit::RequestBodyLimitLayer;
     ApiRouter::new()
         .directory_route("/status", get(handler_status))
         .directory_route(
             "/canister/:ecid/call",
-            post(handler_call).layer(axum::middleware::from_fn(verify_cbor_content_header)),
+            post(handler_call)
+                .layer(RequestBodyLimitLayer::new(
+                    4 * 1024 * 1024, // MAX_REQUEST_BODY_SIZE in BN
+                ))
+                .layer(axum::middleware::from_fn(verify_cbor_content_header)),
         )
         .directory_route(
             "/canister/:ecid/query",
-            post(handler_query).layer(axum::middleware::from_fn(verify_cbor_content_header)),
+            post(handler_query)
+                .layer(RequestBodyLimitLayer::new(
+                    4 * 1024 * 1024, // MAX_REQUEST_BODY_SIZE in BN
+                ))
+                .layer(axum::middleware::from_fn(verify_cbor_content_header)),
         )
         .directory_route(
             "/canister/:ecid/read_state",
-            post(handler_read_state).layer(axum::middleware::from_fn(verify_cbor_content_header)),
+            post(handler_read_state)
+                .layer(RequestBodyLimitLayer::new(
+                    4 * 1024 * 1024, // MAX_REQUEST_BODY_SIZE in BN
+                ))
+                .layer(axum::middleware::from_fn(verify_cbor_content_header)),
         )
 }
 

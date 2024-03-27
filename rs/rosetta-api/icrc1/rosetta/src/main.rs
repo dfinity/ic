@@ -23,6 +23,7 @@ use icrc_ledger_agent::{CallMode, Icrc1Agent};
 use lazy_static::lazy_static;
 use std::{net::TcpListener, sync::Arc};
 use std::{path::PathBuf, process};
+use tokio::sync::Mutex as AsyncMutex;
 use tower_http::classify::{ServerErrorsAsFailures, SharedClassifier};
 use tower_http::trace::TraceLayer;
 use tower_request_id::{RequestId, RequestIdLayer};
@@ -314,6 +315,16 @@ async fn main() -> Result<()> {
         ledger_canister_id: args.ledger_id.into(),
     });
 
+    let metadata = load_metadata(&args, &icrc1_agent, &storage).await?;
+
+    let shared_state = Arc::new(AppState {
+        icrc1_agent: icrc1_agent.clone(),
+        ledger_id: args.ledger_id,
+        storage: storage.clone(),
+        archive_canister_ids: Arc::new(AsyncMutex::new(vec![])),
+        metadata,
+    });
+
     if args.exit_on_sync {
         if args.offline {
             bail!("'exit-on-sync' and 'offline' parameters cannot be specified at the same time.");
@@ -324,19 +335,12 @@ async fn main() -> Result<()> {
             icrc1_agent.clone(),
             storage.clone(),
             *MAXIMUM_BLOCKS_PER_REQUEST,
+            Arc::new(AsyncMutex::new(vec![])),
         )
         .await?;
 
         process::exit(0);
     }
-
-    let metadata = load_metadata(&args, &icrc1_agent, &storage).await?;
-    let shared_state = Arc::new(AppState {
-        icrc1_agent: icrc1_agent.clone(),
-        ledger_id: args.ledger_id,
-        storage: storage.clone(),
-        metadata,
-    });
 
     let app = Router::new()
         .route("/health", get(health))
@@ -364,7 +368,7 @@ async fn main() -> Result<()> {
         // request extensions. Note that it should be added after the
         // Trace layer.
         .layer(RequestIdLayer)
-        .with_state(shared_state);
+        .with_state(shared_state.clone());
 
     let tcp_listener = TcpListener::bind(format!("0.0.0.0:{}", args.get_port()))?;
 
@@ -380,6 +384,7 @@ async fn main() -> Result<()> {
                     icrc1_agent.clone(),
                     storage.clone(),
                     *MAXIMUM_BLOCKS_PER_REQUEST,
+                    shared_state.clone().archive_canister_ids.clone(),
                 )
                 .await
                 {

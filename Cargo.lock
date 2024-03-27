@@ -1664,9 +1664,9 @@ dependencies = [
 
 [[package]]
 name = "candid"
-version = "0.10.5"
+version = "0.10.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "088c2e3d22a0fb1ada78b968946b0f7b96027ac8669973fe7c0815a98e8d13ef"
+checksum = "965e86b1bd1c0c26df70cf0c92ae16c56204ab402eb915c26a541cf949d841cf"
 dependencies = [
  "anyhow",
  "binread",
@@ -5123,7 +5123,7 @@ dependencies = [
  "slog-async",
  "slog-envlogger",
  "slog-term",
- "strum 0.25.0",
+ "strum 0.26.2",
  "tempfile",
 ]
 
@@ -5186,13 +5186,13 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "axum 0.6.20",
+ "axum 0.7.4",
  "candid",
  "clap 3.2.25",
  "dashmap",
  "futures",
  "humantime",
- "hyper 0.14.26",
+ "hyper 1.2.0",
  "ic-agent",
  "indoc",
  "mockall",
@@ -5331,7 +5331,7 @@ dependencies = [
  "serde_cbor",
  "serde_json",
  "slog",
- "strum 0.25.0",
+ "strum 0.26.2",
  "tempfile",
  "thiserror",
  "tokio",
@@ -5679,8 +5679,8 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_cbor",
- "strum 0.25.0",
- "strum_macros 0.25.3",
+ "strum 0.26.2",
+ "strum_macros 0.26.2",
  "tempfile",
 ]
 
@@ -5838,8 +5838,8 @@ dependencies = [
 name = "ic-certification-version"
 version = "0.9.0"
 dependencies = [
- "strum 0.25.0",
- "strum_macros 0.25.3",
+ "strum 0.26.2",
+ "strum_macros 0.26.2",
 ]
 
 [[package]]
@@ -5986,8 +5986,8 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_json",
- "strum 0.25.0",
- "strum_macros 0.25.3",
+ "strum 0.26.2",
+ "strum_macros 0.26.2",
  "thiserror",
  "thousands",
  "time",
@@ -6016,8 +6016,8 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_json",
- "strum 0.25.0",
- "strum_macros 0.25.3",
+ "strum 0.26.2",
+ "strum_macros 0.26.2",
 ]
 
 [[package]]
@@ -6102,7 +6102,7 @@ dependencies = [
  "slog-async",
  "slog-envlogger",
  "slog-term",
- "strum_macros 0.25.3",
+ "strum_macros 0.26.2",
  "tempfile",
 ]
 
@@ -6288,8 +6288,8 @@ dependencies = [
  "sha2 0.10.8",
  "simple_asn1",
  "slog",
- "strum 0.25.0",
- "strum_macros 0.25.3",
+ "strum 0.26.2",
+ "strum_macros 0.26.2",
  "tempfile",
  "tokio",
  "tokio-rustls 0.24.1",
@@ -6484,7 +6484,7 @@ dependencies = [
  "serde",
  "serde_cbor",
  "simple_asn1",
- "strum 0.25.0",
+ "strum 0.26.2",
  "wycheproof",
  "zeroize",
 ]
@@ -6646,8 +6646,8 @@ dependencies = [
  "serde_cbor",
  "slog",
  "slog-async",
- "strum 0.25.0",
- "strum_macros 0.25.3",
+ "strum 0.26.2",
+ "strum_macros 0.26.2",
  "stubborn-io",
  "tarpc",
  "tempfile",
@@ -6679,7 +6679,7 @@ dependencies = [
  "ic-types",
  "paste 1.0.14",
  "proptest",
- "strum 0.25.0",
+ "strum 0.26.2",
 ]
 
 [[package]]
@@ -6722,8 +6722,8 @@ dependencies = [
  "convert_case 0.6.0",
  "ic-metrics",
  "prometheus",
- "strum 0.25.0",
- "strum_macros 0.25.3",
+ "strum 0.26.2",
+ "strum_macros 0.26.2",
 ]
 
 [[package]]
@@ -6772,8 +6772,8 @@ name = "ic-crypto-internal-test-vectors"
 version = "0.9.0"
 dependencies = [
  "hex",
- "strum 0.25.0",
- "strum_macros 0.25.3",
+ "strum 0.26.2",
+ "strum_macros 0.26.2",
 ]
 
 [[package]]
@@ -6800,7 +6800,7 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_cbor",
- "strum_macros 0.25.3",
+ "strum_macros 0.26.2",
  "subtle",
  "zeroize",
 ]
@@ -6831,8 +6831,8 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_cbor",
- "strum 0.25.0",
- "strum_macros 0.25.3",
+ "strum 0.26.2",
+ "strum_macros 0.26.2",
  "subtle",
  "zeroize",
 ]
@@ -6877,8 +6877,8 @@ dependencies = [
  "phantom_newtype",
  "serde",
  "serde_cbor",
- "strum 0.25.0",
- "strum_macros 0.25.3",
+ "strum 0.26.2",
+ "strum_macros 0.26.2",
  "thiserror",
  "zeroize",
 ]
@@ -6948,8 +6948,8 @@ dependencies = [
  "ic-types-test-utils",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
- "strum 0.25.0",
- "strum_macros 0.25.3",
+ "strum 0.26.2",
+ "strum_macros 0.26.2",
 ]
 
 [[package]]
@@ -7000,7 +7000,7 @@ dependencies = [
  "p256",
  "rand 0.8.5",
  "simple_asn1",
- "strum 0.25.0",
+ "strum 0.26.2",
 ]
 
 [[package]]
@@ -7099,8 +7099,8 @@ dependencies = [
  "ic-types",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
- "strum 0.25.0",
- "strum_macros 0.25.3",
+ "strum 0.26.2",
+ "strum_macros 0.26.2",
 ]
 
 [[package]]
@@ -7568,8 +7568,8 @@ version = "0.9.0"
 dependencies = [
  "ic-utils 0.9.0",
  "serde",
- "strum 0.25.0",
- "strum_macros 0.25.3",
+ "strum 0.26.2",
+ "strum_macros 0.26.2",
 ]
 
 [[package]]
@@ -7655,7 +7655,7 @@ dependencies = [
  "serde_bytes",
  "serde_cbor",
  "slog",
- "strum 0.25.0",
+ "strum 0.26.2",
  "tempfile",
  "test-strategy",
  "threadpool",
@@ -7794,7 +7794,7 @@ dependencies = [
  "serde_bytes",
  "serde_cbor",
  "slog",
- "strum 0.25.0",
+ "strum 0.26.2",
  "tempfile",
  "thiserror",
  "threadpool",
@@ -7940,8 +7940,6 @@ dependencies = [
  "ic-cdk",
  "ic-cdk-macros",
  "ic-cdk-timers",
- "ic-icp-index",
- "ic-icrc1",
  "ic-icrc1-index-ng",
  "ic-ledger-canister-core",
  "ic-ledger-core",
@@ -8011,8 +8009,8 @@ dependencies = [
  "serde_cbor",
  "serde_json",
  "serde_with",
- "strum 0.25.0",
- "strum_macros 0.25.3",
+ "strum 0.26.2",
+ "strum_macros 0.26.2",
  "tempfile",
  "tokio",
  "tower-http 0.4.4",
@@ -8038,6 +8036,7 @@ dependencies = [
  "ic-icrc-rosetta",
  "ic-rosetta-api",
  "icrc-ledger-types",
+ "num-bigint 0.4.4",
  "reqwest",
  "rosetta-core",
  "serde",
@@ -8435,7 +8434,7 @@ dependencies = [
 name = "ic-interfaces-adapter-client"
 version = "0.9.0"
 dependencies = [
- "strum_macros 0.25.3",
+ "strum_macros 0.26.2",
  "thiserror",
 ]
 
@@ -8513,8 +8512,8 @@ dependencies = [
  "phantom_newtype",
  "serde",
  "serde_bytes",
- "strum 0.25.0",
- "strum_macros 0.25.3",
+ "strum 0.26.2",
+ "strum_macros 0.26.2",
  "tower",
 ]
 
@@ -8720,8 +8719,8 @@ dependencies = [
  "clap 4.4.6",
  "hex",
  "serde_json",
- "strum 0.25.0",
- "strum_macros 0.25.3",
+ "strum 0.26.2",
+ "strum_macros 0.26.2",
  "tempfile",
 ]
 
@@ -8740,8 +8739,8 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_cbor",
- "strum 0.25.0",
- "strum_macros 0.25.3",
+ "strum 0.26.2",
+ "strum_macros 0.26.2",
 ]
 
 [[package]]
@@ -8997,6 +8996,7 @@ dependencies = [
  "cycles-minting-canister",
  "dfn_protobuf",
  "ic-base-types",
+ "ic-crypto-sha2",
  "ic-error-types",
  "ic-icrc1",
  "ic-icrc1-index-ng",
@@ -9025,6 +9025,7 @@ dependencies = [
  "ic-sns-init",
  "ic-sns-root",
  "ic-sns-swap",
+ "ic-sns-test-utils",
  "ic-sns-wasm",
  "ic-test-utilities",
  "ic-test-utilities-load-wasm",
@@ -9045,6 +9046,14 @@ dependencies = [
  "rustc-hash",
  "serde",
  "xrc-mock",
+]
+
+[[package]]
+name = "ic-nervous-system-lock"
+version = "0.0.1"
+dependencies = [
+ "futures",
+ "tokio",
 ]
 
 [[package]]
@@ -9250,8 +9259,8 @@ dependencies = [
  "rust_decimal_macros",
  "serde",
  "serde_json",
- "strum 0.25.0",
- "strum_macros 0.25.3",
+ "strum 0.26.2",
+ "strum_macros 0.26.2",
  "tempfile",
  "tokio",
  "tokio-test",
@@ -9510,7 +9519,7 @@ dependencies = [
  "rustc-hash",
  "serde",
  "serde_bytes",
- "strum 0.25.0",
+ "strum 0.26.2",
  "tempfile",
  "tokio",
  "wat",
@@ -9630,8 +9639,8 @@ dependencies = [
  "prometheus",
  "serde",
  "slog",
- "strum 0.25.0",
- "strum_macros 0.25.3",
+ "strum 0.26.2",
+ "strum_macros 0.26.2",
  "tempfile",
  "threadpool",
  "tokio",
@@ -9886,8 +9895,8 @@ dependencies = [
  "slog",
  "slog-async",
  "slog-term",
- "strum 0.25.0",
- "strum_macros 0.25.3",
+ "strum 0.26.2",
+ "strum_macros 0.26.2",
  "tempfile",
  "tokio",
  "url",
@@ -10146,8 +10155,8 @@ dependencies = [
  "candid",
  "ic-protobuf",
  "serde",
- "strum 0.25.0",
- "strum_macros 0.25.3",
+ "strum 0.26.2",
+ "strum_macros 0.26.2",
 ]
 
 [[package]]
@@ -10430,8 +10439,8 @@ dependencies = [
  "serde",
  "serde_cbor",
  "slog",
- "strum 0.25.0",
- "strum_macros 0.25.3",
+ "strum 0.26.2",
+ "strum_macros 0.26.2",
  "tempfile",
  "uuid 1.6.1",
 ]
@@ -10507,6 +10516,7 @@ dependencies = [
  "ic-types",
  "icp-ledger",
  "lazy_static",
+ "num-bigint 0.4.4",
  "on_wire",
  "prometheus",
  "proptest",
@@ -10519,8 +10529,8 @@ dependencies = [
  "serde_cbor",
  "serde_derive",
  "serde_json",
- "strum 0.25.0",
- "strum_macros 0.25.3",
+ "strum 0.26.2",
+ "strum_macros 0.26.2",
  "tokio",
  "tracing",
  "tracing-appender",
@@ -10667,6 +10677,7 @@ dependencies = [
  "ic-nervous-system-common-test-keys",
  "ic-nervous-system-common-test-utils",
  "ic-nervous-system-governance",
+ "ic-nervous-system-lock",
  "ic-nervous-system-proto",
  "ic-nervous-system-root",
  "ic-nervous-system-runtime",
@@ -10696,8 +10707,8 @@ dependencies = [
  "rust_decimal",
  "rust_decimal_macros",
  "serde",
- "strum 0.25.0",
- "strum_macros 0.25.3",
+ "strum 0.26.2",
+ "strum_macros 0.26.2",
  "tempfile",
  "tokio",
  "tokio-test",
@@ -11266,8 +11277,8 @@ dependencies = [
  "serde",
  "serde_bytes",
  "slog",
- "strum 0.25.0",
- "strum_macros 0.25.3",
+ "strum 0.26.2",
+ "strum_macros 0.26.2",
  "tempfile",
  "tree-deserializer",
  "uuid 1.6.1",
@@ -11352,8 +11363,8 @@ dependencies = [
  "serde",
  "serde_cbor",
  "slog",
- "strum 0.25.0",
- "strum_macros 0.25.3",
+ "strum 0.26.2",
+ "strum_macros 0.26.2",
  "url",
 ]
 
@@ -11736,7 +11747,7 @@ dependencies = [
  "prometheus",
  "serde",
  "slog",
- "strum 0.25.0",
+ "strum 0.26.2",
  "tokio",
  "tokio-util",
  "tower",
@@ -11853,8 +11864,8 @@ dependencies = [
  "serde_cbor",
  "serde_json",
  "serde_with",
- "strum 0.25.0",
- "strum_macros 0.25.3",
+ "strum 0.26.2",
+ "strum_macros 0.26.2",
  "thiserror",
  "thousands",
 ]
@@ -11865,7 +11876,7 @@ version = "0.9.0"
 dependencies = [
  "ic-types",
  "proptest",
- "strum 0.25.0",
+ "strum 0.26.2",
 ]
 
 [[package]]
@@ -11971,8 +11982,8 @@ dependencies = [
  "ic-types",
  "rand 0.8.5",
  "simple_asn1",
- "strum 0.25.0",
- "strum_macros 0.25.3",
+ "strum 0.26.2",
+ "strum_macros 0.26.2",
 ]
 
 [[package]]
@@ -11998,7 +12009,7 @@ dependencies = [
  "ic-validator",
  "ic-validator-http-request-test-utils",
  "rand 0.8.5",
- "strum 0.25.0",
+ "strum 0.26.2",
 ]
 
 [[package]]
@@ -12300,8 +12311,8 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_cbor",
- "strum 0.25.0",
- "strum_macros 0.25.3",
+ "strum 0.26.2",
+ "strum_macros 0.26.2",
  "tempfile",
 ]
 
@@ -14532,8 +14543,8 @@ dependencies = [
  "serde_cbor",
  "slog",
  "slog-async",
- "strum 0.25.0",
- "strum_macros 0.25.3",
+ "strum 0.26.2",
+ "strum_macros 0.26.2",
  "tempfile",
  "tokio",
  "url",
@@ -16402,6 +16413,7 @@ dependencies = [
  "ic-crypto-internal-basic-sig-ecdsa-secp256k1",
  "ic-types",
  "icrc-ledger-types",
+ "num-bigint 0.4.4",
  "proptest",
  "rand 0.8.5",
  "serde",
@@ -17762,6 +17774,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "strum"
+version = "0.26.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5d8cec3501a5194c432b2b7976db6b7d10ec95c253208b45f83f7136aa985e29"
+dependencies = [
+ "strum_macros 0.26.2",
+]
+
+[[package]]
 name = "strum_macros"
 version = "0.24.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -17779,6 +17800,19 @@ name = "strum_macros"
 version = "0.25.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "23dc1fa9ac9c169a78ba62f0b841814b7abae11bdd047b9c58f893439e309ea0"
+dependencies = [
+ "heck 0.4.1",
+ "proc-macro2 1.0.75",
+ "quote 1.0.35",
+ "rustversion",
+ "syn 2.0.48",
+]
+
+[[package]]
+name = "strum_macros"
+version = "0.26.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c6cf59daf282c0a494ba14fd21610a0325f9f90ec9d1231dea26bcb1d696c946"
 dependencies = [
  "heck 0.4.1",
  "proc-macro2 1.0.75",
@@ -18273,8 +18307,8 @@ dependencies = [
  "slog-async",
  "slog-term",
  "ssh2",
- "strum 0.25.0",
- "strum_macros 0.25.3",
+ "strum 0.26.2",
+ "strum_macros 0.26.2",
  "tempfile",
  "thiserror",
  "time",
