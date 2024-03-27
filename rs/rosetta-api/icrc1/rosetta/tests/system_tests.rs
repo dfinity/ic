@@ -54,6 +54,7 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::{
     path::PathBuf,
+    process::Command,
     sync::Arc,
     time::{Duration, SystemTime},
 };
@@ -83,6 +84,24 @@ fn rosetta_bin() -> PathBuf {
 
 fn rosetta_client_bin() -> PathBuf {
     path_from_env("ROSETTA_CLIENT_BIN_PATH")
+}
+
+fn rosetta_cli() -> String {
+    match std::env::var("ROSETTA_CLI").ok() {
+        Some(binary) => binary,
+        None => String::from("rosetta-cli"),
+    }
+}
+
+fn local(file: &str) -> String {
+    match std::env::var("CARGO_MANIFEST_DIR") {
+        Ok(path) => std::path::PathBuf::from(path)
+            .join(file)
+            .into_os_string()
+            .into_string()
+            .unwrap(),
+        Err(_) => String::from(file),
+    }
 }
 
 pub struct RosettaTestingEnvironment {
@@ -436,7 +455,7 @@ proptest! {
         })
         .await.is_err());
     }}
- });
+  });
  }
 }
 
@@ -1265,4 +1284,49 @@ fn test_search_transactions() {
             },
         )
         .unwrap()
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(*NUM_TEST_CASES))]
+    #[test]
+    fn test_cli_data(args_with_caller in valid_transactions_strategy(
+        (*MINTING_IDENTITY).clone(),
+        DEFAULT_TRANSFER_FEE,
+        *MAX_NUM_GENERATED_BLOCKS,
+        SystemTime::now(),
+    )) {
+        // Create a tokio environment to conduct async calls
+        let rt = Runtime::new().unwrap();
+
+        // Wrap async calls in a blocking Block
+        rt.block_on(async {
+            let env = RosettaTestingEnvironmentBuilder::new()
+                .with_args_with_caller(args_with_caller.clone())
+                .with_init_args_builder(local_replica::icrc_ledger_default_args_builder()
+                .with_minting_account((*MINTING_IDENTITY).clone().sender().unwrap()))
+                .build()
+                .await;
+
+                let output = Command::new(rosetta_cli())
+                .args([
+                    "check:data",
+                    "--configuration-file",
+                    local("tests/rosetta-cli_data_test.json").as_str(),
+                    "--online-url",
+                    &format!("http://0.0.0.0:{}", env._rosetta_context.port)
+                ])
+                .output()
+                .expect("failed to execute rosetta-cli");
+
+                assert!(
+                    output.status.success(),
+                    "rosetta-cli did not finish successfully: {},/\
+                        \n\n--------------------------\nstdout: {}, \
+                        \n\n--------------------------\nstderr: {}",
+                    output.status,
+                    String::from_utf8(output.stdout).unwrap(),
+                    String::from_utf8(output.stderr).unwrap()
+                );
+        });
+    }
 }
