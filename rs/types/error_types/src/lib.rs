@@ -75,8 +75,13 @@ impl From<ErrorCode> for RejectCode {
             CanisterOutOfCycles => SysTransient,
             CertifiedStateUnavailable => SysTransient,
             CanisterInstallCodeRateLimited => SysTransient,
+            CanisterHeapDeltaRateLimited => SysTransient,
             // Invalid destination errors.
             CanisterNotFound => DestinationInvalid,
+            DeprecatedCanisterMethodNotFound => DestinationInvalid,
+            DeprecatedCanisterAlreadyInstalled => DestinationInvalid,
+            DeprecatedCanisterWasmModuleNotFound => DestinationInvalid,
+            CanisterSnapshotNotFound => DestinationInvalid,
             // Explicit reject errors.
             InsufficientCyclesForCreateCanister => CanisterReject,
             InsufficientMemoryAllocation => CanisterReject,
@@ -86,9 +91,12 @@ impl From<ErrorCode> for RejectCode {
             InvalidManagementPayload => CanisterReject,
             CanisterNotHostedBySubnet => CanisterReject,
             // Canister errors.
+            DeprecatedCanisterOutOfCycles => CanisterError,
             CanisterInvalidController => CanisterError,
             CanisterFunctionNotFound => CanisterError,
             CanisterNonEmpty => CanisterError,
+            DeprecatedCertifiedStateUnavailable => CanisterError,
+            DeprecatedCanisterRejectedMessage => CanisterError,
             CanisterTrapped => CanisterError,
             CanisterCalledTrap => CanisterError,
             CanisterContractViolation => CanisterError,
@@ -100,9 +108,12 @@ impl From<ErrorCode> for RejectCode {
             CanisterNotStopped => CanisterError,
             CanisterStoppingCancelled => CanisterError,
             QueryCallGraphLoopDetected => CanisterError,
+            DeprecatedUnknownManagementMessage => CanisterError,
+            DeprecatedInvalidManagementPayload => CanisterError,
             InsufficientCyclesInCall => CanisterError,
             CanisterWasmEngineError => CanisterError,
             CanisterInstructionLimitExceeded => CanisterError,
+            DeprecatedCanisterInstallCodeRateLimited => CanisterError,
             CanisterMemoryAccessLimitExceeded => CanisterError,
             QueryCallGraphTooDeep => CanisterError,
             QueryCallGraphTotalInstructionLimitExceeded => CanisterError,
@@ -118,8 +129,6 @@ impl From<ErrorCode> for RejectCode {
             CanisterMethodNotFound => CanisterError,
             CanisterWasmModuleNotFound => CanisterError,
             CanisterAlreadyInstalled => CanisterError,
-            CanisterSnapshotNotFound => DestinationInvalid,
-            CanisterHeapDeltaRateLimited => SysTransient,
         }
     }
 }
@@ -150,9 +159,9 @@ pub enum ErrorCode {
     CanisterHeapDeltaRateLimited = 210,
     // 3xx -- `RejectCode::DestinationInvalid`
     CanisterNotFound = 301,
-    // 302 (previously `CanisterMethodNotFound`)
-    // 303 (previously `CanisterAlreadyInstalled`)
-    // 304 (previously `CanisterWasmModuleNotFound`)
+    DeprecatedCanisterMethodNotFound = 302,
+    DeprecatedCanisterAlreadyInstalled = 303,
+    DeprecatedCanisterWasmModuleNotFound = 304,
     CanisterSnapshotNotFound = 305,
     // 4xx -- `RejectCode::CanisterReject`
     // 401
@@ -164,7 +173,7 @@ pub enum ErrorCode {
     UnknownManagementMessage = 407,
     InvalidManagementPayload = 408,
     // 5xx -- `RejectCode::CanisterError`
-    // 501 (previously `CanisterOutOfCycles`)
+    DeprecatedCanisterOutOfCycles = 501,
     CanisterTrapped = 502,
     CanisterCalledTrap = 503,
     CanisterContractViolation = 504,
@@ -178,15 +187,15 @@ pub enum ErrorCode {
     CanisterInvalidController = 512,
     CanisterFunctionNotFound = 513,
     CanisterNonEmpty = 514,
-    // 515 (previously `CertifiedStateUnavailable`)
-    // 516 (previously `CanisterRejectedMessage`)
+    DeprecatedCertifiedStateUnavailable = 515,
+    DeprecatedCanisterRejectedMessage = 516,
     QueryCallGraphLoopDetected = 517,
-    // 518 (previously `UnknownManagementMessage`)
-    // 519 (previously `InvalidManagementPayload`)
+    DeprecatedUnknownManagementMessage = 518,
+    DeprecatedInvalidManagementPayload = 519,
     InsufficientCyclesInCall = 520,
     CanisterWasmEngineError = 521,
     CanisterInstructionLimitExceeded = 522,
-    // 523 (previously `CanisterInstallCodeRateLimited`)
+    DeprecatedCanisterInstallCodeRateLimited = 523,
     CanisterMemoryAccessLimitExceeded = 524,
     QueryCallGraphTooDeep = 525,
     QueryCallGraphTotalInstructionLimitExceeded = 526,
@@ -224,9 +233,10 @@ impl TryFrom<u64> for ErrorCode {
             210 => Ok(ErrorCode::CanisterHeapDeltaRateLimited),
             // 3xx -- `RejectCode::DestinationInvalid`
             301 => Ok(ErrorCode::CanisterNotFound),
-            // 302 (previously `CanisterMethodNotFound`)
-            // 303 (previously `CanisterAlreadyInstalled`)
-            // 304 (previously `CanisterWasmModuleNotFound`)
+            // TODO: RUN-948: Backward compatibility
+            302 => Ok(ErrorCode::DeprecatedCanisterMethodNotFound),
+            303 => Ok(ErrorCode::DeprecatedCanisterAlreadyInstalled),
+            304 => Ok(ErrorCode::DeprecatedCanisterWasmModuleNotFound),
             305 => Ok(ErrorCode::CanisterSnapshotNotFound),
             // 4xx -- `RejectCode::CanisterReject`
             // 401
@@ -238,7 +248,7 @@ impl TryFrom<u64> for ErrorCode {
             407 => Ok(ErrorCode::UnknownManagementMessage),
             408 => Ok(ErrorCode::InvalidManagementPayload),
             // 5xx -- `RejectCode::CanisterError`
-            // 501 (previously `CanisterOutOfCycles`)
+            501 => Ok(ErrorCode::DeprecatedCanisterOutOfCycles),
             502 => Ok(ErrorCode::CanisterTrapped),
             503 => Ok(ErrorCode::CanisterCalledTrap),
             504 => Ok(ErrorCode::CanisterContractViolation),
@@ -252,15 +262,16 @@ impl TryFrom<u64> for ErrorCode {
             512 => Ok(ErrorCode::CanisterInvalidController),
             513 => Ok(ErrorCode::CanisterFunctionNotFound),
             514 => Ok(ErrorCode::CanisterNonEmpty),
-            // 515 (previously `CertifiedStateUnavailable`)
-            // 516 (previously `CanisterRejectedMessage`)
+            // TODO: RUN-948: Backward compatibility
+            515 => Ok(ErrorCode::DeprecatedCertifiedStateUnavailable),
+            516 => Ok(ErrorCode::DeprecatedCanisterRejectedMessage),
             517 => Ok(ErrorCode::QueryCallGraphLoopDetected),
-            // 518 (previously `UnknownManagementMessage`)
-            // 519 (previously `InvalidManagementPayload`)
+            518 => Ok(ErrorCode::DeprecatedUnknownManagementMessage),
+            519 => Ok(ErrorCode::DeprecatedInvalidManagementPayload),
             520 => Ok(ErrorCode::InsufficientCyclesInCall),
             521 => Ok(ErrorCode::CanisterWasmEngineError),
             522 => Ok(ErrorCode::CanisterInstructionLimitExceeded),
-            // 523 (previously `CanisterInstallCodeRateLimited`)
+            523 => Ok(ErrorCode::DeprecatedCanisterInstallCodeRateLimited),
             524 => Ok(ErrorCode::CanisterMemoryAccessLimitExceeded),
             525 => Ok(ErrorCode::QueryCallGraphTooDeep),
             526 => Ok(ErrorCode::QueryCallGraphTotalInstructionLimitExceeded),
@@ -396,6 +407,16 @@ impl UserError {
             | ErrorCode::InsufficientCyclesInMessageMemoryGrow
             | ErrorCode::CanisterSnapshotNotFound
             | ErrorCode::CanisterHeapDeltaRateLimited => false,
+            // TODO: RUN-948: Backward compatibility
+            ErrorCode::DeprecatedCanisterMethodNotFound
+            | ErrorCode::DeprecatedCanisterAlreadyInstalled
+            | ErrorCode::DeprecatedCanisterWasmModuleNotFound
+            | ErrorCode::DeprecatedCanisterOutOfCycles
+            | ErrorCode::DeprecatedCertifiedStateUnavailable
+            | ErrorCode::DeprecatedCanisterRejectedMessage
+            | ErrorCode::DeprecatedUnknownManagementMessage
+            | ErrorCode::DeprecatedInvalidManagementPayload
+            | ErrorCode::DeprecatedCanisterInstallCodeRateLimited => false,
         }
     }
 
