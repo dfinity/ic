@@ -44,7 +44,11 @@ pub const DEFAULT_DEPOSIT_BLOCK_NUMBER: u64 = 0x9;
 pub const DEFAULT_DEPOSIT_FROM_ADDRESS: &str = "0x55654e7405fcb336386ea8f36954a211b2cda764";
 pub const DEFAULT_DEPOSIT_TRANSACTION_HASH: &str =
     "0xcfa48c44dc89d18a898a42b4a5b02b6847a3c2019507d5571a481751c7a2f353";
+pub const DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH: &str =
+    "0x2044da6b095d6be2308b868287b8b70d9e01b226c02546b7abcce31dabc34929";
+
 pub const DEFAULT_DEPOSIT_LOG_INDEX: u64 = 0x24;
+pub const DEFAULT_ERC20_DEPOSIT_LOG_INDEX: u64 = 0x42;
 pub const DEFAULT_BLOCK_HASH: &str =
     "0x82005d2f17b251900968f01b0ed482cb49b7e1d797342bc504904d442b64dbe4";
 pub const LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL: u64 = 3_956_206;
@@ -78,6 +82,12 @@ pub struct CkEthSetup {
 impl Default for CkEthSetup {
     fn default() -> Self {
         Self::new(Arc::new(new_state_machine()))
+    }
+}
+
+impl AsRef<CkEthSetup> for CkEthSetup {
+    fn as_ref(&self) -> &CkEthSetup {
+        self
     }
 }
 
@@ -123,7 +133,6 @@ impl CkEthSetup {
         DepositFlow {
             setup: self,
             params,
-            minter_supports_erc20_deposit: false,
         }
     }
 
@@ -240,9 +249,20 @@ impl CkEthSetup {
         amount: u64,
         from_subaccount: Option<[u8; 32]>,
     ) -> ApprovalFlow {
+        let cketh_ledger_id = self.ledger_id;
+        self.call_ledger_id_approve_minter(cketh_ledger_id, from, amount, from_subaccount)
+    }
+
+    pub fn call_ledger_id_approve_minter(
+        self,
+        ledger_id: CanisterId,
+        from: Principal,
+        amount: u64,
+        from_subaccount: Option<[u8; 32]>,
+    ) -> ApprovalFlow {
         let approval_response = Decode!(&assert_reply(self.env.execute_ingress_as(
             PrincipalId::from(from),
-            self.ledger_id,
+            ledger_id,
             "icrc2_approve",
             Encode!(&ApproveArgs {
                 from_subaccount,
@@ -270,7 +290,7 @@ impl CkEthSetup {
     pub fn call_ledger_get_transaction<T: Into<Nat>>(
         self,
         ledger_index: T,
-    ) -> LedgerTransactionAssert {
+    ) -> LedgerTransactionAssert<Self> {
         let ledger_id = self.ledger_id;
         self.call_ledger_id_get_transaction(ledger_id, ledger_index)
     }
@@ -279,33 +299,12 @@ impl CkEthSetup {
         self,
         ledger_id: CanisterId,
         ledger_index: T,
-    ) -> LedgerTransactionAssert {
-        use icrc_ledger_types::icrc3::transactions::{
-            GetTransactionsRequest, GetTransactionsResponse,
-        };
-
-        let request = GetTransactionsRequest {
-            start: ledger_index.into(),
-            length: 1_u8.into(),
-        };
-        let mut response = Decode!(
-            &assert_reply(
-                self.env
-                    .query(ledger_id, "get_transactions", Encode!(&request).unwrap())
-                    .expect("failed to query get_transactions on the ledger")
-            ),
-            GetTransactionsResponse
-        )
-        .unwrap();
-        assert_eq!(
-            response.transactions.len(),
-            1,
-            "Expected exactly one transaction but got {:?}",
-            response.transactions
-        );
+    ) -> LedgerTransactionAssert<Self> {
+        let ledger_transaction =
+            crate::flow::call_ledger_id_get_transaction(&self.env, ledger_id, ledger_index);
         LedgerTransactionAssert {
             setup: self,
-            ledger_transaction: response.transactions.pop().unwrap(),
+            ledger_transaction,
         }
     }
 
