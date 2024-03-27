@@ -1,0 +1,126 @@
+= ckETH and ckERC-20 Development Playground
+
+WARNING: The playground environment could be reset at any time.
+To test the integration of your application, we recommend using the testnet environment.
+
+== Initial Deployment
+
+All commands below should be executed in `rs/ethereum/cketh/playground`.
+
+=== ckETH Setup
+
+.Create all canisters to be controlled by the wallet `mf7xa-laaaa-aaaar-qaaaa-cai`
+====
+[source,shell]
+----
+dfx canister --network ic create --wallet mf7xa-laaaa-aaaar-qaaaa-cai --all
+----
+====
+
+.Deploy the ckETH ICRC1 ledger suite
+====
+.Deploy the ledger
+[source,shell]
+----
+dfx deploy ledger --network ic --argument "(variant { Init = record { minting_account = record { owner = principal \"$(dfx canister --network ic id minter)\" }; feature_flags  = opt record { icrc2 = true }; decimals = opt 18; max_memo_length = opt 80; transfer_fee = 2_000_000_000_000; token_symbol = \"ckSepoliaETH\"; token_name = \"Chain key Sepolia Ethereum\"; metadata = vec {}; initial_balances = vec {}; archive_options = record { num_blocks_to_archive = 1000; trigger_threshold = 2000; max_message_size_bytes = null; cycles_for_archive_creation = opt 1_000_000_000_000; node_max_memory_size_bytes = opt 3_221_225_472; controller_id = principal \"mf7xa-laaaa-aaaar-qaaaa-cai\"; } }})"
+----
+
+.Deploy the index canister
+[source,shell]
+----
+dfx deploy index --network ic --argument "(opt variant {Init = record { ledger_id = principal \"$(dfx canister --network ic id ledger)\" }})"
+----
+
+====
+
+.Deploy the minter
+====
+. Deploy the minter to retrieve its Ethereum address
+[source,shell]
+----
+dfx deploy minter --network ic --argument "(variant {InitArg = record { ethereum_network = variant {Sepolia} ; ecdsa_key_name = \"key_1\"; ledger_id = principal \"$(dfx canister --network ic id ledger)\"; ethereum_block_height = variant {Finalized} ; minimum_withdrawal_amount = 30_000_000_000_000_000; next_transaction_nonce = 0; last_scraped_block_number = 5538626; }})"
+----
+
+[source,shell]
+----
+dfx canister --network ic call minter get_minter_info
+----
+This returns among other things  `minter_address = opt "0x0dBf8d65e434f30738b7Bcbfe5C1F22bb7A7eC81";`
+
+. Deploy the ckETH helper smart contract on Sepolia. You can copy over the existing https://etherscan.io/address/0x7574eB42cA208A4f6960ECCAfDF186D627dCC175#code[one] and deploy it from https://remix.ethereum.org/[Remix]. To instantiate it, uses the previously obtained minter address `0x0dBf8d65e434f30738b7Bcbfe5C1F22bb7A7eC81` for the field `cketh_minter_main_address`.
+. On https://sepolia.etherscan.io/address/0x3a1b77f329327528121de7f7177928b88d7f1ee2[Etherscan], verify the contract and publish the source code so that the contract can be interacted with on Etherscan directly.
+. Upgrade the minter to specify the helper contract address
+[source,shell]
+----
+dfx canister --network ic stop minter
+dfx deploy minter --network ic --argument "(variant {UpgradeArg = record {ethereum_contract_address = opt \"0x3a1b77f329327528121de7f7177928b88d7f1ee2\" }})" --upgrade-unchanged
+dfx canister --network ic start minter
+----
+====
+
+At this point a complete deposit and withdrawal flow should work.
+
+=== ckERC20 Setup
+
+.Deploy the ledger suite orchestrator
+====
+[source,shell]
+----
+dfx deploy orchestrator --network ic --argument "(variant { InitArg = record { more_controller_ids = vec { principal \"mf7xa-laaaa-aaaar-qaaaa-cai\"; }; minter_id = opt principal \"$(dfx canister --network ic id minter)\"; cycles_management = opt record { cycles_for_ledger_creation = 1_000_000_000_000 ; cycles_for_archive_creation = 100_000_000_000; cycles_for_index_creation = 1_000_000_000_000; cycles_top_up_increment = 500_000_000_000 } }})"
+----
+====
+
+. Deploy the ckERC20 helper smart contract on Sepolia. You can copy over the existing https://sepolia.etherscan.io/address/0xe1788e4834c896f1932188645cc36c54d1b80ac1#code#code[one] and deploy it from https://remix.ethereum.org/[Remix]. To instantiate it, uses the previously obtained minter address `0x0dBf8d65e434f30738b7Bcbfe5C1F22bb7A7eC81` for the field `cketh_minter_main_address`.
+. On https://sepolia.etherscan.io/address/0x1714678828a618742b5705631f175346e8388b93[Etherscan], verify the contract and publish the source code so that the contract can be interacted with on Etherscan directly.
+
+.Upgrade the minter to active ckERC20 support
+====
+[source,shell]
+----
+dfx canister --network ic stop minter
+dfx deploy minter --network ic --argument "(variant {UpgradeArg = record {ledger_suite_orchestrator_id = opt principal \"$(dfx canister --network ic id orchestrator)\"; erc20_helper_contract_address = opt \"0x1714678828a618742b5705631f175346e8388b93\"; last_erc20_scraped_block_number = opt 	5538930;}})" --upgrade-unchanged
+dfx canister --network ic start minter
+----
+====
+
+.Add ERC-20 token https://sepolia.etherscan.io/address/0x1c7d4b196cb0c7b01d743fbc6116a902379c7238[SepoliaUSDC]
+====
+If you deploy locally, you need to find out the compressed wasm hashes of the ledger and the index canisters for the desired git revision, e.g. `5553ee5f7586290a59ed372a2b7aca847520af82`:
+[source,shell]
+----
+git checkout 5553ee5f7586290a59ed372a2b7aca847520af82
+openssl sha256 bazel-bin/rs/rosetta-api/icrc1/ledger/ledger_canister_u256.wasm.gz
+openssl sha256 bazel-bin/rs/rosetta-api/icrc1/index-ng/index_ng_canister_u256.wasm.gz
+----
+
+If you deploy from a dev env,
+[source,shell]
+----
+git checkout 5553ee5f7586290a59ed372a2b7aca847520af82
+./gitlab-ci/container/build-ic.sh -c
+----
+
+Modify the `transfer_fee` so that it roughly matches 0.004 USD.
+
+[source,shell]
+----
+dfx deploy orchestrator --network ic --argument "(variant { AddErc20Arg = record { contract = record { chain_id = 11155111; address = \"0x1c7d4b196cb0c7b01d743fbc6116a902379c7238\" }; ledger_init_arg = record { minting_account = record { owner = principal \"$(dfx canister --network ic id minter)\" }; feature_flags  = opt record { icrc2 = true }; decimals = opt 6; max_memo_length = opt 80; transfer_fee = 4_000; token_symbol = \"ckSepoliaUSDC\"; token_name = \"Chain key Sepolia USDC\"; token_logo = \"\"; initial_balances = vec {}; }; git_commit_hash = \"5553ee5f7586290a59ed372a2b7aca847520af82\";  ledger_compressed_wasm_hash = \"56705e38c0a214cb2054553c1540f83654d8a638435bcadb83e3427cc28fc994\"; index_compressed_wasm_hash = \"bed0dfc6e379eb95961a48d8472a5f45867732fc4b25d11ed66242dc11379180\"; }})" --upgrade-unchanged
+----
+
+At this point, you should be able to see via `dfx canister --network ic call minter get_minter_info` that minter now supports `ckSepoliaUSDC`. The canister IDs of the spawned ledger and index canisters can be found via
+[source,shell]
+----
+dfx canister --network ic call orchestrator canister_ids "record {chain_id = 11155111; address = \"0x1c7d4b196cb0c7b01d743fbc6116a902379c7238\"}"
+----
+====
+
+
+
+== Links
+
+. ckETH helper smart contract https://sepolia.etherscan.io/address/0x3a1b77f329327528121de7f7177928b88d7f1ee2[address]
+. ckERC20 helper smart contract https://sepolia.etherscan.io/address/0x1714678828a618742b5705631f175346e8388b93[address]
+. ckETH minter https://34enl-iqaaa-aaaar-qaecq-cai.raw.icp0.io/dashboard[dashboard]
+. ckETH minter https://34enl-iqaaa-aaaar-qaecq-cai.raw.icp0.io/logs?sort=desc[logs]
+. Ledger suite orchestrator https://3vhgx-6yaaa-aaaar-qaeda-cai.raw.icp0.io/dashboard[dashboard]
+. Ledger suite orchestrator https://3vhgx-6yaaa-aaaar-qaeda-cai.raw.icp0.io/logs?sort=desc[logs]
