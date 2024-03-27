@@ -10,6 +10,7 @@ use crate::{
             NnsInstallationBuilder, SshSession, SubnetSnapshot, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
         },
     },
+    retry_with_msg_async,
     util::{agent_observes_canister_module, block_on, spawn_round_robin_workload_engine},
 };
 
@@ -130,12 +131,18 @@ pub fn test(
     );
     block_on(async {
         for agent in app_agents.iter() {
-            retry_async(&log, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
-                match agent_observes_canister_module(agent, &app_canister).await {
-                    true => Ok(()),
-                    false => bail!("Canister module not available yet"),
+            retry_with_msg_async!(
+                format!("observing canister module {}", app_canister.to_string()),
+                &log,
+                READY_WAIT_TIMEOUT,
+                RETRY_BACKOFF,
+                || async {
+                    match agent_observes_canister_module(agent, &app_canister).await {
+                        true => Ok(()),
+                        false => bail!("Canister module not available yet"),
+                    }
                 }
-            })
+            )
             .await
             .unwrap();
         }

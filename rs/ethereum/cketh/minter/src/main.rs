@@ -16,14 +16,14 @@ use ic_cketh_minter::endpoints::{
 use ic_cketh_minter::erc20;
 use ic_cketh_minter::eth_logs::{EventSource, ReceivedErc20Event, ReceivedEthEvent};
 use ic_cketh_minter::guard::retrieve_withdraw_guard;
-use ic_cketh_minter::ledger_client::LedgerClient;
+use ic_cketh_minter::ledger_client::{LedgerBurnError, LedgerClient};
 use ic_cketh_minter::lifecycle::MinterArg;
 use ic_cketh_minter::logs::INFO;
 use ic_cketh_minter::memo::BurnMemo;
 use ic_cketh_minter::numeric::{Erc20Value, LedgerBurnIndex, Wei};
 use ic_cketh_minter::state::audit::{process_event, Event, EventType};
 use ic_cketh_minter::state::transactions::{
-    Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed,
+    Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed, ReimbursementRequest,
 };
 use ic_cketh_minter::state::{lazy_call_ecdsa_public_key, mutate_state, read_state, State, STATE};
 use ic_cketh_minter::withdraw::{
@@ -41,6 +41,7 @@ use std::time::Duration;
 mod dashboard;
 
 pub const SEPOLIA_TEST_CHAIN_ID: u64 = 11155111;
+pub const CKETH_LEDGER_TRANSACTION_FEE: Wei = Wei::new(2_000_000_000_000_u128);
 
 fn validate_caller_not_anonymous() -> candid::Principal {
     let principal = ic_cdk::caller();
@@ -358,8 +359,31 @@ async fn withdraw_erc20(
                     });
                     Ok(RetrieveErc20Request::from(withdrawal_request))
                 }
-                // TODO XC-59: need to schedule a reimbursement of ckETH
-                Err(ckerc20_burn_error) => Err(WithdrawErc20Error::from(ckerc20_burn_error)),
+                Err(ckerc20_burn_error) => {
+                    let reimbursed_amount = match &ckerc20_burn_error {
+                        LedgerBurnError::TemporarilyUnavailable { .. } => erc20_tx_fee, //don't penalize user in case of an error outside of their control
+                        LedgerBurnError::InsufficientFunds { .. }
+                        | LedgerBurnError::InsufficientAllowance { .. } => erc20_tx_fee
+                            .checked_sub(CKETH_LEDGER_TRANSACTION_FEE)
+                            .unwrap_or(Wei::ZERO),
+                    };
+                    if reimbursed_amount > Wei::ZERO {
+                        let reimbursement_request = ReimbursementRequest {
+                            ledger_burn_index: cketh_ledger_burn_index,
+                            reimbursed_amount: reimbursed_amount.change_units(),
+                            to: caller,
+                            to_subaccount: None,
+                            transaction_hash: None,
+                        };
+                        mutate_state(|s| {
+                            process_event(
+                                s,
+                                EventType::FailedErc20WithdrawalRequest(reimbursement_request),
+                            );
+                        });
+                    }
+                    Err(WithdrawErc20Error::from(ckerc20_burn_error))
+                }
             }
         }
         Err(cketh_burn_error) => Err(WithdrawErc20Error::from(cketh_burn_error)),
@@ -583,6 +607,18 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     reimbursed_amount: reimbursed_amount.into(),
                     transaction_hash: transaction_hash.map(|h| h.to_string()),
                 },
+                EventType::ReimbursedErc20Withdrawal {
+                    cketh_ledger_burn_index,
+                    ckerc20_ledger_id,
+                    reimbursed,
+                } => EP::ReimbursedErc20Withdrawal {
+                    withdrawal_id: cketh_ledger_burn_index.get().into(),
+                    burn_in_block: reimbursed.burn_in_block.get().into(),
+                    ledger_id: ckerc20_ledger_id,
+                    reimbursed_in_block: reimbursed.reimbursed_in_block.get().into(),
+                    reimbursed_amount: reimbursed.reimbursed_amount.into(),
+                    transaction_hash: reimbursed.transaction_hash.map(|h| h.to_string()),
+                },
                 EventType::SkippedBlock(block_number) => EP::SkippedBlock {
                     block_number: block_number.into(),
                 },
@@ -625,6 +661,18 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     mint_block_index: mint_block_index.get().into(),
                     ckerc20_token_symbol,
                     erc20_contract_address: erc20_contract_address.to_string(),
+                },
+                EventType::FailedErc20WithdrawalRequest(ReimbursementRequest {
+                    ledger_burn_index,
+                    reimbursed_amount,
+                    to,
+                    to_subaccount,
+                    transaction_hash: _,
+                }) => EP::FailedErc20WithdrawalRequest {
+                    withdrawal_id: ledger_burn_index.get().into(),
+                    reimbursed_amount: reimbursed_amount.into(),
+                    to,
+                    to_subaccount: to_subaccount.map(|s| s.0),
                 },
             },
         }

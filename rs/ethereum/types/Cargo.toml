@@ -7,13 +7,13 @@ edition.workspace = true
 documentation.workspace = true
 
 [dependencies]
-hex = "0.4"
+hex = { workspace = true }
 ic-crypto-sha3 = { path = "../../crypto/sha3" }
 minicbor = { workspace = true }
 minicbor-derive = { workspace = true }
 serde = { workspace = true }
 
 [dev-dependencies]
-assert_matches = "1.5.0"
+assert_matches = { workspace = true }
 proptest = "1.0"
 serde_json = { workspace = true }

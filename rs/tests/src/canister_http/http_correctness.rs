@@ -20,6 +20,7 @@ use crate::driver::{
     test_env::TestEnv,
     test_env_api::{retry_async, RETRY_BACKOFF},
 };
+use crate::retry_with_msg_async;
 use crate::util::block_on;
 use anyhow::bail;
 use candid;
@@ -508,9 +509,16 @@ where
     F: Fn(&Result<RemoteHttpResponse, (RejectionCode, String)>) -> bool,
 {
     info!(logger.clone(), "Running correctness test: {}", test_name);
-    let test_result = retry_async(logger, Duration::from_secs(60), RETRY_BACKOFF, || async {
-        let res =
-            proxy_canister
+    let test_result = retry_with_msg_async!(
+        format!(
+            "checking send_request of proxy canister {}",
+            proxy_canister.canister_id()
+        ),
+        logger,
+        Duration::from_secs(60),
+        RETRY_BACKOFF,
+        || async {
+            let res = proxy_canister
                 .update_(
                     "send_request",
                     candid_one::<
@@ -521,11 +529,12 @@ where
                 )
                 .await
                 .expect("Update call to proxy canister failed");
-        if !response_check(&res) {
-            bail!("Http request didn't pass check: {:?}", &res);
+            if !response_check(&res) {
+                bail!("Http request didn't pass check: {:?}", &res);
+            }
+            Ok(())
         }
-        Ok(())
-    })
+    )
     .await;
 
     match test_result {

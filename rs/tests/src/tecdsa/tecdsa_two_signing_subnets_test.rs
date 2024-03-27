@@ -30,7 +30,7 @@ use crate::driver::test_env_api::{
 use crate::orchestrator::utils::rw_message::install_nns_and_check_progress;
 use crate::orchestrator::utils::subnet_recovery::{get_ecdsa_pub_key, run_ecdsa_signature_test};
 use crate::tecdsa::{create_new_subnet_with_keys, make_key};
-use crate::{tecdsa::KEY_ID1, util::*};
+use crate::{retry_with_msg, tecdsa::KEY_ID1, util::*};
 use anyhow::bail;
 use canister_test::Canister;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -118,7 +118,11 @@ fn wait_until_subnet_mr_version(
         subnet.subnet_id,
     );
     let metrics = MetricsFetcher::new(subnet.nodes().take(1), vec![MR_REGISTRY_VERSION.into()]);
-    retry(
+    retry_with_msg!(
+        format!(
+            "check if message routing registry version {} on subnet {}",
+            target_registry_version, subnet.subnet_id,
+        ),
         logger.clone(),
         READY_WAIT_TIMEOUT,
         RETRY_BACKOFF,
@@ -138,7 +142,7 @@ fn wait_until_subnet_mr_version(
             Err(err) => {
                 bail!("Could not connect to metrics yet {:?}", err);
             }
-        },
+        }
     )
     .expect("The subnet did not reach the specified registry version in time")
 }

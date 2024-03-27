@@ -1,4 +1,3 @@
-use crate::common::constants::*;
 use crate::common::storage::types::{IcrcOperation, RosettaBlock};
 use crate::common::types::{FeeMetadata, FeeSetter};
 use crate::{
@@ -12,13 +11,13 @@ use crate::{
 use anyhow::{bail, Context};
 use candid::Nat;
 use indicatif::{ProgressBar, ProgressState, ProgressStyle};
+use num_bigint::BigInt;
 use rosetta_core::identifiers::*;
 use rosetta_core::{
     identifiers::{BlockIdentifier, NetworkIdentifier, PartialBlockIdentifier},
     objects::{Amount, Currency},
 };
 use serde_bytes::ByteBuf;
-use std::collections::HashSet;
 use std::fmt::Write;
 use std::time::Duration;
 
@@ -368,15 +367,14 @@ pub fn icrc1_operation_to_rosetta_core_operations(
     fee_payed: Option<Nat>,
 ) -> anyhow::Result<Vec<rosetta_core::objects::Operation>> {
     let mut operations = vec![];
-    let mut related_operations = vec![];
     match operation {
         crate::common::storage::types::IcrcOperation::Mint { to, amount } => {
             operations.push(rosetta_core::objects::Operation::new(
-                MINT_OPERATION_IDENTIFIER,
+                0,
                 OperationType::Mint.to_string(),
                 Some(to.into()),
                 Some(rosetta_core::objects::Amount::new(
-                    amount.to_string(),
+                    BigInt::from(amount.0),
                     currency,
                 )),
                 None,
@@ -390,30 +388,26 @@ pub fn icrc1_operation_to_rosetta_core_operations(
             amount,
         } => {
             operations.push(rosetta_core::objects::Operation::new(
-                BURN_OPERATION_IDENTIFIER,
+                0,
                 OperationType::Burn.to_string(),
                 Some(from.into()),
                 Some(rosetta_core::objects::Amount::new(
-                    format!("-{}", amount),
+                    BigInt::from_biguint(num_bigint::Sign::Minus, amount.0),
                     currency,
                 )),
                 None,
                 None,
             ));
 
-            related_operations.push(OperationIdentifier::new(BURN_OPERATION_IDENTIFIER));
-
             if let Some(spender) = spender {
                 operations.push(rosetta_core::objects::Operation::new(
-                    SPENDER_OPERATION_IDENTIFIER,
+                    1,
                     OperationType::Spender.to_string(),
                     Some(spender.into()),
                     None,
                     None,
                     None,
                 ));
-
-                related_operations.push(OperationIdentifier::new(SPENDER_OPERATION_IDENTIFIER));
             }
         }
 
@@ -425,53 +419,52 @@ pub fn icrc1_operation_to_rosetta_core_operations(
             fee,
         } => {
             operations.push(rosetta_core::objects::Operation::new(
-                TRANSFER_TO_OPERATION_IDENTIFIER,
+                0,
                 OperationType::Transfer.to_string(),
                 Some(to.into()),
                 Some(rosetta_core::objects::Amount::new(
-                    amount.to_string(),
+                    BigInt::from(amount.0.clone()),
                     currency.clone(),
                 )),
                 None,
                 None,
             ));
 
-            related_operations.push(OperationIdentifier::new(TRANSFER_TO_OPERATION_IDENTIFIER));
-
             operations.push(rosetta_core::objects::Operation::new(
-                TRANSFER_FROM_OPERATION_IDENTIFIER,
+                1,
                 OperationType::Transfer.to_string(),
                 Some(from.into()),
                 Some(rosetta_core::objects::Amount::new(
-                    format!("-{}", amount),
+                    BigInt::from_biguint(num_bigint::Sign::Minus, amount.0),
                     currency.clone(),
                 )),
                 None,
                 None,
             ));
 
-            related_operations.push(OperationIdentifier::new(TRANSFER_FROM_OPERATION_IDENTIFIER));
+            let mut idx = 2;
 
             if let Some(spender) = spender {
                 operations.push(rosetta_core::objects::Operation::new(
-                    SPENDER_OPERATION_IDENTIFIER,
+                    idx,
                     OperationType::Spender.to_string(),
                     Some(spender.into()),
                     None,
                     None,
                     None,
                 ));
-
-                // Add the Spender operation to the related operations of the Transfer operations
-                related_operations.push(OperationIdentifier::new(SPENDER_OPERATION_IDENTIFIER));
+                idx += 1;
             }
 
             if let Some(fee_paid) = fee_payed {
                 operations.push(rosetta_core::objects::Operation::new(
-                    FEE_OPERATION_IDENTIFIER,
+                    idx,
                     OperationType::Fee.to_string(),
                     Some(from.into()),
-                    Some(Amount::new(format!("-{}", fee_paid), currency.clone())),
+                    Some(Amount::new(
+                        BigInt::from_biguint(num_bigint::Sign::Minus, fee_paid.0),
+                        currency.clone(),
+                    )),
                     None,
                     // If the fee inside the operation is set that means the User set the fee and the Ledger did nothing
                     Some(
@@ -484,8 +477,6 @@ pub fn icrc1_operation_to_rosetta_core_operations(
                         .try_into()?,
                     ),
                 ));
-                // Add the Fee operation to the related operations of the Transfer operations
-                related_operations.push(OperationIdentifier::new(FEE_OPERATION_IDENTIFIER));
             }
         }
 
@@ -498,16 +489,16 @@ pub fn icrc1_operation_to_rosetta_core_operations(
             fee,
         } => {
             operations.push(rosetta_core::objects::Operation::new(
-                APPROVE_OPERATION_IDENTIFIER,
+                0,
                 OperationType::Approve.to_string(),
                 Some(from.into()),
                 None,
                 None,
                 Some(
                     ApproveMetadata {
-                        allowance: Amount::new(amount.to_string(), currency.clone()),
+                        allowance: Amount::new(BigInt::from(amount.0), currency.clone()),
                         expected_allowance: expected_allowance.map(|expected_allowance| {
-                            Amount::new(expected_allowance.to_string(), currency.clone())
+                            Amount::new(BigInt::from(expected_allowance.0), currency.clone())
                         }),
                         expires_at,
                     }
@@ -515,10 +506,8 @@ pub fn icrc1_operation_to_rosetta_core_operations(
                 ),
             ));
 
-            related_operations.push(OperationIdentifier::new(APPROVE_OPERATION_IDENTIFIER));
-
             operations.push(rosetta_core::objects::Operation::new(
-                SPENDER_OPERATION_IDENTIFIER,
+                1,
                 OperationType::Spender.to_string(),
                 Some(spender.into()),
                 None,
@@ -526,14 +515,15 @@ pub fn icrc1_operation_to_rosetta_core_operations(
                 None,
             ));
 
-            related_operations.push(OperationIdentifier::new(SPENDER_OPERATION_IDENTIFIER));
-
             if let Some(fee_paid) = fee_payed {
                 operations.push(rosetta_core::objects::Operation::new(
-                    FEE_OPERATION_IDENTIFIER,
+                    2,
                     OperationType::Fee.to_string(),
                     Some(from.into()),
-                    Some(Amount::new(format!("-{}", fee_paid), currency)),
+                    Some(Amount::new(
+                        BigInt::from_biguint(num_bigint::Sign::Minus, fee_paid.0),
+                        currency,
+                    )),
                     None,
                     // If the fee inside the operation is set that means the User set the fee and the Ledger did nothing
                     Some(
@@ -546,24 +536,9 @@ pub fn icrc1_operation_to_rosetta_core_operations(
                         .try_into()?,
                     ),
                 ));
-
-                // Add the Fee operation to the related operations of the Approve operation
-                related_operations.push(OperationIdentifier::new(FEE_OPERATION_IDENTIFIER));
             }
         }
     };
-
-    for (idx, operation) in operations
-        .iter_mut()
-        .enumerate()
-        .take(related_operations.len())
-    {
-        // The related operations vector contains all operations and has the same order as the operations vector,
-        // we can thus remove the operation identifier of the current operation
-        let mut related_ops = related_operations.clone();
-        related_ops.remove(idx);
-        operation.related_operations = Some(related_ops);
-    }
 
     Ok(operations)
 }
@@ -583,46 +558,22 @@ pub fn icrc1_rosetta_block_to_rosetta_core_operations(
         rosetta_block.get_fee_paid()?,
     )?;
 
-    let related_operations: HashSet<OperationIdentifier> = HashSet::from_iter(
-        operations
-            .iter()
-            .map(|op| op.operation_identifier.clone())
-            .collect::<Vec<OperationIdentifier>>(),
-    );
-
     if let Some(fee_collector) = rosetta_block.get_fee_collector() {
         if let Some(_fee_payed) = rosetta_block.get_fee_paid()? {
-            operations.iter_mut().for_each(|op| {
-                op.related_operations = op
-                    .related_operations
-                    .clone()
-                    .map(|mut rel_ops| {
-                        rel_ops.push(OperationIdentifier::new(FEE_COLLECTOR_OPERATION_IDENTIFIER));
-                        rel_ops
-                    })
-                    .or_else(|| {
-                        Some(vec![OperationIdentifier::new(
-                            FEE_COLLECTOR_OPERATION_IDENTIFIER,
-                        )])
-                    });
-            });
-
             operations.push(rosetta_core::objects::Operation::new(
-                FEE_COLLECTOR_OPERATION_IDENTIFIER,
+                operations.len().try_into().unwrap(),
                 OperationType::FeeCollector.to_string(),
                 Some(fee_collector.into()),
                 Some(rosetta_core::objects::Amount::new(
-                    rosetta_block
-                        .get_fee_paid()?
-                        .context("Fee payed needs to be populated for FeeCollector operation")?
-                        .to_string(),
+                    BigInt::from(
+                        rosetta_block
+                            .get_fee_paid()?
+                            .context("Fee payed needs to be populated for FeeCollector operation")?
+                            .0,
+                    ),
                     currency.clone(),
                 )),
-                Some(
-                    related_operations
-                        .into_iter()
-                        .collect::<Vec<OperationIdentifier>>(),
-                ),
+                None,
                 None,
             ));
         }

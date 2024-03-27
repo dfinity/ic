@@ -339,7 +339,6 @@ fn install_code(
         context.arg.clone(),
         None,
         None,
-        None,
     );
     let ingress = IngressBuilder::new()
         .source(UserId::from(context.sender()))
@@ -2442,45 +2441,6 @@ fn delete_canister_consumed_cycles_observed() {
 }
 
 #[test]
-fn install_canister_with_query_allocation() {
-    with_setup(|canister_manager, mut state, _| {
-        let mut round_limits = RoundLimits {
-            instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
-            compute_allocation_used: state.total_compute_allocation(),
-        };
-        let sender = canister_test_id(1).get();
-        let sender_subnet_id = subnet_test_id(1);
-        let canister_id = canister_manager
-            .create_canister(
-                canister_change_origin_from_principal(&sender),
-                sender_subnet_id,
-                *INITIAL_CYCLES,
-                CanisterSettings::default(),
-                MAX_NUMBER_OF_CANISTERS,
-                &mut state,
-                SMALL_APP_SUBNET_MAX_SIZE,
-                &mut round_limits,
-                ResourceSaturation::default(),
-                &no_op_counter(),
-            )
-            .0
-            .unwrap();
-        assert!(install_code(
-            &canister_manager,
-            InstallCodeContextBuilder::default()
-                .sender(sender)
-                .canister_id(canister_id)
-                .build(),
-            &mut state,
-            &mut round_limits,
-        )
-        .1
-        .is_ok());
-    });
-}
-
-#[test]
 fn deposit_cycles_succeeds_with_enough_cycles() {
     with_setup(|_, _, _| {
         let canister_id = canister_test_id(0);
@@ -4410,7 +4370,6 @@ fn install_code_context_conversion_u128() {
         arg: vec![],
         compute_allocation: Some(candid::Nat::from(u128::MAX)),
         memory_allocation: Some(candid::Nat::from(u128::MAX)),
-        query_allocation: Some(candid::Nat::from(u128::MAX)),
         sender_canister_version: None,
     };
 

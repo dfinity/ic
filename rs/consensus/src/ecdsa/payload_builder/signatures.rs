@@ -8,7 +8,7 @@ use ic_types::{
     consensus::ecdsa,
     crypto::canister_threshold_sig::ExtendedDerivationPath,
     messages::{CallbackId, RejectContext},
-    Time,
+    CanisterId, Time,
 };
 use phantom_newtype::Id;
 
@@ -57,23 +57,18 @@ pub(crate) fn update_signature_agreements(
             continue;
         };
 
-        let response = ic_types::messages::Response {
-            originator: context.request.sender,
-            respondent: ic_types::CanisterId::ic_00(),
-            originator_reply_callback: **callback_id,
-            // Execution is responsible for burning the appropriate cycles
-            // before pushing the new context, so any remaining cycles can
-            // be refunded to the canister.
-            refund: context.request.payment,
-            response_payload: ic_types::messages::Payload::Data(
+        let response = ic_types::batch::ConsensusResponse {
+            callback: **callback_id,
+            payload: ic_types::messages::Payload::Data(
                 SignWithECDSAReply {
                     signature: signature.signature.clone(),
                 }
                 .encode(),
             ),
-            // Not relevant, the consensus queue is flushed every round by the
-            // scheduler, which uses only the payload and originator callback.
-            deadline: context.request.deadline,
+            originator: Some(context.request.sender),
+            respondent: Some(CanisterId::ic_00()),
+            refund: Some(context.request.payment),
+            deadline: Some(context.request.deadline),
         };
 
         completed.insert(
@@ -127,16 +122,14 @@ fn reject_response(
     context: &SignWithEcdsaContext,
     code: RejectCode,
     message: impl ToString,
-) -> ic_types::messages::Response {
-    ic_types::messages::Response {
-        originator: context.request.sender,
-        respondent: ic_types::CanisterId::ic_00(),
-        originator_reply_callback: callback_id,
-        refund: context.request.payment,
-        response_payload: ic_types::messages::Payload::Reject(RejectContext::new(code, message)),
-        // Not relevant, the consensus queue is flushed every round by the
-        // scheduler, which uses only the payload and originator callback.
-        deadline: context.request.deadline,
+) -> ic_types::batch::ConsensusResponse {
+    ic_types::batch::ConsensusResponse {
+        callback: callback_id,
+        payload: ic_types::messages::Payload::Reject(RejectContext::new(code, message)),
+        originator: Some(context.request.sender),
+        respondent: Some(CanisterId::ic_00()),
+        refund: Some(context.request.payment),
+        deadline: Some(context.request.deadline),
     }
 }
 
@@ -254,23 +247,18 @@ pub(crate) fn update_signature_agreements_improved_latency(
             continue;
         };
 
-        let response = ic_types::messages::Response {
-            originator: context.request.sender,
-            respondent: ic_types::CanisterId::ic_00(),
-            originator_reply_callback: *callback_id,
-            // Execution is responsible for burning the appropriate cycles
-            // before pushing the new context, so any remaining cycles can
-            // be refunded to the canister.
-            refund: context.request.payment,
-            response_payload: ic_types::messages::Payload::Data(
+        let response = ic_types::batch::ConsensusResponse {
+            callback: *callback_id,
+            payload: ic_types::messages::Payload::Data(
                 SignWithECDSAReply {
                     signature: signature.signature.clone(),
                 }
                 .encode(),
             ),
-            // Not relevant, the consensus queue is flushed every round by the
-            // scheduler, which uses only the payload and originator callback.
-            deadline: context.request.deadline,
+            originator: Some(context.request.sender),
+            respondent: Some(CanisterId::ic_00()),
+            refund: Some(context.request.payment),
+            deadline: Some(context.request.deadline),
         };
         payload.signature_agreements.insert(
             context.pseudo_random_id,
@@ -646,10 +634,7 @@ mod tests {
         else {
             panic!("Request 1 should have a response");
         };
-        assert_matches!(
-            &response_1.response_payload,
-            ic_types::messages::Payload::Data(_)
-        );
+        assert_matches!(&response_1.payload, ic_types::messages::Payload::Data(_));
 
         assert_matches!(
             ecdsa_payload.signature_agreements.get(&[2; 32]),
@@ -662,7 +647,7 @@ mod tests {
             panic!("Request 3 should have a response");
         };
         assert_matches!(
-            &response_3.response_payload,
+            &response_3.payload,
             ic_types::messages::Payload::Reject(context)
             if context.message().contains("matched to non-existent pre-signature")
         );

@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-hex = "0.4.2"
+hex = { workspace = true }
 base64 = { workspace = true }
 ic-certification = { path = "../../../../../certification" }
 ic-crypto-internal-basic-sig-der-utils = { path = "../der_utils" }
@@ -21,7 +21,7 @@ serde_cbor = { workspace = true }
 simple_asn1 = { workspace = true }
 
 [dev-dependencies]
-assert_matches = "1.5.0"
+assert_matches = { workspace = true }
 ic-certification-test-utils = { path = "../../../../../certification/test-utils" }
 ic-crypto-internal-basic-sig-iccsa-test-utils = { path = "test_utils" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../../../crypto/test_utils/reproducible_rng" }

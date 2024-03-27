@@ -24,16 +24,18 @@ use ic_protobuf::{
     log::consensus_log_entry::v1::ConsensusLogEntry,
     registry::{crypto::v1::PublicKey as PublicKeyProto, subnet::v1::InitialNiDkgTranscriptRecord},
 };
-use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::{
-    batch::{Batch, BatchMessages, BlockmakerMetrics},
+    batch::{Batch, BatchMessages, BlockmakerMetrics, ConsensusResponse},
     consensus::{
         ecdsa::{self, CompletedSignature},
         Block,
     },
     crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTranscript},
-    messages::{CallbackId, Payload, RejectContext, Response, NO_DEADLINE},
-    CanisterId, Cycles, Height, PrincipalId, Randomness, ReplicaVersion, SubnetId,
+    messages::{CallbackId, Payload, RejectContext},
+    Height, PrincipalId, Randomness, ReplicaVersion, SubnetId,
+};
+use ic_types::{
+    crypto::threshold_sig::ThresholdSigPublicKey, messages::NO_DEADLINE, CanisterId, Cycles,
 };
 use std::collections::BTreeMap;
 
@@ -259,8 +261,8 @@ pub fn generate_responses_to_subnet_calls(
     block: &Block,
     stats: &mut BatchStats,
     log: &ReplicaLogger,
-) -> Vec<Response> {
-    let mut consensus_responses = Vec::<Response>::new();
+) -> Vec<ConsensusResponse> {
+    let mut consensus_responses = Vec::new();
     let block_payload = &block.payload;
     if block_payload.is_summary() {
         let summary = block_payload.as_ref().as_summary();
@@ -298,8 +300,8 @@ struct TranscriptResults {
 pub fn generate_responses_to_setup_initial_dkg_calls(
     transcripts_for_new_subnets: &[(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)],
     log: &ReplicaLogger,
-) -> Vec<Response> {
-    let mut consensus_responses = Vec::<Response>::new();
+) -> Vec<ConsensusResponse> {
+    let mut consensus_responses = Vec::new();
 
     let mut transcripts: BTreeMap<CallbackId, TranscriptResults> = BTreeMap::new();
 
@@ -340,22 +342,20 @@ pub fn generate_responses_to_setup_initial_dkg_calls(
         };
     }
 
-    for (callback_id, transcript_results) in transcripts.into_iter() {
+    for (callback, transcript_results) in transcripts.into_iter() {
         let payload = generate_dkg_response_payload(
             transcript_results.low_threshold.as_ref(),
             transcript_results.high_threshold.as_ref(),
             log,
         );
-        if let Some(response_payload) = payload {
-            consensus_responses.push(Response {
-                originator: CanisterId::ic_00(),
-                respondent: CanisterId::ic_00(),
-                originator_reply_callback: callback_id,
-                refund: Cycles::zero(),
-                response_payload,
-                // Not relevant, the consensus queue is flushed every round by the
-                // scheduler, which uses only the payload and originator callback.
-                deadline: NO_DEADLINE,
+        if let Some(payload) = payload {
+            consensus_responses.push(ConsensusResponse {
+                callback,
+                payload,
+                originator: Some(CanisterId::ic_00()),
+                respondent: Some(CanisterId::ic_00()),
+                refund: Some(Cycles::zero()),
+                deadline: Some(NO_DEADLINE),
             });
         }
     }
@@ -438,8 +438,8 @@ fn generate_dkg_response_payload(
 /// signature.
 pub fn generate_responses_to_sign_with_ecdsa_calls(
     ecdsa_payload: &ecdsa::EcdsaPayload,
-) -> Vec<Response> {
-    let mut consensus_responses = Vec::<Response>::new();
+) -> Vec<ConsensusResponse> {
+    let mut consensus_responses = Vec::new();
     for completed in ecdsa_payload.signature_agreements.values() {
         if let CompletedSignature::Unreported(response) = completed {
             consensus_responses.push(response.clone());
@@ -452,8 +452,8 @@ pub fn generate_responses_to_sign_with_ecdsa_calls(
 /// dealings.
 fn generate_responses_to_initial_dealings_calls(
     ecdsa_payload: &ecdsa::EcdsaPayload,
-) -> Vec<Response> {
-    let mut consensus_responses = Vec::<Response>::new();
+) -> Vec<ConsensusResponse> {
+    let mut consensus_responses = Vec::new();
     for agreement in ecdsa_payload.xnet_reshare_agreements.values() {
         if let ecdsa::CompletedReshareRequest::Unreported(response) = agreement {
             consensus_responses.push(response.clone());

@@ -9,7 +9,7 @@ type CanisterStatusResultV2 = record {
   cycles : nat;
   settings : DefiniteCanisterSettingsArgs;
   idle_cycles_burned_per_day : nat;
-  module_hash : opt vec nat8;
+  module_hash : opt blob;
 };
 type CanisterStatusType = variant { stopped; stopping; running };
 type CfInvestment = record { hotkey_principal : text; nns_neuron_id : nat64 };
@@ -91,7 +91,7 @@ type GetOpenTicketResponse = record { result : opt Result_1 };
 type GetSaleParametersResponse = record { params : opt Params };
 type GetStateResponse = record { swap : opt Swap; derived : opt DerivedState };
 type GovernanceError = record { error_message : text; error_type : int32 };
-type Icrc1Account = record { owner : opt principal; subaccount : opt vec nat8 };
+type Icrc1Account = record { owner : opt principal; subaccount : opt blob };
 type IdealMatchedParticipationFunction = record {
   serialized_representation : opt text;
 };
@@ -163,7 +163,7 @@ type NeuronBasketConstructionParameters = record {
   dissolve_delay_interval_seconds : nat64;
   count : nat64;
 };
-type NeuronId = record { id : vec nat8 };
+type NeuronId = record { id : blob };
 type NeuronsFundParticipants = record { cf_participants : vec CfParticipant };
 type NeuronsFundParticipationConstraints = record {
   coefficient_intervals : vec LinearScalingCoefficient;
@@ -172,7 +172,7 @@ type NeuronsFundParticipationConstraints = record {
   ideal_matched_participation_function : opt IdealMatchedParticipationFunction;
 };
 type NewSaleTicketRequest = record {
-  subaccount : opt vec nat8;
+  subaccount : opt blob;
   amount_icp_e8s : nat64;
 };
 type NewSaleTicketResponse = record { result : opt Result_2 };
@@ -251,7 +251,7 @@ type Swap = record {
   purge_old_tickets_last_completion_timestamp_nanoseconds : opt nat64;
   direct_participation_icp_e8s : opt nat64;
   lifecycle : int32;
-  purge_old_tickets_next_principal : opt vec nat8;
+  purge_old_tickets_next_principal : opt blob;
   decentralization_swap_termination_timestamp_seconds : opt nat64;
   buyers : vec record { text; BuyerState };
   params : opt Params;

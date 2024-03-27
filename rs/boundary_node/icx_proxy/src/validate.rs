@@ -20,7 +20,7 @@ pub trait Validate: Sync + Send {
     ) -> Result<Option<VerificationInfo>, Cow<'static, str>>;
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct Validator {}
 
 impl Validator {

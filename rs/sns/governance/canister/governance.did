@@ -40,7 +40,7 @@ type CanisterStatusResultV2 = record {
   cycles : nat;
   settings : DefiniteCanisterSettingsArgs;
   idle_cycles_burned_per_day : nat;
-  module_hash : opt vec nat8;
+  module_hash : opt blob;
 };
 type CanisterStatusType = variant { stopped; stopping; running };
 type ChangeAutoStakeMaturity = record {
@@ -135,7 +135,7 @@ type DissolveState = variant {
 };
 type ExecuteGenericNervousSystemFunction = record {
   function_id : nat64;
-  payload : vec nat8;
+  payload : blob;
 };
 type FinalizeDisburseMaturity = record {
   amount_to_be_disbursed_e8s : nat64;
@@ -245,7 +245,7 @@ type ManageDappCanisterSettings = record {
   compute_allocation : opt nat64;
 };
 type ManageLedgerParameters = record { transfer_fee : opt nat64 };
-type ManageNeuron = record { subaccount : vec nat8; command : opt Command };
+type ManageNeuron = record { subaccount : blob; command : opt Command };
 type ManageNeuronResponse = record { command : opt Command_1 };
 type ManageSnsMetadata = record {
   url : opt text;
@@ -316,7 +316,7 @@ type Neuron = record {
   followees : vec record { nat64; Followees };
   neuron_fees_e8s : nat64;
 };
-type NeuronId = record { id : vec nat8 };
+type NeuronId = record { id : blob };
 type NeuronInFlightCommand = record {
   command : opt Command_2;
   timestamp : nat64;
@@ -399,7 +399,7 @@ type StakeMaturityResponse = record {
   maturity_e8s : nat64;
   staked_maturity_e8s : nat64;
 };
-type Subaccount = record { subaccount : vec nat8 };
+type Subaccount = record { subaccount : blob };
 type SwapNeuron = record { id : opt NeuronId; status : int32 };
 type Tally = record {
   no : nat64;
@@ -422,10 +422,10 @@ type UpgradeInProgress = record {
   target_version : opt Version;
 };
 type UpgradeSnsControlledCanister = record {
-  new_canister_wasm : vec nat8;
+  new_canister_wasm : blob;
   mode : opt int32;
   canister_id : opt principal;
-  canister_upgrade_arg : opt vec nat8;
+  canister_upgrade_arg : opt blob;
 };
 type Valuation = record {
   token : opt int32;
@@ -439,12 +439,12 @@ type ValuationFactors = record {
   tokens : opt Tokens;
 };
 type Version = record {
-  archive_wasm_hash : vec nat8;
-  root_wasm_hash : vec nat8;
-  swap_wasm_hash : vec nat8;
-  ledger_wasm_hash : vec nat8;
-  governance_wasm_hash : vec nat8;
-  index_wasm_hash : vec nat8;
+  archive_wasm_hash : blob;
+  root_wasm_hash : blob;
+  swap_wasm_hash : blob;
+  ledger_wasm_hash : blob;
+  governance_wasm_hash : blob;
+  index_wasm_hash : blob;
 };
 type VotingRewardsParameters = record {
   final_reward_rate_basis_points : opt nat64;

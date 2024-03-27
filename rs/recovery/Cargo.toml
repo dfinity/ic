@@ -7,7 +7,7 @@ edition = "2021"
 base64 = { workspace = true }
 clap = { version = "3.2.25", features = ["derive"] }
 futures = { workspace = true }
-hex = "0.4.2"
+hex = { workspace = true }
 ic-artifact-pool = { path = "../artifact_pool" }
 ic-base-types = { path = "../types/base_types/" }
 ic-canister-sandbox-backend-lib = { path = "../canister_sandbox" }

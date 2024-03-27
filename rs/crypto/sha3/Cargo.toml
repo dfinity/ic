@@ -10,4 +10,4 @@ documentation.workspace = true
 sha3 = "0.9.1"
 
 [dev-dependencies]
-hex = "0.4.3"
+hex = { workspace = true }

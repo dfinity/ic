@@ -7,6 +7,6 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-hex = "0.4.2"
+hex = { workspace = true }
 simple_asn1 = { workspace = true }
 ic-types = { path = "../../../../../types/types" }

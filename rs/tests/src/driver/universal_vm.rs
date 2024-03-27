@@ -18,6 +18,7 @@ use crate::driver::test_env_api::{
 use crate::driver::test_setup::{GroupSetup, InfraProvider};
 use crate::k8s::images::upload_image;
 use crate::k8s::tnet::TNet;
+use crate::retry_with_msg;
 use crate::util::block_on;
 use anyhow::{bail, Result};
 use chrono::Duration;
@@ -374,9 +375,14 @@ impl SshSession for DeployedUniversalVm {
     }
 
     fn block_on_ssh_session(&self) -> Result<Session> {
-        retry(self.env.logger(), SSH_RETRY_TIMEOUT, RETRY_BACKOFF, || {
-            self.get_ssh_session()
-        })
+        let vm = self.get_vm()?;
+        retry_with_msg!(
+            format!("get_ssh_session to {}", vm.ipv6.to_string()),
+            self.env.logger(),
+            SSH_RETRY_TIMEOUT,
+            RETRY_BACKOFF,
+            || { self.get_ssh_session() }
+        )
     }
 }
 

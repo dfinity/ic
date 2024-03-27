@@ -15,7 +15,7 @@ clap = { version = "3.2.25", features = ["derive"] }
 flate2 = "1.0.24"
 futures = { workspace = true }
 httptest = "0.15.4"
-mockall = "0.11.1"
+mockall = { workspace = true }
 nix = { workspace = true }
 opentelemetry = { version = "0.20", features = ["metrics"] }
 opentelemetry-prometheus = "0.13.0"

@@ -33,7 +33,7 @@ serde_bytes = { workspace = true }
 slog = { workspace = true }
 
 [dev-dependencies]
-assert_matches = "1.0.0"
+assert_matches = { workspace = true }
 ic-registry-subnet-features = { path = "../registry/subnet_features" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-embedders = { path = "../test_utilities/embedders" }

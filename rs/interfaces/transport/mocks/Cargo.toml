@@ -9,4 +9,4 @@ documentation.workspace = true
 [dependencies]
 ic-interfaces-transport = { path = "../" }
 ic-base-types = { path = "../../../types/base_types" }
-mockall = "0.11.2"
+mockall = { workspace = true }

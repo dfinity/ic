@@ -14,7 +14,7 @@ path = "src/main.rs"
 
 [dependencies]
 clap = { version = "3.2.25", features = ["derive"] }
-hex = "0.4.2"
+hex = { workspace = true }
 ic-config = { path = "../config" }
 ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }

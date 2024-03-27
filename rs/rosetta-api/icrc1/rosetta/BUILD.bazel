@@ -159,8 +159,15 @@ rust_test_suite_with_extra_srcs(
     srcs = [
         "tests/system_tests.rs",
     ],
-    data = LOCAL_REPLICA_DATA,
-    env = LOCAL_REPLICA_ENV,
+    data = LOCAL_REPLICA_DATA + glob([
+        "tests/*.json",
+    ]) + [
+        "@rosetta-cli//:rosetta-cli",
+    ],
+    env = LOCAL_REPLICA_ENV | {
+        "ROSETTA_CLI": "$(rootpath @rosetta-cli//:rosetta-cli)",
+        "CARGO_MANIFEST_DIR": "rs/rosetta-api/icrc1/rosetta/",
+    },
     extra_srcs = glob([
         "tests/common/*.rs",
     ]),

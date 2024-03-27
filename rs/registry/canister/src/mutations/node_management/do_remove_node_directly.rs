@@ -111,6 +111,7 @@ mod tests {
     };
     use ic_registry_keys::make_node_operator_record_key;
     use ic_registry_transport::insert;
+    use ic_types::ReplicaVersion;
 
     use crate::{
         common::test_helpers::{invariant_compliant_registry, prepare_registry_with_nodes},
@@ -147,7 +148,7 @@ mod tests {
             PrincipalId::try_from(registry.get_node_or_panic(node_id).node_operator_id).unwrap();
         // Add API BN to registry
         let api_bn = ApiBoundaryNodeRecord {
-            version: "version".into(),
+            version: ReplicaVersion::default().to_string(),
         };
         registry.maybe_apply_mutation_internal(vec![insert(
             make_api_boundary_node_record_key(node_id),

@@ -16,7 +16,7 @@ bech32 = "0.9.0"
 bs58 = "0.4.0"
 candid = { workspace = true }
 ciborium = { workspace = true }
-hex = "0.4.3"
+hex = { workspace = true }
 ic0 = "0.18.9"
 ic-base-types = { path = "../../../types/base_types" }
 ic-btc-interface = { workspace = true }
@@ -47,7 +47,7 @@ serde_bytes = { workspace = true }
 serde_json = { workspace = true }
 
 [dev-dependencies]
-assert_matches = "1.5.0"
+assert_matches = { workspace = true }
 bitcoin = "0.28.1"
 candid_parser = { workspace = true }
 canister-test = { path = "../../../rust_canisters/canister_test" }

@@ -263,7 +263,6 @@ async fn main() -> Result<(), Error> {
     let encoder = Arc::new(encoder);
 
     let decoder = Decoder::new(cipher.clone());
-    let decoder = WithMetrics(decoder, MetricParams::new(&meter, SERVICE_NAME, "decrypt"));
     let decoder = Arc::new(decoder);
 
     // Registration

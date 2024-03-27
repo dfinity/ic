@@ -13,16 +13,16 @@ path = "src/main.rs"
 [dependencies]
 anyhow = { workspace = true }
 async-trait = "0.1.53"
-axum = "0.6.1"
+axum = "^0.7.4"
 candid = { workspace = true }
 clap = { version = "3.2.25", features = ["derive"] }
 dashmap = "5.3.4"
 futures = { workspace = true }
 humantime = "2.1.0"
-hyper = "0.14.18"
+hyper = "^1.0.1"
 ic-agent = { workspace = true }
 indoc = "1.0.9"
-mockall = "0.11.1"
+mockall = { workspace = true }
 opentelemetry = { version = "0.20", features = ["metrics"] }
 opentelemetry-prometheus = "0.13.0"
 prometheus = { workspace = true }

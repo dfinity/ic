@@ -7,6 +7,6 @@ edition.workspace = true
 documentation.workspace = true
 
 [dependencies]
-hex = "0.4.2"
+hex = { workspace = true }
 ic-protobuf = { path = "../../../protobuf" }
 ic-types = { path = "../../../types/types" }

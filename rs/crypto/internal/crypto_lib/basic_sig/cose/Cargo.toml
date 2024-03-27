@@ -15,4 +15,4 @@ simple_asn1 = { workspace = true }
 [dev-dependencies]
 ic-crypto-internal-test-vectors = { path = "../../../test_vectors" }
 ic-crypto-sha2 = { path = "../../../../sha2" }
-hex = "0.4.2"
+hex = { workspace = true }

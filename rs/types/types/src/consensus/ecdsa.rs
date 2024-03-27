@@ -51,7 +51,7 @@ use strum_macros::EnumIter;
 /// once that block is finalized, the optimized path matches pre-signatures
 /// with requests in replicated state and generates signature shares as
 /// soon as that state is certified.
-pub const ECDSA_IMPROVED_LATENCY: bool = false;
+pub const ECDSA_IMPROVED_LATENCY: bool = true;
 
 /// For completed signature requests, we differentiate between those
 /// that have already been reported and those that have not. This is
@@ -60,7 +60,7 @@ pub const ECDSA_IMPROVED_LATENCY: bool = false;
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum CompletedSignature {
     ReportedToExecution,
-    Unreported(crate::messages::Response),
+    Unreported(crate::batch::ConsensusResponse),
 }
 
 /// Common data that is carried in both `EcdsaSummaryPayload` and `EcdsaDataPayload`.
@@ -667,7 +667,7 @@ impl TryFrom<&pb::EcdsaReshareRequest> for EcdsaReshareRequest {
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum CompletedReshareRequest {
     ReportedToExecution,
-    Unreported(crate::messages::Response),
+    Unreported(crate::batch::ConsensusResponse),
 }
 
 /// To make sure all ids used in ECDSA payload are uniquely generated,
@@ -1568,7 +1568,7 @@ impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
             };
 
             let signature = if let Some(unreported) = &completed_signature.unreported {
-                let response = crate::messages::Response::try_from(unreported.clone())?;
+                let response = crate::batch::ConsensusResponse::try_from(unreported.clone())?;
                 CompletedSignature::Unreported(response)
             } else {
                 CompletedSignature::ReportedToExecution

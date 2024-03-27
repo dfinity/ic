@@ -30,6 +30,7 @@ use ic_tests::nns_dapp::{
     install_ii_and_nns_dapp, nns_dapp_customizations, set_authorized_subnets,
 };
 use ic_tests::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
+use ic_tests::retry_with_msg;
 use ic_tests::systest;
 use ic_tests::util::block_on;
 use libflate::gzip::Decoder;
@@ -68,47 +69,53 @@ pub fn setup(env: TestEnv) {
 
 fn get_html(env: &TestEnv, farm_url: &str, canister_id: Principal, dapp_anchor: &str) {
     let log = env.logger();
-    retry(log.clone(), secs(600), secs(30), || {
-        block_on(async {
-            let https_connector = HttpsConnectorBuilder::new()
-                .with_native_roots()
-                .https_only()
-                .enable_http1()
-                .build();
-            let client = Client::builder().build::<_, hyper::Body>(https_connector);
+    let dapp_url = &format!("https://{}.{}", canister_id, farm_url);
+    retry_with_msg!(
+        format!("get html from {}", dapp_url),
+        log.clone(),
+        secs(600),
+        secs(30),
+        || {
+            block_on(async {
+                let https_connector = HttpsConnectorBuilder::new()
+                    .with_native_roots()
+                    .https_only()
+                    .enable_http1()
+                    .build();
+                let client = Client::builder().build::<_, hyper::Body>(https_connector);
 
-            let dapp_url = format!("https://{}.{}", canister_id, farm_url);
-            let req = hyper::Request::builder()
-                .method(hyper::Method::GET)
-                .uri(dapp_url)
-                .header("Accept-Encoding", "gzip")
-                .header("User-Agent", "systest") // to prevent getting the service worker
-                .body(hyper::Body::from(""))?;
+                let req = hyper::Request::builder()
+                    .method(hyper::Method::GET)
+                    .uri(dapp_url)
+                    .header("Accept-Encoding", "gzip")
+                    .header("User-Agent", "systest") // to prevent getting the service worker
+                    .body(hyper::Body::from(""))?;
 
-            let resp = client.request(req).await?;
+                let resp = client.request(req).await?;
 
-            let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
-            if let Ok(body) = String::from_utf8(body_bytes.to_vec()) {
-                if body.contains("503 Service Temporarily Unavailable") {
-                    bail!("BN is not ready yet!");
-                } else if body.contains(dapp_anchor) {
-                    return Ok(());
-                } else {
-                    panic!("Unexpected response from BN!");
-                }
-            };
+                let body_bytes = hyper::body::to_bytes(resp.into_body()).await?;
+                if let Ok(body) = String::from_utf8(body_bytes.to_vec()) {
+                    if body.contains("503 Service Temporarily Unavailable") {
+                        bail!("BN is not ready yet!");
+                    } else if body.contains(dapp_anchor) {
+                        return Ok(());
+                    } else {
+                        panic!("Unexpected response from BN!");
+                    }
+                };
 
-            let body_vec = body_bytes.to_vec();
-            let mut decoder = Decoder::new(&body_vec[..]).unwrap();
-            let mut decoded_data = Vec::new();
-            decoder.read_to_end(&mut decoded_data).unwrap();
+                let body_vec = body_bytes.to_vec();
+                let mut decoder = Decoder::new(&body_vec[..]).unwrap();
+                let mut decoded_data = Vec::new();
+                decoder.read_to_end(&mut decoded_data).unwrap();
 
-            let body = String::from_utf8(decoded_data.to_vec()).unwrap();
-            assert!(body.contains(dapp_anchor));
+                let body = String::from_utf8(decoded_data.to_vec()).unwrap();
+                assert!(body.contains(dapp_anchor));
 
-            Ok(())
-        })
-    })
+                Ok(())
+            })
+        }
+    )
     .unwrap_or_else(|_| panic!("{} should deliver a proper HTML page!", canister_id));
 }
 

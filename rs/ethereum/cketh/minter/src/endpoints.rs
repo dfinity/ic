@@ -325,6 +325,14 @@ pub mod events {
             reimbursed_amount: Nat,
             transaction_hash: Option<String>,
         },
+        ReimbursedErc20Withdrawal {
+            withdrawal_id: Nat,
+            burn_in_block: Nat,
+            reimbursed_in_block: Nat,
+            ledger_id: Principal,
+            reimbursed_amount: Nat,
+            transaction_hash: Option<String>,
+        },
         SkippedBlock {
             block_number: Nat,
         },
@@ -345,6 +353,12 @@ pub mod events {
             from: Principal,
             from_subaccount: Option<[u8; 32]>,
             created_at: u64,
+        },
+        FailedErc20WithdrawalRequest {
+            withdrawal_id: Nat,
+            reimbursed_amount: Nat,
+            to: Principal,
+            to_subaccount: Option<[u8; 32]>,
         },
         MintedCkErc20 {
             event_source: EventSource,

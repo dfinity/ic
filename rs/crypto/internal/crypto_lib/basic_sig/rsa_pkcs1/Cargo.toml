@@ -19,7 +19,7 @@ simple_asn1 = { workspace = true }
 num-bigint = "~0.4.3"
 
 [dev-dependencies]
-hex = "0.4.2"
+hex = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 wycheproof = "0.5"

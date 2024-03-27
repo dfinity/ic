@@ -94,6 +94,8 @@ pub(crate) struct SchedulerTest {
     next_canister_id: u64,
     // Monotonically increasing counter that specifies the current round.
     round: ExecutionRound,
+    // CUP interval to pass the next checkpoint round in `execute_round()`.
+    cup_interval: Option<u64>,
     // The amount of cycles that new canisters have by default.
     initial_canister_cycles: Cycles,
     // The id of the user that sends ingress messages.
@@ -395,7 +397,6 @@ impl SchedulerTest {
             arg: encode_message_id_as_payload(message_id),
             compute_allocation: None,
             memory_allocation: None,
-            query_allocation: None,
             sender_canister_version: None,
         };
 
@@ -469,13 +470,16 @@ impl SchedulerTest {
 
     pub fn execute_round(&mut self, round_type: ExecutionRoundType) {
         let state = self.state.take().unwrap();
+        let next_checkpoint_round = self.cup_interval.map(|cup_interval| {
+            ExecutionRound::from(self.round.get() / cup_interval * cup_interval + cup_interval)
+        });
         let state = self.scheduler.execute_round(
             state,
             Randomness::from([0; 32]),
             self.ecdsa_subnet_public_keys.clone(),
             self.ecdsa_quadruple_ids.clone(),
             self.round,
-            None,
+            next_checkpoint_round,
             round_type,
             self.registry_settings(),
         );
@@ -619,6 +623,7 @@ pub(crate) struct SchedulerTestBuilder {
     log: ReplicaLogger,
     ecdsa_keys: Vec<EcdsaKeyId>,
     metrics_registry: MetricsRegistry,
+    cup_interval: Option<u64>,
 }
 
 impl Default for SchedulerTestBuilder {
@@ -642,6 +647,7 @@ impl Default for SchedulerTestBuilder {
             log: no_op_logger(),
             ecdsa_keys: vec![],
             metrics_registry: MetricsRegistry::new(),
+            cup_interval: None,
         }
     }
 }
@@ -701,6 +707,13 @@ impl SchedulerTestBuilder {
 
     pub fn with_batch_time(self, batch_time: Time) -> Self {
         Self { batch_time, ..self }
+    }
+
+    pub fn with_cup_interval(self, cup_interval: u64) -> Self {
+        Self {
+            cup_interval: Some(cup_interval),
+            ..self
+        }
     }
 
     pub fn build(self) -> SchedulerTest {
@@ -835,6 +848,7 @@ impl SchedulerTestBuilder {
             state: Some(state),
             next_canister_id: 0,
             round: ExecutionRound::new(0),
+            cup_interval: self.cup_interval,
             initial_canister_cycles: self.initial_canister_cycles,
             user_id: user_test_id(1),
             xnet_canister_id: canister_test_id(first_xnet_canister),

@@ -23,7 +23,6 @@ use std::sync::Arc;
 use tower::{load_shed::error::Overloaded, timeout::error::Elapsed, BoxError};
 use tower_http::cors::{CorsLayer, Vary};
 
-pub const CONTENT_TYPE_HTML: &str = "text/html";
 pub const CONTENT_TYPE_CBOR: &str = "application/cbor";
 pub const CONTENT_TYPE_PROTOBUF: &str = "application/x-protobuf";
 pub const CONTENT_TYPE_TEXT: &str = "text/plain";

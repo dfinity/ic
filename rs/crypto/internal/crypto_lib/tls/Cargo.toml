@@ -17,11 +17,11 @@ time = "0.3.20"
 zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
 
 [dev-dependencies]
-assert_matches = "1.5.0"
+assert_matches = { workspace = true }
 ic-crypto-node-key-validation = { path = "../../../node_key_validation" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../test_utils/reproducible_rng" }
 ic-protobuf = { path = "../../../../protobuf" }
 rand_chacha = "0.3"
 serde_cbor = { workspace = true }
-hex = "0.4"
+hex = { workspace = true }
 x509-parser = { workspace = true }

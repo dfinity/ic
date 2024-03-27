@@ -16,6 +16,10 @@ version.workspace = true
 name = "icx-proxy"
 path = "src/main.rs"
 
+[lib]
+name = "icx_proxy"
+path = "src/lib.rs"
+
 [dependencies]
 anyhow = { workspace = true }
 arc-swap = "1"

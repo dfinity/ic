@@ -105,11 +105,11 @@ pub fn setup_sns_canisters(
     );
 
     populate_canister_ids(
-        root_canister_id,
-        governance_canister_id,
-        ledger_canister_id,
-        swap_canister_id,
-        index_canister_id,
+        root_canister_id.get(),
+        governance_canister_id.get(),
+        ledger_canister_id.get(),
+        swap_canister_id.get(),
+        index_canister_id.get(),
         vec![],
         &mut payloads,
     );
@@ -569,12 +569,13 @@ impl Scenario {
         let mut configuration = SnsTestsInitPayloadBuilder::new()
             .with_ledger_accounts(account_identifiers, sns_tokens)
             .build();
+
         populate_canister_ids(
-            root_canister_id,
-            governance_canister_id,
-            ledger_canister_id,
-            swap_canister_id,
-            index_canister_id,
+            root_canister_id.get(),
+            governance_canister_id.get(),
+            ledger_canister_id.get(),
+            swap_canister_id.get(),
+            index_canister_id.get(),
             vec![],
             &mut configuration,
         );

@@ -312,6 +312,10 @@ message CanisterLogRecord {
   bytes content = 3;
 }
 
+message SnapshotId {
+  bytes content = 1;
+}
+
 message CanisterStateBits {
   reserved 1;
   reserved "controller";
@@ -393,4 +397,6 @@ message CanisterStateBits {
   optional uint64 wasm_memory_limit = 45;
   // The next local snapshot ID.
   uint64 next_snapshot_id = 46;
+  // The set of snapshots ids of the canister.
+  repeated SnapshotId snapshot_ids = 47;
 }

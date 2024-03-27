@@ -25,6 +25,19 @@ message EcdsaPayload {
   registry.crypto.v1.EcdsaKeyId key_id = 12;
 }
 
+message ConsensusResponse {
+  types.v1.CanisterId originator = 1;
+  types.v1.CanisterId respondent = 2;
+  uint64 callback = 3;
+  state.queues.v1.Funds refund = 4;
+  oneof payload {
+    bytes data = 5;
+    state.queues.v1.RejectContext reject = 6;
+  }
+  state.queues.v1.Cycles cycles_refund = 7;
+  optional uint32 deadline_seconds = 8;
+}
+
 message EcdsaKeyTranscript {
   registry.crypto.v1.EcdsaKeyId key_id = 1;
   UnmaskedTranscriptWithAttributes current = 2;
@@ -59,7 +72,7 @@ message XnetReshareAgreement {
   reserved 2, 3;
   reserved "response";
   EcdsaReshareRequest request = 1;
-  state.queues.v1.Response initial_dealings = 4;
+  ConsensusResponse initial_dealings = 4;
 }
 
 message RequestId {
@@ -168,7 +181,7 @@ message ThresholdEcdsaSigInputsRef {
 message CompletedSignature {
   reserved 1;
   reserved 2;
-  state.queues.v1.Response unreported = 3;
+  ConsensusResponse unreported = 3;
   bytes pseudo_random_id = 4;
 }
 

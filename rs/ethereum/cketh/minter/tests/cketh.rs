@@ -21,12 +21,12 @@ use ic_cketh_test_utils::response::{
     multi_logs_for_single_transaction, transaction_count_response, transaction_receipt,
 };
 use ic_cketh_test_utils::{
-    CkEthSetup, CKETH_TRANSFER_FEE, DEFAULT_BLOCK_HASH, DEFAULT_BLOCK_NUMBER,
-    DEFAULT_DEPOSIT_FROM_ADDRESS, DEFAULT_DEPOSIT_LOG_INDEX, DEFAULT_DEPOSIT_TRANSACTION_HASH,
-    DEFAULT_PRINCIPAL_ID, DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS,
-    DEFAULT_WITHDRAWAL_TRANSACTION_HASH, ETH_HELPER_CONTRACT_ADDRESS, EXPECTED_BALANCE,
-    LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MAX_ETH_LOGS_BLOCK_RANGE, MINTER_ADDRESS,
-    RECEIVED_ETH_EVENT_TOPIC,
+    CkEthSetup, CKETH_MINIMUM_WITHDRAWAL_AMOUNT, CKETH_TRANSFER_FEE, CKETH_WITHDRAWAL_AMOUNT,
+    DEFAULT_BLOCK_HASH, DEFAULT_BLOCK_NUMBER, DEFAULT_DEPOSIT_FROM_ADDRESS,
+    DEFAULT_DEPOSIT_LOG_INDEX, DEFAULT_DEPOSIT_TRANSACTION_HASH, DEFAULT_PRINCIPAL_ID,
+    DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS, DEFAULT_WITHDRAWAL_TRANSACTION_HASH,
+    ETH_HELPER_CONTRACT_ADDRESS, EXPECTED_BALANCE, LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL,
+    MAX_ETH_LOGS_BLOCK_RANGE, MINTER_ADDRESS, RECEIVED_ETH_EVENT_TOPIC,
 };
 use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::Account;
@@ -42,7 +42,7 @@ fn should_deposit_and_withdraw() {
     let cketh = CkEthSetup::default();
     let minter: Principal = cketh.minter_id.into();
     let caller: Principal = cketh.caller.into();
-    let withdrawal_amount = Nat::from(EXPECTED_BALANCE - CKETH_TRANSFER_FEE);
+    let withdrawal_amount = Nat::from(CKETH_WITHDRAWAL_AMOUNT);
     let destination = DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string();
 
     let cketh = cketh
@@ -143,7 +143,7 @@ fn should_deposit_and_withdraw() {
 fn should_retrieve_cache_transaction_price() {
     let cketh = CkEthSetup::default();
     let caller: Principal = cketh.caller.into();
-    let withdrawal_amount = Nat::from(EXPECTED_BALANCE - CKETH_TRANSFER_FEE);
+    let withdrawal_amount = Nat::from(CKETH_WITHDRAWAL_AMOUNT);
     let destination = DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string();
 
     let result = cketh.eip_1559_transaction_price();
@@ -227,7 +227,7 @@ fn should_not_mint_when_logs_inconsistent() {
 fn should_block_withdrawal_to_blocked_address() {
     let cketh = CkEthSetup::default();
     let caller: Principal = cketh.caller.into();
-    let withdrawal_amount = Nat::from(EXPECTED_BALANCE - CKETH_TRANSFER_FEE);
+    let withdrawal_amount = Nat::from(CKETH_WITHDRAWAL_AMOUNT);
     let blocked_address = "0x01e2919679362dFBC9ee1644Ba9C6da6D6245BB1".to_string();
 
     cketh
@@ -251,7 +251,7 @@ fn should_fail_to_withdraw_without_approval() {
         .expect_mint()
         .call_minter_withdraw_eth(
             caller,
-            Nat::from(10_u8),
+            Nat::from(CKETH_MINIMUM_WITHDRAWAL_AMOUNT),
             DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string(),
         )
         .expect_error(WithdrawalError::InsufficientAllowance {
@@ -263,8 +263,8 @@ fn should_fail_to_withdraw_without_approval() {
 fn should_fail_to_withdraw_when_insufficient_funds() {
     let cketh = CkEthSetup::default();
     let caller: Principal = cketh.caller.into();
-    let deposit_amount = 10_000_000_000_000_000_u64;
-    let amount_after_approval = deposit_amount - CKETH_TRANSFER_FEE;
+    let deposit_amount = CKETH_MINIMUM_WITHDRAWAL_AMOUNT + CKETH_TRANSFER_FEE;
+    let amount_after_approval = CKETH_MINIMUM_WITHDRAWAL_AMOUNT;
     assert!(deposit_amount > amount_after_approval);
 
     cketh
@@ -292,15 +292,15 @@ fn should_fail_to_withdraw_too_small_amount() {
     cketh
         .deposit(DepositParams::default())
         .expect_mint()
-        .call_ledger_approve_minter(caller, 10_000, None)
+        .call_ledger_approve_minter(caller, CKETH_MINIMUM_WITHDRAWAL_AMOUNT, None)
         .expect_ok(1)
         .call_minter_withdraw_eth(
             caller,
-            Nat::from(CKETH_TRANSFER_FEE - 1),
+            Nat::from(CKETH_MINIMUM_WITHDRAWAL_AMOUNT - 1),
             DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string(),
         )
         .expect_error(WithdrawalError::AmountTooLow {
-            min_withdrawal_amount: CKETH_TRANSFER_FEE.into(),
+            min_withdrawal_amount: CKETH_MINIMUM_WITHDRAWAL_AMOUNT.into(),
         });
 }
 
@@ -308,7 +308,7 @@ fn should_fail_to_withdraw_too_small_amount() {
 fn should_not_finalize_transaction_when_receipts_do_not_match() {
     let cketh = CkEthSetup::default();
     let caller: Principal = cketh.caller.into();
-    let withdrawal_amount = Nat::from(EXPECTED_BALANCE - CKETH_TRANSFER_FEE);
+    let withdrawal_amount = Nat::from(CKETH_WITHDRAWAL_AMOUNT);
 
     cketh
         .deposit(DepositParams::default())
@@ -346,7 +346,7 @@ fn should_not_finalize_transaction_when_receipts_do_not_match() {
 fn should_not_send_eth_transaction_when_fee_history_inconsistent() {
     let cketh = CkEthSetup::default();
     let caller: Principal = cketh.caller.into();
-    let withdrawal_amount = Nat::from(EXPECTED_BALANCE - CKETH_TRANSFER_FEE);
+    let withdrawal_amount = Nat::from(CKETH_WITHDRAWAL_AMOUNT);
 
     cketh
         .deposit(DepositParams::default())
@@ -388,7 +388,7 @@ fn should_reimburse() {
     let cketh = CkEthSetup::default();
     let minter: Principal = cketh.minter_id.into();
     let caller: Principal = cketh.caller.into();
-    let withdrawal_amount = Nat::from(EXPECTED_BALANCE - CKETH_TRANSFER_FEE);
+    let withdrawal_amount = Nat::from(CKETH_WITHDRAWAL_AMOUNT);
     let destination = "0x221E931fbFcb9bd54DdD26cE6f5e29E98AdD01C0".to_string();
 
     let cketh = cketh
@@ -495,7 +495,7 @@ fn should_reimburse() {
                 owner: PrincipalId::new_user_test_id(DEFAULT_PRINCIPAL_ID).into(),
                 subaccount: None,
             },
-            memo: Some(Memo::from(MintMemo::Reimburse {
+            memo: Some(Memo::from(MintMemo::ReimburseTransaction {
                 withdrawal_id: withdrawal_id.0.to_u64().unwrap(),
                 tx_hash: failed_tx_hash.parse().unwrap(),
             })),
@@ -553,7 +553,7 @@ fn should_reimburse() {
 fn should_resubmit_transaction_as_is_when_price_still_actual() {
     let cketh = CkEthSetup::default();
     let caller: Principal = cketh.caller.into();
-    let withdrawal_amount = Nat::from(EXPECTED_BALANCE - CKETH_TRANSFER_FEE);
+    let withdrawal_amount = Nat::from(CKETH_WITHDRAWAL_AMOUNT);
     let (expected_tx, expected_sig) = default_signed_eip_1559_transaction();
     let expected_sent_tx = encode_transaction(expected_tx, expected_sig);
 
@@ -616,7 +616,7 @@ fn should_resubmit_transaction_as_is_when_price_still_actual() {
 fn should_resubmit_new_transaction_when_price_increased() {
     let cketh = CkEthSetup::default();
     let caller: Principal = cketh.caller.into();
-    let withdrawal_amount = Nat::from(EXPECTED_BALANCE - CKETH_TRANSFER_FEE);
+    let withdrawal_amount = Nat::from(CKETH_WITHDRAWAL_AMOUNT);
     let (expected_tx, expected_sig) = default_signed_eip_1559_transaction();
     let first_tx_hash = hash_transaction(expected_tx.clone(), expected_sig);
     let expected_sent_tx = encode_transaction(expected_tx.clone(), expected_sig);
@@ -1086,7 +1086,7 @@ fn should_skip_single_block_containing_too_many_events() {
 fn should_retrieve_minter_info() {
     let cketh = CkEthSetup::default();
     let caller: Principal = cketh.caller.into();
-    let withdrawal_amount = Nat::from(EXPECTED_BALANCE - CKETH_TRANSFER_FEE);
+    let withdrawal_amount = Nat::from(CKETH_WITHDRAWAL_AMOUNT);
     let destination = DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string();
 
     let info_at_start = cketh.get_minter_info();
@@ -1099,7 +1099,7 @@ fn should_retrieve_minter_info() {
             )),
             erc20_helper_contract_address: None,
             supported_ckerc20_tokens: vec![],
-            minimum_withdrawal_amount: Some(Nat::from(CKETH_TRANSFER_FEE)),
+            minimum_withdrawal_amount: Some(Nat::from(CKETH_MINIMUM_WITHDRAWAL_AMOUNT)),
             ethereum_block_height: Some(Finalized),
             last_observed_block_number: None,
             eth_balance: Some(Nat::from(0_u8)),
