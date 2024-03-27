@@ -165,6 +165,7 @@ bazel-test-all:
   rules:
     - !reference [.bazel-test-all, rules]
     - if: '$CI_COMMIT_REF_PROTECTED == "true" && $CI_COMMIT_TAG =~ /^release-.+/'
+    - if: $CI_COMMIT_REF_PROTECTED == "true" && $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "rosetta-icrc-release"
   variables:
     BAZEL_EXTRA_ARGS: "--keep_going $BAZEL_EXTRA_ARGS_RULES"
     RUN_ON_DIFF_ONLY: "true" # only test targets that changed
