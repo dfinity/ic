@@ -1,3 +1,4 @@
+mod message_pool;
 mod queue;
 #[cfg(test)]
 mod tests;
