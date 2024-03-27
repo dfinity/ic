@@ -911,10 +911,11 @@ impl BatchProcessorImpl {
             match optional_public_key_proto {
                 Some(public_key_proto) => {
                     // If the public key protobuf is invalid, we continue without stalling the subnet.
-                    match ic_crypto_ed25519::PublicKey::deserialize_raw(&public_key_proto.key_value)
-                    {
-                        Ok(pk) => {
-                            node_public_keys.insert(node_id, pk.serialize_rfc8410_der());
+                    match ic_crypto_ed25519::PublicKey::convert_raw_to_der(
+                        &public_key_proto.key_value,
+                    ) {
+                        Ok(pk_der) => {
+                            node_public_keys.insert(node_id, pk_der);
                         }
                         Err(err) => {
                             self.metrics
