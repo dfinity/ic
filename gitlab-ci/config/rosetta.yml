@@ -83,44 +83,6 @@ rosetta-release:
       git tag "rosetta-release-$ROSETTA_RELEASE_VERSION" "$CI_COMMIT_SHA"
       git push origin "rosetta-release-$ROSETTA_RELEASE_VERSION"
 
-icrc-rosetta-api-docker-image:
-  rules:
-    - if: $CI_COMMIT_REF_PROTECTED == "true" && $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "rosetta-icrc-release"
-      when: manual
-      allow_failure: true
-  needs:
-    - job: bazel-test-all
-      artifacts: false
-  script:
-    - |
-      set -exuo pipefail
-
-      pip3 install --ignore-installed -r requirements.txt
-
-      "${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/rclone_download.py --git-rev "$CI_COMMIT_SHA" \
-        --remote-path=release --out="artifacts/release"
-
-      gunzip artifacts/release/ic-icrc-rosetta-bin.gz
-      chmod +x artifacts/release/ic-icrc-rosetta-bin
-
-      pushd "$(mktemp -d)"
-      cp \
-        "$CI_PROJECT_DIR"/artifacts/release/ic-icrc-rosetta-bin \
-        .
-      bazel build //rs/rosetta-api/icrc1/rosetta:ic_icrc_rosetta_image
-      popd
-
-      docker run --rm bazel/rs/rosetta-api/icrc1/rosetta:ic_icrc_rosetta_image --help
-
-      ICRC_ROSETTA_API_VERSION=$(grep -e '^version' "$CI_PROJECT_DIR"/rs/rosetta-api/icrc1/rosetta/Cargo.toml | sed -e 's|^version[ ]*=[ ]*"\([^"]*\)"|\1|g')
-
-      docker tag dfinity/icrc-rosetta-api:"$CI_COMMIT_SHA" dfinity/icrc-rosetta-api:v"$ICRC_ROSETTA_API_VERSION"
-      docker tag dfinity/icrc-rosetta-api:"$CI_COMMIT_SHA" dfinity/icrc-rosetta-api:latest
-
-      docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD"
-      docker push dfinity/icrc-rosetta-api:v"$ICRC_ROSETTA_API_VERSION"
-      docker push dfinity/icrc-rosetta-api:latest
-
 rosetta-icrc-release:
   rules:
     - if: $CI_COMMIT_REF_PROTECTED == "true" && $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "rosetta-icrc-release"
