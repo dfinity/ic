@@ -172,6 +172,9 @@ fn test_der_public_key_conversions() {
         assert_eq!(pk_raw, pk_der);
         assert_eq!(pk_raw.serialize_rfc8410_der(), der);
         assert_eq!(pk_der.serialize_raw(), *raw);
+
+        let pk_der_via_conversion = PublicKey::convert_raw_to_der(raw).unwrap();
+        assert_eq!(pk_der_via_conversion, der);
     }
 }
 

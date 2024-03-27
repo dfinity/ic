@@ -307,6 +307,39 @@ impl PublicKey {
         Ok(Self { pk })
     }
 
+    /// Convert a raw Ed25519 public key (32 bytes) to the DER encoding
+    ///
+    /// # Warning
+    ///
+    /// This performs no validity check on the public key aside from verifying
+    /// that it is exactly 32 bytes long. If you pass an invalid key (ie a
+    /// encoding of a point not in the prime order subgroup), then the DER
+    /// encoding of that invalid key will be returned.
+    pub fn convert_raw_to_der(raw: &[u8]) -> Result<Vec<u8>, PublicKeyDecodingError> {
+        // We continue to check the length, since otherwise the DER
+        // encoding itself would be invalid and unparsable.
+        if raw.len() != Self::BYTES {
+            return Err(PublicKeyDecodingError::InvalidKeyEncoding(format!(
+                "Expected key of exactly {} bytes, got {}",
+                Self::BYTES,
+                raw.len()
+            )));
+        };
+
+        const DER_PREFIX: [u8; 12] = [
+            48, 42, // A sequence of 42 bytes follows
+            48, 5, // An sequence of 5 bytes follows
+            6, 3, 43, 101, 112, // The OID (1.3.101.112)
+            3, 33, // A bitstring of 33 bytes follows
+            0,  // The bitstring has no unused bits
+        ];
+
+        let mut der_enc = Vec::with_capacity(DER_PREFIX.len() + Self::BYTES);
+        der_enc.extend_from_slice(&DER_PREFIX);
+        der_enc.extend_from_slice(raw);
+        Ok(der_enc)
+    }
+
     /// Serialize this public key in raw format
     ///
     /// This is just the 32 byte encoding of the public point
