@@ -104,10 +104,7 @@ rosetta-icrc-release:
           exit 0
       fi
 
-      # - Build an publish the image
-      ICRC_ROSETTA_API_DATE=$(date +"%Y%m%d")
-
-      for tag in "$VERSION_TAG" "$CI_COMMIT_SHA" "$ICRC_ROSETTA_API_DATE" latest; do
+      for tag in "$VERSION_TAG" latest; do
           bazel run --stamp --embed_label="$tag" //rs/rosetta-api/icrc1/rosetta:push_ic_icrc_rosetta_image
       done
 
