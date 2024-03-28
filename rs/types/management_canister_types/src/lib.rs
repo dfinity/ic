@@ -2468,7 +2468,10 @@ impl CanisterLog {
 
     /// Creates a new `CanisterLog` with the given next index and an empty records list.
     pub fn new_with_next_index(next_idx: u64) -> Self {
-        Self::new(next_idx, Default::default())
+        Self {
+            next_idx,
+            records: Default::default(),
+        }
     }
 
     /// Returns the next canister log record index.
@@ -2491,6 +2494,18 @@ impl CanisterLog {
         MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE.saturating_sub(self.records.data_size())
     }
 
+    /// Removes old records to make enough free space for new data within the limit.
+    fn make_free_space_within_limit(&mut self, new_data_size: usize) {
+        let mut total_size = new_data_size + self.records.data_size();
+        while total_size > MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE {
+            if let Some(removed_record) = self.records.pop_front() {
+                total_size -= removed_record.data_size();
+            } else {
+                break; // No more records to pop, limit reached.
+            }
+        }
+    }
+
     /// Adds a new log record.
     pub fn add_record(&mut self, timestamp_nanos: u64, content: &[u8]) {
         // LINT.IfChange
@@ -2499,27 +2514,20 @@ impl CanisterLog {
         let max_content_size =
             MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE - CanisterLogRecord::default().data_size();
         let size = content.len().min(max_content_size);
-        self.records.push_back(CanisterLogRecord {
+        let record = CanisterLogRecord {
             idx: self.next_idx,
             timestamp_nanos,
             content: content[..size].to_vec(),
-        });
-        // LINT.ThenChange(logging_charge_bytes_rule)
+        };
+        self.make_free_space_within_limit(record.data_size());
+        self.records.push_back(record);
         // Update the next canister log record index.
         self.next_idx += 1;
-        // Keep the total canister log records size within limit.
-        while self.records.data_size() > MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE {
-            self.records.pop_front();
-        }
     }
 
     /// Moves all the logs from `other` to `self`.
     pub fn append(&mut self, other: &mut Self) {
-        // Assume records sorted cronologically (with increasing idx) and
-        // update the system state's next index with the last record's index.
-        if let Some(last) = other.records.back() {
-            self.next_idx = last.idx + 1;
-        }
+        self.make_free_space_within_limit(other.records.data_size());
         self.records.append(&mut other.records);
     }
 }

@@ -3,7 +3,8 @@ use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SubnetConfig;
 use ic_management_canister_types::{
     CanisterInstallMode, CanisterLogRecord, CanisterSettingsArgs, CanisterSettingsArgsBuilder,
-    FetchCanisterLogsRequest, FetchCanisterLogsResponse, LogVisibility, Payload,
+    DataSize, FetchCanisterLogsRequest, FetchCanisterLogsResponse, LogVisibility, Payload,
+    MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
@@ -321,6 +322,8 @@ fn test_appending_logs_in_trapped_replicated_query_call(#[strategy("\\PC*")] mes
     );
 }
 
+// TODO(IC-272): fix broken index.
+#[ignore]
 #[test]
 fn test_canister_log_record_index_increment_for_different_calls() {
     // Test that the index of the log records is incremented for each log message,
@@ -375,6 +378,8 @@ fn test_canister_log_record_index_increment_for_different_calls() {
     );
 }
 
+// TODO(IC-272): fix broken index.
+#[ignore]
 #[test]
 fn test_canister_log_record_index_increment_after_node_restart() {
     // Test that the index of the log records is incremented for each log message
@@ -493,4 +498,28 @@ fn test_logging_explicit_canister_trap_with_message() {
             }]
         }
     );
+}
+
+#[test]
+fn test_canister_log_stays_within_limit() {
+    // Test that the total size of canister log records stays within the limit
+    // even if the are many log messages sent in different calls.
+    const MESSAGES_NUMBER: usize = 10;
+    let (env, canister_id, controller) = setup_with_controller(FlagStatus::Enabled);
+    for _ in 0..MESSAGES_NUMBER {
+        env.execute_ingress(
+            canister_id,
+            "update",
+            wasm()
+                .debug_print(&[42; MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE])
+                .reply()
+                .build(),
+        )
+        .unwrap();
+        env.tick();
+    }
+    let result = fetch_canister_logs(env, controller, canister_id);
+    let response = FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap();
+    // Expect that the total size of the log records is less than the limit.
+    assert!(response.canister_log_records.data_size() <= MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE);
 }

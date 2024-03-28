@@ -51,7 +51,7 @@ use strum_macros::EnumIter;
 /// once that block is finalized, the optimized path matches pre-signatures
 /// with requests in replicated state and generates signature shares as
 /// soon as that state is certified.
-pub const ECDSA_IMPROVED_LATENCY: bool = true;
+pub const ECDSA_IMPROVED_LATENCY: bool = false;
 
 /// For completed signature requests, we differentiate between those
 /// that have already been reported and those that have not. This is

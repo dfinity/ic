@@ -73,10 +73,10 @@ use std::{
 };
 use tokio::sync::mpsc::{Sender as TokioSender, UnboundedSender};
 
-const ENABLE_NEW_P2P_CONSENSUS: bool = true;
-const ENABLE_NEW_P2P_CERTIFICATION: bool = true;
-const ENABLE_NEW_P2P_DKG: bool = true;
-const ENABLE_NEW_P2P_INGRESS: bool = true;
+const ENABLE_NEW_P2P_CONSENSUS: bool = false;
+const ENABLE_NEW_P2P_CERTIFICATION: bool = false;
+const ENABLE_NEW_P2P_DKG: bool = false;
+const ENABLE_NEW_P2P_INGRESS: bool = false;
 const ENABLE_NEW_P2P_ECDSA: bool = true;
 const ENABLE_NEW_P2P_HTTPS_OUTCALLS: bool = true;
 
