@@ -299,9 +299,6 @@ bazel-test-macos:
       dotenv: nns.release.env
     paths:
       - bazel-build-log*.json*
-  tags:
-    - dfinity-ic
-    - bazel
   script:
     - |
       set -euo pipefail
@@ -357,6 +354,11 @@ bazel-test-macos:
       else
           gitlab-ci/container/build-ic.sh -i -c -b --no-release
       fi
+
+      # purge test image
+      find ./artifacts/icos -name 'update-img-test.*' -delete
+      # only keep zstd ic images
+      find ./artifacts/icos -name '*.gz' -delete
 
       # release binaries
       [ -d artifacts/release ] && buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
@@ -423,7 +425,7 @@ lock-generate:
     - bazel
   script:
     - ./gitlab-ci/src/ci-scripts/lock-generate.sh
- 
+
 pre-commit:
   variables:
     # Set the pre-commit home to this directory so we can cache it
