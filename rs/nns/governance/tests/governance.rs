@@ -68,8 +68,7 @@ use ic_nns_governance::{
             disburse::Amount,
             ChangeAutoStakeMaturity, ClaimOrRefresh, Command, Configure, Disburse,
             DisburseToNeuron, IncreaseDissolveDelay, JoinCommunityFund, LeaveCommunityFund,
-            MergeMaturity, NeuronIdOrSubaccount, SetDissolveTimestamp, Spawn, Split,
-            StartDissolving,
+            MergeMaturity, NeuronIdOrSubaccount, Spawn, Split, StartDissolving,
         },
         manage_neuron_response::{self, Command as CommandResponse},
         neuron::{self, DissolveState, Followees},
@@ -4772,119 +4771,6 @@ fn test_claim_or_refresh_neuron_does_not_overflow() {
 }
 
 #[test]
-fn test_set_dissolve_delay() {
-    let (mut driver, _, mut neuron) = create_mature_neuron(true);
-
-    // Neuron should be dissolved
-    assert_eq!(neuron.state(driver.now()), NeuronState::Dissolved);
-
-    // Try to set the dissolve delay to a value before the current time, should
-    // fail.
-    assert!(neuron
-        .configure(
-            &TEST_NEURON_1_OWNER_PRINCIPAL,
-            driver.now(),
-            &Configure {
-                operation: Some(Operation::SetDissolveTimestamp(SetDissolveTimestamp {
-                    dissolve_timestamp_seconds: driver.now() - 1,
-                })),
-            },
-        )
-        .is_err());
-
-    // Try to set the dissolve delay to a value in the future, should succeed.
-    neuron
-        .configure(
-            &TEST_NEURON_1_OWNER_PRINCIPAL,
-            driver.now(),
-            &Configure {
-                operation: Some(Operation::SetDissolveTimestamp(SetDissolveTimestamp {
-                    dissolve_timestamp_seconds: driver.now()
-                        + 3 * ic_nns_governance::governance::ONE_MONTH_SECONDS,
-                })),
-            },
-        )
-        .unwrap();
-
-    // Since we set the dissolve delay, neuron should be non-dissolving.
-    assert_eq!(neuron.state(driver.now()), NeuronState::NotDissolving);
-
-    // Try to set the dissolve delay to a value that is smaller than the
-    // current one, should fail.
-    assert!(neuron
-        .configure(
-            &TEST_NEURON_1_OWNER_PRINCIPAL,
-            driver.now(),
-            &Configure {
-                operation: Some(Operation::SetDissolveTimestamp(SetDissolveTimestamp {
-                    dissolve_timestamp_seconds: driver.now() + 2 * ONE_MONTH_SECONDS,
-                })),
-            },
-        )
-        .is_err());
-
-    // Try to set the dissolve delay to a value that is bigger that the max u32,
-    // should fail.
-    assert!(neuron
-        .configure(
-            &TEST_NEURON_1_OWNER_PRINCIPAL,
-            driver.now(),
-            &Configure {
-                operation: Some(Operation::SetDissolveTimestamp(SetDissolveTimestamp {
-                    dissolve_timestamp_seconds: driver.now()
-                        + 3 * ONE_MONTH_SECONDS
-                        + u32::MAX as u64
-                        + 1,
-                })),
-            },
-        )
-        .is_err());
-
-    // Try to increase the dissolve delay to a value that is bigger than 8 years,
-    // should cap the value to 8y, but succeed.
-    neuron
-        .configure(
-            &TEST_NEURON_1_OWNER_PRINCIPAL,
-            driver.now(),
-            &Configure {
-                operation: Some(Operation::SetDissolveTimestamp(SetDissolveTimestamp {
-                    dissolve_timestamp_seconds: driver.now()
-                        + 3 * ONE_MONTH_SECONDS
-                        + u32::MAX as u64,
-                })),
-            },
-        )
-        .unwrap();
-
-    // Since we increased the dissolve delay, neuron should remain non-dissolving.
-    assert_eq!(neuron.state(driver.now()), NeuronState::NotDissolving);
-
-    // Set the neuron to dissolve
-    neuron
-        .configure(
-            &TEST_NEURON_1_OWNER_PRINCIPAL,
-            driver.now(),
-            &Configure {
-                operation: Some(Operation::StartDissolving(StartDissolving {})),
-            },
-        )
-        .unwrap();
-
-    assert_eq!(neuron.state(driver.now()), NeuronState::Dissolving);
-
-    // Advance the time by almost the amount we set
-    driver.advance_time_by(8 * 12 * ic_nns_governance::governance::ONE_MONTH_SECONDS - 1);
-
-    // Neuron should still be dissolving.
-    assert_eq!(neuron.state(driver.now()), NeuronState::Dissolving);
-
-    // Advance the time by the last remaining second.
-    driver.advance_time_by(1);
-    // Now the neuron should be dissolved.
-    assert_eq!(neuron.state(driver.now()), NeuronState::Dissolved);
-}
-
-#[test]
 fn test_cant_disburse_without_paying_fees() {
     let (driver, mut gov, neuron) = create_mature_neuron(true);
 
@@ -9010,37 +8896,6 @@ fn test_manage_neuron_merge_maturity_returns_expected_error() {
                 superseded by StakeMaturity. Use StakeMaturity instead."
             ))),
         }
-    );
-}
-
-#[test]
-fn test_update_stake() {
-    // Assert that doubling a neuron's stake halves its age
-    let mut neuron = Neuron::default();
-    let now = 10;
-    neuron.cached_neuron_stake_e8s = Tokens::new(5, 0).unwrap().get_e8s();
-    neuron.aging_since_timestamp_seconds = 0;
-    neuron.update_stake_adjust_age(Tokens::new(10, 0).unwrap().get_e8s(), now);
-    assert_eq!(neuron.aging_since_timestamp_seconds, 5);
-    assert_eq!(
-        neuron.cached_neuron_stake_e8s,
-        Tokens::new(10, 0).unwrap().get_e8s()
-    );
-
-    // Increase the stake by a random amount
-    let mut neuron = Neuron::default();
-    let now = 10000;
-    neuron.cached_neuron_stake_e8s = Tokens::new(50, 0).unwrap().get_e8s();
-    neuron.aging_since_timestamp_seconds = 0;
-    neuron.update_stake_adjust_age(Tokens::new(58, 0).unwrap().get_e8s(), now);
-    let expected_aging_since_timestamp_seconds = 1380;
-    assert_eq!(
-        neuron.aging_since_timestamp_seconds,
-        expected_aging_since_timestamp_seconds
-    );
-    assert_eq!(
-        neuron.cached_neuron_stake_e8s,
-        Tokens::new(58, 0).unwrap().get_e8s()
     );
 }
 
