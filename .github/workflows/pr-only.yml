@@ -1,0 +1,87 @@
+name: PR Only
+# Jobs that run on PRs, but no other pipelines
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref && github.ref || github.run_id }}
+  cancel-in-progress: true
+env:
+  CI_MERGE_REQUEST_TITLE: ${{ github.event.pull_request.title }}
+jobs:
+  bazel-build-fuzzers-archives:
+    name: Bazel-Build-Fuzzers-Archives
+    runs-on:
+      labels: bazel-runner-small
+    container:
+      image: dfinity/ic-build:e95ed63e9addda1b335c50fde800a8d9f0aad91a0d0cbe7da2fa782dc6ac1d4c
+    if: ${{ vars.RUN_CI == 'true' }}
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v2
+        id: filter
+        with:
+          filters: |
+            fuzzers:
+              - '.github/workflows/pr-only.yml'
+              - 'bin/build-all-fuzzers.sh'
+              - 'bazel/fuzz_testing.bzl'
+      - name: Run Bazel Build Fuzzers Archives
+        id: bazel-build-fuzzers-archives
+        if: steps.filter.outputs.fuzzers == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "${GITHUB_WORKSPACE}"/bin
+          ./build-all-fuzzers.sh --zip
+      - name: No run
+        if: steps.filter.outputs.fuzzers == 'false'
+        run: echo "No changes in fuzzers, skipping build"
+  lock-generate:
+    name: Lock-Generate
+    runs-on:
+      labels: bazel-runner-small
+    container:
+      image: dfinity/ic-build:e95ed63e9addda1b335c50fde800a8d9f0aad91a0d0cbe7da2fa782dc6ac1d4c
+    timeout-minutes: 30
+    if: ${{ vars.RUN_CI == 'true' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            lock-generate:
+              - '.github/workflows/pr-only.yml'
+              - '.bazelrc'
+              - '.bazelversion'
+              - '**/*.bazel'
+              - '**/*.bzl'
+              - '**/*.lock'
+              - '**/*.rs'
+              - '**/*.toml'
+      - name: Run Lock Generate
+        id: lock-generate
+        if: steps.filter.outputs.lock-generate == 'true'
+        run: ./gitlab-ci/src/ci-scripts/lock-generate.sh
+      - name: No run
+        if: steps.filter.outputs.lock-generate == 'false'
+        run: echo "No changes in lock-generate, skipping run"
+  commit-lint:
+    name: Commit-Lint
+    runs-on:
+      labels: default-runner
+    container:
+      image: dfinity/ic-build:e95ed63e9addda1b335c50fde800a8d9f0aad91a0d0cbe7da2fa782dc6ac1d4c
+    timeout-minutes: 30
+    if: ${{ vars.RUN_CI == 'true' }}v
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Commit Lint
+        id: commit-lint
+        run: ./gitlab-ci/src/ci-scripts/commit-lint.sh

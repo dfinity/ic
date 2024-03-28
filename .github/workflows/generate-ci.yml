@@ -26,7 +26,8 @@ jobs:
           if [ -n "$(git status --porcelain)" ]; then
             git config --global user.name "IDX GitHub Automation"
             git config --global user.email "IDX GitHub Automation"
-            git commit -am "IDX GitHub Automation"
+            git add .
+            git commit -m "IDX GitHub Automation"
             git push
           else
             echo "git working tree clean - no changes to be committed"
