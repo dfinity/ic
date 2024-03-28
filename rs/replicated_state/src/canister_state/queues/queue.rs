@@ -1,19 +1,365 @@
-use crate::StateError;
-#[cfg(test)]
-mod tests;
+#![allow(unused)]
 
+use super::message_pool::{MessageId, MessagePool, MessagePoolReference};
+use crate::StateError;
 use ic_base_types::CanisterId;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::state::{ingress::v1 as pb_ingress, queues::v1 as pb_queues};
-use ic_types::messages::{Ingress, Request, RequestOrResponse, Response};
+use ic_types::messages::{CallbackId, Ingress, Request, RequestOrResponse, Response, NO_DEADLINE};
 use ic_types::{CountBytes, Cycles, Time};
 use std::collections::BTreeMap;
+use std::iter::Sum;
 use std::{
     collections::VecDeque,
     convert::{From, TryFrom, TryInto},
     mem::size_of,
     sync::Arc,
 };
+
+#[cfg(test)]
+mod tests;
+
+/// A reference to a message, used as `CanisterQueue` item.
+///
+/// May be a weak reference into the message pool; or identify a reject response to
+/// a specific callback.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(super) enum MessageReference {
+    /// Weak reference to a `Request` held in the message pool.
+    ///
+    /// Guaranteed response call requests in output queues and best-effort requests
+    /// in input or output queues may time out and be dropped from the pool. Such
+    /// stale references can be safely ignored.
+    ///
+    /// Guaranteed response call requests in input queues never time out.
+    Request(MessageId),
+
+    /// Weak reference to a `Response` held in the message pool.
+    ///
+    /// Best-effort responses in output queues may time out and be dropped from the
+    /// pool. Stale response references in output queues can be safely ignored.
+    ///
+    /// A dangling response reference is enqueued into an input queue as a
+    /// `SYS_UNKNOWN` reject response marker. A matching response may or may not be
+    /// inserted into the pool while the reference is backlogged in the input queue.
+    /// Meaning that dangling response references in input queues are `SYS_UNKNOWN`
+    /// reject responses.
+    ///
+    /// Guaranteed responses never time out.
+    Response(MessageId),
+
+    /// Local known (i.e. `SYS_TRANSIENT`) reject response: "timeout" if deadline
+    /// has expired, "drop" otherwise.
+    LocalRejectResponse(CallbackId),
+}
+
+impl MessageReference {
+    /// Returns `true` if this is a reference to a response; or a reject response.
+    pub(super) fn is_response(&self) -> bool {
+        match self {
+            Self::Request(_) => false,
+
+            Self::Response(_) | Self::LocalRejectResponse(_) => true,
+        }
+    }
+}
+
+impl TryFrom<&MessageReference> for MessagePoolReference {
+    type Error = ();
+
+    fn try_from(reference: &MessageReference) -> Result<Self, Self::Error> {
+        use MessageReference::*;
+
+        match reference {
+            Request(id) => Ok(Self::Request(*id)),
+            Response(id) => Ok(Self::Response(*id)),
+            LocalRejectResponse(_) => Err(()),
+        }
+    }
+}
+
+/// A FIFO queue with equal but separate capacities for requests and responses,
+/// ensuring full-duplex communication up to the capacity.
+///
+/// For the most part (with the exception of transient reject response markers)
+/// the queue holds weak references into a `MessagePool`. The messages that
+/// these references point to may expire or be shed, resulting in stale
+/// references that are not immediately removed from the queue. Which is why the
+/// queue stats track "request slots" and "response slots" instead of "requests"
+/// and "responses" and `len()` returns the length of the queue, not the number
+/// of messages that can be popped.
+///
+/// Backpressure (limiting number of open callbacks to a given destination) is
+/// enforced by making enqueuing a request contingent on reserving a slot for
+/// the eventual response in the reverse queue; and bounding the number of
+/// responses (actually enqueued plus reserved slots) by the queue capacity.
+/// Note that this ensures that a response is only ever enqueued into a slot
+/// already reserved for it.
+///
+/// Backpressure should implicitly limit the number of requests (since there
+/// cannot be more live requests than callbacks). It is however possible for
+/// requests to time out; produce a reject response in the reverse queue; and
+/// for that response to be consumed while the request still consumes a slot in
+/// the queue; so we must additionally explicitly limit the number of slots used
+/// by requests to the queue capacity.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct CanisterQueue {
+    /// A FIFO queue of all requests and responses. Since responses may be enqueued
+    /// at arbitrary points in time, response reservations cannot be explicitly
+    /// represented in `queue`. They only exist as the difference between
+    /// `request_slots` and the number of actually enqueued request references (also
+    /// equal to `request_slots + response_slots - queue.len()`).
+    queue: VecDeque<MessageReference>,
+    /// Maximum number of requests; or responses + reserved slots; that can be held
+    /// in the queue at any one time.
+    capacity: usize,
+    /// Number of enqueued requests.
+    request_slots: usize,
+    /// Number of slots used by enqueued responses or reserved for expected
+    /// responses.
+    response_slots: usize,
+}
+
+impl CanisterQueue {
+    pub(super) fn new(capacity: usize) -> Self {
+        let queue = VecDeque::new();
+
+        Self {
+            queue,
+            capacity,
+            request_slots: 0,
+            response_slots: 0,
+        }
+    }
+
+    /// Returns the number slots available for requests.
+    pub(super) fn available_request_slots(&self) -> usize {
+        self.capacity.checked_sub(self.request_slots).unwrap()
+    }
+
+    /// Returns `Ok(())` if there exists at least one available request slot,
+    /// `Err(StateError::QueueFull)` otherwise.
+    pub(super) fn check_has_request_slot(&self) -> Result<(), StateError> {
+        if self.request_slots >= self.capacity {
+            return Err(StateError::QueueFull {
+                capacity: self.capacity,
+            });
+        }
+        Ok(())
+    }
+
+    /// Returns the number of slots available in the queue for reservations.
+    pub(super) fn available_response_slots(&self) -> usize {
+        self.capacity.checked_sub(self.response_slots).unwrap()
+    }
+
+    /// Reserves a slot for a response, if available; else returns `Err(StateError::QueueFull)`.
+    pub(super) fn try_reserve_response_slot(&mut self) -> Result<(), StateError> {
+        if self.response_slots >= self.capacity {
+            return Err(StateError::QueueFull {
+                capacity: self.capacity,
+            });
+        }
+
+        self.response_slots += 1;
+        debug_assert!(self.check_invariants());
+        Ok(())
+    }
+
+    /// Returns the number of reserved response slots in the queue.
+    pub(super) fn reserved_slots(&self) -> usize {
+        (self.request_slots + self.response_slots)
+            .checked_sub(self.queue.len())
+            .unwrap()
+    }
+
+    /// Returns `Ok(())` if there exists at least one reserved response slot,
+    /// `Err(StateError::QueueFull)` otherwise.
+    pub(super) fn check_has_reserved_slot(&self) -> Result<(), StateError> {
+        if self.request_slots + self.response_slots <= self.queue.len() {
+            return Err(StateError::QueueFull {
+                capacity: self.capacity,
+            });
+        }
+        Ok(())
+    }
+
+    /// Enqueues a request.
+    ///
+    /// Panics if there is no available request slot.
+    pub(super) fn push_request(&mut self, id: MessageId) {
+        assert!(self.request_slots < self.capacity);
+
+        self.queue.push_back(MessageReference::Request(id));
+        self.request_slots += 1;
+
+        debug_assert!(self.check_invariants());
+    }
+
+    /// Enqueues a response into a reserved slot, consuming a slot reservation.
+    ///
+    /// Panics if there is no response slot reservation.
+    pub(super) fn push_response(&mut self, id: MessageId) {
+        self.check_has_reserved_slot().unwrap();
+
+        self.queue.push_back(MessageReference::Response(id));
+        debug_assert!(self.check_invariants());
+    }
+
+    /// Enqueues a local `SYS_TRANSIENT` reject response into a reserved slot,
+    /// consuming a slot reservation.
+    ///
+    /// Panics if there is no response slot reservation.
+    pub(super) fn push_local_reject_response(&mut self, callback: CallbackId) {
+        self.check_has_reserved_slot().unwrap();
+
+        self.queue
+            .push_back(MessageReference::LocalRejectResponse(callback));
+        debug_assert!(self.check_invariants());
+    }
+
+    /// Pops a reference from the queue. Returns `None` if the queue is empty.
+    pub(super) fn pop(&mut self) -> Option<MessageReference> {
+        let reference = self.queue.pop_front()?;
+
+        if reference.is_response() {
+            self.response_slots = self.response_slots.checked_sub(1).unwrap();
+        } else {
+            self.request_slots = self.request_slots.checked_sub(1).unwrap();
+        }
+        debug_assert!(self.check_invariants());
+
+        Some(reference)
+    }
+
+    /// Returns a reference to the next item in the queue; or `None` if
+    /// the queue is empty.
+    pub(super) fn peek(&self) -> Option<&MessageReference> {
+        self.queue.front()
+    }
+
+    /// Returns `true` if the queue has one or more used slots.
+    ///
+    /// This is basically an `is_empty()` test, except it also looks at reserved
+    /// slots, so it is named differently to make it clear it doesn't only check for
+    /// enqueued references.
+    pub(super) fn has_used_slots(&self) -> bool {
+        !self.queue.is_empty() || self.response_slots > 0
+    }
+
+    /// Returns the length of the queue (including stale references but not
+    /// including reserved slots).
+    pub(super) fn len(&self) -> usize {
+        self.queue.len()
+    }
+
+    /// Calculates the size in bytes, including struct and messages.
+    ///
+    /// Time complexity: `O(n*log(n`.
+    pub(super) fn calculate_size_bytes(&self, pool: &MessagePool) -> usize {
+        size_of::<Self>() + self.calculate_stat_sum(CountBytes::count_bytes, pool)
+    }
+
+    /// Returns the byte size of an empty `CanisterQueue`. This is the same number
+    /// that `Self::new(capacity).calculate_size_bytes()` would return.
+    pub(super) fn empty_size_bytes() -> usize {
+        size_of::<Self>()
+    }
+
+    /// Calculates the number of messages (non-stale references or reject response
+    /// markers) in the queue.
+    ///
+    /// Time complexity: `O(n * log(n))`.
+    pub(super) fn calculate_message_count(&self, pool: &MessagePool) -> usize {
+        use MessageReference::*;
+
+        self.calculate_reference_stat_sum(|reference| match reference {
+            Request(id) => pool.get_request(*id).is_some() as usize,
+            Response(id) => pool.get_response(*id).is_some() as usize,
+            LocalRejectResponse(_) => 1,
+        })
+    }
+
+    /// Calculates the number of responses (non-stale references or reject response
+    /// markers) in the queue.
+    ///
+    /// Time complexity: `O(n * log(n))`.
+    pub(super) fn calculate_response_count(&self, pool: &MessagePool) -> usize {
+        use MessageReference::*;
+
+        self.calculate_reference_stat_sum(|reference| match reference {
+            Request(_) => 0,
+            Response(id) => pool.get_response(*id).is_some() as usize,
+            LocalRejectResponse(_) => 1,
+        })
+    }
+
+    /// Calculates the amount of cycles contained in the queue.
+    pub(super) fn calculate_cycles_in_queue(&self, pool: &MessagePool) -> Cycles {
+        // FIXME: A reject response could also refund cycles.
+        self.calculate_stat_sum(RequestOrResponse::cycles, pool)
+    }
+
+    /// Calculates the sum of the given stat across all (non-stale) enqueued
+    /// messages.
+    ///
+    /// Time complexity: `O(n * log(n))`.
+    pub(super) fn calculate_stat_sum<S: Sum<S>>(
+        &self,
+        stat: impl Fn(&RequestOrResponse) -> S,
+        pool: &MessagePool,
+    ) -> S {
+        self.queue
+            .iter()
+            .filter_map(|reference| pool.get(reference))
+            .map(stat)
+            .sum()
+    }
+
+    /// Calculates the sum of the given stat across all enqueued references.
+    ///
+    /// Time complexity: `O(n)`.
+    fn calculate_reference_stat_sum(&self, stat: impl Fn(&MessageReference) -> usize) -> usize {
+        self.queue.iter().map(stat).sum::<usize>()
+    }
+
+    /// Tests whether the queue contains the message with the given ID.
+    ///
+    /// Time complexity: `O(n)`.
+    pub(super) fn contains(&self, id: MessageId) -> bool {
+        use MessageReference::*;
+
+        self.queue
+            .iter()
+            .any(|reference| matches!(reference, Request(qid) | Response(qid) if qid == &id))
+    }
+
+    /// Queue invariant check that panics if any invariant does not hold. Intended
+    /// to be called from within a `debug_assert!()` in production code.
+    ///
+    /// Time complexity: `O(n)`.
+    fn check_invariants(&self) -> bool {
+        assert!(self.request_slots <= self.capacity);
+        assert!(self.response_slots <= self.capacity);
+
+        let responses = self.queue.iter().filter(|msg| msg.is_response()).count();
+        assert!(responses <= self.response_slots);
+        assert_eq!(self.queue.len(), self.request_slots + responses);
+
+        true
+    }
+
+    /// Returns an iterator over the underlying messages.
+    ///
+    /// For testing purposes only.
+    pub(super) fn iter_for_testing<'a>(
+        &'a self,
+        pool: &'a MessagePool,
+    ) -> impl Iterator<Item = Option<&'a RequestOrResponse>> {
+        // FIXME: Get rid of this.
+        self.queue.iter().map(|reference| pool.get(reference))
+    }
+}
 
 /// Trait for queue items in `InputQueue` and `OutputQueue`. Such items must
 /// either be a response or a request (including timed out requests).
@@ -363,7 +709,7 @@ impl InputQueue {
         }
     }
 
-    pub fn peek(&self) -> Option<&RequestOrResponse> {
+    pub(super) fn peek(&self) -> Option<&RequestOrResponse> {
         self.queue.peek()
     }
 
@@ -647,7 +993,7 @@ impl OutputQueue {
     }
 
     /// Number of actual messages in the queue (`None` are ignored).
-    pub fn num_messages(&self) -> usize {
+    pub(super) fn num_messages(&self) -> usize {
         self.num_messages
     }
 
@@ -699,7 +1045,7 @@ impl OutputQueue {
     /// Returns an iterator over the underlying messages.
     ///
     /// For testing purposes only.
-    pub fn iter_for_testing(&self) -> impl Iterator<Item = &Option<RequestOrResponse>> {
+    pub(super) fn iter_for_testing(&self) -> impl Iterator<Item = &Option<RequestOrResponse>> {
         self.queue.queue.iter()
     }
 }
