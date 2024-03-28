@@ -521,6 +521,50 @@ fn test_canister_log_stays_within_limit() {
 }
 
 #[test]
+fn test_canister_log_stays_empty_when_feature_is_disabled() {
+    // Test that the total size of canister log in canister state is empty
+    // even if the are many log messages sent in different calls (both via print and trap).
+    const MESSAGES_NUMBER: usize = 10;
+    let (env, canister_id, _controller) = setup_with_controller(FlagStatus::Disabled);
+    for _ in 0..MESSAGES_NUMBER {
+        let _ = env.execute_ingress(
+            canister_id,
+            "update",
+            wasm()
+                .debug_print(&[b'd'; MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE])
+                .trap_with_blob(&[b't'; MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE])
+                .reply()
+                .build(),
+        );
+    }
+    // Expect that the total size of the log in canister state is zero.
+    assert_eq!(env.canister_log(canister_id).used_space(), 0);
+}
+
+#[test]
+fn test_canister_log_in_state_stays_within_limit() {
+    // Test that the total size of canister log in canister state stays within the limit
+    // even if the are many log messages sent in different calls (both via print and trap).
+    const MESSAGES_NUMBER: usize = 10;
+    let (env, canister_id, _controller) = setup_with_controller(FlagStatus::Enabled);
+    for _ in 0..MESSAGES_NUMBER {
+        let _ = env.execute_ingress(
+            canister_id,
+            "update",
+            wasm()
+                .debug_print(&[b'd'; MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE])
+                .trap_with_blob(&[b't'; MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE])
+                .reply()
+                .build(),
+        );
+    }
+    // Expect that the total size of the log in canister state is not zero and less than the limit.
+    let log_size = env.canister_log(canister_id).used_space();
+    assert!(0 < log_size);
+    assert!(log_size <= MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE);
+}
+
+#[test]
 fn test_logging_trap_in_heartbeat() {
     let (env, canister_id, controller) = setup_with_controller(FlagStatus::Enabled);
     let heartbeat = wasm()

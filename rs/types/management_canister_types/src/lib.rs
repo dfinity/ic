@@ -2609,9 +2609,19 @@ impl CanisterLog {
         &self.records
     }
 
+    /// Clears the canister log records.
+    pub fn clear(&mut self) {
+        self.records.clear();
+    }
+
     /// Returns the maximum allowed size of a canister log buffer.
     pub fn capacity(&self) -> usize {
         MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE
+    }
+
+    /// Returns the used space in the canister log buffer.
+    pub fn used_space(&self) -> usize {
+        self.records.data_size()
     }
 
     /// Returns the remaining space in the canister log buffer.
