@@ -1220,9 +1220,10 @@ impl TryFrom<u64> for ErrorCode {
             209 => Ok(ErrorCode::CanisterInstallCodeRateLimited),
             // 3xx -- `RejectCode::DestinationInvalid`
             301 => Ok(ErrorCode::CanisterNotFound),
-            // 302 (previously `CanisterMethodNotFound`)
-            // 303 (previously `CanisterAlreadyInstalled`)
-            // 304 (previously `CanisterWasmModuleNotFound`)
+            // TODO: RUN-948: Backward compatibility
+            302 => Ok(ErrorCode::CanisterMethodNotFound),
+            303 => Ok(ErrorCode::CanisterAlreadyInstalled),
+            304 => Ok(ErrorCode::CanisterWasmModuleNotFound),
             // 4xx -- `RejectCode::CanisterReject`
             // 401
             402 => Ok(ErrorCode::InsufficientMemoryAllocation),
@@ -1247,15 +1248,16 @@ impl TryFrom<u64> for ErrorCode {
             512 => Ok(ErrorCode::CanisterInvalidController),
             513 => Ok(ErrorCode::CanisterFunctionNotFound),
             514 => Ok(ErrorCode::CanisterNonEmpty),
-            // 515 (previously `CertifiedStateUnavailable`)
-            // 516 (previously `CanisterRejectedMessage`)
+            // TODO: RUN-948: Backward compatibility
+            515 => Ok(ErrorCode::CertifiedStateUnavailable),
+            516 => Ok(ErrorCode::CanisterRejectedMessage),
             517 => Ok(ErrorCode::QueryCallGraphLoopDetected),
-            // 518 (previously `UnknownManagementMessage`)
-            // 519 (previously `InvalidManagementPayload`)
+            518 => Ok(ErrorCode::UnknownManagementMessage),
+            519 => Ok(ErrorCode::InvalidManagementPayload),
             520 => Ok(ErrorCode::InsufficientCyclesInCall),
             521 => Ok(ErrorCode::CanisterWasmEngineError),
             522 => Ok(ErrorCode::CanisterInstructionLimitExceeded),
-            // 523 (previously `CanisterInstallCodeRateLimited`)
+            523 => Ok(ErrorCode::CanisterInstallCodeRateLimited),
             524 => Ok(ErrorCode::CanisterMemoryAccessLimitExceeded),
             525 => Ok(ErrorCode::QueryCallGraphTooDeep),
             526 => Ok(ErrorCode::QueryCallGraphTotalInstructionLimitExceeded),
