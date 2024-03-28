@@ -571,6 +571,10 @@ impl CanisterState {
     pub fn append_log(&mut self, other: &mut CanisterLog) {
         self.system_state.canister_log.append(other);
     }
+
+    pub fn clear_log(&mut self) {
+        self.system_state.canister_log.clear();
+    }
 }
 
 /// The result of `next_execution()` function.

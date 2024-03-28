@@ -33,7 +33,7 @@ use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{CertificationScope, StateHashError, StateManager, StateReader};
 use ic_logger::ReplicaLogger;
 use ic_management_canister_types::{
-    self as ic00, CanisterIdRecord, InstallCodeArgs, Method, Payload,
+    self as ic00, CanisterIdRecord, CanisterLog, InstallCodeArgs, Method, Payload,
 };
 pub use ic_management_canister_types::{
     CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs, CanisterStatusResultV2,
@@ -2482,6 +2482,15 @@ impl StateMachine {
         let buffer = Buffer::new(memory.page_map.clone());
         buffer.read(&mut dst, 0);
         dst
+    }
+
+    /// Returns the canister log of the specified canister.
+    pub fn canister_log(&self, canister_id: CanisterId) -> CanisterLog {
+        let replicated_state = self.state_manager.get_latest_state().take();
+        let canister_state = replicated_state
+            .canister_state(&canister_id)
+            .unwrap_or_else(|| panic!("Canister {} does not exist", canister_id));
+        canister_state.system_state.canister_log.clone()
     }
 
     /// Sets the content of the stable memory for the specified canister.
