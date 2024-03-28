@@ -1,5 +1,5 @@
 {
-  "checksum": "85f798123c6af55a77d3668b4e6bef53e98e1cb262d5ccc946791c51ac703995",
+  "checksum": "b646ef6bafb9c90c71c01e53fa0d9062b099977e71bed7debf5c21e9923d31e4",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -23615,12 +23615,9 @@
       "name": "ic-btc-interface",
       "version": "0.2.0",
       "repository": {
-        "Git": {
-          "remote": "https://github.com/dfinity/bitcoin-canister",
-          "commitish": {
-            "Rev": "62a71e47c491fb842ccc257b1c675651501f4b82"
-          },
-          "strip_prefix": "interface"
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-btc-interface/0.2.0/download",
+          "sha256": "46c2d1eedb5fcd02b6aab21fa6e0989ae560505e510bf221af9ab57bffbc83ac"
         }
       },
       "targets": [
@@ -23665,12 +23662,9 @@
       "name": "ic-btc-test-utils",
       "version": "0.1.0",
       "repository": {
-        "Git": {
-          "remote": "https://github.com/dfinity/bitcoin-canister",
-          "commitish": {
-            "Rev": "62a71e47c491fb842ccc257b1c675651501f4b82"
-          },
-          "strip_prefix": "test-utils"
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-btc-test-utils/0.1.0/download",
+          "sha256": "be8e0a43145188ba239150f8460d314b0dd6e0ddf7d753c0ef99296103c622dd"
         }
       },
       "targets": [
@@ -23701,18 +23695,15 @@
         "edition": "2021",
         "version": "0.1.0"
       },
-      "license": null
+      "license": "Apache-2.0"
     },
     "ic-btc-validation 0.1.0": {
       "name": "ic-btc-validation",
       "version": "0.1.0",
       "repository": {
-        "Git": {
-          "remote": "https://github.com/dfinity/bitcoin-canister",
-          "commitish": {
-            "Rev": "0e996988693f2d55fc9533c44dc20ae5310a1894"
-          },
-          "strip_prefix": "validation"
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-btc-validation/0.1.0/download",
+          "sha256": "3e73b5f400b954d3ddb64706bd4392ef0b5829976606c2baa49e692181192761"
         }
       },
       "targets": [
@@ -23743,7 +23734,7 @@
         "edition": "2021",
         "version": "0.1.0"
       },
-      "license": null
+      "license": "Apache-2.0"
     },
     "ic-canister-log 0.2.0": {
       "name": "ic-canister-log",

@@ -17,8 +17,6 @@ def sanitize_external_crates(sanitizers_enabled):
         "bincode": FUZZING_ANNOTATION,
     }
 
-BITCOIN_CANISTER_REV = "62a71e47c491fb842ccc257b1c675651501f4b82"  # tag = "release/2024-01-22"
-
 ICRC_1_REV = "26a80d777e079644cd69e883e18dad1a201f5b1a"
 
 BUILD_INFO_REV = "701a696844fba5c87df162fbbc1ccef96f27c9d7"
@@ -555,16 +553,13 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "ic-btc-interface": crate.spec(
-                git = "https://github.com/dfinity/bitcoin-canister",
-                rev = BITCOIN_CANISTER_REV,
+                version = "^0.2.0",
             ),
             "ic-btc-validation": crate.spec(
-                git = "https://github.com/dfinity/bitcoin-canister",
-                rev = "0e996988693f2d55fc9533c44dc20ae5310a1894",  # TODO: replace with BITCOIN_CANISTER_REV once the replica supports it.
+                version = "^0.1.0",
             ),
             "ic-btc-test-utils": crate.spec(
-                git = "https://github.com/dfinity/bitcoin-canister",
-                rev = BITCOIN_CANISTER_REV,
+                version = "^0.1.0",
             ),
             "ic-canister-log": crate.spec(
                 version = "^0.2.0",
