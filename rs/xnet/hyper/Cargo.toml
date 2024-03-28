@@ -11,5 +11,5 @@ hyper = { version = "0.14.18" , features = ["full", "tcp"] }
 ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-xnet-uri = { path = "../uri" }
-socket2 = { version = "0.5", features = ["all"] }
+socket2 = { workspace = true }
 tokio = { workspace = true }

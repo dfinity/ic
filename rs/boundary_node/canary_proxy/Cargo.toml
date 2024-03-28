@@ -9,7 +9,7 @@ edition = "2021"
 anyhow = { workspace = true }
 bytes = { workspace = true }
 clap = { workspace = true }
-futures-util = "0.3.28"
+futures-util = { workspace = true }
 http = "1.0.0"
 http-body = "1.0.0"
 http-body-util = "0.1.0"
