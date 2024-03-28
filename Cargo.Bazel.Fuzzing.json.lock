@@ -1,5 +1,5 @@
 {
-  "checksum": "3017dd144f9a6795953d484297ee5c6ca015a40842dacd88bd687f79a43cd903",
+  "checksum": "ebe5c17a33386f0932b5ce0643619b7e5969df62a20f2fde878eaeca593c7526",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -14744,7 +14744,7 @@
               "target": "ic_agent"
             },
             {
-              "id": "ic-btc-interface 0.1.0",
+              "id": "ic-btc-interface 0.2.0",
               "target": "ic_btc_interface"
             },
             {
@@ -23710,14 +23710,14 @@
       },
       "license": "Apache-2.0"
     },
-    "ic-btc-interface 0.1.0": {
+    "ic-btc-interface 0.2.0": {
       "name": "ic-btc-interface",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "repository": {
         "Git": {
           "remote": "https://github.com/dfinity/bitcoin-canister",
           "commitish": {
-            "Rev": "9b239d1d67253eb14a35be6061e3967d5ec9db9d"
+            "Rev": "62a71e47c491fb842ccc257b1c675651501f4b82"
           },
           "strip_prefix": "interface"
         }
@@ -23756,7 +23756,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.1.0"
+        "version": "0.2.0"
       },
       "license": "Apache-2.0"
     },
@@ -23767,7 +23767,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/bitcoin-canister",
           "commitish": {
-            "Rev": "26552e8e7d1b2e23d7195499bd6aed650b263ae7"
+            "Rev": "62a71e47c491fb842ccc257b1c675651501f4b82"
           },
           "strip_prefix": "test-utils"
         }
@@ -65011,7 +65011,7 @@
     "hyper-util 0.1.3",
     "hyperlocal-next 0.9.0",
     "ic-agent 0.34.0",
-    "ic-btc-interface 0.1.0",
+    "ic-btc-interface 0.2.0",
     "ic-btc-test-utils 0.1.0",
     "ic-btc-validation 0.1.0",
     "ic-canister-log 0.2.0",
