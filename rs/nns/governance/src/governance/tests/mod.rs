@@ -1203,44 +1203,6 @@ mod cast_vote_and_cascade_follow {
 }
 
 #[test]
-fn governance_remove_neuron_updates_followee_index_correctly() {
-    let mut governance = Governance::new(
-        GovernanceProto {
-            neurons: btreemap! {
-                1 => Neuron {
-                    id: Some(NeuronId { id: 1 }),
-                    followees: hashmap! {
-                         2 => Followees {
-                            followees: vec![NeuronId { id: 2 }, NeuronId { id: 3 }]
-                        }
-                    },
-                    ..Default::default()
-                },
-            },
-            ..Default::default()
-        },
-        Box::new(MockEnvironment::new(vec![], 0)),
-        Box::new(StubIcpLedger {}),
-        Box::new(StubCMC {}),
-    );
-
-    let entry = governance
-        .neuron_store
-        .get_followers_by_followee_and_topic(NeuronId { id: 2 }, Topic::try_from(2).unwrap());
-    assert_eq!(entry, vec![NeuronId { id: 1 }]);
-
-    let neuron = governance
-        .with_neuron(&NeuronId { id: 1 }, |n| n.clone())
-        .unwrap();
-    governance.remove_neuron(neuron).unwrap();
-
-    let entry = governance
-        .neuron_store
-        .get_followers_by_followee_and_topic(NeuronId { id: 2 }, Topic::try_from(2).unwrap());
-    assert_eq!(entry, vec![]);
-}
-
-#[test]
 fn test_pre_and_post_upgrade_first_time() {
     let neuron1 = Neuron {
         id: Some(NeuronId { id: 1 }),

@@ -6,8 +6,11 @@ use crate::{
     },
     neuron::types::{DissolveStateAndAge, StoredDissolvedStateAndAge},
     pb::v1::{
-        governance_error::ErrorType, manage_neuron, neuron::DissolveState, Ballot, BallotInfo,
-        GovernanceError, Neuron, NeuronInfo, NeuronState, NeuronType, Topic, Vote,
+        governance_error::ErrorType,
+        manage_neuron::{configure::Operation, Configure},
+        neuron::DissolveState,
+        Ballot, BallotInfo, GovernanceError, Neuron, NeuronInfo, NeuronState, NeuronType, Topic,
+        Vote,
     },
 };
 #[cfg(target_arch = "wasm32")]
@@ -495,9 +498,9 @@ impl Neuron {
     fn is_authorized_to_configure_or_err(
         &self,
         caller: &PrincipalId,
-        configure: &manage_neuron::configure::Operation,
+        configure: &Operation,
     ) -> Result<(), GovernanceError> {
-        use manage_neuron::configure::Operation::{JoinCommunityFund, LeaveCommunityFund};
+        use Operation::{JoinCommunityFund, LeaveCommunityFund};
 
         match configure {
             // The controller and hotkeys are allowed to change Neuron Fund membership.
@@ -535,12 +538,12 @@ impl Neuron {
 
     /// Apply the specified neuron configuration operation on this neuron.
     ///
-    /// See [manage_neuron::Configure] for details.
+    /// See [Configure] for details.
     pub fn configure(
         &mut self,
         caller: &PrincipalId,
         now_seconds: u64,
-        cmd: &manage_neuron::Configure,
+        cmd: &Configure,
     ) -> Result<(), GovernanceError> {
         let op = &cmd.operation.as_ref().ok_or_else(|| {
             GovernanceError::new_with_message(
@@ -552,7 +555,7 @@ impl Neuron {
         self.is_authorized_to_configure_or_err(caller, op)?;
 
         match op {
-            manage_neuron::configure::Operation::IncreaseDissolveDelay(d) => {
+            Operation::IncreaseDissolveDelay(d) => {
                 if d.additional_dissolve_delay_seconds == 0 {
                     return Err(GovernanceError::new_with_message(
                         ErrorType::InvalidCommand,
@@ -562,7 +565,7 @@ impl Neuron {
                 self.increase_dissolve_delay(now_seconds, d.additional_dissolve_delay_seconds);
                 Ok(())
             }
-            manage_neuron::configure::Operation::SetDissolveTimestamp(d) => {
+            Operation::SetDissolveTimestamp(d) => {
                 if now_seconds > d.dissolve_timestamp_seconds {
                     return Err(GovernanceError::new_with_message(
                         ErrorType::InvalidCommand,
@@ -597,13 +600,9 @@ impl Neuron {
                 );
                 Ok(())
             }
-            manage_neuron::configure::Operation::StartDissolving(_) => {
-                self.start_dissolving(now_seconds)
-            }
-            manage_neuron::configure::Operation::StopDissolving(_) => {
-                self.stop_dissolving(now_seconds)
-            }
-            manage_neuron::configure::Operation::AddHotKey(k) => {
+            Operation::StartDissolving(_) => self.start_dissolving(now_seconds),
+            Operation::StopDissolving(_) => self.stop_dissolving(now_seconds),
+            Operation::AddHotKey(k) => {
                 let hot_key = k.new_hot_key.as_ref().ok_or_else(|| {
                     GovernanceError::new_with_message(
                     ErrorType::InvalidCommand,
@@ -612,20 +611,16 @@ impl Neuron {
                 })?;
                 self.add_hot_key(hot_key)
             }
-            manage_neuron::configure::Operation::RemoveHotKey(k) => {
+            Operation::RemoveHotKey(k) => {
                 let hot_key = k.hot_key_to_remove.as_ref().ok_or_else(|| GovernanceError::new_with_message(
                     ErrorType::InvalidCommand,
                     "Operation RemoveHotKey requires the hot key to remove to be specified in the input",
                 ))?;
                 self.remove_hot_key(hot_key)
             }
-            manage_neuron::configure::Operation::JoinCommunityFund(_) => {
-                self.join_community_fund(now_seconds)
-            }
-            manage_neuron::configure::Operation::LeaveCommunityFund(_) => {
-                self.leave_community_fund()
-            }
-            manage_neuron::configure::Operation::ChangeAutoStakeMaturity(change) => {
+            Operation::JoinCommunityFund(_) => self.join_community_fund(now_seconds),
+            Operation::LeaveCommunityFund(_) => self.leave_community_fund(),
+            Operation::ChangeAutoStakeMaturity(change) => {
                 if change.requested_setting_for_auto_stake_maturity {
                     self.auto_stake_maturity = Some(true);
                 } else {
@@ -899,6 +894,11 @@ impl NeuronInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{
+        governance::ONE_YEAR_SECONDS,
+        pb::v1::manage_neuron::{SetDissolveTimestamp, StartDissolving},
+    };
+
     use ic_nervous_system_common::E8;
 
     const NOW: u64 = 123_456_789;
@@ -1229,5 +1229,94 @@ mod tests {
             Some(DissolveState::WhenDissolvedTimestampSeconds(234567890))
         );
         assert_eq!(neuron.aging_since_timestamp_seconds, u64::MAX);
+    }
+
+    #[test]
+    fn test_neuron_configure_dissolve_delay() {
+        // Step 0: prepare the neuron.
+        let now = 123_456_789;
+        let controller = PrincipalId::new_user_test_id(1);
+        let mut neuron = Neuron {
+            controller: Some(controller),
+            dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(now - 1000)),
+            aging_since_timestamp_seconds: u64::MAX,
+            ..Default::default()
+        };
+
+        // Step 1: try to set the dissolve delay to the past, expecting to fail.
+        assert!(neuron
+            .configure(
+                &controller,
+                now,
+                &Configure {
+                    operation: Some(Operation::SetDissolveTimestamp(SetDissolveTimestamp {
+                        dissolve_timestamp_seconds: now - 1,
+                    })),
+                },
+            )
+            .is_err());
+
+        // Step 2: set the dissolve delay to a value in the future, and verify that the neuron is
+        // now non-dissolving.
+        neuron
+            .configure(
+                &controller,
+                now,
+                &Configure {
+                    operation: Some(Operation::SetDissolveTimestamp(SetDissolveTimestamp {
+                        dissolve_timestamp_seconds: now + 100,
+                    })),
+                },
+            )
+            .unwrap();
+        assert_eq!(neuron.state(now), NeuronState::NotDissolving);
+
+        // Step 3: try to increase the dissolve delay by more than u32::MAX, which should fail.
+        neuron
+            .configure(
+                &controller,
+                now,
+                &Configure {
+                    operation: Some(Operation::SetDissolveTimestamp(SetDissolveTimestamp {
+                        dissolve_timestamp_seconds: now + 100 + u32::MAX as u64 + 1,
+                    })),
+                },
+            )
+            .unwrap_err();
+
+        // Step 4: try to set the dissolve delay to more than 8 years, which should succeed but capped at 8 years.
+        neuron
+            .configure(
+                &controller,
+                now,
+                &Configure {
+                    operation: Some(Operation::SetDissolveTimestamp(SetDissolveTimestamp {
+                        dissolve_timestamp_seconds: now + 8 * ONE_YEAR_SECONDS + 1,
+                    })),
+                },
+            )
+            .unwrap();
+        assert_eq!(neuron.state(now), NeuronState::NotDissolving);
+        assert_eq!(neuron.dissolve_delay_seconds(now), 8 * ONE_YEAR_SECONDS);
+
+        // Step 5: start dissolving the neuron.
+        neuron
+            .configure(
+                &controller,
+                now,
+                &Configure {
+                    operation: Some(Operation::StartDissolving(StartDissolving {})),
+                },
+            )
+            .unwrap();
+        assert_eq!(neuron.state(now), NeuronState::Dissolving);
+
+        // Step 7: advance the time by 8 years - 1 second and see that the neuron is still dissolving.
+        let now = now + 8 * ONE_YEAR_SECONDS - 1;
+        assert_eq!(neuron.state(now), NeuronState::Dissolving);
+
+        // Step 8: advance the time by 1 second and see that the neuron is now dissolved.
+        let now = now + 1;
+        assert_eq!(neuron.state(now), NeuronState::Dissolved);
     }
 }
