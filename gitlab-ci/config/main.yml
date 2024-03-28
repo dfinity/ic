@@ -355,10 +355,12 @@ bazel-test-macos:
           gitlab-ci/container/build-ic.sh -i -c -b --no-release
       fi
 
-      # purge test image
-      find ./artifacts/icos -name 'update-img-test.*' -delete
-      # only keep zstd ic images
-      find ./artifacts/icos -name '*.gz' -delete
+      if [ -d artifacts/icos ]; then
+          # purge test image
+          find ./artifacts/icos -name 'update-img-test.*' -delete
+          # only keep zstd ic images
+          find ./artifacts/icos -name '*.gz' -delete
+      fi
 
       # release binaries
       [ -d artifacts/release ] && buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
