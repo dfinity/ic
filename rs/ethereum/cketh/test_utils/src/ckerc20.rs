@@ -1,4 +1,5 @@
-use crate::flow::{DepositParams, LedgerTransactionAssert};
+use crate::events::MinterEventAssert;
+use crate::flow::{DepositParams, LedgerTransactionAssert, ProcessWithdrawal};
 use crate::mock::{JsonRpcMethod, MockJsonRpcProviders};
 use crate::response::{block_response, empty_logs, Erc20LogEntry};
 use crate::{
@@ -18,7 +19,7 @@ use ic_cketh_minter::endpoints::ckerc20::{
 use ic_cketh_minter::endpoints::events::{EventPayload, EventSource};
 use ic_cketh_minter::endpoints::CkErc20Token;
 use ic_cketh_minter::eth_rpc::FixedSizeData;
-use ic_cketh_minter::numeric::BlockNumber;
+use ic_cketh_minter::numeric::{BlockNumber, Erc20Value};
 use ic_cketh_minter::SCRAPPING_ETH_LOGS_INTERVAL;
 use ic_ethereum_types::Address;
 pub use ic_ledger_suite_orchestrator::candid::AddErc20Arg as Erc20Token;
@@ -126,6 +127,10 @@ impl CkErc20Setup {
         self
     }
 
+    pub fn check_events(self) -> MinterEventAssert<Self> {
+        MinterEventAssert::from_fetching_all_events(self)
+    }
+
     pub fn deposit(self, params: CkErc20DepositParams) -> CkErc20DepositFlow {
         CkErc20DepositFlow {
             setup: self,
@@ -171,9 +176,9 @@ impl CkErc20Setup {
         }
     }
 
-    fn wait_for_updated_ledger_balance(
+    pub fn wait_for_updated_ledger_balance(
         &self,
-        ledger_id: CanisterId,
+        ledger_id: Principal,
         account: impl Into<Account>,
         balance_before: &Nat,
     ) -> Nat {
@@ -182,12 +187,19 @@ impl CkErc20Setup {
         for _ in 0..10 {
             self.env.advance_time(Duration::from_secs(1));
             self.env.tick();
-            current_balance = self.cketh.balance_of_ledger(ledger_id, account);
+            current_balance = self.balance_of_ledger(ledger_id, account);
             if &current_balance != balance_before {
                 break;
             }
         }
         current_balance
+    }
+
+    pub fn balance_of_ledger(&self, ledger_id: Principal, account: impl Into<Account>) -> Nat {
+        self.cketh.balance_of_ledger(
+            CanisterId::unchecked_from_principal(ledger_id.into()),
+            account,
+        )
     }
 
     pub fn call_cketh_ledger_approve_minter(
@@ -359,21 +371,22 @@ impl AsRef<CkEthSetup> for CkErc20DepositFlow {
 
 impl CkErc20DepositFlow {
     pub fn expect_mint(mut self) -> CkErc20Setup {
-        let cketh_balance_before = self.setup.cketh.balance_of(self.params.recipient);
-        let ckerc20_balance_before = self.setup.cketh.balance_of_ledger(
-            CanisterId::unchecked_from_principal(self.params.token.ledger_canister_id.into()),
-            self.params.recipient,
-        );
+        let cketh_balance_before = self
+            .setup
+            .balance_of_ledger(self.setup.cketh_ledger_id(), self.params.recipient);
+        let ckerc20_balance_before = self
+            .setup
+            .balance_of_ledger(self.params.token.ledger_canister_id, self.params.recipient);
 
         self.handle_log_scraping();
 
         let cketh_balance_after = self.setup.wait_for_updated_ledger_balance(
-            CanisterId::unchecked_from_principal(self.setup.cketh_ledger_id().into()),
+            self.setup.cketh_ledger_id(),
             self.params.recipient,
             &cketh_balance_before,
         );
         let ckerc20_balance_after = self.setup.wait_for_updated_ledger_balance(
-            CanisterId::unchecked_from_principal(self.params.token.ledger_canister_id.into()),
+            self.params.token.ledger_canister_id,
             self.params.recipient,
             &ckerc20_balance_before,
         );
@@ -489,21 +502,22 @@ impl CkErc20DepositFlow {
     }
 
     pub fn expect_no_mint(self) -> CkErc20Setup {
-        let cketh_balance_before = self.setup.cketh.balance_of(self.params.recipient);
-        let ckerc20_balance_before = self.setup.cketh.balance_of_ledger(
-            CanisterId::unchecked_from_principal(self.params.token.ledger_canister_id.into()),
-            self.params.recipient,
-        );
+        let cketh_balance_before = self
+            .setup
+            .balance_of_ledger(self.setup.cketh_ledger_id(), self.params.recipient);
+        let ckerc20_balance_before = self
+            .setup
+            .balance_of_ledger(self.params.token.ledger_canister_id, self.params.recipient);
 
         self.handle_log_scraping();
 
         let cketh_balance_after = self.setup.wait_for_updated_ledger_balance(
-            CanisterId::unchecked_from_principal(self.setup.cketh_ledger_id().into()),
+            self.setup.cketh_ledger_id(),
             self.params.recipient,
             &cketh_balance_before,
         );
         let ckerc20_balance_after = self.setup.wait_for_updated_ledger_balance(
-            CanisterId::unchecked_from_principal(self.params.token.ledger_canister_id.into()),
+            self.params.token.ledger_canister_id,
             self.params.recipient,
             &ckerc20_balance_before,
         );
@@ -538,6 +552,18 @@ impl Erc20WithdrawalFlow {
         self.setup
     }
 
+    pub fn expect_withdrawal_request_accepted(
+        self,
+    ) -> ProcessWithdrawal<CkErc20Setup, RetrieveErc20Request> {
+        let response = self
+            .minter_response()
+            .expect("BUG: unexpected error from minter during withdrawal");
+        ProcessWithdrawal {
+            setup: self.setup,
+            withdrawal_request: response,
+        }
+    }
+
     fn minter_response(&self) -> Result<RetrieveErc20Request, WithdrawErc20Error> {
         Decode!(&assert_reply(
         self.setup.env
@@ -546,4 +572,42 @@ impl Erc20WithdrawalFlow {
     ), Result<RetrieveErc20Request, WithdrawErc20Error>)
         .unwrap()
     }
+}
+
+#[allow(deprecated)]
+pub fn erc20_transfer_data(expected_address: &Address, expected_amount: &Erc20Value) -> Vec<u8> {
+    use ethers_core::abi::{Param, ParamType, Token};
+
+    let erc20_transfer = ethers_core::abi::Function {
+        name: "transfer".to_string(),
+        inputs: vec![
+            Param {
+                name: "_to".to_string(),
+                kind: ParamType::Address,
+                internal_type: None,
+            },
+            Param {
+                name: "_value".to_string(),
+                kind: ParamType::Uint(256),
+                internal_type: None,
+            },
+        ],
+        outputs: vec![Param {
+            name: "success".to_string(),
+            kind: ParamType::Bool,
+            internal_type: None,
+        }],
+        constant: None,
+        state_mutability: ethers_core::abi::StateMutability::NonPayable,
+    };
+    assert_eq!(
+        erc20_transfer.short_signature().to_vec(),
+        hex::decode("a9059cbb").unwrap()
+    );
+    erc20_transfer
+        .encode_input(&[
+            Token::Address(expected_address.to_string().parse().unwrap()),
+            Token::Uint(expected_amount.to_be_bytes().into()),
+        ])
+        .expect("failed to encode transfer data")
 }
