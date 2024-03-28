@@ -13,6 +13,7 @@ use crate::{
 use candid::{Decode, Encode, Nat, Principal};
 use ethers_core::utils::{hex, rlp};
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_cketh_minter::endpoints::ckerc20::RetrieveErc20Request;
 use ic_cketh_minter::endpoints::events::{Event, EventPayload, EventSource};
 use ic_cketh_minter::endpoints::RetrieveEthStatus::Pending;
 use ic_cketh_minter::endpoints::{
@@ -260,7 +261,9 @@ pub struct WithdrawalFlow {
 }
 
 impl WithdrawalFlow {
-    pub fn expect_withdrawal_request_accepted(self) -> ProcessWithdrawal {
+    pub fn expect_withdrawal_request_accepted(
+        self,
+    ) -> ProcessWithdrawal<CkEthSetup, RetrieveEthRequest> {
         let response = self
             .minter_response()
             .expect("BUG: unexpected error from minter during withdrawal");
@@ -289,9 +292,25 @@ impl WithdrawalFlow {
     }
 }
 
-pub struct ProcessWithdrawal {
-    pub setup: CkEthSetup,
-    pub withdrawal_request: RetrieveEthRequest,
+pub trait HasWithdrawalId {
+    fn withdrawal_id(&self) -> &Nat;
+}
+
+impl HasWithdrawalId for RetrieveEthRequest {
+    fn withdrawal_id(&self) -> &Nat {
+        &self.block_index
+    }
+}
+
+impl HasWithdrawalId for RetrieveErc20Request {
+    fn withdrawal_id(&self) -> &Nat {
+        &self.cketh_block_index
+    }
+}
+
+pub struct ProcessWithdrawal<T, Req> {
+    pub setup: T,
+    pub withdrawal_request: Req,
 }
 
 pub struct ProcessWithdrawalParams {
@@ -341,17 +360,20 @@ impl ProcessWithdrawalParams {
     }
 }
 
-impl ProcessWithdrawal {
+impl<T: AsRef<CkEthSetup>, Req: HasWithdrawalId> ProcessWithdrawal<T, Req> {
     pub fn withdrawal_id(&self) -> &Nat {
-        &self.withdrawal_request.block_index
+        self.withdrawal_request.withdrawal_id()
     }
 
-    pub fn start_processing_withdrawals(self) -> FeeHistoryProcessWithdrawal {
+    pub fn start_processing_withdrawals(self) -> FeeHistoryProcessWithdrawal<T, Req> {
         assert_eq!(
-            self.setup.retrieve_eth_status(self.withdrawal_id()),
+            self.setup
+                .as_ref()
+                .retrieve_eth_status(self.withdrawal_id()),
             Pending
         );
         self.setup
+            .as_ref()
             .env
             .advance_time(PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL);
         FeeHistoryProcessWithdrawal {
@@ -360,8 +382,9 @@ impl ProcessWithdrawal {
         }
     }
 
-    pub fn retry_processing_withdrawals(self) -> FeeHistoryProcessWithdrawal {
+    pub fn retry_processing_withdrawals(self) -> FeeHistoryProcessWithdrawal<T, Req> {
         self.setup
+            .as_ref()
             .env
             .advance_time(PROCESS_ETH_RETRIEVE_TRANSACTIONS_RETRY_INTERVAL);
         FeeHistoryProcessWithdrawal {
@@ -373,7 +396,7 @@ impl ProcessWithdrawal {
     pub fn wait_and_validate_withdrawal(
         self,
         params: ProcessWithdrawalParams,
-    ) -> TransactionReceiptProcessWithdrawal {
+    ) -> TransactionReceiptProcessWithdrawal<T, Req> {
         self.start_processing_withdrawals()
             .retrieve_fee_history(params.override_rpc_eth_fee_history)
             .expect_status(RetrieveEthStatus::Pending)
@@ -389,12 +412,12 @@ impl ProcessWithdrawal {
     }
 }
 
-pub struct FeeHistoryProcessWithdrawal {
-    setup: CkEthSetup,
-    withdrawal_request: RetrieveEthRequest,
+pub struct FeeHistoryProcessWithdrawal<T, Req> {
+    setup: T,
+    withdrawal_request: Req,
 }
 
-impl FeeHistoryProcessWithdrawal {
+impl<T: AsRef<CkEthSetup>, Req: HasWithdrawalId> FeeHistoryProcessWithdrawal<T, Req> {
     pub fn retrieve_fee_history<
         F: FnMut(MockJsonRpcProvidersBuilder) -> MockJsonRpcProvidersBuilder,
     >(
@@ -412,10 +435,11 @@ impl FeeHistoryProcessWithdrawal {
     pub fn expect_status(
         self,
         status: RetrieveEthStatus,
-    ) -> LatestTransactionCountProcessWithdrawal {
+    ) -> LatestTransactionCountProcessWithdrawal<T, Req> {
         assert_eq!(
             self.setup
-                .retrieve_eth_status(&self.withdrawal_request.block_index),
+                .as_ref()
+                .retrieve_eth_status(self.withdrawal_request.withdrawal_id()),
             status,
             "BUG: unexpected status while processing withdrawal"
         );
@@ -426,12 +450,12 @@ impl FeeHistoryProcessWithdrawal {
     }
 }
 
-pub struct LatestTransactionCountProcessWithdrawal {
-    setup: CkEthSetup,
-    withdrawal_request: RetrieveEthRequest,
+pub struct LatestTransactionCountProcessWithdrawal<T, Req> {
+    setup: T,
+    withdrawal_request: Req,
 }
 
-impl LatestTransactionCountProcessWithdrawal {
+impl<T: AsRef<CkEthSetup>, Req: HasWithdrawalId> LatestTransactionCountProcessWithdrawal<T, Req> {
     pub fn retrieve_latest_transaction_count<
         F: FnMut(MockJsonRpcProvidersBuilder) -> MockJsonRpcProvidersBuilder,
     >(
@@ -448,10 +472,14 @@ impl LatestTransactionCountProcessWithdrawal {
         self
     }
 
-    pub fn expect_status(self, status: RetrieveEthStatus) -> SendRawTransactionProcessWithdrawal {
+    pub fn expect_status(
+        self,
+        status: RetrieveEthStatus,
+    ) -> SendRawTransactionProcessWithdrawal<T, Req> {
         assert_eq!(
             self.setup
-                .retrieve_eth_status(&self.withdrawal_request.block_index),
+                .as_ref()
+                .retrieve_eth_status(self.withdrawal_request.withdrawal_id()),
             status,
             "BUG: unexpected status while processing withdrawal"
         );
@@ -462,12 +490,12 @@ impl LatestTransactionCountProcessWithdrawal {
     }
 }
 
-pub struct SendRawTransactionProcessWithdrawal {
-    setup: CkEthSetup,
-    withdrawal_request: RetrieveEthRequest,
+pub struct SendRawTransactionProcessWithdrawal<T, Req> {
+    setup: T,
+    withdrawal_request: Req,
 }
 
-impl SendRawTransactionProcessWithdrawal {
+impl<T: AsRef<CkEthSetup>, Req: HasWithdrawalId> SendRawTransactionProcessWithdrawal<T, Req> {
     pub fn send_raw_transaction<
         F: FnMut(MockJsonRpcProvidersBuilder) -> MockJsonRpcProvidersBuilder,
     >(
@@ -500,10 +528,11 @@ impl SendRawTransactionProcessWithdrawal {
         })
     }
 
-    pub fn expect_status_sent(self) -> FinalizedTransactionCountProcessWithdrawal {
+    pub fn expect_status_sent(self) -> FinalizedTransactionCountProcessWithdrawal<T, Req> {
         let tx_hash = match self
             .setup
-            .retrieve_eth_status(&self.withdrawal_request.block_index)
+            .as_ref()
+            .retrieve_eth_status(self.withdrawal_request.withdrawal_id())
         {
             RetrieveEthStatus::TxSent(tx) => tx.transaction_hash,
             other => panic!("BUG: unexpected transactions status {:?}", other),
@@ -516,13 +545,15 @@ impl SendRawTransactionProcessWithdrawal {
     }
 }
 
-pub struct FinalizedTransactionCountProcessWithdrawal {
-    setup: CkEthSetup,
-    withdrawal_request: RetrieveEthRequest,
+pub struct FinalizedTransactionCountProcessWithdrawal<T, Req> {
+    setup: T,
+    withdrawal_request: Req,
     sent_transaction_hash: String,
 }
 
-impl FinalizedTransactionCountProcessWithdrawal {
+impl<T: AsRef<CkEthSetup>, Req: HasWithdrawalId>
+    FinalizedTransactionCountProcessWithdrawal<T, Req>
+{
     pub fn retrieve_finalized_transaction_count<
         F: FnMut(MockJsonRpcProvidersBuilder) -> MockJsonRpcProvidersBuilder,
     >(
@@ -539,10 +570,11 @@ impl FinalizedTransactionCountProcessWithdrawal {
         self
     }
 
-    pub fn expect_finalized_transaction(self) -> TransactionReceiptProcessWithdrawal {
+    pub fn expect_finalized_transaction(self) -> TransactionReceiptProcessWithdrawal<T, Req> {
         assert_eq!(
             self.setup
-                .retrieve_eth_status(&self.withdrawal_request.block_index),
+                .as_ref()
+                .retrieve_eth_status(self.withdrawal_request.withdrawal_id()),
             RetrieveEthStatus::TxSent(EthTransaction {
                 transaction_hash: self.sent_transaction_hash.clone()
             }),
@@ -555,10 +587,11 @@ impl FinalizedTransactionCountProcessWithdrawal {
         }
     }
 
-    pub fn expect_pending_transaction(self) -> ProcessWithdrawal {
+    pub fn expect_pending_transaction(self) -> ProcessWithdrawal<T, Req> {
         assert_eq!(
             self.setup
-                .retrieve_eth_status(&self.withdrawal_request.block_index),
+                .as_ref()
+                .retrieve_eth_status(self.withdrawal_request.withdrawal_id()),
             RetrieveEthStatus::TxSent(EthTransaction {
                 transaction_hash: self.sent_transaction_hash.clone()
             }),
@@ -571,13 +604,13 @@ impl FinalizedTransactionCountProcessWithdrawal {
     }
 }
 
-pub struct TransactionReceiptProcessWithdrawal {
-    pub setup: CkEthSetup,
-    pub withdrawal_request: RetrieveEthRequest,
+pub struct TransactionReceiptProcessWithdrawal<T, Req> {
+    pub setup: T,
+    pub withdrawal_request: Req,
     pub sent_transaction_hash: String,
 }
 
-impl TransactionReceiptProcessWithdrawal {
+impl<T: AsRef<CkEthSetup>, Req: HasWithdrawalId> TransactionReceiptProcessWithdrawal<T, Req> {
     pub fn retrieve_transaction_receipt<
         F: FnMut(MockJsonRpcProvidersBuilder) -> MockJsonRpcProvidersBuilder,
     >(
@@ -593,29 +626,29 @@ impl TransactionReceiptProcessWithdrawal {
         self
     }
 
-    fn check_audit_logs_and_upgrade(mut self) -> Self {
-        self.setup = self.setup.check_audit_logs_and_upgrade(Default::default());
-        self
-    }
-
     pub fn expect_status(self, status: RetrieveEthStatus) -> Self {
         assert_eq!(
             self.setup
-                .retrieve_eth_status(&self.withdrawal_request.block_index),
+                .as_ref()
+                .retrieve_eth_status(self.withdrawal_request.withdrawal_id()),
             status,
             "BUG: unexpected status while processing withdrawal"
         );
         self
     }
 
-    pub fn expect_finalized_status(self, status: TxFinalizedStatus) -> CkEthSetup {
+    pub fn expect_finalized_status(self, status: TxFinalizedStatus) -> T {
         assert_eq!(
             self.setup
-                .retrieve_eth_status(&self.withdrawal_request.block_index),
+                .as_ref()
+                .retrieve_eth_status(self.withdrawal_request.withdrawal_id()),
             RetrieveEthStatus::TxFinalized(status),
             "BUG: unexpected finalized status while processing withdrawal"
         );
-        self.check_audit_logs_and_upgrade().setup
+        self.setup
+            .as_ref()
+            .check_audit_logs_and_upgrade_as_ref(Default::default());
+        self.setup
     }
 }
 

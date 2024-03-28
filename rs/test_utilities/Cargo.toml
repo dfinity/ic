@@ -48,7 +48,7 @@ rand = "0.8"
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 slog = { workspace = true }
-socket2 = { version = "0.5", features = ["all"] }
+socket2 = { workspace = true }
 tempfile = "3.1.0"
 tokio = { workspace = true }
 tokio-rustls = { workspace = true }

@@ -1,5 +1,5 @@
 {
-  "checksum": "873b4eaf96ea7051ecfa583cb8f6c9245d5246c68e9dfb41c9a41c72ddca512a",
+  "checksum": "ebe5c17a33386f0932b5ce0643619b7e5969df62a20f2fde878eaeca593c7526",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -612,7 +612,7 @@
               "target": "mio"
             },
             {
-              "id": "socket2 0.5.5",
+              "id": "socket2 0.5.6",
               "target": "socket2"
             },
             {
@@ -874,7 +874,7 @@
               "target": "smallvec"
             },
             {
-              "id": "socket2 0.5.5",
+              "id": "socket2 0.5.6",
               "target": "socket2"
             },
             {
@@ -3035,7 +3035,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures 0.3.28",
+              "id": "futures 0.3.30",
               "target": "futures"
             },
             {
@@ -11634,7 +11634,7 @@
               "target": "criterion_plot"
             },
             {
-              "id": "futures 0.3.28",
+              "id": "futures 0.3.30",
               "target": "futures"
             },
             {
@@ -14639,7 +14639,7 @@
               "target": "fs_extra"
             },
             {
-              "id": "futures 0.3.28",
+              "id": "futures 0.3.30",
               "target": "futures"
             },
             {
@@ -14744,7 +14744,7 @@
               "target": "ic_agent"
             },
             {
-              "id": "ic-btc-interface 0.1.0",
+              "id": "ic-btc-interface 0.2.0",
               "target": "ic_btc_interface"
             },
             {
@@ -15338,7 +15338,7 @@
               "target": "slog_term"
             },
             {
-              "id": "socket2 0.5.5",
+              "id": "socket2 0.5.6",
               "target": "socket2"
             },
             {
@@ -19255,13 +19255,13 @@
       },
       "license": "MIT / Apache-2.0"
     },
-    "futures 0.3.28": {
+    "futures 0.3.30": {
       "name": "futures",
-      "version": "0.3.28",
+      "version": "0.3.30",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/futures/0.3.28/download",
-          "sha256": "23342abe12aba583913b2e62f22225ff9c950774065e4bfb61a19cd9770fec40"
+          "url": "https://static.crates.io/crates/futures/0.3.30/download",
+          "sha256": "645c6916888f6cb6350d2550b80fb63e734897a8498abe35cfb732b6487804b0"
         }
       },
       "targets": [
@@ -19302,7 +19302,7 @@
               "target": "futures_core"
             },
             {
-              "id": "futures-executor 0.3.28",
+              "id": "futures-executor 0.3.30",
               "target": "futures_executor"
             },
             {
@@ -19325,7 +19325,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.3.28"
+        "version": "0.3.30"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -19420,13 +19420,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "futures-executor 0.3.28": {
+    "futures-executor 0.3.30": {
       "name": "futures-executor",
-      "version": "0.3.28",
+      "version": "0.3.30",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/futures-executor/0.3.28/download",
-          "sha256": "ccecee823288125bd88b4d7f565c9e58e41858e47ab72e8ea2d64e93624386e0"
+          "url": "https://static.crates.io/crates/futures-executor/0.3.30/download",
+          "sha256": "a576fc72ae164fca6b9db127eaa9a9dda0d61316034f33a0a0d4eda41f02b01d"
         }
       },
       "targets": [
@@ -19470,7 +19470,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.3.28"
+        "version": "0.3.30"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -20469,7 +20469,7 @@
               "target": "dashmap"
             },
             {
-              "id": "futures 0.3.28",
+              "id": "futures 0.3.30",
               "target": "futures"
             },
             {
@@ -22467,7 +22467,7 @@
               "target": "form_urlencoded"
             },
             {
-              "id": "futures 0.3.28",
+              "id": "futures 0.3.30",
               "target": "futures"
             },
             {
@@ -23107,7 +23107,7 @@
               "target": "async_socks5"
             },
             {
-              "id": "futures 0.3.28",
+              "id": "futures 0.3.30",
               "target": "futures"
             },
             {
@@ -23269,7 +23269,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "socket2 0.5.5",
+              "id": "socket2 0.5.6",
               "target": "socket2"
             },
             {
@@ -23710,14 +23710,14 @@
       },
       "license": "Apache-2.0"
     },
-    "ic-btc-interface 0.1.0": {
+    "ic-btc-interface 0.2.0": {
       "name": "ic-btc-interface",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "repository": {
         "Git": {
           "remote": "https://github.com/dfinity/bitcoin-canister",
           "commitish": {
-            "Rev": "9b239d1d67253eb14a35be6061e3967d5ec9db9d"
+            "Rev": "62a71e47c491fb842ccc257b1c675651501f4b82"
           },
           "strip_prefix": "interface"
         }
@@ -23756,7 +23756,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.1.0"
+        "version": "0.2.0"
       },
       "license": "Apache-2.0"
     },
@@ -23767,7 +23767,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/bitcoin-canister",
           "commitish": {
-            "Rev": "26552e8e7d1b2e23d7195499bd6aed650b263ae7"
+            "Rev": "62a71e47c491fb842ccc257b1c675651501f4b82"
           },
           "strip_prefix": "test-utils"
         }
@@ -24085,7 +24085,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures 0.3.28",
+              "id": "futures 0.3.30",
               "target": "futures"
             },
             {
@@ -25290,7 +25290,7 @@
               "target": "candid"
             },
             {
-              "id": "futures 0.3.28",
+              "id": "futures 0.3.30",
               "target": "futures"
             },
             {
@@ -26569,7 +26569,7 @@
           "selects": {
             "cfg(windows)": [
               {
-                "id": "socket2 0.5.5",
+                "id": "socket2 0.5.6",
                 "target": "socket2"
               },
               {
@@ -27976,7 +27976,7 @@
               "target": "either"
             },
             {
-              "id": "futures 0.3.28",
+              "id": "futures 0.3.30",
               "target": "futures"
             },
             {
@@ -28263,7 +28263,7 @@
               "target": "backoff"
             },
             {
-              "id": "futures 0.3.28",
+              "id": "futures 0.3.30",
               "target": "futures"
             },
             {
@@ -32543,7 +32543,7 @@
               "target": "colored"
             },
             {
-              "id": "futures 0.3.28",
+              "id": "futures 0.3.30",
               "target": "futures"
             },
             {
@@ -35898,7 +35898,7 @@
               "target": "futures_channel"
             },
             {
-              "id": "futures-executor 0.3.28",
+              "id": "futures-executor 0.3.30",
               "target": "futures_executor"
             },
             {
@@ -35991,7 +35991,7 @@
               "target": "futures_channel"
             },
             {
-              "id": "futures-executor 0.3.28",
+              "id": "futures-executor 0.3.30",
               "target": "futures_executor"
             },
             {
@@ -36095,7 +36095,7 @@
               "target": "futures_channel"
             },
             {
-              "id": "futures-executor 0.3.28",
+              "id": "futures-executor 0.3.30",
               "target": "futures_executor"
             },
             {
@@ -41623,7 +41623,7 @@
               "target": "libc"
             },
             {
-              "id": "socket2 0.5.5",
+              "id": "socket2 0.5.6",
               "target": "socket2"
             },
             {
@@ -48256,7 +48256,7 @@
               "alias": "axum_framework"
             },
             {
-              "id": "futures 0.3.28",
+              "id": "futures 0.3.30",
               "target": "futures"
             },
             {
@@ -50440,13 +50440,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "socket2 0.5.5": {
+    "socket2 0.5.6": {
       "name": "socket2",
-      "version": "0.5.5",
+      "version": "0.5.6",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/socket2/0.5.5/download",
-          "sha256": "7b5fac59a5cb5dd637972e5fca70daf0523c9067fcdc4842f053dae04a18f8e9"
+          "url": "https://static.crates.io/crates/socket2/0.5.6/download",
+          "sha256": "05ffd9c0a93b7543e062e759284fcf5f5e3b098501104bfbdde4d404db792871"
         }
       },
       "targets": [
@@ -50482,14 +50482,14 @@
             ],
             "cfg(windows)": [
               {
-                "id": "windows-sys 0.48.0",
+                "id": "windows-sys 0.52.0",
                 "target": "windows_sys"
               }
             ]
           }
         },
         "edition": "2021",
-        "version": "0.5.5"
+        "version": "0.5.6"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -52494,7 +52494,7 @@
               "target": "fnv"
             },
             {
-              "id": "futures 0.3.28",
+              "id": "futures 0.3.30",
               "target": "futures"
             },
             {
@@ -53820,7 +53820,7 @@
           "selects": {
             "cfg(not(target_family = \"wasm\"))": [
               {
-                "id": "socket2 0.5.5",
+                "id": "socket2 0.5.6",
                 "target": "socket2"
               }
             ],
@@ -55408,7 +55408,7 @@
               "target": "forwarded_header_value"
             },
             {
-              "id": "futures 0.3.28",
+              "id": "futures 0.3.30",
               "target": "futures"
             },
             {
@@ -56483,7 +56483,7 @@
               "target": "bytes"
             },
             {
-              "id": "futures 0.3.28",
+              "id": "futures 0.3.30",
               "target": "futures"
             },
             {
@@ -61275,16 +61275,20 @@
           "common": [
             "Win32",
             "Win32_Foundation",
+            "Win32_Networking",
+            "Win32_Networking_WinSock",
             "Win32_Security",
             "Win32_Storage",
             "Win32_Storage_FileSystem",
             "Win32_System",
             "Win32_System_Diagnostics",
             "Win32_System_Diagnostics_Debug",
+            "Win32_System_IO",
             "Win32_System_Kernel",
             "Win32_System_Memory",
             "Win32_System_SystemInformation",
             "Win32_System_Threading",
+            "Win32_System_WindowsProgramming",
             "default"
           ],
           "selects": {}
@@ -62798,7 +62802,7 @@
               "target": "deadpool"
             },
             {
-              "id": "futures 0.3.28",
+              "id": "futures 0.3.30",
               "target": "futures"
             },
             {
@@ -64982,7 +64986,7 @@
     "flate2 1.0.28",
     "form_urlencoded 1.2.0",
     "fs_extra 1.3.0",
-    "futures 0.3.28",
+    "futures 0.3.30",
     "futures-util 0.3.30",
     "get_if_addrs 0.5.3",
     "getrandom 0.2.10",
@@ -65007,7 +65011,7 @@
     "hyper-util 0.1.3",
     "hyperlocal-next 0.9.0",
     "ic-agent 0.34.0",
-    "ic-btc-interface 0.1.0",
+    "ic-btc-interface 0.2.0",
     "ic-btc-test-utils 0.1.0",
     "ic-btc-validation 0.1.0",
     "ic-canister-log 0.2.0",
@@ -65165,7 +65169,7 @@
     "slog-scope 4.4.0",
     "slog-term 2.9.0",
     "slog_derive 0.2.0",
-    "socket2 0.5.5",
+    "socket2 0.5.6",
     "ssh2 0.9.4",
     "strum 0.26.2",
     "strum_macros 0.26.2",
