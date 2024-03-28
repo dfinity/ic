@@ -310,7 +310,7 @@ pub fn await_node_certified_height(node: &IcNodeSnapshot, target_height: Height,
     .expect("The node did not reach the specified height in time")
 }
 
-fn get_certified_height(node: &IcNodeSnapshot, log: Logger) -> Height {
+pub fn get_certified_height(node: &IcNodeSnapshot, log: Logger) -> Height {
     retry_with_msg!(
         format!("get certified height of node {}", node.node_id),
         log,
