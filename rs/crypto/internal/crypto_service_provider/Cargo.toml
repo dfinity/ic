@@ -11,7 +11,7 @@ base64 = { workspace = true }
 bincode = "1.2"
 bytes = { workspace = true }
 educe = "0.4"
-futures = "0.3"
+futures = { workspace = true }
 hex = { workspace = true }
 ic-adapter-metrics = { path = "../../../monitoring/adapter_metrics" }
 ic-config = { path = "../../../config" }

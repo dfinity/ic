@@ -423,10 +423,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.2.0",
             ),
             "futures": crate.spec(
-                version = "^0.3.28",
+                version = "^0.3.30",
             ),
             "futures-util": crate.spec(
-                version = "^0.3.8",
+                version = "^0.3.30",
             ),
             "get_if_addrs": crate.spec(
                 version = "^0.5.3",
@@ -924,7 +924,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.0",
             ),
             "rand": crate.spec(
-                version = "^0.8.4",
+                version = "^0.8.5",
                 features = [
                     "small_rng",
                 ],
@@ -1136,7 +1136,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.2.0",
             ),
             "socket2": crate.spec(
-                version = "^0.5.2",
+                version = "^0.5.6",
                 features = [
                     "all",
                 ],
