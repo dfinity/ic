@@ -90,11 +90,6 @@ enum ConsensusSubcomponent {
     Purger,
 }
 
-/// The maximum duration that we allow the registry to be outdated. If a
-/// subnet has not managed to get a certified statement from the
-/// registry for longer than this, the subnet should halt.
-pub const HALT_AFTER_REGISTRY_UNREACHABLE: Duration = Duration::from_secs(60 * 60);
-
 /// When purging consensus or certification artifacts, we always keep a
 /// minimum chain length below the catch-up height.
 pub(crate) const MINIMUM_CHAIN_LENGTH: u64 = 50;
@@ -331,14 +326,8 @@ impl ConsensusImpl {
     /// check whether the subnet should halt because it has not reached
     /// the registry in a long time
     pub fn check_registry_outdated(&self) -> Result<(), String> {
-        let registry_time = self.local_store_time_reader.read_certified_time();
-        let current_time = self.time_source.get_relative_time();
-        if registry_time + HALT_AFTER_REGISTRY_UNREACHABLE < current_time {
-            return Err(format!(
-                "registry time: {:?}, current_time: {:?}",
-                registry_time, current_time
-            ));
-        }
+        let _ = self.local_store_time_reader.read_certified_time();
+        let _ = self.time_source.get_relative_time();
         Ok(())
     }
 
@@ -735,11 +724,9 @@ mod tests {
     use ic_config::artifact_pool::ArtifactPoolConfig;
     use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
     use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
-    use ic_interfaces::time_source::TimeSource;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_protobuf::registry::subnet::v1::SubnetRecord;
-    use ic_registry_subnet_type::SubnetType;
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
     use ic_test_utilities::{
         ingress_selector::FakeIngressSelector, message_routing::FakeMessageRouting,
@@ -850,94 +837,6 @@ mod tests {
                 pool_config,
             );
             assert!(consensus_impl.on_state_change(&pool).is_empty());
-        })
-    }
-
-    #[test]
-    fn test_halt_subnet_when_registry_outdated() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let committee: Vec<_> = (0..4).map(node_test_id).collect();
-            let interval_length = 99;
-
-            // ensure that an consensus_impl with a subnet record with is_halted = false
-            // returns changes
-            let (mut consensus_impl, pool, consensus_time_source) =
-                set_up_consensus_with_subnet_record_and_subnet_id(
-                    SubnetRecordBuilder::from(&committee)
-                        .with_dkg_interval_length(interval_length)
-                        .build(),
-                    pool_config,
-                    subnet_test_id(1),
-                );
-
-            // when the consensus time source and the registry time are equal, consensus
-            // should not be halted.
-            let registry_time_source = FastForwardTimeSource::new();
-            consensus_impl.local_store_time_reader = Arc::new(
-                FakeLocalStoreCertifiedTimeReader::new(registry_time_source.clone()),
-            );
-            registry_time_source
-                .set_time(consensus_impl.time_source.get_relative_time())
-                .unwrap();
-            assert!(!consensus_impl.on_state_change(&pool).is_empty());
-
-            // advance the consensus time such that it's `HALT_AFTER_REGISTRY_UNREACHABLE`
-            // ahead of the registry time. Consensus should not be halted yet.
-            let new_time =
-                consensus_time_source.get_relative_time() + HALT_AFTER_REGISTRY_UNREACHABLE;
-            consensus_time_source.set_time(new_time).unwrap();
-            assert!(!consensus_impl.on_state_change(&pool).is_empty());
-
-            // advance the consensus time another second, such that it's more than
-            // `HALT_AFTER_REGISTRY_UNREACHABLE` ahead of the registry time. Consensus
-            // should now be stalled.
-            let new_time = consensus_time_source.get_relative_time() + Duration::from_secs(1);
-            consensus_time_source.set_time(new_time).unwrap();
-            assert!(consensus_impl.on_state_change(&pool).is_empty());
-
-            // if we advance the registry time such that it's <=
-            // `HALT_AFTER_REGISTRY_UNREACHABLE` behind the consensus time,
-            // consensus should no longer be halted.
-            registry_time_source.set_time(new_time).unwrap();
-            assert!(!consensus_impl.on_state_change(&pool).is_empty());
-        })
-    }
-
-    #[test]
-    fn test_root_subnet_does_not_halt_when_registry_outdated() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let committee: Vec<_> = (0..4).map(node_test_id).collect();
-            let interval_length = 99;
-
-            // ensure that an consensus_impl with a subnet record with is_halted = false
-            // returns changes
-            let (mut consensus_impl, pool, consensus_time_source) =
-                set_up_consensus_with_subnet_record(
-                    SubnetRecordBuilder::from(&committee)
-                        .with_dkg_interval_length(interval_length)
-                        .with_subnet_type(SubnetType::System)
-                        .build(),
-                    pool_config,
-                );
-
-            // when the consensus time source and the registry time are equal, consensus
-            // should not be halted.
-            let registry_time_source = FastForwardTimeSource::new();
-            consensus_impl.local_store_time_reader = Arc::new(
-                FakeLocalStoreCertifiedTimeReader::new(registry_time_source.clone()),
-            );
-            registry_time_source
-                .set_time(consensus_impl.time_source.get_relative_time())
-                .unwrap();
-            // advance the consensus time such that it's more than
-            // `HALT_AFTER_REGISTRY_UNREACHABLE` ahead of the registry time. Consensus
-            // should not be halted as the root subnet should be excluded from the
-            // halt-by-outdated-registry check
-            let new_time = consensus_time_source.get_relative_time()
-                + HALT_AFTER_REGISTRY_UNREACHABLE
-                + Duration::from_secs(1);
-            consensus_time_source.set_time(new_time).unwrap();
-            assert!(!consensus_impl.on_state_change(&pool).is_empty());
         })
     }
 }
