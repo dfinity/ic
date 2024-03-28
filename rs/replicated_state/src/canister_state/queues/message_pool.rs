@@ -126,7 +126,7 @@ impl MessagePool {
             // `REQUEST_LIFETIME`.
             CoarseTime::floor(now + REQUEST_LIFETIME)
         } else {
-            // Best-effort requests expire as per their specidied deadline.
+            // Best-effort requests expire as per their specified deadline.
             request.deadline
         };
 

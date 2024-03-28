@@ -19,6 +19,10 @@ fn canister_queue_constructor_test() {
     assert_eq!(CAPACITY, queue.available_response_slots());
     assert_eq!(Ok(()), queue.check_has_request_slot());
     assert_eq!(0, queue.reserved_slots());
+    assert_eq!(
+        Err(StateError::QueueFull { capacity: CAPACITY }),
+        queue.check_has_reserved_slot()
+    );
     assert_eq!(queue.peek(), None);
     assert_eq!(queue.pop(), None);
 }
@@ -41,6 +45,10 @@ fn canister_queue_push_request_succeeds() {
     );
     assert_eq!(CAPACITY, queue.available_response_slots());
     assert_eq!(0, queue.reserved_slots());
+    assert_eq!(
+        Err(StateError::QueueFull { capacity: CAPACITY }),
+        queue.check_has_reserved_slot()
+    );
 
     // Peek, then pop the request reference.
     assert_eq!(Some(&MessageReference::Request(id)), queue.peek());
@@ -52,6 +60,10 @@ fn canister_queue_push_request_succeeds() {
     assert_eq!(Ok(()), queue.check_has_request_slot());
     assert_eq!(CAPACITY, queue.available_response_slots());
     assert_eq!(0, queue.reserved_slots());
+    assert_eq!(
+        Err(StateError::QueueFull { capacity: CAPACITY }),
+        queue.check_has_reserved_slot()
+    );
 }
 
 // Reserving a slot, then pushing a response succeeds if there is space.
@@ -69,6 +81,7 @@ fn canister_queue_push_response_succeeds() {
     assert_eq!(Ok(()), queue.check_has_request_slot());
     assert_eq!(CAPACITY - 1, queue.available_response_slots());
     assert_eq!(1, queue.reserved_slots());
+    assert_eq!(Ok(()), queue.check_has_reserved_slot());
 
     // Push response into reseerved slot.
     let id = MessageId::new(13);
@@ -80,6 +93,10 @@ fn canister_queue_push_response_succeeds() {
     assert_eq!(Ok(()), queue.check_has_request_slot());
     assert_eq!(CAPACITY - 1, queue.available_response_slots());
     assert_eq!(0, queue.reserved_slots());
+    assert_eq!(
+        Err(StateError::QueueFull { capacity: CAPACITY }),
+        queue.check_has_reserved_slot()
+    );
 
     // Peek, then pop the response reference.
     assert_eq!(Some(&MessageReference::Response(id)), queue.peek());
@@ -91,6 +108,10 @@ fn canister_queue_push_response_succeeds() {
     assert_eq!(Ok(()), queue.check_has_request_slot());
     assert_eq!(CAPACITY, queue.available_response_slots());
     assert_eq!(0, queue.reserved_slots());
+    assert_eq!(
+        Err(StateError::QueueFull { capacity: CAPACITY }),
+        queue.check_has_reserved_slot()
+    );
 }
 
 /// Test that overfilling an output queue with requests results in failed
@@ -114,6 +135,10 @@ fn canister_queue_push_request_to_full_queue_fails() {
     );
     assert_eq!(CAPACITY, queue.available_response_slots());
     assert_eq!(0, queue.reserved_slots());
+    assert_eq!(
+        Err(StateError::QueueFull { capacity: CAPACITY }),
+        queue.check_has_reserved_slot()
+    );
 
     queue.push_request(MessageId::new(13));
 }
@@ -136,6 +161,7 @@ fn canister_queue_try_reserve_in_full_queue_fails() {
     assert_eq!(Ok(()), queue.check_has_request_slot());
     assert_eq!(0, queue.available_response_slots());
     assert_eq!(CAPACITY, queue.reserved_slots());
+    assert_eq!(Ok(()), queue.check_has_reserved_slot());
 
     // Trying to reserve a slot fails.
     assert_eq!(
@@ -154,6 +180,10 @@ fn canister_queue_try_reserve_in_full_queue_fails() {
     assert_eq!(Ok(()), queue.check_has_request_slot());
     assert_eq!(0, queue.available_response_slots());
     assert_eq!(0, queue.reserved_slots());
+    assert_eq!(
+        Err(StateError::QueueFull { capacity: CAPACITY }),
+        queue.check_has_reserved_slot()
+    );
 
     // Trying to reserve a slot still fails.
     assert_eq!(
@@ -190,7 +220,7 @@ fn canister_queue_full_duplex() {
 }
 
 #[test]
-#[should_panic(expected = "assertion failed: self.reserved_slots() > 0")]
+#[should_panic(expected = "QueueFull { capacity: 10 }")]
 fn canister_queue_push_without_reserved_slot_fails() {
     let mut queue = CanisterQueue::new(10);
     queue.push_response(MessageId::new(13));
@@ -239,6 +269,111 @@ fn canister_queue_empty_size_bytes() {
     assert_eq!(
         CanisterQueue::new(10).calculate_size_bytes(&pool),
         CanisterQueue::empty_size_bytes()
+    );
+}
+
+/// Generator for an arbitrary `MessageReference`.
+fn arbitrary_message_reference() -> impl Strategy<Value = MessageReference> {
+    prop_oneof![
+        5 => any::<u64>().prop_map(|id| MessageReference::Request(MessageId::new(id))),
+        4 => any::<u64>().prop_map(|id| MessageReference::Response(MessageId::new(id))),
+        1 => any::<u64>().prop_map(|id| MessageReference::LocalRejectResponse(CallbackId::new(id))),
+    ]
+}
+
+proptest! {
+    #[test]
+    fn canister_queue_push_and_pop(
+        mut references in proptest::collection::vec_deque(
+            arbitrary_message_reference(),
+            10..20,
+        )
+    ) {
+        // Create a queue with large enough capacity.
+        let mut queue = CanisterQueue::new(20);
+
+        // Push all references onto the queue.
+        for reference in references.iter() {
+            match reference {
+                MessageReference::Request(id) => {
+                    queue.push_request(*id);
+                }
+                MessageReference::Response(id) => {
+                    queue.try_reserve_response_slot().unwrap();
+                    queue.push_response(*id);
+                }
+                MessageReference::LocalRejectResponse(callback) => {
+                    queue.try_reserve_response_slot().unwrap();
+                    queue.push_local_reject_response(*callback);
+                }
+            }
+            prop_assert!(queue.check_invariants());
+        }
+
+        // Check the contents of the queue via `peek` and `pop`.
+        while let Some(r) = queue.peek() {
+            let reference = references.pop_front();
+            prop_assert_eq!(reference.as_ref(), Some(r));
+            prop_assert_eq!(reference, queue.pop());
+        }
+
+        // All references should have been consumed.
+        prop_assert!(references.is_empty());
+    }
+}
+
+#[test]
+fn canister_queue_calculate_stats() {
+    let mut queue = CanisterQueue::new(20);
+    let mut pool = MessagePool::default();
+
+    // Push an active request reference onto the queue.
+    let req: RequestOrResponse = RequestBuilder::default()
+        .payment(Cycles::new(10))
+        .build()
+        .into();
+    let req_id = pool.insert_inbound(req.clone());
+    queue.push_request(req_id);
+
+    // Push an active response reference onto the queue.
+    let rep: RequestOrResponse = ResponseBuilder::default().build().into();
+    let rep_id = pool.insert_inbound(rep.clone());
+    queue.try_reserve_response_slot().unwrap();
+    queue.push_response(rep_id);
+
+    // Push a stale request reference onto the queue.
+    let stale_req_id = MessageId::new(13);
+    queue.push_request(stale_req_id);
+
+    // Push a stale response reference onto the queue.
+    let stale_rep_id = MessageId::new(14);
+    queue.try_reserve_response_slot().unwrap();
+    queue.push_response(stale_rep_id);
+
+    // Push a local reject response reference onto the queue.
+    queue.try_reserve_response_slot().unwrap();
+    queue.push_local_reject_response(CallbackId::new(15));
+
+    // Validate the calculated stats.
+    assert_eq!(
+        CanisterQueue::empty_size_bytes() + req.count_bytes() + rep.count_bytes(),
+        queue.calculate_size_bytes(&pool)
+    );
+    // Two active references and one local reject response.
+    assert_eq!(3, queue.calculate_message_count(&pool));
+    // One active response reference and one local reject response.
+    assert_eq!(2, queue.calculate_response_count(&pool));
+    // Only 10 cycles in the request.
+    assert_eq!(Cycles::new(10), queue.calculate_cycles_in_queue(&pool));
+    // One active request (20) and one active response (21).
+    assert_eq!(
+        41,
+        queue.calculate_stat_sum(|msg| 20 + msg.is_response() as usize, &pool)
+    );
+    // 2 response references (20 each) and 3 response references (21 each).
+    assert_eq!(
+        103,
+        queue.calculate_reference_stat_sum(|r| 20 + r.is_response() as usize)
     );
 }
 
@@ -644,7 +779,6 @@ prop_compose! {
     fn arb_output_queue() (
         (time, num_pop, mut q) in arb_output_queue_no_timeout(5..=20)
         .prop_flat_map(|q| (arb_time_for_output_queue_timeouts(&q), 0..3_usize, Just(q)))
-
     ) -> OutputQueue {
         q.time_out_requests(time).count();
         q.check_invariants();
