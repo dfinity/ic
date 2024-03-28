@@ -9,7 +9,6 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::{Cycles, ExecutionRound, NumInstructions};
 use serde::{Deserialize, Serialize};
 
-const MIB: u64 = 1024 * 1024;
 const M: u64 = 1_000_000;
 const B: u64 = 1_000_000_000;
 const T: u128 = 1_000_000_000_000;
@@ -88,20 +87,6 @@ const SYSTEM_SUBNET_FACTOR: u64 = 10;
 // slow subnets while maintaining the speed of fast subnets, we use the middle
 // value of 200MB.
 const MAX_HEAP_DELTA_PER_ITERATION: NumBytes = NumBytes::new(200 * M);
-
-// The minimum amount of heap delta required to be available in each round
-// on application subnets. Calculated as:
-//     (subnet_heap_delta_capacity - initial_reserve)/CUP interval length
-//     (140GB - 32GB)/500 rounds = 221MiB
-// The CUP interval length is taken from the current subnet record in the registry.
-const APP_SUBNET_HEAP_DELTA_RESERVE_PER_ROUND: NumBytes = NumBytes::new(221 * MIB);
-
-// The minimum amount of heap delta required to be available in each round
-// on system subnets. Calculated as:
-//     (subnet_heap_delta_capacity - initial_reserve)/CUP interval length
-//     (140GB - 32GB)/200 rounds = 553MiB
-// The CUP interval length is taken from the current subnet record in the registry.
-const SYSTEM_SUBNET_HEAP_DELTA_RESERVE_PER_ROUND: NumBytes = NumBytes::new(553 * MIB);
 
 // Log all messages that took more than this value to execute.
 pub const MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS: f64 = 5.0;
@@ -225,17 +210,11 @@ pub struct SchedulerConfig {
     /// the subnet goes above this limit.
     pub subnet_heap_delta_capacity: NumBytes,
 
-    /// The maximum amount of heap delta per iteration. This number is checked
+    /// The maximum amount of heap delta per iteration. This number if checked
     /// after each iteration in an execution round to decided whether to
     /// continue iterations or not. This serves as a proxy for memory bound
     /// instructions that are more expensive and may slow down finalization.
     pub max_heap_delta_per_iteration: NumBytes,
-
-    /// The heap delta reserve per round. This number represents the minimum
-    /// amount of heap delta required to be available in each round. This is
-    /// used to smoothly distribute the subnet heap delta capacity across
-    /// CUP interval rounds.
-    pub heap_delta_reserve_per_round: NumBytes,
 
     /// This value is used to decide whether to emit a warn log after
     /// message execution or not.
@@ -282,7 +261,6 @@ impl SchedulerConfig {
             max_instructions_per_install_code: MAX_INSTRUCTIONS_PER_INSTALL_CODE,
             max_instructions_per_install_code_slice: MAX_INSTRUCTIONS_PER_INSTALL_CODE_SLICE,
             max_heap_delta_per_iteration: MAX_HEAP_DELTA_PER_ITERATION,
-            heap_delta_reserve_per_round: APP_SUBNET_HEAP_DELTA_RESERVE_PER_ROUND,
             max_message_duration_before_warn_in_seconds:
                 MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS,
             heap_delta_rate_limit: NumBytes::from(75 * 1024 * 1024),
@@ -315,7 +293,6 @@ impl SchedulerConfig {
             // Effectively disable DTS on system subnets.
             max_instructions_per_install_code_slice: max_instructions_per_install_code,
             max_heap_delta_per_iteration: MAX_HEAP_DELTA_PER_ITERATION * SYSTEM_SUBNET_FACTOR,
-            heap_delta_reserve_per_round: SYSTEM_SUBNET_HEAP_DELTA_RESERVE_PER_ROUND,
             max_message_duration_before_warn_in_seconds:
                 MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS,
             // This limit should be high enough (1000T) to effectively disable
@@ -349,7 +326,6 @@ impl SchedulerConfig {
             max_instructions_per_install_code,
             max_instructions_per_install_code_slice: MAX_INSTRUCTIONS_PER_INSTALL_CODE_SLICE,
             max_heap_delta_per_iteration: MAX_HEAP_DELTA_PER_ITERATION,
-            heap_delta_reserve_per_round: APP_SUBNET_HEAP_DELTA_RESERVE_PER_ROUND,
             max_message_duration_before_warn_in_seconds:
                 MAX_MESSAGE_DURATION_BEFORE_WARN_IN_SECONDS,
             heap_delta_rate_limit: NumBytes::from(75 * 1024 * 1024),

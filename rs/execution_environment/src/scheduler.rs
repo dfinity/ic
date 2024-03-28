@@ -1400,7 +1400,7 @@ impl Scheduler for SchedulerImpl {
         ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
         ecdsa_quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<QuadrupleId>>,
         current_round: ExecutionRound,
-        next_checkpoint_round: Option<ExecutionRound>,
+        _next_checkpoint_round: Option<ExecutionRound>,
         current_round_type: ExecutionRoundType,
         registry_settings: &RegistryExecutionSettings,
     ) -> ReplicatedState {
@@ -1472,22 +1472,16 @@ impl Scheduler for SchedulerImpl {
                 self.purge_expired_ingress_messages(&mut state);
             }
 
-            let current_heap_delta_reserve = current_heap_delta_reserve(
-                current_round,
-                next_checkpoint_round,
-                self.config.heap_delta_reserve_per_round,
-            );
-            if state.metadata.heap_delta_estimate + current_heap_delta_reserve
-                >= self.config.subnet_heap_delta_capacity
-            {
+            // See documentation around definition of `heap_delta_estimate` for an
+            // explanation.
+            if state.metadata.heap_delta_estimate >= self.config.subnet_heap_delta_capacity {
                 warn!(
                     round_log,
-                    "At Round {} @ time {}, current heap delta estimate {} with reserve {} exceeds the subnet heap delta capacity {}, so not executing any messages.",
+                    "At Round {} @ time {}, current heap delta {} exceeds allowed capacity {}, so not executing any messages.",
                     current_round,
                     state.time(),
                     state.metadata.heap_delta_estimate,
-                    current_heap_delta_reserve,
-                    self.config.subnet_heap_delta_capacity,
+                    self.config.subnet_heap_delta_capacity
                 );
                 self.finish_round(&mut state, current_round_type);
                 self.metrics
@@ -2426,25 +2420,4 @@ fn enqueue_tasks(
     }
 
     canister.system_state.task_queue.push_front(task);
-}
-
-/// Estimates the minimum amount of heap delta required to be available
-/// until the next checkpoint.
-fn current_heap_delta_reserve(
-    current_round: ExecutionRound,
-    next_checkpoint_round: Option<ExecutionRound>,
-    heap_delta_reserve_per_round: NumBytes,
-) -> NumBytes {
-    match next_checkpoint_round {
-        // This might happen only in tests
-        None => NumBytes::from(0),
-        Some(next_checkpoint_round) => {
-            let remaining_rounds = next_checkpoint_round
-                .get()
-                .saturating_sub(current_round.get());
-            remaining_rounds
-                .saturating_mul(heap_delta_reserve_per_round.get())
-                .into()
-        }
-    }
 }
