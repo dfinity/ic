@@ -32,6 +32,9 @@ use std::{
     ops::{Deref, RangeBounds},
 };
 
+pub mod metrics;
+pub use metrics::NeuronMetrics;
+
 #[derive(Debug, Eq, PartialEq)]
 pub enum NeuronStoreError {
     NeuronNotFound {
