@@ -1,7 +1,7 @@
 use anyhow::Result;
 
 use ic_tests::{
-    boundary_nodes::{boundary_nodes_integration::decentralization_test, setup::setup_ic},
+    boundary_nodes::{api_boundary_nodes_integration::decentralization_test, setup::setup_ic},
     driver::group::SystemTestGroup,
     systest,
 };
