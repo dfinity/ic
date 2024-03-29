@@ -297,14 +297,23 @@ impl RegistryHelper {
         &self,
         version: RegistryVersion,
     ) -> OrchestratorResult<Option<IPv4InterfaceConfig>> {
-        let node_record_option = self
+        let result = self
             .registry_client
             .get_node_record(self.node_id, version)
-            .map_err(OrchestratorError::RegistryClientError)?;
+            .map_err(OrchestratorError::RegistryClientError)?
+            .and_then(|node_record| node_record.public_ipv4_config);
+        Ok(result)
+    }
 
-        let result = node_record_option
-            .map(|node_record| node_record.public_ipv4_config)
-            .unwrap_or(None);
+    pub(crate) fn get_node_domain_name(
+        &self,
+        version: RegistryVersion,
+    ) -> OrchestratorResult<Option<String>> {
+        let result = self
+            .registry_client
+            .get_node_record(self.node_id, version)
+            .map_err(OrchestratorError::RegistryClientError)?
+            .and_then(|node_record| node_record.domain);
         Ok(result)
     }
 }
