@@ -1,13 +1,16 @@
 #![allow(dead_code)]
 
 use crate::canister_state::queues::REQUEST_LIFETIME;
-use ic_types::messages::{Request, RequestOrResponse, Response, NO_DEADLINE};
+use ic_types::messages::{
+    Request, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE,
+};
 use ic_types::time::CoarseTime;
 use ic_types::{CountBytes, Time};
 use phantom_newtype::Id;
 use std::cmp::Reverse;
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BinaryHeap};
+use std::ops::{AddAssign, SubAssign};
 use std::sync::Arc;
 
 #[cfg(test)]
@@ -70,6 +73,8 @@ pub struct MessagePool {
     /// Pool contents.
     messages: BTreeMap<MessageId, RequestOrResponse>,
 
+    /// Running memory utilization stats for the pool.
+    memory_usage_stats: MemoryUsageStats,
     /// Total size of all messages in the pool, in bytes.
     size_bytes: usize,
 
@@ -156,11 +161,13 @@ impl MessagePool {
         let size_bytes = msg.count_bytes();
         let is_best_effort = msg.is_best_effort();
 
+        // Update pool byte size.
+        self.memory_usage_stats += MemoryUsageStats::stats_delta(&msg);
+        self.size_bytes += size_bytes;
+
         // Insert.
         assert!(self.messages.insert(id, msg).is_none());
-
-        // Update pool byte size.
-        self.size_bytes += size_bytes;
+        debug_assert_eq!(self.calculate_memory_usage_stats(), self.memory_usage_stats);
         debug_assert_eq!(self.calculate_size_bytes(), self.size_bytes);
 
         // Record in deadline queue iff a deadline was provided.
@@ -196,11 +203,13 @@ impl MessagePool {
         let id = placeholder.0;
         let size_bytes = msg.count_bytes();
 
+        // Update pool byte size.
+        self.memory_usage_stats += MemoryUsageStats::stats_delta(&msg);
+        self.size_bytes += size_bytes;
+
         // Insert. Cannot lead to a conflict because the placeholder is consumed on use.
         assert!(self.messages.insert(id, msg).is_none());
-
-        // Update pool byte size.
-        self.size_bytes += size_bytes;
+        debug_assert_eq!(self.calculate_memory_usage_stats(), self.memory_usage_stats);
         debug_assert_eq!(self.calculate_size_bytes(), self.size_bytes);
 
         // Record in load shedding queue only.
@@ -281,8 +290,11 @@ impl MessagePool {
             | (Response(_), RequestOrResponse::Request(_)) => return None,
         };
 
+        self.memory_usage_stats -= MemoryUsageStats::stats_delta(&msg);
+        debug_assert_eq!(self.calculate_memory_usage_stats(), self.memory_usage_stats);
         self.size_bytes -= msg.count_bytes();
         debug_assert_eq!(self.calculate_size_bytes(), self.size_bytes);
+
         self.maybe_trim_queues();
 
         Some(msg)
@@ -294,6 +306,8 @@ impl MessagePool {
     fn take_by_id(&mut self, id: MessageId) -> Option<RequestOrResponse> {
         let msg = self.messages.remove(&id)?;
 
+        self.memory_usage_stats -= MemoryUsageStats::stats_delta(&msg);
+        debug_assert_eq!(self.calculate_memory_usage_stats(), self.memory_usage_stats);
         self.size_bytes -= msg.count_bytes();
         debug_assert_eq!(self.calculate_size_bytes(), self.size_bytes);
 
@@ -387,27 +401,43 @@ impl MessagePool {
             .map(|message| message.count_bytes())
             .sum()
     }
+
+    /// Computes memory usage stats from scratch. Used when deserializing and in
+    /// `debug_assert!()` checks.
+    ///
+    /// Time complexity: `O(n)`.
+    fn calculate_memory_usage_stats(&self) -> MemoryUsageStats {
+        let mut stats = MemoryUsageStats::default();
+        for msg in self.messages.values() {
+            stats += MemoryUsageStats::stats_delta(msg);
+        }
+        stats
+    }
 }
 
 impl PartialEq for MessagePool {
     fn eq(&self, other: &Self) -> bool {
         let Self {
             messages,
-            size_bytes,
+            memory_usage_stats: _,
+            size_bytes: _,
             deadline_queue,
             size_queue,
             next_message_id,
         } = self;
         let Self {
             messages: other_messages,
-            size_bytes: other_size_bytes,
+            memory_usage_stats: _,
+            size_bytes: _,
             deadline_queue: other_deadline_queue,
             size_queue: other_size_queue,
             next_message_id: other_next_message_id,
         } = other;
 
         messages == other_messages
-            && size_bytes == other_size_bytes
+            // Memory usage stats are implied by the contents of the pool.
+            // && memory_usage_stats == other_memory_usage_stats
+            // && size_bytes == other_size_bytes
             && deadline_queue.len() == other_deadline_queue.len()
             && deadline_queue
                 .iter()
@@ -427,10 +457,116 @@ impl Default for MessagePool {
     fn default() -> Self {
         Self {
             messages: Default::default(),
+            memory_usage_stats: Default::default(),
             size_bytes: Default::default(),
             deadline_queue: Default::default(),
             size_queue: Default::default(),
             next_message_id: 0.into(),
         }
+    }
+}
+
+/// Running memory utilization stats for input and output queues: total byte
+/// size of all responses in input and output queues; and total reservations in
+/// input and output queues.
+///
+/// Memory allocation of output responses in streams is tracked separately, at
+/// the replicated state level (as the canister may be migrated to a different
+/// subnet with outstanding responses still left in this subnet's streams).
+///
+/// Separate from [`InputQueuesStats`] because the resulting `stats_delta()`
+/// method would become quite cumbersome with an extra `QueueType` argument and
+/// a `QueueOp` that only applied to memory usage stats; and would result in
+/// adding lots of zeros in lots of places.
+#[derive(Clone, Debug, Default, Eq)]
+pub(super) struct MemoryUsageStats {
+    /// Sum total of the byte size of all best-effort messages in the pool.
+    best_effort_message_bytes: usize,
+
+    /// Sum total of the byte size of all guaranteed responses in the pool.
+    guaranteed_responses_size_bytes: usize,
+
+    /// Sum total of bytes above `MAX_RESPONSE_COUNT_BYTES` per oversized guaranteed
+    /// response call request. Execution allows local-subnet requests larger than
+    /// `MAX_RESPONSE_COUNT_BYTES`.
+    oversized_guaranteed_requests_extra_bytes: usize,
+}
+
+impl MemoryUsageStats {
+    /// Returns the memory usage in bytes computed from the stats.
+    pub fn memory_usage(&self) -> usize {
+        self.guaranteed_responses_size_bytes + self.oversized_guaranteed_requests_extra_bytes
+    }
+
+    /// Calculates the change in stats caused by pushing (+) or popping (-) the
+    /// given message.
+    fn stats_delta(msg: &RequestOrResponse) -> MemoryUsageStats {
+        match msg {
+            RequestOrResponse::Request(req) => Self::request_stats_delta(req),
+            RequestOrResponse::Response(rep) => Self::response_stats_delta(rep),
+        }
+    }
+
+    /// Calculates the change in stats caused by pushing (+) or popping (-) a
+    /// request.
+    fn request_stats_delta(req: &Request) -> MemoryUsageStats {
+        if req.deadline == NO_DEADLINE {
+            // Adjust guaranteed response call request byte size by this request's byte size.
+            MemoryUsageStats {
+                oversized_guaranteed_requests_extra_bytes: req
+                    .count_bytes()
+                    .saturating_sub(MAX_RESPONSE_COUNT_BYTES),
+                ..Default::default()
+            }
+        } else {
+            // Adjust best-effort messages byte size by this request's byte size.
+            MemoryUsageStats {
+                best_effort_message_bytes: req.count_bytes(),
+                ..Default::default()
+            }
+        }
+    }
+
+    /// Calculates the change in stats caused by pushing (+) or popping (-) the
+    /// given response.
+    fn response_stats_delta(rep: &Response) -> MemoryUsageStats {
+        if rep.deadline == NO_DEADLINE {
+            // Adjust guaranteed responses byte size by this response's byte size.
+            MemoryUsageStats {
+                guaranteed_responses_size_bytes: rep.count_bytes(),
+                ..Default::default()
+            }
+        } else {
+            // Adjust best-effort messages byte size by this response's byte size.
+            MemoryUsageStats {
+                best_effort_message_bytes: rep.count_bytes(),
+                ..Default::default()
+            }
+        }
+    }
+}
+
+impl AddAssign<MemoryUsageStats> for MemoryUsageStats {
+    fn add_assign(&mut self, rhs: MemoryUsageStats) {
+        self.guaranteed_responses_size_bytes += rhs.guaranteed_responses_size_bytes;
+        self.oversized_guaranteed_requests_extra_bytes +=
+            rhs.oversized_guaranteed_requests_extra_bytes;
+    }
+}
+
+impl SubAssign<MemoryUsageStats> for MemoryUsageStats {
+    fn sub_assign(&mut self, rhs: MemoryUsageStats) {
+        self.guaranteed_responses_size_bytes -= rhs.guaranteed_responses_size_bytes;
+        self.oversized_guaranteed_requests_extra_bytes -=
+            rhs.oversized_guaranteed_requests_extra_bytes;
+    }
+}
+
+// Custom `PartialEq`, ignoring `transient_stream_responses_size_bytes`.
+impl PartialEq for MemoryUsageStats {
+    fn eq(&self, rhs: &Self) -> bool {
+        self.guaranteed_responses_size_bytes == rhs.guaranteed_responses_size_bytes
+            && self.oversized_guaranteed_requests_extra_bytes
+                == rhs.oversized_guaranteed_requests_extra_bytes
     }
 }

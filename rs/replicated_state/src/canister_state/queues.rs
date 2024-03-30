@@ -893,11 +893,6 @@ impl CanisterQueues {
         self.input_queues_stats.response_count
     }
 
-    /// Returns input queues stats.
-    pub fn input_queues_stats(&self) -> &InputQueuesStats {
-        &self.input_queues_stats
-    }
-
     /// Returns the memory usage of this `CanisterQueues`.
     pub fn memory_usage(&self) -> usize {
         self.memory_usage_stats.memory_usage()
@@ -1834,8 +1829,8 @@ pub mod testing {
         /// `canister_id`; or `None` if no such output queue exists.
         fn output_queue_iter_for_testing(
             &self,
-            canister_id: &CanisterId,
-        ) -> Option<impl Iterator<Item = Option<&RequestOrResponse>>>;
+            canister_id: CanisterId,
+        ) -> Option<impl Iterator<Item = Option<RequestOrResponse>>>;
     }
 
     impl CanisterQueuesTesting for CanisterQueues {
@@ -1895,10 +1890,10 @@ pub mod testing {
 
         fn output_queue_iter_for_testing(
             &self,
-            canister_id: &CanisterId,
-        ) -> Option<impl Iterator<Item = Option<&RequestOrResponse>>> {
+            canister_id: CanisterId,
+        ) -> Option<impl Iterator<Item = Option<RequestOrResponse>>> {
             self.canister_queues
-                .get(canister_id)
+                .get(&canister_id)
                 .map(|(_, output_queue)| output_queue.iter_for_testing(&self.pool))
         }
     }

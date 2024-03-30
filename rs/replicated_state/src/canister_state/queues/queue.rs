@@ -355,9 +355,11 @@ impl CanisterQueue {
     pub(super) fn iter_for_testing<'a>(
         &'a self,
         pool: &'a MessagePool,
-    ) -> impl Iterator<Item = Option<&'a RequestOrResponse>> {
+    ) -> impl Iterator<Item = Option<RequestOrResponse>> + 'a {
         // FIXME: Get rid of this.
-        self.queue.iter().map(|reference| pool.get(reference))
+        self.queue
+            .iter()
+            .map(|reference| pool.get(reference).cloned())
     }
 }
 

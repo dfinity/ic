@@ -5,7 +5,7 @@ use ic_base_types::CanisterId;
 use ic_interfaces_certified_stream_store::EncodeStreamError;
 use ic_registry_routing_table::{routing_table_insert_subnet, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::ReplicatedState;
+use ic_replicated_state::{testing::CanisterQueuesTesting, ReplicatedState};
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, UserError, WasmResult};
 use ic_test_utilities_metrics::fetch_int_counter_vec;
 use ic_test_utilities_types::ids::subnet_test_id;
@@ -181,7 +181,7 @@ impl SubnetPairProxy {
             self.local_canister_id,
             self.remote_canister_id,
         )
-        .map(|iter| iter.cloned().collect::<Vec<_>>())
+        .map(|iter| iter.collect::<Vec<_>>())
     }
 
     /// Generates a snapshot of the output queue on the remote canister and
@@ -192,7 +192,7 @@ impl SubnetPairProxy {
             self.remote_canister_id,
             self.local_canister_id,
         )
-        .map(|iter| iter.cloned().collect::<Vec<_>>())
+        .map(|iter| iter.collect::<Vec<_>>())
     }
 
     /// Build backpressure on `local_env` until a minimum number of requests are found in the
@@ -276,15 +276,15 @@ fn get_output_queue_iter(
     state: &Arc<ReplicatedState>,
     local_canister_id: CanisterId,
     remote_canister_id: CanisterId,
-) -> Option<impl Iterator<Item = &Option<RequestOrResponse>>> {
+) -> Option<impl Iterator<Item = Option<RequestOrResponse>> + '_> {
     state
         .canister_states
         .get(&local_canister_id)
-        .and_then(|canister_state| {
+        .and_then(move |canister_state| {
             canister_state
                 .system_state
                 .queues()
-                .output_queue_iter_for_testing(&remote_canister_id)
+                .output_queue_iter_for_testing(remote_canister_id)
         })
 }
 

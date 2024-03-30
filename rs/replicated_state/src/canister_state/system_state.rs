@@ -902,19 +902,6 @@ impl SystemState {
         self.reserved_balance_limit = Some(limit);
     }
 
-    /// Initializes `reserved_balance_limit` to the given default value if it
-    /// was not already set.
-    pub fn initialize_reserved_balance_limit_if_empty(&mut self, default_limit: Cycles) {
-        if self.reserved_balance_limit.is_none() {
-            self.reserved_balance_limit = Some(default_limit);
-        }
-    }
-
-    /// Sets `reserved_balance_limit` to `None` for testing.
-    pub fn clear_reserved_balance_limit_for_testing(&mut self) {
-        self.reserved_balance_limit = None;
-    }
-
     /// Get new local snapshot ID.
     pub fn new_local_snapshot_id(&mut self) -> u64 {
         let local_snapshot_id = self.next_snapshot_id;
