@@ -4,13 +4,13 @@ use crate::{
         LOG_PREFIX, MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS,
         MAX_NEURON_RECENT_BALLOTS, MAX_NUM_HOT_KEYS_PER_NEURON,
     },
-    neuron::types::{DissolveStateAndAge, StoredDissolvedStateAndAge},
+    neuron::types::{DissolveStateAndAge, Neuron, StoredDissolvedStateAndAge},
     pb::v1::{
         governance_error::ErrorType,
         manage_neuron::{configure::Operation, Configure},
         neuron::DissolveState,
-        Ballot, BallotInfo, GovernanceError, Neuron, NeuronInfo, NeuronState, NeuronType, Topic,
-        Vote,
+        Ballot, BallotInfo, GovernanceError, Neuron as NeuronProto, NeuronInfo, NeuronState,
+        NeuronType, Topic, Vote,
     },
 };
 #[cfg(target_arch = "wasm32")]
@@ -25,6 +25,74 @@ use std::{
 };
 
 pub mod types;
+
+fn neuron_state(
+    now_seconds: u64,
+    spawn_at_timestamp_seconds: &Option<u64>,
+    dissolve_state: &Option<DissolveState>,
+) -> NeuronState {
+    if spawn_at_timestamp_seconds.is_some() {
+        return NeuronState::Spawning;
+    }
+    match dissolve_state {
+        Some(DissolveState::DissolveDelaySeconds(d)) => {
+            if *d > 0 {
+                NeuronState::NotDissolving
+            } else {
+                NeuronState::Dissolved
+            }
+        }
+        Some(DissolveState::WhenDissolvedTimestampSeconds(ts)) => {
+            if *ts > now_seconds {
+                NeuronState::Dissolving
+            } else {
+                NeuronState::Dissolved
+            }
+        }
+        None => NeuronState::Dissolved,
+    }
+}
+
+fn neuron_dissolve_delay_seconds(now_seconds: u64, dissolve_state: &Option<DissolveState>) -> u64 {
+    match dissolve_state {
+        Some(DissolveState::DissolveDelaySeconds(d)) => *d,
+        Some(DissolveState::WhenDissolvedTimestampSeconds(ts)) => (*ts).saturating_sub(now_seconds),
+        None => 0,
+    }
+}
+
+fn neuron_stake_e8s(
+    cached_neuron_stake_e8s: u64,
+    neuron_fees_e8s: u64,
+    staked_maturity_e8s_equivalent: Option<u64>,
+) -> u64 {
+    cached_neuron_stake_e8s
+        .saturating_sub(neuron_fees_e8s)
+        .saturating_add(staked_maturity_e8s_equivalent.unwrap_or(0))
+}
+
+// The following methods are conceptually methods for the API type of the neuron.
+impl NeuronProto {
+    pub fn state(&self, now_seconds: u64) -> NeuronState {
+        neuron_state(
+            now_seconds,
+            &self.spawn_at_timestamp_seconds,
+            &self.dissolve_state,
+        )
+    }
+
+    pub fn dissolve_delay_seconds(&self, now_seconds: u64) -> u64 {
+        neuron_dissolve_delay_seconds(now_seconds, &self.dissolve_state)
+    }
+
+    pub fn stake_e8s(&self) -> u64 {
+        neuron_stake_e8s(
+            self.cached_neuron_stake_e8s,
+            self.neuron_fees_e8s,
+            self.staked_maturity_e8s_equivalent,
+        )
+    }
+}
 
 impl Neuron {
     // --- Utility methods on neurons: mostly not for public consumption.
@@ -43,26 +111,11 @@ impl Neuron {
     /// Returns the state the neuron would be in a time
     /// `now_seconds`. See [NeuronState] for details.
     pub fn state(&self, now_seconds: u64) -> NeuronState {
-        if self.spawn_at_timestamp_seconds.is_some() {
-            return NeuronState::Spawning;
-        }
-        match self.dissolve_state {
-            Some(DissolveState::DissolveDelaySeconds(d)) => {
-                if d > 0 {
-                    NeuronState::NotDissolving
-                } else {
-                    NeuronState::Dissolved
-                }
-            }
-            Some(DissolveState::WhenDissolvedTimestampSeconds(ts)) => {
-                if ts > now_seconds {
-                    NeuronState::Dissolving
-                } else {
-                    NeuronState::Dissolved
-                }
-            }
-            None => NeuronState::Dissolved,
-        }
+        neuron_state(
+            now_seconds,
+            &self.spawn_at_timestamp_seconds,
+            &self.dissolve_state,
+        )
     }
 
     /// Returns true if and only if `principal` is equal to the
@@ -482,13 +535,7 @@ impl Neuron {
     /// `now_seconds`) until the neuron becomes dissolved; for a
     /// dissolved neuron, this function returns zero.
     pub fn dissolve_delay_seconds(&self, now_seconds: u64) -> u64 {
-        match self.dissolve_state {
-            Some(DissolveState::DissolveDelaySeconds(d)) => d,
-            Some(DissolveState::WhenDissolvedTimestampSeconds(ts)) => {
-                ts.saturating_sub(now_seconds)
-            }
-            None => 0,
-        }
+        neuron_dissolve_delay_seconds(now_seconds, &self.dissolve_state)
     }
 
     pub fn is_dissolved(&self, now_seconds: u64) -> bool {
@@ -643,7 +690,7 @@ impl Neuron {
             created_timestamp_seconds: self.created_timestamp_seconds,
             stake_e8s: self.minted_stake_e8s(),
             joined_community_fund_timestamp_seconds: self.joined_community_fund_timestamp_seconds,
-            known_neuron_data: self.known_neuron_data.as_ref().cloned(),
+            known_neuron_data: self.known_neuron_data.clone(),
             neuron_type: self.neuron_type,
         }
     }
@@ -656,9 +703,11 @@ impl Neuron {
     /// to the account of this neuron and then refreshing the stake, or
     /// by accumulating staked maturity.
     pub fn stake_e8s(&self) -> u64 {
-        self.cached_neuron_stake_e8s
-            .saturating_sub(self.neuron_fees_e8s)
-            .saturating_add(self.staked_maturity_e8s_equivalent.unwrap_or(0))
+        neuron_stake_e8s(
+            self.cached_neuron_stake_e8s,
+            self.neuron_fees_e8s,
+            self.staked_maturity_e8s_equivalent,
+        )
     }
 
     /// Returns the current `minted` stake of the neuron, i.e. the ICP backing the

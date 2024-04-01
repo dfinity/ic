@@ -33,8 +33,8 @@ use ic_nns_governance::{
             Followees,
         },
         proposal::{self},
-        Empty, GovernanceError, ManageNeuron, ManageNeuronResponse, NetworkEconomics, NeuronType,
-        Topic,
+        Empty, GovernanceError, ManageNeuron, ManageNeuronResponse, NetworkEconomics, Neuron,
+        NeuronType, Topic,
     },
 };
 use ic_sns_swap::pb::v1::governance_error::ErrorType::RequiresNotDissolving;
@@ -765,14 +765,14 @@ fn do_test_merge_neurons(
                 source_neuron,
                 nns.governance
                     .neuron_store
-                    .with_neuron(&source_neuron_id, |n| n.clone())
+                    .with_neuron(&source_neuron_id, |n| Neuron::from(n.clone()))
                     .unwrap()
             );
             pretty_assertions::assert_eq!(
                 target_neuron,
                 nns.governance
                     .neuron_store
-                    .with_neuron(&target_neuron_id, |n| n.clone())
+                    .with_neuron(&target_neuron_id, |n| Neuron::from(n.clone()))
                     .unwrap()
             );
             pretty_assertions::assert_eq!(

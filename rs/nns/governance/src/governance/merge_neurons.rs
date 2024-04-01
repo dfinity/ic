@@ -3,12 +3,12 @@ use crate::{
         combine_aged_stakes,
         ledger_helper::{BurnNeuronFeesOperation, NeuronStakeTransferOperation},
     },
-    neuron::types::DissolveStateAndAge,
+    neuron::types::{DissolveStateAndAge, Neuron},
     neuron_store::NeuronStore,
     pb::v1::{
         governance_error::ErrorType, manage_neuron::Merge, manage_neuron::NeuronIdOrSubaccount,
-        manage_neuron_response::MergeResponse, GovernanceError, Neuron, NeuronState, ProposalData,
-        ProposalStatus,
+        manage_neuron_response::MergeResponse, GovernanceError, Neuron as NeuronProto, NeuronState,
+        ProposalData, ProposalStatus,
     },
 };
 use ic_base_types::PrincipalId;
@@ -352,8 +352,8 @@ pub fn build_merge_neurons_response(
     target: &Neuron,
     now_seconds: u64,
 ) -> MergeResponse {
-    let source_neuron = Some(source.clone());
-    let target_neuron = Some(target.clone());
+    let source_neuron = Some(NeuronProto::from(source.clone()));
+    let target_neuron = Some(NeuronProto::from(target.clone()));
     let source_neuron_info = Some(source.get_neuron_info(now_seconds));
     let target_neuron_info = Some(target.get_neuron_info(now_seconds));
     MergeResponse {
