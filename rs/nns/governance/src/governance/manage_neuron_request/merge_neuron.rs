@@ -237,8 +237,8 @@ impl ManageNeuronRequestHandler<manage_neuron::Merge>
         let target_neuron_info = target_neuron.get_neuron_info(now);
 
         Ok(ManageNeuronResponse::merge_response(MergeResponse {
-            source_neuron: Some(source_neuron),
-            target_neuron: Some(target_neuron),
+            source_neuron: Some(source_neuron.into()),
+            target_neuron: Some(target_neuron.into()),
             source_neuron_info: Some(source_neuron_info),
             target_neuron_info: Some(target_neuron_info),
         }))

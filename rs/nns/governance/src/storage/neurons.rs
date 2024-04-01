@@ -1,9 +1,10 @@
 use crate::{
+    neuron::types::Neuron,
     neuron_store::NeuronStoreError,
     pb::v1::{
         abridged_neuron::DissolveState as AbridgedNeuronDissolveState,
         neuron::{DissolveState as NeuronDissolveState, Followees},
-        AbridgedNeuron, BallotInfo, KnownNeuronData, Neuron, NeuronStakeTransfer, Topic,
+        AbridgedNeuron, BallotInfo, KnownNeuronData, NeuronStakeTransfer, Topic,
     },
     storage::validate_stable_btree_map,
 };

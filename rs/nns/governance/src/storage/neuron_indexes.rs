@@ -3,8 +3,9 @@
 use crate::{
     account_id_index::NeuronAccountIdIndex,
     known_neuron_index::{AddKnownNeuronError, KnownNeuronIndex, RemoveKnownNeuronError},
+    neuron::types::Neuron,
     neuron_store::NeuronStoreError,
-    pb::v1::{Neuron, Topic},
+    pb::v1::Topic,
     storage::validate_stable_btree_map,
     subaccount_index::NeuronSubaccountIndex,
 };

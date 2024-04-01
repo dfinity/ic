@@ -1223,9 +1223,7 @@ async fn test_cascade_following() {
 
     // The fee should now be 1 ICP since the fees are charged upfront.
     assert_eq!(
-        gov.neuron_store
-            .heap_neurons()
-            .get(&1)
+        gov.get_full_neuron(&NeuronId { id: 1 }, &principal(1))
             .unwrap()
             .neuron_fees_e8s,
         100_000_000
@@ -1238,9 +1236,7 @@ async fn test_cascade_following() {
             proposal_id: Some(ProposalId { id: 1 }),
             vote: Vote::Yes as i32
         },
-        gov.neuron_store
-            .heap_neurons()
-            .get(&1)
+        gov.get_full_neuron(&NeuronId { id: 1 }, &principal(1))
             .unwrap()
             .recent_ballots
             .first()
@@ -4113,8 +4109,8 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, Neuro
 
     // Make sure the neuron was created with the right details.
     assert_eq!(
-        gov.neuron_store.heap_neurons().get(&id.id).unwrap(),
-        &Neuron {
+        gov.get_full_neuron(&id, &from).unwrap(),
+        Neuron {
             id: Some(id),
             account: to_subaccount.to_vec(),
             controller: Some(from),
@@ -4159,8 +4155,7 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, Neuro
         driver.advance_time_by(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS + 1);
     }
 
-    let neuron = gov
-        .neuron_store
+    gov.neuron_store
         .with_neuron_mut(&id, |neuron| {
             let neuron_fees_e8s = 50_000_000; // 0.5 ICP
             let neuron_maturity = 25_000_000;
@@ -4168,10 +4163,10 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, Neuro
             neuron.neuron_fees_e8s = neuron_fees_e8s;
             // .. and some maturity to collect.
             neuron.maturity_e8s_equivalent = neuron_maturity;
-
-            neuron.clone()
         })
         .expect("Neuron not found");
+
+    let neuron = gov.get_full_neuron(&id, &from).unwrap();
 
     (driver, gov, neuron)
 }
@@ -4708,8 +4703,7 @@ fn test_refresh_neuron_by_subaccount_by_proxy() {
 fn test_claim_or_refresh_neuron_does_not_overflow() {
     let (mut driver, mut gov, neuron) = create_mature_neuron(true);
     let nid = neuron.id.unwrap();
-    let _account = neuron.account.clone();
-    let subaccount = neuron.subaccount().unwrap();
+    let subaccount = Subaccount::try_from(&neuron.account[..]).unwrap();
 
     gov.with_neuron_mut(&nid, |neuron| {
         // Increase the dissolve delay, this will make the neuron start aging from
@@ -5052,36 +5046,28 @@ fn test_neuron_split() {
     driver.assert_num_neuron_accounts_exist(2);
 
     let child_neuron = gov
-        .neuron_store
-        .with_neuron(&child_nid, |n| n.clone())
+        .get_full_neuron(&child_nid, &from)
         .expect("The child neuron is missing");
     let parent_neuron = gov
-        .neuron_store
-        .with_neuron(&id, |n| n.clone())
+        .get_full_neuron(&id, &from)
         .expect("The parent neuron is missing");
-    let child_subaccount = child_neuron.account.clone();
 
     assert_eq!(
         parent_neuron.cached_neuron_stake_e8s,
         neuron_stake_e8s - 100_000_000 - transaction_fee
     );
-
+    assert_eq!(child_neuron.controller, parent_neuron.controller);
+    assert_eq!(child_neuron.cached_neuron_stake_e8s, 100_000_000);
     assert_eq!(
-        child_neuron,
-        Neuron {
-            id: Some(child_nid),
-            account: child_subaccount,
-            controller: parent_neuron.controller,
-            cached_neuron_stake_e8s: 100_000_000,
-            created_timestamp_seconds: parent_neuron.created_timestamp_seconds,
-            aging_since_timestamp_seconds: parent_neuron.aging_since_timestamp_seconds,
-            dissolve_state: Some(DissolveState::DissolveDelaySeconds(
-                parent_neuron.dissolve_delay_seconds(driver.get_fake_env().now())
-            )),
-            kyc_verified: true,
-            ..Default::default()
-        }
+        child_neuron.created_timestamp_seconds,
+        parent_neuron.created_timestamp_seconds
     );
+    assert_eq!(
+        child_neuron.aging_since_timestamp_seconds,
+        parent_neuron.aging_since_timestamp_seconds
+    );
+    assert_eq!(child_neuron.dissolve_state, parent_neuron.dissolve_state);
+    assert_eq!(child_neuron.kyc_verified, true);
 
     let mut neuron_ids = gov.get_neuron_ids_by_principal(&from);
     neuron_ids.sort_unstable();
@@ -5140,32 +5126,25 @@ fn test_seed_neuron_split() {
         .unwrap();
 
     let child_neuron = gov
-        .neuron_store
-        .with_neuron(&child_nid, |n| n.clone())
+        .get_full_neuron(&child_nid, &from)
         .expect("The child neuron is missing");
     let parent_neuron = gov
-        .neuron_store
-        .with_neuron(&id, |n| n.clone())
+        .get_full_neuron(&id, &from)
         .expect("The parent neuron is missing");
-    let child_subaccount = child_neuron.account.clone();
 
+    assert_eq!(child_neuron.controller, parent_neuron.controller);
+    assert_eq!(child_neuron.cached_neuron_stake_e8s, 100_000_000);
     assert_eq!(
-        child_neuron,
-        Neuron {
-            id: Some(child_nid),
-            account: child_subaccount,
-            controller: parent_neuron.controller,
-            cached_neuron_stake_e8s: 100_000_000,
-            created_timestamp_seconds: parent_neuron.created_timestamp_seconds,
-            aging_since_timestamp_seconds: parent_neuron.aging_since_timestamp_seconds,
-            dissolve_state: Some(DissolveState::DissolveDelaySeconds(
-                parent_neuron.dissolve_delay_seconds(driver.get_fake_env().now())
-            )),
-            kyc_verified: true,
-            neuron_type: Some(NeuronType::Seed as i32),
-            ..Default::default()
-        }
+        child_neuron.created_timestamp_seconds,
+        parent_neuron.created_timestamp_seconds
     );
+    assert_eq!(
+        child_neuron.aging_since_timestamp_seconds,
+        parent_neuron.aging_since_timestamp_seconds
+    );
+    assert_eq!(child_neuron.dissolve_state, parent_neuron.dissolve_state);
+    assert_eq!(child_neuron.kyc_verified, true);
+    assert_eq!(child_neuron.neuron_type, Some(NeuronType::Seed as i32));
 }
 
 // Spawn neurons has the least priority in the periodic tasks, so we need to run
@@ -5284,36 +5263,35 @@ fn test_neuron_spawn() {
     .expect("The parent neuron is missing");
 
     let child_neuron = gov
-        .with_neuron(&child_nid, |neuron| neuron.clone())
+        .get_full_neuron(&child_nid, &child_controller)
         .expect("The child neuron is missing");
 
-    let child_subaccount = child_neuron.account.clone();
-
+    assert_eq!(child_neuron.controller, Some(child_controller));
+    assert_eq!(child_neuron.cached_neuron_stake_e8s, 0);
+    assert_eq!(child_neuron.created_timestamp_seconds, driver.now());
+    assert_eq!(child_neuron.aging_since_timestamp_seconds, u64::MAX);
     assert_eq!(
-        child_neuron,
-        Neuron {
-            id: Some(child_nid),
-            account: child_subaccount.clone(),
-            controller: Some(child_controller),
-            cached_neuron_stake_e8s: 0,
-            created_timestamp_seconds: driver.now(),
-            aging_since_timestamp_seconds: u64::MAX,
-            spawn_at_timestamp_seconds: Some(driver.now() + 7 * 86400),
-            dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
-                driver.now()
-                    + gov
-                        .heap_data
-                        .economics
-                        .as_ref()
-                        .unwrap()
-                        .neuron_spawn_dissolve_delay_seconds
-            )),
-            kyc_verified: true,
-            maturity_e8s_equivalent: parent_maturity_e8s_equivalent,
-            neuron_type: None,
-            ..Default::default()
-        }
+        child_neuron.spawn_at_timestamp_seconds,
+        Some(driver.now() + 7 * 86400)
     );
+    assert_eq!(
+        child_neuron.dissolve_state,
+        Some(DissolveState::WhenDissolvedTimestampSeconds(
+            driver.now()
+                + gov
+                    .heap_data
+                    .economics
+                    .as_ref()
+                    .unwrap()
+                    .neuron_spawn_dissolve_delay_seconds
+        ))
+    );
+    assert_eq!(child_neuron.kyc_verified, true);
+    assert_eq!(
+        child_neuron.maturity_e8s_equivalent,
+        parent_maturity_e8s_equivalent
+    );
+    assert_eq!(child_neuron.neuron_type, None);
 
     let creation_timestamp = driver.now();
 
@@ -5328,33 +5306,32 @@ fn test_neuron_spawn() {
     driver.assert_num_neuron_accounts_exist(2);
 
     let child_neuron = gov
-        .with_neuron(&child_nid, |neuron| neuron.clone())
+        .get_full_neuron(&child_nid, &child_controller)
         .expect("The child neuron is missing");
 
+    assert_eq!(child_neuron.controller, Some(child_controller));
     assert_eq!(
-        child_neuron,
-        Neuron {
-            id: Some(child_nid),
-            account: child_subaccount,
-            controller: Some(child_controller),
-            cached_neuron_stake_e8s: (parent_maturity_e8s_equivalent as f64 * 1.01f64) as u64,
-            created_timestamp_seconds: creation_timestamp,
-            aging_since_timestamp_seconds: u64::MAX,
-            spawn_at_timestamp_seconds: None,
-            dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
-                creation_timestamp
-                    + gov
-                        .heap_data
-                        .economics
-                        .as_ref()
-                        .unwrap()
-                        .neuron_spawn_dissolve_delay_seconds
-            )),
-            kyc_verified: true,
-            maturity_e8s_equivalent: 0,
-            ..Default::default()
-        }
+        child_neuron.cached_neuron_stake_e8s,
+        (parent_maturity_e8s_equivalent as f64 * 1.01f64) as u64
     );
+    assert_eq!(child_neuron.created_timestamp_seconds, creation_timestamp);
+    assert_eq!(child_neuron.aging_since_timestamp_seconds, u64::MAX);
+    assert_eq!(child_neuron.spawn_at_timestamp_seconds, None);
+    assert_eq!(
+        child_neuron.dissolve_state,
+        Some(DissolveState::WhenDissolvedTimestampSeconds(
+            creation_timestamp
+                + gov
+                    .heap_data
+                    .economics
+                    .as_ref()
+                    .unwrap()
+                    .neuron_spawn_dissolve_delay_seconds
+        ))
+    );
+    assert_eq!(child_neuron.kyc_verified, true);
+    assert_eq!(child_neuron.maturity_e8s_equivalent, 0);
+    assert_eq!(child_neuron.neuron_type, None);
 }
 
 #[test]
@@ -5470,9 +5447,8 @@ fn test_neuron_spawn_with_subaccount() {
     driver.assert_num_neuron_accounts_exist(2);
 
     let child_neuron = gov
-        .with_neuron(&child_nid, |neuron| neuron.clone())
+        .get_full_neuron(&child_nid, &child_controller)
         .expect("The child neuron is missing");
-    let child_subaccount = child_neuron.account.clone();
 
     // Verify that the sub-account was created according to spawn input.
     let expected_subaccount = {
@@ -5485,34 +5461,31 @@ fn test_neuron_spawn_with_subaccount() {
     };
 
     assert_eq!(
-        child_subaccount, expected_subaccount,
+        child_neuron.account, expected_subaccount,
         "Sub-account doesn't match expected sub-account (with nonce)."
     );
-
+    assert_eq!(child_neuron.controller, Some(child_controller));
     assert_eq!(
-        child_neuron,
-        Neuron {
-            id: Some(child_nid),
-            account: child_subaccount,
-            controller: Some(child_controller),
-            cached_neuron_stake_e8s: (parent_maturity_e8s_equivalent as f64 * 1.01f64) as u64,
-            created_timestamp_seconds: creation_timestamp,
-            aging_since_timestamp_seconds: u64::MAX,
-            spawn_at_timestamp_seconds: None,
-            dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
-                creation_timestamp
-                    + gov
-                        .heap_data
-                        .economics
-                        .as_ref()
-                        .unwrap()
-                        .neuron_spawn_dissolve_delay_seconds
-            )),
-            kyc_verified: true,
-            maturity_e8s_equivalent: 0,
-            ..Default::default()
-        }
+        child_neuron.cached_neuron_stake_e8s,
+        (parent_maturity_e8s_equivalent as f64 * 1.01f64) as u64
     );
+    assert_eq!(child_neuron.created_timestamp_seconds, creation_timestamp);
+    assert_eq!(child_neuron.aging_since_timestamp_seconds, u64::MAX);
+    assert_eq!(child_neuron.spawn_at_timestamp_seconds, None);
+    assert_eq!(
+        child_neuron.dissolve_state,
+        Some(DissolveState::WhenDissolvedTimestampSeconds(
+            creation_timestamp
+                + gov
+                    .heap_data
+                    .economics
+                    .as_ref()
+                    .unwrap()
+                    .neuron_spawn_dissolve_delay_seconds
+        ))
+    );
+    assert_eq!(child_neuron.kyc_verified, true);
+    assert_eq!(child_neuron.maturity_e8s_equivalent, 0);
 }
 
 /// Checks that:
@@ -5609,16 +5582,9 @@ fn assert_neuron_spawn_partial(
     // And we should have 1 ledger accounts.
     driver.assert_num_neuron_accounts_exist(1);
 
-    let child_neuron = gov
-        .neuron_store
-        .with_neuron(&child_nid, |n| n.clone())
-        .expect("The child neuron is missing");
     let parent_neuron = gov
-        .neuron_store
-        .with_neuron(&id, |n| n.clone())
-        .expect("The parent neuron is missing")
-        .clone();
-    let child_subaccount = child_neuron.account.clone();
+        .get_full_neuron(&id, &from)
+        .expect("The parent neuron is missing");
 
     // Running periodic tasks shouldn't cause the ICP to be minted.
     run_periodic_tasks_on_governance_often_enough_to_spawn(&mut gov);
@@ -5637,35 +5603,31 @@ fn assert_neuron_spawn_partial(
     driver.assert_num_neuron_accounts_exist(2);
 
     let child_neuron = gov
-        .neuron_store
-        .with_neuron(&child_nid, |n| n.clone())
-        .expect("The child neuron is missing")
-        .clone();
+        .get_full_neuron(&child_nid, &child_controller)
+        .expect("The child neuron is missing");
 
+    assert_eq!(child_neuron.controller, Some(child_controller));
     assert_eq!(
-        child_neuron,
-        Neuron {
-            id: Some(child_nid),
-            account: child_subaccount,
-            controller: Some(child_controller),
-            cached_neuron_stake_e8s: (expected_spawned_maturity as f64 * 1.01f64) as u64,
-            created_timestamp_seconds: creation_timestamp,
-            aging_since_timestamp_seconds: u64::MAX,
-            spawn_at_timestamp_seconds: None,
-            dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
-                creation_timestamp
-                    + gov
-                        .heap_data
-                        .economics
-                        .as_ref()
-                        .unwrap()
-                        .neuron_spawn_dissolve_delay_seconds
-            )),
-            kyc_verified: true,
-            maturity_e8s_equivalent: 0,
-            ..Default::default()
-        }
+        child_neuron.cached_neuron_stake_e8s,
+        (expected_spawned_maturity as f64 * 1.01f64) as u64
     );
+    assert_eq!(child_neuron.created_timestamp_seconds, creation_timestamp);
+    assert_eq!(child_neuron.aging_since_timestamp_seconds, u64::MAX);
+    assert_eq!(child_neuron.spawn_at_timestamp_seconds, None);
+    assert_eq!(
+        child_neuron.dissolve_state,
+        Some(DissolveState::WhenDissolvedTimestampSeconds(
+            creation_timestamp
+                + gov
+                    .heap_data
+                    .economics
+                    .as_ref()
+                    .unwrap()
+                    .neuron_spawn_dissolve_delay_seconds
+        ))
+    );
+    assert_eq!(child_neuron.kyc_verified, true);
+    assert_eq!(child_neuron.maturity_e8s_equivalent, 0);
 }
 
 /// Assert that a neuron cannot be created with a non self-authenticating
@@ -5944,34 +5906,26 @@ fn test_disburse_to_neuron() {
     driver.assert_num_neuron_accounts_exist(2);
 
     let child_neuron = gov
-        .neuron_store
-        .with_neuron(&child_nid, |n| n.clone())
+        .get_full_neuron(&child_nid, &child_controller)
         .expect("The child neuron is missing");
     let parent_neuron = gov
-        .neuron_store
-        .with_neuron(&id, |n| n.clone())
+        .get_full_neuron(&id, &from)
         .expect("The parent neuron is missing");
-    let child_subaccount = child_neuron.account.clone();
 
     assert_eq!(
         parent_neuron.cached_neuron_stake_e8s,
         neuron_stake_e8s - 2 * 100_000_000 - transaction_fee
     );
 
+    assert_eq!(child_neuron.controller, Some(child_controller));
+    assert_eq!(child_neuron.cached_neuron_stake_e8s, 2 * 100_000_000);
+    assert_eq!(child_neuron.created_timestamp_seconds, driver.now());
+    assert_eq!(child_neuron.aging_since_timestamp_seconds, driver.now());
     assert_eq!(
-        child_neuron,
-        Neuron {
-            id: Some(child_nid),
-            account: child_subaccount,
-            controller: Some(child_controller),
-            cached_neuron_stake_e8s: 2 * 100_000_000,
-            created_timestamp_seconds: driver.now(),
-            aging_since_timestamp_seconds: driver.now(),
-            dissolve_state: Some(DissolveState::DissolveDelaySeconds(24 * 60 * 60)),
-            kyc_verified: true,
-            ..Default::default()
-        }
+        child_neuron.dissolve_state,
+        Some(DissolveState::DissolveDelaySeconds(24 * 60 * 60))
     );
+    assert_eq!(child_neuron.kyc_verified, true);
     // We expect the child's followees not to be inherited from parent.
     // Instead, child is supposed to have the default followees.
     assert_ne!(child_neuron.followees, parent_neuron.followees);
@@ -8787,8 +8741,7 @@ fn test_can_follow_by_subaccount_and_neuron_id() {
 
         // Check that the neuron isn't following anyone beforehand
         let neuron = gov
-            .neuron_store
-            .with_neuron(&nid, |n| n.clone())
+            .get_full_neuron(&nid, &principal(2))
             .expect("Failed to get neuron");
         let f = neuron.followees.get(&(Topic::Unspecified as i32));
         assert_eq!(f, None);
@@ -12502,15 +12455,11 @@ async fn distribute_rewards_load_test() {
     // A number whose only significance is that it is not Protocol Buffers default (i.e. 0.0).
     let maturity_e8s_equivalent = 3;
     let neurons = (1000..2000)
-        .map(|id| {
-            let n = Neuron {
-                id: Some(NeuronId { id }),
-                cached_neuron_stake_e8s: 1_000_000_000,
-                maturity_e8s_equivalent,
-                ..Default::default()
-            };
-            assert!(n.voting_power(now) > 0);
-            n
+        .map(|id| Neuron {
+            id: Some(NeuronId { id }),
+            cached_neuron_stake_e8s: 1_000_000_000,
+            maturity_e8s_equivalent,
+            ..Default::default()
         })
         .collect::<Vec<Neuron>>();
 
@@ -12531,7 +12480,7 @@ async fn distribute_rewards_load_test() {
                     .map(|n| {
                         let ballot = Ballot {
                             vote: Vote::Yes as i32,
-                            voting_power: n.voting_power(now),
+                            voting_power: 1_000_000_000,
                         };
 
                         (n.id.as_ref().unwrap().id, ballot)

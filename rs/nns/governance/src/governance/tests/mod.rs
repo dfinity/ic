@@ -1,8 +1,9 @@
 use super::*;
 use crate::{
+    neuron::types::Neuron,
     pb::v1::{
         governance::{followers_map::Followers, FollowersMap},
-        Neuron,
+        Neuron as NeuronProto,
     },
     test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
 };
@@ -886,7 +887,7 @@ mod metrics_tests {
 }
 
 mod neuron_archiving_tests {
-    use crate::pb::v1::{neuron::DissolveState, Neuron};
+    use crate::{neuron::types::Neuron, pb::v1::neuron::DissolveState};
     use proptest::proptest;
 
     #[test]
@@ -1020,10 +1021,11 @@ mod neuron_archiving_tests {
 mod cast_vote_and_cascade_follow {
     use crate::{
         governance::{Governance, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS},
+        neuron::types::Neuron,
         neuron_store::NeuronStore,
         pb::v1::{
             neuron::{DissolveState, Followees},
-            Ballot, Neuron, Topic, Vote,
+            Ballot, Topic, Vote,
         },
     };
     use ic_nns_common::pb::v1::{NeuronId, ProposalId};
@@ -1204,7 +1206,7 @@ mod cast_vote_and_cascade_follow {
 
 #[test]
 fn test_pre_and_post_upgrade_first_time() {
-    let neuron1 = Neuron {
+    let neuron1 = NeuronProto {
         id: Some(NeuronId { id: 1 }),
         followees: hashmap! {
             2 => Followees {

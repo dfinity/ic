@@ -13,6 +13,7 @@ use crate::{
         reassemble_governance_proto, split_governance_proto, HeapGovernanceData, XdrConversionRate,
     },
     migrations::maybe_run_migrations,
+    neuron::types::Neuron,
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
     neuron_store::{NeuronMetrics, NeuronStore},
     neurons_fund::{
@@ -47,7 +48,7 @@ use crate::{
         Governance as GovernanceProto, GovernanceError, KnownNeuron, ListKnownNeuronsResponse,
         ListNeurons, ListNeuronsResponse, ListProposalInfo, ListProposalInfoResponse, ManageNeuron,
         ManageNeuronResponse, MostRecentMonthlyNodeProviderRewards, Motion, NetworkEconomics,
-        Neuron, NeuronInfo, NeuronState, NeuronsFundAuditInfo, NeuronsFundData,
+        Neuron as NeuronProto, NeuronInfo, NeuronState, NeuronsFundAuditInfo, NeuronsFundData,
         NeuronsFundEconomics as NeuronsFundNetworkEconomicsPb,
         NeuronsFundParticipation as NeuronsFundParticipationPb,
         NeuronsFundSnapshot as NeuronsFundSnapshotPb, NnsFunction, NodeProvider, Proposal,
@@ -1656,7 +1657,13 @@ impl Governance {
         // Step 3: Final assembly.
         Self {
             heap_data: heap_governance_proto,
-            neuron_store: NeuronStore::new(neurons),
+            neuron_store: NeuronStore::new(
+                // Neurons are converted from API type to internal type.
+                neurons
+                    .into_iter()
+                    .map(|(id, proto)| (id, Neuron::from(proto)))
+                    .collect(),
+            ),
             env,
             ledger,
             cmc,
@@ -1895,7 +1902,7 @@ impl Governance {
     /// - the given `neuron` already exists in `self.neuron_store.neurons`
     /// - the controller principal is self-authenticating
     #[cfg(feature = "test")]
-    pub fn update_neuron(&mut self, neuron: Neuron) -> Result<(), GovernanceError> {
+    pub fn update_neuron(&mut self, neuron: NeuronProto) -> Result<(), GovernanceError> {
         // The controller principal is self-authenticating.
         if !neuron.controller.unwrap().is_self_authenticating() {
             return Err(GovernanceError::new_with_message(
@@ -1908,7 +1915,8 @@ impl Governance {
         let neuron_id = neuron.id.expect("Neuron must have a NeuronId");
         // Must clobber an existing neuron.
         self.with_neuron_mut(&neuron_id, |old_neuron| {
-            *old_neuron = neuron;
+            // Converting from API type to internal type.
+            *old_neuron = Neuron::from(neuron);
         })
     }
 
@@ -3405,7 +3413,7 @@ impl Governance {
         &self,
         by: &NeuronIdOrSubaccount,
         caller: &PrincipalId,
-    ) -> Result<Neuron, GovernanceError> {
+    ) -> Result<NeuronProto, GovernanceError> {
         let neuron_clone =
             self.with_neuron_by_neuron_id_or_subaccount(by, |neuron| neuron.clone())?;
         // Check that the caller is authorized for the requested
@@ -3427,7 +3435,7 @@ impl Governance {
                 return Err(GovernanceError::new(ErrorType::NotAuthorized));
             }
         }
-        Ok(neuron_clone)
+        Ok(neuron_clone.into())
     }
 
     /// Returns the complete neuron data for a given neuron `id` after
@@ -3439,7 +3447,7 @@ impl Governance {
         &self,
         id: &NeuronId,
         caller: &PrincipalId,
-    ) -> Result<Neuron, GovernanceError> {
+    ) -> Result<NeuronProto, GovernanceError> {
         self.get_full_neuron_by_id_or_subaccount(&NeuronIdOrSubaccount::NeuronId(*id), caller)
     }
 
