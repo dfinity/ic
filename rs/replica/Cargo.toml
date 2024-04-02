@@ -40,6 +40,7 @@ ic-replica-setup-ic-network = { path = "./setup_ic_network" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-state-manager = { path = "../state_manager" }
 ic-sys = { path = "../sys" }
+ic-tracing = { path = "../monitoring/tracing" }
 ic-types = { path = "../types/types" }
 ic-xnet-endpoint = { path = "../xnet/endpoint" }
 ic-xnet-payload-builder = { path = "../xnet/payload_builder" }
@@ -58,6 +59,9 @@ regex = "1.3.9"
 slog = { workspace = true }
 tempfile = "3.1.0"
 tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-flame = "0.2.0"
+tracing-subscriber = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # this library uses libunwind, which is only applicable to Linux

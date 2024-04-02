@@ -2931,6 +2931,7 @@ dependencies = [
  "indexmap 2.1.0",
  "indicatif",
  "indoc",
+ "inferno",
  "insta",
  "instant-acme",
  "intmap",
@@ -3100,6 +3101,7 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-core",
+ "tracing-flame",
  "tracing-serde",
  "tracing-slog",
  "tracing-subscriber",
@@ -3395,6 +3397,15 @@ checksum = "a19187fea3ac7e84da7dacf48de0c45d63c6a76f9490dae389aead16c243fce3"
 dependencies = [
  "log",
  "regex",
+]
+
+[[package]]
+name = "env_logger"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "95b3f3e67048839cb0d0781f445682a35113da7121f7c949db0e2be96a4fbece"
+dependencies = [
+ "log",
 ]
 
 [[package]]
@@ -5198,12 +5209,17 @@ checksum = "64e9829a50b42bb782c1df523f78d332fe371b10c661e78b7a3c34b0198e9fac"
 
 [[package]]
 name = "inferno"
-version = "0.11.15"
+version = "0.11.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2fb7c1b80a1dfa604bb4a649a5c5aeef3d913f7c520cb42b40e534e8a61bcdfc"
+checksum = "321f0f839cd44a4686e9504b0a62b4d69a50b62072144c71c68f5873c167b8d9"
 dependencies = [
  "ahash 0.8.3",
- "indexmap 1.9.3",
+ "clap 4.4.8",
+ "crossbeam-channel",
+ "crossbeam-utils",
+ "dashmap",
+ "env_logger 0.10.1",
+ "indexmap 2.1.0",
  "is-terminal",
  "itoa",
  "log",
@@ -8092,7 +8108,7 @@ version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "588f6378e4dd99458b60ec275b4477add41ce4fa9f64dcba6f15adccb19b50d6"
 dependencies = [
- "env_logger",
+ "env_logger 0.8.4",
  "log",
  "rand 0.8.5",
 ]
@@ -10832,6 +10848,17 @@ checksum = "c06d3da6113f116aaee68e4d601191614c9053067f9ab7f6edbcb161237daa54"
 dependencies = [
  "once_cell",
  "valuable",
+]
+
+[[package]]
+name = "tracing-flame"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0bae117ee14789185e129aaee5d93750abe67fdc5a9a62650452bfe4e122a3a9"
+dependencies = [
+ "lazy_static",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
