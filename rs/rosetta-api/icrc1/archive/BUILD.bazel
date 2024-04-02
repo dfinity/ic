@@ -1,6 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
-load("//bazel:defs.bzl", "gzip_compress")
+load("//bazel:defs.bzl", "gzip_compress", "rust_ic_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -47,15 +47,16 @@ package(default_visibility = ["//visibility:public"])
     ]
 ]
 
-gzip_compress(
-    name = "archive_canister.wasm.gz",
-    srcs = [":archive_canister"],
-)
-
-gzip_compress(
-    name = "archive_canister_u256.wasm.gz",
-    srcs = [":archive_canister_u256"],
-)
+[
+    gzip_compress(
+        name = "archive_canister" + name_suffix + ".wasm.gz",
+        srcs = [":archive_canister" + name_suffix],
+    )
+    for name_suffix in [
+        "",
+        "_u256",
+    ]
+]
 
 rust_test(
     name = "archive_test",
@@ -68,3 +69,41 @@ rust_test(
     },
     deps = ["@crate_index//:candid_parser"],
 )
+
+[
+    rust_ic_test(
+        name = "archive_integration_tests" + name_suffix,
+        srcs = ["tests/tests.rs"],
+        crate_features = features,
+        data = [
+            ":archive_canister" + name_suffix + ".wasm.gz",
+        ],
+        env = {
+            "CARGO_MANIFEST_DIR": "rs/rosetta-api/icrc1/archive",
+            "IC_ICRC1_ARCHIVE_WASM_PATH": "$(rootpath :archive_canister" + name_suffix + ".wasm.gz)",
+        },
+        deps = [
+            "//packages/icrc-ledger-types:icrc_ledger_types",
+            "//rs/rosetta-api/icrc1",
+            "//rs/rosetta-api/ledger_core",
+            "//rs/state_machine_tests",
+            "//rs/test_utilities/load_wasm",
+            "//rs/types/base_types",
+            "@crate_index//:candid",
+            "@crate_index//:num-traits",
+            "@crate_index//:serde_bytes",
+        ] + extra_deps,
+    )
+    for (name_suffix, features, extra_deps) in [
+        (
+            "",
+            [],
+            ["//rs/rosetta-api/icrc1/tokens_u64"],
+        ),
+        (
+            "_u256",
+            ["u256-tokens"],
+            ["//rs/rosetta-api/icrc1/tokens_u256"],
+        ),
+    ]
+]
