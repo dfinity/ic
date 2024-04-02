@@ -252,7 +252,11 @@ impl Environment for CanisterEnv {
             );
         };
         let (canister_id, method) = mt.canister_and_function()?;
-        let effective_payload = get_effective_payload(mt, &update.payload);
+        let proposal_timestamp_seconds = governance()
+            .get_proposal_data(ProposalId(proposal_id))
+            .map(|data| data.proposal_timestamp_seconds);
+        let effective_payload =
+            get_effective_payload(mt, &update.payload, proposal_id, proposal_timestamp_seconds);
         let err = call_with_callbacks(canister_id, method, &effective_payload, reply, reject);
         if err != 0 {
             Err(GovernanceError::new(ErrorType::PreconditionFailed))
@@ -932,7 +936,14 @@ fn http_request() {
 }
 
 // Processes the payload received and transforms it into a form the intended canister expects.
-fn get_effective_payload(mt: NnsFunction, payload: &[u8]) -> Cow<[u8]> {
+// The arguments `_proposal_id` and `_proposal_timestamp_seconds` will be used in the future
+// by subnet rental NNS proposals.
+fn get_effective_payload(
+    mt: NnsFunction,
+    payload: &[u8],
+    _proposal_id: u64,
+    _proposal_timestamp_seconds: Option<u64>,
+) -> Cow<[u8]> {
     const BITCOIN_SET_CONFIG_METHOD_NAME: &str = "set_config";
     const BITCOIN_MAINNET_CANISTER_ID: &str = "ghsi2-tqaaa-aaaan-aaaca-cai";
     const BITCOIN_TESTNET_CANISTER_ID: &str = "g4xu7-jiaaa-aaaan-aaaaq-cai";
