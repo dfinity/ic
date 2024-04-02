@@ -64,6 +64,9 @@ pub struct Config {
 
     /// Serving at most `max_pprof_concurrent_requests` requessts concurrently for all endpoints under `/_/pprof`.
     pub max_pprof_concurrent_requests: usize,
+
+    /// Serving at most `max_tracing_flamegraph_concurrent_requests` requests concurrently for all endpoints under `/_/tracing/flamegraph`.
+    pub max_tracing_flamegraph_concurrent_requests: usize,
 }
 
 impl Default for Config {
@@ -87,6 +90,7 @@ impl Default for Config {
             max_call_concurrent_requests: 50,
             max_query_concurrent_requests: QUERY_EXECUTION_THREADS_TOTAL * 100,
             max_pprof_concurrent_requests: 5,
+            max_tracing_flamegraph_concurrent_requests: 10,
         }
     }
 }

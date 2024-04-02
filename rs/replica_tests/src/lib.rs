@@ -345,6 +345,7 @@ where
                 registry.clone(),
                 crypto,
                 None,
+                ic_tracing::ReloadHandles::new(tracing_subscriber::reload::Layer::new(vec![]).1),
             )
             .expect("Failed to setup p2p");
 

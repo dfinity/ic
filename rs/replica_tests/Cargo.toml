@@ -34,6 +34,7 @@ ic-state-machine-tests = { path = "../state_machine_tests" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
+ic-tracing = { path = "../monitoring/tracing" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 ic-base-types = { path = "../types/base_types" }
@@ -43,6 +44,7 @@ slog-scope = "4.1.2"
 tempfile = "3.3.0"
 tonic = { workspace = true }
 tokio = { workspace = true }
+tracing-subscriber = { workspace = true }
 prost = { workspace = true }
 wat = "1.0.52"
 tower = { workspace = true }
