@@ -6,7 +6,7 @@ use crate::InstanceId;
 use crate::{OpId, Operation};
 use base64;
 use ic_types::{CanisterId, SubnetId};
-use ic_utils::thread::JoinOnDrop;
+use ic_utils_thread::JoinOnDrop;
 use pocket_ic::{ErrorCode, UserError, WasmResult};
 use serde::{Deserialize, Serialize};
 use std::{

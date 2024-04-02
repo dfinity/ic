@@ -8,7 +8,7 @@ DEPENDENCIES = [
     "//rs/registry/helpers",
     "//rs/registry/proto",
     "//rs/types/types",
-    "//rs/utils",
+    "//rs/utils/thread",
     "@crate_index//:crossbeam-channel",
     "@crate_index//:prometheus",
 ]

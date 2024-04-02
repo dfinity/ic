@@ -13,7 +13,7 @@ pub use ic_types::{
     time::current_time,
     RegistryVersion, Time,
 };
-use ic_utils::thread::JoinOnDrop;
+use ic_utils_thread::JoinOnDrop;
 use std::sync::{Arc, RwLock, RwLockReadGuard};
 use std::{collections::BTreeMap, thread::JoinHandle};
 
