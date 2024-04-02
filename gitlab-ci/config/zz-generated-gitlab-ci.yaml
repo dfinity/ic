@@ -182,20 +182,6 @@
           RUN_ON_DIFF_ONLY="false"
       fi
 
-      if [ "$CI_JOB_NAME" == "build-ic-release" ]; then
-          # read NNS release version from git tree
-          NNS_RELEASE_VERSION="$(jq -r '.subnets["tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"]' testnet/mainnet_revisions.json)"
-          # we pass nss version info to build-determinism-*-release jobs
-          # we put it under /tmp due to git clean -ffdx within build-ic script
-          echo "NNS_RELEASE_VERSION=$NNS_RELEASE_VERSION" > /tmp/nns.release.env
-
-          # fetch and checkout this version
-          git fetch origin "$NNS_RELEASE_VERSION"
-          git checkout "$NNS_RELEASE_VERSION"
-          # NOTE: ic/$VERSION in S3 will have artifacts
-          #       for revision $NNS_RELEASE_VERSION !!!
-      fi
-
       if [ "$CI_COMMIT_REF_PROTECTED" == "true" ]; then
           gitlab-ci/container/build-ic.sh -i -c -b
       elif [ "${RUN_ON_DIFF_ONLY:-}" == "true" ] \
@@ -255,11 +241,6 @@
 
       # clean up
       bazel clean --expunge
-
-      # collect dotenv
-      if [ -f /tmp/nns.release.env ]; then
-          mv /tmp/nns.release.env .
-      fi
 ".rules-build-base-images":
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "build-push-base-images"
@@ -1820,39 +1801,6 @@ build-determinism:
               echo "Build Determinism Check Successful"
           fi
       fi
-build-determinism-release:
-  needs:
-    - job: build-ic-release
-  parallel:
-    matrix:
-      - PATH0: build-ic-release/release
-        PATH1: release
-      - PATH0: build-ic-release/canisters
-        PATH1: canisters
-      - PATH0: build-ic-release/guest-os
-        PATH1: guest-os/update-img
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "build-reproducibility"
-  script:
-    - |
-      set -eExuo pipefail
-
-      # TODO IDX-2757
-      if [ "$CI_JOB_NAME" == "build-determinism-guest-update-img-release" ]; then
-          OLD_PATH="$(git rev-parse HEAD)/build-ic-release/guest-os/update-img"
-          if curl -sfSI --retry 2 "https://download.dfinity.systems/ic/$OLD_PATH/SHA256SUMS"; then
-              PATH0="build-ic-release/guest-os/update-img"
-          fi
-      fi
-
-      # what we've build in build-ic-release
-      P0=$PATH0
-      # what is live and available under $NNS_RELEASE_VERSION
-      # NNS_RELEASE_VERSION is set in build-ic-release
-      # shellcheck disable=SC2153
-      P1="/${NNS_RELEASE_VERSION}/${PATH1}"
-
-      ./gitlab-ci/tools/build-diff.sh "$P0" "$P1"
 build-guestos-base:
   artifacts:
     paths:
@@ -2068,20 +2016,6 @@ build-ic:
           RUN_ON_DIFF_ONLY="false"
       fi
 
-      if [ "$CI_JOB_NAME" == "build-ic-release" ]; then
-          # read NNS release version from git tree
-          NNS_RELEASE_VERSION="$(jq -r '.subnets["tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"]' testnet/mainnet_revisions.json)"
-          # we pass nss version info to build-determinism-*-release jobs
-          # we put it under /tmp due to git clean -ffdx within build-ic script
-          echo "NNS_RELEASE_VERSION=$NNS_RELEASE_VERSION" > /tmp/nns.release.env
-
-          # fetch and checkout this version
-          git fetch origin "$NNS_RELEASE_VERSION"
-          git checkout "$NNS_RELEASE_VERSION"
-          # NOTE: ic/$VERSION in S3 will have artifacts
-          #       for revision $NNS_RELEASE_VERSION !!!
-      fi
-
       if [ "$CI_COMMIT_REF_PROTECTED" == "true" ]; then
           gitlab-ci/container/build-ic.sh -i -c -b
       elif [ "${RUN_ON_DIFF_ONLY:-}" == "true" ] \
@@ -2141,114 +2075,9 @@ build-ic:
 
       # clean up
       bazel clean --expunge
-
-      # collect dotenv
-      if [ -f /tmp/nns.release.env ]; then
-          mv /tmp/nns.release.env .
-      fi
   variables:
     BAZEL_COMMAND: build
     RUN_ON_DIFF_ONLY: 'true'
-build-ic-release:
-  artifacts:
-    paths:
-      - bazel-build-log*.json*
-      - build-ic.tar
-    reports:
-      dotenv:
-        - nns.release.env
-  extends:
-    - ".build-ic"
-  needs: []
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "build-reproducibility"
-  script:
-    - |
-      set -euo pipefail
-      VERSION=$(git rev-parse HEAD)
-
-      if [[ "${CI_MERGE_REQUEST_TITLE:-}" == *"[RUN_ALL_BAZEL_TARGETS]"* ]]; then
-          RUN_ON_DIFF_ONLY="false"
-      fi
-
-      if [ "$CI_JOB_NAME" == "build-ic-release" ]; then
-          # read NNS release version from git tree
-          NNS_RELEASE_VERSION="$(jq -r '.subnets["tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"]' testnet/mainnet_revisions.json)"
-          # we pass nss version info to build-determinism-*-release jobs
-          # we put it under /tmp due to git clean -ffdx within build-ic script
-          echo "NNS_RELEASE_VERSION=$NNS_RELEASE_VERSION" > /tmp/nns.release.env
-
-          # fetch and checkout this version
-          git fetch origin "$NNS_RELEASE_VERSION"
-          git checkout "$NNS_RELEASE_VERSION"
-          # NOTE: ic/$VERSION in S3 will have artifacts
-          #       for revision $NNS_RELEASE_VERSION !!!
-      fi
-
-      if [ "$CI_COMMIT_REF_PROTECTED" == "true" ]; then
-          gitlab-ci/container/build-ic.sh -i -c -b
-      elif [ "${RUN_ON_DIFF_ONLY:-}" == "true" ] \
-          && [ "${CI_PIPELINE_SOURCE:-}" == "merge_request_event" ] \
-          && [ "${CI_MERGE_REQUEST_EVENT_TYPE:-}" != "merge_train" ] \
-          && [[ "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}" != "rc--"* ]]; then
-
-          TARGETS=$(gitlab-ci/src/bazel-ci/diff.sh)
-          ARGS=(--no-release)
-
-          if [ "$TARGETS" == "//..." ]; then
-              ARGS+=(-i -c -b)
-          else
-              if grep -q "ic-os" <<<"$TARGETS"; then
-                  ARGS+=(-i)
-              fi
-              if grep -q "publish/canisters" <<<"$TARGETS"; then
-                  ARGS+=(-c)
-              fi
-              if grep -q "publish/binaries" <<<"$TARGETS"; then
-                  ARGS+=(-b)
-              fi
-          fi
-
-          if [ ${#ARGS[@]} -eq 1 ]; then
-              echo "No changes that require building IC-OS, binaries or canisters."
-              exit 0
-          fi
-          gitlab-ci/container/build-ic.sh "${ARGS[@]}"
-      else
-          gitlab-ci/container/build-ic.sh -i -c -b --no-release
-      fi
-
-      if [ -d artifacts/icos ]; then
-          # purge test image
-          find ./artifacts/icos -name 'update-img-test.*' -delete
-          # only keep zstd ic images
-          find ./artifacts/icos -name '*.gz' -delete
-      fi
-
-      tar -cf artifacts.tar artifacts
-      URL="http://$(cat /ceph-s3-info/BUCKET_HOST)/$(cat /ceph-s3-info/BUCKET_NAME)/${VERSION}/${CI_JOB_ID}"
-      curl --request PUT --upload-file artifacts.tar "${URL}/artifacts.tar"
-
-      mkdir build-ic
-      for DIR in release canisters icos/guestos icos/hostos icos/setupos; do
-          if [ -e "artifacts/${DIR}/SHA256SUMS" ]; then
-              mkdir -p "build-ic/${DIR}/"
-              cp "artifacts/${DIR}/SHA256SUMS" "build-ic/${DIR}/"
-          fi
-      done
-
-      EXTERNAL_URL="https://objects.$(echo "$NODE_NAME" | cut -d'-' -f1)-idx1.dfinity.network/$(cat /ceph-s3-info/BUCKET_NAME)/${VERSION}/${CI_JOB_ID}/artifacts.tar"
-      echo -e "Node: ${NODE_NAME:-}\nURL: ${URL}\nExternal URL: ${EXTERNAL_URL}" >./build-ic/info
-      echo "${EXTERNAL_URL}" >./build-ic/url
-      tar -cf build-ic.tar build-ic
-
-      # clean up
-      bazel clean --expunge
-
-      # collect dotenv
-      if [ -f /tmp/nns.release.env ]; then
-          mv /tmp/nns.release.env .
-      fi
 build-setupos-base:
   artifacts:
     paths:
