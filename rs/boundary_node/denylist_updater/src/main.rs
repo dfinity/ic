@@ -20,7 +20,6 @@ use axum::{
     Extension, Router,
 };
 use clap::{ArgEnum, Parser};
-use futures::future::TryFutureExt;
 use mockall::automock;
 use nix::{
     sys::signal::{kill as send_signal, Signal},
@@ -34,6 +33,7 @@ use serde::Deserialize;
 use serde_json as json;
 use tokio::{
     io::{self},
+    net::TcpListener,
     task,
 };
 use tracing::info;
@@ -142,11 +142,12 @@ async fn main() -> Result<(), Error> {
                 let _ = runner.run().await;
             }
         }),
-        task::spawn(
-            axum::Server::bind(&cli.metrics_addr)
-                .serve(metrics_router.into_make_service())
+        task::spawn(async move {
+            let listener = TcpListener::bind(&cli.metrics_addr).await.unwrap();
+            axum::serve(listener, metrics_router.into_make_service())
+                .await
                 .map_err(|err| anyhow!("server failed: {:?}", err))
-        )
+        })
     )
     .context(format!("{SERVICE_NAME} failed to run"))?;
 

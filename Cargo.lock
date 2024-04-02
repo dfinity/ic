@@ -2999,7 +2999,7 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "axum 0.6.20",
+ "axum 0.7.4",
  "chacha20poly1305",
  "clap 3.2.25",
  "flate2",
