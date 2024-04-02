@@ -130,3 +130,63 @@ jobs:
           pip3 install --ignore-installed -r requirements.txt
           cd gitlab-ci/src
           pytest --ignore=gitlab_config/ --ignore=git_changes/ -v -o junit_family=xunit1 --junitxml=../../test_report.xml --cov=. --cov-report=term --cov-report=term-missing --cov-report=html --cov-branch
+  cargo-clippy-linux:
+    name: Cargo-Clippy-Linux
+    runs-on:
+      labels: default-runner
+    container:
+      image: dfinity/ic-build:e95ed63e9addda1b335c50fde800a8d9f0aad91a0d0cbe7da2fa782dc6ac1d4c
+    timeout-minutes: 30
+    if: ${{ vars.RUN_CI == 'true' }}v
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            cargo:
+              - "**/*.rs"
+              - "**/*.toml"
+              - "**/*.lock"
+      - name: Run Cargo Clippy Linux
+        id: cargo-clippy-linux
+        if: steps.filter.outputs.cargo == 'true'
+        shell: bash
+        run: |
+          set -eExuo pipefail
+          buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- \
+              "$CI_PROJECT_DIR"/gitlab-ci/src/rust_lint/lint.sh
+      - name: No run
+        if: steps.filter.outputs.cargo == 'false'
+        run: echo "No cargo changes, skipping run"
+  cargo-build-release-linux:
+    name: Cargo-Build-Release-Linux
+    runs-on:
+      labels: default-runner
+    container:
+      image: dfinity/ic-build:e95ed63e9addda1b335c50fde800a8d9f0aad91a0d0cbe7da2fa782dc6ac1d4c
+    timeout-minutes: 30
+    if: ${{ vars.RUN_CI == 'true' }}v
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            cargo:
+              - "**/*.rs"
+              - "**/*.toml"
+              - "**/*.lock"
+      - name: Run Cargo Build Release Linux
+        id: cargo-build-release-linux
+        if: steps.filter.outputs.cargo == 'true'
+        shell: bash
+        run: |
+          set -eExuo pipefail
+          buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- \
+              cargo build --release
+      - name: No run
+        if: steps.filter.outputs.cargo == 'false'
+        run: echo "No cargo changes, skipping run"
