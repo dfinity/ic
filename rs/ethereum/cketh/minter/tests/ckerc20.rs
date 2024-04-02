@@ -92,7 +92,9 @@ fn should_mint_with_ckerc20_setup() {
 
 mod withdraw_erc20 {
     use super::*;
-    use ic_cketh_minter::endpoints::ckerc20::{RetrieveErc20Request, WithdrawErc20Error};
+    use ic_cketh_minter::endpoints::ckerc20::{
+        LedgerError, RetrieveErc20Request, WithdrawErc20Error,
+    };
     use ic_cketh_minter::endpoints::events::{
         TransactionReceipt, TransactionStatus, UnsignedTransaction,
     };
@@ -222,11 +224,13 @@ mod withdraw_erc20 {
                 ckusdc.ledger_canister_id,
                 DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS,
             )
-            .expect_error(WithdrawErc20Error::InsufficientAllowance {
-                allowance: Nat::from(0_u8),
-                failed_burn_amount: Nat::from(CKETH_MINIMUM_WITHDRAWAL_AMOUNT),
-                token_symbol: "ckETH".to_string(),
-                ledger_id: cketh_ledger,
+            .expect_error(WithdrawErc20Error::CkEthLedgerError {
+                error: LedgerError::InsufficientAllowance {
+                    allowance: Nat::from(0_u8),
+                    failed_burn_amount: Nat::from(CKETH_MINIMUM_WITHDRAWAL_AMOUNT),
+                    token_symbol: "ckETH".to_string(),
+                    ledger_id: cketh_ledger,
+                },
             });
     }
 
@@ -249,17 +253,20 @@ mod withdraw_erc20 {
                 ckusdc.ledger_canister_id,
                 DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS,
             )
-            .expect_error(WithdrawErc20Error::InsufficientFunds {
-                balance: Nat::from(CKETH_MINIMUM_WITHDRAWAL_AMOUNT - CKETH_TRANSFER_FEE),
-                failed_burn_amount: Nat::from(CKETH_MINIMUM_WITHDRAWAL_AMOUNT),
-                token_symbol: "ckETH".to_string(),
-                ledger_id: cketh_ledger,
+            .expect_error(WithdrawErc20Error::CkEthLedgerError {
+                error: LedgerError::InsufficientFunds {
+                    balance: Nat::from(CKETH_MINIMUM_WITHDRAWAL_AMOUNT - CKETH_TRANSFER_FEE),
+                    failed_burn_amount: Nat::from(CKETH_MINIMUM_WITHDRAWAL_AMOUNT),
+                    token_symbol: "ckETH".to_string(),
+                    ledger_id: cketh_ledger,
+                },
             });
     }
 
     #[test]
     fn should_error_when_minter_fails_to_burn_ckerc20_and_reimburse_cketh() {
         let transaction_fee = CKETH_MINIMUM_WITHDRAWAL_AMOUNT;
+        let cketh_burn_index = 2_u8;
         let mut tests = vec![];
 
         let (setup_without_ckerc20_approval, ckerc20_token) = {
@@ -273,11 +280,14 @@ mod withdraw_erc20 {
         };
         tests.push(ParameterizedTest {
             setup: setup_without_ckerc20_approval,
-            expected_withdrawal_error: WithdrawErc20Error::InsufficientAllowance {
-                allowance: Nat::from(0_u8),
-                failed_burn_amount: TWO_USDC.into(),
-                token_symbol: "ckUSDC".to_string(),
-                ledger_id: ckerc20_token.ledger_canister_id,
+            expected_withdrawal_error: WithdrawErc20Error::CkErc20LedgerError {
+                cketh_block_index: cketh_burn_index.into(),
+                error: LedgerError::InsufficientAllowance {
+                    allowance: Nat::from(0_u8),
+                    failed_burn_amount: TWO_USDC.into(),
+                    token_symbol: "ckUSDC".to_string(),
+                    ledger_id: ckerc20_token.ledger_canister_id,
+                },
             },
         });
 
@@ -299,11 +309,14 @@ mod withdraw_erc20 {
         };
         tests.push(ParameterizedTest {
             setup: setup_with_insufficient_ckerc20_funds,
-            expected_withdrawal_error: WithdrawErc20Error::InsufficientFunds {
-                balance: Nat::from(ONE_USDC - CKERC20_TRANSFER_FEE),
-                failed_burn_amount: Nat::from(TWO_USDC),
-                token_symbol: "ckUSDC".to_string(),
-                ledger_id: ckerc20_token.ledger_canister_id,
+            expected_withdrawal_error: WithdrawErc20Error::CkErc20LedgerError {
+                cketh_block_index: cketh_burn_index.into(),
+                error: LedgerError::InsufficientFunds {
+                    balance: Nat::from(ONE_USDC - CKERC20_TRANSFER_FEE),
+                    failed_burn_amount: Nat::from(TWO_USDC),
+                    token_symbol: "ckUSDC".to_string(),
+                    ledger_id: ckerc20_token.ledger_canister_id,
+                },
             },
         });
 
@@ -323,7 +336,7 @@ mod withdraw_erc20 {
                     DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS,
                 )
                 .expect_error(test.expected_withdrawal_error)
-                .call_cketh_ledger_get_transaction(2_u8)
+                .call_cketh_ledger_get_transaction(cketh_burn_index)
                 .expect_burn(Burn {
                     amount: Nat::from(transaction_fee),
                     from: Account {
@@ -354,7 +367,7 @@ mod withdraw_erc20 {
                 .check_events()
                 .assert_has_unique_events_in_order(&vec![
                     EventPayload::FailedErc20WithdrawalRequest {
-                        withdrawal_id: Nat::from(2_u8),
+                        withdrawal_id: cketh_burn_index.into(),
                         reimbursed_amount: reimbursed_amount.clone(),
                         to: caller,
                         to_subaccount: None,
@@ -371,8 +384,8 @@ mod withdraw_erc20 {
             ckerc20
                 .check_events()
                 .assert_has_unique_events_in_order(&vec![EventPayload::ReimbursedEthWithdrawal {
-                    withdrawal_id: Nat::from(2_u8),
-                    reimbursed_in_block: Nat::from(3_u8),
+                    withdrawal_id: cketh_burn_index.into(),
+                    reimbursed_in_block: Nat::from(cketh_burn_index) + 1_u8,
                     reimbursed_amount: reimbursed_amount.clone(),
                     transaction_hash: None,
                 }])
@@ -384,7 +397,7 @@ mod withdraw_erc20 {
                         subaccount: None,
                     },
                     memo: Some(Memo::from(MintMemo::ReimburseWithdrawal {
-                        withdrawal_id: 2_u64,
+                        withdrawal_id: cketh_burn_index.into(),
                     })),
                     created_at_time: None,
                 });

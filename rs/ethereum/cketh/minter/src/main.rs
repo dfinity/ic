@@ -1,3 +1,4 @@
+use candid::Nat;
 use ic_canister_log::log;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
@@ -382,11 +383,16 @@ async fn withdraw_erc20(
                             );
                         });
                     }
-                    Err(WithdrawErc20Error::from(ckerc20_burn_error))
+                    Err(WithdrawErc20Error::CkErc20LedgerError {
+                        cketh_block_index: Nat::from(cketh_ledger_burn_index.get()),
+                        error: ckerc20_burn_error.into(),
+                    })
                 }
             }
         }
-        Err(cketh_burn_error) => Err(WithdrawErc20Error::from(cketh_burn_error)),
+        Err(cketh_burn_error) => Err(WithdrawErc20Error::CkEthLedgerError {
+            error: cketh_burn_error.into(),
+        }),
     }
 }
 
