@@ -564,6 +564,7 @@ impl Erc20WithdrawalFlow {
         }
     }
 
+    #[allow(clippy::result_large_err)]
     fn minter_response(&self) -> Result<RetrieveErc20Request, WithdrawErc20Error> {
         Decode!(&assert_reply(
         self.setup.env

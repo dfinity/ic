@@ -256,17 +256,26 @@ type WithdrawErc20Error = variant {
     // The user provided ckERC20 token is not supported by the minter.
     TokenNotSupported : record {supported_tokens : vec CkErc20Token};
 
-    // The ckETH or ckERC20 balance of the withdrawal account is too low.
-    InsufficientFunds : record { balance : nat; failed_burn_amount : nat; token_symbol : text; ledger_id : principal };
-
-    // The ckETH or ckERC20 allowance given to the minter is too low.
-    InsufficientAllowance : record { allowance : nat; failed_burn_amount : nat; token_symbol : text; ledger_id : principal };
-
     // Recipient's address is blocked.
     // No withdrawal can be made to that address.
     RecipientAddressBlocked : record { address : text };
 
-    // The minter is overloaded, retry the request.
+    // The minter could not burn the required amount of ckETH to pay for the transaction fees.
+    CkEthLedgerError : record { error : LedgerError };
+
+    // The minter could not burn the requested amount of ckERC20 tokens.
+    // The `cketh_block_index` identifies the burn that occurred on the ckETH ledger and that will be reimbursed.
+    CkErc20LedgerError : record { cketh_block_index : nat; error : LedgerError };
+};
+
+type LedgerError = variant {
+    // The balance of the withdrawal account is too low.
+    InsufficientFunds : record { balance : nat; failed_burn_amount : nat; token_symbol : text; ledger_id : principal };
+
+    // The allowance given to the minter is too low.
+    InsufficientAllowance : record { allowance : nat; failed_burn_amount : nat; token_symbol : text; ledger_id : principal };
+
+    // The ledger is overloaded, retry the request.
     // The payload contains a human-readable message explaining what caused the unavailability.
     TemporarilyUnavailable : text;
 };
