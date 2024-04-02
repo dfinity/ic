@@ -41,6 +41,12 @@ impl fmt::Display for U64 {
     }
 }
 
+impl From<u64> for U64 {
+    fn from(n: u64) -> Self {
+        Self::new(n)
+    }
+}
+
 impl From<U64> for Nat {
     fn from(n: U64) -> Self {
         Nat::from(n.0)

@@ -8,8 +8,12 @@ use ic_stable_structures::{
     cell::Cell as StableCell, log::Log as StableLog, memory_manager::MemoryManager,
     storable::Bound, DefaultMemoryImpl, RestrictedMemory, Storable,
 };
-use icrc_ledger_types::icrc3::blocks::BlockRange;
-use icrc_ledger_types::icrc3::blocks::GenericBlock as IcrcBlock;
+use icrc_ledger_types::icrc3::archive::{GetArchivesArgs, GetArchivesResult};
+use icrc_ledger_types::icrc3::blocks::{BlockRange, GetBlocksRequest, GetBlocksResult};
+use icrc_ledger_types::icrc3::blocks::{
+    GenericBlock as IcrcBlock, ICRC3DataCertificate, SupportedBlockType,
+};
+use icrc_ledger_types::{icrc::generic_value::ICRC3Value, icrc3::blocks::BlockWithId};
 
 use icrc_ledger_types::icrc3::transactions::Transaction;
 use icrc_ledger_types::icrc3::transactions::{GetTransactionsRequest, TransactionRange};
@@ -271,6 +275,69 @@ fn get_blocks(req: GetTransactionsRequest) -> BlockRange {
 
     let blocks = decode_block_range(start, length, decode_icrc1_block);
     BlockRange { blocks }
+}
+
+#[query]
+#[candid_method(query)]
+fn icrc3_get_archives(_arg: GetArchivesArgs) -> GetArchivesResult {
+    vec![]
+}
+
+#[query]
+#[candid_method(query)]
+fn icrc3_get_tip_certificate() -> Option<ICRC3DataCertificate> {
+    // Only the Ledger certifies the tip of the chain.
+    None
+}
+
+#[query]
+#[candid_method(query)]
+fn icrc3_supported_block_types() -> Vec<SupportedBlockType> {
+    vec![
+        SupportedBlockType {
+            block_type: "1burn".to_string(),
+            url: "https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-1/README.md"
+                .to_string(),
+        },
+        SupportedBlockType {
+            block_type: "1mint".to_string(),
+            url: "https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-1/README.md"
+                .to_string(),
+        },
+        SupportedBlockType {
+            block_type: "2approve".to_string(),
+            url: "https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-2/README.md"
+                .to_string(),
+        },
+        SupportedBlockType {
+            block_type: "2xfer".to_string(),
+            url: "https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-2/README.md"
+                .to_string(),
+        },
+    ]
+}
+
+#[query]
+#[candid_method(query)]
+fn icrc3_get_blocks(reqs: Vec<GetBlocksRequest>) -> GetBlocksResult {
+    let mut blocks = vec![];
+    for req in reqs {
+        let mut id = req.start.clone();
+        for block in get_blocks(req).blocks {
+            blocks.push(BlockWithId {
+                id: id.clone(),
+                block: ICRC3Value::from(block),
+            });
+            id += 1u64;
+        }
+    }
+    GetBlocksResult {
+        // We return the local log length because the archive
+        // knows only about its local blocks.
+        log_length: candid::Nat::from(with_blocks(|blocks| blocks.len())),
+        blocks,
+        archived_blocks: vec![],
+    }
 }
 
 #[query(hidden = true)]
