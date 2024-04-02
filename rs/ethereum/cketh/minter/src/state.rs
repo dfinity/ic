@@ -514,10 +514,10 @@ pub async fn minter_address() -> Address {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EthBalance {
     /// Amount of ETH controlled by the minter's address via tECDSA.
-    /// Note that invalid deposits are not accounted for and so so this value
+    /// Note that invalid deposits are not accounted for and so this value
     /// might be less than what is displayed by Etherscan
     /// or retrieved by the JSON-RPC call `eth_getBalance`.
-    /// Also some transactions may have gone directly to the minter's address
+    /// Also, some transactions may have gone directly to the minter's address
     /// without going via the helper smart contract.
     eth_balance: Wei,
     /// Total amount of fees across all finalized transactions ckETH -> ETH.

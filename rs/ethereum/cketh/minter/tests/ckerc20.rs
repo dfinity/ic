@@ -501,8 +501,8 @@ mod withdraw_erc20 {
             Nat::from(0_u8)
         );
 
-        let effective_gas_price = Nat::from(4_277_923_390_u64);
-        let gas_used = Nat::from(21_000_u64);
+        let estimated_max_fee_per_gas = Nat::from(33_003_708_258_u64);
+        let estimated_gas_limit = Nat::from(65_000_u64);
         let ckerc20 = ckerc20
             .check_events()
             .assert_has_unique_events_in_order(&vec![
@@ -524,8 +524,8 @@ mod withdraw_erc20 {
                         chain_id: Nat::from(1_u8),
                         nonce: Nat::from(0_u8),
                         max_priority_fee_per_gas: 1_500_000_000_u64.into(),
-                        max_fee_per_gas: 33_003_708_258_u64.into(),
-                        gas_limit: 65_000_u64.into(),
+                        max_fee_per_gas: estimated_max_fee_per_gas.clone(),
+                        gas_limit: estimated_gas_limit.clone(),
                         destination: ckusdc.erc20_contract_address,
                         value: 0_u8.into(),
                         data: ByteBuf::from(erc20_transfer_data(
@@ -546,17 +546,17 @@ mod withdraw_erc20 {
                     transaction_receipt: TransactionReceipt {
                         block_hash: DEFAULT_BLOCK_HASH.to_string(),
                         block_number: Nat::from(DEFAULT_BLOCK_NUMBER),
-                        effective_gas_price: effective_gas_price.clone(),
-                        gas_used: gas_used.clone(),
+                        effective_gas_price: Nat::from(4_277_923_390_u64),
+                        gas_used: Nat::from(21_000_u64),
                         status: TransactionStatus::Success,
                         transaction_hash: DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_HASH.to_string(),
                     },
                 },
             ]);
 
-        let effective_tx_fee = effective_gas_price * gas_used;
-        assert!(effective_tx_fee < ckerc20_tx_fee);
-        let reimbursed_amount = ckerc20_tx_fee - effective_tx_fee;
+        let estimated_tx_fee = estimated_max_fee_per_gas * estimated_gas_limit;
+        assert!(estimated_tx_fee < ckerc20_tx_fee);
+        let reimbursed_amount = ckerc20_tx_fee - estimated_tx_fee;
         ckerc20.env.advance_time(PROCESS_REIMBURSEMENT);
         let balance_after_reimbursement = ckerc20.wait_for_updated_ledger_balance(
             ckerc20.cketh_ledger_id(),

@@ -628,7 +628,7 @@ impl EthTransactions {
             WithdrawalRequest::CkErc20(request) => {
                 if let Some(unused_tx_fee) = request
                     .max_transaction_fee
-                    .checked_sub(finalized_tx.effective_transaction_fee())
+                    .checked_sub(finalized_tx.transaction_price().max_transaction_fee())
                 {
                     if unused_tx_fee > Wei::ZERO {
                         self.record_reimbursement_request(
