@@ -1,7 +1,7 @@
 mod checkpoint;
 pub mod int_map;
 mod page_allocator;
-mod storage;
+pub mod storage;
 
 use bit_vec::BitVec;
 pub use checkpoint::{CheckpointSerialization, MappingSerialization};
