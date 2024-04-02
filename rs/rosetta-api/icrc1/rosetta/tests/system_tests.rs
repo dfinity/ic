@@ -9,6 +9,7 @@ use ic_agent::Identity;
 use ic_base_types::CanisterId;
 use ic_base_types::PrincipalId;
 pub use ic_canister_client_sender::Ed25519KeyPair as EdKeypair;
+use ic_canister_client_sender::Ed25519KeyPair;
 use ic_icrc1_ledger::{InitArgs, InitArgsBuilder};
 use ic_icrc1_test_utils::{
     minter_identity, valid_transactions_strategy, ArgWithCaller, LedgerEndpointArg,
@@ -1286,47 +1287,171 @@ fn test_search_transactions() {
         .unwrap()
 }
 
-proptest! {
-    #![proptest_config(ProptestConfig::with_cases(*NUM_TEST_CASES))]
-    #[test]
-    fn test_cli_data(args_with_caller in valid_transactions_strategy(
-        (*MINTING_IDENTITY).clone(),
-        DEFAULT_TRANSFER_FEE,
-        *MAX_NUM_GENERATED_BLOCKS,
-        SystemTime::now(),
-    )) {
-        // Create a tokio environment to conduct async calls
-        let rt = Runtime::new().unwrap();
+#[test]
+fn test_cli_data() {
+    let mut runner = TestRunner::new(TestRunnerConfig {
+        max_shrink_iters: 0,
+        cases: *NUM_TEST_CASES,
+        ..Default::default()
+    });
+    runner
+        .run(
+            &(valid_transactions_strategy(
+                (*MINTING_IDENTITY).clone(),
+                DEFAULT_TRANSFER_FEE,
+                *MAX_NUM_GENERATED_BLOCKS,
+                SystemTime::now(),
+            )
+            .no_shrink()),
+            |args_with_caller| {
+                // Create a tokio environment to conduct async calls
+                let rt = Runtime::new().unwrap();
 
-        // Wrap async calls in a blocking Block
-        rt.block_on(async {
-            let env = RosettaTestingEnvironmentBuilder::new()
-                .with_args_with_caller(args_with_caller.clone())
-                .with_init_args_builder(local_replica::icrc_ledger_default_args_builder()
-                .with_minting_account((*MINTING_IDENTITY).clone().sender().unwrap()))
-                .build()
-                .await;
+                // Wrap async calls in a blocking Block
+                rt.block_on(async {
+                    let env = RosettaTestingEnvironmentBuilder::new()
+                        .with_args_with_caller(args_with_caller.clone())
+                        .with_init_args_builder(
+                            local_replica::icrc_ledger_default_args_builder().with_minting_account(
+                                (*MINTING_IDENTITY).clone().sender().unwrap(),
+                            ),
+                        )
+                        .build()
+                        .await;
 
-                let output = Command::new(rosetta_cli())
-                .args([
-                    "check:data",
-                    "--configuration-file",
-                    local("tests/rosetta-cli_data_test.json").as_str(),
-                    "--online-url",
-                    &format!("http://0.0.0.0:{}", env._rosetta_context.port)
-                ])
-                .output()
-                .expect("failed to execute rosetta-cli");
+                    let output = Command::new(rosetta_cli())
+                        .args([
+                            "check:data",
+                            "--configuration-file",
+                            local("tests/rosetta-cli_data_test.json").as_str(),
+                            "--online-url",
+                            &format!("http://0.0.0.0:{}", env._rosetta_context.port),
+                        ])
+                        .output()
+                        .expect("failed to execute rosetta-cli");
 
-                assert!(
-                    output.status.success(),
-                    "rosetta-cli did not finish successfully: {},/\
+                    assert!(
+                        output.status.success(),
+                        "rosetta-cli did not finish successfully: {},/\
                         \n\n--------------------------\nstdout: {}, \
                         \n\n--------------------------\nstderr: {}",
-                    output.status,
-                    String::from_utf8(output.stdout).unwrap(),
-                    String::from_utf8(output.stderr).unwrap()
-                );
-        });
-    }
+                        output.status,
+                        String::from_utf8(output.stdout).unwrap(),
+                        String::from_utf8(output.stderr).unwrap()
+                    );
+                });
+                Ok(())
+            },
+        )
+        .unwrap();
+}
+
+#[test]
+fn test_cli_construction() {
+    let mut runner = TestRunner::new(TestRunnerConfig {
+        max_shrink_iters: 0,
+        cases: *NUM_TEST_CASES,
+        ..Default::default()
+    });
+    runner
+        .run(
+            &(valid_transactions_strategy(
+                (*MINTING_IDENTITY).clone(),
+                DEFAULT_TRANSFER_FEE,
+                *MAX_NUM_GENERATED_BLOCKS,
+                SystemTime::now(),
+            )
+            .no_shrink()),
+            |args_with_caller| {
+                // Create a tokio environment to conduct async calls
+                let rt = Runtime::new().unwrap();
+
+                // Wrap async calls in a blocking Block
+                rt.block_on(async {
+                    let env = RosettaTestingEnvironmentBuilder::new()
+                        .with_args_with_caller(args_with_caller.clone())
+                        .with_init_args_builder(
+                            local_replica::icrc_ledger_default_args_builder().with_minting_account(
+                                (*MINTING_IDENTITY).clone().sender().unwrap(),
+                            ),
+                        )
+                        .build()
+                        .await;
+
+                    let mut args = TransferArg {
+                        from_subaccount: None,
+                        to: *TEST_ACCOUNT,
+                        fee: Some(DEFAULT_TRANSFER_FEE.into()),
+                        amount: 1_000_000_000u64.into(),
+                        memo: None,
+                        created_at_time: None,
+                    };
+
+                    let block_index = env
+                        .rosetta_client
+                        .network_status(env.network_identifier.clone())
+                        .await
+                        .expect("failed to get the last block index")
+                        .current_block_identifier
+                        .index;
+
+                    const NUM_ACCOUNTS: u64 = 7;
+
+                    // Fund the accounts from rosetta-cli_construction_test.json
+                    // The accounts are created from seed 1-7.
+                    for seed in 1..NUM_ACCOUNTS + 1 {
+                        let key_pair = Ed25519KeyPair::generate_from_u64(seed);
+                        let account: Account = key_pair
+                            .generate_principal_id()
+                            .expect("failed to get principal")
+                            .0
+                            .into();
+                        args.to = account;
+
+                        env.icrc1_agent
+                            .transfer(args.clone())
+                            .await
+                            .expect("sending transfer failed")
+                            .expect("transfer resulted in an error");
+                    }
+
+                    let new_block_index = wait_for_rosetta_block(
+                        &env.rosetta_client,
+                        env.network_identifier.clone(),
+                        block_index + NUM_ACCOUNTS,
+                    )
+                    .await
+                    .unwrap();
+
+                    if new_block_index < block_index + NUM_ACCOUNTS {
+                        panic!("failed to sync the funding transactions");
+                    }
+
+                    let output = Command::new(rosetta_cli())
+                        .args([
+                            "check:construction",
+                            "--configuration-file",
+                            local("tests/rosetta-cli_construction_test.json").as_str(),
+                            "--online-url",
+                            &format!("http://0.0.0.0:{}", env._rosetta_context.port),
+                            "--offline-url",
+                            &format!("http://0.0.0.0:{}", env._rosetta_context.port),
+                        ])
+                        .output()
+                        .expect("failed to execute rosetta-cli");
+
+                    assert!(
+                        output.status.success(),
+                        "rosetta-cli did not finish successfully: {},/\
+                    \n\n--------------------------\nstdout: {}, \
+                    \n\n--------------------------\nstderr: {}",
+                        output.status,
+                        String::from_utf8(output.stdout).unwrap(),
+                        String::from_utf8(output.stderr).unwrap()
+                    );
+                });
+                Ok(())
+            },
+        )
+        .unwrap();
 }

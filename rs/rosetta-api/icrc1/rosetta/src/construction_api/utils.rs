@@ -455,6 +455,7 @@ pub fn handle_construction_parse(
     currency: Currency,
     ingress_expiry_start: Option<u64>,
     ingress_expiry_end: Option<u64>,
+    transaction_is_signed: bool,
 ) -> anyhow::Result<ConstructionParseResponse> {
     let mut construction_parse_response = ConstructionParseResponse {
         operations: vec![],
@@ -515,10 +516,12 @@ pub fn handle_construction_parse(
                 .operations
                 .extend(rosetta_core_operations);
 
-            construction_parse_response
-                .account_identifier_signers
-                .get_or_insert_with(Default::default)
-                .push(caller);
+            if transaction_is_signed {
+                construction_parse_response
+                    .account_identifier_signers
+                    .get_or_insert_with(Default::default)
+                    .push(caller);
+            }
         } else {
             bail!(
                 "Wrong EnvelopeContent type, expected EnvelopeContent::Call, got {:?}",

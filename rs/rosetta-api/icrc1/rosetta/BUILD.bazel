@@ -161,6 +161,7 @@ rust_test_suite_with_extra_srcs(
     ],
     data = LOCAL_REPLICA_DATA + glob([
         "tests/*.json",
+        "tests/*.ros",
     ]) + [
         "@rosetta-cli//:rosetta-cli",
     ],
