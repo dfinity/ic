@@ -17,28 +17,21 @@ repos:
 
   - id: bazel_ruff_format
     name: Auto format Python files
-    stages: [commit, manual]
+    stages: [commit]
     entry: bazel run //:ruff-format
-    files: \.py$
-    language: system
-
-  - id: bazel_ruff_lint
-    name: Auto lint Python files
-    stages: [commit, manual]
-    entry: bazel run //:ruff-lint
     files: \.py$
     language: system
 
   - id: bazel_protobuf_format
     name: Auto format Protobuf files
-    stages: [commit, manual]
+    stages: [commit]
     entry: bazel run //:protobuf-format
     files: \.proto$
     language: system
 
   - id: bazel_ormolu_format
     name: Auto format Haskell files
-    stages: [commit, manual]
+    stages: [commit]
     entry: bazel run //:ormolu-format
     files: \.hs|\.lhs$
     language: system
