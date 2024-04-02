@@ -381,6 +381,7 @@ pub(crate) fn get_ecdsa_config_if_enabled(
 
 /// Return ids of ECDSA keys of the given [EcdsaConfig] for which
 /// signing is enabled on the given subnet.
+#[allow(dead_code)]
 pub(crate) fn get_enabled_signing_keys(
     subnet_id: SubnetId,
     registry_version: RegistryVersion,
