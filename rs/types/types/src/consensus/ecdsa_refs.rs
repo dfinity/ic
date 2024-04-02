@@ -682,14 +682,16 @@ impl Hash for QuadrupleInCreation {
         }
         if let Some(config) = &self.kappa_masked_config {
             config.hash(state);
+            self.kappa_masked.hash(state);
         }
-        self.kappa_masked.hash(state);
         self.lambda_config.hash(state);
         self.lambda_masked.hash(state);
         if let Some(config) = &self.kappa_unmasked_config {
             config.hash(state);
         }
-        self.unmask_kappa_config.hash(state);
+        if self.kappa_masked_config.is_some() {
+            self.unmask_kappa_config.hash(state);
+        }
         self.kappa_unmasked.hash(state);
         self.key_times_lambda_config.hash(state);
         self.key_times_lambda.hash(state);

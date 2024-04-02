@@ -34,7 +34,7 @@ use std::process::Command;
 
 /// TODO: Replace with testnet/mainnet_revisions.json dependency once
 /// exhaustive unit test is part of mainnet version.
-const MAINNET_VERSION: &str = "d48e4cb6dafde4a1c5f6fcc8495fbfcdc81d525f";
+const MAINNET_VERSION: &str = "e622d038043a21636311b04f2bb26cd0310d1d31";
 
 #[derive(PartialEq)]
 enum Action {
