@@ -1,5 +1,5 @@
 {
-  "checksum": "b646ef6bafb9c90c71c01e53fa0d9062b099977e71bed7debf5c21e9923d31e4",
+  "checksum": "725eeb5981e600a99a86f011561da878a1f59ba8992ccf7980a4b5ef69e7d125",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -15335,7 +15335,7 @@
               "alias": "tower_http_0_5_1"
             },
             {
-              "id": "tower-request-id 0.2.1",
+              "id": "tower-request-id 0.3.0",
               "target": "tower_request_id"
             },
             {
@@ -55221,13 +55221,13 @@
       },
       "license": "MIT"
     },
-    "tower-request-id 0.2.1": {
+    "tower-request-id 0.3.0": {
       "name": "tower-request-id",
-      "version": "0.2.1",
+      "version": "0.3.0",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/tower-request-id/0.2.1/download",
-          "sha256": "3a4fbab3421649e92056980671a04d83aa76e3bd4e7b755a9d9ae24eb2015b25"
+          "url": "https://static.crates.io/crates/tower-request-id/0.3.0/download",
+          "sha256": "357a1f99dd439c1aa9ebbaf9c6431b41c05a26bf137e9e92879941bdac5cb66d"
         }
       },
       "targets": [
@@ -55249,7 +55249,7 @@
         "deps": {
           "common": [
             {
-              "id": "http 0.2.9",
+              "id": "http 1.0.0",
               "target": "http"
             },
             {
@@ -55267,8 +55267,8 @@
           ],
           "selects": {}
         },
-        "edition": "2018",
-        "version": "0.2.1"
+        "edition": "2021",
+        "version": "0.3.0"
       },
       "license": "MIT"
     },
@@ -65119,7 +65119,7 @@
     "tower 0.4.13",
     "tower-http 0.4.4",
     "tower-http 0.5.1",
-    "tower-request-id 0.2.1",
+    "tower-request-id 0.3.0",
     "tower-test 0.4.0",
     "tower_governor 0.1.0",
     "tracing 0.1.40",
