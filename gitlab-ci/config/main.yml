@@ -466,7 +466,7 @@ cargo-clippy-linux:
     - |
       set -eExuo pipefail
       buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- \
-          "$CI_PROJECT_DIR"/gitlab-ci/src/ci-scripts/rust_lint.sh
+          "$CI_PROJECT_DIR"/gitlab-ci/src/ci-scripts/rust-lint.sh
 
 cargo-build-release-linux:
   needs: [] # don't wait on other jobs

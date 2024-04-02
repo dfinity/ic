@@ -2205,7 +2205,7 @@ cargo-clippy-linux:
     - |
       set -eExuo pipefail
       buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- \
-          "$CI_PROJECT_DIR"/gitlab-ci/src/ci-scripts/rust_lint.sh
+          "$CI_PROJECT_DIR"/gitlab-ci/src/ci-scripts/rust-lint.sh
   variables:
     CARGO_BUILD_TARGET: x86_64-unknown-linux-gnu
 commit-lint:
