@@ -37,7 +37,7 @@ rust_library(
         "//rs/types/error_types",
         "//rs/types/management_canister_types",
         "//rs/types/types",
-        "//rs/utils",
+        "//rs/utils/thread",
         "@crate_index//:prometheus",
         "@crate_index//:slog",
     ],

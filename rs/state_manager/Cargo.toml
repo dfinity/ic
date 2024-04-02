@@ -30,6 +30,7 @@ ic-state-layout = { path = "../state_layout" }
 ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
+ic-utils-thread = { path = "../utils/thread" }
 nix = { workspace = true }
 parking_lot = "0.12.1"
 prometheus = { workspace = true }

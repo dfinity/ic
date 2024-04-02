@@ -8819,7 +8819,7 @@ dependencies = [
  "ic-test-utilities-time",
  "ic-test-utilities-types",
  "ic-types",
- "ic-utils 0.9.0",
+ "ic-utils-thread",
  "lazy_static",
  "maplit",
  "mockall",
@@ -9943,7 +9943,7 @@ dependencies = [
  "ic-registry-proto-data-provider",
  "ic-test-utilities-metrics",
  "ic-types",
- "ic-utils 0.9.0",
+ "ic-utils-thread",
  "prometheus",
 ]
 
@@ -11264,6 +11264,7 @@ dependencies = [
  "ic-test-utilities-types",
  "ic-types",
  "ic-utils 0.9.0",
+ "ic-utils-thread",
  "ic-wasm-types",
  "maplit",
  "nix 0.24.3",
@@ -11939,6 +11940,10 @@ dependencies = [
 
 [[package]]
 name = "ic-utils-rustfmt"
+version = "0.9.0"
+
+[[package]]
+name = "ic-utils-thread"
 version = "0.9.0"
 
 [[package]]
@@ -15142,7 +15147,7 @@ dependencies = [
  "ic-state-machine-tests",
  "ic-test-utilities",
  "ic-types",
- "ic-utils 0.9.0",
+ "ic-utils-thread",
  "ic-validator-ingress-message",
  "itertools 0.12.0",
  "pocket-ic",

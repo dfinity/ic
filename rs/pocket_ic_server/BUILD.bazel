@@ -17,7 +17,7 @@ LIB_DEPENDENCIES = [
     "//rs/types/types",
     "//rs/types/management_canister_types",
     "//rs/crypto/sha2",
-    "//rs/utils",
+    "//rs/utils/thread",
     "//rs/registry/routing_table",
     "//rs/test_utilities",
     "@crate_index//:aide",

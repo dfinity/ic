@@ -1,0 +1,11 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "thread",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_utils_thread",
+    version = "0.1.0",
+    deps = [],
+)
