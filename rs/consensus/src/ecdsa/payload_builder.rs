@@ -5,10 +5,7 @@
 
 use super::pre_signer::{EcdsaTranscriptBuilder, EcdsaTranscriptBuilderImpl};
 use super::signer::{EcdsaSignatureBuilder, EcdsaSignatureBuilderImpl};
-use super::utils::{
-    block_chain_reader, get_ecdsa_config_if_enabled, get_enabled_signing_keys,
-    InvalidChainCacheError,
-};
+use super::utils::{block_chain_reader, get_ecdsa_config_if_enabled, InvalidChainCacheError};
 use crate::consensus::metrics::{EcdsaPayloadMetrics, CRITICAL_ERROR_ECDSA_KEY_TRANSCRIPT_MISSING};
 pub(super) use errors::EcdsaPayloadError;
 use errors::MembershipError;
@@ -559,12 +556,7 @@ pub(crate) fn create_data_payload_helper(
     else {
         return Ok(None);
     };
-    let enabled_signing_keys = get_enabled_signing_keys(
-        subnet_id,
-        curr_interval_registry_version,
-        registry_client,
-        &ecdsa_config,
-    )?;
+    let valid_keys: BTreeSet<_> = ecdsa_config.key_ids.iter().cloned().collect();
 
     let mut ecdsa_payload = if let Some(prev_payload) = parent_block.payload.as_ref().as_ecdsa() {
         prev_payload.clone()
@@ -596,7 +588,7 @@ pub(crate) fn create_data_payload_helper(
         height,
         context.time,
         &ecdsa_config,
-        &enabled_signing_keys,
+        &valid_keys,
         next_interval_registry_version,
         certified_height,
         &receivers,
@@ -616,7 +608,7 @@ pub(crate) fn create_data_payload_helper_2(
     height: Height,
     context_time: Time,
     ecdsa_config: &EcdsaConfig,
-    enabled_signing_keys: &BTreeSet<EcdsaKeyId>,
+    valid_keys: &BTreeSet<EcdsaKeyId>,
     next_interval_registry_version: RegistryVersion,
     certified_height: CertifiedHeight,
     receivers: &[NodeId],
@@ -648,7 +640,7 @@ pub(crate) fn create_data_payload_helper_2(
             signature_builder,
             request_expiry_time,
             ecdsa_payload,
-            enabled_signing_keys,
+            valid_keys,
             ecdsa_payload_metrics,
         );
     } else {
@@ -662,7 +654,7 @@ pub(crate) fn create_data_payload_helper_2(
             request_expiry_time,
             ecdsa_payload,
             all_signing_requests,
-            enabled_signing_keys,
+            valid_keys,
             ecdsa_payload_metrics,
         );
         signatures::update_ongoing_signatures(
@@ -679,12 +671,9 @@ pub(crate) fn create_data_payload_helper_2(
 
     let matched_quadruples = if ECDSA_IMPROVED_LATENCY {
         // We count the number of quadruples in the payload that were already matched,
-        // such that they can be replenished. In this process we don't consider quadruples
-        // that were matched to requests for disabled key IDs, since these requests are
-        // rejected immediately without consuming the quadruples.
+        // such that they can be replenished.
         all_signing_requests
             .values()
-            .filter(|context| enabled_signing_keys.contains(&context.key_id))
             .filter_map(|context| context.matched_quadruple.as_ref())
             .filter(|(qid, _)| ecdsa_payload.available_quadruples.contains_key(qid))
             .count()
@@ -852,10 +841,7 @@ pub(crate) fn get_signing_requests<'a>(
                 callback: *callback_id,
                 payload: ic_types::messages::Payload::Reject(RejectContext::new(
                     RejectCode::CanisterReject,
-                    format!(
-                        "Invalid or disabled key_id in signature request: {:?}",
-                        context.key_id
-                    ),
+                    format!("Invalid key_id in signature request: {:?}", context.key_id),
                 )),
                 originator: Some(context.request.sender),
                 respondent: Some(CanisterId::ic_00()),
@@ -1493,12 +1479,10 @@ mod tests {
             // In the new implementation, the two matched quadruples remain
             // in available_quadruples.
             assert_eq!(num_available_quadruples, 2);
-            // Usually, matched quadruples are replenished, but since one
-            // of them was matched to a disabled key id whose request context
-            // is rejected, the quadruple is "reused" and not replenished.
+            // Matched quadruples are replenished
             assert_eq!(
                 num_quadruples_in_creation,
-                ecdsa_config.quadruples_to_create_in_advance - 1
+                ecdsa_config.quadruples_to_create_in_advance
             );
         } else {
             // In the old implementation, both quadruples are matched to
@@ -1706,7 +1690,7 @@ mod tests {
         assert_matches!(
             &response_1.payload,
             ic_types::messages::Payload::Reject(context)
-            if context.message().contains("Invalid or disabled key_id")
+            if context.message().contains("Invalid key_id")
         );
 
         let Some(ecdsa::CompletedSignature::Unreported(response_2)) =
@@ -1717,7 +1701,7 @@ mod tests {
         assert_matches!(
             &response_2.payload,
             ic_types::messages::Payload::Reject(context)
-            if context.message().contains("Invalid or disabled key_id")
+            if context.message().contains("Invalid key_id")
         );
 
         // The quadruple matched with the expired context should not be deleted
