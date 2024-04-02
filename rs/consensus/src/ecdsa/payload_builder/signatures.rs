@@ -182,10 +182,7 @@ pub(crate) fn update_signature_agreements_improved_latency(
                     *callback_id,
                     context,
                     RejectCode::CanisterReject,
-                    format!(
-                        "Invalid or disabled key_id in signature request: {:?}",
-                        context.key_id
-                    ),
+                    format!("Invalid key_id in signature request: {:?}", context.key_id),
                 )),
             );
 
