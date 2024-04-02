@@ -35,7 +35,7 @@ ic-icrc1-tokens-u64 = { path = "../tokens_u64" }
 ic-icrc1-tokens-u256 = { path = "../tokens_u256" }
 proptest = "1.0"
 rand = "0.8.4"
-axum = "0.6.1"
+axum = "^0.7.5"
 url = "2.2.1"
 clap = { workspace = true }
 tokio = { workspace = true }
@@ -44,9 +44,8 @@ icrc-ledger-agent = { path = "../../../../packages/icrc-ledger-agent" }
 hex = { workspace = true }
 ic-crypto-tree-hash = { path = "../../../crypto/tree_hash" }
 lazy_static = "1.4.0"
-http = "0.2.9"
-tower-http = { version = "0.4.0", features = ["trace"] }
-tower-request-id = "0.2.1"
+tower-http = { version = "^0.5.1", features = ["trace"] }
+tower-request-id = "^0.3.0"
 tracing = { workspace = true }
 tracing-appender = { workspace = true }
 tracing-subscriber = { workspace = true }

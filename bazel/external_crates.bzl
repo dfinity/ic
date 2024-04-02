@@ -1283,7 +1283,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.1",
             ),
             "tower-request-id": crate.spec(
-                version = "^0.2.1",
+                version = "^0.3.0",
             ),
             "tower-test": crate.spec(
                 version = "^0.4.0",
