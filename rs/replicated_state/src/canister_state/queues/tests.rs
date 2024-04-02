@@ -1,4 +1,5 @@
 use super::{
+    message_pool::REQUEST_LIFETIME,
     testing::{new_canister_queues_for_test, CanisterQueuesTesting},
     InputQueueType::*,
     DEFAULT_QUEUE_CAPACITY, *,
@@ -19,7 +20,7 @@ use ic_types::{
 };
 use maplit::{btreemap, btreeset};
 use proptest::prelude::*;
-use std::{collections::BTreeSet, convert::TryInto};
+use std::{collections::BTreeSet, convert::TryInto, time::Duration};
 
 /// Wrapper for `CanisterQueues` for tests using only one pair of
 /// `(InputQueue, OutputQueue)` and arbitrary requests/responses.

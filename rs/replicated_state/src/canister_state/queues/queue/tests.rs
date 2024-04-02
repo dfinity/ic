@@ -1,3 +1,4 @@
+use super::super::message_pool::testing::*;
 use super::*;
 use ic_test_utilities_types::{
     arbitrary,
@@ -33,7 +34,7 @@ fn canister_queue_push_request_succeeds() {
     const CAPACITY: usize = 1;
     let mut queue = CanisterQueue::new(CAPACITY);
 
-    let id = MessageId::new(13);
+    let id = new_request_message_id(13);
     queue.push_request(id);
 
     assert_eq!(1, queue.len());
@@ -84,7 +85,7 @@ fn canister_queue_push_response_succeeds() {
     assert_eq!(Ok(()), queue.check_has_reserved_slot());
 
     // Push response into reseerved slot.
-    let id = MessageId::new(13);
+    let id = new_response_message_id(13);
     queue.push_response(id);
 
     assert_eq!(1, queue.len());
@@ -123,7 +124,7 @@ fn canister_queue_push_request_to_full_queue_fails() {
     const CAPACITY: usize = 2;
     let mut queue = CanisterQueue::new(CAPACITY);
     for i in 0..CAPACITY {
-        queue.push_request(MessageId::new(i as u64));
+        queue.push_request(new_request_message_id(i as u64));
     }
 
     assert_eq!(CAPACITY, queue.len());
@@ -140,7 +141,7 @@ fn canister_queue_push_request_to_full_queue_fails() {
         queue.check_has_reserved_slot()
     );
 
-    queue.push_request(MessageId::new(13));
+    queue.push_request(new_request_message_id(13));
 }
 
 /// Test that overfilling an output queue with reservations results in failed
@@ -171,7 +172,7 @@ fn canister_queue_try_reserve_in_full_queue_fails() {
 
     // Fill the queue with responses.
     for i in 0..CAPACITY {
-        queue.push_response(MessageId::new(i as u64));
+        queue.push_response(new_response_message_id(i as u64));
     }
 
     assert_eq!(2, queue.len());
@@ -200,9 +201,9 @@ fn canister_queue_full_duplex() {
     const CAPACITY: usize = 2;
     let mut queue = CanisterQueue::new(CAPACITY);
     for i in 0..CAPACITY {
-        queue.push_request(MessageId::new(i as u64 * 2));
+        queue.push_request(new_request_message_id(i as u64 * 2));
         queue.try_reserve_response_slot().unwrap();
-        queue.push_response(MessageId::new(i as u64 * 2 + 1));
+        queue.push_response(new_response_message_id(i as u64 * 2 + 1));
     }
 
     assert_eq!(2 * CAPACITY, queue.len());
@@ -223,7 +224,7 @@ fn canister_queue_full_duplex() {
 #[should_panic(expected = "QueueFull { capacity: 10 }")]
 fn canister_queue_push_without_reserved_slot_fails() {
     let mut queue = CanisterQueue::new(10);
-    queue.push_response(MessageId::new(13));
+    queue.push_response(new_response_message_id(13));
 }
 
 #[test]
@@ -231,8 +232,8 @@ fn canister_queue_contains() {
     const CAPACITY: usize = 2;
     let mut queue = CanisterQueue::new(CAPACITY);
 
-    let id1 = MessageId::new(1);
-    let id2 = MessageId::new(2);
+    let id1 = new_request_message_id(1);
+    let id2 = new_response_message_id(2);
     assert!(!queue.contains(id1));
     assert!(!queue.contains(id2));
 
@@ -275,8 +276,8 @@ fn canister_queue_empty_size_bytes() {
 /// Generator for an arbitrary `MessageReference`.
 fn arbitrary_message_reference() -> impl Strategy<Value = MessageReference> {
     prop_oneof![
-        5 => any::<u64>().prop_map(|id| MessageReference::Request(MessageId::new(id))),
-        4 => any::<u64>().prop_map(|id| MessageReference::Response(MessageId::new(id))),
+        5 => any::<u64>().prop_map(|id| MessageReference::Request(new_request_message_id(id))),
+        4 => any::<u64>().prop_map(|id| MessageReference::Response(new_response_message_id(id))),
         1 => any::<u64>().prop_map(|id| MessageReference::LocalRejectResponse(CallbackId::new(id))),
     ]
 }
@@ -342,11 +343,11 @@ fn canister_queue_calculate_stats() {
     queue.push_response(rep_id);
 
     // Push a stale request reference onto the queue.
-    let stale_req_id = MessageId::new(13);
+    let stale_req_id = new_request_message_id(13);
     queue.push_request(stale_req_id);
 
     // Push a stale response reference onto the queue.
-    let stale_rep_id = MessageId::new(14);
+    let stale_rep_id = new_response_message_id(14);
     queue.try_reserve_response_slot().unwrap();
     queue.push_response(stale_rep_id);
 

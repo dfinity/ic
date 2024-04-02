@@ -1,6 +1,6 @@
 #![allow(unused)]
 
-use super::message_pool::{MessageId, MessagePool, MessagePoolReference};
+use super::message_pool::{MessageId, MessagePool};
 use crate::StateError;
 use ic_base_types::CanisterId;
 use ic_protobuf::proxy::ProxyDecodeError;
@@ -23,7 +23,7 @@ mod tests;
 ///
 /// May be a weak reference into the message pool; or identify a reject response to
 /// a specific callback.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) enum MessageReference {
     /// Weak reference to a `Request` held in the message pool.
     ///
@@ -62,18 +62,11 @@ impl MessageReference {
             Self::Response(_) | Self::LocalRejectResponse(_) => true,
         }
     }
-}
 
-impl TryFrom<&MessageReference> for MessagePoolReference {
-    type Error = ();
-
-    fn try_from(reference: &MessageReference) -> Result<Self, Self::Error> {
-        use MessageReference::*;
-
-        match reference {
-            Request(id) => Ok(Self::Request(*id)),
-            Response(id) => Ok(Self::Response(*id)),
-            LocalRejectResponse(_) => Err(()),
+    pub(super) fn id(&self) -> Option<MessageId> {
+        match self {
+            Self::Request(id) | Self::Response(id) => Some(*id),
+            Self::LocalRejectResponse(_) => None,
         }
     }
 }
@@ -102,7 +95,7 @@ impl TryFrom<&MessageReference> for MessagePoolReference {
 /// for that response to be consumed while the request still consumes a slot in
 /// the queue; so we must additionally explicitly limit the number of slots used
 /// by requests to the queue capacity.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct CanisterQueue {
     /// A FIFO queue of all requests and responses. Since responses may be enqueued
     /// at arbitrary points in time, response reservations cannot be explicitly
@@ -311,7 +304,7 @@ impl CanisterQueue {
     ) -> S {
         self.queue
             .iter()
-            .filter_map(|reference| pool.get(reference))
+            .filter_map(|reference| pool.get(reference.id()?))
             .map(stat)
             .sum()
     }
@@ -359,7 +352,7 @@ impl CanisterQueue {
         // FIXME: Get rid of this.
         self.queue
             .iter()
-            .map(|reference| pool.get(reference).cloned())
+            .map(|reference| pool.get(reference.id()?).cloned())
     }
 }
 

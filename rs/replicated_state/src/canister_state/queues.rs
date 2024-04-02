@@ -30,14 +30,9 @@ use std::{
     convert::{From, TryFrom},
     ops::{AddAssign, SubAssign},
     sync::Arc,
-    time::Duration,
 };
 
 pub const DEFAULT_QUEUE_CAPACITY: usize = 500;
-
-/// The default lifetime of a request in OutputQueue from which the deadline
-/// is computed as time + REQUEST_LIFETIME.
-pub const REQUEST_LIFETIME: Duration = Duration::from_secs(300);
 
 /// Encapsulates information about `CanisterQueues`,
 /// used in detecting a loop when consuming the input messages.
@@ -198,7 +193,8 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
                     session_id: SessionId::new(0),
                 };
 
-                let msg = match self.pool.get(reference) {
+                // FIXME: Generate a reject response.
+                let msg = match self.pool.get(reference.id().unwrap()) {
                     Some(msg) => msg,
 
                     // Stale reference, pop it and try again.
@@ -232,7 +228,8 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
                     session_id: SessionId::new(0),
                 };
 
-                let msg = match self.pool.take(&reference) {
+                // FIXME: Generate a reject response.
+                let msg = match self.pool.take(reference.id().unwrap()) {
                     Some(msg) => msg,
 
                     // Stale reference, try again.
@@ -330,7 +327,8 @@ impl CanisterQueues {
     {
         for (canister_id, (_, queue)) in self.canister_queues.iter_mut() {
             while let Some(reference) = queue.peek() {
-                let msg = match self.pool.get(reference) {
+                // FIXME: Generate a reject response.
+                let msg = match self.pool.get(reference.id().unwrap()) {
                     // Actual message.
                     Some(msg) => msg,
 
@@ -477,7 +475,8 @@ impl CanisterQueues {
             // Get the message queue of this canister.
             let input_queue = &mut self.canister_queues.get_mut(&sender).unwrap().0;
             while let Some(reference) = input_queue.pop() {
-                let msg = match self.pool.take(&reference) {
+                // FIXME: Generate a reject response.
+                let msg = match self.pool.take(reference.id().unwrap()) {
                     Some(message) => message,
 
                     // Stale reference, try again.
@@ -521,7 +520,8 @@ impl CanisterQueues {
 
             while let Some(reference) = input_queue.peek() {
                 // Look up the message.
-                let msg = match self.pool.get(reference) {
+                // FIXME: Generate a reject response.
+                let msg = match self.pool.get(reference.id().unwrap()) {
                     Some(msg) => msg,
 
                     // Stale reference, pop it and try again.
@@ -808,7 +808,8 @@ impl CanisterQueues {
 
         while let Some(reference) = output_queue.peek() {
             // Look up the message.
-            match self.pool.get(reference) {
+            // FIXME: Generate a reject response.
+            match self.pool.get(reference.id().unwrap()) {
                 msg @ Some(_) => return msg,
 
                 // Stale reference, pop it and try again.
@@ -1849,7 +1850,8 @@ pub mod testing {
                 .1
                 .pop()
                 .unwrap();
-            let msg = self.pool.take(&reference).unwrap();
+            // FIXME: Generate a reject response.
+            let msg = self.pool.take(reference.id().unwrap()).unwrap();
 
             self.output_queues_stats -= OutputQueuesStats::stats_delta(&msg);
             self.memory_usage_stats -= MemoryUsageStats::stats_delta(QueueOp::Pop, &msg);
