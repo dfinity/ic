@@ -115,9 +115,9 @@ pub struct DeployTestflightArgs {
 #[derive(Debug, Parser)]
 pub struct AddSnsWasmForTestsArgs {
     #[clap(long, value_parser = clap::value_parser!(std::path::PathBuf))]
-    wasm_file: PathBuf,
+    pub wasm_file: PathBuf,
 
-    canister_type: String,
+    pub canister_type: String,
 
     /// The canister ID of SNS-WASMS to use instead of the default
     ///
@@ -126,7 +126,7 @@ pub struct AddSnsWasmForTestsArgs {
     pub override_sns_wasm_canister_id_for_tests: Option<String>,
 
     #[structopt(default_value = "local", long)]
-    network: String,
+    pub network: String,
 }
 
 pub(crate) fn generate_sns_init_payload(
