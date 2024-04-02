@@ -79,8 +79,10 @@ if ! sudo podman "${PODMAN_ARGS[@]}" image exists $IMAGE; then
     fi
 fi
 
-echo "Purging non-relevant container images"
-sudo podman "${PODMAN_ARGS[@]}" image prune -a -f --filter "reference!=$IMAGE" >/dev/null 2>&1
+if findmnt /hoststorage >/dev/null; then
+    echo "Purging non-relevant container images"
+    sudo podman "${PODMAN_ARGS[@]}" image prune -a -f --filter "reference!=$IMAGE"
+fi
 
 WORKDIR="/ic"
 USER=$(whoami)
