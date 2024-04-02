@@ -10,7 +10,7 @@ repos:
 
   - id: bazel_shfmt_format
     name: Auto format shell files
-    stages: [commit, manual]
+    stages: [commit]
     entry: bazel run //:shfmt-format
     files: \.sh$
     language: system
