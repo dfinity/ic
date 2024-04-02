@@ -50,7 +50,7 @@ uuid = { version = "1.2.1", features = ["v4", "serde"] }
 assert_matches = { workspace = true }
 criterion = "0.5"
 criterion-time = { path = "../criterion_time" }
-ic-btc-test-utils = { git = "https://github.com/dfinity/bitcoin-canister", rev = "b1693619e3d4dbc00d8c79e9b6886e1db48b21f7" }
+ic-btc-test-utils = { workspace = true }
 ic-crypto-ed25519 = { path = "../crypto/ed25519" }
 ic-test-utilities-io = { path = "../test_utilities/io" }
 ic-test-utilities-metrics = { path = "../test_utilities/metrics" }

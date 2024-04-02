@@ -1,3 +1,4 @@
+use crate::events::MinterEventAssert;
 use crate::flow::{
     ApprovalFlow, DepositFlow, DepositParams, LedgerTransactionAssert, WithdrawalFlow,
 };
@@ -23,13 +24,13 @@ use ic_test_utilities_load_wasm::load_wasm;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use num_traits::cast::ToPrimitive;
-use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
 pub mod ckerc20;
+pub mod events;
 pub mod flow;
 pub mod mock;
 pub mod response;
@@ -60,6 +61,11 @@ pub const EFFECTIVE_GAS_PRICE: u64 = 4_277_923_390;
 pub const DEFAULT_WITHDRAWAL_TRANSACTION_HASH: &str =
     "0x2cf1763e8ee3990103a31a5709b17b83f167738abb400844e67f608a98b0bdb5";
 pub const DEFAULT_WITHDRAWAL_TRANSACTION: &str = "0x02f87301808459682f008507af2c9f6282520894221e931fbfcb9bd54ddd26ce6f5e29e98add01c0880160cf1e9917a0e680c001a0b27af25a08e87836a778ac2858fdfcff1f6f3a0d43313782c81d05ca34b80271a078026b399a32d3d7abab625388a3c57f651c66a182eb7f8b1a58d9aef7547256";
+
+pub const DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION: &str = "0x02f8b001808459682f008507af2c9f6282fde894a0b86991c6218b36c1d19d4a2e9eb0ce3606eb4880b844a9059cbb000000000000000000000000221e931fbfcb9bd54ddd26ce6f5e29e98add01c000000000000000000000000000000000000000000000000000000000001e8480c080a0bb694aec6175b489523a55d5fce39452368e97096d4afa2cdcc35cf2d805152fa00112b26a028af84dd397d23549844efdaf761d90cdcfdbe6c3608239648a85a3";
+pub const DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_HASH: &str =
+    "0x2c0c328876b8d60580e00d8e5a82599e22099e78d9d9c25cc5e6164bc8f4db62";
+
 pub const MINTER_ADDRESS: &str = "0xfd644a761079369962386f8e4259217c2a10b8d0";
 pub const DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS: &str =
     "0x221E931fbFcb9bd54DdD26cE6f5e29E98AdD01C0";
@@ -347,54 +353,15 @@ impl CkEthSetup {
     }
 
     pub fn assert_has_unique_events_in_order(self, expected_events: &[EventPayload]) -> Self {
-        let audit_events = self.get_all_events();
-        let mut found_event_indexes = BTreeMap::new();
-        for (index_expected_event, expected_event) in expected_events.iter().enumerate() {
-            for (index_audit_event, audit_event) in audit_events.iter().enumerate() {
-                if &audit_event.payload == expected_event {
-                    assert_eq!(
-                        found_event_indexes.insert(index_expected_event, index_audit_event),
-                        None,
-                        "Event {:?} occurs multiple times",
-                        expected_event
-                    );
-                }
-            }
-            assert!(
-                found_event_indexes.contains_key(&index_expected_event),
-                "Missing event {:?}. All events: {:?}",
-                expected_event,
-                audit_events
-            )
-        }
-        let audit_event_indexes = found_event_indexes.into_values().collect::<Vec<_>>();
-        let sorted_audit_event_indexes = {
-            let mut indexes = audit_event_indexes.clone();
-            indexes.sort_unstable();
-            indexes
-        };
-        assert_eq!(
-            audit_event_indexes, sorted_audit_event_indexes,
-            "Events were found in unexpected order"
-        );
-        self
+        MinterEventAssert::from_fetching_all_events(self)
+            .assert_has_unique_events_in_order(expected_events)
     }
 
     pub fn assert_has_no_event_satisfying<P: Fn(&EventPayload) -> bool>(
         self,
         predicate: P,
     ) -> Self {
-        if let Some(unexpected_event) = self
-            .get_all_events()
-            .into_iter()
-            .find(|event| predicate(&event.payload))
-        {
-            panic!(
-                "Found an event satisfying the predicate: {:?}",
-                unexpected_event
-            )
-        }
-        self
+        MinterEventAssert::from_fetching_all_events(self).assert_has_no_event_satisfying(predicate)
     }
 
     fn get_events(&self, start: u64, length: u64) -> GetEventsResult {
@@ -500,10 +467,14 @@ impl CkEthSetup {
     }
 
     pub fn check_audit_logs_and_upgrade(self, upgrade_arg: UpgradeArg) -> Self {
+        self.check_audit_logs_and_upgrade_as_ref(upgrade_arg);
+        self
+    }
+
+    pub fn check_audit_logs_and_upgrade_as_ref(&self, upgrade_arg: UpgradeArg) {
         self.check_audit_log();
         self.env.tick(); //tick before upgrade to finish current timers which are reset afterwards
         self.upgrade_minter(upgrade_arg);
-        self
     }
 
     pub fn assert_has_no_rpc_call(self, method: &JsonRpcMethod) -> Self {

@@ -12,8 +12,20 @@ use crate::icrc1::account::Account;
 /// NOTE: ⌈ 128 / 7 ⌉ = 19
 const INT128_BUF_SIZE: usize = 19;
 pub type Map = BTreeMap<String, Value>;
+pub type ICRC3Map = BTreeMap<String, ICRC3Value>;
 pub type Hash = [u8; 32];
 
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ICRC3Value {
+    Blob(ByteBuf),
+    Text(String),
+    Nat(Nat),
+    Int(Int),
+    Array(Vec<ICRC3Value>),
+    Map(ICRC3Map),
+}
+
+/// Deprecated, use `ICRC3Value` instead
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Value {
     Blob(ByteBuf),
@@ -23,6 +35,35 @@ pub enum Value {
     Int(Int),
     Array(Vec<Value>),
     Map(Map),
+}
+
+impl From<Value> for ICRC3Value {
+    fn from(value: Value) -> Self {
+        match value {
+            Value::Blob(b) => Self::Blob(b),
+            Value::Text(t) => Self::Text(t),
+            Value::Nat(n) => Self::Nat(n),
+            Value::Nat64(n) => Self::Nat(Nat::from(n)),
+            Value::Int(i) => Self::Int(i),
+            Value::Array(a) => Self::Array(a.into_iter().map(Self::from).collect()),
+            Value::Map(m) => Self::Map(m.into_iter().map(|(k, v)| (k, Self::from(v))).collect()),
+        }
+    }
+}
+
+impl From<ICRC3Value> for Value {
+    fn from(value: ICRC3Value) -> Self {
+        match value {
+            ICRC3Value::Blob(b) => Self::Blob(b),
+            ICRC3Value::Text(t) => Self::Text(t),
+            ICRC3Value::Nat(n) => Self::Nat(n),
+            ICRC3Value::Int(i) => Self::Int(i),
+            ICRC3Value::Array(a) => Self::Array(a.into_iter().map(Value::from).collect()),
+            ICRC3Value::Map(m) => {
+                Self::Map(m.into_iter().map(|(k, v)| (k, Self::from(v))).collect())
+            }
+        }
+    }
 }
 
 impl Value {
@@ -74,7 +115,7 @@ impl Value {
                     .expect("BUG: blocks cannot contain integers that do not fit into the 128-bit representation");
                 let mut buf = [0u8; INT128_BUF_SIZE];
                 //TODO: Int should only use sleb128. Due to CiboriumValue only using Integer this is however not possible right now
-                //      Unsigned Integers should be represented through Nat or Nat65: https://dfinity.atlassian.net/browse/FI-764
+                //      Unsigned Integers should be represented through Nat or Nat64: https://dfinity.atlassian.net/browse/FI-764
                 let offset = match v >= 0 {
                     true => leb128(&mut buf, v as u128),
                     false => sleb128(&mut buf, v),
@@ -461,4 +502,54 @@ fn test_test_vectors() {
             input
         );
     }
+}
+
+#[cfg(test)]
+pub fn arb_value() -> impl proptest::prelude::Strategy<Value = Value> {
+    use num_bigint::{BigInt, Sign};
+    use proptest::prelude::{any, prop_oneof, Just};
+    use proptest::strategy::Strategy;
+
+    // https://altsysrq.github.io/proptest-book/proptest/tutorial/recursive.html
+
+    let any_blob = any::<Vec<u8>>().prop_map(|bytes| Value::Blob(ByteBuf::from(bytes)));
+    let any_text = any::<String>().prop_map(Value::Text);
+    let any_nat =
+        any::<Vec<u32>>().prop_map(|digits| Value::Nat(candid::Nat(BigUint::new(digits))));
+    let any_nat64 = any::<u64>().prop_map(Value::Nat64);
+    let any_sign = prop_oneof![Just(Sign::Minus), Just(Sign::NoSign), Just(Sign::Plus)];
+    let any_int = (any_sign, any::<Vec<u32>>())
+        .prop_map(|(sign, digits)| Value::Int(candid::Int(BigInt::new(sign, digits))));
+
+    let leaf = prop_oneof![any_blob, any_text, any_nat, any_nat64, any_int];
+    leaf.prop_recursive(
+        3,  // 3 levels deep
+        16, // Shoot for maximum size of 16 nodes
+        10, // We put up to 10 items per collection
+        |inner| {
+            prop_oneof![
+                // Take the inner strategy and make the two recursive cases.
+                proptest::collection::vec(inner.clone(), 0..10).prop_map(Value::Array),
+                proptest::collection::btree_map(".*", inner, 0..10).prop_map(Value::Map),
+            ]
+        },
+    )
+}
+
+#[test]
+fn test_value_to_icrc3value_roundtrip() {
+    use proptest::{prop_assert_eq, proptest};
+    fn remove_nat64(value: Value) -> Value {
+        match value {
+            Value::Nat64(n) => Value::Nat(candid::Nat::from(n)),
+            Value::Array(a) => Value::Array(a.into_iter().map(remove_nat64).collect()),
+            Value::Map(m) => Value::Map(m.into_iter().map(|(k, v)| (k, remove_nat64(v))).collect()),
+            v => v,
+        }
+    }
+
+    proptest!(|(value in arb_value())| {
+        let icrc3_value = ICRC3Value::from(value.clone());
+        prop_assert_eq!(Value::from(icrc3_value), remove_nat64(value));
+    })
 }

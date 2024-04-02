@@ -23,11 +23,11 @@ ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
 phantom_newtype = { path = "../../phantom_newtype" }
 prometheus = { workspace = true }
-quinn = { version = "0.10.2", features = ["ring"] }
+quinn = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 slog = { workspace = true }
-socket2 = { version = "0.5", features = ["all"] }
+socket2 = { workspace = true }
 tokio = { workspace = true }
 tokio-metrics = { workspace = true }
 tokio-rustls = { workspace = true }

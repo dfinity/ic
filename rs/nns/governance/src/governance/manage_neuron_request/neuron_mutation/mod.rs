@@ -1,7 +1,4 @@
-use crate::{
-    governance::Governance,
-    pb::v1::{GovernanceError, Neuron},
-};
+use crate::{governance::Governance, neuron::types::Neuron, pb::v1::GovernanceError};
 use async_trait::async_trait;
 use ic_nns_common::pb::v1::NeuronId;
 use std::{

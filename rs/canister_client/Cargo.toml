@@ -16,7 +16,7 @@ ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
 ic-protobuf = { path = "../protobuf" }
 ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-types = { path = "../types/types" }
-futures-util = "0.3.21"
+futures-util = { workspace = true }
 hyper = { version = "0.14.18", features = ["client", "tcp", "http1", "http2"] }
 hyper-rustls = { workspace = true }
 itertools = { workspace = true }

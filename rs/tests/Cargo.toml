@@ -524,6 +524,10 @@ name = "ic-systest-network-reliability"
 path = "networking/network_reliability_test.rs"
 
 [[bin]]
+name = "ic-systest-network-large"
+path = "networking/network_large_test.rs"
+
+[[bin]]
 name = "ic-systest-unstuck-subnet"
 path = "consensus/orchestrator/unstuck_subnet_test.rs"
 

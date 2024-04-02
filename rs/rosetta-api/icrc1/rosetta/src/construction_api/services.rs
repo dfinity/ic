@@ -226,6 +226,7 @@ pub fn construction_parse(
         currency,
         ingress_expiry_start,
         ingress_expiry_end,
+        transaction_is_signed,
     )
     .map_err(|err| Error::processing_construction_failed(&err))
 }

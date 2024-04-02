@@ -43,7 +43,7 @@ use ic_types::{
     xnet::{StreamHeader, StreamIndex},
     Height, NodeId, NumBytes, PrincipalIdBlobParseError, RegistryVersion, SubnetId, Time,
 };
-use ic_utils::thread::JoinOnDrop;
+use ic_utils_thread::JoinOnDrop;
 #[cfg(test)]
 use mockall::automock;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};

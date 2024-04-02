@@ -1532,16 +1532,27 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
         )
     }
 
-    /// Waits until the is_healthy() returns an error
+    /// Waits until the is_healthy() returns an error three times in a row
     fn await_status_is_unavailable(&self) -> Result<()> {
+        let mut count = 0;
         retry_with_msg!(
             &format!("await_status_is_unavailable of {}", self.get_public_url()),
             self.test_env().logger(),
             READY_WAIT_TIMEOUT,
             RETRY_BACKOFF,
             || match self.status_is_healthy() {
-                Err(_) => Ok(()),
-                Ok(_) => Err(anyhow!("Status is still available")),
+                Err(_) => {
+                    count += 1;
+                    if count >= 3 {
+                        Ok(())
+                    } else {
+                        Err(anyhow!("Status was unavailable {count} times in a row."))
+                    }
+                }
+                Ok(_) => {
+                    count = 0;
+                    Err(anyhow!("Status is still available"))
+                }
             }
         )
     }

@@ -405,58 +405,6 @@ fn test_store_simplest_nontrivial_case() {
 }
 
 #[test]
-fn test_store_as_neuron_deserialized_as_abridged() {
-    // Step 1: Prepare a neuron and get its serialized bytes.
-    let neuron = Neuron {
-        id: Some(NeuronId { id: 1 }),
-        account: vec![u8::MAX; 32],
-        controller: Some(PrincipalId::new_user_test_id(1)),
-        cached_neuron_stake_e8s: 1,
-        neuron_fees_e8s: 2,
-        created_timestamp_seconds: 3,
-        aging_since_timestamp_seconds: 4,
-        spawn_at_timestamp_seconds: Some(5),
-        kyc_verified: false,
-        maturity_e8s_equivalent: 6,
-        staked_maturity_e8s_equivalent: Some(7),
-        auto_stake_maturity: Some(true),
-        not_for_profit: true,
-        joined_community_fund_timestamp_seconds: Some(8),
-        neuron_type: Some(9),
-        dissolve_state: Some(NeuronDissolveState::WhenDissolvedTimestampSeconds(10)),
-        ..Default::default()
-    };
-    let serialized = neuron.encode_to_vec();
-
-    // Step 2: Deserialize as abridged neuron.
-    let abridged = AbridgedNeuron::decode(&serialized[..]).unwrap();
-
-    // Step 3: Verify the abridged neuron has the same fields.
-    assert_eq!(
-        abridged,
-        AbridgedNeuron {
-            account: vec![u8::MAX; 32],
-            controller: Some(PrincipalId::new_user_test_id(1)),
-            cached_neuron_stake_e8s: 1,
-            neuron_fees_e8s: 2,
-            created_timestamp_seconds: 3,
-            aging_since_timestamp_seconds: 4,
-            spawn_at_timestamp_seconds: Some(5),
-            kyc_verified: false,
-            maturity_e8s_equivalent: 6,
-            staked_maturity_e8s_equivalent: Some(7),
-            auto_stake_maturity: Some(true),
-            not_for_profit: true,
-            joined_community_fund_timestamp_seconds: Some(8),
-            neuron_type: Some(9),
-            dissolve_state: Some(AbridgedNeuronDissolveState::WhenDissolvedTimestampSeconds(
-                10
-            )),
-        }
-    );
-}
-
-#[test]
 fn test_abridged_neuron_size() {
     // All VARINT encoded fields (e.g. int32, uint64, ..., as opposed to fixed32/fixed64) have
     // larger serialized size for larger numbers (10 bytes for u64::MAX as uint64, while 1 byte for

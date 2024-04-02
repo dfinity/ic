@@ -17,6 +17,10 @@ def sanitize_external_crates(sanitizers_enabled):
         "bincode": FUZZING_ANNOTATION,
     }
 
+ICRC_1_REV = "26a80d777e079644cd69e883e18dad1a201f5b1a"
+
+BUILD_INFO_REV = "701a696844fba5c87df162fbbc1ccef96f27c9d7"
+
 def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enabled):
     CRATE_ANNOTATIONS = {
         "ic_bls12_381": [crate.annotation(
@@ -239,11 +243,11 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "build-info": crate.spec(
                 git = "https://github.com/dfinity-lab/build-info",
-                rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7",
+                rev = BUILD_INFO_REV,
             ),
             "build-info-build": crate.spec(
                 git = "https://github.com/dfinity-lab/build-info",
-                rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7",
+                rev = BUILD_INFO_REV,
                 default_features = False,
             ),
             "by_address": crate.spec(
@@ -423,10 +427,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.2.0",
             ),
             "futures": crate.spec(
-                version = "^0.3.28",
+                version = "^0.3.30",
             ),
             "futures-util": crate.spec(
-                version = "^0.3.8",
+                version = "^0.3.30",
             ),
             "get_if_addrs": crate.spec(
                 version = "^0.5.3",
@@ -534,11 +538,11 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "icrc1-test-env": crate.spec(
                 git = "https://github.com/dfinity/ICRC-1",
-                rev = "26a80d777e079644cd69e883e18dad1a201f5b1a",
+                rev = ICRC_1_REV,
             ),
             "icrc1-test-suite": crate.spec(
                 git = "https://github.com/dfinity/ICRC-1",
-                rev = "26a80d777e079644cd69e883e18dad1a201f5b1a",
+                rev = ICRC_1_REV,
             ),
             "ic-agent": crate.spec(
                 version = "^0.34.0",
@@ -549,16 +553,13 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "ic-btc-interface": crate.spec(
-                git = "https://github.com/dfinity/bitcoin-canister",
-                rev = "9b239d1d67253eb14a35be6061e3967d5ec9db9d",
+                version = "^0.2.0",
             ),
             "ic-btc-validation": crate.spec(
-                git = "https://github.com/dfinity/bitcoin-canister",
-                rev = "0e996988693f2d55fc9533c44dc20ae5310a1894",
+                version = "^0.1.0",
             ),
             "ic-btc-test-utils": crate.spec(
-                git = "https://github.com/dfinity/bitcoin-canister",
-                rev = "26552e8e7d1b2e23d7195499bd6aed650b263ae7",
+                version = "^0.1.0",
             ),
             "ic-canister-log": crate.spec(
                 version = "^0.2.0",
@@ -924,7 +925,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.0",
             ),
             "rand": crate.spec(
-                version = "^0.8.4",
+                version = "^0.8.5",
                 features = [
                     "small_rng",
                 ],
@@ -1136,7 +1137,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.2.0",
             ),
             "socket2": crate.spec(
-                version = "^0.5.2",
+                version = "^0.5.6",
                 features = [
                     "all",
                 ],
@@ -1282,7 +1283,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.1",
             ),
             "tower-request-id": crate.spec(
-                version = "^0.2.1",
+                version = "^0.3.0",
             ),
             "tower-test": crate.spec(
                 version = "^0.4.0",

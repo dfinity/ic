@@ -17,7 +17,7 @@ git fetch origin "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" --quiet
 COMMIT_RANGE=${COMMIT_RANGE:-$(git merge-base HEAD origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME)".."}
 DIFF_FILES=$(git diff --name-only "${COMMIT_RANGE}")
 
-if grep -qE "(.*\.bazel|.*\.bzl|\.bazelrc|\.bazelversion)" <<<"$DIFF_FILES"; then
+if grep -qE "(.*\.bazel|.*\.bzl|\.bazelrc|\.bazelversion|\.yml)" <<<"$DIFF_FILES"; then
     echo "Changes detected in bazel files. Considering all targets." >&2
     echo ${BAZEL_TARGETS:-"//..."}
     exit 0

@@ -16,7 +16,7 @@ http = "0.2"
 ic-adapter-metrics-server = { path = "../../monitoring/adapter_metrics_server" }
 ic-async-utils = { path = "../../async_utils" }
 ic-btc-service = { path = "../service" }
-ic-btc-validation = { git = "https://github.com/dfinity/bitcoin-canister", rev = "0e996988693f2d55fc9533c44dc20ae5310a1894" }
+ic-btc-validation = { workspace = true }
 ic-config = { path = "../../config" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }

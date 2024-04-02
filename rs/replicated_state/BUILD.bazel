@@ -79,10 +79,23 @@ rust_library(
     name = "replicated_state",
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
+    crate_features = select({
+        "//bazel:fuzzing_code_enabled": ["fuzzing_code"],
+        "//conditions:default": [],
+    }),
     crate_name = "ic_replicated_state",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
-    deps = DEPENDENCIES,
+    deps = DEPENDENCIES + select({
+        "//bazel:fuzzing_code_enabled": [
+            "//rs/test_utilities/io",
+            "//rs/test_utilities/metrics",
+            "@crate_index//:arbitrary",
+            "@crate_index//:assert_matches",
+            "@crate_index//:proptest",
+        ],
+        "//conditions:default": [],
+    }),
 )
 
 rust_binary(
