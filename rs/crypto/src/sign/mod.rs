@@ -12,15 +12,19 @@ use ic_crypto_internal_csp::CryptoServiceProvider;
 use ic_crypto_internal_threshold_sig_bls12381::api::bls_signature_cache_statistics;
 use ic_interfaces::crypto::{
     BasicSigVerifier, BasicSigner, MultiSigVerifier, MultiSigner, ThresholdEcdsaSigVerifier,
-    ThresholdEcdsaSigner, ThresholdSigVerifier, ThresholdSigVerifierByPublicKey, ThresholdSigner,
+    ThresholdEcdsaSigner, ThresholdSchnorrSigVerifier, ThresholdSchnorrSigner,
+    ThresholdSigVerifier, ThresholdSigVerifierByPublicKey, ThresholdSigner,
 };
 use ic_logger::{debug, new_logger};
 use ic_types::crypto::canister_threshold_sig::error::{
     ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
     ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
+    ThresholdSchnorrCombineSigSharesError, ThresholdSchnorrCreateSigShareError,
+    ThresholdSchnorrVerifyCombinedSigError, ThresholdSchnorrVerifySigShareError,
 };
 use ic_types::crypto::canister_threshold_sig::{
     ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
+    ThresholdSchnorrCombinedSignature, ThresholdSchnorrSigInputs, ThresholdSchnorrSigShare,
 };
 use ic_types::crypto::threshold_sig::errors::threshold_sign_error::ThresholdSignError;
 use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
@@ -823,6 +827,148 @@ impl<C: CryptoServiceProvider> ThresholdEcdsaSigVerifier for CryptoComponentImpl
             canister_threshold_sig::ecdsa::verify_combined_signature(&self.csp, inputs, signature);
         self.metrics.observe_duration_seconds(
             MetricsDomain::ThresholdEcdsa,
+            MetricsScope::Full,
+            "verify_combined_sig",
+            MetricsResult::from(&result),
+            start_time,
+        );
+        debug!(logger;
+            crypto.description => "end",
+            crypto.is_ok => result.is_ok(),
+            crypto.error => log_err(result.as_ref().err()),
+        );
+        result
+    }
+}
+
+impl<C: CryptoServiceProvider> ThresholdSchnorrSigner for CryptoComponentImpl<C> {
+    fn create_sig_share(
+        &self,
+        inputs: &ThresholdSchnorrSigInputs,
+    ) -> Result<ThresholdSchnorrSigShare, ThresholdSchnorrCreateSigShareError> {
+        let log_id = get_log_id(&self.logger, module_path!());
+        let logger = new_logger!(&self.logger;
+            crypto.log_id => log_id,
+            crypto.trait_name => "ThresholdSchnorrSigner",
+            crypto.method_name => "create_sig_share",
+        );
+        debug!(logger;
+            crypto.description => "start",
+            crypto.signature_inputs => format!("{:?}", inputs),
+        );
+        let start_time = self.metrics.now();
+        let result = canister_threshold_sig::schnorr::create_sig_share(
+            self.vault.as_ref(),
+            &self.node_id,
+            inputs,
+        );
+        self.metrics.observe_duration_seconds(
+            MetricsDomain::ThresholdSchnorr,
+            MetricsScope::Full,
+            "create_sig_share",
+            MetricsResult::from(&result),
+            start_time,
+        );
+        debug!(logger;
+            crypto.description => "end",
+            crypto.is_ok => result.is_ok(),
+            crypto.error => log_err(result.as_ref().err()),
+            crypto.signature_shares => log_ok_content(&result),
+        );
+        result
+    }
+}
+
+impl<C: CryptoServiceProvider> ThresholdSchnorrSigVerifier for CryptoComponentImpl<C> {
+    fn verify_sig_share(
+        &self,
+        signer: NodeId,
+        inputs: &ThresholdSchnorrSigInputs,
+        share: &ThresholdSchnorrSigShare,
+    ) -> Result<(), ThresholdSchnorrVerifySigShareError> {
+        let log_id = get_log_id(&self.logger, module_path!());
+        let logger = new_logger!(&self.logger;
+            crypto.log_id => log_id,
+            crypto.trait_name => "ThresholdSchnorrSigVerifier",
+            crypto.method_name => "verify_sig_share",
+        );
+        debug!(logger;
+            crypto.description => "start",
+            crypto.signature_shares => format!("{:?}", share),
+            crypto.signer => format!("{:?}", signer),
+            crypto.signature_inputs => format!("{:?}", inputs),
+        );
+        let start_time = self.metrics.now();
+        let result = canister_threshold_sig::schnorr::verify_sig_share(signer, inputs, share);
+        self.metrics.observe_duration_seconds(
+            MetricsDomain::ThresholdSchnorr,
+            MetricsScope::Full,
+            "verify_sig_share",
+            MetricsResult::from(&result),
+            start_time,
+        );
+        debug!(logger;
+            crypto.description => "end",
+            crypto.is_ok => result.is_ok(),
+            crypto.error => log_err(result.as_ref().err()),
+        );
+        result
+    }
+
+    fn combine_sig_shares(
+        &self,
+        inputs: &ThresholdSchnorrSigInputs,
+        shares: &BTreeMap<NodeId, ThresholdSchnorrSigShare>,
+    ) -> Result<ThresholdSchnorrCombinedSignature, ThresholdSchnorrCombineSigSharesError> {
+        let log_id = get_log_id(&self.logger, module_path!());
+        let logger = new_logger!(&self.logger;
+            crypto.log_id => log_id,
+            crypto.trait_name => "ThresholdSchnorrSigVerifier",
+            crypto.method_name => "combine_sig_shares",
+        );
+        debug!(logger;
+            crypto.description => "start",
+            crypto.signature_inputs => format!("{:?}", inputs),
+            crypto.signature_shares => format!{"{:?}", shares},
+        );
+        let start_time = self.metrics.now();
+        let result = canister_threshold_sig::schnorr::combine_sig_shares(inputs, shares);
+        self.metrics.observe_duration_seconds(
+            MetricsDomain::ThresholdSchnorr,
+            MetricsScope::Full,
+            "combine_sig_shares",
+            MetricsResult::from(&result),
+            start_time,
+        );
+        debug!(logger;
+            crypto.description => "end",
+            crypto.is_ok => result.is_ok(),
+            crypto.error => log_err(result.as_ref().err()),
+            crypto.signature => log_ok_content(&result),
+        );
+        result
+    }
+
+    fn verify_combined_sig(
+        &self,
+        inputs: &ThresholdSchnorrSigInputs,
+        signature: &ThresholdSchnorrCombinedSignature,
+    ) -> Result<(), ThresholdSchnorrVerifyCombinedSigError> {
+        let log_id = get_log_id(&self.logger, module_path!());
+        let logger = new_logger!(&self.logger;
+            crypto.log_id => log_id,
+            crypto.trait_name => "ThresholdSchnorrSigVerifier",
+            crypto.method_name => "verify_combined_sig",
+        );
+        debug!(logger;
+            crypto.description => "start",
+            crypto.signature_inputs => format!("{:?}", inputs),
+            crypto.signature => format!("{:?}", signature),
+        );
+        let start_time = self.metrics.now();
+        let result = canister_threshold_sig::schnorr::verify_combined_sig(inputs, signature);
+        self.metrics.observe_duration_seconds(
+            MetricsDomain::ThresholdSchnorr,
             MetricsScope::Full,
             "verify_combined_sig",
             MetricsResult::from(&result),
