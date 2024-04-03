@@ -9,6 +9,7 @@ use ic_logger::{info, new_replica_logger_from_config};
 use ic_metrics::MetricsRegistry;
 use ic_replica::setup;
 use ic_sys::PAGE_SIZE;
+use ic_tracing::ReloadHandles;
 use ic_types::{
     consensus::CatchUpPackage, replica_version::REPLICA_BINARY_HASH, PrincipalId, ReplicaVersion,
     SubnetId,
@@ -16,6 +17,7 @@ use ic_types::{
 use nix::unistd::{setpgid, Pid};
 use std::{env, fs, io, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
 use tokio::signal::unix::{signal, SignalKind};
+use tracing_subscriber::layer::SubscriberExt;
 
 #[cfg(target_os = "linux")]
 mod jemalloc_metrics;
@@ -225,6 +227,12 @@ fn main() -> io::Result<()> {
         Err(_) => setup::get_subnet_id(node_id, registry.as_ref(), cup.as_ref(), &logger),
     };
 
+    // Set up tracing
+    let (reload_layer, reload_handle) = tracing_subscriber::reload::Layer::new(vec![]);
+    let tracing_handle = ReloadHandles::new(reload_handle);
+    let subscriber = tracing_subscriber::Registry::default().with(reload_layer);
+    tracing::subscriber::set_global_default(subscriber).unwrap();
+
     // Set node_id and subnet_id in the logging context
     let mut context = logger.get_context();
     context.node_id = format!("{}", node_id.get());
@@ -263,6 +271,7 @@ fn main() -> io::Result<()> {
             registry,
             crypto,
             cup_proto,
+            tracing_handle,
         )?;
 
     info!(logger, "Constructed IC stack");

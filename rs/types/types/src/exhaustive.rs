@@ -679,9 +679,9 @@ impl ExhaustiveSet for QuadrupleInCreation {
 
         result.push(QuadrupleInCreation {
             key_id: None,
-            kappa_masked_config: None,
+            kappa_masked_config: Some(RandomTranscriptParams::exhaustive_set(rng)[0].clone()),
             kappa_masked: None,
-            lambda_config: RandomTranscriptParams::exhaustive_set(rng)[0].clone(),
+            lambda_config: RandomTranscriptParams::exhaustive_set(rng)[1].clone(),
             lambda_masked: None,
             kappa_unmasked_config: None,
             unmask_kappa_config: None,

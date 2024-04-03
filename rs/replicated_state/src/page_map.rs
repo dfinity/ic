@@ -1,7 +1,7 @@
 mod checkpoint;
 pub mod int_map;
 mod page_allocator;
-mod storage;
+pub mod storage;
 
 use bit_vec::BitVec;
 pub use checkpoint::{CheckpointSerialization, MappingSerialization};
@@ -817,6 +817,7 @@ impl PageMap {
         let mut file = OpenOptions::new()
             .write(true)
             .create(true)
+            .truncate(false)
             .open(dst)
             .map_err(|err| PersistenceError::FileSystemError {
                 path: dst.display().to_string(),

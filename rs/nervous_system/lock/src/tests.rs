@@ -7,7 +7,7 @@ use tokio::time::sleep;
 // Example of how to use acquire.
 async fn disallow_more_than_on_call_at_a_time(id: u64) -> bool {
     thread_local! {
-        static TRACKER: RefCell<Option<u64>> = RefCell::new(None);
+        static TRACKER: RefCell<Option<u64>> = const { RefCell::new(None) };
     }
     let release_on_drop = acquire(&TRACKER, id);
     if let Err(original_id) = release_on_drop {

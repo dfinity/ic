@@ -9,11 +9,11 @@
 /hs/                      @dfinity-lab/teams/ic-testing-verification
 /licenses/                @dfinity-lab/teams/idx
 /bin/ict                  @dfinity-lab/teams/ic-testing-verification
+/bin/                     @dfinity-lab/teams/idx
 /bin/afl_test.sh          @dfinity-lab/teams/prodsec
 /bin/afl_wrapper.sh       @dfinity-lab/teams/prodsec
 /bin/build-all-fuzzers.sh @dfinity-lab/teams/prodsec
 /bin/fuzzing_coverage.sh  @dfinity-lab/teams/prodsec
-/bin/                     @dfinity-lab/teams/idx
 
 # [Bazel]
 /bazel/                   @dfinity-lab/teams/idx

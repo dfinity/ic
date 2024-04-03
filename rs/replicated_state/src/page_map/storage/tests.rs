@@ -25,7 +25,10 @@ use ic_sys::{PageIndex, PAGE_SIZE};
 use ic_test_utilities_io::{make_mutable, make_readonly, write_all_at};
 use ic_test_utilities_metrics::fetch_int_counter_vec;
 use ic_types::Height;
-use tempfile::{tempdir, TempDir};
+use tempfile::{tempdir, Builder, TempDir};
+
+#[cfg(feature = "fuzzing_code")]
+use arbitrary::Arbitrary;
 
 /// The expected size of an overlay file.
 ///
@@ -434,7 +437,8 @@ fn merge_assert_num_files(
 
 /// An instruction to modify a storage.
 #[derive(Debug, Clone)]
-enum Instruction {
+#[cfg_attr(feature = "fuzzing_code", derive(Arbitrary))]
+pub enum Instruction {
     /// Create an overlay file with provided list of `PageIndex` to write.
     WriteOverlay(Vec<u64>),
     /// Create & apply `MergeCandidate`; check for amount of files merged.
@@ -659,21 +663,37 @@ fn write_overlays_and_verify_with_tempdir(
 /// after every step.
 /// Use unsharded LSMT config.
 fn write_overlays_and_verify_unsharded(instructions: Vec<Instruction>) -> MetricsRegistry {
-    let tempdir = tempdir().unwrap();
-    write_overlays_and_verify_with_tempdir(instructions, &lsmt_config_unsharded(), &tempdir)
+    let tempdir = Builder::new()
+        .prefix("write_overlays_and_verify_unsharded")
+        .tempdir()
+        .unwrap();
+    let metrics =
+        write_overlays_and_verify_with_tempdir(instructions, &lsmt_config_unsharded(), &tempdir);
+    tempdir
+        .close()
+        .expect("Unable to delete temporary directory");
+    metrics
 }
 
 /// Apply a list of `Instruction` to a new temporary directory and check correctness of the sequence
 /// after every step.
 /// Use sharded LSMT config
 fn write_overlays_and_verify_sharded(instructions: Vec<Instruction>) -> MetricsRegistry {
-    let tempdir = tempdir().unwrap();
-    write_overlays_and_verify_with_tempdir(instructions, &lsmt_config_sharded(), &tempdir)
+    let tempdir = Builder::new()
+        .prefix("write_overlays_and_verify_sharded")
+        .tempdir()
+        .unwrap();
+    let metrics =
+        write_overlays_and_verify_with_tempdir(instructions, &lsmt_config_sharded(), &tempdir);
+    tempdir
+        .close()
+        .expect("Unable to delete temporary directory");
+    metrics
 }
 
 /// Apply a list of `Instruction` to a new temporary directory and check correctness of the sequence
 /// after every step for both sharded and unsharded config
-fn write_overlays_and_verify(instructions: Vec<Instruction>) {
+pub fn write_overlays_and_verify(instructions: Vec<Instruction>) {
     write_overlays_and_verify_sharded(instructions.clone());
     write_overlays_and_verify_unsharded(instructions);
 }

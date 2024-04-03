@@ -432,7 +432,7 @@ impl HashTree {
     fn check_invariants(&self) {
         #[cfg(debug_assertions)]
         {
-            fn check_same_dimensions<S, T>(l: &Vec<Vec<S>>, r: &Vec<Vec<T>>) {
+            fn check_same_dimensions<S, T>(l: &[Vec<S>], r: &[Vec<T>]) {
                 debug_assert_eq!(l.len(), r.len());
                 debug_assert!(l.iter().zip(r.iter()).all(|(l, r)| l.len() == r.len()));
             }

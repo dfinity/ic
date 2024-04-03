@@ -1528,7 +1528,6 @@ pub struct OverlayFileSerialization {
     pub mapping: MappingSerialization,
 }
 
-#[cfg(test)]
 pub mod test_utils;
-#[cfg(test)]
-mod tests;
+#[cfg(any(test, feature = "fuzzing_code"))]
+pub mod tests;

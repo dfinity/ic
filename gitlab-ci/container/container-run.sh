@@ -27,6 +27,12 @@ Script uses dfinity/ic-build image by default.
 EOF
 }
 
+if findmnt /hoststorage >/dev/null; then
+    PODMAN_ARGS=(--root /hoststorage/podman-root)
+else
+    PODMAN_ARGS=()
+fi
+
 IMAGE="docker.io/dfinity/ic-build"
 BUILD_ARGS=(--bazel)
 CTR=0
@@ -56,21 +62,26 @@ done
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 IMAGE_TAG=$("$REPO_ROOT"/gitlab-ci/container/get-image-tag.sh)
 IMAGE="$IMAGE:$IMAGE_TAG"
-if ! sudo podman image exists $IMAGE; then
+if ! sudo podman "${PODMAN_ARGS[@]}" image exists $IMAGE; then
     if grep 'index.docker.io' $HOME/.docker/config.json >/dev/null 2>&1; then
         # copy credentials for root
         ROOT_HOME="$(getent passwd root | awk -F: '{print $6}')"
         sudo mkdir -p $ROOT_HOME/.docker
         sudo cp -f $HOME/.docker/config.json $ROOT_HOME/.docker/
-        sudo podman login --authfile $ROOT_HOME/.docker/config.json docker.io
+        sudo podman "${PODMAN_ARGS[@]}" login --authfile $ROOT_HOME/.docker/config.json docker.io
     fi
-    if ! sudo podman pull $IMAGE; then
+    if ! sudo podman "${PODMAN_ARGS[@]}" pull $IMAGE; then
         # fallback to building the image
-        docker() { sudo podman "$@" --network=host; }
+        docker() { sudo podman "${PODMAN_ARGS[@]}" "$@" --network=host; }
         export -f docker
         "$REPO_ROOT"/gitlab-ci/container/build-image.sh "${BUILD_ARGS[@]}"
         unset -f docker
     fi
+fi
+
+if findmnt /hoststorage >/dev/null; then
+    echo "Purging non-relevant container images"
+    sudo podman "${PODMAN_ARGS[@]}" image prune -a -f --filter "reference!=$IMAGE"
 fi
 
 WORKDIR="/ic"
@@ -163,13 +174,13 @@ fi
 # additionally, we need to use hosts's cgroups and network
 if [ $# -eq 0 ]; then
     set -x
-    sudo podman run --pids-limit=-1 -it --rm --privileged --network=host --cgroupns=host \
+    sudo podman "${PODMAN_ARGS[@]}" run --pids-limit=-1 -it --rm --privileged --network=host --cgroupns=host \
         "${PODMAN_RUN_ARGS[@]}" ${PODMAN_RUN_USR_ARGS[@]} -w "$WORKDIR" \
         "$IMAGE" ${USHELL:-/usr/bin/bash}
     set +x
 else
     set -x
-    sudo podman run --pids-limit=-1 -it --rm --privileged --network=host --cgroupns=host \
+    sudo podman "${PODMAN_ARGS[@]}" run --pids-limit=-1 -it --rm --privileged --network=host --cgroupns=host \
         "${PODMAN_RUN_ARGS[@]}" "${PODMAN_RUN_USR_ARGS[@]}" -w "$WORKDIR" \
         "$IMAGE" "$@"
     set +x

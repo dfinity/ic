@@ -5,6 +5,7 @@ package(default_visibility = ["//visibility:public"])
 LIB_DEPENDENCIES = [
     "//rs/config",
     "//rs/boundary_node/ic_boundary",
+    "//rs/boundary_node/icx_proxy:icx_proxy_dev",
     "//rs/interfaces",
     "//rs/http_endpoints/public",
     "//rs/validator/ingress_message",
@@ -17,13 +18,17 @@ LIB_DEPENDENCIES = [
     "//rs/types/types",
     "//rs/types/management_canister_types",
     "//rs/crypto/sha2",
-    "//rs/utils",
+    "//rs/utils/thread",
     "//rs/registry/routing_table",
     "//rs/test_utilities",
     "@crate_index//:aide",
     "@crate_index//:axum_0_7_0",
     "@crate_index//:axum-extra",
     "@crate_index//:backoff",
+    "@crate_index//:http_body_util_0_1_0",
+    "@crate_index//:hyper-util",
+    "@crate_index//:ic-agent",
+    "@crate_index//:ic-utils",
     "@crate_index//:itertools",
     "@crate_index//:tokio",
     "@crate_index//:tempfile",
@@ -53,11 +58,14 @@ TEST_DEPENDENCIES = [
     "//rs/types/types",
     "//rs/registry/subnet_type",
     "//rs/registry/routing_table",
+    "@crate_index//:ic-agent",
     "@crate_index//:ic-cdk",
+    "@crate_index//:ic-utils",
     "@crate_index//:reqwest",
     "@crate_index//:candid",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
+    "@crate_index//:tokio",
 ]
 
 MACRO_DEPENDENCIES = [
@@ -99,10 +107,12 @@ rust_test(
     data = [
         ":pocket-ic-server",
         "//rs/tests:ic-hs",
+        "@ii_dev_canister//file",
     ],
     env = {
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
         "IC_REF_TEST_ROOT": "rs/tests/ic-hs",
+        "II_WASM": "external/ii_dev_canister/file/internet_identity_dev.wasm.gz",
     },
     deps = TEST_DEPENDENCIES,
 )

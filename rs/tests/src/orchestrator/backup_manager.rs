@@ -405,6 +405,7 @@ fn modify_byte_in_file(file_path: PathBuf) -> std::io::Result<()> {
         .read(true)
         .write(true)
         .create(true)
+        .truncate(false)
         .open(file_path)?;
     file.seek(SeekFrom::Start(0))?;
     let mut byte: [u8; 1] = [0];

@@ -37,8 +37,8 @@ use ic_management_canister_types::{
 };
 pub use ic_management_canister_types::{
     CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs, CanisterStatusResultV2,
-    ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId, HttpHeader, HttpMethod, SignWithECDSAReply,
-    UpdateSettingsArgs,
+    CanisterStatusType, ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId, HttpHeader, HttpMethod,
+    SignWithECDSAReply, UpdateSettingsArgs,
 };
 use ic_messaging::SyncMessageRouting;
 use ic_metrics::MetricsRegistry;

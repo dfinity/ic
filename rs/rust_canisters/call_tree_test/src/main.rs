@@ -36,7 +36,7 @@ thread_local! {
     /// Pages accessed by read/write methods.
     /// Since each individual allocated object can only be up to 1 GiB of memory, we need
     /// multiple vectors to fill up the entire heap.
-    static MEMORY: RefCell<Vec<Vec<u8>>> = RefCell::new(Vec::new());
+    static MEMORY: RefCell<Vec<Vec<u8>>> = const { RefCell::new(Vec::new()) };
 }
 
 #[derive(Serialize, Deserialize)]

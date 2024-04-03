@@ -1,0 +1,14 @@
+load("//bazel:fuzz_testing.bzl", "rust_fuzz_test_binary_afl")
+
+package(default_visibility = ["//visibility:private"])
+
+rust_fuzz_test_binary_afl(
+    name = "write_overlays_and_verify",
+    srcs = [
+        "fuzz_targets/write_overlays_and_verify_afl.rs",
+    ],
+    deps = [
+        "//rs/replicated_state",
+        "@crate_index//:libfuzzer-sys",
+    ],
+)

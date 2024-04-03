@@ -13,7 +13,7 @@ ic-metrics = { path = "../../monitoring/metrics" }
 ic-registry-common-proto = { path = "../proto" }
 ic-registry-client-helpers = { path = "../helpers" }
 ic-types = { path = "../../types/types" }
-ic-utils = { path = "../../utils" }
+ic-utils-thread = { path = "../../utils/thread" }
 prometheus = { workspace = true }
 
 [dev-dependencies]

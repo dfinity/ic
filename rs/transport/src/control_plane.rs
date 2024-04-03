@@ -31,6 +31,7 @@ use tower::Service;
 #[strum(serialize_all = "snake_case")]
 enum TransportTlsHandshakeError {
     DeadlineExceeded,
+    #[allow(dead_code)]
     Internal(String),
 }
 

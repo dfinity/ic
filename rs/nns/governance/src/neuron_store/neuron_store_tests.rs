@@ -1,17 +1,12 @@
 use super::*;
 use crate::{
-    governance::{Governance, MockEnvironment},
-    pb::v1::{
-        neuron::{DissolveState, Followees},
-        Governance as GovernanceProto,
-    },
+    pb::v1::neuron::{DissolveState, Followees},
     storage::with_stable_neuron_indexes,
 };
-use ic_nervous_system_common::{cmc::MockCMC, ledger::MockIcpLedger, SECONDS_PER_DAY};
+use ic_nervous_system_common::SECONDS_PER_DAY;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use maplit::{btreemap, hashmap, hashset};
 use num_traits::bounds::LowerBounded;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 fn simple_neuron(id: u64) -> Neuron {
     // Make sure different neurons have different accounts.
@@ -278,119 +273,6 @@ fn test_remove_inactive_neuron() {
         Err(error) => match error {
             NeuronStoreError::NeuronNotFound { neuron_id } => {
                 assert_eq!(neuron_id, inactive_neuron.id.unwrap());
-            }
-            _ => panic!("read returns error other than not found: {:?}", error),
-        },
-    }
-}
-
-#[test]
-fn test_with_neuron_mut_inactive_neuron() {
-    // Step 1: Prepare the world.
-    let now = u64::MAX;
-
-    // Step 1.1: The main characters: a couple of Neurons, one active, the other inactive.
-    let funded_neuron = Neuron {
-        id: Some(NeuronId { id: 42 }),
-        cached_neuron_stake_e8s: 1, // Funded. Thus, no stable memory.
-
-        // This is in the "(sufficiently) distant past" to not be ruled out from being "inactive".
-        dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(42)),
-
-        ..Default::default()
-    };
-    let funded_neuron_id = funded_neuron.id.unwrap();
-
-    let unfunded_neuron = Neuron {
-        id: Some(NeuronId { id: 777 }),
-        cached_neuron_stake_e8s: 0, // Unfunded. Thus, should be copied to stable memory.
-
-        // This is in the "(sufficiently) distant past" to not be ruled out from being "inactive".
-        dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(42)),
-
-        ..Default::default()
-    };
-    let unfunded_neuron_id = unfunded_neuron.id.unwrap();
-
-    // Make sure our test data is correct. Here, we use dummy values for proposals and
-    // in_flight_commands.
-    assert!(unfunded_neuron.is_inactive(now), "{:#?}", unfunded_neuron);
-    assert!(!funded_neuron.is_inactive(now), "{:#?}", funded_neuron);
-
-    // Step 1.2: Construct collaborators of Governance, and Governance itself.
-    let mut governance = {
-        let governance_proto = GovernanceProto {
-            neurons: btreemap! {
-                funded_neuron_id.id => funded_neuron.clone(),
-                unfunded_neuron_id.id => unfunded_neuron.clone(),
-            },
-            ..Default::default()
-        };
-
-        // Governance::new calls environment.now. This just part of "preparing the world", not the
-        // code under test itself. Nevertheless, we have to tell the `mockall` crate about this;
-        // otherwise it will freak out.
-        let mut environment = MockEnvironment::new();
-        let now_timestamp_seconds = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-        environment.expect_now().return_const(now_timestamp_seconds);
-
-        Governance::new(
-            governance_proto,
-            Box::new(environment),
-            Box::new(MockIcpLedger::new()),
-            Box::new(MockCMC::new()),
-        )
-    };
-
-    // Step 2: Call the code under test (twice).
-    let results = [funded_neuron_id, unfunded_neuron_id].map(|neuron_id| {
-        governance.with_neuron_mut(&neuron_id, |neuron: &mut Neuron| {
-            // Modify the neuron a little bit.
-            neuron.account = vec![1, 2, 3];
-
-            // Don't just return () so that the return value has something
-            // (such as it is) to inspect.
-            ("ok", neuron_id)
-        })
-    });
-
-    // Step 3: Verify result(s).
-    assert_eq!(results.len(), 2, "{:#?}", results); // A sanity check.
-    for result in results {
-        let neuron_id = result.as_ref().map(|(_ok, neuron_id)| *neuron_id).unwrap();
-        assert_eq!(result, Ok(("ok", neuron_id)));
-    }
-
-    // Step 3.1: The main thing that we want to see is that the unfunded Neuron ends up in stable
-    // memory (and has the modification).
-    assert_eq!(
-        with_stable_neuron_store(|stable_neuron_store| {
-            stable_neuron_store.read(unfunded_neuron_id)
-        }),
-        Ok(Neuron {
-            account: vec![1, 2, 3],
-            ..unfunded_neuron
-        }),
-    );
-
-    // Step 3.2: Negative result: funded neuron should not be copied to stable memory. Perhaps, less
-    // interesting, but also important is that some neurons (to wit, the funded Neuron) do NOT get
-    // copied to stable memory.
-    let funded_neuron_read_result =
-        with_stable_neuron_store(|stable_neuron_store| stable_neuron_store.read(funded_neuron_id));
-    match funded_neuron_read_result {
-        Ok(_) => {
-            panic!(
-                "Seems that the funded neuron was copied to stable memory. Result:\n{:#?}",
-                funded_neuron_read_result,
-            );
-        }
-        Err(error) => match error {
-            NeuronStoreError::NeuronNotFound { neuron_id } => {
-                assert_eq!(neuron_id, funded_neuron_id);
             }
             _ => panic!("read returns error other than not found: {:?}", error),
         },
@@ -750,4 +632,49 @@ fn test_from_stale_inactive_to_active() {
     assert_neuron_in_neuron_store_eq(&neuron_store, &modified_neuron);
     assert!(is_neuron_in_heap(&neuron_store, neuron_id));
     assert!(!is_neuron_in_stable(neuron_id));
+}
+
+#[test]
+fn test_get_followers_by_followee_and_topic() {
+    let neuron_store = NeuronStore::new(btreemap! {
+        1 => Neuron {
+            id: Some(NeuronId { id: 1 }),
+            followees: hashmap! {
+                Topic::Unspecified as i32 => Followees {
+                    followees: vec![NeuronId { id: 2 }, NeuronId { id: 3 }],
+                },
+            },
+            ..simple_neuron(1)
+        },
+    });
+    assert_eq!(
+        neuron_store.get_followers_by_followee_and_topic(NeuronId { id: 2 }, Topic::Unspecified),
+        vec![NeuronId { id: 1 }]
+    );
+    assert_eq!(
+        neuron_store.get_followers_by_followee_and_topic(NeuronId { id: 2 }, Topic::Governance),
+        vec![]
+    );
+}
+
+#[test]
+fn test_get_neuron_ids_readable_by_caller() {
+    let neuron_store = NeuronStore::new(btreemap! {
+        1 => Neuron {
+            id: Some(NeuronId { id: 1 }),
+            controller: Some(PrincipalId::new_user_test_id(1)),
+            hot_keys: vec![PrincipalId::new_user_test_id(2), PrincipalId::new_user_test_id(3)],
+            ..simple_neuron(1)
+        },
+    });
+    for i in 1..=3 {
+        assert_eq!(
+            neuron_store.get_neuron_ids_readable_by_caller(PrincipalId::new_user_test_id(i)),
+            hashset! { NeuronId { id: 1 } }
+        );
+    }
+    assert_eq!(
+        neuron_store.get_neuron_ids_readable_by_caller(PrincipalId::new_user_test_id(4)),
+        hashset! {}
+    );
 }

@@ -22,6 +22,7 @@ pub fn write_all_at(path: &Path, buf: &[u8], offset: u64) -> std::io::Result<()>
     let f = std::fs::OpenOptions::new()
         .write(true)
         .create(true)
+        .truncate(false)
         .open(path)?;
     f.write_all_at(buf, offset)?;
     Ok(())

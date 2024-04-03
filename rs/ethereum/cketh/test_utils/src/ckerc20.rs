@@ -301,6 +301,7 @@ impl CkErc20Setup {
         self.cketh
             .get_minter_info()
             .supported_ckerc20_tokens
+            .expect("BUG: no ckERC20 tokens supported")
             .iter()
             .find(|t| t.ckerc20_token_symbol == token_symbol)
             .unwrap()
@@ -564,6 +565,7 @@ impl Erc20WithdrawalFlow {
         }
     }
 
+    #[allow(clippy::result_large_err)]
     fn minter_response(&self) -> Result<RetrieveErc20Request, WithdrawErc20Error> {
         Decode!(&assert_reply(
         self.setup.env

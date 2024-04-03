@@ -216,7 +216,7 @@ async fn test_new_standard_xdrs_per_icp_client() {
     }
 
     thread_local! {
-        static CALL_WITHOUT_CLEANUP_CALL_COUNT: RefCell<u64> = RefCell::new(0);
+        static CALL_WITHOUT_CLEANUP_CALL_COUNT: RefCell<u64> = const { RefCell::new(0) };
     }
 
     #[derive(Default)]

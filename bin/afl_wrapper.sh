@@ -21,6 +21,9 @@ fi
 cleanup() {
     echo "Input directory ${INPUT_DIR}"
     echo "Output directory ${OUTPUT_DIR}"
+
+    # kill all detached fuzzers
+    ps -ax | grep afl | awk '{print $1}' | xargs -I {} kill -9 {}
 }
 
 trap cleanup EXIT
@@ -40,7 +43,8 @@ else
     HANDLE_SIGFPE=2
 fi
 
-ASAN_OPTIONS="abort_on_error=1:\
+function afl_env() {
+    ASAN_OPTIONS="abort_on_error=1:\
             alloc_dealloc_mismatch=0:\
             allocator_may_return_null=1:\
             allocator_release_to_os_interval_ms=500:\
@@ -65,27 +69,46 @@ ASAN_OPTIONS="abort_on_error=1:\
             symbolize=0:\
             use_sigaltstack=1"
 
-LSAN_OPTIONS="handle_abort=1:\
-            handle_segv=1:\
-            handle_sigbus=1:\
-            handle_sigfpe=1:\
-            handle_sigill=$HANDLE_SIGILL:\
-            print_summary=1:\
-            print_suppressions=0:\
-            symbolize=0:\
-            use_sigaltstack=1"
+    LSAN_OPTIONS="handle_abort=1:\
+                handle_segv=1:\
+                handle_sigbus=1:\
+                handle_sigfpe=1:\
+                handle_sigill=$HANDLE_SIGILL:\
+                print_summary=1:\
+                print_suppressions=0:\
+                symbolize=0:\
+                use_sigaltstack=1"
 
-ASAN_OPTIONS=$ASAN_OPTIONS \
-    LSAN_OPTIONS=$LSAN_OPTIONS \
-    AFL_FORKSRV_INIT_TMOUT=100 \
-    AFL_FAST_CAL=1 \
-    AFL_BENCH_UNTIL_CRASH=1 \
-    AFL_SKIP_CPUFREQ=1 \
-    AFL_CMPLOG_ONLY_NEW=1 \
-    AFL_IGNORE_PROBLEMS=1 \
-    AFL_IGNORE_TIMEOUTS=1 \
-    AFL_KEEP_TIMEOUTS=1 \
-    AFL_EXPAND_HAVOC_NOW=1 \
-    AFL_DRIVER_DONT_DEFER=1 \
-    AFL_DISABLE_TRIM=1 \
-    /usr/local/bin/afl-fuzz -i $INPUT_DIR -o $OUTPUT_DIR ${@:2} -- $1
+    ASAN_OPTIONS=$ASAN_OPTIONS \
+        LSAN_OPTIONS=$LSAN_OPTIONS \
+        AFL_FORKSRV_INIT_TMOUT=100 \
+        AFL_FAST_CAL=1 \
+        AFL_SKIP_CPUFREQ=1 \
+        AFL_CMPLOG_ONLY_NEW=1 \
+        AFL_IGNORE_PROBLEMS=1 \
+        AFL_IGNORE_TIMEOUTS=1 \
+        AFL_KEEP_TIMEOUTS=1 \
+        AFL_EXPAND_HAVOC_NOW=1 \
+        AFL_DRIVER_DONT_DEFER=1 \
+        AFL_DISABLE_TRIM=1 \
+        /usr/local/bin/afl-fuzz $@
+}
+
+# To run multiple fuzzers in parallel, use the AFL_PARALLEL env variable
+# export AFL_PARALLEL=4
+# Make sure you have enough cores, as each job occupies a core.
+
+if [[ ! -z "$AFL_PARALLEL" ]]; then
+    # master fuzzer
+    afl_env -i $INPUT_DIR -o $OUTPUT_DIR -M fuzzer1 ${@:2} -- $1 </dev/null &>/dev/null &
+
+    for i in $(seq 2 $AFL_PARALLEL); do
+        afl_env -i $INPUT_DIR -o $OUTPUT_DIR -S fuzzer$i ${@:2} -- $1 </dev/null &>/dev/null &
+    done
+
+    watch -n 5 --color "afl-whatsup -d $OUTPUT_DIR"
+else
+    # if AFL_PARALLEL is not set
+    # run a single instance
+    afl_env -i $INPUT_DIR -o $OUTPUT_DIR ${@:2} -- $1
+fi

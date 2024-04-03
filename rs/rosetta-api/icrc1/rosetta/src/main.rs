@@ -1,11 +1,11 @@
 use anyhow::{bail, Context, Result};
 use axum::{
     body::Body,
+    extract::Request,
     routing::{get, post},
     Router,
 };
 use clap::{Parser, ValueEnum};
-use http::Request;
 use ic_agent::{
     agent::http_transport::reqwest_transport::ReqwestHttpReplicaV2Transport,
     identity::AnonymousIdentity, Agent,
@@ -21,9 +21,9 @@ use ic_icrc_rosetta::{
 };
 use icrc_ledger_agent::{CallMode, Icrc1Agent};
 use lazy_static::lazy_static;
-use std::{net::TcpListener, sync::Arc};
+use std::sync::Arc;
 use std::{path::PathBuf, process};
-use tokio::sync::Mutex as AsyncMutex;
+use tokio::{net::TcpListener, sync::Mutex as AsyncMutex};
 use tower_http::classify::{ServerErrorsAsFailures, SharedClassifier};
 use tower_http::trace::TraceLayer;
 use tower_request_id::{RequestId, RequestIdLayer};
@@ -370,7 +370,7 @@ async fn main() -> Result<()> {
         .layer(RequestIdLayer)
         .with_state(shared_state.clone());
 
-    let tcp_listener = TcpListener::bind(format!("0.0.0.0:{}", args.get_port()))?;
+    let tcp_listener = TcpListener::bind(format!("0.0.0.0:{}", args.get_port())).await?;
 
     if let Some(port_file) = args.port_file {
         std::fs::write(port_file, tcp_listener.local_addr()?.port().to_string())?;
@@ -402,8 +402,7 @@ async fn main() -> Result<()> {
 
     info!("Starting Rosetta server");
 
-    axum::Server::from_tcp(tcp_listener)?
-        .serve(app.into_make_service())
+    axum::serve(tcp_listener, app.into_make_service())
         .await
         .context("Unable to start the Rosetta server")
 }
