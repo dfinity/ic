@@ -41,6 +41,7 @@ pub(crate) struct ConsensusManagerMetrics {
     pub send_view_consensus_dup_purge_total: IntCounter,
     pub send_view_send_to_peer_total: IntCounter,
     pub send_view_send_to_peer_delivered_total: IntCounter,
+    pub send_view_send_to_peer_cancelled_total: IntCounter,
     pub send_view_resend_reconnect_total: IntCounter,
 
     // Available slot set
@@ -102,7 +103,7 @@ impl ConsensusManagerMetrics {
                 Histogram::with_opts(histogram_opts!(
                     "ic_consensus_manager_download_task_artifact_download_duration",
                     "Download time for artifact.",
-                    decimal_buckets(-2, 0),
+                    decimal_buckets(-2, 1),
                     const_labels_string.clone(),
                 ))
                 .unwrap(),
@@ -237,6 +238,14 @@ impl ConsensusManagerMetrics {
                 IntCounter::with_opts(opts!(
                     "ic_consensus_manager_send_view_send_to_peer_delivered_total",
                     "Slot updates delivered to peers.",
+                    const_labels.clone(),
+                ))
+                .unwrap(),
+            ),
+            send_view_send_to_peer_cancelled_total: metrics_registry.register(
+                IntCounter::with_opts(opts!(
+                    "ic_consensus_manager_send_view_send_to_peer_cancelled_total",
+                    "Cancelled slot updates to peers.",
                     const_labels.clone(),
                 ))
                 .unwrap(),
