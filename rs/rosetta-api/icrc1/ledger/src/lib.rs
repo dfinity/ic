@@ -27,12 +27,15 @@ use ic_ledger_core::{
     tokens::TokensType,
 };
 use ic_ledger_hash_of::HashOf;
-use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc3::transactions::Transaction as Tx;
 use icrc_ledger_types::icrc3::{blocks::GetBlocksResponse, transactions::GetTransactionsResponse};
 use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value,
     icrc3::archive::{ArchivedRange, QueryBlockArchiveFn, QueryTxArchiveFn},
+};
+use icrc_ledger_types::{
+    icrc1::account::Account,
+    icrc3::archive::{GetArchivesArgs, GetArchivesResult, ICRC3ArchiveInfo},
 };
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
@@ -714,5 +717,32 @@ impl<Tokens: TokensType> Ledger<Tokens> {
             blocks: local_blocks,
             archived_blocks,
         }
+    }
+
+    pub fn icrc3_get_archives(&self, args: GetArchivesArgs) -> GetArchivesResult {
+        self.blockchain()
+            .archive
+            .read()
+            .expect("Unable to access the archives")
+            .iter()
+            .flat_map(|archive| {
+                archive
+                    .index()
+                    .into_iter()
+                    .filter_map(|((start, end), canister_id)| {
+                        let canister_id = Principal::from(canister_id);
+                        if let Some(from) = args.from {
+                            if canister_id <= from {
+                                return None;
+                            }
+                        }
+                        Some(ICRC3ArchiveInfo {
+                            canister_id,
+                            start: Nat::from(start),
+                            end: Nat::from(end),
+                        })
+                    })
+            })
+            .collect()
     }
 }

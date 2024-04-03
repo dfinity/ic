@@ -364,6 +364,33 @@ type ArchiveInfo = record {
     block_range_end: BlockIndex;
 };
 
+type GetArchivesArgs = record {
+    // The last archive seen by the client.
+    // The Ledger will return archives coming
+    // after this one if set, otherwise it
+    // will return the first archives.
+    from : opt principal;
+};
+
+type GetArchivesResult = vec record {
+    // The id of the archive
+    canister_id : principal;
+
+    // The first block in the archive
+    start : nat;
+
+    // The last block in the archive
+    end : nat;
+};
+
+type ICRC3DataCertificate = record {
+  // See https://internetcomputer.org/docs/current/references/ic-interface-spec#certification
+  certificate : blob;
+
+  // CBOR encoded hash_tree
+  hash_tree : blob;
+};
+
 service : (ledger_arg : LedgerArg) -> {
     archives : () -> (vec ArchiveInfo) query;
     get_transactions : (GetTransactionsRequest) -> (GetTransactionsResponse) query;
@@ -384,4 +411,8 @@ service : (ledger_arg : LedgerArg) -> {
     icrc2_approve : (ApproveArgs) -> (ApproveResult);
     icrc2_allowance : (AllowanceArgs) -> (Allowance) query;
     icrc2_transfer_from : (TransferFromArgs) -> (TransferFromResult);
+
+    icrc3_get_archives : (GetArchivesArgs) -> (GetArchivesResult) query;
+    icrc3_get_tip_certificate : () -> (opt ICRC3DataCertificate) query;
+    icrc3_supported_block_types : () -> (vec record { block_type : text; url : text }) query;
 }
