@@ -19,12 +19,14 @@ use ic_cketh_test_utils::{
     RECEIVED_ERC20_EVENT_TOPIC, RECEIVED_ETH_EVENT_TOPIC,
 };
 use ic_ethereum_types::Address;
-use ic_ledger_suite_orchestrator_test_utils::supported_erc20_tokens;
+use ic_ledger_suite_orchestrator_test_utils::{supported_erc20_tokens, usdc};
 use ic_state_machine_tests::ErrorCode;
+use ic_state_machine_tests::{CanisterStatusType, WasmResult};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
 use icrc_ledger_types::icrc3::transactions::Mint;
 use serde_json::json;
+use std::time::Duration;
 
 #[test]
 fn should_refuse_to_add_ckerc20_token_from_unauthorized_principal() {
@@ -80,6 +82,57 @@ fn should_add_ckusdc_and_ckusdt_to_minter_via_orchestrator() {
                 ckerc20_ledger_id: new_ledger_id,
             }]);
     }
+}
+
+#[test]
+fn should_retry_to_add_usdc_when_minter_stopped() {
+    const RETRY_FREQUENCY: Duration = Duration::from_secs(5);
+
+    let mut ckerc20 = CkErc20Setup::default();
+    let embedded_ledger_wasm_hash = ckerc20.orchestrator.embedded_ledger_wasm_hash.clone();
+    let embedded_index_wasm_hash = ckerc20.orchestrator.embedded_index_wasm_hash.clone();
+    let usdc = usdc(
+        Principal::anonymous(),
+        embedded_ledger_wasm_hash,
+        embedded_index_wasm_hash,
+    );
+    let stop_msg_id = ckerc20
+        .env
+        .stop_canister_non_blocking(ckerc20.cketh.minter_id);
+    assert_eq!(ckerc20.cketh.minter_status(), CanisterStatusType::Stopping);
+
+    ckerc20.orchestrator = ckerc20
+        .orchestrator
+        .add_erc20_token(usdc.clone())
+        .expect_new_ledger_and_index_canisters()
+        .setup;
+    let new_ledger_id = ckerc20
+        .orchestrator
+        .call_orchestrator_canister_ids(&usdc.contract)
+        .unwrap()
+        .ledger
+        .unwrap();
+
+    ckerc20.cketh.stop_ongoing_https_outcalls();
+    let stop_res = ckerc20.env.await_ingress(stop_msg_id, 100);
+    assert_matches!(stop_res, Ok(WasmResult::Reply(_)));
+    assert_eq!(ckerc20.cketh.minter_status(), CanisterStatusType::Stopped);
+    ckerc20.env.advance_time(RETRY_FREQUENCY);
+    ckerc20.env.tick();
+
+    ckerc20.cketh.start_minter();
+    assert_eq!(ckerc20.cketh.minter_status(), CanisterStatusType::Running);
+    ckerc20.env.advance_time(RETRY_FREQUENCY);
+    ckerc20.env.tick();
+
+    ckerc20
+        .cketh
+        .assert_has_unique_events_in_order(&vec![EventPayload::AddedCkErc20Token {
+            chain_id: usdc.contract.chain_id,
+            address: format_ethereum_address_to_eip_55(&usdc.contract.address),
+            ckerc20_token_symbol: usdc.ledger_init_arg.token_symbol,
+            ckerc20_ledger_id: new_ledger_id,
+        }]);
 }
 
 #[test]
