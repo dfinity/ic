@@ -34,15 +34,14 @@ use hyper::header;
 use ic_http_endpoints_public::cors_layer;
 use ic_types::CanisterId;
 use pocket_ic::common::rest::{
-    self, ApiResponse, ExtendedSubnetConfigSet, RawAddCycles, RawCanisterCall, RawCanisterId,
-    RawCanisterResult, RawCycles, RawSetStableMemory, RawStableMemory, RawSubnetId, RawTime,
-    RawWasmResult,
+    self, ApiResponse, ExtendedSubnetConfigSet, HttpGatewayConfig, RawAddCycles, RawCanisterCall,
+    RawCanisterId, RawCanisterResult, RawCycles, RawSetStableMemory, RawStableMemory, RawSubnetId,
+    RawTime, RawWasmResult,
 };
 use pocket_ic::WasmResult;
 use serde::Serialize;
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
 use tokio::{runtime::Runtime, sync::RwLock, time::Instant};
-use tower::ServiceBuilder;
 use tracing::trace;
 
 type PocketHttpResponse = (BTreeMap<String, Vec<u8>>, Vec<u8>);
@@ -157,7 +156,20 @@ where
         // Stop automatic progress (see endpoint `auto_progress`)
         // on an IC instance.
         .api_route("/:id/stop_progress", post(stop_progress))
-        .layer(ServiceBuilder::new().layer(cors_layer()))
+        .layer(cors_layer())
+}
+
+pub fn http_gateway_routes<S>() -> ApiRouter<S>
+where
+    S: Clone + Send + Sync + 'static,
+    AppState: extract::FromRef<S>,
+{
+    ApiRouter::new()
+        // Create a new HTTP gateway instance. Takes a HttpGatewayConfig.
+        // Returns an InstanceId and the HTTP gateway's port.
+        .api_route("/", post(create_http_gateway))
+        // Stops an HTTP gateway.
+        .api_route("/:id/stop", post(stop_http_gateway))
 }
 
 async fn run_operation<T: Serialize>(
@@ -899,6 +911,28 @@ pub async fn delete_instance(
     StatusCode::OK
 }
 
+/// Create a new HTTP gateway instance from a given HTTP gateway configuration.
+/// The new InstanceId and HTTP gateway's port will be returned.
+pub async fn create_http_gateway(
+    State(AppState { api_state, .. }): State<AppState>,
+    extract::Json(http_gateway_config): extract::Json<HttpGatewayConfig>,
+) -> (StatusCode, Json<rest::CreateHttpGatewayResponse>) {
+    let (instance_id, port) = api_state.create_http_gateway(http_gateway_config).await;
+    (
+        StatusCode::CREATED,
+        Json(rest::CreateHttpGatewayResponse::Created { instance_id, port }),
+    )
+}
+
+/// Stops an HTTP gateway instance.
+pub async fn stop_http_gateway(
+    State(AppState { api_state, .. }): State<AppState>,
+    Path(id): Path<InstanceId>,
+) -> (StatusCode, Json<ApiResponse<()>>) {
+    api_state.stop_http_gateway(id).await;
+    (StatusCode::OK, Json(ApiResponse::Success(())))
+}
+
 pub async fn auto_progress(
     State(AppState { api_state, .. }): State<AppState>,
     Path(id): Path<InstanceId>,
@@ -988,7 +1022,7 @@ fn make_plaintext_response(status: StatusCode, message: String) -> Response<Body
     resp
 }
 
-async fn verify_cbor_content_header(
+pub async fn verify_cbor_content_header(
     request: axum::extract::Request,
     next: Next,
 ) -> axum::response::Response {
