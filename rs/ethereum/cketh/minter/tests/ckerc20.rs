@@ -198,7 +198,11 @@ mod withdraw_erc20 {
     fn should_error_when_token_unknown() {
         let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
         let caller = ckerc20.caller();
-        let supported_tokens = ckerc20.cketh.get_minter_info().supported_ckerc20_tokens;
+        let supported_tokens = ckerc20
+            .cketh
+            .get_minter_info()
+            .supported_ckerc20_tokens
+            .unwrap();
 
         ckerc20
             .call_minter_withdraw_erc20(
@@ -739,20 +743,22 @@ fn should_fail_to_mint_from_unsupported_erc20_contract_address() {
 #[test]
 fn should_retrieve_minter_info() {
     let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
-    let supported_ckerc20_tokens = ckerc20
-        .supported_erc20_tokens
-        .iter()
-        .map(|token: &Erc20Token| CkErc20Token {
-            ckerc20_token_symbol: token.ledger_init_arg.token_symbol.clone(),
-            erc20_contract_address: format_ethereum_address_to_eip_55(&token.contract.address),
-            ledger_canister_id: ckerc20
-                .orchestrator
-                .call_orchestrator_canister_ids(&token.contract)
-                .unwrap()
-                .ledger
-                .unwrap(),
-        })
-        .collect::<Vec<_>>();
+    let supported_ckerc20_tokens = Some(
+        ckerc20
+            .supported_erc20_tokens
+            .iter()
+            .map(|token: &Erc20Token| CkErc20Token {
+                ckerc20_token_symbol: token.ledger_init_arg.token_symbol.clone(),
+                erc20_contract_address: format_ethereum_address_to_eip_55(&token.contract.address),
+                ledger_canister_id: ckerc20
+                    .orchestrator
+                    .call_orchestrator_canister_ids(&token.contract)
+                    .unwrap()
+                    .ledger
+                    .unwrap(),
+            })
+            .collect::<Vec<_>>(),
+    );
 
     let info_at_start = ckerc20.cketh.get_minter_info();
     assert_eq!(

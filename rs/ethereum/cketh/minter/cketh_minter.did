@@ -141,7 +141,7 @@ type MinterInfo = record {
     erc20_helper_contract_address: opt text;
 
     // Information of supported ERC20 tokens.
-    supported_ckerc20_tokens: vec CkErc20Token;
+    supported_ckerc20_tokens: opt vec CkErc20Token;
 
     // Minimum amount in Wei that can be withdrawn when converting ckETH -> ETH.
     minimum_withdrawal_amount : opt nat;
