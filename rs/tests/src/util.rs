@@ -1004,7 +1004,7 @@ pub(crate) fn assert_http_submit_fails(
     }
 }
 
-pub(crate) async fn create_and_install(
+pub async fn create_and_install(
     agent: &Agent,
     effective_canister_id: PrincipalId,
     canister_wasm: &[u8],

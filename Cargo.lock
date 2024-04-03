@@ -1759,6 +1759,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "canister_http"
+version = "0.9.0"
+dependencies = [
+ "canister-test",
+ "ic-registry-subnet-features",
+ "ic-registry-subnet-type",
+ "ic-types",
+ "slog",
+ "tests",
+ "tokio",
+]
+
+[[package]]
 name = "cargo-platform"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -17633,6 +17646,7 @@ dependencies = [
 name = "spec-compliance"
 version = "0.9.0"
 dependencies = [
+ "canister_http",
  "hyper 0.14.26",
  "hyper-rustls 0.24.2",
  "ic-registry-routing-table",
@@ -18312,7 +18326,6 @@ dependencies = [
  "ic-types-test-utils",
  "ic-universal-canister",
  "ic-utils 0.34.0",
- "ic-utils 0.9.0",
  "ic-wasm-types",
  "icp-ledger",
  "icrc-ledger-agent",
