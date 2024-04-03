@@ -65,6 +65,9 @@ const CATCH_UP_HOLD_OF_TIME: Duration = Duration::from_secs(150);
 
 /// Possible validator transient errors.
 #[derive(Debug)]
+// The fields are only read by the `Debug` implementation.
+// The `dead_code` lint ignores `Debug` impls, see: https://github.com/rust-lang/rust/issues/88900.
+#[allow(dead_code)]
 enum TransientError {
     CryptoError(CryptoError),
     RegistryClientError(RegistryClientError),
@@ -84,6 +87,9 @@ enum TransientError {
 
 /// Possible validator permanent errors.
 #[derive(Debug)]
+// The fields are only read by the `Debug` implementation.
+// The `dead_code` lint ignores `Debug` impls, see: https://github.com/rust-lang/rust/issues/88900.
+#[allow(dead_code)]
 enum PermanentError {
     CryptoError(CryptoError),
     MismatchedRank(Rank, Option<Rank>),

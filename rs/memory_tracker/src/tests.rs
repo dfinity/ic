@@ -954,7 +954,7 @@ mod random_ops {
     use proptest::prelude::*;
 
     thread_local! {
-        static TRACKER: RefCell<Option<SigsegvMemoryTracker>> = RefCell::new(None);
+        static TRACKER: RefCell<Option<SigsegvMemoryTracker>> = const { RefCell::new(None) };
     }
 
     fn with_registered_handler_setup<F, G>(

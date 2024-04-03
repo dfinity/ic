@@ -15,7 +15,7 @@ const SEED: u64 = 5000;
 const NANO: u64 = 1_000_000_000;
 
 thread_local! {
-    static STATE: RefCell<GeneratorState> = RefCell::new(GeneratorState::new());
+    static STATE: RefCell<GeneratorState> = const { RefCell::new(GeneratorState::new()) };
 }
 
 #[derive(CandidType, Debug, candid::Deserialize, PartialEq, Eq)]

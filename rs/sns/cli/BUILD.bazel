@@ -24,6 +24,7 @@ BASE_DEPENDENCIES = [
     "@crate_index//:serde_json",
     "@crate_index//:serde_yaml",
     "@crate_index//:tempfile",
+    "@crate_index//:thiserror",
 ]
 
 # Each target declared in this file may choose either these (release-ready)

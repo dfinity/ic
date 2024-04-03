@@ -305,7 +305,7 @@ pub fn mainnet_query_calls_test(env: TestEnv, bn_ipv6: Ipv6Addr) {
             "Starting workload with rps={rps} for {} sec",
             workload_per_step_duration.as_secs()
         );
-        let requests = vec![GenericRequest::new(
+        let requests = [GenericRequest::new(
             canister_app,
             "read".to_string(),
             payload.clone(),

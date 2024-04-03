@@ -73,6 +73,7 @@ use registry_canister::{
     registry::{EncodedVersion, Registry, MAX_REGISTRY_DELTAS_SIZE},
     registry_lifecycle,
 };
+use std::ptr::addr_of_mut;
 
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
@@ -87,7 +88,7 @@ fn registry() -> &'static Registry {
 
 fn registry_mut() -> &'static mut Registry {
     unsafe {
-        if let Some(g) = &mut REGISTRY {
+        if let Some(g) = &mut *addr_of_mut!(REGISTRY) {
             g
         } else {
             REGISTRY = Some(Registry::new());

@@ -7,7 +7,7 @@ use serde_cbor::Serializer;
 use sha2::{Digest, Sha256};
 
 thread_local! {
-    static TREE: RefCell<RbTree<String, ICHash>> = RefCell::new(RbTree::new());
+    static TREE: RefCell<RbTree<String, ICHash>> = const { RefCell::new(RbTree::new()) };
 }
 
 pub fn get() -> Vec<u8> {

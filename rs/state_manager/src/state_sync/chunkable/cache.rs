@@ -65,7 +65,7 @@ impl StateSyncCache {
 
     /// Returns a reference to the cached entry if there is one available.
     pub fn get(&self) -> Option<Arc<StateSyncCacheEntry>> {
-        self.entry.as_ref().map(Arc::clone)
+        self.entry.clone()
     }
 
     /// Tell the cache that a successful state sync has completed for `height`

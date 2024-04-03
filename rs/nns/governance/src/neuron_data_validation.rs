@@ -695,7 +695,7 @@ mod tests {
     };
 
     thread_local! {
-        static NEXT_TEST_NEURON_ID: RefCell<u64> = RefCell::new(1);
+        static NEXT_TEST_NEURON_ID: RefCell<u64> = const { RefCell::new(1) };
     }
 
     lazy_static! {

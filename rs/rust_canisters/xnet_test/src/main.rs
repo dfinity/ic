@@ -21,17 +21,17 @@ thread_local! {
     ///
     /// The canister starts generating traffic when it received "start" message
     /// and stops when it receives "stop" message.
-    static RUNNING: RefCell<bool> = RefCell::new(false);
+    static RUNNING: RefCell<bool> = const { RefCell::new(false) };
 
     /// The configuration of the subnets that should be specified in the init
     /// argument on canister install. A `Vec` of subnets, each a `Vec` of canister IDs.
-    static NETWORK_TOPOLOGY: RefCell<NetworkTopology> = RefCell::new(Vec::new());
+    static NETWORK_TOPOLOGY: RefCell<NetworkTopology> = const { RefCell::new(Vec::new()) };
 
     /// Number of requests to send to each subnet (other than ours) every round.
-    static PER_SUBNET_RATE: RefCell<u64> = RefCell::new(1);
+    static PER_SUBNET_RATE: RefCell<u64> = const { RefCell::new(1) };
 
     /// Pad requests AND responses to this size (in bytes) if smaller.
-    static PAYLOAD_SIZE: RefCell<u64> = RefCell::new(1024);
+    static PAYLOAD_SIZE: RefCell<u64> = const { RefCell::new(1024) };
 
     /// State of the messaging that we use to check invariants (e.g., sequence
     /// numbers).

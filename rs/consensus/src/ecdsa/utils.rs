@@ -30,13 +30,22 @@ use ic_types::crypto::canister_threshold_sig::{ExtendedDerivationPath, MasterEcd
 use ic_types::registry::RegistryClientError;
 use ic_types::{Height, RegistryVersion, SubnetId};
 use phantom_newtype::Id;
-use std::cell::RefCell;
-use std::collections::{BTreeMap, BTreeSet};
-use std::convert::TryInto;
-use std::sync::Arc;
+use std::{
+    cell::RefCell,
+    collections::{BTreeMap, BTreeSet},
+    convert::TryInto,
+    fmt::{self, Display, Formatter},
+    sync::Arc,
+};
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct InvalidChainCacheError(String);
+
+impl Display for InvalidChainCacheError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 
 pub(super) struct EcdsaBlockReaderImpl {
     chain: Arc<dyn ConsensusBlockChain>,
@@ -164,7 +173,7 @@ impl EcdsaBlockReader for EcdsaBlockReaderImpl {
                 "transcript(): missing idkg_transcript: {:?}",
                 transcript_ref
             ))
-            .map(|entry| entry.clone())
+            .cloned()
     }
 }
 
@@ -182,7 +191,7 @@ pub(super) fn block_chain_reader(
         .map_err(|err| {
             warn!(
                 log,
-                "block_chain_reader(): failed to build chain cache: {:?}", err
+                "block_chain_reader(): failed to build chain cache: {}", err
             );
             if let Some(metrics) = ecdsa_payload_metrics {
                 metrics.payload_errors_inc("summary_invalid_chain_cache");

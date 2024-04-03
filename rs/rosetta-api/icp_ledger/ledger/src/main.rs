@@ -354,7 +354,7 @@ async fn icrc1_send(
 }
 
 thread_local! {
-    static NOTIFY_METHOD_CALLS: RefCell<u64> = RefCell::new(0);
+    static NOTIFY_METHOD_CALLS: RefCell<u64> = const { RefCell::new(0) };
 }
 
 /// You can notify a canister that you have made a payment to it. The
