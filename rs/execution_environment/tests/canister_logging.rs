@@ -1,3 +1,4 @@
+use ic_config::embedders::{Config as EmbeddersConfig, FeatureFlags};
 use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SubnetConfig;
@@ -19,6 +20,19 @@ use std::time::Duration;
 
 const MAX_LOG_MESSAGE_LEN: usize = 4 * 1024;
 
+fn default_config_with_canister_logging(canister_logging: FlagStatus) -> ExecutionConfig {
+    ExecutionConfig {
+        embedders_config: EmbeddersConfig {
+            feature_flags: FeatureFlags {
+                canister_logging,
+                ..FeatureFlags::default()
+            },
+            ..EmbeddersConfig::default()
+        },
+        ..ExecutionConfig::default()
+    }
+}
+
 fn setup(
     canister_logging: FlagStatus,
     settings: CanisterSettingsArgs,
@@ -26,10 +40,7 @@ fn setup(
     let subnet_type = SubnetType::Application;
     let config = StateMachineConfig::new(
         SubnetConfig::new(subnet_type),
-        ExecutionConfig {
-            canister_logging,
-            ..ExecutionConfig::default()
-        },
+        default_config_with_canister_logging(canister_logging),
     );
     let env = StateMachineBuilder::new()
         .with_config(Some(config))
@@ -66,10 +77,7 @@ fn setup_with_controller(
 fn restart_node(env: StateMachine, canister_logging: FlagStatus) -> StateMachine {
     env.restart_node_with_config(StateMachineConfig::new(
         SubnetConfig::new(SubnetType::Application),
-        ExecutionConfig {
-            canister_logging,
-            ..ExecutionConfig::default()
-        },
+        default_config_with_canister_logging(canister_logging),
     ))
 }
 
