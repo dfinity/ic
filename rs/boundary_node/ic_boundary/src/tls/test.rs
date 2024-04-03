@@ -258,7 +258,10 @@ async fn with_store_test() -> Result<(), Error> {
     Ok(())
 }
 
-struct AcmeProviderGuard(MockServer);
+// False positive dead_code warning.
+// It doesn't recognize the Drop implementation of its fields.
+// See https://github.com/rust-lang/rust/issues/122833.
+struct AcmeProviderGuard(#[allow(dead_code)] MockServer);
 
 async fn create_acme_provider() -> Result<(AcmeProviderGuard, String), Error> {
     let mock_server = MockServer::start().await;

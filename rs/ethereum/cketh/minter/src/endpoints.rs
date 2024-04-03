@@ -50,7 +50,7 @@ pub struct MinterInfo {
     pub minter_address: Option<String>,
     pub eth_helper_contract_address: Option<String>,
     pub erc20_helper_contract_address: Option<String>,
-    pub supported_ckerc20_tokens: Vec<CkErc20Token>,
+    pub supported_ckerc20_tokens: Option<Vec<CkErc20Token>>,
     pub minimum_withdrawal_amount: Option<Nat>,
     pub ethereum_block_height: Option<CandidBlockTag>,
     pub last_observed_block_number: Option<Nat>,

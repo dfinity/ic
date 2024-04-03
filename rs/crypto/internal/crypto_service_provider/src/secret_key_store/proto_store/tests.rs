@@ -69,6 +69,7 @@ fn should_not_leak_any_data_on_protobuf_deserialization_error_when_opening_key_s
     let file = std::fs::OpenOptions::new()
         .write(true)
         .create(true)
+        .truncate(false)
         .open(temp_dir.path().join(sks_file_name))
         .unwrap();
     use std::os::unix::fs::FileExt;

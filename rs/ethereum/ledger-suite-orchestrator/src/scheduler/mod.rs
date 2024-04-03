@@ -329,7 +329,9 @@ impl TaskError {
             TaskError::LedgerNotFound(_) => true, //ledger may not yet be created
             TaskError::InterCanisterCallError(CallError { method: _, reason }) => match reason {
                 Reason::OutOfCycles => true,
-                Reason::CanisterError(_) => false,
+                Reason::CanisterError(msg) => {
+                    msg.ends_with("is stopped") || msg.ends_with("is stopping")
+                }
                 Reason::Rejected(_) => false,
                 Reason::TransientInternalError(_) => true,
                 Reason::InternalError(_) => false,

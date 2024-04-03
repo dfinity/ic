@@ -82,7 +82,7 @@ async fn set_exchange_rate(req: SetExchangeRate) {
 }
 
 thread_local! {
-    static RESPONSE: RefCell<Option<xrc_mock::Response>> = RefCell::new(None);
+    static RESPONSE: RefCell<Option<xrc_mock::Response>> = const { RefCell::new(None) };
 
     static RATES: RefCell<BTreeMap<(String, String), u64>> = Default::default();
 }

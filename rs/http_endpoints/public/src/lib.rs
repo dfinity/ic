@@ -15,6 +15,10 @@ mod read_state;
 mod state_reader_executor;
 mod status;
 mod threads;
+mod tracing_flamegraph;
+
+pub use call::CallServiceBuilder;
+pub use query::QueryServiceBuilder;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "fuzzing_code")] {
@@ -38,7 +42,6 @@ use crate::{
     read_state::subnet::SubnetReadStateService,
     state_reader_executor::StateReaderExecutor,
 };
-pub use call::CallServiceBuilder;
 pub use common::cors_layer;
 
 use axum::{
@@ -82,6 +85,7 @@ use ic_registry_client_helpers::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
+use ic_tracing::ReloadHandles;
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
     artifact_kind::IngressArtifact,
@@ -94,7 +98,6 @@ use ic_types::{
     NodeId, SubnetId,
 };
 use metrics::{HttpHandlerMetrics, LABEL_UNKNOWN};
-pub use query::QueryServiceBuilder;
 use rand::Rng;
 pub use read_state::canister::{CanisterReadStateService, CanisterReadStateServiceBuilder};
 use status::StatusState;
@@ -154,6 +157,7 @@ struct HttpHandler {
     pprof_home_router: Router,
     pprof_profile_router: Router,
     pprof_flamegraph_router: Router,
+    tracing_flamegraph_router: MethodRouter,
 }
 
 // Crates a detached tokio blocking task that initializes the server (reading
@@ -292,6 +296,7 @@ pub fn start_server(
     malicious_flags: MaliciousFlags,
     delegation_from_nns: Option<CertificateDelegation>,
     pprof_collector: Arc<dyn PprofCollector>,
+    tracing_handle: ReloadHandles,
 ) {
     let listen_addr = config.listen_addr;
     info!(log, "Starting HTTP server...");
@@ -372,6 +377,10 @@ pub fn start_server(
     let pprof_profile_router = PprofProfileService::new_router(pprof_collector.clone());
     let pprof_flamegraph_router = PprofFlamegraphService::new_router(pprof_collector);
 
+    let tracing_flamegraph_router = MethodRouter::new()
+        .get(crate::tracing_flamegraph::tracing_flamegraph_handle)
+        .with_state(tracing_handle);
+
     let health_status_refresher = HealthStatusRefreshLayer::new(
         log.clone(),
         metrics.clone(),
@@ -405,6 +414,7 @@ pub fn start_server(
         pprof_home_router,
         pprof_profile_router,
         pprof_flamegraph_router,
+        tracing_flamegraph_router,
     };
     let main_service = create_main_service(
         metrics.clone(),
@@ -686,6 +696,17 @@ fn make_router(
                     )),
             ),
         )
+        .route_service(
+            "/_/tracing/flamegraph",
+            http_handler.tracing_flamegraph_router.layer(
+                ServiceBuilder::new()
+                    .layer(HandleErrorLayer::new(map_box_error_to_response))
+                    .load_shed()
+                    .layer(GlobalConcurrencyLimitLayer::new(
+                        config.max_tracing_flamegraph_concurrent_requests,
+                    )),
+            ),
+        )
         // TODO this is 303 instead of 302
         .route(
             "/",
@@ -726,9 +747,7 @@ fn make_router(
                 ServiceBuilder::new()
                     .layer(HandleErrorLayer::new(map_box_error_to_response))
                     .load_shed()
-                    .layer(GlobalConcurrencyLimitLayer::new(
-                        config.max_read_state_concurrent_requests,
-                    )),
+                    .layer(pprof_concurrency_limiter.clone()),
             ),
         )
         .merge(
@@ -1226,6 +1245,7 @@ mod tests {
                 PprofFlamegraphService::route(),
                 axum::routing::get_service(dummy_service.clone()),
             ),
+            tracing_flamegraph_router: MethodRouter::new().get_service(dummy_service.clone()),
         };
 
         let metrics = HttpHandlerMetrics::new(&MetricsRegistry::default());

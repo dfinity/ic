@@ -44,7 +44,7 @@ use dfn_core::println;
 thread_local! {
     // How this value was chosen: queues become full at 500. This is 1/3 of that, which seems to be
     // a reasonable balance.
-    static AVAILABLE_MANAGEMENT_CANISTER_CALL_SLOT_COUNT: RefCell<u64> = RefCell::new(167);
+    static AVAILABLE_MANAGEMENT_CANISTER_CALL_SLOT_COUNT: RefCell<u64> = const { RefCell::new(167) };
 }
 
 fn new_management_canister_client() -> impl ManagementCanisterClient {

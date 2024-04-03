@@ -9,12 +9,16 @@ axum = { version = "^0.7.4" }
 backoff = { workspace = true }
 candid = { workspace = true }
 ed25519-consensus = "2.0.1"
+http-body-util = "0.1.0"
 hyper = { version = "1.2.0", features = ["full"] }
+hyper-util = { version = "0.1.3", features = ["client"] }
 rand = "^0.8.5"
 itertools = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }
 pocket-ic = { path = "../../packages/pocket-ic" }
+ic-agent = { workspace = true }
+ic-utils = { workspace = true }
 ic-state-machine-tests = { path = "../state_machine_tests" }
 ic-management-canister-types = { path = "../types/management_canister_types" }
 ic-config = { path = "../config" }
@@ -31,6 +35,7 @@ ic-boundary = { path = "../boundary_node/ic_boundary" }
 ic-interfaces = { path = "../interfaces" }
 ic-http-endpoints-public = { path = "../http_endpoints/public" }
 ic-validator-ingress-message = { path = "../validator/ingress_message" }
+icx-proxy = { path = "../boundary_node/icx_proxy", features = ["dev_proxy"] }
 hex = { workspace = true }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 clap = { version = "3.2.25", features = ["derive"] }

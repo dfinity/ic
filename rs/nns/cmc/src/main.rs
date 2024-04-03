@@ -66,7 +66,7 @@ const MAX_NOTIFY_PURGE: usize = 100_000;
 const CREATE_CANISTER_MIN_CYCLES: u64 = 100_000_000_000;
 
 thread_local! {
-    static STATE: RefCell<Option<State>> = RefCell::new(None);
+    static STATE: RefCell<Option<State>> = const { RefCell::new(None) };
 }
 
 fn with_state<R>(f: impl FnOnce(&State) -> R) -> R {

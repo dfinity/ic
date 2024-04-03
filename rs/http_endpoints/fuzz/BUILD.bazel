@@ -11,6 +11,7 @@ CALLSERVICE_FUZZER_DEPENDENCIES = [
     "//rs/interfaces/registry",
     "//rs/interfaces/registry/mocks",
     "//rs/monitoring/logger",
+    "//rs/monitoring/tracing",
     "//rs/protobuf",
     "//rs/registry/keys",
     "//rs/registry/provisional_whitelist",
@@ -36,6 +37,7 @@ CALLSERVICE_FUZZER_DEPENDENCIES = [
     "@crate_index//:tokio",
     "@crate_index//:tower",
     "@crate_index//:tower-test",
+    "@crate_index//:tracing-subscriber",
 ]
 
 # required to compile tests/common

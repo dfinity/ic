@@ -71,7 +71,7 @@ impl Index {
 }
 
 thread_local! {
-    static INDEX: RefCell<Option<Index>> = RefCell::new(None);
+    static INDEX: RefCell<Option<Index>> = const { RefCell::new(None) };
     static PROFILING_DATA: RefCell<SpanStats> = RefCell::new(SpanStats::default());
 }
 

@@ -817,6 +817,7 @@ impl PageMap {
         let mut file = OpenOptions::new()
             .write(true)
             .create(true)
+            .truncate(false)
             .open(dst)
             .map_err(|err| PersistenceError::FileSystemError {
                 path: dst.display().to_string(),

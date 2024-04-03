@@ -2,6 +2,7 @@ use crate::{
     deploy::DirectSnsDeployerForTests, init_config_file::InitConfigFileArgs,
     prepare_canisters::PrepareCanistersArgs, propose::ProposeArgs,
 };
+use anyhow::{anyhow, Context};
 use candid::{CandidType, Decode, Encode, IDLArgs};
 use clap::Parser;
 use ic_base_types::PrincipalId;
@@ -115,9 +116,9 @@ pub struct DeployTestflightArgs {
 #[derive(Debug, Parser)]
 pub struct AddSnsWasmForTestsArgs {
     #[clap(long, value_parser = clap::value_parser!(std::path::PathBuf))]
-    wasm_file: PathBuf,
+    pub wasm_file: PathBuf,
 
-    canister_type: String,
+    pub canister_type: String,
 
     /// The canister ID of SNS-WASMS to use instead of the default
     ///
@@ -126,7 +127,7 @@ pub struct AddSnsWasmForTestsArgs {
     pub override_sns_wasm_canister_id_for_tests: Option<String>,
 
     #[structopt(default_value = "local", long)]
-    network: String,
+    pub network: String,
 }
 
 pub(crate) fn generate_sns_init_payload(
@@ -432,14 +433,6 @@ struct Canister {
     name: String,
 }
 
-#[derive(Debug)]
-enum CanisterCallError {
-    UnableToPrepareDfxCall(String),
-    UnableToCallDfx(std::io::Error),
-    DfxBadExit(std::process::Output),
-    ResponseDecodeFail(String),
-}
-
 impl Canister {
     /// Arguments are like those that are passed to `dfx canister`.
     pub(crate) fn new(network: &str, name: &str) -> Self {
@@ -451,40 +444,26 @@ impl Canister {
         Self { network, name }
     }
 
-    pub(crate) fn call<Req>(&self, request: &Req) -> Result<Req::Response, CanisterCallError>
+    pub(crate) fn call<Req>(&self, request: &Req) -> Result<Req::Response, anyhow::Error>
     where
         Req: Request + CandidType,
         <Req as Request>::Response: CandidType + for<'a> candid::Deserialize<'a>,
     {
         // Step 1: Write request to temporary argument file, which we'll later
         // pass to `dfx canister call --argument-file`.
-        let request = Encode!(&request).map_err(|err| {
-            CanisterCallError::UnableToPrepareDfxCall(format!(
-                "Unable to serialize request: {}",
-                err,
-            ))
-        })?;
-        let request = IDLArgs::from_bytes(&request).map_err(|err| {
-            CanisterCallError::UnableToPrepareDfxCall(format!("Unable to format request: {}", err,))
-        })?;
+        let request = Encode!(&request).context("Unable to serialize the request")?;
+        let request = IDLArgs::from_bytes(&request).context("Unable to format request")?;
         let request = format!("{}", request);
-        let mut argument_file = NamedTempFile::new().map_err(|err| {
-            CanisterCallError::UnableToPrepareDfxCall(format!(
-                "Could not create temporary argument file: {}",
-                err,
-            ))
-        })?;
-        argument_file.write_all(request.as_bytes()).map_err(|err| {
-            CanisterCallError::UnableToPrepareDfxCall(format!(
-                "Unable to write request to local file: {}",
-                err,
-            ))
-        })?;
-        let argument_file = argument_file.path().as_os_str().to_str().ok_or_else(|| {
-            CanisterCallError::UnableToPrepareDfxCall(
-                "Unable to determine the path of the argument file.".to_string(),
-            )
-        })?;
+        let mut argument_file =
+            NamedTempFile::new().context("Could not create temporary argument file.")?;
+        argument_file
+            .write_all(request.as_bytes())
+            .context("Unable to write request to local file")?;
+        let argument_file = argument_file
+            .path()
+            .as_os_str()
+            .to_str()
+            .ok_or_else(|| anyhow!("Unable to convert path of argument file to a string."))?;
 
         // Step 2: The real work of making the call takes place here.
         let command = [
@@ -504,40 +483,29 @@ impl Canister {
         // Step 3: Handle errors.
         let (stdout, _stderr) = result.map_err(|err| match err {
             RunCommandError::UnableToRunCommand { error, .. } => {
-                CanisterCallError::UnableToCallDfx(error)
+                anyhow::Error::from(error).context("Unable to run dfx command.")
             }
             RunCommandError::UnsuccessfulExit { output, .. } => {
-                CanisterCallError::DfxBadExit(output)
+                anyhow!("dfx command exited unsuccessfully. {:?}", output)
             }
         })?;
 
         // Step 4: Decode and return response (finally!).
 
         let response = stdout.trim_end();
-        let response = hex::decode(response).map_err(|err| {
-            CanisterCallError::ResponseDecodeFail(format!(
-                "Unable to hex decode the response. reason: {}. response:\n{:?}",
-                err, response,
-            ))
-        })?;
-        Decode!(&response, Req::Response).map_err(|err| {
-            CanisterCallError::ResponseDecodeFail(format!(
-                "Candid deserialization of response failed. reason: {}. response:\n{:?}",
-                err, response,
-            ))
+        let response = hex::decode(response)
+            .with_context(|| format!("Unable to hex decode the response:\n{:?}.", response,))?;
+        Decode!(&response, Req::Response).with_context(|| {
+            format!(
+                "Candid deserialization of response failed. Response:\n{:?}",
+                response,
+            )
         })
     }
 }
 
 struct NnsGovernanceCanister {
     canister: Canister,
-}
-
-#[allow(clippy::large_enum_variant)]
-#[derive(Debug)]
-enum MakeProposalError {
-    CanisterCallError(CanisterCallError),
-    InvalidResponse(ManageNeuronResponse),
 }
 
 impl NnsGovernanceCanister {
@@ -553,7 +521,7 @@ impl NnsGovernanceCanister {
         &self,
         proposer: &NeuronIdOrSubaccount,
         proposal: &Proposal,
-    ) -> Result<MakeProposalResponse, MakeProposalError> {
+    ) -> Result<MakeProposalResponse, anyhow::Error> {
         impl Request for ManageNeuron {
             type Response = ManageNeuronResponse;
             const METHOD_NAME: &'static str = "manage_neuron";
@@ -573,12 +541,15 @@ impl NnsGovernanceCanister {
         let manage_neuron_response = self
             .canister
             .call(&manage_neuron_request)
-            .map_err(MakeProposalError::CanisterCallError)?;
+            .context("Failed calling the canister")?;
 
         // Step 3: Unwrap the response.
         match manage_neuron_response.command {
             Some(manage_neuron_response::Command::MakeProposal(response)) => Ok(response),
-            _ => Err(MakeProposalError::InvalidResponse(manage_neuron_response)),
+            _ => Err(anyhow!(
+                "Received an invalid response: {:?}",
+                manage_neuron_response
+            )),
         }
     }
 }

@@ -16,6 +16,9 @@ use ic_types::{
 use super::InvalidChainCacheError;
 
 #[derive(Clone, Debug, PartialEq)]
+// The fields are only read by the `Debug` implementation.
+// The `dead_code` lint ignores `Debug` impls, see: https://github.com/rust-lang/rust/issues/88900.
+// #[allow(dead_code)]
 pub(crate) enum EcdsaPayloadError {
     RegistryClientError(RegistryClientError),
     MegaKeyFromRegistryError(MegaKeyFromRegistryError),

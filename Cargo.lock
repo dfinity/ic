@@ -3554,6 +3554,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "env_logger"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "95b3f3e67048839cb0d0781f445682a35113da7121f7c949db0e2be96a4fbece"
+dependencies = [
+ "log",
+]
+
+[[package]]
 name = "equivalent"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7780,8 +7789,10 @@ dependencies = [
  "ic-test-utilities-state",
  "ic-test-utilities-time",
  "ic-test-utilities-types",
+ "ic-tracing",
  "ic-types",
  "ic-validator",
+ "inferno",
  "maplit",
  "mockall",
  "pretty_assertions",
@@ -7804,6 +7815,8 @@ dependencies = [
  "tower",
  "tower-http 0.5.2",
  "tower-test",
+ "tracing-flame",
+ "tracing-subscriber",
  "url",
 ]
 
@@ -8098,6 +8111,8 @@ dependencies = [
  "ic-ledger-core",
  "ic-metrics-encoder",
  "ic-stable-structures",
+ "ic-state-machine-tests",
+ "ic-test-utilities-load-wasm",
  "icrc-ledger-types",
  "serde",
 ]
@@ -10279,6 +10294,7 @@ dependencies = [
  "ic-state-manager",
  "ic-sys",
  "ic-test-utilities",
+ "ic-tracing",
  "ic-types",
  "ic-xnet-endpoint",
  "ic-xnet-payload-builder",
@@ -10295,6 +10311,9 @@ dependencies = [
  "slog",
  "tempfile",
  "tokio",
+ "tracing",
+ "tracing-flame",
+ "tracing-subscriber",
  "wat",
 ]
 
@@ -10371,6 +10390,7 @@ dependencies = [
  "ic-test-utilities",
  "ic-test-utilities-logger",
  "ic-test-utilities-types",
+ "ic-tracing",
  "ic-types",
  "ic-utils 0.9.0",
  "maplit",
@@ -10382,6 +10402,7 @@ dependencies = [
  "tokio",
  "tonic",
  "tower",
+ "tracing-subscriber",
  "wat",
 ]
 
@@ -10641,6 +10662,7 @@ dependencies = [
  "serde_json",
  "serde_yaml 0.9.30",
  "tempfile",
+ "thiserror",
 ]
 
 [[package]]
@@ -11726,6 +11748,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-tracing"
+version = "0.9.0"
+dependencies = [
+ "tracing",
+ "tracing-flame",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "ic-transport"
 version = "0.9.0"
 dependencies = [
@@ -12582,12 +12613,17 @@ checksum = "64e9829a50b42bb782c1df523f78d332fe371b10c661e78b7a3c34b0198e9fac"
 
 [[package]]
 name = "inferno"
-version = "0.11.15"
+version = "0.11.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2fb7c1b80a1dfa604bb4a649a5c5aeef3d913f7c520cb42b40e534e8a61bcdfc"
+checksum = "321f0f839cd44a4686e9504b0a62b4d69a50b62072144c71c68f5873c167b8d9"
 dependencies = [
  "ahash 0.8.3",
- "indexmap 1.9.2",
+ "clap 4.4.6",
+ "crossbeam-channel",
+ "crossbeam-utils",
+ "dashmap",
+ "env_logger 0.10.1",
+ "indexmap 2.1.0",
  "is-terminal",
  "itoa",
  "log",
@@ -13527,9 +13563,9 @@ dependencies = [
 
 [[package]]
 name = "log"
-version = "0.4.20"
+version = "0.4.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b5e6163cb8c49088c2c36f57875e58ccd8c87c7427f7fbd50ea6710b2f3f2e8f"
+checksum = "90ed8c1e510134f979dbc4f070f87d4313098b704861a105fe34231c70a3901c"
 dependencies = [
  "serde",
 ]
@@ -14741,9 +14777,9 @@ dependencies = [
 
 [[package]]
 name = "pcre2"
-version = "0.2.6"
+version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4c9d53a8ea5fc3d3568d3de4bebc12606fd0eb8234c602576f1f1ee4880488a7"
+checksum = "5ea92ff5eabd27703ab12cefe01b08b2809ec3dc75fdc69d4e6b75fbce0cbd67"
 dependencies = [
  "libc",
  "log",
@@ -14752,9 +14788,9 @@ dependencies = [
 
 [[package]]
 name = "pcre2-sys"
-version = "0.2.8"
+version = "0.2.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "25b8a7b5253a4465b873a21ee7e8d6ec561a57eed5d319621bec36bea35c86ae"
+checksum = "550f5d18fb1b90c20b87e161852c10cde77858c3900c5059b5ad2a1449f11d8a"
 dependencies = [
  "cc",
  "libc",
@@ -15043,9 +15079,9 @@ dependencies = [
 
 [[package]]
 name = "pkg-config"
-version = "0.3.29"
+version = "0.3.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2900ede94e305130c13ddd391e0ab7cbaeb783945ae07a279c268cb05109c6cb"
+checksum = "d231b230927b5e4ad203db57bbcbee2802f6bce620b1e4a9024a07d94e2907ec"
 
 [[package]]
 name = "platforms"
@@ -15130,7 +15166,10 @@ dependencies = [
  "ed25519-consensus",
  "flate2",
  "hex",
+ "http-body-util",
  "hyper 1.2.0",
+ "hyper-util",
+ "ic-agent",
  "ic-boundary",
  "ic-cdk",
  "ic-config",
@@ -15146,8 +15185,10 @@ dependencies = [
  "ic-state-machine-tests",
  "ic-test-utilities",
  "ic-types",
+ "ic-utils 0.34.0",
  "ic-utils-thread",
  "ic-validator-ingress-message",
+ "icx-proxy",
  "itertools 0.12.0",
  "pocket-ic",
  "rand 0.8.5",
@@ -15676,7 +15717,7 @@ version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "588f6378e4dd99458b60ec275b4477add41ce4fa9f64dcba6f15adccb19b50d6"
 dependencies = [
- "env_logger",
+ "env_logger 0.8.4",
  "log",
  "rand 0.8.5",
 ]
@@ -18859,6 +18900,17 @@ checksum = "c06d3da6113f116aaee68e4d601191614c9053067f9ab7f6edbcb161237daa54"
 dependencies = [
  "once_cell",
  "valuable",
+]
+
+[[package]]
+name = "tracing-flame"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0bae117ee14789185e129aaee5d93750abe67fdc5a9a62650452bfe4e122a3a9"
+dependencies = [
+ "lazy_static",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

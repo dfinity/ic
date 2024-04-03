@@ -17,8 +17,8 @@ use ic_cketh_minter::{
 use ic_ethereum_types::Address;
 use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
 use ic_state_machine_tests::{
-    CanisterHttpResponsePayload, CanisterId, Cycles, PayloadBuilder, PrincipalId, StateMachine,
-    StateMachineBuilder, UserError, WasmResult,
+    CanisterHttpResponsePayload, CanisterId, CanisterStatusType, Cycles, PayloadBuilder,
+    PrincipalId, StateMachine, StateMachineBuilder, UserError, WasmResult,
 };
 use ic_test_utilities_load_wasm::load_wasm;
 use icrc_ledger_types::icrc1::account::Account;
@@ -420,14 +420,14 @@ impl CkEthSetup {
         self.start_minter();
     }
 
-    fn stop_minter(&self) {
+    pub fn stop_minter(&self) {
         let stop_msg_id = self.env.stop_canister_non_blocking(self.minter_id);
         self.stop_ongoing_https_outcalls();
         let stop_res = self.env.await_ingress(stop_msg_id, 100);
         assert_matches!(stop_res, Ok(WasmResult::Reply(_)));
     }
 
-    fn stop_ongoing_https_outcalls(&self) {
+    pub fn stop_ongoing_https_outcalls(&self) {
         let server_error_response = CanisterHttpResponsePayload {
             status: 500_u128,
             headers: vec![],
@@ -445,9 +445,17 @@ impl CkEthSetup {
         self.env.execute_payload(payload);
     }
 
-    fn start_minter(&self) {
+    pub fn start_minter(&self) {
         let start_res = self.env.start_canister(self.minter_id);
         assert_matches!(start_res, Ok(WasmResult::Reply(_)));
+    }
+
+    pub fn minter_status(&self) -> CanisterStatusType {
+        self.env
+            .canister_status(self.minter_id)
+            .unwrap()
+            .unwrap()
+            .status()
     }
 
     pub fn upgrade_minter_to_add_orchestrator_id(self, orchestrator_id: Principal) -> Self {

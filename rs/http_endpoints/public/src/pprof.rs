@@ -1,4 +1,4 @@
-use crate::common::CONTENT_TYPE_PROTOBUF;
+use crate::common::{CONTENT_TYPE_PROTOBUF, CONTENT_TYPE_SVG};
 
 use axum::{
     extract::{Query, State},
@@ -11,7 +11,6 @@ use ic_pprof::PprofCollector;
 use serde::Deserialize;
 use std::{sync::Arc, time::Duration};
 
-pub const CONTENT_TYPE_SVG: &str = "image/svg+xml";
 /// Default CPU profile duration.
 pub const DEFAULT_DURATION_SECONDS: u64 = 30;
 /// Default sampling frequency. 250Hz is the default Linux software clock

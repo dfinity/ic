@@ -27,6 +27,7 @@ use ic_registry_local_store::LocalStoreImpl;
 use ic_replica_setup_ic_network::setup_consensus_and_p2p;
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::{state_sync::StateSync, StateManagerImpl};
+use ic_tracing::ReloadHandles;
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
     artifact_kind::IngressArtifact,
@@ -63,6 +64,7 @@ pub fn construct_ic_stack(
     registry: Arc<dyn RegistryClient + Send + Sync>,
     crypto: Arc<CryptoComponent>,
     catch_up_package: Option<pb::CatchUpPackage>,
+    tracing_handle: ReloadHandles,
 ) -> std::io::Result<(
     // TODO: remove next three return values since they are used only in tests
     Arc<dyn StateReader<State = ReplicatedState>>,
@@ -334,6 +336,7 @@ pub fn construct_ic_stack(
         config.malicious_behaviour.malicious_flags,
         None,
         Arc::new(Pprof),
+        tracing_handle,
     );
 
     Ok((

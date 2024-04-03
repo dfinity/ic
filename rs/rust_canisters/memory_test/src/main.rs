@@ -52,7 +52,7 @@ thread_local! {
     static RNG: RefCell<Lcg64Xsh32> = RefCell::new(Lcg64Xsh32::new(0xcafe_f00d_d15e_a5e5, 0x0a02_bdbf_7bb3_c0a7));
 
     /// Pages accessed by read/write methods.
-    static MEMORY: RefCell<Vec<u64>> = RefCell::new(vec![]);
+    static MEMORY: RefCell<Vec<u64>> = const { RefCell::new(vec![]) };
 }
 
 fn arg_data() -> Vec<u8> {

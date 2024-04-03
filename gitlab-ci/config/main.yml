@@ -309,20 +309,6 @@ bazel-test-macos:
           RUN_ON_DIFF_ONLY="false"
       fi
 
-      if [ "$CI_JOB_NAME" == "build-ic-release" ]; then
-          # read NNS release version from git tree
-          NNS_RELEASE_VERSION="$(jq -r '.subnets["tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"]' testnet/mainnet_revisions.json)"
-          # we pass nss version info to build-determinism-*-release jobs
-          # we put it under /tmp due to git clean -ffdx within build-ic script
-          echo "NNS_RELEASE_VERSION=$NNS_RELEASE_VERSION" > /tmp/nns.release.env
-
-          # fetch and checkout this version
-          git fetch origin "$NNS_RELEASE_VERSION"
-          git checkout "$NNS_RELEASE_VERSION"
-          # NOTE: ic/$VERSION in S3 will have artifacts
-          #       for revision $NNS_RELEASE_VERSION !!!
-      fi
-
       if [ "$CI_COMMIT_REF_PROTECTED" == "true" ]; then
           gitlab-ci/container/build-ic.sh -i -c -b
       elif [ "${RUN_ON_DIFF_ONLY:-}" == "true" ] \
@@ -383,11 +369,6 @@ bazel-test-macos:
       # clean up
       bazel clean --expunge
 
-      # collect dotenv
-      if [ -f /tmp/nns.release.env ]; then
-          mv /tmp/nns.release.env .
-      fi
-
 # MR Pipeline
 build-ic:
   extends:
@@ -397,13 +378,6 @@ build-ic:
     # only build binaries, canisters, ic-os if there are changes
     RUN_ON_DIFF_ONLY: "true"
     BAZEL_COMMAND: "build"
-
-# Scheduled Pipeline
-build-ic-release:
-  extends:
-    - .build-ic
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "build-reproducibility"
 
 lock-generate:
   rules:
@@ -492,7 +466,7 @@ cargo-clippy-linux:
     - |
       set -eExuo pipefail
       buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- \
-          "$CI_PROJECT_DIR"/gitlab-ci/src/rust_lint/lint.sh
+          "$CI_PROJECT_DIR"/gitlab-ci/src/ci-scripts/rust-lint.sh
 
 cargo-build-release-linux:
   needs: [] # don't wait on other jobs
@@ -634,40 +608,6 @@ build-determinism:
               echo "Build Determinism Check Successful"
           fi
       fi
-
-build-determinism-release:
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "build-reproducibility"
-  needs:
-    - job: build-ic-release
-  script:
-    - |
-      set -eExuo pipefail
-
-      # TODO IDX-2757
-      if [ "$CI_JOB_NAME" == "build-determinism-guest-update-img-release" ]; then
-          OLD_PATH="$(git rev-parse HEAD)/build-ic-release/guest-os/update-img"
-          if curl -sfSI --retry 2 "https://download.dfinity.systems/ic/$OLD_PATH/SHA256SUMS"; then
-              PATH0="build-ic-release/guest-os/update-img"
-          fi
-      fi
-
-      # what we've build in build-ic-release
-      P0=$PATH0
-      # what is live and available under $NNS_RELEASE_VERSION
-      # NNS_RELEASE_VERSION is set in build-ic-release
-      # shellcheck disable=SC2153
-      P1="/${NNS_RELEASE_VERSION}/${PATH1}"
-
-      ./gitlab-ci/tools/build-diff.sh "$P0" "$P1"
-  parallel:
-    matrix:
-      - PATH0: "build-ic-release/release"
-        PATH1: "release"
-      - PATH0: "build-ic-release/canisters"
-        PATH1: "canisters"
-      - PATH0: "build-ic-release/guest-os"
-        PATH1: "guest-os/update-img"
 
 test-push-branch:
   rules:

@@ -627,6 +627,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "indoc": crate.spec(
                 version = "^1.0.9",
             ),
+            "inferno": crate.spec(
+                version = "^0.11.19",
+            ),
             "insta": crate.spec(
                 version = "^1.31.0",
             ),
@@ -1293,6 +1296,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "tracing-appender": crate.spec(
                 version = "^0.2.3",
+            ),
+            "tracing-flame": crate.spec(
+                version = "^0.2.0",
             ),
             "tracing-core": crate.spec(
                 version = "^0.1.32",

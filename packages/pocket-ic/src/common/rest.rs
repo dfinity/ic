@@ -14,6 +14,24 @@ use std::path::PathBuf;
 
 pub type InstanceId = usize;
 
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub enum HttpGatewayBackend {
+    Replica(String),
+    PocketIcInstance(InstanceId),
+}
+
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct HttpGatewayConfig {
+    pub listen_at: Option<u16>,
+    pub forward_to: HttpGatewayBackend,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub enum CreateHttpGatewayResponse {
+    Created { instance_id: InstanceId, port: u16 },
+    Error { message: String },
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub enum CreateInstanceResponse {
     Created {

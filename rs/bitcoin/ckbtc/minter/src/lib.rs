@@ -1084,10 +1084,18 @@ pub async fn distribute_kyt_fees() {
     use icrc_ledger_client_cdk::ICRC1Client;
     use icrc_ledger_types::icrc1::transfer::TransferArg;
 
-    #[derive(Debug)]
     enum MintError {
         TransferError(TransferError),
         CallError(i32, String),
+    }
+
+    impl std::fmt::Debug for MintError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match self {
+                MintError::TransferError(e) => write!(f, "TransferError({:?})", e),
+                MintError::CallError(code, msg) => write!(f, "CallError({}, {:?})", code, msg),
+            }
+        }
     }
 
     async fn mint(amount: u64, to: candid::Principal, memo: Memo) -> Result<u64, MintError> {

@@ -21,7 +21,7 @@ use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
 use pocket_ic::common::rest::{BinaryBlob, BlobCompression, BlobId, RawVerifyCanisterSigArg};
 use pocket_ic_server::state_api::routes::{handler_read_graph, timeout_or_default};
 use pocket_ic_server::state_api::{
-    routes::{instances_routes, status, AppState, RouterExt},
+    routes::{http_gateway_routes, instances_routes, status, AppState, RouterExt},
     state::PocketIcApiStateBuilder,
 };
 use pocket_ic_server::BlobStore;
@@ -111,9 +111,17 @@ async fn start(runtime: Arc<Runtime>) {
             Some(std::env::temp_dir().join(format!("pocket_ic_{}.ready", args.pid.unwrap())));
     }
 
+    let addr = format!("127.0.0.1:{}", args.port);
+    let listener = tokio::net::TcpListener::bind(&addr)
+        .await
+        .unwrap_or_else(|_| panic!("Failed to start PocketIC server on port {}", args.port));
+    let real_port = listener.local_addr().unwrap().port();
+
     let _guard = setup_tracing(args.pid);
     // The shared, mutable state of the PocketIC process.
-    let api_state = PocketIcApiStateBuilder::default().build();
+    let api_state = PocketIcApiStateBuilder::default()
+        .with_port(real_port)
+        .build();
     // A time-to-live mechanism: Requests bump this value, and the server
     // gracefully shuts down when the value wasn't bumped for a while.
     let min_alive_until = Arc::new(RwLock::new(Instant::now()));
@@ -146,6 +154,8 @@ async fn start(runtime: Arc<Runtime>) {
         //
         // All instance routes.
         .nest("/instances", instances_routes::<AppState>())
+        // All HTTP gateway routes.
+        .nest("/http_gateway", http_gateway_routes::<AppState>())
         .layer(DefaultBodyLimit::disable())
         .route_layer(middleware::from_fn_with_state(
             app_state.clone(),
@@ -161,11 +171,6 @@ async fn start(runtime: Arc<Runtime>) {
         ..OpenApi::default()
     };
 
-    let addr = format!("127.0.0.1:{}", args.port);
-    let listener = tokio::net::TcpListener::bind(&addr)
-        .await
-        .unwrap_or_else(|_| panic!("Failed to start PocketIC server on port {}", args.port));
-    let real_port = listener.local_addr().unwrap().port();
     let router = router
         // Generate documentation
         .finish_api(&mut api)

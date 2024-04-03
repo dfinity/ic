@@ -359,7 +359,7 @@ impl AllocationArea {
         PageInner {
             ptr,
             offset,
-            page_allocator: page_allocator.map(Arc::clone),
+            page_allocator: page_allocator.cloned(),
             validation: PageValidation::default(),
         }
     }
@@ -660,7 +660,7 @@ impl MmapBasedPageAllocatorCore {
                 return PageInner {
                     ptr: PagePtr(page_start),
                     offset: file_offset,
-                    page_allocator: page_allocator.map(Arc::clone),
+                    page_allocator: page_allocator.cloned(),
                     validation: serialized_page.validation,
                 };
             }

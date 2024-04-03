@@ -17,8 +17,8 @@ const TRANSFER_AMOUNT: u64 = 1_000;
 const NANO: u64 = 1_000_000_000;
 
 thread_local! {
-    static RNG: RefCell<Option<ChaCha8Rng>> = RefCell::new(None);
-    static LEDGER_PRINCIPAL: RefCell<Option<PrincipalId>> = RefCell::new(None);
+    static RNG: RefCell<Option<ChaCha8Rng>> = const { RefCell::new(None) };
+    static LEDGER_PRINCIPAL: RefCell<Option<PrincipalId>> = const { RefCell::new(None) };
 }
 
 #[derive(CandidType, Debug, candid::Deserialize, PartialEq, Eq)]
