@@ -155,7 +155,7 @@ jobs:
 
   cargo-clippy-linux:
     name: Cargo-Clippy-Linux
-    <<: *default-setup
+    <<: *bazel-small-setup
     steps:
       - <<: *checkout
       - <<: *cargo-filters
@@ -173,7 +173,7 @@ jobs:
 
   cargo-build-release-linux:
     name: Cargo-Build-Release-Linux
-    <<: *default-setup
+    <<: *bazel-small-setup
     steps:
       - <<: *checkout
       - <<: *cargo-filters
