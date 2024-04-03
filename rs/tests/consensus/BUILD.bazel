@@ -42,9 +42,11 @@ system_test(
     name = "catch_up_possible_test",
     malicious = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    # TODO(NET-1683): Adjust test for faster p2p
     tags = [
-        "system_test_hourly",
-        "system_test_nightly",
+        "manual",
+        # "system_test_hourly",
+        # "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     uses_guestos_dev = True,

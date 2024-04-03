@@ -36,11 +36,11 @@ const UPDATE_MSG_6: &str = "Fell asleep again!";
 const FAULTY: usize = 16;
 const NODES: usize = 3 * FAULTY + 1; // 49
 
-const IDLE_DURATION: Duration = Duration::from_secs(5 * 60);
+const IDLE_DURATION: Duration = Duration::from_secs(10 * 60);
 
 pub fn setup(env: TestEnv) {
     let vm_resources = VmResources {
-        vcpus: Some(NrOfVCPUs::new(4)),
+        vcpus: Some(NrOfVCPUs::new(8)),
         memory_kibibytes: Some(AmountOfMemoryKiB::new(4195000)), // 4GiB
         boot_image_minimal_size_gibibytes: None,
     };
@@ -52,7 +52,7 @@ pub fn setup(env: TestEnv) {
             Subnet::new(SubnetType::System)
                 .with_default_vm_resources(vm_resources)
                 // Use low DKG interval to confirm system works across interval boundaries.
-                .with_dkg_interval_length(Height::from(49))
+                .with_dkg_interval_length(Height::from(99))
                 .add_nodes(NODES),
         )
         .add_subnet(
@@ -164,9 +164,9 @@ pub fn test(env: TestEnv) {
 
     info!(log, "Step 8: Restart one node again",);
     nodes[FAULTY].vm().start();
-    nodes[FAULTY]
-        .await_status_is_healthy()
-        .expect("Node still healthy");
+    for n in nodes.iter().skip(FAULTY) {
+        n.await_status_is_healthy().unwrap();
+    }
     block_on(message_canister.try_store_msg(UPDATE_MSG_5)).expect("Update canister call failed.");
     assert_eq!(
         block_on(message_canister.try_read_msg()),
