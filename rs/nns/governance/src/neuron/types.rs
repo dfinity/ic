@@ -191,7 +191,7 @@ impl From<NeuronProto> for Neuron {
 /// conversion when invalid states are encountered. 2 of the legacy states
 /// (LegacyDissolvingOrDissolved and LegacyDissolved) are the cases we already know to be existing
 /// on the mainnet.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DissolveStateAndAge {
     /// A non-dissolving neuron has a dissolve delay and an aging since timestamp.
     NotDissolving {
