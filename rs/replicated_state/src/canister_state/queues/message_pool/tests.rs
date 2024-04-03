@@ -1,7 +1,8 @@
 use super::*;
 use core::fmt::Debug;
 use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
-use ic_types::messages::Payload;
+use ic_types::messages::{Payload, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64};
+use ic_types::time::UNIX_EPOCH;
 use maplit::btreeset;
 use std::collections::{BTreeSet, VecDeque};
 use std::time::Duration;
@@ -577,6 +578,188 @@ fn test_message_id_sanity() {
         Context::Outbound as u64,
         Context::Outbound as u64 & Context::BIT
     );
+}
+
+#[test]
+fn test_memory_usage_stats_best_effort() {
+    let mut pool = MessagePool::default();
+
+    // No memoory used by messages.
+    assert_eq!(MemoryUsageStats::default(), pool.memory_usage_stats);
+
+    // Insert a bunch of best-effort messages.
+    let request = request(time(10));
+    let request_size_bytes = request.count_bytes();
+    let response = response(time(20));
+    let response_size_bytes = response.count_bytes();
+
+    let _ = pool.insert_inbound(request.clone().into());
+    let inbound_response_id = pool.insert_inbound(response.clone().into());
+    let outbound_request_id = pool.insert_outbound_request(request.into(), UNIX_EPOCH);
+    let _ = pool.insert_outbound_response(response.into());
+
+    // The guaranteed memory usage is zero.
+    assert_eq!(0, pool.memory_usage_stats.memory_usage());
+    // Best-effort memory usage and total byte size account for all messages.
+    assert_eq!(
+        2 * (request_size_bytes + response_size_bytes),
+        pool.memory_usage_stats.best_effort_message_bytes
+    );
+    assert_eq!(
+        2 * (request_size_bytes + response_size_bytes),
+        pool.memory_usage_stats.size_bytes
+    );
+
+    // Take one request and one response.
+    assert!(pool.take(inbound_response_id).is_some());
+    assert!(pool.take(outbound_request_id).is_some());
+
+    // The guaranteed memory usage is still zero.
+    assert_eq!(0, pool.memory_usage_stats.memory_usage());
+    // Best-effort memory usage and total byte size are halved.
+    assert_eq!(
+        request_size_bytes + response_size_bytes,
+        pool.memory_usage_stats.best_effort_message_bytes
+    );
+    assert_eq!(
+        request_size_bytes + response_size_bytes,
+        pool.memory_usage_stats.size_bytes
+    );
+
+    // Shed one of the remaining messages and time out the other.
+    assert!(pool.shed_largest_message().is_some());
+    assert_eq!(1, pool.expire_messages(time(u32::MAX).into()).len());
+
+    // Again no message memoory usage.
+    assert_eq!(MemoryUsageStats::default(), pool.memory_usage_stats);
+}
+
+#[test]
+fn test_memory_usage_stats_guaranteed_response() {
+    let mut pool = MessagePool::default();
+
+    // No memoory used by messages.
+    assert_eq!(MemoryUsageStats::default(), pool.memory_usage_stats);
+
+    // Insert a bunch of guaranteed response messages.
+    let request = request(NO_DEADLINE);
+    let request_size_bytes = request.count_bytes();
+    let response = response(NO_DEADLINE);
+    let response_size_bytes = response.count_bytes();
+
+    let inbound_request_id = pool.insert_inbound(request.clone().into());
+    let inbound_response_id = pool.insert_inbound(response.clone().into());
+    let _ = pool.insert_outbound_request(request.into(), UNIX_EPOCH);
+    let outbound_response_id = pool.insert_outbound_response(response.into());
+
+    // The guaranteed memory usage covers the two responses.
+    assert_eq!(
+        2 * response_size_bytes,
+        pool.memory_usage_stats.memory_usage()
+    );
+    // Best-effort memory usage is zero.
+    assert_eq!(0, pool.memory_usage_stats.best_effort_message_bytes);
+    // Total byte size accounts for all messages.
+    assert_eq!(
+        2 * (request_size_bytes + response_size_bytes),
+        pool.memory_usage_stats.size_bytes
+    );
+
+    // Take one request and one response.
+    assert!(pool.take(inbound_request_id).is_some());
+    assert!(pool.take(outbound_response_id).is_some());
+
+    // The guaranteed memory usage covers the remaining response.
+    assert_eq!(response_size_bytes, pool.memory_usage_stats.memory_usage());
+    // Best-effort memory usage is still zero.
+    assert_eq!(0, pool.memory_usage_stats.best_effort_message_bytes);
+    // Total byte size accounts for the two remaining messages.
+    assert_eq!(
+        request_size_bytes + response_size_bytes,
+        pool.memory_usage_stats.size_bytes
+    );
+
+    // Time out the one message that has an (implicit) deadline (the outgoing
+    // request), take the other.
+    assert_eq!(1, pool.expire_messages(time(u32::MAX).into()).len());
+    assert!(pool.take(inbound_response_id).is_some());
+
+    // Again no message memoory usage.
+    assert_eq!(MemoryUsageStats::default(), pool.memory_usage_stats);
+}
+
+#[test]
+fn test_memory_usage_stats_oversized_requests() {
+    let mut pool = MessagePool::default();
+
+    // No memoory used by messages.
+    assert_eq!(MemoryUsageStats::default(), pool.memory_usage_stats);
+
+    // Insert a bunch of oversized requests.
+    let best_effort = request_with_payload(
+        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize + 1000,
+        time(10),
+    );
+    let best_effort_size_bytes = best_effort.count_bytes();
+    let guaranteed = request_with_payload(
+        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize + 2000,
+        NO_DEADLINE,
+    );
+    let guaranteed_size_bytes = guaranteed.count_bytes();
+    // The 2000 bytes we added above; plus the method name provided by
+    // `RequestBuilder`; plus any difference in size between the `Request` and
+    // `Response` structs, so better to compute it
+    let guaranteed_extra_bytes = guaranteed_size_bytes - MAX_RESPONSE_COUNT_BYTES;
+
+    let _ = pool.insert_inbound(best_effort.clone().into());
+    let inbound_guaranteed_id = pool.insert_inbound(guaranteed.clone().into());
+    let outbound_best_effort_id = pool.insert_outbound_request(best_effort.into(), UNIX_EPOCH);
+    let _ = pool.insert_outbound_request(guaranteed.into(), UNIX_EPOCH);
+
+    // The guaranteed memory usage covers the extra bytes of the two guaranteed
+    // requests.
+    assert_eq!(
+        2 * guaranteed_extra_bytes,
+        pool.memory_usage_stats.memory_usage()
+    );
+    // Best-effort memory usage covers the two best-effort requests.
+    assert_eq!(
+        2 * best_effort_size_bytes,
+        pool.memory_usage_stats.best_effort_message_bytes
+    );
+    // Total byte size accounts for all requests.
+    assert_eq!(
+        2 * (best_effort_size_bytes + guaranteed_size_bytes),
+        pool.memory_usage_stats.size_bytes
+    );
+
+    // Take one best-effort and one guaranteed request.
+    assert!(pool.take(inbound_guaranteed_id).is_some());
+    assert!(pool.take(outbound_best_effort_id).is_some());
+
+    // The guaranteed memory usage covers the extra bytes of the remaining
+    // guaranteed request.
+    assert_eq!(
+        guaranteed_extra_bytes,
+        pool.memory_usage_stats.memory_usage()
+    );
+    // Best-effort memory usage covers the remaining best-effort request.
+    assert_eq!(
+        best_effort_size_bytes,
+        pool.memory_usage_stats.best_effort_message_bytes
+    );
+    // Total byte size accounts for both remaining requests.
+    assert_eq!(
+        best_effort_size_bytes + guaranteed_size_bytes,
+        pool.memory_usage_stats.size_bytes
+    );
+
+    // Shed one the remaining best-effort request and time out guaranteed one.
+    assert!(pool.shed_largest_message().is_some());
+    assert_eq!(1, pool.expire_messages(time(u32::MAX).into()).len());
+
+    // Again no message memoory usage.
+    assert_eq!(MemoryUsageStats::default(), pool.memory_usage_stats);
 }
 
 //

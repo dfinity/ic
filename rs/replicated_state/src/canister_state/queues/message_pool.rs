@@ -471,7 +471,7 @@ impl Default for MessagePool {
 /// method would become quite cumbersome with an extra `QueueType` argument and
 /// a `QueueOp` that only applied to memory usage stats; and would result in
 /// adding lots of zeros in lots of places.
-#[derive(Clone, Debug, Default, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(super) struct MemoryUsageStats {
     /// Sum total of the byte size of all best-effort messages in the pool.
     best_effort_message_bytes: usize,
@@ -550,26 +550,31 @@ impl MemoryUsageStats {
 
 impl AddAssign<MemoryUsageStats> for MemoryUsageStats {
     fn add_assign(&mut self, rhs: MemoryUsageStats) {
-        self.guaranteed_responses_size_bytes += rhs.guaranteed_responses_size_bytes;
-        self.oversized_guaranteed_requests_extra_bytes +=
-            rhs.oversized_guaranteed_requests_extra_bytes;
+        let MemoryUsageStats {
+            best_effort_message_bytes,
+            guaranteed_responses_size_bytes,
+            oversized_guaranteed_requests_extra_bytes,
+            size_bytes,
+        } = rhs;
+        self.best_effort_message_bytes += best_effort_message_bytes;
+        self.guaranteed_responses_size_bytes += guaranteed_responses_size_bytes;
+        self.oversized_guaranteed_requests_extra_bytes += oversized_guaranteed_requests_extra_bytes;
+        self.size_bytes += size_bytes;
     }
 }
 
 impl SubAssign<MemoryUsageStats> for MemoryUsageStats {
     fn sub_assign(&mut self, rhs: MemoryUsageStats) {
-        self.guaranteed_responses_size_bytes -= rhs.guaranteed_responses_size_bytes;
-        self.oversized_guaranteed_requests_extra_bytes -=
-            rhs.oversized_guaranteed_requests_extra_bytes;
-    }
-}
-
-// Custom `PartialEq`, ignoring `transient_stream_responses_size_bytes`.
-impl PartialEq for MemoryUsageStats {
-    fn eq(&self, rhs: &Self) -> bool {
-        self.guaranteed_responses_size_bytes == rhs.guaranteed_responses_size_bytes
-            && self.oversized_guaranteed_requests_extra_bytes
-                == rhs.oversized_guaranteed_requests_extra_bytes
+        let MemoryUsageStats {
+            best_effort_message_bytes,
+            guaranteed_responses_size_bytes,
+            oversized_guaranteed_requests_extra_bytes,
+            size_bytes,
+        } = rhs;
+        self.best_effort_message_bytes -= best_effort_message_bytes;
+        self.guaranteed_responses_size_bytes -= guaranteed_responses_size_bytes;
+        self.oversized_guaranteed_requests_extra_bytes -= oversized_guaranteed_requests_extra_bytes;
+        self.size_bytes -= size_bytes;
     }
 }
 
