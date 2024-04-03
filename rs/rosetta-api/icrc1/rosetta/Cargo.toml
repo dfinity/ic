@@ -35,7 +35,7 @@ ic-icrc1-tokens-u64 = { path = "../tokens_u64" }
 ic-icrc1-tokens-u256 = { path = "../tokens_u256" }
 proptest = "1.0"
 rand = "0.8.4"
-axum = "^0.7.5"
+axum = { workspace = true }
 url = "2.2.1"
 clap = { workspace = true }
 tokio = { workspace = true }

@@ -32,7 +32,7 @@ DEPENDENCIES = [
     "//rs/types/types",
     "//rs/validator",
     "@crate_index//:askama",
-    "@crate_index//:axum_0_7_0",
+    "@crate_index//:axum",
     "@crate_index//:bytes",
     "@crate_index//:byte-unit",
     "@crate_index//:cfg-if",
