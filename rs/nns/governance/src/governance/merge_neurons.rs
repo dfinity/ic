@@ -13,10 +13,11 @@ use crate::{
 };
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::NeuronId;
+use icp_ledger::Subaccount;
 use std::collections::BTreeMap;
 
 /// All possible effect of merging 2 neurons.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MergeNeuronsEffect {
     /// The source neuron id.
     source_neuron_id: NeuronId,
@@ -83,7 +84,7 @@ impl MergeNeuronsEffect {
 }
 
 /// The effect of merge neurons on the source neuron (other than the ones involving ledger).
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MergeNeuronsSourceEffect {
     dissolve_state_and_age: DissolveStateAndAge,
     subtract_maturity: u64,
@@ -101,7 +102,7 @@ impl MergeNeuronsSourceEffect {
 }
 
 /// The effect of merge neurons on the target neuron (other than the ones involving ledger).
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MergeNeuronsTargetEffect {
     dissolve_state_and_age: DissolveStateAndAge,
     add_maturity: u64,
@@ -119,7 +120,7 @@ impl MergeNeuronsTargetEffect {
 }
 
 /// All possible errors that can occur when merging neurons
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MergeNeuronsError {
     SourceAndTargetSame,
     NoSourceNeuronId,
@@ -319,26 +320,36 @@ pub fn validate_merge_neurons_before_commit(
     neuron_store: &NeuronStore,
     proposals: &BTreeMap<u64, ProposalData>,
 ) -> Result<(), MergeNeuronsError> {
-    let source_is_caller_controller = neuron_store
+    let (source_is_caller_controller, source_subaccount) = neuron_store
         .with_neuron(source_neuron_id, |source_neuron| {
-            source_neuron.is_controlled_by(caller)
+            (
+                source_neuron.is_controlled_by(caller),
+                source_neuron
+                    .subaccount()
+                    .expect("Neuron must have a subaccount"),
+            )
         })
         .map_err(|_| MergeNeuronsError::SourceNeuronNotFound)?;
     if !source_is_caller_controller {
         return Err(MergeNeuronsError::SourceNeuronNotController);
     }
 
-    let target_is_caller_controller = neuron_store
+    let (target_is_caller_controller, target_subaccount) = neuron_store
         .with_neuron(target_neuron_id, |target_neuron| {
-            target_neuron.is_controlled_by(caller)
+            (
+                target_neuron.is_controlled_by(caller),
+                target_neuron
+                    .subaccount()
+                    .expect("Neuron must have a subaccount"),
+            )
         })
         .map_err(|_| MergeNeuronsError::TargetNeuronNotFound)?;
     if !target_is_caller_controller {
         return Err(MergeNeuronsError::TargetNeuronNotController);
     }
 
-    if is_neuron_involved_with_proposals(source_neuron_id, proposals)
-        || is_neuron_involved_with_proposals(target_neuron_id, proposals)
+    if is_neuron_involved_with_open_proposals(source_neuron_id, &source_subaccount, proposals)
+        || is_neuron_involved_with_open_proposals(target_neuron_id, &target_subaccount, proposals)
     {
         return Err(MergeNeuronsError::SourceOrTargetInvolvedInProposal);
     }
@@ -587,7 +598,11 @@ fn validate_request_and_neurons(
     Ok((source_neuron_to_merge, target_neuron_to_merge))
 }
 
-fn is_neuron_involved_with_proposal(neuron_id: &NeuronId, proposal_data: &ProposalData) -> bool {
+fn is_neuron_involved_with_open_proposal(
+    neuron_id: &NeuronId,
+    subaccount: &Subaccount,
+    proposal_data: &ProposalData,
+) -> bool {
     // Only consider proposals that have not been decided yet.
     if proposal_data.status() != ProposalStatus::Open {
         return false;
@@ -604,24 +619,27 @@ fn is_neuron_involved_with_proposal(neuron_id: &NeuronId, proposal_data: &Propos
         return false;
     }
 
-    proposal_data
+    match proposal_data
         .proposal
         .as_ref()
-        .map(|proposal| {
-            // TODO(NNS1-2989) explain or fix the discrepancy between NeuronId and Subaccount
-            // (why only check neuron id?).
-            proposal.managed_neuron() == Some(NeuronIdOrSubaccount::NeuronId(*neuron_id))
-        })
-        .unwrap_or(false)
+        .and_then(|proposal| proposal.managed_neuron())
+    {
+        Some(NeuronIdOrSubaccount::NeuronId(managed_neuron_id)) => managed_neuron_id == *neuron_id,
+        Some(NeuronIdOrSubaccount::Subaccount(managed_subaccount)) => {
+            managed_subaccount == subaccount.to_vec()
+        }
+        None => false,
+    }
 }
 
-fn is_neuron_involved_with_proposals(
+fn is_neuron_involved_with_open_proposals(
     neuron_id: &NeuronId,
+    subaccount: &Subaccount,
     proposals: &BTreeMap<u64, ProposalData>,
 ) -> bool {
-    proposals
-        .values()
-        .any(|proposal_data| is_neuron_involved_with_proposal(neuron_id, proposal_data))
+    proposals.values().any(|proposal_data| {
+        is_neuron_involved_with_open_proposal(neuron_id, subaccount, proposal_data)
+    })
 }
 
 #[cfg(test)]
@@ -629,7 +647,8 @@ mod tests {
     use super::*;
     use crate::pb::v1::{
         neuron::{DissolveState, Followees},
-        Topic,
+        proposal::Action,
+        ManageNeuron, Proposal, Topic,
     };
     use assert_matches::assert_matches;
     use ic_nervous_system_common::{E8, SECONDS_PER_DAY};
@@ -1333,6 +1352,211 @@ mod tests {
                 transfer_staked_maturity_e8s: 40 * E8,
                 transaction_fees_e8s: TRANSACTION_FEES_E8S,
             }
+        );
+    }
+
+    #[test]
+    fn test_validate_merge_neurons_before_commit_valid() {
+        let neuron_store = NeuronStore::new(btreemap! {
+            1 => Neuron {
+                controller: Some(*PRINCIPAL_ID),
+                ..model_neuron(1)
+            },
+            2 => Neuron {
+                controller: Some(*PRINCIPAL_ID),
+                ..model_neuron(2)
+            },
+        });
+        let proposals = btreemap! {
+            1 => ProposalData {
+                proposer: Some(NeuronId { id: 3 }),
+                ..Default::default()
+            },
+        };
+
+        assert_eq!(
+            validate_merge_neurons_before_commit(
+                &NeuronId { id: 1 },
+                &NeuronId { id: 2 },
+                &PRINCIPAL_ID,
+                &neuron_store,
+                &proposals
+            ),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn test_validate_merge_neurons_before_commit_source_neuron_not_controller() {
+        let neuron_store = NeuronStore::new(btreemap! {
+            1 => Neuron {
+                controller: Some(PrincipalId::new_user_test_id(1001)),
+                hot_keys: vec![*PRINCIPAL_ID],
+                ..model_neuron(1)
+            },
+            2 => Neuron {
+                controller: Some(*PRINCIPAL_ID),
+                ..model_neuron(2)
+            },
+        });
+        let proposals = btreemap! {
+            1 => ProposalData {
+                proposer: Some(NeuronId { id: 3 }),
+                ..Default::default()
+            },
+        };
+
+        let error = validate_merge_neurons_before_commit(
+            &NeuronId { id: 1 },
+            &NeuronId { id: 2 },
+            &PRINCIPAL_ID,
+            &neuron_store,
+            &proposals,
+        )
+        .unwrap_err();
+
+        assert_matches!(error, MergeNeuronsError::SourceNeuronNotController);
+    }
+
+    #[test]
+    fn test_validate_merge_neurons_before_commit_target_neuron_not_controller() {
+        let neuron_store = NeuronStore::new(btreemap! {
+            1 => Neuron {
+                controller: Some(*PRINCIPAL_ID),
+                ..model_neuron(1)
+            },
+            2 => Neuron {
+                controller: Some(PrincipalId::new_user_test_id(1001)),
+                hot_keys: vec![*PRINCIPAL_ID],
+                ..model_neuron(2)
+            },
+        });
+        let proposals = btreemap! {
+            1 => ProposalData {
+                proposer: Some(NeuronId { id: 3 }),
+                ..Default::default()
+            },
+        };
+
+        let error = validate_merge_neurons_before_commit(
+            &NeuronId { id: 1 },
+            &NeuronId { id: 2 },
+            &PRINCIPAL_ID,
+            &neuron_store,
+            &proposals,
+        )
+        .unwrap_err();
+
+        assert_matches!(error, MergeNeuronsError::TargetNeuronNotController);
+    }
+
+    #[test]
+    fn test_validate_merge_neurons_before_commit_neurons_involved_with_open_proposal() {
+        let neuron_not_involved = model_neuron(1);
+        let neuron_involved_with_proposal = model_neuron(2);
+        let neuron_involved_with_managed_neuron_proposal_by_id = model_neuron(3);
+        let neuron_involved_with_managed_neuron_proposal_by_subaccount = model_neuron(4);
+
+        let proposal = ProposalData {
+            proposer: neuron_involved_with_proposal.id,
+            ..Default::default()
+        };
+        let managed_neuron_proposal_by_id = ProposalData {
+            proposal: Some(Proposal {
+                action: Some(Action::ManageNeuron(Box::new(ManageNeuron {
+                    neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
+                        neuron_involved_with_managed_neuron_proposal_by_id
+                            .id
+                            .unwrap(),
+                    )),
+                    ..Default::default()
+                }))),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let managed_neuron_proposal_by_subaccount = ProposalData {
+            proposal: Some(Proposal {
+                action: Some(Action::ManageNeuron(Box::new(ManageNeuron {
+                    neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::Subaccount(
+                        neuron_involved_with_managed_neuron_proposal_by_subaccount
+                            .account
+                            .clone(),
+                    )),
+                    ..Default::default()
+                }))),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        // The proposer is a neuron 'not involved', which is OK because the proposal is decided.
+        let decided_proposal = ProposalData {
+            proposer: neuron_not_involved.id,
+            proposal: Some(Proposal {
+                ..Default::default()
+            }),
+            decided_timestamp_seconds: NOW_SECONDS - 1,
+            ..Default::default()
+        };
+
+        let neuron_store = NeuronStore::new(btreemap! {
+            1 => neuron_not_involved.clone(),
+            2 => neuron_involved_with_proposal.clone(),
+            3 => neuron_involved_with_managed_neuron_proposal_by_id.clone(),
+            4 => neuron_involved_with_managed_neuron_proposal_by_subaccount.clone(),
+        });
+        let proposals = btreemap! {
+            1001 => proposal.clone(),
+            1002 => managed_neuron_proposal_by_id.clone(),
+            1003 => managed_neuron_proposal_by_subaccount.clone(),
+            1004 => decided_proposal.clone(),
+        };
+
+        let test_validate_fails_with_involved_in_proposal =
+            |source_neuron_id: NeuronId, target_neuron_id: NeuronId| {
+                assert_eq!(
+                    validate_merge_neurons_before_commit(
+                        &source_neuron_id,
+                        &target_neuron_id,
+                        &PRINCIPAL_ID,
+                        &neuron_store,
+                        &proposals,
+                    ),
+                    Err(MergeNeuronsError::SourceOrTargetInvolvedInProposal)
+                );
+            };
+
+        test_validate_fails_with_involved_in_proposal(
+            neuron_involved_with_proposal.id.unwrap(),
+            neuron_not_involved.id.unwrap(),
+        );
+        test_validate_fails_with_involved_in_proposal(
+            neuron_not_involved.id.unwrap(),
+            neuron_involved_with_proposal.id.unwrap(),
+        );
+        test_validate_fails_with_involved_in_proposal(
+            neuron_involved_with_managed_neuron_proposal_by_id
+                .id
+                .unwrap(),
+            neuron_not_involved.id.unwrap(),
+        );
+        test_validate_fails_with_involved_in_proposal(
+            neuron_not_involved.id.unwrap(),
+            neuron_involved_with_managed_neuron_proposal_by_id
+                .id
+                .unwrap(),
+        );
+        test_validate_fails_with_involved_in_proposal(
+            neuron_involved_with_managed_neuron_proposal_by_subaccount
+                .id
+                .unwrap(),
+            neuron_not_involved.id.unwrap(),
+        );
+        test_validate_fails_with_involved_in_proposal(
+            neuron_not_involved.id.unwrap(),
+            neuron_involved_with_managed_neuron_proposal_by_subaccount
+                .id
+                .unwrap(),
         );
     }
 
