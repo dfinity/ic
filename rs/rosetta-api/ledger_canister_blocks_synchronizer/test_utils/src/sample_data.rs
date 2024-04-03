@@ -21,6 +21,7 @@ pub fn acc_id(seed: u64) -> AccountIdentifier {
     PrincipalId::new_self_authenticating(&public_key_der).into()
 }
 
+#[allow(dead_code)]
 enum Trans {
     Buy(AccountIdentifier, Tokens),
     Sell(AccountIdentifier, Tokens),

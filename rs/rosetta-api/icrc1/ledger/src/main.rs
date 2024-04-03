@@ -47,7 +47,7 @@ type Tokens = ic_icrc1_tokens_u64::U64;
 type Tokens = ic_icrc1_tokens_u256::U256;
 
 thread_local! {
-    static LEDGER: RefCell<Option<Ledger<Tokens>>> = RefCell::new(None);
+    static LEDGER: RefCell<Option<Ledger<Tokens>>> = const { RefCell::new(None) };
 }
 
 declare_log_buffer!(name = LOG, capacity = 1000);

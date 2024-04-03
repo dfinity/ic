@@ -645,25 +645,24 @@ impl BatchProcessorImpl {
         loop {
             match self.try_to_read_registry(registry_version, own_subnet_id) {
                 Ok(result) => return result,
-                Err(err) => {
-                    if let ReadRegistryError::Persistent(_) = err {
-                        // Increment the critical error counter in case of a persistent error.
-                        self.metrics.critical_error_failed_to_read_registry.inc();
-                        warn!(
-                            self.log,
-                            "{}: Persistent error reading registry @ version {}: {:?}.",
-                            CRITICAL_ERROR_FAILED_TO_READ_REGISTRY,
-                            registry_version,
-                            err
-                        );
-                    } else {
-                        warn!(
-                            self.log,
-                            "Unable to read registry @ version {}: {:?}. Trying again...",
-                            registry_version,
-                            err
-                        );
-                    }
+                Err(ReadRegistryError::Persistent(error_message)) => {
+                    // Increment the critical error counter in case of a persistent error.
+                    self.metrics.critical_error_failed_to_read_registry.inc();
+                    warn!(
+                        self.log,
+                        "{}: Persistent error reading registry @ version {}: {:?}.",
+                        CRITICAL_ERROR_FAILED_TO_READ_REGISTRY,
+                        registry_version,
+                        error_message
+                    );
+                }
+                Err(ReadRegistryError::Transient(error_message)) => {
+                    warn!(
+                        self.log,
+                        "Unable to read registry @ version {}: {:?}. Trying again...",
+                        registry_version,
+                        error_message
+                    );
                 }
             }
             sleep(std::time::Duration::from_millis(100));

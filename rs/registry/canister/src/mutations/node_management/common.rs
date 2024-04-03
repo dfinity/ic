@@ -165,7 +165,7 @@ pub fn make_remove_node_registry_mutations(
     let idkg_dealing_key = make_crypto_node_key(node_id, KeyPurpose::IDkgMEGaEncryption);
     let firewall_ruleset_key = make_firewall_rules_record_key(&FirewallRulesScope::Node(node_id));
 
-    let keys_to_maybe_remove = vec![
+    let keys_to_maybe_remove = [
         node_key,
         committee_signing_key,
         node_signing_key,

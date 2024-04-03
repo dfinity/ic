@@ -550,22 +550,22 @@ fn test_firewall_rule_compilation() {
         direction: Some(FirewallRuleDirection::Inbound as i32),
     }];
 
-    let expected_tcp_rules_compiled_v4 = vec![
+    let expected_tcp_rules_compiled_v4 = [
         format!("{} {} {} {}", "test_ipv4_1", "1,2,3", "accept", "comment1"),
         format!("{} {} {} {}", "test_ipv4_2", "4,5,6", "drop", "comment2"),
     ];
 
-    let expected_udp_rules_compiled_v4 = vec![format!(
+    let expected_udp_rules_compiled_v4 = [format!(
         "{} {} {} {}",
         "test_ipv4_5_udp", "13,14,15", "accept", "comment5"
     )];
 
-    let expected_tcp_rules_compiled_v6 = vec![
+    let expected_tcp_rules_compiled_v6 = [
         format!("{} {} {} {}", "test_ipv6_1", "1,2,3", "accept", "comment1"),
         format!("{} {} {} {}", "test_ipv6_3", "7,8,9", "drop", "comment3"),
     ];
 
-    let expected_udp_rules_compiled_v6 = vec![format!(
+    let expected_udp_rules_compiled_v6 = [format!(
         "{} {} {} {}",
         "test_ipv6_5_udp", "13,14,15", "accept", "comment5"
     )];

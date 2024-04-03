@@ -39,7 +39,7 @@ struct Crate {
 enum TomlDep {
     Version(VersionReq),
     VersionExtra(NormalDep),
-    Local(LocalDep),
+    Local,
     Git(GitDep),
 }
 
@@ -65,12 +65,6 @@ struct NormalDep {
 
 fn t() -> bool {
     true
-}
-
-#[derive(Deserialize, Debug)]
-struct LocalDep {
-    #[serde(rename = "path")]
-    _path: String,
 }
 
 #[derive(Deserialize, Debug, Hash, PartialEq, Eq, Clone)]
