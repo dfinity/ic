@@ -377,6 +377,7 @@ pub enum ThresholdSchnorrCreateSigShareError {
     SerializationError(String),
     SecretSharesNotFound { commitment_string: String },
     TransientInternalError(String),
+    InvalidArguments(String),
 }
 impl_display_using_debug!(ThresholdSchnorrCreateSigShareError);
 
@@ -395,6 +396,7 @@ pub enum ThresholdSchnorrCombineSigSharesError {
     UnsatisfiedReconstructionThreshold { threshold: u32, share_count: usize },
     SerializationError(String),
     SignerNotAllowed { node_id: NodeId },
+    InvalidArguments(String),
 }
 impl_display_using_debug!(ThresholdSchnorrCombineSigSharesError);
 

@@ -925,7 +925,6 @@ impl From<ThresholdEcdsaError> for ThresholdBip340VerifySigShareInternalError {
 ///
 /// The values provided must be consistent with when the signature share
 /// was created
-#[allow(clippy::too_many_arguments)]
 pub fn verify_bip340_signature_share(
     sig_share: &ThresholdBip340SignatureShareInternal,
     derivation_path: &DerivationPath,
@@ -970,7 +969,6 @@ impl From<ThresholdEcdsaError> for ThresholdBip340CombineSigSharesInternalError 
 ///
 /// The signature shares must be verified prior to use, and there must
 /// be at least reconstruction_threshold many of them.
-#[allow(clippy::too_many_arguments)]
 pub fn combine_bip340_signature_shares(
     derivation_path: &DerivationPath,
     message: &[u8],
@@ -1017,10 +1015,10 @@ impl From<ThresholdEcdsaError> for ThresholdBip340VerifySignatureInternalError {
 /// `derivation_path`, this function also verifies that the signature
 /// was generated correctly with regards to the provided presignature
 /// transcript and randomness.
-pub fn verify_bip340_threshold_signature(
+pub fn verify_threshold_bip340_signature(
     signature: &ThresholdBip340CombinedSignatureInternal,
     derivation_path: &DerivationPath,
-    hashed_message: &[u8],
+    message: &[u8],
     randomness: Randomness,
     presig_transcript: &IDkgTranscriptInternal,
     key_transcript: &IDkgTranscriptInternal,
@@ -1028,7 +1026,7 @@ pub fn verify_bip340_threshold_signature(
     signature
         .verify(
             derivation_path,
-            hashed_message,
+            message,
             randomness,
             presig_transcript,
             key_transcript,

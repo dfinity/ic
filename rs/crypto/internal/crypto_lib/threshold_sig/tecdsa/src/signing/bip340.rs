@@ -266,6 +266,7 @@ impl ThresholdBip340SignatureShareInternal {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ThresholdBip340SignatureShareInternalSerializationError(pub String);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -276,11 +277,41 @@ pub struct ThresholdBip340CombinedSignatureInternal {
 
 impl ThresholdBip340CombinedSignatureInternal {
     /// Serialize in the format BIP340 expects, x coordinate only
-    pub fn serialize(&self) -> ThresholdEcdsaResult<Vec<u8>> {
+    pub fn serialize(
+        &self,
+    ) -> Result<Vec<u8>, ThresholdBip340SignatureShareInternalSerializationError> {
         let mut v = vec![];
-        v.extend_from_slice(&self.r.serialize_bip340()?);
+        v.extend_from_slice(&self.r.serialize_bip340().map_err(|e| {
+            ThresholdBip340SignatureShareInternalSerializationError(format!(
+                "Failed to serialize r: {:?}",
+                e
+            ))
+        })?);
         v.extend_from_slice(&self.s.serialize());
         Ok(v)
+    }
+
+    /// Deserialize in the format BIP340 expects, x coordinate only
+    pub fn deserialize(
+        bytes: &[u8],
+    ) -> Result<Self, ThresholdBip340SignatureShareInternalSerializationError> {
+        const K256: EccCurveType = EccCurveType::K256;
+
+        if bytes.len() != K256.scalar_bytes() + K256.point_bytes() {
+            return Err(ThresholdBip340SignatureShareInternalSerializationError(
+                "Bad signature length".to_string(),
+            ));
+        }
+
+        let r = EccPoint::deserialize_bip340(K256, &bytes[..K256.scalar_bytes()]).map_err(|e| {
+            ThresholdBip340SignatureShareInternalSerializationError(format!("Invalid r: {:?}", e))
+        })?;
+
+        let s = EccScalar::deserialize(K256, &bytes[K256.scalar_bytes()..]).map_err(|e| {
+            ThresholdBip340SignatureShareInternalSerializationError(format!("Invalid s: {:?}", e))
+        })?;
+
+        Ok(Self { r, s })
     }
 
     /// Combine shares into a BIP340 Schnorr signature
