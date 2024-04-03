@@ -250,7 +250,23 @@ impl ThresholdBip340SignatureShareInternal {
             Err(ThresholdEcdsaError::InvalidSignatureShare)
         }
     }
+
+    pub fn serialize(
+        &self,
+    ) -> Result<Vec<u8>, ThresholdBip340SignatureShareInternalSerializationError> {
+        serde_cbor::to_vec(self)
+            .map_err(|e| ThresholdBip340SignatureShareInternalSerializationError(e.to_string()))
+    }
+
+    pub fn deserialize(
+        raw: &[u8],
+    ) -> Result<Self, ThresholdBip340SignatureShareInternalSerializationError> {
+        serde_cbor::from_slice::<Self>(raw)
+            .map_err(|e| ThresholdBip340SignatureShareInternalSerializationError(e.to_string()))
+    }
 }
+
+pub struct ThresholdBip340SignatureShareInternalSerializationError(pub String);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ThresholdBip340CombinedSignatureInternal {

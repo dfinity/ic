@@ -350,6 +350,7 @@ pub enum MetricsDomain {
     TlsConfig,
     IdkgProtocol,
     ThresholdEcdsa,
+    ThresholdSchnorr,
     PublicSeed,
     KeyManagement,
 }
