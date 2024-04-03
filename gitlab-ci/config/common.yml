@@ -68,6 +68,10 @@ before_script:
       docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
       docker-bin login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
 
+      if [ "${NODE_NAME:-}" != "" ]; then
+          echo "NODE: $NODE_NAME"
+      fi
+
       # set ownership to ic-build container's user,
       # but ignore errors that happen due to git gc:
       #   `chown: changing ownership of '.git/shallow.lock': No such file or directory`
