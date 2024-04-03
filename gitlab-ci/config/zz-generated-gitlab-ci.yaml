@@ -1426,6 +1426,10 @@ before_script:
       docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
       docker-bin login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
 
+      if [ "${NODE_NAME:-}" != "" ]; then
+          echo "NODE: $NODE_NAME"
+      fi
+
       # set ownership to ic-build container's user,
       # but ignore errors that happen due to git gc:
       #   `chown: changing ownership of '.git/shallow.lock': No such file or directory`
@@ -3434,22 +3438,6 @@ tecdsa:
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: cdslo
-test-push-branch:
-  dependencies: []
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
-      when: on_success
-  script:
-    - |
-      # The remote might already exist from a previous CI job run because GitLab re-uses the git repo.
-      git remote add origin "https://gitlab-ci-token:${GITLAB_API_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git" || true
-      git remote set-url origin "https://gitlab-ci-token:${GITLAB_API_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git" || true
-
-      git config --global user.email "infra+gitlab-automation@dfinity.org"
-      git config --global user.name "IDX GitLab Automation"
-
-      git switch --force-create post-merge-tests-passed HEAD
-      git push --force --set-upstream origin post-merge-tests-passed
 variables:
   GET_SOURCES_ATTEMPTS: 5
   GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"

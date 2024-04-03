@@ -59,6 +59,8 @@ Principals: []
 # Path to the SNS Project logo on the local filesystem. The path is relative
 # to the configuration file's location, unless an absolute path is given.
 # Must have less than 341,334 bytes. The only supported format is PNG.
+# Consider that NNS dapp will render the image with a 1:1 aspect ratio and
+# cropped to a circle.
 logo: ~
 
 # URL to the dapp controlled by the SNS project.

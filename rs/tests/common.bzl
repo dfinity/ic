@@ -101,7 +101,6 @@ DEPENDENCIES = [
     "//rs/types/types",
     "//rs/types/wasm_types",
     "//rs/universal_canister/lib",
-    "//rs/utils",
     "@crate_index//:anyhow",
     "@crate_index//:assert_matches",
     "@crate_index//:assert-json-diff",
@@ -357,7 +356,7 @@ BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS = [
 COUNTER_CANISTER_RUNTIME_DEPS = ["//rs/tests:src/counter.wat"]
 
 CANISTER_HTTP_RUNTIME_DEPS = [
-    "//rs/tests:http_uvm_config_image",
+    "//rs/tests/networking/canister_http:http_uvm_config_image",
 ]
 
 CUSTOM_DOMAINS_RUNTIME_DEPS = [

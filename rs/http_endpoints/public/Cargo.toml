@@ -9,7 +9,7 @@ documentation.workspace = true
 [dependencies]
 askama = { workspace = true }
 async-trait = "0.1.68"
-axum = { version = "0.7.0", features = ["macros"] }
+axum = { workspace = true }
 bytes = { workspace = true }
 byte-unit = "4.0.14"
 cfg-if = "1.0.0"

@@ -1,5 +1,5 @@
 {
-  "checksum": "f9fa99977247ec32ccecad41b68e862129eaea590c8a534a9d5fbcd8a74611e8",
+  "checksum": "428deb56d65f87076a9979ff2b332f91bf1153f5645a9321bff20e23fdb4fded",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -14369,12 +14369,12 @@
             },
             {
               "id": "axum 0.6.20",
-              "target": "axum"
+              "target": "axum",
+              "alias": "axum_0_6_1"
             },
             {
               "id": "axum 0.7.4",
-              "target": "axum",
-              "alias": "axum_0_7_0"
+              "target": "axum"
             },
             {
               "id": "axum-extra 0.9.1",

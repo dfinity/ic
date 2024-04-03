@@ -136,6 +136,7 @@ rust_test(
         },
         deps = [
             ":ledger",
+            "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
             "//packages/icrc-ledger-types:icrc_ledger_types",
             "//rs/rosetta-api/icrc1",
             "//rs/rosetta-api/icrc1/ledger/sm-tests:sm-tests" + name_suffix,
@@ -153,13 +154,18 @@ rust_test(
             "@crate_index//:num-traits",
             "@crate_index//:proptest",
             "@crate_index//:serde_bytes",
-        ],
+        ] + extra_deps,
     )
-    for (name_suffix, features) in [
-        ("", []),
+    for (name_suffix, features, extra_deps) in [
+        (
+            "",
+            [],
+            ["//rs/rosetta-api/icrc1/tokens_u64"],
+        ),
         (
             "_u256",
             ["u256-tokens"],
+            ["//rs/rosetta-api/icrc1/tokens_u256"],
         ),
     ]
 ]

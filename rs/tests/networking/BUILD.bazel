@@ -7,6 +7,18 @@ PROXY_CANISTER_RUNTIME_DEPS = [
     "//rs/rust_canisters/proxy_canister:proxy_canister",
 ]
 
+CANISTER_HTTP_BASE_DEPS = [
+    "//rs/rust_canisters/dfn_candid",
+    "//rs/rust_canisters/proxy_canister:lib",
+    "//rs/tests",
+    "//rs/tests/networking/canister_http:canister_http",
+    "//rs/types/management_canister_types",
+    "@crate_index//:anyhow",
+    "@crate_index//:candid",
+    "@crate_index//:ic-cdk",
+    "@crate_index//:slog",
+]
+
 system_test(
     name = "canister_http_test",
     flaky = True,
@@ -17,7 +29,7 @@ system_test(
         UNIVERSAL_VM_RUNTIME_DEPS +
         NNS_CANISTER_RUNTIME_DEPS +
         CANISTER_HTTP_RUNTIME_DEPS + PROXY_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = CANISTER_HTTP_BASE_DEPS + ["//rs/rust_canisters/canister_test"],
 )
 
 system_test(
@@ -35,7 +47,10 @@ system_test(
         NNS_CANISTER_RUNTIME_DEPS +
         BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS +
         CANISTER_HTTP_RUNTIME_DEPS + PROXY_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = CANISTER_HTTP_BASE_DEPS + [
+        "//rs/registry/subnet_features",
+        "//rs/registry/subnet_type",
+    ],
 )
 
 system_test(
@@ -48,7 +63,13 @@ system_test(
         UNIVERSAL_VM_RUNTIME_DEPS +
         NNS_CANISTER_RUNTIME_DEPS +
         CANISTER_HTTP_RUNTIME_DEPS + PROXY_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = CANISTER_HTTP_BASE_DEPS + [
+        "//rs/rust_canisters/canister_test",
+        "//rs/test_utilities",
+        "//rs/test_utilities/types",
+        "//rs/types/base_types",
+        "//rs/types/types",
+    ],
 )
 
 system_test(
@@ -64,7 +85,14 @@ system_test(
         UNIVERSAL_VM_RUNTIME_DEPS +
         NNS_CANISTER_RUNTIME_DEPS +
         CANISTER_HTTP_RUNTIME_DEPS + PROXY_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = CANISTER_HTTP_BASE_DEPS + [
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/types/types",
+        "@crate_index//:ic-utils",
+        "@crate_index//:reqwest",
+        "@crate_index//:tokio",
+    ],
 )
 
 system_test(
@@ -81,7 +109,7 @@ system_test(
         UNIVERSAL_VM_RUNTIME_DEPS +
         NNS_CANISTER_RUNTIME_DEPS +
         CANISTER_HTTP_RUNTIME_DEPS + PROXY_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = CANISTER_HTTP_BASE_DEPS,
 )
 
 system_test(

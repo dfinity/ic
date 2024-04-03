@@ -4,7 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "@crate_index//:anyhow",
-    "@crate_index//:axum",
+    "@crate_index//:axum_0_6_1",
     "@crate_index//:candid",
     "@crate_index//:clap",
     "@crate_index//:futures",

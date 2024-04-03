@@ -13,7 +13,6 @@
   "max_reorg_depth": 100,
   "log_configuration": false,
   "compression_disabled": false,
-  "memory_limit_disabled": false,
   "construction": {
     "offline_url": "http://localhost:0000",
     "prefunded_accounts": [

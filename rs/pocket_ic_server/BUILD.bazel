@@ -22,7 +22,7 @@ LIB_DEPENDENCIES = [
     "//rs/registry/routing_table",
     "//rs/test_utilities",
     "@crate_index//:aide",
-    "@crate_index//:axum_0_7_0",
+    "@crate_index//:axum",
     "@crate_index//:axum-extra",
     "@crate_index//:backoff",
     "@crate_index//:http_body_util_0_1_0",

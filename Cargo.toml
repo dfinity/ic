@@ -338,6 +338,7 @@ members = [
   "rs/test_utilities/tmpdir",
   "rs/tests",
   "rs/tests/httpbin-rs",
+  "rs/tests/networking/canister_http",
   "rs/tests/nested",
   "rs/tests/nns/sns",
   "rs/tests/nns/ic_mainnet_nns_recovery",
