@@ -94,7 +94,7 @@ impl ResponsePlaceholder {
 /// All pool operations except `expire_messages()` and
 /// `calculate_memory_usage_stats()` (only used during deserialization) execute
 /// in at most `O(log(N))` time.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct MessagePool {
     /// Pool contents.
     messages: BTreeMap<MessageId, RequestOrResponse>,
@@ -446,18 +446,6 @@ impl PartialEq for MessagePool {
     }
 }
 impl Eq for MessagePool {}
-
-impl Default for MessagePool {
-    fn default() -> Self {
-        Self {
-            messages: Default::default(),
-            memory_usage_stats: Default::default(),
-            deadline_queue: Default::default(),
-            size_queue: Default::default(),
-            next_message_id_generator: 0,
-        }
-    }
-}
 
 /// Running memory utilization stats for all messages in a `MessagePool`.
 ///
