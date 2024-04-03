@@ -62,8 +62,8 @@ mod ecdsa_sign_share {
 
             assert_matches!(
                 result,
-                Err(ThresholdEcdsaSignShareError::SecretSharesNotFound { commitment_string })
-                if commitment_string == format!("{:?}", parameters.lambda_masked.combined_commitment.commitment())
+                Err(ThresholdEcdsaSignShareError::InternalError { internal_error })
+                if internal_error.contains("WrongSecretKeyType")
             )
         });
     }
@@ -115,8 +115,8 @@ mod ecdsa_sign_share {
 
             assert_matches!(
                 result,
-                Err(ThresholdEcdsaSignShareError::SecretSharesNotFound { commitment_string })
-                if commitment_string == format!("{:?}", parameters.kappa_times_lambda.combined_commitment.commitment())
+                Err(ThresholdEcdsaSignShareError::InternalError { internal_error })
+                if internal_error.contains("WrongSecretKeyType")
             )
         });
     }
@@ -166,8 +166,8 @@ mod ecdsa_sign_share {
 
             assert_matches!(
                 result,
-                Err(ThresholdEcdsaSignShareError::SecretSharesNotFound { commitment_string })
-                if commitment_string == format!("{:?}", parameters.key_times_lambda.combined_commitment.commitment())
+                Err(ThresholdEcdsaSignShareError::InternalError { internal_error })
+                if internal_error.contains("WrongSecretKeyType")
             )
         });
     }
@@ -446,14 +446,14 @@ mod ecdsa_sign_share {
 
             assert_matches!(
                 parameters.ecdsa_sign_share(&vault),
-                Err(ThresholdEcdsaSignShareError::InternalError { internal_error })
+                Err(ThresholdEcdsaSignShareError::SerializationError { internal_error })
                 if internal_error == "ThresholdEcdsaSerializationError(\"Invalid point encoding\")"
             );
         }
     }
 
     #[test]
-    fn should_fail_if_secret_shares_not_found_for_opening() {
+    fn should_fail_if_secret_key_has_wrong_type_or_not_found() {
         use ic_crypto_internal_basic_sig_ed25519::types::SecretKeyBytes as Ed25519SecretKeyBytes;
 
         let parameters = EcdsaSignShareParameters::default();
@@ -494,10 +494,18 @@ mod ecdsa_sign_share {
                     .with_canister_secret_key_store(canister_sks)
                     .build();
 
-                assert_matches!(
-                    parameters.ecdsa_sign_share(&vault),
-                    Err(ThresholdEcdsaSignShareError::SecretSharesNotFound { .. })
-                );
+                if invalid_representation.is_some() {
+                    assert_matches!(
+                        parameters.ecdsa_sign_share(&vault),
+                        Err(ThresholdEcdsaSignShareError::InternalError{ internal_error })
+                        if internal_error.contains("WrongSecretKeyType")
+                    );
+                } else {
+                    assert_matches!(
+                        parameters.ecdsa_sign_share(&vault),
+                        Err(ThresholdEcdsaSignShareError::SecretSharesNotFound { .. })
+                    );
+                }
             }
         }
     }

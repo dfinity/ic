@@ -23,6 +23,9 @@ use ic_crypto_internal_csp::vault::api::PublicRandomSeedGenerator;
 use ic_crypto_internal_csp::vault::api::PublicRandomSeedGeneratorError;
 use ic_crypto_internal_csp::vault::api::SecretKeyStoreCspVault;
 use ic_crypto_internal_csp::vault::api::ThresholdEcdsaSignerCspVault;
+use ic_crypto_internal_csp::vault::api::ThresholdSchnorrCreateSigShareVaultError;
+use ic_crypto_internal_csp::vault::api::ThresholdSchnorrSigShareBytes;
+use ic_crypto_internal_csp::vault::api::ThresholdSchnorrSignerCspVault;
 use ic_crypto_internal_csp::vault::api::ThresholdSignatureCspVault;
 use ic_crypto_internal_csp::vault::api::TlsHandshakeCspVault;
 use ic_crypto_internal_csp::vault::api::ValidatePksAndSksError;
@@ -198,6 +201,18 @@ mock! {
             key_times_lambda_raw: IDkgTranscriptInternalBytes,
             algorithm_id: AlgorithmId,
         ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError>;
+    }
+
+    impl ThresholdSchnorrSignerCspVault for LocalCspVault {
+        fn create_schnorr_sig_share(
+            &self,
+            derivation_path: ExtendedDerivationPath,
+            message: Vec<u8>,
+            nonce: Randomness,
+            key_raw: IDkgTranscriptInternalBytes,
+            presig_raw: IDkgTranscriptInternalBytes,
+            algorithm_id: AlgorithmId,
+        ) -> Result<ThresholdSchnorrSigShareBytes, ThresholdSchnorrCreateSigShareVaultError>;
     }
 
     impl SecretKeyStoreCspVault for LocalCspVault{

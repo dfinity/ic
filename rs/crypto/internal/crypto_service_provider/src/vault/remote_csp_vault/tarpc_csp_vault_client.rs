@@ -9,9 +9,11 @@ use crate::vault::api::{
     IDkgTranscriptInternalBytes, MultiSignatureCspVault, NiDkgCspVault, PksAndSksContainsErrors,
     PublicAndSecretKeyStoreCspVault, PublicKeyStoreCspVault, PublicRandomSeedGenerator,
     PublicRandomSeedGeneratorError, SecretKeyStoreCspVault, ThresholdEcdsaSignerCspVault,
-    ThresholdSignatureCspVault, ValidatePksAndSksError,
+    ThresholdSchnorrSigShareBytes, ThresholdSchnorrSignerCspVault, ThresholdSignatureCspVault,
+    ValidatePksAndSksError,
 };
 use crate::vault::remote_csp_vault::codec::{Bincode, CspVaultObserver, ObservableCodec};
+use crate::vault::remote_csp_vault::ThresholdSchnorrCreateSigShareVaultError;
 use crate::vault::remote_csp_vault::{
     remote_vault_codec_builder, robust_unix_socket, TarpcCspVaultClient, FOUR_GIGA_BYTES,
 };
@@ -742,6 +744,36 @@ impl ThresholdEcdsaSignerCspVault for RemoteCspVault {
             Err(ThresholdEcdsaSignShareError::TransientInternalError {
                 internal_error: rpc_error.to_string(),
             })
+        })
+    }
+}
+
+impl ThresholdSchnorrSignerCspVault for RemoteCspVault {
+    #[inline]
+    fn create_schnorr_sig_share(
+        &self,
+        derivation_path: ExtendedDerivationPath,
+        message: Vec<u8>,
+        nonce: Randomness,
+        key_raw: IDkgTranscriptInternalBytes,
+        presig_raw: IDkgTranscriptInternalBytes,
+        algorithm_id: AlgorithmId,
+    ) -> Result<ThresholdSchnorrSigShareBytes, ThresholdSchnorrCreateSigShareVaultError> {
+        self.tokio_block_on(self.tarpc_csp_client.create_schnorr_sig_share(
+            context_with_timeout(self.rpc_timeout),
+            derivation_path,
+            ByteBuf::from(message),
+            nonce,
+            key_raw,
+            presig_raw,
+            algorithm_id,
+        ))
+        .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
+            Err(
+                ThresholdSchnorrCreateSigShareVaultError::TransientInternalError(
+                    rpc_error.to_string(),
+                ),
+            )
         })
     }
 }
