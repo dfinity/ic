@@ -312,6 +312,7 @@ impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
                 }
                 _ = cancellation_token.cancelled() => {
                     while let Some(result) = in_progress_transmissions.join_next().await {
+                        metrics.send_view_send_to_peer_cancelled_total.inc();
                         panic_on_join_err(result);
                     }
                     break;
