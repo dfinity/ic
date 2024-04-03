@@ -30,9 +30,10 @@ use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
 
-use crate::canister_http::lib::install_nns_canisters;
 use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer};
+use crate::driver::test_env_api::{
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
+};
 use crate::nns::get_subnet_list_from_registry;
 use crate::nns::{
     self, get_software_version_from_snapshot, submit_create_application_subnet_proposal,
@@ -201,4 +202,17 @@ pub fn test(env: TestEnv) {
 
 fn set<H: Clone + std::cmp::Eq + std::hash::Hash>(data: &[H]) -> HashSet<H> {
     HashSet::from_iter(data.iter().cloned())
+}
+
+pub fn install_nns_canisters(env: &TestEnv) {
+    let nns_node = env
+        .topology_snapshot()
+        .root_subnet()
+        .nodes()
+        .next()
+        .expect("there is no NNS node");
+    NnsInstallationBuilder::new()
+        .install(&nns_node, env)
+        .expect("NNS canisters not installed");
+    info!(&env.logger(), "NNS canisters installed");
 }
