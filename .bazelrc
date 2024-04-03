@@ -60,6 +60,7 @@ build --bes_backend=bes.idx.dfinity.network
 build --bes_timeout=30s # Default is no timeout.
 build --bes_upload_mode=wait_for_upload_complete
 build:ci --bes_timeout=180s # Default is no timeout.
+build:ci --bes_upload_mode=fully_async
 build --experimental_remote_build_event_upload=minimal
 
 build --remote_local_fallback

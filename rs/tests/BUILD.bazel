@@ -12,7 +12,6 @@ package(default_visibility = ["//visibility:public"])
 exports_files([
     "src/cow_safety.wasm",
     "src/message.wasm",
-    "activate-systest-uvm-config",
 ])
 
 ALIASES = {
@@ -190,29 +189,6 @@ filegroup(
 exports_files([
     "src/canister_http/universal_vm_activation.sh",
 ])
-
-copy_file(
-    name = "minica_image",
-    src = "@minica//image",
-    out = "minica.tar",
-)
-
-uvm_config_image(
-    name = "http_uvm_config_image",
-    srcs = [
-        ":minica_image",
-        ":src/canister_http/universal_vm_activation.sh",
-        "//ic-os/guestos:rootfs/dev-certs/canister_http_test_ca.cert",
-        "//ic-os/guestos:rootfs/dev-certs/canister_http_test_ca.key",
-        "//rs/tests/httpbin-rs:httpbin_image.tar",
-    ],
-    remap_paths = {
-        "universal_vm_activation.sh": "activate",
-        "canister_http_test_ca.cert": "cert.pem",
-        "canister_http_test_ca.key": "key.pem",
-    },
-    tags = ["manual"],  # this target will be built if required as a dependency of another target
-)
 
 run_binary(
     name = "wabt-tests",

@@ -14,7 +14,6 @@
  "max_reorg_depth": 100,
  "log_configuration": false,
  "compression_disabled": false,
- "memory_limit_disabled": false,
  "construction": null,
  "data": {
   "active_reconciliation_concurrency": 4,
@@ -34,7 +33,6 @@
   "coin_tracking_disabled": false,
   "status_port": 9090,
   "results_output_file": "",
-  "pruning_disabled": false,
   "initial_balance_fetch_disabled": false,
   "end_conditions": {
    "reconciliation_coverage": {

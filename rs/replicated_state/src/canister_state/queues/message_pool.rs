@@ -15,7 +15,7 @@ use std::time::Duration;
 mod tests;
 
 /// The lifetime of a guaranteed response call request in an output queue, from
-/// which its deadline is computed (as `now + REQUEST_LIFETIME ).
+/// which its deadline is computed (as `now + REQUEST_LIFETIME`).
 pub const REQUEST_LIFETIME: Duration = Duration::from_secs(300);
 
 /// Bit encoding the message kind (request or response).
@@ -94,7 +94,7 @@ impl ResponsePlaceholder {
 /// All pool operations except `expire_messages()` and
 /// `calculate_memory_usage_stats()` (only used during deserialization) execute
 /// in at most `O(log(N))` time.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct MessagePool {
     /// Pool contents.
     messages: BTreeMap<MessageId, RequestOrResponse>,
@@ -447,31 +447,14 @@ impl PartialEq for MessagePool {
 }
 impl Eq for MessagePool {}
 
-impl Default for MessagePool {
-    fn default() -> Self {
-        Self {
-            messages: Default::default(),
-            memory_usage_stats: Default::default(),
-            deadline_queue: Default::default(),
-            size_queue: Default::default(),
-            next_message_id_generator: 0,
-        }
-    }
-}
-
-/// Running memory utilization stats for input and output queues: total byte
-/// size of all responses in input and output queues; and total reservations in
-/// input and output queues.
+/// Running memory utilization stats for all messages in a `MessagePool`.
 ///
-/// Memory allocation of output responses in streams is tracked separately, at
-/// the replicated state level (as the canister may be migrated to a different
-/// subnet with outstanding responses still left in this subnet's streams).
+/// Memory reservations for guaranteed responses and memory usage of output
+/// responses in streams are tracked by `CanisterQueues`.
 ///
-/// Separate from [`InputQueuesStats`] because the resulting `stats_delta()`
-/// method would become quite cumbersome with an extra `QueueType` argument and
-/// a `QueueOp` that only applied to memory usage stats; and would result in
-/// adding lots of zeros in lots of places.
-#[derive(Clone, Debug, Default, Eq)]
+/// All operations (computing stats deltas and retrieving the stats) are
+/// constant time.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(super) struct MemoryUsageStats {
     /// Sum total of the byte size of all best-effort messages in the pool.
     best_effort_message_bytes: usize,
@@ -491,6 +474,8 @@ pub(super) struct MemoryUsageStats {
 impl MemoryUsageStats {
     /// Returns the memory usage of the guaranteed response messages in the pool,
     /// excluding memory reservations for guaranteed responses.
+    ///
+    /// Complexity: `O(1)`.
     pub fn memory_usage(&self) -> usize {
         self.guaranteed_responses_size_bytes + self.oversized_guaranteed_requests_extra_bytes
     }
@@ -504,8 +489,8 @@ impl MemoryUsageStats {
         }
     }
 
-    /// Calculates the change in stats caused by pushing (+) or popping (-) a
-    /// request.
+    /// Calculates the change in stats caused by pushing (+) or popping (-) the
+    /// given request.
     fn request_stats_delta(req: &Request) -> MemoryUsageStats {
         let size_bytes = req.count_bytes();
         if req.deadline == NO_DEADLINE {
@@ -550,26 +535,31 @@ impl MemoryUsageStats {
 
 impl AddAssign<MemoryUsageStats> for MemoryUsageStats {
     fn add_assign(&mut self, rhs: MemoryUsageStats) {
-        self.guaranteed_responses_size_bytes += rhs.guaranteed_responses_size_bytes;
-        self.oversized_guaranteed_requests_extra_bytes +=
-            rhs.oversized_guaranteed_requests_extra_bytes;
+        let MemoryUsageStats {
+            best_effort_message_bytes,
+            guaranteed_responses_size_bytes,
+            oversized_guaranteed_requests_extra_bytes,
+            size_bytes,
+        } = rhs;
+        self.best_effort_message_bytes += best_effort_message_bytes;
+        self.guaranteed_responses_size_bytes += guaranteed_responses_size_bytes;
+        self.oversized_guaranteed_requests_extra_bytes += oversized_guaranteed_requests_extra_bytes;
+        self.size_bytes += size_bytes;
     }
 }
 
 impl SubAssign<MemoryUsageStats> for MemoryUsageStats {
     fn sub_assign(&mut self, rhs: MemoryUsageStats) {
-        self.guaranteed_responses_size_bytes -= rhs.guaranteed_responses_size_bytes;
-        self.oversized_guaranteed_requests_extra_bytes -=
-            rhs.oversized_guaranteed_requests_extra_bytes;
-    }
-}
-
-// Custom `PartialEq`, ignoring `transient_stream_responses_size_bytes`.
-impl PartialEq for MemoryUsageStats {
-    fn eq(&self, rhs: &Self) -> bool {
-        self.guaranteed_responses_size_bytes == rhs.guaranteed_responses_size_bytes
-            && self.oversized_guaranteed_requests_extra_bytes
-                == rhs.oversized_guaranteed_requests_extra_bytes
+        let MemoryUsageStats {
+            best_effort_message_bytes,
+            guaranteed_responses_size_bytes,
+            oversized_guaranteed_requests_extra_bytes,
+            size_bytes,
+        } = rhs;
+        self.best_effort_message_bytes -= best_effort_message_bytes;
+        self.guaranteed_responses_size_bytes -= guaranteed_responses_size_bytes;
+        self.oversized_guaranteed_requests_extra_bytes -= oversized_guaranteed_requests_extra_bytes;
+        self.size_bytes -= size_bytes;
     }
 }
 

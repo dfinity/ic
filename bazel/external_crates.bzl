@@ -151,14 +151,14 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "async-trait": crate.spec(
                 version = "^0.1.73",
             ),
-            "axum": crate.spec(
+            "axum_0_6_1": crate.spec(
+                package = "axum",
                 version = "^0.6.1",
                 features = [
                     "headers",
                 ],
             ),
-            "axum_0_7_0": crate.spec(
-                package = "axum",
+            "axum": crate.spec(
                 version = "^0.7.4",
             ),
             "axum-server_0_6_0": crate.spec(
