@@ -32,7 +32,7 @@ DEPENDENCIES = [
     "@crate_index//:async-scoped",
     "@crate_index//:axum-extra",
     "@crate_index//:axum-server",
-    "@crate_index//:axum",
+    "@crate_index//:axum_0_6_1",
     "@crate_index//:bytes",
     "@crate_index//:candid",
     "@crate_index//:clap",

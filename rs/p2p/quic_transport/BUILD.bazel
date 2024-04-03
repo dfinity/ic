@@ -18,7 +18,7 @@ DEPENDENCIES = [
     "//rs/phantom_newtype",
     "//rs/types/base_types",
     "@crate_index//:anyhow",
-    "@crate_index//:axum_0_7_0",
+    "@crate_index//:axum",
     "@crate_index//:bincode",
     "@crate_index//:bytes",
     "@crate_index//:either",
