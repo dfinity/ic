@@ -161,15 +161,16 @@ async fn get_minter_info() -> MinterInfo {
         minter_address: s.minter_address().map(|a| a.to_string()),
         eth_helper_contract_address: s.eth_helper_contract_address.map(|a| a.to_string()),
         erc20_helper_contract_address: s.erc20_helper_contract_address.map(|a| a.to_string()),
-        supported_ckerc20_tokens: s
-            .ckerc20_tokens
-            .iter()
-            .map(|(symbol, addr, canister)| CkErc20Token {
-                ckerc20_token_symbol: erc20::CkTokenSymbol::to_string(symbol),
-                erc20_contract_address: addr.to_string(),
-                ledger_canister_id: *canister,
-            })
-            .collect::<Vec<_>>(),
+        supported_ckerc20_tokens: Some(
+            s.ckerc20_tokens
+                .iter()
+                .map(|(symbol, addr, canister)| CkErc20Token {
+                    ckerc20_token_symbol: erc20::CkTokenSymbol::to_string(symbol),
+                    erc20_contract_address: addr.to_string(),
+                    ledger_canister_id: *canister,
+                })
+                .collect::<Vec<_>>(),
+        ),
         minimum_withdrawal_amount: Some(s.minimum_withdrawal_amount.into()),
         ethereum_block_height: Some(s.ethereum_block_height.into()),
         last_observed_block_number: s.last_observed_block_number.map(|n| n.into()),

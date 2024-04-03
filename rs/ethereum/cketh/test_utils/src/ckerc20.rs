@@ -301,6 +301,7 @@ impl CkErc20Setup {
         self.cketh
             .get_minter_info()
             .supported_ckerc20_tokens
+            .expect("BUG: no ckERC20 tokens supported")
             .iter()
             .find(|t| t.ckerc20_token_symbol == token_symbol)
             .unwrap()
