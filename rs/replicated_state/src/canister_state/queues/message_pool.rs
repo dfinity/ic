@@ -459,18 +459,13 @@ impl Default for MessagePool {
     }
 }
 
-/// Running memory utilization stats for input and output queues: total byte
-/// size of all responses in input and output queues; and total reservations in
-/// input and output queues.
+/// Running memory utilization stats for all messages in a `MessagePool`.
 ///
-/// Memory allocation of output responses in streams is tracked separately, at
-/// the replicated state level (as the canister may be migrated to a different
-/// subnet with outstanding responses still left in this subnet's streams).
+/// Memory reservations for guaranteed responses and memory usage of output
+/// responses in streams are tracked by `CanisterQueues`.
 ///
-/// Separate from [`InputQueuesStats`] because the resulting `stats_delta()`
-/// method would become quite cumbersome with an extra `QueueType` argument and
-/// a `QueueOp` that only applied to memory usage stats; and would result in
-/// adding lots of zeros in lots of places.
+/// All operations (computing stats deltas and retrieving the stats) are
+/// constant time.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(super) struct MemoryUsageStats {
     /// Sum total of the byte size of all best-effort messages in the pool.
@@ -491,6 +486,8 @@ pub(super) struct MemoryUsageStats {
 impl MemoryUsageStats {
     /// Returns the memory usage of the guaranteed response messages in the pool,
     /// excluding memory reservations for guaranteed responses.
+    ///
+    /// Complexity: `O(1)`.
     pub fn memory_usage(&self) -> usize {
         self.guaranteed_responses_size_bytes + self.oversized_guaranteed_requests_extra_bytes
     }
@@ -504,8 +501,8 @@ impl MemoryUsageStats {
         }
     }
 
-    /// Calculates the change in stats caused by pushing (+) or popping (-) a
-    /// request.
+    /// Calculates the change in stats caused by pushing (+) or popping (-) the
+    /// given request.
     fn request_stats_delta(req: &Request) -> MemoryUsageStats {
         let size_bytes = req.count_bytes();
         if req.deadline == NO_DEADLINE {
