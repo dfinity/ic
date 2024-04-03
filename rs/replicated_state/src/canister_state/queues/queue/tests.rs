@@ -228,38 +228,6 @@ fn canister_queue_push_without_reserved_slot_fails() {
 }
 
 #[test]
-fn canister_queue_contains() {
-    const CAPACITY: usize = 2;
-    let mut queue = CanisterQueue::new(CAPACITY);
-
-    let id1 = new_request_message_id(1);
-    let id2 = new_response_message_id(2);
-    assert!(!queue.contains(id1));
-    assert!(!queue.contains(id2));
-
-    // Push a request with ID `id1`.
-    queue.push_request(id1);
-    assert!(queue.contains(id1));
-    assert!(!queue.contains(id2));
-
-    // Push a response with ID `id2`.
-    queue.try_reserve_response_slot().unwrap();
-    queue.push_response(id2);
-    assert!(queue.contains(id1));
-    assert!(queue.contains(id2));
-
-    // Pop the request.
-    assert_eq!(Some(MessageReference::Request(id1)), queue.pop());
-    assert!(!queue.contains(id1));
-    assert!(queue.contains(id2));
-
-    // Pop the response.
-    assert_eq!(Some(MessageReference::Response(id2)), queue.pop());
-    assert!(!queue.contains(id1));
-    assert!(!queue.contains(id2));
-}
-
-#[test]
 fn canister_queue_empty_size_bytes() {
     let pool = MessagePool::default();
 

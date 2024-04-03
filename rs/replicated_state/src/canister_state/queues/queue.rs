@@ -316,17 +316,6 @@ impl CanisterQueue {
         self.queue.iter().map(stat).sum::<usize>()
     }
 
-    /// Tests whether the queue contains the message with the given ID.
-    ///
-    /// Time complexity: `O(n)`.
-    pub(super) fn contains(&self, id: MessageId) -> bool {
-        use MessageReference::*;
-
-        self.queue
-            .iter()
-            .any(|reference| matches!(reference, Request(qid) | Response(qid) if qid == &id))
-    }
-
     /// Queue invariant check that panics if any invariant does not hold. Intended
     /// to be called from within a `debug_assert!()` in production code.
     ///

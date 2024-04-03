@@ -359,6 +359,30 @@ impl MessagePool {
         self.messages.len()
     }
 
+    /// Returns the memory usage of the best-effort messages in the pool.
+    pub(crate) fn best_effort_memory_usage(&self) -> usize {
+        self.memory_usage_stats.best_effort_message_bytes
+    }
+
+    /// Returns the memory usage of the guaranteed response messages in the pool,
+    /// excluding memory reservations for guaranteed responses.
+    pub(crate) fn memory_usage(&self) -> usize {
+        self.memory_usage_stats.memory_usage()
+    }
+
+    /// Returns the sum total of the byte size of all guaranteed responses in the
+    /// pool.
+    pub(crate) fn guaranteed_responses_size_bytes(&self) -> usize {
+        self.memory_usage_stats.guaranteed_responses_size_bytes
+    }
+
+    /// Returns the sum total of bytes above `MAX_RESPONSE_COUNT_BYTES` per
+    /// oversized guaranteed response call request.
+    pub(crate) fn oversized_guaranteed_requests_extra_bytes(&self) -> usize {
+        self.memory_usage_stats
+            .oversized_guaranteed_requests_extra_bytes
+    }
+
     /// Prunes stale entries from the priority queues if they make up more than half
     /// of the respective priority queue. This ensures amortized constant time for
     /// the priority queues.
@@ -465,15 +489,10 @@ pub(super) struct MemoryUsageStats {
 }
 
 impl MemoryUsageStats {
-    /// Returns the memory usage of guaranteed response messages, excluding memory
-    /// reservations for responses.
+    /// Returns the memory usage of the guaranteed response messages in the pool,
+    /// excluding memory reservations for guaranteed responses.
     pub fn memory_usage(&self) -> usize {
         self.guaranteed_responses_size_bytes + self.oversized_guaranteed_requests_extra_bytes
-    }
-
-    /// Returns the memory usage of best-effort messages.
-    pub fn best_effort_memory_usage(&self) -> usize {
-        self.best_effort_message_bytes
     }
 
     /// Calculates the change in stats caused by pushing (+) or popping (-) the
