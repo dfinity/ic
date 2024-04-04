@@ -1508,7 +1508,7 @@ impl ExecutionEnvironment {
                     round_limits,
                     subnet_size,
                     &self.metrics.state_changes_error,
-                    self.config.canister_logging,
+                    self.config.embedders_config.feature_flags.canister_logging,
                 );
                 if let ExecuteMessageResult::Finished {
                     canister: _,
@@ -1544,7 +1544,7 @@ impl ExecutionEnvironment {
                     subnet_size,
                     &self.call_tree_metrics,
                     self.config.dirty_page_logging,
-                    self.config.canister_logging,
+                    self.config.embedders_config.feature_flags.canister_logging,
                 )
             }
             WasmMethod::System(_) => {
@@ -1582,7 +1582,7 @@ impl ExecutionEnvironment {
             subnet_size,
             &self.call_tree_metrics,
             self.config.dirty_page_logging,
-            self.config.canister_logging,
+            self.config.embedders_config.feature_flags.canister_logging,
         )
     }
 
