@@ -206,10 +206,15 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                 .map_err(|e| {
                     CombinedCommitmentOpeningFromSksError::SerializationError(format!("{:?}", e))
                 }),
-            Some(_) => Err(CombinedCommitmentOpeningFromSksError::WrongSecretKeyType),
+            Some(key_with_wrong_type) => {
+                Err(CombinedCommitmentOpeningFromSksError::WrongSecretKeyType(
+                    // only reveals the key type
+                    <&'static str>::from(key_with_wrong_type).to_string(),
+                ))
+            }
             None => Err(
                 CombinedCommitmentOpeningFromSksError::SecretSharesNotFound {
-                    commitment_string: format!("{:?}", commitment),
+                    commitment_string: format!("{commitment:?}"),
                 },
             ),
         }
@@ -224,7 +229,7 @@ enum CombinedCommitmentOpeningFromSksError {
     /// If failed to deserialize the commitment opening.
     SerializationError(String),
     /// if the commitment maps to a secret key that is not an `IDkgCommitmentOpening`
-    WrongSecretKeyType,
+    WrongSecretKeyType(String),
 }
 
 impl From<CombinedCommitmentOpeningFromSksError> for ThresholdSchnorrCreateSigShareVaultError {
@@ -234,8 +239,10 @@ impl From<CombinedCommitmentOpeningFromSksError> for ThresholdSchnorrCreateSigSh
             F::SecretSharesNotFound { commitment_string } => {
                 Self::SecretSharesNotFound { commitment_string }
             }
-            F::SerializationError(e) => Self::SerializationError(e),
-            F::WrongSecretKeyType => Self::InternalError(format!("{e:?}")),
+            F::SerializationError(s) => Self::SerializationError(s),
+            F::WrongSecretKeyType(s) => {
+                Self::InternalError(format!("obtained secret key has wrong type: {s}"))
+            }
         }
     }
 }
@@ -248,8 +255,8 @@ impl From<CombinedCommitmentOpeningFromSksError> for ThresholdEcdsaSignShareErro
                 Self::SecretSharesNotFound { commitment_string }
             }
             F::SerializationError(internal_error) => Self::SerializationError { internal_error },
-            F::WrongSecretKeyType => Self::InternalError {
-                internal_error: format!("{e:?}"),
+            F::WrongSecretKeyType(s) => Self::InternalError {
+                internal_error: format!("obtained secret key has wrong type: {s}"),
             },
         }
     }
