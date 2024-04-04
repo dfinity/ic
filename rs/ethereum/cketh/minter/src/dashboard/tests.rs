@@ -1,11 +1,12 @@
 use crate::dashboard::tests::assertions::DashboardAssert;
 use crate::dashboard::DashboardTemplate;
+use crate::erc20::CkErc20Token;
 use candid::Principal;
-use ic_cketh_minter::eth_logs::{EventSource, ReceivedEthEvent};
+use ic_cketh_minter::eth_logs::{EventSource, ReceivedErc20Event, ReceivedEthEvent};
 use ic_cketh_minter::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use ic_cketh_minter::lifecycle::EthereumNetwork;
 use ic_cketh_minter::numeric::{
-    BlockNumber, CkTokenAmount, GasAmount, LedgerBurnIndex, LedgerMintIndex, LogIndex,
+    BlockNumber, CkTokenAmount, Erc20Value, GasAmount, LedgerBurnIndex, LedgerMintIndex, LogIndex,
     TransactionNonce, Wei, WeiPerGas,
 };
 use ic_cketh_minter::state::audit::{apply_state_transition, EventType};
@@ -20,7 +21,7 @@ use std::str::FromStr;
 
 #[test]
 fn should_display_metadata() {
-    let dashboard = DashboardTemplate {
+    let mut dashboard = DashboardTemplate {
         minter_address: "0x1789F79e95324A47c5Fd6693071188e82E9a3558".to_string(),
         eth_helper_contract_address: "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34".to_string(),
         ledger_id: Principal::from_text("apia6-jaaaa-aaaar-qabma-cai")
@@ -31,10 +32,11 @@ fn should_display_metadata() {
         ..initial_dashboard()
     };
 
-    DashboardAssert::assert_that(dashboard)
+    DashboardAssert::assert_that(dashboard.clone())
         .has_ethereum_network("Ethereum Testnet Sepolia")
         .has_minter_address("0x1789F79e95324A47c5Fd6693071188e82E9a3558")
         .has_eth_helper_contract_address("0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34")
+        .has_erc20_helper_contract_address("N/A")
         .has_ledger_canister_id("apia6-jaaaa-aaaar-qabma-cai")
         .has_tecdsa_key_name("key_1")
         .has_next_transaction_nonce("42")
@@ -42,30 +44,38 @@ fn should_display_metadata() {
         .has_eth_balance("0")
         .has_total_effective_tx_fees("0")
         .has_total_unspent_tx_fees("0");
+
+    dashboard.erc20_helper_contract_address =
+        "0xE1788E4834c896F1932188645cc36c54d1b80AC1".to_string();
+    DashboardAssert::assert_that(dashboard.clone())
+        .has_erc20_helper_contract_address("0xE1788E4834c896F1932188645cc36c54d1b80AC1");
 }
 
 #[test]
 fn should_display_block_sync() {
     let dashboard = DashboardTemplate {
         last_observed_block: None,
-        last_synced_block: BlockNumber::from(4552270_u32),
+        last_eth_synced_block: BlockNumber::from(4552270_u32),
         ..initial_dashboard()
     };
     DashboardAssert::assert_that(dashboard)
         .has_no_elements_matching("#last-observed-block-number")
-        .has_last_synced_block_href("https://sepolia.etherscan.io/block/4552270")
+        .has_no_elements_matching("#last-erc20-synced-block-number")
+        .has_last_eth_synced_block_href("https://sepolia.etherscan.io/block/4552270")
         .has_first_synced_block_href("https://sepolia.etherscan.io/block/3956207")
         .has_no_elements_matching("#skipped-blocks");
 
     let dashboard = DashboardTemplate {
         last_observed_block: Some(BlockNumber::from(4552271_u32)),
-        last_synced_block: BlockNumber::from(4552270_u32),
+        last_eth_synced_block: BlockNumber::from(4552270_u32),
+        last_erc20_synced_block: Some(BlockNumber::from(4552269_u32)),
         skipped_blocks: btreeset! {BlockNumber::from(3552270_u32), BlockNumber::from(2552270_u32)},
         ..initial_dashboard()
     };
     DashboardAssert::assert_that(dashboard)
         .has_last_observed_block_href("https://sepolia.etherscan.io/block/4552271")
-        .has_last_synced_block_href("https://sepolia.etherscan.io/block/4552270")
+        .has_last_eth_synced_block_href("https://sepolia.etherscan.io/block/4552270")
+        .has_last_erc20_synced_block_href("https://sepolia.etherscan.io/block/4552269")
         .has_first_synced_block_href("https://sepolia.etherscan.io/block/3956207")
         .has_skipped_blocks(
             r#"<a href="https://sepolia.etherscan.io/block/2552270"><code>2552270</code></a>, <a href="https://sepolia.etherscan.io/block/3552270"><code>3552270</code></a>"#,
@@ -81,24 +91,61 @@ fn should_display_block_sync() {
 }
 
 #[test]
-fn should_display_events_to_mint_sorted_by_decreasing_block_number() {
-    DashboardAssert::assert_that(initial_dashboard()).has_no_elements_matching("#events-to-mint");
-
+fn should_display_supported_erc20_tokens() {
+    let usdc = ckusdc();
+    let usdt = ckusdt();
     let dashboard = {
         let mut state = initial_state();
+        state.ethereum_network = EthereumNetwork::Mainnet;
+        state.record_add_ckerc20_token(usdc.clone());
+        state.record_add_ckerc20_token(usdt.clone());
+        DashboardTemplate::from_state(&state)
+    };
+
+    DashboardAssert::assert_that(dashboard)
+        .has_supported_erc20_tokens(
+            1,
+            &vec![
+                "ckUSDC",
+                "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+                "mxzaz-hqaaa-aaaar-qaada-cai",
+            ],
+        )
+        .has_supported_erc20_tokens(
+            2,
+            &vec![
+                "ckUSDT",
+                "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+                "sa4so-piaaa-aaaar-qacnq-cai",
+            ],
+        );
+}
+
+#[test]
+fn should_display_pending_deposits_sorted_by_decreasing_block_number() {
+    DashboardAssert::assert_that(initial_dashboard()).has_no_elements_matching("#pending-deposits");
+
+    let dashboard = {
+        let mut state = initial_state_with_usdc_support();
+
         let event_1 = ReceivedEthEvent {
             block_number: BlockNumber::from(3960623_u32),
             ..received_eth_event()
         };
         let event_2 = ReceivedEthEvent {
-            block_number: BlockNumber::from(3960624_u32),
+            block_number: BlockNumber::from(3960625_u32),
             transaction_hash: "0x5e5a5954e0a6fe5e61067330ea6f1398425a5e01a1dc1ef895b5dde00994e796"
                 .parse()
                 .unwrap(),
             ..received_eth_event()
         };
+        let event_3 = ReceivedErc20Event {
+            block_number: BlockNumber::from(3960624_u32),
+            ..received_erc20_event()
+        };
         apply_state_transition(&mut state, &EventType::AcceptedDeposit(event_1));
         apply_state_transition(&mut state, &EventType::AcceptedDeposit(event_2));
+        apply_state_transition(&mut state, &EventType::AcceptedErc20Deposit(event_3));
         DashboardTemplate::from_state(&state)
     };
 
@@ -106,23 +153,37 @@ fn should_display_events_to_mint_sorted_by_decreasing_block_number() {
         .has_eth_balance("20_000_000_000_000_000")
         .has_total_effective_tx_fees("0")
         .has_total_unspent_tx_fees("0")
-        .has_events_to_mint(
+        .has_pending_deposits(
             1,
             &vec![
                 "0x5e5a5954e0a6fe5e61067330ea6f1398425a5e01a1dc1ef895b5dde00994e796",
                 "29",
                 "0xdd2851Cdd40aE6536831558DD46db62fAc7A844d",
+                "ckETH",
                 "10_000_000_000_000_000",
                 "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae",
+                "3960625",
+            ],
+        )
+        .has_pending_deposits(
+            2,
+            &vec![
+                "0x44d8e93a8f4bbc89ad35fc4fbbdb12cb597b4832da09c0b2300777be180fde87",
+                "39",
+                "0xdd2851Cdd40aE6536831558DD46db62fAc7A844d",
+                "ckUSDC",
+                "10_000_000_000_000_000_000",
+                "hkroy-sm7vs-yyjs7-ekppe-qqnwx-hm4zf-n7ybs-titsi-k6e3k-ucuiu-uqe",
                 "3960624",
             ],
         )
-        .has_events_to_mint(
-            2,
+        .has_pending_deposits(
+            3,
             &vec![
                 "0xf1ac37d920fa57d9caeebc7136fea591191250309ffca95ae0e8a7739de89cc2",
                 "29",
                 "0xdd2851Cdd40aE6536831558DD46db62fAc7A844d",
+                "ckETH",
                 "10_000_000_000_000_000",
                 "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae",
                 "3960623",
@@ -135,20 +196,29 @@ fn should_display_minted_events_sorted_by_decreasing_mint_block_index() {
     DashboardAssert::assert_that(initial_dashboard()).has_no_elements_matching("#minted-events");
 
     let dashboard = {
-        let mut state = initial_state();
+        let mut state = initial_state_with_usdc_support();
+
         let event_1 = ReceivedEthEvent {
             block_number: BlockNumber::from(3960623_u32),
             ..received_eth_event()
         };
         let event_2 = ReceivedEthEvent {
-            block_number: BlockNumber::from(3960624_u32),
+            block_number: BlockNumber::from(3960625_u32),
             transaction_hash: "0x5e5a5954e0a6fe5e61067330ea6f1398425a5e01a1dc1ef895b5dde00994e796"
                 .parse()
                 .unwrap(),
             ..received_eth_event()
         };
+        let event_3 = ReceivedErc20Event {
+            block_number: BlockNumber::from(3960624_u32),
+            ..received_erc20_event()
+        };
         apply_state_transition(&mut state, &EventType::AcceptedDeposit(event_1.clone()));
         apply_state_transition(&mut state, &EventType::AcceptedDeposit(event_2.clone()));
+        apply_state_transition(
+            &mut state,
+            &EventType::AcceptedErc20Deposit(event_3.clone()),
+        );
         apply_state_transition(
             &mut state,
             &EventType::MintedCkEth {
@@ -163,6 +233,15 @@ fn should_display_minted_events_sorted_by_decreasing_mint_block_index() {
                 mint_block_index: LedgerMintIndex::new(43),
             },
         );
+        apply_state_transition(
+            &mut state,
+            &EventType::MintedCkErc20 {
+                event_source: event_3.source(),
+                ckerc20_token_symbol: "ckUSDC".to_string(),
+                erc20_contract_address: event_3.erc20_contract_address,
+                mint_block_index: LedgerMintIndex::new(44),
+            },
+        );
         DashboardTemplate::from_state(&state)
     };
 
@@ -173,6 +252,7 @@ fn should_display_minted_events_sorted_by_decreasing_mint_block_index() {
                 "0x5e5a5954e0a6fe5e61067330ea6f1398425a5e01a1dc1ef895b5dde00994e796",
                 "29",
                 "0xdd2851Cdd40aE6536831558DD46db62fAc7A844d",
+                "ckETH",
                 "10_000_000_000_000_000",
                 "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae",
                 "43",
@@ -181,9 +261,22 @@ fn should_display_minted_events_sorted_by_decreasing_mint_block_index() {
         .has_minted_events(
             2,
             &vec![
+                "0x44d8e93a8f4bbc89ad35fc4fbbdb12cb597b4832da09c0b2300777be180fde87",
+                "39",
+                "0xdd2851Cdd40aE6536831558DD46db62fAc7A844d",
+                "ckUSDC",
+                "10_000_000_000_000_000_000",
+                "hkroy-sm7vs-yyjs7-ekppe-qqnwx-hm4zf-n7ybs-titsi-k6e3k-ucuiu-uqe",
+                "44",
+            ],
+        )
+        .has_minted_events(
+            3,
+            &vec![
                 "0xf1ac37d920fa57d9caeebc7136fea591191250309ffca95ae0e8a7739de89cc2",
                 "29",
                 "0xdd2851Cdd40aE6536831558DD46db62fAc7A844d",
+                "ckETH",
                 "10_000_000_000_000_000",
                 "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae",
                 "42",
@@ -622,6 +715,13 @@ fn initial_state() -> State {
     .expect("valid init args")
 }
 
+fn initial_state_with_usdc_support() -> State {
+    let mut state = initial_state();
+    state.ethereum_network = EthereumNetwork::Mainnet;
+    state.record_add_ckerc20_token(ckusdc());
+    state
+}
+
 fn received_eth_event() -> ReceivedEthEvent {
     ReceivedEthEvent {
         transaction_hash: "0xf1ac37d920fa57d9caeebc7136fea591191250309ffca95ae0e8a7739de89cc2"
@@ -636,6 +736,48 @@ fn received_eth_event() -> ReceivedEthEvent {
         principal: "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae"
             .parse()
             .unwrap(),
+    }
+}
+
+fn received_erc20_event() -> ReceivedErc20Event {
+    ReceivedErc20Event {
+        transaction_hash: "0x44d8e93a8f4bbc89ad35fc4fbbdb12cb597b4832da09c0b2300777be180fde87"
+            .parse()
+            .unwrap(),
+        block_number: BlockNumber::new(5326500),
+        log_index: LogIndex::from(39_u8),
+        from_address: "0xdd2851Cdd40aE6536831558DD46db62fAc7A844d"
+            .parse()
+            .unwrap(),
+        value: Erc20Value::from(10_000_000_000_000_000_000_u128),
+        principal: "hkroy-sm7vs-yyjs7-ekppe-qqnwx-hm4zf-n7ybs-titsi-k6e3k-ucuiu-uqe"
+            .parse()
+            .unwrap(),
+        erc20_contract_address: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+            .parse()
+            .unwrap(),
+    }
+}
+
+pub fn ckusdc() -> CkErc20Token {
+    CkErc20Token {
+        erc20_ethereum_network: EthereumNetwork::Mainnet,
+        erc20_contract_address: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+            .parse()
+            .unwrap(),
+        ckerc20_token_symbol: "ckUSDC".parse().unwrap(),
+        ckerc20_ledger_id: "mxzaz-hqaaa-aaaar-qaada-cai".parse().unwrap(),
+    }
+}
+
+pub fn ckusdt() -> CkErc20Token {
+    CkErc20Token {
+        erc20_ethereum_network: EthereumNetwork::Mainnet,
+        erc20_contract_address: "0xdac17f958d2ee523a2206206994597c13d831ec7"
+            .parse()
+            .unwrap(),
+        ckerc20_token_symbol: "ckUSDT".parse().unwrap(),
+        ckerc20_ledger_id: "sa4so-piaaa-aaaar-qacnq-cai".parse().unwrap(),
     }
 }
 
@@ -755,11 +897,19 @@ mod assertions {
             )
         }
 
-        pub fn has_last_synced_block_href(&self, expected_href: &str) -> &Self {
+        pub fn has_last_eth_synced_block_href(&self, expected_href: &str) -> &Self {
             self.has_href_value(
-                "#last-synced-block-number > td > a",
+                "#last-eth-synced-block-number > td > a",
                 expected_href,
-                "wrong last synced block href",
+                "wrong last ETH synced block href",
+            )
+        }
+
+        pub fn has_last_erc20_synced_block_href(&self, expected_href: &str) -> &Self {
+            self.has_href_value(
+                "#last-erc20-synced-block-number > td > a",
+                expected_href,
+                "wrong last ERC20 synced block href",
             )
         }
 
@@ -810,7 +960,15 @@ mod assertions {
             self.has_string_value(
                 "#eth-helper-contract-address > td",
                 expected_address,
-                "wrong contract address",
+                "wrong ETH helper contract address",
+            )
+        }
+
+        pub fn has_erc20_helper_contract_address(&self, expected_address: &str) -> &Self {
+            self.has_string_value(
+                "#erc20-helper-contract-address > td",
+                expected_address,
+                "wrong ERC20 helper contract address",
             )
         }
 
@@ -866,11 +1024,23 @@ mod assertions {
             )
         }
 
-        pub fn has_events_to_mint(&self, row_index: u8, expected_value: &Vec<&str>) -> &Self {
+        pub fn has_supported_erc20_tokens(
+            &self,
+            row_index: u8,
+            expected_token: &Vec<&str>,
+        ) -> &Self {
             self.has_table_row_string_value(
-                &format!("#events-to-mint + table > tbody > tr:nth-child({row_index})"),
+                &format!("#supported-ckerc20-tokens + table > tbody > tr:nth-child({row_index})"),
+                expected_token,
+                "wrong supported erc20 tokens",
+            )
+        }
+
+        pub fn has_pending_deposits(&self, row_index: u8, expected_value: &Vec<&str>) -> &Self {
+            self.has_table_row_string_value(
+                &format!("#pending-deposits + table > tbody > tr:nth-child({row_index})"),
                 expected_value,
-                "events-to-mint",
+                "pending-deposits",
             )
         }
 
@@ -878,7 +1048,7 @@ mod assertions {
             self.has_table_row_string_value(
                 &format!("#minted-events + table > tbody > tr:nth-child({row_index})"),
                 expected_value,
-                "events-to-mint",
+                "minted-events",
             )
         }
 
