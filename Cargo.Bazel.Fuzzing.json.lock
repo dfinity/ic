@@ -1,5 +1,5 @@
 {
-  "checksum": "428deb56d65f87076a9979ff2b332f91bf1153f5645a9321bff20e23fdb4fded",
+  "checksum": "e8cce6d6c5b26487170687cc95740396eda8ff32123c68c75b40786c4510803d",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -305,7 +305,7 @@
               "target": "futures_core"
             },
             {
-              "id": "h2 0.3.24",
+              "id": "h2 0.3.26",
               "target": "h2"
             },
             {
@@ -14659,7 +14659,7 @@
               "target": "glob"
             },
             {
-              "id": "h2 0.3.24",
+              "id": "h2 0.3.26",
               "target": "h2"
             },
             {
@@ -20661,13 +20661,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "h2 0.3.24": {
+    "h2 0.3.26": {
       "name": "h2",
-      "version": "0.3.24",
+      "version": "0.3.26",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/h2/0.3.24/download",
-          "sha256": "bb2c4422095b67ee78da96fbb51a4cc413b3b25883c7717ff7ca1ab31022c9c9"
+          "url": "https://static.crates.io/crates/h2/0.3.26/download",
+          "sha256": "81fe527a889e1532da5c525686d96d4c2e74cdd345badf8dfef9f6b39dd5f5e8"
         }
       },
       "targets": [
@@ -20736,17 +20736,17 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.3.24"
+        "version": "0.3.26"
       },
       "license": "MIT"
     },
-    "h2 0.4.2": {
+    "h2 0.4.4": {
       "name": "h2",
-      "version": "0.4.2",
+      "version": "0.4.4",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/h2/0.4.2/download",
-          "sha256": "31d030e59af851932b72ceebadf4a2b5986dba4c3b99dd2493f8273a0f151943"
+          "url": "https://static.crates.io/crates/h2/0.4.4/download",
+          "sha256": "816ec7294445779408f36fe57bc5b7fc1cf59664059096c65f905c1c61f58069"
         }
       },
       "targets": [
@@ -20814,8 +20814,8 @@
           ],
           "selects": {}
         },
-        "edition": "2018",
-        "version": "0.4.2"
+        "edition": "2021",
+        "version": "0.4.4"
       },
       "license": "MIT"
     },
@@ -22690,7 +22690,7 @@
               "target": "futures_util"
             },
             {
-              "id": "h2 0.3.24",
+              "id": "h2 0.3.26",
               "target": "h2"
             },
             {
@@ -22796,7 +22796,7 @@
               "target": "futures_util"
             },
             {
-              "id": "h2 0.4.2",
+              "id": "h2 0.4.4",
               "target": "h2"
             },
             {
@@ -43977,7 +43977,7 @@
                 "target": "encoding_rs"
               },
               {
-                "id": "h2 0.3.24",
+                "id": "h2 0.3.26",
                 "target": "h2"
               },
               {
@@ -54758,7 +54758,7 @@
               "target": "bytes"
             },
             {
-              "id": "h2 0.3.24",
+              "id": "h2 0.3.26",
               "target": "h2"
             },
             {
@@ -65111,7 +65111,7 @@
     "get_if_addrs 0.5.3",
     "getrandom 0.2.10",
     "glob 0.3.1",
-    "h2 0.3.24",
+    "h2 0.3.26",
     "hashlink 0.8.4",
     "hex 0.4.3",
     "hex-literal 0.4.1",
