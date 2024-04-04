@@ -94,6 +94,7 @@ impl TryFrom<InitArg> for State {
             last_transaction_price_estimate: None,
             ledger_suite_orchestrator_id: None,
             ckerc20_tokens: Default::default(),
+            erc20_balances: Default::default(),
         };
         state.validate_config()?;
         Ok(state)

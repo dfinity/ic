@@ -289,6 +289,10 @@ impl FinalizedEip1559Transaction {
         &self.receipt.transaction_hash
     }
 
+    pub fn transaction_data(&self) -> &[u8] {
+        &self.transaction.transaction().data
+    }
+
     pub fn transaction(&self) -> &Eip1559TransactionRequest {
         self.transaction.transaction()
     }

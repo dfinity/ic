@@ -2,7 +2,7 @@ use assert_matches::assert_matches;
 use candid::{Nat, Principal};
 use ic_cketh_minter::endpoints::events::{EventPayload, EventSource};
 use ic_cketh_minter::endpoints::CandidBlockTag::Finalized;
-use ic_cketh_minter::endpoints::{AddCkErc20Token, CkErc20Token, MinterInfo};
+use ic_cketh_minter::endpoints::{AddCkErc20Token, CkErc20Token, Erc20Balance, MinterInfo};
 use ic_cketh_minter::memo::MintMemo;
 use ic_cketh_minter::numeric::BlockNumber;
 use ic_cketh_minter::SCRAPPING_ETH_LOGS_INTERVAL;
@@ -492,6 +492,12 @@ mod withdraw_erc20 {
             )
             .expect_withdrawal_request_accepted();
 
+        assert_eq!(
+            ckerc20
+                .setup
+                .erc20_balance_from_get_minter_info(&ckusdc.erc20_contract_address),
+            TWO_USDC + CKERC20_TRANSFER_FEE
+        );
         let time = ckerc20.setup.env.get_time().as_nanos_since_unix_epoch();
 
         let RetrieveErc20Request {
@@ -556,6 +562,10 @@ mod withdraw_erc20 {
         assert_eq!(
             ckerc20.balance_of_ledger(ckusdc.ledger_canister_id, caller),
             Nat::from(0_u8)
+        );
+        assert_eq!(
+            ckerc20.erc20_balance_from_get_minter_info(&ckusdc.erc20_contract_address),
+            CKERC20_TRANSFER_FEE
         );
 
         let estimated_max_fee_per_gas = Nat::from(33_003_708_258_u64);
@@ -796,22 +806,29 @@ fn should_fail_to_mint_from_unsupported_erc20_contract_address() {
 #[test]
 fn should_retrieve_minter_info() {
     let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
-    let supported_ckerc20_tokens = Some(
-        ckerc20
-            .supported_erc20_tokens
-            .iter()
-            .map(|token: &Erc20Token| CkErc20Token {
-                ckerc20_token_symbol: token.ledger_init_arg.token_symbol.clone(),
-                erc20_contract_address: format_ethereum_address_to_eip_55(&token.contract.address),
-                ledger_canister_id: ckerc20
-                    .orchestrator
-                    .call_orchestrator_canister_ids(&token.contract)
-                    .unwrap()
-                    .ledger
-                    .unwrap(),
-            })
-            .collect::<Vec<_>>(),
-    );
+    let supported_ckerc20_tokens = ckerc20
+        .supported_erc20_tokens
+        .iter()
+        .map(|token: &Erc20Token| CkErc20Token {
+            ckerc20_token_symbol: token.ledger_init_arg.token_symbol.clone(),
+            erc20_contract_address: format_ethereum_address_to_eip_55(&token.contract.address),
+            ledger_canister_id: ckerc20
+                .orchestrator
+                .call_orchestrator_canister_ids(&token.contract)
+                .unwrap()
+                .ledger
+                .unwrap(),
+        })
+        .collect::<Vec<_>>();
+    assert!(!supported_ckerc20_tokens.is_empty());
+
+    let erc20_balances = supported_ckerc20_tokens
+        .iter()
+        .map(|token| Erc20Balance {
+            erc20_contract_address: token.erc20_contract_address.clone(),
+            balance: Nat::from(0_u8),
+        })
+        .collect();
 
     let info_at_start = ckerc20.cketh.get_minter_info();
     assert_eq!(
@@ -824,12 +841,13 @@ fn should_retrieve_minter_info() {
             erc20_helper_contract_address: Some(format_ethereum_address_to_eip_55(
                 ERC20_HELPER_CONTRACT_ADDRESS
             )),
-            supported_ckerc20_tokens,
+            supported_ckerc20_tokens: Some(supported_ckerc20_tokens),
             minimum_withdrawal_amount: Some(Nat::from(CKETH_MINIMUM_WITHDRAWAL_AMOUNT)),
             ethereum_block_height: Some(Finalized),
             last_observed_block_number: None,
             eth_balance: Some(Nat::from(0_u8)),
             last_gas_fee_estimate: None,
+            erc20_balances: Some(erc20_balances),
         }
     );
 }

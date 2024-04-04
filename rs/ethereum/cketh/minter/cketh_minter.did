@@ -158,6 +158,10 @@ type MinterInfo = record {
 
     // Last gas fee estimate.
     last_gas_fee_estimate: opt GasFeeEstimate;
+
+    // Amount of ETH in Wei controlled by the minter.
+    // This might be less that the actual amount available on the `minter_address()`.
+    erc20_balances : opt vec record { erc20_contract_address: text; balance: nat};
 };
 
 

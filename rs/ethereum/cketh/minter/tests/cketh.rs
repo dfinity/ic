@@ -1098,12 +1098,13 @@ fn should_retrieve_minter_info() {
                 ETH_HELPER_CONTRACT_ADDRESS
             )),
             erc20_helper_contract_address: None,
-            supported_ckerc20_tokens: Some(vec![]),
+            supported_ckerc20_tokens: None,
             minimum_withdrawal_amount: Some(Nat::from(CKETH_MINIMUM_WITHDRAWAL_AMOUNT)),
             ethereum_block_height: Some(Finalized),
             last_observed_block_number: None,
             eth_balance: Some(Nat::from(0_u8)),
             last_gas_fee_estimate: None,
+            erc20_balances: None,
         }
     );
 
