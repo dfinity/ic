@@ -2000,16 +2000,19 @@ mod create_transaction {
     use crate::numeric::{
         Erc20Value, GasAmount, LedgerBurnIndex, TransactionNonce, Wei, WeiPerGas,
     };
+    use crate::state::transactions::tests::arbitrary::{arb_address, arb_checked_amount_of};
     use crate::state::transactions::tests::{
         ckerc20_withdrawal_request_with_index, cketh_withdrawal_request_with_index,
         cketh_withdrawal_tx_fee,
     };
     use crate::state::transactions::{
         create_transaction, CreateTransactionError, Erc20WithdrawalRequest, EthWithdrawalRequest,
+        TransactionCallData,
     };
     use crate::tx::TransactionPrice;
     use crate::tx::{AccessList, Eip1559TransactionRequest};
     use crate::withdraw::CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT;
+    use proptest::collection::vec as pvec;
     use proptest::prelude::any;
     use proptest::{prop_assert_eq, proptest};
 
@@ -2149,6 +2152,22 @@ mod create_transaction {
                 }))
         }
     }
+
+    proptest! {
+         #[test]
+         fn should_encode_decode_transaction_call_data(to in arb_address(), value in arb_checked_amount_of()) {
+             let erc20_transfer = TransactionCallData::Erc20Transfer { to, value };
+             let decoded_data = TransactionCallData::decode(erc20_transfer.encode()).unwrap();
+             prop_assert_eq!(decoded_data, erc20_transfer);
+         }
+
+         #[test]
+         fn should_not_panic_when_decoding_transaction_call_data(data_with_expected_length in pvec(any::<u8>(), 68), arb_data in pvec(any::<u8>(), 0..1000)) {
+             let _decoded_data = TransactionCallData::decode(data_with_expected_length);
+             let _decoded_data = TransactionCallData::decode(arb_data);
+         }
+
+    }
 }
 
 mod withdrawal_flow {
@@ -2231,7 +2250,7 @@ pub mod arbitrary {
         uniform32(any::<u8>()).prop_map(ethnum::u256::from_be_bytes)
     }
 
-    fn arb_address() -> impl Strategy<Value = Address> {
+    pub fn arb_address() -> impl Strategy<Value = Address> {
         uniform20(any::<u8>()).prop_map(Address::new)
     }
 

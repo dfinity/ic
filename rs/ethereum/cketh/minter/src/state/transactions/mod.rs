@@ -967,7 +967,11 @@ pub fn create_transaction(
                 gas_limit: transaction_price.gas_limit,
                 destination: request.erc20_contract_address,
                 amount: Wei::ZERO,
-                data: create_transaction_data(request),
+                data: TransactionCallData::Erc20Transfer {
+                    to: request.destination,
+                    value: request.withdrawal_amount,
+                }
+                .encode(),
                 access_list: Default::default(),
             })
         }
@@ -976,12 +980,49 @@ pub fn create_transaction(
 
 // First 4 bytes of keccak256(transfer(address,uint256))
 const ERC_20_TRANSFER_FUNCTION_SELECTOR: [u8; 4] = hex_literal::hex!("a9059cbb");
-fn create_transaction_data(withdrawal_request: &Erc20WithdrawalRequest) -> Vec<u8> {
-    let mut data = Vec::with_capacity(68);
-    data.extend(ERC_20_TRANSFER_FUNCTION_SELECTOR);
-    data.extend(<[u8; 32]>::from(&withdrawal_request.destination));
-    data.extend(withdrawal_request.withdrawal_amount.to_be_bytes());
-    data
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum TransactionCallData {
+    Erc20Transfer { to: Address, value: Erc20Value },
+}
+
+impl TransactionCallData {
+    /// Encode the transaction call data to interact with an Ethereum smart contract.
+    /// See the [Contract ABI Specification](https://docs.soliditylang.org/en/develop/abi-spec.html#contract-abi-specification).
+    pub fn encode(&self) -> Vec<u8> {
+        match self {
+            TransactionCallData::Erc20Transfer { to, value } => {
+                let mut data = Vec::with_capacity(68);
+                data.extend(ERC_20_TRANSFER_FUNCTION_SELECTOR);
+                data.extend(<[u8; 32]>::from(to));
+                data.extend(value.to_be_bytes());
+                data
+            }
+        }
+    }
+
+    pub fn decode<T: AsRef<[u8]>>(data: T) -> Result<Self, String> {
+        let data = data.as_ref();
+        match data.get(0..4) {
+            Some(selector) if selector == ERC_20_TRANSFER_FUNCTION_SELECTOR => {
+                if data.len() != 68 {
+                    return Err("Invalid data length".to_string());
+                }
+                let address = <[u8; 32]>::try_from(&data[4..36]).unwrap();
+                let to = Address::try_from(&address).unwrap();
+
+                let value = <[u8; 32]>::try_from(&data[36..]).unwrap();
+                let value = Erc20Value::from_be_bytes(value);
+
+                Ok(TransactionCallData::Erc20Transfer { to, value })
+            }
+            Some(selector) => Err(format!(
+                "Unknown function selector 0x{:?}",
+                hex::encode(selector)
+            )),
+            None => Err("missing function selector".to_string()),
+        }
+    }
 }
 
 /// Returns true if the two transactions are equal ignoring the transaction fee and amount.

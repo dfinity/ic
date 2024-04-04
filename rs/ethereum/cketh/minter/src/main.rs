@@ -11,10 +11,9 @@ use ic_cketh_minter::endpoints::events::{
     Event as CandidEvent, EventSource as CandidEventSource, GetEventsArg, GetEventsResult,
 };
 use ic_cketh_minter::endpoints::{
-    AddCkErc20Token, CkErc20Token, Eip1559TransactionPrice, GasFeeEstimate, MinterInfo,
+    AddCkErc20Token, Eip1559TransactionPrice, Erc20Balance, GasFeeEstimate, MinterInfo,
     RetrieveEthRequest, RetrieveEthStatus, WithdrawalArg, WithdrawalError,
 };
-use ic_cketh_minter::erc20;
 use ic_cketh_minter::eth_logs::{EventSource, ReceivedErc20Event, ReceivedEthEvent};
 use ic_cketh_minter::guard::retrieve_withdraw_guard;
 use ic_cketh_minter::ledger_client::{LedgerBurnError, LedgerClient};
@@ -30,6 +29,7 @@ use ic_cketh_minter::state::{lazy_call_ecdsa_public_key, mutate_state, read_stat
 use ic_cketh_minter::withdraw::{
     process_reimbursement, process_retrieve_eth_requests, CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
 };
+use ic_cketh_minter::{endpoints, erc20};
 use ic_cketh_minter::{
     state, storage, PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, PROCESS_REIMBURSEMENT,
     SCRAPPING_ETH_LOGS_INTERVAL,
@@ -157,31 +157,46 @@ async fn eip_1559_transaction_price() -> Eip1559TransactionPrice {
 /// To retain some flexibility in the API all fields in the return value are optional.
 #[query]
 async fn get_minter_info() -> MinterInfo {
-    read_state(|s| MinterInfo {
-        minter_address: s.minter_address().map(|a| a.to_string()),
-        eth_helper_contract_address: s.eth_helper_contract_address.map(|a| a.to_string()),
-        erc20_helper_contract_address: s.erc20_helper_contract_address.map(|a| a.to_string()),
-        supported_ckerc20_tokens: Some(
-            s.ckerc20_tokens
-                .iter()
-                .map(|(symbol, addr, canister)| CkErc20Token {
-                    ckerc20_token_symbol: erc20::CkTokenSymbol::to_string(symbol),
-                    erc20_contract_address: addr.to_string(),
-                    ledger_canister_id: *canister,
+    read_state(|s| {
+        let (erc20_balances, supported_ckerc20_tokens) = if s.is_ckerc20_feature_active() {
+            let (balances, tokens) = s
+                .supported_ck_erc20_tokens()
+                .map(|token| {
+                    (
+                        Erc20Balance {
+                            erc20_contract_address: token.erc20_contract_address.to_string(),
+                            balance: s
+                                .erc20_balances
+                                .balance_of(&token.erc20_contract_address)
+                                .into(),
+                        },
+                        endpoints::CkErc20Token::from(token),
+                    )
                 })
-                .collect::<Vec<_>>(),
-        ),
-        minimum_withdrawal_amount: Some(s.minimum_withdrawal_amount.into()),
-        ethereum_block_height: Some(s.ethereum_block_height.into()),
-        last_observed_block_number: s.last_observed_block_number.map(|n| n.into()),
-        eth_balance: Some(s.eth_balance.eth_balance().into()),
-        last_gas_fee_estimate: s.last_transaction_price_estimate.as_ref().map(
-            |(timestamp, estimate)| GasFeeEstimate {
-                max_fee_per_gas: estimate.max_fee_per_gas.into(),
-                max_priority_fee_per_gas: estimate.max_priority_fee_per_gas.into(),
-                timestamp: *timestamp,
-            },
-        ),
+                .unzip();
+            (Some(balances), Some(tokens))
+        } else {
+            (None, None)
+        };
+
+        MinterInfo {
+            minter_address: s.minter_address().map(|a| a.to_string()),
+            eth_helper_contract_address: s.eth_helper_contract_address.map(|a| a.to_string()),
+            erc20_helper_contract_address: s.erc20_helper_contract_address.map(|a| a.to_string()),
+            supported_ckerc20_tokens,
+            minimum_withdrawal_amount: Some(s.minimum_withdrawal_amount.into()),
+            ethereum_block_height: Some(s.ethereum_block_height.into()),
+            last_observed_block_number: s.last_observed_block_number.map(|n| n.into()),
+            eth_balance: Some(s.eth_balance.eth_balance().into()),
+            last_gas_fee_estimate: s.last_transaction_price_estimate.as_ref().map(
+                |(timestamp, estimate)| GasFeeEstimate {
+                    max_fee_per_gas: estimate.max_fee_per_gas.into(),
+                    max_priority_fee_per_gas: estimate.max_priority_fee_per_gas.into(),
+                    timestamp: *timestamp,
+                },
+            ),
+            erc20_balances,
+        }
     })
 }
 

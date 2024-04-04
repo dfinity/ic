@@ -17,7 +17,7 @@ use ic_cketh_minter::endpoints::ckerc20::{
     RetrieveErc20Request, WithdrawErc20Arg, WithdrawErc20Error,
 };
 use ic_cketh_minter::endpoints::events::{EventPayload, EventSource};
-use ic_cketh_minter::endpoints::CkErc20Token;
+use ic_cketh_minter::endpoints::{CkErc20Token, MinterInfo};
 use ic_cketh_minter::eth_rpc::FixedSizeData;
 use ic_cketh_minter::numeric::{BlockNumber, Erc20Value};
 use ic_cketh_minter::SCRAPPING_ETH_LOGS_INTERVAL;
@@ -27,9 +27,11 @@ use ic_ledger_suite_orchestrator::candid::InitArg as LedgerSuiteOrchestratorInit
 use ic_ledger_suite_orchestrator_test_utils::{supported_erc20_tokens, LedgerSuiteOrchestrator};
 use ic_state_machine_tests::{ErrorCode, MessageId, StateMachine};
 use icrc_ledger_types::icrc1::account::Account;
+use num_traits::ToPrimitive;
 use serde_json::json;
 use std::collections::BTreeSet;
 use std::convert::identity;
+use std::iter::zip;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -129,6 +131,23 @@ impl CkErc20Setup {
 
     pub fn check_events(self) -> MinterEventAssert<Self> {
         MinterEventAssert::from_fetching_all_events(self)
+    }
+
+    pub fn get_minter_info(&self) -> MinterInfo {
+        self.cketh.get_minter_info()
+    }
+
+    pub fn erc20_balance_from_get_minter_info(&self, erc20_contract_address: &str) -> u64 {
+        let MinterInfo { erc20_balances, .. } = self.get_minter_info();
+        erc20_balances
+            .unwrap()
+            .into_iter()
+            .find(|balance| balance.erc20_contract_address == erc20_contract_address)
+            .unwrap()
+            .balance
+            .0
+            .to_u64()
+            .unwrap()
     }
 
     pub fn deposit(self, params: CkErc20DepositParams) -> CkErc20DepositFlow {
@@ -378,6 +397,10 @@ impl CkErc20DepositFlow {
         let ckerc20_balance_before = self
             .setup
             .balance_of_ledger(self.params.token.ledger_canister_id, self.params.recipient);
+        let MinterInfo {
+            erc20_balances: erc20_balances_before,
+            ..
+        } = self.setup.get_minter_info();
 
         self.handle_log_scraping();
 
@@ -391,6 +414,10 @@ impl CkErc20DepositFlow {
             self.params.recipient,
             &ckerc20_balance_before,
         );
+        let MinterInfo {
+            erc20_balances: erc20_balances_after,
+            ..
+        } = self.setup.get_minter_info();
 
         assert_eq!(
             cketh_balance_after - cketh_balance_before,
@@ -400,6 +427,23 @@ impl CkErc20DepositFlow {
             ckerc20_balance_after - ckerc20_balance_before,
             self.params.ckerc20_amount
         );
+
+        let erc20_balances_before = erc20_balances_before.unwrap();
+        let erc20_balances_after = erc20_balances_after.unwrap();
+        assert_eq!(erc20_balances_before.len(), erc20_balances_after.len());
+        let mut has_deposited_token = false;
+        for (balance_before, balance_after) in zip(erc20_balances_before, erc20_balances_after) {
+            if balance_before.erc20_contract_address == self.params.token.erc20_contract_address {
+                assert_eq!(
+                    balance_after.balance - balance_before.balance,
+                    self.params.ckerc20_amount
+                );
+                has_deposited_token = true;
+            } else {
+                assert_eq!(balance_after.balance, balance_before.balance);
+            }
+        }
+        assert!(has_deposited_token);
 
         self.setup.cketh.check_audit_log();
 
