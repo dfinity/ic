@@ -103,9 +103,9 @@ impl From<BurnMemo> for Memo {
 impl From<&ReceivedEvent> for Memo {
     fn from(event: &ReceivedEvent) -> Self {
         Memo::from(MintMemo::Convert {
-            from_address: *event.from_address(),
-            tx_hash: *event.transaction_hash(),
-            log_index: *event.log_index(),
+            from_address: event.from_address(),
+            tx_hash: event.transaction_hash(),
+            log_index: event.log_index(),
         })
     }
 }

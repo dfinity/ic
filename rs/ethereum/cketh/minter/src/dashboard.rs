@@ -1,14 +1,15 @@
 #[cfg(test)]
 mod tests;
 
+use crate::erc20::CkErc20Token;
 use askama::Template;
 use candid::Principal;
 use ic_cketh_minter::endpoints::{EthTransaction, RetrieveEthStatus};
-use ic_cketh_minter::eth_logs::{EventSource, ReceivedEthEvent, ReceivedEvent};
+use ic_cketh_minter::eth_logs::{EventSource, ReceivedEvent};
 use ic_cketh_minter::eth_rpc::Hash;
 use ic_cketh_minter::eth_rpc_client::responses::TransactionStatus;
 use ic_cketh_minter::lifecycle::EthereumNetwork;
-use ic_cketh_minter::numeric::{BlockNumber, LedgerBurnIndex, TransactionNonce, Wei};
+use ic_cketh_minter::numeric::{BlockNumber, LedgerBurnIndex, LogIndex, TransactionNonce, Wei};
 use ic_cketh_minter::state::transactions::{Reimbursed, WithdrawalRequest};
 use ic_cketh_minter::state::{EthBalance, MintedEvent, State};
 use ic_ethereum_types::Address;
@@ -40,6 +41,18 @@ mod filters {
     }
 }
 
+#[derive(Clone)]
+pub struct DashboardPendingDeposit {
+    pub tx_hash: Hash,
+    pub log_index: LogIndex,
+    pub block_number: BlockNumber,
+    pub from: Address,
+    pub token_symbol: String,
+    pub value: candid::Nat,
+    pub beneficiary: Principal,
+}
+
+#[derive(Clone)]
 pub struct DashboardPendingTransaction {
     pub ledger_burn_index: LedgerBurnIndex,
     pub destination: Address,
@@ -47,6 +60,7 @@ pub struct DashboardPendingTransaction {
     pub status: RetrieveEthStatus,
 }
 
+#[derive(Clone)]
 pub struct DashboardFinalizedTransaction {
     pub ledger_burn_index: LedgerBurnIndex,
     pub destination: Address,
@@ -57,21 +71,57 @@ pub struct DashboardFinalizedTransaction {
     pub status: TransactionStatus,
 }
 
+fn received_event_token_symbol(
+    supported_ckerc20_tokens: &[CkErc20Token],
+    event: &ReceivedEvent,
+) -> String {
+    match event {
+        ReceivedEvent::Eth(_) => "ckETH".to_string(),
+        ReceivedEvent::Erc20(event) => supported_ckerc20_tokens
+            .iter()
+            .find_map(|token| {
+                if token.erc20_contract_address == event.erc20_contract_address {
+                    Some(token.ckerc20_token_symbol.to_string())
+                } else {
+                    None
+                }
+            })
+            .unwrap_or("N/A".to_string()),
+    }
+}
+
+impl DashboardPendingDeposit {
+    fn new(supported_ckerc20_tokens: &[CkErc20Token], event: &ReceivedEvent) -> Self {
+        Self {
+            tx_hash: event.transaction_hash(),
+            log_index: event.log_index(),
+            block_number: event.block_number(),
+            from: event.from_address(),
+            token_symbol: received_event_token_symbol(supported_ckerc20_tokens, event),
+            value: event.value(),
+            beneficiary: event.principal(),
+        }
+    }
+}
+
 #[derive(Template)]
 #[template(path = "dashboard.html")]
+#[derive(Clone)]
 pub struct DashboardTemplate {
     pub ethereum_network: EthereumNetwork,
     pub ecdsa_key_name: String,
     pub minter_address: String,
     pub eth_helper_contract_address: String,
+    pub erc20_helper_contract_address: String,
     pub next_transaction_nonce: TransactionNonce,
     pub minimum_withdrawal_amount: Wei,
     pub first_synced_block: BlockNumber,
-    pub last_synced_block: BlockNumber,
+    pub last_eth_synced_block: BlockNumber,
+    pub last_erc20_synced_block: Option<BlockNumber>,
     pub last_observed_block: Option<BlockNumber>,
     pub ledger_id: Principal,
     pub minted_events: Vec<MintedEvent>,
-    pub events_to_mint: Vec<ReceivedEthEvent>,
+    pub pending_deposits: Vec<DashboardPendingDeposit>,
     pub rejected_deposits: BTreeMap<EventSource, String>,
     pub withdrawal_requests: Vec<WithdrawalRequest>,
     pub pending_transactions: Vec<DashboardPendingTransaction>,
@@ -79,22 +129,27 @@ pub struct DashboardTemplate {
     pub reimbursed_transactions: Vec<Reimbursed>,
     pub eth_balance: EthBalance,
     pub skipped_blocks: BTreeSet<BlockNumber>,
+    pub supported_ckerc20_tokens: Vec<CkErc20Token>,
 }
 
 impl DashboardTemplate {
     pub fn from_state(state: &State) -> Self {
         let mut minted_events: Vec<_> = state.minted_events.values().cloned().collect();
-        minted_events.sort_unstable_by_key(|event| Reverse(event.mint_block_index));
-        let (eth_events_to_mint, _erc20_events_to_mint): (Vec<_>, Vec<_>) = state
-            .events_to_mint()
-            .into_iter()
-            .map(|event| match event {
-                ReceivedEvent::Eth(event) => (Some(event), None),
-                ReceivedEvent::Erc20(event) => (None, Some(event)),
-            })
-            .unzip();
-        let mut eth_events_to_mint: Vec<_> = eth_events_to_mint.into_iter().flatten().collect();
-        eth_events_to_mint.sort_unstable_by_key(|event| Reverse(event.block_number));
+        minted_events.sort_unstable_by_key(|event| {
+            let deposit_event = &event.deposit_event;
+            Reverse((deposit_event.block_number(), deposit_event.log_index()))
+        });
+
+        let mut supported_ckerc20_tokens: Vec<_> = state.supported_ck_erc20_tokens().collect();
+        supported_ckerc20_tokens.sort_unstable_by_key(|token| token.ckerc20_token_symbol.clone());
+
+        let mut events_to_mint = state.events_to_mint();
+        events_to_mint
+            .sort_unstable_by_key(|event| Reverse((event.block_number(), event.log_index())));
+        let pending_deposits = events_to_mint
+            .iter()
+            .map(|event| DashboardPendingDeposit::new(&supported_ckerc20_tokens, event))
+            .collect();
 
         let mut withdrawal_requests: Vec<_> = state
             .eth_transactions
@@ -157,14 +212,20 @@ impl DashboardTemplate {
             eth_helper_contract_address: state
                 .eth_helper_contract_address
                 .map_or("N/A".to_string(), |address| address.to_string()),
+            erc20_helper_contract_address: state
+                .erc20_helper_contract_address
+                .map_or("N/A".to_string(), |address| address.to_string()),
             ledger_id: state.ledger_id,
             next_transaction_nonce: state.eth_transactions.next_transaction_nonce(),
             minimum_withdrawal_amount: state.minimum_withdrawal_amount,
             first_synced_block: state.first_scraped_block_number,
-            last_synced_block: state.last_scraped_block_number,
+            last_eth_synced_block: state.last_scraped_block_number,
+            last_erc20_synced_block: state
+                .erc20_helper_contract_address
+                .map(|_| state.last_erc20_scraped_block_number),
             last_observed_block: state.last_observed_block_number,
             minted_events,
-            events_to_mint: eth_events_to_mint,
+            pending_deposits,
             rejected_deposits: state.invalid_events.clone(),
             withdrawal_requests,
             pending_transactions,
@@ -172,6 +233,7 @@ impl DashboardTemplate {
             reimbursed_transactions,
             eth_balance: state.eth_balance.clone(),
             skipped_blocks: state.skipped_blocks.clone(),
+            supported_ckerc20_tokens,
         }
     }
 }

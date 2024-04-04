@@ -56,7 +56,7 @@ async fn mint() {
         let block_index = match client
             .transfer(TransferArg {
                 from_subaccount: None,
-                to: (*event.principal()).into(),
+                to: (event.principal()).into(),
                 fee: None,
                 created_at_time: None,
                 memo: Some((&event).into()),
@@ -195,7 +195,7 @@ where
                     event.value(),
                     event.principal()
                 );
-                if crate::blocklist::is_blocked(event.from_address()) {
+                if crate::blocklist::is_blocked(&event.from_address()) {
                     log!(
                         INFO,
                         "Received event from a blocked address: {} for {} {topic_name}",
