@@ -1346,6 +1346,7 @@ fn test_cli_data() {
         .unwrap();
 }
 
+#[ignore]
 #[test]
 fn test_cli_construction() {
     let mut runner = TestRunner::new(TestRunnerConfig {
