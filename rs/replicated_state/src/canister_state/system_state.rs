@@ -1096,8 +1096,8 @@ impl SystemState {
     ///    full when pushing a `Request`; or when pushing a `Response` when none
     ///    is expected.
     ///  * `CanisterOutOfCycles` if the canister does not have enough cycles.
-    ///  * `OutOfMemory` if the necessary memory reservation is larger than subnet
-    ///     available memory.
+    ///  * `OutOfMemory` if the necessary guaranteed response memory reservation
+    ///    is larger than `subnet_available_memory``.
     ///  * `CanisterStopping` if the canister is stopping and inducting a
     ///    `Request` was attempted.
     ///  * `CanisterStopped` if the canister is stopped.

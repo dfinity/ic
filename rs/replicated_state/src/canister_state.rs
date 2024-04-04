@@ -365,8 +365,8 @@ impl CanisterState {
             .map(|ccm| ccm.callbacks().len())
             .unwrap_or(0);
         let num_responses = self.system_state.queues().input_queues_response_count();
-        let num_reservations = self.system_state.queues().input_queues_reservation_count();
-        let is_callback_invariant_broken = if num_callbacks == num_reservations + num_responses {
+        let reserved_slots = self.system_state.queues().input_queues_reserved_slots();
+        let is_callback_invariant_broken = if num_callbacks == reserved_slots + num_responses {
             false
         } else if !self.has_paused_execution() && !self.has_aborted_execution() {
             true
@@ -374,14 +374,14 @@ impl CanisterState {
             // With a pending DTS execution, the response callback is accounted
             // in `num_callbacks` until the execution finishes. Note that there
             // can be at most one pending DTS execution per canister.
-            num_callbacks - 1 != num_reservations + num_responses
+            num_callbacks - 1 != reserved_slots + num_responses
         };
         if is_callback_invariant_broken {
             return Err(StateError::InvariantBroken(format!(
-                "Canister {}: Number of callbacks ({}) is different than the accumulated number of reservations and responses ({})",
+                "Canister {}: Number of callbacks ({}) is different than the accumulated number of reserved slots and responses ({})",
                 self.canister_id(),
                 num_callbacks,
-                num_reservations + num_responses
+                reserved_slots + num_responses
             )));
         }
 

@@ -6,6 +6,7 @@ use ic_base_types::CanisterId;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::state::{ingress::v1 as pb_ingress, queues::v1 as pb_queues};
 use ic_types::messages::{CallbackId, Ingress, Request, RequestOrResponse, Response, NO_DEADLINE};
+use ic_types::time::CoarseTime;
 use ic_types::{CountBytes, Cycles, Time};
 use std::collections::BTreeMap;
 use std::iter::Sum;
@@ -98,8 +99,8 @@ impl MessageReference {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct CanisterQueue {
     /// A FIFO queue of all requests and responses. Since responses may be enqueued
-    /// at arbitrary points in time, response reservations cannot be explicitly
-    /// represented in `queue`. They only exist as the difference between
+    /// at arbitrary points in time, reserved slots for responses cannot be
+    /// explicitly represented in `queue`. They only exist as the difference between
     /// `request_slots` and the number of actually enqueued request references (also
     /// equal to `request_slots + response_slots - queue.len()`).
     queue: VecDeque<MessageReference>,
@@ -111,17 +112,18 @@ pub(crate) struct CanisterQueue {
     /// Number of slots used by enqueued responses or reserved for expected
     /// responses.
     response_slots: usize,
+    /// Memory reservations for expected guaranteed responses.
+    response_memory_reservations: usize,
 }
 
 impl CanisterQueue {
     pub(super) fn new(capacity: usize) -> Self {
-        let queue = VecDeque::new();
-
         Self {
-            queue,
+            queue: VecDeque::new(),
             capacity,
             request_slots: 0,
             response_slots: 0,
+            response_memory_reservations: 0,
         }
     }
 
@@ -141,13 +143,13 @@ impl CanisterQueue {
         Ok(())
     }
 
-    /// Returns the number of slots available in the queue for reservations.
+    /// Returns the number of slots available in the queue for reservation.
     pub(super) fn available_response_slots(&self) -> usize {
         self.capacity.checked_sub(self.response_slots).unwrap()
     }
 
     /// Reserves a slot for a response, if available; else returns `Err(StateError::QueueFull)`.
-    pub(super) fn try_reserve_response_slot(&mut self) -> Result<(), StateError> {
+    pub(super) fn try_reserve_response_slot(&mut self, req: &Request) -> Result<(), StateError> {
         if self.response_slots >= self.capacity {
             return Err(StateError::QueueFull {
                 capacity: self.capacity,
@@ -155,6 +157,7 @@ impl CanisterQueue {
         }
 
         self.response_slots += 1;
+        self.response_memory_reservations += (req.deadline == NO_DEADLINE) as usize;
         debug_assert!(self.check_invariants());
         Ok(())
     }
@@ -166,13 +169,23 @@ impl CanisterQueue {
             .unwrap()
     }
 
+    /// Returns the number of guaranteed response memory reservations in the queue.
+    pub(super) fn response_memory_reservations(&self) -> usize {
+        self.response_memory_reservations
+    }
+
     /// Returns `Ok(())` if there exists at least one reserved response slot,
     /// `Err(StateError::QueueFull)` otherwise.
-    pub(super) fn check_has_reserved_slot(&self) -> Result<(), StateError> {
+    pub(super) fn check_has_reserved_slot(&self, is_best_effort: bool) -> Result<(), StateError> {
         if self.request_slots + self.response_slots <= self.queue.len() {
             return Err(StateError::QueueFull {
                 capacity: self.capacity,
             });
+        }
+
+        if !is_best_effort {
+            // This is a guaranteed response, we must have a memory reservation for it.
+            assert!(self.response_memory_reservations > 0);
         }
         Ok(())
     }
@@ -189,25 +202,32 @@ impl CanisterQueue {
         debug_assert!(self.check_invariants());
     }
 
-    /// Enqueues a response into a reserved slot, consuming a slot reservation.
+    /// Enqueues a response into a reserved slot, consuming the slot.
     ///
-    /// Panics if there is no response slot reservation.
+    /// Panics if there is no reserved response slot.
     pub(super) fn push_response(&mut self, id: MessageId) {
-        self.check_has_reserved_slot().unwrap();
+        self.check_has_reserved_slot(id.is_best_effort()).unwrap();
+
+        if !id.is_best_effort() {
+            // Guaranteed response, consume one memory reservation.
+            self.response_memory_reservations -= 1;
+        }
 
         self.queue.push_back(MessageReference::Response(id));
         debug_assert!(self.check_invariants());
     }
 
     /// Enqueues a local `SYS_TRANSIENT` reject response into a reserved slot,
-    /// consuming a slot reservation.
+    /// consuming the slot.
     ///
-    /// Panics if there is no response slot reservation.
-    pub(super) fn push_local_reject_response(&mut self, callback: CallbackId) {
-        self.check_has_reserved_slot().unwrap();
+    /// Panics if there is no reserved response slot.
+    pub(super) fn push_local_reject_response(&mut self, own_request: &Request) {
+        self.check_has_reserved_slot(own_request.deadline != NO_DEADLINE)
+            .unwrap();
 
-        self.queue
-            .push_back(MessageReference::LocalRejectResponse(callback));
+        self.queue.push_back(MessageReference::LocalRejectResponse(
+            own_request.sender_reply_callback,
+        ));
         debug_assert!(self.check_invariants());
     }
 
@@ -327,6 +347,7 @@ impl CanisterQueue {
         let responses = self.queue.iter().filter(|msg| msg.is_response()).count();
         assert!(responses <= self.response_slots);
         assert_eq!(self.queue.len(), self.request_slots + responses);
+        assert!(self.response_memory_reservations <= self.reserved_slots());
 
         true
     }
@@ -394,12 +415,12 @@ impl QueueItem<Option<RequestOrResponse>> for Option<RequestOrResponse> {
 /// Requests are handled in a straightforward manner: pushing a request onto the
 /// queue succeeds if there are available request slots, fails if there aren't.
 ///
-/// Response slots are used by either actual responses or by reservations for
-/// expected responses. Since an (incoming or outgoing) response always results
-/// from an (outgoing or, respectively, incoming) request, it is required to
-/// first make a reservation for a response; and later push the response into
-/// the reserved slot, consuming the reservation. Attempting to push a response
-/// with no reservations available will produce an error.
+/// Response slots are either used by either responses or reserved for expected
+/// responses. Since an (incoming or outgoing) response always results from an
+/// (outgoing or, respectively, incoming) request, it is required to first
+/// reserve a slot for a response; and later push the response into the reserved
+/// slot, consuming the slot reservation. Attempting to push a response with no
+/// reserved slot available will produce an error.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct QueueWithReservation<T: QueueItem<T> + std::clone::Clone> {
     /// A FIFO queue of all requests and responses. Since responses may be enqueued

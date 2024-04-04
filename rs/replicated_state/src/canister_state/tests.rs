@@ -139,7 +139,7 @@ impl CanisterStateFixture {
         iter.pop()
     }
 
-    fn with_input_reservation(&mut self) {
+    fn with_input_slot_reservation(&mut self) {
         self.canister_state
             .push_output_request(default_output_request(), UNIX_EPOCH)
             .unwrap();
@@ -160,7 +160,7 @@ fn canister_state_push_input_request_success() {
 }
 
 #[test]
-fn canister_state_push_input_response_no_reservation() {
+fn canister_state_push_input_response_no_reserved_slot() {
     let mut fixture = CanisterStateFixture::new();
     let response = default_input_response(fixture.make_callback());
     assert_eq!(
@@ -176,8 +176,8 @@ fn canister_state_push_input_response_no_reservation() {
 #[test]
 fn canister_state_push_input_response_success() {
     let mut fixture = CanisterStateFixture::new();
-    // Make an input queue reservation.
-    fixture.with_input_reservation();
+    // Reserve a slot in the input queue.
+    fixture.with_input_slot_reservation();
     // Pushing input response should succeed.
     let response = default_input_response(fixture.make_callback());
     fixture
@@ -395,8 +395,8 @@ fn canister_state_push_input_response_memory_limit_test_impl(
 ) {
     let mut fixture = CanisterStateFixture::new();
 
-    // Make an input queue reservation.
-    fixture.with_input_reservation();
+    //Reserve a slot in the input queue.
+    fixture.with_input_slot_reservation();
     let response = default_input_response(fixture.make_callback());
 
     let mut subnet_available_memory = -13;

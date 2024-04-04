@@ -42,6 +42,18 @@ impl Context {
     const BIT: u64 = 1 << 1;
 }
 
+/// Bit encoding the message class (guaranteed response vs best-effort).
+#[repr(u64)]
+enum Class {
+    GuaranteedResponse = 0,
+    BestEffort = Self::BIT,
+}
+
+impl Class {
+    // Message class bit (guaranteed response vs best-effort).
+    const BIT: u64 = 1 << 2;
+}
+
 /// A unique generated identifier for a message held in a `MessagePool` that
 /// also encodes the message kind (request or response) and context (incoming or
 /// outgoing).
@@ -50,10 +62,10 @@ pub struct MessageId(u64);
 
 impl MessageId {
     /// Number of `MessageId` bits used as flags.
-    const BITMASK_LEN: u32 = 2;
+    const BITMASK_LEN: u32 = 3;
 
-    fn new(kind: Kind, context: Context, generator: u64) -> Self {
-        Self(kind as u64 | context as u64 | generator << MessageId::BITMASK_LEN)
+    fn new(kind: Kind, context: Context, class: Class, generator: u64) -> Self {
+        Self(kind as u64 | context as u64 | class as u64 | generator << MessageId::BITMASK_LEN)
     }
 
     pub(super) fn is_response(&self) -> bool {
@@ -62,6 +74,10 @@ impl MessageId {
 
     pub(super) fn is_outbound(&self) -> bool {
         self.0 & Context::BIT == Context::Outbound as u64
+    }
+
+    pub(super) fn is_best_effort(&self) -> bool {
+        self.0 & Class::BIT == Class::BestEffort as u64
     }
 }
 
@@ -100,7 +116,8 @@ pub struct MessagePool {
     messages: BTreeMap<MessageId, RequestOrResponse>,
 
     /// Running memory usage stats for the pool.
-    memory_usage_stats: MemoryUsageStats,
+    // FIXME drop the `pub`.`
+    pub memory_usage_stats: MemoryUsageStats,
 
     /// Deadline priority queue, earliest deadlines first.
     ///
@@ -193,11 +210,19 @@ impl MessagePool {
         deadline: CoarseTime,
         context: Context,
     ) -> MessageId {
-        let kind = match &msg {
-            RequestOrResponse::Request(_) => Kind::Request,
-            RequestOrResponse::Response(_) => Kind::Response,
+        let class_for = |deadline| {
+            if deadline == NO_DEADLINE {
+                Class::GuaranteedResponse
+            } else {
+                Class::BestEffort
+            }
         };
-        let id = self.next_message_id(kind, context);
+        let (kind, class) = match &msg {
+            RequestOrResponse::Request(req) => (Kind::Request, class_for(req.deadline)),
+            RequestOrResponse::Response(rep) => (Kind::Response, class_for(rep.deadline)),
+        };
+        let id = self.next_message_id(kind, context, class);
+
         let size_bytes = msg.count_bytes();
         let is_best_effort = msg.is_best_effort();
 
@@ -223,7 +248,11 @@ impl MessagePool {
 
     /// Prepares a placeholder for a potential late inbound best-effort response.
     pub(super) fn insert_inbound_timeout_response(&mut self) -> ResponsePlaceholder {
-        ResponsePlaceholder(self.next_message_id(Kind::Response, Context::Inbound))
+        ResponsePlaceholder(self.next_message_id(
+            Kind::Response,
+            Context::Inbound,
+            Class::BestEffort,
+        ))
     }
 
     /// Inserts a late inbound best-effort response into a response placeholder.
@@ -253,8 +282,8 @@ impl MessagePool {
     }
 
     /// Reserves and returns a new message ID.
-    fn next_message_id(&mut self, kind: Kind, context: Context) -> MessageId {
-        let id = MessageId::new(kind, context, self.next_message_id_generator);
+    fn next_message_id(&mut self, kind: Kind, context: Context, class: Class) -> MessageId {
+        let id = MessageId::new(kind, context, class, self.next_message_id_generator);
         self.next_message_id_generator += 1;
         id
     }
@@ -341,7 +370,7 @@ impl MessagePool {
         expired
     }
 
-    /// Removes and returns the largest message in the pool.
+    /// Removes and returns the largest best-effort message in the pool.
     pub(crate) fn shed_largest_message(&mut self) -> Option<(MessageId, RequestOrResponse)> {
         // Keep trying until we actually drop a message.
         while let Some((_, id)) = self.size_queue.pop() {
@@ -457,18 +486,18 @@ impl Eq for MessagePool {}
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(super) struct MemoryUsageStats {
     /// Sum total of the byte size of all best-effort messages in the pool.
-    best_effort_message_bytes: usize,
+    pub(super) best_effort_message_bytes: usize,
 
     /// Sum total of the byte size of all guaranteed responses in the pool.
-    guaranteed_responses_size_bytes: usize,
+    pub(super) guaranteed_responses_size_bytes: usize,
 
     /// Sum total of bytes above `MAX_RESPONSE_COUNT_BYTES` per oversized guaranteed
     /// response call request. Execution allows local-subnet requests larger than
     /// `MAX_RESPONSE_COUNT_BYTES`.
-    oversized_guaranteed_requests_extra_bytes: usize,
+    pub(super) oversized_guaranteed_requests_extra_bytes: usize,
 
     /// Total size of all messages in the pool, in bytes.
-    size_bytes: usize,
+    pub(super) size_bytes: usize,
 }
 
 impl MemoryUsageStats {
@@ -567,13 +596,23 @@ impl SubAssign<MemoryUsageStats> for MemoryUsageStats {
 pub(crate) mod testing {
     use super::*;
 
-    /// Generates a `MessageId` for a request.
+    /// Generates a `MessageId` for a best-effort inbound request.
     pub(crate) fn new_request_message_id(generator: u64) -> MessageId {
-        MessageId::new(Kind::Request, Context::Inbound, generator)
+        MessageId::new(
+            Kind::Request,
+            Context::Inbound,
+            Class::BestEffort,
+            generator,
+        )
     }
 
-    /// Generates a `MessageId` for a response.
+    /// Generates a `MessageId` for a best-effort inbound response.
     pub(crate) fn new_response_message_id(generator: u64) -> MessageId {
-        MessageId::new(Kind::Response, Context::Inbound, generator)
+        MessageId::new(
+            Kind::Response,
+            Context::Inbound,
+            Class::BestEffort,
+            generator,
+        )
     }
 }

@@ -2062,7 +2062,7 @@ fn observe_replicated_state_metrics(
     let mut input_queues_message_count = 0;
     let mut input_queues_size_bytes = 0;
     let mut queues_response_bytes = 0;
-    let mut queues_reservations = 0;
+    let mut queues_memory_reservations = 0;
     let mut queues_oversized_requests_extra_bytes = 0;
     let mut canisters_not_in_routing_table = 0;
     let mut canisters_with_old_open_call_contexts = 0;
@@ -2116,7 +2116,7 @@ fn observe_replicated_state_metrics(
         input_queues_message_count += queues.input_queues_message_count();
         input_queues_size_bytes += queues.input_queues_size_bytes();
         queues_response_bytes += queues.guaranteed_responses_size_bytes();
-        queues_reservations += queues.reserved_slots();
+        queues_memory_reservations += queues.guaranteed_response_memory_reservations();
         queues_oversized_requests_extra_bytes += queues.oversized_guaranteed_requests_extra_bytes();
         if !canister_id_ranges.contains(&canister.canister_id()) {
             canisters_not_in_routing_table += 1;
@@ -2222,7 +2222,7 @@ fn observe_replicated_state_metrics(
     metrics.observe_input_queues_size_bytes(MESSAGE_KIND_CANISTER, input_queues_size_bytes);
 
     metrics.observe_queues_response_bytes(queues_response_bytes);
-    metrics.observe_queues_reservations(queues_reservations);
+    metrics.observe_queues_memory_reservations(queues_memory_reservations);
     metrics.observe_oversized_requests_extra_bytes(queues_oversized_requests_extra_bytes);
     metrics.observe_streams_response_bytes(streams_response_bytes);
 
