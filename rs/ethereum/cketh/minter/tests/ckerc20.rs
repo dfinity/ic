@@ -151,13 +151,19 @@ mod withdraw_erc20 {
     use ic_cketh_minter::endpoints::events::{
         TransactionReceipt, TransactionStatus, UnsignedTransaction,
     };
-    use ic_cketh_minter::endpoints::{EthTransaction, TxFinalizedStatus};
+    use ic_cketh_minter::endpoints::{EthTransaction, RetrieveEthStatus, TxFinalizedStatus};
     use ic_cketh_minter::memo::BurnMemo;
     use ic_cketh_minter::PROCESS_REIMBURSEMENT;
     use ic_cketh_test_utils::ckerc20::{
         erc20_transfer_data, DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS, ONE_USDC, TWO_USDC,
     };
-    use ic_cketh_test_utils::flow::{DepositParams, ProcessWithdrawalParams};
+    use ic_cketh_test_utils::flow::{
+        increment_base_fee_per_gas, DepositParams, ProcessWithdrawalParams,
+    };
+    use ic_cketh_test_utils::mock::JsonRpcProvider;
+    use ic_cketh_test_utils::response::{
+        decode_transaction, default_erc20_signed_eip_1559_transaction, hash_transaction,
+    };
     use ic_cketh_test_utils::{
         CKETH_TRANSFER_FEE, DEFAULT_BLOCK_HASH, DEFAULT_BLOCK_NUMBER,
         DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION, DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_HASH,
@@ -468,48 +474,66 @@ mod withdraw_erc20 {
 
     #[test]
     fn should_withdraw_ckusdc_and_reimburse_unused_transaction_fees() {
-        let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
-        let minter = ckerc20.cketh.minter_id;
-        let ckusdc = ckerc20.find_ckerc20_token("ckUSDC");
-        let caller = ckerc20.caller();
-        let ckerc20_tx_fee = CKETH_MINIMUM_WITHDRAWAL_AMOUNT;
+        fn test(transaction_status: TransactionStatus) {
+            let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
+            let minter = ckerc20.cketh.minter_id;
+            let ckusdc = ckerc20.find_ckerc20_token("ckUSDC");
+            let caller = ckerc20.caller();
+            let ckerc20_tx_fee = CKETH_MINIMUM_WITHDRAWAL_AMOUNT;
 
-        let ckerc20 = ckerc20
-            .deposit_cketh_and_ckerc20(
-                EXPECTED_BALANCE,
-                TWO_USDC + CKERC20_TRANSFER_FEE,
-                ckusdc.clone(),
-                caller,
-            )
-            .expect_mint()
-            .call_cketh_ledger_approve_minter(caller, ckerc20_tx_fee, None)
-            .call_ckerc20_ledger_approve_minter(ckusdc.ledger_canister_id, caller, TWO_USDC, None)
-            .call_minter_withdraw_erc20(
-                caller,
-                TWO_USDC,
-                ckusdc.ledger_canister_id,
-                DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS,
-            )
-            .expect_withdrawal_request_accepted();
+            let ckerc20 = ckerc20
+                .deposit_cketh_and_ckerc20(
+                    EXPECTED_BALANCE,
+                    TWO_USDC + CKERC20_TRANSFER_FEE,
+                    ckusdc.clone(),
+                    caller,
+                )
+                .expect_mint()
+                .call_cketh_ledger_approve_minter(caller, ckerc20_tx_fee, None)
+                .call_ckerc20_ledger_approve_minter(
+                    ckusdc.ledger_canister_id,
+                    caller,
+                    TWO_USDC,
+                    None,
+                )
+                .call_minter_withdraw_erc20(
+                    caller,
+                    TWO_USDC,
+                    ckusdc.ledger_canister_id,
+                    DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS,
+                )
+                .expect_withdrawal_request_accepted();
 
-        assert_eq!(
-            ckerc20
-                .setup
-                .erc20_balance_from_get_minter_info(&ckusdc.erc20_contract_address),
-            TWO_USDC + CKERC20_TRANSFER_FEE
-        );
-        let time = ckerc20.setup.env.get_time().as_nanos_since_unix_epoch();
+            assert_eq!(
+                ckerc20
+                    .setup
+                    .erc20_balance_from_get_minter_info(&ckusdc.erc20_contract_address),
+                TWO_USDC + CKERC20_TRANSFER_FEE
+            );
+            let time = ckerc20.setup.env.get_time().as_nanos_since_unix_epoch();
 
-        let RetrieveErc20Request {
-            cketh_block_index,
-            ckerc20_block_index,
-        } = ckerc20.withdrawal_request.clone();
+            let RetrieveErc20Request {
+                cketh_block_index,
+                ckerc20_block_index,
+            } = ckerc20.withdrawal_request.clone();
 
-        let ckerc20 = ckerc20
-            .wait_and_validate_withdrawal(ProcessWithdrawalParams::default())
-            .expect_finalized_status(TxFinalizedStatus::Success(EthTransaction {
-                transaction_hash: DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_HASH.to_string(),
-            }))
+            let ckerc20 = match transaction_status {
+                TransactionStatus::Success => ckerc20
+                    .wait_and_validate_withdrawal(ProcessWithdrawalParams::default())
+                    .expect_finalized_status(TxFinalizedStatus::Success(EthTransaction {
+                        transaction_hash: DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_HASH.to_string(),
+                    })),
+                TransactionStatus::Failure => ckerc20
+                    .wait_and_validate_withdrawal(
+                        ProcessWithdrawalParams::default().with_failed_transaction_receipt(),
+                    )
+                    .expect_finalized_status(TxFinalizedStatus::PendingReimbursement(
+                        EthTransaction {
+                            transaction_hash: DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_HASH
+                                .to_string(),
+                        },
+                    )),
+            }
             .call_cketh_ledger_get_transaction(cketh_block_index.clone())
             .expect_burn(Burn {
                 amount: ckerc20_tx_fee.into(),
@@ -553,46 +577,249 @@ mod withdraw_erc20 {
                 created_at_time: None,
             });
 
-        let expected_balance_after_withdrawal =
-            Nat::from(EXPECTED_BALANCE - CKETH_TRANSFER_FEE - CKETH_MINIMUM_WITHDRAWAL_AMOUNT);
-        assert_eq!(
-            ckerc20.cketh.balance_of(caller),
-            expected_balance_after_withdrawal
-        );
-        assert_eq!(
-            ckerc20.balance_of_ledger(ckusdc.ledger_canister_id, caller),
-            Nat::from(0_u8)
-        );
-        assert_eq!(
-            ckerc20.erc20_balance_from_get_minter_info(&ckusdc.erc20_contract_address),
-            CKERC20_TRANSFER_FEE
-        );
+            let expected_cketh_balance_after_withdrawal =
+                Nat::from(EXPECTED_BALANCE - CKETH_TRANSFER_FEE - CKETH_MINIMUM_WITHDRAWAL_AMOUNT);
+            assert_eq!(
+                ckerc20.cketh.balance_of(caller),
+                expected_cketh_balance_after_withdrawal
+            );
+            let expected_ckerc20_balance_after_withdrawal = Nat::from(0_u8);
+            assert_eq!(
+                ckerc20.balance_of_ledger(ckusdc.ledger_canister_id, caller),
+                expected_ckerc20_balance_after_withdrawal
+            );
+            assert_eq!(
+                ckerc20.erc20_balance_from_get_minter_info(&ckusdc.erc20_contract_address),
+                match transaction_status {
+                    TransactionStatus::Success => CKERC20_TRANSFER_FEE,
+                    TransactionStatus::Failure => TWO_USDC + CKERC20_TRANSFER_FEE,
+                }
+            );
 
-        let estimated_max_fee_per_gas = Nat::from(33_003_708_258_u64);
-        let estimated_gas_limit = Nat::from(65_000_u64);
+            let estimated_max_fee_per_gas = Nat::from(33_003_708_258_u64);
+            let estimated_gas_limit = Nat::from(65_000_u64);
+            let ckerc20 = ckerc20
+                .check_events()
+                .assert_has_unique_events_in_order(&vec![
+                    EventPayload::AcceptedErc20WithdrawalRequest {
+                        max_transaction_fee: ckerc20_tx_fee.into(),
+                        withdrawal_amount: TWO_USDC.into(),
+                        erc20_contract_address: ckusdc.erc20_contract_address.clone(),
+                        destination: DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS.to_string(),
+                        cketh_ledger_burn_index: cketh_block_index.clone(),
+                        ckerc20_ledger_id: ckusdc.ledger_canister_id,
+                        ckerc20_ledger_burn_index: ckerc20_block_index.clone(),
+                        from: caller,
+                        from_subaccount: None,
+                        created_at: time,
+                    },
+                    EventPayload::CreatedTransaction {
+                        withdrawal_id: cketh_block_index.clone(),
+                        transaction: UnsignedTransaction {
+                            chain_id: Nat::from(1_u8),
+                            nonce: Nat::from(0_u8),
+                            max_priority_fee_per_gas: 1_500_000_000_u64.into(),
+                            max_fee_per_gas: estimated_max_fee_per_gas.clone(),
+                            gas_limit: estimated_gas_limit.clone(),
+                            destination: ckusdc.erc20_contract_address,
+                            value: 0_u8.into(),
+                            data: ByteBuf::from(erc20_transfer_data(
+                                &DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS
+                                    .parse()
+                                    .unwrap(),
+                                &TWO_USDC.into(),
+                            )),
+                            access_list: vec![],
+                        },
+                    },
+                    EventPayload::SignedTransaction {
+                        withdrawal_id: cketh_block_index.clone(),
+                        raw_transaction: DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION.to_string(),
+                    },
+                    EventPayload::FinalizedTransaction {
+                        withdrawal_id: cketh_block_index.clone(),
+                        transaction_receipt: TransactionReceipt {
+                            block_hash: DEFAULT_BLOCK_HASH.to_string(),
+                            block_number: Nat::from(DEFAULT_BLOCK_NUMBER),
+                            effective_gas_price: Nat::from(4_277_923_390_u64),
+                            gas_used: Nat::from(21_000_u64),
+                            status: transaction_status.clone(),
+                            transaction_hash: DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_HASH
+                                .to_string(),
+                        },
+                    },
+                ]);
+
+            let estimated_tx_fee = estimated_max_fee_per_gas * estimated_gas_limit;
+            assert!(estimated_tx_fee < ckerc20_tx_fee);
+            let reimbursed_cketh_amount = ckerc20_tx_fee - estimated_tx_fee;
+            ckerc20.env.advance_time(PROCESS_REIMBURSEMENT);
+            let cketh_balance_after_reimbursement = ckerc20.wait_for_updated_ledger_balance(
+                ckerc20.cketh_ledger_id(),
+                caller,
+                &expected_cketh_balance_after_withdrawal,
+            );
+            assert_eq!(
+                cketh_balance_after_reimbursement - expected_cketh_balance_after_withdrawal,
+                reimbursed_cketh_amount.clone(),
+            );
+
+            let ckerc20 = ckerc20
+                .check_events()
+                .assert_has_unique_events_in_order(&vec![EventPayload::ReimbursedEthWithdrawal {
+                    withdrawal_id: cketh_block_index.clone(),
+                    reimbursed_in_block: Nat::from(3_u8),
+                    reimbursed_amount: reimbursed_cketh_amount.clone(),
+                    transaction_hash: Some(DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_HASH.to_string()),
+                }])
+                .call_cketh_ledger_get_transaction(3_u8)
+                .expect_mint(Mint {
+                    amount: reimbursed_cketh_amount,
+                    to: Account {
+                        owner: caller,
+                        subaccount: None,
+                    },
+                    memo: Some(Memo::from(MintMemo::ReimburseTransaction {
+                        withdrawal_id: cketh_block_index.0.to_u64().unwrap(),
+                        tx_hash: DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_HASH.parse().unwrap(),
+                    })),
+                    created_at_time: None,
+                });
+
+            if transaction_status == TransactionStatus::Failure {
+                let ckerc20_balance_after_reimbursement = ckerc20.wait_for_updated_ledger_balance(
+                    ckusdc.ledger_canister_id,
+                    caller,
+                    &expected_ckerc20_balance_after_withdrawal,
+                );
+                assert_eq!(ckerc20_balance_after_reimbursement, Nat::from(TWO_USDC));
+                ckerc20
+                    .check_events()
+                    .assert_has_unique_events_in_order(&vec![
+                        EventPayload::ReimbursedErc20Withdrawal {
+                            withdrawal_id: cketh_block_index.clone(),
+                            burn_in_block: ckerc20_block_index.clone(),
+                            reimbursed_in_block: Nat::from(3_u8),
+                            ledger_id: ckusdc.ledger_canister_id,
+                            reimbursed_amount: TWO_USDC.into(),
+                            transaction_hash: Some(
+                                DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_HASH.to_string(),
+                            ),
+                        },
+                    ])
+                    .call_ckerc20_ledger_get_transaction(ckusdc.ledger_canister_id, 3_u8)
+                    .expect_mint(Mint {
+                        amount: TWO_USDC.into(),
+                        to: Account {
+                            owner: caller,
+                            subaccount: None,
+                        },
+                        memo: Some(Memo::from(MintMemo::ReimburseTransaction {
+                            withdrawal_id: ckerc20_block_index.0.to_u64().unwrap(),
+                            tx_hash: DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_HASH.parse().unwrap(),
+                        })),
+                        created_at_time: None,
+                    });
+            }
+        }
+
+        test(TransactionStatus::Success);
+        test(TransactionStatus::Failure);
+    }
+
+    #[test]
+    fn should_resubmit_transaction_as_is_when_price_still_actual() {
+        let (expected_tx, expected_sig) = default_erc20_signed_eip_1559_transaction();
+        let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
+        let ckusdc = ckerc20.find_ckerc20_token("ckUSDC");
+        let caller = ckerc20.caller();
+        let ckerc20_tx_fee = CKETH_MINIMUM_WITHDRAWAL_AMOUNT;
+
+        ckerc20
+            .deposit_cketh_and_ckerc20(
+                EXPECTED_BALANCE,
+                TWO_USDC + CKERC20_TRANSFER_FEE,
+                ckusdc.clone(),
+                caller,
+            )
+            .expect_mint()
+            .call_cketh_ledger_approve_minter(caller, ckerc20_tx_fee, None)
+            .call_ckerc20_ledger_approve_minter(ckusdc.ledger_canister_id, caller, TWO_USDC, None)
+            .call_minter_withdraw_erc20(
+                caller,
+                TWO_USDC,
+                ckusdc.ledger_canister_id,
+                DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS,
+            )
+            .expect_withdrawal_request_accepted()
+            .process_withdrawal_with_resubmission_and_same_price(expected_tx, expected_sig)
+            .check_events()
+            .assert_has_no_event_satisfying(|event| {
+                matches!(event, EventPayload::ReplacedTransaction { .. })
+            });
+    }
+
+    #[test]
+    fn should_resubmit_new_transaction_when_price_increased() {
+        let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
+        let ckusdc = ckerc20.find_ckerc20_token("ckUSDC");
+        let caller = ckerc20.caller();
+        let ckerc20_tx_fee = CKETH_MINIMUM_WITHDRAWAL_AMOUNT;
+        let (first_tx, first_tx_sig) = default_erc20_signed_eip_1559_transaction();
+        let first_tx_hash = hash_transaction(first_tx.clone(), first_tx_sig);
+        let resubmitted_sent_tx = "0x02f8b001808462590080850873e448ec82fde894a0b86991c6218b36c1d19d4a2e9eb0ce3606eb4880b844a9059cbb000000000000000000000000221e931fbfcb9bd54ddd26ce6f5e29e98add01c000000000000000000000000000000000000000000000000000000000001e8480c080a07d3665d9d20485927c46f8d4c8e13db55cc93816fae1ab5c3edd903724fcc01da02006320a931de2e96f8fe5df15219d924ee34bd536879461526b7a25dbbda9e1";
+        let (resubmitted_tx, resubmitted_tx_sig) = decode_transaction(resubmitted_sent_tx);
+        let resubmitted_tx_hash = hash_transaction(resubmitted_tx.clone(), resubmitted_tx_sig);
+        assert_eq!(
+            resubmitted_tx,
+            first_tx
+                .clone()
+                .max_priority_fee_per_gas(1_650_000_000_u64)
+                .max_fee_per_gas(36_304_079_084_u64)
+        );
+        assert_ne!(first_tx_hash, resubmitted_tx_hash);
+
         let ckerc20 = ckerc20
+            .deposit_cketh_and_ckerc20(
+                EXPECTED_BALANCE,
+                TWO_USDC + CKERC20_TRANSFER_FEE,
+                ckusdc.clone(),
+                caller,
+            )
+            .expect_mint()
+            .call_cketh_ledger_approve_minter(caller, ckerc20_tx_fee, None)
+            .call_ckerc20_ledger_approve_minter(ckusdc.ledger_canister_id, caller, TWO_USDC, None)
+            .call_minter_withdraw_erc20(
+                caller,
+                TWO_USDC,
+                ckusdc.ledger_canister_id,
+                DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS,
+            )
+            .expect_withdrawal_request_accepted();
+
+        let RetrieveErc20Request {
+            cketh_block_index,
+            ckerc20_block_index: _,
+        } = ckerc20.withdrawal_request.clone();
+
+        ckerc20
+            .process_withdrawal_with_resubmission_and_increased_price(
+                first_tx,
+                first_tx_sig,
+                &mut increment_base_fee_per_gas,
+                resubmitted_tx,
+                resubmitted_tx_sig,
+            )
             .check_events()
             .assert_has_unique_events_in_order(&vec![
-                EventPayload::AcceptedErc20WithdrawalRequest {
-                    max_transaction_fee: ckerc20_tx_fee.into(),
-                    withdrawal_amount: TWO_USDC.into(),
-                    erc20_contract_address: ckusdc.erc20_contract_address.clone(),
-                    destination: DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS.to_string(),
-                    cketh_ledger_burn_index: cketh_block_index.clone(),
-                    ckerc20_ledger_id: ckusdc.ledger_canister_id,
-                    ckerc20_ledger_burn_index: ckerc20_block_index,
-                    from: caller,
-                    from_subaccount: None,
-                    created_at: time,
-                },
-                EventPayload::CreatedTransaction {
+                EventPayload::ReplacedTransaction {
                     withdrawal_id: cketh_block_index.clone(),
                     transaction: UnsignedTransaction {
                         chain_id: Nat::from(1_u8),
                         nonce: Nat::from(0_u8),
-                        max_priority_fee_per_gas: 1_500_000_000_u64.into(),
-                        max_fee_per_gas: estimated_max_fee_per_gas.clone(),
-                        gas_limit: estimated_gas_limit.clone(),
+                        max_priority_fee_per_gas: Nat::from(1_650_000_000_u64),
+                        max_fee_per_gas: Nat::from(36_304_079_084_u64),
+                        gas_limit: Nat::from(65_000_u64),
                         destination: ckusdc.erc20_contract_address,
                         value: 0_u8.into(),
                         data: ByteBuf::from(erc20_transfer_data(
@@ -606,56 +833,99 @@ mod withdraw_erc20 {
                 },
                 EventPayload::SignedTransaction {
                     withdrawal_id: cketh_block_index.clone(),
-                    raw_transaction: DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION.to_string(),
+                    raw_transaction: resubmitted_sent_tx.to_string(),
                 },
                 EventPayload::FinalizedTransaction {
-                    withdrawal_id: cketh_block_index.clone(),
+                    withdrawal_id: cketh_block_index,
                     transaction_receipt: TransactionReceipt {
                         block_hash: DEFAULT_BLOCK_HASH.to_string(),
                         block_number: Nat::from(DEFAULT_BLOCK_NUMBER),
                         effective_gas_price: Nat::from(4_277_923_390_u64),
                         gas_used: Nat::from(21_000_u64),
                         status: TransactionStatus::Success,
-                        transaction_hash: DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_HASH.to_string(),
+                        transaction_hash: format!("{:?}", resubmitted_tx_hash),
                     },
                 },
             ]);
-
-        let estimated_tx_fee = estimated_max_fee_per_gas * estimated_gas_limit;
-        assert!(estimated_tx_fee < ckerc20_tx_fee);
-        let reimbursed_amount = ckerc20_tx_fee - estimated_tx_fee;
-        ckerc20.env.advance_time(PROCESS_REIMBURSEMENT);
-        let balance_after_reimbursement = ckerc20.wait_for_updated_ledger_balance(
-            ckerc20.cketh_ledger_id(),
-            caller,
-            &expected_balance_after_withdrawal,
-        );
-        assert_eq!(
-            balance_after_reimbursement - expected_balance_after_withdrawal,
-            reimbursed_amount.clone(),
-        );
+    }
+    #[test]
+    fn should_not_finalize_transaction_when_receipts_do_not_match() {
+        let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
+        let ckusdc = ckerc20.find_ckerc20_token("ckUSDC");
+        let caller = ckerc20.caller();
+        let ckerc20_tx_fee = CKETH_MINIMUM_WITHDRAWAL_AMOUNT;
 
         ckerc20
-            .check_events()
-            .assert_has_unique_events_in_order(&vec![EventPayload::ReimbursedEthWithdrawal {
-                withdrawal_id: cketh_block_index.clone(),
-                reimbursed_in_block: Nat::from(3_u8),
-                reimbursed_amount: reimbursed_amount.clone(),
-                transaction_hash: Some(DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_HASH.to_string()),
-            }])
-            .call_cketh_ledger_get_transaction(3_u8)
-            .expect_mint(Mint {
-                amount: reimbursed_amount,
-                to: Account {
-                    owner: caller,
-                    subaccount: None,
-                },
-                memo: Some(Memo::from(MintMemo::ReimburseTransaction {
-                    withdrawal_id: cketh_block_index.0.to_u64().unwrap(),
-                    tx_hash: DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_HASH.parse().unwrap(),
-                })),
-                created_at_time: None,
-            });
+            .deposit_cketh_and_ckerc20(
+                EXPECTED_BALANCE,
+                TWO_USDC + CKERC20_TRANSFER_FEE,
+                ckusdc.clone(),
+                caller,
+            )
+            .expect_mint()
+            .call_cketh_ledger_approve_minter(caller, ckerc20_tx_fee, None)
+            .call_ckerc20_ledger_approve_minter(ckusdc.ledger_canister_id, caller, TWO_USDC, None)
+            .call_minter_withdraw_erc20(
+                caller,
+                TWO_USDC,
+                ckusdc.ledger_canister_id,
+                DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS,
+            )
+            .expect_withdrawal_request_accepted()
+            .wait_and_validate_withdrawal(
+                ProcessWithdrawalParams::default().with_inconsistent_transaction_receipt(),
+            )
+            .expect_status(RetrieveEthStatus::TxSent(EthTransaction {
+                transaction_hash: DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_HASH.to_string(),
+            }));
+    }
+
+    #[test]
+    fn should_not_send_eth_transaction_when_fee_history_inconsistent() {
+        let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
+        let ckusdc = ckerc20.find_ckerc20_token("ckUSDC");
+        let caller = ckerc20.caller();
+        let ckerc20_tx_fee = CKETH_MINIMUM_WITHDRAWAL_AMOUNT;
+
+        ckerc20
+            .deposit_cketh_and_ckerc20(
+                EXPECTED_BALANCE,
+                TWO_USDC + CKERC20_TRANSFER_FEE,
+                ckusdc.clone(),
+                caller,
+            )
+            .expect_mint()
+            .call_cketh_ledger_approve_minter(caller, ckerc20_tx_fee, None)
+            .call_ckerc20_ledger_approve_minter(ckusdc.ledger_canister_id, caller, TWO_USDC, None)
+            .call_minter_withdraw_erc20(
+                caller,
+                TWO_USDC,
+                ckusdc.ledger_canister_id,
+                DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS,
+            )
+            .expect_withdrawal_request_accepted()
+            .start_processing_withdrawals()
+            .retrieve_fee_history(move |mock| {
+                mock.modify_response(
+                    JsonRpcProvider::Ankr,
+                    &mut |response: &mut ethers_core::types::FeeHistory| {
+                        response.oldest_block = 0x17740742_u64.into()
+                    },
+                )
+                .modify_response(
+                    JsonRpcProvider::PublicNode,
+                    &mut |response: &mut ethers_core::types::FeeHistory| {
+                        response.oldest_block = 0x17740743_u64.into()
+                    },
+                )
+                .modify_response(
+                    JsonRpcProvider::LlamaNodes,
+                    &mut |response: &mut ethers_core::types::FeeHistory| {
+                        response.oldest_block = 0x17740744_u64.into()
+                    },
+                )
+            })
+            .expect_status(RetrieveEthStatus::Pending);
     }
 }
 
