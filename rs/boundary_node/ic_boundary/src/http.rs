@@ -1,10 +1,13 @@
+use std::time::Instant;
+
 use async_trait::async_trait;
+use http::Version;
 use http_body::{combinators::UnsyncBoxBody, Body as HttpBody, LengthLimitError, Limited};
 use hyper::body;
 use reqwest::{Error as ReqwestError, Request, Response};
 use rustls::Error as RustlsError;
 
-use crate::{core::error_source, dns::DnsError, routes::ErrorCause};
+use crate::{core::error_source, dns::DnsError, metrics::WithMetrics, routes::ErrorCause};
 
 /// Standard response used to pass between middlewares
 pub type AxumResponse = http::Response<UnsyncBoxBody<bytes::Bytes, axum::Error>>;
@@ -21,6 +24,41 @@ pub struct ReqwestClient(pub reqwest::Client);
 impl HttpClient for ReqwestClient {
     async fn execute(&self, req: Request) -> Result<Response, ReqwestError> {
         self.0.execute(req).await
+    }
+}
+
+fn http_version(v: Version) -> &'static str {
+    match v {
+        Version::HTTP_09 => "0.9",
+        Version::HTTP_10 => "1.0",
+        Version::HTTP_11 => "1.1",
+        Version::HTTP_2 => "2.0",
+        Version::HTTP_3 => "3.0",
+        _ => "-",
+    }
+}
+
+#[async_trait]
+impl<T: HttpClient> HttpClient for WithMetrics<T> {
+    async fn execute(&self, req: Request) -> Result<Response, ReqwestError> {
+        let start = Instant::now();
+        let res = self.0.execute(req).await;
+        let dur = start.elapsed().as_secs_f64();
+
+        let success = if res.is_ok() { "yes" } else { "no" };
+
+        // TODO try to avoid allocating String here?
+        // Not sure how, status() returns non-static &str for some reason though CODE_DIGITS is static
+        let (status_code, http_version) = res
+            .as_ref()
+            .map(|x| (x.status().as_str().to_string(), http_version(x.version())))
+            .unwrap_or(("0".into(), "-"));
+
+        let labels = &[success, status_code.as_str(), http_version];
+        self.1.counter.with_label_values(labels).inc();
+        self.1.recorder.with_label_values(labels).observe(dur);
+
+        res
     }
 }
 
