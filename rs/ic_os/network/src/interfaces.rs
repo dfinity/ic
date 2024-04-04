@@ -45,7 +45,7 @@ pub fn has_ipv6_connectivity(
     let ping_target = ping_target.parse::<IpAddr>()?;
     let ping_timeout = Duration::from_secs(3);
     let result = retry(
-        10,
+        40,
         || {
             eprintln!(
                 "Attempting to ping {}, after {} seconds",
@@ -102,7 +102,7 @@ fn is_some_or_err<T>(r: &Result<Option<T>>) -> bool {
 fn qualify_and_generate_interfaces(interface_names: &[&str]) -> Result<Vec<Interface>> {
     // On some hardware ethtool needs time before link status settles.
     // Takes 2.3 seconds for recent NP.
-    // Wait a total of ten seconds across all interfaces, retrying each 2 seconds.
+    // Wait a maximum of 20 seconds for link status to settle.
     let mut result_vec: Vec<Interface> = Vec::new();
     let wait_time = Duration::from_secs(2);
     let interface_results: Vec<Result<Option<Interface>>> = interface_names
