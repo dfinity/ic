@@ -15,6 +15,9 @@ use ic_types::crypto::AlgorithmId;
 use ic_types::Randomness;
 use rand::{CryptoRng, Rng};
 
+#[cfg(test)]
+mod tests;
+
 impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore>
     ThresholdSchnorrSignerCspVault for LocalCspVault<R, S, C, P>
 {
