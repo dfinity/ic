@@ -298,10 +298,10 @@ pub(crate) fn start_connection_manager(
         active_connections: JoinMap::new(),
         router,
     };
-    let shutdown = Shutdown::new(rt.clone());
-    shutdown
-        .spawn_on_with_cancellation(|cancellation: CancellationToken| manager.run(cancellation));
-    shutdown
+    Shutdown::spawn_on_with_cancellation(
+        |cancellation: CancellationToken| manager.run(cancellation),
+        rt,
+    )
 }
 
 impl ConnectionManager {

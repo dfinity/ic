@@ -23,7 +23,7 @@ use ic_async_utils::JoinMap;
 use ic_base_types::NodeId;
 use ic_interfaces::p2p::state_sync::{ChunkId, Chunkable, StateSyncArtifactId, StateSyncClient};
 use ic_logger::{error, info, ReplicaLogger};
-use ic_quic_transport::Transport;
+use ic_quic_transport::{Shutdown, Transport};
 use rand::{
     distributions::{Distribution, WeightedIndex},
     rngs::SmallRng,
@@ -34,7 +34,6 @@ use tokio::{
     runtime::Handle,
     select,
     sync::mpsc::{Receiver, Sender},
-    task::JoinHandle,
 };
 use tokio_util::sync::CancellationToken;
 
@@ -49,7 +48,6 @@ struct OngoingStateSync<T: Send> {
     artifact_id: StateSyncArtifactId,
     metrics: OngoingStateSyncMetrics,
     transport: Arc<dyn Transport>,
-    cancellation: CancellationToken,
     // Peer management
     new_peers_rx: Receiver<NodeId>,
     // Peers that advertised state and the number of outstanding chunk downloads to that peer.
@@ -67,8 +65,7 @@ struct OngoingStateSync<T: Send> {
 pub(crate) struct OngoingStateSyncHandle {
     pub sender: Sender<NodeId>,
     pub artifact_id: StateSyncArtifactId,
-    pub jh: JoinHandle<()>,
-    pub cancellation: CancellationToken,
+    pub shutdown: Shutdown,
 }
 
 pub(crate) struct DownloadResult {
@@ -84,7 +81,6 @@ pub(crate) fn start_ongoing_state_sync<T: Send + 'static>(
     artifact_id: StateSyncArtifactId,
     state_sync: Arc<dyn StateSyncClient<Message = T>>,
     transport: Arc<dyn Transport>,
-    cancellation: CancellationToken,
 ) -> OngoingStateSyncHandle {
     let (new_peers_tx, new_peers_rx) = tokio::sync::mpsc::channel(ONGOING_STATE_SYNC_CHANNEL_SIZE);
     let ongoing = OngoingStateSync {
@@ -93,7 +89,6 @@ pub(crate) fn start_ongoing_state_sync<T: Send + 'static>(
         artifact_id: artifact_id.clone(),
         metrics,
         transport,
-        cancellation: cancellation.clone(),
         new_peers_rx,
         active_downloads: HashMap::new(),
         allowed_downloads: 0,
@@ -103,20 +98,27 @@ pub(crate) fn start_ongoing_state_sync<T: Send + 'static>(
         state_sync_finished: false,
     };
 
-    let jh = rt.spawn(ongoing.run(tracker));
+    let shutdown = Shutdown::spawn_on_with_cancellation(
+        |cancellation: CancellationToken| ongoing.run(cancellation, tracker),
+        rt,
+    );
+
     OngoingStateSyncHandle {
         sender: new_peers_tx,
         artifact_id,
-        jh,
-        cancellation,
+        shutdown,
     }
 }
 
 impl<T: 'static + Send> OngoingStateSync<T> {
-    pub async fn run(mut self, tracker: Arc<Mutex<Box<dyn Chunkable<T> + Send>>>) {
+    pub async fn run(
+        mut self,
+        cancellation: CancellationToken,
+        tracker: Arc<Mutex<Box<dyn Chunkable<T> + Send>>>,
+    ) {
         loop {
             select! {
-                () = self.cancellation.cancelled() => {
+                () = cancellation.cancelled() => {
                     break
                 },
                 Some(new_peer) = self.new_peers_rx.recv() => {
@@ -124,7 +126,7 @@ impl<T: 'static + Send> OngoingStateSync<T> {
                         info!(self.log, "Adding peer {} to ongoing state sync of height {}.", new_peer, self.artifact_id.height);
                         e.insert(0);
                         self.allowed_downloads += PARALLEL_CHUNK_DOWNLOADS;
-                        self.spawn_chunk_downloads(tracker.clone());
+                        self.spawn_chunk_downloads(cancellation.clone(), tracker.clone());
                     }
                 }
                 Some(download_result) = self.downloading_chunks.join_next() => {
@@ -137,7 +139,7 @@ impl<T: 'static + Send> OngoingStateSync<T> {
                             // 5-10min when state sync restarts.
                             self.active_downloads.entry(result.peer_id).and_modify(|v| { *v = v.saturating_sub(1) });
                             self.handle_downloaded_chunk_result(result);
-                            self.spawn_chunk_downloads(tracker.clone());
+                            self.spawn_chunk_downloads(cancellation.clone(), tracker.clone());
                         }
                         Err(err) => {
                             // If task panic we propagate but we allow tasks to be cancelled.
@@ -176,7 +178,7 @@ impl<T: 'static + Send> OngoingStateSync<T> {
                 break;
             }
         }
-
+        // All tracker objects must be dropped before closing the channel.
         while let Some(Ok((finished, _))) = self.downloading_chunks.join_next().await {
             self.handle_downloaded_chunk_result(finished);
         }
@@ -213,7 +215,11 @@ impl<T: 'static + Send> OngoingStateSync<T> {
         }
     }
 
-    fn spawn_chunk_downloads(&mut self, tracker: Arc<Mutex<Box<dyn Chunkable<T> + Send>>>) {
+    fn spawn_chunk_downloads(
+        &mut self,
+        cancellation: CancellationToken,
+        tracker: Arc<Mutex<Box<dyn Chunkable<T> + Send>>>,
+    ) {
         let available_download_capacity = self
             .allowed_downloads
             .saturating_sub(self.downloading_chunks.len());
@@ -254,7 +260,7 @@ impl<T: 'static + Send> OngoingStateSync<T> {
                                 tracker.clone(),
                                 self.artifact_id.clone(),
                                 chunk,
-                                self.cancellation.child_token(),
+                                cancellation.child_token(),
                                 self.metrics.clone(),
                             )),
                         &self.rt,
@@ -424,12 +430,11 @@ mod tests {
                 },
                 Arc::new(s),
                 Arc::new(t),
-                CancellationToken::new(),
             );
 
             rt.block_on(async move {
                 ongoing.sender.send(NODE_1).await.unwrap();
-                ongoing.jh.await.unwrap();
+                ongoing.shutdown.shutdown().await;
             });
         });
     }
@@ -466,13 +471,12 @@ mod tests {
                 },
                 Arc::new(s),
                 Arc::new(t),
-                CancellationToken::new(),
             );
 
             rt.block_on(async move {
                 ongoing.sender.send(NODE_1).await.unwrap();
                 // State sync should exit because NODE_1 got removed.
-                ongoing.jh.await.unwrap();
+                ongoing.shutdown.shutdown().await;
             });
         });
     }
@@ -514,7 +518,6 @@ mod tests {
                 },
                 Arc::new(s),
                 Arc::new(t),
-                CancellationToken::new(),
             );
 
             rt.block_on(async move {
@@ -523,7 +526,7 @@ mod tests {
                 should_cancel.store(true, Ordering::SeqCst);
                 ongoing.sender.send(NODE_1).await.unwrap();
                 // State sync should exit because NODE_1 got removed.
-                ongoing.jh.await.unwrap();
+                ongoing.shutdown.shutdown().await;
             });
         });
     }
