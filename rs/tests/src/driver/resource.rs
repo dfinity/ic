@@ -9,7 +9,7 @@ use slog::{info, warn};
 use std::collections::BTreeMap;
 use std::fs::{self, File};
 use std::io::{self, Write};
-use std::net::Ipv6Addr;
+use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use url::Url;
@@ -145,6 +145,7 @@ pub struct AllocatedVm {
     pub group_name: String,
     pub ipv6: Ipv6Addr,
     pub mac6: String,
+    pub ipv4: Option<Ipv4Addr>,
 }
 
 /// This translates the configuration structure from InternetComputer to a
@@ -371,6 +372,7 @@ pub fn allocate_resources(
                 res_group.add_vm(AllocatedVm {
                     name: vm_name,
                     group_name: group_name.clone(),
+                    ipv4: None,
                     ipv6,
                     mac6,
                 })
@@ -378,10 +380,13 @@ pub fn allocate_resources(
         }
         InfraProvider::K8s => {
             for (vm_name, created_vm) in vm_responses {
-                let VMCreateResponse { ipv6, mac6, .. } = created_vm;
+                let VMCreateResponse {
+                    ipv6, mac6, ipv4, ..
+                } = created_vm;
                 res_group.add_vm(AllocatedVm {
                     name: vm_name,
                     group_name: group_name.clone(),
+                    ipv4,
                     ipv6,
                     mac6,
                 })
