@@ -974,6 +974,15 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "stream",
                 ],
             ),
+            "reqwest_0_12_0": crate.spec(
+                package = "reqwest",
+                version = "^0.12.0",
+                default_features = False,
+                features = [
+                    "rustls-tls",
+                    "rustls-tls-native-roots",
+                ],
+            ),
             "ring": crate.spec(
                 version = "^0.17.7",
                 features = [
