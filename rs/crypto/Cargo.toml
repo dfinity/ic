@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-async-trait = "0.1.41"
+async-trait = { workspace = true }
 bincode = "1.2.1"
 clap = { version = "3.2.25", features = ["derive"] }
 ed25519-consensus = "2.0.1"

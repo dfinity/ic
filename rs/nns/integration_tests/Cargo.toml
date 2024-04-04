@@ -30,7 +30,7 @@ path = "test_canisters/canister_playground_canister.rs"
 # Dependencies required to compile the test canisters.
 [dependencies]
 assert_matches = { workspace = true }
-async-trait = "0.1.42"
+async-trait = { workspace = true }
 bytes = { workspace = true }
 candid = { workspace = true }
 cycles-minting-canister = { path = "../../nns/cmc" }

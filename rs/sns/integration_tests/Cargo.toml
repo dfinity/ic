@@ -16,7 +16,7 @@ path = "test_canisters/sns_governance_mem_test_canister.rs"
 
 # Dependencies required to compile the test canisters.
 [dependencies]
-async-trait = "0.1.42"
+async-trait = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
 candid = { workspace = true }
 cycles-minting-canister = { path = "../../nns/cmc" }

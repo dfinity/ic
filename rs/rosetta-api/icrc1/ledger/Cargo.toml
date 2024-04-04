@@ -11,7 +11,7 @@ name = "ic-icrc1-ledger"
 path = "src/main.rs"
 
 [dependencies]
-async-trait = "0.1.53"
+async-trait = { workspace = true }
 candid = { workspace = true }
 ciborium = { workspace = true }
 hex = { workspace = true }
