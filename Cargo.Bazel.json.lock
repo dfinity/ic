@@ -1,5 +1,5 @@
 {
-  "checksum": "522d11ff14e233087e3f161aae6c619dd79a4b81944c71c7431cf26cdf1bef30",
+  "checksum": "143f863879aa3f60b8c7129daf91d094fe999c9b0273623b3b83e9244cda0f71",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -15050,6 +15050,11 @@
             {
               "id": "reqwest 0.11.22",
               "target": "reqwest"
+            },
+            {
+              "id": "reqwest 0.12.2",
+              "target": "reqwest",
+              "alias": "reqwest_0_12_0"
             },
             {
               "id": "rgb 0.8.37",
@@ -43943,6 +43948,195 @@
       },
       "license": "MIT OR Apache-2.0"
     },
+    "reqwest 0.12.2": {
+      "name": "reqwest",
+      "version": "0.12.2",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/reqwest/0.12.2/download",
+          "sha256": "2d66674f2b6fb864665eea7a3c1ac4e3dfacd2fda83cf6f935a612e01b0e3338"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "reqwest",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "reqwest",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "__rustls",
+            "__tls",
+            "rustls-pki-types",
+            "rustls-tls",
+            "rustls-tls-native-roots",
+            "rustls-tls-webpki-roots"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "base64 0.21.6",
+              "target": "base64"
+            },
+            {
+              "id": "bytes 1.5.0",
+              "target": "bytes"
+            },
+            {
+              "id": "futures-core 0.3.30",
+              "target": "futures_core"
+            },
+            {
+              "id": "futures-util 0.3.30",
+              "target": "futures_util"
+            },
+            {
+              "id": "http 1.0.0",
+              "target": "http"
+            },
+            {
+              "id": "serde 1.0.195",
+              "target": "serde"
+            },
+            {
+              "id": "serde_urlencoded 0.7.1",
+              "target": "serde_urlencoded"
+            },
+            {
+              "id": "sync_wrapper 0.1.2",
+              "target": "sync_wrapper"
+            },
+            {
+              "id": "tower-service 0.3.2",
+              "target": "tower_service"
+            },
+            {
+              "id": "url 2.4.1",
+              "target": "url"
+            }
+          ],
+          "selects": {
+            "cfg(not(target_arch = \"wasm32\"))": [
+              {
+                "id": "http-body 1.0.0",
+                "target": "http_body"
+              },
+              {
+                "id": "http-body-util 0.1.0",
+                "target": "http_body_util"
+              },
+              {
+                "id": "hyper 1.1.0",
+                "target": "hyper"
+              },
+              {
+                "id": "hyper-rustls 0.26.0",
+                "target": "hyper_rustls"
+              },
+              {
+                "id": "hyper-util 0.1.3",
+                "target": "hyper_util"
+              },
+              {
+                "id": "ipnet 2.8.0",
+                "target": "ipnet"
+              },
+              {
+                "id": "log 0.4.20",
+                "target": "log"
+              },
+              {
+                "id": "mime 0.3.17",
+                "target": "mime"
+              },
+              {
+                "id": "once_cell 1.19.0",
+                "target": "once_cell"
+              },
+              {
+                "id": "percent-encoding 2.3.0",
+                "target": "percent_encoding"
+              },
+              {
+                "id": "pin-project-lite 0.2.13",
+                "target": "pin_project_lite"
+              },
+              {
+                "id": "rustls 0.22.2",
+                "target": "rustls"
+              },
+              {
+                "id": "rustls-native-certs 0.7.0",
+                "target": "rustls_native_certs"
+              },
+              {
+                "id": "rustls-pemfile 1.0.3",
+                "target": "rustls_pemfile"
+              },
+              {
+                "id": "rustls-pki-types 1.3.1",
+                "target": "rustls_pki_types"
+              },
+              {
+                "id": "tokio 1.36.0",
+                "target": "tokio"
+              },
+              {
+                "id": "tokio-rustls 0.25.0",
+                "target": "tokio_rustls"
+              },
+              {
+                "id": "webpki-roots 0.26.1",
+                "target": "webpki_roots"
+              }
+            ],
+            "cfg(target_arch = \"wasm32\")": [
+              {
+                "id": "js-sys 0.3.64",
+                "target": "js_sys"
+              },
+              {
+                "id": "serde_json 1.0.108",
+                "target": "serde_json"
+              },
+              {
+                "id": "wasm-bindgen 0.2.87",
+                "target": "wasm_bindgen"
+              },
+              {
+                "id": "wasm-bindgen-futures 0.4.37",
+                "target": "wasm_bindgen_futures"
+              },
+              {
+                "id": "web-sys 0.3.64",
+                "target": "web_sys"
+              }
+            ],
+            "cfg(windows)": [
+              {
+                "id": "winreg 0.50.0",
+                "target": "winreg"
+              }
+            ]
+          }
+        },
+        "edition": "2021",
+        "version": "0.12.2"
+      },
+      "license": "MIT OR Apache-2.0"
+    },
     "resolv-conf 0.7.0": {
       "name": "resolv-conf",
       "version": "0.7.0",
@@ -54157,7 +54351,132 @@
             "logging",
             "tls12"
           ],
-          "selects": {}
+          "selects": {
+            "aarch64-apple-darwin": [
+              "default",
+              "ring"
+            ],
+            "aarch64-apple-ios": [
+              "default",
+              "ring"
+            ],
+            "aarch64-apple-ios-sim": [
+              "default",
+              "ring"
+            ],
+            "aarch64-fuchsia": [
+              "default",
+              "ring"
+            ],
+            "aarch64-linux-android": [
+              "default",
+              "ring"
+            ],
+            "aarch64-pc-windows-msvc": [
+              "default",
+              "ring"
+            ],
+            "aarch64-unknown-linux-gnu": [
+              "default",
+              "ring"
+            ],
+            "aarch64-unknown-nixos-gnu": [
+              "default",
+              "ring"
+            ],
+            "arm-unknown-linux-gnueabi": [
+              "default",
+              "ring"
+            ],
+            "armv7-linux-androideabi": [
+              "default",
+              "ring"
+            ],
+            "armv7-unknown-linux-gnueabi": [
+              "default",
+              "ring"
+            ],
+            "i686-apple-darwin": [
+              "default",
+              "ring"
+            ],
+            "i686-linux-android": [
+              "default",
+              "ring"
+            ],
+            "i686-pc-windows-msvc": [
+              "default",
+              "ring"
+            ],
+            "i686-unknown-freebsd": [
+              "default",
+              "ring"
+            ],
+            "i686-unknown-linux-gnu": [
+              "default",
+              "ring"
+            ],
+            "powerpc-unknown-linux-gnu": [
+              "default",
+              "ring"
+            ],
+            "riscv32imc-unknown-none-elf": [
+              "default",
+              "ring"
+            ],
+            "riscv64gc-unknown-none-elf": [
+              "default",
+              "ring"
+            ],
+            "s390x-unknown-linux-gnu": [
+              "default",
+              "ring"
+            ],
+            "thumbv7em-none-eabi": [
+              "default",
+              "ring"
+            ],
+            "thumbv8m.main-none-eabi": [
+              "default",
+              "ring"
+            ],
+            "x86_64-apple-darwin": [
+              "default",
+              "ring"
+            ],
+            "x86_64-apple-ios": [
+              "default",
+              "ring"
+            ],
+            "x86_64-fuchsia": [
+              "default",
+              "ring"
+            ],
+            "x86_64-linux-android": [
+              "default",
+              "ring"
+            ],
+            "x86_64-pc-windows-msvc": [
+              "default",
+              "ring"
+            ],
+            "x86_64-unknown-freebsd": [
+              "default",
+              "ring"
+            ],
+            "x86_64-unknown-linux-gnu": [
+              "default",
+              "ring"
+            ],
+            "x86_64-unknown-nixos-gnu": [
+              "default",
+              "ring"
+            ],
+            "x86_64-unknown-none": [
+              "default",
+              "ring"
+            ]
+          }
         },
         "deps": {
           "common": [
@@ -65172,6 +65491,7 @@
     "rcgen 0.11.1",
     "regex 1.9.1",
     "reqwest 0.11.22",
+    "reqwest 0.12.2",
     "rgb 0.8.37",
     "ring 0.17.7",
     "ripemd 0.1.3",

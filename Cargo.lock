@@ -1856,7 +1856,7 @@ dependencies = [
  "pem 1.1.1",
  "prometheus",
  "rcgen",
- "reqwest",
+ "reqwest 0.11.22",
  "serde",
  "serde_cbor",
  "serde_json",
@@ -1875,17 +1875,16 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "axum 0.6.20",
+ "axum 0.7.5",
  "candid",
  "clap 4.4.6",
  "futures",
- "hyper 0.14.26",
- "hyper-rustls 0.24.2",
  "mockall",
  "nix 0.24.3",
  "opentelemetry 0.20.0",
  "opentelemetry-prometheus",
  "prometheus",
+ "reqwest 0.12.2",
  "serde",
  "serde_json",
  "tempfile",
@@ -2163,7 +2162,7 @@ dependencies = [
  "chrono",
  "http 0.2.9",
  "percent-encoding 1.0.1",
- "reqwest",
+ "reqwest 0.11.22",
  "serde",
  "serde_json",
  "serde_qs 0.4.6",
@@ -3010,7 +3009,7 @@ dependencies = [
  "opentelemetry 0.20.0",
  "opentelemetry-prometheus",
  "prometheus",
- "reqwest",
+ "reqwest 0.11.22",
  "rsa",
  "serde",
  "serde_json",
@@ -3932,12 +3931,21 @@ checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 
 [[package]]
 name = "foreign-types"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f6f339eb8adc052cd2ca78910fda869aefa38d22d5cb648e6485e4d3fc06f3b1"
+dependencies = [
+ "foreign-types-shared 0.1.1",
+]
+
+[[package]]
+name = "foreign-types"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d737d9aa519fb7b749cbc3b962edcf310a8dd1f4b67c91c4f83975dbdd17d965"
 dependencies = [
  "foreign-types-macros",
- "foreign-types-shared",
+ "foreign-types-shared 0.3.1",
 ]
 
 [[package]]
@@ -3950,6 +3958,12 @@ dependencies = [
  "quote 1.0.35",
  "syn 2.0.48",
 ]
+
+[[package]]
+name = "foreign-types-shared"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "00b0228411908ca8685dba7fc2cdd70ec9990a6e753e89b6ac91a84c40fbaf4b"
 
 [[package]]
 name = "foreign-types-shared"
@@ -4337,7 +4351,7 @@ dependencies = [
  "nix 0.24.3",
  "rand 0.8.5",
  "rand_distr",
- "reqwest",
+ "reqwest 0.11.22",
  "serde",
  "serde_cbor",
  "serde_json",
@@ -4860,6 +4874,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "hyper-tls"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "70206fc6890eaca9fde8a0bf71caa2ddfc9fe045ac9e5c70df101a7dbde866e0"
+dependencies = [
+ "bytes",
+ "http-body-util",
+ "hyper 1.2.0",
+ "hyper-util",
+ "native-tls",
+ "tokio",
+ "tokio-native-tls",
+ "tower-service",
+]
+
+[[package]]
 name = "hyper-util"
 version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5060,7 +5090,7 @@ dependencies = [
  "pkcs8",
  "rand 0.8.5",
  "rangemap",
- "reqwest",
+ "reqwest 0.11.22",
  "ring 0.17.8",
  "rustls-webpki 0.101.7",
  "sec1",
@@ -5179,7 +5209,7 @@ dependencies = [
  "ic-test-utilities-tmpdir",
  "ic-types",
  "rand 0.8.5",
- "reqwest",
+ "reqwest 0.11.22",
  "serde",
  "serde_json",
  "slog",
@@ -5332,7 +5362,7 @@ dependencies = [
  "ratelimit",
  "rcgen",
  "regex",
- "reqwest",
+ "reqwest 0.11.22",
  "rustls 0.21.10",
  "rustls-pemfile 1.0.4",
  "serde",
@@ -7409,7 +7439,7 @@ dependencies = [
  "ic-registry-nns-data-provider",
  "ic-types",
  "prost",
- "reqwest",
+ "reqwest 0.11.22",
  "tokio",
 ]
 
@@ -7800,7 +7830,7 @@ dependencies = [
  "proptest",
  "prost",
  "rand 0.8.5",
- "reqwest",
+ "reqwest 0.11.22",
  "serde",
  "serde_bytes",
  "serde_cbor",
@@ -7832,7 +7862,7 @@ dependencies = [
  "ic-logger",
  "ic-test-utilities-in-memory-logger",
  "mockito",
- "reqwest",
+ "reqwest 0.11.22",
  "slog",
  "tar",
  "tempfile",
@@ -8011,7 +8041,7 @@ dependencies = [
  "once_cell",
  "proptest",
  "rand 0.8.5",
- "reqwest",
+ "reqwest 0.11.22",
  "ring 0.16.20",
  "rolling-file",
  "rosetta-core",
@@ -8049,7 +8079,7 @@ dependencies = [
  "ic-rosetta-api",
  "icrc-ledger-types",
  "num-bigint 0.4.4",
- "reqwest",
+ "reqwest 0.11.22",
  "rosetta-core",
  "serde",
  "tokio",
@@ -8715,7 +8745,7 @@ dependencies = [
  "ic-sns-wasm",
  "ic-types",
  "icp-ledger",
- "reqwest",
+ "reqwest 0.11.22",
  "serde",
  "slog",
  "tests",
@@ -9771,7 +9801,7 @@ dependencies = [
  "pretty_assertions",
  "prost",
  "rand 0.8.5",
- "reqwest",
+ "reqwest 0.11.22",
  "serde",
  "serde_json",
  "slog",
@@ -9901,7 +9931,7 @@ dependencies = [
  "ic-test-utilities-types",
  "ic-types",
  "prost",
- "reqwest",
+ "reqwest 0.11.22",
  "serde",
  "serde_cbor",
  "serde_json",
@@ -10541,7 +10571,7 @@ dependencies = [
  "proptest",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
- "reqwest",
+ "reqwest 0.11.22",
  "rolling-file",
  "rosetta-core",
  "serde",
@@ -10570,7 +10600,7 @@ dependencies = [
  "log",
  "nix 0.24.3",
  "rand 0.8.5",
- "reqwest",
+ "reqwest 0.11.22",
  "rosetta-core",
  "serde",
  "serde_json",
@@ -11138,7 +11168,7 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "ic-agent",
- "reqwest",
+ "reqwest 0.11.22",
  "tempfile",
  "tokio",
 ]
@@ -12178,7 +12208,7 @@ dependencies = [
  "maplit",
  "prometheus",
  "prost",
- "reqwest",
+ "reqwest 0.11.22",
  "serde",
  "serde_json",
  "slog",
@@ -12247,7 +12277,7 @@ dependencies = [
  "prometheus",
  "proptest",
  "rand 0.8.5",
- "reqwest",
+ "reqwest 0.11.22",
  "slog",
  "tempfile",
  "tokio",
@@ -12458,7 +12488,7 @@ dependencies = [
  "opentelemetry-prometheus",
  "prometheus",
  "regex",
- "reqwest",
+ "reqwest 0.11.22",
  "rustls 0.22.2",
  "rustls-native-certs 0.7.0",
  "rustls-pemfile 1.0.4",
@@ -13117,7 +13147,7 @@ dependencies = [
  "ic-prep",
  "ic-registry-subnet-type",
  "ic-types",
- "reqwest",
+ "reqwest 0.11.22",
  "serde",
  "slog",
  "slog-async",
@@ -14020,6 +14050,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
 
 [[package]]
+name = "native-tls"
+version = "0.2.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "07226173c32f2926027b63cce4bcd8076c3552846cbe7925f3aaffeac0a3b92e"
+dependencies = [
+ "lazy_static",
+ "libc",
+ "log",
+ "openssl",
+ "openssl-probe",
+ "openssl-sys",
+ "schannel",
+ "security-framework",
+ "security-framework-sys",
+ "tempfile",
+]
+
+[[package]]
 name = "neli"
 version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -14409,6 +14457,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "openssl"
+version = "0.10.64"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "95a0481286a310808298130d22dd1fef0fa571e05a8f44ec801801e84b216b1f"
+dependencies = [
+ "bitflags 2.4.2",
+ "cfg-if 1.0.0",
+ "foreign-types 0.3.2",
+ "libc",
+ "once_cell",
+ "openssl-macros",
+ "openssl-sys",
+]
+
+[[package]]
+name = "openssl-macros"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a948666b637a0f465e8564c73e89d4dde00d72d4d473cc972f390fc3dcee7d9c"
+dependencies = [
+ "proc-macro2 1.0.75",
+ "quote 1.0.35",
+ "syn 2.0.48",
+]
+
+[[package]]
 name = "openssl-probe"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -14416,9 +14490,9 @@ checksum = "ff011a302c396a5197692431fc1948019154afc178baf7d8e37367442a4601cf"
 
 [[package]]
 name = "openssl-sys"
-version = "0.9.97"
+version = "0.9.101"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c3eaad34cdd97d81de97964fc7f29e2d104f483840d906ef56daa1912338460b"
+checksum = "dda2b0f344e78efc2facf7d195d098df0dd72151b26ab98da807afc26c198dff"
 dependencies = [
  "cc",
  "libc",
@@ -15141,7 +15215,7 @@ dependencies = [
  "ic-cdk",
  "ic-universal-canister",
  "icp-ledger",
- "reqwest",
+ "reqwest 0.11.22",
  "schemars",
  "serde",
  "serde_bytes",
@@ -15192,7 +15266,7 @@ dependencies = [
  "itertools 0.12.0",
  "pocket-ic",
  "rand 0.8.5",
- "reqwest",
+ "reqwest 0.11.22",
  "serde",
  "serde_cbor",
  "spec-compliance",
@@ -16286,6 +16360,54 @@ dependencies = [
  "wasm-streams",
  "web-sys",
  "webpki-roots 0.25.2",
+ "winreg 0.50.0",
+]
+
+[[package]]
+name = "reqwest"
+version = "0.12.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2d66674f2b6fb864665eea7a3c1ac4e3dfacd2fda83cf6f935a612e01b0e3338"
+dependencies = [
+ "base64 0.21.5",
+ "bytes",
+ "encoding_rs",
+ "futures-core",
+ "futures-util",
+ "h2 0.4.2",
+ "http 1.0.0",
+ "http-body 1.0.0",
+ "http-body-util",
+ "hyper 1.2.0",
+ "hyper-rustls 0.26.0",
+ "hyper-tls",
+ "hyper-util",
+ "ipnet",
+ "js-sys",
+ "log",
+ "mime",
+ "native-tls",
+ "once_cell",
+ "percent-encoding 2.3.0",
+ "pin-project-lite",
+ "rustls 0.22.2",
+ "rustls-native-certs 0.7.0",
+ "rustls-pemfile 1.0.4",
+ "rustls-pki-types",
+ "serde",
+ "serde_json",
+ "serde_urlencoded",
+ "sync_wrapper 0.1.2",
+ "system-configuration",
+ "tokio",
+ "tokio-native-tls",
+ "tokio-rustls 0.25.0",
+ "tower-service",
+ "url",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+ "webpki-roots 0.26.1",
  "winreg 0.50.0",
 ]
 
@@ -18001,7 +18123,7 @@ dependencies = [
  "clap 4.4.6",
  "http 0.2.9",
  "itertools 0.12.0",
- "reqwest",
+ "reqwest 0.11.22",
  "thiserror",
  "tokio",
  "url",
@@ -18345,7 +18467,7 @@ dependencies = [
  "rcgen",
  "regex",
  "registry-canister",
- "reqwest",
+ "reqwest 0.11.22",
  "ring 0.17.8",
  "rosetta-core",
  "rsa",
@@ -18562,6 +18684,16 @@ dependencies = [
  "pin-project-lite",
  "tokio",
  "tokio-stream",
+]
+
+[[package]]
+name = "tokio-native-tls"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bbae76ab933c85776efabc971569dd6119c580d8f5d448769dec1764bf796ef2"
+dependencies = [
+ "native-tls",
+ "tokio",
 ]
 
 [[package]]
@@ -19266,7 +19398,7 @@ version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f0e0da3c8d6b71dbaf219188cc0e7f9ca3943f3263ca479920338d92d7ea5e07"
 dependencies = [
- "foreign-types",
+ "foreign-types 0.5.0",
  "libc",
  "unwind-sys",
 ]
@@ -19408,7 +19540,7 @@ version = "1.0.0"
 dependencies = [
  "anyhow",
  "regex",
- "reqwest",
+ "reqwest 0.11.22",
  "rusb",
  "serde",
  "serde_json",

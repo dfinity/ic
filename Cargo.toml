@@ -430,7 +430,7 @@ assert_matches = "1.5.0"
 async-recursion = "1.0.5"
 async-trait = "0.1"
 async-scoped = { version = "0.8", features = ["use-tokio"] }
-axum = "0.7.4"
+axum = { version = "0.7.4", features = ["json"] }
 backoff = "0.4"
 base64 = { version = "0.13.1" }
 # build-info and build-info-build MUST be kept in sync!
@@ -512,6 +512,7 @@ reqwest = { version = "0.11.22", default-features = false, features = [
   "blocking",
   "json",
   "multipart",
+  "rustls-tls",
   "rustls-tls-webpki-roots",
   "stream",
 ] }
