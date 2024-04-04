@@ -109,6 +109,7 @@ pub fn config_impl(env: TestEnv, deploy_bn_and_nns_canisters: bool, http_request
             )
             .start(&env)
             .expect("failed to set up universal VM");
+        canister_http::start_httpbin_on_uvm(&env);
         let log = env.logger();
         retry_with_msg!(
             "check if httpbin is responding to requests",
