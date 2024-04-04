@@ -8,7 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
-async-trait = "0.1.59"
+async-trait = { workspace = true }
 axum = { version = "0.6.1", features = ["json"] }
 candid = { workspace = true }
 clap = { workspace = true }

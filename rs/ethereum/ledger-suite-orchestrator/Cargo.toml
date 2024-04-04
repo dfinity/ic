@@ -9,7 +9,7 @@ path = "src/main.rs"
 
 [dependencies]
 askama = { workspace = true }
-async-trait = "0.1.73"
+async-trait = { workspace = true }
 candid = { workspace = true }
 ciborium = { workspace = true }
 futures = { workspace = true }

@@ -9,7 +9,7 @@ documentation.workspace = true
 [dependencies]
 build-info = { workspace = true }
 
-async-trait = "0.1.42"
+async-trait = { workspace = true }
 candid = { workspace = true }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }

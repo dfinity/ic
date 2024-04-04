@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-async-trait = "0.1.42"
+async-trait = { workspace = true }
 dfn_core = { path = "../../../rust_canisters/dfn_core" }
 futures = { workspace = true }
 icp-ledger = { path = "../../../rosetta-api/icp_ledger" }

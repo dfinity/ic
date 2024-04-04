@@ -12,7 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = { workspace = true }
-async-trait = "0.1.53"
+async-trait = { workspace = true }
 axum = { workspace = true }
 candid = { workspace = true }
 clap = { version = "3.2.25", features = ["derive"] }

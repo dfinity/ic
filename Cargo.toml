@@ -428,6 +428,7 @@ arrayvec = "0.7.4"
 askama = { version = "0.12.1", features = ["serde-json"] }
 assert_matches = "1.5.0"
 async-recursion = "1.0.5"
+async-trait = "0.1"
 async-scoped = { version = "0.8", features = ["use-tokio"] }
 axum = "0.7.4"
 backoff = "0.4"
