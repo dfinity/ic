@@ -19,6 +19,7 @@ pub(super) mod tests;
 pub const REQUEST_LIFETIME: Duration = Duration::from_secs(300);
 
 /// Bit encoding the message kind (request or response).
+#[derive(Clone, Copy)]
 #[repr(u64)]
 enum Kind {
     Request = 0,
@@ -31,6 +32,7 @@ impl Kind {
 }
 
 /// Bit encoding the message context (inbound or outbound).
+#[derive(Clone, Copy)]
 #[repr(u64)]
 enum Context {
     Inbound = 0,
@@ -43,6 +45,7 @@ impl Context {
 }
 
 /// Bit encoding the message class (guaranteed response vs best-effort).
+#[derive(Clone, Copy)]
 #[repr(u64)]
 enum Class {
     GuaranteedResponse = 0,
@@ -423,22 +426,21 @@ impl PartialEq for MessagePool {
     fn eq(&self, other: &Self) -> bool {
         let Self {
             messages,
-            memory_usage_stats: _,
+            memory_usage_stats,
             deadline_queue,
             size_queue,
             next_message_id_generator,
         } = self;
         let Self {
             messages: other_messages,
-            memory_usage_stats: _,
+            memory_usage_stats: other_memory_usage_stats,
             deadline_queue: other_deadline_queue,
             size_queue: other_size_queue,
             next_message_id_generator: other_next_message_id_generator,
         } = other;
 
         messages == other_messages
-            // Memory usage stats are implied by the contents of the pool.
-            // && memory_usage_stats == other_memory_usage_stats
+            && memory_usage_stats == other_memory_usage_stats
             && deadline_queue.len() == other_deadline_queue.len()
             && deadline_queue
                 .iter()
@@ -501,19 +503,22 @@ impl MemoryUsageStats {
     fn request_stats_delta(req: &Request) -> MemoryUsageStats {
         let size_bytes = req.count_bytes();
         if req.deadline == NO_DEADLINE {
-            // Adjust guaranteed response call request byte size by this request's byte size.
+            // Adjust the byte size; and the extra bytes for oversized guaranteed requests,
+            // if necessary.
             MemoryUsageStats {
+                best_effort_message_bytes: 0,
+                guaranteed_responses_size_bytes: 0,
                 oversized_guaranteed_requests_extra_bytes: size_bytes
                     .saturating_sub(MAX_RESPONSE_COUNT_BYTES),
                 size_bytes,
-                ..Default::default()
             }
         } else {
-            // Adjust best-effort messages byte size by this request's byte size.
+            // Adjust best-effort message byte size and total byte size.
             MemoryUsageStats {
                 best_effort_message_bytes: size_bytes,
+                guaranteed_responses_size_bytes: 0,
+                oversized_guaranteed_requests_extra_bytes: 0,
                 size_bytes,
-                ..Default::default()
             }
         }
     }
@@ -523,18 +528,20 @@ impl MemoryUsageStats {
     fn response_stats_delta(rep: &Response) -> MemoryUsageStats {
         let size_bytes = rep.count_bytes();
         if rep.deadline == NO_DEADLINE {
-            // Adjust guaranteed responses byte size by this response's byte size.
+            // Adjust guaranteed responses byte size and total byte size.
             MemoryUsageStats {
+                best_effort_message_bytes: 0,
                 guaranteed_responses_size_bytes: size_bytes,
+                oversized_guaranteed_requests_extra_bytes: 0,
                 size_bytes,
-                ..Default::default()
             }
         } else {
-            // Adjust best-effort messages byte size by this response's byte size.
+            // Adjust best-effort message byte size and total byte size.
             MemoryUsageStats {
                 best_effort_message_bytes: size_bytes,
+                guaranteed_responses_size_bytes: 0,
+                oversized_guaranteed_requests_extra_bytes: 0,
                 size_bytes,
-                ..Default::default()
             }
         }
     }

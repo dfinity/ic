@@ -594,6 +594,56 @@ fn test_message_id_sanity() {
 }
 
 #[test]
+fn test_message_id_flags() {
+    // Guaranteed inbound request.
+    let giq_id = MessageId::new(
+        Kind::Request,
+        Context::Inbound,
+        Class::GuaranteedResponse,
+        13,
+    );
+    assert!(!giq_id.is_response());
+    assert!(!giq_id.is_outbound());
+    assert!(!giq_id.is_best_effort());
+    assert_eq!(13, giq_id.0 >> MessageId::BITMASK_LEN);
+
+    // Best-effort outbound response, same generator.
+    let bop_id = MessageId::new(Kind::Response, Context::Outbound, Class::BestEffort, 13);
+    assert!(bop_id.is_response());
+    assert!(bop_id.is_outbound());
+    assert!(bop_id.is_best_effort());
+    assert_eq!(13, bop_id.0 >> MessageId::BITMASK_LEN);
+
+    // IDs should be different.
+    assert_ne!(giq_id, bop_id);
+    // But equal to themselves.
+    assert_eq!(giq_id, giq_id);
+    assert_eq!(bop_id, bop_id);
+}
+
+#[test]
+fn test_message_id_range() {
+    let request = Kind::Request;
+    let inbound = Context::Inbound;
+    let guaranteed = Class::GuaranteedResponse;
+
+    let id1 = MessageId::new(request, inbound, guaranteed, 0);
+    assert_eq!(0, id1.0 >> MessageId::BITMASK_LEN);
+
+    let id2 = MessageId::new(request, inbound, guaranteed, 13);
+    assert_eq!(13, id2.0 >> MessageId::BITMASK_LEN);
+
+    // Maximum generator value that will be preserved
+    const GENERATOR_MAX: u64 = u64::MAX >> MessageId::BITMASK_LEN;
+    let id3 = MessageId::new(request, inbound, guaranteed, GENERATOR_MAX);
+    assert_eq!(GENERATOR_MAX, id3.0 >> MessageId::BITMASK_LEN);
+
+    // Larger generator values still work, their high bits are just ignored.
+    let id4 = MessageId::new(request, inbound, guaranteed, u64::MAX);
+    assert_eq!(GENERATOR_MAX, id4.0 >> MessageId::BITMASK_LEN);
+}
+
+#[test]
 fn test_memory_usage_stats_best_effort() {
     let mut pool = MessagePool::default();
 
