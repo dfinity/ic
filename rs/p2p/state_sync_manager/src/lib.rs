@@ -181,7 +181,6 @@ impl<T: 'static + Send> StateSyncManager<T> {
                 self.metrics.ongoing_state_sync_metrics.clone(),
                 Arc::new(Mutex::new(chunkable)),
                 artifact_id.clone(),
-                self.state_sync.clone(),
                 self.transport.clone(),
             );
             // Add peer that initiated this state sync to ongoing state sync.
