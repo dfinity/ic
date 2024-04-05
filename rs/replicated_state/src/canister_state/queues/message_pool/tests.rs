@@ -556,7 +556,7 @@ fn test_message_id_sanity() {
     assert_eq!(1, Kind::BIT.count_ones());
     assert_eq!(1, Context::BIT.count_ones());
     assert_eq!(1, Class::BIT.count_ones());
-    // And they are the trailing two bits.
+    // And they are the trailing three bits.
     assert_eq!(
         MessageId::BITMASK_LEN,
         (Kind::BIT | Context::BIT | Class::BIT).trailing_ones()
@@ -623,23 +623,23 @@ fn test_message_id_flags() {
 
 #[test]
 fn test_message_id_range() {
-    let request = Kind::Request;
-    let inbound = Context::Inbound;
-    let guaranteed = Class::GuaranteedResponse;
+    const REQUEST: Kind = Kind::Request;
+    const INBOUND: Context = Context::Inbound;
+    const GUARANTEED: Class = Class::GuaranteedResponse;
 
-    let id1 = MessageId::new(request, inbound, guaranteed, 0);
+    let id1 = MessageId::new(REQUEST, INBOUND, GUARANTEED, 0);
     assert_eq!(0, id1.0 >> MessageId::BITMASK_LEN);
 
-    let id2 = MessageId::new(request, inbound, guaranteed, 13);
+    let id2 = MessageId::new(REQUEST, INBOUND, GUARANTEED, 13);
     assert_eq!(13, id2.0 >> MessageId::BITMASK_LEN);
 
     // Maximum generator value that will be preserved
     const GENERATOR_MAX: u64 = u64::MAX >> MessageId::BITMASK_LEN;
-    let id3 = MessageId::new(request, inbound, guaranteed, GENERATOR_MAX);
+    let id3 = MessageId::new(REQUEST, INBOUND, GUARANTEED, GENERATOR_MAX);
     assert_eq!(GENERATOR_MAX, id3.0 >> MessageId::BITMASK_LEN);
 
     // Larger generator values still work, their high bits are just ignored.
-    let id4 = MessageId::new(request, inbound, guaranteed, u64::MAX);
+    let id4 = MessageId::new(REQUEST, INBOUND, GUARANTEED, u64::MAX);
     assert_eq!(GENERATOR_MAX, id4.0 >> MessageId::BITMASK_LEN);
 }
 

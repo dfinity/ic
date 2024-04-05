@@ -19,7 +19,6 @@ pub(super) mod tests;
 pub const REQUEST_LIFETIME: Duration = Duration::from_secs(300);
 
 /// Bit encoding the message kind (request or response).
-#[derive(Clone, Copy)]
 #[repr(u64)]
 enum Kind {
     Request = 0,
@@ -32,7 +31,6 @@ impl Kind {
 }
 
 /// Bit encoding the message context (inbound or outbound).
-#[derive(Clone, Copy)]
 #[repr(u64)]
 enum Context {
     Inbound = 0,
@@ -45,7 +43,6 @@ impl Context {
 }
 
 /// Bit encoding the message class (guaranteed response vs best-effort).
-#[derive(Clone, Copy)]
 #[repr(u64)]
 enum Class {
     GuaranteedResponse = 0,
