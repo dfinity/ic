@@ -845,7 +845,7 @@ pub(crate) fn new_request_message_id(generator: u64) -> MessageId {
     MessageId::new(
         Kind::Request,
         Context::Inbound,
-            Class::BestEffort,
+        Class::BestEffort,
         generator,
     )
 }
