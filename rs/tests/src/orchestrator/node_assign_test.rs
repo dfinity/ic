@@ -208,10 +208,10 @@ pub fn test(env: TestEnv) {
     // Restart node to start consensus.
     info!(logger, "Restart node to start consensus");
     newly_assigned_nodes[kill_nodes_count].vm().start();
-    info!(logger, "Wait for it to become available");
-    newly_assigned_nodes[kill_nodes_count]
-        .await_status_is_healthy()
-        .expect("Node still unhealthy");
+    info!(logger, "Wait for subnet to restart");
+    // Wait for 1 DKG interval to ensure that subnet makes progress again.
+    let target_height = get_certified_height(&app_node, logger.clone()).get() + DKG_INTERVAL_LENGTH;
+    await_node_certified_height(&app_node, Height::from(target_height), logger.clone());
 
     // Assert that `update` call to the canister succeeds again.
     info!(
