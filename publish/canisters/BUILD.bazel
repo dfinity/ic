@@ -69,13 +69,19 @@ DEFAULT_CANISTERS_MAX_SIZE_E5_BYTES = "21"
 
 CANISTERS_MAX_SIZE_E5_BYTES = {
     "ic-ckbtc-minter.wasm": "19",
-    "ic-icrc1-ledger.wasm": "19",
     "ledger-canister.wasm": "19",
-    "ledger-canisternotify-method.wasm": "19",
+    "ledger-canister_notify-method.wasm": "19",
     "sns-canister.wasm": "15",
 }
 
-CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES = {}
+CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES = {
+    # -- FI team --
+    # The compressed version of these two canisters should be ~600kb,
+    # we are setting the check to 7 to leave some space for growth
+    # but enough to get an alert in case of a spike in size.
+    "ic-icrc1-ledger.wasm.gz": "7",
+    "ic-icrc1-ledger-u256.wasm.gz": "7",
+}
 
 CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES.update(NNS_CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES)
 
