@@ -13,7 +13,7 @@ use crate::{
         reassemble_governance_proto, split_governance_proto, HeapGovernanceData, XdrConversionRate,
     },
     migrations::maybe_run_migrations,
-    neuron::types::Neuron,
+    neuron::types::{DissolveStateAndAge, Neuron, NeuronBuilder},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
     neuron_store::{NeuronMetrics, NeuronStore},
     neurons_fund::{
@@ -36,7 +36,7 @@ use crate::{
         },
         manage_neuron_response,
         manage_neuron_response::{MergeMaturityResponse, StakeMaturityResponse},
-        neuron::{DissolveState, Followees},
+        neuron::Followees,
         neurons_fund_snapshot::NeuronsFundNeuronPortion as NeuronsFundNeuronPortionPb,
         proposal,
         proposal::Action,
@@ -2465,7 +2465,7 @@ impl Governance {
             ));
         }
 
-        let creation_timestamp_seconds = self.env.now();
+        let created_timestamp_seconds = self.env.now();
         let child_nid = self.neuron_store.new_neuron_id(&mut *self.env);
 
         let from_subaccount = parent_neuron.subaccount()?;
@@ -2481,7 +2481,7 @@ impl Governance {
         }
 
         let in_flight_command = NeuronInFlightCommand {
-            timestamp: creation_timestamp_seconds,
+            timestamp: created_timestamp_seconds,
             command: Some(InFlightCommand::Split(split.clone())),
         };
 
@@ -2498,33 +2498,23 @@ impl Governance {
         // However the new neuron is not yet ready to be used as we can't know
         // whether the transfer will succeed, so we temporarily set the
         // stake to 0 and only change it after the transfer is successful.
-        let child_neuron = Neuron {
-            id: Some(child_nid),
-            account: to_subaccount.to_vec(),
-            controller: Some(*caller),
-            hot_keys: parent_neuron.hot_keys.clone(),
-            cached_neuron_stake_e8s: 0,
-            neuron_fees_e8s: 0,
-            created_timestamp_seconds: creation_timestamp_seconds,
-            aging_since_timestamp_seconds: parent_neuron.aging_since_timestamp_seconds,
-            dissolve_state: parent_neuron.dissolve_state.clone(),
-            followees: parent_neuron.followees.clone(),
-            recent_ballots: Vec::new(),
-            kyc_verified: parent_neuron.kyc_verified,
-            transfer: None,
-            maturity_e8s_equivalent: 0,
-            staked_maturity_e8s_equivalent: None,
-            auto_stake_maturity: parent_neuron.auto_stake_maturity,
-            not_for_profit: parent_neuron.not_for_profit,
-            // We allow splitting of a neuron that has joined the Neurons' Fund (used to be called
-            // Community Fund): both resulting neurons remain members of the fund with the same
-            // "join date".
-            joined_community_fund_timestamp_seconds: parent_neuron
-                .joined_community_fund_timestamp_seconds,
-            known_neuron_data: None,
-            spawn_at_timestamp_seconds: None,
-            neuron_type: parent_neuron.neuron_type,
-        };
+        let child_neuron = NeuronBuilder::new(
+            child_nid,
+            to_subaccount,
+            *caller,
+            parent_neuron.dissolve_state_and_age(),
+            created_timestamp_seconds,
+        )
+        .with_hot_keys(parent_neuron.hot_keys.clone())
+        .with_followees(parent_neuron.followees.clone())
+        .with_kyc_verified(parent_neuron.kyc_verified)
+        .with_auto_stake_maturity(parent_neuron.auto_stake_maturity.unwrap_or(false))
+        .with_not_for_profit(parent_neuron.not_for_profit)
+        .with_joined_community_fund_timestamp_seconds(
+            parent_neuron.joined_community_fund_timestamp_seconds,
+        )
+        .with_neuron_type(parent_neuron.neuron_type)
+        .build();
 
         // Add the child neuron to the set of neurons undergoing ledger updates.
         let _child_lock = self.lock_neuron_for_command(child_nid.id, in_flight_command.clone())?;
@@ -2931,34 +2921,21 @@ impl Governance {
         let _parent_lock = self.lock_neuron_for_command(id.id, in_flight_command.clone())?;
         let _child_lock = self.lock_neuron_for_command(child_nid.id, in_flight_command.clone())?;
 
-        let child_neuron = Neuron {
-            id: Some(child_nid),
-            account: to_subaccount.to_vec(),
-            controller: Some(*child_controller),
-            hot_keys: parent_neuron.hot_keys.clone(),
-            cached_neuron_stake_e8s: 0,
-            neuron_fees_e8s: 0,
+        let child_neuron = NeuronBuilder::new(
+            child_nid,
+            to_subaccount,
+            *child_controller,
+            DissolveStateAndAge::DissolvingOrDissolved {
+                when_dissolved_timestamp_seconds: dissolve_and_spawn_at_timestamp_seconds,
+            },
             created_timestamp_seconds,
-            aging_since_timestamp_seconds: u64::MAX,
-            dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
-                dissolve_and_spawn_at_timestamp_seconds,
-            )),
-            spawn_at_timestamp_seconds: Some(dissolve_and_spawn_at_timestamp_seconds),
-            followees: parent_neuron.followees.clone(),
-            recent_ballots: Vec::new(),
-            kyc_verified: parent_neuron.kyc_verified,
-            transfer: None,
-            maturity_e8s_equivalent: maturity_to_spawn,
-            staked_maturity_e8s_equivalent: None,
-            auto_stake_maturity: None,
-            not_for_profit: false,
-            // We allow spawning of maturity from a neuron that has
-            // joined the Neurons' Fund: the spawned neuron is not
-            // considered part of the Neurons' Fund.
-            joined_community_fund_timestamp_seconds: None,
-            known_neuron_data: None,
-            neuron_type: None,
-        };
+        )
+        .with_spawn_at_timestamp_seconds(dissolve_and_spawn_at_timestamp_seconds)
+        .with_hot_keys(parent_neuron.hot_keys.clone())
+        .with_followees(parent_neuron.followees.clone())
+        .with_kyc_verified(parent_neuron.kyc_verified)
+        .with_maturity_e8s_equivalent(maturity_to_spawn)
+        .build();
 
         // `add_neuron` will verify that `child_neuron.controller` `is_self_authenticating()`, so we don't need to check it here.
         self.add_neuron(child_nid.id, child_neuron)?;
@@ -3115,7 +3092,7 @@ impl Governance {
             .expect("Governance must have economics.")
             .clone();
 
-        let creation_timestamp_seconds = self.env.now();
+        let created_timestamp_seconds = self.env.now();
         let transaction_fee_e8s = self.transaction_fee();
 
         let parent_neuron = self.with_neuron(id, |neuron| neuron.clone())?;
@@ -3166,7 +3143,7 @@ impl Governance {
             ));
         }
 
-        let state = parent_neuron.state(creation_timestamp_seconds);
+        let state = parent_neuron.state(created_timestamp_seconds);
         if state != NeuronState::Dissolved {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
@@ -3229,7 +3206,7 @@ impl Governance {
         }
 
         let in_flight_command = NeuronInFlightCommand {
-            timestamp: creation_timestamp_seconds,
+            timestamp: created_timestamp_seconds,
             command: Some(InFlightCommand::DisburseToNeuron(
                 disburse_to_neuron.clone(),
             )),
@@ -3250,29 +3227,19 @@ impl Governance {
         // However the new neuron is not yet ready to be used as we can't know
         // whether the transfer will succeed, so we temporarily set the
         // stake to 0 and only change it after the transfer is successful.
-        let child_neuron = Neuron {
-            id: Some(child_nid),
-            account: to_subaccount.to_vec(),
-            controller: Some(*child_controller),
-            hot_keys: Vec::new(),
-            cached_neuron_stake_e8s: 0,
-            neuron_fees_e8s: 0,
-            created_timestamp_seconds: creation_timestamp_seconds,
-            aging_since_timestamp_seconds: creation_timestamp_seconds,
-            dissolve_state: Some(DissolveState::DissolveDelaySeconds(dissolve_delay_seconds)),
-            followees: self.heap_data.default_followees.clone(),
-            recent_ballots: Vec::new(),
-            kyc_verified: disburse_to_neuron.kyc_verified,
-            transfer: None,
-            maturity_e8s_equivalent: 0,
-            staked_maturity_e8s_equivalent: None,
-            auto_stake_maturity: None,
-            not_for_profit: false,
-            joined_community_fund_timestamp_seconds: None,
-            known_neuron_data: None,
-            spawn_at_timestamp_seconds: None,
-            neuron_type: None,
-        };
+        let child_neuron = NeuronBuilder::new(
+            child_nid,
+            to_subaccount,
+            *child_controller,
+            DissolveStateAndAge::NotDissolving {
+                dissolve_delay_seconds,
+                aging_since_timestamp_seconds: created_timestamp_seconds,
+            },
+            created_timestamp_seconds,
+        )
+        .with_followees(self.heap_data.default_followees.clone())
+        .with_kyc_verified(parent_neuron.kyc_verified)
+        .build();
 
         self.add_neuron(child_nid.id, child_neuron.clone())?;
 
@@ -3283,7 +3250,7 @@ impl Governance {
 
         // Do the transfer from the parent neuron's subaccount to the child neuron's
         // subaccount.
-        let memo = creation_timestamp_seconds;
+        let memo = created_timestamp_seconds;
         let result: Result<u64, NervousSystemError> = self
             .ledger
             .transfer_funds(
@@ -4032,31 +3999,21 @@ impl Governance {
                     MAX_DISSOLVE_DELAY_SECONDS,
                 );
                 // Transfer successful.
-                let neuron = Neuron {
-                    id: Some(nid),
-                    account: to_subaccount.to_vec(),
-                    controller: Some(*np_principal),
-                    hot_keys: Vec::new(),
-                    cached_neuron_stake_e8s: reward.amount_e8s,
-                    neuron_fees_e8s: 0,
-                    created_timestamp_seconds: now,
-                    aging_since_timestamp_seconds: now,
-                    dissolve_state: Some(DissolveState::DissolveDelaySeconds(
+                let neuron = NeuronBuilder::new(
+                    nid,
+                    to_subaccount,
+                    *np_principal,
+                    DissolveStateAndAge::NotDissolving {
                         dissolve_delay_seconds,
-                    )),
-                    followees: self.heap_data.default_followees.clone(),
-                    recent_ballots: vec![],
-                    kyc_verified: true,
-                    maturity_e8s_equivalent: 0,
-                    staked_maturity_e8s_equivalent: None,
-                    auto_stake_maturity: None,
-                    not_for_profit: false,
-                    transfer: None,
-                    joined_community_fund_timestamp_seconds: None,
-                    known_neuron_data: None,
-                    spawn_at_timestamp_seconds: None,
-                    neuron_type: None,
-                };
+                        aging_since_timestamp_seconds: now,
+                    },
+                    now,
+                )
+                .with_followees(self.heap_data.default_followees.clone())
+                .with_cached_neuron_stake_e8s(reward.amount_e8s)
+                .with_kyc_verified(true)
+                .build();
+
                 self.add_neuron(nid.id, neuron)
             }
             Some(RewardMode::RewardToAccount(reward_to_account)) => {
@@ -5822,29 +5779,18 @@ impl Governance {
     ) -> Result<NeuronId, GovernanceError> {
         let nid = self.neuron_store.new_neuron_id(&mut *self.env);
         let now = self.env.now();
-        let neuron = Neuron {
-            id: Some(nid),
-            account: subaccount.to_vec(),
-            controller: Some(controller),
-            cached_neuron_stake_e8s: 0,
-            created_timestamp_seconds: now,
-            aging_since_timestamp_seconds: now,
-            dissolve_state: Some(DissolveState::DissolveDelaySeconds(0)),
-            transfer: None,
-            kyc_verified: true,
-            followees: self.heap_data.default_followees.clone(),
-            hot_keys: vec![],
-            maturity_e8s_equivalent: 0,
-            staked_maturity_e8s_equivalent: None,
-            auto_stake_maturity: None,
-            neuron_fees_e8s: 0,
-            not_for_profit: false,
-            recent_ballots: vec![],
-            joined_community_fund_timestamp_seconds: None,
-            known_neuron_data: None,
-            spawn_at_timestamp_seconds: None,
-            neuron_type: None,
-        };
+        let neuron = NeuronBuilder::new(
+            nid,
+            subaccount,
+            controller,
+            DissolveStateAndAge::LegacyDissolved {
+                aging_since_timestamp_seconds: now,
+            },
+            now,
+        )
+        .with_followees(self.heap_data.default_followees.clone())
+        .with_kyc_verified(true)
+        .build();
 
         // This also verifies that there are not too many neurons already.
         self.add_neuron(nid.id, neuron.clone())?;
