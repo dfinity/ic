@@ -54,8 +54,9 @@ fn canister_queue_push_request_succeeds() {
         Err(StateError::QueueFull { capacity: CAPACITY }),
         queue.check_has_reserved_slot(true)
     );
+    assert_eq!(0, queue.response_memory_reservations());
 
-    // Peek, then pop the request reference.
+    // Peek, then pop the request.
     assert_eq!(Some(&MessageReference::Request(id)), queue.peek());
     assert_eq!(Some(MessageReference::Request(id)), queue.pop());
 
@@ -69,6 +70,7 @@ fn canister_queue_push_request_succeeds() {
         Err(StateError::QueueFull { capacity: CAPACITY }),
         queue.check_has_reserved_slot(true)
     );
+    assert_eq!(0, queue.response_memory_reservations());
 }
 
 // Reserving a slot, then pushing a response succeeds if there is space.
@@ -89,9 +91,10 @@ fn canister_queue_push_response_succeeds() {
     assert_eq!(CAPACITY - 1, queue.available_response_slots());
     assert_eq!(1, queue.reserved_slots());
     assert_eq!(Ok(()), queue.check_has_reserved_slot(false));
+    assert_eq!(1, queue.response_memory_reservations());
 
     // Push response into reseerved slot.
-    let id = new_response_message_id(13);
+    let id = new_response_message_id(13, false);
     queue.push_response(id);
 
     assert_eq!(1, queue.len());
@@ -104,6 +107,7 @@ fn canister_queue_push_response_succeeds() {
         Err(StateError::QueueFull { capacity: CAPACITY }),
         queue.check_has_reserved_slot(true)
     );
+    assert_eq!(0, queue.response_memory_reservations());
 
     // Peek, then pop the response reference.
     assert_eq!(Some(&MessageReference::Response(id)), queue.peek());
@@ -119,6 +123,7 @@ fn canister_queue_push_response_succeeds() {
         Err(StateError::QueueFull { capacity: CAPACITY }),
         queue.check_has_reserved_slot(true)
     );
+    assert_eq!(0, queue.response_memory_reservations());
 }
 
 /// Test that overfilling an output queue with requests results in failed
@@ -146,6 +151,7 @@ fn canister_queue_push_request_to_full_queue_fails() {
         Err(StateError::QueueFull { capacity: CAPACITY }),
         queue.check_has_reserved_slot(true)
     );
+    assert_eq!(0, queue.response_memory_reservations());
 
     queue.push_request(new_request_message_id(13));
 }
@@ -160,8 +166,9 @@ fn canister_queue_try_reserve_response_slot_in_full_queue_fails() {
 
     // Reserve all response slots.
     for i in 0..CAPACITY {
+        let best_effort = i % 2 == 0;
         queue
-            .try_reserve_response_slot(&make_request(i as u64, i % 2 == 0))
+            .try_reserve_response_slot(&make_request(i as u64, best_effort))
             .unwrap();
     }
 
@@ -172,6 +179,7 @@ fn canister_queue_try_reserve_response_slot_in_full_queue_fails() {
     assert_eq!(0, queue.available_response_slots());
     assert_eq!(CAPACITY, queue.reserved_slots());
     assert_eq!(Ok(()), queue.check_has_reserved_slot(true));
+    assert_eq!(CAPACITY / 2, queue.response_memory_reservations());
 
     // Trying to reserve a slot fails.
     assert_eq!(
@@ -181,7 +189,8 @@ fn canister_queue_try_reserve_response_slot_in_full_queue_fails() {
 
     // Fill the queue with responses.
     for i in 0..CAPACITY {
-        queue.push_response(new_response_message_id(i as u64));
+        let best_effort = i % 2 == 0;
+        queue.push_response(new_response_message_id(i as u64, best_effort));
     }
 
     assert_eq!(2, queue.len());
@@ -194,6 +203,7 @@ fn canister_queue_try_reserve_response_slot_in_full_queue_fails() {
         Err(StateError::QueueFull { capacity: CAPACITY }),
         queue.check_has_reserved_slot(true)
     );
+    assert_eq!(0, queue.response_memory_reservations());
 
     // Trying to reserve a slot still fails.
     assert_eq!(
@@ -214,7 +224,7 @@ fn canister_queue_full_duplex() {
         queue
             .try_reserve_response_slot(&make_request(i, true))
             .unwrap();
-        queue.push_response(new_response_message_id(i * 2 + 1));
+        queue.push_response(new_response_message_id(i * 2 + 1, true));
     }
 
     assert_eq!(2 * CAPACITY, queue.len());
@@ -233,9 +243,35 @@ fn canister_queue_full_duplex() {
 
 #[test]
 #[should_panic(expected = "QueueFull { capacity: 10 }")]
-fn canister_queue_push_without_reserved_slot_fails() {
+fn canister_queue_push_without_reserved_slot_panics() {
     let mut queue = CanisterQueue::new(10);
-    queue.push_response(new_response_message_id(13));
+    queue.push_response(new_response_message_id(13, true));
+}
+
+#[test]
+#[should_panic(expected = "assertion failed: self.response_memory_reservations > 0")]
+fn canister_queue_push_without_memory_reservation_panics() {
+    let mut queue = CanisterQueue::new(10);
+    // Reserve a best-effort slot.
+    queue
+        .try_reserve_response_slot(&make_request(1, true))
+        .unwrap();
+    // Push a guaranteed response.
+    queue.push_response(new_response_message_id(13, false));
+}
+
+#[test]
+#[should_panic(
+    expected = "assertion failed: self.response_memory_reservations <= self.reserved_slots()"
+)]
+fn canister_queue_push_without_consuming_memory_reservation_panics() {
+    let mut queue = CanisterQueue::new(10);
+    // Reserve a guaranteed response slot.
+    queue
+        .try_reserve_response_slot(&make_request(1, false))
+        .unwrap();
+    // Push a best-effort response.
+    queue.push_response(new_response_message_id(13, true));
 }
 
 #[test]
@@ -255,8 +291,8 @@ fn canister_queue_empty_size_bytes() {
 /// Generator for an arbitrary `MessageReference`.
 fn arbitrary_message_reference() -> impl Strategy<Value = MessageReference> {
     prop_oneof![
-        5 => any::<u64>().prop_map(|id| MessageReference::Request(new_request_message_id(id))),
-        4 => any::<u64>().prop_map(|id| MessageReference::Response(new_response_message_id(id))),
+        5 => any::<u64>().prop_map(|gen| MessageReference::Request(new_request_message_id(gen))),
+        4 => any::<u64>().prop_map(|gen| MessageReference::Response(new_response_message_id(gen, true))),
         1 => any::<u64>().prop_map(|id| MessageReference::LocalRejectResponse(CallbackId::new(id))),
     ]
 }
@@ -283,7 +319,8 @@ proptest! {
                     queue.push_response(*id);
                 }
                 MessageReference::LocalRejectResponse(callback) => {
-                    let req = make_request(callback.get(), callback.get() % 2 == 0);
+                    let best_effort = callback.get() % 2 == 0;
+                    let req = make_request(callback.get(), best_effort);
                     queue.try_reserve_response_slot(&req).unwrap();
                     queue.push_local_reject_response(&req);
                 }
@@ -324,17 +361,16 @@ fn canister_queue_calculate_stats() {
     queue.push_request(stale_req_id);
 
     // Push a stale response reference onto the queue.
-    let stale_rep_id = new_response_message_id(14);
+    let stale_rep_id = new_response_message_id(14, true);
     queue
         .try_reserve_response_slot(&make_request(15, true))
         .unwrap();
     queue.push_response(stale_rep_id);
 
     // Push a local reject response reference onto the queue.
-    queue
-        .try_reserve_response_slot(&make_request(16, true))
-        .unwrap();
-    queue.push_local_reject_response(&make_request(16, true));
+    let request = make_request(16, false);
+    queue.try_reserve_response_slot(&request).unwrap();
+    queue.push_local_reject_response(&request);
 
     // Validate the calculated stats.
     assert_eq!(

@@ -556,7 +556,7 @@ fn test_message_id_sanity() {
     assert_eq!(1, Kind::BIT.count_ones());
     assert_eq!(1, Context::BIT.count_ones());
     assert_eq!(1, Class::BIT.count_ones());
-    // And they are the trailing two bits.
+    // And they are the trailing three bits.
     assert_eq!(
         MessageId::BITMASK_LEN,
         (Kind::BIT | Context::BIT | Class::BIT).trailing_ones()
@@ -591,6 +591,56 @@ fn test_message_id_sanity() {
         Class::BestEffort as u64,
         Class::BestEffort as u64 & Class::BIT
     );
+}
+
+#[test]
+fn test_message_id_flags() {
+    // Guaranteed inbound request.
+    let giq_id = MessageId::new(
+        Kind::Request,
+        Context::Inbound,
+        Class::GuaranteedResponse,
+        13,
+    );
+    assert!(!giq_id.is_response());
+    assert!(!giq_id.is_outbound());
+    assert!(!giq_id.is_best_effort());
+    assert_eq!(13, giq_id.0 >> MessageId::BITMASK_LEN);
+
+    // Best-effort outbound response, same generator.
+    let bop_id = MessageId::new(Kind::Response, Context::Outbound, Class::BestEffort, 13);
+    assert!(bop_id.is_response());
+    assert!(bop_id.is_outbound());
+    assert!(bop_id.is_best_effort());
+    assert_eq!(13, bop_id.0 >> MessageId::BITMASK_LEN);
+
+    // IDs should be different.
+    assert_ne!(giq_id, bop_id);
+    // But equal to themselves.
+    assert_eq!(giq_id, giq_id);
+    assert_eq!(bop_id, bop_id);
+}
+
+#[test]
+fn test_message_id_range() {
+    const REQUEST: Kind = Kind::Request;
+    const INBOUND: Context = Context::Inbound;
+    const GUARANTEED: Class = Class::GuaranteedResponse;
+
+    let id1 = MessageId::new(REQUEST, INBOUND, GUARANTEED, 0);
+    assert_eq!(0, id1.0 >> MessageId::BITMASK_LEN);
+
+    let id2 = MessageId::new(REQUEST, INBOUND, GUARANTEED, 13);
+    assert_eq!(13, id2.0 >> MessageId::BITMASK_LEN);
+
+    // Maximum generator value that will be preserved
+    const GENERATOR_MAX: u64 = u64::MAX >> MessageId::BITMASK_LEN;
+    let id3 = MessageId::new(REQUEST, INBOUND, GUARANTEED, GENERATOR_MAX);
+    assert_eq!(GENERATOR_MAX, id3.0 >> MessageId::BITMASK_LEN);
+
+    // Larger generator values still work, their high bits are just ignored.
+    let id4 = MessageId::new(REQUEST, INBOUND, GUARANTEED, u64::MAX);
+    assert_eq!(GENERATOR_MAX, id4.0 >> MessageId::BITMASK_LEN);
 }
 
 #[test]
@@ -850,12 +900,16 @@ pub(crate) fn new_request_message_id(generator: u64) -> MessageId {
     )
 }
 
-/// Generates a `MessageId` for a best-effort inbound response.
-pub(crate) fn new_response_message_id(generator: u64) -> MessageId {
+/// Generates a `MessageId` for an inbound response.
+pub(crate) fn new_response_message_id(generator: u64, best_effort: bool) -> MessageId {
     MessageId::new(
         Kind::Response,
         Context::Inbound,
-        Class::BestEffort,
+        if best_effort {
+            Class::BestEffort
+        } else {
+            Class::GuaranteedResponse
+        },
         generator,
     )
 }

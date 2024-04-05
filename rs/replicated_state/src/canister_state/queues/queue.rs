@@ -152,6 +152,18 @@ impl CanisterQueue {
         Ok(())
     }
 
+    /// Enqueues a request.
+    ///
+    /// Panics if there is no available request slot.
+    pub(super) fn push_request(&mut self, id: MessageId) {
+        assert!(self.request_slots < self.capacity);
+
+        self.queue.push_back(MessageReference::Request(id));
+        self.request_slots += 1;
+
+        debug_assert!(self.check_invariants());
+    }
+
     /// Returns the number of response slots available for reservation.
     pub(super) fn available_response_slots(&self) -> usize {
         self.capacity.checked_sub(self.response_slots).unwrap()
@@ -206,18 +218,6 @@ impl CanisterQueue {
         self.response_memory_reservations
     }
 
-    /// Enqueues a request.
-    ///
-    /// Panics if there is no available request slot.
-    pub(super) fn push_request(&mut self, id: MessageId) {
-        assert!(self.request_slots < self.capacity);
-
-        self.queue.push_back(MessageReference::Request(id));
-        self.request_slots += 1;
-
-        debug_assert!(self.check_invariants());
-    }
-
     /// Enqueues a response into a reserved slot, consuming the slot.
     ///
     /// Panics if there is no reserved response slot or if this is a guaranteed
@@ -242,6 +242,11 @@ impl CanisterQueue {
     pub(super) fn push_local_reject_response(&mut self, own_request: &Request) {
         self.check_has_reserved_slot(own_request.deadline != NO_DEADLINE)
             .unwrap();
+
+        if own_request.deadline == NO_DEADLINE {
+            // Guaranteed response, consume one memory reservation.
+            self.response_memory_reservations -= 1;
+        }
 
         self.queue.push_back(MessageReference::LocalRejectResponse(
             own_request.sender_reply_callback,
@@ -359,12 +364,16 @@ impl CanisterQueue {
     ///
     /// Time complexity: `O(n)`.
     fn check_invariants(&self) -> bool {
+        // Requests and response slots at or below capacity.
         assert!(self.request_slots <= self.capacity);
         assert!(self.response_slots <= self.capacity);
 
         let responses = self.queue.iter().filter(|msg| msg.is_response()).count();
+        // At most as many responses as response slots (difference is reserved slots).
         assert!(responses <= self.response_slots);
+        // Queue contains only requests and responses.
         assert_eq!(self.queue.len(), self.request_slots + responses);
+        // Cannot have more response memory reservations than slot reservations.
         assert!(self.response_memory_reservations <= self.reserved_slots());
 
         true
