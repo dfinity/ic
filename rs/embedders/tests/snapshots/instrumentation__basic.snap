@@ -6,17 +6,16 @@ expression: out
 (module
   (type (;0;) (func (param i32 i32) (result i32)))
   (type (;1;) (func))
-  (type (;2;) (func (param i32 i32 i32) (result i32)))
-  (type (;3;) (func (param i64 i64 i32) (result i64)))
-  (type (;4;) (func (param i32)))
-  (type (;5;) (func (param i64 i64 i64)))
-  (type (;6;) (func (param i64) (result i64)))
-  (type (;7;) (func (param i32 i32) (result i32 i32)))
+  (type (;2;) (func (param i64 i64 i32) (result i64)))
+  (type (;3;) (func (param i32)))
+  (type (;4;) (func (param i64 i64 i64)))
+  (type (;5;) (func (param i64) (result i64)))
+  (type (;6;) (func (param i32 i32) (result i32 i32)))
   (import "__" "out_of_instructions" (func $addTwo (;0;) (type 1)))
-  (import "__" "update_available_memory" (func (;1;) (type 2)))
-  (import "__" "try_grow_stable_memory" (func (;2;) (type 3)))
-  (import "__" "internal_trap" (func (;3;) (type 4)))
-  (import "__" "stable_read_first_access" (func (;4;) (type 5)))
+  (import "__" "try_grow_wasm_memory" (func (;1;) (type 0)))
+  (import "__" "try_grow_stable_memory" (func (;2;) (type 2)))
+  (import "__" "internal_trap" (func (;3;) (type 3)))
+  (import "__" "stable_read_first_access" (func (;4;) (type 4)))
   (func (;5;) (type 0) (param i32 i32) (result i32)
     global.get 0
     i64.const 4
@@ -32,7 +31,7 @@ expression: out
     local.get 1
     i32.add
   )
-  (func (;6;) (type 6) (param i64) (result i64)
+  (func (;6;) (type 5) (param i64) (result i64)
     (local i64)
     global.get 0
     local.get 0
@@ -54,7 +53,7 @@ expression: out
     end
     local.get 0
   )
-  (func (;7;) (type 7) (param i32 i32) (result i32 i32)
+  (func (;7;) (type 6) (param i32 i32) (result i32 i32)
     (local i32 i32 i32 i32)
     local.get 0
     local.get 1

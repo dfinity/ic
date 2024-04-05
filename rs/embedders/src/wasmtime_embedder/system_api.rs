@@ -1057,16 +1057,14 @@ pub(crate) fn syscalls(
         .unwrap();
 
     linker
-        .func_wrap("__", "update_available_memory", {
+        .func_wrap("__", "try_grow_wasm_memory", {
             move |mut caller: Caller<'_, StoreData>,
                   native_memory_grow_res: i32,
-                  additional_elements: u32,
-                  element_size: u32| {
+                  additional_wasm_pages: u32| {
                 with_system_api(&mut caller, |s| {
-                    s.update_available_memory(
+                    s.try_grow_wasm_memory(
                         native_memory_grow_res as i64,
-                        additional_elements as u64,
-                        element_size as u64,
+                        additional_wasm_pages as u64,
                     )
                 })
                 .map(|()| native_memory_grow_res)
