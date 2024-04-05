@@ -5582,11 +5582,12 @@ mod tests {
     use async_trait::async_trait;
     use candid::Principal;
     use futures::{join, FutureExt};
-    use ic_base_types::NumBytes;
     use ic_canister_client_sender::Sender;
     use ic_nervous_system_clients::{
         canister_id_record::CanisterIdRecord,
-        canister_status::{CanisterStatusResultV2, CanisterStatusType},
+        canister_status::{
+            CanisterStatusResultFromManagementCanister, CanisterStatusResultV2, CanisterStatusType,
+        },
     };
     use ic_nervous_system_common::{
         assert_is_err, assert_is_ok, cmc::FakeCmc, ledger::compute_neuron_staking_subaccount_bytes,
@@ -6371,17 +6372,23 @@ mod tests {
         module_hash: Vec<u8>,
         status: CanisterStatusType,
     ) -> CanisterStatusResultV2 {
-        CanisterStatusResultV2::new(
+        CanisterStatusResultV2::from(canister_status_from_management_canister_for_test(
+            module_hash,
             status,
-            Some(module_hash),
-            vec![],
-            NumBytes::new(0),
-            0,
-            0,
-            Some(0),
-            0,
-            0,
-        )
+        ))
+    }
+
+    fn canister_status_from_management_canister_for_test(
+        module_hash: Vec<u8>,
+        status: CanisterStatusType,
+    ) -> CanisterStatusResultFromManagementCanister {
+        let module_hash = Some(module_hash);
+
+        CanisterStatusResultFromManagementCanister {
+            status,
+            module_hash,
+            ..Default::default()
+        }
     }
 
     #[should_panic]
@@ -7339,7 +7346,7 @@ mod tests {
                     CanisterId::ic_00(),
                     "canister_status",
                     Encode!(&CanisterIdRecord::from(canister_id)).unwrap(),
-                    Ok(Encode!(&canister_status_for_test(
+                    Ok(Encode!(&canister_status_from_management_canister_for_test(
                         vec![],
                         CanisterStatusType::Stopped,
                     ))
