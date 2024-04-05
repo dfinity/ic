@@ -23,11 +23,6 @@ bool_flag(
     build_setting_default = False,
 )
 
-config_setting(
-    name = "k8s_flag_is_set",
-    flag_values = {":k8s": "1"},
-)
-
 rust_library(
     name = "tests",
     srcs = glob(["src/**/*.rs"]),
