@@ -16,7 +16,7 @@ pub struct SubnetTopology {
     #[prost(message, repeated, tag = "1")]
     pub nodes: ::prost::alloc::vec::Vec<SubnetTopologyEntry>,
     /// The public key of the subnet (a DER-encoded BLS key, see
-    /// <https://sdk.dfinity.org/docs/interface-spec/index.html#certification>)
+    /// <https://internetcomputer.org/docs/current/references/ic-interface-spec#certification>)
     #[prost(bytes = "vec", tag = "2")]
     pub public_key: ::prost::alloc::vec::Vec<u8>,
     #[prost(

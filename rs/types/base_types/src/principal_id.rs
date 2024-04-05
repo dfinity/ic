@@ -14,10 +14,10 @@ use std::{
 };
 
 /// The type representing principals as described in the [interface
-/// spec](https://sdk.dfinity.org/docs/interface-spec/index.html#_principals).
+/// spec](https://internetcomputer.org/docs/current/references/ic-interface-spec#principal).
 ///
 /// A principal is just a blob that is displayed in a particular way.
-/// (see <https://sdk.dfinity.org/docs/interface-spec/index.html#textual-ids>)
+/// (see <https://internetcomputer.org/docs/current/references/ic-interface-spec#textual-ids>)
 ///
 /// Principals have variable length, bounded by 29 bytes. Since we
 /// want [`PrincipalId`] to implement the Copy trait, we encode them as

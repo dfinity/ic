@@ -23,7 +23,7 @@ impl TryFrom<PrincipalId> for CanisterIdRecord {
 pub enum CanisterStatusType {
     // The rename statements are mandatory to comply with the candid interface
     // of the IC management canister. For more details, see:
-    // https://sdk.dfinity.org/docs/interface-spec/index.html#ic-candid
+    // https://internetcomputer.org/docs/current/references/ic-interface-spec#ic-candid
     #[serde(rename = "running")]
     Running,
     #[serde(rename = "stopping")]

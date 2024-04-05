@@ -95,7 +95,7 @@ pub fn encode_metadata(
 /// Encodes the list of canister ID ranges assigned to a subnet according to
 /// the interface specification.
 ///
-/// See https://sdk.dfinity.org/docs/interface-spec/index.html#state-tree-subnet
+/// See https://internetcomputer.org/docs/current/references/ic-interface-spec#state-tree-subnet
 pub fn encode_subnet_canister_ranges(ranges: Option<&Vec<(PrincipalId, PrincipalId)>>) -> Vec<u8> {
     let mut serializer = serde_cbor::Serializer::new(vec![]);
     serializer.self_describe().unwrap();

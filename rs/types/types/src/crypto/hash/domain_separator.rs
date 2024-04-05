@@ -2,7 +2,7 @@
 pub enum DomainSeparator {
     /// The domain separator to be used when calculating the sender signature for a
     /// request to the Internet Computer according to the
-    /// [interface specification](https://sdk.dfinity.org/docs/interface-spec/index.html).
+    /// [interface specification](https://internetcomputer.org/docs/current/references/ic-interface-spec).
     #[allow(dead_code)]
     // This variant is only defined to check in tests that there are no
     // collisions in separators. The used variable is defined in DOMAIN_IC_REQUEST
@@ -33,7 +33,7 @@ pub enum DomainSeparator {
     _IcOnchainObservabilityReport,
     /// The domain separator to be used when calculating the signature for a
     /// query response from a replica.
-    /// [interface specification](https://sdk.dfinity.org/docs/interface-spec/index.html).
+    /// [interface specification](https://internetcomputer.org/docs/current/references/ic-interface-spec).
     QueryResponse,
     RandomTapeContent,
     RandomTape,
