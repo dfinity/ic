@@ -640,3 +640,61 @@ fn test_logging_trap_in_timer() {
         }
     );
 }
+
+#[test]
+fn test_canister_log_preserved_after_disabling_and_enabling_again() {
+    // Test that the logs are recorded when the feature is enabled
+    // and preserved (not deleted) when the feature gets disabled.
+    let (env, canister_id, controller) = setup_with_controller(FlagStatus::Enabled);
+    env.set_checkpoints_enabled(true);
+
+    // Feature is enabled, batch #1.
+    let _ = env.execute_ingress(
+        canister_id,
+        "update",
+        wasm().debug_print(b"message 1").reply().build(),
+    );
+
+    // Disable the feature and log batch #2.
+    let env = restart_node(env, FlagStatus::Disabled);
+    env.advance_time(Duration::from_nanos(111_111));
+    let _ = env.execute_ingress(
+        canister_id,
+        "update",
+        wasm().debug_print(b"message 2").reply().build(),
+    );
+
+    // Enable the feature again and log batch #3.
+    let env = restart_node(env, FlagStatus::Enabled);
+    env.advance_time(Duration::from_nanos(222_222));
+    let _ = env.execute_ingress(
+        canister_id,
+        "update",
+        wasm().debug_print(b"message 3").reply().build(),
+    );
+
+    // Expect only batches 1 and 3.
+    let result = fetch_canister_logs(env, controller, canister_id);
+    let data = FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap();
+    assert_eq!(data.canister_log_records.len(), 2);
+    assert_eq!(
+        data,
+        FetchCanisterLogsResponse {
+            canister_log_records: vec![
+                // Batch #1.
+                CanisterLogRecord {
+                    idx: 0,
+                    timestamp_nanos: time::GENESIS.as_nanos_since_unix_epoch(),
+                    content: b"message 1".to_vec()
+                },
+                // No batch #2 records.
+                // Batch #3.
+                CanisterLogRecord {
+                    idx: 1,
+                    timestamp_nanos: 1620328630000333333,
+                    content: b"message 3".to_vec()
+                },
+            ],
+        }
+    );
+}
