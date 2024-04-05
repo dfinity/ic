@@ -10,7 +10,9 @@ use ic_cketh_minter::numeric::{
     TransactionNonce, Wei, WeiPerGas,
 };
 use ic_cketh_minter::state::audit::{apply_state_transition, EventType};
-use ic_cketh_minter::state::transactions::{EthWithdrawalRequest, Subaccount};
+use ic_cketh_minter::state::transactions::{
+    create_transaction, Erc20WithdrawalRequest, EthWithdrawalRequest, Subaccount, WithdrawalRequest,
+};
 use ic_cketh_minter::state::State;
 use ic_cketh_minter::tx::{
     Eip1559Signature, Eip1559TransactionRequest, SignedEip1559TransactionRequest, TransactionPrice,
@@ -343,23 +345,59 @@ fn should_display_rejected_deposits() {
 }
 
 #[test]
-fn should_display_withdrawal_requests_sorted_by_decreasing_ledger_burn_index() {
+fn should_display_correct_cketh_token_symbol_based_on_network() {
+    fn test(ethereum_network: EthereumNetwork, expected_symbol: &str) {
+        let dashboard = {
+            let mut state = initial_state();
+            state.ethereum_network = ethereum_network;
+            apply_state_transition(
+                &mut state,
+                &EventType::AcceptedEthWithdrawalRequest(cketh_withdrawal_request_with_index(
+                    LedgerBurnIndex::new(15),
+                )),
+            );
+            DashboardTemplate::from_state(&state)
+        };
+        DashboardAssert::assert_that(dashboard).has_withdrawal_requests(
+            1,
+            &vec![
+                "15",
+                "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
+                expected_symbol,
+                "1_100_000_000_000_000",
+                "N/A",
+            ],
+        );
+    }
+    test(EthereumNetwork::Sepolia, "ckSepoliaETH");
+    test(EthereumNetwork::Mainnet, "ckETH");
+}
+
+#[test]
+fn should_display_withdrawal_requests_sorted_by_decreasing_cketh_ledger_burn_index() {
     DashboardAssert::assert_that(initial_dashboard())
         .has_no_elements_matching("#withdrawal-requests");
 
     let dashboard = {
-        let mut state = initial_state();
+        let mut state = initial_state_with_usdc_support();
         apply_state_transition(
             &mut state,
-            &EventType::AcceptedEthWithdrawalRequest(withdrawal_request_with_index(
+            &EventType::AcceptedEthWithdrawalRequest(cketh_withdrawal_request_with_index(
                 LedgerBurnIndex::new(15),
+            )),
+        );
+        apply_state_transition(
+            &mut state,
+            &EventType::AcceptedErc20WithdrawalRequest(ckerc20_withdrawal_request_with_index(
+                LedgerBurnIndex::new(16),
+                &ckusdc(),
             )),
         );
         apply_state_transition(
             &mut state,
             &EventType::AcceptedEthWithdrawalRequest(EthWithdrawalRequest {
                 created_at: Some(1699540751000000000),
-                ..withdrawal_request_with_index(LedgerBurnIndex::new(16))
+                ..cketh_withdrawal_request_with_index(LedgerBurnIndex::new(17))
             }),
         );
         DashboardTemplate::from_state(&state)
@@ -369,8 +407,9 @@ fn should_display_withdrawal_requests_sorted_by_decreasing_ledger_burn_index() {
         .has_withdrawal_requests(
             1,
             &vec![
-                "16",
+                "17",
                 "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
+                "ckETH",
                 "1_100_000_000_000_000",
                 "2023-11-09T14:39:11+00:00",
             ],
@@ -378,8 +417,19 @@ fn should_display_withdrawal_requests_sorted_by_decreasing_ledger_burn_index() {
         .has_withdrawal_requests(
             2,
             &vec![
+                "16",
+                "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
+                "ckUSDC",
+                "2_000_000",
+                "2024-04-05T08:23:43+00:00",
+            ],
+        )
+        .has_withdrawal_requests(
+            3,
+            &vec![
                 "15",
                 "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
+                "ckETH",
                 "1_100_000_000_000_000",
                 "N/A",
             ],
@@ -387,48 +437,69 @@ fn should_display_withdrawal_requests_sorted_by_decreasing_ledger_burn_index() {
 }
 
 #[test]
-fn should_display_pending_transactions_sorted_by_decreasing_ledger_burn_index() {
+fn should_display_pending_transactions_sorted_by_decreasing_cketh_ledger_burn_index() {
     DashboardAssert::assert_that(initial_dashboard())
         .has_no_elements_matching("#pending-transactions");
 
     let dashboard = {
-        let mut state = initial_state();
-        let id_1 = LedgerBurnIndex::new(15);
-        let (req_1, tx_1, _signed_tx_1, _receipt_1) = withdrawal_flow(
-            id_1,
-            TransactionNonce::from(0_u8),
-            TransactionStatus::Success,
-        );
-        apply_state_transition(&mut state, &EventType::AcceptedEthWithdrawalRequest(req_1));
-        apply_state_transition(
-            &mut state,
-            &EventType::CreatedTransaction {
-                withdrawal_id: id_1,
-                transaction: tx_1,
-            },
-        );
+        let mut state = initial_state_with_usdc_support();
+        for (req, tx, _signed_tx, _receipt) in vec![
+            cketh_withdrawal_flow(
+                LedgerBurnIndex::new(15),
+                TransactionNonce::from(0_u8),
+                TransactionStatus::Success,
+            ),
+            ckerc20_withdrawal_flow(
+                LedgerBurnIndex::new(16),
+                TransactionNonce::from(1_u8),
+                &ckusdc(),
+                TransactionStatus::Success,
+            ),
+        ] {
+            apply_state_transition(
+                &mut state,
+                &req.clone().into_accepted_withdrawal_request_event(),
+            );
+            apply_state_transition(
+                &mut state,
+                &EventType::CreatedTransaction {
+                    withdrawal_id: req.cketh_ledger_burn_index(),
+                    transaction: tx,
+                },
+            );
+        }
 
-        let id_2 = LedgerBurnIndex::new(16);
-        let (req_2, tx_2, signed_tx_2, _receipt_2) = withdrawal_flow(
-            id_2,
-            TransactionNonce::from(1_u8),
-            TransactionStatus::Success,
-        );
-        apply_state_transition(&mut state, &EventType::AcceptedEthWithdrawalRequest(req_2));
-        apply_state_transition(
-            &mut state,
-            &EventType::CreatedTransaction {
-                withdrawal_id: id_2,
-                transaction: tx_2,
-            },
-        );
-        apply_state_transition(
-            &mut state,
-            &EventType::SignedTransaction {
-                withdrawal_id: id_2,
-                transaction: signed_tx_2,
-            },
-        );
+        for (req, tx, signed_tx, _receipt) in vec![
+            cketh_withdrawal_flow(
+                LedgerBurnIndex::new(17),
+                TransactionNonce::from(2_u8),
+                TransactionStatus::Success,
+            ),
+            ckerc20_withdrawal_flow(
+                LedgerBurnIndex::new(18),
+                TransactionNonce::from(3_u8),
+                &ckusdc(),
+                TransactionStatus::Success,
+            ),
+        ] {
+            let withdrawal_id = req.cketh_ledger_burn_index();
+            apply_state_transition(&mut state, &req.into_accepted_withdrawal_request_event());
+            apply_state_transition(
+                &mut state,
+                &EventType::CreatedTransaction {
+                    withdrawal_id,
+                    transaction: tx,
+                },
+            );
+            apply_state_transition(
+                &mut state,
+                &EventType::SignedTransaction {
+                    withdrawal_id,
+                    transaction: signed_tx,
+                },
+            );
+        }
+
         DashboardTemplate::from_state(&state)
     };
 
@@ -436,17 +507,39 @@ fn should_display_pending_transactions_sorted_by_decreasing_ledger_burn_index() 
         .has_pending_transactions(
             1,
             &vec![
-                "16",
+                "18",
                 "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
-                "1_058_000_000_000_000",
-                "Sent(0x9a4793ece4b3a487679a43dd465d8a4855fa2a23adc128a59eaaa9eb5837105e)",
+                "ckUSDC",
+                "2_000_000",
+                "Sent(0xb5115ef5e39db0cfca5589ac2dca8a91e59825af1216c01826fbf39c3eaeb0c2)",
             ],
         )
         .has_pending_transactions(
             2,
             &vec![
+                "17",
+                "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
+                "ckETH",
+                "1_058_000_000_000_000",
+                "Sent(0xada056f5d3942fac34371527524b5ee8a45833eb5edc41a06ac7a742a6a59762)",
+            ],
+        )
+        .has_pending_transactions(
+            3,
+            &vec![
+                "16",
+                "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
+                "ckUSDC",
+                "2_000_000",
+                "Created",
+            ],
+        )
+        .has_pending_transactions(
+            4,
+            &vec![
                 "15",
                 "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
+                "ckETH",
                 "1_058_000_000_000_000",
                 "Created",
             ],
@@ -454,12 +547,12 @@ fn should_display_pending_transactions_sorted_by_decreasing_ledger_burn_index() 
 }
 
 #[test]
-fn should_display_finalized_transactions_sorted_by_decreasing_ledger_burn_index() {
+fn should_display_finalized_transactions_sorted_by_decreasing_cketh_ledger_burn_index() {
     DashboardAssert::assert_that(initial_dashboard())
         .has_no_elements_matching("#finalized-transactions");
 
     let dashboard = {
-        let mut state = initial_state();
+        let mut state = initial_state_with_usdc_support();
         let deposit = received_eth_event();
         apply_state_transition(&mut state, &EventType::AcceptedDeposit(deposit.clone()));
         apply_state_transition(
@@ -469,20 +562,38 @@ fn should_display_finalized_transactions_sorted_by_decreasing_ledger_burn_index(
                 mint_block_index: LedgerMintIndex::new(42),
             },
         );
+        let deposit = received_erc20_event();
+        apply_state_transition(
+            &mut state,
+            &EventType::AcceptedErc20Deposit(deposit.clone()),
+        );
+        apply_state_transition(
+            &mut state,
+            &EventType::MintedCkEth {
+                event_source: deposit.source(),
+                mint_block_index: LedgerMintIndex::new(43),
+            },
+        );
         for (req, tx, signed_tx, receipt) in vec![
-            withdrawal_flow(
+            cketh_withdrawal_flow(
                 LedgerBurnIndex::new(15),
                 TransactionNonce::from(0_u8),
                 TransactionStatus::Success,
             ),
-            withdrawal_flow(
+            cketh_withdrawal_flow(
                 LedgerBurnIndex::new(16),
                 TransactionNonce::from(1_u8),
                 TransactionStatus::Failure,
             ),
+            ckerc20_withdrawal_flow(
+                LedgerBurnIndex::new(17),
+                TransactionNonce::from(2_u8),
+                &ckusdc(),
+                TransactionStatus::Success,
+            ),
         ] {
-            let id = req.ledger_burn_index;
-            apply_state_transition(&mut state, &EventType::AcceptedEthWithdrawalRequest(req));
+            let id = req.cketh_ledger_burn_index();
+            apply_state_transition(&mut state, &req.into_accepted_withdrawal_request_event());
             apply_state_transition(
                 &mut state,
                 &EventType::CreatedTransaction {
@@ -510,14 +621,28 @@ fn should_display_finalized_transactions_sorted_by_decreasing_ledger_burn_index(
     };
 
     DashboardAssert::assert_that(dashboard)
-        .has_eth_balance("8_900_000_000_000_000")
-        .has_total_effective_tx_fees("42_000_000_000_000")
-        .has_total_unspent_tx_fees("42_000_000_000_000")
+        .has_eth_balance("8_835_000_000_000_000")
+        .has_total_effective_tx_fees("107_000_000_000_000")
+        .has_total_unspent_tx_fees("107_000_000_000_000")
         .has_finalized_transactions(
             1,
             &vec![
+                "17",
+                "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
+                "ckUSDC",
+                "2_000_000",
+                "65_000_000_000_000",
+                "5558738",
+                "0xe0e5b9da5c1e550501f9ded95c65741b18eec0873db82bb416293b8a42207071",
+                "Success",
+            ],
+        )
+        .has_finalized_transactions(
+            2,
+            &vec![
                 "16",
                 "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
+                "ckETH",
                 "1_058_000_000_000_000",
                 "21_000_000_000_000",
                 "4190269",
@@ -526,10 +651,11 @@ fn should_display_finalized_transactions_sorted_by_decreasing_ledger_burn_index(
             ],
         )
         .has_finalized_transactions(
-            2,
+            3,
             &vec![
                 "15",
                 "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
+                "ckETH",
                 "1_058_000_000_000_000",
                 "21_000_000_000_000",
                 "4190269",
@@ -583,24 +709,24 @@ fn should_display_reimbursed_requests() {
         );
 
         for (req, tx, signed_tx, receipt) in vec![
-            withdrawal_flow(
+            cketh_withdrawal_flow(
                 LedgerBurnIndex::new(15),
                 TransactionNonce::from(0_u8),
                 TransactionStatus::Success,
             ),
-            withdrawal_flow(
+            cketh_withdrawal_flow(
                 LedgerBurnIndex::new(16),
                 TransactionNonce::from(1_u8),
                 TransactionStatus::Failure,
             ),
-            withdrawal_flow(
+            cketh_withdrawal_flow(
                 LedgerBurnIndex::new(17),
                 TransactionNonce::from(2_u8),
                 TransactionStatus::Failure,
             ),
         ] {
-            let id = req.ledger_burn_index;
-            apply_state_transition(&mut state, &EventType::AcceptedEthWithdrawalRequest(req));
+            let id = req.cketh_ledger_burn_index();
+            apply_state_transition(&mut state, &req.into_accepted_withdrawal_request_event());
             apply_state_transition(
                 &mut state,
                 &EventType::CreatedTransaction {
@@ -644,6 +770,7 @@ fn should_display_reimbursed_requests() {
             &vec![
                 "17",
                 "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
+                "ckSepoliaETH",
                 "1_058_000_000_000_000",
                 "21_000_000_000_000",
                 "4190269",
@@ -656,6 +783,7 @@ fn should_display_reimbursed_requests() {
             &vec![
                 "16",
                 "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
+                "ckSepoliaETH",
                 "1_058_000_000_000_000",
                 "21_000_000_000_000",
                 "4190269",
@@ -668,6 +796,7 @@ fn should_display_reimbursed_requests() {
             &vec![
                 "15",
                 "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
+                "ckSepoliaETH",
                 "1_058_000_000_000_000",
                 "21_000_000_000_000",
                 "4190269",
@@ -781,7 +910,7 @@ pub fn ckusdt() -> CkErc20Token {
     }
 }
 
-fn withdrawal_request_with_index(ledger_burn_index: LedgerBurnIndex) -> EthWithdrawalRequest {
+fn cketh_withdrawal_request_with_index(ledger_burn_index: LedgerBurnIndex) -> EthWithdrawalRequest {
     const DEFAULT_WITHDRAWAL_AMOUNT: u128 = 1_100_000_000_000_000;
     const DEFAULT_PRINCIPAL: &str =
         "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae";
@@ -797,17 +926,39 @@ fn withdrawal_request_with_index(ledger_burn_index: LedgerBurnIndex) -> EthWithd
     }
 }
 
-fn withdrawal_flow(
+fn ckerc20_withdrawal_request_with_index(
+    cketh_ledger_burn_index: LedgerBurnIndex,
+    ckerc20_token: &CkErc20Token,
+) -> Erc20WithdrawalRequest {
+    const DEFAULT_PRINCIPAL: &str =
+        "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae";
+    const DEFAULT_SUBACCOUNT: [u8; 32] = [0x11; 32];
+    const DEFAULT_RECIPIENT_ADDRESS: &str = "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34";
+    Erc20WithdrawalRequest {
+        max_transaction_fee: Wei::from(30_000_000_000_000_000_u64),
+        withdrawal_amount: Erc20Value::from(2_000_000_u32),
+        destination: Address::from_str(DEFAULT_RECIPIENT_ADDRESS).unwrap(),
+        cketh_ledger_burn_index,
+        erc20_contract_address: ckerc20_token.erc20_contract_address,
+        ckerc20_ledger_id: ckerc20_token.ckerc20_ledger_id,
+        ckerc20_ledger_burn_index: (cketh_ledger_burn_index.get() + 1_u64).into(),
+        from: candid::Principal::from_str(DEFAULT_PRINCIPAL).unwrap(),
+        from_subaccount: Some(Subaccount(DEFAULT_SUBACCOUNT)),
+        created_at: 1712305423000000000,
+    }
+}
+
+fn cketh_withdrawal_flow(
     ledger_burn_index: LedgerBurnIndex,
     nonce: TransactionNonce,
     tx_status: TransactionStatus,
 ) -> (
-    EthWithdrawalRequest,
+    WithdrawalRequest,
     Eip1559TransactionRequest,
     SignedEip1559TransactionRequest,
     TransactionReceipt,
 ) {
-    let withdrawal_request = withdrawal_request_with_index(ledger_burn_index);
+    let withdrawal_request = cketh_withdrawal_request_with_index(ledger_burn_index);
     let fee = TransactionPrice {
         max_priority_fee_per_gas: WeiPerGas::from(1_500_000_000_u64),
         max_fee_per_gas: WeiPerGas::from(2_000_000_000_u64),
@@ -848,7 +999,65 @@ fn withdrawal_flow(
         status: tx_status,
         transaction_hash: signed_tx.hash(),
     };
-    (withdrawal_request, transaction, signed_tx, tx_receipt)
+    (
+        withdrawal_request.into(),
+        transaction,
+        signed_tx,
+        tx_receipt,
+    )
+}
+
+fn ckerc20_withdrawal_flow(
+    cketh_ledger_burn_index: LedgerBurnIndex,
+    nonce: TransactionNonce,
+    ckerc20_token: &CkErc20Token,
+    tx_status: TransactionStatus,
+) -> (
+    WithdrawalRequest,
+    Eip1559TransactionRequest,
+    SignedEip1559TransactionRequest,
+    TransactionReceipt,
+) {
+    let withdrawal_request =
+        ckerc20_withdrawal_request_with_index(cketh_ledger_burn_index, ckerc20_token);
+    let fee = TransactionPrice {
+        max_priority_fee_per_gas: WeiPerGas::from(1_500_000_000_u64),
+        max_fee_per_gas: WeiPerGas::from(2_000_000_000_u64),
+        gas_limit: GasAmount::from(65_000_u32),
+    };
+    let transaction = create_transaction(
+        &withdrawal_request.clone().into(),
+        nonce,
+        fee,
+        EthereumNetwork::Sepolia,
+    )
+    .unwrap();
+    let dummy_signature = Eip1559Signature {
+        signature_y_parity: false,
+        r: Default::default(),
+        s: Default::default(),
+    };
+    let signed_tx = SignedEip1559TransactionRequest::from((transaction.clone(), dummy_signature));
+    let tx_receipt = TransactionReceipt {
+        block_hash: "0x736adb84ba42d14c2cd3611fce58bcc3d834938510739f3762c31b77d592a0e5"
+            .parse()
+            .unwrap(),
+        block_number: BlockNumber::new(5558738),
+        effective_gas_price: signed_tx
+            .transaction()
+            .max_fee_per_gas
+            .checked_div_ceil(2_u8)
+            .unwrap(),
+        gas_used: signed_tx.transaction().gas_limit,
+        status: tx_status,
+        transaction_hash: signed_tx.hash(),
+    };
+    (
+        withdrawal_request.into(),
+        transaction,
+        signed_tx,
+        tx_receipt,
+    )
 }
 
 mod assertions {

@@ -38,7 +38,7 @@
 <html lang="en">
 
 <head>
-    <title>ckETH Minter Dashboard</title>
+    <title>ckETH and ckERC20 Minter Dashboard</title>
     <style>
         body {
             font-family: monospace;
@@ -298,23 +298,25 @@
             {% endif %}
 
             {% if !withdrawal_requests.is_empty() %}
-            <h3 id="withdrawal-requests">Withdrawal Requests ckETH → ETH</h3>
+            <h3 id="withdrawal-requests">Withdrawal Requests ckETH → ETH and ckERC20 → ERC20</h3>
             <table>
                 <thead>
                 <tr>
                     <th>Ledger Burn Index</th>
-                    <th>Destination</th>
-                    <th>Amount (Wei)</th>
+                    <th>To</th>
+                    <th>Token Symbol</th>
+                    <th>Value (base unit)</th>
                     <th>Created At</th>
                 </tr>
                 </thead>
                 <tbody>
                 {% for withdrawal in withdrawal_requests %}
                 <tr>
-                    <td class="numeric">{{ withdrawal.cketh_ledger_burn_index() }}</td>
-                    <td>{% call etherscan_address_link(withdrawal.payee()) %}</td>
-                    <td class="numeric">{{ withdrawal|withdrawal_amount }}</td>
-                    <td>{% call format_opt_timestamp(withdrawal.created_at()) %}</td>
+                    <td class="numeric">{{ withdrawal.cketh_ledger_burn_index }}</td>
+                    <td>{% call etherscan_address_link(withdrawal.destination) %}</td>
+                    <td>{{ withdrawal.token_symbol }}</td>
+                    <td class="numeric">{{ withdrawal.value }}</td>
+                    <td>{% call format_opt_timestamp(withdrawal.created_at) %}</td>
                 </tr>
                 {% endfor %}
                 </tbody>
@@ -322,13 +324,14 @@
             {% endif %}
 
             {% if !pending_transactions.is_empty() %}
-            <h3 id="pending-transactions">Pending Transactions ckETH → ETH</h3>
+            <h3 id="pending-transactions">Pending Transactions ckETH → ETH and ckERC20 → ERC20</h3>
             <table>
                 <thead>
                 <tr>
                     <th>Ledger Burn Index</th>
                     <th>To</th>
-                    <th>Value (Wei)</th>
+                    <th>Token Symbol</th>
+                    <th>Value (base unit)</th>
                     <th>Status</th>
                 </tr>
                 </thead>
@@ -337,7 +340,8 @@
                 <tr>
                     <td class="numeric">{{ tx.ledger_burn_index }}</td>
                     <td>{% call etherscan_address_link(tx.destination) %}</td>
-                    <td class="numeric">{{ tx.transaction_amount }}</td>
+                    <td>{{ tx.token_symbol }}</td>
+                    <td class="numeric">{{ tx.value }}</td>
                     <td>{{ tx.status }}</td>
                 </tr>
                 {% endfor %}
@@ -346,13 +350,14 @@
             {% endif %}
 
             {% if !finalized_transactions.is_empty() %}
-            <h3 id="finalized-transactions">Finalized Transactions ckETH → ETH</h3>
+            <h3 id="finalized-transactions">Finalized Transactions ckETH → ETH and ckERC20 → ERC20</h3>
             <table>
                 <thead>
                 <tr>
                     <th>Ledger Burn Index</th>
                     <th>To</th>
-                    <th>Value (Wei)</th>
+                    <th>Token Symbol</th>
+                    <th>Value (base unit)</th>
                     <th>Txn Fee (Wei)</th>
                     <th>Block</th>
                     <th>Txn Hash</th>
@@ -364,7 +369,8 @@
                 <tr>
                     <td class="numeric">{{ tx.ledger_burn_index }}</td>
                     <td>{% call etherscan_address_link(tx.destination) %}</td>
-                    <td class="numeric">{{ tx.transaction_amount }}</td>
+                    <td>{{ tx.token_symbol }}</td>
+                    <td class="numeric">{{ tx.value }}</td>
                     <td class="numeric">{{ tx.transaction_fee }}</td>
                     <td class="numeric">{% call etherscan_block_link(tx.block_number) %}</td>
                     <td>{% call etherscan_tx_link(tx.transaction_hash) %}</td>

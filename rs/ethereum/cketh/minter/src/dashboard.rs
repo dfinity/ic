@@ -3,22 +3,22 @@ mod tests;
 
 use crate::erc20::CkErc20Token;
 use askama::Template;
-use candid::Principal;
+use candid::{Nat, Principal};
 use ic_cketh_minter::endpoints::{EthTransaction, RetrieveEthStatus};
+use ic_cketh_minter::erc20::CkTokenSymbol;
 use ic_cketh_minter::eth_logs::{EventSource, ReceivedEvent};
 use ic_cketh_minter::eth_rpc::Hash;
 use ic_cketh_minter::eth_rpc_client::responses::TransactionStatus;
 use ic_cketh_minter::lifecycle::EthereumNetwork;
 use ic_cketh_minter::numeric::{BlockNumber, LedgerBurnIndex, LogIndex, TransactionNonce, Wei};
-use ic_cketh_minter::state::transactions::{Reimbursed, WithdrawalRequest};
+use ic_cketh_minter::state::transactions::{Reimbursed, TransactionCallData, WithdrawalRequest};
 use ic_cketh_minter::state::{EthBalance, MintedEvent, State};
+use ic_cketh_minter::tx::Eip1559TransactionRequest;
 use ic_ethereum_types::Address;
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet};
 
 mod filters {
-    use super::*;
-
     pub fn timestamp_to_datetime<T: std::fmt::Display>(timestamp: T) -> askama::Result<String> {
         let input = timestamp.to_string();
         let ts: i128 = input
@@ -31,14 +31,6 @@ mod filters {
                 .unwrap();
         Ok(dt_offset.format(&format).unwrap())
     }
-
-    //TODO XC-82: also render token symbol
-    pub fn withdrawal_amount(request: &WithdrawalRequest) -> askama::Result<String> {
-        match request {
-            WithdrawalRequest::CkEth(r) => Ok(r.withdrawal_amount.to_string()),
-            WithdrawalRequest::CkErc20(r) => Ok(r.withdrawal_amount.to_string()),
-        }
-    }
 }
 
 #[derive(Clone)]
@@ -47,16 +39,26 @@ pub struct DashboardPendingDeposit {
     pub log_index: LogIndex,
     pub block_number: BlockNumber,
     pub from: Address,
-    pub token_symbol: String,
-    pub value: candid::Nat,
+    pub token_symbol: CkTokenSymbol,
+    pub value: Nat,
     pub beneficiary: Principal,
+}
+
+#[derive(Clone)]
+pub struct DashboardWithdrawalRequest {
+    pub cketh_ledger_burn_index: LedgerBurnIndex,
+    pub destination: Address,
+    pub value: Nat,
+    pub token_symbol: CkTokenSymbol,
+    pub created_at: Option<u64>,
 }
 
 #[derive(Clone)]
 pub struct DashboardPendingTransaction {
     pub ledger_burn_index: LedgerBurnIndex,
     pub destination: Address,
-    pub transaction_amount: Wei,
+    pub value: Nat,
+    pub token_symbol: CkTokenSymbol,
     pub status: RetrieveEthStatus,
 }
 
@@ -64,40 +66,28 @@ pub struct DashboardPendingTransaction {
 pub struct DashboardFinalizedTransaction {
     pub ledger_burn_index: LedgerBurnIndex,
     pub destination: Address,
-    pub transaction_amount: Wei,
+    pub value: Nat,
+    pub token_symbol: CkTokenSymbol,
     pub block_number: BlockNumber,
     pub transaction_hash: Hash,
     pub transaction_fee: Wei,
     pub status: TransactionStatus,
 }
 
-fn received_event_token_symbol(
-    supported_ckerc20_tokens: &[CkErc20Token],
-    event: &ReceivedEvent,
-) -> String {
-    match event {
-        ReceivedEvent::Eth(_) => "ckETH".to_string(),
-        ReceivedEvent::Erc20(event) => supported_ckerc20_tokens
-            .iter()
-            .find_map(|token| {
-                if token.erc20_contract_address == event.erc20_contract_address {
-                    Some(token.ckerc20_token_symbol.to_string())
-                } else {
-                    None
-                }
-            })
-            .unwrap_or("N/A".to_string()),
-    }
-}
-
 impl DashboardPendingDeposit {
-    fn new(supported_ckerc20_tokens: &[CkErc20Token], event: &ReceivedEvent) -> Self {
+    fn new(event: &ReceivedEvent, state: &State) -> Self {
         Self {
             tx_hash: event.transaction_hash(),
             log_index: event.log_index(),
             block_number: event.block_number(),
             from: event.from_address(),
-            token_symbol: received_event_token_symbol(supported_ckerc20_tokens, event),
+            token_symbol: match event {
+                ReceivedEvent::Eth(_) => CkTokenSymbol::cketh_symbol_from_state(state),
+                ReceivedEvent::Erc20(e) => state
+                    .ckerc20_token_symbol(&e.erc20_contract_address)
+                    .expect("BUG: unknown ERC-20 token")
+                    .clone(),
+            },
             value: event.value(),
             beneficiary: event.principal(),
         }
@@ -123,7 +113,7 @@ pub struct DashboardTemplate {
     pub minted_events: Vec<MintedEvent>,
     pub pending_deposits: Vec<DashboardPendingDeposit>,
     pub rejected_deposits: BTreeMap<EventSource, String>,
-    pub withdrawal_requests: Vec<WithdrawalRequest>,
+    pub withdrawal_requests: Vec<DashboardWithdrawalRequest>,
     pub pending_transactions: Vec<DashboardPendingTransaction>,
     pub finalized_transactions: Vec<DashboardFinalizedTransaction>,
     pub reimbursed_transactions: Vec<Reimbursed>,
@@ -148,35 +138,60 @@ impl DashboardTemplate {
             .sort_unstable_by_key(|event| Reverse((event.block_number(), event.log_index())));
         let pending_deposits = events_to_mint
             .iter()
-            .map(|event| DashboardPendingDeposit::new(&supported_ckerc20_tokens, event))
+            .map(|event| DashboardPendingDeposit::new(event, state))
             .collect();
 
         let mut withdrawal_requests: Vec<_> = state
             .eth_transactions
             .withdrawal_requests_iter()
             .cloned()
+            .map(|request| match request {
+                WithdrawalRequest::CkEth(req) => DashboardWithdrawalRequest {
+                    cketh_ledger_burn_index: req.ledger_burn_index,
+                    destination: req.destination,
+                    value: req.withdrawal_amount.into(),
+                    token_symbol: CkTokenSymbol::cketh_symbol_from_state(state),
+                    created_at: req.created_at,
+                },
+                WithdrawalRequest::CkErc20(req) => DashboardWithdrawalRequest {
+                    cketh_ledger_burn_index: req.cketh_ledger_burn_index,
+                    destination: req.destination,
+                    value: req.withdrawal_amount.into(),
+                    token_symbol: state
+                        .ckerc20_token_symbol(&req.erc20_contract_address)
+                        .expect("BUG: unknown ERC-20 token")
+                        .clone(),
+                    created_at: Some(req.created_at),
+                },
+            })
             .collect();
-        withdrawal_requests.sort_unstable_by_key(|req| Reverse(req.cketh_ledger_burn_index()));
+        withdrawal_requests.sort_unstable_by_key(|req| Reverse(req.cketh_ledger_burn_index));
 
         let mut pending_transactions: Vec<_> = state
             .eth_transactions
             .transactions_to_sign_iter()
-            .map(
-                |(_nonce, ledger_burn_index, tx)| DashboardPendingTransaction {
+            .map(|(_nonce, ledger_burn_index, tx)| {
+                let (destination, value, token_symbol) = to_dashboard_transaction(tx, state);
+                DashboardPendingTransaction {
                     ledger_burn_index: *ledger_burn_index,
-                    destination: tx.destination,
-                    transaction_amount: tx.amount,
+                    destination,
+                    value,
+                    token_symbol,
                     status: RetrieveEthStatus::TxCreated,
-                },
-            )
+                }
+            })
             .collect();
         pending_transactions.extend(state.eth_transactions.sent_transactions_iter().flat_map(
             |(_nonce, ledger_burn_index, txs)| {
-                txs.into_iter().map(|tx| DashboardPendingTransaction {
-                    ledger_burn_index: *ledger_burn_index,
-                    destination: tx.transaction().destination,
-                    transaction_amount: tx.transaction().amount,
-                    status: RetrieveEthStatus::TxSent(EthTransaction::from(tx)),
+                txs.into_iter().map(|tx| {
+                    let (destination, value, token_symbol) = to_dashboard_transaction(tx, state);
+                    DashboardPendingTransaction {
+                        ledger_burn_index: *ledger_burn_index,
+                        destination,
+                        value,
+                        token_symbol,
+                        status: RetrieveEthStatus::TxSent(EthTransaction::from(tx)),
+                    }
                 })
             },
         ));
@@ -186,14 +201,18 @@ impl DashboardTemplate {
         let mut finalized_transactions: Vec<_> = state
             .eth_transactions
             .finalized_transactions_iter()
-            .map(|(_tx_nonce, index, tx)| DashboardFinalizedTransaction {
-                ledger_burn_index: *index,
-                destination: *tx.destination(),
-                transaction_amount: *tx.transaction_amount(),
-                block_number: *tx.block_number(),
-                transaction_hash: *tx.transaction_hash(),
-                transaction_fee: tx.effective_transaction_fee(),
-                status: *tx.transaction_status(),
+            .map(|(_tx_nonce, index, tx)| {
+                let (destination, value, token_symbol) = to_dashboard_transaction(tx, state);
+                DashboardFinalizedTransaction {
+                    ledger_burn_index: *index,
+                    destination,
+                    value,
+                    token_symbol,
+                    block_number: *tx.block_number(),
+                    transaction_hash: *tx.transaction_hash(),
+                    transaction_fee: tx.effective_transaction_fee(),
+                    status: *tx.transaction_status(),
+                }
             })
             .collect();
         finalized_transactions.sort_unstable_by_key(|tx| Reverse(tx.ledger_burn_index));
@@ -235,5 +254,29 @@ impl DashboardTemplate {
             skipped_blocks: state.skipped_blocks.clone(),
             supported_ckerc20_tokens,
         }
+    }
+}
+
+fn to_dashboard_transaction<T: AsRef<Eip1559TransactionRequest>>(
+    tx: T,
+    state: &State,
+) -> (Address, Nat, CkTokenSymbol) {
+    let tx = tx.as_ref();
+    if !tx.data.is_empty() {
+        let TransactionCallData::Erc20Transfer { to, value } =
+            TransactionCallData::decode(&tx.data)
+                .expect("BUG: failed to decode transaction data from transaction issued by minter");
+        let destination = to;
+        let value = value.into();
+        let token_symbol = state
+            .ckerc20_token_symbol(&tx.destination)
+            .expect("BUG: unknown ERC-20 token")
+            .clone();
+        (destination, value, token_symbol)
+    } else {
+        let destination = tx.destination;
+        let value = tx.amount.into();
+        let token_symbol = CkTokenSymbol::cketh_symbol_from_state(state);
+        (destination, value, token_symbol)
     }
 }
