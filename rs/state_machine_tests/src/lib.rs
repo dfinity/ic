@@ -17,7 +17,7 @@ use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
 use ic_cycles_account_manager::CyclesAccountManager;
 pub use ic_error_types::{ErrorCode, UserError};
 use ic_execution_environment::{ExecutionServices, IngressHistoryReaderImpl};
-use ic_ingress_manager::{CustomRandomState, IngressManager};
+use ic_ingress_manager::{IngressManager, RandomStateKind};
 use ic_interfaces::ingress_pool::{
     IngressPool, PoolSection, UnvalidatedIngressArtifact, ValidatedIngressArtifact,
 };
@@ -1209,7 +1209,7 @@ impl StateMachine {
             state_manager.clone(),
             cycles_account_manager,
             malicious_flags,
-            CustomRandomState::Deterministic,
+            RandomStateKind::Deterministic,
         ));
 
         Self {
