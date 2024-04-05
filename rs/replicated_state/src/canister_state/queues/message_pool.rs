@@ -303,12 +303,12 @@ impl MessagePool {
         self.messages.get(&id)
     }
 
-    /// Retrieves the message identified by the given reference.
+    /// Retrieves the message with the given `MessageId`.
     pub(crate) fn get(&self, id: MessageId) -> Option<&RequestOrResponse> {
         self.messages.get(&id)
     }
 
-    /// Removes the message identified by the given reference from the pool.
+    /// Removes the message with the given `MessageId` from the pool.
     ///
     /// Updates the stats; and prunes the priority queues if necessary.
     pub(crate) fn take(&mut self, id: MessageId) -> Option<RequestOrResponse> {
@@ -385,7 +385,7 @@ impl MessagePool {
         self.messages.len()
     }
 
-    /// Returns a reference to the pool's memory stats.
+    /// Returns a reference to the pool's memory usage stats.
     pub(crate) fn memory_usage_stats(&self) -> &MemoryUsageStats {
         &self.memory_usage_stats
     }
