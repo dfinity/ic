@@ -21,7 +21,7 @@ use crate::routes::{build_chunk_handler_request, parse_chunk_handler_response};
 
 use ic_async_utils::JoinMap;
 use ic_base_types::NodeId;
-use ic_interfaces::p2p::state_sync::{ChunkId, Chunkable, StateSyncArtifactId, StateSyncClient};
+use ic_interfaces::p2p::state_sync::{ChunkId, Chunkable, StateSyncArtifactId};
 use ic_logger::{error, info, ReplicaLogger};
 use ic_quic_transport::{Shutdown, Transport};
 use rand::{
@@ -42,7 +42,7 @@ const PARALLEL_CHUNK_DOWNLOADS: usize = 10;
 const ONGOING_STATE_SYNC_CHANNEL_SIZE: usize = 200;
 const CHUNK_DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(10);
 
-struct OngoingStateSync<T: Send> {
+struct OngoingStateSync {
     log: ReplicaLogger,
     rt: Handle,
     artifact_id: StateSyncArtifactId,
@@ -58,7 +58,6 @@ struct OngoingStateSync<T: Send> {
     // Event tasks
     downloading_chunks: JoinMap<ChunkId, DownloadResult>,
     // State sync
-    state_sync: Arc<dyn StateSyncClient<Message = T>>,
     state_sync_finished: bool,
 }
 
@@ -79,7 +78,6 @@ pub(crate) fn start_ongoing_state_sync<T: Send + 'static>(
     metrics: OngoingStateSyncMetrics,
     tracker: Arc<Mutex<Box<dyn Chunkable<T> + Send>>>,
     artifact_id: StateSyncArtifactId,
-    state_sync: Arc<dyn StateSyncClient<Message = T>>,
     transport: Arc<dyn Transport>,
 ) -> OngoingStateSyncHandle {
     let (new_peers_tx, new_peers_rx) = tokio::sync::mpsc::channel(ONGOING_STATE_SYNC_CHANNEL_SIZE);
@@ -94,7 +92,6 @@ pub(crate) fn start_ongoing_state_sync<T: Send + 'static>(
         allowed_downloads: 0,
         chunks_to_download: Box::new(std::iter::empty()),
         downloading_chunks: JoinMap::new(),
-        state_sync,
         state_sync_finished: false,
     };
 
@@ -110,8 +107,8 @@ pub(crate) fn start_ongoing_state_sync<T: Send + 'static>(
     }
 }
 
-impl<T: 'static + Send> OngoingStateSync<T> {
-    pub async fn run(
+impl OngoingStateSync {
+    pub async fn run<T: 'static + Send>(
         mut self,
         cancellation: CancellationToken,
         tracker: Arc<Mutex<Box<dyn Chunkable<T> + Send>>>,
@@ -165,15 +162,12 @@ impl<T: 'static + Send> OngoingStateSync<T> {
             self.metrics
                 .peers_serving_state
                 .set(self.active_downloads.len() as i64);
-            // Conditions on when to exit (in addition to timeout)
-            if self.state_sync_finished
-                || self.active_downloads.is_empty()
-                || self.state_sync.should_cancel(&self.artifact_id)
-            {
-                info!(self.log, "Stopping ongoing state sync because: finished: {}; no peers: {}; should cancel: {};",
+            if self.state_sync_finished || self.active_downloads.is_empty() {
+                info!(
+                    self.log,
+                    "Stopping ongoing state sync because: finished: {}; no peers: {};",
                     self.state_sync_finished,
                     self.active_downloads.is_empty(),
-                    self.state_sync.should_cancel(&self.artifact_id)
                 );
                 break;
             }
@@ -182,6 +176,7 @@ impl<T: 'static + Send> OngoingStateSync<T> {
         while let Some(Ok((finished, _))) = self.downloading_chunks.join_next().await {
             self.handle_downloaded_chunk_result(finished);
         }
+        self.new_peers_rx.close();
     }
 
     fn handle_downloaded_chunk_result(
@@ -215,7 +210,7 @@ impl<T: 'static + Send> OngoingStateSync<T> {
         }
     }
 
-    fn spawn_chunk_downloads(
+    fn spawn_chunk_downloads<T: 'static + Send>(
         &mut self,
         cancellation: CancellationToken,
         tracker: Arc<Mutex<Box<dyn Chunkable<T> + Send>>>,
@@ -286,7 +281,7 @@ impl<T: 'static + Send> OngoingStateSync<T> {
         }
     }
 
-    async fn download_chunk_task(
+    async fn download_chunk_task<T: 'static + Send>(
         peer_id: NodeId,
         client: Arc<dyn Transport>,
         tracker: Arc<Mutex<Box<dyn Chunkable<T> + Send>>>,
@@ -374,13 +369,11 @@ pub(crate) enum DownloadChunkError {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::{AtomicBool, Ordering};
-
     use axum::http::{Response, StatusCode};
     use bytes::{Bytes, BytesMut};
     use ic_interfaces::p2p::state_sync::AddChunkError;
     use ic_metrics::MetricsRegistry;
-    use ic_p2p_test_utils::mocks::{MockChunkable, MockStateSync, MockTransport};
+    use ic_p2p_test_utils::mocks::{MockChunkable, MockTransport};
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_types::{crypto::CryptoHash, Height};
     use ic_types_test_utils::ids::{NODE_1, NODE_2};
@@ -403,10 +396,6 @@ mod tests {
     #[test]
     fn test_should_cancel() {
         with_test_replica_logger(|log| {
-            let mut s = MockStateSync::default();
-            s.expect_should_cancel()
-                .return_once(|_| false)
-                .return_const(true);
             let mut t = MockTransport::default();
             t.expect_rpc().returning(|_, _| {
                 Ok(Response::builder()
@@ -428,7 +417,6 @@ mod tests {
                     height: Height::from(1),
                     hash: CryptoHash(vec![]),
                 },
-                Arc::new(s),
                 Arc::new(t),
             );
 
@@ -443,8 +431,6 @@ mod tests {
     #[test]
     fn test_chunk_verification_failed() {
         with_test_replica_logger(|log| {
-            let mut s = MockStateSync::default();
-            s.expect_should_cancel().return_const(false);
             let mut t = MockTransport::default();
             t.expect_rpc().returning(|_, _| {
                 Ok(Response::builder()
@@ -469,7 +455,6 @@ mod tests {
                     height: Height::from(1),
                     hash: CryptoHash(vec![]),
                 },
-                Arc::new(s),
                 Arc::new(t),
             );
 
@@ -486,11 +471,6 @@ mod tests {
     #[test]
     fn test_add_peer_multiple_times_to_ongoing_state_sync() {
         with_test_replica_logger(|log| {
-            let should_cancel = Arc::new(AtomicBool::default());
-            let should_cancel_c = should_cancel.clone();
-            let mut s = MockStateSync::default();
-            s.expect_should_cancel()
-                .returning(move |_| should_cancel_c.load(Ordering::SeqCst));
             let mut t = MockTransport::default();
             t.expect_rpc().returning(|_, _| {
                 Ok(Response::builder()
@@ -516,14 +496,12 @@ mod tests {
                     height: Height::from(1),
                     hash: CryptoHash(vec![]),
                 },
-                Arc::new(s),
                 Arc::new(t),
             );
 
             rt.block_on(async move {
                 ongoing.sender.send(NODE_1).await.unwrap();
                 ongoing.sender.send(NODE_1).await.unwrap();
-                should_cancel.store(true, Ordering::SeqCst);
                 ongoing.sender.send(NODE_1).await.unwrap();
                 // State sync should exit because NODE_1 got removed.
                 ongoing.shutdown.shutdown().await;
