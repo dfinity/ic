@@ -2464,18 +2464,17 @@ impl SystemApi for SystemApiImpl {
         result
     }
 
-    fn update_available_memory(
+    fn try_grow_wasm_memory(
         &mut self,
         native_memory_grow_res: i64,
-        additional_elements: u64,
-        element_size: u64,
+        additional_wasm_pages: u64,
     ) -> HypervisorResult<()> {
         let result = {
             if native_memory_grow_res == -1 {
                 return Ok(());
             }
-            let bytes = additional_elements
-                .checked_mul(element_size)
+            let bytes = additional_wasm_pages
+                .checked_mul(WASM_PAGE_SIZE_IN_BYTES as u64)
                 .map(NumBytes::new)
                 .ok_or(HypervisorError::OutOfMemory)?;
 
@@ -2499,11 +2498,10 @@ impl SystemApi for SystemApiImpl {
         };
         trace_syscall!(
             self,
-            UpdateAvailableMemory,
+            TryGrowWasmMemory,
             result,
             native_memory_grow_res,
-            additional_elements,
-            element_size
+            additional_wasm_pages
         );
         result
     }

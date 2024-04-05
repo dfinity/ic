@@ -1490,7 +1490,7 @@ fn call_perform_not_enough_cycles_does_not_trap() {
 }
 
 #[test]
-fn update_available_memory_updates_subnet_available_memory() {
+fn growing_wasm_memory_updates_subnet_available_memory() {
     let wasm_page_size = 64 << 10;
     let subnet_available_memory_bytes = 2 * wasm_page_size;
     let subnet_available_memory = SubnetAvailableMemory::new(subnet_available_memory_bytes, 0, 0);
@@ -1524,8 +1524,7 @@ fn update_available_memory_updates_subnet_available_memory() {
         no_op_logger(),
     );
 
-    api.update_available_memory(0, 1, wasm_page_size as u64)
-        .unwrap();
+    api.try_grow_wasm_memory(0, 1).unwrap();
     assert_eq!(api.get_allocated_bytes().get() as i64, wasm_page_size);
     assert_eq!(api.get_allocated_message_bytes().get() as i64, 0);
     assert_eq!(
@@ -1533,8 +1532,7 @@ fn update_available_memory_updates_subnet_available_memory() {
         wasm_custom_sections_available_memory_before
     );
 
-    api.update_available_memory(0, 10, wasm_page_size as u64)
-        .unwrap_err();
+    api.try_grow_wasm_memory(0, 10).unwrap_err();
     assert_eq!(api.get_allocated_bytes().get() as i64, wasm_page_size);
     assert_eq!(api.get_allocated_message_bytes().get() as i64, 0);
     assert_eq!(

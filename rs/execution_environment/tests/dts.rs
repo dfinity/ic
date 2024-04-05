@@ -339,8 +339,8 @@ const ACTUAL_EXECUTION_COST: u128 = match EmbeddersConfig::new()
     .feature_flags
     .wasm_native_stable_memory
 {
-    FlagStatus::Enabled => 988_890,
-    FlagStatus::Disabled => 868_892,
+    FlagStatus::Enabled => 984_090,
+    FlagStatus::Disabled => 864_092,
 };
 
 #[test]

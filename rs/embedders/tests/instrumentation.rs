@@ -26,12 +26,20 @@ use ic_types::{
 /// Assert what the output of wasm instrumentation should be using the [`insta`]
 /// crate.
 ///
-/// When making changes that alter the expected output, changes can be easily reviewed and acked using the [`insta` cli](https://insta.rs/docs/cli/).
 /// Expected output is stored in `.snap` files in the `snapshots` folder.
-/// When tests fail, the new output will be stored in a `.snap.new` file.
-/// Instead of using the `insta` cli, you can review and make changes by
-/// directly diffing the `.snap` and `.snap.new` files and save changes by
-/// updating the `.snap` file.
+///
+/// When tests fail, you can get the new files with `bazel` as follows:
+/// - `mkdir /ic/insta`
+/// - modify `INSTA_WORKSPACE_ROOT` in BUILD.bazel to `/ic/insta`
+/// - `bazel test //rs/embedders:instrumentation --spawn_strategy=local`
+/// - the new files will be in `ic/insta`
+/// - `cd rs/embedders/tests/snapshots/`
+/// - `for x in *.snap; do cp /ic/insta/rs/embedders/tests/snapshots/$x.new $x; done`
+/// - the for-loop above overwrites the existing snap files with the new ones.
+/// - restore `INSTA_WORKSPACE_ROOT` to `.`
+/// - `bazel test //rs/embedders:instrumentation` should pass now.
+///
+/// If you find a simpler way to get the new snap files, please update the steps.
 fn inject_and_cmp(testname: &str) {
     let filename = format!(
         "{}/tests/instrumentation-test-data/{}.wat",

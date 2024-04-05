@@ -1511,7 +1511,7 @@ fn query_cache_future_proof_test() {
         | SystemApiCallId::StableWrite
         | SystemApiCallId::Time
         | SystemApiCallId::Trap
-        | SystemApiCallId::UpdateAvailableMemory => {
+        | SystemApiCallId::TryGrowWasmMemory => {
             ////////////////////////////////////////////////////////////////////
             // ATTENTION!
             ////////////////////////////////////////////////////////////////////
