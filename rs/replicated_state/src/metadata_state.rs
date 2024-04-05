@@ -345,7 +345,7 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SubnetTopology {
     /// The public key of the subnet (a DER-encoded BLS key, see
-    /// https://sdk.dfinity.org/docs/interface-spec/index.html#certification)
+    /// https://internetcomputer.org/docs/current/references/ic-interface-spec#certification)
     pub public_key: Vec<u8>,
     pub nodes: BTreeSet<NodeId>,
     pub subnet_type: SubnetType,

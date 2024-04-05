@@ -4,7 +4,7 @@
 //!
 //! As much as possible the naming of structs in this module should match the
 //! naming used in the [Interface
-//! Specification](https://sdk.dfinity.org/docs/interface-spec/index.html)
+//! Specification](https://internetcomputer.org/docs/current/references/ic-interface-spec)
 mod catch_up_package;
 mod common;
 mod dashboard;

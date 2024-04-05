@@ -34,7 +34,7 @@ Run `+cargo run --bin ic-nns-init -- --help+` for the usage and all available op
 
 An easy way to interact with the NNS for manual testing is through the Candid web UI and/or the `dfx canister` command.
 
-To get `dfx`, see https://sdk.dfinity.org/docs/quickstart/quickstart.html#download-and-install
+To get `dfx`, see https://internetcomputer.org/docs/current/developer-docs/getting-started/install/
 
 All commands in these instructions assume that the NNS dir `rs/nns` is the current dir.
 

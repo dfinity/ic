@@ -47,7 +47,7 @@ Code installation messages have the following format:
 * `<mode>` is one of `install`, `reinstall` or `upgrade`
 
 * `<canister_id>` is the desired ID for the canister to be installed, given in textual
-representation (e.g. `rwlgt-iiaaa-aaaaa-aaaaa-cai`) as specified in https://sdk.dfinity.org/docs/interface-spec/index.html#textual-ids.
+representation (e.g. `rwlgt-iiaaa-aaaaa-aaaaa-cai`) as specified in https://internetcomputer.org/docs/current/references/ic-interface-spec#textual-ids.
 
 * `<wasmfile>` is a path to a Wasm file that should be installed in this drun execution.
 

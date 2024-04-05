@@ -348,7 +348,7 @@ pub enum ApiType {
     /// The `call_on_cleanup` callback is executed iff the `reply` or the
     /// `reject` callback was executed and trapped (for any reason).
     ///
-    /// See https://sdk.dfinity.org/docs/interface-spec/index.html#system-api-call
+    /// See https://internetcomputer.org/docs/current/references/ic-interface-spec#system-api-call
     Cleanup {
         caller: PrincipalId,
         time: Time,

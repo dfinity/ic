@@ -5,7 +5,7 @@ pub const PUBLIC_KEY_SIZE: usize = 96;
 
 /// Converts public key bytes into its DER-encoded form.
 ///
-/// See [the Interface Spec](https://sdk.dfinity.org/docs/interface-spec/index.html#_certificate)
+/// See [the Interface Spec](https://internetcomputer.org/docs/current/references/ic-interface-spec#certificate)
 /// and [RFC 5480](https://tools.ietf.org/html/rfc5480).
 pub fn public_key_to_der(key: &[u8]) -> Result<Vec<u8>, String> {
     simple_asn1::to_der(&ASN1Block::Sequence(
@@ -20,7 +20,7 @@ pub fn public_key_to_der(key: &[u8]) -> Result<Vec<u8>, String> {
 
 /// Parses a `PublicKeyBytes` from its DER-encoded form.
 ///
-/// See [the Interface Spec](https://sdk.dfinity.org/docs/interface-spec/index.html#_certificate)
+/// See [the Interface Spec](https://internetcomputer.org/docs/current/references/ic-interface-spec#certificate)
 /// and [RFC 5480](https://tools.ietf.org/html/rfc5480).
 ///
 /// # Errors
