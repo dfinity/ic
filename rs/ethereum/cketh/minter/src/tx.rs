@@ -86,6 +86,12 @@ pub struct Eip1559TransactionRequest {
     pub access_list: AccessList,
 }
 
+impl AsRef<Eip1559TransactionRequest> for Eip1559TransactionRequest {
+    fn as_ref(&self) -> &Eip1559TransactionRequest {
+        self
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Resubmittable<T> {
     pub transaction: T,
@@ -212,6 +218,12 @@ pub struct SignedEip1559TransactionRequest {
     memoized_hash: Hash,
 }
 
+impl AsRef<Eip1559TransactionRequest> for SignedEip1559TransactionRequest {
+    fn as_ref(&self) -> &Eip1559TransactionRequest {
+        &self.inner.transaction
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Encode, Decode)]
 struct InnerSignedTransactionRequest {
     #[n(0)]
@@ -270,6 +282,12 @@ pub struct FinalizedEip1559Transaction {
     transaction: SignedEip1559TransactionRequest,
     #[n(1)]
     receipt: TransactionReceipt,
+}
+
+impl AsRef<Eip1559TransactionRequest> for FinalizedEip1559Transaction {
+    fn as_ref(&self) -> &Eip1559TransactionRequest {
+        self.transaction.as_ref()
+    }
 }
 
 impl FinalizedEip1559Transaction {
