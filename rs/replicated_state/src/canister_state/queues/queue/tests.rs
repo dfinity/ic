@@ -1,4 +1,4 @@
-use super::super::message_pool::testing::*;
+use super::super::message_pool::tests::*;
 use super::*;
 use ic_test_utilities_types::{
     arbitrary,

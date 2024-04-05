@@ -12,7 +12,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 #[cfg(test)]
-mod tests;
+pub(super) mod tests;
 
 /// The lifetime of a guaranteed response call request in an output queue, from
 /// which its deadline is computed (as `now + REQUEST_LIFETIME`).
@@ -116,8 +116,7 @@ pub struct MessagePool {
     messages: BTreeMap<MessageId, RequestOrResponse>,
 
     /// Running memory usage stats for the pool.
-    // FIXME drop the `pub`.`
-    pub memory_usage_stats: MemoryUsageStats,
+    memory_usage_stats: MemoryUsageStats,
 
     /// Deadline priority queue, earliest deadlines first.
     ///
@@ -210,16 +209,14 @@ impl MessagePool {
         deadline: CoarseTime,
         context: Context,
     ) -> MessageId {
-        let class_for = |deadline| {
-            if deadline == NO_DEADLINE {
-                Class::GuaranteedResponse
-            } else {
-                Class::BestEffort
-            }
+        let kind = match &msg {
+            RequestOrResponse::Request(_) => Kind::Request,
+            RequestOrResponse::Response(_) => Kind::Response,
         };
-        let (kind, class) = match &msg {
-            RequestOrResponse::Request(req) => (Kind::Request, class_for(req.deadline)),
-            RequestOrResponse::Response(rep) => (Kind::Response, class_for(rep.deadline)),
+        let class = if msg.deadline() == NO_DEADLINE {
+            Class::GuaranteedResponse
+        } else {
+            Class::BestEffort
         };
         let id = self.next_message_id(kind, context, class);
 
@@ -388,28 +385,9 @@ impl MessagePool {
         self.messages.len()
     }
 
-    /// Returns the memory usage of the best-effort messages in the pool.
-    pub(crate) fn best_effort_memory_usage(&self) -> usize {
-        self.memory_usage_stats.best_effort_message_bytes
-    }
-
-    /// Returns the memory usage of the guaranteed response messages in the pool,
-    /// excluding memory reservations for guaranteed responses.
-    pub(crate) fn memory_usage(&self) -> usize {
-        self.memory_usage_stats.memory_usage()
-    }
-
-    /// Returns the sum total of the byte size of all guaranteed responses in the
-    /// pool.
-    pub(crate) fn guaranteed_responses_size_bytes(&self) -> usize {
-        self.memory_usage_stats.guaranteed_responses_size_bytes
-    }
-
-    /// Returns the sum total of bytes above `MAX_RESPONSE_COUNT_BYTES` per
-    /// oversized guaranteed response call request.
-    pub(crate) fn oversized_guaranteed_requests_extra_bytes(&self) -> usize {
-        self.memory_usage_stats
-            .oversized_guaranteed_requests_extra_bytes
+    /// Returns a reference to the pool's memory usage stats.
+    pub(crate) fn memory_usage_stats(&self) -> &MemoryUsageStats {
+        &self.memory_usage_stats
     }
 
     /// Prunes stale entries from the priority queues if they make up more than half
@@ -589,30 +567,5 @@ impl SubAssign<MemoryUsageStats> for MemoryUsageStats {
         self.guaranteed_responses_size_bytes -= guaranteed_responses_size_bytes;
         self.oversized_guaranteed_requests_extra_bytes -= oversized_guaranteed_requests_extra_bytes;
         self.size_bytes -= size_bytes;
-    }
-}
-
-#[cfg(test)]
-pub(crate) mod testing {
-    use super::*;
-
-    /// Generates a `MessageId` for a best-effort inbound request.
-    pub(crate) fn new_request_message_id(generator: u64) -> MessageId {
-        MessageId::new(
-            Kind::Request,
-            Context::Inbound,
-            Class::BestEffort,
-            generator,
-        )
-    }
-
-    /// Generates a `MessageId` for a best-effort inbound response.
-    pub(crate) fn new_response_message_id(generator: u64) -> MessageId {
-        MessageId::new(
-            Kind::Response,
-            Context::Inbound,
-            Class::BestEffort,
-            generator,
-        )
     }
 }

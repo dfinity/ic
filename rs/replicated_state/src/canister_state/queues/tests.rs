@@ -1105,8 +1105,8 @@ fn test_memory_usage_stats_oversized_requests() {
     assert_eq!(OutputQueuesStats::default(), queues.output_queues_stats);
     assert_eq!(MemoryUsageStats::default(), queues.memory_usage_stats);
     assert_eq!(
-        message_pool::MemoryUsageStats::default(),
-        queues.pool.memory_usage_stats
+        &message_pool::MemoryUsageStats::default(),
+        queues.pool.memory_usage_stats()
     );
 
     // Insert a bunch of oversized requests.
@@ -1166,7 +1166,7 @@ fn test_memory_usage_stats_oversized_requests() {
         oversized_guaranteed_requests_extra_bytes: 2 * guaranteed_extra_bytes,
         size_bytes: 2 * (best_effort_size_bytes + guaranteed_size_bytes),
     };
-    assert_eq!(expected_pool_mu_stats, queues.pool.memory_usage_stats);
+    assert_eq!(&expected_pool_mu_stats, queues.pool.memory_usage_stats());
 
     // Pop the incoming best-effort request and the incoming guaranteed request.
     assert_eq!(
@@ -1206,7 +1206,9 @@ fn test_memory_usage_stats_oversized_requests() {
         oversized_guaranteed_requests_extra_bytes: guaranteed_extra_bytes,
         size_bytes: best_effort_size_bytes + guaranteed_size_bytes,
     };
-    assert_eq!(expected_pool_mu_stats, queues.pool.memory_usage_stats);
+    assert_eq!(&expected_pool_mu_stats, queues.pool.memory_usage_stats());
+
+    // FIXME: Drop everything after this point except in one of the 3 tests.
 
     // Shed the outgoing best-effort request and time out the outgoing guaranteed one.
     assert!(queues.shed_largest_message(&best_effort.sender, &BTreeMap::new()));
@@ -1236,8 +1238,8 @@ fn test_memory_usage_stats_oversized_requests() {
         queues.memory_usage_stats
     );
     assert_eq!(
-        message_pool::MemoryUsageStats::default(),
-        queues.pool.memory_usage_stats
+        &message_pool::MemoryUsageStats::default(),
+        queues.pool.memory_usage_stats()
     );
 }
 
@@ -1516,7 +1518,7 @@ fn test_stats_induct_message_to_self() {
     let mut expected_pool_mu_stats = message_pool::MemoryUsageStats::default();
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     assert_eq!(expected_mu_stats, queues.memory_usage_stats);
-    assert_eq!(expected_pool_mu_stats, queues.pool.memory_usage_stats);
+    assert_eq!(&expected_pool_mu_stats, queues.pool.memory_usage_stats());
 
     // No messages to induct.
     assert!(queues.induct_message_to_self(this).is_err());

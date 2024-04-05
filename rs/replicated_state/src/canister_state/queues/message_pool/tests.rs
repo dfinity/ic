@@ -839,3 +839,23 @@ fn assert_trimmed_priority_queues(pool: &MessagePool) {
         pool.len()
     );
 }
+
+/// Generates a `MessageId` for a best-effort inbound request.
+pub(crate) fn new_request_message_id(generator: u64) -> MessageId {
+    MessageId::new(
+        Kind::Request,
+        Context::Inbound,
+        Class::BestEffort,
+        generator,
+    )
+}
+
+/// Generates a `MessageId` for a best-effort inbound response.
+pub(crate) fn new_response_message_id(generator: u64) -> MessageId {
+    MessageId::new(
+        Kind::Response,
+        Context::Inbound,
+        Class::BestEffort,
+        generator,
+    )
+}

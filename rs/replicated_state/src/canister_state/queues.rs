@@ -904,15 +904,22 @@ impl CanisterQueues {
         self.input_queues_stats.response_count
     }
 
+    /// Returns the memory usage of all best-effort messages.
+    pub fn best_effort_memory_usage(&self) -> usize {
+        self.pool.memory_usage_stats().best_effort_message_bytes
+    }
+
     /// Returns the memory usage of all guaranteed response messages.
     pub fn memory_usage(&self) -> usize {
-        self.memory_usage_stats.memory_usage() + self.pool.memory_usage()
+        self.memory_usage_stats.memory_usage() + self.pool.memory_usage_stats().memory_usage()
     }
 
     /// Returns the total byte size of guaranteed responses across input and
     /// output queues.
     pub fn guaranteed_responses_size_bytes(&self) -> usize {
-        self.pool.guaranteed_responses_size_bytes()
+        self.pool
+            .memory_usage_stats()
+            .guaranteed_responses_size_bytes
     }
 
     /// Returns the total memory reservations for guaranteed responses across input
@@ -926,9 +933,11 @@ impl CanisterQueues {
     }
 
     /// Returns the sum total of bytes above `MAX_RESPONSE_COUNT_BYTES` per
-    /// oversized request.
+    /// oversized guaranteed response call request.
     pub fn oversized_guaranteed_requests_extra_bytes(&self) -> usize {
-        self.pool.oversized_guaranteed_requests_extra_bytes()
+        self.pool
+            .memory_usage_stats()
+            .oversized_guaranteed_requests_extra_bytes
     }
 
     /// Sets the (transient) size in bytes of responses routed from
