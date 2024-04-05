@@ -1872,6 +1872,8 @@ fn test_ic0_cycles_burn() {
     assert_eq!(Cycles::new(0), Cycles::from(&heap));
 }
 
+const CANISTER_LOGGING_IS_ENABLED: bool = true;
+
 #[test]
 fn test_save_log_message_adds_canister_log_records() {
     let messages: Vec<Vec<_>> = vec![
@@ -1889,7 +1891,12 @@ fn test_save_log_message_adds_canister_log_records() {
     let initial_records_number = api.canister_log().records().len();
     // Save several log messages.
     for message in &messages {
-        api.save_log_message(0, message.len() as u32, message);
+        api.save_log_message(
+            CANISTER_LOGGING_IS_ENABLED,
+            0,
+            message.len() as u32,
+            message,
+        );
     }
     let records = api.canister_log().records();
     // Expect increased number of log records and the content to match the messages.
@@ -1911,7 +1918,7 @@ fn test_save_log_message_invalid_message_size() {
     );
     let initial_records_number = api.canister_log().records().len();
     // Save a log message.
-    api.save_log_message(0, invalid_size, message);
+    api.save_log_message(CANISTER_LOGGING_IS_ENABLED, 0, invalid_size, message);
     // Expect added log record with an error message.
     let records = api.canister_log().records();
     assert_eq!(records.len(), initial_records_number + 1);
@@ -1932,7 +1939,12 @@ fn test_save_log_message_invalid_message_offset() {
     );
     let initial_records_number = api.canister_log().records().len();
     // Save a log message.
-    api.save_log_message(invalid_src, message.len() as u32, message);
+    api.save_log_message(
+        CANISTER_LOGGING_IS_ENABLED,
+        invalid_src,
+        message.len() as u32,
+        message,
+    );
     // Expect added log record with an error message.
     let records = api.canister_log().records();
     assert_eq!(records.len(), initial_records_number + 1);
@@ -1953,7 +1965,7 @@ fn test_save_log_message_trims_long_message() {
     let initial_records_number = api.canister_log().records().len();
     // Save a long log message.
     let bytes = vec![b'x'; long_message_size];
-    api.save_log_message(0, bytes.len() as u32, &bytes);
+    api.save_log_message(CANISTER_LOGGING_IS_ENABLED, 0, bytes.len() as u32, &bytes);
     // Expect added log record with the content trimmed to the allowed size.
     let records = api.canister_log().records();
     assert_eq!(records.len(), initial_records_number + 1);
@@ -1973,7 +1985,7 @@ fn test_save_log_message_keeps_total_log_size_limited() {
     // Save several long messages.
     for _ in 0..messages_number {
         let bytes = vec![b'x'; long_message_size];
-        api.save_log_message(0, bytes.len() as u32, &bytes);
+        api.save_log_message(CANISTER_LOGGING_IS_ENABLED, 0, bytes.len() as u32, &bytes);
     }
     // Expect only one log record to be kept, with the total size kept within the limit.
     let records = api.canister_log().records();
