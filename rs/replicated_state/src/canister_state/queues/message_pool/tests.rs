@@ -89,7 +89,7 @@ fn test_insert_outbound_request_deadline_rounding() {
 fn test_replace_inbound_timeout_response() {
     let mut pool = MessagePool::default();
 
-    // Reserve a message ID for a timeout response.
+    // Create a placeholder for a timeout response.
     let placeholder = pool.insert_inbound_timeout_response();
     let id = placeholder.id();
     assert!(!id.is_outbound());
@@ -114,7 +114,7 @@ fn test_replace_inbound_timeout_response() {
 fn test_replace_request() {
     let mut pool = MessagePool::default();
 
-    // Reserve a placeholder for a timeout response.
+    // Create a placeholder for a timeout response.
     let placeholder = pool.insert_inbound_timeout_response();
 
     // Replace the placeholder with a request.
@@ -126,7 +126,7 @@ fn test_replace_request() {
 fn test_replace_guaranteed_response() {
     let mut pool = MessagePool::default();
 
-    // Reserve a placeholder for a timeout response.
+    // Create a placeholder for a timeout response.
     let placeholder = pool.insert_inbound_timeout_response();
 
     // Replace the placeholder with a guaranteed response.
@@ -168,7 +168,7 @@ fn test_get() {
     }
 
     // Also do a negative test.
-    let nonexistent_id = pool.next_message_id(Kind::Request, Context::Inbound);
+    let nonexistent_id = pool.next_message_id(Kind::Request, Context::Inbound, Class::BestEffort);
     assert_eq!(None, pool.get(nonexistent_id));
 }
 
@@ -555,20 +555,21 @@ fn test_message_id_sanity() {
     // Each bit is actually a single bit.
     assert_eq!(1, Kind::BIT.count_ones());
     assert_eq!(1, Context::BIT.count_ones());
+    assert_eq!(1, Class::BIT.count_ones());
     // And they are the trailing two bits.
     assert_eq!(
         MessageId::BITMASK_LEN,
-        (Kind::BIT | Context::BIT).trailing_ones()
+        (Kind::BIT | Context::BIT | Class::BIT).trailing_ones()
     );
 
     // `Kind::Request` and `Kind::Response` have different `u64` representations and
-    // they are both confined to `KIND_BIT`.
+    // they are both confined to `Kind::BIT`.
     assert_ne!(Kind::Request as u64, Kind::Response as u64);
     assert_eq!(Kind::Request as u64, Kind::Request as u64 & Kind::BIT);
     assert_eq!(Kind::Response as u64, Kind::Response as u64 & Kind::BIT);
 
     // `Context::Inbound` and `Context::Outbound` have different `u64`
-    // representations and they are both confined to `CONTEXT_BIT`.
+    // representations and they are both confined to `Context::BIT`.
     assert_ne!(Context::Inbound as u64, Context::Outbound as u64);
     assert_eq!(
         Context::Inbound as u64,
@@ -577,6 +578,18 @@ fn test_message_id_sanity() {
     assert_eq!(
         Context::Outbound as u64,
         Context::Outbound as u64 & Context::BIT
+    );
+
+    // `Class::GuaranteedResponse` and `Class::BestEffort` have different `u64`
+    // representations and they are both confined to `Class::BIT`.
+    assert_ne!(Class::GuaranteedResponse as u64, Class::BestEffort as u64);
+    assert_eq!(
+        Class::GuaranteedResponse as u64,
+        Class::GuaranteedResponse as u64 & Class::BIT
+    );
+    assert_eq!(
+        Class::BestEffort as u64,
+        Class::BestEffort as u64 & Class::BIT
     );
 }
 
@@ -825,4 +838,24 @@ fn assert_trimmed_priority_queues(pool: &MessagePool) {
         pool.size_queue.len(),
         pool.len()
     );
+}
+
+/// Generates a `MessageId` for a best-effort inbound request.
+pub(crate) fn new_request_message_id(generator: u64) -> MessageId {
+    MessageId::new(
+        Kind::Request,
+        Context::Inbound,
+        Class::BestEffort,
+        generator,
+    )
+}
+
+/// Generates a `MessageId` for a best-effort inbound response.
+pub(crate) fn new_response_message_id(generator: u64) -> MessageId {
+    MessageId::new(
+        Kind::Response,
+        Context::Inbound,
+        Class::BestEffort,
+        generator,
+    )
 }
