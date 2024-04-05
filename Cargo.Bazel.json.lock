@@ -1,5 +1,5 @@
 {
-  "checksum": "6f52e5198e0e5e7618d64ffce7b654b83937fa5104fa1fbc9a7d1966a56d0228",
+  "checksum": "26ad8b0adea16a0914584353a2388efba7ef278e1beba228a4b5e037ab16fb54",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -7681,57 +7681,6 @@
       },
       "license": "MIT OR BSD-3-Clause"
     },
-    "cached 0.41.0": {
-      "name": "cached",
-      "version": "0.41.0",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/cached/0.41.0/download",
-          "sha256": "ec6d20b3d24b6c74e2c5331d2d3d8d1976a9883c7da179aa851afa4c90d62e36"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "cached",
-            "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        }
-      ],
-      "library_target_name": "cached",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "hashbrown 0.12.3",
-              "target": "hashbrown"
-            },
-            {
-              "id": "instant 0.1.12",
-              "target": "instant"
-            },
-            {
-              "id": "once_cell 1.19.0",
-              "target": "once_cell"
-            },
-            {
-              "id": "thiserror 1.0.57",
-              "target": "thiserror"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.41.0"
-      },
-      "license": "MIT"
-    },
     "cached 0.46.1": {
       "name": "cached",
       "version": "0.46.1",
@@ -7868,6 +7817,57 @@
           "selects": {}
         },
         "version": "0.47.0"
+      },
+      "license": "MIT"
+    },
+    "cached 0.49.2": {
+      "name": "cached",
+      "version": "0.49.2",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/cached/0.49.2/download",
+          "sha256": "f251fd1e72720ca07bf5d8e310f54a193fd053479a1f6342c6663ee4fa01cf96"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "cached",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "cached",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "hashbrown 0.14.2",
+              "target": "hashbrown"
+            },
+            {
+              "id": "instant 0.1.12",
+              "target": "instant"
+            },
+            {
+              "id": "once_cell 1.19.0",
+              "target": "once_cell"
+            },
+            {
+              "id": "thiserror 1.0.57",
+              "target": "thiserror"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.49.2"
       },
       "license": "MIT"
     },
@@ -14350,7 +14350,7 @@
               "target": "bytes"
             },
             {
-              "id": "cached 0.41.0",
+              "id": "cached 0.49.2",
               "target": "cached"
             },
             {
@@ -20778,7 +20778,6 @@
         ],
         "crate_features": {
           "common": [
-            "inline-more",
             "raw"
           ],
           "selects": {}
@@ -65262,7 +65261,7 @@
     "byte-unit 4.0.19",
     "byteorder 1.5.0",
     "bytes 1.5.0",
-    "cached 0.41.0",
+    "cached 0.49.2",
     "candid 0.10.6",
     "candid_parser 0.1.2",
     "cargo_metadata 0.14.2",

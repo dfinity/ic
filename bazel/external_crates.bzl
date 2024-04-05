@@ -263,7 +263,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.5.0",
             ),
             "cached": crate.spec(
-                version = "^0.41",
+                version = "^0.49",
                 default_features = False,
             ),
             "candid": crate.spec(
