@@ -116,7 +116,6 @@ members = [
   "rs/recovery",
   "rs/recovery/subnet_splitting",
   "rs/replay",
-  "rs/elastic_common_schema",
   "rs/embedders",
   "rs/execution_environment",
   "rs/execution_environment/benches/lib",

@@ -130,7 +130,6 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/depcheck/                                           @dfinity-lab/teams/interface-owners
 /rs/determinism_test/                                   @dfinity-lab/teams/execution-owners
 /rs/drun/                                               @dfinity-lab/teams/execution-owners
-/rs/elastic_common_schema/                              @dfinity-lab/teams/ic-testing-verification
 /rs/embedders/                                          @dfinity-lab/teams/runtime-owners
 /rs/ethereum/                                           @dfinity-lab/teams/cross-chain-team
 /rs/execution_environment/                              @dfinity-lab/teams/execution-owners @dfinity-lab/teams/runtime-owners
