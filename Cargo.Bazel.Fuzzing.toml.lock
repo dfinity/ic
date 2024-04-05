@@ -3074,7 +3074,6 @@ dependencies = [
  "slog-json",
  "slog-scope",
  "slog-term",
- "slog_derive",
  "socket2 0.5.6",
  "ssh2",
  "strum 0.26.2",
@@ -9820,17 +9819,6 @@ dependencies = [
  "term 0.7.0",
  "thread_local",
  "time",
-]
-
-[[package]]
-name = "slog_derive"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a945ec7f7ce853e89ffa36be1e27dce9a43e82ff9093bf3461c30d5da74ed11b"
-dependencies = [
- "proc-macro2 1.0.76",
- "quote 1.0.35",
- "syn 1.0.109",
 ]
 
 [[package]]

@@ -3457,22 +3457,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7fcaabb2fef8c910e7f4c7ce9f67a1283a1715879a7c230ca9d6d1ae31f16d91"
 
 [[package]]
-name = "elastic_common_schema"
-version = "0.9.0"
-dependencies = [
- "anyhow",
- "chrono",
- "erased-serde",
- "hyper 0.14.26",
- "serde",
- "serde_json",
- "slog",
- "slog-json",
- "slog_derive",
- "uuid 1.6.1",
-]
-
-[[package]]
 name = "elliptic-curve"
 version = "0.13.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -17699,17 +17683,6 @@ dependencies = [
  "term 0.7.0",
  "thread_local",
  "time",
-]
-
-[[package]]
-name = "slog_derive"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a945ec7f7ce853e89ffa36be1e27dce9a43e82ff9093bf3461c30d5da74ed11b"
-dependencies = [
- "proc-macro2 1.0.75",
- "quote 1.0.35",
- "syn 1.0.109",
 ]
 
 [[package]]

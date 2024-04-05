@@ -1,5 +1,5 @@
 {
-  "checksum": "434f76f9f4fb8c2995fa83ffa2e8156738883bb52a891a723f53acbb7e46a405",
+  "checksum": "41fe8318ef50446ad74aa5a4e5164f8e44fc9abdcf37ac57cf6125f9fcbd82b4",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -15680,10 +15680,6 @@
             {
               "id": "serde_derive 1.0.195",
               "target": "serde_derive"
-            },
-            {
-              "id": "slog_derive 0.2.0",
-              "target": "slog_derive"
             },
             {
               "id": "strum_macros 0.26.2",
@@ -50404,53 +50400,6 @@
       },
       "license": "MPL-2.0 OR MIT OR Apache-2.0"
     },
-    "slog_derive 0.2.0": {
-      "name": "slog_derive",
-      "version": "0.2.0",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/slog_derive/0.2.0/download",
-          "sha256": "a945ec7f7ce853e89ffa36be1e27dce9a43e82ff9093bf3461c30d5da74ed11b"
-        }
-      },
-      "targets": [
-        {
-          "ProcMacro": {
-            "crate_name": "slog_derive",
-            "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        }
-      ],
-      "library_target_name": "slog_derive",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "proc-macro2 1.0.76",
-              "target": "proc_macro2"
-            },
-            {
-              "id": "quote 1.0.35",
-              "target": "quote"
-            },
-            {
-              "id": "syn 1.0.109",
-              "target": "syn"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.2.0"
-      },
-      "license": "MIT/Apache-2.0"
-    },
     "slotmap 1.0.6": {
       "name": "slotmap",
       "version": "1.0.6",
@@ -65614,7 +65563,6 @@
     "slog-json 2.6.1",
     "slog-scope 4.4.0",
     "slog-term 2.9.0",
-    "slog_derive 0.2.0",
     "socket2 0.5.6",
     "ssh2 0.9.4",
     "strum 0.26.2",
