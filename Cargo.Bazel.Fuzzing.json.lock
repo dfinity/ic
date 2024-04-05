@@ -1,5 +1,5 @@
 {
-  "checksum": "6352bbd351f5763b5e01f1f6ad3a8f25d62ca115143c34fce886faacef0f79dd",
+  "checksum": "434f76f9f4fb8c2995fa83ffa2e8156738883bb52a891a723f53acbb7e46a405",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -269,7 +269,7 @@
               "target": "actix_utils"
             },
             {
-              "id": "ahash 0.8.3",
+              "id": "ahash 0.8.7",
               "target": "ahash"
             },
             {
@@ -798,7 +798,7 @@
               "target": "actix_utils"
             },
             {
-              "id": "ahash 0.8.3",
+              "id": "ahash 0.8.7",
               "target": "ahash"
             },
             {
@@ -1163,13 +1163,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "ahash 0.7.6": {
+    "ahash 0.7.8": {
       "name": "ahash",
-      "version": "0.7.6",
+      "version": "0.7.8",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ahash/0.7.6/download",
-          "sha256": "fcb51a0695d8f838b1ee009b3fbf66bda078cd64590202a864a8f3e8c4315c47"
+          "url": "https://static.crates.io/crates/ahash/0.7.8/download",
+          "sha256": "891477e0c6a8957309ee5c45a6368af3ae14bb510732d2684ffa19af310920f9"
         }
       },
       "targets": [
@@ -1200,7 +1200,7 @@
         "deps": {
           "common": [
             {
-              "id": "ahash 0.7.6",
+              "id": "ahash 0.7.8",
               "target": "build_script_build"
             }
           ],
@@ -1220,7 +1220,7 @@
           }
         },
         "edition": "2018",
-        "version": "0.7.6"
+        "version": "0.7.8"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -1238,13 +1238,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "ahash 0.8.3": {
+    "ahash 0.8.7": {
       "name": "ahash",
-      "version": "0.8.3",
+      "version": "0.8.7",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ahash/0.8.3/download",
-          "sha256": "2c99f64d1e06488f620f932677e24bc6e2897582980441ae90a671415bd7ec2f"
+          "url": "https://static.crates.io/crates/ahash/0.8.7/download",
+          "sha256": "77c3a9648d43b9cd48db467b3f87fdd6e146bcc88ab0180006cef2179fe11d01"
         }
       },
       "targets": [
@@ -1284,7 +1284,7 @@
         "deps": {
           "common": [
             {
-              "id": "ahash 0.8.3",
+              "id": "ahash 0.8.7",
               "target": "build_script_build"
             },
             {
@@ -1294,6 +1294,10 @@
             {
               "id": "getrandom 0.2.10",
               "target": "getrandom"
+            },
+            {
+              "id": "zerocopy 0.7.32",
+              "target": "zerocopy"
             }
           ],
           "selects": {
@@ -1306,7 +1310,7 @@
           }
         },
         "edition": "2018",
-        "version": "0.8.3"
+        "version": "0.8.7"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -7808,7 +7812,7 @@
         "deps": {
           "common": [
             {
-              "id": "ahash 0.8.3",
+              "id": "ahash 0.8.7",
               "target": "ahash"
             },
             {
@@ -7873,7 +7877,7 @@
         "deps": {
           "common": [
             {
-              "id": "ahash 0.8.3",
+              "id": "ahash 0.8.7",
               "target": "ahash"
             },
             {
@@ -12605,13 +12609,13 @@
       },
       "license": "Unlicense/MIT"
     },
-    "curve25519-dalek 4.1.1": {
+    "curve25519-dalek 4.1.2": {
       "name": "curve25519-dalek",
-      "version": "4.1.1",
+      "version": "4.1.2",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/curve25519-dalek/4.1.1/download",
-          "sha256": "e89b8c6a2e4b1f45971ad09761aafb85514a84744b67a95e32c3cc1352d1f65c"
+          "url": "https://static.crates.io/crates/curve25519-dalek/4.1.2/download",
+          "sha256": "0a677b8922c94e01bdbb12126b0bc852f00447528dee1782229af9c720c3f348"
         }
       },
       "targets": [
@@ -12656,7 +12660,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "curve25519-dalek 4.1.1",
+              "id": "curve25519-dalek 4.1.2",
               "target": "build_script_build"
             },
             {
@@ -12699,7 +12703,7 @@
             ]
           }
         },
-        "version": "4.1.1"
+        "version": "4.1.2"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -14563,7 +14567,7 @@
               "target": "csv"
             },
             {
-              "id": "curve25519-dalek 4.1.1",
+              "id": "curve25519-dalek 4.1.2",
               "target": "curve25519_dalek"
             },
             {
@@ -16465,7 +16469,7 @@
         "deps": {
           "common": [
             {
-              "id": "curve25519-dalek 4.1.1",
+              "id": "curve25519-dalek 4.1.2",
               "target": "curve25519_dalek"
             },
             {
@@ -20889,7 +20893,7 @@
         "deps": {
           "common": [
             {
-              "id": "ahash 0.7.6",
+              "id": "ahash 0.7.8",
               "target": "ahash"
             }
           ],
@@ -20936,7 +20940,7 @@
         "deps": {
           "common": [
             {
-              "id": "ahash 0.8.3",
+              "id": "ahash 0.8.7",
               "target": "ahash"
             }
           ],
@@ -20985,7 +20989,7 @@
         "deps": {
           "common": [
             {
-              "id": "ahash 0.8.3",
+              "id": "ahash 0.8.7",
               "target": "ahash"
             },
             {
@@ -26057,7 +26061,7 @@
         "deps": {
           "common": [
             {
-              "id": "ahash 0.8.3",
+              "id": "ahash 0.8.7",
               "target": "ahash"
             },
             {
@@ -28326,7 +28330,7 @@
         "deps": {
           "common": [
             {
-              "id": "ahash 0.8.3",
+              "id": "ahash 0.8.7",
               "target": "ahash"
             },
             {
@@ -30208,34 +30212,26 @@
         ],
         "crate_features": {
           "common": [
+            "elf",
+            "errno",
             "general",
             "ioctl",
             "no_std"
           ],
           "selects": {
             "aarch64-unknown-linux-gnu": [
-              "elf",
-              "errno",
               "prctl"
             ],
             "aarch64-unknown-nixos-gnu": [
-              "elf",
-              "errno",
               "prctl"
             ],
             "arm-unknown-linux-gnueabi": [
-              "elf",
-              "errno",
               "prctl"
             ],
             "armv7-unknown-linux-gnueabi": [
-              "elf",
-              "errno",
               "prctl"
             ],
             "i686-unknown-linux-gnu": [
-              "elf",
-              "errno",
               "prctl"
             ],
             "powerpc-unknown-linux-gnu": [
@@ -30245,13 +30241,9 @@
               "prctl"
             ],
             "x86_64-unknown-linux-gnu": [
-              "elf",
-              "errno",
               "prctl"
             ],
             "x86_64-unknown-nixos-gnu": [
-              "elf",
-              "errno",
               "prctl"
             ]
           }
@@ -35004,101 +34996,7 @@
             "race",
             "std"
           ],
-          "selects": {
-            "aarch64-apple-darwin": [
-              "unstable"
-            ],
-            "aarch64-apple-ios": [
-              "unstable"
-            ],
-            "aarch64-apple-ios-sim": [
-              "unstable"
-            ],
-            "aarch64-fuchsia": [
-              "unstable"
-            ],
-            "aarch64-linux-android": [
-              "unstable"
-            ],
-            "aarch64-pc-windows-msvc": [
-              "unstable"
-            ],
-            "aarch64-unknown-linux-gnu": [
-              "unstable"
-            ],
-            "aarch64-unknown-nixos-gnu": [
-              "unstable"
-            ],
-            "arm-unknown-linux-gnueabi": [
-              "unstable"
-            ],
-            "armv7-linux-androideabi": [
-              "unstable"
-            ],
-            "armv7-unknown-linux-gnueabi": [
-              "unstable"
-            ],
-            "i686-apple-darwin": [
-              "unstable"
-            ],
-            "i686-linux-android": [
-              "unstable"
-            ],
-            "i686-pc-windows-msvc": [
-              "unstable"
-            ],
-            "i686-unknown-freebsd": [
-              "unstable"
-            ],
-            "i686-unknown-linux-gnu": [
-              "unstable"
-            ],
-            "powerpc-unknown-linux-gnu": [
-              "unstable"
-            ],
-            "riscv32imc-unknown-none-elf": [
-              "unstable"
-            ],
-            "riscv64gc-unknown-none-elf": [
-              "unstable"
-            ],
-            "s390x-unknown-linux-gnu": [
-              "unstable"
-            ],
-            "wasm32-unknown-unknown": [
-              "unstable"
-            ],
-            "wasm32-wasi": [
-              "unstable"
-            ],
-            "x86_64-apple-darwin": [
-              "unstable"
-            ],
-            "x86_64-apple-ios": [
-              "unstable"
-            ],
-            "x86_64-fuchsia": [
-              "unstable"
-            ],
-            "x86_64-linux-android": [
-              "unstable"
-            ],
-            "x86_64-pc-windows-msvc": [
-              "unstable"
-            ],
-            "x86_64-unknown-freebsd": [
-              "unstable"
-            ],
-            "x86_64-unknown-linux-gnu": [
-              "unstable"
-            ],
-            "x86_64-unknown-nixos-gnu": [
-              "unstable"
-            ],
-            "x86_64-unknown-none": [
-              "unstable"
-            ]
-          }
+          "selects": {}
         },
         "edition": "2021",
         "version": "1.19.0"
@@ -47186,7 +47084,7 @@
         "deps": {
           "common": [
             {
-              "id": "ahash 0.8.3",
+              "id": "ahash 0.8.7",
               "target": "ahash"
             },
             {
@@ -63840,6 +63738,100 @@
       },
       "license": "MIT OR Apache-2.0"
     },
+    "zerocopy 0.7.32": {
+      "name": "zerocopy",
+      "version": "0.7.32",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/zerocopy/0.7.32/download",
+          "sha256": "74d4d3961e53fa4c9a25a8637fc2bfaf2595b3d3ae34875568a5cf64787716be"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "zerocopy",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "zerocopy",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "simd"
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "proc_macro_deps": {
+          "common": [],
+          "selects": {
+            "cfg(any())": [
+              {
+                "id": "zerocopy-derive 0.7.32",
+                "target": "zerocopy_derive"
+              }
+            ]
+          }
+        },
+        "version": "0.7.32"
+      },
+      "license": "BSD-2-Clause OR Apache-2.0 OR MIT"
+    },
+    "zerocopy-derive 0.7.32": {
+      "name": "zerocopy-derive",
+      "version": "0.7.32",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/zerocopy-derive/0.7.32/download",
+          "sha256": "9ce1b18ccd8e73a9321186f97e46f9f04b778851177567b1975109d26a08d2a6"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "zerocopy_derive",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "zerocopy_derive",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.76",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.35",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.48",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.7.32"
+      },
+      "license": "BSD-2-Clause OR Apache-2.0 OR MIT"
+    },
     "zeroize 1.7.0": {
       "name": "zeroize",
       "version": "1.7.0",
@@ -64478,6 +64470,7 @@
       "x86_64-unknown-linux-gnu",
       "x86_64-unknown-nixos-gnu"
     ],
+    "cfg(any())": [],
     "cfg(any(rustix_use_libc, miri, not(all(target_os = \"linux\", any(target_arch = \"x86\", all(target_arch = \"x86_64\", target_pointer_width = \"64\"), all(target_endian = \"little\", any(target_arch = \"arm\", all(target_arch = \"aarch64\", target_pointer_width = \"64\"), target_arch = \"powerpc64\", target_arch = \"riscv64\", target_arch = \"mips\", target_arch = \"mips64\")))))))": [
       "aarch64-apple-darwin",
       "aarch64-apple-ios",
@@ -65416,7 +65409,7 @@
     "crossbeam 0.8.4",
     "crossbeam-channel 0.5.11",
     "csv 1.3.0",
-    "curve25519-dalek 4.1.1",
+    "curve25519-dalek 4.1.2",
     "cvt 0.1.2",
     "dashmap 5.5.3",
     "derive_more 0.99.8-alpha.0",
