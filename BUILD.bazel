@@ -35,11 +35,6 @@ alias(
 )
 
 alias(
-    name = "ruff-lint",
-    actual = "//pre-commit:ruff-lint",
-)
-
-alias(
     name = "protobuf-format",
     actual = "//pre-commit:protobuf-format",
 )

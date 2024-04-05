@@ -17,8 +17,6 @@ def sanitize_external_crates(sanitizers_enabled):
         "bincode": FUZZING_ANNOTATION,
     }
 
-BITCOIN_CANISTER_REV = "62a71e47c491fb842ccc257b1c675651501f4b82"  # tag = "release/2024-01-22"
-
 ICRC_1_REV = "26a80d777e079644cd69e883e18dad1a201f5b1a"
 
 BUILD_INFO_REV = "701a696844fba5c87df162fbbc1ccef96f27c9d7"
@@ -153,14 +151,14 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "async-trait": crate.spec(
                 version = "^0.1.73",
             ),
-            "axum": crate.spec(
+            "axum_0_6_1": crate.spec(
+                package = "axum",
                 version = "^0.6.1",
                 features = [
                     "headers",
                 ],
             ),
-            "axum_0_7_0": crate.spec(
-                package = "axum",
+            "axum": crate.spec(
                 version = "^0.7.4",
             ),
             "axum-server_0_6_0": crate.spec(
@@ -555,16 +553,13 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "ic-btc-interface": crate.spec(
-                git = "https://github.com/dfinity/bitcoin-canister",
-                rev = BITCOIN_CANISTER_REV,
+                version = "^0.2.0",
             ),
             "ic-btc-validation": crate.spec(
-                git = "https://github.com/dfinity/bitcoin-canister",
-                rev = "0e996988693f2d55fc9533c44dc20ae5310a1894",  # TODO: replace with BITCOIN_CANISTER_REV once the replica supports it.
+                version = "^0.1.0",
             ),
             "ic-btc-test-utils": crate.spec(
-                git = "https://github.com/dfinity/bitcoin-canister",
-                rev = BITCOIN_CANISTER_REV,
+                version = "^0.1.0",
             ),
             "ic-canister-log": crate.spec(
                 version = "^0.2.0",
@@ -631,6 +626,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "indoc": crate.spec(
                 version = "^1.0.9",
+            ),
+            "inferno": crate.spec(
+                version = "^0.11.19",
             ),
             "insta": crate.spec(
                 version = "^1.31.0",
@@ -1288,7 +1286,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.1",
             ),
             "tower-request-id": crate.spec(
-                version = "^0.2.1",
+                version = "^0.3.0",
             ),
             "tower-test": crate.spec(
                 version = "^0.4.0",
@@ -1298,6 +1296,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "tracing-appender": crate.spec(
                 version = "^0.2.3",
+            ),
+            "tracing-flame": crate.spec(
+                version = "^0.2.0",
             ),
             "tracing-core": crate.spec(
                 version = "^0.1.32",

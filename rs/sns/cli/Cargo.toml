@@ -20,6 +20,7 @@ candid = { workspace = true }
 clap = { workspace = true }
 hex = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
+ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
 ic-nervous-system-humanize = { path = "../../nervous_system/humanize" }
@@ -37,6 +38,7 @@ serde = { workspace = true }
 serde_yaml = { workspace = true }
 json-patch = "0.2.6"
 tempfile = "3.1.0"
+thiserror = { workspace = true }
 
 [dev-dependencies]
 lazy_static = "1.4.0"

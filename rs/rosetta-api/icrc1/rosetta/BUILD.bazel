@@ -29,8 +29,7 @@ DEPENDENCIES = [
     "@crate_index//:rand",
     "@crate_index//:lazy_static",
     "@crate_index//:url",
-    "@crate_index//:http",
-    "@crate_index//:tower-http",
+    "@crate_index//:tower_http_0_5_1",
     "@crate_index//:ic-certification",
     "@crate_index//:tower-request-id",
     "@crate_index//:tracing",
@@ -161,6 +160,7 @@ rust_test_suite_with_extra_srcs(
     ],
     data = LOCAL_REPLICA_DATA + glob([
         "tests/*.json",
+        "tests/*.ros",
     ]) + [
         "@rosetta-cli//:rosetta-cli",
     ],

@@ -1,6 +1,7 @@
 use crate::{
+    neuron::types::Neuron,
     neuron_store::NeuronStore,
-    pb::v1::{Neuron, Topic},
+    pb::v1::Topic,
     storage::{with_stable_neuron_indexes, with_stable_neuron_store},
 };
 
@@ -688,13 +689,13 @@ mod tests {
     use crate::{
         pb::v1::{
             neuron::{DissolveState, Followees},
-            KnownNeuronData, Neuron,
+            KnownNeuronData,
         },
         storage::{with_stable_neuron_indexes_mut, with_stable_neuron_store_mut},
     };
 
     thread_local! {
-        static NEXT_TEST_NEURON_ID: RefCell<u64> = RefCell::new(1);
+        static NEXT_TEST_NEURON_ID: RefCell<u64> = const { RefCell::new(1) };
     }
 
     lazy_static! {

@@ -9,7 +9,7 @@ documentation.workspace = true
 [dependencies]
 askama = { workspace = true }
 async-trait = "0.1.68"
-axum = { version = "0.7.0", features = ["macros"] }
+axum = { workspace = true }
 bytes = { workspace = true }
 byte-unit = "4.0.14"
 cfg-if = "1.0.0"
@@ -34,6 +34,7 @@ ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../../interfaces/state_manager" }
 ic-logger = { path = "../../monitoring/logger" }
+ic-tracing = { path = "../../monitoring/tracing" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-pprof = { path = "../../monitoring/pprof" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
@@ -42,6 +43,7 @@ ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-replicated-state = { path = "../../replicated_state" }
 ic-types = { path = "../../types/types" }
 ic-validator = { path = "../../validator" }
+inferno = "0.11.19"
 prometheus = { workspace = true }
 prost = { workspace = true }
 rand = "0.8.3"
@@ -57,6 +59,8 @@ tokio-io-timeout = "1.2.0"
 tokio-rustls = { workspace = true }
 tower = { workspace = true }
 tower-http = { version = "0.5.1", features = ["limit", "cors"] }
+tracing-flame = "0.2.0"
+tracing-subscriber = { workspace = true }
 url = "2.1.1"
 
 

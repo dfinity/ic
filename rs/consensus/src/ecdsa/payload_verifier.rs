@@ -62,12 +62,18 @@ use std::convert::TryFrom;
 
 #[allow(clippy::enum_variant_names)]
 #[derive(Debug)]
+// The fields are only read by the `Debug` implementation.
+// The `dead_code` lint ignores `Debug` impls, see: https://github.com/rust-lang/rust/issues/88900.
+#[allow(dead_code)]
 pub(crate) enum TransientError {
     RegistryClientError(RegistryClientError),
     StateManagerError(StateManagerError),
 }
 
 #[derive(Debug)]
+// The fields are only read by the `Debug` implementation.
+// The `dead_code` lint ignores `Debug` impls, see: https://github.com/rust-lang/rust/issues/88900.
+#[allow(dead_code)]
 pub(crate) enum PermanentError {
     // wrapper of other errors
     UnexpectedSummaryPayload(EcdsaPayloadError),

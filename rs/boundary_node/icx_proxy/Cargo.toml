@@ -24,7 +24,7 @@ path = "src/lib.rs"
 anyhow = { workspace = true }
 arc-swap = "1"
 async-trait = "0.1"
-axum = { version = "^0.7.4" }
+axum = { workspace = true }
 axum-server = "0.6.0"
 bytes = { workspace = true }
 candid = { workspace = true }

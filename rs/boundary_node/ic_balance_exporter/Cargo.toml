@@ -13,7 +13,7 @@ path = "src/main.rs"
 [dependencies]
 anyhow = { workspace = true }
 async-trait = "0.1.53"
-axum = "^0.7.4"
+axum = { workspace = true }
 candid = { workspace = true }
 clap = { version = "3.2.25", features = ["derive"] }
 dashmap = "5.3.4"

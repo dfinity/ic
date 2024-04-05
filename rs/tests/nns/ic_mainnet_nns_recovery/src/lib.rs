@@ -718,6 +718,7 @@ fn fetch_mainnet_ic_replay(env: TestEnv) {
     let mut gz = GzDecoder::new(&ic_replay_gz_file);
     let mut ic_replay_file = OpenOptions::new()
         .create(true)
+        .truncate(false)
         .write(true)
         .mode(0o755)
         .open(ic_replay_path.clone())
@@ -770,6 +771,7 @@ fn fetch_mainnet_ic_recovery(env: TestEnv) {
     let mut gz = GzDecoder::new(&ic_recovery_gz_file);
     let mut ic_recovery_file = OpenOptions::new()
         .create(true)
+        .truncate(false)
         .write(true)
         .mode(0o755)
         .open(ic_recovery_path.clone())

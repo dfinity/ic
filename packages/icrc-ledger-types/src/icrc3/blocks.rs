@@ -1,3 +1,4 @@
+use crate::icrc::generic_value::ICRC3Value;
 use crate::icrc3::archive::ArchivedRange;
 use crate::icrc3::archive::QueryBlockArchiveFn;
 use crate::{icrc::generic_value::Value, icrc1::transfer::BlockIndex};
@@ -5,8 +6,13 @@ use candid::{CandidType, Deserialize, Nat};
 use serde::Serialize;
 use serde_bytes::ByteBuf;
 
-pub type GenericBlock = Value;
+use super::archive::QueryArchiveFn;
 
+/// Deprecated, use `ICRC3GenericBlock` instead
+pub type GenericBlock = Value;
+pub type ICRC3GenericBlock = ICRC3Value;
+
+/// Deprecated, use `GetBlocksResult` instead
 #[derive(Debug, CandidType, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct GetBlocksResponse {
     pub first_index: BlockIndex,
@@ -15,6 +21,26 @@ pub struct GetBlocksResponse {
     pub blocks: Vec<GenericBlock>,
     pub archived_blocks: Vec<ArchivedRange<QueryBlockArchiveFn>>,
 }
+
+#[derive(Debug, CandidType, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct BlockWithId {
+    pub id: Nat,
+    pub block: ICRC3GenericBlock,
+}
+
+#[derive(Debug, CandidType, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ArchivedBlocks {
+    pub args: Vec<GetBlocksRequest>,
+    pub callback: QueryArchiveFn<Vec<GetBlocksRequest>, GetBlocksResult>,
+}
+
+#[derive(Debug, CandidType, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct GetBlocksResult {
+    pub log_length: Nat,
+    pub blocks: Vec<BlockWithId>,
+    pub archived_blocks: Vec<ArchivedBlocks>,
+}
+
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct GetBlocksRequest {
     pub start: BlockIndex,
@@ -48,8 +74,21 @@ impl GetBlocksRequest {
     }
 }
 
+/// Deprecated, use `ICRC3DataCertificate` instead"
 #[derive(Debug, CandidType, Serialize, Deserialize)]
 pub struct DataCertificate {
     pub certificate: Option<serde_bytes::ByteBuf>,
     pub hash_tree: serde_bytes::ByteBuf,
+}
+
+#[derive(Debug, CandidType, Serialize, Deserialize)]
+pub struct ICRC3DataCertificate {
+    pub certificate: serde_bytes::ByteBuf,
+    pub hash_tree: serde_bytes::ByteBuf,
+}
+
+#[derive(Debug, CandidType, Serialize, Deserialize)]
+pub struct SupportedBlockType {
+    pub block_type: String,
+    pub url: String,
 }

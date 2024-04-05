@@ -5,8 +5,10 @@ use crate::pocket_ic::{AdvanceTimeAndTick, PocketIc};
 use crate::InstanceId;
 use crate::{OpId, Operation};
 use base64;
+use ic_http_endpoints_public::cors_layer;
 use ic_types::{CanisterId, SubnetId};
-use ic_utils::thread::JoinOnDrop;
+use ic_utils_thread::JoinOnDrop;
+use pocket_ic::common::rest::{HttpGatewayBackend, HttpGatewayConfig};
 use pocket_ic::{ErrorCode, UserError, WasmResult};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -21,7 +23,7 @@ use tokio::{
     task::{spawn, spawn_blocking, JoinHandle},
     time::{self, sleep},
 };
-use tracing::trace;
+use tracing::{info, trace};
 
 // The maximum wait time for a computation to finish synchronously.
 const DEFAULT_SYNC_WAIT_DURATION: Duration = Duration::from_secs(10);
@@ -81,12 +83,17 @@ pub struct ApiState {
     // PocketIC instance to a background worker and drop it there.
     drop_sender: mpsc::UnboundedSender<PocketIc>,
     _drop_worker_handle: JoinOnDrop<()>,
+    // PocketIC server port
+    port: Option<u16>,
+    // status of HTTP gateway (true = running, false = stopped)
+    http_gateways: Arc<RwLock<Vec<bool>>>,
 }
 
 #[derive(Default)]
 pub struct PocketIcApiStateBuilder {
     initial_instances: Vec<PocketIc>,
     sync_wait_time: Option<Duration>,
+    port: Option<u16>,
 }
 
 impl PocketIcApiStateBuilder {
@@ -99,6 +106,13 @@ impl PocketIcApiStateBuilder {
     pub fn with_sync_wait_time(self, sync_wait_time: Duration) -> Self {
         Self {
             sync_wait_time: Some(sync_wait_time),
+            ..self
+        }
+    }
+
+    pub fn with_port(self, port: u16) -> Self {
+        Self {
+            port: Some(port),
             ..self
         }
     }
@@ -146,6 +160,8 @@ impl PocketIcApiStateBuilder {
             sync_wait_time,
             drop_sender,
             _drop_worker_handle: JoinOnDrop::new(drop_handle),
+            port: self.port,
+            http_gateways: Arc::new(RwLock::new(Vec::new())),
         })
     }
 }
@@ -350,6 +366,175 @@ impl ApiState {
         if let Some(t) = progress_thread.take() {
             t.sender.send(()).await.unwrap();
             t.handle.await.unwrap();
+        }
+    }
+
+    pub async fn create_http_gateway(
+        &self,
+        http_gateway_config: HttpGatewayConfig,
+    ) -> (InstanceId, u16) {
+        use crate::state_api::routes::verify_cbor_content_header;
+        use axum::extract::{DefaultBodyLimit, Path, State};
+        use axum::handler::Handler;
+        use axum::routing::{get, post};
+        use axum::Router;
+        use http_body_util::Full;
+        use hyper::body::{Bytes, Incoming};
+        use hyper::header::CONTENT_TYPE;
+        use hyper::{Method, Request, Response, StatusCode, Uri};
+        use hyper_util::client::legacy::{connect::HttpConnector, Client};
+        use icx_proxy::{agent_handler, AppState, DnsCanisterConfig, ResolverState, Validator};
+        use std::str::FromStr;
+
+        async fn handler_status(
+            State(replica_url): State<String>,
+            bytes: Bytes,
+        ) -> (StatusCode, Response<Incoming>) {
+            let client =
+                Client::builder(hyper_util::rt::TokioExecutor::new()).build(HttpConnector::new());
+            let url = format!("{}/api/v2/status", replica_url);
+            let req = Request::builder()
+                .uri(url)
+                .header(CONTENT_TYPE, "application/cbor")
+                .body(Full::<Bytes>::new(bytes))
+                .unwrap();
+            let resp = client.request(req).await.unwrap();
+
+            (resp.status(), resp)
+        }
+
+        async fn handler_api_v2_canister(
+            replica_url: String,
+            effective_canister_id: CanisterId,
+            endpoint: &str,
+            bytes: Bytes,
+        ) -> (StatusCode, Response<Incoming>) {
+            let client =
+                Client::builder(hyper_util::rt::TokioExecutor::new()).build(HttpConnector::new());
+            let url = format!(
+                "{}/api/v2/canister/{}/{}",
+                replica_url, effective_canister_id, endpoint
+            );
+            let req = Request::builder()
+                .method(Method::POST)
+                .uri(url)
+                .header(CONTENT_TYPE, "application/cbor")
+                .body(Full::<Bytes>::new(bytes))
+                .unwrap();
+            let resp = client.request(req).await.unwrap();
+
+            (resp.status(), resp)
+        }
+
+        async fn handler_call(
+            State(replica_url): State<String>,
+            Path(effective_canister_id): Path<CanisterId>,
+            bytes: Bytes,
+        ) -> (StatusCode, Response<Incoming>) {
+            handler_api_v2_canister(replica_url, effective_canister_id, "call", bytes).await
+        }
+
+        async fn handler_query(
+            State(replica_url): State<String>,
+            Path(effective_canister_id): Path<CanisterId>,
+            bytes: Bytes,
+        ) -> (StatusCode, Response<Incoming>) {
+            handler_api_v2_canister(replica_url, effective_canister_id, "query", bytes).await
+        }
+
+        async fn handler_read_state(
+            State(replica_url): State<String>,
+            Path(effective_canister_id): Path<CanisterId>,
+            bytes: Bytes,
+        ) -> (StatusCode, Response<Incoming>) {
+            handler_api_v2_canister(replica_url, effective_canister_id, "read_state", bytes).await
+        }
+
+        let port = http_gateway_config.listen_at.unwrap_or_default();
+        let addr = format!("127.0.0.1:{}", port);
+        let listener = tokio::net::TcpListener::bind(&addr)
+            .await
+            .unwrap_or_else(|_| panic!("Failed to start HTTP gateway on port {}", port));
+        let real_port = listener.local_addr().unwrap().port();
+
+        let mut http_gateways = self.http_gateways.write().await;
+        http_gateways.push(true);
+        let instance_id = http_gateways.len() - 1;
+        drop(http_gateways);
+
+        let http_gateways = self.http_gateways.clone();
+        let shutdown_signal = async move {
+            loop {
+                let guard = http_gateways.read().await;
+                if !guard[instance_id] {
+                    break;
+                }
+                drop(guard);
+                tokio::time::sleep(Duration::from_secs(1)).await;
+            }
+        };
+        let pocket_ic_server_port = self.port.unwrap();
+        spawn(async move {
+            let replica_url = match http_gateway_config.forward_to {
+                HttpGatewayBackend::Replica(replica_url) => replica_url,
+                HttpGatewayBackend::PocketIcInstance(instance_id) => {
+                    format!(
+                        "http://localhost:{}/instances/{}/",
+                        pocket_ic_server_port, instance_id
+                    )
+                }
+            };
+            let agent = ic_agent::Agent::builder()
+                .with_url(replica_url.clone())
+                .build()
+                .unwrap();
+            agent.fetch_root_key().await.unwrap();
+            let replicas = vec![(agent, Uri::from_str(&replica_url).unwrap())];
+            let aliases: Vec<String> = vec![];
+            let suffixes: Vec<String> = vec!["localhost".to_string()];
+            let resolver = ResolverState {
+                dns: DnsCanisterConfig::new(aliases, suffixes).unwrap(),
+            };
+            let validator = Validator::default();
+            let app_state = AppState::new_for_testing(replicas, resolver, validator);
+            let fallback_handler = agent_handler.with_state(app_state);
+
+            let router = Router::new()
+                .route("/api/v2/status", get(handler_status))
+                .route(
+                    "/api/v2/canister/:ecid/call",
+                    post(handler_call).layer(axum::middleware::from_fn(verify_cbor_content_header)),
+                )
+                .route(
+                    "/api/v2/canister/:ecid/query",
+                    post(handler_query)
+                        .layer(axum::middleware::from_fn(verify_cbor_content_header)),
+                )
+                .route(
+                    "/api/v2/canister/:ecid/read_state",
+                    post(handler_read_state)
+                        .layer(axum::middleware::from_fn(verify_cbor_content_header)),
+                )
+                .fallback_service(fallback_handler)
+                .layer(DefaultBodyLimit::disable())
+                .layer(cors_layer())
+                .with_state(replica_url.trim_end_matches('/').to_string())
+                .into_make_service();
+
+            axum::serve(listener, router)
+                .with_graceful_shutdown(shutdown_signal)
+                .await
+                .unwrap();
+
+            info!("Terminating HTTP gateway.");
+        });
+        (instance_id, real_port)
+    }
+
+    pub async fn stop_http_gateway(&self, instance_id: InstanceId) {
+        let mut http_gateways = self.http_gateways.write().await;
+        if instance_id < http_gateways.len() {
+            http_gateways[instance_id] = false;
         }
     }
 

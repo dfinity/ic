@@ -15,6 +15,9 @@ use ic_management_canister_types::{
 use ic_replicated_state::NetworkTopology;
 
 #[derive(Debug)]
+#[allow(dead_code)]
+// The fields are only read by the `Debug` implementation.
+// The `dead_code` lint ignores `Debug` impls, see: https://github.com/rust-lang/rust/issues/88900.
 pub(super) enum ResolveDestinationError {
     UserError(UserError),
     MethodNotFound(String),

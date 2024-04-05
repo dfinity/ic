@@ -355,7 +355,12 @@ impl Display for SaveToErrors {
 /// Ensure that a path to a file exists (by creating it if it does not) and is writeable.
 fn ensure_file_exists_and_is_writeable(path: &Path) -> Result<(), SaveToErrors> {
     // Make sure the file is writeable. Create it if it does not exist.
-    match OpenOptions::new().create(true).write(true).open(path) {
+    match OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(path)
+    {
         Ok(_) => (),
         Err(e) => {
             return Err(SaveToErrors::FileOpenFailed(

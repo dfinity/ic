@@ -2,11 +2,11 @@ use crate::{
     governance::{
         Environment, TimeWarp, LOG_PREFIX, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
     },
-    neuron::neuron_id_range_to_u64_range,
+    neuron::{neuron_id_range_to_u64_range, types::Neuron},
     pb::v1::{
         governance::{followers_map::Followers, FollowersMap},
         governance_error::ErrorType,
-        GovernanceError, Neuron, NeuronState, Topic,
+        GovernanceError, Neuron as NeuronProto, NeuronState, Topic,
     },
     storage::{
         neuron_indexes::{CorruptedNeuronIndexes, NeuronIndex},
@@ -31,6 +31,9 @@ use std::{
     fmt::{Debug, Display, Formatter},
     ops::{Deref, RangeBounds},
 };
+
+pub mod metrics;
+pub use metrics::NeuronMetrics;
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum NeuronStoreError {
@@ -175,7 +178,7 @@ enum StorageLocation {
     Stable,
 }
 
-pub type NeuronStoreState = (BTreeMap<u64, Neuron>, HashMap<i32, FollowersMap>);
+pub type NeuronStoreState = (BTreeMap<u64, NeuronProto>, HashMap<i32, FollowersMap>);
 
 fn proto_to_heap_topic_followee_index(
     proto: HashMap<i32, FollowersMap>,
@@ -327,10 +330,13 @@ impl NeuronStore {
     // topic_followee_index).
     pub fn new_restored(state: NeuronStoreState) -> Self {
         let clock = Box::new(IcClock::new());
-        let (heap_neurons, topic_followee_index) = state;
+        let (neurons, topic_followee_index) = state;
 
         Self {
-            heap_neurons,
+            heap_neurons: neurons
+                .into_iter()
+                .map(|(id, proto)| (id, proto.into()))
+                .collect(),
             topic_followee_index: proto_to_heap_topic_followee_index(topic_followee_index),
             clock,
         }
@@ -339,7 +345,10 @@ impl NeuronStore {
     /// Takes the neuron store state which should be persisted through upgrades.
     pub fn take(self) -> NeuronStoreState {
         (
-            self.heap_neurons,
+            self.heap_neurons
+                .into_iter()
+                .map(|(id, neuron)| (id, neuron.into()))
+                .collect(),
             heap_topic_followee_index_to_proto(self.topic_followee_index),
         )
     }
@@ -380,8 +389,11 @@ impl NeuronStore {
 
     /// Clones all the neurons. This is only used for testing.
     /// TODO(NNS-2474) clean it up after NNSState stop using GovernanceProto.
-    pub fn clone_neurons(&self) -> BTreeMap<u64, Neuron> {
-        self.heap_neurons.clone()
+    pub fn clone_neurons(&self) -> BTreeMap<u64, NeuronProto> {
+        self.heap_neurons
+            .iter()
+            .map(|(id, neuron)| (*id, neuron.clone().into()))
+            .collect()
     }
 
     pub fn clone_topic_followee_index(&self) -> HashMap<i32, FollowersMap> {

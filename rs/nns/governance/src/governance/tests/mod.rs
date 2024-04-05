@@ -1,8 +1,9 @@
 use super::*;
 use crate::{
+    neuron::types::Neuron,
     pb::v1::{
         governance::{followers_map::Followers, FollowersMap},
-        Neuron,
+        Neuron as NeuronProto,
     },
     test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
 };
@@ -886,7 +887,7 @@ mod metrics_tests {
 }
 
 mod neuron_archiving_tests {
-    use crate::pb::v1::{neuron::DissolveState, Neuron};
+    use crate::{neuron::types::Neuron, pb::v1::neuron::DissolveState};
     use proptest::proptest;
 
     #[test]
@@ -1020,10 +1021,11 @@ mod neuron_archiving_tests {
 mod cast_vote_and_cascade_follow {
     use crate::{
         governance::{Governance, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS},
+        neuron::types::Neuron,
         neuron_store::NeuronStore,
         pb::v1::{
             neuron::{DissolveState, Followees},
-            Ballot, Neuron, Topic, Vote,
+            Ballot, Topic, Vote,
         },
     };
     use ic_nns_common::pb::v1::{NeuronId, ProposalId};
@@ -1203,46 +1205,8 @@ mod cast_vote_and_cascade_follow {
 }
 
 #[test]
-fn governance_remove_neuron_updates_followee_index_correctly() {
-    let mut governance = Governance::new(
-        GovernanceProto {
-            neurons: btreemap! {
-                1 => Neuron {
-                    id: Some(NeuronId { id: 1 }),
-                    followees: hashmap! {
-                         2 => Followees {
-                            followees: vec![NeuronId { id: 2 }, NeuronId { id: 3 }]
-                        }
-                    },
-                    ..Default::default()
-                },
-            },
-            ..Default::default()
-        },
-        Box::new(MockEnvironment::new(vec![], 0)),
-        Box::new(StubIcpLedger {}),
-        Box::new(StubCMC {}),
-    );
-
-    let entry = governance
-        .neuron_store
-        .get_followers_by_followee_and_topic(NeuronId { id: 2 }, Topic::try_from(2).unwrap());
-    assert_eq!(entry, vec![NeuronId { id: 1 }]);
-
-    let neuron = governance
-        .with_neuron(&NeuronId { id: 1 }, |n| n.clone())
-        .unwrap();
-    governance.remove_neuron(neuron).unwrap();
-
-    let entry = governance
-        .neuron_store
-        .get_followers_by_followee_and_topic(NeuronId { id: 2 }, Topic::try_from(2).unwrap());
-    assert_eq!(entry, vec![]);
-}
-
-#[test]
 fn test_pre_and_post_upgrade_first_time() {
-    let neuron1 = Neuron {
+    let neuron1 = NeuronProto {
         id: Some(NeuronId { id: 1 }),
         followees: hashmap! {
             2 => Followees {

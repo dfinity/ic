@@ -274,6 +274,7 @@ fn returns_an_error_if_file_size_is_not_a_multiple_of_page_size() {
     OpenOptions::new()
         .write(true)
         .create(true)
+        .truncate(false)
         .open(&heap_file)
         .unwrap()
         .write_all(&vec![1; PAGE_SIZE / 2])

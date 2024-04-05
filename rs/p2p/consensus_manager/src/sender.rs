@@ -145,7 +145,7 @@ impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
 
             #[cfg(debug_assertions)]
             {
-                if !(self.join_set.len() >= self.active_adverts.len()) {
+                if self.join_set.len() < self.active_adverts.len() {
                     // This invariant can be violated if the root cancellation token is cancelled.
                     // It can be violated because the active_adverts HashMap is only cleared
                     // when purging artifacts, and not when the tasks join due to a cancellation
@@ -312,6 +312,7 @@ impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
                 }
                 _ = cancellation_token.cancelled() => {
                     while let Some(result) = in_progress_transmissions.join_next().await {
+                        metrics.send_view_send_to_peer_cancelled_total.inc();
                         panic_on_join_err(result);
                     }
                     break;

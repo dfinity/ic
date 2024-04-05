@@ -15,7 +15,6 @@ use ic_ledger_canister_core::ledger::{
 };
 use ic_ledger_core::tokens::Zero;
 use ic_ledger_core::{approvals::Approvals, timestamp::TimeStamp};
-use icrc_ledger_types::icrc1::transfer::Memo;
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc3::blocks::DataCertificate;
 use icrc_ledger_types::{
@@ -31,6 +30,10 @@ use icrc_ledger_types::{
     icrc2::allowance::{Allowance, AllowanceArgs},
 };
 use icrc_ledger_types::{
+    icrc1::transfer::Memo,
+    icrc3::archive::{GetArchivesArgs, GetArchivesResult},
+};
+use icrc_ledger_types::{
     icrc1::transfer::{TransferArg, TransferError},
     icrc2::transfer_from::{TransferFromArgs, TransferFromError},
 };
@@ -41,13 +44,13 @@ use std::cell::RefCell;
 const MAX_MESSAGE_SIZE: u64 = 1024 * 1024;
 
 #[cfg(not(feature = "u256-tokens"))]
-type Tokens = ic_icrc1_tokens_u64::U64;
+pub type Tokens = ic_icrc1_tokens_u64::U64;
 
 #[cfg(feature = "u256-tokens")]
-type Tokens = ic_icrc1_tokens_u256::U256;
+pub type Tokens = ic_icrc1_tokens_u256::U256;
 
 thread_local! {
-    static LEDGER: RefCell<Option<Ledger<Tokens>>> = RefCell::new(None);
+    static LEDGER: RefCell<Option<Ledger<Tokens>>> = const { RefCell::new(None) };
 }
 
 declare_log_buffer!(name = LOG, capacity = 1000);
@@ -600,6 +603,54 @@ fn icrc2_allowance(arg: AllowanceArgs) -> Allowance {
             expires_at: allowance.expires_at.map(|t| t.as_nanos_since_unix_epoch()),
         }
     })
+}
+
+#[query]
+#[candid_method(query)]
+fn icrc3_get_archives(args: GetArchivesArgs) -> GetArchivesResult {
+    Access::with_ledger(|ledger| ledger.icrc3_get_archives(args))
+}
+
+#[query]
+#[candid_method(query)]
+fn icrc3_get_tip_certificate() -> Option<icrc_ledger_types::icrc3::blocks::ICRC3DataCertificate> {
+    let certificate = ByteBuf::from(ic_cdk::api::data_certificate()?);
+    let hash_tree = Access::with_ledger(|ledger| ledger.construct_hash_tree());
+    let mut tree_buf = vec![];
+    ciborium::ser::into_writer(&hash_tree, &mut tree_buf).unwrap();
+    Some(icrc_ledger_types::icrc3::blocks::ICRC3DataCertificate {
+        certificate,
+        hash_tree: ByteBuf::from(tree_buf),
+    })
+}
+
+#[query]
+#[candid_method(query)]
+fn icrc3_supported_block_types() -> Vec<icrc_ledger_types::icrc3::blocks::SupportedBlockType> {
+    use icrc_ledger_types::icrc3::blocks::SupportedBlockType;
+
+    vec![
+        SupportedBlockType {
+            block_type: "1burn".to_string(),
+            url: "https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-1/README.md"
+                .to_string(),
+        },
+        SupportedBlockType {
+            block_type: "1mint".to_string(),
+            url: "https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-1/README.md"
+                .to_string(),
+        },
+        SupportedBlockType {
+            block_type: "2approve".to_string(),
+            url: "https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-2/README.md"
+                .to_string(),
+        },
+        SupportedBlockType {
+            block_type: "2xfer".to_string(),
+            url: "https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-2/README.md"
+                .to_string(),
+        },
+    ]
 }
 
 candid::export_service!();

@@ -299,9 +299,7 @@ bazel-test-macos:
       dotenv: nns.release.env
     paths:
       - bazel-build-log*.json*
-  tags:
-    - dfinity-ic
-    - bazel
+      - build-ic.tar
   script:
     - |
       set -euo pipefail
@@ -309,20 +307,6 @@ bazel-test-macos:
 
       if [[ "${CI_MERGE_REQUEST_TITLE:-}" == *"[RUN_ALL_BAZEL_TARGETS]"* ]]; then
           RUN_ON_DIFF_ONLY="false"
-      fi
-
-      if [ "$CI_JOB_NAME" == "build-ic-release" ]; then
-          # read NNS release version from git tree
-          NNS_RELEASE_VERSION="$(jq -r '.subnets["tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"]' testnet/mainnet_revisions.json)"
-          # we pass nss version info to build-determinism-*-release jobs
-          # we put it under /tmp due to git clean -ffdx within build-ic script
-          echo "NNS_RELEASE_VERSION=$NNS_RELEASE_VERSION" > /tmp/nns.release.env
-
-          # fetch and checkout this version
-          git fetch origin "$NNS_RELEASE_VERSION"
-          git checkout "$NNS_RELEASE_VERSION"
-          # NOTE: ic/$VERSION in S3 will have artifacts
-          #       for revision $NNS_RELEASE_VERSION !!!
       fi
 
       if [ "$CI_COMMIT_REF_PROTECTED" == "true" ]; then
@@ -365,35 +349,25 @@ bazel-test-macos:
           find ./artifacts/icos -name '*.gz' -delete
       fi
 
-      # release binaries
-      [ -d artifacts/release ] && buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
-          gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
-          "artifacts/release" "${CI_JOB_NAME}/release"
-      # canister binaries
-      [ -d artifacts/canisters ] && buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
-          gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
-          "artifacts/canisters" "${CI_JOB_NAME}/canisters"
+      tar -cf artifacts.tar artifacts
+      URL="http://$(cat /ceph-s3-info/BUCKET_HOST)/$(cat /ceph-s3-info/BUCKET_NAME)/${VERSION}/${CI_JOB_ID}"
+      curl --request PUT --upload-file artifacts.tar "${URL}/artifacts.tar"
 
-      # guestos images
-      [ -d artifacts/icos/guestos ] && buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
-          gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
-          "artifacts/icos/guestos" "${CI_JOB_NAME}/guest-os"
-      # hostos images
-      [ -d artifacts/icos/hostos ] && buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
-          gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
-          "artifacts/icos/hostos" "${CI_JOB_NAME}/host-os"
-      # setupos images
-      [ -d artifacts/icos/setupos ] && buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
-          gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
-          "artifacts/icos/setupos" "${CI_JOB_NAME}/setup-os"
+      mkdir build-ic
+      for DIR in release canisters icos/guestos icos/hostos icos/setupos; do
+          if [ -e "artifacts/${DIR}/SHA256SUMS" ]; then
+              mkdir -p "build-ic/${DIR}/"
+              cp "artifacts/${DIR}/SHA256SUMS" "build-ic/${DIR}/"
+          fi
+      done
+
+      EXTERNAL_URL="https://objects.$(echo "$NODE_NAME" | cut -d'-' -f1)-idx1.dfinity.network/$(cat /ceph-s3-info/BUCKET_NAME)/${VERSION}/${CI_JOB_ID}/artifacts.tar"
+      echo -e "Node: ${NODE_NAME:-}\nURL: ${URL}\nExternal URL: ${EXTERNAL_URL}" >./build-ic/info
+      echo "${EXTERNAL_URL}" >./build-ic/url
+      tar -cf build-ic.tar build-ic
 
       # clean up
       bazel clean --expunge
-
-      # collect dotenv
-      if [ -f /tmp/nns.release.env ]; then
-          mv /tmp/nns.release.env .
-      fi
 
 # MR Pipeline
 build-ic:
@@ -404,13 +378,6 @@ build-ic:
     # only build binaries, canisters, ic-os if there are changes
     RUN_ON_DIFF_ONLY: "true"
     BAZEL_COMMAND: "build"
-
-# Scheduled Pipeline
-build-ic-release:
-  extends:
-    - .build-ic
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "build-reproducibility"
 
 lock-generate:
   rules:
@@ -499,7 +466,7 @@ cargo-clippy-linux:
     - |
       set -eExuo pipefail
       buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- \
-          "$CI_PROJECT_DIR"/gitlab-ci/src/rust_lint/lint.sh
+          "$CI_PROJECT_DIR"/gitlab-ci/src/ci-scripts/rust-lint.sh
 
 cargo-build-release-linux:
   needs: [] # don't wait on other jobs
@@ -571,7 +538,7 @@ build-determinism:
     - job: bazel-test-all
       artifacts: true
     - job: build-ic
-      artifacts: false
+      artifacts: true
   parallel:
     matrix:
       - TARGET: "//publish/binaries:upload"
@@ -582,14 +549,14 @@ build-determinism:
         PATH1: "build-ic/canisters"
       - TARGET: "//ic-os/guestos/envs/prod:upload_update-img"
         PATH0: "guest-os/update-img"
-        PATH1: "build-ic/guest-os"
+        PATH1: "build-ic/icos/guestos"
       - TARGET: "//ic-os/hostos/envs/prod:upload_update-img"
         PATH0: "host-os/update-img"
-        PATH1: "build-ic/host-os"
+        PATH1: "build-ic/icos/hostos"
       - TARGET: "//ic-os/setupos/envs/prod:upload_disk-img"
         PATH0: "setup-os/disk-img"
-        PATH1: "build-ic/setup-os"
-        SETUPOS_FLAG: "true"
+        PATH1: "build-ic/icos/setupos"
+        DISKIMG: "true"
   script:
     - |
       set -eExuo pipefail
@@ -601,59 +568,46 @@ build-determinism:
       fi
 
       if grep -q "$TARGET" bazel-targets || grep -qF "//..." bazel-targets; then
-          gitlab-ci/tools/build-diff.sh "$PATH0" "$PATH1"
-      fi
+          VERSION="$(git rev-parse HEAD)"
 
-build-determinism-release:
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "build-reproducibility"
-  needs:
-    - job: build-ic-release
-  script:
-    - |
-      set -eExuo pipefail
+          # build-ic.tar with SHA256SUMS files is expected from build-ic CI job
+          if [ ! -e build-ic.tar ]; then
+              echo "Missing 'build-ic.tar' file!"
+              exit 1
+          fi
 
-      # TODO IDX-2757
-      if [ "$CI_JOB_NAME" == "build-determinism-guest-update-img-release" ]; then
-          OLD_PATH="$(git rev-parse HEAD)/build-ic-release/guest-os/update-img"
-          if curl -sfSI --retry 2 "https://download.dfinity.systems/ic/$OLD_PATH/SHA256SUMS"; then
-              PATH0="build-ic-release/guest-os/update-img"
+          # PATH0
+          mkdir -p "$PATH0"
+          curl -sfS --retry 5 --retry-delay 10 \
+            "https://download.dfinity.systems/ic/$VERSION/$PATH0/SHA256SUMS" \
+            -o "$PATH0/SHA256SUMS"
+
+          # PATH1
+          tar -xf build-ic.tar
+
+          # ignore *.wasm.did files
+          sed -i -e '/.wasm.did/d' "$PATH0/SHA256SUMS" "$PATH1/SHA256SUMS"
+
+          # for hostos / guestos we only care about update-img
+          if [ "${DISKIMG:-}" != "true" ]; then
+              sed -i -e '/disk-img/d' "$PATH0/SHA256SUMS" "$PATH1/SHA256SUMS"
+          fi
+
+          if ! diff -u "$PATH0/SHA256SUMS" "$PATH1/SHA256SUMS"; then
+              set -x
+              cat build-ic/info
+              echo "Build Determinism Check Failed!"
+              echo "Contact IDX or investigate by yourself using diffoscope:"
+              echo " * [bazel-test-all]: curl -sfS https://download.dfinity.systems/ic/$VERSION/$PATH0/<artifact> -O"
+              echo " * [build-ic]: curl $(cat build-ic/url) -O"
+              echo "See info for pull the artifacts from both CI jobs above. Specify <artifact> based on logs (e.g. 'ic-admin.gz', 'disk-img.tar.zst')."
+              echo "Note that [build-ic] artifacts.tar contains all the build artifacts (binaries, canisters and IC images)."
+              set +x
+              exit 1
+          else
+              echo "Build Determinism Check Successful"
           fi
       fi
-
-      # what we've build in build-ic-release
-      P0=$PATH0
-      # what is live and available under $NNS_RELEASE_VERSION
-      # NNS_RELEASE_VERSION is set in build-ic-release
-      # shellcheck disable=SC2153
-      P1="/${NNS_RELEASE_VERSION}/${PATH1}"
-
-      ./gitlab-ci/tools/build-diff.sh "$P0" "$P1"
-  parallel:
-    matrix:
-      - PATH0: "build-ic-release/release"
-        PATH1: "release"
-      - PATH0: "build-ic-release/canisters"
-        PATH1: "canisters"
-      - PATH0: "build-ic-release/guest-os"
-        PATH1: "guest-os/update-img"
-
-test-push-branch:
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
-      when: on_success
-  dependencies: [] # don't copy artifacts from other jobs
-  script:
-    - |
-      # The remote might already exist from a previous CI job run because GitLab re-uses the git repo.
-      git remote add origin "https://gitlab-ci-token:${GITLAB_API_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git" || true
-      git remote set-url origin "https://gitlab-ci-token:${GITLAB_API_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git" || true
-
-      git config --global user.email "infra+gitlab-automation@dfinity.org"
-      git config --global user.name "IDX GitLab Automation"
-
-      git switch --force-create post-merge-tests-passed HEAD
-      git push --force --set-upstream origin post-merge-tests-passed
 
 cut-release-candidate:
   rules:

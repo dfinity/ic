@@ -1,10 +1,11 @@
-use candid::Principal;
+use candid::{Encode, Principal};
 use ic_registry_routing_table::{canister_id_into_u64, CanisterIdRange};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::PrincipalId;
 use pocket_ic::common::rest::{
-    CanisterIdRange as RawCanisterIdRange, CreateInstanceResponse, RawTime, SubnetConfigSet,
-    Topology,
+    CanisterIdRange as RawCanisterIdRange, CreateHttpGatewayResponse, CreateInstanceResponse,
+    ExtendedSubnetConfigSet, HttpGatewayBackend, HttpGatewayConfig, InstanceId, RawTime,
+    SubnetConfig, SubnetConfigSet, SubnetId,
 };
 use reqwest::blocking::Client;
 use reqwest::{StatusCode, Url};
@@ -160,6 +161,99 @@ fn test_port_file() {
     }
 }
 
+#[test]
+fn test_http_gateway() {
+    use ic_utils::interfaces::ManagementCanister;
+
+    // create PocketIc instance in auto progress mode
+    let url = start_server();
+    let client = Client::new();
+    let (instance_id, _nns_subnet_id, _nns_config, _app_subnet_id, app_config) =
+        create_live_instance(&url, &client);
+
+    // start HTTP gateway
+    let http_gateway_url = url.join("http_gateway").unwrap();
+    let body = HttpGatewayConfig {
+        listen_at: None,
+        forward_to: HttpGatewayBackend::PocketIcInstance(instance_id),
+    };
+    let (http_gateway_id, http_gateway_port) = match client
+        .post(http_gateway_url)
+        .json(&body)
+        .send()
+        .unwrap()
+        .json::<CreateHttpGatewayResponse>()
+        .expect("Could not parse response for create HTTP gateway request")
+    {
+        CreateHttpGatewayResponse::Created { instance_id, port } => (instance_id, port),
+        CreateHttpGatewayResponse::Error { message } => panic!("{}", message),
+    };
+
+    // deploy II canister to PocketIc instance proxying through HTTP gateway
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let ii_canister_id = rt.block_on(async {
+        let agent_endpoint = format!("http://localhost:{}", http_gateway_port);
+        let agent = ic_agent::Agent::builder()
+            .with_url(agent_endpoint)
+            .build()
+            .unwrap();
+        agent.fetch_root_key().await.unwrap();
+
+        let ic00 = ManagementCanister::create(&agent);
+
+        let app_canister_id = raw_canister_id_range_into(&app_config.canister_ranges[0]).start;
+        let (canister_id,) = ic00
+            .create_canister()
+            .as_provisional_create_with_amount(None)
+            .with_effective_canister_id(app_canister_id)
+            .call_and_wait()
+            .await
+            .unwrap();
+
+        let ii_path =
+            std::env::var_os("II_WASM").expect("Missing II_WASM (path to II wasm) in env.");
+        let ii_wasm = std::fs::read(ii_path).expect("Could not read II wasm file.");
+        ic00.install_code(&canister_id, &ii_wasm)
+            .with_raw_arg(Encode!(&()).unwrap())
+            .call_and_wait()
+            .await
+            .unwrap();
+
+        canister_id
+    });
+
+    // perform frontend asset request for the title page
+    let ii_url = format!(
+        "http://localhost:{}/?canisterId={}",
+        http_gateway_port, ii_canister_id
+    );
+    let res = client.get(ii_url.clone()).send().unwrap();
+    let page = String::from_utf8(res.bytes().unwrap().to_vec()).unwrap();
+    assert!(page.contains("<title>Internet Identity</title>"));
+
+    // stop HTTP gateway
+    let stop_http_gateway_url = url
+        .join(&format!("http_gateway/{}/stop", http_gateway_id))
+        .unwrap();
+    client
+        .post(stop_http_gateway_url)
+        .send()
+        .unwrap()
+        .json::<()>()
+        .expect("Could not parse response for stop HTTP gateway request");
+
+    // HTTP gateway requests should eventually stop and requests to it fail
+    loop {
+        if client.get(ii_url.clone()).send().is_err() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}
+
 const EXCLUDED: &[&str] = &[
     // blocked on canister https outcalls in PocketIC
     "$0 ~ /canister http outcalls/",
@@ -233,35 +327,9 @@ fn raw_canister_id_range_into(r: &RawCanisterIdRange) -> CanisterIdRange {
 fn setup_and_run_ic_ref_test(test_nns: bool, excluded_tests: Vec<&str>, included_tests: Vec<&str>) {
     let url = start_server();
     let client = Client::new();
-    let (instance_id, topo) = create_instance(
-        &client,
-        &url,
-        &SubnetConfigSet {
-            nns: true,
-            application: 1,
-            ..Default::default()
-        },
-    );
+    let (instance_id, nns_subnet_id, nns_config, app_subnet_id, app_config) =
+        create_live_instance(&url, &client);
     let endpoint = url.join(&format!("instances/{instance_id}/")).unwrap();
-
-    // set time of the IC instance to the current time
-    let time_url = url
-        .join(&format!("instances/{instance_id}/update/set_time"))
-        .unwrap();
-    let now = std::time::SystemTime::now();
-    let body = RawTime {
-        nanos_since_epoch: now
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .expect("Time went backwards")
-            .as_nanos() as u64,
-    };
-    client.post(time_url.clone()).json(&body).send().unwrap();
-
-    // set auto_progress on the IC instance
-    let progress_url = url
-        .join(&format!("instances/{instance_id}/auto_progress",))
-        .unwrap();
-    client.post(progress_url).send().unwrap();
 
     // derive artifact paths
     let ic_ref_test_root = std::env::var_os("IC_REF_TEST_ROOT")
@@ -276,8 +344,6 @@ fn setup_and_run_ic_ref_test(test_nns: bool, excluded_tests: Vec<&str>, included
     ic_test_data_path.push("test-data");
 
     // NNS subnet config
-    let nns_subnet_id = topo.get_nns().unwrap();
-    let nns_config = topo.0.get(&nns_subnet_id).unwrap();
     let nns_canister_ranges = nns_config
         .canister_ranges
         .iter()
@@ -286,8 +352,6 @@ fn setup_and_run_ic_ref_test(test_nns: bool, excluded_tests: Vec<&str>, included
     let nns_subnet_config = subnet_config(nns_subnet_id, SubnetType::System, nns_canister_ranges);
 
     // app subnet config
-    let app_subnet_id = topo.get_app_subnets()[0];
-    let app_config = topo.0.get(&app_subnet_id).unwrap();
     let app_canister_ranges = app_config
         .canister_ranges
         .iter()
@@ -348,22 +412,22 @@ fn start_server() -> Url {
     }
 }
 
-fn create_instance(
-    client: &Client,
+fn create_live_instance(
     url: &Url,
-    subnet_config_set: &SubnetConfigSet,
-) -> (usize, Topology) {
-    use pocket_ic::common::rest::ExtendedSubnetConfigSet;
+    client: &Client,
+) -> (InstanceId, SubnetId, SubnetConfig, SubnetId, SubnetConfig) {
+    let subnet_config_set = SubnetConfigSet {
+        nns: true,
+        application: 1,
+        ..Default::default()
+    };
     let response = client
         .post(url.join("instances").unwrap())
-        .json(&Into::<ExtendedSubnetConfigSet>::into(
-            subnet_config_set.clone(),
-        ))
+        .json(&Into::<ExtendedSubnetConfigSet>::into(subnet_config_set))
         .send()
         .unwrap();
     assert_eq!(response.status(), StatusCode::CREATED);
     let response_json: CreateInstanceResponse = response.json().unwrap();
-
     let CreateInstanceResponse::Created {
         instance_id,
         topology,
@@ -371,5 +435,36 @@ fn create_instance(
     else {
         panic!("instance must be created");
     };
-    (instance_id, topology)
+
+    // set time of the IC instance to the current time
+    let time_url = url
+        .join(&format!("instances/{instance_id}/update/set_time"))
+        .unwrap();
+    let now = std::time::SystemTime::now();
+    let body = RawTime {
+        nanos_since_epoch: now
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("Time went backwards")
+            .as_nanos() as u64,
+    };
+    client.post(time_url.clone()).json(&body).send().unwrap();
+
+    // set auto_progress on the IC instance
+    let progress_url = url
+        .join(&format!("instances/{instance_id}/auto_progress",))
+        .unwrap();
+    client.post(progress_url).send().unwrap();
+
+    let nns_subnet_id = topology.get_nns().unwrap();
+    let nns_config = topology.0.get(&nns_subnet_id).unwrap();
+    let app_subnet_id = topology.get_app_subnets()[0];
+    let app_config = topology.0.get(&app_subnet_id).unwrap();
+
+    (
+        instance_id,
+        nns_subnet_id,
+        nns_config.clone(),
+        app_subnet_id,
+        app_config.clone(),
+    )
 }

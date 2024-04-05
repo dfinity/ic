@@ -2599,7 +2599,7 @@ impl Governance {
     ) -> Result<(), GovernanceError> {
         // Only execute one proposal of this type at a time.
         thread_local! {
-            static IN_PROGRESS_PROPOSAL_ID: RefCell<Option<u64>> = RefCell::new(None);
+            static IN_PROGRESS_PROPOSAL_ID: RefCell<Option<u64>> = const { RefCell::new(None) };
         }
         let release_on_drop = acquire(&IN_PROGRESS_PROPOSAL_ID, proposal_id);
         if let Err(already_in_progress_proposal_id) = release_on_drop {
@@ -5471,7 +5471,7 @@ impl Governance {
 
 // TODO(NNS1-2835): Remove this const after changes published.
 thread_local! {
-    static ATTEMPTED_FIXING_MEMORY_ALLOCATIONS: RefCell<bool> = RefCell::new(false);
+    static ATTEMPTED_FIXING_MEMORY_ALLOCATIONS: RefCell<bool> = const { RefCell::new(false) };
 }
 
 fn err_if_another_upgrade_is_in_progress(

@@ -140,7 +140,7 @@ impl GovernanceUpgradeRootProposal {
 }
 
 thread_local! {
-  static PROPOSALS: RefCell<BTreeMap<PrincipalId, GovernanceUpgradeRootProposal>> = RefCell::new(BTreeMap::new());
+  static PROPOSALS: RefCell<BTreeMap<PrincipalId, GovernanceUpgradeRootProposal>> = const { RefCell::new(BTreeMap::new()) };
 }
 
 async fn get_current_governance_canister_wasm() -> Vec<u8> {

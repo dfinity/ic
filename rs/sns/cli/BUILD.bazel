@@ -4,6 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 # See rs/nervous_system/feature_test.md
 BASE_DEPENDENCIES = [
+    "//rs/crypto/sha2",
     "//rs/nervous_system/common",
     "//rs/nervous_system/common/test_keys",
     "//rs/nervous_system/humanize",
@@ -23,6 +24,7 @@ BASE_DEPENDENCIES = [
     "@crate_index//:serde_json",
     "@crate_index//:serde_yaml",
     "@crate_index//:tempfile",
+    "@crate_index//:thiserror",
 ]
 
 # Each target declared in this file may choose either these (release-ready)

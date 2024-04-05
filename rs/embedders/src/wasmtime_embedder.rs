@@ -582,16 +582,6 @@ impl WasmtimeEmbedder {
     }
 }
 
-struct StoreRef(*mut wasmtime::Store<()>);
-
-/// SAFETY: The users of `StoreRef` are required to only dereference the pointer
-/// when it is know that nothing else is using the `Store`. When the signal
-/// handler runs we dereference the pointer even though wasmtime may still be
-/// using it, but we don't modify it in any way. EXC-535 should make this
-/// unnecessary.
-unsafe impl Sync for StoreRef {}
-unsafe impl Send for StoreRef {}
-
 pub struct MemorySigSegvInfo {
     instance_memory: wasmtime::Memory,
     current_memory_size_in_pages: MemoryPageSize,

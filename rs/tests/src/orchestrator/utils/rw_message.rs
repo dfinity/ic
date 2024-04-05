@@ -6,7 +6,7 @@ use reqwest::Url;
 use slog::{debug, info, Logger};
 use std::time::Duration;
 
-pub(crate) fn store_message(
+pub fn store_message(
     url: &Url,
     effective_canister_id: PrincipalId,
     msg: &str,
@@ -26,7 +26,7 @@ pub(crate) fn store_message(
     })
 }
 
-pub(crate) fn store_message_with_retries(
+pub fn store_message_with_retries(
     url: &Url,
     effective_canister_id: PrincipalId,
     msg: &str,
@@ -54,7 +54,7 @@ pub(crate) fn store_message_with_retries(
 }
 
 /// Try to store the given message within the next 30 seconds, return true if successful
-pub(crate) fn can_store_msg(log: &Logger, url: &Url, canister_id: Principal, msg: &str) -> bool {
+pub fn can_store_msg(log: &Logger, url: &Url, canister_id: Principal, msg: &str) -> bool {
     block_on(async {
         match create_agent(url.as_str()).await {
             Ok(agent) => {
@@ -79,7 +79,7 @@ pub(crate) fn can_store_msg(log: &Logger, url: &Url, canister_id: Principal, msg
 }
 
 /// Try to store the given message. Retry for 300 seconds or until update was unsuccessful
-pub(crate) fn cannot_store_msg(log: Logger, url: &Url, canister_id: Principal, msg: &str) -> bool {
+pub fn cannot_store_msg(log: Logger, url: &Url, canister_id: Principal, msg: &str) -> bool {
     retry_with_msg!(
         format!(
             "store message in canister {} via {}",
@@ -100,7 +100,7 @@ pub(crate) fn cannot_store_msg(log: Logger, url: &Url, canister_id: Principal, m
     .is_ok()
 }
 
-pub(crate) fn can_read_msg(log: &Logger, url: &Url, canister_id: Principal, msg: &str) -> bool {
+pub fn can_read_msg(log: &Logger, url: &Url, canister_id: Principal, msg: &str) -> bool {
     block_on(can_read_msg_impl(
         log,
         url,
@@ -110,7 +110,7 @@ pub(crate) fn can_read_msg(log: &Logger, url: &Url, canister_id: Principal, msg:
     ))
 }
 
-pub(crate) fn can_read_msg_with_retries(
+pub fn can_read_msg_with_retries(
     log: &Logger,
     url: &Url,
     canister_id: Principal,
@@ -162,10 +162,7 @@ async fn can_read_msg_impl(
     false
 }
 
-pub(crate) fn get_cert_time(
-    url: &url::Url,
-    effective_canister_id: PrincipalId,
-) -> Result<u64, String> {
+pub fn get_cert_time(url: &url::Url, effective_canister_id: PrincipalId) -> Result<u64, String> {
     use ic_agent::lookup_value;
     block_on(async {
         let path = vec!["time".into()];
@@ -184,7 +181,7 @@ pub(crate) fn get_cert_time(
     })
 }
 
-pub(crate) fn cert_state_makes_progress_with_retries(
+pub fn cert_state_makes_progress_with_retries(
     url: &url::Url,
     effective_canister_id: PrincipalId,
     logger: &slog::Logger,
@@ -226,7 +223,7 @@ pub(crate) fn cert_state_makes_progress_with_retries(
     .expect("System should make progress!");
 }
 
-pub(crate) fn cert_state_makes_no_progress_with_retries(
+pub fn cert_state_makes_no_progress_with_retries(
     url: &url::Url,
     effective_canister_id: PrincipalId,
     logger: &slog::Logger,

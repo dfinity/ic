@@ -1,12 +1,12 @@
-use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::test_env_api::{HasTopologySnapshot, IcNodeContainer, RetrieveIpv4Addr};
-use crate::driver::universal_vm::*;
-use crate::driver::{test_env::TestEnv, test_env_api::*};
-use crate::util::{self, create_and_install};
 use canister_test::Canister;
 use canister_test::Runtime;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
+use ic_tests::driver::ic::{InternetComputer, Subnet};
+use ic_tests::driver::test_env_api::{HasTopologySnapshot, IcNodeContainer, RetrieveIpv4Addr};
+use ic_tests::driver::universal_vm::*;
+use ic_tests::driver::{test_env::TestEnv, test_env_api::*};
+use ic_tests::util::{self, create_and_install};
 pub use ic_types::{CanisterId, PrincipalId};
 use slog::info;
 use std::net::{Ipv4Addr, Ipv6Addr};
@@ -19,11 +19,6 @@ pub const BACKOFF_DELAY: Duration = Duration::from_secs(5);
 pub enum PemType {
     PemCert,
     PemKey,
-}
-
-pub fn get_universal_vm_activation_script(env: &TestEnv) -> String {
-    env.read_dependency_to_string("rs/tests/src/canister_http/universal_vm_activation.sh")
-        .expect("File not found")
 }
 
 pub fn await_nodes_healthy(env: &TestEnv) {
@@ -78,10 +73,12 @@ pub fn install_qualifying_nns_canisters(env: &TestEnv) {
     info!(&env.logger(), "Qualifying NNS canisters installed");
 }
 
-pub fn config(env: TestEnv) {
+pub fn setup(env: TestEnv) {
     // Set up Universal VM with HTTP Bin testing service
     UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
-        .with_config_img(env.get_dependency_path("rs/tests/http_uvm_config_image.zst"))
+        .with_config_img(
+            env.get_dependency_path("rs/tests/networking/canister_http/http_uvm_config_image.zst"),
+        )
         .enable_ipv4()
         .start(&env)
         .expect("failed to set up universal VM");

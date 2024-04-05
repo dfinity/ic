@@ -165,6 +165,9 @@ impl<Rt: Runtime, Wasm: ArchiveCanisterWasm> Archive<Rt, Wasm> {
         self.nodes.len() - 1
     }
 
+    // Return the archives with their respective block ranges
+    // associated. The block ranges are inclusive in both start
+    // and end.
     pub fn index(&self) -> Vec<((u64, u64), CanisterId)> {
         self.nodes_block_ranges
             .iter()

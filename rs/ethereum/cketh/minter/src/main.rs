@@ -1,3 +1,4 @@
+use candid::Nat;
 use ic_canister_log::log;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
@@ -160,15 +161,16 @@ async fn get_minter_info() -> MinterInfo {
         minter_address: s.minter_address().map(|a| a.to_string()),
         eth_helper_contract_address: s.eth_helper_contract_address.map(|a| a.to_string()),
         erc20_helper_contract_address: s.erc20_helper_contract_address.map(|a| a.to_string()),
-        supported_ckerc20_tokens: s
-            .ckerc20_tokens
-            .iter()
-            .map(|(symbol, addr, canister)| CkErc20Token {
-                ckerc20_token_symbol: erc20::CkTokenSymbol::to_string(symbol),
-                erc20_contract_address: addr.to_string(),
-                ledger_canister_id: *canister,
-            })
-            .collect::<Vec<_>>(),
+        supported_ckerc20_tokens: Some(
+            s.ckerc20_tokens
+                .iter()
+                .map(|(symbol, addr, canister)| CkErc20Token {
+                    ckerc20_token_symbol: erc20::CkTokenSymbol::to_string(symbol),
+                    erc20_contract_address: addr.to_string(),
+                    ledger_canister_id: *canister,
+                })
+                .collect::<Vec<_>>(),
+        ),
         minimum_withdrawal_amount: Some(s.minimum_withdrawal_amount.into()),
         ethereum_block_height: Some(s.ethereum_block_height.into()),
         last_observed_block_number: s.last_observed_block_number.map(|n| n.into()),
@@ -382,11 +384,16 @@ async fn withdraw_erc20(
                             );
                         });
                     }
-                    Err(WithdrawErc20Error::from(ckerc20_burn_error))
+                    Err(WithdrawErc20Error::CkErc20LedgerError {
+                        cketh_block_index: Nat::from(cketh_ledger_burn_index.get()),
+                        error: ckerc20_burn_error.into(),
+                    })
                 }
             }
         }
-        Err(cketh_burn_error) => Err(WithdrawErc20Error::from(cketh_burn_error)),
+        Err(cketh_burn_error) => Err(WithdrawErc20Error::CkEthLedgerError {
+            error: cketh_burn_error.into(),
+        }),
     }
 }
 

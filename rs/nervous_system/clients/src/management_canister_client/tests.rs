@@ -89,7 +89,7 @@ async fn test_limit_outstanding_calls() {
         };
 
         thread_local! {
-            static SLOTS: RefCell<u64> = RefCell::new(2);
+            static SLOTS: RefCell<u64> = const { RefCell::new(2) };
         }
 
         let subject =

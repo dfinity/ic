@@ -1,5 +1,6 @@
 use candid::{CandidType, Decode, Encode, Nat};
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_icrc1::{Block, Operation, Transaction};
 use ic_icrc1_ledger::{ChangeFeeCollector, FeatureFlags, InitArgs, LedgerArgument};
 use ic_icrc1_ledger_sm_tests::{
     get_allowance, send_approval, send_transfer_from, ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY,
@@ -8,7 +9,8 @@ use ic_icrc1_ledger_sm_tests::{
     TOKEN_SYMBOL,
 };
 use ic_ledger_canister_core::archive::ArchiveOptions;
-use ic_ledger_core::block::BlockIndex;
+use ic_ledger_core::block::{BlockIndex, BlockType};
+use ic_ledger_hash_of::{HashOf, HASH_LENGTH};
 use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
 use icrc_ledger_types::icrc1::account::Account;
@@ -16,6 +18,7 @@ use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use icrc_ledger_types::icrc2::allowance::Allowance;
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
+use icrc_ledger_types::icrc3::archive::{GetArchivesArgs, GetArchivesResult};
 use num_traits::ToPrimitive;
 use std::path::PathBuf;
 
@@ -486,6 +489,122 @@ fn test_icrc2_feature_flag_doesnt_disable_icrc2_endpoints() {
             allowance: 0u32.into()
         })
     );
+}
+
+fn icrc3_get_archives(
+    env: &StateMachine,
+    ledger_id: CanisterId,
+    args: GetArchivesArgs,
+) -> GetArchivesResult {
+    let args = Encode!(&args).unwrap();
+    let res = env
+        .query(ledger_id, "icrc3_get_archives", args)
+        .expect("Unable to call icrc3_get_archives")
+        .bytes();
+    Decode!(&res, GetArchivesResult).unwrap()
+}
+
+#[cfg(not(feature = "u256-tokens"))]
+pub type Tokens = ic_icrc1_tokens_u64::U64;
+
+#[cfg(feature = "u256-tokens")]
+pub type Tokens = ic_icrc1_tokens_u256::U256;
+
+#[test]
+fn test_icrc3_get_archives() {
+    let env = StateMachine::new();
+    let minting_account = account(111);
+
+    let mint_block_size = Block {
+        parent_hash: Some(HashOf::new([1; HASH_LENGTH])),
+        transaction: Transaction {
+            operation: Operation::Mint {
+                to: minting_account,
+                amount: Tokens::from(1_000_000u64),
+            },
+            created_at_time: None,
+            memo: None,
+        },
+        effective_fee: None,
+        timestamp: 0,
+        fee_collector: None,
+        fee_collector_block_index: None,
+    }
+    .encode()
+    .size_bytes();
+    // Make it so an archive can keep up to two blocks. There is a
+    // bit of overhead so 2.5 * mint_block_size is used
+    let node_max_memory_size_bytes = Some((2.5 * mint_block_size as f64).ceil() as u64);
+    // Trigger block archival every 2 blocks local to the ledger and
+    // archive both blocks immediately
+    let trigger_threshold = 2;
+    let num_blocks_to_archive = 2;
+
+    let args = LedgerArgument::Init(InitArgs {
+        minting_account,
+        fee_collector_account: None,
+        initial_balances: vec![],
+        transfer_fee: Nat::from(0u64),
+        decimals: None,
+        token_name: "Not a Token".to_string(),
+        token_symbol: "NAT".to_string(),
+        metadata: vec![],
+        archive_options: ArchiveOptions {
+            trigger_threshold,
+            num_blocks_to_archive,
+            node_max_memory_size_bytes,
+            max_message_size_bytes: None,
+            controller_id: PrincipalId(minting_account.owner),
+            more_controller_ids: None,
+            cycles_for_archive_creation: None,
+            max_transactions_per_response: None,
+        },
+        max_memo_length: None,
+        feature_flags: None,
+        maximum_number_of_accounts: None,
+        accounts_overflow_trim_quantity: None,
+    });
+    let args = Encode!(&args).unwrap();
+    let ledger_id = env
+        .install_canister(ledger_wasm(), args, None)
+        .expect("Unable to install the ledger");
+
+    // check that there are no archives if there are no blocks
+    let actual = icrc3_get_archives(&env, ledger_id, GetArchivesArgs { from: None });
+    assert_eq!(actual, vec![]);
+
+    let actual = icrc3_get_archives(
+        &env,
+        ledger_id,
+        GetArchivesArgs {
+            from: Some(minting_account.owner),
+        },
+    );
+    assert_eq!(actual, vec![]);
+
+    // push 4 mint blocks to create 2 archives (see archive options above)
+    for _block_id in 0..4 {
+        let _ = transfer(&env, ledger_id, minting_account, account(1), 1_000_000);
+    }
+    let mut actual = icrc3_get_archives(&env, ledger_id, GetArchivesArgs { from: None });
+    assert_eq!(2, actual.len());
+    actual.sort_by(|i1, i2| i1.start.cmp(&i2.start));
+    // the first archive contains blocks 0 and 1
+    assert_eq!(0u64, actual[0].start);
+    assert_eq!(1u64, actual[0].end);
+    // the second archive contains blocks 2 and 3
+    assert_eq!(2u64, actual[1].start);
+    assert_eq!(3u64, actual[1].end);
+
+    // query all the archives after the first one
+    let from = actual.iter().map(|info| info.canister_id).min();
+    let actual = icrc3_get_archives(&env, ledger_id, GetArchivesArgs { from });
+    assert_eq!(1, actual.len());
+
+    // query all the archives after the last one
+    let from = Some(actual[0].canister_id);
+    let actual = icrc3_get_archives(&env, ledger_id, GetArchivesArgs { from });
+    assert_eq!(0, actual.len());
 }
 
 mod verify_written_blocks {

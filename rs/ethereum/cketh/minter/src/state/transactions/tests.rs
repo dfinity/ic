@@ -1499,7 +1499,12 @@ mod eth_transactions {
             transactions.record_finalized_transaction(cketh_ledger_burn_index, receipt.clone());
             let expected_cketh_reimbursed_amount = withdrawal_request
                 .max_transaction_fee
-                .checked_sub(receipt.effective_transaction_fee())
+                .checked_sub(
+                    signed_tx
+                        .transaction()
+                        .transaction_price()
+                        .max_transaction_fee(),
+                )
                 .unwrap();
 
             assert_eq!(transactions.maybe_reimburse, btreemap! {});
@@ -1583,7 +1588,12 @@ mod eth_transactions {
             let expected_cketh_reimbursed_amount = withdrawal_request
                 //TODO XC-59: rename max_transaction_fee to burn_cketh_amount
                 .max_transaction_fee
-                .checked_sub(receipt.effective_transaction_fee())
+                .checked_sub(
+                    signed_tx
+                        .transaction()
+                        .transaction_price()
+                        .max_transaction_fee(),
+                )
                 .unwrap();
             let expected_ckerc20_reimbursed_amount = withdrawal_request.withdrawal_amount;
 

@@ -218,13 +218,13 @@ mod mint_transaction {
     #[test]
     fn should_have_readable_erc20_debug_representation() {
         let expected = "ReceivedErc20Event { \
-          transaction_hash: 0x44d8e93a8f4bbc89ad35fc4fbbdb12cb597b4832da09c0b2300777be180fde87, \
-          block_number: 5_326_500, \
-          log_index: 39, \
+          transaction_hash: 0xd9335910102c08a9dc16f8cc1a42a0bf8ca93666d11dc3194c6ee1bd30d19686, \
+          block_number: 5_539_903, \
+          log_index: 87, \
           from_address: 0xdd2851Cdd40aE6536831558DD46db62fAc7A844d, \
-          value: 10_000_000_000_000_000_000, \
+          value: 5_000_000, \
           principal: hkroy-sm7vs-yyjs7-ekppe-qqnwx-hm4zf-n7ybs-titsi-k6e3k-ucuiu-uqe, \
-          contract_address: 0x7439E9Bb6D8a84dd3A23fe621A30F95403F87fB9 \
+          contract_address: 0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238 \
         }";
         assert_eq!(format!("{:?}", received_erc20_event()), expected);
     }
@@ -247,21 +247,22 @@ fn received_eth_event() -> ReceivedEthEvent {
     }
 }
 
+// https://sepolia.etherscan.io/tx/0xd9335910102c08a9dc16f8cc1a42a0bf8ca93666d11dc3194c6ee1bd30d19686
 fn received_erc20_event() -> ReceivedErc20Event {
     ReceivedErc20Event {
-        transaction_hash: "0x44d8e93a8f4bbc89ad35fc4fbbdb12cb597b4832da09c0b2300777be180fde87"
+        transaction_hash: "0xd9335910102c08a9dc16f8cc1a42a0bf8ca93666d11dc3194c6ee1bd30d19686"
             .parse()
             .unwrap(),
-        block_number: BlockNumber::new(5326500),
-        log_index: LogIndex::from(39_u8),
+        block_number: BlockNumber::new(5539903),
+        log_index: LogIndex::from(0x57_u32),
         from_address: "0xdd2851Cdd40aE6536831558DD46db62fAc7A844d"
             .parse()
             .unwrap(),
-        value: Erc20Value::from(10_000_000_000_000_000_000_u128),
+        value: Erc20Value::from(5_000_000_u64),
         principal: "hkroy-sm7vs-yyjs7-ekppe-qqnwx-hm4zf-n7ybs-titsi-k6e3k-ucuiu-uqe"
             .parse()
             .unwrap(),
-        erc20_contract_address: "0x7439e9bb6d8a84dd3a23fe621a30f95403f87fb9"
+        erc20_contract_address: "0x1c7d4b196cb0c7b01d743fbc6116a902379c7238"
             .parse()
             .unwrap(),
     }
@@ -1250,12 +1251,11 @@ mod eth_balance {
     };
     use crate::state::audit::{apply_state_transition, EventType};
     use crate::state::tests::{initial_state, received_eth_event};
-    use crate::state::transactions::EthWithdrawalRequest;
-    use crate::state::{EthBalance, State};
-    use crate::tx::{
-        Eip1559Signature, Eip1559TransactionRequest, SignedEip1559TransactionRequest,
-        TransactionPrice,
+    use crate::state::transactions::{
+        create_transaction, Erc20WithdrawalRequest, EthWithdrawalRequest, WithdrawalRequest,
     };
+    use crate::state::{EthBalance, State};
+    use crate::tx::{Eip1559Signature, SignedEip1559TransactionRequest, TransactionPrice};
 
     #[test]
     fn should_add_deposit_to_eth_balance() {
@@ -1279,6 +1279,21 @@ mod eth_balance {
     }
 
     #[test]
+    fn should_ignore_erc20_deposit_for_eth_balance() {
+        let mut state = initial_erc20_state();
+        let balance_before = state.eth_balance.clone();
+
+        let deposit_event = received_erc20_event();
+        apply_state_transition(
+            &mut state,
+            &ReceivedEvent::from(deposit_event.clone()).into_deposit(),
+        );
+        let balance_after = state.eth_balance.clone();
+
+        assert_eq!(balance_before, balance_after);
+    }
+
+    #[test]
     fn should_ignore_rejected_deposit() {
         let mut state = initial_state();
         let balance_before = state.eth_balance.clone();
@@ -1292,8 +1307,20 @@ mod eth_balance {
             },
         );
         let balance_after = state.eth_balance.clone();
+        assert_eq!(balance_after, balance_before);
 
-        assert_eq!(balance_after, balance_before)
+        add_erc20_token(&mut state);
+        let deposit_event = received_erc20_event();
+        apply_state_transition(
+            &mut state,
+            &EventType::InvalidDeposit {
+                event_source: deposit_event.source(),
+                reason: "invalid principal".to_string(),
+            },
+        );
+        let balance_after_erc20_deposit = state.eth_balance.clone();
+
+        assert_eq!(balance_after_erc20_deposit, balance_before);
     }
 
     #[test]
@@ -1307,8 +1334,19 @@ mod eth_balance {
         let mut state_after_successful_withdrawal = state_before_withdrawal.clone();
         let balance_before_withdrawal = state_after_successful_withdrawal.eth_balance.clone();
         //Values from https://sepolia.etherscan.io/tx/0xef628b8f45984bdf386f5b765b665a2e584295e1190d21c6acdfabe17c27e1bb
-        let withdrawal_flow = WithdrawalFlow {
+        let withdrawal_request = EthWithdrawalRequest {
             withdrawal_amount: Wei::new(10_000_000_000_000_000),
+            destination: "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34"
+                .parse()
+                .unwrap(),
+            ledger_burn_index: LedgerBurnIndex::new(0),
+            from: "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae"
+                .parse()
+                .unwrap(),
+            from_subaccount: None,
+            created_at: Some(1699527697000000000),
+        };
+        let withdrawal_flow = WithdrawalFlow {
             tx_fee: TransactionPrice {
                 gas_limit: GasAmount::from(21_000_u32),
                 max_fee_per_gas: WeiPerGas::from(7_828_365_474_u64),
@@ -1316,7 +1354,7 @@ mod eth_balance {
             },
             effective_gas_price: WeiPerGas::from(0x1176e9eb9_u64),
             tx_status: TransactionStatus::Success,
-            ..Default::default()
+            ..WithdrawalFlow::for_request(withdrawal_request)
         };
         withdrawal_flow
             .clone()
@@ -1367,71 +1405,146 @@ mod eth_balance {
         );
     }
 
+    #[test]
+    fn should_update_after_successful_and_failed_erc20_withdrawal() {
+        let mut state_before_withdrawal = initial_erc20_state();
+        apply_state_transition(
+            &mut state_before_withdrawal,
+            &EventType::AcceptedErc20Deposit(received_erc20_event()),
+        );
+        apply_state_transition(
+            &mut state_before_withdrawal,
+            &EventType::AcceptedDeposit(received_eth_event()),
+        );
+
+        let mut state_after_successful_withdrawal = state_before_withdrawal.clone();
+        let balance_before_withdrawal = state_after_successful_withdrawal.eth_balance.clone();
+        //Values from https://sepolia.etherscan.io/tx/0x9695853792c636f9098844931da5e0ae7c5bdc8b9c6a7471aa44aed96875affc
+        let withdrawal_request = Erc20WithdrawalRequest {
+            max_transaction_fee: Wei::from(30_000_000_000_000_000_u64),
+            withdrawal_amount: Erc20Value::from(4_996_000_u64),
+            destination: "0xdd2851Cdd40aE6536831558DD46db62fAc7A844d"
+                .parse()
+                .unwrap(),
+            cketh_ledger_burn_index: LedgerBurnIndex::new(5),
+            erc20_contract_address: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238"
+                .parse()
+                .unwrap(),
+            ckerc20_ledger_id: Principal::from_text("3sgad-taaaa-aaaar-qaedq-cai").unwrap(),
+            ckerc20_ledger_burn_index: LedgerBurnIndex::new(2),
+            from: Principal::from_text(
+                "hkroy-sm7vs-yyjs7-ekppe-qqnwx-hm4zf-n7ybs-titsi-k6e3k-ucuiu-uqe",
+            )
+            .unwrap(),
+            from_subaccount: None,
+            created_at: 1_711_138_972_460_345_032,
+        };
+        let transaction_price = TransactionPrice {
+            gas_limit: GasAmount::from(65_000_u64),
+            max_fee_per_gas: WeiPerGas::from(1_500_766_620_u64),
+            max_priority_fee_per_gas: WeiPerGas::from(1_500_000_000_u64),
+        };
+        let effective_gas_price = WeiPerGas::from(0x596cfd9a_u64);
+        let effective_gas_used = GasAmount::from(0xb003_u32);
+        let withdrawal_flow = WithdrawalFlow {
+            tx_fee: transaction_price.clone(),
+            effective_gas_price,
+            effective_gas_used,
+            tx_status: TransactionStatus::Success,
+            ..WithdrawalFlow::for_request(withdrawal_request)
+        };
+        withdrawal_flow
+            .clone()
+            .apply(&mut state_after_successful_withdrawal);
+        let balance_after_successful_withdrawal =
+            state_after_successful_withdrawal.eth_balance.clone();
+
+        let estimated_transaction_fee = transaction_price.max_transaction_fee();
+        let effective_transaction_fee = effective_gas_price
+            .transaction_cost(effective_gas_used)
+            .unwrap();
+        let unspent_tx_fee = estimated_transaction_fee
+            .checked_sub(effective_transaction_fee)
+            .unwrap();
+        assert_eq!(
+            balance_after_successful_withdrawal,
+            EthBalance {
+                eth_balance: balance_before_withdrawal
+                    .eth_balance
+                    .checked_sub(effective_transaction_fee)
+                    .unwrap(),
+                total_effective_tx_fees: balance_before_withdrawal
+                    .total_effective_tx_fees
+                    .checked_add(effective_transaction_fee)
+                    .unwrap(),
+                total_unspent_tx_fees: balance_before_withdrawal
+                    .total_unspent_tx_fees
+                    .checked_add(unspent_tx_fee)
+                    .unwrap(),
+            }
+        );
+
+        let mut state_after_failed_withdrawal = state_before_withdrawal.clone();
+        WithdrawalFlow {
+            tx_status: TransactionStatus::Failure,
+            ..withdrawal_flow
+        }
+        .apply(&mut state_after_failed_withdrawal);
+        let balance_after_failed_withdrawal = state_after_failed_withdrawal.eth_balance.clone();
+        assert_eq!(
+            balance_after_successful_withdrawal,
+            balance_after_failed_withdrawal
+        );
+    }
+
     #[derive(Clone)]
     struct WithdrawalFlow {
-        ledger_burn_index: LedgerBurnIndex,
+        withdrawal_request: WithdrawalRequest,
         nonce: TransactionNonce,
-        withdrawal_amount: Wei,
         tx_fee: TransactionPrice,
         effective_gas_price: WeiPerGas,
+        effective_gas_used: GasAmount,
         tx_status: TransactionStatus,
     }
 
-    impl Default for WithdrawalFlow {
-        fn default() -> Self {
+    impl WithdrawalFlow {
+        fn for_request<T: Into<WithdrawalRequest>>(withdrawal_request: T) -> Self {
             Self {
-                ledger_burn_index: LedgerBurnIndex::new(0),
+                withdrawal_request: withdrawal_request.into(),
                 nonce: TransactionNonce::ZERO,
-                withdrawal_amount: Wei::ONE,
                 tx_fee: TransactionPrice {
                     gas_limit: GasAmount::from(21_000_u32),
                     max_fee_per_gas: WeiPerGas::ONE,
                     max_priority_fee_per_gas: WeiPerGas::ONE,
                 },
                 effective_gas_price: WeiPerGas::ONE,
+                effective_gas_used: GasAmount::from(21_000_u32),
                 tx_status: TransactionStatus::Success,
             }
         }
-    }
 
-    impl WithdrawalFlow {
         fn apply(self, state: &mut State) -> TransactionReceipt {
-            let withdrawal_request = EthWithdrawalRequest {
-                withdrawal_amount: self.withdrawal_amount,
-                destination: "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34"
-                    .parse()
-                    .unwrap(),
-                ledger_burn_index: self.ledger_burn_index,
-                from: "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae"
-                    .parse()
-                    .unwrap(),
-                from_subaccount: None,
-                created_at: Some(1699527697000000000),
+            let accepted_withdrawal_request_event = match &self.withdrawal_request {
+                WithdrawalRequest::CkEth(eth_request) => {
+                    EventType::AcceptedEthWithdrawalRequest(eth_request.clone())
+                }
+                WithdrawalRequest::CkErc20(erc20_request) => {
+                    EventType::AcceptedErc20WithdrawalRequest(erc20_request.clone())
+                }
             };
-            apply_state_transition(
-                state,
-                &EventType::AcceptedEthWithdrawalRequest(withdrawal_request.clone()),
-            );
+            apply_state_transition(state, &accepted_withdrawal_request_event);
 
-            let max_fee = self.tx_fee.max_transaction_fee();
-            let transaction = Eip1559TransactionRequest {
-                chain_id: EthereumNetwork::Sepolia.chain_id(),
-                nonce: self.nonce,
-                max_priority_fee_per_gas: self.tx_fee.max_priority_fee_per_gas,
-                max_fee_per_gas: self.tx_fee.max_fee_per_gas,
-                gas_limit: self.tx_fee.gas_limit,
-                destination: withdrawal_request.destination,
-                amount: withdrawal_request
-                    .withdrawal_amount
-                    .checked_sub(max_fee)
-                    .unwrap(),
-                data: vec![],
-                access_list: Default::default(),
-            };
+            let transaction = create_transaction(
+                &self.withdrawal_request,
+                self.nonce,
+                self.tx_fee,
+                EthereumNetwork::Sepolia,
+            )
+            .expect("BUG: failed to create transaction");
             apply_state_transition(
                 state,
                 &EventType::CreatedTransaction {
-                    withdrawal_id: self.ledger_burn_index,
+                    withdrawal_id: self.withdrawal_request.cketh_ledger_burn_index(),
                     transaction: transaction.clone(),
                 },
             );
@@ -1446,7 +1559,7 @@ mod eth_balance {
             apply_state_transition(
                 state,
                 &EventType::SignedTransaction {
-                    withdrawal_id: self.ledger_burn_index,
+                    withdrawal_id: self.withdrawal_request.cketh_ledger_burn_index(),
                     transaction: signed_tx.clone(),
                 },
             );
@@ -1457,18 +1570,39 @@ mod eth_balance {
                     .unwrap(),
                 block_number: BlockNumber::new(4190269),
                 effective_gas_price: self.effective_gas_price,
-                gas_used: signed_tx.transaction().gas_limit,
+                gas_used: self.effective_gas_used,
                 status: self.tx_status,
                 transaction_hash: signed_tx.hash(),
             };
             apply_state_transition(
                 state,
                 &EventType::FinalizedTransaction {
-                    withdrawal_id: self.ledger_burn_index,
+                    withdrawal_id: self.withdrawal_request.cketh_ledger_burn_index(),
                     transaction_receipt: tx_receipt.clone(),
                 },
             );
             tx_receipt
         }
+    }
+
+    fn initial_erc20_state() -> State {
+        let mut state = initial_state();
+        add_erc20_token(&mut state);
+        state
+    }
+
+    fn add_erc20_token(state: &mut State) {
+        use crate::state::CkErc20Token;
+        apply_state_transition(
+            state,
+            &EventType::AddedCkErc20Token(CkErc20Token {
+                erc20_ethereum_network: Default::default(),
+                erc20_contract_address: "0x1c7d4b196cb0c7b01d743fbc6116a902379c7238"
+                    .parse()
+                    .unwrap(),
+                ckerc20_token_symbol: "ckSepoliaUSDC".parse().unwrap(),
+                ckerc20_ledger_id: Principal::from_text("3sgad-taaaa-aaaar-qaedq-cai").unwrap(),
+            }),
+        );
     }
 }
