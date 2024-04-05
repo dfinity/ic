@@ -845,17 +845,21 @@ pub(crate) fn new_request_message_id(generator: u64) -> MessageId {
     MessageId::new(
         Kind::Request,
         Context::Inbound,
-        Class::BestEffort,
+            Class::BestEffort,
         generator,
     )
 }
 
-/// Generates a `MessageId` for a best-effort inbound response.
-pub(crate) fn new_response_message_id(generator: u64) -> MessageId {
+/// Generates a `MessageId` for an inbound response.
+pub(crate) fn new_response_message_id(generator: u64, best_effort: bool) -> MessageId {
     MessageId::new(
         Kind::Response,
         Context::Inbound,
-        Class::BestEffort,
+        if best_effort {
+            Class::BestEffort
+        } else {
+            Class::GuaranteedResponse
+        },
         generator,
     )
 }
