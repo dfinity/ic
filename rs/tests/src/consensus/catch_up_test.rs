@@ -55,7 +55,7 @@ use std::time::Duration;
 const PROMETHEUS_SCRAPE_INTERVAL: Duration = Duration::from_secs(5);
 // We need to wait a bit longer than [`PROMETHEUS_SCRAPE_INTERVAL`] to make sure that the new
 // metrics have been scraped before querying them again.
-const CUP_RETRY_DELAY: Duration = PROMETHEUS_SCRAPE_INTERVAL.saturating_mul(3);
+const CUP_RETRY_DELAY: Duration = PROMETHEUS_SCRAPE_INTERVAL.saturating_mul(5);
 
 // FIXME: We would expect the values for execution and state sync delay to be much smaller
 /// This configuration should not create a catch up loop.
