@@ -108,6 +108,7 @@ lazy_static! {
             MAX_NUM_INSTRUCTIONS
         ),
         canister_memory_limit: NumBytes::new(u64::MAX / 2),
+        wasm_memory_limit: None,
         memory_allocation: MemoryAllocation::default(),
         compute_allocation: ComputeAllocation::default(),
         subnet_type: SubnetType::Application,

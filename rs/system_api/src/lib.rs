@@ -160,6 +160,8 @@ impl InstructionLimits {
 pub struct ExecutionParameters {
     pub instruction_limits: InstructionLimits,
     pub canister_memory_limit: NumBytes,
+    // The limit on the Wasm memory set by the developer in canister settings.
+    pub wasm_memory_limit: Option<NumBytes>,
     pub memory_allocation: MemoryAllocation,
     pub compute_allocation: ComputeAllocation,
     pub subnet_type: SubnetType,
@@ -622,6 +624,11 @@ struct MemoryUsage {
     /// Upper limit on how much the memory the canister could use.
     limit: NumBytes,
 
+    /// The Wasm memory limit set by the developer in canister settings.
+    /// TODO: Enforce this limit in `update_available_memory`.
+    #[allow(dead_code)]
+    wasm_memory_limit: Option<NumBytes>,
+
     /// The current amount of execution memory that the canister is using.
     current_usage: NumBytes,
 
@@ -648,6 +655,7 @@ impl MemoryUsage {
         log: ReplicaLogger,
         canister_id: CanisterId,
         limit: NumBytes,
+        wasm_memory_limit: Option<NumBytes>,
         current_usage: NumBytes,
         current_message_usage: NumBytes,
         subnet_available_memory: SubnetAvailableMemory,
@@ -668,6 +676,7 @@ impl MemoryUsage {
         }
         Self {
             limit,
+            wasm_memory_limit,
             current_usage,
             current_message_usage,
             subnet_available_memory,
@@ -895,6 +904,7 @@ impl SystemApiImpl {
             log.clone(),
             sandbox_safe_system_state.canister_id,
             execution_parameters.canister_memory_limit,
+            execution_parameters.wasm_memory_limit,
             canister_current_memory_usage,
             canister_current_message_memory_usage,
             subnet_available_memory,
