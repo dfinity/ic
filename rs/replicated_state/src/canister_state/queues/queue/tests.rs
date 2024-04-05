@@ -8,17 +8,6 @@ use ic_test_utilities_types::{
 use ic_types::{messages::RequestOrResponse, time::UNIX_EPOCH, Time};
 use proptest::prelude::*;
 
-fn make_request(callback_id: u64, best_effort: bool) -> Request {
-    RequestBuilder::default()
-        .sender_reply_callback(CallbackId::from(callback_id))
-        .deadline(if best_effort {
-            CoarseTime::from_secs_since_unix_epoch(1)
-        } else {
-            NO_DEADLINE
-        })
-        .build()
-}
-
 #[test]
 fn canister_queue_constructor_test() {
     const CAPACITY: usize = 14;
@@ -368,6 +357,17 @@ fn canister_queue_calculate_stats() {
         103,
         queue.calculate_reference_stat_sum(|r| 20 + r.is_response() as usize)
     );
+}
+
+fn make_request(callback_id: u64, best_effort: bool) -> Request {
+    RequestBuilder::default()
+        .sender_reply_callback(CallbackId::from(callback_id))
+        .deadline(if best_effort {
+            CoarseTime::from_secs_since_unix_epoch(1)
+        } else {
+            NO_DEADLINE
+        })
+        .build()
 }
 
 #[test]
@@ -1020,7 +1020,7 @@ fn output_queue_decode_check_num_requests_and_responses() {
     )
     .is_ok());
 
-    // Check we get an error with one more request.
+    // Check that we get an error with one more request.
     queue.push_back(Some(RequestOrResponse::Request(
         RequestBuilder::default().build().into(),
     )));
@@ -1033,7 +1033,7 @@ fn output_queue_decode_check_num_requests_and_responses() {
     .is_err());
     queue.pop_back();
 
-    // Check we get an error with one more `None`.
+    // Check that we get an error with one more `None`.
     queue.push_back(None);
     assert!(output_queue_roundtrip_from_vec_deque(
         queue.clone(),
@@ -1044,7 +1044,7 @@ fn output_queue_decode_check_num_requests_and_responses() {
     .is_err());
     queue.pop_back();
 
-    // Check we get an error with one more response.
+    // Check that we get an error with one more response.
     queue.push_back(Some(RequestOrResponse::Response(
         ResponseBuilder::default().build().into(),
     )));
@@ -1057,7 +1057,7 @@ fn output_queue_decode_check_num_requests_and_responses() {
     .is_err());
     queue.pop_back();
 
-    // Check we get an error with one more slot reservation.
+    // Check that we get an error with one more slot reservation.
     assert!(output_queue_roundtrip_from_vec_deque(
         queue.clone(),
         num_request_slots,
