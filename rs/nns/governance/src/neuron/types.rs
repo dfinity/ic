@@ -15,16 +15,7 @@ use std::collections::HashMap;
 #[compare_default]
 pub struct Neuron {
     /// The id of the neuron.
-    ///
-    /// This is stored here temporarily, since its also stored on the map
-    /// that contains neurons.
-    ///
-    /// Initialization uses ids for the following graph. We need neurons
-    /// to come into existence at genesis with pre-chosen ids, so a
-    /// neuron needs to have an id. We could alternatively choose a
-    /// unique naming scheme instead and chose the ids on the
-    /// initialization of the canister.
-    pub id: Option<NeuronId>,
+    pub id: NeuronId,
     /// The principal of the ICP ledger account where the locked ICP
     /// balance resides. This principal is indistinguishable from one
     /// identifying a public key pair, such that those browsing the ICP
@@ -128,10 +119,17 @@ pub struct Neuron {
     pub dissolve_state: Option<DissolveState>,
 }
 
+impl Neuron {
+    /// Returns the neuron's ID.
+    pub fn id(&self) -> NeuronId {
+        self.id
+    }
+}
+
 impl From<Neuron> for NeuronProto {
     fn from(neuron: Neuron) -> Self {
         NeuronProto {
-            id: neuron.id,
+            id: Some(neuron.id),
             account: neuron.account,
             controller: neuron.controller,
             hot_keys: neuron.hot_keys,
@@ -156,10 +154,14 @@ impl From<Neuron> for NeuronProto {
     }
 }
 
-impl From<NeuronProto> for Neuron {
-    fn from(proto: NeuronProto) -> Self {
-        Neuron {
-            id: proto.id,
+impl TryFrom<NeuronProto> for Neuron {
+    type Error = String;
+
+    fn try_from(proto: NeuronProto) -> Result<Self, Self::Error> {
+        let id = proto.id.ok_or("Neuron ID is missing")?;
+
+        Ok(Neuron {
+            id,
             account: proto.account,
             controller: proto.controller,
             hot_keys: proto.hot_keys,
@@ -180,13 +182,14 @@ impl From<NeuronProto> for Neuron {
             known_neuron_data: proto.known_neuron_data,
             neuron_type: proto.neuron_type,
             dissolve_state: proto.dissolve_state,
-        }
+        })
     }
 }
 
 /// Builder of a neuron before it gets added into NeuronStore. This allows us to construct a neuron
 /// with private fields. Only fields that are possible to be set at creation time are defined in the
 /// builder.
+#[derive(Clone, Debug, PartialEq)]
 pub struct NeuronBuilder {
     // Required fields.
     pub id: NeuronId,
@@ -308,7 +311,6 @@ impl NeuronBuilder {
             neuron_type,
         } = self;
 
-        let id = Some(id);
         let StoredDissolvedStateAndAge {
             dissolve_state,
             aging_since_timestamp_seconds,

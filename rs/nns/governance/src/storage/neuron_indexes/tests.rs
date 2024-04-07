@@ -22,7 +22,7 @@ fn add_remove_neuron() {
     // Step 1: prepare indexes and neurons.
     let mut indexes = new_heap_based();
     let neuron = Neuron {
-        id: Some(NeuronId { id: 1 }),
+        id: NeuronId { id: 1 },
         account: [1u8; 32].to_vec(),
         controller: Some(PrincipalId::new_user_test_id(1)),
         hot_keys: vec![
@@ -148,7 +148,7 @@ lazy_static! {
     // Use MODEL_NEURON for tests where the exact member values are not needed for understanding the
     // test.
     static ref MODEL_NEURON: Neuron = Neuron {
-        id: Some(NeuronId { id: 1 }),
+        id: NeuronId { id: 1 },
         account: [1u8; 32].to_vec(),
         controller: Some(PrincipalId::new_user_test_id(1)),
         hot_keys: vec![
@@ -177,11 +177,11 @@ lazy_static! {
 fn update_neuron_id_fails() {
     let mut indexes = new_heap_based();
     let neuron = Neuron {
-        id: Some(NeuronId { id: 1 }),
+        id: NeuronId { id: 1 },
         ..MODEL_NEURON.clone()
     };
     let neuron_with_different_id = Neuron {
-        id: Some(NeuronId { id: 2 }),
+        id: NeuronId { id: 2 },
         ..MODEL_NEURON.clone()
     };
 
@@ -222,7 +222,7 @@ fn update_neuron_replace_controller() {
         hot_keys: vec![],
         ..MODEL_NEURON.clone()
     };
-    let neuron_id = MODEL_NEURON.id.unwrap();
+    let neuron_id = MODEL_NEURON.id();
     // Before updating, the neuron can be looked up by the old controller but cannot be by the new
     // one.
     assert_eq!(
@@ -277,7 +277,7 @@ fn update_neuron_add_hot_key() {
         ],
         ..MODEL_NEURON.clone()
     };
-    let neuron_id = MODEL_NEURON.id.unwrap();
+    let neuron_id = MODEL_NEURON.id();
     // Before updating, the neuron can be looked up by 101, 102 but not 103
     for i in 101..=102 {
         assert_eq!(
@@ -324,7 +324,7 @@ fn update_neuron_remove_hot_key() {
         hot_keys: vec![PrincipalId::new_user_test_id(102)],
         ..MODEL_NEURON.clone()
     };
-    let neuron_id = MODEL_NEURON.id.unwrap();
+    let neuron_id = MODEL_NEURON.id();
     // Before updating, the neuron can be looked up by 101, 102
     for i in 101..=102 {
         assert_eq!(
@@ -372,7 +372,7 @@ fn update_neuron_remove_controller_as_hot_key() {
         hot_keys: vec![PrincipalId::new_user_test_id(101)],
         ..MODEL_NEURON.clone()
     };
-    let neuron_id = MODEL_NEURON.id.unwrap();
+    let neuron_id = MODEL_NEURON.id();
     // Before updating, the neuron can be looked up by 100, 101
     for i in 100..=101 {
         assert_eq!(
@@ -436,7 +436,7 @@ fn update_neuron_set_followees() {
         },
         ..MODEL_NEURON.clone()
     };
-    let neuron_id = MODEL_NEURON.id.unwrap();
+    let neuron_id = MODEL_NEURON.id();
     // Before updating, the neuron can be looked up by 2, 3, 4 for topic 1.
     for i in 2..=4 {
         assert_eq!(
@@ -506,7 +506,7 @@ fn update_neuron_add_known_neuron() {
         }),
         ..MODEL_NEURON.clone()
     };
-    let neuron_id = MODEL_NEURON.id.unwrap();
+    let neuron_id = MODEL_NEURON.id();
     // No known neurons before update.
     assert_eq!(indexes.known_neuron().list_known_neuron_ids(), vec![]);
 
@@ -534,7 +534,7 @@ fn update_neuron_remove_known_neuron() {
         known_neuron_data: None,
         ..MODEL_NEURON.clone()
     };
-    let neuron_id = MODEL_NEURON.id.unwrap();
+    let neuron_id = MODEL_NEURON.id();
     // Known neuron can be looked up before update.
     assert_eq!(
         indexes.known_neuron().list_known_neuron_ids(),
@@ -565,7 +565,7 @@ fn update_neuron_update_known_neuron_name() {
         }),
         ..MODEL_NEURON.clone()
     };
-    let neuron_id = MODEL_NEURON.id.unwrap();
+    let neuron_id = MODEL_NEURON.id();
     assert!(indexes
         .known_neuron()
         .contains_known_neuron_name("known neuron data"),);
@@ -603,7 +603,7 @@ fn simple_neuron(id: u64) -> Neuron {
     }
 
     Neuron {
-        id: Some(NeuronId { id }),
+        id: NeuronId { id },
         account,
         controller: Some(PrincipalId::new_user_test_id(id)),
         ..Default::default()
