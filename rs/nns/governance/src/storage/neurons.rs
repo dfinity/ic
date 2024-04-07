@@ -661,8 +661,6 @@ impl TryFrom<Neuron> for DecomposedNeuron {
             dissolve_state,
         } = source;
 
-        let id = id.ok_or(NeuronStoreError::NeuronIdIsNone)?;
-
         let main = AbridgedNeuron {
             account,
             controller,
@@ -730,7 +728,7 @@ impl DecomposedNeuron {
         } = main;
 
         Neuron {
-            id: Some(id),
+            id,
             account,
             controller,
             hot_keys,

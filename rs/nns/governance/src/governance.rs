@@ -1661,7 +1661,7 @@ impl Governance {
                 // Neurons are converted from API type to internal type.
                 neurons
                     .into_iter()
-                    .map(|(id, proto)| (id, Neuron::from(proto)))
+                    .map(|(id, proto)| (id, Neuron::try_from(proto).expect("Invalid neuron")))
                     .collect(),
             ),
             env,
@@ -1916,7 +1916,7 @@ impl Governance {
         // Must clobber an existing neuron.
         self.with_neuron_mut(&neuron_id, |old_neuron| {
             // Converting from API type to internal type.
-            *old_neuron = Neuron::from(neuron);
+            *old_neuron = Neuron::try_from(neuron).unwrap();
         })
     }
 
@@ -1934,7 +1934,7 @@ impl Governance {
             ));
         }
         {
-            let neuron_real_id = neuron.id.as_ref().map(|x| x.id).unwrap_or(0);
+            let neuron_real_id = neuron.id().id;
             if neuron_real_id != neuron_id {
                 return Err(GovernanceError::new_with_message(
                     ErrorType::PreconditionFailed,
@@ -1982,7 +1982,7 @@ impl Governance {
     /// Fail if the given `neuron_id` doesn't exist in `self.neuron_store`.
     /// Caller should make sure neuron.id = Some(NeuronId {id: neuron_id}).
     fn remove_neuron(&mut self, neuron: Neuron) -> Result<(), GovernanceError> {
-        let neuron_id = neuron.id.expect("Neuron must have an id");
+        let neuron_id = neuron.id();
         if !self.neuron_store.contains(neuron_id) {
             return Err(GovernanceError::new_with_message(
                 ErrorType::NotFound,
@@ -1992,8 +1992,7 @@ impl Governance {
                 ),
             ));
         }
-        self.neuron_store
-            .remove_neuron(&neuron.id.expect("Neuron must have an id"));
+        self.neuron_store.remove_neuron(&neuron_id);
 
         Ok(())
     }
@@ -2071,7 +2070,7 @@ impl Governance {
             .flat_map(|neuron_id| {
                 self.neuron_store
                     .with_neuron(&neuron_id, |n| KnownNeuron {
-                        id: n.id,
+                        id: Some(n.id()),
                         known_neuron_data: n.known_neuron_data.clone(),
                     })
                     .map_err(|e| {
@@ -2428,7 +2427,7 @@ impl Governance {
             ));
         }
 
-        let parent_nid = parent_neuron.id.as_ref().expect("Neurons must have an id");
+        let parent_nid = parent_neuron.id();
 
         if !parent_neuron.is_controlled_by(caller) {
             return Err(GovernanceError::new(ErrorType::NotAuthorized));
@@ -3096,7 +3095,7 @@ impl Governance {
         let transaction_fee_e8s = self.transaction_fee();
 
         let parent_neuron = self.with_neuron(id, |neuron| neuron.clone())?;
-        let parent_nid = parent_neuron.id.as_ref().expect("Neurons must have an id");
+        let parent_nid = parent_neuron.id();
 
         if parent_neuron.state(self.env.now()) == NeuronState::Spawning {
             return Err(GovernanceError::new_with_message(
@@ -5084,12 +5083,12 @@ impl Governance {
 
             let managed_neuron_id = self
                 .with_neuron_by_neuron_id_or_subaccount(&managed_id, |managed_neuron| {
-                    managed_neuron.id
+                    managed_neuron.id()
                 })?;
 
             let title = Some(format!(
                 "Manage neuron proposal for neuron: {}",
-                managed_neuron_id.expect("Neurons must have an id").id
+                managed_neuron_id.id,
             ));
 
             Proposal {
@@ -5222,7 +5221,7 @@ impl Governance {
                     total_power += voting_power as u128;
 
                     ballots.insert(
-                        neuron.id.expect("Neuron must have an id").id,
+                        neuron.id().id,
                         Ballot {
                             vote: Vote::Unspecified as i32,
                             voting_power,
@@ -6337,7 +6336,7 @@ impl Governance {
                             // both internally to governance and externally in ledger.
                             println!(
                                 "{}Could not apply modulation to {:?} for neuron {:?} due to {:?}, skipping",
-                                LOG_PREFIX, neuron.maturity_e8s_equivalent, neuron.id, err
+                                LOG_PREFIX, neuron.maturity_e8s_equivalent, neuron.id(), err
                             );
                             continue;
                         }

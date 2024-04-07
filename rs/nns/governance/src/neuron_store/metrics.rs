@@ -236,7 +236,7 @@ mod tests {
 
         neuron_store
             .add_neuron(Neuron {
-                id: Some(NeuronId { id: 1 }),
+                id: NeuronId { id: 1 },
                 cached_neuron_stake_e8s: 100_000_000,
                 dissolve_state: Some(DissolveState::DissolveDelaySeconds(1)),
                 neuron_type: Some(NeuronType::Seed as i32),
@@ -246,7 +246,7 @@ mod tests {
             .unwrap();
         neuron_store
             .add_neuron(Neuron {
-                id: Some(NeuronId { id: 2 }),
+                id: NeuronId { id: 2 },
                 cached_neuron_stake_e8s: 234_000_000,
                 dissolve_state: Some(DissolveState::DissolveDelaySeconds(ONE_YEAR_SECONDS)),
                 joined_community_fund_timestamp_seconds: Some(1),
@@ -258,7 +258,7 @@ mod tests {
             .unwrap();
         neuron_store
             .add_neuron(Neuron {
-                id: Some(NeuronId { id: 3 }),
+                id: NeuronId { id: 3 },
                 cached_neuron_stake_e8s: 568_000_000,
                 dissolve_state: Some(DissolveState::DissolveDelaySeconds(ONE_YEAR_SECONDS * 4)),
                 controller: Some(PrincipalId::new_user_test_id(123)),
@@ -267,7 +267,7 @@ mod tests {
             .unwrap();
         neuron_store
             .add_neuron(Neuron {
-                id: Some(NeuronId { id: 4 }),
+                id: NeuronId { id: 4 },
                 cached_neuron_stake_e8s: 1_123_000_000,
                 dissolve_state: Some(DissolveState::DissolveDelaySeconds(ONE_YEAR_SECONDS * 4)),
                 controller: Some(PrincipalId::new_user_test_id(123)),
@@ -276,7 +276,7 @@ mod tests {
             .unwrap();
         neuron_store
             .add_neuron(Neuron {
-                id: Some(NeuronId { id: 5 }),
+                id: NeuronId { id: 5 },
                 cached_neuron_stake_e8s: 6_087_000_000,
                 dissolve_state: Some(DissolveState::DissolveDelaySeconds(ONE_YEAR_SECONDS * 8)),
                 controller: Some(PrincipalId::new_user_test_id(123)),
@@ -285,7 +285,7 @@ mod tests {
             .unwrap();
         neuron_store
             .add_neuron(Neuron {
-                id: Some(NeuronId { id: 6 }),
+                id: NeuronId { id: 6 },
                 cached_neuron_stake_e8s: 0,
                 dissolve_state: Some(DissolveState::DissolveDelaySeconds(5)),
                 controller: Some(PrincipalId::new_user_test_id(123)),
@@ -294,7 +294,7 @@ mod tests {
             .unwrap();
         neuron_store
             .add_neuron(Neuron {
-                id: Some(NeuronId { id: 7 }),
+                id: NeuronId { id: 7 },
                 cached_neuron_stake_e8s: 100,
                 dissolve_state: Some(DissolveState::DissolveDelaySeconds(5)),
                 controller: Some(PrincipalId::new_user_test_id(123)),
@@ -303,7 +303,7 @@ mod tests {
             .unwrap();
         neuron_store
             .add_neuron(Neuron {
-                id: Some(NeuronId { id: 8 }),
+                id: NeuronId { id: 8 },
                 cached_neuron_stake_e8s: 234_000_000,
                 dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
                     now + ONE_YEAR_SECONDS,
@@ -316,7 +316,7 @@ mod tests {
             .unwrap();
         neuron_store
             .add_neuron(Neuron {
-                id: Some(NeuronId { id: 9 }),
+                id: NeuronId { id: 9 },
                 cached_neuron_stake_e8s: 568_000_000,
                 dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
                     now + ONE_YEAR_SECONDS * 3,
@@ -329,7 +329,7 @@ mod tests {
             .unwrap();
         neuron_store
             .add_neuron(Neuron {
-                id: Some(NeuronId { id: 10 }),
+                id: NeuronId { id: 10 },
                 cached_neuron_stake_e8s: 1_123_000_000,
                 dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
                     now + ONE_YEAR_SECONDS * 5,
@@ -339,7 +339,7 @@ mod tests {
             .unwrap();
         neuron_store
             .add_neuron(Neuron {
-                id: Some(NeuronId { id: 11 }),
+                id: NeuronId { id: 11 },
                 cached_neuron_stake_e8s: 6_087_000_000,
                 dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
                     now + ONE_YEAR_SECONDS * 5,
@@ -350,7 +350,7 @@ mod tests {
             .unwrap();
         neuron_store
             .add_neuron(Neuron {
-                id: Some(NeuronId { id: 12 }),
+                id: NeuronId { id: 12 },
                 cached_neuron_stake_e8s: 18_000_000_000,
                 dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
                     now + ONE_YEAR_SECONDS * 7,
@@ -361,7 +361,7 @@ mod tests {
             .unwrap();
         neuron_store
             .add_neuron(Neuron {
-                id: Some(NeuronId { id: 13 }),
+                id: NeuronId { id: 13 },
                 cached_neuron_stake_e8s: 4_450_000_000,
                 controller: Some(PrincipalId::new_user_test_id(123)),
                 ..Default::default()
@@ -369,7 +369,7 @@ mod tests {
             .unwrap();
         neuron_store
             .add_neuron(Neuron {
-                id: Some(NeuronId { id: 14 }),
+                id: NeuronId { id: 14 },
                 cached_neuron_stake_e8s: 1_220_000_000,
                 controller: Some(PrincipalId::new_user_test_id(123)),
                 ..Default::default()
@@ -377,7 +377,7 @@ mod tests {
             .unwrap();
         neuron_store
             .add_neuron(Neuron {
-                id: Some(NeuronId { id: 15 }),
+                id: NeuronId { id: 15 },
                 cached_neuron_stake_e8s: 100_000_000,
                 dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(1)),
                 controller: Some(PrincipalId::new_user_test_id(123)),
@@ -454,7 +454,7 @@ mod tests {
 
         neuron_store
             .add_neuron(Neuron {
-                id: Some(NeuronId { id: 1 }),
+                id: NeuronId { id: 1 },
                 cached_neuron_stake_e8s: 0,
                 dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
                     now - ONE_DAY_SECONDS,
@@ -464,7 +464,7 @@ mod tests {
             .unwrap();
         neuron_store
             .add_neuron(Neuron {
-                id: Some(NeuronId { id: 2 }),
+                id: NeuronId { id: 2 },
                 cached_neuron_stake_e8s: 0,
                 dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
                     now - 13 * ONE_DAY_SECONDS,
@@ -474,7 +474,7 @@ mod tests {
             .unwrap();
         neuron_store
             .add_neuron(Neuron {
-                id: Some(NeuronId { id: 3 }),
+                id: NeuronId { id: 3 },
                 cached_neuron_stake_e8s: 0,
                 dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
                     now - 30 * ONE_DAY_SECONDS,

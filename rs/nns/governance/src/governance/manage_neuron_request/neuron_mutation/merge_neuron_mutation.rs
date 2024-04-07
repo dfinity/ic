@@ -96,7 +96,7 @@ impl GovernanceNeuronMutation for MergeNeuronMutation {
             .saturating_sub(target_neuron.aging_since_timestamp_seconds as i128);
 
         Ok(btreemap! {
-        source_neuron.id.unwrap() => NeuronDeltas {
+        source_neuron.id() => NeuronDeltas {
             neuron_fees_e8s: 0,
             cached_neuron_stake_e8s: (if source_stake_less_transaction_fee_e8s > 0 {
                 source_stake_e8s
@@ -114,7 +114,7 @@ impl GovernanceNeuronMutation for MergeNeuronMutation {
             maturity_e8s_equivalent: (source_maturity_to_transfer as i128).neg(),
             staked_maturity_e8s_equivalent: (source_staked_maturity_to_transfer as i128).neg(),
         },
-        target_neuron.id.unwrap() => NeuronDeltas {
+        target_neuron.id() => NeuronDeltas {
             neuron_fees_e8s: 0,
             cached_neuron_stake_e8s: (source_stake_less_transaction_fee_e8s as i128),
             aging_since_timestamp_seconds: aging_timestamp_seconds_delta,

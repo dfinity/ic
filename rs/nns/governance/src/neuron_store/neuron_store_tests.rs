@@ -16,7 +16,7 @@ fn simple_neuron(id: u64) -> Neuron {
     }
 
     Neuron {
-        id: Some(NeuronId { id }),
+        id: NeuronId { id },
         account,
         controller: Some(PrincipalId::new_user_test_id(id)),
         ..Default::default()
@@ -30,7 +30,7 @@ fn test_neuron_add_modify_remove() {
         cached_neuron_stake_e8s: 1,
         ..simple_neuron(1)
     };
-    let neuron_id = neuron.id.unwrap();
+    let neuron_id = neuron.id();
     let mut neuron_store = NeuronStore::new(BTreeMap::new());
 
     // Step 2: verify that the neuron store is empty and does not contain the neuron.
@@ -43,7 +43,7 @@ fn test_neuron_add_modify_remove() {
     // Step 4: verify that the neuron can be read and the neuron store isn't empty anymore.
     assert_eq!(neuron_store.len(), 1);
     assert!(neuron_store.contains(neuron_id));
-    let neuron_read_result = neuron_store.with_neuron(&neuron.id.unwrap(), |neuron| neuron.clone());
+    let neuron_read_result = neuron_store.with_neuron(&neuron.id(), |neuron| neuron.clone());
     assert_eq!(neuron_read_result, Ok(neuron.clone()));
 
     // Step 5: modify the neuron.
@@ -55,7 +55,7 @@ fn test_neuron_add_modify_remove() {
     // Step 6: verify that the neuron can still be read and the modification took place.
     assert_eq!(neuron_store.len(), 1);
     assert!(neuron_store.contains(neuron_id));
-    let neuron_read_result = neuron_store.with_neuron(&neuron.id.unwrap(), |neuron| neuron.clone());
+    let neuron_read_result = neuron_store.with_neuron(&neuron.id(), |neuron| neuron.clone());
     assert_eq!(
         neuron_read_result,
         Ok(Neuron {
@@ -70,7 +70,7 @@ fn test_neuron_add_modify_remove() {
     // Step 8: verify the neuron store is empty again and the neuron cannot be read anymore.
     assert_eq!(neuron_store.len(), 0);
     assert!(!neuron_store.contains(neuron_id));
-    let neuron_read_result = neuron_store.with_neuron(&neuron.id.unwrap(), |neuron| neuron.clone());
+    let neuron_read_result = neuron_store.with_neuron(&neuron.id(), |neuron| neuron.clone());
     assert_eq!(
         neuron_read_result,
         Err(NeuronStoreError::not_found(neuron_id))
@@ -95,7 +95,7 @@ fn test_add_neuron_update_indexes() {
             .get_neuron_id_by_subaccount(&neuron_2.subaccount().unwrap())
             .unwrap()
     });
-    assert_eq!(neuron_id_found_by_subaccount_index, neuron_2.id.unwrap());
+    assert_eq!(neuron_id_found_by_subaccount_index, neuron_2.id());
 
     let expected_account_id = AccountIdentifier::new(
         GOVERNANCE_CANISTER_ID.get(),
@@ -107,7 +107,7 @@ fn test_add_neuron_update_indexes() {
             .get_neuron_id_by_account_id(&expected_account_id)
             .unwrap()
     });
-    assert_eq!(neuron_id_found_by_account_id_index, neuron_2.id.unwrap());
+    assert_eq!(neuron_id_found_by_account_id_index, neuron_2.id());
 }
 
 #[test]
@@ -115,11 +115,11 @@ fn test_remove_neuron_update_indexes() {
     // Step 1: prepare the neuron and neuron store.
     let neuron = simple_neuron(1);
     let mut neuron_store = NeuronStore::new(btreemap! {
-        neuron.id.unwrap().id => neuron.clone(),
+        neuron.id().id => neuron.clone(),
     });
 
     // Step 2: removes the neuron from neuron store.
-    neuron_store.remove_neuron(&neuron.id.unwrap());
+    neuron_store.remove_neuron(&neuron.id());
 
     // Step 3: verifies that the neuron has also been removed from the subaccount index.
     let neuron_id_found_by_subaccount_index = with_stable_neuron_indexes(|indexes| {
@@ -149,12 +149,12 @@ fn test_modify_neuron_update_indexes() {
         ..simple_neuron(1)
     };
     let mut neuron_store = NeuronStore::new(btreemap! {
-        neuron.id.unwrap().id => neuron.clone(),
+        neuron.id().id => neuron.clone(),
     });
 
     // Step 2: modifies the controller of the neuron.
     neuron_store
-        .with_neuron_mut(&neuron.id.unwrap(), |neuron| {
+        .with_neuron_mut(&neuron.id(), |neuron| {
             neuron.controller = Some(PrincipalId::new_user_test_id(2));
         })
         .unwrap();
@@ -165,10 +165,7 @@ fn test_modify_neuron_update_indexes() {
             .principal()
             .get_neuron_ids(PrincipalId::new_user_test_id(2))
     });
-    assert_eq!(
-        neuron_ids_found_by_new_controller,
-        hashset! {neuron.id.unwrap()}
-    );
+    assert_eq!(neuron_ids_found_by_new_controller, hashset! {neuron.id()});
     let neuron_ids_found_by_old_controller = with_stable_neuron_indexes(|indexes| {
         indexes
             .principal()
@@ -216,13 +213,13 @@ fn test_add_inactive_neuron() {
 
     // Step 3.1: verify that the active neuron is not in the stable neuron store.
     let active_neuron_read_result = with_stable_neuron_store(|stable_neuron_store| {
-        stable_neuron_store.read(active_neuron.id.unwrap())
+        stable_neuron_store.read(active_neuron.id())
     });
     match active_neuron_read_result {
         Ok(_) => panic!("Active neuron appeared in stable neuron store"),
         Err(error) => match error {
             NeuronStoreError::NeuronNotFound { neuron_id } => {
-                assert_eq!(neuron_id, active_neuron.id.unwrap());
+                assert_eq!(neuron_id, active_neuron.id());
             }
             _ => panic!("read returns error other than not found: {:?}", error),
         },
@@ -231,13 +228,13 @@ fn test_add_inactive_neuron() {
     // Step 3.2: verify that inactive neuron can be read from stable neuron store and it's equal to
     // the one we added.
     let inactive_neuron_read_result = with_stable_neuron_store(|stable_neuron_store| {
-        stable_neuron_store.read(inactive_neuron.id.unwrap())
+        stable_neuron_store.read(inactive_neuron.id())
     });
     assert_eq!(inactive_neuron_read_result, Ok(inactive_neuron.clone()));
 
     // Step 3.3: verify that the inactive neuron can also be read from neuron store.
     let inactive_neuron_in_neuron_store =
-        neuron_store.with_neuron(&inactive_neuron.id.unwrap(), |neuron| neuron.clone());
+        neuron_store.with_neuron(&inactive_neuron.id(), |neuron| neuron.clone());
     assert_eq!(inactive_neuron_in_neuron_store, Ok(inactive_neuron.clone()));
 }
 
@@ -257,22 +254,22 @@ fn test_remove_inactive_neuron() {
     // Step 1.3: add the inactive neuron into neuron store and verifies it's in the stable neuron store.
     neuron_store.add_neuron(inactive_neuron.clone()).unwrap();
     let inactive_neuron_read_result = with_stable_neuron_store(|stable_neuron_store| {
-        stable_neuron_store.read(inactive_neuron.id.unwrap())
+        stable_neuron_store.read(inactive_neuron.id())
     });
     assert_eq!(inactive_neuron_read_result, Ok(inactive_neuron.clone()));
 
     // Step 2: remove the neuron from neuron store.
-    neuron_store.remove_neuron(&inactive_neuron.id.unwrap());
+    neuron_store.remove_neuron(&inactive_neuron.id());
 
     // Step 3: verify that inactive neuron cannot be read from stable neuron store anymore.
     let inactive_neuron_read_result = with_stable_neuron_store(|stable_neuron_store| {
-        stable_neuron_store.read(inactive_neuron.id.unwrap())
+        stable_neuron_store.read(inactive_neuron.id())
     });
     match inactive_neuron_read_result {
         Ok(_) => panic!("Inactive neuron failed to be removed from stable neuron store"),
         Err(error) => match error {
             NeuronStoreError::NeuronNotFound { neuron_id } => {
-                assert_eq!(neuron_id, inactive_neuron.id.unwrap());
+                assert_eq!(neuron_id, inactive_neuron.id());
             }
             _ => panic!("read returns error other than not found: {:?}", error),
         },
@@ -301,7 +298,7 @@ fn test_neuron_store_new_then_restore() {
     for neuron in neurons.values() {
         assert_eq!(
             neuron_store
-                .with_neuron(&neuron.id.unwrap(), |neuron| neuron.clone())
+                .with_neuron(&neuron.id(), |neuron| neuron.clone())
                 .unwrap(),
             neuron.clone()
         );
@@ -322,7 +319,7 @@ fn test_neuron_store_new_then_restore() {
     for neuron in neurons.values() {
         assert_eq!(
             restored_neuron_store
-                .with_neuron(&neuron.id.unwrap(), |neuron| neuron.clone())
+                .with_neuron(&neuron.id(), |neuron| neuron.clone())
                 .unwrap(),
             neuron.clone()
         );
@@ -403,7 +400,7 @@ fn test_batch_validate_neurons_in_stable_store_are_inactive_invalid() {
         neuron_store.batch_validate_neurons_in_stable_store_are_inactive(NeuronId::min_value(), 10);
 
     // Step 3: verifies the results - the active neuron in stable storage should be found as invalid.
-    assert_eq!(invalid_neuron_ids, vec![neuron.id.unwrap()]);
+    assert_eq!(invalid_neuron_ids, vec![neuron.id()]);
 }
 
 // Below are tests related to how the neurons are stored, which look at the internals of the neuron
@@ -446,7 +443,7 @@ fn is_neuron_in_stable(neuron_id: NeuronId) -> bool {
 fn assert_neuron_in_neuron_store_eq(neuron_store: &NeuronStore, neuron: &Neuron) {
     assert_eq!(
         neuron_store
-            .with_neuron(&neuron.id.unwrap(), |neuron| neuron.clone())
+            .with_neuron(&neuron.id(), |neuron| neuron.clone())
             .unwrap(),
         *neuron
     );
@@ -457,7 +454,7 @@ fn test_from_active_to_active() {
     // Step 1.1: set up an empty neuron store with an active neuron.
     let mut neuron_store = NeuronStore::new(BTreeMap::new());
     let neuron = active_neuron(neuron_store.now());
-    let neuron_id = neuron.id.unwrap();
+    let neuron_id = neuron.id();
     neuron_store.add_neuron(neuron.clone()).unwrap();
 
     // Step 1.2: verifies that the neuron is only in heap
@@ -489,7 +486,7 @@ fn test_from_active_to_inactive() {
         cached_neuron_stake_e8s: 1,
         ..inactive_neuron()
     };
-    let neuron_id = neuron.id.unwrap();
+    let neuron_id = neuron.id();
     neuron_store.add_neuron(neuron.clone()).unwrap();
 
     // Step 1.2: verifies that the neuron is only in heap
@@ -519,7 +516,7 @@ fn test_from_inactive_to_active() {
     // Step 1.1: set up an empty neuron store with an inactive neuron.
     let mut neuron_store = NeuronStore::new(BTreeMap::new());
     let neuron = inactive_neuron();
-    let neuron_id = neuron.id.unwrap();
+    let neuron_id = neuron.id();
     neuron_store.add_neuron(neuron.clone()).unwrap();
 
     // Step 1.2: verifies that the neuron is in both stable and heap.
@@ -549,7 +546,7 @@ fn test_from_inactive_to_inactive() {
     // Step 1.1: set up an empty neuron store with an inactive neuron.
     let mut neuron_store = NeuronStore::new(BTreeMap::new());
     let neuron = inactive_neuron();
-    let neuron_id = neuron.id.unwrap();
+    let neuron_id = neuron.id();
     neuron_store.add_neuron(neuron.clone()).unwrap();
 
     // Step 1.2: verifies that the neuron is in both stable and heap.
@@ -581,7 +578,7 @@ fn test_from_stale_inactive_to_inactive() {
     // Step 1.1: set up an empty neuron store with an active neuron.
     let mut neuron_store = NeuronStore::new(BTreeMap::new());
     let neuron = active_neuron(neuron_store.now());
-    let neuron_id = neuron.id.unwrap();
+    let neuron_id = neuron.id();
     neuron_store.add_neuron(neuron.clone()).unwrap();
 
     // Step 1.2: verifies that the neuron is only in heap.
@@ -608,7 +605,7 @@ fn test_from_stale_inactive_to_active() {
     // Step 1.1: set up an empty neuron store with an active neuron.
     let mut neuron_store = NeuronStore::new(BTreeMap::new());
     let neuron = active_neuron(neuron_store.now());
-    let neuron_id = neuron.id.unwrap();
+    let neuron_id = neuron.id();
     neuron_store.add_neuron(neuron.clone()).unwrap();
 
     // Step 1.2: verifies that the neuron is only in heap.
@@ -638,7 +635,7 @@ fn test_from_stale_inactive_to_active() {
 fn test_get_followers_by_followee_and_topic() {
     let neuron_store = NeuronStore::new(btreemap! {
         1 => Neuron {
-            id: Some(NeuronId { id: 1 }),
+            id: NeuronId { id: 1 },
             followees: hashmap! {
                 Topic::Unspecified as i32 => Followees {
                     followees: vec![NeuronId { id: 2 }, NeuronId { id: 3 }],
@@ -661,7 +658,7 @@ fn test_get_followers_by_followee_and_topic() {
 fn test_get_neuron_ids_readable_by_caller() {
     let neuron_store = NeuronStore::new(btreemap! {
         1 => Neuron {
-            id: Some(NeuronId { id: 1 }),
+            id: NeuronId { id: 1 },
             controller: Some(PrincipalId::new_user_test_id(1)),
             hot_keys: vec![PrincipalId::new_user_test_id(2), PrincipalId::new_user_test_id(3)],
             ..simple_neuron(1)
