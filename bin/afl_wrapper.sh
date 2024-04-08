@@ -79,19 +79,20 @@ function afl_env() {
                 symbolize=0:\
                 use_sigaltstack=1"
 
+    # Keep them sorted
     ASAN_OPTIONS=$ASAN_OPTIONS \
         LSAN_OPTIONS=$LSAN_OPTIONS \
-        AFL_FORKSRV_INIT_TMOUT=100 \
-        AFL_FAST_CAL=1 \
-        AFL_SKIP_CPUFREQ=1 \
         AFL_CMPLOG_ONLY_NEW=1 \
+        AFL_DISABLE_TRIM=1 \
+        AFL_DRIVER_DONT_DEFER=1 \
+        AFL_EXPAND_HAVOC_NOW=1 \
+        AFL_FAST_CAL=1 \
+        AFL_FORKSRV_INIT_TMOUT=100 \
         AFL_IGNORE_PROBLEMS=1 \
         AFL_IGNORE_TIMEOUTS=1 \
         AFL_KEEP_TIMEOUTS=1 \
-        AFL_EXPAND_HAVOC_NOW=1 \
-        AFL_DRIVER_DONT_DEFER=1 \
-        AFL_DISABLE_TRIM=1 \
-        /usr/local/bin/afl-fuzz $@
+        AFL_SKIP_CPUFREQ=1 \
+        /usr/local/bin/afl-fuzz -t +5000 $@
 }
 
 # To run multiple fuzzers in parallel, use the AFL_PARALLEL env variable
@@ -100,15 +101,62 @@ function afl_env() {
 
 if [[ ! -z "$AFL_PARALLEL" ]]; then
     # master fuzzer
-    afl_env -i $INPUT_DIR -o $OUTPUT_DIR -M fuzzer1 ${@:2} -- $1 </dev/null &>/dev/null &
+    afl_env -i $INPUT_DIR -o $OUTPUT_DIR -P exploit -p explore -M fuzzer1 ${@:2} -- $1 </dev/null &>/dev/null &
 
     for i in $(seq 2 $AFL_PARALLEL); do
-        afl_env -i $INPUT_DIR -o $OUTPUT_DIR -S fuzzer$i ${@:2} -- $1 </dev/null &>/dev/null &
+        probability=$((100 * $i / $AFL_PARALLEL))
+
+        # Strategy distribution
+        # 0.34 - exploit
+        # 0.67 - explore
+
+        # Power Schedule distribution
+        # 0.3 - fast
+        # 0.3 - explore
+        # 0.2 - exploit
+        # 0.1 - coe
+        # 0.1 - rare
+
+        # cummulative sum probability
+        if [[ $probability -le 10 ]]; then
+            power_schedule="fast"
+            strategy="exploit"
+        elif [[ $probability -le 30 ]]; then
+            power_schedule="fast"
+            strategy="explore"
+        elif [[ $probability -le 40 ]]; then
+            power_schedule="explore"
+            strategy="exploit"
+        elif [[ $probability -le 60 ]]; then
+            power_schedule="explore"
+            strategy="explore"
+        elif [[ $probability -le 67 ]]; then
+            power_schedule="exploit"
+            strategy="exploit"
+        elif [[ $probability -le 80 ]]; then
+            power_schedule="exploit"
+            strategy="explore"
+        elif [[ $probability -le 84 ]]; then
+            power_schedule="coe"
+            strategy="exploit"
+        elif [[ $probability -le 90 ]]; then
+            power_schedule="coe"
+            strategy="explore"
+        elif [[ $probability -le 94 ]]; then
+            power_schedule="rare"
+            strategy="exploit"
+        else
+            power_schedule="rare"
+            strategy="explore"
+        fi
+
+        afl_env -i $INPUT_DIR -o $OUTPUT_DIR -P $strategy -p $power_schedule -S fuzzer$i ${@:2} -- $1 </dev/null &>/dev/null &
     done
 
-    watch -n 5 --color "afl-whatsup -d $OUTPUT_DIR"
+    watch -n 5 --color "afl-whatsup -s -d $OUTPUT_DIR"
 else
     # if AFL_PARALLEL is not set
     # run a single instance
-    afl_env -i $INPUT_DIR -o $OUTPUT_DIR ${@:2} -- $1
+    # single instance will have strategy and power_schedule as exploit
+    afl_env -i $INPUT_DIR -o $OUTPUT_DIR -P exploit -p exploit ${@:2} -- $1
 fi

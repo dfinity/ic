@@ -17,6 +17,7 @@
 
 # [Bazel]
 /bazel/                   @dfinity-lab/teams/idx
+/bazel/fuzz_testing.bzl   @dfinity-lab/teams/idx @dfinity-lab/teams/prodsec
 /third_party/             @dfinity-lab/teams/idx
 /WORKSPACE.bazel          @dfinity-lab/teams/idx
 /mainnet-canisters.bzl    @dfinity-lab/teams/idx @dfinity-lab/teams/nns-team
