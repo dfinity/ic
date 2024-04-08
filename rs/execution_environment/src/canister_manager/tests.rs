@@ -4495,7 +4495,7 @@ fn fails_when_keeping_main_memory_without_enhanced_orthogonal_persistence() {
             )
             .unwrap_err();
         assert_eq!(error.code(), ErrorCode::CanisterContractViolation);
-        assert_eq!(error.description(), "Invalid upgrade option: The `wasm_memory_persistence: opt Keep` upgrade option requires that the new canister version supports enhanced orthogonal persistence.");
+        assert_eq!(error.description(), "Invalid upgrade option: The `wasm_memory_persistence: opt Keep` upgrade option requires that the new canister module supports enhanced orthogonal persistence.");
     }
 }
 
@@ -4519,16 +4519,15 @@ fn test_upgrade_to_enhanced_orthogonal_persistence() {
     )
     "#;
     let version2_wasm = wat::parse_str(version2_wat).unwrap();
-    let error = test
-        .upgrade_canister_v2(
-            canister_id,
-            version2_wasm,
-            CanisterUpgradeOptions {
-                skip_pre_upgrade: None,
-                wasm_memory_persistence: Some(WasmMemoryPersistence::Keep),
-            },
-        )
-        .unwrap();
+    test.upgrade_canister_v2(
+        canister_id,
+        version2_wasm,
+        CanisterUpgradeOptions {
+            skip_pre_upgrade: None,
+            wasm_memory_persistence: Some(WasmMemoryPersistence::Keep),
+        },
+    )
+    .unwrap();
 }
 
 fn create_canisters(test: &mut ExecutionTest, canisters: usize) {

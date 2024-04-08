@@ -795,7 +795,7 @@ impl PausedInstallCodeExecution for PausedPostUpgradeExecution {
     }
 }
 
-/// Determine main memory handling based on the `wasm_memory_persistence` upgrade options.
+/// Determines main memory handling based on the `wasm_memory_persistence` upgrade options.
 /// Integrates two safety checks:
 /// - The `wasm_memory_persistence` upgrade option is not omitted in error, when
 ///   the old canister implementation uses enhanced orthogonal persistence.
@@ -836,12 +836,17 @@ fn determine_main_memory_handling(
         })) => {
             // Safety guard checking that the enhanced orthogonal persistence upgrade option is only applied to canisters that support such.
             if !new_state_uses_orthogonal_persistence() {
-                let message = "The `wasm_memory_persistence: opt Keep` upgrade option requires that the new canister version supports enhanced orthogonal persistence.".to_string();
+                let message = "The `wasm_memory_persistence: opt Keep` upgrade option requires that the new canister module supports enhanced orthogonal persistence.".to_string();
                 return Err(CanisterManagerError::InvalidUpgradeOptionError { message });
             }
             Ok(MemoryHandling::Keep)
         }
-        _ => Ok(MemoryHandling::Replace),
+        CanisterInstallModeV2::Upgrade(Some(CanisterUpgradeOptions {
+            wasm_memory_persistence: Some(WasmMemoryPersistence::Replace),
+            ..
+        })) => Ok(MemoryHandling::Replace),
+        // These two modes cannot occur during an upgrade.
+        CanisterInstallModeV2::Install | CanisterInstallModeV2::Reinstall => unreachable!(),
     }
 }
 

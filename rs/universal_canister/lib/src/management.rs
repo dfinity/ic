@@ -290,7 +290,7 @@ impl<Args: CandidType> From<CandidCallBuilder<Args>> for Call {
 #[derive(CandidType, Deserialize)]
 pub enum WasmMemoryPersistence {
     Keep,
-    Drop,
+    Replace,
 }
 
 #[derive(CandidType, Deserialize)]
