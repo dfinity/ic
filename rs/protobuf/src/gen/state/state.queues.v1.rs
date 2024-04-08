@@ -86,8 +86,6 @@ pub struct Request {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RejectContext {
-    #[prost(uint64, tag = "1")]
-    pub reject_code_old: u64,
     #[prost(enumeration = "super::super::super::types::v1::RejectCode", tag = "3")]
     pub reject_code: i32,
     #[prost(string, tag = "2")]
