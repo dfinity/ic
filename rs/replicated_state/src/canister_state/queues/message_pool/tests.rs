@@ -15,27 +15,35 @@ fn test_insert() {
     let id1 = pool.insert_inbound(request(NO_DEADLINE).into());
     assert!(!id1.is_outbound());
     assert!(!id1.is_response());
+    assert!(!id1.is_best_effort());
     let id2 = pool.insert_inbound(request(time(20)).into());
     assert!(!id2.is_outbound());
     assert!(!id2.is_response());
+    assert!(id2.is_best_effort());
     let id3 = pool.insert_inbound(response(NO_DEADLINE).into());
     assert!(!id3.is_outbound());
     assert!(id3.is_response());
+    assert!(!id3.is_best_effort());
     let id4 = pool.insert_inbound(response(time(40)).into());
     assert!(!id4.is_outbound());
     assert!(id4.is_response());
+    assert!(id4.is_best_effort());
     let id5 = pool.insert_outbound_request(request(NO_DEADLINE).into(), time(50).into());
     assert!(id5.is_outbound());
     assert!(!id5.is_response());
+    assert!(!id5.is_best_effort());
     let id6 = pool.insert_outbound_request(request(time(60)).into(), time(65).into());
     assert!(id6.is_outbound());
     assert!(!id6.is_response());
+    assert!(id6.is_best_effort());
     let id7 = pool.insert_outbound_response(response(NO_DEADLINE).into());
     assert!(id7.is_outbound());
     assert!(id7.is_response());
+    assert!(!id7.is_best_effort());
     let id8 = pool.insert_outbound_response(response(time(80)).into());
     assert!(id8.is_outbound());
     assert!(id8.is_response());
+    assert!(id8.is_best_effort());
 
     assert_eq!(8, pool.len());
 
@@ -94,6 +102,7 @@ fn test_replace_inbound_timeout_response() {
     let id = placeholder.id();
     assert!(!id.is_outbound());
     assert!(id.is_response());
+    assert!(id.is_best_effort());
     assert_eq!(0, pool.len());
     assert_eq!(None, pool.get_response(id));
 
@@ -647,7 +656,7 @@ fn test_message_id_range() {
 fn test_memory_usage_stats_best_effort() {
     let mut pool = MessagePool::default();
 
-    // No memoory used by messages.
+    // No memory used by messages.
     assert_eq!(MemoryUsageStats::default(), pool.memory_usage_stats);
 
     // Insert a bunch of best-effort messages.
@@ -693,7 +702,7 @@ fn test_memory_usage_stats_best_effort() {
     assert!(pool.shed_largest_message().is_some());
     assert_eq!(1, pool.expire_messages(time(u32::MAX).into()).len());
 
-    // Again no message memoory usage.
+    // Again no message memory usage.
     assert_eq!(MemoryUsageStats::default(), pool.memory_usage_stats);
 }
 
@@ -701,7 +710,7 @@ fn test_memory_usage_stats_best_effort() {
 fn test_memory_usage_stats_guaranteed_response() {
     let mut pool = MessagePool::default();
 
-    // No memoory used by messages.
+    // No memory used by messages.
     assert_eq!(MemoryUsageStats::default(), pool.memory_usage_stats);
 
     // Insert a bunch of guaranteed response messages.
@@ -747,7 +756,7 @@ fn test_memory_usage_stats_guaranteed_response() {
     assert_eq!(1, pool.expire_messages(time(u32::MAX).into()).len());
     assert!(pool.take(inbound_response_id).is_some());
 
-    // Again no message memoory usage.
+    // Again no message memory usage.
     assert_eq!(MemoryUsageStats::default(), pool.memory_usage_stats);
 }
 
@@ -755,7 +764,7 @@ fn test_memory_usage_stats_guaranteed_response() {
 fn test_memory_usage_stats_oversized_requests() {
     let mut pool = MessagePool::default();
 
-    // No memoory used by messages.
+    // No memory used by messages.
     assert_eq!(MemoryUsageStats::default(), pool.memory_usage_stats);
 
     // Insert a bunch of oversized requests.
@@ -821,7 +830,7 @@ fn test_memory_usage_stats_oversized_requests() {
     assert!(pool.shed_largest_message().is_some());
     assert_eq!(1, pool.expire_messages(time(u32::MAX).into()).len());
 
-    // Again no message memoory usage.
+    // Again no message memory usage.
     assert_eq!(MemoryUsageStats::default(), pool.memory_usage_stats);
 }
 
