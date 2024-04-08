@@ -1566,6 +1566,7 @@ pub struct ExecutionTestBuilder {
     caller_canister_id: Option<CanisterId>,
     ecdsa_signature_fee: Option<Cycles>,
     ecdsa_key: Option<EcdsaKeyId>,
+    ecdsa_signing_enabled: bool,
     instruction_limit: NumInstructions,
     slice_instruction_limit: NumInstructions,
     install_code_instruction_limit: NumInstructions,
@@ -1602,6 +1603,7 @@ impl Default for ExecutionTestBuilder {
             caller_canister_id: None,
             ecdsa_signature_fee: None,
             ecdsa_key: None,
+            ecdsa_signing_enabled: false,
             instruction_limit: scheduler_config.max_instructions_per_message,
             slice_instruction_limit: scheduler_config.max_instructions_per_slice,
             install_code_instruction_limit: scheduler_config.max_instructions_per_install_code,
@@ -1680,6 +1682,15 @@ impl ExecutionTestBuilder {
     pub fn with_ecdsa_key(self, ecdsa_key: EcdsaKeyId) -> Self {
         Self {
             ecdsa_key: Some(ecdsa_key),
+            ecdsa_signing_enabled: true,
+            ..self
+        }
+    }
+
+    pub fn with_disabled_ecdsa_key(self, ecdsa_key: EcdsaKeyId) -> Self {
+        Self {
+            ecdsa_key: Some(ecdsa_key),
+            ecdsa_signing_enabled: false,
             ..self
         }
     }
@@ -1993,11 +2004,13 @@ impl ExecutionTestBuilder {
             config.ecdsa_signature_fee = ecdsa_signature_fee;
         }
         if let Some(ecdsa_key) = &self.ecdsa_key {
-            state
-                .metadata
-                .network_topology
-                .ecdsa_signing_subnets
-                .insert(ecdsa_key.clone(), vec![self.own_subnet_id]);
+            if self.ecdsa_signing_enabled {
+                state
+                    .metadata
+                    .network_topology
+                    .ecdsa_signing_subnets
+                    .insert(ecdsa_key.clone(), vec![self.own_subnet_id]);
+            }
             state
                 .metadata
                 .network_topology
@@ -2021,7 +2034,7 @@ impl ExecutionTestBuilder {
                 (
                     key,
                     MasterEcdsaPublicKey {
-                        algorithm_id: AlgorithmId::Secp256k1,
+                        algorithm_id: AlgorithmId::EcdsaSecp256k1,
                         public_key: b"abababab".to_vec(),
                     },
                 )
