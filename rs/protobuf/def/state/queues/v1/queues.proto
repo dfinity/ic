@@ -18,7 +18,7 @@ message Funds {
 }
 
 message StreamFlags {
-  bool responses_only = 1;
+  bool deprecated_responses_only = 1;
 }
 
 message Stream {

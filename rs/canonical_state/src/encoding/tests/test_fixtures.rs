@@ -19,7 +19,7 @@ pub fn stream_header(certification_version: CertificationVersion) -> StreamHeade
         vec![10.into(), 200.into(), 250.into()].into()
     };
     let flags = StreamFlags {
-        responses_only: certification_version >= CertificationVersion::V17,
+        deprecated_responses_only: certification_version >= CertificationVersion::V17,
     };
 
     StreamHeader::new(23.into(), 25.into(), 256.into(), reject_signals, flags)
