@@ -1187,7 +1187,7 @@ where
         vec![(Account::from(p1.0), 10_000_000)],
     );
 
-    let now = system_time_to_nanos(env.time());
+    let now = system_time_to_nanos(env.time_of_next_round());
     let tx_window = TX_WINDOW.as_nanos() as u64;
 
     assert_eq!(
@@ -1206,6 +1206,8 @@ where
             }
         )
     );
+
+    let now = system_time_to_nanos(env.time_of_next_round());
 
     assert_eq!(
         Err(TransferError::CreatedInFuture { ledger_time: now }),

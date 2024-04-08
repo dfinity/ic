@@ -230,10 +230,14 @@ fn global_timer_can_be_cancelled() {
         .unwrap();
 
     // Setup global timer to increase a global counter
-    let now_nanos = env.time().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
+    let now_nanos = env
+        .time_of_next_round()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos() as u64;
     let set_global_timer = wasm()
         .set_global_timer_method(wasm().inc_global_counter())
-        .api_global_timer_set(now_nanos + 1)
+        .api_global_timer_set(now_nanos + 3) // set the deadline in three rounds from now
         .get_global_counter()
         .reply_int64()
         .build();
@@ -258,7 +262,7 @@ fn global_timer_can_be_cancelled() {
         .unwrap();
     assert_eq!(
         result,
-        WasmResult::Reply((now_nanos + 1).to_le_bytes().into())
+        WasmResult::Reply((now_nanos + 3).to_le_bytes().into())
     );
 
     // The timer should not be called
@@ -309,10 +313,14 @@ fn global_timer_is_one_off() {
         .unwrap();
 
     // Setup global timer to increase a global counter
-    let now_nanos = env.time().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
+    let now_nanos = env
+        .time_of_next_round()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos() as u64;
     let set_global_timer = wasm()
         .set_global_timer_method(wasm().inc_global_counter())
-        .api_global_timer_set(now_nanos + 1)
+        .api_global_timer_set(now_nanos + 2) // set the deadline in two rounds from now
         .get_global_counter()
         .reply_int64()
         .build();
@@ -330,7 +338,6 @@ fn global_timer_is_one_off() {
     assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().into()));
 
     // The timer should reach the deadline now
-    env.advance_time(Duration::from_secs(1));
     env.tick();
     let result = env
         .execute_ingress(canister_id, "update", get_global_counter.clone())
@@ -339,6 +346,7 @@ fn global_timer_is_one_off() {
 
     // The timer should be called just once
     env.advance_time(Duration::from_secs(1));
+    env.tick();
     let result = env
         .execute_ingress(canister_id, "update", get_global_counter)
         .unwrap();
