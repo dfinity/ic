@@ -1,7 +1,3 @@
-// Including this clippy allow to circumvent clippy errors spawned by MockAll
-// internal expansion.  Should be removed when DFN-860 is resolved.
-// Specifically relevant to the Vec<> parameter.
-#![allow(clippy::ptr_arg)]
 use ic_interfaces::messaging::{MessageRouting, MessageRoutingError};
 use ic_interfaces_state_manager::{CertificationScope, StateManager};
 use ic_replicated_state::ReplicatedState;
