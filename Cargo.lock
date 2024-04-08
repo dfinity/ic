@@ -13184,6 +13184,7 @@ dependencies = [
  "dfn_http_metrics",
  "dfn_protobuf",
  "ic-base-types",
+ "ic-cdk",
  "ic-ledger-canister-core",
  "ic-ledger-core",
  "ic-metrics-encoder",
