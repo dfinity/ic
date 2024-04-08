@@ -421,7 +421,9 @@ impl CanisterQueues {
             }
             RequestOrResponse::Response(rep) => match self.canister_queues.get_mut(&sender) {
                 Some((queue, _)) => {
-                    if let Err(e) = queue.check_has_reserved_slot(rep.deadline != NO_DEADLINE) {
+                    if let Err(e) =
+                        queue.check_has_reserved_response_slot(rep.deadline != NO_DEADLINE)
+                    {
                         return Err((e, msg));
                     }
                     queue
@@ -879,21 +881,10 @@ impl CanisterQueues {
         self.input_queues_stats.reserved_slots as usize
     }
 
-    /// Returns total amount of cycles included in input queues.
-    pub fn input_queue_cycles(&self) -> Cycles {
-        self.input_queues_stats.cycles
-    }
-
     /// Returns the number of actual messages in output queues.
     pub fn output_queues_message_count(&self) -> usize {
         self.output_queues_stats.message_count
     }
-
-    /// Returns total amount of cycles included in the output queues.
-    pub fn output_queue_cycles(&self) -> Cycles {
-        self.output_queues_stats.cycles
-    }
-
     /// Returns the total byte size of canister input queues (queues +
     /// messages).
     pub fn input_queues_size_bytes(&self) -> usize {
@@ -1100,7 +1091,6 @@ impl CanisterQueues {
             stats.reserved_slots += q.reserved_slots() as isize;
             // FIXME
             stats.size_bytes += q.calculate_size_bytes(pool);
-            stats.cycles += q.calculate_cycles_in_queue(pool);
         }
         stats
     }
@@ -1117,7 +1107,6 @@ impl CanisterQueues {
         for (_, q) in canister_queues.values() {
             // stats.message_count += q.len();
             stats.message_count += q.calculate_message_count(pool);
-            stats.cycles += q.calculate_cycles_in_queue(pool);
         }
         stats
     }
@@ -1538,9 +1527,6 @@ pub struct InputQueuesStats {
 
     /// Byte size of input queues (queues + messages).
     size_bytes: usize,
-
-    /// Total amount of cycles contained in the input messages.
-    cycles: Cycles,
 }
 
 impl InputQueuesStats {
@@ -1562,7 +1548,6 @@ impl InputQueuesStats {
             response_count,
             reserved_slots,
             size_bytes: msg.count_bytes(),
-            cycles: msg.cycles(),
         }
     }
 }
@@ -1573,7 +1558,6 @@ impl AddAssign<InputQueuesStats> for InputQueuesStats {
         self.response_count += rhs.response_count;
         self.reserved_slots += rhs.reserved_slots;
         self.size_bytes += rhs.size_bytes;
-        self.cycles += rhs.cycles;
     }
 }
 
@@ -1583,7 +1567,6 @@ impl SubAssign<InputQueuesStats> for InputQueuesStats {
         self.response_count -= rhs.response_count;
         self.reserved_slots -= rhs.reserved_slots;
         self.size_bytes -= rhs.size_bytes;
-        self.cycles -= rhs.cycles;
     }
 }
 
@@ -1592,37 +1575,25 @@ impl SubAssign<InputQueuesStats> for InputQueuesStats {
 pub struct OutputQueuesStats {
     /// Number of actual messages in output queues.
     message_count: usize,
-
-    /// Total amount of cycles contained in the output queues.
-    cycles: Cycles,
 }
 
 impl OutputQueuesStats {
     /// Calculates the change in output queue stats caused by pushing (+) or
     /// popping (-) the given message.
-    fn stats_delta(msg: &RequestOrResponse) -> OutputQueuesStats {
-        let cycles_message = match msg {
-            RequestOrResponse::Response(response) => response.refund,
-            RequestOrResponse::Request(request) => request.payment,
-        };
-        OutputQueuesStats {
-            message_count: 1,
-            cycles: cycles_message,
-        }
+    fn stats_delta(_msg: &RequestOrResponse) -> OutputQueuesStats {
+        OutputQueuesStats { message_count: 1 }
     }
 }
 
 impl AddAssign<OutputQueuesStats> for OutputQueuesStats {
     fn add_assign(&mut self, rhs: OutputQueuesStats) {
         self.message_count += rhs.message_count;
-        self.cycles += rhs.cycles;
     }
 }
 
 impl SubAssign<OutputQueuesStats> for OutputQueuesStats {
     fn sub_assign(&mut self, rhs: OutputQueuesStats) {
         self.message_count -= rhs.message_count;
-        self.cycles -= rhs.cycles;
     }
 }
 

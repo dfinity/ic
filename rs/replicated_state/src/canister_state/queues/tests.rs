@@ -1144,14 +1144,10 @@ fn test_memory_usage_stats_oversized_requests() {
         response_count: 0,
         reserved_slots: 2,
         size_bytes: iq_size + best_effort_size_bytes + guaranteed_size_bytes,
-        cycles: Cycles::zero(),
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     // Two messages in output queues.
-    let expected_oq_stats = OutputQueuesStats {
-        message_count: 2,
-        cycles: Cycles::zero(),
-    };
+    let expected_oq_stats = OutputQueuesStats { message_count: 2 };
     assert_eq!(expected_oq_stats, queues.output_queues_stats);
     // Two guaranteed response memory reservations.
     let expected_mu_stats = MemoryUsageStats {
@@ -1184,14 +1180,10 @@ fn test_memory_usage_stats_oversized_requests() {
         response_count: 0,
         reserved_slots: 2,
         size_bytes: iq_size,
-        cycles: Cycles::zero(),
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     // Still two messages in output queues.
-    let expected_oq_stats = OutputQueuesStats {
-        message_count: 2,
-        cycles: Cycles::zero(),
-    };
+    let expected_oq_stats = OutputQueuesStats { message_count: 2 };
     assert_eq!(expected_oq_stats, queues.output_queues_stats);
     // Still two guaranteed response memory reservations.
     let expected_mu_stats = MemoryUsageStats {
@@ -1270,7 +1262,7 @@ fn test_stats() {
             .sender(*sender)
             .receiver(this)
             .method_name(&NAME[0..i + 1]) // Vary request size.
-            .payment(Cycles::new(5))
+            .payment(Cycles::zero())
             .build()
             .into();
         msg_size[i] = msg.count_bytes();
@@ -1284,7 +1276,6 @@ fn test_stats() {
             response_count: 0,
             reserved_slots: 0,
             size_bytes: iq_size + msg_size[i],
-            cycles: Cycles::new(5),
         };
         assert_eq!(expected_iq_stats, queues.input_queues_stats);
         assert_eq!(expected_oq_stats, queues.output_queues_stats);
@@ -1305,7 +1296,6 @@ fn test_stats() {
         response_count: 0,
         reserved_slots: 0,
         size_bytes: msg_size[0],
-        cycles: Cycles::new(5),
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     assert_eq!(expected_oq_stats, queues.output_queues_stats);
@@ -1316,16 +1306,13 @@ fn test_stats() {
     let msg = ResponseBuilder::default()
         .respondent(this)
         .originator(other_1)
-        .refund(Cycles::new(2))
+        .refund(Cycles::zero())
         .build();
     msg_size[3] = msg.count_bytes();
     queues.push_output_response(msg.into());
     // Input queue stats are unchanged.
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
-    expected_oq_stats += OutputQueuesStats {
-        message_count: 1,
-        cycles: Cycles::new(2),
-    };
+    expected_oq_stats += OutputQueuesStats { message_count: 1 };
     assert_eq!(expected_oq_stats, queues.output_queues_stats);
     // Consumed a guaranteed response memory reservation and added a response.
     expected_mu_stats += MemoryUsageStats {
@@ -1342,7 +1329,6 @@ fn test_stats() {
         .receiver(other_1)
         .method_name(NAME)
         .method_payload(vec![13; MAX_RESPONSE_COUNT_BYTES])
-        .payment(Cycles::new(5))
         .build();
     msg_size[4] = msg.count_bytes();
     queues.push_output_request(msg.into(), UNIX_EPOCH).unwrap();
@@ -1351,10 +1337,7 @@ fn test_stats() {
     expected_mu_stats.guaranteed_response_memory_reservations += 1;
     // expected_mu_stats.oversized_requests_extra_bytes += msg_size[4] - MAX_RESPONSE_COUNT_BYTES;
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
-    expected_oq_stats += OutputQueuesStats {
-        message_count: 1,
-        cycles: Cycles::new(5),
-    };
+    expected_oq_stats += OutputQueuesStats { message_count: 1 };
     assert_eq!(expected_oq_stats, queues.output_queues_stats);
     assert_eq!(expected_mu_stats, queues.memory_usage_stats);
 
@@ -1372,10 +1355,7 @@ fn test_stats() {
         .expect("could not pop a message")
     {
         (_, RequestOrResponse::Response(msg)) => {
-            expected_oq_stats -= OutputQueuesStats {
-                message_count: 1,
-                cycles: msg.refund,
-            };
+            expected_oq_stats -= OutputQueuesStats { message_count: 1 };
             assert_eq!(msg.originator, other_1)
         }
         msg => panic!("unexpected message popped: {:?}", msg),
@@ -1394,10 +1374,7 @@ fn test_stats() {
         .expect("could not pop a message")
     {
         (_, RequestOrResponse::Request(msg)) => {
-            expected_oq_stats -= OutputQueuesStats {
-                message_count: 1,
-                cycles: msg.payment,
-            };
+            expected_oq_stats -= OutputQueuesStats { message_count: 1 };
             assert_eq!(msg.receiver, other_1)
         }
         msg => panic!("unexpected message popped: {:?}", msg),
@@ -1411,16 +1388,13 @@ fn test_stats() {
 
     // Ensure no more outgoing messages.
     assert!(queues.output_into_iter(this).next().is_none());
-    expected_oq_stats = OutputQueuesStats {
-        message_count: 0,
-        cycles: Cycles::new(0),
-    };
+    expected_oq_stats = OutputQueuesStats { message_count: 0 };
 
     // And enqueue a matching incoming response.
     let msg: RequestOrResponse = ResponseBuilder::default()
         .respondent(other_1)
         .originator(this)
-        .refund(Cycles::new(5))
+        .refund(Cycles::zero())
         .build()
         .into();
     msg_size[5] = msg.count_bytes();
@@ -1433,7 +1407,6 @@ fn test_stats() {
         response_count: 1,
         reserved_slots: -1,
         size_bytes: msg_size[5],
-        cycles: Cycles::new(5),
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     assert_eq!(expected_oq_stats, queues.output_queues_stats);
@@ -1459,7 +1432,6 @@ fn test_stats() {
         response_count: 0,
         reserved_slots: 0,
         size_bytes: msg_size[1],
-        cycles: Cycles::new(5),
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     assert_eq!(expected_oq_stats, queues.output_queues_stats);
@@ -1477,7 +1449,6 @@ fn test_stats() {
         response_count: 0,
         reserved_slots: 0,
         size_bytes: msg_size[2],
-        cycles: Cycles::new(5),
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     assert_eq!(expected_oq_stats, queues.output_queues_stats);
@@ -1495,7 +1466,6 @@ fn test_stats() {
         response_count: 1,
         reserved_slots: 0,
         size_bytes: msg_size[5],
-        cycles: Cycles::new(5),
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     assert_eq!(expected_oq_stats, queues.output_queues_stats);
@@ -1551,7 +1521,6 @@ fn test_stats_induct_message_to_self() {
         response_count: 0,
         reserved_slots: 0,
         size_bytes: request_size,
-        cycles: Cycles::zero(),
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     // We now have guaranteed response memory reservations (for the same request) in
@@ -1567,7 +1536,6 @@ fn test_stats_induct_message_to_self() {
         response_count: 0,
         reserved_slots: 0,
         size_bytes: request_size,
-        cycles: Cycles::zero(),
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     // Memory usage stats unchanged, as the response memory reservations are still there.
@@ -1600,7 +1568,6 @@ fn test_stats_induct_message_to_self() {
         response_count: 1,
         reserved_slots: -1,
         size_bytes: response_size,
-        cycles: Cycles::zero(),
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     // Consumed input queue response memory reservation but response is still there
@@ -1616,7 +1583,6 @@ fn test_stats_induct_message_to_self() {
         response_count: 1,
         reserved_slots: 0,
         size_bytes: response_size,
-        cycles: Cycles::zero(),
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     // Zero response bytes, zero response memory reservations.
@@ -2075,11 +2041,11 @@ fn time_out_requests_pushes_correct_reject_responses() {
     let deadline1 = Time::from_secs_since_unix_epoch(0).unwrap();
     let deadline2 = Time::from_secs_since_unix_epoch(1).unwrap();
 
-    for (canister_id, cycles, callback_id, deadline) in [
-        (own_canister_id, 3, 0, deadline1),
-        (local_canister_id, 5, 1, deadline1),
-        (remote_canister_id, 7, 2, deadline1),
-        (remote_canister_id, 14, 3, deadline2),
+    for (canister_id, callback_id, deadline) in [
+        (own_canister_id, 0, deadline1),
+        (local_canister_id, 1, deadline1),
+        (remote_canister_id, 2, deadline1),
+        (remote_canister_id, 3, deadline2),
     ] {
         canister_queues
             .push_output_request(
@@ -2087,7 +2053,7 @@ fn time_out_requests_pushes_correct_reject_responses() {
                     receiver: canister_id,
                     sender: own_canister_id,
                     sender_reply_callback: CallbackId::from(callback_id),
-                    payment: Cycles::from(cycles as u64),
+                    payment: Cycles::zero(),
                     method_name: "No-Op".to_string(),
                     method_payload: vec![],
                     metadata: None,
