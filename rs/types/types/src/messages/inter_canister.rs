@@ -448,7 +448,7 @@ impl RequestOrResponse {
     pub fn payload_size_bytes(&self) -> NumBytes {
         match self {
             RequestOrResponse::Request(req) => req.payload_size_bytes(),
-            RequestOrResponse::Response(resp) => resp.response_payload.size_bytes(),
+            RequestOrResponse::Response(resp) => resp.payload_size_bytes(),
         }
     }
 
@@ -482,8 +482,7 @@ impl CountBytes for Request {
     fn count_bytes(&self) -> usize {
         size_of::<RequestOrResponse>()
             + size_of::<Request>()
-            + self.method_name.len()
-            + self.method_payload.len()
+            + self.payload_size_bytes().get() as usize
     }
 }
 
@@ -492,11 +491,9 @@ impl CountBytes for Request {
 /// `self` into a `RequestOrResponse` only to calculate its estimated byte size.
 impl CountBytes for Response {
     fn count_bytes(&self) -> usize {
-        let var_fields_size = match &self.response_payload {
-            Payload::Data(data) => data.len(),
-            Payload::Reject(context) => context.message.len(),
-        };
-        size_of::<RequestOrResponse>() + size_of::<Response>() + var_fields_size
+        size_of::<RequestOrResponse>()
+            + size_of::<Response>()
+            + self.payload_size_bytes().get() as usize
     }
 }
 
