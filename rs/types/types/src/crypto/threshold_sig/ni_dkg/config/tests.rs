@@ -286,7 +286,7 @@ fn should_return_correct_collection_threshold_when_resharing() {
 // applicable.
 //
 // The format of the subnet ids is specified in the interface spec:
-// https://sdk.dfinity.org/docs/interface-spec/index.html#textual-ids
+// https://internetcomputer.org/docs/current/references/ic-interface-spec#textual-ids
 fn should_correctly_format_config_display_message() {
     let config = NiDkgConfig::new(valid_dkg_config_data());
 

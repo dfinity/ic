@@ -110,8 +110,10 @@ async fn test_limit_outstanding_calls() {
             compute_allocation: zero.clone(),
             memory_allocation: zero.clone(),
             freezing_threshold: zero.clone(),
+            reserved_cycles_limit: zero.clone(),
         },
         status: CanisterStatusType::Running,
+        reserved_cycles: zero.clone(),
     };
 
     // Step 2: Call code under test.

@@ -1,3 +1,4 @@
+use ic_config::embedders::{Config as EmbeddersConfig, FeatureFlags};
 use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SubnetConfig;
@@ -19,6 +20,19 @@ use std::time::Duration;
 
 const MAX_LOG_MESSAGE_LEN: usize = 4 * 1024;
 
+fn default_config_with_canister_logging(canister_logging: FlagStatus) -> ExecutionConfig {
+    ExecutionConfig {
+        embedders_config: EmbeddersConfig {
+            feature_flags: FeatureFlags {
+                canister_logging,
+                ..FeatureFlags::default()
+            },
+            ..EmbeddersConfig::default()
+        },
+        ..ExecutionConfig::default()
+    }
+}
+
 fn setup(
     canister_logging: FlagStatus,
     settings: CanisterSettingsArgs,
@@ -26,10 +40,7 @@ fn setup(
     let subnet_type = SubnetType::Application;
     let config = StateMachineConfig::new(
         SubnetConfig::new(subnet_type),
-        ExecutionConfig {
-            canister_logging,
-            ..ExecutionConfig::default()
-        },
+        default_config_with_canister_logging(canister_logging),
     );
     let env = StateMachineBuilder::new()
         .with_config(Some(config))
@@ -66,10 +77,7 @@ fn setup_with_controller(
 fn restart_node(env: StateMachine, canister_logging: FlagStatus) -> StateMachine {
     env.restart_node_with_config(StateMachineConfig::new(
         SubnetConfig::new(SubnetType::Application),
-        ExecutionConfig {
-            canister_logging,
-            ..ExecutionConfig::default()
-        },
+        default_config_with_canister_logging(canister_logging),
     ))
 }
 
@@ -629,6 +637,64 @@ fn test_logging_trap_in_timer() {
                     content: b"[TRAP]: timer trap!".to_vec()
                 }
             ]
+        }
+    );
+}
+
+#[test]
+fn test_canister_log_preserved_after_disabling_and_enabling_again() {
+    // Test that the logs are recorded when the feature is enabled
+    // and preserved (not deleted) when the feature gets disabled.
+    let (env, canister_id, controller) = setup_with_controller(FlagStatus::Enabled);
+    env.set_checkpoints_enabled(true);
+
+    // Feature is enabled, batch #1.
+    let _ = env.execute_ingress(
+        canister_id,
+        "update",
+        wasm().debug_print(b"message 1").reply().build(),
+    );
+
+    // Disable the feature and log batch #2.
+    let env = restart_node(env, FlagStatus::Disabled);
+    env.advance_time(Duration::from_nanos(111_111));
+    let _ = env.execute_ingress(
+        canister_id,
+        "update",
+        wasm().debug_print(b"message 2").reply().build(),
+    );
+
+    // Enable the feature again and log batch #3.
+    let env = restart_node(env, FlagStatus::Enabled);
+    env.advance_time(Duration::from_nanos(222_222));
+    let _ = env.execute_ingress(
+        canister_id,
+        "update",
+        wasm().debug_print(b"message 3").reply().build(),
+    );
+
+    // Expect only batches 1 and 3.
+    let result = fetch_canister_logs(env, controller, canister_id);
+    let data = FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap();
+    assert_eq!(data.canister_log_records.len(), 2);
+    assert_eq!(
+        data,
+        FetchCanisterLogsResponse {
+            canister_log_records: vec![
+                // Batch #1.
+                CanisterLogRecord {
+                    idx: 0,
+                    timestamp_nanos: time::GENESIS.as_nanos_since_unix_epoch(),
+                    content: b"message 1".to_vec()
+                },
+                // No batch #2 records.
+                // Batch #3.
+                CanisterLogRecord {
+                    idx: 1,
+                    timestamp_nanos: 1620328630000333333,
+                    content: b"message 3".to_vec()
+                },
+            ],
         }
     );
 }

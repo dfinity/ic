@@ -2642,7 +2642,14 @@ impl CanisterLog {
     }
 
     /// Adds a new log record.
-    pub fn add_record(&mut self, timestamp_nanos: u64, content: &[u8]) {
+    pub fn add_record(&mut self, is_enabled: bool, timestamp_nanos: u64, content: &[u8]) {
+        if !is_enabled {
+            // If logging is disabled do not add new records,
+            // but still make sure the buffer is within limit.
+            self.make_free_space_within_limit(0);
+            return;
+        }
+
         // LINT.IfChange
         // Keep the new log record size within limit,
         // this must be in sync with `logging_charge_bytes` in `system_api.rs`.

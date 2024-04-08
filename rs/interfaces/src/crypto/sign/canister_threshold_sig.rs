@@ -642,16 +642,16 @@ pub trait ThresholdSchnorrSigner {
     /// using the method [`IDkgProtocol::load_transcript`].
     ///
     /// # Errors
-    /// * [`ThresholdSchnorrSigShareError::InternalError`] if there was an internal error creating the
+    /// * [`ThresholdSchnorrCreateSigShareError::InternalError`] if there was an internal error creating the
     ///   signature share, likely due to invalid input.
-    /// * [`ThresholdSchnorrSigShareError::NotAReceiver`] if the caller isn't in the
+    /// * [`ThresholdSchnorrCreateSigShareError::NotAReceiver`] if the caller isn't in the
     ///   transcripts' receivers. Only receivers can create signature shares.
-    /// * [`ThresholdSchnorrSigShareError::SerializationError`] if there was an error deserializing the
+    /// * [`ThresholdSchnorrCreateSigShareError::SerializationError`] if there was an error deserializing the
     ///   transcripts or serializing the signature share.
-    /// * [`ThresholdSchnorrSigShareError::SecretSharesNotFound`] if the secret shares necessary
+    /// * [`ThresholdSchnorrCreateSigShareError::SecretSharesNotFound`] if the secret shares necessary
     ///   for creating the dealing could not be found in the canister secret key store. Calling
     ///   [`IDkgProtocol::load_transcript`] may be necessary.
-    /// * [`ThresholdSchnorrSigShareError::TransientInternalError`] if there was a transient internal
+    /// * [`ThresholdSchnorrCreateSigShareError::TransientInternalError`] if there was a transient internal
     ///   error, e.g., when communicating with the remote vault.
     fn create_sig_share(
         &self,
@@ -700,7 +700,7 @@ pub trait ThresholdSchnorrSigVerifier {
     ///   not eligible according to the key transcript.
     fn combine_sig_shares(
         &self,
-        inputs: ThresholdSchnorrSigInputs,
+        inputs: &ThresholdSchnorrSigInputs,
         shares: &BTreeMap<NodeId, ThresholdSchnorrSigShare>,
     ) -> Result<ThresholdSchnorrCombinedSignature, ThresholdSchnorrCombineSigSharesError>;
 

@@ -110,8 +110,9 @@ impl IngressSelector for IngressManager {
             msgs: Vec<&'a ValidatedIngressArtifact>,
         }
 
-        let mut canister_queues =
-            HashMap::<_, CanisterQueue, CustomRandomState>::with_hasher(self.random_state.clone());
+        let mut canister_queues = HashMap::<_, CanisterQueue, CustomRandomState>::with_hasher(
+            self.random_state.create_state(),
+        );
 
         let artifacts = ingress_pool
             .validated()

@@ -30,7 +30,7 @@ use ic_https_outcalls_consensus::{
     gossip::CanisterHttpGossipImpl, payload_builder::CanisterHttpPayloadBuilderImpl,
     pool_manager::CanisterHttpPoolManagerImpl,
 };
-use ic_ingress_manager::{CustomRandomState, IngressManager};
+use ic_ingress_manager::{IngressManager, RandomStateKind};
 use ic_interfaces::{
     batch_payload::BatchPayloadBuilder,
     execution_environment::IngressHistoryReader,
@@ -482,7 +482,7 @@ fn start_consensus(
         cycles_account_manager,
         malicious_flags.clone(),
         // todo: use a builder pattern and remove this from the constructor.
-        CustomRandomState::default(),
+        RandomStateKind::Random,
     ));
 
     let canister_http_payload_builder = Arc::new(CanisterHttpPayloadBuilderImpl::new(

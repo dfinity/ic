@@ -11,7 +11,7 @@ name = "ledger-canister"
 path = "src/main.rs"
 
 [dependencies]
-async-trait = "0.1.57"
+async-trait = { workspace = true }
 candid = { workspace = true }
 candid_parser = { workspace = true }
 ciborium = { workspace = true }

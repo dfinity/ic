@@ -14,7 +14,7 @@ actix-web = { version = "4.0.1", default-features = false, features = [
     "compress-gzip",
     "cookies",
 ] }
-async-trait = "0.1.41"
+async-trait = { workspace = true }
 base64 = { workspace = true }
 candid = { workspace = true }
 clap = { version = "3.2.25", features = ["derive"] }

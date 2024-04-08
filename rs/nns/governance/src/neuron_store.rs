@@ -335,7 +335,7 @@ impl NeuronStore {
         Self {
             heap_neurons: neurons
                 .into_iter()
-                .map(|(id, proto)| (id, proto.into()))
+                .map(|(id, proto)| (id, Neuron::try_from(proto).unwrap()))
                 .collect(),
             topic_followee_index: proto_to_heap_topic_followee_index(topic_followee_index),
             clock,
@@ -417,7 +417,7 @@ impl NeuronStore {
 
     /// Add a new neuron
     pub fn add_neuron(&mut self, neuron: Neuron) -> Result<NeuronId, NeuronStoreError> {
-        let neuron_id = neuron.id.expect("Neuron must have an id");
+        let neuron_id = neuron.id();
 
         if self.contains(neuron_id) {
             return Err(NeuronStoreError::NeuronAlreadyExists(neuron_id));
@@ -455,7 +455,7 @@ impl NeuronStore {
                  neuron indexes are out-of-sync with neurons: {}",
                 LOG_PREFIX,
                 NeuronStoreError::CorruptedNeuronIndexes(CorruptedNeuronIndexes {
-                    neuron_id: neuron.id.unwrap(),
+                    neuron_id: neuron.id(),
                     indexes: vec![defects],
                 })
             );
@@ -494,7 +494,7 @@ impl NeuronStore {
     }
 
     fn remove_neuron_from_indexes(&mut self, neuron: &Neuron) {
-        let neuron_id = neuron.id.expect("Neuron must have id");
+        let neuron_id = neuron.id();
         if let Err(error) = with_stable_neuron_indexes_mut(|indexes| indexes.remove_neuron(neuron))
         {
             println!(
@@ -682,7 +682,7 @@ impl NeuronStore {
                     > 0
         };
         self.map_heap_neurons_filtered(filter, |n| NeuronsFundNeuron {
-            id: n.id.unwrap(),
+            id: n.id(),
             controller: n.controller.unwrap(),
             maturity_equivalent_icp_e8s: n.maturity_e8s_equivalent,
         })
@@ -693,10 +693,7 @@ impl NeuronStore {
     /// List all neuron ids whose neurons have staked maturity greater than 0.
     pub fn list_neurons_ready_to_unstake_maturity(&self, now_seconds: u64) -> Vec<NeuronId> {
         let filter = |neuron: &Neuron| neuron.ready_to_unstake_maturity(now_seconds);
-        self.map_heap_neurons_filtered(filter, |neuron| neuron.id)
-            .into_iter()
-            .flatten()
-            .collect()
+        self.map_heap_neurons_filtered(filter, |neuron| neuron.id())
     }
 
     /// List all neuron ids of known neurons
@@ -715,10 +712,7 @@ impl NeuronStore {
             // so it would be quite surprising if it is missing here (impossible in fact)
             now_seconds >= n.spawn_at_timestamp_seconds.unwrap_or(u64::MAX)
         };
-        self.map_heap_neurons_filtered(filter, |n| n.id)
-            .into_iter()
-            .flatten()
-            .collect()
+        self.map_heap_neurons_filtered(filter, |n| n.id())
     }
 
     /// Returns an iterator of all voting-eligible neurons
@@ -772,7 +766,7 @@ impl NeuronStore {
                  neuron indexes are out-of-sync with neurons: {}",
                 LOG_PREFIX,
                 NeuronStoreError::CorruptedNeuronIndexes(CorruptedNeuronIndexes {
-                    neuron_id: old_neuron.id.unwrap(),
+                    neuron_id: old_neuron.id(),
                     indexes: defects,
                 })
             );
@@ -847,7 +841,7 @@ impl NeuronStore {
                 .range_neurons(next_neuron_id..)
                 .take(batch_size)
                 .flat_map(|neuron| {
-                    let current_neuron_id = neuron.id.unwrap();
+                    let current_neuron_id = neuron.id();
                     neuron_id_for_next_batch = current_neuron_id.next();
 
                     let is_neuron_inactive = neuron.is_inactive(self.now());

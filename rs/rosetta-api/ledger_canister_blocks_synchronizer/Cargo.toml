@@ -6,7 +6,7 @@ edition = "2021"
 description = "Synchronizes a local copy of the ledger blocks with the ledger"
 
 [dependencies]
-async-trait = "0.1.41"
+async-trait = { workspace = true }
 candid = { workspace = true }
 chrono = { workspace = true }
 clap = { version = "3.2.25", features = ["derive"] }

@@ -230,7 +230,7 @@ impl ComputeAllocation {
     }
 }
 
-// The default `ComputeAllocation` is 0: https://sdk.dfinity.org/docs/interface-spec/index.html#ic-install_code.
+// The default `ComputeAllocation` is 0: https://internetcomputer.org/docs/current/references/ic-interface-spec#ic-install_code.
 #[allow(clippy::derivable_impls)]
 impl Default for ComputeAllocation {
     fn default() -> Self {

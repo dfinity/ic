@@ -8,18 +8,17 @@ documentation.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
-async-trait = "0.1.59"
-axum = { version = "0.6.1", features = ["json"] }
+async-trait = { workspace = true }
+axum = { workspace = true }
 candid = { workspace = true }
 clap = { workspace = true }
 futures = { workspace = true }
-hyper = { version = "0.14.23", features = ["full"] }
-hyper-rustls = { workspace = true }
 mockall = { workspace = true }
 nix = { workspace = true }
 opentelemetry = { version = "0.20", features = ["metrics"] }
 opentelemetry-prometheus = "0.13.0"
 prometheus = { workspace = true }
+reqwest = { version = "^0.12.0", features = ["rustls-tls", "rustls-tls-native-roots"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tempfile = "3.3.0"

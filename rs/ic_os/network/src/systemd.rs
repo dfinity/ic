@@ -158,6 +158,8 @@ pub fn generate_systemd_config_files(
     eprintln!("Interfaces sorted by speed: {:?}", interfaces);
 
     let ping_target = network_info.ipv6_gateway.to_string();
+    // old nodes are still configured with a local IPv4 interface connection
+    // local IPv4 interfaces must be filtered out
     let ipv6_interfaces: Vec<&Interface> = interfaces
         .iter()
         .filter(|i| {

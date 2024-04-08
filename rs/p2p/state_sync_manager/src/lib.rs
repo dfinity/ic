@@ -86,7 +86,6 @@ pub fn start_state_sync_manager<T: Send + 'static>(
     advert_receiver: tokio::sync::mpsc::Receiver<(StateSyncArtifactId, NodeId)>,
 ) -> Shutdown {
     let state_sync_manager_metrics = StateSyncManagerMetrics::new(metrics);
-    let shutdown = Shutdown::new(rt.clone());
     let manager = StateSyncManager {
         log: log.clone(),
         rt: rt.clone(),
@@ -96,9 +95,10 @@ pub fn start_state_sync_manager<T: Send + 'static>(
         advert_receiver,
         ongoing_state_sync: None,
     };
-    shutdown
-        .spawn_on_with_cancellation(|cancellation: CancellationToken| manager.run(cancellation));
-    shutdown
+    Shutdown::spawn_on_with_cancellation(
+        |cancellation: CancellationToken| manager.run(cancellation),
+        rt,
+    )
 }
 
 struct StateSyncManager<T> {
@@ -135,7 +135,7 @@ impl<T: 'static + Send> StateSyncManager<T> {
                     );
                 },
                 Some((advert, peer_id)) = self.advert_receiver.recv() =>{
-                    self.handle_advert(advert, peer_id, &cancellation).await;
+                    self.handle_advert(advert, peer_id).await;
                 }
                 Some(_) = advertise_task.join_next() => {}
             }
@@ -143,12 +143,7 @@ impl<T: 'static + Send> StateSyncManager<T> {
         advertise_task.shutdown().await;
     }
 
-    async fn handle_advert(
-        &mut self,
-        artifact_id: StateSyncArtifactId,
-        peer_id: NodeId,
-        root_cancellation: &CancellationToken,
-    ) {
+    async fn handle_advert(&mut self, artifact_id: StateSyncArtifactId, peer_id: NodeId) {
         self.metrics.adverts_received_total.inc();
         // Remove ongoing state sync if finished or try to add peer if ongoing.
         if let Some(ongoing) = &mut self.ongoing_state_sync {
@@ -158,12 +153,12 @@ impl<T: 'static + Send> StateSyncManager<T> {
                 // to drop adverts since peers will readvertise anyway.
                 let _ = ongoing.sender.try_send(peer_id);
             }
-            if ongoing.jh.is_finished() {
+            if ongoing.shutdown.completed() {
                 info!(self.log, "Cleaning up state sync {}", artifact_id.height);
                 self.ongoing_state_sync = None;
             } else {
                 if self.state_sync.should_cancel(&ongoing.artifact_id) {
-                    ongoing.cancellation.cancel();
+                    ongoing.shutdown.cancel();
                 }
                 return;
             }
@@ -186,9 +181,7 @@ impl<T: 'static + Send> StateSyncManager<T> {
                 self.metrics.ongoing_state_sync_metrics.clone(),
                 Arc::new(Mutex::new(chunkable)),
                 artifact_id.clone(),
-                self.state_sync.clone(),
                 self.transport.clone(),
-                root_cancellation.child_token(),
             );
             // Add peer that initiated this state sync to ongoing state sync.
             ongoing

@@ -1,5 +1,6 @@
 pub mod ecdsa;
 mod idkg;
+pub mod schnorr;
 #[cfg(test)]
 pub(crate) mod test_utils;
 

@@ -1,8 +1,3 @@
-// Including this clippy allow to circumvent clippy errors spawned by MockAll
-// internal expansion.  Should be removed when DFN-860 is resolved.
-// Specifically relevant to the Vec<> parameter.
-#![allow(clippy::ptr_arg)]
-
 use super::*;
 use crate::message_routing::{LABEL_REMOTE, METRIC_TIME_IN_BACKLOG, METRIC_TIME_IN_STREAM};
 use ic_base_types::NumSeconds;
@@ -1154,7 +1149,7 @@ fn garbage_collect_local_state_success() {
         initial_stream.push(response.clone());
         initial_stream.push(request.clone());
         initial_stream.set_reverse_stream_flags(StreamFlags {
-            responses_only: false,
+            deprecated_responses_only: false,
         });
         initial_state.with_streams(btreemap![REMOTE_SUBNET => initial_stream]);
 
@@ -1167,7 +1162,7 @@ fn garbage_collect_local_state_success() {
             signals_end: 33,
             reject_signals: None,
             flags: StreamFlags {
-                responses_only: true,
+                deprecated_responses_only: true,
             },
         });
 
@@ -1181,7 +1176,7 @@ fn garbage_collect_local_state_success() {
         });
         expected_stream.push(request);
         expected_stream.set_reverse_stream_flags(StreamFlags {
-            responses_only: true,
+            deprecated_responses_only: true,
         });
         expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_stream]);
 

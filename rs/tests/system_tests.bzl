@@ -171,9 +171,6 @@ def system_test(
     _env_deps[_guestos + "version.txt"] = "ENV_DEPS__IC_VERSION_FILE"
 
     if uses_guestos_dev:
-        # TODO: remove GZ after CDI is upgraded to version that supports ZST
-        _env_deps[_guestos + "disk-img-url-gz"] = "ENV_DEPS__DEV_DISK_IMG_TAR_GZ_CAS_URL"
-        _env_deps[_guestos + "disk-img.tar.gz.sha256"] = "ENV_DEPS__DEV_DISK_IMG_TAR_GZ_SHA256"
         _env_deps[_guestos + "disk-img.tar.zst.cas-url"] = "ENV_DEPS__DEV_DISK_IMG_TAR_ZST_CAS_URL"
         _env_deps[_guestos + "disk-img.tar.zst.sha256"] = "ENV_DEPS__DEV_DISK_IMG_TAR_ZST_SHA256"
         _env_deps[_guestos + "update-img.tar.zst.cas-url"] = "ENV_DEPS__DEV_UPDATE_IMG_TAR_ZST_CAS_URL"

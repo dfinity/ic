@@ -8,7 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 askama = { workspace = true }
-async-trait = "0.1.68"
+async-trait = { workspace = true }
 axum = { workspace = true }
 bytes = { workspace = true }
 byte-unit = "4.0.14"

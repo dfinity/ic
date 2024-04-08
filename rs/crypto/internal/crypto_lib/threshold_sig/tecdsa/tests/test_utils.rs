@@ -1149,7 +1149,7 @@ impl Bip340SignatureProtocolExecution {
         &self,
         sig: &ThresholdBip340CombinedSignatureInternal,
     ) -> Result<(), ThresholdBip340VerifySignatureInternalError> {
-        verify_bip340_threshold_signature(
+        verify_threshold_bip340_signature(
             sig,
             &self.derivation_path,
             &self.signed_message,
@@ -1163,7 +1163,9 @@ impl Bip340SignatureProtocolExecution {
 
         assert!(verify_bip340_signature_using_third_party(
             &pk,
-            &sig.serialize()?,
+            &sig.serialize().map_err(|e| {
+                ThresholdBip340VerifySignatureInternalError::InternalError(format!("{e:?}"))
+            })?,
             &self.signed_message
         ));
 

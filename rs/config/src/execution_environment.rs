@@ -261,10 +261,6 @@ pub struct Config {
     /// Indicates whether canister backup and restore feature is enabled or not.
     pub canister_snapshots: FlagStatus,
 
-    // TODO(IC-272): remove this flag once the feature is enabled by default.
-    /// Indicates whether canister logging feature is enabled or not.
-    pub canister_logging: FlagStatus,
-
     /// Indicates whether dirty page logging is enabled or not.
     pub dirty_page_logging: FlagStatus,
 }
@@ -337,7 +333,6 @@ impl Default for Config {
             wasm_chunk_store: FlagStatus::Enabled,
             stop_canister_timeout_duration: STOP_CANISTER_TIMEOUT_DURATION,
             canister_snapshots: FlagStatus::Disabled,
-            canister_logging: FlagStatus::Disabled,
             dirty_page_logging: FlagStatus::Disabled,
         }
     }

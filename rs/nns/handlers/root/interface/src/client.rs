@@ -77,6 +77,7 @@ pub enum SpyNnsRootCanisterClientCall {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[allow(clippy::large_enum_variant)]
 pub enum SpyNnsRootCanisterClientReply {
     ChangeCanisterControllers(Result<ChangeCanisterControllersResponse, (Option<i32>, String)>),
     CanisterStatus(Result<CanisterStatusResult, (Option<i32>, String)>),
@@ -208,8 +209,16 @@ impl SpyNnsRootCanisterClientReply {
             status: CanisterStatusType::Running,
             module_hash: None,
             memory_size: Default::default(),
-            settings: DefiniteCanisterSettings { controllers },
+            settings: DefiniteCanisterSettings {
+                controllers,
+                compute_allocation: Some(candid::Nat::from(7_u32)),
+                memory_allocation: Some(candid::Nat::from(8_u32)),
+                freezing_threshold: Some(candid::Nat::from(9_u32)),
+                reserved_cycles_limit: Some(candid::Nat::from(10_u32)),
+            },
             cycles: candid::Nat::from(42_u32),
+            idle_cycles_burned_per_day: Some(candid::Nat::from(43_u32)),
+            reserved_cycles: Some(candid::Nat::from(44_u32)),
         }))
     }
 

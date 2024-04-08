@@ -5,12 +5,13 @@ use crate::vault::api::{
     CspBasicSignatureError, CspBasicSignatureKeygenError, CspMultiSignatureError,
     CspMultiSignatureKeygenError, CspSecretKeyStoreContainsError, CspTlsKeygenError,
     CspTlsSignError, IDkgCreateDealingVaultError, PublicRandomSeedGeneratorError,
-    ValidatePksAndSksError,
+    ThresholdSchnorrSigShareBytes, ValidatePksAndSksError,
 };
 use crate::vault::api::{
     CspPublicKeyStoreError, CspVault, IDkgDealingInternalBytes, IDkgTranscriptInternalBytes,
 };
 use crate::vault::local_csp_vault::{LocalCspVault, ProdLocalCspVault};
+use crate::vault::remote_csp_vault::ThresholdSchnorrCreateSigShareVaultError;
 use crate::vault::remote_csp_vault::{remote_vault_codec_builder, TarpcCspVault};
 use crate::vault::remote_csp_vault::{PksAndSksContainsErrors, FOUR_GIGA_BYTES};
 use crate::ExternalPublicKeys;
@@ -488,6 +489,31 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
                 lambda_masked_raw,
                 kappa_times_lambda_raw,
                 key_times_lambda_raw,
+                algorithm_id,
+            )
+        };
+        execute_on_thread_pool(&self.thread_pool, job).await
+    }
+
+    // `ThresholdSchnorrSignerCspVault`-methods
+    async fn create_schnorr_sig_share(
+        self,
+        _: context::Context,
+        derivation_path: ExtendedDerivationPath,
+        message: ByteBuf,
+        nonce: Randomness,
+        key_raw: IDkgTranscriptInternalBytes,
+        presig_raw: IDkgTranscriptInternalBytes,
+        algorithm_id: AlgorithmId,
+    ) -> Result<ThresholdSchnorrSigShareBytes, ThresholdSchnorrCreateSigShareVaultError> {
+        let vault = self.local_csp_vault;
+        let job = move || {
+            vault.create_schnorr_sig_share(
+                derivation_path,
+                message.into_vec(),
+                nonce,
+                key_raw,
+                presig_raw,
                 algorithm_id,
             )
         };

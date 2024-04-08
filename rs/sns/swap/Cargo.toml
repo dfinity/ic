@@ -20,7 +20,7 @@ path = "tests/swap.rs"
 [dependencies]
 build-info = { workspace = true }
 
-async-trait = "0.1.42"
+async-trait = { workspace = true }
 candid = { workspace = true }
 comparable = { version = "0.5.1", features = ["derive"] }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }

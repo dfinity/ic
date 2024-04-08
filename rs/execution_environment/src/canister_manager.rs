@@ -1001,7 +1001,7 @@ impl CanisterManager {
 
     /// Uninstalls code from a canister.
     ///
-    /// See https://sdk.dfinity.org/docs/interface-spec/index.html#ic-uninstall_code
+    /// See https://internetcomputer.org/docs/current/references/ic-interface-spec#ic-uninstall_code
     pub(crate) fn uninstall_code(
         &self,
         origin: CanisterChangeOrigin,
@@ -2320,7 +2320,7 @@ impl From<CanisterManagerError> for RejectContext {
 
 /// Uninstalls a canister.
 ///
-/// See https://sdk.dfinity.org/docs/interface-spec/index.html#ic-uninstall_code
+/// See https://internetcomputer.org/docs/current/references/ic-interface-spec#ic-uninstall_code
 ///
 /// Returns a list of rejects that need to be sent out to their callers.
 #[doc(hidden)]

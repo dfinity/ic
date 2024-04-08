@@ -19,7 +19,7 @@ pub struct Funds {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StreamFlags {
     #[prost(bool, tag = "1")]
-    pub responses_only: bool,
+    pub deprecated_responses_only: bool,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]

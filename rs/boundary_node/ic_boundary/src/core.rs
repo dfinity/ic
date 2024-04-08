@@ -46,7 +46,7 @@ use crate::{
     metrics::{
         self, HttpMetricParams, HttpMetricParamsStatus, MetricParams, MetricParamsCheck,
         MetricParamsPersist, MetricParamsSnapshot, MetricsCache, MetricsRunner, WithMetrics,
-        WithMetricsCheck, WithMetricsPersist, WithMetricsSnapshot,
+        WithMetricsCheck, WithMetricsPersist, WithMetricsSnapshot, HTTP_DURATION_BUCKETS,
     },
     persist::{Persist, Persister, Routes},
     rate_limiting::RateLimit,
@@ -127,13 +127,18 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     ));
 
     // TLS Configuration
-    let rustls_config = rustls::ClientConfig::builder()
+    let mut rustls_config = rustls::ClientConfig::builder()
         .with_cipher_suites(&[TLS13_AES_256_GCM_SHA384, TLS13_AES_128_GCM_SHA256])
         .with_safe_default_kx_groups()
         .with_protocol_versions(&[&rustls::version::TLS13])
         .context("unable to build Rustls config")?
         .with_custom_certificate_verifier(tls_verifier)
         .with_no_client_auth();
+
+    // Enable ALPN to negotiate HTTP version
+    rustls_config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
+    // Set larger session resumption cache to accomodate all replicas (256 by default)
+    rustls_config.resumption = rustls::client::Resumption::in_memory_sessions(4096);
 
     let keepalive = Duration::from_secs(cli.listen.http_keepalive);
 
@@ -153,7 +158,17 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         .dns_resolver(Arc::new(dns_resolver))
         .build()
         .context("unable to build HTTP client")?;
-    let http_client = Arc::new(ReqwestClient(http_client));
+    let http_client = ReqwestClient(http_client);
+    let http_client = WithMetrics(
+        http_client,
+        MetricParams::new_with_opts(
+            &metrics_registry,
+            "http_client",
+            &["success", "status", "http_ver"],
+            Some(HTTP_DURATION_BUCKETS),
+        ),
+    );
+    let http_client = Arc::new(http_client);
 
     #[cfg(feature = "tls")]
     let (configuration_runner, tls_acceptor, token_owner) = prepare_tls(&cli, &metrics_registry)

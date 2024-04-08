@@ -45,7 +45,6 @@ pub fn execute_update(
     subnet_size: usize,
     call_tree_metrics: &dyn CallTreeMetrics,
     log_dirty_pages: FlagStatus,
-    canister_logging: FlagStatus,
 ) -> ExecuteMessageResult {
     let (clean_canister, prepaid_execution_cycles, resuming_aborted) =
         match prepaid_execution_cycles {
@@ -115,7 +114,6 @@ pub fn execute_update(
         freezing_threshold,
         canister_id: clean_canister.canister_id(),
         log_dirty_pages,
-        canister_logging,
     };
 
     let helper = match UpdateHelper::new(&clean_canister, &original) {
@@ -273,7 +271,6 @@ struct OriginalContext {
     freezing_threshold: Cycles,
     canister_id: CanisterId,
     log_dirty_pages: FlagStatus,
-    canister_logging: FlagStatus,
 }
 
 /// Contains fields of `UpdateHelper` that are necessary for resuming an update
@@ -370,11 +367,7 @@ impl UpdateHelper {
         round_limits: &mut RoundLimits,
         call_tree_metrics: &dyn CallTreeMetrics,
     ) -> ExecuteMessageResult {
-        if original.canister_logging == FlagStatus::Enabled {
-            self.canister.append_log(&mut output.canister_log);
-        } else {
-            self.canister.clear_log();
-        }
+        self.canister.append_log(&mut output.canister_log);
         self.canister
             .system_state
             .apply_ingress_induction_cycles_debit(

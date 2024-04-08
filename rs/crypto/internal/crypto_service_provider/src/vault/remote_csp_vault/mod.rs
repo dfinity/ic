@@ -4,7 +4,8 @@ use crate::vault::api::{
     CspBasicSignatureError, CspBasicSignatureKeygenError, CspMultiSignatureError,
     CspMultiSignatureKeygenError, CspPublicKeyStoreError, CspSecretKeyStoreContainsError,
     CspTlsKeygenError, CspTlsSignError, IDkgCreateDealingVaultError, IDkgDealingInternalBytes,
-    IDkgTranscriptInternalBytes, PksAndSksContainsErrors, ValidatePksAndSksError,
+    IDkgTranscriptInternalBytes, PksAndSksContainsErrors, ThresholdSchnorrCreateSigShareVaultError,
+    ThresholdSchnorrSigShareBytes, ValidatePksAndSksError,
 };
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
@@ -228,6 +229,16 @@ pub trait TarpcCspVault {
         key_times_lambda_raw: IDkgTranscriptInternalBytes,
         algorithm_id: AlgorithmId,
     ) -> Result<ThresholdEcdsaSigShareInternal, ThresholdEcdsaSignShareError>;
+
+    // Corresponds to `ThresholdSchnorrSignerCspVault.create_schnorr_sig_share`
+    async fn create_schnorr_sig_share(
+        derivation_path: ExtendedDerivationPath,
+        message: ByteBuf,
+        nonce: Randomness,
+        key_raw: IDkgTranscriptInternalBytes,
+        presig_raw: IDkgTranscriptInternalBytes,
+        algorithm_id: AlgorithmId,
+    ) -> Result<ThresholdSchnorrSigShareBytes, ThresholdSchnorrCreateSigShareVaultError>;
 
     async fn new_public_seed() -> Result<Seed, PublicRandomSeedGeneratorError>;
 }

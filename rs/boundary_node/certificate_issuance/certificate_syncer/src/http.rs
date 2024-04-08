@@ -1,9 +1,9 @@
 use std::time::Instant;
 
 use async_trait::async_trait;
-use hyper::{client::connect::Connect, Body, Request, Response};
 use mockall::automock;
 use opentelemetry::KeyValue;
+use reqwest::{Client, Error, Request, Response};
 use tracing::info;
 
 use crate::metrics::{MetricParams, WithMetrics};
@@ -11,44 +11,40 @@ use crate::metrics::{MetricParams, WithMetrics};
 #[automock]
 #[async_trait]
 pub trait HttpClient: Send + Sync {
-    async fn request(&self, req: Request<Body>) -> Result<Response<Body>, hyper::Error>;
+    async fn execute(&self, req: Request) -> Result<Response, Error>;
 }
 
-pub struct HyperClient<T> {
-    c: hyper::Client<T>,
-}
+pub struct ReqwestClient(Client);
 
-impl<T> HyperClient<T> {
-    pub fn new(c: hyper::Client<T>) -> Self {
-        Self { c }
+impl ReqwestClient {
+    pub fn new(c: Client) -> Self {
+        Self(c)
     }
 }
 
 #[async_trait]
-impl<T> HttpClient for HyperClient<T>
-where
-    T: Connect + Clone + Send + Sync + 'static,
-{
-    async fn request(&self, req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
-        self.c.request(req).await
+impl HttpClient for ReqwestClient {
+    async fn execute(&self, req: Request) -> Result<Response, Error> {
+        self.0.execute(req).await
     }
 }
 
 #[async_trait]
 impl<T: HttpClient> HttpClient for WithMetrics<T> {
-    async fn request(&self, req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
+    async fn execute(&self, req: Request) -> Result<Response, Error> {
         let start_time = Instant::now();
 
-        let (uri, method) = (req.uri().to_string(), req.method().to_string());
+        let url_string = req.url().to_string();
+        let method = req.method().to_string();
 
-        let out = self.0.request(req).await;
+        let out = self.0.execute(req).await;
 
         let status = if out.is_ok() { "ok" } else { "fail" };
         let duration = start_time.elapsed().as_secs_f64();
 
         let labels = &[
             KeyValue::new("status", status),
-            KeyValue::new("method", method.to_string()),
+            KeyValue::new("method", method.clone()),
         ];
 
         let MetricParams {
@@ -60,7 +56,7 @@ impl<T: HttpClient> HttpClient for WithMetrics<T> {
         counter.add(1, labels);
         recorder.record(duration, labels);
 
-        info!(action = action.as_str(), uri, method, status, duration, error = ?out.as_ref().err());
+        info!(action = action.as_str(), url_string, method, status, duration, error = ?out.as_ref().err());
 
         out
     }

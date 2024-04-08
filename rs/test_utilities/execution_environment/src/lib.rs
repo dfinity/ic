@@ -1914,7 +1914,10 @@ impl ExecutionTestBuilder {
     }
 
     pub fn with_canister_logging(mut self, status: FlagStatus) -> Self {
-        self.execution_config.canister_logging = status;
+        self.execution_config
+            .embedders_config
+            .feature_flags
+            .canister_logging = status;
         self
     }
 

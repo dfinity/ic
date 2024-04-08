@@ -2739,7 +2739,7 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
         expected_distributed_e8s_equivalent,
     );
     for neuron in gov.neuron_store.heap_neurons().values() {
-        if neuron.id == Some(NeuronId { id: 1 }) {
+        if neuron.id().id == 1 {
             continue;
         }
 
@@ -3790,7 +3790,7 @@ fn test_approve_kyc() {
     // Test that non kyc'd neurons can't be disbursed to accounts.
     let result = gov
         .disburse_neuron(
-            neuron_a.id.as_ref().unwrap(),
+            &neuron_a.id(),
             &principal1,
             &Disburse {
                 amount: None,
@@ -3805,7 +3805,7 @@ fn test_approve_kyc() {
     // Test that non kyc'd neurons can't be disbursed to another neuron.
     let result = gov
         .disburse_to_neuron(
-            neuron_b.id.as_ref().unwrap(),
+            &neuron_b.id(),
             &principal2,
             &DisburseToNeuron {
                 new_controller: Some(principal2),
@@ -3887,7 +3887,7 @@ fn test_approve_kyc() {
     // Disbursing should now work.
     let _ = gov
         .disburse_neuron(
-            neuron_a.id.as_ref().unwrap(),
+            &neuron_a.id(),
             &principal1,
             &Disburse {
                 amount: None,
@@ -3901,7 +3901,7 @@ fn test_approve_kyc() {
     // ...as should disburse-to-neuron.
     let _ = gov
         .disburse_to_neuron(
-            neuron_b.id.as_ref().unwrap(),
+            &neuron_b.id(),
             &principal2,
             &DisburseToNeuron {
                 new_controller: Some(principal2),
@@ -4640,7 +4640,7 @@ fn refresh_neuron_by_id_or_subaccount(
     assert_eq!(neuron.cached_neuron_stake_e8s, stake.get_e8s());
 
     let neuron_id_or_subaccount = match refresh_by {
-        RefreshBy::NeuronId => NeuronIdOrSubaccount::NeuronId(neuron.id.unwrap()),
+        RefreshBy::NeuronId => NeuronIdOrSubaccount::NeuronId(neuron.id()),
         RefreshBy::Subaccount => NeuronIdOrSubaccount::Subaccount(subaccount.into()),
     };
 

@@ -207,7 +207,7 @@ impl InternalHttpQueryHandler {
                     BitcoinGetBalanceArgs::decode(&query.method_payload)?.network
                 }
                 Ok(QueryMethod::FetchCanisterLogs) => {
-                    return match self.config.canister_logging {
+                    return match self.config.embedders_config.feature_flags.canister_logging {
                         FlagStatus::Enabled => fetch_canister_logs(
                             query.source.get(),
                             state.get_ref(),

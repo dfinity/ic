@@ -150,6 +150,7 @@ impl WasmtimeInstanceBuilder {
                     self.num_instructions,
                 ),
                 canister_memory_limit: self.canister_memory_limit,
+                wasm_memory_limit: None,
                 memory_allocation: MemoryAllocation::default(),
                 compute_allocation: ComputeAllocation::default(),
                 subnet_type: self.subnet_type,

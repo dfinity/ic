@@ -239,6 +239,7 @@ pub enum MockManagementCanisterClientCall {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[allow(clippy::large_enum_variant)]
 pub enum MockManagementCanisterClientReply {
     CanisterStatus(Result<CanisterStatusResultFromManagementCanister, (i32, String)>),
     UpdateSettings(Result<(), (i32, String)>),

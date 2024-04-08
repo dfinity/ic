@@ -25,7 +25,7 @@
 //!
 //! ```wasm
 //! (import "__" "out_of_instructions" (func (;0;) (func)))
-//! (import "__" "update_available_memory" (func (;1;) ((param i32 i32 i32) (result i32))))
+//! (import "__" "try_grow_wasm_memory" (func (;1;) ((param i32 i32) (result i32))))
 //! (import "__" "try_grow_stable_memory" (func (;1;) ((param i64 i64 i32) (result i64))))
 //! (import "__" "internal_trap" (func (;1;) ((param i32))))
 //! (import "__" "stable_read_first_access" (func ((param i64) (param i64) (param i64))))
@@ -139,7 +139,7 @@ use std::convert::TryFrom;
 // The indices of injected function imports.
 pub(crate) enum InjectedImports {
     OutOfInstructions = 0,
-    UpdateAvailableMemory = 1,
+    TryGrowWasmMemory = 1,
     TryGrowStableMemory = 2,
     InternalTrap = 3,
     StableReadFirstAccess = 4,
@@ -457,7 +457,7 @@ pub fn instruction_to_cost_new(i: &Operator) -> u64 {
 
 const INSTRUMENTED_FUN_MODULE: &str = "__";
 const OUT_OF_INSTRUCTIONS_FUN_NAME: &str = "out_of_instructions";
-const UPDATE_MEMORY_FUN_NAME: &str = "update_available_memory";
+const TRY_GROW_WASM_MEMORY_FUN_NAME: &str = "try_grow_wasm_memory";
 const TRY_GROW_STABLE_MEMORY_FUN_NAME: &str = "try_grow_stable_memory";
 const INTERNAL_TRAP_FUN_NAME: &str = "internal_trap";
 const STABLE_READ_FIRST_ACCESS_NAME: &str = "stable_read_first_access";
@@ -561,10 +561,10 @@ fn mutate_function_indices(module: &mut Module, f: impl Fn(u32) -> u32) {
 fn inject_helper_functions(mut module: Module, wasm_native_stable_memory: FlagStatus) -> Module {
     // insert types
     let ooi_type = FuncType::new([], []);
-    let uam_type = FuncType::new([ValType::I32, ValType::I32, ValType::I32], [ValType::I32]);
+    let tgwm_type = FuncType::new([ValType::I32, ValType::I32], [ValType::I32]);
 
     let ooi_type_idx = add_func_type(&mut module, ooi_type);
-    let uam_type_idx = add_func_type(&mut module, uam_type);
+    let tgwm_type_idx = add_func_type(&mut module, tgwm_type);
 
     // push_front imports
     let ooi_imp = Import {
@@ -573,17 +573,17 @@ fn inject_helper_functions(mut module: Module, wasm_native_stable_memory: FlagSt
         ty: TypeRef::Func(ooi_type_idx),
     };
 
-    let uam_imp = Import {
+    let tgwm_imp = Import {
         module: INSTRUMENTED_FUN_MODULE,
-        name: UPDATE_MEMORY_FUN_NAME,
-        ty: TypeRef::Func(uam_type_idx),
+        name: TRY_GROW_WASM_MEMORY_FUN_NAME,
+        ty: TypeRef::Func(tgwm_type_idx),
     };
 
     let mut old_imports = module.imports;
     module.imports =
         Vec::with_capacity(old_imports.len() + InjectedImports::count(wasm_native_stable_memory));
     module.imports.push(ooi_imp);
-    module.imports.push(uam_imp);
+    module.imports.push(tgwm_imp);
 
     if wasm_native_stable_memory == FlagStatus::Enabled {
         let tgsm_type = FuncType::new([ValType::I64, ValType::I64, ValType::I32], [ValType::I64]);
@@ -624,8 +624,7 @@ fn inject_helper_functions(mut module: Module, wasm_native_stable_memory: FlagSt
         module.imports[InjectedImports::OutOfInstructions as usize].name == "out_of_instructions"
     );
     debug_assert!(
-        module.imports[InjectedImports::UpdateAvailableMemory as usize].name
-            == "update_available_memory"
+        module.imports[InjectedImports::TryGrowWasmMemory as usize].name == "try_grow_wasm_memory"
     );
     if wasm_native_stable_memory == FlagStatus::Enabled {
         debug_assert!(
@@ -750,12 +749,11 @@ pub(super) fn instrument(
         }
     }
 
-    // Inject `update_available_memory` to functions with `memory.grow`
-    // instructions.
+    // Inject `try_grow_wasm_memory` after `memory.grow` instructions.
     if !func_types.is_empty() {
         let func_bodies = &mut module.code_sections;
         for (func_ix, func_type) in func_types.into_iter() {
-            inject_update_available_memory(&mut func_bodies[func_ix], &func_type);
+            inject_try_grow_wasm_memory(&mut func_bodies[func_ix], &func_type);
             if write_barrier == FlagStatus::Enabled {
                 inject_mem_barrier(&mut func_bodies[func_ix], &func_type);
             }
@@ -1455,23 +1453,16 @@ fn inject_mem_barrier(func_body: &mut ic_wasm_transform::Body, func_type: &FuncT
     }
 }
 
-// Scans through a function and adds instrumentation after each `memory.grow` or
-// `table.grow` instruction to make sure that there's enough available memory
-// left to support the requested extra memory. If no `memory.grow` or
-// `table.grow` instructions are present then the code remains unchanged.
-fn inject_update_available_memory(func_body: &mut ic_wasm_transform::Body, func_type: &FuncType) {
-    // This is an overestimation of table element size computed based on the
-    // existing canister limits.
-    const TABLE_ELEMENT_SIZE: u32 = 1024;
+// Scans through the function and adds instrumentation after each `memory.grow`
+// instruction to make sure that there's enough available memory left to support
+// the requested extra memory.
+fn inject_try_grow_wasm_memory(func_body: &mut ic_wasm_transform::Body, func_type: &FuncType) {
     use Operator::*;
-    let mut injection_points: Vec<(usize, u32)> = Vec::new();
+    let mut injection_points: Vec<usize> = Vec::new();
     {
         for (idx, instr) in func_body.instructions.iter().enumerate() {
             if let MemoryGrow { .. } = instr {
-                injection_points.push((idx, WASM_PAGE_SIZE));
-            }
-            if let TableGrow { .. } = instr {
-                injection_points.push((idx, TABLE_ELEMENT_SIZE));
+                injection_points.push(idx);
             }
         }
     }
@@ -1479,8 +1470,8 @@ fn inject_update_available_memory(func_body: &mut ic_wasm_transform::Body, func_
     // If we found any injection points, we need to instrument the code.
     if !injection_points.is_empty() {
         // We inject a local to cache the argument to `memory.grow`.
-        // The locals are stored as a vector of (count, ValType), so summing over the first field gives
-        // the total number of locals.
+        // The locals are stored as a vector of (count, ValType), so summing
+        // over the first field gives the total number of locals.
         let n_locals: u32 = func_body.locals.iter().map(|x| x.0).sum();
         let memory_local_ix = func_type.params().len() as u32 + n_locals;
         func_body.locals.push((1, ValType::I32));
@@ -1488,8 +1479,8 @@ fn inject_update_available_memory(func_body: &mut ic_wasm_transform::Body, func_
         let orig_elems = &func_body.instructions;
         let mut elems: Vec<Operator> = Vec::new();
         let mut last_injection_position = 0;
-        for (point, element_size) in injection_points {
-            let update_available_memory_instr = orig_elems[point].clone();
+        for point in injection_points {
+            let memory_grow_instr = orig_elems[point].clone();
             elems.extend_from_slice(&orig_elems[last_injection_position..point]);
             // At this point we have a memory.grow so the argument to it will be on top of
             // the stack, which we just assign to `memory_local_ix` with a local.tee
@@ -1498,15 +1489,12 @@ fn inject_update_available_memory(func_body: &mut ic_wasm_transform::Body, func_
                 LocalTee {
                     local_index: memory_local_ix,
                 },
-                update_available_memory_instr,
+                memory_grow_instr,
                 LocalGet {
                     local_index: memory_local_ix,
                 },
-                I32Const {
-                    value: element_size as i32,
-                },
                 Call {
-                    function_index: InjectedImports::UpdateAvailableMemory as u32,
+                    function_index: InjectedImports::TryGrowWasmMemory as u32,
                 },
             ]);
             last_injection_position = point + 1;

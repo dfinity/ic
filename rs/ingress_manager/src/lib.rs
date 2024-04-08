@@ -83,21 +83,31 @@ impl IngressManagerMetrics {
     }
 }
 
-/// A custom RandomState we can use to control the randomness of a hashmap. By default
-/// random.
-#[derive(Clone)]
-pub enum CustomRandomState {
-    /// Seeds a HashMap with the default [`std::collections::hash_map::RandomState`].
-    Random(RandomState),
-    /// Makes a hash map deterministic, by seeding it with the non-random default hasher.
-    /// Use it for testing purposes, to create a repeatable element order.
+/// The kind of RandomState you want to generate.
+pub enum RandomStateKind {
+    /// Creates random states using the default [`std::collections::hash_map::RandomState`].
+    Random,
+    /// Creates a deterministic default random state. Use it for testing purposes,
+    /// to create a repeatable element order.
     Deterministic,
 }
 
-impl Default for CustomRandomState {
-    fn default() -> Self {
-        CustomRandomState::Random(RandomState::new())
+impl RandomStateKind {
+    /// Creates a custom random state of the given kind, which can be used
+    /// to seed data structures like hashmaps.
+    fn create_state(&self) -> CustomRandomState {
+        match self {
+            Self::Random => CustomRandomState::Random(RandomState::new()),
+            Self::Deterministic => CustomRandomState::Deterministic,
+        }
     }
+}
+
+/// A custom RandomState we can use to control the randomness of a hashmap.
+#[derive(Clone)]
+enum CustomRandomState {
+    Random(RandomState),
+    Deterministic,
 }
 
 impl BuildHasher for CustomRandomState {
@@ -134,8 +144,8 @@ pub struct IngressManager {
     cycles_account_manager: Arc<CyclesAccountManager>,
 
     /// A determinism flag for testing. Used for making hashmaps in the ingress selector
-    /// deterministic. Set to `false` in production.
-    random_state: CustomRandomState,
+    /// deterministic. Set to `RandomStateKind::Random` in production.
+    random_state: RandomStateKind,
 }
 
 impl IngressManager {
@@ -154,7 +164,7 @@ impl IngressManager {
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         cycles_account_manager: Arc<CyclesAccountManager>,
         malicious_flags: MaliciousFlags,
-        random_state: CustomRandomState,
+        random_state: RandomStateKind,
     ) -> Self {
         let request_validator = if malicious_flags.maliciously_disable_ingress_validation {
             pub struct DisabledHttpRequestVerifier;
@@ -348,7 +358,7 @@ pub(crate) mod tests {
                         Arc::new(state_manager),
                         cycles_account_manager,
                         MaliciousFlags::default(),
-                        CustomRandomState::default(),
+                        RandomStateKind::Random,
                     ),
                     ingress_pool,
                 )
