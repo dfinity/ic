@@ -1154,7 +1154,7 @@ fn garbage_collect_local_state_success() {
         initial_stream.push(response.clone());
         initial_stream.push(request.clone());
         initial_stream.set_reverse_stream_flags(StreamFlags {
-            responses_only: false,
+            deprecated_responses_only: false,
         });
         initial_state.with_streams(btreemap![REMOTE_SUBNET => initial_stream]);
 
@@ -1167,7 +1167,7 @@ fn garbage_collect_local_state_success() {
             signals_end: 33,
             reject_signals: None,
             flags: StreamFlags {
-                responses_only: true,
+                deprecated_responses_only: true,
             },
         });
 
@@ -1181,7 +1181,7 @@ fn garbage_collect_local_state_success() {
         });
         expected_stream.push(request);
         expected_stream.set_reverse_stream_flags(StreamFlags {
-            responses_only: true,
+            deprecated_responses_only: true,
         });
         expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_stream]);
 

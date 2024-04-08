@@ -174,12 +174,12 @@ pub struct SubnetMetrics {
 #[derive(EnumCount, EnumIter)]
 #[repr(u64)]
 pub enum StreamFlagBits {
-    ResponsesOnly = 1,
+    DeprecatedResponsesOnly = 1,
 }
 
 /// Constant version of `ic_types::xnet::StreamFlags::default()`.
 pub const STREAM_DEFAULT_FLAGS: ic_types::xnet::StreamFlags = ic_types::xnet::StreamFlags {
-    responses_only: false,
+    deprecated_responses_only: false,
 };
 
 /// A mask containing the supported bits.
@@ -211,9 +211,11 @@ impl From<(&ic_types::xnet::StreamHeader, CertificationVersion)> for StreamHeade
         }
 
         let mut flags = 0;
-        let ic_types::xnet::StreamFlags { responses_only } = *header.flags();
-        if responses_only {
-            flags |= StreamFlagBits::ResponsesOnly as u64;
+        let ic_types::xnet::StreamFlags {
+            deprecated_responses_only,
+        } = *header.flags();
+        if deprecated_responses_only {
+            flags |= StreamFlagBits::DeprecatedResponsesOnly as u64;
         }
 
         Self {
@@ -251,7 +253,9 @@ impl TryFrom<StreamHeader> for ic_types::xnet::StreamHeader {
             )));
         }
         let flags = ic_types::xnet::StreamFlags {
-            responses_only: header.flags & StreamFlagBits::ResponsesOnly as u64 != 0,
+            deprecated_responses_only: header.flags
+                & StreamFlagBits::DeprecatedResponsesOnly as u64
+                != 0,
         };
 
         Ok(Self::new(

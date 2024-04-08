@@ -134,7 +134,7 @@ fn canonical_encoding_stream_header_v8_plus() {
 ///     signals_end: 256.into(),
 ///     reject_signals: vec![249.into(), 250.into(), 252.into()].into(),
 ///     flags: StreamFlags {
-///        responses_only: true,
+///        deprecated_responses_only: true,
 ///     },
 /// }
 /// ```
@@ -169,7 +169,7 @@ fn canonical_encoding_stream_header_v17_plus() {
             256.into(),
             vec![249.into(), 250.into(), 252.into()].into(),
             StreamFlags {
-                responses_only: true,
+                deprecated_responses_only: true,
             },
         );
 
@@ -1412,7 +1412,7 @@ fn stream_header(certification_version: CertificationVersion) -> StreamHeader {
             VecDeque::default()
         },
         StreamFlags {
-            responses_only: certification_version >= CertificationVersion::V17,
+            deprecated_responses_only: certification_version >= CertificationVersion::V17,
         },
     )
 }

@@ -1215,7 +1215,7 @@ impl Default for Stream {
         let reject_signals = VecDeque::default();
         let messages_size_bytes = Self::size_bytes(&messages);
         let reverse_stream_flags = StreamFlags {
-            responses_only: false,
+            deprecated_responses_only: false,
         };
         Self {
             messages,
@@ -1240,7 +1240,7 @@ impl From<&Stream> for pb_queues::Stream {
             signals_end: item.signals_end.get(),
             reject_signals,
             reverse_stream_flags: Some(pb_queues::StreamFlags {
-                responses_only: item.reverse_stream_flags.responses_only,
+                deprecated_responses_only: item.reverse_stream_flags.deprecated_responses_only,
             }),
         }
     }
@@ -1270,7 +1270,7 @@ impl TryFrom<pb_queues::Stream> for Stream {
             reverse_stream_flags: item
                 .reverse_stream_flags
                 .map(|flags| StreamFlags {
-                    responses_only: flags.responses_only,
+                    deprecated_responses_only: flags.deprecated_responses_only,
                 })
                 .unwrap_or_default(),
         })
