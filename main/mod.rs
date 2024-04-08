@@ -52,6 +52,26 @@ pub async fn update_settings(arg: UpdateSettingsArgument) -> CallResult<()> {
     .await
 }
 
+/// See [IC method `upload_chunk`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-upload_chunk).
+pub async fn upload_chunk(arg: UploadChunkArgument) -> CallResult<(ChunkHash,)> {
+    call(Principal::management_canister(), "upload_chunk", (arg,)).await
+}
+
+/// See [IC method `clear_chunk_store`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-clear_chunk_store).
+pub async fn clear_chunk_store(arg: ClearChunkStoreArgument) -> CallResult<()> {
+    call(
+        Principal::management_canister(),
+        "clear_chunk_store",
+        (arg,),
+    )
+    .await
+}
+
+/// See [IC method `stored_chunks`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-stored_chunks).
+pub async fn stored_chunks(arg: StoredChunksArgument) -> CallResult<(Vec<ChunkHash>,)> {
+    call(Principal::management_canister(), "stored_chunks", (arg,)).await
+}
+
 /// Install code into a canister.
 ///
 /// See [IC method `install_code`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-install_code).
@@ -66,6 +86,27 @@ pub async fn install_code(arg: InstallCodeArgument) -> CallResult<()> {
     call(
         Principal::management_canister(),
         "install_code",
+        (extended_arg,),
+    )
+    .await
+}
+
+/// Install code into a canister where the code has previously been uploaded in chunks.
+///
+/// See [IC method `install_chunked_code`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-install_chunked_code).
+pub async fn install_chunked_code(arg: InstallChunkedCodeArgument) -> CallResult<()> {
+    let extended_arg = InstallChunkedCodeArgumentExtended {
+        mode: arg.mode,
+        target_canister: arg.target_canister,
+        store_canister: arg.store_canister,
+        chunk_hashes_list: arg.chunk_hashes_list,
+        wasm_module_hash: arg.wasm_module_hash,
+        arg: arg.arg,
+        sender_canister_version: Some(canister_version()),
+    };
+    call(
+        Principal::management_canister(),
+        "install_chunked_code",
         (extended_arg,),
     )
     .await
