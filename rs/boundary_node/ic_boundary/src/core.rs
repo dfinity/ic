@@ -118,7 +118,7 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     let registry_snapshot = Arc::new(ArcSwapOption::empty());
 
     // DNS
-    let dns_resolver = DnsResolver::new(Arc::clone(&registry_snapshot));
+    let dns_resolver = Arc::new(DnsResolver::new(Arc::clone(&registry_snapshot)));
 
     // TLS verifier
     let tls_verifier = Arc::new(TlsVerifier::new(
@@ -136,29 +136,17 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         .with_no_client_auth();
 
     // Enable ALPN to negotiate HTTP version
-    rustls_config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
+    let mut alpn = vec![];
+    if !cli.listen.disable_http2_client {
+        alpn.push(b"h2".to_vec());
+    }
+    alpn.push(b"http/1.1".to_vec());
+    rustls_config.alpn_protocols = alpn;
+
     // Set larger session resumption cache to accomodate all replicas (256 by default)
     rustls_config.resumption = rustls::client::Resumption::in_memory_sessions(4096);
 
-    let keepalive = Duration::from_secs(cli.listen.http_keepalive);
-
-    // HTTP Client
-    let http_client = reqwest::Client::builder()
-        .timeout(Duration::from_millis(cli.listen.http_timeout))
-        .connect_timeout(Duration::from_millis(cli.listen.http_timeout_connect))
-        .pool_idle_timeout(Some(Duration::from_secs(cli.listen.http_idle_timeout))) // After this duration the idle connection is closed (default 90s)
-        .http2_keep_alive_interval(Some(keepalive)) // Keepalive interval for http2 connections
-        .http2_keep_alive_timeout(Duration::from_secs(cli.listen.http_keepalive_timeout)) // Close connection if no reply after timeout
-        .http2_keep_alive_while_idle(true) // Also ping connections that have no streams open
-        .tcp_keepalive(Some(keepalive)) // Enable TCP keepalives
-        .user_agent(SERVICE_NAME)
-        .redirect(reqwest::redirect::Policy::none())
-        .no_proxy()
-        .use_preconfigured_tls(rustls_config)
-        .dns_resolver(Arc::new(dns_resolver))
-        .build()
-        .context("unable to build HTTP client")?;
-    let http_client = ReqwestClient(http_client);
+    let http_client = ReqwestClient::new(&cli, rustls_config, dns_resolver)?;
     let http_client = WithMetrics(
         http_client,
         MetricParams::new_with_opts(

@@ -133,6 +133,14 @@ pub struct ListenConfig {
     /// Currently used only for UNIX socket.
     #[clap(long, default_value = "8192")]
     pub backlog: u32,
+
+    /// Disable HTTP2 support for outgoing connections (to replicas)
+    #[clap(long)]
+    pub disable_http2_client: bool,
+
+    /// Number of HTTP clients to create to spread the load over
+    #[clap(long, default_value = "2", value_parser = clap::value_parser!(u8).range(1..))]
+    pub http_client_count: u8,
 }
 
 #[derive(Args)]
