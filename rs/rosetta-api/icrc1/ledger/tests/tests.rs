@@ -611,7 +611,7 @@ mod verify_written_blocks {
     use super::*;
     use ic_icrc1_ledger::FeatureFlags;
     use ic_icrc1_ledger_sm_tests::{system_time_to_nanos, MINTER};
-    use ic_state_machine_tests::{StateMachine, Time, WasmResult};
+    use ic_state_machine_tests::{StateMachine, WasmResult};
     use icrc_ledger_types::icrc1::account::Account;
     use icrc_ledger_types::icrc1::transfer::{Memo, NumTokens, TransferArg};
     use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
@@ -621,12 +621,10 @@ mod verify_written_blocks {
     };
     use num_traits::ToPrimitive;
     use serde_bytes::ByteBuf;
-    use std::time::SystemTime;
 
     const DEFAULT_FEE: u64 = 10_000;
     const DEFAULT_AMOUNT: u64 = 1_000_000;
     const DEFAULT_MEMO: [u8; 10] = [0u8; 10];
-    const GENESIS: Time = Time::from_nanos_since_unix_epoch(1_620_328_630_000_000_000);
 
     #[test]
     fn test_verify_written_mint_block() {
@@ -876,7 +874,6 @@ mod verify_written_blocks {
             let env = StateMachine::new();
             let ledger_id = env.install_canister(ledger_wasm(), args, None).unwrap();
 
-            env.set_time(SystemTime::from(GENESIS));
             let current_time_ns_since_unix_epoch = system_time_to_nanos(env.time());
 
             Self {

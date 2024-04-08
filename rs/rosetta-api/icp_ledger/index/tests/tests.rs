@@ -582,7 +582,7 @@ fn test_ledger_index_icrc1_mint_parity() {
     let minter_account = Account::from(MINTER_PRINCIPAL.0);
     let recipient_account = account(4, 0);
     let recipient_account_identifier = AccountIdentifier::from(recipient_account);
-    let created_at_time = TimeStamp::from(setup.env.time());
+    let created_at_time = TimeStamp::from(setup.env.time_of_next_round());
     let mint_block_index = icrc1_transfer(
         &setup.env,
         setup.ledger_id,
@@ -624,7 +624,7 @@ fn test_ledger_index_icrc1_transfer_parity() {
     // Set up an environment with a ledger, and index, and a single mint transaction
     let setup = ParitySetup::new();
     // Create an ICRC1 Transfer transaction with all fields set
-    let tx_timestamp = TimeStamp::from(setup.env.time());
+    let tx_timestamp = TimeStamp::from(setup.env.time_of_next_round());
     let tx_block_index = icrc1_transfer(
         &setup.env,
         setup.ledger_id,
@@ -669,7 +669,7 @@ fn test_ledger_index_icrc1_transfer_without_created_at_time_parity() {
     // Set up an environment with a ledger, and index, and a single mint transaction
     let setup = ParitySetup::new();
     // Create an ICRC1 Transfer transaction with all fields set
-    let tx_timestamp = TimeStamp::from(setup.env.time());
+    let tx_timestamp = TimeStamp::from(setup.env.time_of_next_round());
     let tx_block_index = icrc1_transfer(
         &setup.env,
         setup.ledger_id,
@@ -714,7 +714,7 @@ fn test_ledger_index_icrc1_approve_parity() {
     // Set up an environment with a ledger, and index, and a single mint transaction
     let setup = ParitySetup::new();
     // Create an ICRC1 Approve transaction with all fields set
-    let tx_timestamp = TimeStamp::from(setup.env.time());
+    let tx_timestamp = TimeStamp::from(setup.env.time_of_next_round());
     let expires_at = tx_timestamp.as_nanos_since_unix_epoch() + 3600 * 1_000_000_000;
     let tx_block_index = approve(
         &setup.env,
@@ -766,7 +766,7 @@ fn test_ledger_index_icrc1_transfer_from_parity() {
     // Set up an environment with a ledger, and index, and a single mint transaction
     let setup = ParitySetup::new();
     // Create an ICRC1 Approve transaction with all fields set
-    let tx_timestamp = TimeStamp::from(setup.env.time());
+    let tx_timestamp = TimeStamp::from(setup.env.time_of_next_round());
     let expires_at = tx_timestamp.as_nanos_since_unix_epoch() + 3600 * 1_000_000_000;
     let tx_block_index = approve(
         &setup.env,
@@ -786,6 +786,7 @@ fn test_ledger_index_icrc1_transfer_from_parity() {
     assert_eq!(tx_block_index, Nat::from(1u8));
     // Create an ICRC2 TransferFrom transaction with all fields set, based on the previously
     // executed ICRC1 Approve transaction
+    let tx_timestamp = TimeStamp::from(setup.env.time_of_next_round());
     let tx_block_index = icrc2_transfer_from(
         &setup.env,
         setup.ledger_id,
@@ -942,11 +943,15 @@ fn test_archive_indexing() {
     assert_ledger_index_parity(env, ledger_id, index_id);
 }
 
-fn expected_block_timestamp(phase: u32, start_time: SystemTime) -> Option<TimeStamp> {
+fn expected_block_timestamp(rounds: u32, phase: u32, start_time: SystemTime) -> Option<TimeStamp> {
     Some(TimeStamp::from(
         start_time
+            .checked_add(Duration::from_nanos(rounds.into())) // timestamp increases by 1ns every round
+            .expect("checked_add should not overflow")
             .checked_add(
                 SYNC_STEP_SECONDS
+                    .checked_add(Duration::from_nanos(1)) // timestamp increases by 1ns every phase
+                    .expect("checked_mul should not overflow")
                     .checked_mul(phase)
                     .expect("checked_mul should not overflow"),
             )
@@ -962,12 +967,14 @@ fn test_get_account_identifier_transactions() {
         Tokens::from_e8s(1_000_000_000_000),
     );
     let env = &StateMachine::new();
+    let time = env.time();
     let ledger_id = install_ledger(env, initial_balances, default_archive_options());
     let index_id = install_index(env, ledger_id);
 
     // List of the transactions that the test is going to add. This exists to make
     // the test easier to read. The transactions are executed in separate phases, where the block
     // timestamp is a function of the phase.
+    let mut rounds = 2u32; // ledger is created in 1st round and initialized in 2nd round
     let mut phase = 0u32;
     let tx0 = SettledTransactionWithId {
         id: 0u64,
@@ -979,9 +986,10 @@ fn test_get_account_identifier_transactions() {
             memo: Memo(0),
             created_at_time: None,
             icrc1_memo: None,
-            timestamp: expected_block_timestamp(phase, env.time()),
+            timestamp: expected_block_timestamp(rounds, phase, time),
         },
     };
+    rounds += 3; // it takes two more rounds to create and initialize index and one more round for the transfer
     phase = 1;
     let tx1 = SettledTransactionWithId {
         id: 1u64,
@@ -996,9 +1004,10 @@ fn test_get_account_identifier_transactions() {
             memo: Memo(0),
             created_at_time: None,
             icrc1_memo: None,
-            timestamp: expected_block_timestamp(phase, env.time()),
+            timestamp: expected_block_timestamp(rounds, phase, time),
         },
     };
+    rounds += 1; // it takes one more round for the transfer
     phase = 2;
     let tx2 = SettledTransactionWithId {
         id: 2u64,
@@ -1013,9 +1022,10 @@ fn test_get_account_identifier_transactions() {
             memo: Memo(0),
             created_at_time: None,
             icrc1_memo: None,
-            timestamp: expected_block_timestamp(phase, env.time()),
+            timestamp: expected_block_timestamp(rounds, phase, time),
         },
     };
+    rounds += 1; // it takes one more round for the transfer
     let tx3 = SettledTransactionWithId {
         id: 3u64,
         transaction: SettledTransaction {
@@ -1029,12 +1039,12 @@ fn test_get_account_identifier_transactions() {
             memo: Memo(0),
             created_at_time: None,
             icrc1_memo: None,
-            timestamp: expected_block_timestamp(phase, env.time()),
+            timestamp: expected_block_timestamp(rounds, phase, time),
         },
     };
+    rounds += 1; // it takes one more round for the transfer
     phase = 3;
-    let expires_at = env
-        .time()
+    let expires_at = time
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap()
         .as_nanos() as u64
@@ -1053,7 +1063,7 @@ fn test_get_account_identifier_transactions() {
             memo: Memo(0),
             created_at_time: None,
             icrc1_memo: None,
-            timestamp: expected_block_timestamp(phase, env.time()),
+            timestamp: expected_block_timestamp(rounds, phase, time),
         },
     };
 
@@ -1152,6 +1162,7 @@ fn test_get_account_transactions_start_length() {
     let env = &StateMachine::new();
     let ledger_id = install_ledger(env, initial_balances, default_archive_options());
     let index_id = install_index(env, ledger_id);
+    let time = env.time_of_next_round();
     for i in 0..10 {
         transfer(
             env,
@@ -1175,7 +1186,10 @@ fn test_get_account_transactions_start_length() {
                 memo: Memo(0),
                 created_at_time: None,
                 icrc1_memo: None,
-                timestamp: Some(TimeStamp::from(env.time())),
+                timestamp: Some(TimeStamp::from(
+                    time.checked_add(Duration::from_nanos(i))
+                        .expect("checked_add should not overflow"),
+                )),
             },
         })
         .collect();
@@ -1217,6 +1231,7 @@ fn test_get_account_identifier_transactions_pagination() {
     let env = &StateMachine::new();
     let ledger_id = install_ledger(env, initial_balances, default_archive_options());
     let index_id = install_index(env, ledger_id);
+    let time = env.time_of_next_round();
     for i in 0..10 {
         transfer(
             env,
@@ -1254,12 +1269,15 @@ fn test_get_account_identifier_transactions_pagination() {
         }
 
         let mut last_seen_txid = start;
-        for SettledTransactionWithId { id, transaction } in &res.transactions {
+        for (i, SettledTransactionWithId { id, transaction }) in res.transactions.iter().enumerate()
+        {
             // transactions ids must be unique and in descending order
             if let Some(last_seen_txid) = last_seen_txid {
                 assert!(*id < last_seen_txid);
             }
             last_seen_txid = Some(*id);
+
+            let j = res.transactions.len() - 1 - i; // transactions are in descending order
 
             // check the transaction itself
             assert_tx_eq(
@@ -1272,9 +1290,8 @@ fn test_get_account_identifier_transactions_pagination() {
                     created_at_time: None,
                     icrc1_memo: None,
                     timestamp: Some(TimeStamp::from(
-                        env.time()
-                            .checked_sub(SYNC_STEP_SECONDS)
-                            .expect("should not underflow"),
+                        time.checked_add(Duration::from_nanos(j as u64))
+                            .expect("checked_add should not overflow"),
                     )),
                 },
                 transaction,

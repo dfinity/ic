@@ -1567,21 +1567,22 @@ impl StateMachine {
     }
 
     /// Checks critical error counters and panics if a critical error occurred.
-    /// We ignore `mr_non_increasing_batch_time` and `execution_environment_unfiltered_ingress` for now.
+    /// We ignore `execution_environment_unfiltered_ingress` for now.
     pub fn check_critical_errors(&self) {
         let error_counter_vec = fetch_counter_vec(&self.metrics_registry, "critical_errors");
         if let Some((metric, _)) = error_counter_vec.into_iter().find(|(_, v)| *v != 0.0) {
             let err: String = metric.get("error").unwrap().to_string();
-            if err != *"mr_non_increasing_batch_time"
-                && err != *"execution_environment_unfiltered_ingress"
-            {
+            if err != *"execution_environment_unfiltered_ingress" {
                 panic!("Critical error {} occurred.", err);
             }
         }
     }
 
-    /// Triggers a single round of execution with block payload as an input.
+    /// Advances time by 1ns (to make sure time is strictly monotone)
+    /// and triggers a single round of execution with block payload as an input.
     pub fn execute_payload(&self, payload: PayloadBuilder) -> Height {
+        self.advance_time(Duration::from_nanos(1));
+
         let batch_number = self.message_routing.expected_batch_height();
 
         let mut seed = [0u8; 32];
@@ -1697,9 +1698,26 @@ impl StateMachine {
     pub fn time(&self) -> SystemTime {
         SystemTime::UNIX_EPOCH + Duration::from_nanos(self.time.load(Ordering::Relaxed))
     }
+
+    /// Returns the state machine time at the beginning of next round.
+    pub fn time_of_next_round(&self) -> SystemTime {
+        self.time() + Duration::from_nanos(1)
+    }
+
+    /// Returns the current state machine time.
     pub fn get_time(&self) -> Time {
         Time::from_nanos_since_unix_epoch(
             self.time()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos() as u64,
+        )
+    }
+
+    /// Returns the state machine time at the beginning of next round.
+    pub fn get_time_of_next_round(&self) -> Time {
+        Time::from_nanos_since_unix_epoch(
+            self.time_of_next_round()
                 .duration_since(SystemTime::UNIX_EPOCH)
                 .unwrap()
                 .as_nanos() as u64,

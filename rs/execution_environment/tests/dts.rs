@@ -1353,7 +1353,7 @@ fn dts_ingress_status_of_update_is_correct() {
         .install_canister_with_cycles(binary, vec![], None, INITIAL_CYCLES_BALANCE)
         .unwrap();
 
-    let original_time = env.time();
+    let original_time = env.time_of_next_round();
     let update = env.send_ingress(user_id, canister, "update", vec![]);
 
     env.tick();
@@ -1423,7 +1423,7 @@ fn dts_ingress_status_of_install_is_correct() {
         .install_canister_with_cycles(binary.clone(), vec![], None, INITIAL_CYCLES_BALANCE)
         .unwrap();
 
-    let original_time = env.time();
+    let original_time = env.time_of_next_round();
 
     let install = {
         let args = InstallCodeArgs::new(
@@ -1504,7 +1504,7 @@ fn dts_ingress_status_of_upgrade_is_correct() {
         .install_canister_with_cycles(binary.clone(), vec![], None, INITIAL_CYCLES_BALANCE)
         .unwrap();
 
-    let original_time = env.time();
+    let original_time = env.time_of_next_round();
 
     let install = {
         let args = InstallCodeArgs::new(
@@ -1604,7 +1604,7 @@ fn dts_ingress_status_of_update_with_call_is_correct() {
         .inter_update(b_id, call_args().other_side(b))
         .build();
 
-    let original_time = env.time();
+    let original_time = env.time_of_next_round();
     let update = env.send_ingress(user_id, a_id, "update", a);
 
     env.tick();

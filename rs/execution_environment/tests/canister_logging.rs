@@ -14,11 +14,15 @@ use ic_state_machine_tests::{
 };
 use ic_test_utilities::universal_canister::{wasm, UNIVERSAL_CANISTER_WASM};
 use ic_test_utilities_execution_environment::get_reply;
-use ic_types::{ingress::WasmResult, time, CanisterId, Cycles};
+use ic_types::{ingress::WasmResult, CanisterId, Cycles};
 use proptest::{prelude::ProptestConfig, prop_assume};
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 const MAX_LOG_MESSAGE_LEN: usize = 4 * 1024;
+
+fn system_time_to_nanos(t: SystemTime) -> u64 {
+    t.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos() as u64
+}
 
 fn default_config_with_canister_logging(canister_logging: FlagStatus) -> ExecutionConfig {
     ExecutionConfig {
@@ -232,6 +236,7 @@ fn test_log_visibility_of_fetch_canister_logs() {
 fn test_appending_logs_in_replied_update_call(#[strategy("\\PC*")] message: String) {
     prop_assume!(message.len() < MAX_LOG_MESSAGE_LEN);
     let (env, canister_id, controller) = setup_with_controller(FlagStatus::Enabled);
+    let now = env.time_of_next_round();
     let _ = env.execute_ingress(
         canister_id,
         "update",
@@ -243,7 +248,7 @@ fn test_appending_logs_in_replied_update_call(#[strategy("\\PC*")] message: Stri
         FetchCanisterLogsResponse {
             canister_log_records: vec![CanisterLogRecord {
                 idx: 0,
-                timestamp_nanos: time::GENESIS.as_nanos_since_unix_epoch(),
+                timestamp_nanos: system_time_to_nanos(now),
                 content: message.as_bytes().to_vec()
             }]
         }
@@ -254,6 +259,7 @@ fn test_appending_logs_in_replied_update_call(#[strategy("\\PC*")] message: Stri
 fn test_appending_logs_in_trapped_update_call(#[strategy("\\PC*")] message: String) {
     prop_assume!(message.len() < MAX_LOG_MESSAGE_LEN);
     let (env, canister_id, controller) = setup_with_controller(FlagStatus::Enabled);
+    let now = env.time_of_next_round();
     let _ = env.execute_ingress(
         canister_id,
         "update",
@@ -266,12 +272,12 @@ fn test_appending_logs_in_trapped_update_call(#[strategy("\\PC*")] message: Stri
             canister_log_records: vec![
                 CanisterLogRecord {
                     idx: 0,
-                    timestamp_nanos: time::GENESIS.as_nanos_since_unix_epoch(),
+                    timestamp_nanos: system_time_to_nanos(now),
                     content: message.as_bytes().to_vec()
                 },
                 CanisterLogRecord {
                     idx: 1,
-                    timestamp_nanos: time::GENESIS.as_nanos_since_unix_epoch(),
+                    timestamp_nanos: system_time_to_nanos(now),
                     content: b"[TRAP]: (no message)".to_vec()
                 }
             ]
@@ -283,6 +289,7 @@ fn test_appending_logs_in_trapped_update_call(#[strategy("\\PC*")] message: Stri
 fn test_appending_logs_in_replied_replicated_query_call(#[strategy("\\PC*")] message: String) {
     prop_assume!(message.len() < MAX_LOG_MESSAGE_LEN);
     let (env, canister_id, controller) = setup_with_controller(FlagStatus::Enabled);
+    let now = env.time_of_next_round();
     let _ = env.execute_ingress(
         canister_id,
         "query",
@@ -294,7 +301,7 @@ fn test_appending_logs_in_replied_replicated_query_call(#[strategy("\\PC*")] mes
         FetchCanisterLogsResponse {
             canister_log_records: vec![CanisterLogRecord {
                 idx: 0,
-                timestamp_nanos: time::GENESIS.as_nanos_since_unix_epoch(),
+                timestamp_nanos: system_time_to_nanos(now),
                 content: message.as_bytes().to_vec()
             }]
         }
@@ -305,6 +312,7 @@ fn test_appending_logs_in_replied_replicated_query_call(#[strategy("\\PC*")] mes
 fn test_appending_logs_in_trapped_replicated_query_call(#[strategy("\\PC*")] message: String) {
     prop_assume!(message.len() < MAX_LOG_MESSAGE_LEN);
     let (env, canister_id, controller) = setup_with_controller(FlagStatus::Enabled);
+    let now = env.time_of_next_round();
     let _ = env.execute_ingress(
         canister_id,
         "query",
@@ -317,12 +325,12 @@ fn test_appending_logs_in_trapped_replicated_query_call(#[strategy("\\PC*")] mes
             canister_log_records: vec![
                 CanisterLogRecord {
                     idx: 0,
-                    timestamp_nanos: time::GENESIS.as_nanos_since_unix_epoch(),
+                    timestamp_nanos: system_time_to_nanos(now),
                     content: message.as_bytes().to_vec()
                 },
                 CanisterLogRecord {
                     idx: 1,
-                    timestamp_nanos: time::GENESIS.as_nanos_since_unix_epoch(),
+                    timestamp_nanos: system_time_to_nanos(now),
                     content: b"[TRAP]: (no message)".to_vec()
                 }
             ]
@@ -335,6 +343,7 @@ fn test_canister_log_record_index_increment_for_different_calls() {
     // Test that the index of the log records is incremented for each log message,
     // both for logging them in the same and different update calls.
     let (env, canister_id, controller) = setup_with_controller(FlagStatus::Enabled);
+    let now_01 = env.time_of_next_round();
     let _ = env.execute_ingress(
         canister_id,
         "update",
@@ -345,6 +354,7 @@ fn test_canister_log_record_index_increment_for_different_calls() {
             .build(),
     );
     env.advance_time(Duration::from_nanos(123_456));
+    let now_23 = env.time_of_next_round();
     let _ = env.execute_ingress(
         canister_id,
         "update",
@@ -361,22 +371,22 @@ fn test_canister_log_record_index_increment_for_different_calls() {
             canister_log_records: vec![
                 CanisterLogRecord {
                     idx: 0,
-                    timestamp_nanos: time::GENESIS.as_nanos_since_unix_epoch(),
+                    timestamp_nanos: system_time_to_nanos(now_01),
                     content: b"message 0".to_vec()
                 },
                 CanisterLogRecord {
                     idx: 1,
-                    timestamp_nanos: time::GENESIS.as_nanos_since_unix_epoch(),
+                    timestamp_nanos: system_time_to_nanos(now_01),
                     content: b"message 1".to_vec()
                 },
                 CanisterLogRecord {
                     idx: 2,
-                    timestamp_nanos: 1620328630000123456,
+                    timestamp_nanos: system_time_to_nanos(now_23),
                     content: b"message 2".to_vec()
                 },
                 CanisterLogRecord {
                     idx: 3,
-                    timestamp_nanos: 1620328630000123456,
+                    timestamp_nanos: system_time_to_nanos(now_23),
                     content: b"message 3".to_vec()
                 }
             ],
@@ -392,6 +402,7 @@ fn test_canister_log_record_index_increment_after_node_restart() {
     let (env, canister_id, controller) = setup_with_controller(canister_logging);
     env.set_checkpoints_enabled(true);
 
+    let now_01 = env.time_of_next_round();
     let _ = env.execute_ingress(
         canister_id,
         "update",
@@ -405,6 +416,7 @@ fn test_canister_log_record_index_increment_after_node_restart() {
     let env = restart_node(env, canister_logging);
     env.advance_time(Duration::from_nanos(123_456));
 
+    let now_23 = env.time_of_next_round();
     let _ = env.execute_ingress(
         canister_id,
         "update",
@@ -421,22 +433,22 @@ fn test_canister_log_record_index_increment_after_node_restart() {
             canister_log_records: vec![
                 CanisterLogRecord {
                     idx: 0,
-                    timestamp_nanos: time::GENESIS.as_nanos_since_unix_epoch(),
+                    timestamp_nanos: system_time_to_nanos(now_01),
                     content: b"message 0".to_vec()
                 },
                 CanisterLogRecord {
                     idx: 1,
-                    timestamp_nanos: time::GENESIS.as_nanos_since_unix_epoch(),
+                    timestamp_nanos: system_time_to_nanos(now_01),
                     content: b"message 1".to_vec()
                 },
                 CanisterLogRecord {
                     idx: 2,
-                    timestamp_nanos: 1620328630000123456,
+                    timestamp_nanos: system_time_to_nanos(now_23),
                     content: b"message 2".to_vec()
                 },
                 CanisterLogRecord {
                     idx: 3,
-                    timestamp_nanos: 1620328630000123456,
+                    timestamp_nanos: system_time_to_nanos(now_23),
                     content: b"message 3".to_vec()
                 }
             ],
@@ -448,6 +460,7 @@ fn test_canister_log_record_index_increment_after_node_restart() {
 fn test_logging_in_trapped_wasm_execution() {
     let (env, canister_id, controller) = setup_with_controller(FlagStatus::Enabled);
     // Grow stable memory by 1 page (64kb), reading outside of the page should trap.
+    let now = env.time_of_next_round();
     let _ = env.execute_ingress(
         canister_id,
         "update",
@@ -459,7 +472,7 @@ fn test_logging_in_trapped_wasm_execution() {
         FetchCanisterLogsResponse {
             canister_log_records: vec![CanisterLogRecord {
                 idx: 0,
-                timestamp_nanos: time::GENESIS.as_nanos_since_unix_epoch(),
+                timestamp_nanos: system_time_to_nanos(now),
                 content: b"[TRAP]: stable memory out of bounds".to_vec()
             }]
         }
@@ -469,6 +482,7 @@ fn test_logging_in_trapped_wasm_execution() {
 #[test]
 fn test_logging_explicit_canister_trap_without_message() {
     let (env, canister_id, controller) = setup_with_controller(FlagStatus::Enabled);
+    let now = env.time_of_next_round();
     let _ = env.execute_ingress(canister_id, "update", wasm().trap().build());
     let result = fetch_canister_logs(env, controller, canister_id);
     assert_eq!(
@@ -476,7 +490,7 @@ fn test_logging_explicit_canister_trap_without_message() {
         FetchCanisterLogsResponse {
             canister_log_records: vec![CanisterLogRecord {
                 idx: 0,
-                timestamp_nanos: time::GENESIS.as_nanos_since_unix_epoch(),
+                timestamp_nanos: system_time_to_nanos(now),
                 content: b"[TRAP]: (no message)".to_vec()
             }]
         }
@@ -486,6 +500,7 @@ fn test_logging_explicit_canister_trap_without_message() {
 #[test]
 fn test_logging_explicit_canister_trap_with_message() {
     let (env, canister_id, controller) = setup_with_controller(FlagStatus::Enabled);
+    let now = env.time_of_next_round();
     let _ = env.execute_ingress(
         canister_id,
         "update",
@@ -497,7 +512,7 @@ fn test_logging_explicit_canister_trap_with_message() {
         FetchCanisterLogsResponse {
             canister_log_records: vec![CanisterLogRecord {
                 idx: 0,
-                timestamp_nanos: time::GENESIS.as_nanos_since_unix_epoch(),
+                timestamp_nanos: system_time_to_nanos(now),
                 content: b"[TRAP]: some text".to_vec()
             }]
         }
@@ -584,6 +599,7 @@ fn test_logging_trap_in_heartbeat() {
         "update",
         wasm().set_heartbeat(heartbeat).build(),
     );
+    let now = env.time_of_next_round();
     env.tick();
     let result = fetch_canister_logs(env, controller, canister_id);
     assert_eq!(
@@ -592,12 +608,12 @@ fn test_logging_trap_in_heartbeat() {
             canister_log_records: vec![
                 CanisterLogRecord {
                     idx: 0,
-                    timestamp_nanos: time::GENESIS.as_nanos_since_unix_epoch(),
+                    timestamp_nanos: system_time_to_nanos(now),
                     content: b"before trap".to_vec()
                 },
                 CanisterLogRecord {
                     idx: 1,
-                    timestamp_nanos: time::GENESIS.as_nanos_since_unix_epoch(),
+                    timestamp_nanos: system_time_to_nanos(now),
                     content: b"[TRAP]: heartbeat trap!".to_vec()
                 }
             ]
@@ -620,6 +636,7 @@ fn test_logging_trap_in_timer() {
             .api_global_timer_set(1)
             .build(),
     );
+    let now = env.time_of_next_round();
     env.tick();
     let result = fetch_canister_logs(env, controller, canister_id);
     assert_eq!(
@@ -628,12 +645,12 @@ fn test_logging_trap_in_timer() {
             canister_log_records: vec![
                 CanisterLogRecord {
                     idx: 0,
-                    timestamp_nanos: time::GENESIS.as_nanos_since_unix_epoch(),
+                    timestamp_nanos: system_time_to_nanos(now),
                     content: b"before trap".to_vec()
                 },
                 CanisterLogRecord {
                     idx: 1,
-                    timestamp_nanos: time::GENESIS.as_nanos_since_unix_epoch(),
+                    timestamp_nanos: system_time_to_nanos(now),
                     content: b"[TRAP]: timer trap!".to_vec()
                 }
             ]
@@ -649,6 +666,7 @@ fn test_canister_log_preserved_after_disabling_and_enabling_again() {
     env.set_checkpoints_enabled(true);
 
     // Feature is enabled, batch #1.
+    let now_1 = env.time_of_next_round();
     let _ = env.execute_ingress(
         canister_id,
         "update",
@@ -667,6 +685,7 @@ fn test_canister_log_preserved_after_disabling_and_enabling_again() {
     // Enable the feature again and log batch #3.
     let env = restart_node(env, FlagStatus::Enabled);
     env.advance_time(Duration::from_nanos(222_222));
+    let now_3 = env.time_of_next_round();
     let _ = env.execute_ingress(
         canister_id,
         "update",
@@ -684,14 +703,14 @@ fn test_canister_log_preserved_after_disabling_and_enabling_again() {
                 // Batch #1.
                 CanisterLogRecord {
                     idx: 0,
-                    timestamp_nanos: time::GENESIS.as_nanos_since_unix_epoch(),
+                    timestamp_nanos: system_time_to_nanos(now_1),
                     content: b"message 1".to_vec()
                 },
                 // No batch #2 records.
                 // Batch #3.
                 CanisterLogRecord {
                     idx: 1,
-                    timestamp_nanos: 1620328630000333333,
+                    timestamp_nanos: system_time_to_nanos(now_3),
                     content: b"message 3".to_vec()
                 },
             ],

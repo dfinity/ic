@@ -302,21 +302,19 @@ fn counter_canister_call_test() {
         .unwrap();
 
     // This time we need to execute multiple rounds on the 1st subnet
-    // to induct all ingress messages with large payloads. The ingress
-    // messages are *not* selected in a deterministic order, so we check
-    // that any two out of three messages are known.
+    // to induct all ingress messages with large payloads.
     env1.execute_round();
     assert!(matches!(
-        env1.ingress_status(&msg10_id),
-        IngressStatus::Unknown { .. }
-    ));
-    assert!(matches!(
-        env1.ingress_status(&msg11_id),
-        IngressStatus::Known { .. }
-    ));
-    assert!(matches!(
-        env1.ingress_status(&msg12_id),
-        IngressStatus::Known { .. }
+        (
+            env1.ingress_status(&msg10_id),
+            env1.ingress_status(&msg11_id),
+            env1.ingress_status(&msg12_id)
+        ),
+        (
+            IngressStatus::Known { .. },
+            IngressStatus::Known { .. },
+            IngressStatus::Unknown { .. }
+        )
     ));
 
     // The third ingress message is only inducted after a repeated

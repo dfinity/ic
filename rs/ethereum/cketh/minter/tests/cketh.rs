@@ -402,7 +402,10 @@ fn should_reimburse() {
     let balance_before_withdrawal = cketh.balance_of(caller);
     assert_eq!(balance_before_withdrawal, withdrawal_amount);
 
-    let time_before_withdrawal = cketh.env.get_time().as_nanos_since_unix_epoch();
+    let time_at_withdrawal = cketh
+        .env
+        .get_time_of_next_round()
+        .as_nanos_since_unix_epoch();
 
     let cketh = cketh
         .call_minter_withdraw_eth(caller, withdrawal_amount.clone(), destination.clone())
@@ -490,7 +493,7 @@ fn should_reimburse() {
                 ledger_burn_index: withdrawal_id.clone(),
                 from: caller,
                 from_subaccount: None,
-                created_at: Some(time_before_withdrawal),
+                created_at: Some(time_at_withdrawal),
             },
             EventPayload::CreatedTransaction {
                 withdrawal_id: withdrawal_id.clone(),
