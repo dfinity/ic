@@ -1,6 +1,7 @@
 use axum::extract::State;
 use axum::http::{header, StatusCode};
 use axum::response::IntoResponse;
+use axum::Router;
 use ic_tracing::{utils::SharedBuffer, ReloadHandles};
 use std::io::BufReader;
 use std::time::Duration;
@@ -13,8 +14,23 @@ use crate::common::CONTENT_TYPE_SVG;
 
 const DEFAULT_TRACING_FLAMEGRAPH_DURATION: Duration = Duration::from_secs(30);
 
+#[derive(Clone)]
+pub(crate) struct TracingFlamegraphService(ReloadHandles);
+
+impl TracingFlamegraphService {
+    pub(crate) fn route() -> &'static str {
+        "/_/tracing/flamegraph"
+    }
+
+    pub(crate) fn build_router(handles: ReloadHandles) -> Router {
+        Router::new()
+            .route(Self::route(), axum::routing::get(tracing_flamegraph_handle))
+            .with_state(Self(handles))
+    }
+}
+
 pub(crate) async fn tracing_flamegraph_handle(
-    State(reload_handles): State<ReloadHandles>,
+    State(TracingFlamegraphService(reload_handles)): State<TracingFlamegraphService>,
 ) -> impl IntoResponse {
     let writer = SharedBuffer::default();
     let flame_layer = FlameLayer::new(writer.clone())
