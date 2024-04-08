@@ -8703,6 +8703,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-ledger-test-utils"
+version = "0.9.0"
+dependencies = [
+ "canister-test",
+]
+
+[[package]]
 name = "ic-logger"
 version = "0.9.0"
 dependencies = [
@@ -13187,10 +13194,12 @@ dependencies = [
  "ic-cdk",
  "ic-ledger-canister-core",
  "ic-ledger-core",
+ "ic-ledger-test-utils",
  "ic-metrics-encoder",
  "ic-nns-constants",
  "icp-ledger",
  "lazy_static",
+ "pocket-ic",
  "serde",
 ]
 
