@@ -35,8 +35,6 @@ use crate::{
 #[cfg(test)]
 mod tests;
 
-pub const ENHANCED_ORTHOGONAL_PERSISTENCE_SECTION: &str = "enhanced-orthogonal-persistence";
-
 /// Indicates whether the memory is kept or replaced with new (initial) memory.
 /// Applicable to both the stable memory and the main memory of a canister.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -582,18 +580,6 @@ impl InstallCodeHelper {
             new_wasm_custom_sections_memory_used,
         );
         Ok(())
-    }
-
-    /// Tests whether the canister uses enhanced orthogonal persistence.
-    /// Used for checking that the `wasm_memory_persistence` upgrade option is not omitted in error.
-    pub fn expects_orthogonal_persistence(&self) -> bool {
-        match &self.canister.execution_state {
-            Some(old_state) => old_state
-                .metadata
-                .get_custom_section(ENHANCED_ORTHOGONAL_PERSISTENCE_SECTION)
-                .is_some(),
-            None => false,
-        }
     }
 
     // A helper method to keep track of allocated and deallocated memory bytes.

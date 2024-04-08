@@ -16,10 +16,11 @@ use crate::execution::install_code::{
 use crate::execution_environment::{RoundContext, RoundLimits};
 use ic_base_types::PrincipalId;
 use ic_embedders::wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult};
-use ic_ic00_types::{CanisterInstallModeV2, WasmMemoryPersistence};
-use ic_interfaces::execution_environment::{HypervisorError, WasmExecutionOutput};
+use ic_ic00_types::{CanisterInstallModeV2, CanisterUpgradeOptions, WasmMemoryPersistence};
+use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult, WasmExecutionOutput};
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
+use ic_replicated_state::ExecutionState;
 use ic_replicated_state::{
     metadata_state::subnet_call_context_manager::InstallCodeCallId, CanisterState, SystemState,
 };
@@ -31,6 +32,8 @@ use super::install_code::MemoryHandling;
 
 #[cfg(test)]
 mod tests;
+
+pub const ENHANCED_ORTHOGONAL_PERSISTENCE_SECTION: &str = "enhanced-orthogonal-persistence";
 
 /// Performs a canister upgrade. The algorithm consists of six stages:
 /// - Stage 0: validate input.
@@ -265,30 +268,16 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
         original.compilation_cost_handling,
     );
 
-    let main_memory_handling = match context.mode {
-        CanisterInstallModeV2::Upgrade(Some(upgrade_options)) => {
-            match upgrade_options.wasm_memory_persistence {
-                Some(WasmMemoryPersistence::Keep) => MemoryHandling::Keep,
-                Some(WasmMemoryPersistence::Replace) => MemoryHandling::Replace,
-                None => {
-                    // Safety guard checking that the `wasm_memory_persistence` upgrade option has not been omitted in error.
-                    if helper.expects_orthogonal_persistence() {
-                        let instructions_left = helper.instructions_left();
-                        let message = "Enhanced orthogonal persistence requires the `wasm_memory_persistence` upgrade option.".to_string();
-                        let error = CanisterManagerError::MissingUpgradeOptionError { message };
-                        return finish_err(
-                            clean_canister,
-                            instructions_left,
-                            original,
-                            round,
-                            error,
-                        );
-                    }
-                    MemoryHandling::Replace
-                }
-            }
+    let main_memory_handling = match determine_main_memory_handling(
+        context.mode,
+        &helper.canister().execution_state,
+        &result,
+    ) {
+        Ok(memory_handling) => memory_handling,
+        Err(err) => {
+            let instructions_left = helper.instructions_left();
+            return finish_err(clean_canister, instructions_left, original, round, err);
         }
-        _ => MemoryHandling::Replace,
     };
 
     let memory_handling = CanisterMemoryHandling {
@@ -804,4 +793,62 @@ impl PausedInstallCodeExecution for PausedPostUpgradeExecution {
         self.paused_wasm_execution.abort();
         (self.original.message, self.original.call_id, Cycles::zero())
     }
+}
+
+/// Determine main memory handling based on the `wasm_memory_persistence` upgrade options.
+/// Integrates two safety checks:
+/// - The `wasm_memory_persistence` upgrade option is not omitted in error, when
+///   the old canister implementation uses enhanced orthogonal persistence.
+/// - The `wasm_memory_persistence: opt keep` option is not applied to a new canister
+///   implementation that does not support enhanced orthogonal persistence.
+fn determine_main_memory_handling(
+    install_mode: CanisterInstallModeV2,
+    old_state: &Option<ExecutionState>,
+    new_state_candidate: &HypervisorResult<ExecutionState>,
+) -> Result<MemoryHandling, CanisterManagerError> {
+    let old_state_uses_orthogonal_persistence = || {
+        old_state
+            .as_ref()
+            .map_or(false, expects_enhanced_orthogonal_persistence)
+    };
+    let new_state_uses_orthogonal_persistence = || {
+        new_state_candidate
+            .as_ref()
+            .map_or(false, expects_enhanced_orthogonal_persistence)
+    };
+
+    match install_mode {
+        CanisterInstallModeV2::Upgrade(None)
+        | CanisterInstallModeV2::Upgrade(Some(CanisterUpgradeOptions {
+            wasm_memory_persistence: None,
+            ..
+        })) => {
+            // Safety guard checking that the `wasm_memory_persistence` upgrade option has not been omitted in error.
+            if old_state_uses_orthogonal_persistence() {
+                let message = "Enhanced orthogonal persistence requires the `wasm_memory_persistence` upgrade option.".to_string();
+                return Err(CanisterManagerError::MissingUpgradeOptionError { message });
+            }
+            Ok(MemoryHandling::Replace)
+        }
+        CanisterInstallModeV2::Upgrade(Some(CanisterUpgradeOptions {
+            wasm_memory_persistence: Some(WasmMemoryPersistence::Keep),
+            ..
+        })) => {
+            // Safety guard checking that the enhanced orthogonal persistence upgrade option is only applied to canisters that support such.
+            if !new_state_uses_orthogonal_persistence() {
+                let message = "The `wasm_memory_persistence: opt Keep` upgrade option requires that the new canister version supports enhanced orthogonal persistence.".to_string();
+                return Err(CanisterManagerError::InvalidUpgradeOptionError { message });
+            }
+            Ok(MemoryHandling::Keep)
+        }
+        _ => Ok(MemoryHandling::Replace),
+    }
+}
+
+/// Helper function to check whether the state expects enhanced orthogonal persistence.
+fn expects_enhanced_orthogonal_persistence(execution_state: &ExecutionState) -> bool {
+    execution_state
+        .metadata
+        .get_custom_section(ENHANCED_ORTHOGONAL_PERSISTENCE_SECTION)
+        .is_some()
 }
