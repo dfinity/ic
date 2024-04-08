@@ -76,8 +76,9 @@ pub const MAX_XNET_PAYLOAD_IN_BYTES: NumBytes =
 pub const MAX_XNET_PAYLOAD_SIZE_ERROR_MARGIN_PERCENT: u64 = 5;
 
 /// Maximum byte size of a valid inter-canister `Response`.
-pub const MAX_RESPONSE_COUNT_BYTES: usize =
-    size_of::<RequestOrResponse>() + MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize;
+pub const MAX_RESPONSE_COUNT_BYTES: usize = size_of::<RequestOrResponse>()
+    + size_of::<Response>()
+    + MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize;
 
 /// An end user's signature.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
