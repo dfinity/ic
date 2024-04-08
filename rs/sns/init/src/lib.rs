@@ -1747,6 +1747,14 @@ impl SnsInitPayload {
         let min_participant_sns_e8s = min_participant_icp_e8s as u128 * sns_tokens_e8s as u128
             / max_direct_participation_icp_e8s as u128;
 
+        if neuron_minimum_stake_e8s <= sns_transaction_fee_e8s {
+            return Err(format!(
+                "Error: neuron_minimum_stake_e8s={} is too small. It needs to be \
+                 greater than the transaction fee ({} e8s)",
+                neuron_minimum_stake_e8s, sns_transaction_fee_e8s
+            ));
+        }
+
         let min_participant_icp_e8s_big_enough = min_participant_sns_e8s
             >= neuron_basket_construction_parameters_count as u128
                 * (neuron_minimum_stake_e8s + sns_transaction_fee_e8s) as u128;
@@ -3452,6 +3460,50 @@ mod test {
             assert!(
                 sns_init_payload.validate_pre_execution().unwrap_err().contains("Error: The following canisters are listed as dapp canisters, but are NNS canisters:"),
             );
+        }
+    }
+
+    #[test]
+    fn test_transaction_fee_must_be_less_than_min_stake() {
+        // `neuron_minimum_stake_e8s == transaction_fee_e8s` is invalid
+        {
+            let sns_init_payload = SnsInitPayload {
+                neuron_minimum_stake_e8s: Some(10_000),
+
+                transaction_fee_e8s: Some(10_000),
+                ..SnsInitPayload::with_valid_values_for_testing_pre_execution()
+            };
+
+            // Assert that this payload is invalid in the view of the library
+            let error = sns_init_payload.validate_pre_execution().unwrap_err();
+            assert!(error.contains("neuron_minimum_stake_e8s"));
+            assert!(error.contains("It needs to be greater than the transaction fee"));
+        }
+
+        // `neuron_minimum_stake_e8s < transaction_fee_e8s` is invalid
+        {
+            let sns_init_payload = SnsInitPayload {
+                neuron_minimum_stake_e8s: Some(10_000),
+                transaction_fee_e8s: Some(11_000),
+                ..SnsInitPayload::with_valid_values_for_testing_pre_execution()
+            };
+
+            // Assert that this payload is invalid in the view of the library
+            let error = sns_init_payload.validate_pre_execution().unwrap_err();
+            assert!(error.contains("neuron_minimum_stake_e8s"));
+            assert!(error.contains("It needs to be greater than the transaction fee"));
+        }
+
+        // `neuron_minimum_stake_e8s > transaction_fee_e8s` may be valid
+        {
+            let sns_init_payload = SnsInitPayload {
+                neuron_minimum_stake_e8s: Some(11_000),
+                transaction_fee_e8s: Some(10_000),
+                ..SnsInitPayload::with_valid_values_for_testing_pre_execution()
+            };
+
+            // Assert that this payload is valid in the view of the library
+            sns_init_payload.validate_pre_execution().unwrap();
         }
     }
 }
