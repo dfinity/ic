@@ -705,9 +705,11 @@ mod tests {
                         compute_allocation: candid::Nat::from(0_u32),
                         memory_allocation: candid::Nat::from(0_u32),
                         freezing_threshold: candid::Nat::from(0_u32),
+                        reserved_cycles_limit: candid::Nat::from(0_u32),
                     },
                     cycles: candid::Nat::from(0_u32),
                     idle_cycles_burned_per_day: candid::Nat::from(0_u32),
+                    reserved_cycles: candid::Nat::from(0_u32),
                 },
             )),
         ]);

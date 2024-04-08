@@ -91,7 +91,7 @@ pub(crate) fn arb_valid_versioned_stream_header(
             ),
             Just(CertificationVersion::V8..=CertificationVersion::V16)
         ),
-        // Stream headers may have the `StreamHeaderFlagBits::ResponsesOnly` flag set
+        // Stream headers may have the `StreamHeaderFlagBits::DeprecatedResponsesOnly` flag set
         // starting with certification version 17.
         (
             arb_stream_header(

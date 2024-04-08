@@ -11,7 +11,7 @@ path = "../certificate_orchestrator_interface"
 
 [dependencies]
 anyhow = { workspace = true }
-async-trait = "0.1.58"
+async-trait = { workspace = true }
 axum = { workspace = true }
 candid = { workspace = true }
 chacha20poly1305 = "0.10.0"

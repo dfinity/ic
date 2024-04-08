@@ -620,7 +620,7 @@ fn validate_signature_plain(
 }
 
 // Validate a chain of delegations.
-// See https://sdk.dfinity.org/docs/interface-spec/index.html#_envelope_authentication
+// See https://internetcomputer.org/docs/current/references/ic-interface-spec#authentication
 //
 // If the delegations are valid, returns the public key used to sign the
 // request as well as the set of canister IDs that the public key is valid for.

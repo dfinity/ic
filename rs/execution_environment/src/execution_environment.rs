@@ -1508,7 +1508,6 @@ impl ExecutionEnvironment {
                     round_limits,
                     subnet_size,
                     &self.metrics.state_changes_error,
-                    self.config.canister_logging,
                 );
                 if let ExecuteMessageResult::Finished {
                     canister: _,
@@ -1544,7 +1543,6 @@ impl ExecutionEnvironment {
                     subnet_size,
                     &self.call_tree_metrics,
                     self.config.dirty_page_logging,
-                    self.config.canister_logging,
                 )
             }
             WasmMethod::System(_) => {
@@ -1582,7 +1580,6 @@ impl ExecutionEnvironment {
             subnet_size,
             &self.call_tree_metrics,
             self.config.dirty_page_logging,
-            self.config.canister_logging,
         )
     }
 
@@ -1609,6 +1606,7 @@ impl ExecutionEnvironment {
         ExecutionParameters {
             instruction_limits,
             canister_memory_limit: canister.memory_limit(self.config.max_canister_memory_size),
+            wasm_memory_limit: canister.wasm_memory_limit(),
             memory_allocation: canister.memory_allocation(),
             compute_allocation: canister.compute_allocation(),
             subnet_type: self.own_subnet_type,

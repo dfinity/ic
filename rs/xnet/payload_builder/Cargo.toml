@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-async-trait = "0.1.31"
+async-trait = { workspace = true }
 hyper = { version = "0.14.18", features = ["full", "tcp"] }
 ic-async-utils = { path = "../../async_utils" }
 ic-base-types = { path = "../../types/base_types" }

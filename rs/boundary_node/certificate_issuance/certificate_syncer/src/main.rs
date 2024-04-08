@@ -12,23 +12,21 @@ use axum::{
     handler::Handler,
     http::{Response, StatusCode},
     routing::get,
-    Extension, Router, Server,
+    Extension, Router,
 };
 use clap::Parser;
-use futures::future::TryFutureExt;
-use hyper::Uri;
-use hyper_rustls::HttpsConnectorBuilder;
 use import::Import;
 use nix::sys::signal::Signal;
 use opentelemetry::{metrics::MeterProvider as _, sdk::metrics::MeterProvider, KeyValue};
 use opentelemetry_prometheus::exporter;
 use persist::Persist;
 use prometheus::{labels, Encoder as PrometheusEncoder, Registry, TextEncoder};
-use tokio::task;
+use reqwest::{redirect::Policy, Url};
+use tokio::{net::TcpListener, task};
 use tracing::info;
 
 use crate::{
-    http::HyperClient,
+    http::ReqwestClient,
     import::CertificatesImporter,
     metrics::{MetricParams, WithMetrics},
     persist::{Persister, WithDedup},
@@ -54,7 +52,7 @@ struct Cli {
     pid_path: PathBuf,
 
     #[clap(long, default_value = "http://127.0.0.1:3000/certificates")]
-    certificates_exporter_uri: Uri,
+    certificates_exporter_uri: Url,
 
     #[clap(long, default_value = "certs")]
     local_certificates_path: PathBuf,
@@ -102,14 +100,15 @@ async fn main() -> Result<(), Error> {
     let metrics_router = Router::new().route("/metrics", get(metrics_handler));
 
     // HTTP
-    let http_client = hyper::Client::builder().build(
-        HttpsConnectorBuilder::new()
-            .with_native_roots()
-            .https_or_http()
-            .enable_http1()
-            .build(),
-    );
-    let http_client = HyperClient::new(http_client);
+    let http_client = reqwest::ClientBuilder::new()
+        .use_rustls_tls()
+        .http1_only()
+        .redirect(Policy::none())
+        .referer(false)
+        .build()
+        .unwrap();
+
+    let http_client = ReqwestClient::new(http_client);
     let http_client = WithMetrics(
         http_client,
         MetricParams::new(&meter, SERVICE_NAME, "http_request"),
@@ -168,11 +167,12 @@ async fn main() -> Result<(), Error> {
                 let _ = runner.run().await;
             }
         }),
-        task::spawn(
-            Server::bind(&cli.metrics_addr)
-                .serve(metrics_router.into_make_service())
+        task::spawn(async move {
+            let listener = TcpListener::bind(&cli.metrics_addr).await.unwrap();
+            axum::serve(listener, metrics_router.into_make_service())
+                .await
                 .map_err(|err| anyhow!("server failed: {:?}", err))
-        ),
+        }),
     )
     .context(format!("{SERVICE_NAME} failed to run"))?;
 

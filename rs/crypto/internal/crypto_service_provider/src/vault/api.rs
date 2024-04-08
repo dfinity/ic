@@ -385,6 +385,7 @@ pub trait CspVault:
     + NiDkgCspVault
     + IDkgProtocolCspVault
     + ThresholdEcdsaSignerCspVault
+    + ThresholdSchnorrSignerCspVault
     + SecretKeyStoreCspVault
     + TlsHandshakeCspVault
     + PublicRandomSeedGenerator
@@ -402,6 +403,7 @@ impl<T> CspVault for T where
         + NiDkgCspVault
         + IDkgProtocolCspVault
         + ThresholdEcdsaSignerCspVault
+        + ThresholdSchnorrSignerCspVault
         + SecretKeyStoreCspVault
         + TlsHandshakeCspVault
         + PublicRandomSeedGenerator

@@ -86,7 +86,7 @@ impl IngressStatus {
     }
 
     /// Returns the name of this status as specified in the interface spec:
-    /// `<https://sdk.dfinity.org/docs/interface-spec/index.html#state-tree-request-status>`
+    /// `<https://internetcomputer.org/docs/current/references/ic-interface-spec#state-tree-request-status>`
     pub fn as_str(&self) -> &'static str {
         match self {
             IngressStatus::Known { state, .. } => match state {

@@ -4,8 +4,12 @@ use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_tests::driver::ic::{InternetComputer, Subnet};
 use ic_tests::driver::test_env_api::{HasTopologySnapshot, IcNodeContainer, RetrieveIpv4Addr};
+use ic_tests::driver::test_setup::InfraProvider;
 use ic_tests::driver::universal_vm::*;
-use ic_tests::driver::{test_env::TestEnv, test_env_api::*};
+use ic_tests::driver::{
+    test_env::{TestEnv, TestEnvAttribute},
+    test_env_api::*,
+};
 use ic_tests::util::{self, create_and_install};
 pub use ic_types::{CanisterId, PrincipalId};
 use slog::info;
@@ -83,6 +87,8 @@ pub fn setup(env: TestEnv) {
         .start(&env)
         .expect("failed to set up universal VM");
 
+    start_httpbin_on_uvm(&env);
+
     InternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
         .add_subnet(
@@ -120,11 +126,78 @@ pub fn get_universal_vm_address(env: &TestEnv) -> Ipv6Addr {
 
 pub fn get_universal_vm_ipv4_address(env: &TestEnv) -> Ipv4Addr {
     let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
-    let webserver_ipv4 = deployed_universal_vm
-        .block_on_ipv4()
-        .expect("Universal VM IPv4 not found.");
-    info!(&env.logger(), "Webserver has IPv4 {:?}", webserver_ipv4);
-    webserver_ipv4
+    match InfraProvider::read_attribute(env) {
+        InfraProvider::Farm => deployed_universal_vm
+            .block_on_ipv4()
+            .expect("Universal VM IPv4 not found."),
+        InfraProvider::K8s => deployed_universal_vm.get_vm().unwrap().ipv4.unwrap(),
+    }
+}
+
+pub fn start_httpbin_on_uvm(env: &TestEnv) {
+    let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
+    let vm = deployed_universal_vm.get_vm().unwrap();
+    let ipv6 = vm.ipv6.to_string();
+    let ipv4 = vm.ipv4.map_or("".to_string(), |ipv4| ipv4.to_string());
+    info!(
+        &env.logger(),
+        "Starting httpbin service on UVM '{UNIVERSAL_VM_NAME}' ..."
+    );
+    deployed_universal_vm
+        .block_on_bash_script(&format!(
+            r#"
+        set -e -o pipefail
+        ipv6="{ipv6}"
+        ipv4="{ipv4}"
+
+        if [[ "$ipv4" == "" ]] && ip link show dev enp2s0 >/dev/null; then
+            count=0
+            until ipv4=$(ip -j address show dev enp2s0 \
+                        | jq -r -e \
+                        '.[0].addr_info | map(select(.scope == "global")) | .[0].local'); \
+            do
+                if [ "$count" -ge 120 ]; then
+                    exit 1
+                fi
+                sleep 1
+                count=$((count+1))
+            done
+        fi
+        echo "IPv4 is ${{ipv4:-disabled}}"
+
+        echo "Generate ipv6 service cert with root cert and key, using `minica` ..."
+        mkdir certs
+        cd certs
+        cp /config/cert.pem minica.pem
+        cp /config/key.pem minica-key.pem
+        chmod -R 755 ./
+
+        echo "Making certs directory in $(pwd) ..."
+        docker load -i /config/minica.tar
+        docker tag bazel/image:image minica
+        docker run \
+            -v "$(pwd)":/output \
+            minica \
+            -ip-addresses="$ipv6${{ipv4:+,$ipv4}}"
+
+        echo "Updating service certificate folder name so it can be fed to ssl-proxy container ..."
+        sudo mv "$ipv6" ipv6
+        sudo chmod -R 755 ipv6
+
+        echo "Setting up httpbin on port 20443 ..."
+        docker load -i /config/httpbin_image.tar
+        docker tag bazel/rs/tests/httpbin-rs:httpbin_image httpbin
+        sudo docker run \
+            --rm \
+            -d \
+            -p 20443:80 \
+            -v "$(pwd)/ipv6":/certs \
+            --name httpbin \
+            httpbin \
+            --cert-file /certs/cert.pem --key-file /certs/key.pem --port 80
+    "#
+        ))
+        .unwrap_or_else(|e| panic!("Could not start httpbin on {UNIVERSAL_VM_NAME} because {e:?}"));
 }
 
 pub fn get_node_snapshots(env: &TestEnv) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {

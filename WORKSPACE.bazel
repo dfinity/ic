@@ -83,7 +83,7 @@ rust_register_toolchains(
     # The version below is chosen so that it is in sync with the non-nightly version.
     versions = [
         "1.77.1",
-        "nightly/2023-11-11",
+        "nightly/2024-02-06",
     ],
 )
 

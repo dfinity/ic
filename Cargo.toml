@@ -116,7 +116,6 @@ members = [
   "rs/recovery",
   "rs/recovery/subnet_splitting",
   "rs/replay",
-  "rs/elastic_common_schema",
   "rs/embedders",
   "rs/execution_environment",
   "rs/execution_environment/benches/lib",
@@ -125,6 +124,7 @@ members = [
   "rs/http_endpoints/metrics",
   "rs/http_utils",
   "rs/ic_os/deterministic_ips",
+  "rs/ic_os/dflate",
   "rs/ic_os/config",
   "rs/ic_os/fstrim_tool",
   "rs/ic_os/guestos_tool",
@@ -428,8 +428,9 @@ arrayvec = "0.7.4"
 askama = { version = "0.12.1", features = ["serde-json"] }
 assert_matches = "1.5.0"
 async-recursion = "1.0.5"
+async-trait = "0.1"
 async-scoped = { version = "0.8", features = ["use-tokio"] }
-axum = "0.7.4"
+axum = { version = "0.7.4", features = ["json"] }
 backoff = "0.4"
 base64 = { version = "0.13.1" }
 # build-info and build-info-build MUST be kept in sync!
@@ -449,7 +450,7 @@ cloudflare = { version = "0.9.1", default_features = false, features = [
   "rustls-tls",
 ] }
 crossbeam-channel = "0.5.11"
-curve25519-dalek = "=4.1.1"
+curve25519-dalek = "4.1.2"
 ethnum = { version = "1.3.2", features = ["serde"] }
 flate2 = "1.0.28"
 futures = "0.3.30"
@@ -511,6 +512,7 @@ reqwest = { version = "0.11.22", default-features = false, features = [
   "blocking",
   "json",
   "multipart",
+  "rustls-tls",
   "rustls-tls-webpki-roots",
   "stream",
 ] }

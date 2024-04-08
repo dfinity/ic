@@ -45,6 +45,12 @@ impl From<crate::erc20::CkErc20Token> for CkErc20Token {
     }
 }
 
+#[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+pub struct Erc20Balance {
+    pub erc20_contract_address: String,
+    pub balance: Nat,
+}
+
 #[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
 pub struct MinterInfo {
     pub minter_address: Option<String>,
@@ -56,6 +62,7 @@ pub struct MinterInfo {
     pub last_observed_block_number: Option<Nat>,
     pub eth_balance: Option<Nat>,
     pub last_gas_fee_estimate: Option<GasFeeEstimate>,
+    pub erc20_balances: Option<Vec<Erc20Balance>>,
 }
 
 #[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]

@@ -13,7 +13,7 @@ documentation.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-async-trait = "0.1.53"
+async-trait = { workspace = true }
 candid = { workspace = true }
 ic-cdk = { workspace = true }
 icrc-ledger-client = { path = "../icrc-ledger-client" }

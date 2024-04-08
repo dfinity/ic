@@ -263,7 +263,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.5.0",
             ),
             "cached": crate.spec(
-                version = "^0.41",
+                version = "^0.49",
                 default_features = False,
             ),
             "candid": crate.spec(
@@ -356,7 +356,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.1",
             ),
             "curve25519-dalek": crate.spec(
-                version = "=4.1.1",
+                version = "^4.1.2",
             ),
             "cvt": crate.spec(
                 version = "^0.1.1",
@@ -445,7 +445,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.3.0",
             ),
             "h2": crate.spec(
-                version = "^0.3.24",
+                version = "^0.3.26",
             ),
             "hashlink": crate.spec(
                 version = "^0.8.0",
@@ -974,6 +974,15 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "stream",
                 ],
             ),
+            "reqwest_0_12_0": crate.spec(
+                package = "reqwest",
+                version = "^0.12.0",
+                default_features = False,
+                features = [
+                    "rustls-tls",
+                    "rustls-tls-native-roots",
+                ],
+            ),
             "ring": crate.spec(
                 version = "^0.17.7",
                 features = [
@@ -1135,9 +1144,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "slog-term": crate.spec(
                 version = "^2.6.0",
-            ),
-            "slog_derive": crate.spec(
-                version = "^0.2.0",
             ),
             "socket2": crate.spec(
                 version = "^0.5.6",

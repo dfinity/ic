@@ -18,7 +18,7 @@ tls = []
 anyhow = { workspace = true }
 arc-swap = "1"
 async-scoped = { version = "0.8", features = ["use-tokio"] }
-async-trait = "0.1.56"
+async-trait = { workspace = true }
 axum = "0.6.1"
 axum-extra = "0.9.0"
 axum-server = { version = "0.5.1", features = ["tls-rustls"] }

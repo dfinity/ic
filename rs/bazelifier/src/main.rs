@@ -165,7 +165,6 @@ static MACRO_CRATES: &[&str] = &[
     "ic-nervous-system-common-build-metadata",
     "paste",
     "proptest-derive",
-    "slog_derive",
     "strum_macros",
 ];
 

@@ -11,7 +11,7 @@ name = "sns-root-canister"
 path = "canister/canister.rs"
 
 [dependencies]
-async-trait = "0.1.53"
+async-trait = { workspace = true }
 
 build-info = { workspace = true }
 

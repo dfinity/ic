@@ -24,96 +24,51 @@ function read_variables() {
     done <"${CONFIG}"
 }
 
+# WARNING: Uses 'eval' for command execution.
+# Ensure 'command' is a trusted, fixed string.
+function eval_command_with_retries() {
+    local command="${1}"
+    local error_message="${2}"
+    local result=""
+    local attempt_count=0
+
+    while [ -z "${result}" ] && [ ${attempt_count} -lt 3 ]; do
+        result=$(eval "${command}")
+        ((attempt_count++))
+
+        if [ -z "${result}" ] && [ ${attempt_count} -lt 3 ]; then
+            sleep 1
+        fi
+    done
+
+    if [ -z "${result}" ]; then
+        log_and_halt_installation_on_error "1" "${error_message}"
+    fi
+
+    echo "${result}"
+}
+
 function get_network_settings() {
     # Full IPv6 address
-    retry=0
+    ipv6_address_system_full=$(eval_command_with_retries \
+        "ip -6 addr show | awk '(/inet6/) && (!/fe80|::1/) { print \$2 }'" \
+        "Failed to get system network configuration.")
 
-    ipv6_address_system_full=$(ip -6 a s | awk '(/inet6/) && (! / fe80| ::1/) { print $2 }')
-    log_and_halt_installation_on_error "${?}" "System network configuration failed."
+    ipv6_prefix_system=$(eval_command_with_retries \
+        "echo ${ipv6_address_system_full} | cut -d: -f1-4" \
+        "Failed to get system's IPv6 prefix.")
 
-    while [ -z "${ipv6_address_system_full}" ]; do
-        let retry=retry+1
-        if [ ${retry} -ge 3 ]; then
-            log_and_halt_installation_on_error "1" "System network configuration failed."
-            break
-        else
-            sleep 1
-            ipv6_address_system_full=$(ip -6 a s | awk '(/inet6/) && (! /fe80|::1/) { print $2 }')
-            log_and_halt_installation_on_error "${?}" "System network configuration failed."
-        fi
-    done
+    ipv6_subnet_system=$(eval_command_with_retries \
+        "echo ${ipv6_address_system_full} | awk -F '/' '{ print \"/\" \$2 }'" \
+        "Failed to get system's IPv6 subnet.")
 
-    # IPv6 prefix
-    retry=0
+    ipv6_gateway_system=$(eval_command_with_retries \
+        "ip -6 route show | awk '(/^default/) { print \$3 }'" \
+        "Failed to get system's IPv6 gateway.")
 
-    ipv6_prefix_system=$(echo ${ipv6_address_system_full} | cut -d: -f1-4)
-    log_and_halt_installation_on_error "${?}" "Unable to get system's IPv6 prefix."
-
-    while [ -z "${ipv6_prefix_system}" ]; do
-        let retry=retry+1
-        if [ ${retry} -ge 3 ]; then
-            log_and_halt_installation_on_error "1" "Unable to get system's IPv6 prefix."
-            break
-        else
-            sleep 1
-            ipv6_prefix_system=$(echo ${ipv6_address_system_full} | cut -d: -f1-4)
-            log_and_halt_installation_on_error "${?}" "Unable to get system's IPv6 prefix."
-        fi
-    done
-
-    # IPv6 subnet
-    retry=0
-
-    ipv6_subnet_system=$(echo ${ipv6_address_system_full} | awk -F '/' '{ print "/" $2 }')
-    log_and_halt_installation_on_error "${?}" "Unable to get system's IPv6 subnet."
-
-    while [ -z "${ipv6_subnet_system}" ]; do
-        let retry=retry+1
-        if [ ${retry} -ge 3 ]; then
-            log_and_halt_installation_on_error "1" "Unable to get system's IPv6 subnet."
-            break
-        else
-            sleep 1
-            ipv6_subnet_system=$(echo ${ipv6_address_system_full} | awk -F '/' '{ print "/" $2 }')
-            log_and_halt_installation_on_error "${?}" "Unable to get system's IPv6 subnet."
-        fi
-    done
-
-    # IPv6 gateway
-    retry=0
-
-    ipv6_gateway_system=$(ip -6 r s | awk '(/^default/) { print $3 }')
-    log_and_halt_installation_on_error "${?}" "Unable to get system's IPv6 gateway."
-
-    while [ -z "${ipv6_gateway_system}" ]; do
-        let retry=retry+1
-        if [ ${retry} -ge 3 ]; then
-            log_and_halt_installation_on_error "1" "Unable to get system's IPv6 gateway."
-            break
-        else
-            sleep 1
-            ipv6_gateway_system=$(ip -6 r s | awk '(/^default/) { print $3 }')
-            log_and_halt_installation_on_error "${?}" "Unable to get system's IPv6 gateway."
-        fi
-    done
-
-    # IPv6 address
-    retry=0
-
-    ipv6_address_system=$(echo ${ipv6_address_system_full} | awk -F '/' '{ print $1 }')
-    log_and_halt_installation_on_error "${?}" "Unable to get system's IPv6 subnet."
-
-    while [ -z "${ipv6_address_system}" ]; do
-        let retry=retry+1
-        if [ ${retry} -ge 3 ]; then
-            log_and_halt_installation_on_error "1" "Unable to get system's IPv6 subnet."
-            break
-        else
-            sleep 1
-            ipv6_address_system=$(echo ${ipv6_address_system_full} | awk -F '/' '{ print $1 }')
-            log_and_halt_installation_on_error "${?}" "Unable to get system's IPv6 subnet."
-        fi
-    done
+    ipv6_address_system=$(eval_command_with_retries \
+        "echo ${ipv6_address_system_full} | awk -F '/' '{ print \$1 }'" \
+        "Failed to get system's IPv6 address.")
 
     HOSTOS_IPV6_ADDRESS=$(/opt/ic/bin/setupos_tool generate-ipv6-address --node-type HostOS)
     GUESTOS_IPV6_ADDRESS=$(/opt/ic/bin/setupos_tool generate-ipv6-address --node-type GuestOS)

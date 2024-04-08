@@ -17,7 +17,7 @@ use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
 use ic_cycles_account_manager::CyclesAccountManager;
 pub use ic_error_types::{ErrorCode, UserError};
 use ic_execution_environment::{ExecutionServices, IngressHistoryReaderImpl};
-use ic_ingress_manager::{CustomRandomState, IngressManager};
+use ic_ingress_manager::{IngressManager, RandomStateKind};
 use ic_interfaces::ingress_pool::{
     IngressPool, PoolSection, UnvalidatedIngressArtifact, ValidatedIngressArtifact,
 };
@@ -79,7 +79,8 @@ use ic_state_layout::{CheckpointLayout, RwPolicy};
 use ic_state_manager::StateManagerImpl;
 use ic_test_utilities::crypto::CryptoReturningOk;
 use ic_test_utilities_metrics::{
-    fetch_histogram_stats, fetch_int_counter, fetch_int_gauge, fetch_int_gauge_vec, Labels,
+    fetch_counter_vec, fetch_histogram_stats, fetch_int_counter, fetch_int_gauge,
+    fetch_int_gauge_vec, Labels,
 };
 use ic_test_utilities_registry::{
     add_single_subnet_record, add_subnet_key_record, add_subnet_list_record, SubnetRecordBuilder,
@@ -1208,7 +1209,7 @@ impl StateMachine {
             state_manager.clone(),
             cycles_account_manager,
             malicious_flags,
-            CustomRandomState::Deterministic,
+            RandomStateKind::Deterministic,
         ));
 
         Self {
@@ -1565,6 +1566,20 @@ impl StateMachine {
         }
     }
 
+    /// Checks critical error counters and panics if a critical error occurred.
+    /// We ignore `mr_non_increasing_batch_time` and `execution_environment_unfiltered_ingress` for now.
+    pub fn check_critical_errors(&self) {
+        let error_counter_vec = fetch_counter_vec(&self.metrics_registry, "critical_errors");
+        if let Some((metric, _)) = error_counter_vec.into_iter().find(|(_, v)| *v != 0.0) {
+            let err: String = metric.get("error").unwrap().to_string();
+            if err != *"mr_non_increasing_batch_time"
+                && err != *"execution_environment_unfiltered_ingress"
+            {
+                panic!("Critical error {} occurred.", err);
+            }
+        }
+    }
+
     /// Triggers a single round of execution with block payload as an input.
     pub fn execute_payload(&self, payload: PayloadBuilder) -> Height {
         let batch_number = self.message_routing.expected_batch_height();
@@ -1604,6 +1619,8 @@ impl StateMachine {
                 .0,
             batch_number
         );
+
+        self.check_critical_errors();
 
         batch_number
     }

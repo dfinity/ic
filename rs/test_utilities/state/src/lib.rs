@@ -846,7 +846,7 @@ prop_compose! {
 
         let mut stream = Stream::with_signals(messages, signals_end, reject_signals);
         stream.set_reverse_stream_flags(StreamFlags {
-            responses_only: responses_only_flag,
+            deprecated_responses_only: responses_only_flag,
         });
         stream
     }
@@ -900,7 +900,7 @@ prop_compose! {
             signals_end,
             reject_signals,
             StreamFlags {
-                responses_only,
+                deprecated_responses_only: responses_only,
             },
         )
     }

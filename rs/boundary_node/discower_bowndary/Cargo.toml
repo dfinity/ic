@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-async-trait = "0.1.73"
+async-trait = { workspace = true }
 prost = { workspace = true }
 tokio = { workspace = true }
 url = "2.4.0"

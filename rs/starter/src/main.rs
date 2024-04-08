@@ -639,6 +639,7 @@ impl ValidatedConfig {
             embedders_config: EmbeddersConfig {
                 feature_flags: FeatureFlags {
                     rate_limiting_of_debug_prints: FlagStatus::Disabled,
+                    canister_logging: FlagStatus::Enabled,
                     ..FeatureFlags::default()
                 },
                 metering_type: if self.use_old_metering {
@@ -654,7 +655,6 @@ impl ValidatedConfig {
             wasm_chunk_store: FlagStatus::Enabled,
             query_stats_aggregation: FlagStatus::Enabled,
             query_stats_epoch_length: 60,
-            canister_logging: FlagStatus::Enabled,
             ..HypervisorConfig::default()
         };
 

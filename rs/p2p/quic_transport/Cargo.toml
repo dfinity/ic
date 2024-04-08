@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = { workspace = true }
-async-trait = "0.1.36"
+async-trait = { workspace = true }
 axum = { workspace = true }
 bincode = "1.2.1"
 bytes = { workspace = true }

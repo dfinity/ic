@@ -28,7 +28,7 @@ harness = false
 [dependencies]
 build-info = { workspace = true }
 
-async-trait = "0.1.42"
+async-trait = { workspace = true }
 bytes = { workspace = true }
 candid = { workspace = true }
 cycles-minting-canister = { path = "../cmc" }

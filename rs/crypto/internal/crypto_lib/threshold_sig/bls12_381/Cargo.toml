@@ -9,7 +9,7 @@ documentation.workspace = true
 [dependencies]
 base64 = { workspace = true }
 hex = { workspace = true }
-cached = { version = "0.41", default-features = false }
+cached = { version = "0.49", default-features = false }
 parking_lot = "0.12.1"
 ic-crypto-internal-bls12-381-type = { path = "../../bls12_381/type" }
 ic-crypto-internal-seed = { path = "../../seed" }

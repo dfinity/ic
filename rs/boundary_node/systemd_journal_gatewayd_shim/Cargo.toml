@@ -8,7 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
-async-trait = "0.1.73"
+async-trait = { workspace = true }
 axum = "0.6.20"
 clap = { workspace = true }
 http = "0.2.9"

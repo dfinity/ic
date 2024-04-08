@@ -770,11 +770,11 @@ pub fn process(
                 HypervisorError::CalledTrap(text) => Some(format!("[TRAP]: {}", text)),
                 _ => None,
             } {
-                if embedder.config().feature_flags.canister_logging == FlagStatus::Enabled {
-                    canister_log.add_record(timestamp_nanos, log_message.as_bytes());
-                } else {
-                    canister_log.clear();
-                }
+                canister_log.add_record(
+                    embedder.config().feature_flags.canister_logging == FlagStatus::Enabled,
+                    timestamp_nanos,
+                    log_message.as_bytes(),
+                );
             }
             None
         }

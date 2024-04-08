@@ -1467,7 +1467,7 @@ fn stream_roundtrip_encoding() {
         SignalConfig { end: 153 },
     );
     stream.reverse_stream_flags = StreamFlags {
-        responses_only: true,
+        deprecated_responses_only: true,
     };
 
     let proto_stream: pb_queues::Stream = (&stream).into();

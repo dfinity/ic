@@ -17,7 +17,7 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use ic_artifact_pool::ingress_pool::IngressPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_constants::MAX_INGRESS_TTL;
-use ic_ingress_manager::{CustomRandomState, IngressManager};
+use ic_ingress_manager::{IngressManager, RandomStateKind};
 use ic_interfaces::{
     p2p::consensus::{ChangeSetProducer, MutablePool, UnvalidatedArtifact},
     time_source::TimeSource,
@@ -239,7 +239,7 @@ where
                 Arc::new(state_manager),
                 cycles_account_manager,
                 MaliciousFlags::default(),
-                CustomRandomState::default(),
+                RandomStateKind::Random,
             );
             test(
                 time_source,

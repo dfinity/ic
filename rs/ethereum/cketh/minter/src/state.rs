@@ -7,7 +7,10 @@ use crate::lifecycle::upgrade::UpgradeArg;
 use crate::lifecycle::EthereumNetwork;
 use crate::logs::DEBUG;
 use crate::map::MultiKeyMap;
-use crate::numeric::{BlockNumber, LedgerBurnIndex, LedgerMintIndex, TransactionNonce, Wei};
+use crate::numeric::{
+    BlockNumber, Erc20Value, LedgerBurnIndex, LedgerMintIndex, TransactionNonce, Wei,
+};
+use crate::state::transactions::{Erc20WithdrawalRequest, TransactionCallData};
 use crate::tx::TransactionPriceEstimate;
 use candid::Principal;
 use ic_canister_log::log;
@@ -64,9 +67,13 @@ pub struct State {
     pub eth_transactions: EthTransactions,
     pub skipped_blocks: BTreeSet<BlockNumber>,
 
-    /// Current balance of ETH held by minter.
+    /// Current balance of ETH held by the minter.
     /// Computed based on audit events.
     pub eth_balance: EthBalance,
+
+    /// Current balance of ERC-20 tokens held by the minter.
+    /// Computed based on audit events.
+    pub erc20_balances: Erc20Balances,
 
     /// Per-principal lock for pending withdrawals
     pub pending_withdrawal_principals: BTreeSet<Principal>,
@@ -159,15 +166,14 @@ impl State {
         if let ReceivedEvent::Erc20(event) = event {
             assert!(
                 self.ckerc20_tokens
-                    .get_alt(&event.erc20_contract_address)
-                    .is_some(),
-                "Event {event:?} has an unsupported erc20_contract_address"
+                    .contains_alt(&event.erc20_contract_address),
+                "BUG: unsupported ERC-20 contract address in event {event:?}"
             )
         }
 
         self.events_to_mint.insert(event_source, event.clone());
 
-        self.update_eth_balance_upon_deposit(event)
+        self.update_balance_upon_deposit(event)
     }
 
     pub fn has_events_to_mint(&self) -> bool {
@@ -201,6 +207,12 @@ impl State {
                 erc20_ethereum_network: self.ethereum_network,
                 ckerc20_token_symbol: symbol.clone(),
             })
+    }
+
+    pub fn ckerc20_token_symbol(&self, erc20_contract_address: &Address) -> Option<&CkTokenSymbol> {
+        self.ckerc20_tokens
+            .get_entry_alt(erc20_contract_address)
+            .map(|(symbol, _)| symbol)
     }
 
     fn record_invalid_deposit(&mut self, source: EventSource, error: String) -> bool {
@@ -252,6 +264,16 @@ impl State {
         );
     }
 
+    pub fn record_erc20_withdrawal_request(&mut self, request: Erc20WithdrawalRequest) {
+        assert!(
+            self.ckerc20_tokens
+                .contains_alt(&request.erc20_contract_address),
+            "BUG: unsupported ERC-20 token {}",
+            request.erc20_contract_address
+        );
+        self.eth_transactions.record_withdrawal_request(request);
+    }
+
     pub fn record_finalized_transaction(
         &mut self,
         withdrawal_id: &LedgerBurnIndex,
@@ -259,8 +281,7 @@ impl State {
     ) {
         self.eth_transactions
             .record_finalized_transaction(*withdrawal_id, receipt.clone());
-        //TODO XC-59: update ETH balance when ckERC20 withdrawal finalized
-        self.update_eth_balance_upon_withdrawal(withdrawal_id, receipt);
+        self.update_balance_upon_withdrawal(withdrawal_id, receipt);
     }
 
     pub fn next_request_id(&mut self) -> u64 {
@@ -271,14 +292,16 @@ impl State {
         current_request_id
     }
 
-    fn update_eth_balance_upon_deposit(&mut self, event: &ReceivedEvent) {
-        // Only update the ETH balance if it is an ETH event
-        if let ReceivedEvent::Eth(event) = event {
-            self.eth_balance.eth_balance_add(event.value);
-        }
+    fn update_balance_upon_deposit(&mut self, event: &ReceivedEvent) {
+        match event {
+            ReceivedEvent::Eth(event) => self.eth_balance.eth_balance_add(event.value),
+            ReceivedEvent::Erc20(event) => self
+                .erc20_balances
+                .erc20_add(event.erc20_contract_address, event.value),
+        };
     }
 
-    fn update_eth_balance_upon_withdrawal(
+    fn update_balance_upon_withdrawal(
         &mut self,
         withdrawal_id: &LedgerBurnIndex,
         receipt: &TransactionReceipt,
@@ -304,6 +327,14 @@ impl State {
         self.eth_balance.eth_balance_sub(debited_amount);
         self.eth_balance.total_effective_tx_fees_add(tx_fee);
         self.eth_balance.total_unspent_tx_fees_add(unspent_tx_fee);
+
+        if receipt.status == TransactionStatus::Success && !tx.transaction_data().is_empty() {
+            let TransactionCallData::Erc20Transfer { to: _, value } = TransactionCallData::decode(
+                tx.transaction_data(),
+            )
+            .expect("BUG: failed to decode transaction data from transaction issued by minter");
+            self.erc20_balances.erc20_sub(*tx.destination(), value);
+        }
     }
 
     pub fn record_skipped_block(&mut self, block_number: BlockNumber) {
@@ -589,6 +620,56 @@ impl EthBalance {
 
     pub fn total_unspent_tx_fees(&self) -> Wei {
         self.total_unspent_tx_fees
+    }
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct Erc20Balances {
+    balance_by_erc20_contract: BTreeMap<Address, Erc20Value>,
+}
+
+impl Erc20Balances {
+    pub fn balance_of(&self, erc20_contract: &Address) -> Erc20Value {
+        *self
+            .balance_by_erc20_contract
+            .get(erc20_contract)
+            .unwrap_or(&Erc20Value::ZERO)
+    }
+
+    pub fn erc20_add(&mut self, erc20_contract: Address, deposit: Erc20Value) {
+        match self.balance_by_erc20_contract.get(&erc20_contract) {
+            Some(previous_value) => {
+                let new_value = previous_value.checked_add(deposit).unwrap_or_else(|| {
+                    panic!(
+                        "BUG: overflow when adding {} to {}",
+                        deposit, previous_value
+                    )
+                });
+                self.balance_by_erc20_contract
+                    .insert(erc20_contract, new_value);
+            }
+            None => {
+                self.balance_by_erc20_contract
+                    .insert(erc20_contract, deposit);
+            }
+        }
+    }
+
+    pub fn erc20_sub(&mut self, erc20_contract: Address, withdrawal_amount: Erc20Value) {
+        let previous_value = self
+            .balance_by_erc20_contract
+            .get(&erc20_contract)
+            .expect("BUG: Cannot subtract from a missing ERC-20 balance");
+        let new_value = previous_value
+            .checked_sub(withdrawal_amount)
+            .unwrap_or_else(|| {
+                panic!(
+                    "BUG: underflow when subtracting {} from {}",
+                    withdrawal_amount, previous_value
+                )
+            });
+        self.balance_by_erc20_contract
+            .insert(erc20_contract, new_value);
     }
 }
 

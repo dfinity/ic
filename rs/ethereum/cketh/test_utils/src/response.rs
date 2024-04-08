@@ -2,7 +2,7 @@ use crate::{
     DEFAULT_BLOCK_HASH, DEFAULT_BLOCK_NUMBER, DEFAULT_DEPOSIT_BLOCK_NUMBER,
     DEFAULT_DEPOSIT_LOG_INDEX, DEFAULT_ERC20_DEPOSIT_LOG_INDEX,
     DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS, EFFECTIVE_GAS_PRICE, HEADER_SIZE_LIMIT, MINTER_ADDRESS,
-    RECEIVED_ERC20_EVENT_TOPIC, RECEIVED_ETH_EVENT_TOPIC,
+    RECEIVED_ERC20_EVENT_TOPIC, RECEIVED_ETH_EVENT_TOPIC, USDC_ERC20_CONTRACT_ADDRESS,
 };
 use ethers_core::abi::AbiDecode;
 use ethers_core::utils::rlp;
@@ -211,6 +211,38 @@ pub fn default_signed_eip_1559_transaction() -> (
         )
         .unwrap(),
         v: 1,
+    };
+    (tx, sig)
+}
+
+pub fn default_erc20_signed_eip_1559_transaction() -> (
+    ethers_core::types::Eip1559TransactionRequest,
+    ethers_core::types::Signature,
+) {
+    let tx = ethers_core::types::Eip1559TransactionRequest::new()
+        .from(minter_address())
+        .to(USDC_ERC20_CONTRACT_ADDRESS
+            .parse::<ethers_core::types::NameOrAddress>()
+            .unwrap())
+        .nonce(0_u64)
+        .value(0_u64)
+        .gas(65_000_u64)
+        .data(hex::decode(&"0xa9059cbb000000000000000000000000221e931fbfcb9bd54ddd26ce6f5e29e98add01c000000000000000000000000000000000000000000000000000000000001e8480"[2..]).unwrap())
+        .max_priority_fee_per_gas(1_500_000_000_u64)
+        .max_fee_per_gas(33_003_708_258_u64)
+        .chain_id(1_u64);
+    let sig = ethers_core::types::Signature {
+        r: ethers_core::types::U256::from_str_radix(
+            "bb694aec6175b489523a55d5fce39452368e97096d4afa2cdcc35cf2d805152f",
+            16,
+        )
+        .unwrap(),
+        s: ethers_core::types::U256::from_str_radix(
+            "0112b26a028af84dd397d23549844efdaf761d90cdcfdbe6c3608239648a85a3",
+            16,
+        )
+        .unwrap(),
+        v: 0,
     };
     (tx, sig)
 }
