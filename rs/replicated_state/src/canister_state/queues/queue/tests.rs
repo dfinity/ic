@@ -22,11 +22,11 @@ fn canister_queue_constructor_test() {
     assert_eq!(0, queue.reserved_slots());
     assert_eq!(
         Err(StateError::QueueFull { capacity: CAPACITY }),
-        queue.check_has_reserved_slot(true)
+        queue.check_has_reserved_response_slot(true)
     );
     assert_eq!(
         Err(StateError::QueueFull { capacity: CAPACITY }),
-        queue.check_has_reserved_slot(false)
+        queue.check_has_reserved_response_slot(false)
     );
     assert_eq!(queue.peek(), None);
     assert_eq!(queue.pop(), None);
@@ -52,7 +52,7 @@ fn canister_queue_push_request_succeeds() {
     assert_eq!(0, queue.reserved_slots());
     assert_eq!(
         Err(StateError::QueueFull { capacity: CAPACITY }),
-        queue.check_has_reserved_slot(true)
+        queue.check_has_reserved_response_slot(true)
     );
     assert_eq!(0, queue.response_memory_reservations());
 
@@ -68,7 +68,7 @@ fn canister_queue_push_request_succeeds() {
     assert_eq!(0, queue.reserved_slots());
     assert_eq!(
         Err(StateError::QueueFull { capacity: CAPACITY }),
-        queue.check_has_reserved_slot(true)
+        queue.check_has_reserved_response_slot(true)
     );
     assert_eq!(0, queue.response_memory_reservations());
 }
@@ -90,7 +90,7 @@ fn canister_queue_push_response_succeeds() {
     assert_eq!(Ok(()), queue.check_has_request_slot());
     assert_eq!(CAPACITY - 1, queue.available_response_slots());
     assert_eq!(1, queue.reserved_slots());
-    assert_eq!(Ok(()), queue.check_has_reserved_slot(false));
+    assert_eq!(Ok(()), queue.check_has_reserved_response_slot(false));
     assert_eq!(1, queue.response_memory_reservations());
 
     // Push response into reseerved slot.
@@ -105,7 +105,7 @@ fn canister_queue_push_response_succeeds() {
     assert_eq!(0, queue.reserved_slots());
     assert_eq!(
         Err(StateError::QueueFull { capacity: CAPACITY }),
-        queue.check_has_reserved_slot(true)
+        queue.check_has_reserved_response_slot(true)
     );
     assert_eq!(0, queue.response_memory_reservations());
 
@@ -121,7 +121,7 @@ fn canister_queue_push_response_succeeds() {
     assert_eq!(0, queue.reserved_slots());
     assert_eq!(
         Err(StateError::QueueFull { capacity: CAPACITY }),
-        queue.check_has_reserved_slot(true)
+        queue.check_has_reserved_response_slot(true)
     );
     assert_eq!(0, queue.response_memory_reservations());
 }
@@ -149,7 +149,7 @@ fn canister_queue_push_request_to_full_queue_fails() {
     assert_eq!(0, queue.reserved_slots());
     assert_eq!(
         Err(StateError::QueueFull { capacity: CAPACITY }),
-        queue.check_has_reserved_slot(true)
+        queue.check_has_reserved_response_slot(true)
     );
     assert_eq!(0, queue.response_memory_reservations());
 
@@ -178,7 +178,7 @@ fn canister_queue_try_reserve_response_slot_in_full_queue_fails() {
     assert_eq!(Ok(()), queue.check_has_request_slot());
     assert_eq!(0, queue.available_response_slots());
     assert_eq!(CAPACITY, queue.reserved_slots());
-    assert_eq!(Ok(()), queue.check_has_reserved_slot(true));
+    assert_eq!(Ok(()), queue.check_has_reserved_response_slot(true));
     assert_eq!(CAPACITY / 2, queue.response_memory_reservations());
 
     // Trying to reserve a slot fails.
@@ -201,7 +201,7 @@ fn canister_queue_try_reserve_response_slot_in_full_queue_fails() {
     assert_eq!(0, queue.reserved_slots());
     assert_eq!(
         Err(StateError::QueueFull { capacity: CAPACITY }),
-        queue.check_has_reserved_slot(true)
+        queue.check_has_reserved_response_slot(true)
     );
     assert_eq!(0, queue.response_memory_reservations());
 
@@ -346,7 +346,7 @@ fn canister_queue_calculate_stats() {
     let mut pool = MessagePool::default();
 
     // Push an active request reference onto the queue.
-    let req = RequestBuilder::default().payment(Cycles::new(10)).build();
+    let req = RequestBuilder::default().build();
     let req_id = pool.insert_inbound(req.clone().into());
     queue.push_request(req_id);
 
@@ -381,8 +381,6 @@ fn canister_queue_calculate_stats() {
     assert_eq!(3, queue.calculate_message_count(&pool));
     // One active response reference and one local reject response.
     assert_eq!(2, queue.calculate_response_count(&pool));
-    // Only 10 cycles in the request.
-    assert_eq!(Cycles::new(10), queue.calculate_cycles_in_queue(&pool));
     // One active request (20) and one active response (21).
     assert_eq!(
         41,

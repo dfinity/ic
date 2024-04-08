@@ -57,11 +57,7 @@ pub(super) enum MessageReference {
 impl MessageReference {
     /// Returns `true` if this is a reference to a response; or a reject response.
     pub(super) fn is_response(&self) -> bool {
-        match self {
-            Self::Request(_) => false,
-
-            Self::Response(_) | Self::LocalRejectResponse(_) => true,
-        }
+        matches!(self, Self::Response(_) | Self::LocalRejectResponse(_))
     }
 
     /// Returns the `MessageId` behind this reference, if any; `None` if this is a
@@ -182,7 +178,9 @@ impl CanisterQueue {
         }
 
         self.response_slots += 1;
-        self.response_memory_reservations += (req.deadline == NO_DEADLINE) as usize;
+        if req.deadline == NO_DEADLINE {
+            self.response_memory_reservations += 1;
+        }
         debug_assert!(self.check_invariants());
         Ok(())
     }
@@ -199,7 +197,10 @@ impl CanisterQueue {
     ///
     /// Panics if `is_best_effort` is `false` (i.e. this is a guaranteed response
     /// call) and no guaranteed response memory reservation exists.
-    pub(super) fn check_has_reserved_slot(&self, is_best_effort: bool) -> Result<(), StateError> {
+    pub(super) fn check_has_reserved_response_slot(
+        &self,
+        is_best_effort: bool,
+    ) -> Result<(), StateError> {
         if self.request_slots + self.response_slots <= self.queue.len() {
             return Err(StateError::QueueFull {
                 capacity: self.capacity,
@@ -223,7 +224,8 @@ impl CanisterQueue {
     /// Panics if there is no reserved response slot or if this is a guaranteed
     /// response.and there is no matching guaranteed response memory reservation.
     pub(super) fn push_response(&mut self, id: MessageId) {
-        self.check_has_reserved_slot(id.is_best_effort()).unwrap();
+        self.check_has_reserved_response_slot(id.is_best_effort())
+            .unwrap();
 
         if !id.is_best_effort() {
             // Guaranteed response, consume one memory reservation.
@@ -240,7 +242,7 @@ impl CanisterQueue {
     /// Panics if there is no reserved response slot or if this is a guaranteed
     /// response.call and there is no guaranteed response memory reservation.
     pub(super) fn push_local_reject_response(&mut self, own_request: &Request) {
-        self.check_has_reserved_slot(own_request.deadline != NO_DEADLINE)
+        self.check_has_reserved_response_slot(own_request.deadline != NO_DEADLINE)
             .unwrap();
 
         if own_request.deadline == NO_DEADLINE {
@@ -291,7 +293,7 @@ impl CanisterQueue {
 
     /// Calculates the size in bytes, including struct and messages.
     ///
-    /// Time complexity: `O(n*log(n`.
+    /// Time complexity: `O(n * log(n))`.
     pub(super) fn calculate_size_bytes(&self, pool: &MessagePool) -> usize {
         size_of::<Self>() + self.calculate_stat_sum(CountBytes::count_bytes, pool)
     }
@@ -328,12 +330,6 @@ impl CanisterQueue {
             Response(id) => pool.get_response(*id).is_some() as usize,
             LocalRejectResponse(_) => 1,
         })
-    }
-
-    /// Calculates the amount of cycles contained in the queue.
-    pub(super) fn calculate_cycles_in_queue(&self, pool: &MessagePool) -> Cycles {
-        // FIXME: A reject response could also refund cycles.
-        self.calculate_stat_sum(RequestOrResponse::cycles, pool)
     }
 
     /// Calculates the sum of the given stat across all (non-stale) enqueued
