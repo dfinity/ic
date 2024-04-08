@@ -1,8 +1,3 @@
-// Including this clippy allow to circumvent clippy errors spawned by MockAll
-// internal expansion.  Should be removed when DFN-860 is resolved.
-// Specifically relevant to the Vec<> parameter.
-#![allow(clippy::ptr_arg)]
-
 use super::*;
 use crate::message_routing::{LABEL_REMOTE, METRIC_TIME_IN_BACKLOG, METRIC_TIME_IN_STREAM};
 use ic_base_types::NumSeconds;
