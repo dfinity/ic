@@ -951,7 +951,7 @@ pub enum WasmMemoryPersistence {
     Keep,
     /// Reinitialize the main memory on upgrade.
     /// Default behavior without enhanced orthogonal persistence.
-    Drop,
+    Replace,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, Eq, Hash, CandidType, Copy, Default)]
@@ -960,7 +960,7 @@ pub enum WasmMemoryPersistence {
 ///    skip_pre_upgrade: opt bool;
 ///    wasm_memory_persistence : opt variant {
 ///      keep;
-///      drop;
+///      replace;
 ///    };
 /// }`
 /// Extendibility for the future: Adding new optional fields ensures both backwards- and
@@ -1010,7 +1010,7 @@ impl CanisterInstallModeV2 {
             })),
             CanisterInstallModeV2::Upgrade(Some(CanisterUpgradeOptions {
                 skip_pre_upgrade: None,
-                wasm_memory_persistence: Some(WasmMemoryPersistence::Drop),
+                wasm_memory_persistence: Some(WasmMemoryPersistence::Replace),
             })),
             CanisterInstallModeV2::Upgrade(Some(CanisterUpgradeOptions {
                 skip_pre_upgrade: Some(false),
@@ -1022,7 +1022,7 @@ impl CanisterInstallModeV2 {
             })),
             CanisterInstallModeV2::Upgrade(Some(CanisterUpgradeOptions {
                 skip_pre_upgrade: Some(false),
-                wasm_memory_persistence: Some(WasmMemoryPersistence::Drop),
+                wasm_memory_persistence: Some(WasmMemoryPersistence::Replace),
             })),
             CanisterInstallModeV2::Upgrade(Some(CanisterUpgradeOptions {
                 skip_pre_upgrade: Some(true),
@@ -1034,7 +1034,7 @@ impl CanisterInstallModeV2 {
             })),
             CanisterInstallModeV2::Upgrade(Some(CanisterUpgradeOptions {
                 skip_pre_upgrade: Some(true),
-                wasm_memory_persistence: Some(WasmMemoryPersistence::Drop),
+                wasm_memory_persistence: Some(WasmMemoryPersistence::Replace),
             })),
         ];
         MODES.iter()
@@ -1197,7 +1197,7 @@ impl TryFrom<i32> for WasmMemoryPersistence {
     fn try_from(item: i32) -> Result<Self, Self::Error> {
         match WasmMemoryPersistenceProto::try_from(item).ok() {
             Some(WasmMemoryPersistenceProto::Keep) => Ok(WasmMemoryPersistence::Keep),
-            Some(WasmMemoryPersistenceProto::Drop) => Ok(WasmMemoryPersistence::Drop),
+            Some(WasmMemoryPersistenceProto::Replace) => Ok(WasmMemoryPersistence::Replace),
             Some(WasmMemoryPersistenceProto::Unspecified) | None => Err(CanisterInstallModeError(
                 format!("Invalid `WasmMemoryPersistence` value: {item}").to_string(),
             )),
@@ -1216,7 +1216,7 @@ impl From<WasmMemoryPersistence> for WasmMemoryPersistenceProto {
     fn from(item: WasmMemoryPersistence) -> Self {
         match item {
             WasmMemoryPersistence::Keep => WasmMemoryPersistenceProto::Keep,
-            WasmMemoryPersistence::Drop => WasmMemoryPersistenceProto::Drop,
+            WasmMemoryPersistence::Replace => WasmMemoryPersistenceProto::Replace,
         }
     }
 }

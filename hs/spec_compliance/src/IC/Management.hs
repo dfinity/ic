@@ -43,7 +43,7 @@ type InstallMode =
         skip_pre_upgrade : opt bool;
         wasm_memory_persistence : opt variant {
           keep;
-          drop;
+          replace;
         };
       };
     }

@@ -91,7 +91,7 @@ impl CanisterInstallMode {
 pub enum WasmMemoryPersistence {
     Unspecified = 0,
     Keep = 1,
-    Drop = 2,
+    Replace = 2,
 }
 impl WasmMemoryPersistence {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -102,7 +102,7 @@ impl WasmMemoryPersistence {
         match self {
             WasmMemoryPersistence::Unspecified => "WASM_MEMORY_PERSISTENCE_UNSPECIFIED",
             WasmMemoryPersistence::Keep => "WASM_MEMORY_PERSISTENCE_KEEP",
-            WasmMemoryPersistence::Drop => "WASM_MEMORY_PERSISTENCE_DROP",
+            WasmMemoryPersistence::Replace => "WASM_MEMORY_PERSISTENCE_REPLACE",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -110,7 +110,7 @@ impl WasmMemoryPersistence {
         match value {
             "WASM_MEMORY_PERSISTENCE_UNSPECIFIED" => Some(Self::Unspecified),
             "WASM_MEMORY_PERSISTENCE_KEEP" => Some(Self::Keep),
-            "WASM_MEMORY_PERSISTENCE_DROP" => Some(Self::Drop),
+            "WASM_MEMORY_PERSISTENCE_REPLACE" => Some(Self::Replace),
             _ => None,
         }
     }

@@ -269,7 +269,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
         CanisterInstallModeV2::Upgrade(Some(upgrade_options)) => {
             match upgrade_options.wasm_memory_persistence {
                 Some(WasmMemoryPersistence::Keep) => MemoryHandling::Keep,
-                Some(WasmMemoryPersistence::Drop) => MemoryHandling::Replace,
+                Some(WasmMemoryPersistence::Replace) => MemoryHandling::Replace,
                 None => {
                     // Safety guard checking that the `wasm_memory_persistence` upgrade option has not been omitted in error.
                     if helper.expects_orthogonal_persistence() {
