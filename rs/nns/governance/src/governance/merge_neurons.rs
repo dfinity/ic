@@ -418,7 +418,7 @@ impl ValidSourceNeuron {
             .unwrap_or(0);
 
         Ok(Self {
-            id: neuron.id.expect("Neuron must have an id"),
+            id: neuron.id(),
             dissolve_delay_seconds,
             age_seconds: now_seconds - aging_since_timestamp_seconds,
             minted_stake_e8s,
@@ -459,7 +459,7 @@ impl ValidTargetNeuron {
         let cached_stake_e8s = neuron.cached_neuron_stake_e8s;
 
         Ok(Self {
-            id: neuron.id.expect("Neuron must have an id"),
+            id: neuron.id(),
             dissolve_delay_seconds,
             age_seconds: now_seconds - aging_since_timestamp_seconds,
             cached_stake_e8s,
@@ -669,7 +669,7 @@ mod tests {
             *destination = *data;
         }
         Neuron {
-            id: Some(NeuronId { id }),
+            id: NeuronId { id },
             account,
             controller: Some(*PRINCIPAL_ID),
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(1)),
@@ -1458,16 +1458,14 @@ mod tests {
         let neuron_involved_with_managed_neuron_proposal_by_subaccount = model_neuron(4);
 
         let proposal = ProposalData {
-            proposer: neuron_involved_with_proposal.id,
+            proposer: Some(neuron_involved_with_proposal.id()),
             ..Default::default()
         };
         let managed_neuron_proposal_by_id = ProposalData {
             proposal: Some(Proposal {
                 action: Some(Action::ManageNeuron(Box::new(ManageNeuron {
                     neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
-                        neuron_involved_with_managed_neuron_proposal_by_id
-                            .id
-                            .unwrap(),
+                        neuron_involved_with_managed_neuron_proposal_by_id.id(),
                     )),
                     ..Default::default()
                 }))),
@@ -1491,7 +1489,7 @@ mod tests {
         };
         // The proposer is a neuron 'not involved', which is OK because the proposal is decided.
         let decided_proposal = ProposalData {
-            proposer: neuron_not_involved.id,
+            proposer: Some(neuron_not_involved.id()),
             proposal: Some(Proposal {
                 ..Default::default()
             }),
@@ -1527,36 +1525,28 @@ mod tests {
             };
 
         test_validate_fails_with_involved_in_proposal(
-            neuron_involved_with_proposal.id.unwrap(),
-            neuron_not_involved.id.unwrap(),
+            neuron_involved_with_proposal.id(),
+            neuron_not_involved.id(),
         );
         test_validate_fails_with_involved_in_proposal(
-            neuron_not_involved.id.unwrap(),
-            neuron_involved_with_proposal.id.unwrap(),
+            neuron_not_involved.id(),
+            neuron_involved_with_proposal.id(),
         );
         test_validate_fails_with_involved_in_proposal(
-            neuron_involved_with_managed_neuron_proposal_by_id
-                .id
-                .unwrap(),
-            neuron_not_involved.id.unwrap(),
+            neuron_involved_with_managed_neuron_proposal_by_id.id(),
+            neuron_not_involved.id(),
         );
         test_validate_fails_with_involved_in_proposal(
-            neuron_not_involved.id.unwrap(),
-            neuron_involved_with_managed_neuron_proposal_by_id
-                .id
-                .unwrap(),
+            neuron_not_involved.id(),
+            neuron_involved_with_managed_neuron_proposal_by_id.id(),
         );
         test_validate_fails_with_involved_in_proposal(
-            neuron_involved_with_managed_neuron_proposal_by_subaccount
-                .id
-                .unwrap(),
-            neuron_not_involved.id.unwrap(),
+            neuron_involved_with_managed_neuron_proposal_by_subaccount.id(),
+            neuron_not_involved.id(),
         );
         test_validate_fails_with_involved_in_proposal(
-            neuron_not_involved.id.unwrap(),
-            neuron_involved_with_managed_neuron_proposal_by_subaccount
-                .id
-                .unwrap(),
+            neuron_not_involved.id(),
+            neuron_involved_with_managed_neuron_proposal_by_subaccount.id(),
         );
     }
 

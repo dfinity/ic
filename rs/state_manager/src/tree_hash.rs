@@ -237,7 +237,7 @@ mod tests {
             }
             if certification_version >= CertificationVersion::V17 {
                 stream.set_reverse_stream_flags(StreamFlags {
-                    responses_only: true,
+                    deprecated_responses_only: true,
                 });
             }
             state.modify_streams(|streams| {

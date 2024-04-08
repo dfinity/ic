@@ -464,6 +464,11 @@ impl CanisterState {
         }
     }
 
+    /// Returns the Wasm memory limit from the canister settings.
+    pub fn wasm_memory_limit(&self) -> Option<NumBytes> {
+        self.system_state.wasm_memory_limit
+    }
+
     /// Returns the current compute allocation for the canister.
     pub fn compute_allocation(&self) -> ComputeAllocation {
         self.scheduler_state.compute_allocation

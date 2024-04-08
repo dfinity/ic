@@ -1,5 +1,4 @@
 use super::*;
-use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
 use ic_error_types::RejectCode;
 use ic_management_canister_types::Method;
@@ -21,11 +20,11 @@ use ic_test_utilities_types::{
 };
 use ic_types::{
     messages::{
-        CallbackId, CanisterMessage, Payload, RejectContext, Request, RequestOrResponse, Response,
+        CallbackId, Payload, RejectContext, Request, RequestOrResponse, Response,
         MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64, NO_DEADLINE,
     },
     time::UNIX_EPOCH,
-    xnet::{StreamFlags, StreamIndex, StreamIndexedQueue},
+    xnet::{StreamIndex, StreamIndexedQueue},
     CanisterId, Cycles, SubnetId, Time,
 };
 use lazy_static::lazy_static;
@@ -426,99 +425,6 @@ fn build_streams_impl_at_limit_leaves_state_untouched() {
         assert_eq!(
             btreemap! {},
             nonzero_values(fetch_int_gauge_vec(&metrics_registry, METRIC_STREAM_BEGIN))
-        );
-    });
-}
-
-/// Test the stream builder rejects all requests locally when the responses only stream flag is
-/// set.
-///
-/// The provided (initial) state has only output requests (no input messages and empty streams). The
-/// resulting state must have the same number of input reject responses as the provided state has output
-/// messages (no output messages and empty streams), i.e. no messages are dropped or duplicated.
-#[test]
-fn build_streams_impl_responses_only_flag_locally_rejects_requests() {
-    with_test_replica_logger(|log| {
-        let (stream_builder, mut provided_state, metrics_registry) = new_fixture(&log);
-        provided_state.metadata.network_topology.routing_table = Arc::new(RoutingTable::try_from(
-            btreemap! {
-                CanisterIdRange{ start: CanisterId::from(0), end: CanisterId::from(0xfff) } => REMOTE_SUBNET,
-            },
-        ).unwrap());
-
-        // We put an empty stream for the destination subnet into the state because
-        // the implementation of stream builder will always allow one message if
-        // the stream does not exist yet. We also set the responses only stream flag.
-        let mut streams = provided_state.take_streams();
-        streams
-            .get_mut_or_insert(REMOTE_SUBNET)
-            .set_reverse_stream_flags(StreamFlags {
-                responses_only: true,
-            });
-        provided_state.put_streams(streams);
-
-        // Set up the `provided_canister_states`; ensure all output messages are requests.
-        let msgs: Vec<Request> =
-            generate_messages_for_test(/* senders = */ 2, /* receivers = */ 2);
-        let num_output_requests = msgs.len() as u64;
-        let provided_canister_states = canister_states_with_outputs(msgs);
-        provided_state.put_canister_states(provided_canister_states);
-
-        // Call `build_streams_impl()` with no limits in memory or number of messages. Since the only
-        // responses stream flag is set, all requests should get locally rejected, i.e. the
-        // requests should disappear from output queues and reject responses should appear in input
-        // queues.
-        let mut result_state =
-            stream_builder.build_streams_impl(provided_state.clone(), usize::MAX, usize::MAX);
-
-        // Check the total number of messages is conserved.
-        assert!(provided_state
-            .canisters_iter()
-            .all(|canister| !canister.has_input()));
-        assert!(result_state
-            .canisters_iter()
-            .all(|canister| !canister.has_output()));
-        assert_eq!(
-            provided_state
-                .canisters_iter()
-                .map(|canister| canister.system_state.queues().output_queues_message_count())
-                .collect::<Vec<_>>(),
-            result_state
-                .canisters_iter()
-                .map(|canister| canister.system_state.queues().input_queues_message_count())
-                .collect::<Vec<_>>(),
-        );
-        assert_eq!(
-            provided_state.get_stream(&REMOTE_SUBNET),
-            result_state.get_stream(&REMOTE_SUBNET)
-        );
-
-        // Check input messages in `result_state` are all reject responses.
-        let mut num_reject_responses = 0;
-        for canister_state in result_state.canisters_iter_mut() {
-            while let Some(msg) = canister_state.system_state.queues_mut().pop_input() {
-                assert_matches!(
-                    msg,
-                    CanisterMessage::Response(response) if matches!(response.response_payload, Payload::Reject(_))
-                );
-                num_reject_responses += 1;
-            }
-        }
-        assert_eq!(num_output_requests, num_reject_responses);
-
-        // Check metrics have registered the reject responses with the correct labels.
-        assert_routed_messages_eq(
-            metric_vec(&[(
-                &[
-                    (LABEL_TYPE, LABEL_VALUE_TYPE_REQUEST),
-                    (
-                        LABEL_STATUS,
-                        LABEL_VALUE_STATUS_DESTINATION_NOT_ACCEPTING_REQUESTS,
-                    ),
-                ],
-                num_output_requests,
-            )]),
-            &metrics_registry,
         );
     });
 }

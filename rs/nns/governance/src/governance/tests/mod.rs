@@ -1048,7 +1048,7 @@ mod cast_vote_and_cascade_follow {
         aging_since_timestamp_seconds: u64,
     ) -> Neuron {
         Neuron {
-            id: Some(NeuronId { id }),
+            id: NeuronId { id },
             followees: hashmap! {
                 topic as i32 => Followees {
                     followees: followees.into_iter().map(|id| NeuronId { id }).collect()
@@ -1285,7 +1285,7 @@ fn can_spawn_neurons_only_true_when_not_spawning_and_neurons_ready_to_spawn() {
     governance
         .neuron_store
         .add_neuron(Neuron {
-            id: Some(NeuronId { id: 1 }),
+            id: NeuronId { id: 1 },
             spawn_at_timestamp_seconds: Some(99),
             ..Default::default()
         })

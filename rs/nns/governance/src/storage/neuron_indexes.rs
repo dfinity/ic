@@ -166,7 +166,7 @@ where
     fn add_neuron(&mut self, new_neuron: &Neuron) -> Result<(), NeuronIndexDefect> {
         // StableNeuronIndexes::add_neuron calls validate_neuron which make sure id and subaccount
         // are valid.
-        let neuron_id = new_neuron.id.unwrap();
+        let neuron_id = new_neuron.id();
         let subaccount = new_neuron.subaccount().unwrap();
 
         self.add_neuron_subaccount(neuron_id, &subaccount)
@@ -177,7 +177,7 @@ where
 
     fn remove_neuron(&mut self, existing_neuron: &Neuron) -> Result<(), NeuronIndexDefect> {
         // StableNeuronIndexes::remove_neuron calls validate_neuron which make sure id is valid.
-        let neuron_id = existing_neuron.id.unwrap();
+        let neuron_id = existing_neuron.id();
         let subaccount = existing_neuron.subaccount().unwrap();
 
         self.remove_neuron_subaccount(neuron_id, &subaccount)
@@ -235,7 +235,7 @@ where
 {
     fn add_neuron(&mut self, new_neuron: &Neuron) -> Result<(), NeuronIndexDefect> {
         // StableNeuronIndexes::add_neuron calls validate_neuron which make sure id is valid.
-        let neuron_id = new_neuron.id.unwrap();
+        let neuron_id = new_neuron.id();
 
         let already_present_principal_ids = add_neuron_id_principal_ids(
             self,
@@ -247,7 +247,7 @@ where
 
     fn remove_neuron(&mut self, existing_neuron: &Neuron) -> Result<(), NeuronIndexDefect> {
         // StableNeuronIndexes::remove_neuron calls validate_neuron which make sure id is valid.
-        let neuron_id = existing_neuron.id.unwrap();
+        let neuron_id = existing_neuron.id();
 
         let already_absent_principal_ids = remove_neuron_id_principal_ids(
             self,
@@ -263,7 +263,7 @@ where
         new_neuron: &Neuron,
     ) -> Result<(), Vec<NeuronIndexDefect>> {
         // StableNeuronIndexes::update_neuron calls validate_neuron which make sure id is valid.
-        let neuron_id = old_neuron.id.unwrap();
+        let neuron_id = old_neuron.id();
 
         let old_principal_ids = old_neuron
             .principal_ids_with_special_permissions()
@@ -335,7 +335,7 @@ fn following_index_add_neuron(
     new_neuron: &Neuron,
 ) -> Result<(), NeuronIndexDefect> {
     // StableNeuronIndexes::add_neuron checks neuron id before calling this method.
-    let neuron_id = new_neuron.id.expect("Neuron must have an id");
+    let neuron_id = new_neuron.id();
     let already_present_topic_followee_pairs = add_neuron_followees(
         index,
         &neuron_id,
@@ -350,7 +350,7 @@ fn following_index_remove_neuron(
     existing_neuron: &Neuron,
 ) -> Result<(), NeuronIndexDefect> {
     // StableNeuronIndexes::remove_neuron checks neuron id before calling this method.
-    let neuron_id = existing_neuron.id.expect("Neuron must have an id");
+    let neuron_id = existing_neuron.id();
     let already_absent_topic_followee_pairs = remove_neuron_followees(
         index,
         &neuron_id,
@@ -366,7 +366,7 @@ fn following_index_update_neuron(
     new_neuron: &Neuron,
 ) -> Result<(), Vec<NeuronIndexDefect>> {
     // StableNeuronIndexes::update_neuron calls validate_neuron which make sure id is valid.
-    let neuron_id = old_neuron.id.expect("Neuron must have an id");
+    let neuron_id = old_neuron.id();
     let old_topic_followee_pairs = old_neuron.topic_followee_pairs();
     let new_topic_followee_pairs = new_neuron.topic_followee_pairs();
 
@@ -447,7 +447,7 @@ where
             None => return Ok(()),
         };
         // StableNeuronIndexes::add_neuron checks neuron id before calling this method.
-        let neuron_id = new_neuron.id.expect("Neuron must have an id");
+        let neuron_id = new_neuron.id();
 
         self.add_known_neuron(known_neuron_name, neuron_id)
             .map_err(|add_known_neuron_error| match add_known_neuron_error {
@@ -472,7 +472,7 @@ where
 
     fn remove_neuron(&mut self, existing_neuron: &Neuron) -> Result<(), NeuronIndexDefect> {
         // StableNeuronIndexes::remove_neuron checks neuron id before calling this method.
-        let neuron_id = existing_neuron.id.expect("Neuron must have an id");
+        let neuron_id = existing_neuron.id();
         let known_neuron_name = match existing_neuron.known_neuron_data.as_ref() {
             Some(known_neuron_data) => &known_neuron_data.name,
             // This is fine. Only some (a small number) of Neurons are known.
@@ -561,7 +561,7 @@ where
         } else {
             Err(NeuronStoreError::CorruptedNeuronIndexes(
                 CorruptedNeuronIndexes {
-                    neuron_id: new_neuron.id.unwrap(), // We can unwrap because of validate_neuron.
+                    neuron_id: new_neuron.id(), // We can unwrap because of validate_neuron.
                     indexes: defects,
                 },
             ))
@@ -587,7 +587,7 @@ where
         } else {
             Err(NeuronStoreError::CorruptedNeuronIndexes(
                 CorruptedNeuronIndexes {
-                    neuron_id: existing_neuron.id.unwrap(), // We can unwrap because of validate_neuron.
+                    neuron_id: existing_neuron.id(), // We can unwrap because of validate_neuron.
                     indexes: defects,
                 },
             ))
@@ -608,8 +608,8 @@ where
         validate_neuron(new_neuron)?;
 
         // We can unwrap because of validate_neuron validates that ids exist.
-        let old_neuron_id = old_neuron.id.unwrap();
-        let new_neuron_id = new_neuron.id.unwrap();
+        let old_neuron_id = old_neuron.id();
+        let new_neuron_id = new_neuron.id();
         if old_neuron_id != new_neuron_id {
             return Err(NeuronStoreError::neuron_id_modified(
                 old_neuron_id,
@@ -645,7 +645,7 @@ where
         } else {
             Err(NeuronStoreError::CorruptedNeuronIndexes(
                 CorruptedNeuronIndexes {
-                    neuron_id: old_neuron.id.unwrap(), // We can unwrap because of validate_neuron.
+                    neuron_id: old_neuron.id(), // We can unwrap because of validate_neuron.
                     indexes: defects,
                 },
             ))
@@ -703,7 +703,7 @@ where
 // so we validate before performing any index update, and assume those are true when updating each
 // index.
 fn validate_neuron(neuron: &Neuron) -> Result<(), NeuronStoreError> {
-    let neuron_id = neuron.id.ok_or(NeuronStoreError::NeuronIdIsNone)?;
+    let neuron_id = neuron.id();
     neuron
         .subaccount()
         .map_err(|_| NeuronStoreError::invalid_subaccount(neuron_id, neuron.account.clone()))?;
@@ -728,7 +728,7 @@ where
     fn add_neuron(&mut self, new_neuron: &Neuron) -> Result<(), NeuronIndexDefect> {
         // StableNeuronIndexes::add_neuron calls validate_neuron which make sure id and subaccount
         // are valid.
-        let neuron_id = new_neuron.id.expect("Expected Neuron.id to bet set");
+        let neuron_id = new_neuron.id();
         let subaccount = new_neuron
             .subaccount()
             .expect("Expected Neuron.account to be set");
@@ -744,7 +744,7 @@ where
     fn remove_neuron(&mut self, existing_neuron: &Neuron) -> Result<(), NeuronIndexDefect> {
         // StableNeuronIndexes::remove_neuron calls validate_neuron which make sure id and subaccount
         // are valid.
-        let neuron_id = existing_neuron.id.expect("Expected Neuron.id to bet set");
+        let neuron_id = existing_neuron.id();
         let subaccount = existing_neuron
             .subaccount()
             .expect("Expected Neuron.account to be set");

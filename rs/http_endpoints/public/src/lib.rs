@@ -4,7 +4,7 @@
 //!
 //! As much as possible the naming of structs in this module should match the
 //! naming used in the [Interface
-//! Specification](https://sdk.dfinity.org/docs/interface-spec/index.html)
+//! Specification](https://internetcomputer.org/docs/current/references/ic-interface-spec)
 mod catch_up_package;
 mod common;
 mod dashboard;
@@ -41,6 +41,8 @@ use crate::{
     pprof::{PprofFlamegraphService, PprofHomeService, PprofProfileService},
     read_state::subnet::SubnetReadStateService,
     state_reader_executor::StateReaderExecutor,
+    status::StatusService,
+    tracing_flamegraph::TracingFlamegraphService,
 };
 pub use common::cors_layer;
 
@@ -50,7 +52,7 @@ use axum::{
     extract::{DefaultBodyLimit, MatchedPath, State},
     middleware::Next,
     response::Redirect,
-    routing::{get, post_service, MethodRouter},
+    routing::{get, post_service},
     Router,
 };
 use bytes::Bytes;
@@ -100,7 +102,6 @@ use ic_types::{
 use metrics::{HttpHandlerMetrics, LABEL_UNKNOWN};
 use rand::Rng;
 pub use read_state::canister::{CanisterReadStateService, CanisterReadStateServiceBuilder};
-use status::StatusState;
 use std::{
     convert::{Infallible, TryFrom},
     io::Write,
@@ -151,13 +152,13 @@ struct HttpHandler {
     query_router: Router,
     catchup_service: EndpointService,
     dashboard_router: Router,
-    status_method: MethodRouter,
+    status_router: Router,
     canister_read_state_router: Router,
     subnet_read_state_router: Router,
     pprof_home_router: Router,
     pprof_profile_router: Router,
     pprof_flamegraph_router: Router,
-    tracing_flamegraph_router: MethodRouter,
+    tracing_flamegraph_router: Router,
 }
 
 // Crates a detached tokio blocking task that initializes the server (reading
@@ -359,16 +360,13 @@ pub fn start_server(
         Arc::clone(&delegation_from_nns),
         state_reader_executor.clone(),
     );
-    let status_method =
-        MethodRouter::new()
-            .get(crate::status::status)
-            .with_state(StatusState::new(
-                log.clone(),
-                nns_subnet_id,
-                Arc::clone(&registry_client),
-                Arc::clone(&health_status),
-                state_reader_executor.clone(),
-            ));
+    let status_router = StatusService::build_router(
+        log.clone(),
+        nns_subnet_id,
+        Arc::clone(&registry_client),
+        Arc::clone(&health_status),
+        state_reader_executor.clone(),
+    );
     let dashboard_router =
         DashboardService::new_router(config.clone(), subnet_type, state_reader_executor.clone());
     let catchup_service = CatchUpPackageService::new_service(consensus_pool_cache.clone());
@@ -377,9 +375,7 @@ pub fn start_server(
     let pprof_profile_router = PprofProfileService::new_router(pprof_collector.clone());
     let pprof_flamegraph_router = PprofFlamegraphService::new_router(pprof_collector);
 
-    let tracing_flamegraph_router = MethodRouter::new()
-        .get(crate::tracing_flamegraph::tracing_flamegraph_handle)
-        .with_state(tracing_handle);
+    let tracing_flamegraph_router = TracingFlamegraphService::build_router(tracing_handle);
 
     let health_status_refresher = HealthStatusRefreshLayer::new(
         log.clone(),
@@ -406,7 +402,7 @@ pub fn start_server(
     let http_handler = HttpHandler {
         call_router,
         query_router,
-        status_method,
+        status_router,
         catchup_service,
         dashboard_router,
         canister_read_state_router,
@@ -685,28 +681,6 @@ fn make_router(
         GlobalConcurrencyLimitLayer::new(config.max_pprof_concurrent_requests);
 
     let get_router = Router::new()
-        .route_service(
-            "/api/v2/status",
-            http_handler.status_method.layer(
-                ServiceBuilder::new()
-                    .layer(HandleErrorLayer::new(map_box_error_to_response))
-                    .load_shed()
-                    .layer(GlobalConcurrencyLimitLayer::new(
-                        config.max_status_concurrent_requests,
-                    )),
-            ),
-        )
-        .route_service(
-            "/_/tracing/flamegraph",
-            http_handler.tracing_flamegraph_router.layer(
-                ServiceBuilder::new()
-                    .layer(HandleErrorLayer::new(map_box_error_to_response))
-                    .load_shed()
-                    .layer(GlobalConcurrencyLimitLayer::new(
-                        config.max_tracing_flamegraph_concurrent_requests,
-                    )),
-            ),
-        )
         // TODO this is 303 instead of 302
         .route(
             "/",
@@ -722,6 +696,16 @@ fn make_router(
 
     let final_router = get_router
         .merge(post_router)
+        .merge(
+            http_handler.status_router.layer(
+                ServiceBuilder::new()
+                    .layer(HandleErrorLayer::new(map_box_error_to_response))
+                    .load_shed()
+                    .layer(GlobalConcurrencyLimitLayer::new(
+                        config.max_status_concurrent_requests,
+                    )),
+            ),
+        )
         .merge(
             http_handler.call_router.layer(
                 ServiceBuilder::new()
@@ -747,7 +731,9 @@ fn make_router(
                 ServiceBuilder::new()
                     .layer(HandleErrorLayer::new(map_box_error_to_response))
                     .load_shed()
-                    .layer(pprof_concurrency_limiter.clone()),
+                    .layer(GlobalConcurrencyLimitLayer::new(
+                        config.max_read_state_concurrent_requests,
+                    )),
             ),
         )
         .merge(
@@ -792,6 +778,16 @@ fn make_router(
                     .layer(HandleErrorLayer::new(map_box_error_to_response))
                     .load_shed()
                     .layer(pprof_concurrency_limiter.clone()),
+            ),
+        )
+        .merge(
+            http_handler.tracing_flamegraph_router.layer(
+                ServiceBuilder::new()
+                    .layer(HandleErrorLayer::new(map_box_error_to_response))
+                    .load_shed()
+                    .layer(GlobalConcurrencyLimitLayer::new(
+                        config.max_tracing_flamegraph_concurrent_requests,
+                    )),
             ),
         );
 
@@ -1224,7 +1220,10 @@ mod tests {
                 DashboardService::route(),
                 axum::routing::get_service(dummy_service.clone()),
             ),
-            status_method: MethodRouter::new().get_service(dummy_service.clone()),
+            status_router: Router::new().route(
+                StatusService::route(),
+                axum::routing::get_service(dummy_service.clone()),
+            ),
             canister_read_state_router: Router::new().route(
                 CanisterReadStateService::route(),
                 axum::routing::post_service(dummy_service.clone()),
@@ -1245,7 +1244,10 @@ mod tests {
                 PprofFlamegraphService::route(),
                 axum::routing::get_service(dummy_service.clone()),
             ),
-            tracing_flamegraph_router: MethodRouter::new().get_service(dummy_service.clone()),
+            tracing_flamegraph_router: Router::new().route(
+                TracingFlamegraphService::route(),
+                axum::routing::get_service(dummy_service.clone()),
+            ),
         };
 
         let metrics = HttpHandlerMetrics::new(&MetricsRegistry::default());

@@ -177,7 +177,7 @@ pub struct StreamHeader {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct StreamFlags {
     /// Indicates that the subnet expects responses only in the reverse stream.
-    pub responses_only: bool,
+    pub deprecated_responses_only: bool,
 }
 
 impl StreamHeader {

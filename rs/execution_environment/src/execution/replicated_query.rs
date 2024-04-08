@@ -11,7 +11,6 @@ use crate::execution::common::{
 };
 use crate::execution_environment::{ExecuteMessageResult, RoundContext, RoundLimits};
 use crate::metrics::CallTreeMetricsNoOp;
-use ic_config::flag_status::FlagStatus;
 use ic_error_types::{ErrorCode, UserError};
 use ic_replicated_state::{CallOrigin, CanisterState};
 use ic_system_api::{ApiType, ExecutionParameters};
@@ -34,7 +33,6 @@ pub fn execute_replicated_query(
     round_limits: &mut RoundLimits,
     subnet_size: usize,
     state_changes_error: &IntCounter,
-    canister_logging: FlagStatus,
 ) -> ExecuteMessageResult {
     // A replicated query runs without DTS.
     let instruction_limits = &execution_parameters.instruction_limits;
@@ -144,11 +142,7 @@ pub fn execute_replicated_query(
         time,
     );
 
-    if canister_logging == FlagStatus::Enabled {
-        canister.append_log(&mut output.canister_log);
-    } else {
-        canister.clear_log();
-    }
+    canister.append_log(&mut output.canister_log);
     let result = output.wasm_result;
     let log = round.log;
     let result = result.map_err(|err| err.into_user_error(&canister.canister_id()));

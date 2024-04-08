@@ -614,7 +614,9 @@ pub(crate) fn syscalls(
         .func_wrap("ic0", "debug_print", {
             move |mut caller: Caller<'_, StoreData>, offset: u32, length: u32| {
                 let mut num_bytes = 0;
-                if feature_flags.canister_logging == FlagStatus::Enabled {
+                let canister_logging_is_enabled =
+                    feature_flags.canister_logging == FlagStatus::Enabled;
+                if canister_logging_is_enabled {
                     num_bytes += logging_charge_bytes(&mut caller, length as u64)?
                 }
                 let debug_print_is_enabled = debug_print_is_enabled(&mut caller, feature_flags)?;
@@ -627,9 +629,12 @@ pub(crate) fn syscalls(
                     num_bytes,
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    if feature_flags.canister_logging == FlagStatus::Enabled {
-                        system_api.save_log_message(offset, length, memory);
-                    }
+                    system_api.save_log_message(
+                        canister_logging_is_enabled,
+                        offset,
+                        length,
+                        memory,
+                    );
                     if debug_print_is_enabled {
                         system_api.ic0_debug_print(offset, length, memory)
                     } else {
@@ -1052,16 +1057,14 @@ pub(crate) fn syscalls(
         .unwrap();
 
     linker
-        .func_wrap("__", "update_available_memory", {
+        .func_wrap("__", "try_grow_wasm_memory", {
             move |mut caller: Caller<'_, StoreData>,
                   native_memory_grow_res: i32,
-                  additional_elements: u32,
-                  element_size: u32| {
+                  additional_wasm_pages: u32| {
                 with_system_api(&mut caller, |s| {
-                    s.update_available_memory(
+                    s.try_grow_wasm_memory(
                         native_memory_grow_res as i64,
-                        additional_elements as u64,
-                        element_size as u64,
+                        additional_wasm_pages as u64,
                     )
                 })
                 .map(|()| native_memory_grow_res)

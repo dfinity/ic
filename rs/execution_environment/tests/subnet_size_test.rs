@@ -2,7 +2,6 @@ use candid::{Decode, Encode};
 use ic_config::{
     embedders::Config as EmbeddersConfig,
     execution_environment::Config as HypervisorConfig,
-    flag_status::FlagStatus,
     subnet_config::{CyclesAccountManagerConfig, SubnetConfig},
 };
 use ic_management_canister_types::{
@@ -31,13 +30,7 @@ const TEST_SUBNET_SIZES: [usize; 3] = [4, 13, 34];
 
 pub const ECDSA_SIGNATURE_FEE: Cycles = Cycles::new(10 * B as u128);
 const DEFAULT_CYCLES_PER_NODE: Cycles = Cycles::new(100 * B as u128);
-const TEST_CANISTER_INSTALL_EXECUTION_INSTRUCTIONS: u64 = match EmbeddersConfig::new()
-    .feature_flags
-    .wasm_native_stable_memory
-{
-    FlagStatus::Enabled => 2_670_000,
-    FlagStatus::Disabled => 1_044_000,
-};
+const TEST_CANISTER_INSTALL_EXECUTION_INSTRUCTIONS: u64 = 0;
 
 // instruction cost of executing inc method on the test canister
 fn inc_instruction_cost(config: HypervisorConfig) -> u64 {
@@ -332,7 +325,13 @@ fn simulate_execute_install_code_cost(subnet_type: SubnetType, subnet_size: usiz
         .with_subnet_size(subnet_size)
         .with_config(Some(StateMachineConfig::new(
             filtered_subnet_config(subnet_type, KeepFeesFilter::Execution),
-            HypervisorConfig::default(),
+            HypervisorConfig {
+                embedders_config: EmbeddersConfig {
+                    cost_to_compile_wasm_instruction: NumInstructions::from(0),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
         )))
         .build();
     let canister_id =

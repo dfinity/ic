@@ -170,13 +170,7 @@ def system_test(
     # NOTE: we use "ENV_DEPS__" as prefix for env variables, which are passed to system-tests via Bazel.
     _env_deps[_guestos + "version.txt"] = "ENV_DEPS__IC_VERSION_FILE"
 
-    k8s_env_deps = {}
-
     if uses_guestos_dev:
-        # TODO: remove GZ after CDI is upgraded to version that supports ZST
-        k8s_env_deps[_guestos + "disk-img-url-gz"] = "ENV_DEPS__DEV_DISK_IMG_TAR_GZ_CAS_URL"
-        k8s_env_deps[_guestos + "disk-img.tar.gz.sha256"] = "ENV_DEPS__DEV_DISK_IMG_TAR_GZ_SHA256"
-
         _env_deps[_guestos + "disk-img.tar.zst.cas-url"] = "ENV_DEPS__DEV_DISK_IMG_TAR_ZST_CAS_URL"
         _env_deps[_guestos + "disk-img.tar.zst.sha256"] = "ENV_DEPS__DEV_DISK_IMG_TAR_ZST_SHA256"
         _env_deps[_guestos + "update-img.tar.zst.cas-url"] = "ENV_DEPS__DEV_UPDATE_IMG_TAR_ZST_CAS_URL"
@@ -203,16 +197,11 @@ def system_test(
         _env_deps[_guestos_malicous + "update-img.tar.zst.cas-url"] = "ENV_DEPS__DEV_MALICIOUS_UPDATE_IMG_TAR_ZST_CAS_URL"
         _env_deps[_guestos_malicous + "update-img.tar.zst.sha256"] = "ENV_DEPS__DEV_MALICIOUS_UPDATE_IMG_TAR_ZST_SHA256"
 
-    k8s_env_deps.update(_env_deps)
-
     run_system_test(
         name = name,
         src = bin_name,
         runtime_deps = runtime_deps,
-        env_deps = select({
-            "//rs/tests:k8s_flag_is_set": k8s_env_deps,
-            "//conditions:default": _env_deps,
-        }),
+        env_deps = _env_deps,
         env_inherit = env_inherit,
         tags = tags + ["requires-network", "system_test"] +
                (["manual"] if "experimental_system_test_colocation" in tags else []),

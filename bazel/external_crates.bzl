@@ -263,7 +263,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.5.0",
             ),
             "cached": crate.spec(
-                version = "^0.41",
+                version = "^0.49",
                 default_features = False,
             ),
             "candid": crate.spec(
@@ -356,7 +356,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.1",
             ),
             "curve25519-dalek": crate.spec(
-                version = "=4.1.1",
+                version = "^4.1.2",
             ),
             "cvt": crate.spec(
                 version = "^0.1.1",
@@ -1144,9 +1144,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "slog-term": crate.spec(
                 version = "^2.6.0",
-            ),
-            "slog_derive": crate.spec(
-                version = "^0.2.0",
             ),
             "socket2": crate.spec(
                 version = "^0.5.6",

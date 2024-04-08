@@ -1,0 +1,10 @@
+[package]
+name = "ic-ledger-test-utils"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+canister-test = { path = "../../../rust_canisters/canister_test" }

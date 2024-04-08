@@ -160,6 +160,8 @@ impl InstructionLimits {
 pub struct ExecutionParameters {
     pub instruction_limits: InstructionLimits,
     pub canister_memory_limit: NumBytes,
+    // The limit on the Wasm memory set by the developer in canister settings.
+    pub wasm_memory_limit: Option<NumBytes>,
     pub memory_allocation: MemoryAllocation,
     pub compute_allocation: ComputeAllocation,
     pub subnet_type: SubnetType,
@@ -346,7 +348,7 @@ pub enum ApiType {
     /// The `call_on_cleanup` callback is executed iff the `reply` or the
     /// `reject` callback was executed and trapped (for any reason).
     ///
-    /// See https://sdk.dfinity.org/docs/interface-spec/index.html#system-api-call
+    /// See https://internetcomputer.org/docs/current/references/ic-interface-spec#system-api-call
     Cleanup {
         caller: PrincipalId,
         time: Time,
@@ -622,6 +624,11 @@ struct MemoryUsage {
     /// Upper limit on how much the memory the canister could use.
     limit: NumBytes,
 
+    /// The Wasm memory limit set by the developer in canister settings.
+    /// TODO: Enforce this limit in `update_available_memory`.
+    #[allow(dead_code)]
+    wasm_memory_limit: Option<NumBytes>,
+
     /// The current amount of execution memory that the canister is using.
     current_usage: NumBytes,
 
@@ -648,6 +655,7 @@ impl MemoryUsage {
         log: ReplicaLogger,
         canister_id: CanisterId,
         limit: NumBytes,
+        wasm_memory_limit: Option<NumBytes>,
         current_usage: NumBytes,
         current_message_usage: NumBytes,
         subnet_available_memory: SubnetAvailableMemory,
@@ -668,6 +676,7 @@ impl MemoryUsage {
         }
         Self {
             limit,
+            wasm_memory_limit,
             current_usage,
             current_message_usage,
             subnet_available_memory,
@@ -895,6 +904,7 @@ impl SystemApiImpl {
             log.clone(),
             sandbox_safe_system_state.canister_id,
             execution_parameters.canister_memory_limit,
+            execution_parameters.wasm_memory_limit,
             canister_current_memory_usage,
             canister_current_message_memory_usage,
             subnet_available_memory,
@@ -1369,8 +1379,9 @@ impl SystemApiImpl {
     }
 
     /// Appends the specified bytes on the heap as a string to the canister's logs.
-    pub fn save_log_message(&mut self, src: u32, size: u32, heap: &[u8]) {
+    pub fn save_log_message(&mut self, is_enabled: bool, src: u32, size: u32, heap: &[u8]) {
         self.sandbox_safe_system_state.append_canister_log(
+            is_enabled,
             self.api_type.time(),
             valid_subslice("save_log_message", src, size, heap).unwrap_or(
                 // Do not trap here!
@@ -2453,18 +2464,17 @@ impl SystemApi for SystemApiImpl {
         result
     }
 
-    fn update_available_memory(
+    fn try_grow_wasm_memory(
         &mut self,
         native_memory_grow_res: i64,
-        additional_elements: u64,
-        element_size: u64,
+        additional_wasm_pages: u64,
     ) -> HypervisorResult<()> {
         let result = {
             if native_memory_grow_res == -1 {
                 return Ok(());
             }
-            let bytes = additional_elements
-                .checked_mul(element_size)
+            let bytes = additional_wasm_pages
+                .checked_mul(WASM_PAGE_SIZE_IN_BYTES as u64)
                 .map(NumBytes::new)
                 .ok_or(HypervisorError::OutOfMemory)?;
 
@@ -2488,11 +2498,10 @@ impl SystemApi for SystemApiImpl {
         };
         trace_syscall!(
             self,
-            UpdateAvailableMemory,
+            TryGrowWasmMemory,
             result,
             native_memory_grow_res,
-            additional_elements,
-            element_size
+            additional_wasm_pages
         );
         result
     }

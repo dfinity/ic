@@ -11,6 +11,7 @@ use crate::numeric::{
     CkTokenAmount, Erc20Value, LedgerBurnIndex, LedgerMintIndex, TransactionCount,
     TransactionNonce, Wei,
 };
+use crate::state::event::EventType;
 use crate::tx::{
     Eip1559TransactionRequest, FinalizedEip1559Transaction, ResubmissionStrategy,
     SignedEip1559TransactionRequest, SignedTransactionRequest, TransactionPrice,
@@ -71,6 +72,15 @@ impl WithdrawalRequest {
         match self {
             WithdrawalRequest::CkEth(request) => &request.from_subaccount,
             WithdrawalRequest::CkErc20(request) => &request.from_subaccount,
+        }
+    }
+
+    pub fn into_accepted_withdrawal_request_event(self) -> EventType {
+        match self {
+            WithdrawalRequest::CkEth(request) => EventType::AcceptedEthWithdrawalRequest(request),
+            WithdrawalRequest::CkErc20(request) => {
+                EventType::AcceptedErc20WithdrawalRequest(request)
+            }
         }
     }
 }

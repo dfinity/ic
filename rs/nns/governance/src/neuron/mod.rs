@@ -103,7 +103,7 @@ impl Neuron {
         self.account.as_slice().try_into().map_err(|_| {
             GovernanceError::new_with_message(
                 ErrorType::NotFound,
-                format!("Neuron {:?} has invalid account", self.id),
+                format!("Neuron {:?} has invalid account", self.id()),
             )
         })
     }
@@ -168,7 +168,9 @@ impl Neuron {
                     None => {
                         println!(
                             "{} Invalid topic {:?} in neuron {:?}",
-                            LOG_PREFIX, topic, self.id
+                            LOG_PREFIX,
+                            topic,
+                            self.id()
                         );
                         return None;
                     }
@@ -739,7 +741,10 @@ impl Neuron {
         if updated_stake_e8s < self.cached_neuron_stake_e8s {
             println!(
                 "{}Reducing neuron {:?} stake via update_stake_adjust_age: {} -> {}",
-                LOG_PREFIX, self.id, self.cached_neuron_stake_e8s, updated_stake_e8s
+                LOG_PREFIX,
+                self.id(),
+                self.cached_neuron_stake_e8s,
+                updated_stake_e8s
             );
             self.cached_neuron_stake_e8s = updated_stake_e8s;
         } else {
@@ -768,7 +773,7 @@ impl Neuron {
                             "{}Neuron {:?} is in state {:?}, so it should not have \
                          an age, but aging_since_timestamp_seconds = {}",
                             LOG_PREFIX,
-                            self.id,
+                            self.id(),
                             self.state(now),
                             self.aging_since_timestamp_seconds
                         );

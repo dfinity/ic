@@ -96,6 +96,7 @@ def rust_fuzz_test_binary_afl(name, srcs, rustc_flags = [], crate_features = [],
         srcs = srcs,
         aliases = {},
         rustc_env = {
+            "AFL_LLVM_LAF_ALL": "1",
             "AFL_USE_ASAN": "1",
             "AFL_USE_LSAN": "1",
         },

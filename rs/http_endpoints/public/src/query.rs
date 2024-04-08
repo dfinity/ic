@@ -7,7 +7,7 @@ use crate::{
 
 use axum::{
     body::Body,
-    extract::State,
+    extract::{DefaultBodyLimit, State},
     response::{IntoResponse, Response},
     Router,
 };
@@ -134,15 +134,16 @@ impl QueryServiceBuilder {
         Router::new().route_service(
             QueryService::route(),
             axum::routing::post(query).with_state(state).layer(
-                ServiceBuilder::new().layer(axum::middleware::from_fn(verify_cbor_content_header)),
+                ServiceBuilder::new()
+                    .layer(DefaultBodyLimit::disable())
+                    .layer(axum::middleware::from_fn(verify_cbor_content_header)),
             ),
         )
     }
 
     pub fn build_service(self) -> BoxCloneService<Request<Body>, Response, Infallible> {
-        use axum::extract::DefaultBodyLimit;
         let router = self.build_router();
-        BoxCloneService::new(router.layer(DefaultBodyLimit::disable()).into_service())
+        BoxCloneService::new(router.into_service())
     }
 }
 

@@ -1508,7 +1508,6 @@ impl ExecutionEnvironment {
                     round_limits,
                     subnet_size,
                     &self.metrics.state_changes_error,
-                    self.config.embedders_config.feature_flags.canister_logging,
                 );
                 if let ExecuteMessageResult::Finished {
                     canister: _,
@@ -1544,7 +1543,6 @@ impl ExecutionEnvironment {
                     subnet_size,
                     &self.call_tree_metrics,
                     self.config.dirty_page_logging,
-                    self.config.embedders_config.feature_flags.canister_logging,
                 )
             }
             WasmMethod::System(_) => {
@@ -1582,7 +1580,6 @@ impl ExecutionEnvironment {
             subnet_size,
             &self.call_tree_metrics,
             self.config.dirty_page_logging,
-            self.config.embedders_config.feature_flags.canister_logging,
         )
     }
 
@@ -1609,6 +1606,7 @@ impl ExecutionEnvironment {
         ExecutionParameters {
             instruction_limits,
             canister_memory_limit: canister.memory_limit(self.config.max_canister_memory_size),
+            wasm_memory_limit: canister.wasm_memory_limit(),
             memory_allocation: canister.memory_allocation(),
             compute_allocation: canister.compute_allocation(),
             subnet_type: self.own_subnet_type,
@@ -2424,13 +2422,9 @@ impl ExecutionEnvironment {
         // We already ensured message_hash is 32 byte statically, so there is
         // no need to check length here.
 
+        let topology = &state.metadata.network_topology;
         // If the request isn't from the NNS, then we need to charge for it.
-        // Consensus will return any remaining cycles.
-        let source_subnet = state
-            .metadata
-            .network_topology
-            .routing_table
-            .route(request.sender.get());
+        let source_subnet = topology.routing_table.route(request.sender.get());
         if source_subnet != Some(state.metadata.network_topology.nns_subnet_id) {
             let signature_fee = self.cycles_account_manager.ecdsa_signature_fee(subnet_size);
             if request.payment < signature_fee {
@@ -2452,15 +2446,18 @@ impl ExecutionEnvironment {
             }
         }
 
-        let mut pseudo_random_id = [0u8; 32];
-        rng.fill_bytes(&mut pseudo_random_id);
-
-        info!(
-            self.log,
-            "Assigned the pseudo_random_id {:?} to the new sign_with_ECDSA request from {:?}",
-            pseudo_random_id,
-            request.sender()
-        );
+        if !topology
+            .ecdsa_signing_subnets(&key_id)
+            .contains(&state.metadata.own_subnet_id)
+        {
+            return Err(UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "sign_with_ecdsa request could not be handled, invalid or disabled key {}.",
+                    key_id
+                ),
+            ));
+        }
 
         if state
             .metadata
@@ -2475,6 +2472,16 @@ impl ExecutionEnvironment {
                     .to_string(),
             ));
         }
+
+        let mut pseudo_random_id = [0u8; 32];
+        rng.fill_bytes(&mut pseudo_random_id);
+
+        info!(
+            self.log,
+            "Assigned the pseudo_random_id {:?} to the new sign_with_ECDSA request from {:?}",
+            pseudo_random_id,
+            request.sender()
+        );
 
         state
             .metadata

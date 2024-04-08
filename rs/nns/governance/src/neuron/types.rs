@@ -4,6 +4,7 @@ use crate::pb::v1::{
 };
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::NeuronId;
+use icp_ledger::Subaccount;
 use std::collections::HashMap;
 
 /// A neuron type internal to the governance crate. Currently, this type is identical to the
@@ -14,16 +15,7 @@ use std::collections::HashMap;
 #[compare_default]
 pub struct Neuron {
     /// The id of the neuron.
-    ///
-    /// This is stored here temporarily, since its also stored on the map
-    /// that contains neurons.
-    ///
-    /// Initialization uses ids for the following graph. We need neurons
-    /// to come into existence at genesis with pre-chosen ids, so a
-    /// neuron needs to have an id. We could alternatively choose a
-    /// unique naming scheme instead and chose the ids on the
-    /// initialization of the canister.
-    pub id: Option<NeuronId>,
+    pub id: NeuronId,
     /// The principal of the ICP ledger account where the locked ICP
     /// balance resides. This principal is indistinguishable from one
     /// identifying a public key pair, such that those browsing the ICP
@@ -127,10 +119,17 @@ pub struct Neuron {
     pub dissolve_state: Option<DissolveState>,
 }
 
+impl Neuron {
+    /// Returns the neuron's ID.
+    pub fn id(&self) -> NeuronId {
+        self.id
+    }
+}
+
 impl From<Neuron> for NeuronProto {
     fn from(neuron: Neuron) -> Self {
         NeuronProto {
-            id: neuron.id,
+            id: Some(neuron.id),
             account: neuron.account,
             controller: neuron.controller,
             hot_keys: neuron.hot_keys,
@@ -155,10 +154,14 @@ impl From<Neuron> for NeuronProto {
     }
 }
 
-impl From<NeuronProto> for Neuron {
-    fn from(proto: NeuronProto) -> Self {
-        Neuron {
-            id: proto.id,
+impl TryFrom<NeuronProto> for Neuron {
+    type Error = String;
+
+    fn try_from(proto: NeuronProto) -> Result<Self, Self::Error> {
+        let id = proto.id.ok_or("Neuron ID is missing")?;
+
+        Ok(Neuron {
+            id,
             account: proto.account,
             controller: proto.controller,
             hot_keys: proto.hot_keys,
@@ -179,6 +182,176 @@ impl From<NeuronProto> for Neuron {
             known_neuron_data: proto.known_neuron_data,
             neuron_type: proto.neuron_type,
             dissolve_state: proto.dissolve_state,
+        })
+    }
+}
+
+/// Builder of a neuron before it gets added into NeuronStore. This allows us to construct a neuron
+/// with private fields. Only fields that are possible to be set at creation time are defined in the
+/// builder.
+#[derive(Clone, Debug, PartialEq)]
+pub struct NeuronBuilder {
+    // Required fields.
+    pub id: NeuronId,
+    pub subaccount: Subaccount,
+    pub controller: PrincipalId,
+    pub dissolve_state_and_age: DissolveStateAndAge,
+    pub created_timestamp_seconds: u64,
+
+    // Optional fields with reasonable defaults.
+    pub cached_neuron_stake_e8s: u64,
+    pub hot_keys: Vec<PrincipalId>,
+    pub spawn_at_timestamp_seconds: Option<u64>,
+    pub followees: HashMap<i32, Followees>,
+    pub kyc_verified: bool,
+    pub maturity_e8s_equivalent: u64,
+    pub auto_stake_maturity: bool,
+    pub not_for_profit: bool,
+    pub joined_community_fund_timestamp_seconds: Option<u64>,
+    pub neuron_type: Option<i32>,
+}
+
+impl NeuronBuilder {
+    pub fn new(
+        id: NeuronId,
+        subaccount: Subaccount,
+        controller: PrincipalId,
+        dissolve_state_and_age: DissolveStateAndAge,
+        created_timestamp_seconds: u64,
+    ) -> Self {
+        NeuronBuilder {
+            id,
+            subaccount,
+            controller,
+            dissolve_state_and_age,
+            created_timestamp_seconds,
+
+            cached_neuron_stake_e8s: 0,
+            hot_keys: Vec::new(),
+            spawn_at_timestamp_seconds: None,
+            followees: HashMap::new(),
+            kyc_verified: false,
+            maturity_e8s_equivalent: 0,
+            auto_stake_maturity: false,
+            not_for_profit: false,
+            joined_community_fund_timestamp_seconds: None,
+            neuron_type: None,
+        }
+    }
+
+    pub fn with_cached_neuron_stake_e8s(mut self, cached_neuron_stake_e8s: u64) -> Self {
+        self.cached_neuron_stake_e8s = cached_neuron_stake_e8s;
+        self
+    }
+
+    pub fn with_hot_keys(mut self, hot_keys: Vec<PrincipalId>) -> Self {
+        self.hot_keys = hot_keys;
+        self
+    }
+
+    pub fn with_spawn_at_timestamp_seconds(mut self, spawn_at_timestamp_seconds: u64) -> Self {
+        self.spawn_at_timestamp_seconds = Some(spawn_at_timestamp_seconds);
+        self
+    }
+
+    pub fn with_followees(mut self, followees: HashMap<i32, Followees>) -> Self {
+        self.followees = followees;
+        self
+    }
+
+    pub fn with_kyc_verified(mut self, kyc_verified: bool) -> Self {
+        self.kyc_verified = kyc_verified;
+        self
+    }
+
+    pub fn with_maturity_e8s_equivalent(mut self, maturity_e8s_equivalent: u64) -> Self {
+        self.maturity_e8s_equivalent = maturity_e8s_equivalent;
+        self
+    }
+
+    pub fn with_auto_stake_maturity(mut self, auto_stake_maturity: bool) -> Self {
+        self.auto_stake_maturity = auto_stake_maturity;
+        self
+    }
+
+    pub fn with_not_for_profit(mut self, not_for_profit: bool) -> Self {
+        self.not_for_profit = not_for_profit;
+        self
+    }
+
+    pub fn with_joined_community_fund_timestamp_seconds(
+        mut self,
+        joined_community_fund_timestamp_seconds: Option<u64>,
+    ) -> Self {
+        self.joined_community_fund_timestamp_seconds = joined_community_fund_timestamp_seconds;
+        self
+    }
+
+    pub fn with_neuron_type(mut self, neuron_type: Option<i32>) -> Self {
+        self.neuron_type = neuron_type;
+        self
+    }
+
+    pub fn build(self) -> Neuron {
+        let NeuronBuilder {
+            id,
+            subaccount,
+            controller,
+            hot_keys,
+            cached_neuron_stake_e8s,
+            created_timestamp_seconds,
+            dissolve_state_and_age,
+            spawn_at_timestamp_seconds,
+            followees,
+            kyc_verified,
+            maturity_e8s_equivalent,
+            auto_stake_maturity,
+            not_for_profit,
+            joined_community_fund_timestamp_seconds,
+            neuron_type,
+        } = self;
+
+        let StoredDissolvedStateAndAge {
+            dissolve_state,
+            aging_since_timestamp_seconds,
+        } = StoredDissolvedStateAndAge::from(dissolve_state_and_age);
+        let account = subaccount.to_vec();
+        let controller = Some(controller);
+        let auto_stake_maturity = if auto_stake_maturity {
+            Some(true)
+        } else {
+            None
+        };
+
+        // The below fields are always the default values for a new neuron.
+        let neuron_fees_e8s = 0;
+        let recent_ballots = Vec::new();
+        let transfer = None;
+        let staked_maturity_e8s_equivalent = None;
+        let known_neuron_data = None;
+
+        Neuron {
+            id,
+            account,
+            controller,
+            hot_keys,
+            cached_neuron_stake_e8s,
+            neuron_fees_e8s,
+            created_timestamp_seconds,
+            aging_since_timestamp_seconds,
+            spawn_at_timestamp_seconds,
+            followees,
+            recent_ballots,
+            kyc_verified,
+            transfer,
+            maturity_e8s_equivalent,
+            staked_maturity_e8s_equivalent,
+            auto_stake_maturity,
+            not_for_profit,
+            joined_community_fund_timestamp_seconds,
+            known_neuron_data,
+            neuron_type,
+            dissolve_state,
         }
     }
 }

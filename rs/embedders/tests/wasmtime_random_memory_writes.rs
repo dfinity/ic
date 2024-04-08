@@ -93,6 +93,7 @@ fn test_api_for_update(
                 instruction_limit,
             ),
             canister_memory_limit,
+            wasm_memory_limit: None,
             memory_allocation: MemoryAllocation::default(),
             compute_allocation: ComputeAllocation::default(),
             subnet_type: SubnetType::Application,

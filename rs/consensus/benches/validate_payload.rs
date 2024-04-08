@@ -18,7 +18,7 @@ use ic_consensus_utils::pool_reader::PoolReader;
 use ic_constants::MAX_INGRESS_TTL;
 use ic_execution_environment::IngressHistoryReaderImpl;
 use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
-use ic_ingress_manager::{CustomRandomState, IngressManager};
+use ic_ingress_manager::{IngressManager, RandomStateKind};
 use ic_interfaces::{
     batch_payload::ProposalContext,
     consensus::{PayloadBuilder, PayloadValidationError},
@@ -157,7 +157,7 @@ where
             Arc::new(state_manager),
             cycles_account_manager,
             ic_types::malicious_flags::MaliciousFlags::default(),
-            CustomRandomState::default(),
+            RandomStateKind::Random,
         ));
 
         let payload_builder = Arc::new(PayloadBuilderImpl::new(

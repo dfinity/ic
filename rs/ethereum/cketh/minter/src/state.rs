@@ -209,6 +209,12 @@ impl State {
             })
     }
 
+    pub fn ckerc20_token_symbol(&self, erc20_contract_address: &Address) -> Option<&CkTokenSymbol> {
+        self.ckerc20_tokens
+            .get_entry_alt(erc20_contract_address)
+            .map(|(symbol, _)| symbol)
+    }
+
     fn record_invalid_deposit(&mut self, source: EventSource, error: String) -> bool {
         assert!(
             !self.events_to_mint.contains_key(&source),

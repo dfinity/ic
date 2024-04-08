@@ -11,7 +11,7 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use ic_artifact_pool::ingress_pool::IngressPoolImpl;
 use ic_constants::MAX_INGRESS_TTL;
-use ic_ingress_manager::{CustomRandomState, IngressManager};
+use ic_ingress_manager::{IngressManager, RandomStateKind};
 use ic_interfaces::{
     ingress_manager::IngressSelector,
     ingress_pool::{ChangeAction, ChangeSet, IngressPool},
@@ -115,7 +115,7 @@ where
                 Arc::new(state_manager),
                 cycles_account_manager,
                 MaliciousFlags::default(),
-                CustomRandomState::default(),
+                RandomStateKind::Random,
             ),
             registry,
             canisters,

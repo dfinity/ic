@@ -1,4 +1,3 @@
-#![allow(clippy::ptr_arg)]
 pub mod batch;
 pub mod fake;
 

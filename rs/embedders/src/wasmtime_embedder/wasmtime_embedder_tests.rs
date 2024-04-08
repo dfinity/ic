@@ -71,6 +71,7 @@ fn test_wasmtime_system_api() {
                 MAX_NUM_INSTRUCTIONS,
             ),
             canister_memory_limit,
+            wasm_memory_limit: None,
             memory_allocation: MemoryAllocation::default(),
             compute_allocation: ComputeAllocation::default(),
             subnet_type: SubnetType::Application,
