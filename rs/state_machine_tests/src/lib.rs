@@ -1567,14 +1567,11 @@ impl StateMachine {
     }
 
     /// Checks critical error counters and panics if a critical error occurred.
-    /// We ignore `execution_environment_unfiltered_ingress` for now.
     pub fn check_critical_errors(&self) {
         let error_counter_vec = fetch_counter_vec(&self.metrics_registry, "critical_errors");
         if let Some((metric, _)) = error_counter_vec.into_iter().find(|(_, v)| *v != 0.0) {
             let err: String = metric.get("error").unwrap().to_string();
-            if err != *"execution_environment_unfiltered_ingress" {
-                panic!("Critical error {} occurred.", err);
-            }
+            panic!("Critical error {} occurred.", err);
         }
     }
 
