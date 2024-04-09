@@ -4,7 +4,7 @@ load("//rs/tests:system_tests.bzl", "system_test")
 package(default_visibility = ["//visibility:public"])
 
 CANISTER_RUNTIME_DEPS = [
-    "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister",
+    "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm.gz",
     "//rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm.gz",
     "//rs/rosetta-api/icrc1/index-ng:index_ng_canister_u256.wasm.gz",
     "//rs/rosetta-api/icrc1/archive:archive_canister_u256.wasm.gz",
