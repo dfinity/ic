@@ -10,7 +10,7 @@ DEPENDENCIES = [
     "@crate_index//:futures",
     "@crate_index//:glob",
     "@crate_index//:humantime",
-    "@crate_index//:hyper_1_0_0",
+    "@crate_index//:hyper",
     "@crate_index//:ic-agent",
     "@crate_index//:ic-utils",
     "@crate_index//:mockall",

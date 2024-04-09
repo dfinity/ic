@@ -473,8 +473,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 package = "http-body",
                 version = "^1.0.0",
             ),
-            "http-body-util_0_1_0": crate.spec(
-                package = "http-body-util",
+            "http-body-util": crate.spec(
                 version = "^0.1.0",
             ),
             "http-serde": crate.spec(
@@ -486,7 +485,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "humantime": crate.spec(
                 version = "^2.1.0",
             ),
-            "hyper": crate.spec(
+            "hyper_0_14_27": crate.spec(
+                package = "hyper",
                 version = "^0.14.27",
                 features = [
                     "client",
@@ -497,9 +497,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "tcp",
                 ],
             ),
-            "hyper_1_0_0": crate.spec(
-                package = "hyper",
-                version = "^1.0.1",
+            "hyper": crate.spec(
+                version = "^1.2.0",
                 features = [
                     "full",
                 ],
