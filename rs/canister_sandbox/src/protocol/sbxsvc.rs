@@ -133,7 +133,11 @@ impl EnumerateInnerFileDescriptors for StorageSerialization {
     fn enumerate_fds<'a>(&'a mut self, fds: &mut Vec<&'a mut std::os::unix::io::RawFd>) {
         match self.base {
             BaseFileSerialization::Base(ref mut b) => b.enumerate_fds(fds),
-            BaseFileSerialization::Overlay(ref mut o) => o.enumerate_fds(fds),
+            BaseFileSerialization::Overlay(ref mut overlays) => {
+                for o in overlays.iter_mut() {
+                    o.enumerate_fds(fds);
+                }
+            }
         }
         for overlay in &mut self.overlays {
             overlay.enumerate_fds(fds);

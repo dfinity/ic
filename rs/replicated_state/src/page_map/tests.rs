@@ -1,6 +1,6 @@
 use super::{
     checkpoint::Checkpoint, page_allocator::PageAllocatorSerialization,
-    storage::test_utils::TestStorageLayout, storage::BaseFileSerialization, Buffer, FileDescriptor,
+    storage::BaseFileSerialization, test_utils::base_only_storage_layout, Buffer, FileDescriptor,
     MemoryInstructions, MemoryMapOrData, PageAllocatorRegistry, PageIndex, PageMap,
     PageMapSerialization, PersistenceError, StorageMetrics, TestPageAllocatorFileDescriptorImpl,
     WRITE_BUCKET_PAGES,
@@ -23,11 +23,7 @@ fn persist_delta_to_base(
     metrics: &StorageMetrics,
 ) -> Result<(), PersistenceError> {
     pagemap.persist_delta(
-        &TestStorageLayout {
-            base: base_path.to_path_buf(),
-            overlay_dst: "".into(),
-            existing_overlays: Vec::new(),
-        },
+        &base_only_storage_layout(base_path),
         Height::new(0),
         &LsmtConfig {
             lsmt_status: FlagStatus::Disabled,
@@ -60,9 +56,11 @@ fn duplicate_file_descriptors(
                 };
             }
         }
-        BaseFileSerialization::Overlay(ref mut overlay) => {
-            overlay.mapping.file_descriptor = FileDescriptor {
-                fd: dup(overlay.mapping.file_descriptor.fd).unwrap(),
+        BaseFileSerialization::Overlay(ref mut overlays) => {
+            for ref mut overlay in overlays.iter_mut() {
+                overlay.mapping.file_descriptor = FileDescriptor {
+                    fd: dup(overlay.mapping.file_descriptor.fd).unwrap(),
+                }
             }
         }
     }
@@ -152,8 +150,7 @@ fn persisted_map_is_equivalent_to_the_original() {
         );
         persist_delta_to_base(pagemap, heap_file.to_path_buf(), metrics).unwrap();
         let persisted_map = PageMap::open(
-            heap_file,
-            &[],
+            &base_only_storage_layout(heap_file.to_path_buf()),
             Height::new(0),
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
         )
@@ -231,8 +228,7 @@ fn can_persist_and_load_an_empty_page_map() {
     let metrics = StorageMetrics::new(&MetricsRegistry::new());
     persist_delta_to_base(&original_map, heap_file.to_path_buf(), &metrics).unwrap();
     let persisted_map = PageMap::open(
-        &heap_file,
-        &[],
+        &base_only_storage_layout(heap_file.to_path_buf()),
         Height::new(0),
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
     )
@@ -251,8 +247,7 @@ fn can_load_a_page_map_without_files() {
     let heap_file = tmp.path().join("missing_file");
 
     let loaded_map = PageMap::open(
-        &heap_file,
-        &[],
+        &base_only_storage_layout(heap_file.to_path_buf()),
         Height::new(0),
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
     )
@@ -281,8 +276,7 @@ fn returns_an_error_if_file_size_is_not_a_multiple_of_page_size() {
         .unwrap();
 
     match PageMap::open(
-        &heap_file,
-        &[],
+        &base_only_storage_layout(heap_file.to_path_buf()),
         Height::new(0),
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
     ) {
@@ -486,8 +480,7 @@ fn get_memory_instructions_returns_deltas() {
     persist_delta_to_base(&page_map, heap_file.to_path_buf(), &metrics).unwrap();
 
     let mut page_map = PageMap::open(
-        &heap_file,
-        &[],
+        &base_only_storage_layout(heap_file.to_path_buf()),
         Height::new(0),
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
     )

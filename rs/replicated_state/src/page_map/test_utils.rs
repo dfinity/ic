@@ -27,6 +27,14 @@ impl StorageLayout for TestStorageLayout {
     }
 }
 
+pub fn base_only_storage_layout(path: PathBuf) -> TestStorageLayout {
+    TestStorageLayout {
+        base: path,
+        overlay_dst: "".into(),
+        existing_overlays: Vec::new(),
+    }
+}
+
 pub struct ShardedTestStorageLayout {
     pub base: PathBuf,
     pub dir_path: PathBuf,

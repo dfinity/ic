@@ -34,12 +34,14 @@ use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::{execution_state::SandboxMemory, NextExecution},
-    page_map::PAGE_SIZE,
+    page_map::{
+        test_utils::base_only_storage_layout, PageMap, TestPageAllocatorFileDescriptorImpl,
+        PAGE_SIZE,
+    },
     testing::{CanisterQueuesTesting, ReplicatedStateTesting},
     CallContext, CanisterState, ExecutionState, ExecutionTask, InputQueueType, NetworkTopology,
     PageIndex, ReplicatedState, SubnetTopology,
 };
-use ic_replicated_state::{page_map::TestPageAllocatorFileDescriptorImpl, PageMap};
 use ic_system_api::InstructionLimits;
 use ic_test_utilities::crypto::mock_random_number_generator;
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder};
@@ -1520,7 +1522,8 @@ impl ExecutionTest {
                     .unwrap();
             }
             let factory = Arc::clone(&fd_factory);
-            es.wasm_memory.page_map = PageMap::open(&path, &[], Height::new(0), factory).unwrap();
+            es.wasm_memory.page_map =
+                PageMap::open(&base_only_storage_layout(path), Height::new(0), factory).unwrap();
             *es.wasm_memory.sandbox_memory.lock().unwrap() = SandboxMemory::Unsynced;
             new_checkpoint_files.push(checkpoint_file);
 
@@ -1539,7 +1542,8 @@ impl ExecutionTest {
                     .unwrap();
             }
             let factory = Arc::clone(&fd_factory);
-            es.stable_memory.page_map = PageMap::open(&path, &[], Height::new(0), factory).unwrap();
+            es.stable_memory.page_map =
+                PageMap::open(&base_only_storage_layout(path), Height::new(0), factory).unwrap();
             *es.stable_memory.sandbox_memory.lock().unwrap() = SandboxMemory::Unsynced;
             new_checkpoint_files.push(checkpoint_file);
         }
