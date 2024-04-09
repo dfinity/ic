@@ -8,7 +8,7 @@ use ic_types::{
     consensus::ecdsa,
     crypto::canister_threshold_sig::ExtendedDerivationPath,
     messages::{CallbackId, RejectContext},
-    CanisterId, Time,
+    Time,
 };
 use phantom_newtype::Id;
 
@@ -49,7 +49,7 @@ pub(crate) fn update_signature_agreements(
     // Then we collect new signatures into the signature_agreements
     let mut completed = BTreeMap::new();
     for request_id in payload.ongoing_signatures.keys() {
-        let Some((callback_id, context)) = all_random_ids.get(&request_id.pseudo_random_id) else {
+        let Some((callback_id, _)) = all_random_ids.get(&request_id.pseudo_random_id) else {
             continue;
         };
 
@@ -57,19 +57,15 @@ pub(crate) fn update_signature_agreements(
             continue;
         };
 
-        let response = ic_types::batch::ConsensusResponse {
-            callback: **callback_id,
-            payload: ic_types::messages::Payload::Data(
+        let response = ic_types::batch::ConsensusResponse::new(
+            **callback_id,
+            ic_types::messages::Payload::Data(
                 SignWithECDSAReply {
                     signature: signature.signature.clone(),
                 }
                 .encode(),
             ),
-            originator: Some(context.request.sender),
-            respondent: Some(CanisterId::ic_00()),
-            refund: Some(context.request.payment),
-            deadline: Some(context.request.deadline),
-        };
+        );
 
         completed.insert(
             request_id.clone(),
@@ -119,18 +115,13 @@ pub(crate) fn update_ongoing_signatures(
 /// with the given code and message
 fn reject_response(
     callback_id: CallbackId,
-    context: &SignWithEcdsaContext,
     code: RejectCode,
     message: impl ToString,
 ) -> ic_types::batch::ConsensusResponse {
-    ic_types::batch::ConsensusResponse {
-        callback: callback_id,
-        payload: ic_types::messages::Payload::Reject(RejectContext::new(code, message)),
-        originator: Some(context.request.sender),
-        respondent: Some(CanisterId::ic_00()),
-        refund: Some(context.request.payment),
-        deadline: Some(context.request.deadline),
-    }
+    ic_types::batch::ConsensusResponse::new(
+        callback_id,
+        ic_types::messages::Payload::Reject(RejectContext::new(code, message)),
+    )
 }
 
 /// Update signature agreements in the data payload by:
@@ -180,7 +171,6 @@ pub(crate) fn update_signature_agreements_improved_latency(
                 context.pseudo_random_id,
                 ecdsa::CompletedSignature::Unreported(reject_response(
                     *callback_id,
-                    context,
                     RejectCode::CanisterReject,
                     format!("Invalid key_id in signature request: {:?}", context.key_id),
                 )),
@@ -204,7 +194,6 @@ pub(crate) fn update_signature_agreements_improved_latency(
                 context.pseudo_random_id,
                 ecdsa::CompletedSignature::Unreported(reject_response(
                     *callback_id,
-                    context,
                     RejectCode::CanisterError,
                     "Signature request expired",
                 )),
@@ -226,7 +215,6 @@ pub(crate) fn update_signature_agreements_improved_latency(
                 context.pseudo_random_id,
                 ecdsa::CompletedSignature::Unreported(reject_response(
                     *callback_id,
-                    context,
                     RejectCode::CanisterError,
                     "Signature request was matched to non-existent pre-signature.",
                 )),
@@ -244,19 +232,15 @@ pub(crate) fn update_signature_agreements_improved_latency(
             continue;
         };
 
-        let response = ic_types::batch::ConsensusResponse {
-            callback: *callback_id,
-            payload: ic_types::messages::Payload::Data(
+        let response = ic_types::batch::ConsensusResponse::new(
+            *callback_id,
+            ic_types::messages::Payload::Data(
                 SignWithECDSAReply {
                     signature: signature.signature.clone(),
                 }
                 .encode(),
             ),
-            originator: Some(context.request.sender),
-            respondent: Some(CanisterId::ic_00()),
-            refund: Some(context.request.payment),
-            deadline: Some(context.request.deadline),
-        };
+        );
         payload.signature_agreements.insert(
             context.pseudo_random_id,
             ecdsa::CompletedSignature::Unreported(response),

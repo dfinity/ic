@@ -8,7 +8,6 @@ use ic_management_canister_types::{BitcoinGetSuccessorsResponse, EmptyBlob, Payl
 use ic_types::{
     batch::ConsensusResponse,
     messages::{CallbackId, Payload, RejectContext},
-    CanisterId,
 };
 use std::cmp::min;
 
@@ -56,103 +55,48 @@ pub fn push_response(
             };
 
             // Add response to the consensus queue.
-            state.consensus_queue.push(ConsensusResponse {
-                callback: callback_id,
-                payload,
-                originator: Some(context.request.sender()),
-                respondent: Some(CanisterId::ic_00()),
-                refund: Some(context.request.take_cycles()),
-                // Not relevant, the consensus queue is flushed every round by the
-                // scheduler, which uses only the payload and originator callback.
-                deadline: Some(context.request.deadline),
-            });
+            state
+                .consensus_queue
+                .push(ConsensusResponse::new(callback_id, payload));
 
             Ok(())
         }
         BitcoinAdapterResponseWrapper::SendTransactionResponse(_) => {
             // Retrieve the associated request from the call context manager.
             let callback_id = CallbackId::from(response.callback_id);
-            let context = state
-                .metadata
-                .subnet_call_context_manager
-                .bitcoin_send_transaction_internal_contexts
-                .get_mut(&callback_id)
-                .ok_or_else(|| StateError::BitcoinNonMatchingResponse {
-                    callback_id: callback_id.get(),
-                })?;
-
             // The response to a `send_transaction` call is always the empty blob.
             let payload = Payload::Data(EmptyBlob.encode());
 
             // Add response to the consensus queue.
-            state.consensus_queue.push(ConsensusResponse {
-                callback: callback_id,
-                payload,
-                originator: Some(context.request.sender()),
-                respondent: Some(CanisterId::ic_00()),
-                refund: Some(context.request.take_cycles()),
-                // Not relevant, the consensus queue is flushed every round by the
-                // scheduler, which uses only the payload and originator callback.
-                deadline: Some(context.request.deadline),
-            });
+            state
+                .consensus_queue
+                .push(ConsensusResponse::new(callback_id, payload));
 
             Ok(())
         }
         BitcoinAdapterResponseWrapper::GetSuccessorsReject(reject) => {
             // Retrieve the associated request from the call context manager.
             let callback_id = CallbackId::from(response.callback_id);
-            let context = state
-                .metadata
-                .subnet_call_context_manager
-                .bitcoin_get_successors_contexts
-                .get_mut(&callback_id)
-                .ok_or_else(|| StateError::BitcoinNonMatchingResponse {
-                    callback_id: callback_id.get(),
-                })?;
-
             let reject_payload =
                 Payload::Reject(RejectContext::new(reject.reject_code, reject.message));
 
             // Add response to the consensus queue.
-            state.consensus_queue.push(ConsensusResponse {
-                callback: callback_id,
-                payload: reject_payload,
-                originator: Some(context.request.sender()),
-                respondent: Some(CanisterId::ic_00()),
-                refund: Some(context.request.take_cycles()),
-                // Not relevant, the consensus queue is flushed every round by the
-                // scheduler, which uses only the payload and originator callback.
-                deadline: Some(context.request.deadline),
-            });
+            state
+                .consensus_queue
+                .push(ConsensusResponse::new(callback_id, reject_payload));
 
             Ok(())
         }
         BitcoinAdapterResponseWrapper::SendTransactionReject(reject) => {
             // Retrieve the associated request from the call context manager.
             let callback_id = CallbackId::from(response.callback_id);
-            let context = state
-                .metadata
-                .subnet_call_context_manager
-                .bitcoin_send_transaction_internal_contexts
-                .get_mut(&callback_id)
-                .ok_or_else(|| StateError::BitcoinNonMatchingResponse {
-                    callback_id: callback_id.get(),
-                })?;
-
             let reject_payload =
                 Payload::Reject(RejectContext::new(reject.reject_code, reject.message));
 
             // Add response to the consensus queue.
-            state.consensus_queue.push(ConsensusResponse {
-                callback: callback_id,
-                payload: reject_payload,
-                originator: Some(context.request.sender()),
-                respondent: Some(CanisterId::ic_00()),
-                refund: Some(context.request.take_cycles()),
-                // Not relevant, the consensus queue is flushed every round by the
-                // scheduler, which uses only the payload and originator callback.
-                deadline: Some(context.request.deadline),
-            });
+            state
+                .consensus_queue
+                .push(ConsensusResponse::new(callback_id, reject_payload));
 
             Ok(())
         }

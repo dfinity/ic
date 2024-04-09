@@ -22,7 +22,6 @@ use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_features::EcdsaConfig;
 use ic_replicated_state::{metadata_state::subnet_call_context_manager::*, ReplicatedState};
 use ic_types::consensus::ecdsa::ECDSA_IMPROVED_LATENCY;
-use ic_types::CanisterId;
 use ic_types::{
     batch::ValidationContext,
     consensus::{
@@ -837,17 +836,13 @@ pub(crate) fn get_signing_requests<'a>(
         if !valid_keys.contains(&context.key_id) {
             // Reject new requests with unknown key Ids.
             // Note that no quadruples are consumed at this stage.
-            let response = ic_types::batch::ConsensusResponse {
-                callback: *callback_id,
-                payload: ic_types::messages::Payload::Reject(RejectContext::new(
+            let response = ic_types::batch::ConsensusResponse::new(
+                *callback_id,
+                ic_types::messages::Payload::Reject(RejectContext::new(
                     RejectCode::CanisterReject,
                     format!("Invalid key_id in signature request: {:?}", context.key_id),
                 )),
-                originator: Some(context.request.sender),
-                respondent: Some(CanisterId::ic_00()),
-                refund: Some(context.request.payment),
-                deadline: Some(context.request.deadline),
-            };
+            );
             ecdsa_payload.signature_agreements.insert(
                 context.pseudo_random_id,
                 ecdsa::CompletedSignature::Unreported(response),
@@ -894,17 +889,13 @@ pub(crate) fn get_signing_requests<'a>(
         // the expiry of its corresponding request. This leads to the creation of a new quadruple.
         if let Some(expiry) = request_expiry_time {
             if context.batch_time < expiry {
-                let response = ic_types::batch::ConsensusResponse {
-                    callback: *callback_id,
-                    payload: ic_types::messages::Payload::Reject(RejectContext::new(
+                let response = ic_types::batch::ConsensusResponse::new(
+                    *callback_id,
+                    ic_types::messages::Payload::Reject(RejectContext::new(
                         RejectCode::CanisterError,
                         "Signature request expired",
                     )),
-                    originator: Some(context.request.sender),
-                    respondent: Some(CanisterId::ic_00()),
-                    refund: Some(context.request.payment),
-                    deadline: Some(context.request.deadline),
-                };
+                );
                 ecdsa_payload.signature_agreements.insert(
                     context.pseudo_random_id,
                     ecdsa::CompletedSignature::Unreported(response),
