@@ -1409,7 +1409,6 @@ impl Scheduler for SchedulerImpl {
         // The goal is to ensure that we can track the performance of `execute_round` and its individual components.
         let root_measurement_scope = MeasurementScope::root(&self.metrics.round);
 
-        let mut cycles_in_sum = Cycles::zero();
         let round_log;
         let mut csprng;
         let long_running_canister_ids: BTreeSet<_>;
@@ -1501,19 +1500,11 @@ impl Scheduler for SchedulerImpl {
                 &ExecutionThread(self.config.scheduler_cores as u32),
             );
 
-            let default_reserved_balance_limit =
-                self.cycles_account_manager.default_reserved_balance_limit();
-
-            for canister in state.canisters_iter_mut() {
-                cycles_in_sum += canister.system_state.balance();
-                cycles_in_sum += canister.system_state.queues().input_queue_cycles();
-                // TODO(RUN-763): This is needed only for one replica release in
-                // order to initialize the existing canisters. After that it can
-                // be removed.
-                canister
-                    .system_state
-                    .initialize_reserved_balance_limit_if_empty(default_reserved_balance_limit);
-            }
+            // TODO(EXC-1124): Re-enable once the cycle balance check is fixed.
+            // for canister in state.canisters_iter_mut() {
+            //     cycles_in_sum += canister.system_state.balance();
+            //     cycles_in_sum += canister.system_state.queues().input_queue_cycles();
+            // }
 
             // Set the round limits used when executing canister messages.
             //
@@ -1697,7 +1688,6 @@ impl Scheduler for SchedulerImpl {
 
             let mut final_state;
             {
-                let mut cycles_out_sum = Cycles::zero();
                 let mut total_canister_balance = Cycles::zero();
                 let mut total_canister_reserved_balance = Cycles::zero();
                 let mut total_canister_history_memory_usage = NumBytes::new(0);
@@ -1732,9 +1722,11 @@ impl Scheduler for SchedulerImpl {
                     total_canister_memory_usage += canister.memory_usage();
                     total_canister_balance += canister.system_state.balance();
                     total_canister_reserved_balance += canister.system_state.reserved_balance();
-                    cycles_out_sum += canister.system_state.queues().output_queue_cycles();
+                    // TODO(EXC-1124): Re-enable once the cycle balance check is fixed.
+                    // cycles_out_sum += canister.system_state.queues().output_queue_cycles();
                 }
-                cycles_out_sum += total_canister_balance;
+                // TODO(EXC-1124): Re-enable once the cycle balance check is fixed.
+                // cycles_out_sum += total_canister_balance;
 
                 self.metrics
                     .total_canister_balance
@@ -2070,7 +2062,7 @@ fn observe_replicated_state_metrics(
     let mut input_queues_message_count = 0;
     let mut input_queues_size_bytes = 0;
     let mut queues_response_bytes = 0;
-    let mut queues_reservations = 0;
+    let mut queues_memory_reservations = 0;
     let mut queues_oversized_requests_extra_bytes = 0;
     let mut canisters_not_in_routing_table = 0;
     let mut canisters_with_old_open_call_contexts = 0;
@@ -2124,7 +2116,7 @@ fn observe_replicated_state_metrics(
         input_queues_message_count += queues.input_queues_message_count();
         input_queues_size_bytes += queues.input_queues_size_bytes();
         queues_response_bytes += queues.responses_size_bytes();
-        queues_reservations += queues.reserved_slots();
+        queues_memory_reservations += queues.reserved_slots();
         queues_oversized_requests_extra_bytes += queues.oversized_requests_extra_bytes();
         if !canister_id_ranges.contains(&canister.canister_id()) {
             canisters_not_in_routing_table += 1;
@@ -2230,7 +2222,7 @@ fn observe_replicated_state_metrics(
     metrics.observe_input_queues_size_bytes(MESSAGE_KIND_CANISTER, input_queues_size_bytes);
 
     metrics.observe_queues_response_bytes(queues_response_bytes);
-    metrics.observe_queues_reservations(queues_reservations);
+    metrics.observe_queues_memory_reservations(queues_memory_reservations);
     metrics.observe_oversized_requests_extra_bytes(queues_oversized_requests_extra_bytes);
     metrics.observe_streams_response_bytes(streams_response_bytes);
 
