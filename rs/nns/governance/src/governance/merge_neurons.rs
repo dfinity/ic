@@ -126,8 +126,6 @@ pub enum MergeNeuronsError {
     NoSourceNeuronId,
     SourceNeuronNotFound,
     TargetNeuronNotFound,
-    SourceInvalidAccount,
-    TargetInvalidAccount,
     SourceNeuronNotHotKeyOrController,
     TargetNeuronNotHotKeyOrController,
     SourceNeuronSpawning,
@@ -162,14 +160,6 @@ impl From<MergeNeuronsError> for GovernanceError {
             MergeNeuronsError::TargetNeuronNotFound => {
                 GovernanceError::new_with_message(ErrorType::NotFound, "Target neuron not found")
             }
-            MergeNeuronsError::SourceInvalidAccount => GovernanceError::new_with_message(
-                ErrorType::NotFound,
-                "Source neuron's account is invalid",
-            ),
-            MergeNeuronsError::TargetInvalidAccount => GovernanceError::new_with_message(
-                ErrorType::NotFound,
-                "Target neuron's account is invalid",
-            ),
             MergeNeuronsError::SourceNeuronNotHotKeyOrController => {
                 GovernanceError::new_with_message(
                     ErrorType::NotAuthorized,
@@ -324,9 +314,7 @@ pub fn validate_merge_neurons_before_commit(
         .with_neuron(source_neuron_id, |source_neuron| {
             (
                 source_neuron.is_controlled_by(caller),
-                source_neuron
-                    .subaccount()
-                    .expect("Neuron must have a subaccount"),
+                source_neuron.subaccount(),
             )
         })
         .map_err(|_| MergeNeuronsError::SourceNeuronNotFound)?;
@@ -338,9 +326,7 @@ pub fn validate_merge_neurons_before_commit(
         .with_neuron(target_neuron_id, |target_neuron| {
             (
                 target_neuron.is_controlled_by(caller),
-                target_neuron
-                    .subaccount()
-                    .expect("Neuron must have a subaccount"),
+                target_neuron.subaccount(),
             )
         })
         .map_err(|_| MergeNeuronsError::TargetNeuronNotFound)?;
@@ -484,7 +470,6 @@ fn validate_request_and_neurons(
 
     let (
         source_neuron_to_merge,
-        source_account_valid,
         source_is_caller_authorized,
         source_is_not_spawning,
         source_is_not_in_neurons_fund,
@@ -495,7 +480,6 @@ fn validate_request_and_neurons(
     ) = neuron_store
         .with_neuron(&source_neuron_id, |source_neuron| {
             let source_neuron_to_merge = ValidSourceNeuron::try_new(source_neuron, now_seconds);
-            let source_account_valid = source_neuron.subaccount().is_ok();
             let source_is_caller_authorized =
                 source_neuron.is_authorized_to_simulate_manage_neuron(caller);
             let source_is_not_spawning = source_neuron.state(now_seconds) != NeuronState::Spawning;
@@ -507,7 +491,6 @@ fn validate_request_and_neurons(
 
             (
                 source_neuron_to_merge,
-                source_account_valid,
                 source_is_caller_authorized,
                 source_is_not_spawning,
                 source_is_not_in_neurons_fund,
@@ -518,9 +501,6 @@ fn validate_request_and_neurons(
             )
         })
         .map_err(|_| MergeNeuronsError::SourceNeuronNotFound)?;
-    if !source_account_valid {
-        return Err(MergeNeuronsError::SourceInvalidAccount);
-    }
     if !source_is_caller_authorized {
         return Err(MergeNeuronsError::SourceNeuronNotHotKeyOrController);
     }
@@ -534,7 +514,6 @@ fn validate_request_and_neurons(
 
     let (
         target_neuron_to_merge,
-        target_account_valid,
         target_is_caller_authorized,
         target_is_not_spawning,
         target_is_not_in_neurons_fund,
@@ -545,7 +524,6 @@ fn validate_request_and_neurons(
     ) = neuron_store
         .with_neuron(target_neuron_id, |target_neuron| {
             let target_neuron_to_merge = ValidTargetNeuron::try_new(target_neuron, now_seconds);
-            let target_account_valid = target_neuron.subaccount().is_ok();
             let target_is_caller_authorized =
                 target_neuron.is_authorized_to_simulate_manage_neuron(caller);
             let target_is_not_spawning = target_neuron.state(now_seconds) != NeuronState::Spawning;
@@ -557,7 +535,6 @@ fn validate_request_and_neurons(
 
             (
                 target_neuron_to_merge,
-                target_account_valid,
                 target_is_caller_authorized,
                 target_is_not_spawning,
                 target_is_not_in_neurons_fund,
@@ -568,9 +545,6 @@ fn validate_request_and_neurons(
             )
         })
         .map_err(|_| MergeNeuronsError::TargetNeuronNotFound)?;
-    if !target_account_valid {
-        return Err(MergeNeuronsError::TargetInvalidAccount);
-    }
     if !target_is_caller_authorized {
         return Err(MergeNeuronsError::TargetNeuronNotHotKeyOrController);
     }
@@ -645,10 +619,13 @@ fn is_neuron_involved_with_open_proposals(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pb::v1::{
-        neuron::{DissolveState, Followees},
-        proposal::Action,
-        ManageNeuron, Proposal, Topic,
+    use crate::{
+        neuron::types::{DissolveStateAndAge, NeuronBuilder},
+        pb::v1::{
+            neuron::{DissolveState, Followees},
+            proposal::Action,
+            ManageNeuron, Proposal, Topic,
+        },
     };
     use assert_matches::assert_matches;
     use ic_nervous_system_common::{E8, SECONDS_PER_DAY};
@@ -668,14 +645,18 @@ mod tests {
         for (destination, data) in account.iter_mut().zip(id.to_le_bytes().iter().cycle()) {
             *destination = *data;
         }
-        Neuron {
-            id: NeuronId { id },
-            account,
-            controller: Some(*PRINCIPAL_ID),
-            dissolve_state: Some(DissolveState::DissolveDelaySeconds(1)),
-            aging_since_timestamp_seconds: NOW_SECONDS - 1,
-            ..Default::default()
-        }
+        let subaccount = Subaccount::try_from(account.as_slice()).unwrap();
+        NeuronBuilder::new(
+            NeuronId { id },
+            subaccount,
+            *PRINCIPAL_ID,
+            DissolveStateAndAge::NotDissolving {
+                dissolve_delay_seconds: 1,
+                aging_since_timestamp_seconds: NOW_SECONDS - 1,
+            },
+            NOW_SECONDS,
+        )
+        .build()
     }
 
     #[test]
@@ -756,56 +737,6 @@ mod tests {
         .unwrap_err();
 
         assert_matches!(error, MergeNeuronsError::TargetNeuronNotFound);
-    }
-
-    #[test]
-    fn test_calculate_effect_source_invalid_account() {
-        let neuron_store = NeuronStore::new(btreemap! {
-            1 => Neuron {
-                account: vec![],
-                ..model_neuron(1)
-            },
-            2 => model_neuron(2),
-        });
-
-        let error = calculate_merge_neurons_effect(
-            &NeuronId { id: 2 },
-            &Merge {
-                source_neuron_id: Some(NeuronId { id: 1 }),
-            },
-            &PRINCIPAL_ID,
-            &neuron_store,
-            TRANSACTION_FEES_E8S,
-            NOW_SECONDS,
-        )
-        .unwrap_err();
-
-        assert_matches!(error, MergeNeuronsError::SourceInvalidAccount);
-    }
-
-    #[test]
-    fn test_calculate_effect_target_invalid_account() {
-        let neuron_store = NeuronStore::new(btreemap! {
-            1 => model_neuron(1),
-            2 => Neuron {
-                account: vec![],
-                ..model_neuron(2)
-            },
-        });
-
-        let error = calculate_merge_neurons_effect(
-            &NeuronId { id: 2 },
-            &Merge {
-                source_neuron_id: Some(NeuronId { id: 1 }),
-            },
-            &PRINCIPAL_ID,
-            &neuron_store,
-            TRANSACTION_FEES_E8S,
-            NOW_SECONDS,
-        )
-        .unwrap_err();
-
-        assert_matches!(error, MergeNeuronsError::TargetInvalidAccount);
     }
 
     #[test]
@@ -1478,8 +1409,8 @@ mod tests {
                 action: Some(Action::ManageNeuron(Box::new(ManageNeuron {
                     neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::Subaccount(
                         neuron_involved_with_managed_neuron_proposal_by_subaccount
-                            .account
-                            .clone(),
+                            .subaccount()
+                            .to_vec(),
                     )),
                     ..Default::default()
                 }))),

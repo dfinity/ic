@@ -1,5 +1,6 @@
 use super::*;
 use crate::{
+    neuron::types::{DissolveStateAndAge, NeuronBuilder},
     pb::v1::neuron::{DissolveState, Followees},
     storage::with_stable_neuron_indexes,
 };
@@ -15,12 +16,17 @@ fn simple_neuron(id: u64) -> Neuron {
         *destination = *data;
     }
 
-    Neuron {
-        id: NeuronId { id },
-        account,
-        controller: Some(PrincipalId::new_user_test_id(id)),
-        ..Default::default()
-    }
+    NeuronBuilder::new(
+        NeuronId { id },
+        Subaccount::try_from(account.as_slice()).unwrap(),
+        PrincipalId::new_user_test_id(id),
+        DissolveStateAndAge::NotDissolving {
+            dissolve_delay_seconds: 1,
+            aging_since_timestamp_seconds: 0,
+        },
+        123_456_789,
+    )
+    .build()
 }
 
 #[test]
@@ -92,15 +98,13 @@ fn test_add_neuron_update_indexes() {
     let neuron_id_found_by_subaccount_index = with_stable_neuron_indexes(|indexes| {
         indexes
             .subaccount()
-            .get_neuron_id_by_subaccount(&neuron_2.subaccount().unwrap())
+            .get_neuron_id_by_subaccount(&neuron_2.subaccount())
             .unwrap()
     });
     assert_eq!(neuron_id_found_by_subaccount_index, neuron_2.id());
 
-    let expected_account_id = AccountIdentifier::new(
-        GOVERNANCE_CANISTER_ID.get(),
-        Some(neuron_2.subaccount().unwrap()),
-    );
+    let expected_account_id =
+        AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), Some(neuron_2.subaccount()));
     let neuron_id_found_by_account_id_index = with_stable_neuron_indexes(|indexes| {
         indexes
             .account_id()
@@ -125,14 +129,12 @@ fn test_remove_neuron_update_indexes() {
     let neuron_id_found_by_subaccount_index = with_stable_neuron_indexes(|indexes| {
         indexes
             .subaccount()
-            .get_neuron_id_by_subaccount(&neuron.subaccount().unwrap())
+            .get_neuron_id_by_subaccount(&neuron.subaccount())
     });
     assert_eq!(neuron_id_found_by_subaccount_index, None);
 
-    let expected_account_id = AccountIdentifier::new(
-        GOVERNANCE_CANISTER_ID.get(),
-        Some(neuron.subaccount().unwrap()),
-    );
+    let expected_account_id =
+        AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), Some(neuron.subaccount()));
     let neuron_id_found_by_account_id_index = with_stable_neuron_indexes(|indexes| {
         indexes
             .account_id()

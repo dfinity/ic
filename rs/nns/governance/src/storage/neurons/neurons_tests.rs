@@ -2,7 +2,7 @@ use super::*;
 
 use crate::{
     neuron::types::{DissolveStateAndAge, NeuronBuilder},
-    pb::v1::Vote,
+    pb::v1::{abridged_neuron::DissolveState, Vote},
 };
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::ProposalId;
@@ -254,11 +254,7 @@ fn test_store_simplest_nontrivial_case() {
     assert_eq!(store.read(NeuronId { id: 42 }), Ok(neuron_5.clone()));
 
     // 7. Bad update: Neuron not found (unknown ID).
-    let non_existent_neuron = Neuron {
-        id: NeuronId { id: 0xDEAD_BEEF },
-        cached_neuron_stake_e8s: 0xBAD_F00D,
-        ..Default::default()
-    };
+    let non_existent_neuron = create_model_neuron(0xDEAD_BEEF);
     let update_result = store.update(&non_existent_neuron, non_existent_neuron.clone());
     match &update_result {
         // This is what we expected.
@@ -430,9 +426,7 @@ fn test_abridged_neuron_size() {
         not_for_profit: true,
         joined_community_fund_timestamp_seconds: Some(u64::MAX),
         neuron_type: Some(i32::MAX),
-        dissolve_state: Some(AbridgedNeuronDissolveState::WhenDissolvedTimestampSeconds(
-            u64::MAX,
-        )),
+        dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(u64::MAX)),
     };
 
     assert!(abridged_neuron.encoded_len() as u32 <= AbridgedNeuron::BOUND.max_size());

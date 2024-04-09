@@ -15,7 +15,7 @@ use common::increase_dissolve_delay_raw;
 use comparable::{Changed, I32Change, MapChange, OptionChange, StringChange, U64Change, VecChange};
 use dfn_protobuf::ToProto;
 use fixtures::{
-    environment_fixture::CanisterCallReply, new_motion_proposal, principal, NNSBuilder,
+    account, environment_fixture::CanisterCallReply, new_motion_proposal, principal, NNSBuilder,
     NNSStateChange, NeuronBuilder, ProposalNeuronBehavior, NNS,
 };
 use futures::future::FutureExt;
@@ -1965,14 +1965,10 @@ fn test_query_for_manage_neuron() {
             .error_type
     );
     // Test that the neuron info can be found by subaccount.
-    let neuron_1_subaccount = Subaccount(
-        gov.neuron_store
-            .with_neuron(&NeuronId { id: 1 }, |n| n.clone())
-            .unwrap()
-            .account[..]
-            .try_into()
-            .unwrap(),
-    );
+    let neuron_1_subaccount = gov
+        .neuron_store
+        .with_neuron(&NeuronId { id: 1 }, |n| n.subaccount())
+        .unwrap();
     assert_eq!(
         1066,
         gov.get_neuron_info_by_id_or_subaccount(&NeuronIdOrSubaccount::Subaccount(
@@ -6502,10 +6498,7 @@ fn test_manage_and_reward_node_providers() {
     assert_eq!(neuron.stake_e8s(), 99_999_999);
     // Find the transaction in the ledger...
     driver.assert_account_contains(
-        &AccountIdentifier::new(
-            GOVERNANCE_CANISTER_ID.get(),
-            Some(Subaccount::try_from(&neuron.account[..]).unwrap()),
-        ),
+        &AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), Some(neuron.subaccount())),
         99_999_999,
     );
     // Now make a proposal to remove the NodeProvider
@@ -6812,10 +6805,7 @@ fn test_manage_and_reward_multiple_node_providers() {
     assert_eq!(neuron.stake_e8s(), 99_999_999);
     // Find the transaction in the ledger...
     driver.assert_account_contains(
-        &AccountIdentifier::new(
-            GOVERNANCE_CANISTER_ID.get(),
-            Some(Subaccount::try_from(&neuron.account[..]).unwrap()),
-        ),
+        &AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), Some(neuron.subaccount())),
         99_999_999,
     );
 
@@ -8860,6 +8850,7 @@ fn fixture_for_dissolving_neuron_tests(id: u64, dissolve_state: DissolveState) -
         neurons: btreemap! {
             1 => Neuron {
                 id: Some(NeuronId { id }),
+                account: account(id),
                 controller: Some(principal(id)),
                 dissolve_state: Some(dissolve_state),
                 aging_since_timestamp_seconds: DEFAULT_TEST_START_TIMESTAMP_SECONDS,
@@ -9106,7 +9097,7 @@ fn test_update_node_provider() {
     let controller = neuron.controller.unwrap();
     let account = AccountIdentifier::new(
         ic_base_types::PrincipalId::from(GOVERNANCE_CANISTER_ID),
-        Some(Subaccount::try_from(neuron.account.as_slice()).unwrap()),
+        Some(neuron.subaccount()),
     );
 
     let update_np = UpdateNodeProvider {
@@ -9196,6 +9187,7 @@ fn test_increase_dissolve_delay() {
         neurons: btreemap! {
             1 => Neuron {
                 id: Some(NeuronId { id: 1 }),
+                account: account(1),
                 controller: Some(principal(principal_id)),
                 dissolve_state: Some(DissolveState::DissolveDelaySeconds(
                     MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
@@ -9204,6 +9196,7 @@ fn test_increase_dissolve_delay() {
             },
             2 => Neuron {
                 id: Some(NeuronId { id: 2 }),
+                account: account(2),
                 controller: Some(principal(principal_id)),
                 dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
                     DEFAULT_TEST_START_TIMESTAMP_SECONDS
@@ -9213,6 +9206,7 @@ fn test_increase_dissolve_delay() {
             },
             3 => Neuron {
                 id: Some(NeuronId { id: 3 }),
+                account: account(3),
                 controller: Some(principal(principal_id)),
                 dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
                     DEFAULT_TEST_START_TIMESTAMP_SECONDS - 1,
@@ -9340,18 +9334,21 @@ fn test_join_neurons_fund() {
         neurons: btreemap! {
             1 => Neuron {
                 id: Some(NeuronId { id: 1 }),
+                account: account(1),
                 cached_neuron_stake_e8s: 10 * E8,
                 controller: Some(principal(principal_a)),
                 ..Neuron::default()
             },
             2 => Neuron {
                 id: Some(NeuronId { id: 2 }),
+                account: account(2),
                 cached_neuron_stake_e8s: 20 * 100_000_000,
                 controller: Some(principal(principal_b)),
                 ..Neuron::default()
             },
             3 => Neuron {
                 id: Some(NeuronId { id: 3 }),
+                account: account(3),
                 cached_neuron_stake_e8s: 100 * 100_000_000,
                 controller: Some(principal(principal_b)),
                 ..Neuron::default()
@@ -9614,6 +9611,7 @@ fn wait_for_quiet_test_helper(
         .enumerate()
         .map(|(i, neuron_vote)| Neuron {
             id: Some(NeuronId { id: i as u64 }),
+            account: account(i as u64),
             dissolve_state: NOTDISSOLVING_MIN_DISSOLVE_DELAY_TO_VOTE,
             controller: Some(principal(i as u64)),
             cached_neuron_stake_e8s: neuron_vote.stake,
@@ -10896,6 +10894,7 @@ lazy_static! {
         vec![
             Neuron {
                 id: Some(NeuronId { id: 1 }),
+                account: account(1),
                 controller: Some(principal(1)),
                 maturity_e8s_equivalent: 1_200_000 * E8,
                 joined_community_fund_timestamp_seconds: Some(1),
@@ -10903,6 +10902,7 @@ lazy_static! {
             },
             Neuron {
                 id: Some(NeuronId { id: 2 }),
+                account: account(2),
                 controller: Some(principal(1)),
                 maturity_e8s_equivalent: 200_000 * E8,
                 joined_community_fund_timestamp_seconds: Some(1),
@@ -10910,6 +10910,7 @@ lazy_static! {
             },
             Neuron {
                 id: Some(NeuronId { id: 3 }),
+                account: account(3),
                 controller: Some(principal(2)),
                 maturity_e8s_equivalent: 600_000 * E8,
                 joined_community_fund_timestamp_seconds: Some(1),
@@ -10919,6 +10920,7 @@ lazy_static! {
             // Unlike the foregoing neurons, this one is NOT a CF neuron.
             Neuron {
                 id: Some(NeuronId { id: 4 }),
+                account: account(4),
                 controller: Some(principal(1)),
                 maturity_e8s_equivalent: 1_000_000 * E8,
                 ..neuron_base
@@ -12457,6 +12459,7 @@ async fn distribute_rewards_load_test() {
     let neurons = (1000..2000)
         .map(|id| Neuron {
             id: Some(NeuronId { id }),
+            account: account(id),
             cached_neuron_stake_e8s: 1_000_000_000,
             maturity_e8s_equivalent,
             ..Default::default()
@@ -12758,6 +12761,7 @@ async fn test_metrics() {
             id: Some(NeuronId {
                 id: 1
             }),
+            account: account(1),
             cached_neuron_stake_e8s: 100_000_000,
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(1)),
             neuron_type: Some(NeuronType::Seed as i32),
@@ -12767,6 +12771,7 @@ async fn test_metrics() {
             id: Some(NeuronId {
                 id: 2
             }),
+            account: account(2),
             cached_neuron_stake_e8s: 200_000_000,
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(ONE_YEAR_SECONDS)),
             neuron_type: Some(NeuronType::Ect as i32),
@@ -12777,6 +12782,7 @@ async fn test_metrics() {
             id: Some(NeuronId {
                 id: 3
             }),
+            account: account(3),
             cached_neuron_stake_e8s: 300_000_000,
             dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
                 now + ONE_YEAR_SECONDS * 3,
@@ -12788,6 +12794,7 @@ async fn test_metrics() {
             id: Some(NeuronId {
                 id: 4
             }),
+            account: account(4),
             cached_neuron_stake_e8s: 400_000_000,
             ..Default::default()
         }

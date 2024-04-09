@@ -1,10 +1,8 @@
 use crate::{
-    neuron::types::Neuron,
+    neuron::types::{DecomposedNeuron, Neuron},
     neuron_store::NeuronStoreError,
     pb::v1::{
-        abridged_neuron::DissolveState as AbridgedNeuronDissolveState,
-        neuron::{DissolveState as NeuronDissolveState, Followees},
-        AbridgedNeuron, BallotInfo, KnownNeuronData, NeuronStakeTransfer, Topic,
+        neuron::Followees, AbridgedNeuron, BallotInfo, KnownNeuronData, NeuronStakeTransfer, Topic,
     },
     storage::validate_stable_btree_map,
 };
@@ -22,32 +20,6 @@ use std::{
     collections::{BTreeMap as HeapBTreeMap, BTreeSet as HeapBTreeSet, HashMap},
     ops::RangeBounds,
 };
-
-impl From<AbridgedNeuronDissolveState> for NeuronDissolveState {
-    fn from(source: AbridgedNeuronDissolveState) -> Self {
-        use AbridgedNeuronDissolveState as S;
-        use NeuronDissolveState as D;
-        match source {
-            S::WhenDissolvedTimestampSeconds(timestamp) => {
-                D::WhenDissolvedTimestampSeconds(timestamp)
-            }
-            S::DissolveDelaySeconds(delay) => D::DissolveDelaySeconds(delay),
-        }
-    }
-}
-
-impl From<NeuronDissolveState> for AbridgedNeuronDissolveState {
-    fn from(source: NeuronDissolveState) -> Self {
-        use AbridgedNeuronDissolveState as D;
-        use NeuronDissolveState as S;
-        match source {
-            S::WhenDissolvedTimestampSeconds(timestamp) => {
-                D::WhenDissolvedTimestampSeconds(timestamp)
-            }
-            S::DissolveDelaySeconds(delay) => D::DissolveDelaySeconds(delay),
-        }
-    }
-}
 
 // Because many arguments are needed to construct a StableNeuronStore, there is
 // no natural argument order that StableNeuronStore::new would be able to
@@ -377,7 +349,7 @@ where
         let known_neuron_data = self.known_neuron_data_map.get(&neuron_id);
         let transfer = self.transfer_map.get(&neuron_id);
 
-        DecomposedNeuron {
+        let decomposed = DecomposedNeuron {
             id: neuron_id,
             main: main_neuron_part,
 
@@ -390,8 +362,9 @@ where
 
             known_neuron_data,
             transfer,
-        }
-        .reconstitute()
+        };
+
+        Neuron::from(decomposed)
     }
 
     // Misc Private Helper(s)
@@ -595,162 +568,6 @@ lazy_static! {
         Principal::try_from(vec![0xFF_u8; PRINCIPAL_MAX_LENGTH_IN_BYTES])
             .expect("Unable to construct MAX_PRINCIPAL_ID.")
     );
-}
-
-/// Breaks out "fat" fields from a Neuron.
-///
-/// Used like so:
-///
-///     let DecomposedNeuron {
-///         main: abridged_neuron,
-///
-///         hot_keys,
-///         recent_ballots,
-///         followees,
-///
-///         known_neuron_data,
-///         transfer,
-///     } = DecomposedNeuron::from(full_neuron);
-///
-/// Of course, a similar effect can be achieved "manually" by calling
-/// std::mem::take on each of the auxiliary fields, but that is error prone,
-/// because it is very easy to forget to take one of the auxiliary fields. By
-/// sticking to this, such mistakes can be avoided.
-///
-/// Notice that full_neuron in the above example gets consumed. It is "replaced"
-/// with abridged_neuron.
-struct DecomposedNeuron {
-    id: NeuronId,
-    main: AbridgedNeuron,
-
-    // Collections
-    hot_keys: Vec<PrincipalId>,
-    recent_ballots: Vec<BallotInfo>,
-    followees: HashMap</* topic ID */ i32, Followees>,
-
-    // Singletons
-    known_neuron_data: Option<KnownNeuronData>,
-    transfer: Option<NeuronStakeTransfer>,
-}
-
-impl TryFrom<Neuron> for DecomposedNeuron {
-    type Error = NeuronStoreError;
-
-    fn try_from(source: Neuron) -> Result<Self, NeuronStoreError> {
-        let Neuron {
-            id,
-            account,
-            controller,
-            hot_keys,
-            cached_neuron_stake_e8s,
-            neuron_fees_e8s,
-            created_timestamp_seconds,
-            aging_since_timestamp_seconds,
-            spawn_at_timestamp_seconds,
-            followees,
-            recent_ballots,
-            kyc_verified,
-            transfer,
-            maturity_e8s_equivalent,
-            staked_maturity_e8s_equivalent,
-            auto_stake_maturity,
-            not_for_profit,
-            joined_community_fund_timestamp_seconds,
-            known_neuron_data,
-            neuron_type,
-            dissolve_state,
-        } = source;
-
-        let main = AbridgedNeuron {
-            account,
-            controller,
-            cached_neuron_stake_e8s,
-            neuron_fees_e8s,
-            created_timestamp_seconds,
-            aging_since_timestamp_seconds,
-            spawn_at_timestamp_seconds,
-            kyc_verified,
-            maturity_e8s_equivalent,
-            staked_maturity_e8s_equivalent,
-            auto_stake_maturity,
-            not_for_profit,
-            joined_community_fund_timestamp_seconds,
-            neuron_type,
-            dissolve_state: dissolve_state.map(AbridgedNeuronDissolveState::from),
-        };
-
-        Ok(Self {
-            id,
-            main,
-
-            // Collections
-            hot_keys,
-            recent_ballots,
-            followees,
-
-            // Singletons
-            known_neuron_data,
-            transfer,
-        })
-    }
-}
-
-impl DecomposedNeuron {
-    fn reconstitute(self) -> Neuron {
-        let Self {
-            id,
-            main,
-
-            hot_keys,
-            recent_ballots,
-            followees,
-
-            known_neuron_data,
-            transfer,
-        } = self;
-
-        let AbridgedNeuron {
-            account,
-            controller,
-            cached_neuron_stake_e8s,
-            neuron_fees_e8s,
-            created_timestamp_seconds,
-            aging_since_timestamp_seconds,
-            spawn_at_timestamp_seconds,
-            kyc_verified,
-            maturity_e8s_equivalent,
-            staked_maturity_e8s_equivalent,
-            auto_stake_maturity,
-            not_for_profit,
-            joined_community_fund_timestamp_seconds,
-            neuron_type,
-            dissolve_state,
-        } = main;
-
-        Neuron {
-            id,
-            account,
-            controller,
-            hot_keys,
-            cached_neuron_stake_e8s,
-            neuron_fees_e8s,
-            created_timestamp_seconds,
-            aging_since_timestamp_seconds,
-            spawn_at_timestamp_seconds,
-            followees,
-            recent_ballots,
-            kyc_verified,
-            transfer,
-            maturity_e8s_equivalent,
-            staked_maturity_e8s_equivalent,
-            auto_stake_maturity,
-            not_for_profit,
-            joined_community_fund_timestamp_seconds,
-            known_neuron_data,
-            neuron_type,
-            dissolve_state: dissolve_state.map(NeuronDissolveState::from),
-        }
-    }
 }
 
 /// Replaces values in a StableBTreeMap corresponding to a repeated field in a Neuron.

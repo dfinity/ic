@@ -1,6 +1,6 @@
 use super::*;
 use crate::{
-    neuron::types::Neuron,
+    neuron::types::{DissolveStateAndAge, NeuronBuilder},
     pb::v1::{
         governance::{followers_map::Followers, FollowersMap},
         Neuron as NeuronProto,
@@ -887,7 +887,10 @@ mod metrics_tests {
 }
 
 mod neuron_archiving_tests {
-    use crate::{neuron::types::Neuron, pb::v1::neuron::DissolveState};
+    use crate::neuron::types::{DissolveStateAndAge, NeuronBuilder};
+    use ic_base_types::PrincipalId;
+    use ic_nns_common::pb::v1::NeuronId;
+    use icp_ledger::Subaccount;
     use proptest::proptest;
 
     #[test]
@@ -895,31 +898,31 @@ mod neuron_archiving_tests {
         const NOW: u64 = 123_456_789;
 
         // Dissolved in the distant past.
-        let model_neuron = Neuron {
-            dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(42)),
-            ..Default::default()
-        };
+        let model_neuron = NeuronBuilder::new(
+            NeuronId { id: 1 },
+            Subaccount::try_from(&[0u8; 32] as &[u8]).unwrap(),
+            PrincipalId::new_user_test_id(1),
+            DissolveStateAndAge::DissolvingOrDissolved {
+                when_dissolved_timestamp_seconds: 42,
+            },
+            NOW,
+        )
+        .build();
         assert!(model_neuron.is_inactive(NOW), "{:#?}", model_neuron);
 
         // Case Some(positive): Active.
-        let neuron = Neuron {
-            joined_community_fund_timestamp_seconds: Some(42),
-            ..model_neuron.clone()
-        };
+        let mut neuron = model_neuron.clone();
+        neuron.joined_community_fund_timestamp_seconds = Some(42);
         assert!(!neuron.is_inactive(NOW), "{:#?}", neuron);
 
         // Case Some(0): Inactive.
-        let neuron = Neuron {
-            joined_community_fund_timestamp_seconds: Some(0),
-            ..model_neuron.clone()
-        };
+        let mut neuron = model_neuron.clone();
+        neuron.joined_community_fund_timestamp_seconds = Some(0);
         assert!(neuron.is_inactive(NOW), "{:#?}", neuron);
 
         // Case None: Same as Some(0), i.e. Inactive
-        let neuron = Neuron {
-            joined_community_fund_timestamp_seconds: None,
-            ..model_neuron.clone()
-        };
+        let mut neuron = model_neuron.clone();
+        neuron.joined_community_fund_timestamp_seconds = None;
         assert!(neuron.is_inactive(NOW), "{:#?}", neuron);
 
         // This is just so that clone is always called in all of the above cases.
@@ -930,44 +933,57 @@ mod neuron_archiving_tests {
     fn test_neuron_is_inactive_based_on_dissolve_state() {
         const NOW: u64 = 123_456_789;
 
+        let neuron_with_dissolve_state_and_age = |dissolve_state_and_age| {
+            NeuronBuilder::new(
+                NeuronId { id: 1 },
+                Subaccount::try_from(&[0u8; 32] as &[u8]).unwrap(),
+                PrincipalId::new_user_test_id(1),
+                dissolve_state_and_age,
+                NOW,
+            )
+            .build()
+        };
+
         // Case 0: None: Active
-        let neuron = Neuron::default();
+        let neuron =
+            neuron_with_dissolve_state_and_age(DissolveStateAndAge::LegacyNoneDissolveState {
+                aging_since_timestamp_seconds: NOW,
+            });
         assert!(!neuron.is_inactive(NOW), "{:#?}", neuron);
 
         // Case 1a: Dissolved in the "distant" past: Inactive. This is the only case where
         // "inactive" is the expected result.
-        let neuron = Neuron {
-            dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(42)),
-            ..Default::default()
-        };
+        let neuron =
+            neuron_with_dissolve_state_and_age(DissolveStateAndAge::DissolvingOrDissolved {
+                when_dissolved_timestamp_seconds: 42,
+            });
         assert!(neuron.is_inactive(NOW), "{:#?}", neuron);
 
         // Case 1b: Dissolved right now: Active
-        let neuron = Neuron {
-            dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(NOW)),
-            ..Default::default()
-        };
+        let neuron =
+            neuron_with_dissolve_state_and_age(DissolveStateAndAge::DissolvingOrDissolved {
+                when_dissolved_timestamp_seconds: NOW,
+            });
         assert!(!neuron.is_inactive(NOW), "{:#?}", neuron);
 
-        // Case 1c: Dissolved right now: Active (again).
-        let neuron = Neuron {
-            dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(NOW + 42)),
-            ..Default::default()
-        };
+        // Case 1c: Soon to be dissolved: Active (again).
+        let neuron =
+            neuron_with_dissolve_state_and_age(DissolveStateAndAge::DissolvingOrDissolved {
+                when_dissolved_timestamp_seconds: NOW + 42,
+            });
         assert!(!neuron.is_inactive(NOW), "{:#?}", neuron);
 
         // Case 2a: DissolveDelay(0): Active
-        let neuron = Neuron {
-            dissolve_state: Some(DissolveState::DissolveDelaySeconds(0)),
-            ..Default::default()
-        };
+        let neuron = neuron_with_dissolve_state_and_age(DissolveStateAndAge::LegacyDissolved {
+            aging_since_timestamp_seconds: 42,
+        });
         assert!(!neuron.is_inactive(NOW), "{:#?}", neuron);
 
         // Case 2b: DissolveDelay(positive): Active
-        let neuron = Neuron {
-            dissolve_state: Some(DissolveState::DissolveDelaySeconds(42)),
-            ..Default::default()
-        };
+        let neuron = neuron_with_dissolve_state_and_age(DissolveStateAndAge::NotDissolving {
+            dissolve_delay_seconds: 42,
+            aging_since_timestamp_seconds: NOW,
+        });
         assert!(!neuron.is_inactive(NOW), "{:#?}", neuron);
     }
 
@@ -993,16 +1009,19 @@ mod neuron_archiving_tests {
             let now = 123_456_789;
 
             let staked_maturity_e8s_equivalent = Some(staked_maturity_e8s_equivalent);
-            let neuron = Neuron {
-                cached_neuron_stake_e8s,
-                staked_maturity_e8s_equivalent,
-                neuron_fees_e8s,
-                maturity_e8s_equivalent,
-
-                dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(42)),
-
-                ..Default::default()
-            };
+            let mut neuron = NeuronBuilder::new(
+                NeuronId { id: 1 },
+                Subaccount::try_from(&[0u8; 32] as &[u8]).unwrap(),
+                PrincipalId::new_user_test_id(1),
+                DissolveStateAndAge::DissolvingOrDissolved {
+                    when_dissolved_timestamp_seconds: 42,
+                },
+                now,
+            ).build();
+            neuron.cached_neuron_stake_e8s = cached_neuron_stake_e8s;
+            neuron.neuron_fees_e8s = neuron_fees_e8s;
+            neuron.maturity_e8s_equivalent = maturity_e8s_equivalent;
+            neuron.staked_maturity_e8s_equivalent = staked_maturity_e8s_equivalent;
 
             assert_eq!(
                 neuron.is_inactive(now),
@@ -1021,18 +1040,15 @@ mod neuron_archiving_tests {
 mod cast_vote_and_cascade_follow {
     use crate::{
         governance::{Governance, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS},
-        neuron::types::Neuron,
+        neuron::types::{DissolveStateAndAge, Neuron, NeuronBuilder},
         neuron_store::NeuronStore,
-        pb::v1::{
-            neuron::{DissolveState, Followees},
-            Ballot, Topic, Vote,
-        },
+        pb::v1::{neuron::Followees, Ballot, Topic, Vote},
     };
+    use ic_base_types::PrincipalId;
     use ic_nns_common::pb::v1::{NeuronId, ProposalId};
+    use icp_ledger::Subaccount;
     use maplit::hashmap;
     use std::collections::{BTreeMap, HashMap};
-
-    const E8S: u64 = 100_000_000;
 
     fn make_ballot(voting_power: u64, vote: Vote) -> Ballot {
         Ballot {
@@ -1047,20 +1063,22 @@ mod cast_vote_and_cascade_follow {
         followees: Vec<u64>,
         aging_since_timestamp_seconds: u64,
     ) -> Neuron {
-        Neuron {
-            id: NeuronId { id },
-            followees: hashmap! {
-                topic as i32 => Followees {
-                    followees: followees.into_iter().map(|id| NeuronId { id }).collect()
-                }
+        NeuronBuilder::new(
+            NeuronId { id },
+            Subaccount::try_from(&[0u8; 32] as &[u8]).unwrap(),
+            PrincipalId::new_user_test_id(1),
+            DissolveStateAndAge::NotDissolving {
+                dissolve_delay_seconds: MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
+                aging_since_timestamp_seconds,
             },
-            cached_neuron_stake_e8s: E8S, // clippy doesn't like 1 * E8S
-            dissolve_state: Some(DissolveState::DissolveDelaySeconds(
-                MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
-            )),
-            aging_since_timestamp_seconds,
-            ..Default::default()
-        }
+            123_456_789,
+        )
+        .with_followees(hashmap! {
+            topic as i32 => Followees {
+                followees: followees.into_iter().map(|id| NeuronId { id }).collect()
+            }
+        })
+        .build()
     }
 
     #[test]
@@ -1284,11 +1302,20 @@ fn can_spawn_neurons_only_true_when_not_spawning_and_neurons_ready_to_spawn() {
 
     governance
         .neuron_store
-        .add_neuron(Neuron {
-            id: NeuronId { id: 1 },
-            spawn_at_timestamp_seconds: Some(99),
-            ..Default::default()
-        })
+        .add_neuron(
+            NeuronBuilder::new(
+                NeuronId { id: 1 },
+                Subaccount::try_from(vec![0u8; 32].as_slice()).unwrap(),
+                PrincipalId::new_user_test_id(1),
+                DissolveStateAndAge::NotDissolving {
+                    dissolve_delay_seconds: 42,
+                    aging_since_timestamp_seconds: 1,
+                },
+                123_456_789,
+            )
+            .with_spawn_at_timestamp_seconds(99)
+            .build(),
+        )
         .unwrap();
 
     governance.heap_data.spawning_neurons = Some(true);
