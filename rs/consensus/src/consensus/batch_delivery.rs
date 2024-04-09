@@ -24,6 +24,7 @@ use ic_protobuf::{
     log::consensus_log_entry::v1::ConsensusLogEntry,
     registry::{crypto::v1::PublicKey as PublicKeyProto, subnet::v1::InitialNiDkgTranscriptRecord},
 };
+use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::{
     batch::{Batch, BatchMessages, BlockmakerMetrics, ConsensusResponse},
     consensus::{
@@ -33,9 +34,6 @@ use ic_types::{
     crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTranscript},
     messages::{CallbackId, Payload, RejectContext},
     Height, PrincipalId, Randomness, ReplicaVersion, SubnetId,
-};
-use ic_types::{
-    crypto::threshold_sig::ThresholdSigPublicKey, messages::NO_DEADLINE, CanisterId, Cycles,
 };
 use std::collections::BTreeMap;
 
@@ -349,14 +347,7 @@ pub fn generate_responses_to_setup_initial_dkg_calls(
             log,
         );
         if let Some(payload) = payload {
-            consensus_responses.push(ConsensusResponse {
-                callback,
-                payload,
-                originator: Some(CanisterId::ic_00()),
-                respondent: Some(CanisterId::ic_00()),
-                refund: Some(Cycles::zero()),
-                deadline: Some(NO_DEADLINE),
-            });
+            consensus_responses.push(ConsensusResponse::new(callback, payload));
         }
     }
     consensus_responses

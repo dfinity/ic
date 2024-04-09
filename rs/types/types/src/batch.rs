@@ -186,12 +186,25 @@ impl BlockmakerMetrics {
 /// TODO: Remove optional fields
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConsensusResponse {
-    pub originator: Option<CanisterId>,
-    pub respondent: Option<CanisterId>,
+    pub(crate) originator: Option<CanisterId>,
+    pub(crate) respondent: Option<CanisterId>,
     pub callback: CallbackId,
-    pub refund: Option<Cycles>,
+    pub(crate) refund: Option<Cycles>,
     pub payload: Payload,
-    pub deadline: Option<CoarseTime>,
+    pub(crate) deadline: Option<CoarseTime>,
+}
+
+impl ConsensusResponse {
+    pub fn new(callback: CallbackId, payload: Payload) -> Self {
+        Self {
+            callback,
+            payload,
+            originator: None,
+            respondent: None,
+            refund: None,
+            deadline: None,
+        }
+    }
 }
 
 /// Custom hash implementation, ensuring consistency with previous version

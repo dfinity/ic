@@ -8,7 +8,6 @@ use ic_types::{
         error::InitialIDkgDealingsValidationError, idkg::InitialIDkgDealings,
     },
     messages::CallbackId,
-    CanisterId,
 };
 
 use crate::ecdsa::pre_signer::EcdsaTranscriptBuilder;
@@ -71,19 +70,15 @@ pub(super) fn make_reshare_dealings_response(
                     })
                 {
                     use ic_management_canister_types::ComputeInitialEcdsaDealingsResponse;
-                    return Some(ic_types::batch::ConsensusResponse {
-                        callback: *callback_id,
-                        payload: ic_types::messages::Payload::Data(
+                    return Some(ic_types::batch::ConsensusResponse::new(
+                        *callback_id,
+                        ic_types::messages::Payload::Data(
                             ComputeInitialEcdsaDealingsResponse {
                                 initial_dkg_dealings: initial_dealings.into(),
                             }
                             .encode(),
                         ),
-                        originator: Some(context.request.sender),
-                        respondent: Some(CanisterId::ic_00()),
-                        refund: Some(context.request.payment),
-                        deadline: Some(context.request.deadline),
-                    });
+                    ));
                 }
             }
             None

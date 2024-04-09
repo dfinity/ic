@@ -102,7 +102,6 @@ use ic_types::crypto::{
     CombinedThresholdSigOf, KeyPurpose, Signable, Signed,
 };
 use ic_types::malicious_flags::MaliciousFlags;
-use ic_types::messages::NO_DEADLINE;
 use ic_types::signature::ThresholdSignature;
 use ic_types::time::GENESIS;
 use ic_types::xnet::CertifiedStreamSlice;
@@ -1014,14 +1013,10 @@ impl StateMachine {
 
             let reply = SignWithECDSAReply { signature };
 
-            payload.consensus_responses.push(ConsensusResponse {
+            payload.consensus_responses.push(ConsensusResponse::new(
                 callback,
-                payload: MsgPayload::Data(reply.encode()),
-                originator: Some(CanisterId::ic_00()),
-                respondent: Some(CanisterId::ic_00()),
-                refund: Some(Cycles::zero()),
-                deadline: Some(NO_DEADLINE),
-            });
+                MsgPayload::Data(reply.encode()),
+            ));
         }
 
         // Finally execute the payload.
@@ -1534,14 +1529,10 @@ impl StateMachine {
 
             let reply = SignWithECDSAReply { signature };
 
-            payload.consensus_responses.push(ConsensusResponse {
+            payload.consensus_responses.push(ConsensusResponse::new(
                 callback,
-                payload: MsgPayload::Data(reply.encode()),
-                originator: Some(CanisterId::ic_00()),
-                respondent: Some(CanisterId::ic_00()),
-                refund: Some(Cycles::zero()),
-                deadline: Some(NO_DEADLINE),
-            });
+                MsgPayload::Data(reply.encode()),
+            ));
         }
         self.execute_payload(payload);
     }
@@ -2858,14 +2849,10 @@ impl PayloadBuilder {
         callback: CallbackId,
         payload: &CanisterHttpResponsePayload,
     ) -> Self {
-        self.consensus_responses.push(ConsensusResponse {
+        self.consensus_responses.push(ConsensusResponse::new(
             callback,
-            payload: MsgPayload::Data(payload.encode()),
-            originator: Some(CanisterId::ic_00()),
-            respondent: Some(CanisterId::ic_00()),
-            refund: Some(Cycles::zero()),
-            deadline: Some(NO_DEADLINE),
-        });
+            MsgPayload::Data(payload.encode()),
+        ));
         self
     }
 
@@ -2875,14 +2862,10 @@ impl PayloadBuilder {
         code: RejectCode,
         message: impl ToString,
     ) -> Self {
-        self.consensus_responses.push(ConsensusResponse {
+        self.consensus_responses.push(ConsensusResponse::new(
             callback,
-            payload: MsgPayload::Reject(RejectContext::new(code, message)),
-            originator: Some(CanisterId::ic_00()),
-            respondent: Some(CanisterId::ic_00()),
-            refund: Some(Cycles::zero()),
-            deadline: Some(NO_DEADLINE),
-        });
+            MsgPayload::Reject(RejectContext::new(code, message)),
+        ));
         self
     }
 

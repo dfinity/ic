@@ -725,14 +725,7 @@ impl ExhaustiveSet for ConsensusResponse {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
         Response::exhaustive_set(rng)
             .into_iter()
-            .map(|r| ConsensusResponse {
-                originator: Some(r.originator),
-                respondent: Some(r.respondent),
-                callback: r.originator_reply_callback,
-                refund: Some(r.refund),
-                payload: r.response_payload,
-                deadline: Some(r.deadline),
-            })
+            .map(|r| ConsensusResponse::new(r.originator_reply_callback, r.response_payload))
             .collect()
     }
 }

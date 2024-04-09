@@ -618,8 +618,7 @@ mod test {
     use ic_test_utilities::crypto::CryptoReturningOk;
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
-        consensus::ecdsa::CompletedSignature, crypto::AlgorithmId, messages::CallbackId,
-        CanisterId, Height,
+        consensus::ecdsa::CompletedSignature, crypto::AlgorithmId, messages::CallbackId, Height,
     };
     use std::{collections::BTreeSet, str::FromStr};
 
@@ -1153,16 +1152,13 @@ mod test {
         let state = fake_state_with_ecdsa_contexts(height, sign_with_ecdsa_contexts.clone());
 
         let fake_context = fake_sign_with_ecdsa_context(key_id.clone(), [4; 32]);
-        let fake_response = CompletedSignature::Unreported(ic_types::batch::ConsensusResponse {
-            callback: CallbackId::from(0),
-            payload: ic_types::messages::Payload::Data(
-                SignWithECDSAReply { signature: vec![] }.encode(),
-            ),
-            originator: Some(fake_context.request.sender),
-            respondent: Some(CanisterId::ic_00()),
-            refund: Some(fake_context.request.payment),
-            deadline: Some(fake_context.request.deadline),
-        });
+        let fake_response =
+            CompletedSignature::Unreported(ic_types::batch::ConsensusResponse::new(
+                CallbackId::from(0),
+                ic_types::messages::Payload::Data(
+                    SignWithECDSAReply { signature: vec![] }.encode(),
+                ),
+            ));
 
         // Insert agreement for incomplete context
         let mut ecdsa_payload_incomplete_context = empty_ecdsa_payload(subnet_id);

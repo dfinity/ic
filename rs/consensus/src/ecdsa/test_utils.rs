@@ -47,9 +47,9 @@ use ic_types::crypto::canister_threshold_sig::{
     ThresholdEcdsaSigShare,
 };
 use ic_types::crypto::AlgorithmId;
-use ic_types::messages::{CallbackId, NO_DEADLINE};
+use ic_types::messages::CallbackId;
+use ic_types::signature::*;
 use ic_types::time::UNIX_EPOCH;
-use ic_types::{signature::*, CanisterId, Cycles};
 use ic_types::{Height, NodeId, PrincipalId, Randomness, RegistryVersion, SubnetId, Time};
 use rand::{CryptoRng, Rng};
 use std::collections::{BTreeMap, BTreeSet};
@@ -60,14 +60,10 @@ use std::sync::{Arc, Mutex};
 use super::utils::get_context_request_id;
 
 pub(crate) fn empty_response() -> ic_types::batch::ConsensusResponse {
-    ic_types::batch::ConsensusResponse {
-        callback: ic_types::messages::CallbackId::from(0),
-        payload: ic_types::messages::Payload::Data(vec![]),
-        originator: Some(CanisterId::ic_00()),
-        respondent: Some(CanisterId::ic_00()),
-        refund: Some(Cycles::zero()),
-        deadline: Some(NO_DEADLINE),
-    }
+    ic_types::batch::ConsensusResponse::new(
+        ic_types::messages::CallbackId::from(0),
+        ic_types::messages::Payload::Data(vec![]),
+    )
 }
 
 pub fn fake_sign_with_ecdsa_context(
