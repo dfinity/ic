@@ -9,41 +9,43 @@ use std::time::Duration;
 
 #[test]
 fn test_insert() {
+    use Class::*;
+
     let mut pool = MessagePool::default();
 
     // Insert one message of each kind / class / context.
     let id1 = pool.insert_inbound(request(NO_DEADLINE).into());
     assert!(!id1.is_outbound());
     assert!(!id1.is_response());
-    assert!(!id1.is_best_effort());
+    assert_eq!(GuaranteedResponse, id1.class());
     let id2 = pool.insert_inbound(request(time(20)).into());
     assert!(!id2.is_outbound());
     assert!(!id2.is_response());
-    assert!(id2.is_best_effort());
+    assert_eq!(BestEffort, id2.class());
     let id3 = pool.insert_inbound(response(NO_DEADLINE).into());
     assert!(!id3.is_outbound());
     assert!(id3.is_response());
-    assert!(!id3.is_best_effort());
+    assert_eq!(GuaranteedResponse, id3.class());
     let id4 = pool.insert_inbound(response(time(40)).into());
     assert!(!id4.is_outbound());
     assert!(id4.is_response());
-    assert!(id4.is_best_effort());
+    assert_eq!(BestEffort, id4.class());
     let id5 = pool.insert_outbound_request(request(NO_DEADLINE).into(), time(50).into());
     assert!(id5.is_outbound());
     assert!(!id5.is_response());
-    assert!(!id5.is_best_effort());
+    assert_eq!(GuaranteedResponse, id5.class());
     let id6 = pool.insert_outbound_request(request(time(60)).into(), time(65).into());
     assert!(id6.is_outbound());
     assert!(!id6.is_response());
-    assert!(id6.is_best_effort());
+    assert_eq!(BestEffort, id6.class());
     let id7 = pool.insert_outbound_response(response(NO_DEADLINE).into());
     assert!(id7.is_outbound());
     assert!(id7.is_response());
-    assert!(!id7.is_best_effort());
+    assert_eq!(GuaranteedResponse, id7.class());
     let id8 = pool.insert_outbound_response(response(time(80)).into());
     assert!(id8.is_outbound());
     assert!(id8.is_response());
-    assert!(id8.is_best_effort());
+    assert_eq!(BestEffort, id8.class());
 
     assert_eq!(8, pool.len());
 
@@ -102,7 +104,7 @@ fn test_replace_inbound_timeout_response() {
     let id = placeholder.id();
     assert!(!id.is_outbound());
     assert!(id.is_response());
-    assert!(id.is_best_effort());
+    assert_eq!(Class::BestEffort, id.class());
     assert_eq!(0, pool.len());
     assert_eq!(None, pool.get_response(id));
 
@@ -613,14 +615,14 @@ fn test_message_id_flags() {
     );
     assert!(!giq_id.is_response());
     assert!(!giq_id.is_outbound());
-    assert!(!giq_id.is_best_effort());
+    assert_eq!(Class::GuaranteedResponse, giq_id.class());
     assert_eq!(13, giq_id.0 >> MessageId::BITMASK_LEN);
 
     // Best-effort outbound response, same generator.
     let bop_id = MessageId::new(Kind::Response, Context::Outbound, Class::BestEffort, 13);
     assert!(bop_id.is_response());
     assert!(bop_id.is_outbound());
-    assert!(bop_id.is_best_effort());
+    assert_eq!(Class::BestEffort, bop_id.class());
     assert_eq!(13, bop_id.0 >> MessageId::BITMASK_LEN);
 
     // IDs should be different.
@@ -910,15 +912,6 @@ pub(crate) fn new_request_message_id(generator: u64) -> MessageId {
 }
 
 /// Generates a `MessageId` for an inbound response.
-pub(crate) fn new_response_message_id(generator: u64, best_effort: bool) -> MessageId {
-    MessageId::new(
-        Kind::Response,
-        Context::Inbound,
-        if best_effort {
-            Class::BestEffort
-        } else {
-            Class::GuaranteedResponse
-        },
-        generator,
-    )
+pub(crate) fn new_response_message_id(generator: u64, class: Class) -> MessageId {
+    MessageId::new(Kind::Response, Context::Inbound, class, generator)
 }

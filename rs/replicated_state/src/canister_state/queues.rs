@@ -5,6 +5,7 @@ mod tests;
 
 use self::message_pool::{MessageId, MessagePool};
 use self::queue::{CanisterQueue, IngressQueue, MessageReference};
+use crate::canister_state::queues::message_pool::Class;
 use crate::replicated_state::MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN;
 use crate::{CanisterState, InputQueueType, NextInputQueue, StateError};
 use ic_base_types::PrincipalId;
@@ -421,9 +422,12 @@ impl CanisterQueues {
             }
             RequestOrResponse::Response(rep) => match self.canister_queues.get_mut(&sender) {
                 Some((queue, _)) => {
-                    if let Err(e) =
-                        queue.check_has_reserved_response_slot(rep.deadline != NO_DEADLINE)
-                    {
+                    let class = if rep.deadline == NO_DEADLINE {
+                        Class::GuaranteedResponse
+                    } else {
+                        Class::BestEffort
+                    };
+                    if let Err(e) = queue.check_has_reserved_response_slot(class) {
                         return Err((e, msg));
                     }
                     queue

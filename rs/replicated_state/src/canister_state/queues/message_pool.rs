@@ -44,7 +44,8 @@ impl Context {
 
 /// Bit encoding the message class (guaranteed response vs best-effort).
 #[repr(u64)]
-enum Class {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Class {
     GuaranteedResponse = 0,
     BestEffort = Self::BIT,
 }
@@ -76,8 +77,12 @@ impl MessageId {
         self.0 & Context::BIT == Context::Outbound as u64
     }
 
-    pub(super) fn is_best_effort(&self) -> bool {
-        self.0 & Class::BIT == Class::BestEffort as u64
+    pub(super) fn class(&self) -> Class {
+        if self.0 & Class::BIT == Class::GuaranteedResponse as u64 {
+            Class::GuaranteedResponse
+        } else {
+            Class::BestEffort
+        }
     }
 }
 

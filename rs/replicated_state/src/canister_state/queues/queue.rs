@@ -1,6 +1,6 @@
 #![allow(unused)]
 
-use super::message_pool::{MessageId, MessagePool};
+use super::message_pool::{Class, MessageId, MessagePool};
 use crate::StateError;
 use ic_base_types::CanisterId;
 use ic_protobuf::proxy::ProxyDecodeError;
@@ -195,20 +195,17 @@ impl CanisterQueue {
     /// Returns `Ok(())` if there exists at least one reserved response slot,
     /// `Err(StateError::QueueFull)` otherwise.
     ///
-    /// Panics if `is_best_effort` is `false` (i.e. this is a guaranteed response
-    /// call) and no guaranteed response memory reservation exists.
-    pub(super) fn check_has_reserved_response_slot(
-        &self,
-        is_best_effort: bool,
-    ) -> Result<(), StateError> {
+    /// Panics if `class` is `GuaranteedResponse` and no guaranteed response
+    /// memory reservation exists.
+    pub(super) fn check_has_reserved_response_slot(&self, class: Class) -> Result<(), StateError> {
         if self.request_slots + self.response_slots <= self.queue.len() {
             return Err(StateError::QueueFull {
                 capacity: self.capacity,
             });
         }
 
-        if !is_best_effort {
-            // This is a guaranteed response, we must have a memory reservation for it.
+        if class == Class::GuaranteedResponse {
+            // Guaranteed response, we must have a memory reservation for it.
             assert!(self.response_memory_reservations > 0);
         }
         Ok(())
@@ -224,10 +221,9 @@ impl CanisterQueue {
     /// Panics if there is no reserved response slot or if this is a guaranteed
     /// response.and there is no matching guaranteed response memory reservation.
     pub(super) fn push_response(&mut self, id: MessageId) {
-        self.check_has_reserved_response_slot(id.is_best_effort())
-            .unwrap();
+        self.check_has_reserved_response_slot(id.class()).unwrap();
 
-        if !id.is_best_effort() {
+        if id.class() == Class::GuaranteedResponse {
             // Guaranteed response, consume one memory reservation.
             self.response_memory_reservations -= 1;
         }
@@ -242,11 +238,15 @@ impl CanisterQueue {
     /// Panics if there is no reserved response slot or if this is a guaranteed
     /// response.call and there is no guaranteed response memory reservation.
     pub(super) fn push_local_reject_response(&mut self, own_request: &Request) {
-        self.check_has_reserved_response_slot(own_request.deadline != NO_DEADLINE)
-            .unwrap();
+        let class = if own_request.deadline == NO_DEADLINE {
+            Class::GuaranteedResponse
+        } else {
+            Class::BestEffort
+        };
+        self.check_has_reserved_response_slot(class).unwrap();
 
-        if own_request.deadline == NO_DEADLINE {
-            // Guaranteed response, consume one memory reservation.
+        if class == Class::GuaranteedResponse {
+            // Consume one memory reservation.
             self.response_memory_reservations -= 1;
         }
 
@@ -438,7 +438,7 @@ impl QueueItem<Option<RequestOrResponse>> for Option<RequestOrResponse> {
 /// Requests are handled in a straightforward manner: pushing a request onto the
 /// queue succeeds if there are available request slots, fails if there aren't.
 ///
-/// Response slots are either used by either responses or reserved for expected
+/// Response slots are either used by responses or reserved for expected
 /// responses. Since an (incoming or outgoing) response always results from an
 /// (outgoing or, respectively, incoming) request, it is required to first
 /// reserve a slot for a response; and later push the response into the reserved
