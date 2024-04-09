@@ -4209,6 +4209,17 @@ dependencies = [
 
 [[package]]
 name = "gimli"
+version = "0.26.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "22030e2c5a68ec659fde1e949a745124b48e6fa8b045b7ed5bd1fe4ccc5c4e5d"
+dependencies = [
+ "fallible-iterator 0.2.0",
+ "indexmap 1.9.2",
+ "stable_deref_trait",
+]
+
+[[package]]
+name = "gimli"
 version = "0.27.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ad0a93d233ebf96623465aad4046a8d3aa4da22d4f4beba5388838c8a434bbb4"
@@ -9634,7 +9645,7 @@ dependencies = [
  "registry-canister",
  "serde",
  "tokio",
- "walrus",
+ "walrus 0.19.0",
 ]
 
 [[package]]
@@ -11113,8 +11124,10 @@ dependencies = [
  "ic-test-utilities-compare-dirs",
  "ic-test-utilities-types",
  "ic-types",
+ "ic-wasm",
  "icp-ledger",
  "icrc-ledger-types",
+ "libflate",
  "maplit",
  "pretty_assertions",
  "prost",
@@ -12123,6 +12136,25 @@ dependencies = [
  "subtle",
  "wasm-bindgen",
  "zeroize",
+]
+
+[[package]]
+name = "ic-wasm"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "41a41c085039129d3b18848abdf8e39aeb7efd6b8322cb8bcc4f67a72ae2f143"
+dependencies = [
+ "anyhow",
+ "candid",
+ "clap 4.4.6",
+ "libflate",
+ "rustc-demangle",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "walrus 0.20.3",
+ "wasm-opt",
 ]
 
 [[package]]
@@ -19594,6 +19626,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "walrus"
+version = "0.20.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2c03529cd0c4400a2449f640d2f27cd1b48c3065226d15e26d98e4429ab0adb7"
+dependencies = [
+ "anyhow",
+ "gimli 0.26.2",
+ "id-arena",
+ "leb128",
+ "log",
+ "walrus-macro",
+ "wasm-encoder 0.29.0",
+ "wasmparser 0.80.2",
+]
+
+[[package]]
 name = "walrus-macro"
 version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -19745,6 +19793,15 @@ dependencies = [
 
 [[package]]
 name = "wasm-encoder"
+version = "0.29.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "18c41dbd92eaebf3612a39be316540b8377c871cb9bde6b064af962984912881"
+dependencies = [
+ "leb128",
+]
+
+[[package]]
+name = "wasm-encoder"
 version = "0.38.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0ad2b51884de9c7f4fe2fd1043fccb8dcad4b1e29558146ee57a144d15779f3f"
@@ -19760,6 +19817,46 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "972f97a5d8318f908dded23594188a90bcd09365986b1163e66d70170e5287ae"
 dependencies = [
  "leb128",
+]
+
+[[package]]
+name = "wasm-opt"
+version = "0.113.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "65a2799e08026234b07b44da6363703974e75be21430cef00756bbc438c8ff8a"
+dependencies = [
+ "anyhow",
+ "libc",
+ "strum 0.24.1",
+ "strum_macros 0.24.3",
+ "tempfile",
+ "thiserror",
+ "wasm-opt-cxx-sys",
+ "wasm-opt-sys",
+]
+
+[[package]]
+name = "wasm-opt-cxx-sys"
+version = "0.113.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c8d26f86d1132245e8bcea8fac7f02b10fb885b6696799969c94d7d3c14db5e1"
+dependencies = [
+ "anyhow",
+ "cxx",
+ "cxx-build",
+ "wasm-opt-sys",
+]
+
+[[package]]
+name = "wasm-opt-sys"
+version = "0.113.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "497d069cd3420cdd52154a320b901114a20946878e2de62c670f9d906e472370"
+dependencies = [
+ "anyhow",
+ "cc",
+ "cxx",
+ "cxx-build",
 ]
 
 [[package]]
@@ -19780,6 +19877,12 @@ name = "wasmparser"
 version = "0.77.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b35c86d22e720a07d954ebbed772d01180501afe7d03d464f413bb5f8914a8d6"
+
+[[package]]
+name = "wasmparser"
+version = "0.80.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "449167e2832691a1bff24cde28d2804e90e09586a448c8e76984792c44334a6b"
 
 [[package]]
 name = "wasmparser"
