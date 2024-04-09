@@ -355,7 +355,7 @@ fn purge_records(state: &mut ReplicatedState) {
 
     // Delete records for epoch that are already aggregated
     state.stats.iter_mut().for_each(|(_node_id, records)| {
-        records.retain(|&epoch, _| epoch <= highest_aggregated_epoch)
+        records.retain(|&epoch, _| epoch > highest_aggregated_epoch)
     });
 
     // Delete node_ids that don't have any entries
