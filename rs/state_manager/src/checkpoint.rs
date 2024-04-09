@@ -8,7 +8,7 @@ use ic_config::flag_status::FlagStatus;
 use ic_logger::error;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_snapshots::CanisterSnapshots;
-use ic_replicated_state::page_map::{PageAllocatorFileDescriptor, StorageLayout};
+use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::{
     canister_state::execution_state::WasmBinary, page_map::PageMap, CanisterMetrics, CanisterState,
     ExecutionState, ReplicatedState, SchedulerState, SystemState,
@@ -323,12 +323,7 @@ pub fn load_canister_state<P: ReadPolicy>(
             let starting_time = Instant::now();
             let wasm_memory_layout = canister_layout.vmemory_0();
             let wasm_memory = Memory::new(
-                PageMap::open(
-                    &wasm_memory_layout.base(),
-                    &wasm_memory_layout.existing_overlays()?,
-                    height,
-                    Arc::clone(&fd_factory),
-                )?,
+                PageMap::open(&wasm_memory_layout, height, Arc::clone(&fd_factory))?,
                 execution_state_bits.heap_size,
             );
             durations.insert("wasm_memory", starting_time.elapsed());
@@ -336,12 +331,7 @@ pub fn load_canister_state<P: ReadPolicy>(
             let starting_time = Instant::now();
             let stable_memory_layout = canister_layout.stable_memory();
             let stable_memory = Memory::new(
-                PageMap::open(
-                    &stable_memory_layout.base(),
-                    &stable_memory_layout.existing_overlays()?,
-                    height,
-                    Arc::clone(&fd_factory),
-                )?,
+                PageMap::open(&stable_memory_layout, height, Arc::clone(&fd_factory))?,
                 canister_state_bits.stable_memory_size,
             );
             durations.insert("stable_memory", starting_time.elapsed());
@@ -396,12 +386,8 @@ pub fn load_canister_state<P: ReadPolicy>(
 
     let starting_time = Instant::now();
     let wasm_chunk_store_layout = canister_layout.wasm_chunk_store();
-    let wasm_chunk_store_data = PageMap::open(
-        &wasm_chunk_store_layout.base(),
-        &wasm_chunk_store_layout.existing_overlays()?,
-        height,
-        Arc::clone(&fd_factory),
-    )?;
+    let wasm_chunk_store_data =
+        PageMap::open(&wasm_chunk_store_layout, height, Arc::clone(&fd_factory))?;
     durations.insert("wasm_chunk_store", starting_time.elapsed());
 
     let system_state = SystemState::new_from_checkpoint(

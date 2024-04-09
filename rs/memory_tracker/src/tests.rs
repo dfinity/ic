@@ -1,7 +1,10 @@
 use std::{io::Write, ops::Range};
 
 use ic_logger::replica_logger::no_op_logger;
-use ic_replicated_state::{page_map::TestPageAllocatorFileDescriptorImpl, PageIndex, PageMap};
+use ic_replicated_state::{
+    page_map::{test_utils::base_only_storage_layout, TestPageAllocatorFileDescriptorImpl},
+    PageIndex, PageMap,
+};
 use ic_sys::{PageBytes, PAGE_SIZE};
 use ic_types::Height;
 use libc::c_void;
@@ -36,8 +39,7 @@ fn setup(
     }
     tmpfile.as_file().sync_all().unwrap();
     let mut page_map = PageMap::open(
-        tmpfile.path(),
-        &[],
+        &base_only_storage_layout(tmpfile.path().to_path_buf()),
         Height::new(0),
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
     )
