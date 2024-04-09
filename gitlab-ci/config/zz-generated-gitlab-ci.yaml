@@ -3303,6 +3303,15 @@ statesync-experiment:
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: cdslo
+sync-codeowners:
+  needs: []
+  rules:
+    - changes:
+        - gitlab-ci/src/ci-scripts/sync-codeowners.sh
+        - ".gitlab/CODEOWNERS"
+      if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  script:
+    - "./gitlab-ci/src/ci-scripts/sync-codeowners.sh"
 system-baseline-query-performance-test-nightly:
   artifacts:
     paths:

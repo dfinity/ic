@@ -748,3 +748,13 @@ bazel-test-bare-metal:
           --file_share_ssh_key "$(realpath "$ZH2_FILE_SHARE_KEY_PATH")" \
           --file_share_username ci_interim \
           --ci_mode
+
+sync-codeowners:
+  needs: []
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes:
+        - gitlab-ci/src/ci-scripts/sync-codeowners.sh
+        - .gitlab/CODEOWNERS
+  script:
+    - ./gitlab-ci/src/ci-scripts/sync-codeowners.sh
