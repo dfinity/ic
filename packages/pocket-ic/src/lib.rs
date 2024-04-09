@@ -34,7 +34,7 @@
 //! For more information, see the [README](https://crates.io/crates/pocket-ic).
 //!
 use crate::common::rest::{
-    ApiResponse, BlobCompression, BlobId, CreateInstanceResponse, ExtendedSubnetConfigSet,
+    ApiResponse, BlobCompression, BlobId, CreateInstanceResponse, DtsFlag, ExtendedSubnetConfigSet,
     InstanceId, RawAddCycles, RawCanisterCall, RawCanisterId, RawCanisterResult, RawCycles,
     RawEffectivePrincipal, RawSetStableMemory, RawStableMemory, RawSubnetId, RawTime,
     RawVerifyCanisterSigArg, RawWasmResult, SubnetId, SubnetSpec, Topology,
@@ -195,6 +195,11 @@ impl PocketIcBuilder {
         self.config
             .application
             .push(SubnetSpec::default().with_benchmarking_instruction_config());
+        self
+    }
+
+    pub fn with_dts_flag(mut self, dts_flag: DtsFlag) -> Self {
+        self.config = self.config.with_dts_flag(dts_flag);
         self
     }
 }

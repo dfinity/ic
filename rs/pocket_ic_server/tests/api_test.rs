@@ -4,7 +4,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::PrincipalId;
 use pocket_ic::common::rest::{
     CanisterIdRange as RawCanisterIdRange, CreateHttpGatewayResponse, CreateInstanceResponse,
-    ExtendedSubnetConfigSet, HttpGatewayBackend, HttpGatewayConfig, InstanceId, RawTime,
+    DtsFlag, ExtendedSubnetConfigSet, HttpGatewayBackend, HttpGatewayConfig, InstanceId, RawTime,
     SubnetConfig, SubnetConfigSet, SubnetId,
 };
 use reqwest::blocking::Client;
@@ -169,7 +169,7 @@ fn test_http_gateway() {
     let url = start_server();
     let client = Client::new();
     let (instance_id, _nns_subnet_id, _nns_config, _app_subnet_id, app_config) =
-        create_live_instance(&url, &client);
+        create_live_instance(&url, &client, DtsFlag::Enabled);
 
     // start HTTP gateway
     let http_gateway_url = url.join("http_gateway").unwrap();
@@ -328,7 +328,7 @@ fn setup_and_run_ic_ref_test(test_nns: bool, excluded_tests: Vec<&str>, included
     let url = start_server();
     let client = Client::new();
     let (instance_id, nns_subnet_id, nns_config, app_subnet_id, app_config) =
-        create_live_instance(&url, &client);
+        create_live_instance(&url, &client, DtsFlag::Disabled);
     let endpoint = url.join(&format!("instances/{instance_id}/")).unwrap();
 
     // derive artifact paths
@@ -415,15 +415,18 @@ fn start_server() -> Url {
 fn create_live_instance(
     url: &Url,
     client: &Client,
+    dts_flag: DtsFlag,
 ) -> (InstanceId, SubnetId, SubnetConfig, SubnetId, SubnetConfig) {
     let subnet_config_set = SubnetConfigSet {
         nns: true,
         application: 1,
         ..Default::default()
     };
+    let mut extended_subnet_config_set: ExtendedSubnetConfigSet = subnet_config_set.into();
+    extended_subnet_config_set = extended_subnet_config_set.with_dts_flag(dts_flag);
     let response = client
         .post(url.join("instances").unwrap())
-        .json(&Into::<ExtendedSubnetConfigSet>::into(subnet_config_set))
+        .json(&extended_subnet_config_set)
         .send()
         .unwrap();
     assert_eq!(response.status(), StatusCode::CREATED);
@@ -467,4 +470,22 @@ fn create_live_instance(
         app_subnet_id,
         app_config.clone(),
     )
+}
+
+#[test]
+fn pocket_ic_server_binary_name() {
+    let bin_path = std::env::var_os("POCKET_IC_BIN").expect("Missing PocketIC binary");
+    let new_bin_path = format!("{}_", bin_path.to_str().unwrap());
+    Command::new("cp")
+        .arg(bin_path.clone())
+        .arg(new_bin_path.clone())
+        .output()
+        .unwrap();
+    let out = Command::new(PathBuf::from(new_bin_path))
+        .output()
+        .expect("Failed to start PocketIC binary");
+    let out_str = String::from_utf8(out.stderr).unwrap();
+    assert!(out_str.contains(
+        "The PocketIc server binary name must be \"pocket-ic-server\" (without quotes)."
+    ));
 }

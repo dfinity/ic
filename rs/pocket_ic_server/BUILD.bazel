@@ -1,8 +1,10 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("//bazel:defs.bzl", "rust_ic_test")
 
 package(default_visibility = ["//visibility:public"])
 
 LIB_DEPENDENCIES = [
+    "//rs/canister_sandbox:backend_lib",
     "//rs/config",
     "//rs/boundary_node/ic_boundary",
     "//rs/boundary_node/icx_proxy:icx_proxy_dev",
@@ -93,7 +95,7 @@ rust_library(
     deps = LIB_DEPENDENCIES,
 )
 
-rust_test(
+rust_ic_test(
     name = "pic_test",
     srcs = glob(["src/**"]),
     proc_macro_deps = MACRO_DEPENDENCIES,

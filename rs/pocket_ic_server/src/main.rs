@@ -15,6 +15,11 @@ use axum::{
     Extension, Json,
 };
 use clap::Parser;
+use ic_canister_sandbox_backend_lib::{
+    canister_sandbox_main, compiler_sandbox::compiler_sandbox_main,
+    launcher::sandbox_launcher_main, RUN_AS_CANISTER_SANDBOX_FLAG, RUN_AS_COMPILER_SANDBOX_FLAG,
+    RUN_AS_SANDBOX_LAUNCHER_FLAG,
+};
 use ic_crypto_iccsa::{public_key_bytes_from_der, types::SignatureBytes, verify};
 use ic_crypto_sha2::Sha256;
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
@@ -65,16 +70,38 @@ struct Args {
     ttl: u64,
 }
 
+/// Get the path of the current running binary.
+fn current_binary_path() -> Option<PathBuf> {
+    std::env::args().next().map(PathBuf::from)
+}
+
 fn main() {
-    let rt = tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .worker_threads(16)
-        // we use the tokio rt to dispatch blocking operations in the background
-        .max_blocking_threads(16)
-        .build()
-        .expect("Failed to create tokio runtime!");
-    let runtime_arc = Arc::new(rt);
-    runtime_arc.block_on(async { start(runtime_arc.clone()).await });
+    let current_binary_path = current_binary_path().unwrap();
+    let current_binary_name = current_binary_path.file_name().unwrap().to_str().unwrap();
+    if current_binary_name != "pocket-ic-server" {
+        panic!("The PocketIc server binary name must be \"pocket-ic-server\" (without quotes).")
+    }
+    // Check if `pocket-ic-server` is running in the canister sandbox mode where it waits
+    // for commands from the parent process. This check has to be performed
+    // before the arguments are parsed because the parent process does not pass
+    // all the normally required arguments of `pocket-ic-server`.
+    if std::env::args().any(|arg| arg == RUN_AS_CANISTER_SANDBOX_FLAG) {
+        canister_sandbox_main();
+    } else if std::env::args().any(|arg| arg == RUN_AS_SANDBOX_LAUNCHER_FLAG) {
+        sandbox_launcher_main();
+    } else if std::env::args().any(|arg| arg == RUN_AS_COMPILER_SANDBOX_FLAG) {
+        compiler_sandbox_main();
+    } else {
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .worker_threads(16)
+            // we use the tokio rt to dispatch blocking operations in the background
+            .max_blocking_threads(16)
+            .build()
+            .expect("Failed to create tokio runtime!");
+        let runtime_arc = Arc::new(rt);
+        runtime_arc.block_on(async { start(runtime_arc.clone()).await });
+    }
 }
 
 async fn start(runtime: Arc<Runtime>) {
