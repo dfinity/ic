@@ -27,6 +27,10 @@ use serde_bytes::ByteBuf;
 use std::collections::{HashMap, HashSet};
 use std::time::SystemTime;
 
+fn system_time_to_nanos(t: SystemTime) -> u64 {
+    t.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos() as u64
+}
+
 fn ledger_wasm() -> Vec<u8> {
     ic_test_utilities_load_wasm::load_wasm(
         std::env::var("CARGO_MANIFEST_DIR").unwrap(),
@@ -749,12 +753,16 @@ fn test_query_archived_blocks() {
     let user2 = Principal::from_slice(&[2]);
 
     // mint block
+    let mint_time = system_time_to_nanos(env.time_of_next_round());
     transfer(&env, ledger, MINTER, user1, 2_000_000_000).unwrap();
     // burn block
+    let burn_time = system_time_to_nanos(env.time_of_next_round());
     transfer(&env, ledger, user1, MINTER, 1_000_000_000).unwrap();
     // xfer block
+    let xfer_time = system_time_to_nanos(env.time_of_next_round());
     transfer(&env, ledger, user1, user2, 100_000_000).unwrap();
     // approve block
+    let approve_time = system_time_to_nanos(env.time_of_next_round());
     send_approval(
         &env,
         ledger,
@@ -798,11 +806,6 @@ fn test_query_archived_blocks() {
     )
     .unwrap()
     .unwrap();
-    let time = env
-        .time()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos() as u64;
     assert_eq!(
         block_range
             .blocks
@@ -812,7 +815,7 @@ fn test_query_archived_blocks() {
         vec![
             CandidTransaction {
                 memo: icp_ledger::Memo(0),
-                created_at_time: TimeStamp::from_nanos_since_unix_epoch(time),
+                created_at_time: TimeStamp::from_nanos_since_unix_epoch(mint_time),
                 icrc1_memo: None,
                 operation: Some(CandidOperation::Mint {
                     to: AccountIdentifier::from(user1).to_address(),
@@ -821,7 +824,7 @@ fn test_query_archived_blocks() {
             },
             CandidTransaction {
                 memo: icp_ledger::Memo(0),
-                created_at_time: TimeStamp::from_nanos_since_unix_epoch(time),
+                created_at_time: TimeStamp::from_nanos_since_unix_epoch(burn_time),
                 icrc1_memo: None,
                 operation: Some(CandidOperation::Burn {
                     from: AccountIdentifier::from(user1).to_address(),
@@ -831,7 +834,7 @@ fn test_query_archived_blocks() {
             },
             CandidTransaction {
                 memo: icp_ledger::Memo(0),
-                created_at_time: TimeStamp::from_nanos_since_unix_epoch(time),
+                created_at_time: TimeStamp::from_nanos_since_unix_epoch(xfer_time),
                 icrc1_memo: None,
                 operation: Some(CandidOperation::Transfer {
                     from: AccountIdentifier::from(user1).to_address(),
@@ -843,7 +846,7 @@ fn test_query_archived_blocks() {
             },
             CandidTransaction {
                 memo: icp_ledger::Memo(0),
-                created_at_time: TimeStamp::from_nanos_since_unix_epoch(time),
+                created_at_time: TimeStamp::from_nanos_since_unix_epoch(approve_time),
                 icrc1_memo: None,
                 operation: Some(CandidOperation::Approve {
                     from: AccountIdentifier::from(user2).to_address(),

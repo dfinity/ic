@@ -4,11 +4,15 @@
 //
 // Create the testnet using:
 //
-//   rm -rf test_tmpdir; ict testnet create recovered_mainnet_nns --lifetime-mins 120 --set-required-host-features=dc=zh1 --verbose -- --test_tmpdir=test_tmpdir
+//   test_tmpdir="/tmp/$(whoami)/test_tmpdir"; echo "test_tmpdir=$test_tmpdir"; rm -rf "$test_tmpdir"; ict testnet create recovered_mainnet_nns --lifetime-mins 120 --set-required-host-features=dc=zh1 --verbose -- --test_tmpdir="$test_tmpdir"
 //
 // Make sure to pick a DC in --set-required-host-features=dc=zh1 which is close to
 // where you are running the test from. Shipping state across the Atlantic can double the
 // time it takes to setup the IC with the recovered NNS.
+//
+// If you're running this on a devenv VM make sure to point --test_tmpdir to
+// host-backed storage like /tmp/$(whoami) to avoid the >7GB backup being downloaded to
+// and procecessed on CEPH-backed storage.
 //
 // It will take between 10 to 20 minutes to setup the recovered NNS.
 // Wait for a message like the following before interacting with the recovered NNS:

@@ -561,7 +561,6 @@ pub struct Tick;
 impl Operation for Tick {
     fn compute(&self, pic: &mut PocketIc) -> OpOut {
         for subnet in pic.subnets.read().unwrap().values() {
-            subnet.advance_time(Duration::from_nanos(1));
             subnet.execute_round();
         }
         OpOut::NoOutput
