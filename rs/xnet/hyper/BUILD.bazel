@@ -11,7 +11,7 @@ rust_library(
         "//rs/crypto/tls_interfaces",
         "//rs/interfaces/registry",
         "//rs/xnet/uri",
-        "@crate_index//:hyper",
+        "@crate_index//:hyper_0_14_27",
         "@crate_index//:socket2",
         "@crate_index//:tokio",
     ],

@@ -1,5 +1,5 @@
 {
-  "checksum": "26ad8b0adea16a0914584353a2388efba7ef278e1beba228a4b5e037ab16fb54",
+  "checksum": "6987ca371e5cdc3093d487ca362da47696aecbc600414ab1023c542bf858dac9",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -353,7 +353,7 @@
               "target": "sha1"
             },
             {
-              "id": "smallvec 1.11.0",
+              "id": "smallvec 1.13.2",
               "target": "smallvec"
             },
             {
@@ -877,7 +877,7 @@
               "target": "serde_urlencoded"
             },
             {
-              "id": "smallvec 1.11.0",
+              "id": "smallvec 1.13.2",
               "target": "smallvec"
             },
             {
@@ -3720,7 +3720,7 @@
               "target": "http_body_util"
             },
             {
-              "id": "hyper 1.1.0",
+              "id": "hyper 1.2.0",
               "target": "hyper"
             },
             {
@@ -4440,7 +4440,7 @@
               "target": "http_body_util"
             },
             {
-              "id": "hyper 1.1.0",
+              "id": "hyper 1.2.0",
               "target": "hyper"
             },
             {
@@ -10943,7 +10943,7 @@
               "target": "regalloc2"
             },
             {
-              "id": "smallvec 1.11.0",
+              "id": "smallvec 1.13.2",
               "target": "smallvec"
             },
             {
@@ -11183,7 +11183,7 @@
               "target": "log"
             },
             {
-              "id": "smallvec 1.11.0",
+              "id": "smallvec 1.13.2",
               "target": "smallvec"
             },
             {
@@ -11369,7 +11369,7 @@
               "target": "log"
             },
             {
-              "id": "smallvec 1.11.0",
+              "id": "smallvec 1.13.2",
               "target": "smallvec"
             },
             {
@@ -12326,7 +12326,7 @@
               "target": "phf"
             },
             {
-              "id": "smallvec 1.11.0",
+              "id": "smallvec 1.13.2",
               "target": "smallvec"
             }
           ],
@@ -14574,8 +14574,7 @@
             },
             {
               "id": "http-body-util 0.1.0",
-              "target": "http_body_util",
-              "alias": "http_body_util_0_1_0"
+              "target": "http_body_util"
             },
             {
               "id": "http-serde 2.0.0",
@@ -14591,12 +14590,12 @@
             },
             {
               "id": "hyper 0.14.27",
-              "target": "hyper"
+              "target": "hyper",
+              "alias": "hyper_0_14_27"
             },
             {
-              "id": "hyper 1.1.0",
-              "target": "hyper",
-              "alias": "hyper_1_0_0"
+              "id": "hyper 1.2.0",
+              "target": "hyper"
             },
             {
               "id": "hyper-rustls 0.24.2",
@@ -20446,7 +20445,7 @@
               "target": "rand"
             },
             {
-              "id": "smallvec 1.11.0",
+              "id": "smallvec 1.13.2",
               "target": "smallvec"
             }
           ],
@@ -22650,13 +22649,13 @@
       },
       "license": "MIT"
     },
-    "hyper 1.1.0": {
+    "hyper 1.2.0": {
       "name": "hyper",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/hyper/1.1.0/download",
-          "sha256": "fb5aa53871fc917b1a9ed87b683a5d86db645e23acb32c2e0785a353e522fb75"
+          "url": "https://static.crates.io/crates/hyper/1.2.0/download",
+          "sha256": "186548d73ac615b32a73aafe38fb4f56c0d340e110e5a200bcadbaf2e199263a"
         }
       },
       "targets": [
@@ -22729,6 +22728,10 @@
               "target": "pin_project_lite"
             },
             {
+              "id": "smallvec 1.13.2",
+              "target": "smallvec"
+            },
+            {
               "id": "tokio 1.36.0",
               "target": "tokio"
             },
@@ -22739,8 +22742,8 @@
           ],
           "selects": {}
         },
-        "edition": "2018",
-        "version": "1.1.0"
+        "edition": "2021",
+        "version": "1.2.0"
       },
       "license": "MIT"
     },
@@ -22970,7 +22973,7 @@
               "target": "http"
             },
             {
-              "id": "hyper 1.1.0",
+              "id": "hyper 1.2.0",
               "target": "hyper"
             },
             {
@@ -23213,7 +23216,7 @@
               "target": "http_body"
             },
             {
-              "id": "hyper 1.1.0",
+              "id": "hyper 1.2.0",
               "target": "hyper"
             },
             {
@@ -23294,7 +23297,7 @@
               "target": "http_body_util"
             },
             {
-              "id": "hyper 1.1.0",
+              "id": "hyper 1.2.0",
               "target": "hyper"
             },
             {
@@ -23527,7 +23530,7 @@
               "target": "http_body"
             },
             {
-              "id": "hyper 1.1.0",
+              "id": "hyper 1.2.0",
               "target": "hyper"
             },
             {
@@ -28270,7 +28273,7 @@
               "target": "serde_json"
             },
             {
-              "id": "smallvec 1.11.0",
+              "id": "smallvec 1.13.2",
               "target": "smallvec"
             },
             {
@@ -31701,7 +31704,7 @@
               "target": "http_body_util"
             },
             {
-              "id": "hyper 1.1.0",
+              "id": "hyper 1.2.0",
               "target": "hyper"
             },
             {
@@ -32710,7 +32713,7 @@
               "target": "quanta"
             },
             {
-              "id": "smallvec 1.11.0",
+              "id": "smallvec 1.13.2",
               "target": "smallvec"
             },
             {
@@ -33939,7 +33942,7 @@
               "target": "serde"
             },
             {
-              "id": "smallvec 1.11.0",
+              "id": "smallvec 1.13.2",
               "target": "smallvec"
             },
             {
@@ -36657,7 +36660,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "smallvec 1.11.0",
+              "id": "smallvec 1.13.2",
               "target": "smallvec"
             }
           ],
@@ -36737,7 +36740,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "smallvec 1.11.0",
+              "id": "smallvec 1.13.2",
               "target": "smallvec"
             }
           ],
@@ -38819,7 +38822,7 @@
               "target": "prost"
             },
             {
-              "id": "smallvec 1.11.0",
+              "id": "smallvec 1.13.2",
               "target": "smallvec"
             },
             {
@@ -43295,7 +43298,7 @@
               "target": "slice_group_by"
             },
             {
-              "id": "smallvec 1.11.0",
+              "id": "smallvec 1.13.2",
               "target": "smallvec"
             }
           ],
@@ -43943,7 +43946,7 @@
                 "target": "http_body_util"
               },
               {
-                "id": "hyper 1.1.0",
+                "id": "hyper 1.2.0",
                 "target": "hyper"
               },
               {
@@ -45182,7 +45185,7 @@
               "target": "libsqlite3_sys"
             },
             {
-              "id": "smallvec 1.11.0",
+              "id": "smallvec 1.13.2",
               "target": "smallvec"
             }
           ],
@@ -47078,7 +47081,7 @@
               "target": "selectors"
             },
             {
-              "id": "smallvec 1.11.0",
+              "id": "smallvec 1.13.2",
               "target": "smallvec"
             },
             {
@@ -47735,7 +47738,7 @@
               "target": "servo_arc"
             },
             {
-              "id": "smallvec 1.11.0",
+              "id": "smallvec 1.13.2",
               "target": "smallvec"
             }
           ],
@@ -50439,13 +50442,13 @@
       },
       "license": "Zlib"
     },
-    "smallvec 1.11.0": {
+    "smallvec 1.13.2": {
       "name": "smallvec",
-      "version": "1.11.0",
+      "version": "1.13.2",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/smallvec/1.11.0/download",
-          "sha256": "62bb4feee49fdd9f707ef802e22365a35de4b7b299de4763d44bfea899442ff9"
+          "url": "https://static.crates.io/crates/smallvec/1.13.2/download",
+          "sha256": "3c5e1a9a646d36c3599cd173a41282daf47c44583ad367b8e6837255952e5c67"
         }
       },
       "targets": [
@@ -50466,13 +50469,15 @@
         ],
         "crate_features": {
           "common": [
+            "const_generics",
+            "const_new",
             "union",
             "write"
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.11.0"
+        "version": "1.13.2"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -56255,7 +56260,7 @@
               "target": "sharded_slab"
             },
             {
-              "id": "smallvec 1.11.0",
+              "id": "smallvec 1.13.2",
               "target": "smallvec"
             },
             {
@@ -56479,7 +56484,7 @@
               "target": "rand"
             },
             {
-              "id": "smallvec 1.11.0",
+              "id": "smallvec 1.13.2",
               "target": "smallvec"
             },
             {
@@ -56586,7 +56591,7 @@
               "target": "resolv_conf"
             },
             {
-              "id": "smallvec 1.11.0",
+              "id": "smallvec 1.13.2",
               "target": "smallvec"
             },
             {
@@ -65323,7 +65328,7 @@
     "httptest 0.15.4",
     "humantime 2.1.0",
     "hyper 0.14.27",
-    "hyper 1.1.0",
+    "hyper 1.2.0",
     "hyper-rustls 0.24.2",
     "hyper-rustls 0.26.0",
     "hyper-socks2 0.8.0",
