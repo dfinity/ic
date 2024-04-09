@@ -1,5 +1,5 @@
 use crate::{
-    pagemaptypes_with_num_pages, CheckpointError, CheckpointMetrics, TipRequest,
+    pagemaptypes_with_num_pages, CheckpointError, CheckpointMetrics, HasDowngrade, TipRequest,
     CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN, NUMBER_OF_CHECKPOINT_THREADS,
 };
 use crossbeam_channel::{unbounded, Sender};
@@ -57,7 +57,7 @@ pub(crate) fn make_checkpoint(
     thread_pool: &mut scoped_threadpool::Pool,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     lsmt_storage: FlagStatus,
-) -> Result<(CheckpointLayout<ReadOnly>, ReplicatedState), CheckpointError> {
+) -> Result<(CheckpointLayout<ReadOnly>, ReplicatedState, HasDowngrade), CheckpointError> {
     {
         let _timer = metrics
             .make_checkpoint_step_duration
@@ -78,7 +78,7 @@ pub(crate) fn make_checkpoint(
         })
         .unwrap();
 
-    let cp = {
+    let (cp, has_downgrade) = {
         let _timer = metrics
             .make_checkpoint_step_duration
             .with_label_values(&["tip_to_checkpoint"])
@@ -91,17 +91,18 @@ pub(crate) fn make_checkpoint(
                 sender: send,
             })
             .unwrap();
-        let cp = recv.recv().unwrap()?;
+        let (cp, has_downgrade) = recv.recv().unwrap()?;
         // With lsmt storage, ResetTipAndMerge happens later (after manifest).
         if lsmt_storage == FlagStatus::Disabled {
             tip_channel
                 .send(TipRequest::ResetTipAndMerge {
                     checkpoint_layout: cp.clone(),
                     pagemaptypes_with_num_pages: pagemaptypes_with_num_pages(state),
+                    is_initializing_tip: false,
                 })
                 .unwrap();
         }
-        cp
+        (cp, has_downgrade)
     };
 
     if lsmt_storage == FlagStatus::Disabled {
@@ -130,7 +131,7 @@ pub(crate) fn make_checkpoint(
         )?
     };
 
-    Ok((cp, state))
+    Ok((cp, state, has_downgrade))
 }
 
 /// Calls [load_checkpoint] with a newly created thread pool.

@@ -16,7 +16,7 @@ use crate::{
         chunkable::cache::StateSyncCache,
         types::{FileGroupChunks, Manifest, MetaManifest},
     },
-    tip::{spawn_tip_thread, PageMapToFlush, TipRequest},
+    tip::{spawn_tip_thread, HasDowngrade, PageMapToFlush, TipRequest},
 };
 use crossbeam_channel::{unbounded, Sender};
 use ic_base_types::CanisterId;
@@ -855,6 +855,7 @@ fn initialize_tip(
         .send(TipRequest::ResetTipAndMerge {
             checkpoint_layout,
             pagemaptypes_with_num_pages: pagemaptypes_with_num_pages(&snapshot.state),
+            is_initializing_tip: true,
         })
         .unwrap();
     ReplicatedState::clone(&snapshot.state)
@@ -2320,8 +2321,8 @@ impl StateManagerImpl {
                 self.lsmt_status,
             )
         };
-        let (cp_layout, checkpointed_state) = match result {
-            Ok(checkpointed_state) => checkpointed_state,
+        let (cp_layout, checkpointed_state, has_downgrade) = match result {
+            Ok(response) => response,
             Err(CheckpointError::AlreadyExists(_)) => {
                 warn!(
                     self.log,
@@ -2359,6 +2360,8 @@ impl StateManagerImpl {
                 (
                     self.state_layout.checkpoint(height).unwrap(),
                     checkpointed_state,
+                    // HasDowngrade::Yes is the conservative choice, opting for full Manifest computation.
+                    HasDowngrade::Yes,
                 )
             }
             Err(err) => fatal!(
@@ -2380,7 +2383,7 @@ impl StateManagerImpl {
 
         // On the NNS subnet we never allow incremental manifest computation
         let is_nns = self.own_subnet_id == state.metadata.network_topology.nns_subnet_id;
-        let manifest_delta = if is_nns {
+        let manifest_delta = if is_nns || has_downgrade == HasDowngrade::Yes {
             None
         } else {
             let _timer = self
@@ -2422,6 +2425,7 @@ impl StateManagerImpl {
                 vec![TipRequest::ResetTipAndMerge {
                     checkpoint_layout: checkpoint_layout.clone(),
                     pagemaptypes_with_num_pages: pagemaptypes_with_num_pages(state),
+                    is_initializing_tip: false,
                 }]
             } else {
                 vec![TipRequest::DefragTip {
