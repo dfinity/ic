@@ -487,6 +487,55 @@ pub mod get_deployed_sns_by_proposal_id_response {
         DeployedSns(super::DeployedSns),
     }
 }
+/// The argument for get_wasm, which consists of the WASM hash to be retrieved.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetWasmMetadataRequest {
+    #[prost(bytes = "vec", optional, tag = "1")]
+    pub hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+}
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct MetadataSection {
+    /// First part of the section. Normally, this is either "icp:private" or "icp:public".
+    #[prost(string, optional, tag = "1")]
+    pub visibility: ::core::option::Option<::prost::alloc::string::String>,
+    /// Second part of the section. For example, this might be "candid:service".
+    #[prost(string, optional, tag = "2")]
+    pub name: ::core::option::Option<::prost::alloc::string::String>,
+    /// Last part of the section, containing its raw contents.
+    #[prost(bytes = "vec", optional, tag = "3")]
+    pub contents: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+}
+/// The response for get_wasm, which returns a WASM if it is found, or None.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetWasmMetadataResponse {
+    #[prost(oneof = "get_wasm_metadata_response::Result", tags = "1, 2")]
+    pub result: ::core::option::Option<get_wasm_metadata_response::Result>,
+}
+/// Nested message and enum types in `GetWasmMetadataResponse`.
+pub mod get_wasm_metadata_response {
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct Ok {
+        #[prost(message, repeated, tag = "1")]
+        pub sections: ::prost::alloc::vec::Vec<super::MetadataSection>,
+    }
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Result {
+        #[prost(message, tag = "1")]
+        Ok(Ok),
+        #[prost(message, tag = "2")]
+        Error(super::SnsWasmError),
+    }
+}
 /// The type of canister a particular WASM is intended to be installed on.
 #[derive(
     candid::CandidType,

@@ -4988,13 +4988,14 @@ dependencies = [
 
 [[package]]
 name = "ic-wasm"
-version = "0.7.0"
+version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9d2aa0d7deeb38f18fcec6e4c25c5004422e2e9f8c3fbad15bb795ebac37aca6"
+checksum = "41a41c085039129d3b18848abdf8e39aeb7efd6b8322cb8bcc4f67a72ae2f143"
 dependencies = [
  "anyhow",
  "candid",
  "clap 4.4.8",
+ "libflate",
  "rustc-demangle",
  "serde",
  "serde_json",
