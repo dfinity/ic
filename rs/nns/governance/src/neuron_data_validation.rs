@@ -452,10 +452,7 @@ impl CardinalityAndRangeValidator for SubaccountIndexValidator {
         neuron: &Neuron,
     ) -> Option<ValidationIssue> {
         let neuron_id = neuron.id();
-        let subaccount = match neuron.subaccount() {
-            Ok(subaccount) => subaccount,
-            Err(error) => return Some(ValidationIssue::NeuronStoreError(error.to_string())),
-        };
+        let subaccount = neuron.subaccount();
         let subaccount_in_index = with_stable_neuron_indexes(|indexes| {
             indexes.subaccount().contains_entry(neuron_id, &subaccount)
         });
@@ -746,12 +743,16 @@ mod tests {
 
     #[test]
     fn test_finish_validation() {
-        let neuron = Neuron {
-            id: NeuronId { id: 1 },
-            account: [1u8; 32].to_vec(),
-            controller: Some(PrincipalId::new_user_test_id(1)),
-            ..Default::default()
-        };
+        let neuron = NeuronBuilder::new(
+            NeuronId { id: 1 },
+            Subaccount::try_from([1u8; 32].as_ref()).unwrap(),
+            PrincipalId::new_user_test_id(1),
+            DissolveStateAndAge::DissolvingOrDissolved {
+                when_dissolved_timestamp_seconds: 1,
+            },
+            123_456_789,
+        )
+        .build();
         let neuron_store = NeuronStore::new(btreemap! {neuron.id().id => neuron});
         let mut validation = NeuronDataValidator::new();
 

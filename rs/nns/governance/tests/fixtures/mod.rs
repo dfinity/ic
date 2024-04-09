@@ -55,6 +55,15 @@ pub fn principal(i: u64) -> PrincipalId {
     PrincipalId::try_from(format!("SID{}", i).as_bytes().to_vec()).unwrap()
 }
 
+/// Constructs a test neuron's account.
+pub fn account(i: u64) -> Vec<u8> {
+    let mut account = vec![0; 32];
+    for (destination, data) in account.iter_mut().zip(i.to_le_bytes().iter().cycle()) {
+        *destination = *data;
+    }
+    account
+}
+
 // Constructs a simple motion proposal for tests where the content does not
 // matter.
 pub fn new_motion_proposal() -> Proposal {
@@ -188,7 +197,6 @@ pub struct NeuronBuilder {
     kyc_verified: bool,
     not_for_profit: bool,
     joined_community_fund: Option<u64>,
-    do_not_create_subaccount: bool,
     spawn_at_timestamp_seconds: Option<u64>,
     neuron_type: Option<i32>,
 }
@@ -214,7 +222,6 @@ impl From<Neuron> for NeuronBuilder {
             kyc_verified: neuron.kyc_verified,
             not_for_profit: neuron.not_for_profit,
             joined_community_fund: neuron.joined_community_fund_timestamp_seconds,
-            do_not_create_subaccount: false,
             spawn_at_timestamp_seconds: None,
             neuron_type: neuron.neuron_type,
         }
@@ -238,7 +245,6 @@ impl NeuronBuilder {
             kyc_verified: true,
             not_for_profit: false,
             joined_community_fund: None,
-            do_not_create_subaccount: false,
             spawn_at_timestamp_seconds: None,
             neuron_type: None,
         }
@@ -260,7 +266,6 @@ impl NeuronBuilder {
             kyc_verified: true,
             not_for_profit: false,
             joined_community_fund: None,
-            do_not_create_subaccount: false,
             spawn_at_timestamp_seconds: None,
             neuron_type: None,
         }
@@ -349,11 +354,6 @@ impl NeuronBuilder {
         self
     }
 
-    pub fn do_not_create_subaccount(mut self) -> Self {
-        self.do_not_create_subaccount = true;
-        self
-    }
-
     pub fn set_spawn_at_timestamp_seconds(
         mut self,
         spawn_at_timestamp_seconds: Option<u64>,
@@ -368,20 +368,13 @@ impl NeuronBuilder {
     }
 
     pub fn create(self, now: u64, ledger: &mut LedgerBuilder) -> Neuron {
-        let subaccount = match self.do_not_create_subaccount {
-            false => {
-                let subaccount = Self::subaccount(self.owner, self.ident);
-                ledger.add_account(neuron_subaccount(subaccount), self.stake);
-                subaccount.to_vec()
-            }
-            true => {
-                vec![]
-            }
-        };
+        let subaccount = Self::subaccount(self.owner, self.ident);
+        ledger.add_account(neuron_subaccount(subaccount), self.stake);
+        subaccount.to_vec();
 
         Neuron {
             id: Some(NeuronId { id: self.ident }),
-            account: subaccount,
+            account: subaccount.to_vec(),
             controller: self.owner,
             hot_keys: self.hot_keys,
             cached_neuron_stake_e8s: self.stake,

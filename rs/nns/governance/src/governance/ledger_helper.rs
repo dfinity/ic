@@ -25,8 +25,7 @@ impl BurnNeuronFeesOperation {
         neuron_store: &mut NeuronStore,
         now_seconds: u64,
     ) -> Result<(), GovernanceError> {
-        let subaccount =
-            neuron_store.with_neuron(&self.neuron_id, |neuron| neuron.subaccount())??;
+        let subaccount = neuron_store.with_neuron(&self.neuron_id, |neuron| neuron.subaccount())?;
 
         // If the ledger call fails, it's recoverable since nothing else has been changed.
         ledger
@@ -90,9 +89,9 @@ impl NeuronStakeTransferOperation {
         // Get the subaccounts of source and target. Any errors are recoverable since no changes have been
         // made to the neurons.
         let source_subaccount =
-            neuron_store.with_neuron(&self.source_neuron_id, |neuron| neuron.subaccount())??;
+            neuron_store.with_neuron(&self.source_neuron_id, |neuron| neuron.subaccount())?;
         let target_subaccount =
-            neuron_store.with_neuron(&self.target_neuron_id, |neuron| neuron.subaccount())??;
+            neuron_store.with_neuron(&self.target_neuron_id, |neuron| neuron.subaccount())?;
 
         // This is the first mutation step and therefore recoverable if it fails.
         neuron_store.with_neuron_mut(&self.source_neuron_id, |source_neuron| {
