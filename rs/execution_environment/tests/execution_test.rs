@@ -1387,56 +1387,6 @@ fn test_update_settings_with_different_controllers_amount() {
 }
 
 #[test]
-fn reserved_balance_limit_is_initialized_after_replica_upgrade() {
-    let subnet_config = SubnetConfig::new(SubnetType::Application);
-    let env = StateMachine::new_with_config(StateMachineConfig::new(
-        subnet_config,
-        HypervisorConfig::default(),
-    ));
-
-    let initial_cycles = Cycles::new(200 * B);
-
-    let canister_id = create_universal_canister_with_cycles(&env, None, initial_cycles);
-
-    // Clear the reserved balance limit to simulate a canister before the
-    // replica upgrade.
-    {
-        let mut state = env.get_latest_state().as_ref().clone();
-        let canister = state.canister_state_mut(&canister_id).unwrap();
-        assert_eq!(
-            canister.system_state.reserved_balance_limit(),
-            Some(CyclesAccountManagerConfig::application_subnet().default_reserved_balance_limit)
-        );
-        canister
-            .system_state
-            .clear_reserved_balance_limit_for_testing();
-        assert_eq!(canister.system_state.reserved_balance_limit(), None);
-        env.replace_canister_state(Arc::new(state), canister_id);
-    }
-
-    assert_eq!(
-        env.get_latest_state()
-            .canister_state(&canister_id)
-            .unwrap()
-            .system_state
-            .reserved_balance_limit(),
-        None
-    );
-
-    // Execute one round that will initialize the reserved balance limit.
-    env.tick();
-
-    assert_eq!(
-        env.get_latest_state()
-            .canister_state(&canister_id)
-            .unwrap()
-            .system_state
-            .reserved_balance_limit(),
-        Some(CyclesAccountManagerConfig::application_subnet().default_reserved_balance_limit),
-    )
-}
-
-#[test]
 fn execution_observes_oversize_messages() {
     let sm = StateMachine::new();
 
