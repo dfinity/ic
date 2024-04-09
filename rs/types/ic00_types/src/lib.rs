@@ -954,6 +954,14 @@ pub enum WasmMemoryPersistence {
     Replace,
 }
 
+impl WasmMemoryPersistence {
+    pub fn iter() -> Iter<'static, WasmMemoryPersistence> {
+        static MODES: [WasmMemoryPersistence; 2] =
+            [WasmMemoryPersistence::Keep, WasmMemoryPersistence::Replace];
+        MODES.iter()
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, Eq, Hash, CandidType, Copy, Default)]
 /// Struct used for encoding/decoding:
 /// `record {
@@ -1225,14 +1233,11 @@ impl From<WasmMemoryPersistence> for WasmMemoryPersistenceProto {
 
 #[test]
 fn wasm_persistence_round_trip() {
-    fn wasm_persistence_round_trip_aux(persistence: WasmMemoryPersistence) {
-        let encoded: WasmMemoryPersistenceProto = persistence.into();
+    for persistence in WasmMemoryPersistence::iter() {
+        let encoded: WasmMemoryPersistenceProto = (*persistence).into();
         let decoded = WasmMemoryPersistence::try_from(encoded).unwrap();
-        assert_eq!(persistence, decoded);
+        assert_eq!(*persistence, decoded);
     }
-
-    wasm_persistence_round_trip_aux(WasmMemoryPersistence::Keep);
-    wasm_persistence_round_trip_aux(WasmMemoryPersistence::Replace);
 
     WasmMemoryPersistence::try_from(WasmMemoryPersistenceProto::Unspecified).unwrap_err();
 }
@@ -1252,69 +1257,11 @@ fn canister_install_mode_round_trip() {
 
 #[test]
 fn canister_install_mode_v2_round_trip() {
-    fn canister_install_mode_v2_round_trip_aux(mode: CanisterInstallModeV2) {
-        let encoded: CanisterInstallModeV2Proto = (&mode).into();
+    for mode in CanisterInstallModeV2::iter() {
+        let encoded: CanisterInstallModeV2Proto = mode.into();
         let decoded = CanisterInstallModeV2::try_from(encoded).unwrap();
-        assert_eq!(mode, decoded);
+        assert_eq!(*mode, decoded);
     }
-
-    canister_install_mode_v2_round_trip_aux(CanisterInstallModeV2::Install);
-    canister_install_mode_v2_round_trip_aux(CanisterInstallModeV2::Reinstall);
-    canister_install_mode_v2_round_trip_aux(CanisterInstallModeV2::Upgrade(None));
-    canister_install_mode_v2_round_trip_aux(CanisterInstallModeV2::Upgrade(Some(
-        CanisterUpgradeOptions {
-            skip_pre_upgrade: None,
-            wasm_memory_persistence: None,
-        },
-    )));
-    canister_install_mode_v2_round_trip_aux(CanisterInstallModeV2::Upgrade(Some(
-        CanisterUpgradeOptions {
-            skip_pre_upgrade: None,
-            wasm_memory_persistence: Some(WasmMemoryPersistence::Keep),
-        },
-    )));
-    canister_install_mode_v2_round_trip_aux(CanisterInstallModeV2::Upgrade(Some(
-        CanisterUpgradeOptions {
-            skip_pre_upgrade: None,
-            wasm_memory_persistence: Some(WasmMemoryPersistence::Replace),
-        },
-    )));
-    canister_install_mode_v2_round_trip_aux(CanisterInstallModeV2::Upgrade(Some(
-        CanisterUpgradeOptions {
-            skip_pre_upgrade: Some(false),
-            wasm_memory_persistence: None,
-        },
-    )));
-    canister_install_mode_v2_round_trip_aux(CanisterInstallModeV2::Upgrade(Some(
-        CanisterUpgradeOptions {
-            skip_pre_upgrade: Some(false),
-            wasm_memory_persistence: Some(WasmMemoryPersistence::Keep),
-        },
-    )));
-    canister_install_mode_v2_round_trip_aux(CanisterInstallModeV2::Upgrade(Some(
-        CanisterUpgradeOptions {
-            skip_pre_upgrade: Some(false),
-            wasm_memory_persistence: Some(WasmMemoryPersistence::Replace),
-        },
-    )));
-    canister_install_mode_v2_round_trip_aux(CanisterInstallModeV2::Upgrade(Some(
-        CanisterUpgradeOptions {
-            skip_pre_upgrade: Some(true),
-            wasm_memory_persistence: None,
-        },
-    )));
-    canister_install_mode_v2_round_trip_aux(CanisterInstallModeV2::Upgrade(Some(
-        CanisterUpgradeOptions {
-            skip_pre_upgrade: Some(true),
-            wasm_memory_persistence: Some(WasmMemoryPersistence::Keep),
-        },
-    )));
-    canister_install_mode_v2_round_trip_aux(CanisterInstallModeV2::Upgrade(Some(
-        CanisterUpgradeOptions {
-            skip_pre_upgrade: Some(true),
-            wasm_memory_persistence: Some(WasmMemoryPersistence::Replace),
-        },
-    )));
 }
 
 impl Payload<'_> for CanisterStatusResultV2 {}
