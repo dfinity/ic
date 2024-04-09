@@ -632,6 +632,7 @@ pub struct StateMachineBuilder {
     is_root_subnet: bool,
     seq_no: u8,
     with_extra_canister_range: Option<std::ops::RangeInclusive<CanisterId>>,
+    dts: bool,
 }
 
 impl StateMachineBuilder {
@@ -662,6 +663,7 @@ impl StateMachineBuilder {
             is_root_subnet: false,
             seq_no: 0,
             with_extra_canister_range: None,
+            dts: false,
         }
     }
 
@@ -801,6 +803,11 @@ impl StateMachineBuilder {
         }
     }
 
+    /// Only use from pocket-ic-server binary.
+    pub fn with_dts(self) -> Self {
+        Self { dts: true, ..self }
+    }
+
     pub fn build_internal(self) -> StateMachine {
         StateMachine::setup_from_dir(
             self.state_dir,
@@ -824,6 +831,7 @@ impl StateMachineBuilder {
             self.lsmt_override,
             self.is_root_subnet,
             self.seq_no,
+            self.dts,
         )
     }
 
@@ -1047,6 +1055,7 @@ impl StateMachine {
         lsmt_override: Option<LsmtConfig>,
         is_root_subnet: bool,
         seq_no: u8,
+        dts: bool,
     ) -> Self {
         let replica_logger = replica_logger();
 
@@ -1084,9 +1093,10 @@ impl StateMachine {
             sm_config.lsmt_config = lsmt_override;
         }
 
-        if !(std::env::var("SANDBOX_BINARY").is_ok()
-            && std::env::var("LAUNCHER_BINARY").is_ok()
-            && std::env::var("COMPILER_BINARY").is_ok())
+        if !(dts
+            || (std::env::var("SANDBOX_BINARY").is_ok()
+                && std::env::var("LAUNCHER_BINARY").is_ok()
+                && std::env::var("COMPILER_BINARY").is_ok()))
         {
             hypervisor_config.canister_sandboxing_flag = FlagStatus::Disabled;
             hypervisor_config.deterministic_time_slicing = FlagStatus::Disabled;

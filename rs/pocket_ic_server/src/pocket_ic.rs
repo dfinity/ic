@@ -33,9 +33,9 @@ use ic_types::{
 use ic_validator_ingress_message::StandaloneIngressSigVerifier;
 use itertools::Itertools;
 use pocket_ic::common::rest::{
-    self, BinaryBlob, BlobCompression, ExtendedSubnetConfigSet, RawAddCycles, RawCanisterCall,
-    RawEffectivePrincipal, RawSetStableMemory, SubnetInstructionConfig, SubnetKind, SubnetSpec,
-    Topology,
+    self, BinaryBlob, BlobCompression, DtsFlag, ExtendedSubnetConfigSet, RawAddCycles,
+    RawCanisterCall, RawEffectivePrincipal, RawSetStableMemory, SubnetInstructionConfig,
+    SubnetKind, SubnetSpec, Topology,
 };
 use rand::rngs::StdRng;
 use rand::Rng;
@@ -84,6 +84,7 @@ impl PocketIc {
                     SubnetKind::System,
                     spec.get_state_path(),
                     spec.get_instruction_config(),
+                    spec.get_dts_flag(),
                 )
             });
             let app = subnet_configs.application.iter().map(|spec| {
@@ -91,6 +92,7 @@ impl PocketIc {
                     SubnetKind::Application,
                     spec.get_state_path(),
                     spec.get_instruction_config(),
+                    spec.get_dts_flag(),
                 )
             });
             sys.chain(app)
@@ -107,7 +109,7 @@ impl PocketIc {
 
         let ii_subnet_split = subnet_configs.ii.is_some();
 
-        for (subnet_kind, subnet_state_dir, instruction_config) in
+        for (subnet_kind, subnet_state_dir, instruction_config, dts_flag) in
             fixed_range_subnets.into_iter().chain(flexible_subnets)
         {
             let RangeConfig {
@@ -129,6 +131,7 @@ impl PocketIc {
                 subnet_kind,
                 state_dir,
                 instruction_config,
+                dts_flag,
             });
         }
 
@@ -146,6 +149,7 @@ impl PocketIc {
                 subnet_kind,
                 state_dir,
                 instruction_config,
+                dts_flag,
             },
         ) in subnet_config_info.into_iter().enumerate()
         {
@@ -163,6 +167,10 @@ impl PocketIc {
                     .max_instructions_per_message_without_dts = instruction_limit;
                 hypervisor_config.max_query_call_graph_instructions = instruction_limit;
             }
+            // bound PocketIc resource consumption
+            hypervisor_config.embedders_config.min_sandbox_count = 0;
+            hypervisor_config.embedders_config.max_sandbox_count = 64;
+            hypervisor_config.embedders_config.max_sandbox_idle_time = Duration::from_secs(30);
             let sm_config = StateMachineConfig::new(subnet_config, hypervisor_config);
             let subnet_size = subnet_size(subnet_kind);
             let mut builder = StateMachineBuilder::new()
@@ -174,6 +182,10 @@ impl PocketIc {
                 .with_registry_data_provider(registry_data_provider.clone())
                 .with_multisubnet_ecdsa_key()
                 .with_use_cost_scaling_flag(true);
+
+            if let DtsFlag::Enabled = dts_flag {
+                builder = builder.with_dts();
+            };
 
             if subnet_kind == SubnetKind::NNS {
                 builder = builder.with_root_subnet_config();
@@ -491,6 +503,7 @@ struct SubnetConfigInfo {
     pub subnet_kind: SubnetKind,
     pub state_dir: Option<TempDir>,
     pub instruction_config: SubnetInstructionConfig,
+    pub dts_flag: DtsFlag,
 }
 
 // ---------------------------------------------------------------------------------------- //
@@ -616,7 +629,6 @@ impl Operation for ExecuteIngressMessage {
                         let max_rounds = 100;
                         for _i in 0..max_rounds {
                             for subnet_ in pic.subnets.read().unwrap().values() {
-                                subnet_.advance_time(Duration::from_nanos(1));
                                 subnet_.execute_round();
                             }
                             match subnet.ingress_status(&msg_id) {

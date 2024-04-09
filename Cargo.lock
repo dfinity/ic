@@ -15249,6 +15249,7 @@ dependencies = [
  "hyper-util",
  "ic-agent",
  "ic-boundary",
+ "ic-canister-sandbox-backend-lib",
  "ic-cdk",
  "ic-config",
  "ic-crypto-iccsa",

@@ -347,8 +347,8 @@ impl ApiState {
 
     pub async fn add_instance(&self, instance: PocketIc) -> InstanceId {
         let mut instances = self.instances.write().await;
-        instances.push(Mutex::new(InstanceState::Available(instance)));
         let mut progress_threads = self.progress_threads.write().await;
+        instances.push(Mutex::new(InstanceState::Available(instance)));
         progress_threads.push(Mutex::new(None));
         instances.len() - 1
     }
