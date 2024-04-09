@@ -2880,3 +2880,14 @@ impl PayloadBuilder {
         self.ingress_messages.iter().map(|i| i.id()).collect()
     }
 }
+
+// This test should panic on a critical error due to non-monotone timestamps.
+#[should_panic]
+#[test]
+fn critical_error_test() {
+    let sm = StateMachineBuilder::new().build();
+    sm.set_time(SystemTime::UNIX_EPOCH);
+    sm.tick();
+    sm.set_time(SystemTime::UNIX_EPOCH);
+    sm.tick();
+}
