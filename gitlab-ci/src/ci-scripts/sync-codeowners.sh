@@ -9,7 +9,7 @@ outputFilePath=".github/CODEOWNERS"
 # sed "s/@dfinity-lab\/teams/@dfinity/g" $inputFilePath > $outputFilePath
 
 # for now, only include teams we want to test in the sandbox org
-grep -E "^.*\/\s*@dfinity-lab/teams/idx$" $inputFilePath | sed "s/@dfinity-lab\/teams/@dfinity-sandbox/g" > $outputFilePath
+grep -E "^.*\/\s*@dfinity-lab/teams/idx$" $inputFilePath | sed "s/@dfinity-lab\/teams/@dfinity-sandbox/g" >$outputFilePath
 
 git add $outputFilePath
 # If there were changes commit them with the IDX GITLAB bot
