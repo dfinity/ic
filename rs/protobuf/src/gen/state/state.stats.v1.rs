@@ -7,8 +7,8 @@ pub struct Stats {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct QueryStats {
-    #[prost(uint64, tag = "1")]
-    pub highest_aggregated_epoch: u64,
+    #[prost(uint64, optional, tag = "1")]
+    pub highest_aggregated_epoch: ::core::option::Option<u64>,
     #[prost(message, repeated, tag = "2")]
     pub query_stats: ::prost::alloc::vec::Vec<QueryStatsInner>,
 }
