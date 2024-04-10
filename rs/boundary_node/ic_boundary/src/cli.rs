@@ -117,7 +117,7 @@ pub struct ListenConfig {
     #[clap(long, default_value = "1200", value_parser = clap::value_parser!(u64).range(10..))]
     pub shed_target_latency: u64,
 
-    /// How frequently to send TCP/HTTP2 keepalives, in seconds
+    /// How frequently to send TCP/HTTP2 keepalives, in seconds. Affects both incoming and outgoing connections.
     #[clap(long, default_value = "15")]
     pub http_keepalive: u64,
 
@@ -126,7 +126,7 @@ pub struct ListenConfig {
     pub http_keepalive_timeout: u64,
 
     /// How long to keep idle outgoing connections open, in seconds
-    #[clap(long, default_value = "60")]
+    #[clap(long, default_value = "120")]
     pub http_idle_timeout: u64,
 
     /// Backlog of incoming connections to set on the listening socket.
