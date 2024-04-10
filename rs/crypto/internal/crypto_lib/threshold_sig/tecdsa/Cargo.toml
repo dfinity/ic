@@ -18,6 +18,8 @@ ic-crypto-secrets-containers = { path = "../../../../secrets_containers" }
 ic-types = { path = "../../../../../types/types" }
 k256 = { workspace = true }
 p256 = { workspace = true }
+curve25519-dalek = { version = "^4.1.2", features = ["group", "precomputed-tables"] }
+group = "0.13"
 zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
 rand = "0.8"
 hex = { workspace = true }

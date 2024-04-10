@@ -1,5 +1,5 @@
 {
-  "checksum": "3e1fadca32dc02ecb4a9474ec79488b5688fad4a79e6856adb23705774e6675f",
+  "checksum": "856e76546c91edf284728233d7ca1812b6c4f05b1395ab6a252d99a6e5a5f788",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -12562,7 +12562,9 @@
             "alloc",
             "default",
             "digest",
+            "group",
             "precomputed-tables",
+            "rand_core",
             "zeroize"
           ],
           "selects": {}
@@ -12580,6 +12582,14 @@
             {
               "id": "digest 0.10.7",
               "target": "digest"
+            },
+            {
+              "id": "group 0.13.0",
+              "target": "group"
+            },
+            {
+              "id": "rand_core 0.6.4",
+              "target": "rand_core"
             },
             {
               "id": "subtle 2.5.0",
@@ -14575,6 +14585,10 @@
             {
               "id": "glob 0.3.1",
               "target": "glob"
+            },
+            {
+              "id": "group 0.13.0",
+              "target": "group"
             },
             {
               "id": "h2 0.3.26",
@@ -20574,7 +20588,8 @@
         ],
         "crate_features": {
           "common": [
-            "alloc"
+            "alloc",
+            "default"
           ],
           "selects": {}
         },
@@ -65543,6 +65558,7 @@
     "get_if_addrs 0.5.3",
     "getrandom 0.2.10",
     "glob 0.3.1",
+    "group 0.13.0",
     "h2 0.3.26",
     "hashlink 0.8.3",
     "hex 0.4.3",

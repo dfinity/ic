@@ -26,16 +26,21 @@ mod tests;
 /// Extracts the master public key from the given `idkg_transcript`.
 fn get_tecdsa_master_public_key_from_internal_transcript(
     idkg_transcript_internal: &IDkgTranscriptInternal,
-) -> MasterEcdsaPublicKey {
+) -> Result<MasterEcdsaPublicKey, MasterPublicKeyExtractionError> {
     let pub_key = idkg_transcript_internal.constant_term();
     let alg = match pub_key.curve_type() {
         EccCurveType::K256 => AlgorithmId::EcdsaSecp256k1,
         EccCurveType::P256 => AlgorithmId::EcdsaP256,
+        x => {
+            return Err(MasterPublicKeyExtractionError::UnsupportedAlgorithm(
+                format!("ECDSA does not support curve {:?}", x),
+            ))
+        }
     };
-    MasterEcdsaPublicKey {
+    Ok(MasterEcdsaPublicKey {
         algorithm_id: alg,
         public_key: pub_key.serialize(),
-    }
+    })
 }
 
 pub fn sign_share<C: CspThresholdEcdsaSigner>(
@@ -204,9 +209,7 @@ pub fn get_tecdsa_master_public_key(
                     .map_err(|e| {
                         MasterPublicKeyExtractionError::SerializationError(format!("{:?}", e))
                     })?;
-                Ok(get_tecdsa_master_public_key_from_internal_transcript(
-                    &internal_transcript,
-                ))
+                get_tecdsa_master_public_key_from_internal_transcript(&internal_transcript)
             }
             Masked(_) => Err(MasterPublicKeyExtractionError::CannotExtractFromMasked),
         }

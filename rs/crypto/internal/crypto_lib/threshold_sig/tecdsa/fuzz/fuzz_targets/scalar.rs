@@ -16,6 +16,7 @@ fn prime_for(curve: EccCurveType) -> BigUint {
             16,
         )
         .unwrap(),
+        _ => unimplemented!(),
     }
 }
 

@@ -11,7 +11,7 @@ fn key_derivation(c: &mut Criterion) {
     for curve in [EccCurveType::K256] {
         let algorithm_id = match curve {
             EccCurveType::K256 => AlgorithmId::EcdsaSecp256k1,
-            EccCurveType::P256 => unreachable!(),
+            _ => unreachable!(),
         };
 
         let sk = EccScalar::random(curve, &mut rng);
