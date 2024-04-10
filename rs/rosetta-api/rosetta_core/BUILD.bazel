@@ -3,11 +3,10 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
-    "//rs/canister_client",
     "//packages/icrc-ledger-types:icrc_ledger_types",
-    "//rs/canister_client/sender",
     "//rs/crypto/ecdsa_secp256k1",
     "//rs/types/types",
+    "//rs/crypto/ed25519",
     "@crate_index//:anyhow",
     "@crate_index//:serde",
     "@crate_index//:rand",

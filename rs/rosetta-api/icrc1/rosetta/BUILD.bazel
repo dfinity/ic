@@ -65,7 +65,6 @@ DEV_DEPENDENCIES = [
     "//rs/rosetta-api/icrc1/rosetta/client:ic-icrc-rosetta-client",
     "//rs/rosetta-api/icrc1/rosetta/runner:ic-icrc-rosetta-runner",
     "//rs/rosetta-api/test_utils",
-    "//rs/canister_client/sender",
     ":ic-icrc-rosetta",
     "@crate_index//:futures",
     "@crate_index//:ring",

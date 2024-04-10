@@ -55,7 +55,7 @@ async fn test_add_hotkey(
 ) -> Result<(), ic_rosetta_api::models::Error> {
     let _neuron = &neuron_info.neuron;
     let acc = neuron_info.account_id;
-    let key_pair = Arc::new(neuron_info.key_pair);
+    let key_pair = Arc::new(neuron_info.key_pair.clone());
     let neuron_index = neuron_info.neuron_subaccount_identifier;
 
     let (_, _, pk, pid) = make_user(1400);
@@ -126,7 +126,7 @@ async fn test_remove_hotkey(
     neuron_details: &NeuronDetails,
     _logger: &Logger,
 ) {
-    let key_pair: Arc<EdKeypair> = neuron_details.key_pair.into();
+    let key_pair: Arc<EdKeypair> = neuron_details.key_pair.clone().into();
     let account = neuron_details.account_id;
     let neuron_index = neuron_details.neuron_subaccount_identifier;
     let _neuron_controller = neuron_details.principal_id;

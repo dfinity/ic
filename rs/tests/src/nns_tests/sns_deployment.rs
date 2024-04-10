@@ -769,21 +769,19 @@ impl SaleParticipant {
     ) -> Self {
         let key_pair = EdKeypair::generate_from_u64(seed);
         let principal_id = key_pair.generate_principal_id().unwrap();
+        let (secret_key, public_key) = key_pair.serialize_raw();
         Self {
             name,
             principal_id,
-            secret_key: key_pair.secret_key,
-            public_key: key_pair.public_key,
+            secret_key,
+            public_key,
             starting_sns_balance,
             starting_icp_balance,
         }
     }
 
     pub fn key_pair(&self) -> EdKeypair {
-        EdKeypair {
-            secret_key: self.secret_key,
-            public_key: self.public_key,
-        }
+        EdKeypair::deserialize_raw(&self.secret_key).unwrap()
     }
 
     pub fn icp_account(&self) -> Account {
@@ -825,7 +823,7 @@ impl Identity for SaleParticipant {
     fn sign_arbitrary(&self, msg: &[u8]) -> Result<Signature, String> {
         let signature = self.key_pair().sign(msg.as_ref());
         Ok(Signature {
-            signature: Some(signature.as_ref().to_vec()),
+            signature: Some(signature),
             public_key: self.public_key(),
             delegations: None,
         })

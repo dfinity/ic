@@ -112,7 +112,7 @@ async fn test_start_dissolve(
     neuron_info: &NeuronDetails,
 ) -> Result<(), ic_rosetta_api::models::Error> {
     let account = neuron_info.account_id;
-    let key_pair = Arc::new(neuron_info.key_pair);
+    let key_pair = Arc::new(neuron_info.key_pair.clone());
     let neuron_index = neuron_info.neuron_subaccount_identifier;
 
     do_multiple_txn(
@@ -146,7 +146,7 @@ async fn test_stop_dissolve(
     neuron_info: &NeuronDetails,
 ) -> Result<(), ic_rosetta_api::models::Error> {
     let account = neuron_info.account_id;
-    let key_pair = Arc::new(neuron_info.key_pair);
+    let key_pair = Arc::new(neuron_info.key_pair.clone());
     let neuron_index = neuron_info.neuron_subaccount_identifier;
 
     do_multiple_txn(
@@ -209,7 +209,7 @@ async fn set_dissolve_timestamp(
     timestamp: Seconds,
 ) -> Result<(), ic_rosetta_api::models::Error> {
     let account = neuron_info.account_id;
-    let key_pair = Arc::new(neuron_info.key_pair);
+    let key_pair = Arc::new(neuron_info.key_pair.clone());
     let neuron_index = neuron_info.neuron_subaccount_identifier;
 
     do_multiple_txn(

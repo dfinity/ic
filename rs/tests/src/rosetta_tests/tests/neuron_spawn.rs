@@ -64,7 +64,7 @@ async fn test_spawn(
     percentage_to_spawn: Option<u32>,
 ) {
     let account = neuron_info.account_id;
-    let key_pair = Arc::new(neuron_info.key_pair);
+    let key_pair = Arc::new(neuron_info.key_pair.clone());
     let neuron_index = neuron_info.neuron_subaccount_identifier;
 
     let neuron_acc = neuron_info.neuron_account;
@@ -146,7 +146,7 @@ async fn test_spawn(
 
 async fn test_spawn_invalid(ros: &RosettaApiClient, neuron_info: &NeuronDetails) {
     let account = neuron_info.account_id;
-    let key_pair = Arc::new(neuron_info.key_pair);
+    let key_pair = Arc::new(neuron_info.key_pair.clone());
     let neuron_index = neuron_info.neuron_subaccount_identifier;
 
     // the nonce used to generate spawned neuron.

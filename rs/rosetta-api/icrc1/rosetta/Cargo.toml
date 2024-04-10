@@ -76,7 +76,6 @@ ring = { version = "0.16.11", features = ["std"] }
 futures = { workspace = true }
 ic-icrc-rosetta-client = { path = "client" }
 ic-icrc-rosetta-runner = { path = "runner" }
-ic-canister-client-sender = { path = "../../../canister_client/sender" }
 ic-rosetta-test-utils = { path = "../../test_utils" }
 
 [[test]]

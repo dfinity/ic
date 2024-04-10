@@ -240,7 +240,6 @@ mod tests {
     use candid::Encode;
     use ic_agent::agent::EnvelopeContent;
     use ic_agent::Identity;
-    use ic_canister_client_sender::{Ed25519KeyPair, Secp256k1KeyPair};
     use ic_icrc1_test_utils::construction_payloads_request_metadata;
     use ic_icrc1_test_utils::minter_identity;
     use ic_icrc1_test_utils::valid_transactions_strategy;
@@ -257,6 +256,7 @@ mod tests {
     use proptest::test_runner::Config as TestRunnerConfig;
     use proptest::test_runner::TestRunner;
     use rosetta_core::models::RosettaSupportedKeyPair;
+    use rosetta_core::models::{Ed25519KeyPair, Secp256k1KeyPair};
 
     const NUM_TEST_CASES: u32 = 100;
     const NUM_BLOCKS: usize = 1;
