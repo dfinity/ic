@@ -84,9 +84,7 @@ def _custom_partitions():
         vg_name = "hostlvm",
         vg_uuid = "4c7GVZ-Df82-QEcJ-xXtV-JgRL-IjLE-hK0FgA",
         pv_uuid = "eu0VQE-HlTi-EyRc-GceP-xZtn-3j6t-iqEwyv",
-        # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
-        # TODO(IDX-2221): remove no-remote-cache when CI jobs and bazel infrastructure will run in the same clusters.
-        tags = ["no-remote-cache", "manual"],
+        tags = ["manual"],
         target_compatible_with = [
             "@platforms//os:linux",
         ],
