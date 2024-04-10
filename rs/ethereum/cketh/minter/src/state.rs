@@ -11,7 +11,7 @@ use crate::numeric::{
     BlockNumber, Erc20Value, LedgerBurnIndex, LedgerMintIndex, TransactionNonce, Wei,
 };
 use crate::state::transactions::{Erc20WithdrawalRequest, TransactionCallData};
-use crate::tx::TransactionPriceEstimate;
+use crate::tx::GasFeeEstimate;
 use candid::Principal;
 use ic_canister_log::log;
 use ic_cdk::api::management_canister::ecdsa::EcdsaPublicKeyResponse;
@@ -85,7 +85,7 @@ pub struct State {
     /// Used to correlate request and response in logs.
     pub http_request_counter: u64,
 
-    pub last_transaction_price_estimate: Option<(u64, TransactionPriceEstimate)>,
+    pub last_transaction_price_estimate: Option<(u64, GasFeeEstimate)>,
 
     /// Canister ID of the ledger suite orchestrator that
     /// can add new ERC-20 token to the minter
@@ -678,6 +678,7 @@ pub enum TaskType {
     Mint,
     RetrieveEth,
     ScrapEthLogs,
+    RefreshGasFeeEstimate,
     Reimbursement,
     MintCkErc20,
 }

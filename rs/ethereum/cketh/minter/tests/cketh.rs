@@ -14,7 +14,7 @@ use ic_cketh_minter::memo::{BurnMemo, MintMemo};
 use ic_cketh_minter::numeric::BlockNumber;
 use ic_cketh_minter::{PROCESS_REIMBURSEMENT, SCRAPPING_ETH_LOGS_INTERVAL};
 use ic_cketh_test_utils::flow::{
-    increment_base_fee_per_gas, DepositParams, ProcessWithdrawalParams,
+    double_and_increment_base_fee_per_gas, DepositParams, ProcessWithdrawalParams,
 };
 use ic_cketh_test_utils::mock::{JsonRpcMethod, JsonRpcProvider, MockJsonRpcProviders};
 use ic_cketh_test_utils::response::{
@@ -565,16 +565,16 @@ fn should_resubmit_new_transaction_when_price_increased() {
     let withdrawal_amount = Nat::from(CKETH_WITHDRAWAL_AMOUNT);
     let (expected_tx, expected_sig) = default_signed_eip_1559_transaction();
     let first_tx_hash = hash_transaction(expected_tx.clone(), expected_sig);
-    let resubmitted_sent_tx = "0x02f87301808462590080850873e448ec82520894221e931fbfcb9bd54ddd26ce6f5e29e98add01c088016090159f0c209680c080a0b43ed9d22ba0731a5cb30ca6e8e171982ab0edc5040dfe0aeee2c77e1b89bd9ea01dfb601f4125243a81ce4d2bfe10c60d519f92a3a4eff8b6dc3da69e19382238";
+    let resubmitted_sent_tx = "0x02f87301808462590080850f0de1e14682520894221e931fbfcb9bd54ddd26ce6f5e29e98add01c088015e728d945289c680c001a0537665ebe010409f026674776c6273ef7af3a79bca42492a263ec405c3869c2ca00a238d29dbf894e7cf85b70d5ecd62fc99e375b754c112bcbe1199fc9f00dff2";
     let (resubmitted_tx, resubmitted_tx_sig) = decode_transaction(resubmitted_sent_tx);
     let resubmitted_tx_hash = hash_transaction(resubmitted_tx.clone(), resubmitted_tx_sig);
     assert_eq!(
         resubmitted_tx,
         expected_tx
             .clone()
-            .value(99_237_614_339_235_990_u64)
+            .value(98_642_194_253_121_990_u64)
             .max_priority_fee_per_gas(1_650_000_000_u64)
-            .max_fee_per_gas(36_304_079_084_u64)
+            .max_fee_per_gas(64_657_416_518_u64)
     );
     assert_ne!(first_tx_hash, resubmitted_tx_hash);
 
@@ -596,7 +596,7 @@ fn should_resubmit_new_transaction_when_price_increased() {
         .process_withdrawal_with_resubmission_and_increased_price(
             expected_tx,
             expected_sig,
-            &mut increment_base_fee_per_gas,
+            &mut double_and_increment_base_fee_per_gas,
             resubmitted_tx,
             resubmitted_tx_sig,
         )
@@ -607,10 +607,10 @@ fn should_resubmit_new_transaction_when_price_increased() {
                     chain_id: Nat::from(1_u8),
                     nonce: Nat::from(0_u8),
                     max_priority_fee_per_gas: Nat::from(1_650_000_000_u64),
-                    max_fee_per_gas: Nat::from(36_304_079_084_u64),
+                    max_fee_per_gas: Nat::from(64_657_416_518_u64),
                     gas_limit: Nat::from(21_000_u32),
                     destination: DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string(),
-                    value: Nat::from(99_237_614_339_235_990_u64),
+                    value: Nat::from(98_642_194_253_121_990_u64),
                     data: Default::default(),
                     access_list: vec![],
                 },

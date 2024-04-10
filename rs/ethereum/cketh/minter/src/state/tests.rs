@@ -15,8 +15,8 @@ use crate::state::event::{Event, EventType};
 use crate::state::transactions::{Erc20WithdrawalRequest, ReimbursementIndex};
 use crate::state::{Erc20Balances, State};
 use crate::tx::{
-    AccessList, AccessListItem, Eip1559Signature, Eip1559TransactionRequest, ResubmissionStrategy,
-    SignedEip1559TransactionRequest, StorageKey, TransactionPriceEstimate,
+    AccessList, AccessListItem, Eip1559Signature, Eip1559TransactionRequest, GasFeeEstimate,
+    ResubmissionStrategy, SignedEip1559TransactionRequest, StorageKey,
 };
 use candid::{Nat, Principal};
 use ethnum::u256;
@@ -1216,8 +1216,8 @@ fn state_equivalence() {
         state.is_equivalent_to(&State {
             last_transaction_price_estimate: Some((
                 0,
-                TransactionPriceEstimate {
-                    max_fee_per_gas: WeiPerGas::new(100_000_000),
+                GasFeeEstimate {
+                    base_fee_per_gas: WeiPerGas::new(10_000_000),
                     max_priority_fee_per_gas: WeiPerGas::new(1_000_000),
                 }
             )),

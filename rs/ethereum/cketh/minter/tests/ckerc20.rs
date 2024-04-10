@@ -158,7 +158,7 @@ mod withdraw_erc20 {
         erc20_transfer_data, DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS, ONE_USDC, TWO_USDC,
     };
     use ic_cketh_test_utils::flow::{
-        increment_base_fee_per_gas, DepositParams, ProcessWithdrawalParams,
+        double_and_increment_base_fee_per_gas, DepositParams, ProcessWithdrawalParams,
     };
     use ic_cketh_test_utils::mock::JsonRpcProvider;
     use ic_cketh_test_utils::response::{
@@ -767,7 +767,7 @@ mod withdraw_erc20 {
         let ckerc20_tx_fee = CKETH_MINIMUM_WITHDRAWAL_AMOUNT;
         let (first_tx, first_tx_sig) = default_erc20_signed_eip_1559_transaction();
         let first_tx_hash = hash_transaction(first_tx.clone(), first_tx_sig);
-        let resubmitted_sent_tx = "0x02f8b001808462590080850873e448ec82fde894a0b86991c6218b36c1d19d4a2e9eb0ce3606eb4880b844a9059cbb000000000000000000000000221e931fbfcb9bd54ddd26ce6f5e29e98add01c000000000000000000000000000000000000000000000000000000000001e8480c080a07d3665d9d20485927c46f8d4c8e13db55cc93816fae1ab5c3edd903724fcc01da02006320a931de2e96f8fe5df15219d924ee34bd536879461526b7a25dbbda9e1";
+        let resubmitted_sent_tx = "0x02f8b001808462590080850f0de1e14682fde894a0b86991c6218b36c1d19d4a2e9eb0ce3606eb4880b844a9059cbb000000000000000000000000221e931fbfcb9bd54ddd26ce6f5e29e98add01c000000000000000000000000000000000000000000000000000000000001e8480c080a069eab386ad525029a368cd105f4bf125a426301433a5c53770fb9fca6e1bd857a0580fd7bd1ea3359ae4d6fa5d17f20d0e7ae0aeec5c48ac2be680dd6e11608706";
         let (resubmitted_tx, resubmitted_tx_sig) = decode_transaction(resubmitted_sent_tx);
         let resubmitted_tx_hash = hash_transaction(resubmitted_tx.clone(), resubmitted_tx_sig);
         assert_eq!(
@@ -775,7 +775,7 @@ mod withdraw_erc20 {
             first_tx
                 .clone()
                 .max_priority_fee_per_gas(1_650_000_000_u64)
-                .max_fee_per_gas(36_304_079_084_u64)
+                .max_fee_per_gas(64_657_416_518_u64)
         );
         assert_ne!(first_tx_hash, resubmitted_tx_hash);
 
@@ -806,7 +806,7 @@ mod withdraw_erc20 {
             .process_withdrawal_with_resubmission_and_increased_price(
                 first_tx,
                 first_tx_sig,
-                &mut increment_base_fee_per_gas,
+                &mut double_and_increment_base_fee_per_gas,
                 resubmitted_tx,
                 resubmitted_tx_sig,
             )
@@ -818,7 +818,7 @@ mod withdraw_erc20 {
                         chain_id: Nat::from(1_u8),
                         nonce: Nat::from(0_u8),
                         max_priority_fee_per_gas: Nat::from(1_650_000_000_u64),
-                        max_fee_per_gas: Nat::from(36_304_079_084_u64),
+                        max_fee_per_gas: Nat::from(64_657_416_518_u64),
                         gas_limit: Nat::from(65_000_u64),
                         destination: ckusdc.erc20_contract_address,
                         value: 0_u8.into(),

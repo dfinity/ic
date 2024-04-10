@@ -137,7 +137,6 @@ async fn smart_contract_address() -> String {
 
 /// Estimate price of EIP-1559 transaction based on the
 /// `base_fee_per_gas` included in the last finalized block.
-/// See https://www.blocknative.com/blog/eip-1559-fees
 #[query]
 async fn eip_1559_transaction_price() -> Eip1559TransactionPrice {
     match read_state(|s| s.last_transaction_price_estimate.clone()) {
@@ -190,7 +189,7 @@ async fn get_minter_info() -> MinterInfo {
             eth_balance: Some(s.eth_balance.eth_balance().into()),
             last_gas_fee_estimate: s.last_transaction_price_estimate.as_ref().map(
                 |(timestamp, estimate)| GasFeeEstimate {
-                    max_fee_per_gas: estimate.max_fee_per_gas.into(),
+                    max_fee_per_gas: estimate.estimate_max_fee_per_gas().into(),
                     max_priority_fee_per_gas: estimate.max_priority_fee_per_gas.into(),
                     timestamp: *timestamp,
                 },
@@ -804,7 +803,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "cketh_minter_last_max_fee_per_gas",
                     s.last_transaction_price_estimate
                         .clone()
-                        .map(|(_, fee)| fee.max_fee_per_gas.as_f64())
+                        .map(|(_, fee)| fee.estimate_max_fee_per_gas().as_f64())
                         .unwrap_or_default(),
                     "Last max fee per gas",
                 )?;

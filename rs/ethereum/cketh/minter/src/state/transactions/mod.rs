@@ -13,9 +13,9 @@ use crate::numeric::{
 };
 use crate::state::event::EventType;
 use crate::tx::{
-    Eip1559TransactionRequest, FinalizedEip1559Transaction, ResubmissionStrategy,
+    Eip1559TransactionRequest, FinalizedEip1559Transaction, GasFeeEstimate, ResubmissionStrategy,
     SignedEip1559TransactionRequest, SignedTransactionRequest, TransactionPrice,
-    TransactionPriceEstimate, TransactionRequest,
+    TransactionRequest,
 };
 use candid::Principal;
 use ic_ethereum_types::Address;
@@ -510,7 +510,7 @@ impl EthTransactions {
     pub fn create_resubmit_transactions(
         &self,
         latest_transaction_count: TransactionCount,
-        current_gas_fee: TransactionPriceEstimate,
+        current_gas_fee: GasFeeEstimate,
     ) -> Vec<Result<(LedgerBurnIndex, Eip1559TransactionRequest), ResubmitTransactionError>> {
         // If transaction count at block height H is c > 0, then transactions with nonces
         // 0, 1, ..., c - 1 were mined. If transaction count is 0, then no transactions were mined.
