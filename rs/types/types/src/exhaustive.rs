@@ -721,6 +721,28 @@ impl ExhaustiveSet for PreSignatureQuadrupleRef {
     }
 }
 
+#[derive(Clone)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub struct DerivedEcdsaReshareRequest {
+    pub key_id: EcdsaKeyId,
+    pub receiving_node_ids: Vec<NodeId>,
+    pub registry_version: RegistryVersion,
+}
+
+impl ExhaustiveSet for EcdsaReshareRequest {
+    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+        DerivedEcdsaReshareRequest::exhaustive_set(rng)
+            .into_iter()
+            .map(|r| EcdsaReshareRequest {
+                key_id: r.key_id,
+                master_key_id: None,
+                receiving_node_ids: r.receiving_node_ids,
+                registry_version: r.registry_version,
+            })
+            .collect()
+    }
+}
+
 impl ExhaustiveSet for ConsensusResponse {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
         Response::exhaustive_set(rng)

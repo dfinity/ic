@@ -28,7 +28,7 @@ use crate::{
 use ic_crypto_sha2::Sha256;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_management_canister_types::EcdsaKeyId;
+use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     registry::{crypto::v1 as crypto_pb, subnet::v1 as subnet_pb},
@@ -40,7 +40,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     convert::{TryFrom, TryInto},
     fmt::{self, Display, Formatter},
-    hash::Hash,
+    hash::{Hash, Hasher},
     time::Duration,
 };
 use strum_macros::EnumIter;
@@ -623,12 +623,29 @@ impl TryFrom<&pb::KeyTranscriptCreation> for KeyTranscriptCreation {
 }
 
 /// Internal format of the resharing request from execution.
-#[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize, Hash)]
-#[cfg_attr(test, derive(ExhaustiveSet))]
+#[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EcdsaReshareRequest {
     pub key_id: EcdsaKeyId,
+    pub master_key_id: Option<MasterPublicKeyId>,
     pub receiving_node_ids: Vec<NodeId>,
     pub registry_version: RegistryVersion,
+}
+
+impl Hash for EcdsaReshareRequest {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        let EcdsaReshareRequest {
+            key_id,
+            master_key_id,
+            receiving_node_ids,
+            registry_version,
+        } = self;
+        key_id.hash(state);
+        if let Some(master_key_id) = master_key_id {
+            master_key_id.hash(state);
+        }
+        receiving_node_ids.hash(state);
+        registry_version.hash(state);
+    }
 }
 
 impl From<&EcdsaReshareRequest> for pb::EcdsaReshareRequest {
@@ -639,6 +656,7 @@ impl From<&EcdsaReshareRequest> for pb::EcdsaReshareRequest {
         }
         Self {
             key_id: Some((&request.key_id).into()),
+            master_key_id: request.master_key_id.clone().map(|key_id| key_id.into()),
             receiving_node_ids,
             registry_version: request.registry_version.get(),
         }
@@ -655,8 +673,14 @@ impl TryFrom<&pb::EcdsaReshareRequest> for EcdsaReshareRequest {
             .collect::<Result<Vec<_>, ProxyDecodeError>>()?;
 
         let key_id = try_from_option_field(request.key_id.clone(), "EcdsaReshareRequest::key_id")?;
+        let master_key_id = request
+            .master_key_id
+            .clone()
+            .map(|key_id| key_id.try_into())
+            .transpose()?;
         Ok(Self {
             key_id,
+            master_key_id,
             receiving_node_ids,
             registry_version: RegistryVersion::new(request.registry_version),
         })

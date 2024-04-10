@@ -190,6 +190,7 @@ message EcdsaReshareRequest {
   repeated types.v1.NodeId receiving_node_ids = 2;
   uint64 registry_version = 3;
   registry.crypto.v1.EcdsaKeyId key_id = 4;
+  registry.crypto.v1.MasterPublicKeyId master_key_id = 5;
 }
 
 enum KeyTranscriptCreationState {

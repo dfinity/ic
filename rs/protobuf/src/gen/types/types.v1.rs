@@ -679,6 +679,9 @@ pub struct EcdsaReshareRequest {
     pub registry_version: u64,
     #[prost(message, optional, tag = "4")]
     pub key_id: ::core::option::Option<super::super::registry::crypto::v1::EcdsaKeyId>,
+    #[prost(message, optional, tag = "5")]
+    pub master_key_id:
+        ::core::option::Option<super::super::registry::crypto::v1::MasterPublicKeyId>,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]

@@ -1492,6 +1492,7 @@ pub(crate) fn fake_ecdsa_key_id() -> EcdsaKeyId {
 pub(crate) fn create_reshare_request(num_nodes: u64, registry_version: u64) -> EcdsaReshareRequest {
     EcdsaReshareRequest {
         key_id: fake_ecdsa_key_id(),
+        master_key_id: None,
         receiving_node_ids: (0..num_nodes).map(node_test_id).collect::<Vec<_>>(),
         registry_version: RegistryVersion::from(registry_version),
     }
