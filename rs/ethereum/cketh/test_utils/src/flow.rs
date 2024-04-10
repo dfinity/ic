@@ -826,8 +826,11 @@ pub fn encode_principal(principal: Principal) -> String {
     format!("0x{}", hex::encode(fixed_bytes))
 }
 
-pub fn increment_base_fee_per_gas(fee_history: &mut ethers_core::types::FeeHistory) {
+pub fn double_and_increment_base_fee_per_gas(fee_history: &mut ethers_core::types::FeeHistory) {
     for base_fee_per_gas in fee_history.base_fee_per_gas.iter_mut() {
-        *base_fee_per_gas = base_fee_per_gas.checked_add(1_u64.into()).unwrap();
+        *base_fee_per_gas = base_fee_per_gas
+            .checked_mul(2_u64.into())
+            .and_then(|f| f.checked_add(1_u64.into()))
+            .unwrap();
     }
 }
