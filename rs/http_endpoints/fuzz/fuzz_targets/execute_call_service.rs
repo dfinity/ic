@@ -77,7 +77,7 @@ impl IngressPoolThrottler for MockIngressPoolThrottler {
 //
 // To execute the fuzzer run
 // bazel run --config=afl //rs/http_endpoints/fuzz:execute_call_service_afl -- corpus/
-//
+
 fuzz_target!(|call_impls: Vec<CallServiceImpl>| {
     if !call_impls.is_empty() {
         let rt = Runtime::new().unwrap();
@@ -89,20 +89,21 @@ fuzz_target!(|call_impls: Vec<CallServiceImpl>| {
         // Mock ingress filter
         rt.spawn(async move {
             for flag in filter_flags {
-                let (_, resp) = ingress_filter_handle.next_request().await.unwrap();
-                if flag {
-                    resp.send_response(Ok(()))
-                } else {
-                    resp.send_response(Err(UserError::new(
-                        ErrorCode::CanisterNotFound,
-                        "Fuzzing ingress filter error",
-                    )))
+                while let Some((_, resp)) = ingress_filter_handle.next_request().await {
+                    if flag {
+                        resp.send_response(Ok(()))
+                    } else {
+                        resp.send_response(Err(UserError::new(
+                            ErrorCode::CanisterNotFound,
+                            "Fuzzing ingress filter error",
+                        )))
+                    }
                 }
             }
         });
 
         // Mock ingress throttler
-        rt.spawn(async move {
+        rt.block_on(async move {
             for flag in throttler_flags {
                 if let Err(err) = throttler_tx.send(flag).await {
                     eprintln!("Error sending message: {}", err);
@@ -145,7 +146,6 @@ fuzz_target!(|call_impls: Vec<CallServiceImpl>| {
                     .await
                     .unwrap()
             });
-            //println!("{:#?}", _res)
         }
     }
 });
@@ -190,9 +190,6 @@ fn new_call_service(
 
     let (ingress_filter, ingress_filter_handle) = setup_ingress_filter_mock();
     let ingress_pool_throttler = MockIngressPoolThrottler::new(throttler_rx);
-    //ingress_pool_throttler
-    //    .expect_exceeds_threshold()
-    //    .returning(|| false);
 
     let ingress_throttler = Arc::new(RwLock::new(ingress_pool_throttler));
     #[allow(clippy::disallowed_methods)]
