@@ -30,6 +30,18 @@ for file in $DIFF_FILES; do
     fi
 done
 
+if grep -qE ".*\.sh" <<<"$DIFF_FILES"; then
+    files+=(//pre-commit:shfmt-lint)
+fi
+
+if grep -qE ".*\.py" <<<"$DIFF_FILES"; then
+    files+=(//pre-commit:ruff-lint)
+fi
+
+if grep -qE ".*\.hs" <<<"$DIFF_FILES"; then
+    files+=(//pre-commit:ormolu-lint)
+fi
+
 if [ ${#files[@]} -eq 0 ]; then
     echo "Changes not detected in bazel targets. No bazel targets to build or test." >&2
     exit 0
