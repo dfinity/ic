@@ -65,6 +65,7 @@ pub(super) fn make_reshare_dealings_response(
                 if request
                     == &(ecdsa::EcdsaReshareRequest {
                         key_id: context.key_id.clone(),
+                        master_key_id: None,
                         receiving_node_ids: context.nodes.iter().copied().collect(),
                         registry_version: context.registry_version,
                     })
@@ -165,6 +166,7 @@ pub(super) fn get_reshare_requests(
         .values()
         .map(|context| ecdsa::EcdsaReshareRequest {
             key_id: context.key_id.clone(),
+            master_key_id: None,
             receiving_node_ids: context.nodes.iter().copied().collect(),
             registry_version: context.registry_version,
         })
@@ -186,6 +188,7 @@ pub mod test_utils {
     ) -> ecdsa::EcdsaReshareRequest {
         ecdsa::EcdsaReshareRequest {
             key_id,
+            master_key_id: None,
             receiving_node_ids: (0..num_nodes).map(node_test_id).collect::<Vec<_>>(),
             registry_version: RegistryVersion::from(registry_version),
         }
@@ -244,6 +247,7 @@ mod tests {
             |i: u64| EcdsaKeyId::from_str(&format!("Secp256k1:some_key_{i}")).unwrap();
         let make_reshare_request = |i| EcdsaReshareRequest {
             key_id: make_key_id(i),
+            master_key_id: None,
             receiving_node_ids: vec![node_test_id(i)],
             registry_version: RegistryVersion::from(i),
         };
