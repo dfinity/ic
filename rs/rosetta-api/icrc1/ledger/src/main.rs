@@ -481,6 +481,10 @@ fn supported_standards() -> Vec<StandardRecord> {
             name: "ICRC-2".to_string(),
             url: "https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-2".to_string(),
         },
+        StandardRecord {
+            name: "ICRC-3".to_string(),
+            url: "https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-3".to_string(),
+        },
     ];
     standards
 }
