@@ -1255,7 +1255,8 @@ bazel-test-bare-metal:
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "setupos-bare-metal-smoke-test"
   script:
     - |
-      bazel "${BAZEL_STARTUP_ARGS}" run "${BAZEL_CI_CONFIG}" \
+      # shellcheck disable=SC2046,SC2086
+      bazel ${BAZEL_STARTUP_ARGS} run ${BAZEL_CI_CONFIG} \
         //ic-os/setupos/envs/dev:launch_bare_metal -- \
           --config_path "$(realpath  ./ic-os/utils/bare_metal_deployment/zh2-dll01.yaml)" \
           --csv_filename "$(realpath "$ZH2_DLL01_CSV_SECRETS_PATH")" \
@@ -1263,7 +1264,8 @@ bazel-test-bare-metal:
           --file_share_username ci_interim \
           --ci_mode
 
-      bazel "${BAZEL_STARTUP_ARGS}" run "${BAZEL_CI_CONFIG}" \
+      # shellcheck disable=SC2046,SC2086
+      bazel ${BAZEL_STARTUP_ARGS} run ${BAZEL_CI_CONFIG} \
         //ic-os/setupos/envs/prod:launch_bare_metal -- \
           --config_path "$(realpath  ./ic-os/utils/bare_metal_deployment/zh2-dll01.yaml)" \
           --csv_filename "$(realpath "$ZH2_DLL01_CSV_SECRETS_PATH")" \
