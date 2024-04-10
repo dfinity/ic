@@ -2,7 +2,7 @@
 use candid::{CandidType, Decode, Deserialize, Encode, Principal};
 use ic_agent::identity::BasicIdentity;
 use ic_agent::Agent;
-use ic_agent::{agent::http_transport::reqwest_transport::ReqwestHttpReplicaV2Transport, Identity};
+use ic_agent::{agent::http_transport::reqwest_transport::ReqwestTransport, Identity};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_ledger::FeatureFlags;
 use ic_icrc1_ledger::{InitArgs, InitArgsBuilder, LedgerArgument};
@@ -74,9 +74,7 @@ pub async fn get_custom_agent(
     let replica_url = Url::parse(&format!("http://localhost:{}", context.port)).unwrap();
 
     // Setup the agent
-    let client = reqwest::ClientBuilder::new().build().unwrap();
-    let transport =
-        ReqwestHttpReplicaV2Transport::create_with_client(replica_url.clone(), client).unwrap();
+    let transport = ReqwestTransport::create(replica_url.clone()).unwrap();
     let agent = Agent::builder()
         .with_identity(basic_identity)
         .with_arc_transport(Arc::new(transport))

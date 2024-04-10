@@ -15,8 +15,7 @@ use dashmap::DashMap;
 use futures::stream::FuturesUnordered;
 use hyper::{Request, Response, StatusCode};
 use ic_agent::{
-    agent::http_transport::reqwest_transport::ReqwestHttpReplicaV2Transport,
-    identity::BasicIdentity, Agent,
+    agent::http_transport::reqwest_transport::ReqwestTransport, identity::BasicIdentity, Agent,
 };
 use mockall::automock;
 use opentelemetry::{metrics::MeterProvider as _, sdk::metrics::MeterProvider, KeyValue};
@@ -100,8 +99,8 @@ async fn main() -> Result<(), Error> {
         .transpose()
         .context("failed to open root key")?;
 
-    let transport = ReqwestHttpReplicaV2Transport::create(cli.replica_endpoint)
-        .context("failed to create transport")?;
+    let transport =
+        ReqwestTransport::create(cli.replica_endpoint).context("failed to create transport")?;
 
     let agent = Agent::builder()
         .with_transport(transport)

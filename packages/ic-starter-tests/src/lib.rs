@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Context, Result};
-use ic_agent::agent::http_transport::reqwest_transport::ReqwestHttpReplicaV2Transport;
+use ic_agent::agent::http_transport::reqwest_transport::ReqwestTransport;
 use ic_agent::Agent;
 use std::path::PathBuf;
 use std::process::{Child, Command};
@@ -169,16 +169,9 @@ pub async fn start_replica(
         )
     })?;
 
-    let client = reqwest::ClientBuilder::new()
-        .build()
-        .context("failed to build an HTTP client")?;
-
     let transport = Arc::new(
-        ReqwestHttpReplicaV2Transport::create_with_client(
-            format!("http://localhost:{}", port),
-            client,
-        )
-        .context("failed to construct the replica transport")?,
+        ReqwestTransport::create(format!("http://localhost:{}", port))
+            .context("failed to construct the replica transport")?,
     );
 
     let agent = Agent::builder()

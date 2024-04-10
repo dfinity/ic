@@ -1,5 +1,5 @@
 use candid::{CandidType, Decode, Deserialize, Encode, Nat, Principal};
-use ic_agent::agent::http_transport::reqwest_transport::ReqwestHttpReplicaV2Transport;
+use ic_agent::agent::http_transport::reqwest_transport::ReqwestTransport;
 use ic_agent::identity::BasicIdentity;
 use ic_agent::{Agent, Identity};
 use ic_management_canister_types::{CanisterInstallMode, CreateCanisterArgs, InstallCodeArgs};
@@ -143,10 +143,7 @@ async fn test() {
 
     let replica_url = Url::parse(&format!("http://localhost:{}", context.port)).unwrap();
 
-    let client = reqwest::ClientBuilder::new().build().unwrap();
-
-    let transport =
-        ReqwestHttpReplicaV2Transport::create_with_client(replica_url.clone(), client).unwrap();
+    let transport = ReqwestTransport::create(replica_url.clone()).unwrap();
 
     let agent = Agent::builder()
         .with_identity(test_identity())

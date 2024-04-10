@@ -7,8 +7,7 @@ use axum::{
 };
 use clap::{Parser, ValueEnum};
 use ic_agent::{
-    agent::http_transport::reqwest_transport::ReqwestHttpReplicaV2Transport,
-    identity::AnonymousIdentity, Agent,
+    agent::http_transport::reqwest_transport::ReqwestTransport, identity::AnonymousIdentity, Agent,
 };
 use ic_base_types::CanisterId;
 use ic_icrc_rosetta::{
@@ -291,7 +290,7 @@ async fn main() -> Result<()> {
 
     let ic_agent = Agent::builder()
         .with_identity(AnonymousIdentity)
-        .with_transport(ReqwestHttpReplicaV2Transport::create(
+        .with_transport(ReqwestTransport::create(
             Url::parse(&network_url)
                 .context(format!("Failed to parse URL {}", network_url.clone()))?,
         )?)

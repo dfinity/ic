@@ -8022,7 +8022,7 @@ dependencies = [
  "once_cell",
  "proptest",
  "rand 0.8.5",
- "reqwest 0.11.22",
+ "reqwest 0.12.3",
  "ring 0.16.20",
  "rolling-file",
  "rosetta-core",
@@ -8060,7 +8060,7 @@ dependencies = [
  "ic-rosetta-api",
  "icrc-ledger-types",
  "num-bigint 0.4.4",
- "reqwest 0.11.22",
+ "reqwest 0.12.3",
  "rosetta-core",
  "serde",
  "tokio",
@@ -11158,7 +11158,7 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "ic-agent",
- "reqwest 0.11.22",
+ "reqwest 0.12.3",
  "tempfile",
  "tokio",
 ]

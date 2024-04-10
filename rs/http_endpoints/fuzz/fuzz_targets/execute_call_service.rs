@@ -5,7 +5,7 @@ use bytes::Bytes;
 use http_body_util::Full;
 use hyper::{Method, Request, Response};
 use ic_agent::{
-    agent::{http_transport::reqwest_transport::ReqwestHttpReplicaV2Transport, UpdateBuilder},
+    agent::{http_transport::reqwest_transport::ReqwestTransport, UpdateBuilder},
     export::Principal,
     identity::AnonymousIdentity,
     Agent,
@@ -166,7 +166,7 @@ fn new_update_call(
 ) -> Vec<u8> {
     let agent = Agent::builder()
         .with_identity(AnonymousIdentity)
-        .with_transport(ReqwestHttpReplicaV2Transport::create(format!("http://{}", addr)).unwrap())
+        .with_transport(ReqwestTransport::create(format!("http://{}", addr)).unwrap())
         .build()
         .unwrap();
     let update = UpdateBuilder::new(&agent, effective_canister_id, content.method_name)
