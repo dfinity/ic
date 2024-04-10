@@ -1,0 +1,50 @@
+package(default_visibility = ["//ic-os/setupos:__subpackages__"])
+
+exports_files([
+    "Dockerfile.base",
+    "extra_boot_args",
+])
+
+filegroup(
+    name = "rootfs-files",
+    srcs = [
+        "Dockerfile",
+        "docker-base.dev",
+        "docker-base.prod",
+        "packages.common",
+        "packages.dev",
+    ] + [
+        "etc/default/locale",
+        "etc/fstab",
+        "etc/hostname",
+        "etc/hosts",
+        "etc/initramfs-tools/initramfs.conf",
+        "etc/resolv.conf",
+        "etc/systemd/resolved.conf.d/fallback.conf",
+        "etc/systemd/system-generators/systemd-gpt-auto-generator",
+        "etc/systemd/system/config.service",
+        "etc/systemd/system/generate-network-config.service",
+        "etc/systemd/system/serial-getty@.service",
+        "etc/systemd/system/setupos.service",
+        "opt/ic/bin/config.sh",
+        "opt/ic/bin/devices.sh",
+        "opt/ic/bin/disk.sh",
+        "opt/ic/bin/fetch-property.sh",
+        "opt/ic/bin/functions.sh",
+        "opt/ic/bin/guestos.sh",
+        "opt/ic/bin/hardware.sh",
+        "opt/ic/bin/hostos.sh",
+        "opt/ic/bin/network.sh",
+        "opt/ic/bin/output-wrapper.sh",
+        "opt/ic/bin/setupos.sh",
+        "prep/fscontext-fixes/fscontext-fixes.fc",
+        "prep/fscontext-fixes/fscontext-fixes.if",
+        "prep/fscontext-fixes/fscontext-fixes.te",
+        "prep/misc-fixes/misc-fixes.if",
+        "prep/misc-fixes/misc-fixes.te",
+        "prep/prep.sh",
+        "prep/systemd-fixes/systemd-fixes.if",
+        "prep/systemd-fixes/systemd-fixes.te",
+    ],
+    tags = ["manual"],
+)

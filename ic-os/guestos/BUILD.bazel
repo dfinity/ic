@@ -4,20 +4,7 @@ package(default_visibility = ["__subpackages__"])
 
 exports_files([
     "partitions.csv",
-    "rootfs/docker-base.dev",
-    "rootfs/docker-base.prod",
-    "rootfs/allow_console_root",
-    "rootfs/extra_boot_args.template",
-    "rootfs/dev-certs/canister_http_test_ca.cert",
-    "rootfs/dev-certs/canister_http_test_ca.key",
-    "rootfs/opt/ic/share/ic.json5.template",
 ])
-
-filegroup(
-    name = "rootfs-files",
-    srcs = glob(["rootfs/**"]),
-    tags = ["manual"],
-)
 
 ext4_image(
     name = "partition-config.tar",
@@ -30,9 +17,9 @@ ext4_image(
 
 sh_test(
     name = "validate-ic-json5",
-    srcs = ["rootfs/opt/ic/bin/validate-replica-config.sh"],
-    args = ["$(execpath :rootfs/opt/ic/share/ic.json5.template)"],
-    data = [":rootfs/opt/ic/share/ic.json5.template"],
+    srcs = ["//ic-os/guestos/rootfs:opt/ic/bin/validate-replica-config.sh"],
+    args = ["$(execpath //ic-os/guestos/rootfs:opt/ic/share/ic.json5.template)"],
+    data = ["//ic-os/guestos/rootfs:opt/ic/share/ic.json5.template"],
     tags = ["manual"],
 )
 
