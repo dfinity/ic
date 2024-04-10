@@ -8,8 +8,6 @@ use ic_agent::identity::BasicIdentity;
 use ic_agent::Identity;
 use ic_base_types::CanisterId;
 use ic_base_types::PrincipalId;
-pub use ic_canister_client_sender::Ed25519KeyPair as EdKeypair;
-use ic_canister_client_sender::Ed25519KeyPair;
 use ic_icrc1_ledger::{InitArgs, InitArgsBuilder};
 use ic_icrc1_test_utils::{
     minter_identity, valid_transactions_strategy, ArgWithCaller, LedgerEndpointArg,
@@ -46,6 +44,7 @@ use proptest::test_runner::Config as TestRunnerConfig;
 use proptest::test_runner::TestRunner;
 use rosetta_core::identifiers::*;
 use rosetta_core::miscellaneous::OperationStatus;
+pub use rosetta_core::models::Ed25519KeyPair as EdKeypair;
 use rosetta_core::models::RosettaSupportedKeyPair;
 use rosetta_core::objects::*;
 use rosetta_core::request_types::*;
@@ -1401,7 +1400,7 @@ fn test_cli_construction() {
                     // Fund the accounts from rosetta-cli_construction_test.json
                     // The accounts are created from seed 1-7.
                     for seed in 1..NUM_ACCOUNTS + 1 {
-                        let key_pair = Ed25519KeyPair::generate_from_u64(seed);
+                        let key_pair = EdKeypair::generate_from_u64(seed);
                         let account: Account = key_pair
                             .generate_principal_id()
                             .expect("failed to get principal")

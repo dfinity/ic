@@ -23,7 +23,6 @@ dfn_protobuf = { path = "../rust_canisters/dfn_protobuf" }
 hex = { workspace = true }
 ic-agent = { workspace = true }
 ic-canister-client = { path = "../canister_client" }
-ic-canister-client-sender = { path = "../canister_client/sender" }
 ic-constants = { path = "../constants" }
 ic-crypto-sha2 = { path = "../crypto/sha2/" }
 ic-crypto-ecdsa-secp256k1 = { path = "../crypto/ecdsa_secp256k1" }

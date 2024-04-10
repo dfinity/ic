@@ -34,7 +34,7 @@ pub fn test(env: TestEnv) {
     // A user can only fetch the list of their own neurons. This is why the principals of the caller and the neuron controller have to match.
     let identity = get_identity();
     let principal = identity.sender().unwrap();
-    let keypair = EdKeypair::from_pem(IDENTITY_PEM).unwrap();
+    let keypair = EdKeypair::deserialize_pkcs8_pem(IDENTITY_PEM).unwrap();
 
     let mut neurons = TestNeurons::new(2000, &mut ledger_balances);
     let neuron_setup = |neuron: &mut Neuron| {

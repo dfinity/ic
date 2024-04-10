@@ -9,7 +9,6 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "//rs/canister_client",
-    "//rs/canister_client/sender",
     "//rs/constants",
     "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
     "//rs/crypto/sha2",

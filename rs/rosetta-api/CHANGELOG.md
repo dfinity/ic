@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixes
 - Prohibit Rosetta from spamming the ledger in case of errors at the ledger client. 
 - Handle Errors that may occur while deserializing objects using serde_json
+- Replacing internal crypto library `ic_canister_client_sender` with `ic_crypto_ed25519` 
+  and `ic_crypto_ecdsa_secp256k1`.
 - Return the correct `signature_type` in the `payloads` returned by the `construction_payloads` endpoint.
 ### Added
 - Add `timestamp` to the `blocks` table

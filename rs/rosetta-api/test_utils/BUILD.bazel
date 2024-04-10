@@ -3,7 +3,6 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
-    "//rs/canister_client/sender",
     "//rs/rosetta-api",
     "//rs/rosetta-api/icp_ledger",
     "//rs/rosetta-api/rosetta_core:rosetta-core",

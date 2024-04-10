@@ -54,7 +54,7 @@ pub fn test(env: TestEnv) {
         test_change_auto_stake_maturity(
             &client,
             neuron4.account_id,
-            Arc::new(neuron4.key_pair).clone(),
+            Arc::new(neuron4.key_pair.clone()),
             true,
             neuron4.neuron_subaccount_identifier,
         )
@@ -96,7 +96,7 @@ async fn test_stake_maturity(
 
     let acc = neuron_info.account_id;
     let neuron_index = neuron_info.neuron_subaccount_identifier;
-    let key_pair: Arc<EdKeypair> = neuron_info.key_pair.into();
+    let key_pair: Arc<EdKeypair> = neuron_info.key_pair.clone().into();
 
     let neuron_acc = neuron_info.neuron_account;
     let balance_before = ledger.get_account_balance(neuron_acc).await;
@@ -164,7 +164,7 @@ async fn test_stake_maturity(
 async fn test_stake_maturity_invalid(ros: &RosettaApiClient, neuron_info: &NeuronDetails) {
     let acc = neuron_info.account_id;
     let neuron_index = neuron_info.neuron_subaccount_identifier;
-    let key_pair: Arc<EdKeypair> = neuron_info.key_pair.into();
+    let key_pair: Arc<EdKeypair> = neuron_info.key_pair.clone().into();
 
     let res = do_multiple_txn(
         ros,
