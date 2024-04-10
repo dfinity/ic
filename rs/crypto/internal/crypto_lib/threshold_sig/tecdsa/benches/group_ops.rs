@@ -431,23 +431,9 @@ fn point_serialize(c: &mut Criterion) {
             b.iter_with_setup(|| random_point(curve_type, rng), |p| p.serialize())
         });
 
-        group.bench_function(BenchmarkId::new("serialize_uncompressed", 0), |b| {
-            b.iter_with_setup(
-                || random_point(curve_type, rng),
-                |p| p.serialize_uncompressed(),
-            )
-        });
-
         group.bench_function(BenchmarkId::new("deserialize_compressed", 0), |b| {
             b.iter_with_setup(
                 || random_point(curve_type, rng).serialize(),
-                |p| EccPoint::deserialize(curve_type, &p),
-            );
-        });
-
-        group.bench_function(BenchmarkId::new("deserialize_uncompressed", 0), |b| {
-            b.iter_with_setup(
-                || random_point(curve_type, rng).serialize_uncompressed(),
                 |p| EccPoint::deserialize(curve_type, &p),
             );
         });

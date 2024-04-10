@@ -57,7 +57,7 @@ macro_rules! declare_mul_by_g_impl {
 
                 assert_eq!(self.table.len(), WINDOWS * Self::TABLE_ELEM_PER_WINDOW);
 
-                let s = x.as_bytes();
+                let s = x.to_bytes();
 
                 let mut accum = <$projective>::identity();
 
@@ -176,8 +176,8 @@ macro_rules! declare_mul2_table_impl {
 
             /// Computes g*a + h*b where g and h are the points specified during construction
             pub fn mul2(&self, a: &$scalar, b: &$scalar) -> $projective {
-                let s1 = a.as_bytes();
-                let s2 = b.as_bytes();
+                let s1 = a.to_bytes();
+                let s2 = b.to_bytes();
 
                 let mut accum = <$projective>::identity();
 

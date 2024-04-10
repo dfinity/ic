@@ -357,6 +357,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "curve25519-dalek": crate.spec(
                 version = "^4.1.2",
+                features = ["group", "precomputed-tables"],
             ),
             "cvt": crate.spec(
                 version = "^0.1.1",
@@ -443,6 +444,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "glob": crate.spec(
                 version = "^0.3.0",
+            ),
+            "group": crate.spec(
+                version = "^0.13",
             ),
             "h2": crate.spec(
                 version = "^0.3.26",

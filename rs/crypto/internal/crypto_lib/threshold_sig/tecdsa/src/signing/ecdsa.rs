@@ -84,6 +84,13 @@ impl ThresholdEcdsaSigShareInternal {
         key_times_lambda: &CommitmentOpening,
         curve_type: EccCurveType,
     ) -> ThresholdEcdsaResult<Self> {
+        if !curve_type.valid_for_ecdsa() {
+            return Err(ThresholdEcdsaError::InvalidArguments(format!(
+                "Curve {} not valid for ECDSA",
+                curve_type
+            )));
+        }
+
         let (rho, key_tweak, randomizer, _presig) = derive_rho(
             curve_type,
             hashed_message,
@@ -153,6 +160,13 @@ impl ThresholdEcdsaSigShareInternal {
         key_times_lambda: &IDkgTranscriptInternal,
         curve_type: EccCurveType,
     ) -> ThresholdEcdsaResult<()> {
+        if !curve_type.valid_for_ecdsa() {
+            return Err(ThresholdEcdsaError::InvalidArguments(format!(
+                "Curve {} not valid for ECDSA",
+                curve_type
+            )));
+        }
+
         // Compute rho and tweak
         let (rho, key_tweak, randomizer, _presig) = derive_rho(
             curve_type,
@@ -241,6 +255,13 @@ impl ThresholdEcdsaCombinedSigInternal {
             ))
         })?;
 
+        if !curve_type.valid_for_ecdsa() {
+            return Err(ThresholdEcdsaSerializationError(format!(
+                "Curve {} not valid for ECDSA",
+                curve_type
+            )));
+        }
+
         let slen = curve_type.scalar_bytes();
 
         if bytes.len() != 2 * slen {
@@ -319,7 +340,7 @@ impl ThresholdEcdsaCombinedSigInternal {
         let sigma = numerator.mul(&denominator_inv)?;
 
         // Always use the smaller value of s
-        let norm_sigma = if sigma.is_high() {
+        let norm_sigma = if sigma.is_high()? {
             sigma.negate()
         } else {
             sigma
@@ -373,7 +394,7 @@ impl ThresholdEcdsaCombinedSigInternal {
         }
 
         // We require s normalization for all curves
-        if self.s.is_high() {
+        if self.s.is_high()? {
             return Err(ThresholdEcdsaError::InvalidSignature);
         }
 

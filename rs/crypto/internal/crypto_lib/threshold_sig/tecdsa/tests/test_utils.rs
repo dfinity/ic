@@ -102,6 +102,7 @@ impl ProtocolSetup {
         let alg = match cfg.signature_curve() {
             EccCurveType::K256 => AlgorithmId::ThresholdEcdsaSecp256k1,
             EccCurveType::P256 => AlgorithmId::ThresholdEcdsaSecp256r1,
+            EccCurveType::Ed25519 => AlgorithmId::ThresholdEd25519,
         };
 
         let rng = &mut seed.into_rng();

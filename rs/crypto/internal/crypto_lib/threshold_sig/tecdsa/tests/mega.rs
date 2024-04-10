@@ -49,12 +49,14 @@ fn mega_key_validity() -> ThresholdEcdsaResult<()> {
 
         assert!(verify_mega_public_key(curve_type, &pk_bytes).is_ok());
 
-        // In compressed format flipping this bit is equivalent to
-        // flipping the sign of y, which is equivalent to negating the
-        // point.  In all cases if pk_bytes is a valid encoding, this
-        // modification is also
-        pk_bytes[0] ^= 1;
-        assert!(verify_mega_public_key(curve_type, &pk_bytes).is_ok());
+        if curve_type != EccCurveType::Ed25519 {
+            // In compressed format flipping this bit is equivalent to
+            // flipping the sign of y, which is equivalent to negating the
+            // point.  In all cases if pk_bytes is a valid encoding, this
+            // modification is also
+            pk_bytes[0] ^= 1;
+            assert!(verify_mega_public_key(curve_type, &pk_bytes).is_ok());
+        }
 
         // Invalid header:
         pk_bytes[0] ^= 2;
