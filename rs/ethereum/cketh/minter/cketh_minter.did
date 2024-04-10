@@ -229,7 +229,7 @@ type WithdrawalError = variant {
    // Recipient's address is blocked.
    // No withdrawal can be made to that address.
     RecipientAddressBlocked : record { address : text };
-    // The minter is overloaded, retry the request.
+    // The minter or the ckETH ledger is temporarily unavailable, retry the request.
     // The payload contains a human-readable message explaining what caused the unavailability.
     TemporarilyUnavailable : text;
 };
@@ -270,6 +270,10 @@ type WithdrawErc20Error = variant {
     // The minter could not burn the requested amount of ckERC20 tokens.
     // The `cketh_block_index` identifies the burn that occurred on the ckETH ledger and that will be reimbursed.
     CkErc20LedgerError : record { cketh_block_index : nat; error : LedgerError };
+
+    // The minter is temporarily unavailable, retry the request.
+    // The payload contains a human-readable message explaining what caused the unavailability.
+    TemporarilyUnavailable : text;
 };
 
 type LedgerError = variant {

@@ -701,7 +701,7 @@ pub enum TransactionFeeEstimationError {
 ///
 /// From the fee history, the current base fee per gas and the max priority fee per gas are determined.
 /// Then, the max fee per gas is computed as `2 * base_fee_per_gas + max_priority_fee_per_gas` to ensure that
-/// the estimate remains valid for the next few blocks, see https://www.blocknative.com/blog/eip-1559-fees.
+/// the estimate remains valid for the next few blocks, see `<https://www.blocknative.com/blog/eip-1559-fees>`.
 pub fn estimate_transaction_fee(
     fee_history: &FeeHistory,
 ) -> Result<GasFeeEstimate, TransactionFeeEstimationError> {

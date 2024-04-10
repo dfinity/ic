@@ -24,7 +24,7 @@ impl From<Erc20WithdrawalRequest> for RetrieveErc20Request {
     }
 }
 
-#[derive(CandidType, Deserialize, Debug, PartialEq)]
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
 pub enum WithdrawErc20Error {
     TokenNotSupported {
         supported_tokens: Vec<crate::endpoints::CkErc20Token>,
@@ -39,9 +39,10 @@ pub enum WithdrawErc20Error {
         cketh_block_index: Nat,
         error: LedgerError,
     },
+    TemporarilyUnavailable(String),
 }
 
-#[derive(CandidType, Deserialize, Debug, PartialEq)]
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
 pub enum LedgerError {
     InsufficientFunds {
         balance: Nat,

@@ -826,6 +826,17 @@ pub fn encode_principal(principal: Principal) -> String {
     format!("0x{}", hex::encode(fixed_bytes))
 }
 
+pub fn increment_max_priority_fee_per_gas(fee_history: &mut ethers_core::types::FeeHistory) {
+    for rewards in fee_history.reward.iter_mut() {
+        for reward in rewards.iter_mut() {
+            *reward = reward
+                .checked_add(1_u64.into())
+                .unwrap()
+                .max((1_500_000_000_u64 + 1_u64).into());
+        }
+    }
+}
+
 pub fn double_and_increment_base_fee_per_gas(fee_history: &mut ethers_core::types::FeeHistory) {
     for base_fee_per_gas in fee_history.base_fee_per_gas.iter_mut() {
         *base_fee_per_gas = base_fee_per_gas

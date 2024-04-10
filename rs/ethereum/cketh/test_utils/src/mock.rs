@@ -5,8 +5,8 @@ use ic_cdk::api::management_canister::http_request::{
     HttpResponse as OutCallHttpResponse, TransformArgs,
 };
 use ic_state_machine_tests::{
-    CanisterHttpMethod, CanisterHttpRequestContext, CanisterHttpResponsePayload, PayloadBuilder,
-    RejectCode, StateMachine,
+    CallbackId, CanisterHttpMethod, CanisterHttpRequestContext, CanisterHttpResponsePayload,
+    PayloadBuilder, RejectCode, StateMachine,
 };
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -114,6 +114,12 @@ impl JsonRpcRequestMatcher {
         }
     }
 
+    pub fn new_for_all_providers(method: JsonRpcMethod) -> BTreeMap<JsonRpcProvider, Self> {
+        JsonRpcProvider::iter()
+            .map(|provider| (provider, Self::new(provider, method.clone())))
+            .collect()
+    }
+
     pub fn with_request_params(mut self, params: Option<serde_json::Value>) -> Self {
         self.match_request_params = params;
         self
@@ -122,6 +128,39 @@ impl JsonRpcRequestMatcher {
     pub fn with_max_response_bytes(mut self, max_response_bytes: Option<u64>) -> Self {
         self.max_response_bytes = max_response_bytes;
         self
+    }
+
+    fn tick_until_next_http_request(&self, env: &StateMachine) {
+        let method = self.json_rpc_method.to_string();
+        for _ in 0..MAX_TICKS {
+            let matching_method = env
+                .canister_http_request_contexts()
+                .values()
+                .any(|context| {
+                    JsonRpcRequest::from_str(
+                        std::str::from_utf8(&context.body.clone().unwrap()).unwrap(),
+                    )
+                    .expect("BUG: invalid JSON RPC method")
+                    .method
+                    .to_string()
+                        == method
+                });
+            if matching_method {
+                break;
+            }
+            env.tick();
+            env.advance_time(Duration::from_nanos(1));
+        }
+    }
+
+    pub fn find_rpc_call(
+        &self,
+        env: &StateMachine,
+    ) -> Option<(CallbackId, CanisterHttpRequestContext)> {
+        self.tick_until_next_http_request(env);
+        env.canister_http_request_contexts()
+            .into_iter()
+            .find(|(_id, context)| self.matches(context))
     }
 }
 
@@ -166,18 +205,13 @@ struct StubOnce {
 
 impl StubOnce {
     fn expect_rpc_call(self, env: &StateMachine, canister_id_cleanup_response: CanisterId) {
-        self.tick_until_next_http_request(env);
-        let (id, context) = env
-            .canister_http_request_contexts()
-            .into_iter()
-            .find(|(_id, context)| self.matcher.matches(context))
-            .unwrap_or_else(|| {
-                panic!(
-                    "no request found matching the stub {:?}. Current requests {}",
-                    self,
-                    debug_http_outcalls(env)
-                )
-            });
+        let (id, context) = self.matcher.find_rpc_call(env).unwrap_or_else(|| {
+            panic!(
+                "no request found matching the stub {:?}. Current requests {}",
+                self,
+                debug_http_outcalls(env)
+            )
+        });
         let request_id = {
             let request_body = context
                 .body
@@ -261,29 +295,6 @@ impl StubOnce {
         let mut payload = PayloadBuilder::new();
         payload = payload.http_response(id, &http_response);
         env.execute_payload(payload);
-    }
-
-    fn tick_until_next_http_request(&self, env: &StateMachine) {
-        let method = self.matcher.json_rpc_method.to_string();
-        for _ in 0..MAX_TICKS {
-            let matching_method = env
-                .canister_http_request_contexts()
-                .values()
-                .any(|context| {
-                    JsonRpcRequest::from_str(
-                        std::str::from_utf8(&context.body.clone().unwrap()).unwrap(),
-                    )
-                    .expect("BUG: invalid JSON RPC method")
-                    .method
-                    .to_string()
-                        == method
-                });
-            if matching_method {
-                break;
-            }
-            env.tick();
-            env.advance_time(Duration::from_nanos(1));
-        }
     }
 }
 
