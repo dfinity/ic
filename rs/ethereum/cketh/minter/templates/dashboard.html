@@ -198,14 +198,16 @@
                 <thead>
                 <tr>
                     <th>Token Symbol</th>
+                    <th>Total managed (base unit)</th>
                     <th>Contract Address</th>
                     <th>Ledger Canister Id</th>
                 </tr>
                 </thead>
                 <tbody>
                 {% for token in supported_ckerc20_tokens -%}
-                <tr>
-                  <td>{{ token.ckerc20_token_symbol.to_string() }}</td>
+                <tr id="supported-ckerc20-{{ token.ckerc20_ledger_id}}">
+                    <td>{{ token.ckerc20_token_symbol.to_string() }}</td>
+                    <td class="numeric">{{ token.balance }}</td>
                     <td>{% call etherscan_address_link(token.erc20_contract_address.to_string()) %}</td>
                     <td><code>{{ token.ckerc20_ledger_id.to_string() }}</code></td>
                 </tr>

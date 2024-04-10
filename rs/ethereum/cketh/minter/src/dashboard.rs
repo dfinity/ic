@@ -1,7 +1,6 @@
 #[cfg(test)]
 mod tests;
 
-use crate::erc20::CkErc20Token;
 use askama::Template;
 use candid::{Nat, Principal};
 use ic_cketh_minter::endpoints::{EthTransaction, RetrieveEthStatus};
@@ -10,7 +9,9 @@ use ic_cketh_minter::eth_logs::{EventSource, ReceivedEvent};
 use ic_cketh_minter::eth_rpc::Hash;
 use ic_cketh_minter::eth_rpc_client::responses::TransactionStatus;
 use ic_cketh_minter::lifecycle::EthereumNetwork;
-use ic_cketh_minter::numeric::{BlockNumber, LedgerBurnIndex, LogIndex, TransactionNonce, Wei};
+use ic_cketh_minter::numeric::{
+    BlockNumber, Erc20Value, LedgerBurnIndex, LogIndex, TransactionNonce, Wei,
+};
 use ic_cketh_minter::state::transactions::{Reimbursed, TransactionCallData, WithdrawalRequest};
 use ic_cketh_minter::state::{EthBalance, MintedEvent, State};
 use ic_cketh_minter::tx::Eip1559TransactionRequest;
@@ -31,6 +32,14 @@ mod filters {
                 .unwrap();
         Ok(dt_offset.format(&format).unwrap())
     }
+}
+
+#[derive(Clone)]
+pub struct DashboardCkErc20Token {
+    pub erc20_contract_address: Address,
+    pub ckerc20_token_symbol: CkTokenSymbol,
+    pub ckerc20_ledger_id: Principal,
+    pub balance: Erc20Value,
 }
 
 #[derive(Clone)]
@@ -119,7 +128,7 @@ pub struct DashboardTemplate {
     pub reimbursed_transactions: Vec<Reimbursed>,
     pub eth_balance: EthBalance,
     pub skipped_blocks: BTreeSet<BlockNumber>,
-    pub supported_ckerc20_tokens: Vec<CkErc20Token>,
+    pub supported_ckerc20_tokens: Vec<DashboardCkErc20Token>,
 }
 
 impl DashboardTemplate {
@@ -130,7 +139,17 @@ impl DashboardTemplate {
             Reverse((deposit_event.block_number(), deposit_event.log_index()))
         });
 
-        let mut supported_ckerc20_tokens: Vec<_> = state.supported_ck_erc20_tokens().collect();
+        let mut supported_ckerc20_tokens: Vec<_> = state
+            .supported_ck_erc20_tokens()
+            .map(|ckerc20| DashboardCkErc20Token {
+                erc20_contract_address: ckerc20.erc20_contract_address,
+                ckerc20_token_symbol: ckerc20.ckerc20_token_symbol,
+                ckerc20_ledger_id: ckerc20.ckerc20_ledger_id,
+                balance: state
+                    .erc20_balances
+                    .balance_of(&ckerc20.erc20_contract_address),
+            })
+            .collect();
         supported_ckerc20_tokens.sort_unstable_by_key(|token| token.ckerc20_token_symbol.clone());
 
         let mut events_to_mint = state.events_to_mint();

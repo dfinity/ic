@@ -109,6 +109,7 @@ fn should_display_supported_erc20_tokens() {
             1,
             &vec![
                 "ckUSDC",
+                "0",
                 "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
                 "mxzaz-hqaaa-aaaar-qaada-cai",
             ],
@@ -117,6 +118,7 @@ fn should_display_supported_erc20_tokens() {
             2,
             &vec![
                 "ckUSDT",
+                "0",
                 "0xdAC17F958D2ee523a2206206994597C13D831ec7",
                 "sa4so-piaaa-aaaar-qacnq-cai",
             ],
@@ -153,6 +155,7 @@ fn should_display_pending_deposits_sorted_by_decreasing_block_number() {
 
     DashboardAssert::assert_that(dashboard)
         .has_eth_balance("20_000_000_000_000_000")
+        .has_erc20_balance(&ckusdc(), "10_000_000_000_000_000_000")
         .has_total_effective_tx_fees("0")
         .has_total_unspent_tx_fees("0")
         .has_pending_deposits(
@@ -624,6 +627,7 @@ fn should_display_finalized_transactions_sorted_by_decreasing_cketh_ledger_burn_
         .has_eth_balance("8_835_000_000_000_000")
         .has_total_effective_tx_fees("107_000_000_000_000")
         .has_total_unspent_tx_fees("107_000_000_000_000")
+        .has_erc20_balance(&ckusdc(), "9_999_999_999_998_000_000")
         .has_finalized_transactions(
             1,
             &vec![
@@ -1063,6 +1067,7 @@ fn ckerc20_withdrawal_flow(
 mod assertions {
     use crate::dashboard::DashboardTemplate;
     use askama::Template;
+    use ic_cketh_minter::erc20::CkErc20Token;
     use scraper::Html;
     use scraper::Selector;
 
@@ -1241,6 +1246,23 @@ mod assertions {
             self.has_table_row_string_value(
                 &format!("#supported-ckerc20-tokens + table > tbody > tr:nth-child({row_index})"),
                 expected_token,
+                "wrong supported erc20 tokens",
+            )
+        }
+
+        pub fn has_erc20_balance(&self, token: &CkErc20Token, expected_balance: &str) -> &Self {
+            let token_symbol = format!("{}", token.ckerc20_token_symbol);
+            let erc20_contract = format!("{}", token.erc20_contract_address);
+            let ckerc20_ledger = format!("{}", token.ckerc20_ledger_id);
+            let expected_value = vec![
+                token_symbol.as_str(),
+                expected_balance,
+                erc20_contract.as_str(),
+                ckerc20_ledger.as_str(),
+            ];
+            self.has_table_row_string_value(
+                &format!("#supported-ckerc20-{}", token.ckerc20_ledger_id),
+                &expected_value,
                 "wrong supported erc20 tokens",
             )
         }
