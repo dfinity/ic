@@ -39,7 +39,7 @@ impl Default for Config {
             http_request_timeout_secs: DEFAULT_HTTP_REQUEST_TIMEOUT_SECS,
             incoming_source: IncomingSource::default(),
             logger: LoggerConfig::default(),
-            socks_proxy: "socks5://notaproxy:1080".to_string(),
+            socks_proxy: "socks5://127.0.0.1:1080".to_string(),
         }
     }
 }

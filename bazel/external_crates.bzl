@@ -983,6 +983,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "json",
                     "rustls-tls",
                     "rustls-tls-native-roots",
+                    "socks",
+                    "stream",
                 ],
             ),
             "ring": crate.spec(
