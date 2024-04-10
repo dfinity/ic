@@ -69,7 +69,7 @@ use {
         socket::listen_tcp_backlog,
         tls::{acme_challenge, prepare_tls, redirect_to_https},
     },
-    axum_server::Server,
+    axum_server::{AddrIncomingConfig, Server},
 };
 
 pub const SERVICE_NAME: &str = "ic_boundary";
@@ -241,6 +241,13 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
         SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), cli.listen.https_port),
         cli.listen.backlog,
     )?)
+    .addr_incoming_config({
+        let mut cfg = AddrIncomingConfig::default();
+        cfg.tcp_keepalive(Some(Duration::from_secs(cli.listen.http_keepalive)));
+        cfg.tcp_keepalive_retries(Some(2));
+        cfg.tcp_nodelay(true);
+        cfg
+    })
     .acceptor(tls_acceptor.clone())
     .serve(
         routers_https
