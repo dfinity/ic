@@ -5701,6 +5701,7 @@ dependencies = [
  "ic-canonical-state-tree-hash",
  "ic-canonical-state-tree-hash-test-utils",
  "ic-certification-version",
+ "ic-crypto-sha2",
  "ic-crypto-tree-hash",
  "ic-error-types",
  "ic-protobuf",
