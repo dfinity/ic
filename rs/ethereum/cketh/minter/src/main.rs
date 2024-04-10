@@ -26,8 +26,10 @@ use ic_cketh_minter::state::transactions::{
     Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed, ReimbursementRequest,
 };
 use ic_cketh_minter::state::{lazy_call_ecdsa_public_key, mutate_state, read_state, State, STATE};
+use ic_cketh_minter::tx::lazy_refresh_gas_fee_estimate;
 use ic_cketh_minter::withdraw::{
-    process_reimbursement, process_retrieve_eth_requests, CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
+    process_reimbursement, process_retrieve_eth_requests, CKERC20_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
+    CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
 };
 use ic_cketh_minter::{endpoints, erc20};
 use ic_cketh_minter::{
@@ -316,7 +318,9 @@ async fn withdraw_erc20(
             }
         })?;
     let cketh_ledger = read_state(LedgerClient::cketh_ledger_from_state);
-    let erc20_tx_fee = estimate_erc20_transaction_fee();
+    let erc20_tx_fee = estimate_erc20_transaction_fee().await.ok_or_else(|| {
+        WithdrawErc20Error::TemporarilyUnavailable("Failed to retrieve current gas fee".to_string())
+    })?;
     let now = ic_cdk::api::time();
     log!(INFO, "[withdraw_erc20]: burning {:?} ckETH", erc20_tx_fee);
     match cketh_ledger
@@ -411,9 +415,14 @@ async fn withdraw_erc20(
     }
 }
 
-fn estimate_erc20_transaction_fee() -> Wei {
-    //TODO XC-58: better fee estimation
-    read_state(|s| s.minimum_withdrawal_amount)
+async fn estimate_erc20_transaction_fee() -> Option<Wei> {
+    lazy_refresh_gas_fee_estimate()
+        .await
+        .map(|gas_fee_estimate| {
+            gas_fee_estimate
+                .to_price(CKERC20_WITHDRAWAL_TRANSACTION_GAS_LIMIT)
+                .max_transaction_fee()
+        })
 }
 
 #[query]

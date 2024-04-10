@@ -109,7 +109,7 @@ use ic_types::{
     batch::{Batch, BatchMessages, XNetPayload},
     consensus::certification::Certification,
     messages::{
-        Blob, CallbackId, Certificate, CertificateDelegation, HttpCallContent, HttpCanisterUpdate,
+        Blob, Certificate, CertificateDelegation, HttpCallContent, HttpCanisterUpdate,
         HttpRequestEnvelope, Payload as MsgPayload, RejectContext, SignedIngress,
         SignedIngressContent, UserQuery, EXPECTED_MESSAGE_ID_LENGTH,
     },
@@ -118,7 +118,7 @@ use ic_types::{
 };
 pub use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
-    messages::{HttpRequestError, MessageId},
+    messages::{CallbackId, HttpRequestError, MessageId},
     time::Time,
     CanisterId, CryptoHashOfState, Cycles, PrincipalId, SubnetId, UserId,
 };
