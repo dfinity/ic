@@ -1,7 +1,7 @@
 use candid::{Decode, Encode, Nat, Principal};
 use ic_icrc1::blocks::encoded_block_to_generic_block;
-use ic_ledger_core::block::BlockType;
-use ic_state_machine_tests::{CanisterId, StateMachine};
+use ic_ledger_core::block::{BlockType, EncodedBlock};
+use ic_state_machine_tests::{CanisterId, StateMachine, WasmResult};
 use icrc_ledger_types::icrc::generic_value::ICRC3Value;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc3::blocks::{
@@ -30,32 +30,74 @@ fn archive_wasm() -> Vec<u8> {
     )
 }
 
-fn icrc3_get_blocks(
-    env: &StateMachine,
+struct Setup {
+    state_machine: StateMachine,
     archive_id: CanisterId,
-    arg: Vec<GetBlocksRequest>,
-) -> GetBlocksResult {
-    let payload = Encode!(&arg).unwrap();
-    let res = env.query(archive_id, "icrc3_get_blocks", payload).unwrap();
-    Decode!(&res.bytes(), GetBlocksResult).unwrap()
+}
+
+impl Setup {
+    fn new(
+        /* The Principal that can send blocks to the archive */
+        archiver_id: &Principal,
+        block_index_offset: &u64,
+        max_memory_size_bytes: &Option<u64>,
+        max_transactions_per_response: &Option<u64>,
+    ) -> Self {
+        let state_machine = StateMachine::new();
+        let payload = Encode!(
+            archiver_id,
+            block_index_offset,
+            max_memory_size_bytes,
+            max_transactions_per_response
+        )
+        .unwrap();
+        let archive_id = state_machine
+            .install_canister(archive_wasm(), payload, None)
+            .unwrap();
+        Self {
+            state_machine,
+            archive_id,
+        }
+    }
+
+    fn nanos_since_epoch(&self) -> u64 {
+        self.state_machine
+            .time()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as u64
+    }
+
+    fn append_blocks(&self, blocks: Vec<EncodedBlock>) -> WasmResult {
+        let payload = Encode!(&blocks).unwrap();
+        self.state_machine
+            .execute_ingress(self.archive_id, "append_blocks", payload)
+            .unwrap()
+    }
+
+    fn icrc3_get_blocks(&self, arg: Vec<GetBlocksRequest>) -> GetBlocksResult {
+        let payload = Encode!(&arg).unwrap();
+        let res = self
+            .state_machine
+            .query(self.archive_id, "icrc3_get_blocks", payload)
+            .unwrap();
+        Decode!(&res.bytes(), GetBlocksResult).unwrap()
+    }
+}
+
+impl Default for Setup {
+    fn default() -> Self {
+        Self::new(&Principal::anonymous(), &0u64, &None, &None)
+    }
 }
 
 #[test]
 fn test_icrc3_get_blocks() {
-    let env = StateMachine::new();
-    let payload = Encode!(
-        /* The Principal that can send blocks to the archive */
-        &Principal::anonymous(),
-        /* block_index_offset */ &0u64,
-        /* max_memory_size_bytes */ &None::<u64>,
-        /* max_transactions_per_response */ &None::<u64>
-    )
-    .unwrap();
-    let archive_id = env.install_canister(archive_wasm(), payload, None).unwrap();
+    let setup = Setup::default();
 
     let block = |parent: Option<Block>, operation: Operation| -> Block {
         let parent_hash = parent.map(|block| Block::block_hash(&block.encode()));
-        let timestamp = env.time().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
+        let timestamp = setup.nanos_since_epoch();
         Block {
             parent_hash,
             effective_fee: None,
@@ -140,10 +182,7 @@ fn test_icrc3_get_blocks() {
         block3.encode(),
     ];
     let blockids = vec![blockid0, blockid1, blockid2, blockid3];
-    let payload = Encode!(&blocks).unwrap();
-    let _ = env
-        .execute_ingress(archive_id, "append_blocks", payload)
-        .unwrap();
+    let _ = setup.append_blocks(blocks);
 
     let check_icrc3_get_blocks =
         |requested_start_lengths: Vec<(usize, usize)>,
@@ -155,7 +194,7 @@ fn test_icrc3_get_blocks() {
                     length: Nat::from(length),
                 })
                 .collect::<Vec<_>>();
-            let blocks_found = icrc3_get_blocks(&env, archive_id, req);
+            let blocks_found = setup.icrc3_get_blocks(req);
             assert_eq!(blocks_found.log_length, 4u64);
             assert_eq!(blocks_found.archived_blocks, Vec::<ArchivedBlocks>::new());
             let mut expected = vec![];
@@ -197,4 +236,106 @@ fn test_icrc3_get_blocks() {
 
     // query partially out of range
     check_icrc3_get_blocks(vec![(0, 100)], vec![(0, 4)]);
+}
+
+#[test]
+fn test_icrc3_get_blocks_number_of_blocks_limit() {
+    // add 101 blocks to archive and checks that
+    // icrc3_get_blocks returns at most 100 blocks
+    // even with multiple ranges.
+
+    let setup = Setup::default();
+    fn new_encoded_block(amount: usize) -> EncodedBlock {
+        // create a mint block with amount set to the parameter
+        Block {
+            parent_hash: None,
+            effective_fee: None,
+            timestamp: 0,
+            fee_collector: None,
+            fee_collector_block_index: None,
+            transaction: Transaction {
+                operation: Operation::Mint {
+                    to: Account::from(Principal::anonymous()),
+                    amount: Tokens::from(amount as u64),
+                },
+                created_at_time: None,
+                memo: None,
+            },
+        }
+        .encode()
+    }
+    let encoded_blocks = (0..101).map(new_encoded_block).collect::<Vec<_>>();
+    let _ = setup.append_blocks(encoded_blocks.clone());
+
+    let blocks = encoded_blocks
+        .into_iter()
+        .enumerate()
+        .map(|(id, encoded_block)| BlockWithId {
+            id: Nat::from(id),
+            block: ICRC3Value::from(encoded_block_to_generic_block(&encoded_block)),
+        })
+        .collect::<Vec<_>>();
+
+    let check_icrc3_get_blocks =
+        |requested_start_lengths: Vec<(usize, usize)>,
+         expected_start_lengths: Vec<(usize, usize)>| {
+            let req = requested_start_lengths
+                .iter()
+                .map(|(start, length)| GetBlocksRequest {
+                    start: Nat::from(*start),
+                    length: Nat::from(*length),
+                })
+                .collect::<Vec<_>>();
+            let blocks_found = setup.icrc3_get_blocks(req);
+            assert_eq!(
+                blocks_found.log_length, 101u64,
+                "{requested_start_lengths:?}"
+            );
+            assert_eq!(
+                blocks_found.archived_blocks,
+                Vec::<ArchivedBlocks>::new(),
+                "{requested_start_lengths:?}"
+            );
+            let mut expected_blocks = vec![];
+            for (start, length) in expected_start_lengths {
+                expected_blocks.push(&blocks[start..start + length]);
+            }
+            let expected_blocks = expected_blocks.concat();
+            assert_eq!(blocks_found.blocks.len(), expected_blocks.len());
+            for (id, (block_found, block_expected)) in blocks_found
+                .blocks
+                .into_iter()
+                .zip(expected_blocks)
+                .enumerate()
+            {
+                assert_eq!(
+                    block_found, block_expected,
+                    "{requested_start_lengths:?} {id}"
+                );
+            }
+        };
+
+    // max blocks returned should be 100
+    check_icrc3_get_blocks(vec![(0, 1)], vec![(0, 1)]);
+    check_icrc3_get_blocks(vec![(1, 1)], vec![(1, 1)]);
+    check_icrc3_get_blocks(vec![(50, 1)], vec![(50, 1)]);
+    check_icrc3_get_blocks(vec![(99, 1)], vec![(99, 1)]);
+    check_icrc3_get_blocks(vec![(0, 10)], vec![(0, 10)]);
+    check_icrc3_get_blocks(vec![(1, 10)], vec![(1, 10)]);
+    check_icrc3_get_blocks(vec![(50, 10)], vec![(50, 10)]);
+    check_icrc3_get_blocks(vec![(90, 10)], vec![(90, 10)]);
+    check_icrc3_get_blocks(vec![(0, 50)], vec![(0, 50)]);
+    check_icrc3_get_blocks(vec![(1, 50)], vec![(1, 50)]);
+    check_icrc3_get_blocks(vec![(50, 50)], vec![(50, 50)]);
+    check_icrc3_get_blocks(vec![(0, 99)], vec![(0, 99)]);
+    check_icrc3_get_blocks(vec![(0, 100)], vec![(0, 100)]);
+    check_icrc3_get_blocks(vec![(0, 101)], vec![(0, 100)]);
+    check_icrc3_get_blocks(vec![(1, 102)], vec![(1, 100)]);
+    check_icrc3_get_blocks(vec![(0, 101), (0, 101)], vec![(0, 100)]);
+    check_icrc3_get_blocks(
+        vec![(0, 101), (0, 101), (1, 101), (100, 101)],
+        vec![(0, 100)],
+    );
+    check_icrc3_get_blocks(vec![(0, 10), (20, 10)], vec![(0, 10), (20, 10)]);
+    check_icrc3_get_blocks(vec![(0, 10), (5, 10)], vec![(0, 10), (5, 10)]);
 }
