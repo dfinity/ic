@@ -56,18 +56,18 @@ LIB_DEPENDENCIES = [
 
 TEST_DEPENDENCIES = [
     "//packages/pocket-ic:pocket-ic",
-    "//rs/tests/testing_verification/spec_compliance",
     "//rs/types/types",
-    "//rs/registry/subnet_type",
     "//rs/registry/routing_table",
     "@crate_index//:ic-agent",
-    "@crate_index//:ic-cdk",
     "@crate_index//:ic-utils",
     "@crate_index//:reqwest",
     "@crate_index//:candid",
-    "@crate_index//:serde",
-    "@crate_index//:serde_json",
     "@crate_index//:tokio",
+]
+
+SPEC_TEST_DEPENDENCIES = TEST_DEPENDENCIES + [
+    "//rs/tests/testing_verification/spec_compliance",
+    "//rs/registry/subnet_type",
 ]
 
 MACRO_DEPENDENCIES = [
@@ -105,16 +105,35 @@ rust_ic_test(
 rust_test(
     name = "test",
     size = "medium",
-    srcs = ["tests/api_test.rs"],
+    srcs = [
+        "tests/common.rs",
+        "tests/test.rs",
+    ],
     data = [
         ":pocket-ic-server",
-        "//rs/tests:ic-hs",
         "@ii_dev_canister//file",
     ],
     env = {
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
-        "IC_REF_TEST_ROOT": "rs/tests/ic-hs",
         "II_WASM": "external/ii_dev_canister/file/internet_identity_dev.wasm.gz",
     },
     deps = TEST_DEPENDENCIES,
+)
+
+rust_test(
+    name = "spec_test",
+    size = "medium",
+    srcs = [
+        "tests/common.rs",
+        "tests/spec_test.rs",
+    ],
+    data = [
+        ":pocket-ic-server",
+        "//rs/tests:ic-hs",
+    ],
+    env = {
+        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+        "IC_REF_TEST_ROOT": "rs/tests/ic-hs",
+    },
+    deps = SPEC_TEST_DEPENDENCIES,
 )
