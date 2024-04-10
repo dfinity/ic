@@ -306,6 +306,17 @@ impl From<&manage_neuron::Command> for neuron_in_flight_command::Command {
     }
 }
 
+lazy_static! {
+    static ref DEFAULT_NERVOUS_SYSTEM_PARAMETERS: NervousSystemParameters =
+        NervousSystemParameters::default();
+}
+
+impl Default for &NervousSystemParameters {
+    fn default() -> Self {
+        &DEFAULT_NERVOUS_SYSTEM_PARAMETERS
+    }
+}
+
 /// Some constants that define upper bound (ceiling) and lower bounds (floor) for some of
 /// the nervous system parameters as well as the default values for the nervous system
 /// parameters (until we initialize them). We can't implement Default since it conflicts
@@ -1735,6 +1746,35 @@ pub fn is_registered_function_id(
     match nervous_system_functions.get(&function_id) {
         None => false,
         Some(function) => function != &*NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER,
+    }
+}
+
+// This is almost a copy n' paste from NNS. The main difference (as of
+// 2023-11-17) is to account for the fact that here in SNS,
+// total_available_e8s_equivalent is optional. (Therefore, an extra
+// unwrap_or_default call is added.)
+impl RewardEvent {
+    /// Calculates the total_available_e8s_equivalent in this event that should
+    /// be "rolled over" into the next `RewardEvent`.
+    ///
+    /// Behavior:
+    /// - If rewards were distributed for this event, then no available_icp_e8s
+    ///   should be rolled over, so this function returns 0.
+    /// - Otherwise, this function returns
+    ///   `total_available_e8s_equivalent`.
+    pub(crate) fn e8s_equivalent_to_be_rolled_over(&self) -> u64 {
+        if self.rewards_rolled_over() {
+            self.total_available_e8s_equivalent.unwrap_or_default()
+        } else {
+            0
+        }
+    }
+
+    // Not copied from NNS: fn rounds_since_last_distribution_to_be_rolled_over
+
+    /// Whether this is a "rollover event", where no rewards were distributed.
+    pub(crate) fn rewards_rolled_over(&self) -> bool {
+        self.settled_proposals.is_empty()
     }
 }
 

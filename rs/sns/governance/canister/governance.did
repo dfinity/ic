@@ -386,6 +386,7 @@ type RewardEvent = record {
   rounds_since_last_distribution : opt nat64;
   actual_timestamp_seconds : nat64;
   end_timestamp_seconds : opt nat64;
+  total_available_e8s_equivalent : opt nat64;
   distributed_e8s_equivalent : nat64;
   round : nat64;
   settled_proposals : vec ProposalId;

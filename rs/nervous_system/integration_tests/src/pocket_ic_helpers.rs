@@ -1346,7 +1346,7 @@ pub mod sns {
             );
         }
 
-        fn get_proposal(
+        pub fn get_proposal(
             pocket_ic: &PocketIc,
             canister_id: PrincipalId,
             proposal_id: sns_pb::ProposalId,
