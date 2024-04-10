@@ -31,7 +31,10 @@ use icrc_ledger_types::{
 };
 use icrc_ledger_types::{
     icrc1::transfer::Memo,
-    icrc3::archive::{GetArchivesArgs, GetArchivesResult},
+    icrc3::{
+        archive::{GetArchivesArgs, GetArchivesResult},
+        blocks::GetBlocksResult,
+    },
 };
 use icrc_ledger_types::{
     icrc1::transfer::{TransferArg, TransferError},
@@ -651,6 +654,12 @@ fn icrc3_supported_block_types() -> Vec<icrc_ledger_types::icrc3::blocks::Suppor
                 .to_string(),
         },
     ]
+}
+
+#[query]
+#[candid_method(query)]
+fn icrc3_get_blocks(args: Vec<GetBlocksRequest>) -> GetBlocksResult {
+    Access::with_ledger(|ledger| ledger.icrc3_get_blocks(args))
 }
 
 candid::export_service!();

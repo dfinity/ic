@@ -34,8 +34,12 @@ use icrc_ledger_types::{
     icrc3::archive::{ArchivedRange, QueryBlockArchiveFn, QueryTxArchiveFn},
 };
 use icrc_ledger_types::{
+    icrc::generic_value::ICRC3Value,
     icrc1::account::Account,
-    icrc3::archive::{GetArchivesArgs, GetArchivesResult, ICRC3ArchiveInfo},
+    icrc3::{
+        archive::{GetArchivesArgs, GetArchivesResult, ICRC3ArchiveInfo, QueryArchiveFn},
+        blocks::{ArchivedBlocks, GetBlocksRequest, GetBlocksResult},
+    },
 };
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
@@ -744,5 +748,64 @@ impl<Tokens: TokensType> Ledger<Tokens> {
                     })
             })
             .collect()
+    }
+
+    // TODO(FI-1268): extend MAX_BLOCKS_PER_RESPONSE to include archives
+    pub fn icrc3_get_blocks(&self, args: Vec<GetBlocksRequest>) -> GetBlocksResult {
+        const MAX_BLOCKS_PER_RESPONSE: u64 = 100;
+
+        let mut blocks = vec![];
+        let mut archived_blocks_by_callback = BTreeMap::new();
+        for arg in args {
+            let (start, length) = arg
+                .as_start_and_length()
+                .unwrap_or_else(|msg| ic_cdk::api::trap(&msg));
+            let max_length = MAX_BLOCKS_PER_RESPONSE.saturating_sub(blocks.len() as u64);
+            if max_length == 0 {
+                break;
+            }
+            let length = max_length.min(length).min(usize::MAX as u64) as usize;
+            let (first_index, local_blocks, archived_ranges) = self.query_blocks(
+                start,
+                length,
+                |block| ICRC3Value::from(encoded_block_to_generic_block(block)),
+                |canister_id| {
+                    QueryArchiveFn::<Vec<GetBlocksRequest>, GetBlocksResult>::new(
+                        canister_id,
+                        "icrc3_get_blocks",
+                    )
+                },
+            );
+            for (id, block) in (first_index..).zip(local_blocks) {
+                blocks.push(icrc_ledger_types::icrc3::blocks::BlockWithId {
+                    id: Nat::from(id),
+                    block,
+                });
+            }
+            for ArchivedRange {
+                start,
+                length,
+                callback,
+            } in archived_ranges
+            {
+                let request = GetBlocksRequest { start, length };
+                archived_blocks_by_callback
+                    .entry(callback)
+                    .or_insert(vec![])
+                    .push(request);
+            }
+            if blocks.len() as u64 >= MAX_BLOCKS_PER_RESPONSE {
+                break;
+            }
+        }
+        let mut archived_blocks = vec![];
+        for (callback, args) in archived_blocks_by_callback {
+            archived_blocks.push(ArchivedBlocks { args, callback });
+        }
+        GetBlocksResult {
+            log_length: Nat::from(self.blockchain.chain_length()),
+            blocks,
+            archived_blocks,
+        }
     }
 }
