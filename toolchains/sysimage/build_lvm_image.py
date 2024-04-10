@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 #
 # Builds a lvm image from individual partition images and a volume
-# table description. The actual lvm image is wrapped up into a tar file
+# table description. The actual lvm image is wrapped up into a tzst file
 # because the raw file is sparse.
 #
-# The input partition images are also expected to be given as tar files,
-# where each tar archive must contain a single file named "partition.img".
+# The input partition images are also expected to be given as tzst files,
 #
 # Call example:
-#   build_lvm_image -v volumes.csv -o partition-hostlvm.tar part1.tar part2.tar ...
+#   build_lvm_image -v volumes.csv -o partition-hostlvm.tzst part1.tzst part2.tzst ...
 #
 import argparse
 import atexit
@@ -26,7 +25,7 @@ EXTENT_SIZE_BYTES = int(4 * BYTES_PER_MEBIBYTE)
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-o", "--out", help="Target (tar) file to write lvm image to", type=str)
+    parser.add_argument("-o", "--out", help="Target (tzst) file to write lvm image to", type=str)
     parser.add_argument("-v", "--volume_table", help="CSV file describing the volume table", type=str)
     parser.add_argument("-n", "--vg-name", metavar="vg_name", help="Volume Group name to use", type=str)
     parser.add_argument("-u", "--vg-uuid", metavar="vg_uuid", help="UUID to use for Volume Group", type=str)
@@ -38,6 +37,7 @@ def main():
         nargs="*",
         help="Partitions to write. These must match the CSV volume table entries.",
     )
+    parser.add_argument("-d", "--dflate", help="Path to dflate", type=str)
 
     args = parser.parse_args(sys.argv[1:])
 
@@ -74,24 +74,32 @@ def main():
         partition_file = select_partition_file(name, partition_files)
 
         if partition_file:
-            write_partition_image_from_tar(entry, lvm_image, tarfile.open(partition_file, mode="r:"))
+            write_partition_image_from_tzst(entry, lvm_image, partition_file)
         else:
             print("No partition file for '%s' found, leaving empty" % name)
 
+    # If dflate is ever misbehaving, it can be replaced with:
+    # tar cf <output> --sort=name --owner=root:0 --group=root:0 --mtime="UTC 1970-01-01 00:00:00" --sparse --hole-detection=raw -C <context_path> <item>
+    temp_tar = os.path.join(tmpdir, "partition.tar")
     subprocess.run(
         [
-            "tar",
-            "cf",
+            args.dflate,
+            "--input",
+            lvm_image,
+            "--output",
+            temp_tar,
+        ],
+        check=True,
+    )
+
+    subprocess.run(
+        [
+            "zstd",
+            "-q",
+            "--threads=0",
+            temp_tar,
+            "-o",
             out_file,
-            "--sort=name",
-            "--owner=root:0",
-            "--group=root:0",
-            "--mtime=UTC 1970-01-01 00:00:00",
-            "--sparse",
-            "--hole-detection=raw",
-            "-C",
-            tmpdir,
-            "partition.img",
         ],
         check=True,
     )
@@ -165,7 +173,14 @@ def select_partition_file(name, partition_files):
     return None
 
 
-def write_partition_image_from_tar(lvm_entry, image_file, partition_tf):
+def write_partition_image_from_tzst(lvm_entry, image_file, partition_tzst):
+    tmpdir = tempfile.mkdtemp(prefix="icosbuild")
+    atexit.register(lambda: subprocess.run(["rm", "-rf", tmpdir], check=True))
+
+    partition_tf = os.path.join(tmpdir, "partition.tar")
+    subprocess.run(["zstd", "-q", "--threads=0", "-f", "-d", partition_tzst, "-o", partition_tf], check=True)
+
+    partition_tf = tarfile.open(partition_tf, mode="r:")
     base = LVM_HEADER_SIZE_BYTES + (lvm_entry["start"] * EXTENT_SIZE_BYTES)
     with os.fdopen(os.open(image_file, os.O_RDWR), "wb+") as target:
         for member in partition_tf:

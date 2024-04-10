@@ -9,7 +9,7 @@ exports_files([
 ])
 
 ext4_image(
-    name = "partition-config.tar",
+    name = "partition-config.tzst",
     partition_size = "100M",
     tags = ["manual"],
     target_compatible_with = [
