@@ -27,6 +27,7 @@ MACRO_DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     "//rs/canonical_state/tree_hash/test_utils",
+    "//rs/crypto/sha2",
     "//rs/registry/subnet_features",
     "//rs/sys",
     "//rs/test_utilities/state",

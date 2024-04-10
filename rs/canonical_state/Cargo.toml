@@ -28,6 +28,7 @@ strum_macros = { workspace = true }
 [dev-dependencies]
 assert_matches = { workspace = true }
 ic-canonical-state-tree-hash-test-utils = { path = "tree_hash/test_utils" }
+ic-crypto-sha2 = { path = "../crypto/sha2/" }
 ic-registry-subnet-features = { path = "../registry/subnet_features" }
 ic-test-utilities-state = { path = "../test_utilities/state" }
 ic-test-utilities-time = { path = "../test_utilities/time" }
