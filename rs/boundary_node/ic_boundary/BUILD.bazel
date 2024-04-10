@@ -59,7 +59,7 @@ DEPENDENCIES = [
     "@crate_index//:ratelimit",
     "@crate_index//:rcgen",
     "@crate_index//:regex",
-    "@crate_index//:reqwest",
+    "@crate_index//:reqwest_0_11_27",
     "@crate_index//:rustls",
     "@crate_index//:rustls-pemfile",
     "@crate_index//:serde",

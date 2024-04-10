@@ -962,8 +962,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "regex": crate.spec(
                 version = "^1.3.9",
             ),
-            "reqwest": crate.spec(
-                version = "^0.11.22",
+            "reqwest_0_11_27": crate.spec(
+                package = "reqwest",
+                version = "^0.11.27",
                 default_features = False,
                 features = [
                     "blocking",
@@ -973,11 +974,13 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "stream",
                 ],
             ),
-            "reqwest_0_12_0": crate.spec(
-                package = "reqwest",
-                version = "^0.12.0",
+            "reqwest": crate.spec(
+                version = "^0.12.3",
                 default_features = False,
                 features = [
+                    "blocking",
+                    "http2",
+                    "json",
                     "rustls-tls",
                     "rustls-tls-native-roots",
                 ],
