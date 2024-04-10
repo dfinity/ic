@@ -1,6 +1,9 @@
 use candid::CandidType;
 use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
-use ic_protobuf::{proxy::ProxyDecodeError, registry::subnet::v1 as pb};
+use ic_protobuf::{
+    proxy::ProxyDecodeError,
+    registry::{crypto::v1::MasterPublicKeyId as MasterPublicKeyIdPb, subnet::v1 as pb},
+};
 use serde::{Deserialize, Serialize};
 use std::{convert::TryFrom, str::FromStr};
 
@@ -130,11 +133,82 @@ pub struct KeyConfig {
     pub max_queue_size: Option<u32>,
 }
 
+impl From<KeyConfig> for pb::KeyConfig {
+    fn from(src: KeyConfig) -> Self {
+        let KeyConfig {
+            key_id,
+            pre_signatures_to_create_in_advance,
+            max_queue_size,
+        } = src;
+
+        let key_id = Some(MasterPublicKeyIdPb::from(key_id));
+
+        let pre_signatures_to_create_in_advance = Some(pre_signatures_to_create_in_advance);
+
+        Self {
+            key_id,
+            pre_signatures_to_create_in_advance,
+            max_queue_size,
+        }
+    }
+}
+
 #[derive(CandidType, Clone, Default, Deserialize, Debug, Eq, PartialEq, Serialize)]
 pub struct ChainKeyConfig {
     pub key_configs: Vec<KeyConfig>,
     pub signature_request_timeout_ns: Option<u64>,
     pub idkg_key_rotation_period_ms: Option<u64>,
+}
+
+impl From<ChainKeyConfig> for pb::ChainKeyConfig {
+    fn from(src: ChainKeyConfig) -> Self {
+        let ChainKeyConfig {
+            key_configs,
+            signature_request_timeout_ns,
+            idkg_key_rotation_period_ms,
+        } = src;
+
+        let key_configs = key_configs.into_iter().map(pb::KeyConfig::from).collect();
+
+        Self {
+            key_configs,
+            signature_request_timeout_ns,
+            idkg_key_rotation_period_ms,
+        }
+    }
+}
+
+/// This code is part of the data migration from `EcdsaConfig` to `ChainKeyConfig`.
+///
+/// Use this implementation to retrofit the values from an existing `EcdsaConfig` instance in places
+/// where we now need a `ChainKeyConfig` instance.
+///
+/// TODO[NNS1-2986]: Remove this code.
+impl From<EcdsaConfig> for ChainKeyConfig {
+    fn from(src: EcdsaConfig) -> Self {
+        let EcdsaConfig {
+            key_ids,
+            quadruples_to_create_in_advance,
+            max_queue_size,
+            signature_request_timeout_ns,
+            idkg_key_rotation_period_ms,
+        } = src;
+
+        let key_configs = key_ids
+            .into_iter()
+            .map(|key_id| KeyConfig {
+                key_id: MasterPublicKeyId::Ecdsa(key_id),
+                pre_signatures_to_create_in_advance: quadruples_to_create_in_advance,
+                max_queue_size,
+            })
+            .collect();
+
+        Self {
+            key_configs,
+            signature_request_timeout_ns,
+            idkg_key_rotation_period_ms,
+        }
+    }
 }
 
 #[cfg(test)]
