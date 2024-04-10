@@ -3,7 +3,7 @@ set -eEuo pipefail
 
 TARGET_LIST=$(bazel query "attr(tags, 'rust_bench', ${TARGETS:-'//rs/...'})")
 for TARGET in $TARGET_LIST; do
-    BAZEL_TARGETS="$TARGET"
+    export BAZEL_TARGETS="$TARGET"
     time ./gitlab-ci/src/bazel-ci/main.sh
 done
 find -L ./bazel-out -name 'benchmark.json'

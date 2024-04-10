@@ -27,7 +27,7 @@ anchors:
     container:
       <<: *image
     timeout-minutes: 30
-    if: ${{ vars.RUN_CI == 'true' }}v
+    if: ${{ vars.RUN_CI == 'true' }}
   checkout: &checkout
     name: Checkout
     uses: actions/checkout@v4
