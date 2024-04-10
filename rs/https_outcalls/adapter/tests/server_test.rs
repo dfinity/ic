@@ -3,7 +3,6 @@
 // We use `hyper-rustls` which uses Rustls, which supports the SSL_CERT_FILE variable.
 mod test {
     use futures::TryFutureExt;
-    use http::{header::HeaderValue, StatusCode};
     use ic_https_outcalls_adapter::{AdapterServer, Config};
     use ic_https_outcalls_service::{
         canister_http_service_client::CanisterHttpServiceClient, CanisterHttpSendRequest,
@@ -21,7 +20,10 @@ mod test {
     use tower::service_fn;
     use unix::UnixListenerDrop;
     use uuid::Uuid;
-    use warp::{http::Response, Filter};
+    use warp::{
+        http::{header::HeaderValue, Response, StatusCode},
+        Filter,
+    };
 
     // Selfsigned localhost cert
     const CERT: &str = "
@@ -336,7 +338,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         assert!(response
             .unwrap_err()
             .message()
-            .contains(&"deadline has elapsed".to_string()));
+            .contains(&"Failed to directly connect".to_string()));
     }
 
     #[tokio::test]

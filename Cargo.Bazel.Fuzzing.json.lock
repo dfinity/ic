@@ -1,5 +1,5 @@
 {
-  "checksum": "ba84650c4f99cbe133149a41c32171fc0f883819b5dda4edb55cc1adb130999f",
+  "checksum": "1200d19d5789d0791530049931e96da28bf9dea2f69f1e0114394c5857432675",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -44076,7 +44076,9 @@
             "rustls-pki-types",
             "rustls-tls",
             "rustls-tls-native-roots",
-            "rustls-tls-webpki-roots"
+            "rustls-tls-webpki-roots",
+            "socks",
+            "stream"
           ],
           "selects": {
             "aarch64-apple-darwin": [
@@ -44300,6 +44302,14 @@
                 "target": "tokio_rustls"
               },
               {
+                "id": "tokio-socks 0.5.1",
+                "target": "tokio_socks"
+              },
+              {
+                "id": "tokio-util 0.7.10",
+                "target": "tokio_util"
+              },
+              {
                 "id": "webpki-roots 0.26.1",
                 "target": "webpki_roots"
               }
@@ -44316,6 +44326,10 @@
               {
                 "id": "wasm-bindgen-futures 0.4.37",
                 "target": "wasm_bindgen_futures"
+              },
+              {
+                "id": "wasm-streams 0.4.0",
+                "target": "wasm_streams"
               },
               {
                 "id": "web-sys 0.3.64",
