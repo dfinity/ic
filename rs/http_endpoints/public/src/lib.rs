@@ -445,6 +445,9 @@ pub fn start_server(
         loop {
             match tcp_listener.accept().await {
                 Ok((tcp_stream, _)) => {
+                    if let Err(err) = tcp_stream.set_nodelay(true) {
+                        error!(log, "Failed to set nodelay, error = {}", err);
+                    }
                     metrics.connections_total.inc();
                     // Start recording connection setup duration.
                     let mut conn_svc = conn_svc.clone();
