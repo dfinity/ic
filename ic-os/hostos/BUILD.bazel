@@ -6,16 +6,7 @@ exports_files([
     "partitions.csv",
     "volumes.csv",
     "grub.cfg",
-    "rootfs/docker-base.dev",
-    "rootfs/extra_boot_args",
-    "rootfs/docker-base.prod",
 ])
-
-filegroup(
-    name = "rootfs-files",
-    srcs = glob(["rootfs/**"]),
-    tags = ["manual"],
-)
 
 ext4_image(
     name = "partition-config.tar",

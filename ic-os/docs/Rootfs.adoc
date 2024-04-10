@@ -20,8 +20,8 @@ system:
 * +boot+
 
 If you need to add files to the system, drop them into the
-appropriate target directory. At present, all dfinity-specific binaries
-and scripts go to +/opt/ic/bin+.
+appropriate target directory, and add the file to +rootfs/BUILD.bazel+.
+At present, all dfinity-specific binaries and scripts go to +/opt/ic/bin+.
 
 If you install new systemd services, drop an appropriate unit file into
 /etc/systemd/system and add an activation to the Dockerfile (maybe the

@@ -19,7 +19,7 @@ def image_deps(mode, malicious = False):
     """
 
     deps = {
-        "base_dockerfile": "//ic-os/guestos:rootfs/Dockerfile.base",
+        "base_dockerfile": "//ic-os/guestos/rootfs:Dockerfile.base",
 
         # Extra files to be added to rootfs and bootfs
         "bootfs": {},
@@ -50,7 +50,7 @@ def image_deps(mode, malicious = False):
         },
 
         # Set various configuration values
-        "container_context_files": Label("//ic-os/guestos:rootfs-files"),
+        "container_context_files": Label("//ic-os/guestos/rootfs:rootfs-files"),
         "partition_table": Label("//ic-os/guestos:partitions.csv"),
         "expanded_size": "50G",
         "rootfs_size": "3G",
@@ -64,7 +64,7 @@ def image_deps(mode, malicious = False):
         # substitution) as a dependency so that changes to the template file are
         # reflected in the overall version hash (the root_hash must include the
         # version hash, it cannot be the other way around).
-        "boot_args_template": Label("//ic-os/guestos:rootfs/extra_boot_args.template"),
+        "boot_args_template": Label("//ic-os/guestos/rootfs:extra_boot_args.template"),
     }
 
     # Add extra files depending on image variant
@@ -93,10 +93,10 @@ def image_deps(mode, malicious = False):
     # Add extra files depending on image variant
     extra_rootfs_deps = {
         "dev": {
-            "//ic-os/guestos:rootfs/allow_console_root": "/etc/allow_console_root:0644",
+            "//ic-os/guestos/rootfs:allow_console_root": "/etc/allow_console_root:0644",
         },
         "local-base-dev": {
-            "//ic-os/guestos:rootfs/allow_console_root": "/etc/allow_console_root:0644",
+            "//ic-os/guestos/rootfs:allow_console_root": "/etc/allow_console_root:0644",
         },
     }
 
