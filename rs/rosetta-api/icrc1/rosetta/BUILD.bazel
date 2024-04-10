@@ -37,7 +37,7 @@ DEPENDENCIES = [
     "@crate_index//:strum",
     "@crate_index//:tracing-subscriber",
     "@crate_index//:num-bigint",
-    "@crate_index//:reqwest",
+    "@crate_index//:reqwest_0_11_27",
     "@crate_index//:tracing-appender",
     "@crate_index//:rolling-file",
     "//packages/icrc-ledger-types:icrc_ledger_types",
