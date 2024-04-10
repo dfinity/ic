@@ -74,12 +74,12 @@ def image_deps(mode, _malicious = False):
 # earlier in the pipeline, and is depended on by the final disk image.
 def _custom_partitions():
     lvm_image(
-        name = "partition-hostlvm.tar",
+        name = "partition-hostlvm.tzst",
         layout = Label("//ic-os/hostos:volumes.csv"),
         partitions = [
-            Label("//ic-os/hostos:partition-config.tar"),
-            ":partition-boot.tar",
-            ":partition-root.tar",
+            Label("//ic-os/hostos:partition-config.tzst"),
+            ":partition-boot.tzst",
+            ":partition-root.tzst",
         ],
         vg_name = "hostlvm",
         vg_uuid = "4c7GVZ-Df82-QEcJ-xXtV-JgRL-IjLE-hK0FgA",
@@ -92,4 +92,4 @@ def _custom_partitions():
         ],
     )
 
-    return [":partition-hostlvm.tar"]
+    return [":partition-hostlvm.tzst"]

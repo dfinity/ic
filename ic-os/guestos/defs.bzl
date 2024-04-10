@@ -57,7 +57,7 @@ def image_deps(mode, malicious = False):
         "bootfs_size": "1G",
 
         # Add any custom partitions to the manifest
-        "custom_partitions": lambda: [Label("//ic-os/guestos:partition-config.tar")],
+        "custom_partitions": lambda: [Label("//ic-os/guestos:partition-config.tzst")],
 
         # We will install extra_boot_args onto the system, after substituting the
         # hash of the root filesystem into it. Track the template (before
