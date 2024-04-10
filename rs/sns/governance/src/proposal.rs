@@ -1597,11 +1597,6 @@ impl ProposalData {
     /// proto for more information.
     pub fn reward_status(&self, now_seconds: u64) -> ProposalRewardStatus {
         if self.has_been_rewarded() {
-            debug_assert!(
-                self.is_eligible_for_rewards,
-                "Invalid ProposalData: {:#?}",
-                self
-            );
             return ProposalRewardStatus::Settled;
         }
 
@@ -1609,6 +1604,7 @@ impl ProposalData {
             return ProposalRewardStatus::AcceptVotes;
         }
 
+        // TODO(NNS1-2731): Replace this with just ReadyToSettle.
         if self.is_eligible_for_rewards {
             ProposalRewardStatus::ReadyToSettle
         } else {

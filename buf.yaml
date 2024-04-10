@@ -20,6 +20,7 @@ lint:
     - DEFAULT
 breaking:
   ignore:
+    - ic_sns_governance/pb/v1/governance.proto
   use:
     - WIRE
   except:
