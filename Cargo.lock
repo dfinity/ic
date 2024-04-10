@@ -7610,6 +7610,7 @@ dependencies = [
 name = "ic-error-types"
 version = "0.9.0"
 dependencies = [
+ "ic-protobuf",
  "ic-utils 0.9.0",
  "serde",
  "strum 0.26.2",

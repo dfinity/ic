@@ -56,13 +56,15 @@ pub struct IngressStatusFailed {
     #[prost(message, optional, tag = "1")]
     pub user_id: ::core::option::Option<super::super::super::types::v1::UserId>,
     #[prost(uint64, tag = "2")]
-    pub err_code: u64,
+    pub err_code_old: u64,
     #[prost(string, tag = "3")]
     pub err_description: ::prost::alloc::string::String,
     #[prost(uint64, tag = "4")]
     pub time_nanos: u64,
     #[prost(message, optional, tag = "5")]
     pub receiver: ::core::option::Option<super::super::super::types::v1::PrincipalId>,
+    #[prost(enumeration = "ErrorCode", tag = "6")]
+    pub err_code: i32,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -153,4 +155,318 @@ pub struct Ingress {
     /// Represents the id of the canister that the message is targeting.
     #[prost(message, optional, tag = "7")]
     pub effective_canister_id: ::core::option::Option<super::super::super::types::v1::CanisterId>,
+}
+#[derive(
+    serde::Serialize,
+    serde::Deserialize,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    ::prost::Enumeration,
+)]
+#[repr(i32)]
+pub enum ErrorCode {
+    Unspecified = 0,
+    /// 1xx -- `RejectCode::SysFatal`
+    SubnetOversubscribed = 101,
+    MaxNumberOfCanistersReached = 102,
+    /// 2xx -- `RejectCode::SysTransient`
+    CanisterQueueFull = 201,
+    IngressMessageTimeout = 202,
+    CanisterQueueNotEmpty = 203,
+    IngressHistoryFull = 204,
+    CanisterIdAlreadyExists = 205,
+    StopCanisterRequestTimeout = 206,
+    CanisterOutOfCycles = 207,
+    CertifiedStateUnavailable = 208,
+    CanisterInstallCodeRateLimited = 209,
+    CanisterHeapDeltaRateLimited = 210,
+    /// 3xx -- `RejectCode::DestinationInvalid`
+    CanisterNotFound = 301,
+    DeprecatedCanisterMethodNotFound = 302,
+    DeprecatedCanisterAlreadyInstalled = 303,
+    DeprecatedCanisterWasmModuleNotFound = 304,
+    CanisterSnapshotNotFound = 305,
+    /// 4xx -- `RejectCode::CanisterReject`
+    InsufficientMemoryAllocation = 402,
+    InsufficientCyclesForCreateCanister = 403,
+    SubnetNotFound = 404,
+    CanisterNotHostedBySubnet = 405,
+    CanisterRejectedMessage = 406,
+    UnknownManagementMessage = 407,
+    InvalidManagementPayload = 408,
+    /// 5xx -- `RejectCode::CanisterError`
+    DeprecatedCanisterOutOfCycles = 501,
+    CanisterTrapped = 502,
+    CanisterCalledTrap = 503,
+    CanisterContractViolation = 504,
+    CanisterInvalidWasm = 505,
+    CanisterDidNotReply = 506,
+    CanisterOutOfMemory = 507,
+    CanisterStopped = 508,
+    CanisterStopping = 509,
+    CanisterNotStopped = 510,
+    CanisterStoppingCancelled = 511,
+    CanisterInvalidController = 512,
+    CanisterFunctionNotFound = 513,
+    CanisterNonEmpty = 514,
+    DeprecatedCertifiedStateUnavailable = 515,
+    DeprecatedCanisterRejectedMessage = 516,
+    QueryCallGraphLoopDetected = 517,
+    DeprecatedUnknownManagementMessage = 518,
+    DeprecatedInvalidManagementPayload = 519,
+    InsufficientCyclesInCall = 520,
+    CanisterWasmEngineError = 521,
+    CanisterInstructionLimitExceeded = 522,
+    DeprecatedCanisterInstallCodeRateLimited = 523,
+    CanisterMemoryAccessLimitExceeded = 524,
+    QueryCallGraphTooDeep = 525,
+    QueryCallGraphTotalInstructionLimitExceeded = 526,
+    CompositeQueryCalledInReplicatedMode = 527,
+    QueryTimeLimitExceeded = 528,
+    QueryCallGraphInternal = 529,
+    InsufficientCyclesInComputeAllocation = 530,
+    InsufficientCyclesInMemoryAllocation = 531,
+    InsufficientCyclesInMemoryGrow = 532,
+    ReservedCyclesLimitExceededInMemoryAllocation = 533,
+    ReservedCyclesLimitExceededInMemoryGrow = 534,
+    InsufficientCyclesInMessageMemoryGrow = 535,
+    CanisterMethodNotFound = 536,
+    CanisterWasmModuleNotFound = 537,
+    CanisterAlreadyInstalled = 538,
+}
+impl ErrorCode {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            ErrorCode::Unspecified => "ERROR_CODE_UNSPECIFIED",
+            ErrorCode::SubnetOversubscribed => "ERROR_CODE_SUBNET_OVERSUBSCRIBED",
+            ErrorCode::MaxNumberOfCanistersReached => "ERROR_CODE_MAX_NUMBER_OF_CANISTERS_REACHED",
+            ErrorCode::CanisterQueueFull => "ERROR_CODE_CANISTER_QUEUE_FULL",
+            ErrorCode::IngressMessageTimeout => "ERROR_CODE_INGRESS_MESSAGE_TIMEOUT",
+            ErrorCode::CanisterQueueNotEmpty => "ERROR_CODE_CANISTER_QUEUE_NOT_EMPTY",
+            ErrorCode::IngressHistoryFull => "ERROR_CODE_INGRESS_HISTORY_FULL",
+            ErrorCode::CanisterIdAlreadyExists => "ERROR_CODE_CANISTER_ID_ALREADY_EXISTS",
+            ErrorCode::StopCanisterRequestTimeout => "ERROR_CODE_STOP_CANISTER_REQUEST_TIMEOUT",
+            ErrorCode::CanisterOutOfCycles => "ERROR_CODE_CANISTER_OUT_OF_CYCLES",
+            ErrorCode::CertifiedStateUnavailable => "ERROR_CODE_CERTIFIED_STATE_UNAVAILABLE",
+            ErrorCode::CanisterInstallCodeRateLimited => {
+                "ERROR_CODE_CANISTER_INSTALL_CODE_RATE_LIMITED"
+            }
+            ErrorCode::CanisterHeapDeltaRateLimited => {
+                "ERROR_CODE_CANISTER_HEAP_DELTA_RATE_LIMITED"
+            }
+            ErrorCode::CanisterNotFound => "ERROR_CODE_CANISTER_NOT_FOUND",
+            ErrorCode::DeprecatedCanisterMethodNotFound => {
+                "ERROR_CODE_DEPRECATED_CANISTER_METHOD_NOT_FOUND"
+            }
+            ErrorCode::DeprecatedCanisterAlreadyInstalled => {
+                "ERROR_CODE_DEPRECATED_CANISTER_ALREADY_INSTALLED"
+            }
+            ErrorCode::DeprecatedCanisterWasmModuleNotFound => {
+                "ERROR_CODE_DEPRECATED_CANISTER_WASM_MODULE_NOT_FOUND"
+            }
+            ErrorCode::CanisterSnapshotNotFound => "ERROR_CODE_CANISTER_SNAPSHOT_NOT_FOUND",
+            ErrorCode::InsufficientMemoryAllocation => "ERROR_CODE_INSUFFICIENT_MEMORY_ALLOCATION",
+            ErrorCode::InsufficientCyclesForCreateCanister => {
+                "ERROR_CODE_INSUFFICIENT_CYCLES_FOR_CREATE_CANISTER"
+            }
+            ErrorCode::SubnetNotFound => "ERROR_CODE_SUBNET_NOT_FOUND",
+            ErrorCode::CanisterNotHostedBySubnet => "ERROR_CODE_CANISTER_NOT_HOSTED_BY_SUBNET",
+            ErrorCode::CanisterRejectedMessage => "ERROR_CODE_CANISTER_REJECTED_MESSAGE",
+            ErrorCode::UnknownManagementMessage => "ERROR_CODE_UNKNOWN_MANAGEMENT_MESSAGE",
+            ErrorCode::InvalidManagementPayload => "ERROR_CODE_INVALID_MANAGEMENT_PAYLOAD",
+            ErrorCode::DeprecatedCanisterOutOfCycles => {
+                "ERROR_CODE_DEPRECATED_CANISTER_OUT_OF_CYCLES"
+            }
+            ErrorCode::CanisterTrapped => "ERROR_CODE_CANISTER_TRAPPED",
+            ErrorCode::CanisterCalledTrap => "ERROR_CODE_CANISTER_CALLED_TRAP",
+            ErrorCode::CanisterContractViolation => "ERROR_CODE_CANISTER_CONTRACT_VIOLATION",
+            ErrorCode::CanisterInvalidWasm => "ERROR_CODE_CANISTER_INVALID_WASM",
+            ErrorCode::CanisterDidNotReply => "ERROR_CODE_CANISTER_DID_NOT_REPLY",
+            ErrorCode::CanisterOutOfMemory => "ERROR_CODE_CANISTER_OUT_OF_MEMORY",
+            ErrorCode::CanisterStopped => "ERROR_CODE_CANISTER_STOPPED",
+            ErrorCode::CanisterStopping => "ERROR_CODE_CANISTER_STOPPING",
+            ErrorCode::CanisterNotStopped => "ERROR_CODE_CANISTER_NOT_STOPPED",
+            ErrorCode::CanisterStoppingCancelled => "ERROR_CODE_CANISTER_STOPPING_CANCELLED",
+            ErrorCode::CanisterInvalidController => "ERROR_CODE_CANISTER_INVALID_CONTROLLER",
+            ErrorCode::CanisterFunctionNotFound => "ERROR_CODE_CANISTER_FUNCTION_NOT_FOUND",
+            ErrorCode::CanisterNonEmpty => "ERROR_CODE_CANISTER_NON_EMPTY",
+            ErrorCode::DeprecatedCertifiedStateUnavailable => {
+                "ERROR_CODE_DEPRECATED_CERTIFIED_STATE_UNAVAILABLE"
+            }
+            ErrorCode::DeprecatedCanisterRejectedMessage => {
+                "ERROR_CODE_DEPRECATED_CANISTER_REJECTED_MESSAGE"
+            }
+            ErrorCode::QueryCallGraphLoopDetected => "ERROR_CODE_QUERY_CALL_GRAPH_LOOP_DETECTED",
+            ErrorCode::DeprecatedUnknownManagementMessage => {
+                "ERROR_CODE_DEPRECATED_UNKNOWN_MANAGEMENT_MESSAGE"
+            }
+            ErrorCode::DeprecatedInvalidManagementPayload => {
+                "ERROR_CODE_DEPRECATED_INVALID_MANAGEMENT_PAYLOAD"
+            }
+            ErrorCode::InsufficientCyclesInCall => "ERROR_CODE_INSUFFICIENT_CYCLES_IN_CALL",
+            ErrorCode::CanisterWasmEngineError => "ERROR_CODE_CANISTER_WASM_ENGINE_ERROR",
+            ErrorCode::CanisterInstructionLimitExceeded => {
+                "ERROR_CODE_CANISTER_INSTRUCTION_LIMIT_EXCEEDED"
+            }
+            ErrorCode::DeprecatedCanisterInstallCodeRateLimited => {
+                "ERROR_CODE_DEPRECATED_CANISTER_INSTALL_CODE_RATE_LIMITED"
+            }
+            ErrorCode::CanisterMemoryAccessLimitExceeded => {
+                "ERROR_CODE_CANISTER_MEMORY_ACCESS_LIMIT_EXCEEDED"
+            }
+            ErrorCode::QueryCallGraphTooDeep => "ERROR_CODE_QUERY_CALL_GRAPH_TOO_DEEP",
+            ErrorCode::QueryCallGraphTotalInstructionLimitExceeded => {
+                "ERROR_CODE_QUERY_CALL_GRAPH_TOTAL_INSTRUCTION_LIMIT_EXCEEDED"
+            }
+            ErrorCode::CompositeQueryCalledInReplicatedMode => {
+                "ERROR_CODE_COMPOSITE_QUERY_CALLED_IN_REPLICATED_MODE"
+            }
+            ErrorCode::QueryTimeLimitExceeded => "ERROR_CODE_QUERY_TIME_LIMIT_EXCEEDED",
+            ErrorCode::QueryCallGraphInternal => "ERROR_CODE_QUERY_CALL_GRAPH_INTERNAL",
+            ErrorCode::InsufficientCyclesInComputeAllocation => {
+                "ERROR_CODE_INSUFFICIENT_CYCLES_IN_COMPUTE_ALLOCATION"
+            }
+            ErrorCode::InsufficientCyclesInMemoryAllocation => {
+                "ERROR_CODE_INSUFFICIENT_CYCLES_IN_MEMORY_ALLOCATION"
+            }
+            ErrorCode::InsufficientCyclesInMemoryGrow => {
+                "ERROR_CODE_INSUFFICIENT_CYCLES_IN_MEMORY_GROW"
+            }
+            ErrorCode::ReservedCyclesLimitExceededInMemoryAllocation => {
+                "ERROR_CODE_RESERVED_CYCLES_LIMIT_EXCEEDED_IN_MEMORY_ALLOCATION"
+            }
+            ErrorCode::ReservedCyclesLimitExceededInMemoryGrow => {
+                "ERROR_CODE_RESERVED_CYCLES_LIMIT_EXCEEDED_IN_MEMORY_GROW"
+            }
+            ErrorCode::InsufficientCyclesInMessageMemoryGrow => {
+                "ERROR_CODE_INSUFFICIENT_CYCLES_IN_MESSAGE_MEMORY_GROW"
+            }
+            ErrorCode::CanisterMethodNotFound => "ERROR_CODE_CANISTER_METHOD_NOT_FOUND",
+            ErrorCode::CanisterWasmModuleNotFound => "ERROR_CODE_CANISTER_WASM_MODULE_NOT_FOUND",
+            ErrorCode::CanisterAlreadyInstalled => "ERROR_CODE_CANISTER_ALREADY_INSTALLED",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "ERROR_CODE_UNSPECIFIED" => Some(Self::Unspecified),
+            "ERROR_CODE_SUBNET_OVERSUBSCRIBED" => Some(Self::SubnetOversubscribed),
+            "ERROR_CODE_MAX_NUMBER_OF_CANISTERS_REACHED" => Some(Self::MaxNumberOfCanistersReached),
+            "ERROR_CODE_CANISTER_QUEUE_FULL" => Some(Self::CanisterQueueFull),
+            "ERROR_CODE_INGRESS_MESSAGE_TIMEOUT" => Some(Self::IngressMessageTimeout),
+            "ERROR_CODE_CANISTER_QUEUE_NOT_EMPTY" => Some(Self::CanisterQueueNotEmpty),
+            "ERROR_CODE_INGRESS_HISTORY_FULL" => Some(Self::IngressHistoryFull),
+            "ERROR_CODE_CANISTER_ID_ALREADY_EXISTS" => Some(Self::CanisterIdAlreadyExists),
+            "ERROR_CODE_STOP_CANISTER_REQUEST_TIMEOUT" => Some(Self::StopCanisterRequestTimeout),
+            "ERROR_CODE_CANISTER_OUT_OF_CYCLES" => Some(Self::CanisterOutOfCycles),
+            "ERROR_CODE_CERTIFIED_STATE_UNAVAILABLE" => Some(Self::CertifiedStateUnavailable),
+            "ERROR_CODE_CANISTER_INSTALL_CODE_RATE_LIMITED" => {
+                Some(Self::CanisterInstallCodeRateLimited)
+            }
+            "ERROR_CODE_CANISTER_HEAP_DELTA_RATE_LIMITED" => {
+                Some(Self::CanisterHeapDeltaRateLimited)
+            }
+            "ERROR_CODE_CANISTER_NOT_FOUND" => Some(Self::CanisterNotFound),
+            "ERROR_CODE_DEPRECATED_CANISTER_METHOD_NOT_FOUND" => {
+                Some(Self::DeprecatedCanisterMethodNotFound)
+            }
+            "ERROR_CODE_DEPRECATED_CANISTER_ALREADY_INSTALLED" => {
+                Some(Self::DeprecatedCanisterAlreadyInstalled)
+            }
+            "ERROR_CODE_DEPRECATED_CANISTER_WASM_MODULE_NOT_FOUND" => {
+                Some(Self::DeprecatedCanisterWasmModuleNotFound)
+            }
+            "ERROR_CODE_CANISTER_SNAPSHOT_NOT_FOUND" => Some(Self::CanisterSnapshotNotFound),
+            "ERROR_CODE_INSUFFICIENT_MEMORY_ALLOCATION" => Some(Self::InsufficientMemoryAllocation),
+            "ERROR_CODE_INSUFFICIENT_CYCLES_FOR_CREATE_CANISTER" => {
+                Some(Self::InsufficientCyclesForCreateCanister)
+            }
+            "ERROR_CODE_SUBNET_NOT_FOUND" => Some(Self::SubnetNotFound),
+            "ERROR_CODE_CANISTER_NOT_HOSTED_BY_SUBNET" => Some(Self::CanisterNotHostedBySubnet),
+            "ERROR_CODE_CANISTER_REJECTED_MESSAGE" => Some(Self::CanisterRejectedMessage),
+            "ERROR_CODE_UNKNOWN_MANAGEMENT_MESSAGE" => Some(Self::UnknownManagementMessage),
+            "ERROR_CODE_INVALID_MANAGEMENT_PAYLOAD" => Some(Self::InvalidManagementPayload),
+            "ERROR_CODE_DEPRECATED_CANISTER_OUT_OF_CYCLES" => {
+                Some(Self::DeprecatedCanisterOutOfCycles)
+            }
+            "ERROR_CODE_CANISTER_TRAPPED" => Some(Self::CanisterTrapped),
+            "ERROR_CODE_CANISTER_CALLED_TRAP" => Some(Self::CanisterCalledTrap),
+            "ERROR_CODE_CANISTER_CONTRACT_VIOLATION" => Some(Self::CanisterContractViolation),
+            "ERROR_CODE_CANISTER_INVALID_WASM" => Some(Self::CanisterInvalidWasm),
+            "ERROR_CODE_CANISTER_DID_NOT_REPLY" => Some(Self::CanisterDidNotReply),
+            "ERROR_CODE_CANISTER_OUT_OF_MEMORY" => Some(Self::CanisterOutOfMemory),
+            "ERROR_CODE_CANISTER_STOPPED" => Some(Self::CanisterStopped),
+            "ERROR_CODE_CANISTER_STOPPING" => Some(Self::CanisterStopping),
+            "ERROR_CODE_CANISTER_NOT_STOPPED" => Some(Self::CanisterNotStopped),
+            "ERROR_CODE_CANISTER_STOPPING_CANCELLED" => Some(Self::CanisterStoppingCancelled),
+            "ERROR_CODE_CANISTER_INVALID_CONTROLLER" => Some(Self::CanisterInvalidController),
+            "ERROR_CODE_CANISTER_FUNCTION_NOT_FOUND" => Some(Self::CanisterFunctionNotFound),
+            "ERROR_CODE_CANISTER_NON_EMPTY" => Some(Self::CanisterNonEmpty),
+            "ERROR_CODE_DEPRECATED_CERTIFIED_STATE_UNAVAILABLE" => {
+                Some(Self::DeprecatedCertifiedStateUnavailable)
+            }
+            "ERROR_CODE_DEPRECATED_CANISTER_REJECTED_MESSAGE" => {
+                Some(Self::DeprecatedCanisterRejectedMessage)
+            }
+            "ERROR_CODE_QUERY_CALL_GRAPH_LOOP_DETECTED" => Some(Self::QueryCallGraphLoopDetected),
+            "ERROR_CODE_DEPRECATED_UNKNOWN_MANAGEMENT_MESSAGE" => {
+                Some(Self::DeprecatedUnknownManagementMessage)
+            }
+            "ERROR_CODE_DEPRECATED_INVALID_MANAGEMENT_PAYLOAD" => {
+                Some(Self::DeprecatedInvalidManagementPayload)
+            }
+            "ERROR_CODE_INSUFFICIENT_CYCLES_IN_CALL" => Some(Self::InsufficientCyclesInCall),
+            "ERROR_CODE_CANISTER_WASM_ENGINE_ERROR" => Some(Self::CanisterWasmEngineError),
+            "ERROR_CODE_CANISTER_INSTRUCTION_LIMIT_EXCEEDED" => {
+                Some(Self::CanisterInstructionLimitExceeded)
+            }
+            "ERROR_CODE_DEPRECATED_CANISTER_INSTALL_CODE_RATE_LIMITED" => {
+                Some(Self::DeprecatedCanisterInstallCodeRateLimited)
+            }
+            "ERROR_CODE_CANISTER_MEMORY_ACCESS_LIMIT_EXCEEDED" => {
+                Some(Self::CanisterMemoryAccessLimitExceeded)
+            }
+            "ERROR_CODE_QUERY_CALL_GRAPH_TOO_DEEP" => Some(Self::QueryCallGraphTooDeep),
+            "ERROR_CODE_QUERY_CALL_GRAPH_TOTAL_INSTRUCTION_LIMIT_EXCEEDED" => {
+                Some(Self::QueryCallGraphTotalInstructionLimitExceeded)
+            }
+            "ERROR_CODE_COMPOSITE_QUERY_CALLED_IN_REPLICATED_MODE" => {
+                Some(Self::CompositeQueryCalledInReplicatedMode)
+            }
+            "ERROR_CODE_QUERY_TIME_LIMIT_EXCEEDED" => Some(Self::QueryTimeLimitExceeded),
+            "ERROR_CODE_QUERY_CALL_GRAPH_INTERNAL" => Some(Self::QueryCallGraphInternal),
+            "ERROR_CODE_INSUFFICIENT_CYCLES_IN_COMPUTE_ALLOCATION" => {
+                Some(Self::InsufficientCyclesInComputeAllocation)
+            }
+            "ERROR_CODE_INSUFFICIENT_CYCLES_IN_MEMORY_ALLOCATION" => {
+                Some(Self::InsufficientCyclesInMemoryAllocation)
+            }
+            "ERROR_CODE_INSUFFICIENT_CYCLES_IN_MEMORY_GROW" => {
+                Some(Self::InsufficientCyclesInMemoryGrow)
+            }
+            "ERROR_CODE_RESERVED_CYCLES_LIMIT_EXCEEDED_IN_MEMORY_ALLOCATION" => {
+                Some(Self::ReservedCyclesLimitExceededInMemoryAllocation)
+            }
+            "ERROR_CODE_RESERVED_CYCLES_LIMIT_EXCEEDED_IN_MEMORY_GROW" => {
+                Some(Self::ReservedCyclesLimitExceededInMemoryGrow)
+            }
+            "ERROR_CODE_INSUFFICIENT_CYCLES_IN_MESSAGE_MEMORY_GROW" => {
+                Some(Self::InsufficientCyclesInMessageMemoryGrow)
+            }
+            "ERROR_CODE_CANISTER_METHOD_NOT_FOUND" => Some(Self::CanisterMethodNotFound),
+            "ERROR_CODE_CANISTER_WASM_MODULE_NOT_FOUND" => Some(Self::CanisterWasmModuleNotFound),
+            "ERROR_CODE_CANISTER_ALREADY_INSTALLED" => Some(Self::CanisterAlreadyInstalled),
+            _ => None,
+        }
+    }
 }
