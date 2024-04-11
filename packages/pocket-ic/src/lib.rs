@@ -223,13 +223,22 @@ impl PocketIc {
     /// Creates a new PocketIC instance with the specified subnet config.
     /// The server is started if it's not already running.
     pub fn from_config(config: impl Into<ExtendedSubnetConfigSet>) -> Self {
+        let server_url = crate::start_or_reuse_server();
+        Self::from_config_and_server_url(config, server_url)
+    }
+
+    /// Creates a new PocketIC instance with the specified subnet config and server url.
+    /// This function is intended for advanced users who start the server manually.
+    pub fn from_config_and_server_url(
+        config: impl Into<ExtendedSubnetConfigSet>,
+        server_url: Url,
+    ) -> Self {
         let config = config.into();
         config.validate().unwrap();
 
         let parent_pid = std::os::unix::process::parent_id();
         let log_guard = setup_tracing(parent_pid);
 
-        let server_url = crate::start_or_reuse_server();
         let reqwest_client = reqwest::blocking::Client::new();
         let (instance_id, topology) = match reqwest_client
             .post(server_url.join("instances").unwrap())

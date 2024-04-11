@@ -1,12 +1,16 @@
 mod common;
 
-use crate::common::{create_live_instance, raw_canister_id_range_into, start_server};
+use crate::common::{
+    create_live_instance, raw_canister_id_range_into, start_server, start_server_helper,
+};
 use candid::Encode;
 use pocket_ic::common::rest::{
     CreateHttpGatewayResponse, DtsFlag, HttpGatewayBackend, HttpGatewayConfig, SubnetConfigSet,
 };
+use pocket_ic::PocketIc;
 use reqwest::blocking::Client;
 use reqwest::StatusCode;
+use std::io::Read;
 use std::path::PathBuf;
 use std::process::Command;
 use std::time::{Duration, Instant};
@@ -265,4 +269,42 @@ fn pocket_ic_server_binary_name() {
     assert!(out_str.contains(
         "The PocketIc server binary name must be \"pocket-ic-server\" (without quotes)."
     ));
+}
+
+const CANISTER_LOGS_WAT: &str = r#"
+    (module
+        (import "ic0" "debug_print"
+            (func $debug_print (param i32 i32)))
+        (func $init
+            (call $debug_print (i32.const 0) (i32.const 14))
+        )
+        (memory $memory 1)
+        (export "canister_init" (func $init))
+        (data (i32.const 0) "Logging works!")
+    )
+"#;
+
+#[test]
+fn canister_logs() {
+    const INIT_CYCLES: u128 = 2_000_000_000_000;
+    let (server_url, mut out) = start_server_helper(0, Some(5), true);
+    let subnet_config_set = SubnetConfigSet {
+        application: 1,
+        ..Default::default()
+    };
+    let pic = PocketIc::from_config_and_server_url(subnet_config_set, server_url);
+
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, INIT_CYCLES);
+    let canister_logs_wasm = wat::parse_str(CANISTER_LOGS_WAT).unwrap();
+    pic.install_canister(canister_id, canister_logs_wasm, vec![], None);
+
+    drop(pic);
+    let mut stderr = String::new();
+    out.stderr
+        .take()
+        .unwrap()
+        .read_to_string(&mut stderr)
+        .unwrap();
+    assert!(stderr.contains("Logging works!"));
 }
