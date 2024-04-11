@@ -190,7 +190,6 @@ use ic_interfaces_state_manager::StateReader;
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
-use ic_types::consensus::ecdsa::ECDSA_IMPROVED_LATENCY;
 use ic_types::crypto::canister_threshold_sig::error::IDkgRetainKeysError;
 use ic_types::{
     artifact::{EcdsaMessageId, Priority, PriorityFn},
@@ -475,7 +474,7 @@ impl EcdsaPriorityFnArgs {
             active_transcripts.insert(transcript_ref.transcript_id);
         }
 
-        let (certified_height, request_contexts) = state_reader
+        let (certified_height, requested_signatures) = state_reader
             .get_certified_state_snapshot()
             .map_or(Default::default(), |snapshot| {
                 let request_contexts = snapshot
@@ -487,17 +486,6 @@ impl EcdsaPriorityFnArgs {
 
                 (snapshot.get_height(), request_contexts)
             });
-
-        let requested_signatures = if ECDSA_IMPROVED_LATENCY {
-            request_contexts
-        } else {
-            BTreeSet::from_iter(
-                block_reader
-                    .requested_signatures()
-                    .map(|(request_id, _)| request_id)
-                    .cloned(),
-            )
-        };
 
         Self {
             finalized_height: block_reader.tip_height(),
@@ -557,7 +545,7 @@ fn compute_priority(
                 Priority::Stash
             }
         }
-        EcdsaMessageAttribute::EcdsaSigShare(request_id) if ECDSA_IMPROVED_LATENCY => {
+        EcdsaMessageAttribute::EcdsaSigShare(request_id) => {
             if request_id.height <= args.certified_height {
                 if args.requested_signatures.contains(request_id) {
                     Priority::Fetch
@@ -569,23 +557,6 @@ fn compute_priority(
                     Priority::Drop
                 }
             } else if request_id.height < args.certified_height + Height::from(LOOK_AHEAD) {
-                Priority::Fetch
-            } else {
-                Priority::Stash
-            }
-        }
-        EcdsaMessageAttribute::EcdsaSigShare(request_id) => {
-            if request_id.height <= args.finalized_height {
-                if args.requested_signatures.contains(request_id) {
-                    Priority::Fetch
-                } else {
-                    metrics
-                        .dropped_adverts
-                        .with_label_values(&[attr.as_str()])
-                        .inc();
-                    Priority::Drop
-                }
-            } else if request_id.height < args.finalized_height + Height::from(LOOK_AHEAD) {
                 Priority::Fetch
             } else {
                 Priority::Stash

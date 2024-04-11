@@ -37,7 +37,6 @@ use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{StateManager, StateManagerError};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithEcdsaContext;
 use ic_replicated_state::ReplicatedState;
-use ic_types::consensus::ecdsa::ECDSA_IMPROVED_LATENCY;
 use ic_types::{
     batch::ValidationContext,
     consensus::{
@@ -360,7 +359,6 @@ fn validate_data_payload(
                 state.get_ref(),
                 &prev_payload,
                 curr_payload,
-                ECDSA_IMPROVED_LATENCY,
             )
         },
         metrics,
@@ -415,13 +413,6 @@ impl EcdsaTranscriptBuilder for CachedBuilder {
 
 impl EcdsaSignatureBuilder for CachedBuilder {
     fn get_completed_signature(
-        &self,
-        request_id: &ecdsa::RequestId,
-    ) -> Option<ThresholdEcdsaCombinedSignature> {
-        self.signatures.get(&request_id.pseudo_random_id).cloned()
-    }
-
-    fn get_completed_signature_from_context(
         &self,
         context: &SignWithEcdsaContext,
     ) -> Option<ThresholdEcdsaCombinedSignature> {
@@ -535,7 +526,6 @@ fn validate_new_signature_agreements(
     state: &ReplicatedState,
     prev_payload: &ecdsa::EcdsaPayload,
     curr_payload: &ecdsa::EcdsaPayload,
-    ecdsa_improved_latency: bool,
 ) -> Result<BTreeMap<ecdsa::PseudoRandomId, ThresholdEcdsaCombinedSignature>, EcdsaValidationError>
 {
     use PermanentError::*;
@@ -559,28 +549,11 @@ fn validate_new_signature_agreements(
                     return Err(PermanentError::NewSignatureUnexpected(*random_id).into());
                 }
 
-                let input_ref = if ecdsa_improved_latency {
-                    let context = context_map
-                        .get(random_id)
-                        .ok_or(PermanentError::NewSignatureMissingContext(*random_id))?;
-                    let (_, input_ref) = build_signature_inputs(context, block_reader)
-                        .ok_or(PermanentError::NewSignatureMissingInput(*random_id))?;
-                    input_ref
-                } else {
-                    prev_payload
-                        .ongoing_signatures
-                        .iter()
-                        .find_map(|(request_id, sig_input_ref)| {
-                            if request_id.pseudo_random_id == *random_id {
-                                Some(sig_input_ref)
-                            } else {
-                                None
-                            }
-                        })
-                        .ok_or(NewSignatureMissingInput(*random_id))?
-                        .clone()
-                };
-
+                let context = context_map
+                    .get(random_id)
+                    .ok_or(PermanentError::NewSignatureMissingContext(*random_id))?;
+                let (_, input_ref) = build_signature_inputs(context, block_reader)
+                    .ok_or(PermanentError::NewSignatureMissingInput(*random_id))?;
                 let input = input_ref
                     .translate(block_reader)
                     .map_err(PermanentError::from)?;
@@ -599,12 +572,8 @@ mod test {
     use super::*;
     use crate::ecdsa::{
         payload_builder::{
-            get_signing_requests,
             resharing::{initiate_reshare_requests, update_completed_reshare_requests},
-            signatures::{
-                update_ongoing_signatures, update_signature_agreements,
-                update_signature_agreements_improved_latency,
-            },
+            signatures::update_signature_agreements,
         },
         test_utils::*,
         utils::get_context_request_id,
@@ -839,152 +808,6 @@ mod test {
         let env = CanisterThresholdSigTestEnvironment::new(num_nodes, &mut rng);
         let crypto = &CryptoReturningOk::default();
         let mut block_reader = TestEcdsaBlockReader::new();
-        let key_id = fake_ecdsa_key_id();
-        let valid_keys = BTreeSet::from([key_id.clone()]);
-        let max_ongoing_signatures = 2;
-        let sign_with_ecdsa_contexts = BTreeMap::from([
-            (
-                CallbackId::from(1),
-                fake_sign_with_ecdsa_context(key_id.clone(), [1; 32]),
-            ),
-            (
-                CallbackId::from(2),
-                fake_sign_with_ecdsa_context(key_id.clone(), [2; 32]),
-            ),
-        ]);
-        let height = Height::from(0);
-        let state = fake_state_with_ecdsa_contexts(height, sign_with_ecdsa_contexts.clone());
-        let mut ecdsa_payload = empty_ecdsa_payload(subnet_id);
-
-        let (key_transcript, key_transcript_ref) =
-            ecdsa_payload.generate_current_key(&env, &mut rng);
-        let quadruple_id_1 = ecdsa_payload.uid_generator.next_quadruple_id();
-        let quadruple_id_2 = ecdsa_payload.uid_generator.next_quadruple_id();
-        // Fill in the ongoing signatures
-        let sig_inputs_1 = create_sig_inputs_with_args(
-            13,
-            &env.nodes.ids(),
-            key_transcript.clone(),
-            Height::from(44),
-        );
-        let sig_inputs_2 = create_sig_inputs_with_args(
-            14,
-            &env.nodes.ids(),
-            key_transcript.clone(),
-            Height::from(44),
-        );
-        block_reader.add_transcript(*key_transcript_ref.as_ref(), key_transcript);
-        sig_inputs_1
-            .idkg_transcripts
-            .iter()
-            .for_each(|(transcript_ref, transcript)| {
-                block_reader.add_transcript(*transcript_ref, transcript.clone())
-            });
-        sig_inputs_2
-            .idkg_transcripts
-            .iter()
-            .for_each(|(transcript_ref, transcript)| {
-                block_reader.add_transcript(*transcript_ref, transcript.clone())
-            });
-        //block_reader.add_transcript(*key_transcript_ref.as_ref(), key_transcript);
-        ecdsa_payload.available_quadruples.insert(
-            quadruple_id_1,
-            sig_inputs_1.sig_inputs_ref.presig_quadruple_ref,
-        );
-        ecdsa_payload.available_quadruples.insert(
-            quadruple_id_2,
-            sig_inputs_2.sig_inputs_ref.presig_quadruple_ref,
-        );
-
-        let all_requests = get_signing_requests(
-            Height::from(0),
-            None,
-            &mut ecdsa_payload,
-            &sign_with_ecdsa_contexts,
-            &valid_keys,
-            None,
-        );
-
-        update_ongoing_signatures(
-            all_requests,
-            max_ongoing_signatures,
-            &mut ecdsa_payload,
-            &no_op_logger(),
-        )
-        .unwrap();
-
-        let mut signature_builder = TestEcdsaSignatureBuilder::new();
-        signature_builder.signatures.insert(
-            ecdsa_payload
-                .ongoing_signatures
-                .keys()
-                .next()
-                .unwrap()
-                .clone(),
-            ThresholdEcdsaCombinedSignature {
-                signature: vec![1; 32],
-            },
-        );
-        update_signature_agreements(
-            &sign_with_ecdsa_contexts,
-            &signature_builder,
-            &mut ecdsa_payload,
-        );
-
-        let prev_payload = ecdsa_payload.clone();
-        signature_builder.signatures.insert(
-            ecdsa_payload
-                .ongoing_signatures
-                .keys()
-                .next()
-                .unwrap()
-                .clone(),
-            ThresholdEcdsaCombinedSignature {
-                signature: vec![1; 32],
-            },
-        );
-        update_signature_agreements(
-            &sign_with_ecdsa_contexts,
-            &signature_builder,
-            &mut ecdsa_payload,
-        );
-
-        let res = validate_new_signature_agreements(
-            crypto,
-            &block_reader,
-            state.get_ref(),
-            &prev_payload,
-            &ecdsa_payload,
-            false,
-        );
-        assert!(res.is_ok());
-        assert_eq!(res.unwrap().len(), 1);
-
-        // Repeated signature leads to error
-        let res = validate_new_signature_agreements(
-            crypto,
-            &block_reader,
-            state.get_ref(),
-            &ecdsa_payload,
-            &ecdsa_payload,
-            false,
-        );
-        assert_matches!(
-            res,
-            Err(ValidationError::Permanent(
-                PermanentError::NewSignatureUnexpected(_)
-            ))
-        );
-    }
-
-    #[test]
-    fn test_validate_new_signature_agreements_improved_latency() {
-        let mut rng = reproducible_rng();
-        let num_nodes = 4;
-        let subnet_id = subnet_test_id(0);
-        let env = CanisterThresholdSigTestEnvironment::new(num_nodes, &mut rng);
-        let crypto = &CryptoReturningOk::default();
-        let mut block_reader = TestEcdsaBlockReader::new();
         let height = Height::from(1);
         let mut valid_keys = BTreeSet::new();
         let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
@@ -1048,7 +871,7 @@ mod test {
             },
         );
 
-        update_signature_agreements_improved_latency(
+        update_signature_agreements(
             &sign_with_ecdsa_contexts,
             &signature_builder,
             None,
@@ -1074,7 +897,7 @@ mod test {
                 signature: vec![1; 32],
             },
         );
-        update_signature_agreements_improved_latency(
+        update_signature_agreements(
             &sign_with_ecdsa_contexts,
             &signature_builder,
             None,
@@ -1106,7 +929,6 @@ mod test {
             state.get_ref(),
             &prev_payload,
             &ecdsa_payload,
-            true,
         )
         .unwrap();
         assert_eq!(res.len(), 1);
@@ -1119,7 +941,6 @@ mod test {
             state.get_ref(),
             &ecdsa_payload,
             &ecdsa_payload,
-            true,
         );
         assert_matches!(
             res,
@@ -1131,7 +952,7 @@ mod test {
     }
 
     #[test]
-    fn test_validate_new_signature_agreements_improved_latency_missing_input() {
+    fn test_validate_new_signature_agreements_missing_input() {
         let height = Height::from(0);
         let subnet_id = subnet_test_id(0);
         let crypto = &CryptoReturningOk::default();
@@ -1171,7 +992,6 @@ mod test {
             state.get_ref(),
             &prev_payload,
             &ecdsa_payload_incomplete_context,
-            true,
         );
         assert_matches!(
             res,
@@ -1191,7 +1011,6 @@ mod test {
             state.get_ref(),
             &prev_payload,
             &ecdsa_payload_missing_context,
-            true,
         );
         assert_matches!(
             res,
