@@ -582,6 +582,7 @@ mod test {
     use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_dealings;
     use ic_crypto_test_utils_canister_threshold_sigs::CanisterThresholdSigTestEnvironment;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+    use ic_interfaces_state_manager::CertifiedStateSnapshot;
     use ic_logger::replica_logger::no_op_logger;
     use ic_management_canister_types::{EcdsaKeyId, Payload, SignWithECDSAReply};
     use ic_test_utilities::crypto::CryptoReturningOk;
@@ -829,7 +830,7 @@ mod test {
                 Some(quadruple_id3.clone()),
             ),
         ]);
-        let state = fake_state_with_ecdsa_contexts(height, sign_with_ecdsa_contexts.clone());
+        let snapshot = fake_state_with_ecdsa_contexts(height, sign_with_ecdsa_contexts.clone());
 
         let request_ids = sign_with_ecdsa_contexts
             .values()
@@ -926,7 +927,7 @@ mod test {
         let res = validate_new_signature_agreements(
             crypto,
             &block_reader,
-            state.get_ref(),
+            snapshot.get_state(),
             &prev_payload,
             &ecdsa_payload,
         )
@@ -938,7 +939,7 @@ mod test {
         let res = validate_new_signature_agreements(
             crypto,
             &block_reader,
-            state.get_ref(),
+            snapshot.get_state(),
             &ecdsa_payload,
             &ecdsa_payload,
         );
@@ -970,7 +971,7 @@ mod test {
                 key_id.clone(),
                 Some(quadruple_id.clone()),
             )]);
-        let state = fake_state_with_ecdsa_contexts(height, sign_with_ecdsa_contexts.clone());
+        let snapshot = fake_state_with_ecdsa_contexts(height, sign_with_ecdsa_contexts.clone());
 
         let fake_context = fake_sign_with_ecdsa_context(key_id.clone(), [4; 32]);
         let fake_response =
@@ -989,7 +990,7 @@ mod test {
         let res = validate_new_signature_agreements(
             crypto,
             &block_reader,
-            state.get_ref(),
+            snapshot.get_state(),
             &prev_payload,
             &ecdsa_payload_incomplete_context,
         );
@@ -1008,7 +1009,7 @@ mod test {
         let res = validate_new_signature_agreements(
             crypto,
             &block_reader,
-            state.get_ref(),
+            snapshot.get_state(),
             &prev_payload,
             &ecdsa_payload_missing_context,
         );
