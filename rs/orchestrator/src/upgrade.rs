@@ -847,7 +847,7 @@ mod tests {
 
         let ecdsa = ecdsa::EcdsaPayload {
             signature_agreements: BTreeMap::new(),
-            ongoing_signatures: BTreeMap::new(),
+            deprecated_ongoing_signatures: BTreeMap::new(),
             available_quadruples: BTreeMap::new(),
             quadruples_in_creation: BTreeMap::new(),
             uid_generator: EcdsaUIDGenerator::new(subnet_test_id(0), h),

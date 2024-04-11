@@ -64,8 +64,8 @@ pub struct EcdsaPayload {
     /// Collection of completed signatures.
     pub signature_agreements: BTreeMap<PseudoRandomId, CompletedSignature>,
 
-    /// The `RequestIds` for which we are currently generating signatures.
-    pub ongoing_signatures: BTreeMap<RequestId, ThresholdEcdsaSigInputsRef>,
+    /// DEPRECATED: The `RequestIds` for which we are currently generating signatures.
+    pub deprecated_ongoing_signatures: BTreeMap<RequestId, ThresholdEcdsaSigInputsRef>,
 
     /// ECDSA transcript quadruples that we can use to create ECDSA signatures.
     pub available_quadruples: BTreeMap<QuadrupleId, PreSignatureQuadrupleRef>,
@@ -135,12 +135,6 @@ impl EcdsaPayload {
         }
     }
 
-    /// Return an iterator of all request ids that are used in the payload.
-    /// Note that it doesn't guarantee any ordering.
-    pub fn iter_request_ids(&self) -> Box<dyn Iterator<Item = &RequestId> + '_> {
-        Box::new(self.ongoing_signatures.keys())
-    }
-
     /// Return an iterator of all ids of quadruples in the payload.
     pub fn iter_quadruple_ids(&self) -> Box<dyn Iterator<Item = QuadrupleId> + '_> {
         Box::new(
@@ -148,24 +142,6 @@ impl EcdsaPayload {
                 .keys()
                 .chain(self.quadruples_in_creation.keys())
                 .cloned(),
-        )
-    }
-    /// Return an iterator of all unassigned quadruple ids that is used in the payload.
-    /// A quadruple id is assigned if it already paired with a signature request i.e.
-    /// there exists a request id (in ongoing signatures) that contains this quadruple id.
-    ///
-    /// Note that under proper payload construction, the quadruples paired with requests
-    /// in ongoing_signatures should always be disjoint with the set of available and
-    /// ongoing quadruples. This function is offered here as a safer alternative.
-    pub fn unassigned_quadruple_ids(&self) -> Box<dyn Iterator<Item = QuadrupleId> + '_> {
-        let assigned = self
-            .iter_request_ids()
-            .cloned()
-            .map(|id| id.quadruple_id)
-            .collect::<BTreeSet<_>>();
-        Box::new(
-            self.iter_quadruple_ids()
-                .filter(move |id| !assigned.contains(id)),
         )
     }
 
@@ -177,9 +153,6 @@ impl EcdsaPayload {
                 active_refs.insert(r);
             })
         };
-        for obj in self.ongoing_signatures.values() {
-            insert(obj.get_refs())
-        }
         for obj in self.available_quadruples.values() {
             insert(obj.get_refs())
         }
@@ -195,9 +168,6 @@ impl EcdsaPayload {
 
     /// Updates the height of all the transcript refs to the given height.
     pub fn update_refs(&mut self, height: Height) {
-        for obj in self.ongoing_signatures.values_mut() {
-            obj.update(height);
-        }
         for obj in self.available_quadruples.values_mut() {
             obj.update(height);
         }
@@ -243,18 +213,7 @@ impl EcdsaPayload {
                 .get(&transcript.as_ref().transcript_id)
                 .map(|transcript| transcript.registry_version),
         };
-        let mut registry_version = min_version(key_version, in_creation_version);
-        for (_, sig_input_ref) in self.ongoing_signatures.iter() {
-            for r in sig_input_ref.get_refs().iter() {
-                registry_version = min_version(
-                    registry_version,
-                    idkg_transcripts
-                        .get(&r.transcript_id)
-                        .map(|transcript| transcript.registry_version),
-                );
-            }
-        }
-        registry_version
+        min_version(key_version, in_creation_version)
     }
 
     /// Returns the initial DKG dealings being used to bootstrap the target subnet,
@@ -1457,7 +1416,7 @@ impl From<&EcdsaPayload> for pb::EcdsaPayload {
 
         // ongoing_signatures
         let mut ongoing_signatures = Vec::new();
-        for (request_id, ongoing) in &payload.ongoing_signatures {
+        for (request_id, ongoing) in &payload.deprecated_ongoing_signatures {
             ongoing_signatures.push(pb::OngoingSignature {
                 request_id: Some(request_id.clone().into()),
                 sig_inputs: Some(ongoing.into()),
@@ -1594,7 +1553,7 @@ impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
         }
 
         // ongoing_signatures
-        let mut ongoing_signatures = BTreeMap::new();
+        let mut deprecated_ongoing_signatures = BTreeMap::new();
         for ongoing_signature in &payload.ongoing_signatures {
             let request_id: RequestId = try_from_option_field(
                 ongoing_signature.request_id.as_ref(),
@@ -1605,7 +1564,7 @@ impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
                 ongoing_signature.sig_inputs.as_ref(),
                 "EcdsaPayload::ongoing_signature::sig_inputs",
             )?;
-            ongoing_signatures.insert(request_id, sig_inputs);
+            deprecated_ongoing_signatures.insert(request_id, sig_inputs);
         }
 
         // available_quadruples
@@ -1701,7 +1660,7 @@ impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
 
         Ok(Self {
             signature_agreements,
-            ongoing_signatures,
+            deprecated_ongoing_signatures,
             available_quadruples,
             quadruples_in_creation,
             idkg_transcripts,

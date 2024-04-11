@@ -1015,11 +1015,6 @@ pub trait EcdsaBlockReader: Send + Sync {
     /// Returns the IDs of quadruples in creation by the tip.
     fn quadruples_in_creation(&self) -> Box<dyn Iterator<Item = &QuadrupleId> + '_>;
 
-    /// Returns the signatures requested by the tip.
-    fn requested_signatures(
-        &self,
-    ) -> Box<dyn Iterator<Item = (&RequestId, &ThresholdEcdsaSigInputsRef)> + '_>;
-
     /// For the given quadruple ID, returns the quadruple ref if available.
     fn available_quadruple(&self, id: &QuadrupleId) -> Option<&PreSignatureQuadrupleRef>;
 
@@ -1546,19 +1541,6 @@ impl ThresholdEcdsaSigInputsRef {
             key_transcript,
         )
         .map_err(ThresholdEcdsaSigInputsError::Failed)
-    }
-
-    /// Returns the refs held
-    pub fn get_refs(&self) -> Vec<TranscriptRef> {
-        let mut ret = self.presig_quadruple_ref.get_refs();
-        ret.push(*self.key_transcript_ref.as_ref());
-        ret
-    }
-
-    /// Updates the height of the references.
-    pub fn update(&mut self, height: Height) {
-        self.presig_quadruple_ref.update(height);
-        self.key_transcript_ref.as_mut().update(height);
     }
 }
 
