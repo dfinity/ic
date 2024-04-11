@@ -97,18 +97,18 @@ rust_test(
 
 [
     rust_test(
-        name = "index_ng_test" + name_suffix,
+        name = "index_ng_test" + test_suffix,
         srcs = ["tests/tests.rs"],
         data = [
             ":index_ng_canister" + name_suffix + ".wasm",
             "//rs/rosetta-api/icrc1/index:index_canister.wasm",
             "//rs/rosetta-api/icrc1/ledger:ledger_canister" + name_suffix + ".wasm",
-        ],
+        ] + extra_data,
         env = {
             "CARGO_MANIFEST_DIR": "rs/rosetta-api/icrc1/index-ng",
             "IC_ICRC1_INDEX_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/index:index_canister.wasm)",
             "IC_ICRC1_INDEX_NG_WASM_PATH": "$(rootpath :index_ng_canister" + name_suffix + ".wasm)",
-            "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister" + name_suffix + ".wasm)",
+            "IC_ICRC1_LEDGER_WASM_PATH": ledger_wasm,
         },
         deps = [
             ":index-ng",
@@ -134,8 +134,27 @@ rust_test(
             "@crate_index//:serde_json",
         ],
     )
-    for name_suffix in [
-        "",
-        "_u256",
+    for test_suffix, name_suffix, extra_data, ledger_wasm in [
+        # The Index must be backward compatible with the version of the Ledger
+        # that doesn't support ICRC-3 yet. Therefore we run a set of tests for
+        # the Ledger in the current commit, which supports ICRC-3, as well as
+        # a set of tests for the Ledger without ICRC-3 downloaded from a
+        # previous commit.
+        # - Ledger with ICRC-3
+        ("", "", [], "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister.wasm)"),
+        ("_u256", "_u256", [], "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm)"),
+        # - Ledger without ICRC-3
+        (
+            "_wo_icrc3",
+            "",
+            ["@ic-icrc1-ledger-wo-icrc-3.wasm.gz//file"],
+            "$(rootpath @ic-icrc1-ledger-wo-icrc-3.wasm.gz//file)",
+        ),
+        (
+            "_wo_icrc3_u256",
+            "_u256",
+            ["@ic-icrc1-ledger-wo-icrc-3-u256.wasm.gz//file"],
+            "$(rootpath @ic-icrc1-ledger-wo-icrc-3-u256.wasm.gz//file)",
+        ),
     ]
 ]

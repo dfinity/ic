@@ -619,6 +619,19 @@ http_file(
     url = "https://download.dfinity.systems/ic/0456f740295aabdd287811f1ed51829082b3df01/canisters/ic-icrc1-ledger.wasm.gz",
 )
 
+# ic-icrc1-ledger releases without ICRC-3
+http_file(
+    name = "ic-icrc1-ledger-wo-icrc-3.wasm.gz",
+    sha256 = "dc42ffd30d6616068b2dd10023ab0ff8d49b0cbce7582c4673c18caa7412dd3a",
+    url = "https://download.dfinity.systems/ic/300dc603a92b5f70dae79229793c902f346af3cc/canisters/ic-icrc1-ledger.wasm.gz",
+)
+
+http_file(
+    name = "ic-icrc1-ledger-wo-icrc-3-u256.wasm.gz",
+    sha256 = "8730fd2aa3b9fe67468fc5e853436f618d0b16be34ff30d7e6492eac55f78d90",
+    url = "https://download.dfinity.systems/ic/300dc603a92b5f70dae79229793c902f346af3cc/canisters/ic-icrc1-ledger-u256.wasm.gz",
+)
+
 # Haskell toolchain for spec_compliance tests
 
 http_archive(
