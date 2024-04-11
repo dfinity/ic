@@ -83,11 +83,11 @@ disk.img
 dev-root-ca.crt
 
 # IC-OS binaries
-infogetty
-infogetty.o
-network_info.o
-prestorecon
-prestorecon.o
+ic-os/utils/**/infogetty
+ic-os/utils/**/infogetty.o
+ic-os/utils/**/network_info.o
+ic-os/utils/**/prestorecon
+ic-os/utils/**/prestorecon.o
 
 # Various build artifacts
 /artifacts/
