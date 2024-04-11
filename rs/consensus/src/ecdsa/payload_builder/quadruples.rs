@@ -291,7 +291,7 @@ fn make_new_quadruples_if_needed_helper(
     matched_quadruples: usize,
 ) {
     let unassigned_quadruples = ecdsa_payload
-        .unassigned_quadruple_ids()
+        .iter_quadruple_ids()
         .count()
         .saturating_sub(matched_quadruples);
     let quadruples_to_create = ecdsa_config.quadruples_to_create_in_advance as usize;

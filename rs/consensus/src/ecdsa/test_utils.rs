@@ -389,6 +389,19 @@ impl TestEcdsaBlockReader {
     ) {
         self.available_quadruples.insert(quadruple_id, quadruple);
     }
+
+    pub(crate) fn requested_signatures(
+        &self,
+    ) -> Box<dyn Iterator<Item = (&RequestId, &ThresholdEcdsaSigInputsRef)> + '_> {
+        Box::new(
+            // False positive `map_identity` warning.
+            // See: https://github.com/rust-lang/rust-clippy/pull/11792 (merged)
+            #[allow(clippy::map_identity)]
+            self.requested_signatures
+                .iter()
+                .map(|(id, sig_inputs)| (id, sig_inputs)),
+        )
+    }
 }
 
 impl EcdsaBlockReader for TestEcdsaBlockReader {
@@ -402,19 +415,6 @@ impl EcdsaBlockReader for TestEcdsaBlockReader {
 
     fn quadruples_in_creation(&self) -> Box<dyn Iterator<Item = &QuadrupleId> + '_> {
         Box::new(std::iter::empty())
-    }
-
-    fn requested_signatures(
-        &self,
-    ) -> Box<dyn Iterator<Item = (&RequestId, &ThresholdEcdsaSigInputsRef)> + '_> {
-        Box::new(
-            // False positive `map_identity` warning.
-            // See: https://github.com/rust-lang/rust-clippy/pull/11792 (merged)
-            #[allow(clippy::map_identity)]
-            self.requested_signatures
-                .iter()
-                .map(|(id, sig_inputs)| (id, sig_inputs)),
-        )
     }
 
     fn available_quadruple(&self, id: &QuadrupleId) -> Option<&PreSignatureQuadrupleRef> {
@@ -1459,7 +1459,7 @@ pub(crate) fn empty_ecdsa_payload_with_key_ids(
 
     EcdsaPayload {
         signature_agreements: BTreeMap::new(),
-        ongoing_signatures: BTreeMap::new(),
+        deprecated_ongoing_signatures: BTreeMap::new(),
         available_quadruples: BTreeMap::new(),
         quadruples_in_creation: BTreeMap::new(),
         uid_generator: EcdsaUIDGenerator::new(subnet_id, Height::new(0)),

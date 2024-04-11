@@ -55,7 +55,7 @@ pub(crate) fn make_bootstrap_summary(
 ) -> ecdsa::Summary {
     Some(ecdsa::EcdsaPayload {
         signature_agreements: BTreeMap::new(),
-        ongoing_signatures: BTreeMap::new(),
+        deprecated_ongoing_signatures: BTreeMap::new(),
         available_quadruples: BTreeMap::new(),
         quadruples_in_creation: BTreeMap::new(),
         uid_generator: ecdsa::EcdsaUIDGenerator::new(subnet_id, height),
@@ -81,7 +81,7 @@ pub(crate) fn make_bootstrap_summary_with_initial_dealings(
 ) -> Result<ecdsa::Summary, EcdsaPayloadError> {
     let mut summary_payload = ecdsa::EcdsaPayload {
         signature_agreements: BTreeMap::new(),
-        ongoing_signatures: BTreeMap::new(),
+        deprecated_ongoing_signatures: BTreeMap::new(),
         available_quadruples: BTreeMap::new(),
         quadruples_in_creation: BTreeMap::new(),
         uid_generator: ecdsa::EcdsaUIDGenerator::new(subnet_id, height),
@@ -286,7 +286,7 @@ fn create_summary_payload_helper(
     let mut ecdsa_summary = if is_new_key_transcript {
         ecdsa::EcdsaPayload {
             signature_agreements: ecdsa_payload.signature_agreements.clone(),
-            ongoing_signatures: BTreeMap::new(),
+            deprecated_ongoing_signatures: BTreeMap::new(),
             // We keep available quadruples for now, even if the key transcript
             // changed, as we don't know if they are part of ongoing signature
             // requests. Instead we will purge them once the certified state
@@ -305,7 +305,7 @@ fn create_summary_payload_helper(
     } else {
         ecdsa::EcdsaPayload {
             signature_agreements: ecdsa_payload.signature_agreements.clone(),
-            ongoing_signatures: BTreeMap::new(),
+            deprecated_ongoing_signatures: BTreeMap::new(),
             available_quadruples: ecdsa_payload.available_quadruples.clone(),
             quadruples_in_creation: ecdsa_payload.quadruples_in_creation.clone(),
             uid_generator: ecdsa_payload.uid_generator.clone(),
@@ -1685,7 +1685,6 @@ mod tests {
                 ],
             );
             add_block(summary_block, summary_height.get(), &mut pool);
-            let sig_1 = inputs_1.sig_inputs_ref;
             let quad_1 = inputs_2.sig_inputs_ref.presig_quadruple_ref;
 
             // Create payload blocks with transcripts
@@ -1710,7 +1709,6 @@ mod tests {
                 payload_height_1.get() - summary_height.get(),
                 &mut pool,
             );
-            let sig_2 = inputs_1.sig_inputs_ref;
             let quad_2 = inputs_2.sig_inputs_ref.presig_quadruple_ref;
 
             // Create a payload block with references to these past blocks
@@ -1722,22 +1720,7 @@ mod tests {
                 ecdsa_payload.uid_generator.next_quadruple_id(),
                 ecdsa_payload.uid_generator.next_quadruple_id(),
             );
-            let req_id_1 = ecdsa::RequestId {
-                quadruple_id: quadruple_id_1.clone(),
-                pseudo_random_id: [0; 32],
-                height: payload_height_1,
-            };
-            let req_id_2 = ecdsa::RequestId {
-                quadruple_id: quadruple_id_2.clone(),
-                pseudo_random_id: [1; 32],
-                height: payload_height_1,
-            };
-            ecdsa_payload
-                .ongoing_signatures
-                .insert(req_id_1, sig_1.clone());
-            ecdsa_payload
-                .ongoing_signatures
-                .insert(req_id_2, sig_2.clone());
+
             ecdsa_payload
                 .available_quadruples
                 .insert(quadruple_id_1, quad_1.clone());
@@ -1751,8 +1734,6 @@ mod tests {
                 .insert(req_1, reshare_params_1.clone());
 
             add_expected_transcripts(vec![*key_transcript_ref.as_ref()]);
-            add_expected_transcripts(sig_1.get_refs());
-            add_expected_transcripts(sig_2.get_refs());
             add_expected_transcripts(quad_1.get_refs());
             add_expected_transcripts(quad_2.get_refs());
             add_expected_transcripts(reshare_params_1.as_ref().get_refs());
@@ -1829,11 +1810,6 @@ mod tests {
                     .height,
                 new_summary_height
             );
-            for ongoing_signature in summary.ongoing_signatures.values() {
-                for transcript_ref in ongoing_signature.get_refs() {
-                    assert_ne!(transcript_ref.height, new_summary_height);
-                }
-            }
             for available_quadruple in summary.available_quadruples.values() {
                 for transcript_ref in available_quadruple.get_refs() {
                     assert_ne!(transcript_ref.height, new_summary_height);
@@ -1879,11 +1855,6 @@ mod tests {
                     .height,
                 new_summary_height
             );
-            for ongoing_signature in summary.ongoing_signatures.values() {
-                for transcript_ref in ongoing_signature.get_refs() {
-                    assert_eq!(transcript_ref.height, new_summary_height);
-                }
-            }
             for available_quadruple in summary.available_quadruples.values() {
                 for transcript_ref in available_quadruple.get_refs() {
                     assert_eq!(transcript_ref.height, new_summary_height);
@@ -1949,7 +1920,6 @@ mod tests {
             let b = add_block(summary_block, summary_height.get(), &mut pool);
             assert_proposal_conversion(b);
 
-            let sig_1 = inputs_1.sig_inputs_ref;
             let quad_1 = inputs_2.sig_inputs_ref.presig_quadruple_ref;
 
             // Create payload blocks with transcripts
@@ -1977,7 +1947,6 @@ mod tests {
             );
             assert_proposal_conversion(b);
 
-            let sig_2 = inputs_1.sig_inputs_ref;
             let quad_2 = inputs_2.sig_inputs_ref.presig_quadruple_ref;
 
             // Create a payload block with references to these past blocks
@@ -1988,18 +1957,6 @@ mod tests {
             let quadruple_id_1 = uid_generator.next_quadruple_id();
             let quadruple_id_2 = uid_generator.next_quadruple_id();
             ecdsa_payload.key_transcript.current = Some(current_key_transcript.clone());
-            let req_id_1 = ecdsa::RequestId {
-                quadruple_id: quadruple_id_1.clone(),
-                pseudo_random_id: [0; 32],
-                height: payload_height_1,
-            };
-            let req_id_2 = ecdsa::RequestId {
-                quadruple_id: quadruple_id_2.clone(),
-                pseudo_random_id: [1; 32],
-                height: payload_height_1,
-            };
-            ecdsa_payload.ongoing_signatures.insert(req_id_1, sig_1);
-            ecdsa_payload.ongoing_signatures.insert(req_id_2, sig_2);
             ecdsa_payload
                 .available_quadruples
                 .insert(quadruple_id_1, quad_1);
@@ -2117,7 +2074,6 @@ mod tests {
             assert!(!summary.signature_agreements.is_empty());
             assert!(reported > 0);
             assert!(unreported > 0);
-            assert!(!summary.ongoing_signatures.is_empty());
             assert!(!summary.available_quadruples.is_empty());
             assert!(!summary.quadruples_in_creation.is_empty());
             assert!(!summary.idkg_transcripts.is_empty());

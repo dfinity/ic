@@ -84,19 +84,6 @@ impl EcdsaBlockReader for EcdsaBlockReaderImpl {
             })
     }
 
-    fn requested_signatures(
-        &self,
-    ) -> Box<dyn Iterator<Item = (&RequestId, &ThresholdEcdsaSigInputsRef)> + '_> {
-        self.chain
-            .tip()
-            .payload
-            .as_ref()
-            .as_ecdsa()
-            .map_or(Box::new(std::iter::empty()), |payload| {
-                Box::new(payload.ongoing_signatures.iter())
-            })
-    }
-
     fn available_quadruple(&self, id: &QuadrupleId) -> Option<&PreSignatureQuadrupleRef> {
         self.chain
             .tip()
