@@ -12,7 +12,6 @@ use errors::MembershipError;
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_crypto::retrieve_mega_public_key_from_registry;
-use ic_error_types::RejectCode;
 use ic_interfaces::ecdsa::EcdsaPool;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
@@ -21,7 +20,6 @@ use ic_management_canister_types::EcdsaKeyId;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_features::EcdsaConfig;
 use ic_replicated_state::{metadata_state::subnet_call_context_manager::*, ReplicatedState};
-use ic_types::consensus::ecdsa::ECDSA_IMPROVED_LATENCY;
 use ic_types::{
     batch::ValidationContext,
     consensus::{
@@ -33,7 +31,7 @@ use ic_types::{
         canister_threshold_sig::idkg::{IDkgTranscript, InitialIDkgDealings},
         AlgorithmId,
     },
-    messages::{CallbackId, RejectContext},
+    messages::CallbackId,
     Height, NodeId, RegistryVersion, SubnetId, Time,
 };
 use std::collections::{BTreeMap, BTreeSet};
@@ -286,49 +284,28 @@ fn create_summary_payload_helper(
     };
 
     let mut ecdsa_summary = if is_new_key_transcript {
-        if ECDSA_IMPROVED_LATENCY {
-            ecdsa::EcdsaPayload {
-                signature_agreements: ecdsa_payload.signature_agreements.clone(),
-                ongoing_signatures: BTreeMap::new(),
-                // We keep available quadruples for now, even if the key transcript
-                // changed, as we don't know if they are part of ongoing signature
-                // requests. Instead we will purge them once the certified state
-                // height catches up with the height of this summary block.
-                available_quadruples: ecdsa_payload.available_quadruples.clone(),
-                quadruples_in_creation: BTreeMap::new(),
-                uid_generator: ecdsa_payload.uid_generator.clone(),
-                // This will clear the current ongoing reshares, and
-                // the execution requests will be restarted with the
-                // new key and different transcript IDs.
-                ongoing_xnet_reshares: BTreeMap::new(),
-                xnet_reshare_agreements: ecdsa_payload.xnet_reshare_agreements.clone(),
-                idkg_transcripts: BTreeMap::new(),
-                key_transcript,
-            }
-        } else {
-            ecdsa::EcdsaPayload {
-                signature_agreements: ecdsa_payload.signature_agreements.clone(),
-                ongoing_signatures: ecdsa_payload.ongoing_signatures.clone(),
-                available_quadruples: BTreeMap::new(),
-                quadruples_in_creation: BTreeMap::new(),
-                uid_generator: ecdsa_payload.uid_generator.clone(),
-                // This will clear the current ongoing reshares, and
-                // the execution requests will be restarted with the
-                // new key and different transcript IDs.
-                ongoing_xnet_reshares: BTreeMap::new(),
-                xnet_reshare_agreements: ecdsa_payload.xnet_reshare_agreements.clone(),
-                idkg_transcripts: BTreeMap::new(),
-                key_transcript,
-            }
+        ecdsa::EcdsaPayload {
+            signature_agreements: ecdsa_payload.signature_agreements.clone(),
+            ongoing_signatures: BTreeMap::new(),
+            // We keep available quadruples for now, even if the key transcript
+            // changed, as we don't know if they are part of ongoing signature
+            // requests. Instead we will purge them once the certified state
+            // height catches up with the height of this summary block.
+            available_quadruples: ecdsa_payload.available_quadruples.clone(),
+            quadruples_in_creation: BTreeMap::new(),
+            uid_generator: ecdsa_payload.uid_generator.clone(),
+            // This will clear the current ongoing reshares, and
+            // the execution requests will be restarted with the
+            // new key and different transcript IDs.
+            ongoing_xnet_reshares: BTreeMap::new(),
+            xnet_reshare_agreements: ecdsa_payload.xnet_reshare_agreements.clone(),
+            idkg_transcripts: BTreeMap::new(),
+            key_transcript,
         }
     } else {
         ecdsa::EcdsaPayload {
             signature_agreements: ecdsa_payload.signature_agreements.clone(),
-            ongoing_signatures: if ECDSA_IMPROVED_LATENCY {
-                BTreeMap::new()
-            } else {
-                ecdsa_payload.ongoing_signatures.clone()
-            },
+            ongoing_signatures: BTreeMap::new(),
             available_quadruples: ecdsa_payload.available_quadruples.clone(),
             quadruples_in_creation: ecdsa_payload.quadruples_in_creation.clone(),
             uid_generator: ecdsa_payload.uid_generator.clone(),
@@ -633,52 +610,26 @@ pub(crate) fn create_data_payload_helper_2(
         .signature_request_timeout_ns
         .and_then(|timeout| context_time.checked_sub(Duration::from_nanos(timeout)));
 
-    if ECDSA_IMPROVED_LATENCY {
-        signatures::update_signature_agreements_improved_latency(
-            all_signing_requests,
-            signature_builder,
-            request_expiry_time,
-            ecdsa_payload,
-            valid_keys,
-            ecdsa_payload_metrics,
-        );
-    } else {
-        signatures::update_signature_agreements(
-            all_signing_requests,
-            signature_builder,
-            ecdsa_payload,
-        );
-        let new_signing_requests = get_signing_requests(
-            height,
-            request_expiry_time,
-            ecdsa_payload,
-            all_signing_requests,
-            valid_keys,
-            ecdsa_payload_metrics,
-        );
-        signatures::update_ongoing_signatures(
-            new_signing_requests,
-            ecdsa_config.quadruples_to_create_in_advance,
-            ecdsa_payload,
-            log,
-        )?;
-    }
+    signatures::update_signature_agreements(
+        all_signing_requests,
+        signature_builder,
+        request_expiry_time,
+        ecdsa_payload,
+        valid_keys,
+        ecdsa_payload_metrics,
+    );
 
     if matches!(certified_height, CertifiedHeight::ReachedSummaryHeight) {
         quadruples::purge_old_key_quadruples(ecdsa_payload, all_signing_requests);
     }
 
-    let matched_quadruples = if ECDSA_IMPROVED_LATENCY {
-        // We count the number of quadruples in the payload that were already matched,
-        // such that they can be replenished.
-        all_signing_requests
-            .values()
-            .filter_map(|context| context.matched_quadruple.as_ref())
-            .filter(|(qid, _)| ecdsa_payload.available_quadruples.contains_key(qid))
-            .count()
-    } else {
-        0
-    };
+    // We count the number of quadruples in the payload that were already matched,
+    // such that they can be replenished.
+    let matched_quadruples = all_signing_requests
+        .values()
+        .filter_map(|context| context.matched_quadruple.as_ref())
+        .filter(|(qid, _)| ecdsa_payload.available_quadruples.contains_key(qid))
+        .count();
     quadruples::make_new_quadruples_if_needed(ecdsa_config, ecdsa_payload, matched_quadruples);
 
     let mut new_transcripts =
@@ -715,217 +666,6 @@ pub(crate) fn create_data_payload_helper_2(
         resharing::get_reshare_requests(ecdsa_dealings_contexts),
     );
     Ok(())
-}
-
-/// Return the set of new signing requests by assigning them a RequestId.  The
-/// logic enforces the requirements set forth in Section A.5 of the ECDSA
-/// design doc. Suppose we have signing requests SR_1, SR_2, ...  and
-/// quadruples Q_1, Q_2, ... .
-///
-/// The SR_i's are ordered in the order the requests were made by execution,
-/// which is determined by the corresponding callback_id, which is defined in
-/// the SubnetCallContextManager struct (see
-/// rs/replicated_state/src/metadata_state/subnet_call_context_manager.rs).
-/// callback_id's are obtained from a counter that gets incremented as requests
-/// get made.
-///
-/// The Q_i's are ordered in the order in which their construction was
-/// initiated, which is determined by QuadrupleId.  QuadrupleId's are obtained
-/// from a counter that gets incremented as new quadruples are initiated.
-///
-/// The basic idea is that SR_i gets paired with Q_i. These pairings are
-/// reflected in the RequestId struct, which consists of a QuadrupleId and a
-/// the pseudo_random_id of the signing request.  A pseudo_random_id is the
-/// random string generated from the random tape when the signing request is
-/// made, as per Section A.5 of the ECDSA design doc. While pseudo_random_id
-/// is ultimately used in the crypto layer as the nonce from which the
-/// re-randomization value delta is derived, it is also used in consensus as an
-/// ID for signing requests.
-///
-/// The logic here works as follows.
-///
-/// 1. let known_random_ids = the pseudo_random_id's of all signing requests
-/// that are either ongoing or agreed upon.
-///
-/// 2. let unassigned_quadruple_ids be the list of all QuadrupleIds for
-/// quadruples that are currently (a) either in creation or available, but (b)
-/// are not paired with any signing requests that are either ongoing or agreed
-/// upon.
-///
-/// 3. Now we build the list of RequestId's by iterating through the signing
-/// request contexts in order of callback_id. This is done implicitly by virtue
-/// of the fact that sign_with_ecdsa_contexts is a BTreeMap mapping CallBackId
-/// to SignWithEcdsaContext and the semantics of the BTreeMap.values method.
-/// So for each context considered in the given order, we ignore it if it
-/// corresponds to an ongoing or agreed upon signing request (using  the value
-/// known_random_ids), and otherwise take the next unassigned quadruple from
-/// unassigned_quadruple_ids and pair that with this signing request.
-///
-/// The main caller of this function is create_data_payload, who uses the
-/// result to determine which signing-request/quadruple pairs will be moved to
-/// the ongoing signatures state.  This is done via the function
-/// update_ongoing_signatures, which moves such a pair to  ongoing signatures
-/// if the quadruple is available.
-///
-/// For example, say in one round we could have SR_1, SR_2, SR_3, SR_4 in the
-/// signing request contexts, none of which are yet ongoing, and Q_1, Q_2, Q_3
-/// in the unassigned_quadruple_ids list.  So the return value of the function
-/// would be ((SR_1,Q_1), (SR_2,Q_2), (SR_3,Q_3)).  In this same round, the
-/// calling function, create_data_payload, could move, say, (SR_2,Q_2) to the
-/// ongoing signatures state if Q2 were available.  In the next round, we have
-/// SR_1, SR_3, SR_4 in the signing requests contexts, with SR_2 now removed
-/// because it is in the ongoing signatures state.  We would also have
-/// unassigned_quadruple_ids Q_1, Q_3, Q_4.  The return value of the function
-/// would be ((SR_1,Q_1), (SR_3,Q_3)).  In this same round, we could move, say,
-/// (SR_1,Q_1) to the ongoing signatures state if Q1 were available.
-///
-/// The above logic ensures that the pairing of SR_i with Q_i is deterministic,
-/// and cannot be manipulated by the adversary, as discussed in Section A.5 of
-/// the ECDSA design doc. However, as discussed in Section A.5.1 of the ECDSA
-/// design doc, it is allowed to essentially dispose of Q_i and replace it with
-/// a fresh quadruple Q'_i.  In the implementation, this may happen at a
-/// summary block.  The logic in create_summary_payload will ensure that all
-/// quadruples that are either in creation or available or disposed of
-/// (currently, if a key reshare occurs) or retained (currently, if a key
-/// reshare does not occur).  This logic of either either disposing of or
-/// retaining all quadruples that are either in creation or available
-/// guarantees that the invariants in Section A.5.1 of the ECDSA design doc are
-/// maintained.  However, the following logic would also be acceptable: if we
-/// dispose of a quadruple Q_i that is in creation or available, then we must
-/// dispose of all quadruples Q_j for j > i that are in creation or available.
-/// This logic may be useful if and when we implement pro-active resharing of
-/// the signing key without subnet membership changes.  In this case, in
-/// creat_summary_payload, if Q_i is the first quadruple that is in creation,
-/// we can retain Q_1, ..., Q_{i-1} and dispose of all quadruples Q_j for j >=
-/// i that are in creation or available.  This logic will allow us to continue
-/// using at least some (and typically most) of the quadruples that were
-/// already available when we pro-actively reshare the signing key.
-pub(crate) fn get_signing_requests<'a>(
-    height: Height,
-    request_expiry_time: Option<Time>,
-    ecdsa_payload: &mut ecdsa::EcdsaPayload,
-    sign_with_ecdsa_contexts: &'a BTreeMap<CallbackId, SignWithEcdsaContext>,
-    valid_keys: &BTreeSet<EcdsaKeyId>,
-    ecdsa_payload_metrics: Option<&EcdsaPayloadMetrics>,
-) -> BTreeMap<ecdsa::RequestId, &'a SignWithEcdsaContext> {
-    let mut known_random_ids_completed = ecdsa_payload
-        .signature_agreements
-        .keys()
-        .cloned()
-        .collect::<BTreeSet<_>>();
-    let known_random_ids_ongoing = ecdsa_payload
-        .ongoing_signatures
-        .keys()
-        .map(|id| (id.pseudo_random_id, id.clone()))
-        .collect::<BTreeMap<_, _>>();
-    let mut unassigned_quadruple_ids = ecdsa_payload.unassigned_quadruple_ids().collect::<Vec<_>>();
-    // sort in reverse order (bigger to smaller).
-    unassigned_quadruple_ids.sort_by(|a, b| b.cmp(a));
-    let mut new_requests = BTreeMap::new();
-
-    // We first go through all requests and check if their key_ids are valid.
-    // All *new* requests with invalid key ids will be rejected.
-    for (callback_id, context) in sign_with_ecdsa_contexts {
-        // Skip known completed and ongoing requests.
-        if known_random_ids_completed.contains(&context.pseudo_random_id)
-            || known_random_ids_ongoing.contains_key(&context.pseudo_random_id)
-        {
-            continue;
-        }
-
-        if !valid_keys.contains(&context.key_id) {
-            // Reject new requests with unknown key Ids.
-            // Note that no quadruples are consumed at this stage.
-            let response = ic_types::batch::ConsensusResponse::new(
-                *callback_id,
-                ic_types::messages::Payload::Reject(RejectContext::new(
-                    RejectCode::CanisterReject,
-                    format!("Invalid key_id in signature request: {:?}", context.key_id),
-                )),
-            );
-            ecdsa_payload.signature_agreements.insert(
-                context.pseudo_random_id,
-                ecdsa::CompletedSignature::Unreported(response),
-            );
-            // Remember this is already responded to.
-            known_random_ids_completed.insert(context.pseudo_random_id);
-            if let Some(metrics) = ecdsa_payload_metrics {
-                metrics.payload_errors_inc("invalid_keyid_requests");
-            }
-        }
-    }
-
-    // The following iteration goes through contexts in the order
-    // of their keys, which is the callback_id. Therefore we are
-    // traversing the requests in the order they were created.
-    for (callback_id, context) in sign_with_ecdsa_contexts {
-        // Skip known completed requests.
-        if known_random_ids_completed.contains(&context.pseudo_random_id) {
-            continue;
-        }
-
-        // A request_id may already exist for this signing request.
-        // If not, we create one by pairing the pseudo_random_id with a quadruple id
-        // if there are still unassigned quadruples.
-        let known_request_id = known_random_ids_ongoing.get(&context.pseudo_random_id);
-        let request_id = known_request_id.cloned().or_else(|| {
-            unassigned_quadruple_ids
-                .pop()
-                .map(|quadruple_id| ecdsa::RequestId {
-                    height,
-                    quadruple_id,
-                    pseudo_random_id: context.pseudo_random_id,
-                })
-        });
-
-        // Reject requests that timed out.
-        //
-        // Note that we only reach this stage when a request gets paired with a quadruple id.
-        // If we assume all requests eventually are paired with quadruple ids, expired ones
-        // will eventually all be rejected.
-        //
-        // This assumption holds because we start to make new quadruples whenever there is space.
-        // If an ongoing quadruple does not make progress, it will be purged eventually due to
-        // the expiry of its corresponding request. This leads to the creation of a new quadruple.
-        if let Some(expiry) = request_expiry_time {
-            if context.batch_time < expiry {
-                let response = ic_types::batch::ConsensusResponse::new(
-                    *callback_id,
-                    ic_types::messages::Payload::Reject(RejectContext::new(
-                        RejectCode::CanisterError,
-                        "Signature request expired",
-                    )),
-                );
-                ecdsa_payload.signature_agreements.insert(
-                    context.pseudo_random_id,
-                    ecdsa::CompletedSignature::Unreported(response),
-                );
-                if let Some(metrics) = ecdsa_payload_metrics {
-                    metrics.payload_errors_inc("expired_requests");
-                }
-                // Remove from other structures if request id exists
-                if let Some(request_id) = request_id {
-                    ecdsa_payload.ongoing_signatures.remove(&request_id);
-                    ecdsa_payload
-                        .quadruples_in_creation
-                        .remove(&request_id.quadruple_id);
-                    ecdsa_payload
-                        .available_quadruples
-                        .remove(&request_id.quadruple_id);
-                }
-                continue;
-            }
-        }
-
-        // If a request is not known and not expired and request id exists, it is a new request.
-        if known_request_id.is_none() {
-            if let Some(request_id) = request_id {
-                new_requests.insert(request_id, context);
-            }
-        }
-    }
-
-    new_requests
 }
 
 /// Update configuration and data about the next ECDSA key transcript.
@@ -1219,29 +959,6 @@ mod tests {
         block_proposal.content.as_ref().clone()
     }
 
-    fn set_up_ecdsa_payload_and_sign_with_ecdsa_contexts(
-        parameters: Vec<(EcdsaKeyId, u8, Time)>,
-    ) -> (
-        EcdsaPayload,
-        CanisterThresholdSigTestEnvironment,
-        BTreeMap<CallbackId, SignWithEcdsaContext>,
-    ) {
-        let keys: BTreeSet<_> = parameters
-            .iter()
-            .map(|parameters| parameters.0.clone())
-            .collect();
-        let (ecdsa_payload, env) = set_up_ecdsa_payload_with_keys(Vec::from_iter(keys));
-
-        let contexts = set_up_sign_with_ecdsa_contexts(
-            parameters
-                .into_iter()
-                .map(|(key, id, time)| (key, id, time, None))
-                .collect(),
-        );
-
-        (ecdsa_payload, env, contexts)
-    }
-
     fn set_up_ecdsa_payload_with_keys(
         key_ids: Vec<EcdsaKeyId>,
     ) -> (EcdsaPayload, CanisterThresholdSigTestEnvironment) {
@@ -1267,132 +984,6 @@ mod tests {
             contexts.insert(callback_id, context);
         }
         contexts
-    }
-
-    #[test]
-    fn test_ecdsa_signing_request_order() {
-        let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
-        let (mut ecdsa_payload, env, mut contexts) =
-            set_up_ecdsa_payload_and_sign_with_ecdsa_contexts(vec![(
-                key_id.clone(),
-                0,
-                UNIX_EPOCH,
-            )]);
-
-        let subnet_nodes: Vec<_> = env.nodes.ids();
-        let registry_version = env.newest_registry_version;
-
-        let valid_keys = BTreeSet::from([key_id.clone()]);
-
-        let max_ongoing_signatures = 2;
-
-        let height = Height::from(1);
-        let signing_requets = get_signing_requests(
-            height,
-            /*request_expiry_time=*/ None,
-            &mut ecdsa_payload,
-            &contexts,
-            &valid_keys,
-            /*ecdsa_payload_metrics=*/ None,
-        );
-        // Because there is no quadruples available, expect empty return
-        assert!(signing_requets.is_empty());
-
-        // Add two quadruples in creation
-        let quadruple_id_0 = ecdsa_payload.peek_next_quadruple_id();
-        let (_kappa_config_ref, _lambda_config_ref) =
-            quadruples::test_utils::create_new_quadruple_in_creation(
-                &subnet_nodes,
-                registry_version,
-                &mut ecdsa_payload.uid_generator,
-                key_id.clone(),
-                &mut ecdsa_payload.quadruples_in_creation,
-            );
-        let quadruple_id_1 = ecdsa_payload.peek_next_quadruple_id();
-        let (_kappa_config_ref, _lambda_config_ref) =
-            quadruples::test_utils::create_new_quadruple_in_creation(
-                &subnet_nodes,
-                registry_version,
-                &mut ecdsa_payload.uid_generator,
-                key_id.clone(),
-                &mut ecdsa_payload.quadruples_in_creation,
-            );
-        let new_requests = get_signing_requests(
-            height,
-            /*request_expiry_time=*/ None,
-            &mut ecdsa_payload,
-            &contexts,
-            &valid_keys,
-            /*ecdsa_payload_metrics=*/ None,
-        );
-        assert_eq!(new_requests.len(), 1);
-        // Check if it is matched with the smaller quadruple ID
-        let request_id_0 = new_requests.keys().next().unwrap().clone();
-        assert_eq!(request_id_0.quadruple_id, quadruple_id_0);
-
-        // Now we are going to make quadruple_id_1 available.
-        let sig_inputs = create_sig_inputs(10);
-        let quadruple_ref = &sig_inputs.sig_inputs_ref.presig_quadruple_ref;
-        ecdsa_payload
-            .available_quadruples
-            .insert(quadruple_id_1.clone(), quadruple_ref.clone());
-        ecdsa_payload.quadruples_in_creation.remove(&quadruple_id_1);
-        let result = signatures::update_ongoing_signatures(
-            signing_requets,
-            max_ongoing_signatures,
-            &mut ecdsa_payload,
-            &no_op_logger(),
-        );
-        // Now ongoing_signatures should still be empty, because we only have one request
-        // and its matching quadruple is not available yet.
-        assert!(result.is_ok());
-        assert!(ecdsa_payload.ongoing_signatures.is_empty());
-        // We insert a second request
-        contexts.insert(
-            CallbackId::from(1),
-            fake_sign_with_ecdsa_context(
-                EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
-                [1; 32],
-            ),
-        );
-        // Now there are two signing requests
-        let new_requests = get_signing_requests(
-            height,
-            /*request_expiry_time=*/ None,
-            &mut ecdsa_payload,
-            &contexts,
-            &valid_keys,
-            /*ecdsa_payload_metrics=*/ None,
-        );
-        assert_eq!(new_requests.len(), 2);
-        let request_id_1 = new_requests
-            .keys()
-            .find(|x| x != &&request_id_0)
-            .unwrap()
-            .clone();
-        // We should be able to move the 2nd request into ongoing_signatures.
-        let result = signatures::update_ongoing_signatures(
-            new_requests,
-            max_ongoing_signatures,
-            &mut ecdsa_payload,
-            &no_op_logger(),
-        );
-        assert!(result.is_ok());
-        assert_eq!(
-            *ecdsa_payload.ongoing_signatures.keys().next().unwrap(),
-            request_id_1
-        );
-        // Run get_signing_requests again, we should get request_id_0, but not request_id_1
-        let result = get_signing_requests(
-            height,
-            /*request_expiry_time=*/ None,
-            &mut ecdsa_payload,
-            &contexts,
-            &valid_keys,
-            /*ecdsa_payload_metrics=*/ None,
-        );
-        assert_eq!(result.len(), 1);
-        assert_eq!(result.keys().next().unwrap().clone(), request_id_0);
     }
 
     #[test]
@@ -1466,63 +1057,20 @@ mod tests {
 
         let num_quadruples_in_creation = ecdsa_payload.quadruples_in_creation.len() as u32;
         let num_available_quadruples = ecdsa_payload.available_quadruples.len() as u32;
-        if ECDSA_IMPROVED_LATENCY {
-            // In the new implementation, the two matched quadruples remain
-            // in available_quadruples.
-            assert_eq!(num_available_quadruples, 2);
-            // Matched quadruples are replenished
-            assert_eq!(
-                num_quadruples_in_creation,
-                ecdsa_config.quadruples_to_create_in_advance
-            );
-        } else {
-            // In the old implementation, both quadruples are matched to
-            // two of the contexts requesting the valid keys, as the
-            // matched_quadruple field is ignored.
-            // The matched quadruples are moved to ongoing_signatures,
-            // thus we start the creation of 5 new quadruples.
-            assert_eq!(num_available_quadruples, 0);
-            assert_eq!(
-                num_quadruples_in_creation,
-                ecdsa_config.quadruples_to_create_in_advance
-            );
-        }
+        // The two matched quadruples remain
+        // in available_quadruples.
+        assert_eq!(num_available_quadruples, 2);
+        // Usually, matched quadruples are replenished, but since one
+        // of them was matched to a disabled key id whose request context
+        // is rejected, the quadruple is "reused" and not replenished.
+        assert_eq!(
+            num_quadruples_in_creation,
+            ecdsa_config.quadruples_to_create_in_advance
+        );
     }
 
     #[test]
     fn test_ecdsa_signing_request_timeout() {
-        let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
-        let expired_time = UNIX_EPOCH + Duration::from_secs(10);
-        let expiry_time = UNIX_EPOCH + Duration::from_secs(11);
-        let non_expired_time = UNIX_EPOCH + Duration::from_secs(12);
-        let (mut ecdsa_payload, _env, contexts) =
-            set_up_ecdsa_payload_and_sign_with_ecdsa_contexts(vec![
-                (key_id.clone(), 0, expired_time),
-                (key_id.clone(), 1, non_expired_time),
-            ]);
-        // Add quadruples
-        let _discarded_quadruple_id =
-            create_available_quadruple(&mut ecdsa_payload, key_id.clone(), 10);
-        let matched_quadruple_id =
-            create_available_quadruple(&mut ecdsa_payload, key_id.clone(), 11);
-
-        let result = get_signing_requests(
-            Height::from(1),
-            Some(expiry_time),
-            &mut ecdsa_payload,
-            &contexts,
-            &BTreeSet::from([key_id]),
-            /*ecdsa_payload_metrics=*/ None,
-        );
-
-        assert_eq!(result.len(), 1);
-        // Check if it is matched with the quadruple ID 1, because quadruple ID 0 is discard too.
-        let request_id = &result.keys().next().unwrap().clone();
-        assert_eq!(request_id.quadruple_id, matched_quadruple_id);
-    }
-
-    #[test]
-    fn test_ecdsa_signing_request_timeout_improved_latency() {
         let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
         let expired_time = UNIX_EPOCH + Duration::from_secs(10);
         let expiry_time = UNIX_EPOCH + Duration::from_secs(11);
@@ -1558,7 +1106,7 @@ mod tests {
         assert_eq!(ecdsa_payload.available_quadruples.len(), 2);
 
         let signature_builder = TestEcdsaSignatureBuilder::new();
-        signatures::update_signature_agreements_improved_latency(
+        signatures::update_signature_agreements(
             &contexts,
             &signature_builder,
             Some(expiry_time),
@@ -1592,52 +1140,6 @@ mod tests {
     fn test_ecdsa_request_with_invalid_key() {
         let valid_key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
         let invalid_key_id = EcdsaKeyId::from_str("Secp256k1:some_invalid_key").unwrap();
-        let (mut ecdsa_payload, _env, contexts) = set_up_ecdsa_payload_and_sign_with_ecdsa_contexts(
-            vec![(invalid_key_id, 0, UNIX_EPOCH)],
-        );
-        let valid_keys = BTreeSet::from([valid_key_id.clone()]);
-        let height = Height::from(1);
-
-        let result = get_signing_requests(
-            height,
-            /*request_expiry_time=*/ None,
-            &mut ecdsa_payload,
-            &contexts,
-            &valid_keys,
-            /*ecdsa_payload_metrics=*/ None,
-        );
-        // Because there is no quadruples available, expect empty return
-        assert!(result.is_empty());
-
-        // Add quadruples
-        create_available_quadruple(&mut ecdsa_payload, valid_key_id.clone(), 10);
-        create_available_quadruple(&mut ecdsa_payload, valid_key_id.clone(), 11);
-
-        let result = get_signing_requests(
-            height,
-            /*request_expiry_time=*/ None,
-            &mut ecdsa_payload,
-            &contexts,
-            &valid_keys,
-            /*ecdsa_payload_metrics=*/ None,
-        );
-
-        // Verify the request is rejected.
-        assert_eq!(result.len(), 0);
-        assert_eq!(ecdsa_payload.ongoing_signatures.len(), 0);
-        assert_eq!(ecdsa_payload.signature_agreements.len(), 1);
-        let (_, response) = ecdsa_payload.signature_agreements.iter().next().unwrap();
-        if let ecdsa::CompletedSignature::Unreported(response) = response {
-            assert_matches!(response.payload, ic_types::messages::Payload::Reject(..));
-        } else {
-            panic!("Unexpected response");
-        }
-    }
-
-    #[test]
-    fn test_ecdsa_request_with_invalid_key_improved_latency() {
-        let valid_key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
-        let invalid_key_id = EcdsaKeyId::from_str("Secp256k1:some_invalid_key").unwrap();
         let (mut ecdsa_payload, _env) = set_up_ecdsa_payload_with_keys(vec![valid_key_id.clone()]);
         // Add quadruples
         let quadruple_id1 = create_available_quadruple(&mut ecdsa_payload, valid_key_id.clone(), 1);
@@ -1662,7 +1164,7 @@ mod tests {
         assert_eq!(ecdsa_payload.available_quadruples.len(), 2);
 
         let signature_builder = TestEcdsaSignatureBuilder::new();
-        signatures::update_signature_agreements_improved_latency(
+        signatures::update_signature_agreements(
             &contexts,
             &signature_builder,
             None,
@@ -2080,27 +1582,7 @@ mod tests {
 
         let block_reader = TestEcdsaBlockReader::new();
         let transcript_builder = TestEcdsaTranscriptBuilder::new();
-        let max_ongoing_signatures = 1;
         let mut signature_builder = TestEcdsaSignatureBuilder::new();
-
-        if !ECDSA_IMPROVED_LATENCY {
-            let all_requests = get_signing_requests(
-                Height::from(1),
-                /*request_expiry_time*/ None,
-                &mut ecdsa_payload,
-                &sign_with_ecdsa_contexts,
-                &valid_keys,
-                /*ecdsa_payload_metrics*/ None,
-            );
-
-            signatures::update_ongoing_signatures(
-                all_requests,
-                max_ongoing_signatures,
-                &mut ecdsa_payload,
-                &no_op_logger(),
-            )
-            .unwrap();
-        }
 
         signature_builder.signatures.insert(
             get_context_request_id(&context.1).unwrap(),
@@ -3094,11 +2576,7 @@ mod tests {
             // Now, quadruples and xnet reshares should be purged
             assert!(payload_4.quadruples_in_creation.is_empty());
             assert!(payload_4.ongoing_xnet_reshares.is_empty());
-            if !ECDSA_IMPROVED_LATENCY {
-                assert!(payload_4.available_quadruples.is_empty());
-                return;
-            }
-            // In the new implementation, available quadruples cannot be purged yet,
+            // Available quadruples cannot be purged yet,
             // as we don't know if they are matched to ongoing signature requests.
             assert_eq!(
                 payload_4.available_quadruples.len(),

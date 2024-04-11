@@ -580,13 +580,6 @@ impl TestEcdsaSignatureBuilder {
 impl EcdsaSignatureBuilder for TestEcdsaSignatureBuilder {
     fn get_completed_signature(
         &self,
-        request_id: &RequestId,
-    ) -> Option<ThresholdEcdsaCombinedSignature> {
-        self.signatures.get(request_id).cloned()
-    }
-
-    fn get_completed_signature_from_context(
-        &self,
         context: &SignWithEcdsaContext,
     ) -> Option<ThresholdEcdsaCombinedSignature> {
         let request_id = get_context_request_id(context)?;

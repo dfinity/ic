@@ -45,14 +45,6 @@ use std::{
 };
 use strum_macros::EnumIter;
 
-/// This feature flag enables the reduced latency path through payload
-/// builder and signer components. Instead of matching pre-signatures
-/// with requests in the block payload, and generating signature shares
-/// once that block is finalized, the optimized path matches pre-signatures
-/// with requests in replicated state and generates signature shares as
-/// soon as that state is certified.
-pub const ECDSA_IMPROVED_LATENCY: bool = true;
-
 /// For completed signature requests, we differentiate between those
 /// that have already been reported and those that have not. This is
 /// to prevent signatures from being reported more than once.
