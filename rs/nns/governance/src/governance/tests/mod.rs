@@ -1226,6 +1226,7 @@ mod cast_vote_and_cascade_follow {
 fn test_pre_and_post_upgrade_first_time() {
     let neuron1 = NeuronProto {
         id: Some(NeuronId { id: 1 }),
+        controller: Some(PrincipalId::new_user_test_id(1)),
         followees: hashmap! {
             2 => Followees {
                 followees: vec![NeuronId { id : 3}]

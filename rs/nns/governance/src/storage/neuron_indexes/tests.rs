@@ -153,10 +153,10 @@ fn add_remove_neuron() {
     );
 }
 
-fn create_model_neuron(id: u64) -> Neuron {
+fn create_model_neuron_builder(id: u64) -> NeuronBuilder {
     let mut account = vec![0; 32];
 
-    let mut neuron = NeuronBuilder::new(
+    NeuronBuilder::new(
         NeuronId { id },
         Subaccount::try_from(account.as_slice()).unwrap(),
         PrincipalId::new_user_test_id(id),
@@ -178,44 +178,21 @@ fn create_model_neuron(id: u64) -> Neuron {
             ],
         }
     })
-    .build();
-
-    neuron.known_neuron_data = Some(KnownNeuronData {
+    .with_known_neuron_data(Some(KnownNeuronData {
         name: format!("known neuron data {}", id),
         description: None,
-    });
-
-    neuron
-}
-
-#[test]
-fn update_neuron_id_fails() {
-    let mut indexes = new_heap_based();
-    let neuron = Neuron {
-        id: NeuronId { id: 1 },
-        ..create_model_neuron(1)
-    };
-    let neuron_with_different_id = Neuron {
-        id: NeuronId { id: 2 },
-        ..create_model_neuron(2)
-    };
-
-    assert_matches!(indexes.update_neuron(&neuron, &neuron_with_different_id),
-        Err(NeuronStoreError::NeuronIdModified { old_neuron_id, new_neuron_id })
-        if old_neuron_id.id == 1 && new_neuron_id.id == 2);
+    }))
 }
 
 #[test]
 fn update_neuron_account_fails() {
     let mut indexes = new_heap_based();
-    let neuron = Neuron {
-        subaccount: Subaccount::try_from([1u8; 32].as_ref()).unwrap(),
-        ..create_model_neuron(1)
-    };
-    let neuron_with_different_account = Neuron {
-        subaccount: Subaccount::try_from([2u8; 32].as_ref()).unwrap(),
-        ..create_model_neuron(1)
-    };
+    let neuron = create_model_neuron_builder(1)
+        .with_subaccount(Subaccount::try_from([1u8; 32].as_ref()).unwrap())
+        .build();
+    let neuron_with_different_account = create_model_neuron_builder(1)
+        .with_subaccount(Subaccount::try_from([2u8; 32].as_ref()).unwrap())
+        .build();
 
     assert_matches!(
         indexes.update_neuron(&neuron, &neuron_with_different_account),
@@ -224,22 +201,20 @@ fn update_neuron_account_fails() {
 }
 
 #[test]
-fn update_neuron_replace_controller() {
+fn update_neuron_set_controller() {
     let mut indexes = new_heap_based();
-    let old_neuron = create_model_neuron(1);
+    let old_neuron = create_model_neuron_builder(1).build();
     assert_eq!(indexes.add_neuron(&old_neuron), Ok(()));
     let new_controller = PrincipalId::new_user_test_id(1001);
     // Make sure the new controller is different from the old one and not one of the hot keys.
-    assert_ne!(new_controller, old_neuron.controller.unwrap());
+    assert_ne!(new_controller, old_neuron.controller());
     assert!(!old_neuron.hot_keys.contains(&new_controller));
 
     // Before updating, the neuron can be looked up by the old controller but cannot be by the new
     // one.
     let neuron_id = old_neuron.id();
     assert_eq!(
-        indexes
-            .principal()
-            .get_neuron_ids(old_neuron.controller.unwrap()),
+        indexes.principal().get_neuron_ids(old_neuron.controller()),
         hashset! { neuron_id }
     );
     assert_eq!(
@@ -249,22 +224,18 @@ fn update_neuron_replace_controller() {
 
     let mut new_neuron = old_neuron.clone();
 
-    new_neuron.controller = Some(PrincipalId::new_user_test_id(2));
+    new_neuron.set_controller(PrincipalId::new_user_test_id(2));
 
     assert_eq!(indexes.update_neuron(&old_neuron, &new_neuron), Ok(()));
 
     // After updating the neuron cannot be looked up by the old controller, but the can be by the
     // new one.
     assert_eq!(
-        indexes
-            .principal()
-            .get_neuron_ids(old_neuron.controller.unwrap()),
+        indexes.principal().get_neuron_ids(old_neuron.controller()),
         hashset! {}
     );
     assert_eq!(
-        indexes
-            .principal()
-            .get_neuron_ids(new_neuron.controller.unwrap()),
+        indexes.principal().get_neuron_ids(new_neuron.controller()),
         hashset! { neuron_id }
     );
 }
@@ -273,7 +244,7 @@ fn update_neuron_replace_controller() {
 fn update_neuron_add_hot_key() {
     // Step 1: prepare a neuron and add it to the indexes.
     let mut indexes = new_heap_based();
-    let old_neuron = create_model_neuron(1);
+    let old_neuron = create_model_neuron_builder(1).build();
     assert_eq!(indexes.add_neuron(&old_neuron), Ok(()));
 
     // Step 2: make sure the new hot key is different from the old ones.
@@ -309,7 +280,7 @@ fn update_neuron_add_hot_key() {
 fn update_neuron_remove_hot_key() {
     // Step 1: prepare a neuron and add it to the indexes.
     let mut indexes = new_heap_based();
-    let old_neuron = create_model_neuron(1);
+    let old_neuron = create_model_neuron_builder(1).build();
     assert_eq!(indexes.add_neuron(&old_neuron), Ok(()));
 
     // Step 2: before updating, the neuron can be looked up by the hot keys.
@@ -398,22 +369,23 @@ fn update_neuron_remove_controller_as_hot_key() {
 fn update_neuron_set_followees() {
     // Step 1: prepare a neuron with followees and add it to the indexes.
     let mut indexes = new_heap_based();
-    let mut old_neuron = create_model_neuron(1);
-    old_neuron.followees = hashmap! {
-        Topic::NeuronManagement as i32 => Followees{
-            followees: vec![
-                NeuronId { id: 2 },
-                NeuronId { id: 3 },
-                NeuronId { id: 4 },
-            ],
-        },
-        Topic::ExchangeRate as i32 => Followees{
-            followees: vec![
-                NeuronId { id: 5 },
-                NeuronId { id: 6 },
-            ],
-        },
-    };
+    let old_neuron = create_model_neuron_builder(1)
+        .with_followees(hashmap! {
+            1 => Followees {
+                followees: vec![
+                    NeuronId { id: 2 },
+                    NeuronId { id: 3 },
+                    NeuronId { id: 4 },
+                ],
+            },
+            2 => Followees {
+                followees: vec![
+                    NeuronId { id: 5 },
+                    NeuronId { id: 6 },
+                ],
+            },
+        })
+        .build();
     assert_eq!(indexes.add_neuron(&old_neuron), Ok(()));
 
     // Step 2: before updating, make sure the neuron can be looked up by the followees.
@@ -492,8 +464,9 @@ fn update_neuron_set_followees() {
 fn update_neuron_add_known_neuron() {
     // Step 1: prepare a neuron without known neuron data and add it to the indexes.
     let mut indexes = new_heap_based();
-    let mut old_neuron = create_model_neuron(1);
-    old_neuron.known_neuron_data = None;
+    let old_neuron = create_model_neuron_builder(1)
+        .with_known_neuron_data(None)
+        .build();
     assert_eq!(indexes.add_neuron(&old_neuron), Ok(()));
 
     // Step 2: before updating, make sure the neuron cannot be listed as a known neuron.
@@ -518,11 +491,12 @@ fn update_neuron_add_known_neuron() {
 fn update_neuron_remove_known_neuron() {
     // Step 1: prepare a neuron with known neuron data and add it to the indexes.
     let mut indexes = new_heap_based();
-    let mut old_neuron = create_model_neuron(1);
-    old_neuron.known_neuron_data = Some(KnownNeuronData {
-        name: "known neuron data".to_string(),
-        description: None,
-    });
+    let old_neuron = create_model_neuron_builder(1)
+        .with_known_neuron_data(Some(KnownNeuronData {
+            name: "known neuron data".to_string(),
+            description: None,
+        }))
+        .build();
     assert_eq!(indexes.add_neuron(&old_neuron), Ok(()));
 
     // Step 2: before updating, make sure the neuron can be listed as a known neuron.
@@ -544,11 +518,12 @@ fn update_neuron_remove_known_neuron() {
 fn update_neuron_update_known_neuron_name() {
     // Step 1: prepare a neuron with known neuron data and add it to the indexes.
     let mut indexes = new_heap_based();
-    let mut old_neuron = create_model_neuron(1);
-    old_neuron.known_neuron_data = Some(KnownNeuronData {
-        name: "known neuron data".to_string(),
-        description: None,
-    });
+    let old_neuron = create_model_neuron_builder(1)
+        .with_known_neuron_data(Some(KnownNeuronData {
+            name: "known neuron data".to_string(),
+            description: None,
+        }))
+        .build();
     assert_eq!(indexes.add_neuron(&old_neuron), Ok(()));
 
     // Step 2: before updating, make sure the neuron can be looked up by the known neuron name.

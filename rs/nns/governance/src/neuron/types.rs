@@ -18,17 +18,17 @@ use std::collections::HashMap;
 #[derive(Clone, Debug, PartialEq)]
 pub struct Neuron {
     /// The id of the neuron.
-    pub id: NeuronId,
+    id: NeuronId,
     /// The principal of the ICP ledger account where the locked ICP
     /// balance resides. This principal is indistinguishable from one
     /// identifying a public key pair, such that those browsing the ICP
     /// ledger cannot tell which balances belong to neurons.
-    pub subaccount: Subaccount,
+    subaccount: Subaccount,
     /// The principal that actually controls the neuron. The principal
     /// must identify a public key pair, which acts as a “master key”,
     /// such that the corresponding secret key should be kept very
     /// secure. The principal may control many neurons.
-    pub controller: Option<PrincipalId>,
+    controller: PrincipalId,
     /// Keys that can be used to perform actions with limited privileges
     /// without exposing the secret key corresponding to the principal
     /// e.g. could be a WebAuthn key.
@@ -128,8 +128,19 @@ impl Neuron {
         self.id
     }
 
+    /// Returns the subaccount of the neuron.
     pub fn subaccount(&self) -> Subaccount {
         self.subaccount
+    }
+
+    /// Returns the principal that controls the neuron.
+    pub fn controller(&self) -> PrincipalId {
+        self.controller
+    }
+
+    /// Replace the controller of the neuron. Only GTC neurons can change their controller.
+    pub fn set_controller(&mut self, new_controller: PrincipalId) {
+        self.controller = new_controller;
     }
 }
 
@@ -138,7 +149,7 @@ impl From<Neuron> for NeuronProto {
         NeuronProto {
             id: Some(neuron.id),
             account: neuron.subaccount.to_vec(),
-            controller: neuron.controller,
+            controller: Some(neuron.controller),
             hot_keys: neuron.hot_keys,
             cached_neuron_stake_e8s: neuron.cached_neuron_stake_e8s,
             neuron_fees_e8s: neuron.neuron_fees_e8s,
@@ -171,7 +182,9 @@ impl TryFrom<NeuronProto> for Neuron {
             id,
             subaccount: Subaccount::try_from(proto.account.as_slice())
                 .map_err(|_| "Invalid subaccount".to_string())?,
-            controller: proto.controller,
+            controller: proto
+                .controller
+                .ok_or(format!("Controller is missing for neuron {}", id.id))?,
             hot_keys: proto.hot_keys,
             cached_neuron_stake_e8s: proto.cached_neuron_stake_e8s,
             neuron_fees_e8s: proto.neuron_fees_e8s,
@@ -286,7 +299,7 @@ impl TryFrom<Neuron> for DecomposedNeuron {
 
         let main = AbridgedNeuron {
             account: subaccount.to_vec(),
-            controller,
+            controller: Some(controller),
             cached_neuron_stake_e8s,
             neuron_fees_e8s,
             created_timestamp_seconds,
@@ -353,7 +366,7 @@ impl From<DecomposedNeuron> for Neuron {
         Neuron {
             id,
             subaccount: Subaccount::try_from(account.as_slice()).unwrap(),
-            controller,
+            controller: controller.unwrap(),
             hot_keys,
             cached_neuron_stake_e8s,
             neuron_fees_e8s,
@@ -382,29 +395,35 @@ impl From<DecomposedNeuron> for Neuron {
 #[derive(Clone, Debug, PartialEq)]
 pub struct NeuronBuilder {
     // Required fields.
-    pub id: NeuronId,
-    pub subaccount: Subaccount,
-    pub controller: PrincipalId,
-    pub dissolve_state_and_age: DissolveStateAndAge,
-    pub created_timestamp_seconds: u64,
+    id: NeuronId,
+    subaccount: Subaccount,
+    controller: PrincipalId,
+    dissolve_state_and_age: DissolveStateAndAge,
+    created_timestamp_seconds: u64,
 
     // Optional fields with reasonable defaults.
-    pub cached_neuron_stake_e8s: u64,
-    pub hot_keys: Vec<PrincipalId>,
-    pub spawn_at_timestamp_seconds: Option<u64>,
-    pub followees: HashMap<i32, Followees>,
-    pub kyc_verified: bool,
-    pub maturity_e8s_equivalent: u64,
-    pub auto_stake_maturity: bool,
-    pub not_for_profit: bool,
-    pub joined_community_fund_timestamp_seconds: Option<u64>,
-    pub neuron_type: Option<i32>,
+    cached_neuron_stake_e8s: u64,
+    hot_keys: Vec<PrincipalId>,
+    spawn_at_timestamp_seconds: Option<u64>,
+    followees: HashMap<i32, Followees>,
+    kyc_verified: bool,
+    maturity_e8s_equivalent: u64,
+    auto_stake_maturity: bool,
+    not_for_profit: bool,
+    joined_community_fund_timestamp_seconds: Option<u64>,
+    neuron_type: Option<i32>,
 
-    // Fields that don't exist when a neuron is first built. We allow them to be set in tests. The
-    // rest of the fields (e.g. recent_ballots, transfer) can be added below as they are needed in
-    // tests.
+    // Fields that don't exist when a neuron is first built. We allow them to be set in tests.
+    #[cfg(test)]
+    neuron_fees_e8s: u64,
+    #[cfg(test)]
+    recent_ballots: Vec<BallotInfo>,
+    #[cfg(test)]
+    transfer: Option<NeuronStakeTransfer>,
     #[cfg(test)]
     staked_maturity_e8s_equivalent: Option<u64>,
+    #[cfg(test)]
+    known_neuron_data: Option<KnownNeuronData>,
 }
 
 impl NeuronBuilder {
@@ -434,8 +453,37 @@ impl NeuronBuilder {
             neuron_type: None,
 
             #[cfg(test)]
+            neuron_fees_e8s: 0,
+            #[cfg(test)]
+            recent_ballots: Vec::new(),
+            #[cfg(test)]
+            transfer: None,
+            #[cfg(test)]
             staked_maturity_e8s_equivalent: None,
+            #[cfg(test)]
+            known_neuron_data: None,
         }
+    }
+
+    #[cfg(test)]
+    pub fn with_subaccount(mut self, subaccount: Subaccount) -> Self {
+        self.subaccount = subaccount;
+        self
+    }
+
+    #[cfg(test)]
+    pub fn with_controller(mut self, controller: PrincipalId) -> Self {
+        self.controller = controller;
+        self
+    }
+
+    #[cfg(test)]
+    pub fn with_dissolve_state_and_age(
+        mut self,
+        dissolve_state_and_age: DissolveStateAndAge,
+    ) -> Self {
+        self.dissolve_state_and_age = dissolve_state_and_age;
+        self
     }
 
     pub fn with_cached_neuron_stake_e8s(mut self, cached_neuron_stake_e8s: u64) -> Self {
@@ -492,11 +540,35 @@ impl NeuronBuilder {
     }
 
     #[cfg(test)]
+    pub fn with_neuron_fees_e8s(mut self, neuron_fees_e8s: u64) -> Self {
+        self.neuron_fees_e8s = neuron_fees_e8s;
+        self
+    }
+
+    #[cfg(test)]
+    pub fn with_recent_ballots(mut self, recent_ballots: Vec<BallotInfo>) -> Self {
+        self.recent_ballots = recent_ballots;
+        self
+    }
+
+    #[cfg(test)]
+    pub fn with_transfer(mut self, transfer: Option<NeuronStakeTransfer>) -> Self {
+        self.transfer = transfer;
+        self
+    }
+
+    #[cfg(test)]
     pub fn with_staked_maturity_e8s_equivalent(
         mut self,
         staked_maturity_e8s_equivalent: u64,
     ) -> Self {
         self.staked_maturity_e8s_equivalent = Some(staked_maturity_e8s_equivalent);
+        self
+    }
+
+    #[cfg(test)]
+    pub fn with_known_neuron_data(mut self, known_neuron_data: Option<KnownNeuronData>) -> Self {
+        self.known_neuron_data = known_neuron_data;
         self
     }
 
@@ -518,14 +590,21 @@ impl NeuronBuilder {
             joined_community_fund_timestamp_seconds,
             neuron_type,
             #[cfg(test)]
+            neuron_fees_e8s,
+            #[cfg(test)]
+            recent_ballots,
+            #[cfg(test)]
+            transfer,
+            #[cfg(test)]
             staked_maturity_e8s_equivalent,
+            #[cfg(test)]
+            known_neuron_data,
         } = self;
 
         let StoredDissolvedStateAndAge {
             dissolve_state,
             aging_since_timestamp_seconds,
         } = StoredDissolvedStateAndAge::from(dissolve_state_and_age);
-        let controller = Some(controller);
         let auto_stake_maturity = if auto_stake_maturity {
             Some(true)
         } else {
@@ -533,11 +612,15 @@ impl NeuronBuilder {
         };
 
         // The below fields are always the default values for a new neuron.
+        #[cfg(not(test))]
         let neuron_fees_e8s = 0;
+        #[cfg(not(test))]
         let recent_ballots = Vec::new();
+        #[cfg(not(test))]
         let transfer = None;
         #[cfg(not(test))]
         let staked_maturity_e8s_equivalent = None;
+        #[cfg(not(test))]
         let known_neuron_data = None;
 
         Neuron {

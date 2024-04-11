@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
     neuron::types::{DissolveStateAndAge, NeuronBuilder},
-    pb::v1::neuron::{DissolveState, Followees},
+    pb::v1::neuron::Followees,
     storage::with_stable_neuron_indexes,
 };
 use ic_nervous_system_common::SECONDS_PER_DAY;
@@ -9,7 +9,7 @@ use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use maplit::{btreemap, hashmap, hashset};
 use num_traits::bounds::LowerBounded;
 
-fn simple_neuron(id: u64) -> Neuron {
+fn simple_neuron_builder(id: u64) -> NeuronBuilder {
     // Make sure different neurons have different accounts.
     let mut account = vec![0; 32];
     for (destination, data) in account.iter_mut().zip(id.to_le_bytes().iter().cycle()) {
@@ -26,16 +26,14 @@ fn simple_neuron(id: u64) -> Neuron {
         },
         123_456_789,
     )
-    .build()
 }
 
 #[test]
 fn test_neuron_add_modify_remove() {
     // Step 1: prepare a neuron and an empty neuron store.
-    let neuron = Neuron {
-        cached_neuron_stake_e8s: 1,
-        ..simple_neuron(1)
-    };
+    let neuron = simple_neuron_builder(1)
+        .with_cached_neuron_stake_e8s(1)
+        .build();
     let neuron_id = neuron.id();
     let mut neuron_store = NeuronStore::new(BTreeMap::new());
 
@@ -62,13 +60,9 @@ fn test_neuron_add_modify_remove() {
     assert_eq!(neuron_store.len(), 1);
     assert!(neuron_store.contains(neuron_id));
     let neuron_read_result = neuron_store.with_neuron(&neuron.id(), |neuron| neuron.clone());
-    assert_eq!(
-        neuron_read_result,
-        Ok(Neuron {
-            cached_neuron_stake_e8s: 2,
-            ..neuron.clone()
-        })
-    );
+    let mut expected_neuron = neuron.clone();
+    expected_neuron.cached_neuron_stake_e8s = 2;
+    assert_eq!(neuron_read_result, Ok(expected_neuron));
 
     // Step 7: remove the neuron.
     neuron_store.remove_neuron(&neuron_id);
@@ -87,11 +81,11 @@ fn test_neuron_add_modify_remove() {
 fn test_add_neuron_update_indexes() {
     // Step 1: prepare the neuron and neuron store.
     let mut neuron_store = NeuronStore::new(btreemap! {
-        1 => simple_neuron(1),
+        1 => simple_neuron_builder(1).build(),
     });
 
     // Step 2: adds a new neuron into neuron store.
-    let neuron_2 = simple_neuron(2);
+    let neuron_2 = simple_neuron_builder(2).build();
     neuron_store.add_neuron(neuron_2.clone()).unwrap();
 
     // Step 3: verifies that the indexes can be looked up for the new neuron.
@@ -117,7 +111,7 @@ fn test_add_neuron_update_indexes() {
 #[test]
 fn test_remove_neuron_update_indexes() {
     // Step 1: prepare the neuron and neuron store.
-    let neuron = simple_neuron(1);
+    let neuron = simple_neuron_builder(1).build();
     let mut neuron_store = NeuronStore::new(btreemap! {
         neuron.id().id => neuron.clone(),
     });
@@ -146,10 +140,9 @@ fn test_remove_neuron_update_indexes() {
 #[test]
 fn test_modify_neuron_update_indexes() {
     // Step 1: prepare the neuron and neuron store.
-    let neuron = Neuron {
-        controller: Some(PrincipalId::new_user_test_id(1)),
-        ..simple_neuron(1)
-    };
+    let neuron = simple_neuron_builder(1)
+        .with_controller(PrincipalId::new_user_test_id(1))
+        .build();
     let mut neuron_store = NeuronStore::new(btreemap! {
         neuron.id().id => neuron.clone(),
     });
@@ -157,7 +150,7 @@ fn test_modify_neuron_update_indexes() {
     // Step 2: modifies the controller of the neuron.
     neuron_store
         .with_neuron_mut(&neuron.id(), |neuron| {
-            neuron.controller = Some(PrincipalId::new_user_test_id(2));
+            neuron.set_controller(PrincipalId::new_user_test_id(2));
         })
         .unwrap();
 
@@ -178,11 +171,16 @@ fn test_modify_neuron_update_indexes() {
 
 #[test]
 fn test_heap_range_with_begin_and_limit() {
+    let neuron_1 = simple_neuron_builder(1).build();
+    let neuron_3 = simple_neuron_builder(3).build();
+    let neuron_7 = simple_neuron_builder(7).build();
+    let neuron_12 = simple_neuron_builder(12).build();
+
     let neuron_store = NeuronStore::new(btreemap! {
-        1 => simple_neuron(1),
-        3 => simple_neuron(3),
-        7 => simple_neuron(7),
-        12 => simple_neuron(12),
+        1 => neuron_1,
+        3 => neuron_3.clone(),
+        7 => neuron_7.clone(),
+        12 => neuron_12,
     });
 
     let observed_neurons: Vec<_> = neuron_store
@@ -190,24 +188,18 @@ fn test_heap_range_with_begin_and_limit() {
         .take(2)
         .collect();
 
-    assert_eq!(observed_neurons, vec![simple_neuron(3), simple_neuron(7)],);
+    assert_eq!(observed_neurons, vec![neuron_3, neuron_7],);
 }
 
 #[test]
 fn test_add_inactive_neuron() {
-    // Step 1.1: set up 1 active neuron and 1 inactive neuron.
-    let active_neuron = Neuron {
-        cached_neuron_stake_e8s: 1,
-        ..simple_neuron(1)
-    };
-    let inactive_neuron = Neuron {
-        cached_neuron_stake_e8s: 0,
-        dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(1)),
-        ..simple_neuron(2)
-    };
-
-    // Step 1.2: create neuron store with no neurons.
+    // Step 1.1: create neuron store with no neurons.
     let mut neuron_store = NeuronStore::new(BTreeMap::new());
+
+    // Step 1.1: set up 1 active neuron and 1 inactive neuron.
+    let now = neuron_store.now();
+    let active_neuron = active_neuron_builder(1, now).build();
+    let inactive_neuron = inactive_neuron_builder(2).build();
 
     // Step 2: add both neurons into neuron store.
     neuron_store.add_neuron(active_neuron.clone()).unwrap();
@@ -243,12 +235,7 @@ fn test_add_inactive_neuron() {
 #[test]
 fn test_remove_inactive_neuron() {
     // Step 1.1: set up 1 active neuron and 1 inactive neuron.
-    let inactive_neuron = Neuron {
-        cached_neuron_stake_e8s: 0,
-        // We require a neuron to have at least 6 months dissolve delay, in order to be inactive.
-        dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(1)),
-        ..simple_neuron(2)
-    };
+    let inactive_neuron = inactive_neuron_builder(1).build();
 
     // Step 1.2: create neuron store with no neurons.
     let mut neuron_store = NeuronStore::new(BTreeMap::new());
@@ -283,14 +270,13 @@ fn test_neuron_store_new_then_restore() {
     // Step 1: create a NeuronStore for the first time with 10 neurons with following.
     let neurons: BTreeMap<_, _> = (0..10)
         .map(|i| {
-            let neuron = Neuron {
-                followees: hashmap! {
+            let neuron = simple_neuron_builder(i)
+                .with_followees(hashmap! {
                     Topic::Governance as i32 => Followees {
                         followees: vec![NeuronId { id: 10 }],
-                    },
-                },
-                ..simple_neuron(i)
-            };
+                    }
+                })
+                .build();
             (i, neuron)
         })
         .collect();
@@ -341,11 +327,7 @@ fn test_batch_validate_neurons_in_stable_store_are_inactive() {
     for i in 1..=80 {
         // The dissolve state timestamp is chosen so that it meets the inactive neuron criteria.
         neuron_store
-            .add_neuron(Neuron {
-                cached_neuron_stake_e8s: 0,
-                dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(1)),
-                ..simple_neuron(i)
-            })
+            .add_neuron(inactive_neuron_builder(i).build())
             .unwrap();
     }
 
@@ -372,11 +354,7 @@ fn test_batch_validate_neurons_in_stable_store_are_inactive() {
 #[test]
 fn test_batch_validate_neurons_in_stable_store_are_inactive_invalid() {
     // Step 1.1: set up 1 inactive neuron.
-    let neuron = Neuron {
-        cached_neuron_stake_e8s: 0,
-        dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(1)),
-        ..simple_neuron(1)
-    };
+    let neuron = inactive_neuron_builder(1).build();
 
     // Step 1.2: create neuron store with no neurons.
     let mut neuron_store = NeuronStore::new(BTreeMap::new());
@@ -385,15 +363,12 @@ fn test_batch_validate_neurons_in_stable_store_are_inactive_invalid() {
     neuron_store.add_neuron(neuron.clone()).unwrap();
 
     // Step 1.4: modify the inactive in stable neuron store to make it actually active.
+    let mut neuron_made_active = neuron.clone();
+    neuron_made_active.cached_neuron_stake_e8s = 1;
+
     with_stable_neuron_store_mut(|stable_neuron_store| {
         stable_neuron_store
-            .update(
-                &neuron,
-                Neuron {
-                    cached_neuron_stake_e8s: 1,
-                    ..neuron.clone()
-                },
-            )
+            .update(&neuron, neuron_made_active)
             .unwrap()
     });
 
@@ -409,22 +384,20 @@ fn test_batch_validate_neurons_in_stable_store_are_inactive_invalid() {
 // store. They should probably be cleaned up after the inactive neuron migration since it's better
 // to test through its public API.
 
-fn active_neuron(now: u64) -> Neuron {
-    Neuron {
-        cached_neuron_stake_e8s: 0,
-        // A neuron just dissolved must be active.
-        dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(now)),
-        ..simple_neuron(1)
-    }
+fn active_neuron_builder(id: u64, now: u64) -> NeuronBuilder {
+    simple_neuron_builder(id)
+        .with_cached_neuron_stake_e8s(0)
+        .with_dissolve_state_and_age(DissolveStateAndAge::DissolvingOrDissolved {
+            when_dissolved_timestamp_seconds: now,
+        })
 }
 
-fn inactive_neuron() -> Neuron {
-    Neuron {
-        cached_neuron_stake_e8s: 0,
-        // A neuron dissolved very long time ago is inactive if other conditions are met.
-        dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(1)),
-        ..simple_neuron(1)
-    }
+fn inactive_neuron_builder(id: u64) -> NeuronBuilder {
+    simple_neuron_builder(id)
+        .with_cached_neuron_stake_e8s(0)
+        .with_dissolve_state_and_age(DissolveStateAndAge::DissolvingOrDissolved {
+            when_dissolved_timestamp_seconds: 1,
+        })
 }
 
 fn warp_time_to_make_neuron_inactive(neuron_store: &mut NeuronStore) {
@@ -455,7 +428,7 @@ fn assert_neuron_in_neuron_store_eq(neuron_store: &NeuronStore, neuron: &Neuron)
 fn test_from_active_to_active() {
     // Step 1.1: set up an empty neuron store with an active neuron.
     let mut neuron_store = NeuronStore::new(BTreeMap::new());
-    let neuron = active_neuron(neuron_store.now());
+    let neuron = active_neuron_builder(1, neuron_store.now()).build();
     let neuron_id = neuron.id();
     neuron_store.add_neuron(neuron.clone()).unwrap();
 
@@ -465,10 +438,8 @@ fn test_from_active_to_active() {
     assert!(!is_neuron_in_stable(neuron_id));
 
     // Step 2: modifies the neuron to be still active.
-    let modified_neuron = Neuron {
-        cached_neuron_stake_e8s: 2,
-        ..neuron
-    };
+    let mut modified_neuron = neuron.clone();
+    modified_neuron.cached_neuron_stake_e8s = 2;
     neuron_store
         .with_neuron_mut(&neuron_id, |neuron| *neuron = modified_neuron.clone())
         .unwrap();
@@ -484,10 +455,8 @@ fn test_from_active_to_inactive() {
     // Step 1.1: set up an empty neuron store with an active neuron which would be inactive if there
     // is no fund.
     let mut neuron_store = NeuronStore::new(BTreeMap::new());
-    let neuron = Neuron {
-        cached_neuron_stake_e8s: 1,
-        ..inactive_neuron()
-    };
+    let mut neuron = inactive_neuron_builder(1).build();
+    neuron.cached_neuron_stake_e8s = 1;
     let neuron_id = neuron.id();
     neuron_store.add_neuron(neuron.clone()).unwrap();
 
@@ -497,18 +466,14 @@ fn test_from_active_to_inactive() {
     assert!(!is_neuron_in_stable(neuron_id));
 
     // Step 2: modifies the neuron to be inactive by removing its stake
-    let modified_neuron = Neuron {
-        cached_neuron_stake_e8s: 0,
-        ..neuron
-    };
+    let mut modified_neuron = neuron.clone();
+    modified_neuron.cached_neuron_stake_e8s = 0;
     neuron_store
         .with_neuron_mut(&neuron_id, |neuron| *neuron = modified_neuron.clone())
         .unwrap();
 
-    // Step 3: verifies that the neuron is in both heap and stable.
+    // Step 3: verifies that the neuron is only in stable.
     assert_neuron_in_neuron_store_eq(&neuron_store, &modified_neuron);
-    // Whether the inactive neuron can be found in heap depends on whether we want to store inactive neurons
-    // only in stable memory.
     assert!(!is_neuron_in_heap(&neuron_store, neuron_id));
     assert!(is_neuron_in_stable(neuron_id));
 }
@@ -517,7 +482,7 @@ fn test_from_active_to_inactive() {
 fn test_from_inactive_to_active() {
     // Step 1.1: set up an empty neuron store with an inactive neuron.
     let mut neuron_store = NeuronStore::new(BTreeMap::new());
-    let neuron = inactive_neuron();
+    let neuron = inactive_neuron_builder(1).build();
     let neuron_id = neuron.id();
     neuron_store.add_neuron(neuron.clone()).unwrap();
 
@@ -529,10 +494,8 @@ fn test_from_inactive_to_active() {
     assert!(is_neuron_in_stable(neuron_id));
 
     // Step 2: modifies the neuron to be active by funding it.
-    let modified_neuron = Neuron {
-        cached_neuron_stake_e8s: 1,
-        ..neuron
-    };
+    let mut modified_neuron = neuron.clone();
+    modified_neuron.cached_neuron_stake_e8s = 1;
     neuron_store
         .with_neuron_mut(&neuron_id, |neuron| *neuron = modified_neuron.clone())
         .unwrap();
@@ -547,7 +510,7 @@ fn test_from_inactive_to_active() {
 fn test_from_inactive_to_inactive() {
     // Step 1.1: set up an empty neuron store with an inactive neuron.
     let mut neuron_store = NeuronStore::new(BTreeMap::new());
-    let neuron = inactive_neuron();
+    let neuron = inactive_neuron_builder(1).build();
     let neuron_id = neuron.id();
     neuron_store.add_neuron(neuron.clone()).unwrap();
 
@@ -559,18 +522,14 @@ fn test_from_inactive_to_inactive() {
     assert!(is_neuron_in_stable(neuron_id));
 
     // Step 2: modifies the neuron to be still inactive.
-    let modified_neuron = Neuron {
-        auto_stake_maturity: Some(true),
-        ..neuron
-    };
+    let mut modified_neuron = neuron.clone();
+    modified_neuron.auto_stake_maturity = Some(true);
     neuron_store
         .with_neuron_mut(&neuron_id, |neuron| *neuron = modified_neuron.clone())
         .unwrap();
 
-    // Step 3: verifies that the neuron is modified and is only in heap.
+    // Step 3: verifies that the neuron is modified and is only in stable.
     assert_neuron_in_neuron_store_eq(&neuron_store, &modified_neuron);
-    // Whether the inactive neuron can be found in heap depends on whether we want to store inactive neurons
-    // only in stable memory.
     assert!(!is_neuron_in_heap(&neuron_store, neuron_id));
     assert!(is_neuron_in_stable(neuron_id));
 }
@@ -579,7 +538,7 @@ fn test_from_inactive_to_inactive() {
 fn test_from_stale_inactive_to_inactive() {
     // Step 1.1: set up an empty neuron store with an active neuron.
     let mut neuron_store = NeuronStore::new(BTreeMap::new());
-    let neuron = active_neuron(neuron_store.now());
+    let neuron = active_neuron_builder(1, neuron_store.now()).build();
     let neuron_id = neuron.id();
     neuron_store.add_neuron(neuron.clone()).unwrap();
 
@@ -594,10 +553,8 @@ fn test_from_stale_inactive_to_inactive() {
     // Step 2: call with_neuron_mut without modification.
     neuron_store.with_neuron_mut(&neuron_id, |_| {}).unwrap();
 
-    // Step 3: verifies that the neuron is not modified but now in both heap and stable.
+    // Step 3: verifies that the neuron is not modified but now only in stable.
     assert_neuron_in_neuron_store_eq(&neuron_store, &neuron);
-    // Whether the inactive neuron can be found in heap depends on whether we want to store inactive neurons
-    // only in stable memory.
     assert!(!is_neuron_in_heap(&neuron_store, neuron_id));
     assert!(is_neuron_in_stable(neuron_id));
 }
@@ -606,7 +563,7 @@ fn test_from_stale_inactive_to_inactive() {
 fn test_from_stale_inactive_to_active() {
     // Step 1.1: set up an empty neuron store with an active neuron.
     let mut neuron_store = NeuronStore::new(BTreeMap::new());
-    let neuron = active_neuron(neuron_store.now());
+    let neuron = active_neuron_builder(1, neuron_store.now()).build();
     let neuron_id = neuron.id();
     neuron_store.add_neuron(neuron.clone()).unwrap();
 
@@ -619,10 +576,8 @@ fn test_from_stale_inactive_to_active() {
     warp_time_to_make_neuron_inactive(&mut neuron_store);
 
     // Step 2: modify the neuron to be active again
-    let modified_neuron = Neuron {
-        cached_neuron_stake_e8s: 1,
-        ..neuron
-    };
+    let mut modified_neuron = neuron.clone();
+    modified_neuron.cached_neuron_stake_e8s = 1;
     neuron_store
         .with_neuron_mut(&neuron_id, |neuron| *neuron = modified_neuron.clone())
         .unwrap();
@@ -635,16 +590,15 @@ fn test_from_stale_inactive_to_active() {
 
 #[test]
 fn test_get_followers_by_followee_and_topic() {
+    let neuron = simple_neuron_builder(1)
+        .with_followees(hashmap! {
+            Topic::Unspecified as i32 => Followees {
+                followees: vec![NeuronId { id: 2 }, NeuronId { id: 3 }],
+            }
+        })
+        .build();
     let neuron_store = NeuronStore::new(btreemap! {
-        1 => Neuron {
-            id: NeuronId { id: 1 },
-            followees: hashmap! {
-                Topic::Unspecified as i32 => Followees {
-                    followees: vec![NeuronId { id: 2 }, NeuronId { id: 3 }],
-                },
-            },
-            ..simple_neuron(1)
-        },
+        1 => neuron,
     });
     assert_eq!(
         neuron_store.get_followers_by_followee_and_topic(NeuronId { id: 2 }, Topic::Unspecified),
@@ -658,13 +612,15 @@ fn test_get_followers_by_followee_and_topic() {
 
 #[test]
 fn test_get_neuron_ids_readable_by_caller() {
+    let neuron = simple_neuron_builder(1)
+        .with_controller(PrincipalId::new_user_test_id(1))
+        .with_hot_keys(vec![
+            PrincipalId::new_user_test_id(2),
+            PrincipalId::new_user_test_id(3),
+        ])
+        .build();
     let neuron_store = NeuronStore::new(btreemap! {
-        1 => Neuron {
-            id: NeuronId { id: 1 },
-            controller: Some(PrincipalId::new_user_test_id(1)),
-            hot_keys: vec![PrincipalId::new_user_test_id(2), PrincipalId::new_user_test_id(3)],
-            ..simple_neuron(1)
-        },
+        1 => neuron,
     });
     for i in 1..=3 {
         assert_eq!(

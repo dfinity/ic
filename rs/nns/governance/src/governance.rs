@@ -1965,7 +1965,7 @@ impl Governance {
             ));
         }
 
-        if !neuron.controller.unwrap().is_self_authenticating() {
+        if !neuron.controller().is_self_authenticating() {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
                 "Cannot add neuron, controller PrincipalId must be self-authenticating".to_string(),
@@ -2105,7 +2105,7 @@ impl Governance {
 
         let ids_are_valid = neuron_ids.iter().all(|id| {
             self.with_neuron(id, |neuron| {
-                neuron.controller.as_ref() == Some(GENESIS_TOKEN_CANISTER_ID.get_ref())
+                neuron.controller() == *GENESIS_TOKEN_CANISTER_ID.get_ref()
             })
             .unwrap_or(false)
         });
@@ -2122,10 +2122,7 @@ impl Governance {
         for neuron_id in neuron_ids {
             self.with_neuron_mut(&neuron_id, |neuron| {
                 neuron.created_timestamp_seconds = now;
-                neuron
-                    .controller
-                    .replace(new_controller)
-                    .expect("Neuron must have a controller")
+                neuron.set_controller(new_controller)
             })
             .unwrap();
         }
@@ -2152,7 +2149,7 @@ impl Governance {
         let (is_donor_controlled_by_gtc, donor_subaccount, donor_cached_neuron_stake_e8s) = self
             .with_neuron(donor_neuron_id, |donor_neuron| {
                 let is_donor_controlled_by_gtc =
-                    donor_neuron.controller.as_ref() == Some(GENESIS_TOKEN_CANISTER_ID.get_ref());
+                    donor_neuron.controller() == *GENESIS_TOKEN_CANISTER_ID.get_ref();
                 let donor_subaccount = donor_neuron.subaccount();
                 let donor_cached_neuron_stake_e8s = donor_neuron.cached_neuron_stake_e8s;
                 (
@@ -2855,13 +2852,10 @@ impl Governance {
 
         // Validate that if a child neuron controller was provided, it is a valid
         // principal.
-        let child_controller = if let Some(child_controller_) = &spawn.new_controller {
-            child_controller_
+        let child_controller = if let Some(child_controller) = &spawn.new_controller {
+            *child_controller
         } else {
-            parent_neuron
-                .controller
-                .as_ref()
-                .expect("The parent neuron doesn't have a controller.")
+            parent_neuron.controller()
         };
 
         let economics = self
@@ -2888,7 +2882,7 @@ impl Governance {
         let to_subaccount = match spawn.nonce {
             None => Subaccount(self.env.random_byte_array()),
             Some(nonce_val) => {
-                ledger::compute_neuron_staking_subaccount(*child_controller, nonce_val)
+                ledger::compute_neuron_staking_subaccount(child_controller, nonce_val)
             }
         };
 
@@ -2917,7 +2911,7 @@ impl Governance {
         let child_neuron = NeuronBuilder::new(
             child_nid,
             to_subaccount,
-            *child_controller,
+            child_controller,
             DissolveStateAndAge::DissolvingOrDissolved {
                 when_dissolved_timestamp_seconds: dissolve_and_spawn_at_timestamp_seconds,
             },
@@ -4197,14 +4191,10 @@ impl Governance {
                 // neuron.
                 match mgmt.get_neuron_id_or_subaccount() {
                     Ok(Some(ref managed_neuron_id)) => {
-                        if let Some(controller) = self
-                            .with_neuron_by_neuron_id_or_subaccount(
-                                managed_neuron_id,
-                                |managed_neuron| managed_neuron.controller,
-                            )
-                            .ok()
-                            .and_then(|controller| controller)
-                        {
+                        if let Ok(controller) = self.with_neuron_by_neuron_id_or_subaccount(
+                            managed_neuron_id,
+                            |managed_neuron| managed_neuron.controller(),
+                        ) {
                             let result = self.manage_neuron(&controller, &mgmt).await;
                             match result.command {
                                 Some(manage_neuron_response::Command::Error(err)) => {
@@ -4218,7 +4208,7 @@ impl Governance {
                                 Err(GovernanceError::new_with_message(
                                     ErrorType::NotAuthorized,
                                     "Couldn't execute manage neuron proposal.\
-                                          The neuron doesn't have a controller.",
+                                        The neuron was not found.",
                                 )),
                             );
                         }
@@ -4618,7 +4608,7 @@ impl Governance {
         for principal in principal_set {
             for neuron_id in self.get_neuron_ids_by_principal(principal) {
                 self.with_neuron_mut(&neuron_id, |neuron| {
-                    if neuron.controller.as_ref() == Some(principal) {
+                    if neuron.controller() == *principal {
                         neuron.kyc_verified = true;
                     }
                 })

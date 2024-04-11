@@ -109,7 +109,7 @@ impl Neuron {
     /// Returns true if and only if `principal` is equal to the
     /// controller of this neuron.
     pub(crate) fn is_controlled_by(&self, principal: &PrincipalId) -> bool {
-        self.controller.as_ref().map_or(false, |c| c == principal)
+        self.controller() == *principal
     }
 
     /// Returns true if and only if `principal` is authorized to
@@ -133,12 +133,8 @@ impl Neuron {
 
     // Returns all principal ids with special permissions..
     pub fn principal_ids_with_special_permissions(&self) -> Vec<PrincipalId> {
-        let mut principal_ids: Vec<_> = self
-            .hot_keys
-            .iter()
-            .chain(self.controller.iter())
-            .copied()
-            .collect();
+        let mut principal_ids: Vec<_> = self.hot_keys.clone();
+        principal_ids.push(self.controller());
         // The number of entries is bounded so Vec->HashSet->Vec won't have a clear advantage. Also,
         // although the order isn't needed by this method and expected use cases, having a stable
         // ordering (instead of being determined by hash) is usually good for debugging.
@@ -1299,7 +1295,7 @@ mod tests {
             create_neuron_with_dissolve_state_and_age(DissolveStateAndAge::DissolvingOrDissolved {
                 when_dissolved_timestamp_seconds: now - 1000,
             });
-        let controller = neuron.controller.unwrap();
+        let controller = neuron.controller();
 
         // Step 1: try to set the dissolve delay to the past, expecting to fail.
         assert!(neuron
