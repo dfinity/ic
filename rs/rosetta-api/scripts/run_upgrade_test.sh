@@ -17,7 +17,7 @@ if [ "$2" != "icp-ledger-archive" ] && [ "$2" != "icp-ledger-archive-1" ] && [ "
     exit 2
 fi
 
-sudo apt update && sudo apt install sqlite3
+sudo apt update && sudo apt install sqlite3 containernetworking-plugins
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 COMMIT_ID="$1"
