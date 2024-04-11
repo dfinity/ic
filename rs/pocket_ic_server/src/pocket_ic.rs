@@ -9,6 +9,7 @@ use hyper::header::{HeaderValue, CONTENT_TYPE};
 use hyper::Method;
 use ic_boundary::{Health, RootKey};
 use ic_config::execution_environment;
+use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SubnetConfig;
 use ic_crypto_sha2::Sha256;
 use ic_http_endpoints_public::{
@@ -171,6 +172,11 @@ impl PocketIc {
             hypervisor_config.embedders_config.min_sandbox_count = 0;
             hypervisor_config.embedders_config.max_sandbox_count = 64;
             hypervisor_config.embedders_config.max_sandbox_idle_time = Duration::from_secs(30);
+            // enable canister debug prints
+            hypervisor_config
+                .embedders_config
+                .feature_flags
+                .rate_limiting_of_debug_prints = FlagStatus::Disabled;
             let sm_config = StateMachineConfig::new(subnet_config, hypervisor_config);
             let subnet_size = subnet_size(subnet_kind);
             let mut builder = StateMachineBuilder::new()

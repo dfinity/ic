@@ -8,7 +8,7 @@ use pocket_ic::common::rest::{
 use reqwest::blocking::Client;
 use reqwest::{StatusCode, Url};
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Child, Command};
 use std::time::{Duration, Instant, SystemTime};
 
 pub const LOCALHOST: &str = "127.0.0.1";
@@ -24,31 +24,44 @@ pub fn raw_canister_id_range_into(r: &RawCanisterIdRange) -> CanisterIdRange {
     }
 }
 
-pub fn start_server() -> Url {
-    let parent_pid = std::os::unix::process::parent_id();
+pub fn start_server_helper(
+    parent_pid: u32,
+    ttl: Option<u64>,
+    capture_stderr: bool,
+) -> (Url, Child) {
     let bin_path = std::env::var_os("POCKET_IC_BIN").expect("Missing PocketIC binary");
-    Command::new(PathBuf::from(bin_path))
-        .arg("--pid")
-        .arg(parent_pid.to_string())
-        .spawn()
-        .expect("Failed to start PocketIC binary");
+    let mut cmd = Command::new(PathBuf::from(bin_path));
+    cmd.arg("--pid").arg(parent_pid.to_string());
+    if let Some(ttl) = ttl {
+        cmd.arg("--ttl").arg(ttl.to_string());
+    }
+    if capture_stderr {
+        cmd.stderr(std::process::Stdio::piped());
+    }
+    let out = cmd.spawn().expect("Failed to start PocketIC binary");
     let port_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.port", parent_pid));
     let ready_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.ready", parent_pid));
     let start = Instant::now();
-    loop {
+    let url = loop {
         match ready_file_path.try_exists() {
             Ok(true) => {
                 let port_string = std::fs::read_to_string(port_file_path)
                     .expect("Failed to read port from port file");
                 let port: u16 = port_string.parse().expect("Failed to parse port to number");
-                return Url::parse(&format!("http://{}:{}/", LOCALHOST, port)).unwrap();
+                break Url::parse(&format!("http://{}:{}/", LOCALHOST, port)).unwrap();
             }
             _ => std::thread::sleep(Duration::from_millis(20)),
         }
         if start.elapsed() > Duration::from_secs(5) {
             panic!("Failed to start PocketIC service in time");
         }
-    }
+    };
+    (url, out)
+}
+
+pub fn start_server() -> Url {
+    let parent_pid = std::os::unix::process::parent_id();
+    start_server_helper(parent_pid, None, false).0
 }
 
 pub fn create_live_instance(

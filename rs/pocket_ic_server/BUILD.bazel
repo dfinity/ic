@@ -63,6 +63,7 @@ TEST_DEPENDENCIES = [
     "@crate_index//:reqwest",
     "@crate_index//:candid",
     "@crate_index//:tokio",
+    "@crate_index//:wat",
 ]
 
 SPEC_TEST_DEPENDENCIES = TEST_DEPENDENCIES + [
