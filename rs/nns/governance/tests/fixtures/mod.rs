@@ -229,27 +229,6 @@ impl From<Neuron> for NeuronBuilder {
 }
 
 impl NeuronBuilder {
-    pub fn new_without_owner(ident: u64, stake: u64) -> Self {
-        NeuronBuilder {
-            ident,
-            stake,
-            owner: None,
-            hot_keys: Vec::new(),
-            age_timestamp: None,
-            created_seconds: None,
-            maturity: 0,
-            staked_maturity: 0,
-            neuron_fees: 0,
-            dissolve_state: None,
-            followees: HashMap::new(),
-            kyc_verified: true,
-            not_for_profit: false,
-            joined_community_fund: None,
-            spawn_at_timestamp_seconds: None,
-            neuron_type: None,
-        }
-    }
-
     pub fn new(ident: u64, stake: u64, owner: PrincipalId) -> Self {
         NeuronBuilder {
             ident,
