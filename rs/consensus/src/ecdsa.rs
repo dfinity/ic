@@ -590,7 +590,7 @@ fn compute_priority(
 mod tests {
     use self::test_utils::{
         fake_completed_sign_with_ecdsa_context, fake_sign_with_ecdsa_context_with_quadruple,
-        fake_state_with_ecdsa_contexts, FakeCertifiedStateSnapshot, TestEcdsaBlockReader,
+        fake_state_with_ecdsa_contexts, TestEcdsaBlockReader,
     };
 
     use super::test_utils::fake_ecdsa_key_id;
@@ -612,19 +612,17 @@ mod tests {
             fake_completed_sign_with_ecdsa_context(0, quadruple_id.clone());
         let context_without_quadruple =
             fake_sign_with_ecdsa_context_with_quadruple(1, key_id.clone(), None);
-        let state = fake_state_with_ecdsa_contexts(
+        let snapshot = fake_state_with_ecdsa_contexts(
             height,
             [
                 context_with_quadruple.clone(),
                 context_without_quadruple.clone(),
             ],
-        )
-        .take();
-        let snapshot = Box::new(FakeCertifiedStateSnapshot { height, state });
+        );
         state_manager
             .get_mut()
             .expect_get_certified_state_snapshot()
-            .returning(move || Some(snapshot.clone() as Box<_>));
+            .returning(move || Some(Box::new(snapshot.clone()) as Box<_>));
 
         let expected_request_id = get_context_request_id(&context_with_quadruple.1).unwrap();
         assert_eq!(expected_request_id.pseudo_random_id, [0; 32]);

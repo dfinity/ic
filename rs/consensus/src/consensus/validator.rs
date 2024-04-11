@@ -1934,7 +1934,8 @@ pub mod test {
                 .return_const(Ok(fake_state_with_ecdsa_contexts(
                     Height::from(0),
                     contexts.clone(),
-                )));
+                )
+                .get_labeled_state()));
 
             // Manually construct a cup share
             let make_next_cup_share = |proposal: BlockProposal,

@@ -22,6 +22,7 @@ use ic_metrics::MetricsRegistry;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithEcdsaContext;
 use ic_replicated_state::ReplicatedState;
 use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
+use ic_test_utilities::state_manager::RefMockStateManager;
 use ic_test_utilities_consensus::{fake::*, EcdsaStatsNoOp};
 use ic_test_utilities_state::ReplicatedStateBuilder;
 use ic_test_utilities_types::ids::{node_test_id, NODE_1, NODE_2};
@@ -138,10 +139,7 @@ pub fn fake_sign_with_ecdsa_context_from_request_id(
     (callback_id, context)
 }
 
-pub fn fake_state_with_ecdsa_contexts<T>(
-    height: Height,
-    contexts: T,
-) -> Labeled<Arc<ReplicatedState>>
+pub fn fake_state_with_ecdsa_contexts<T>(height: Height, contexts: T) -> FakeCertifiedStateSnapshot
 where
     T: IntoIterator<Item = (CallbackId, SignWithEcdsaContext)>,
 {
@@ -151,7 +149,10 @@ where
         .subnet_call_context_manager
         .sign_with_ecdsa_contexts = BTreeMap::from_iter(contexts);
 
-    Labeled::new(height, Arc::new(state))
+    FakeCertifiedStateSnapshot {
+        height,
+        state: Arc::new(state),
+    }
 }
 
 pub fn insert_test_sig_inputs<T>(
@@ -589,8 +590,19 @@ impl EcdsaSignatureBuilder for TestEcdsaSignatureBuilder {
 
 #[derive(Clone)]
 pub(crate) struct FakeCertifiedStateSnapshot {
-    pub height: Height,
-    pub state: Arc<ReplicatedState>,
+    pub(crate) height: Height,
+    pub(crate) state: Arc<ReplicatedState>,
+}
+
+impl FakeCertifiedStateSnapshot {
+    pub(crate) fn get_labeled_state(&self) -> Labeled<Arc<ReplicatedState>> {
+        Labeled::new(self.height, self.state.clone())
+    }
+
+    pub(crate) fn inc_height_by(&mut self, height: u64) -> Height {
+        self.height += Height::from(height);
+        self.height
+    }
 }
 
 impl CertifiedStateSnapshot for FakeCertifiedStateSnapshot {
@@ -705,20 +717,10 @@ pub(crate) fn create_signer_dependencies(
     create_signer_dependencies_with_crypto(pool_config, logger, None)
 }
 
-pub(crate) fn create_signer_dependencies_with_state(
+pub(crate) fn create_signer_dependencies_and_state_manager(
     pool_config: ArtifactPoolConfig,
     logger: ReplicaLogger,
-    state: Labeled<Arc<ReplicatedState>>,
-) -> (EcdsaPoolImpl, EcdsaSignerImpl) {
-    create_signer_dependencies_with_state_and_crypto(pool_config, logger, state, None)
-}
-
-pub(crate) fn create_signer_dependencies_with_state_and_crypto(
-    pool_config: ArtifactPoolConfig,
-    logger: ReplicaLogger,
-    state: Labeled<Arc<ReplicatedState>>,
-    consensus_crypto: Option<Arc<dyn ConsensusCrypto>>,
-) -> (EcdsaPoolImpl, EcdsaSignerImpl) {
+) -> (EcdsaPoolImpl, EcdsaSignerImpl, Arc<RefMockStateManager>) {
     let metrics_registry = MetricsRegistry::new();
     let Dependencies {
         pool,
@@ -727,26 +729,17 @@ pub(crate) fn create_signer_dependencies_with_state_and_crypto(
         ..
     } = dependencies(pool_config.clone(), 1);
 
-    let snapshot = Box::new(FakeCertifiedStateSnapshot {
-        height: state.height(),
-        state: state.take(),
-    });
-    state_manager
-        .get_mut()
-        .expect_get_certified_state_snapshot()
-        .returning(move || Some(snapshot.clone() as Box<_>));
-
     let signer = EcdsaSignerImpl::new(
         NODE_1,
         pool.get_block_cache(),
-        consensus_crypto.unwrap_or(crypto),
+        crypto,
         state_manager.clone(),
         metrics_registry.clone(),
         logger.clone(),
     );
     let ecdsa_pool = create_ecdsa_pool(pool_config, logger, metrics_registry);
 
-    (ecdsa_pool, signer)
+    (ecdsa_pool, signer, state_manager)
 }
 
 // Sets up the dependencies and creates the complaint handler
