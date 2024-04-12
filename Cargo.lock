@@ -3283,13 +3283,16 @@ dependencies = [
 name = "discower_bowndary"
 version = "0.1.0"
 dependencies = [
+ "arc-swap",
  "async-trait",
+ "ic-agent",
  "ic-protobuf",
  "ic-registry-client",
  "ic-registry-nns-data-provider-wrappers",
  "prost",
  "thiserror",
  "tokio",
+ "tokio-util",
  "url",
 ]
 
