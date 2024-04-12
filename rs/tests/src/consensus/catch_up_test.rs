@@ -20,7 +20,7 @@ depends on the number of messages in the blocks to replay.
 
 end::catalog[] */
 
-const TARGET_FR_MS: u64 = 400;
+const TARGET_FR_MS: u64 = 320;
 const DKG_INTERVAL: u64 = 150;
 const DKG_INTERVAL_TIME_MS: u64 = TARGET_FR_MS * DKG_INTERVAL;
 
@@ -29,6 +29,7 @@ const CATCH_UP_RETRIES: u64 = 40;
 const STATE_MANAGER_MAX_RESIDENT_HEIGHT: &str = "state_manager_max_resident_height";
 
 const CATCH_UP_PACKAGE_MAX_HEIGHT: &str = "artifact_pool_consensus_height_stat{pool_type=\"validated\",stat=\"max\",type=\"catch_up_package\"}";
+const CATCH_UP_PACKAGE_MIN_HEIGHT: &str = "artifact_pool_consensus_height_stat{pool_type=\"validated\",stat=\"min\",type=\"catch_up_package\"}";
 const FINALIZATION_MIN_HEIGHT: &str = "artifact_pool_consensus_height_stat{pool_type=\"validated\",stat=\"min\",type=\"finalization\"}";
 const FINALIZATION_MAX_HEIGHT: &str = "artifact_pool_consensus_height_stat{pool_type=\"validated\",stat=\"max\",type=\"finalization\"}";
 
@@ -201,6 +202,7 @@ fn test(env: TestEnv, expect_catch_up: bool) {
             vec![
                 STATE_MANAGER_MAX_RESIDENT_HEIGHT.to_string(),
                 CATCH_UP_PACKAGE_MAX_HEIGHT.to_string(),
+                CATCH_UP_PACKAGE_MIN_HEIGHT.to_string(),
                 FINALIZATION_MIN_HEIGHT.to_string(),
                 FINALIZATION_MAX_HEIGHT.to_string(),
             ],
@@ -232,15 +234,19 @@ fn test(env: TestEnv, expect_catch_up: bool) {
 
             info!(
                 log,
-                "The slow node has a CUP at height {} and \
+                "The slow node has a CUP at height max {} min {} and \
                 a finalized block chain from height {} to height {}",
                 unhealthy_metrics[CATCH_UP_PACKAGE_MAX_HEIGHT][0],
+                unhealthy_metrics[CATCH_UP_PACKAGE_MIN_HEIGHT][0],
                 unhealthy_metrics[FINALIZATION_MIN_HEIGHT][0],
                 unhealthy_metrics[FINALIZATION_MAX_HEIGHT][0]
             );
 
+            // Purger is only active if we have CUPs at two different height. If purger is active we should purge old finalizations
             if unhealthy_metrics[FINALIZATION_MIN_HEIGHT][0]
                 < unhealthy_metrics[CATCH_UP_PACKAGE_MAX_HEIGHT][0] - 50
+                && unhealthy_metrics[CATCH_UP_PACKAGE_MAX_HEIGHT][0]
+                    > unhealthy_metrics[CATCH_UP_PACKAGE_MIN_HEIGHT][0]
             {
                 // In order to give the Purger extra time to purge the unnecessary artifacts, we
                 // only panic when we have detected that we have too many Finalizations two times in
