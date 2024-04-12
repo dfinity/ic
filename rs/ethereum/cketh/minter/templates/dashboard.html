@@ -390,15 +390,17 @@
                     <tr>
                         <th>Ledger Burn Index</th>
                         <th>Ledger Mint Index</th>
-                        <th>Value (Wei)</th>
+                        <th>Token Symbol</th>
+                        <th>Value (base unit)</th>
                         <th>Txn Hash</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for r in reimbursed_transactions %}
                     <tr>
-                        <td class="numeric">{{ r.burn_in_block }}</td>
+                        <td class="numeric">{{ r.cketh_ledger_burn_index }}</td>
                         <td class="numeric">{{ r.reimbursed_in_block }}</td>
+                        <td>{{ r.token_symbol }}</td>
                         <td class="numeric">{{ r.reimbursed_amount }}</td>
                         <td>{% if r.transaction_hash.is_some() %}{% call etherscan_tx_link(r.transaction_hash.unwrap()) %}{% else%}N/A{% endif %}</td>
                     </tr>
