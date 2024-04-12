@@ -489,6 +489,41 @@ mod withdraw_erc20 {
     }
 
     #[test]
+    fn should_error_when_ckerc20_withdrawal_amount_too_small() {
+        let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
+        let ckusdc = ckerc20.find_ckerc20_token("ckUSDC");
+        let caller = ckerc20.caller();
+        let ckerc20_tx_fee = CKETH_MINIMUM_WITHDRAWAL_AMOUNT;
+
+        ckerc20
+            .deposit_cketh_and_ckerc20(
+                EXPECTED_BALANCE,
+                TWO_USDC + CKERC20_TRANSFER_FEE,
+                ckusdc.clone(),
+                caller,
+            )
+            .expect_mint()
+            .call_cketh_ledger_approve_minter(caller, ckerc20_tx_fee, None)
+            .call_ckerc20_ledger_approve_minter(ckusdc.ledger_canister_id, caller, TWO_USDC, None)
+            .call_minter_withdraw_erc20(
+                caller,
+                CKERC20_TRANSFER_FEE - 1,
+                ckusdc.ledger_canister_id,
+                DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS,
+            )
+            .expect_refresh_gas_fee_estimate(identity)
+            .expect_error(WithdrawErc20Error::CkErc20LedgerError {
+                cketh_block_index: 2_u8.into(),
+                error: LedgerError::AmountTooLow {
+                    minimum_burn_amount: CKERC20_TRANSFER_FEE.into(),
+                    failed_burn_amount: Nat::from(CKERC20_TRANSFER_FEE - 1),
+                    token_symbol: "ckUSDC".to_string(),
+                    ledger_id: ckusdc.ledger_canister_id,
+                },
+            });
+    }
+
+    #[test]
     fn should_refresh_gas_fee_estimate_only_once_within_a_minute() {
         let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
         let ckusdc = ckerc20.find_ckerc20_token("ckUSDC");

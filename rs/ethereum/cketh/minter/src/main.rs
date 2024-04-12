@@ -185,7 +185,7 @@ async fn get_minter_info() -> MinterInfo {
             eth_helper_contract_address: s.eth_helper_contract_address.map(|a| a.to_string()),
             erc20_helper_contract_address: s.erc20_helper_contract_address.map(|a| a.to_string()),
             supported_ckerc20_tokens,
-            minimum_withdrawal_amount: Some(s.minimum_withdrawal_amount.into()),
+            minimum_withdrawal_amount: Some(s.cketh_minimum_withdrawal_amount.into()),
             ethereum_block_height: Some(s.ethereum_block_height.into()),
             last_observed_block_number: s.last_observed_block_number.map(|n| n.into()),
             eth_balance: Some(s.eth_balance.eth_balance().into()),
@@ -224,7 +224,7 @@ async fn withdraw_eth(
 
     let amount = Wei::try_from(amount).expect("failed to convert Nat to u256");
 
-    let minimum_withdrawal_amount = read_state(|s| s.minimum_withdrawal_amount);
+    let minimum_withdrawal_amount = read_state(|s| s.cketh_minimum_withdrawal_amount);
     if amount < minimum_withdrawal_amount {
         return Err(WithdrawalError::AmountTooLow {
             min_withdrawal_amount: minimum_withdrawal_amount.into(),
@@ -383,6 +383,7 @@ async fn withdraw_erc20(
                     let reimbursed_amount = match &ckerc20_burn_error {
                         LedgerBurnError::TemporarilyUnavailable { .. } => erc20_tx_fee, //don't penalize user in case of an error outside of their control
                         LedgerBurnError::InsufficientFunds { .. }
+                        | LedgerBurnError::AmountTooLow { .. }
                         | LedgerBurnError::InsufficientAllowance { .. } => erc20_tx_fee
                             .checked_sub(CKETH_LEDGER_TRANSACTION_FEE)
                             .unwrap_or(Wei::ZERO),

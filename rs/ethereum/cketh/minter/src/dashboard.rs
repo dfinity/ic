@@ -255,7 +255,7 @@ impl DashboardTemplate {
                 .map_or("N/A".to_string(), |address| address.to_string()),
             ledger_id: state.ledger_id,
             next_transaction_nonce: state.eth_transactions.next_transaction_nonce(),
-            minimum_withdrawal_amount: state.minimum_withdrawal_amount,
+            minimum_withdrawal_amount: state.cketh_minimum_withdrawal_amount,
             first_synced_block: state.first_scraped_block_number,
             last_eth_synced_block: state.last_scraped_block_number,
             last_erc20_synced_block: state

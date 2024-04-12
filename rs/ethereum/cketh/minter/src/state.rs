@@ -55,7 +55,7 @@ pub struct State {
     pub eth_helper_contract_address: Option<Address>,
     pub erc20_helper_contract_address: Option<Address>,
     pub ecdsa_public_key: Option<EcdsaPublicKeyResponse>,
-    pub minimum_withdrawal_amount: Wei,
+    pub cketh_minimum_withdrawal_amount: Wei,
     pub ethereum_block_height: BlockTag,
     pub first_scraped_block_number: BlockNumber,
     pub last_scraped_block_number: BlockNumber,
@@ -131,9 +131,20 @@ impl State {
                 "eth_helper_contract_address cannot be the zero address".to_string(),
             ));
         }
-        if self.minimum_withdrawal_amount == Wei::ZERO {
+        if self.cketh_minimum_withdrawal_amount == Wei::ZERO {
             return Err(InvalidStateError::InvalidMinimumWithdrawalAmount(
                 "minimum_withdrawal_amount must be positive".to_string(),
+            ));
+        }
+        let cketh_ledger_transfer_fee = match self.ethereum_network {
+            EthereumNetwork::Mainnet => Wei::new(2_000_000_000_000),
+            EthereumNetwork::Sepolia => Wei::new(10_000_000_000),
+        };
+        if self.cketh_minimum_withdrawal_amount < cketh_ledger_transfer_fee {
+            return Err(InvalidStateError::InvalidMinimumWithdrawalAmount(
+                "minimum_withdrawal_amount must cover ledger transaction fee, \
+                otherwise ledger can return a BadBurn error that should be returned to the user"
+                    .to_string(),
             ));
         }
         Ok(())
@@ -404,7 +415,7 @@ impl State {
             let minimum_withdrawal_amount = Wei::try_from(amount).map_err(|e| {
                 InvalidStateError::InvalidMinimumWithdrawalAmount(format!("ERROR: {}", e))
             })?;
-            self.minimum_withdrawal_amount = minimum_withdrawal_amount;
+            self.cketh_minimum_withdrawal_amount = minimum_withdrawal_amount;
         }
         if let Some(address) = ethereum_contract_address {
             let eth_helper_contract_address = Address::from_str(&address).map_err(|e| {
@@ -452,8 +463,8 @@ impl State {
             other.eth_helper_contract_address
         );
         ensure_eq!(
-            self.minimum_withdrawal_amount,
-            other.minimum_withdrawal_amount
+            self.cketh_minimum_withdrawal_amount,
+            other.cketh_minimum_withdrawal_amount
         );
         ensure_eq!(
             self.first_scraped_block_number,

@@ -77,7 +77,7 @@ impl TryFrom<InitArg> for State {
             pending_withdrawal_principals: Default::default(),
             eth_transactions: EthTransactions::new(initial_nonce),
             ledger_id,
-            minimum_withdrawal_amount,
+            cketh_minimum_withdrawal_amount: minimum_withdrawal_amount,
             ethereum_block_height: BlockTag::from(ethereum_block_height),
             first_scraped_block_number,
             last_scraped_block_number,

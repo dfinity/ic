@@ -1,7 +1,7 @@
 use crate::dashboard::tests::assertions::DashboardAssert;
 use crate::dashboard::DashboardTemplate;
 use crate::erc20::CkErc20Token;
-use candid::Principal;
+use candid::{Nat, Principal};
 use ic_cketh_minter::eth_logs::{EventSource, ReceivedErc20Event, ReceivedEthEvent};
 use ic_cketh_minter::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use ic_cketh_minter::lifecycle::EthereumNetwork;
@@ -841,7 +841,7 @@ fn initial_state() -> State {
         ledger_id: Principal::from_text("apia6-jaaaa-aaaar-qabma-cai")
             .expect("BUG: invalid principal"),
         ethereum_block_height: Default::default(),
-        minimum_withdrawal_amount: Wei::TWO.into(),
+        minimum_withdrawal_amount: Nat::from(10_000_000_000_000_000_u64),
         next_transaction_nonce: TransactionNonce::ZERO.into(),
         last_scraped_block_number: candid::Nat::from(3_956_206_u32),
     })

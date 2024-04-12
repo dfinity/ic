@@ -50,6 +50,12 @@ pub enum LedgerError {
         token_symbol: String,
         ledger_id: Principal,
     },
+    AmountTooLow {
+        minimum_burn_amount: Nat,
+        failed_burn_amount: Nat,
+        token_symbol: String,
+        ledger_id: Principal,
+    },
     InsufficientAllowance {
         allowance: Nat,
         failed_burn_amount: Nat,
@@ -81,6 +87,16 @@ impl From<LedgerBurnError> for LedgerError {
                 ledger,
             } => LedgerError::InsufficientAllowance {
                 allowance,
+                failed_burn_amount,
+                token_symbol: ledger.token_symbol.to_string(),
+                ledger_id: ledger.id,
+            },
+            LedgerBurnError::AmountTooLow {
+                minimum_burn_amount,
+                failed_burn_amount,
+                ledger,
+            } => LedgerError::AmountTooLow {
+                minimum_burn_amount,
                 failed_burn_amount,
                 token_symbol: ledger.token_symbol.to_string(),
                 ledger_id: ledger.id,
