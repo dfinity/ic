@@ -135,6 +135,14 @@ pub fn add_file_to_archive<W: Write>(
         std::io::copy(&mut Read::by_ref(source).take(block.size), dest_raw)?;
     }
 
+    // Pad to the 512 byte boundary
+    let zero_pad_len = 512 - (stripped_size % 512);
+    if zero_pad_len < 512 {
+        // NOTE: This will always be less than 512, so should totally fit into usize.
+        let zero_pad = vec![0; zero_pad_len as usize];
+        std::io::copy(&mut &*zero_pad, dest_raw)?;
+    }
+
     Ok(())
 }
 
