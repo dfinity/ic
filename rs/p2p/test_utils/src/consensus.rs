@@ -23,13 +23,12 @@ pub struct U64Artifact;
 impl ArtifactKind for U64Artifact {
     // Does not matter
     const TAG: ArtifactTag = ArtifactTag::ConsensusArtifact;
-    // Id==Message
-    type PbMessage = u64;
+    type PbMessage = Vec<u8>;
     type PbIdError = Infallible;
     type PbMessageError = Infallible;
     type PbAttributeError = Infallible;
     type PbFilterError = Infallible;
-    type Message = u64;
+    type Message = Vec<u8>;
     type PbId = u64;
     type Id = u64;
     type PbAttribute = ();
@@ -40,12 +39,21 @@ impl ArtifactKind for U64Artifact {
     /// The function converts a U64ArtifactMessage to an advert for a
     /// U64Artifact.
     fn message_to_advert(msg: &Self::Message) -> Advert<U64Artifact> {
+        let id = u64::from_le_bytes(msg[..8].try_into().unwrap());
         Advert {
             attribute: (),
-            size: 64,
-            id: *msg,
+            size: msg.len(),
+            id,
             integrity_hash: CryptoHash(vec![]),
         }
+    }
+}
+
+impl U64Artifact {
+    pub fn id_to_msg(id: u64, msg_size: usize) -> Vec<u8> {
+        let mut msg = id.to_le_bytes().to_vec();
+        msg.resize(msg_size, 0);
+        msg
     }
 }
 
@@ -100,10 +108,12 @@ pub struct TestConsensus<Artifact: ArtifactKind> {
     _log: ReplicaLogger,
     node_id: NodeId,
     inner: Arc<Mutex<TestConsensusInner<Artifact>>>,
+    msg_size: usize,
+    latency_sensitive: bool,
 }
 
 pub struct TestConsensusInner<Artifact: ArtifactKind> {
-    adverts: VecDeque<Artifact::Message>,
+    adverts: VecDeque<Artifact::Id>,
     purge: VecDeque<Artifact::Id>,
     peer_pool: HashMap<NodeId, PeerPool>,
 }
@@ -111,16 +121,16 @@ pub struct TestConsensusInner<Artifact: ArtifactKind> {
 impl MutablePool<U64Artifact> for TestConsensus<U64Artifact> {
     type ChangeSet = (Vec<u64>, Vec<u64>);
 
-    fn insert(&mut self, msg: UnvalidatedArtifact<u64>) {
+    fn insert(&mut self, msg: UnvalidatedArtifact<Vec<u8>>) {
         let mut inner = self.inner.lock().unwrap();
         let peer_pool = &mut inner.peer_pool;
         assert!(self.node_id != msg.peer_id);
         peer_pool
             .entry(msg.peer_id)
-            .and_modify(|x| x.insert(msg.message))
+            .and_modify(|x| x.insert(U64Artifact::message_to_advert(&msg.message).id))
             .or_insert_with(|| {
                 let mut pool = PeerPool::new();
-                pool.insert(msg.message);
+                pool.insert(U64Artifact::message_to_advert(&msg.message).id);
                 pool
             });
     }
@@ -145,8 +155,8 @@ impl MutablePool<U64Artifact> for TestConsensus<U64Artifact> {
                 .0
                 .into_iter()
                 .map(|m| ArtifactWithOpt {
-                    advert: U64Artifact::message_to_advert(&m),
-                    is_latency_sensitive: false,
+                    advert: U64Artifact::message_to_advert(&self.id_to_msg(m)),
+                    is_latency_sensitive: self.latency_sensitive,
                 })
                 .collect(),
             poll_immediately,
@@ -169,7 +179,12 @@ impl ChangeSetProducer<TestConsensus<U64Artifact>> for TestConsensus<U64Artifact
 
 #[allow(dead_code)]
 impl TestConsensus<U64Artifact> {
-    pub fn new(log: ReplicaLogger, node_id: NodeId) -> Self {
+    pub fn new(
+        log: ReplicaLogger,
+        node_id: NodeId,
+        msg_size: usize,
+        latency_sensitive: bool,
+    ) -> Self {
         Self {
             _log: log,
             node_id,
@@ -178,7 +193,13 @@ impl TestConsensus<U64Artifact> {
                 purge: VecDeque::new(),
                 peer_pool: HashMap::from_iter(vec![(node_id, PeerPool::default())]),
             })),
+            msg_size,
+            latency_sensitive,
         }
+    }
+
+    pub fn id_to_msg(&self, id: u64) -> Vec<u8> {
+        U64Artifact::id_to_msg(id, self.msg_size)
     }
 
     pub fn push_advert(&self, id: u64) {
@@ -262,13 +283,13 @@ impl ValidatedPoolReader<U64Artifact> for TestConsensus<U64Artifact> {
         &self,
         id: &<U64Artifact as ArtifactKind>::Id,
     ) -> Option<<U64Artifact as ArtifactKind>::Message> {
-        self.my_pool().get(id).copied()
+        self.my_pool().get(id).map(|id| self.id_to_msg(*id))
     }
     fn get_all_validated_by_filter(
         &self,
         _filter: &<U64Artifact as ArtifactKind>::Filter,
     ) -> Box<dyn Iterator<Item = <U64Artifact as ArtifactKind>::Message> + '_> {
-        Box::new(self.my_pool().into_iter())
+        Box::new(self.my_pool().into_iter().map(|id| self.id_to_msg(id)))
     }
 }
 
