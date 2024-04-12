@@ -159,7 +159,6 @@ write_metric_attr "guestos_boot_action" \
 
 if [ -f /boot/config/CONFIGURED ]; then
     echo "Bootstrap completed already"
-    exit 0
 fi
 
 while [ ! -f /boot/config/CONFIGURED ]; do
@@ -200,3 +199,13 @@ while [ ! -f /boot/config/CONFIGURED ]; do
         umount /mnt
     fi
 done
+
+node_operator_private_key_exists=0
+if [ -f "/var/lib/ic/data/node_operator_private_key.pem" ]; then
+    node_operator_private_key_exists=1
+fi
+
+write_metric "guestos_node_operator_private_key_exists" \
+    "${node_operator_private_key_exists}" \
+    "Existence of a Node Operator private key indicates the node deployment method" \
+    "gauge"
