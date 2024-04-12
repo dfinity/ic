@@ -27,6 +27,7 @@ use lazy_static::lazy_static;
 use maplit::btreemap;
 use proptest::prelude::*;
 use std::{ops::Range, sync::Arc, time::Duration};
+use strum::IntoEnumIterator;
 
 struct DummyMetrics;
 impl CheckpointLoadingMetrics for DummyMetrics {
@@ -1911,6 +1912,18 @@ fn blockmaker_metrics_soft_invariant_size_limit_bumps_critical_error_counter() {
     let metrics = BlockmakerMetricsFixture::new_with_too_many_observations();
     assert_matches!(metrics.check_soft_invariants(), Err(err) if err.contains("exceeds limit"));
     do_roundtrip_and_check_error(&metrics, "exceeds limit");
+}
+
+#[test]
+fn canister_state_bits_cycles_use_case_round_trip() {
+    use ic_protobuf::state::canister_state_bits::v1 as pb;
+
+    for initial in CyclesUseCase::iter() {
+        let encoded = pb::CyclesUseCase::from(initial);
+        let round_trip = CyclesUseCase::try_from(encoded).unwrap();
+
+        assert_eq!(initial, round_trip);
+    }
 }
 
 const MAX_NUM_DAYS: usize = BLOCKMAKER_METRICS_TIME_SERIES_NUM_SNAPSHOTS + 10;

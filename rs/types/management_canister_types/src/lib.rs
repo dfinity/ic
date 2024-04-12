@@ -700,31 +700,6 @@ pub enum LogVisibility {
     Public,
 }
 
-impl From<LogVisibility> for i32 {
-    fn from(item: LogVisibility) -> Self {
-        match item {
-            LogVisibility::Controllers => 1,
-            LogVisibility::Public => 2,
-        }
-    }
-}
-
-impl TryFrom<i32> for LogVisibility {
-    type Error = ProxyDecodeError;
-
-    fn try_from(item: i32) -> Result<Self, Self::Error> {
-        match item {
-            0 => Ok(Self::default()),
-            1 => Ok(Self::Controllers),
-            2 => Ok(Self::Public),
-            _ => Err(ProxyDecodeError::ValueOutOfRange {
-                typ: "LogVisibility",
-                err: format!("Unable to convert {:?} to LogVisibility", item),
-            }),
-        }
-    }
-}
-
 impl From<LogVisibility> for pb_canister_state_bits::LogVisibility {
     fn from(item: LogVisibility) -> Self {
         match item {
