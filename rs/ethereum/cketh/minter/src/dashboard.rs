@@ -10,9 +10,11 @@ use ic_cketh_minter::eth_rpc::Hash;
 use ic_cketh_minter::eth_rpc_client::responses::TransactionStatus;
 use ic_cketh_minter::lifecycle::EthereumNetwork;
 use ic_cketh_minter::numeric::{
-    BlockNumber, Erc20Value, LedgerBurnIndex, LogIndex, TransactionNonce, Wei,
+    BlockNumber, Erc20Value, LedgerBurnIndex, LedgerMintIndex, LogIndex, TransactionNonce, Wei,
 };
-use ic_cketh_minter::state::transactions::{Reimbursed, TransactionCallData, WithdrawalRequest};
+use ic_cketh_minter::state::transactions::{
+    ReimbursementIndex, TransactionCallData, WithdrawalRequest,
+};
 use ic_cketh_minter::state::{EthBalance, MintedEvent, State};
 use ic_cketh_minter::tx::Eip1559TransactionRequest;
 use ic_ethereum_types::Address;
@@ -83,6 +85,15 @@ pub struct DashboardFinalizedTransaction {
     pub status: TransactionStatus,
 }
 
+#[derive(Clone)]
+pub struct DashboardReimbursedTransaction {
+    pub cketh_ledger_burn_index: LedgerBurnIndex,
+    pub reimbursed_in_block: LedgerMintIndex,
+    pub reimbursed_amount: Nat,
+    pub token_symbol: CkTokenSymbol,
+    pub transaction_hash: Option<Hash>,
+}
+
 impl DashboardPendingDeposit {
     fn new(event: &ReceivedEvent, state: &State) -> Self {
         Self {
@@ -125,7 +136,7 @@ pub struct DashboardTemplate {
     pub withdrawal_requests: Vec<DashboardWithdrawalRequest>,
     pub pending_transactions: Vec<DashboardPendingTransaction>,
     pub finalized_transactions: Vec<DashboardFinalizedTransaction>,
-    pub reimbursed_transactions: Vec<Reimbursed>,
+    pub reimbursed_transactions: Vec<DashboardReimbursedTransaction>,
     pub eth_balance: EthBalance,
     pub skipped_blocks: BTreeSet<BlockNumber>,
     pub supported_ckerc20_tokens: Vec<DashboardCkErc20Token>,
@@ -236,9 +247,35 @@ impl DashboardTemplate {
             .collect();
         finalized_transactions.sort_unstable_by_key(|tx| Reverse(tx.ledger_burn_index));
 
-        let mut reimbursed_transactions = state.eth_transactions.get_reimbursed_transactions();
+        let mut reimbursed_transactions: Vec<_> = state
+            .eth_transactions
+            .reimbursed_transactions_iter()
+            .map(|(index, reimbursed)| match index {
+                ReimbursementIndex::CkEth { ledger_burn_index } => DashboardReimbursedTransaction {
+                    cketh_ledger_burn_index: *ledger_burn_index,
+                    reimbursed_in_block: reimbursed.reimbursed_in_block,
+                    reimbursed_amount: reimbursed.reimbursed_amount.into(),
+                    token_symbol: CkTokenSymbol::cketh_symbol_from_state(state),
+                    transaction_hash: reimbursed.transaction_hash,
+                },
+                ReimbursementIndex::CkErc20 {
+                    cketh_ledger_burn_index,
+                    ledger_id,
+                    ckerc20_ledger_burn_index: _,
+                } => DashboardReimbursedTransaction {
+                    cketh_ledger_burn_index: *cketh_ledger_burn_index,
+                    reimbursed_in_block: reimbursed.reimbursed_in_block,
+                    reimbursed_amount: reimbursed.reimbursed_amount.into(),
+                    token_symbol: state
+                        .ckerc20_token_symbol_for_ledger(ledger_id)
+                        .expect("BUG: unknown ERC-20 token")
+                        .clone(),
+                    transaction_hash: reimbursed.transaction_hash,
+                },
+            })
+            .collect();
         reimbursed_transactions
-            .sort_unstable_by_key(|reimbursed_tx| std::cmp::Reverse(reimbursed_tx.burn_in_block));
+            .sort_unstable_by_key(|reimbursed_tx| Reverse(reimbursed_tx.cketh_ledger_burn_index));
 
         DashboardTemplate {
             ethereum_network: state.ethereum_network,

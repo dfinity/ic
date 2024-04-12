@@ -215,6 +215,13 @@ impl State {
             .map(|(symbol, _)| symbol)
     }
 
+    pub fn ckerc20_token_symbol_for_ledger(&self, ledger_id: &Principal) -> Option<&CkTokenSymbol> {
+        self.ckerc20_tokens
+            .iter()
+            .find(|(_, _, id)| *id == ledger_id)
+            .map(|(symbol, _, _)| symbol)
+    }
+
     fn record_invalid_deposit(&mut self, source: EventSource, error: String) -> bool {
         assert!(
             !self.events_to_mint.contains_key(&source),

@@ -369,6 +369,12 @@ impl EthTransactions {
         self.reimbursement_requests.iter()
     }
 
+    pub fn reimbursed_transactions_iter(
+        &self,
+    ) -> impl Iterator<Item = (&ReimbursementIndex, &Reimbursed)> {
+        self.reimbursed.iter()
+    }
+
     pub fn get_reimbursed_transactions(&self) -> Vec<Reimbursed> {
         self.reimbursed.values().cloned().collect()
     }
