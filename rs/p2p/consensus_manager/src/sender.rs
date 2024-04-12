@@ -447,10 +447,10 @@ mod tests {
             // Initial validated pool contains one element.
             mock_reader
                 .expect_get_all_validated_by_filter()
-                .returning(|_| Box::new(std::iter::once(1)));
+                .returning(|_| Box::new(std::iter::once(U64Artifact::id_to_msg(1, 1024))));
             mock_reader
                 .expect_get_validated_by_identifier()
-                .returning(|id| Some(*id));
+                .returning(|id| Some(U64Artifact::id_to_msg(*id, 1024)));
 
             let (_tx, rx) = tokio::sync::mpsc::channel(100);
             ConsensusManagerSender::run(
@@ -501,7 +501,7 @@ mod tests {
                 .returning(|_| Box::new(std::iter::empty()));
             mock_reader
                 .expect_get_validated_by_identifier()
-                .returning(|id| Some(*id));
+                .returning(|id| Some(U64Artifact::id_to_msg(*id, 1024)));
 
             ConsensusManagerSender::run(
                 log,
@@ -515,7 +515,7 @@ mod tests {
         });
 
         tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
-            advert: U64Artifact::message_to_advert(&1),
+            advert: U64Artifact::message_to_advert(&U64Artifact::id_to_msg(1, 1024)),
             is_latency_sensitive: false,
         }))
         .await
@@ -576,7 +576,7 @@ mod tests {
                 .returning(|_| Box::new(std::iter::empty()));
             mock_reader
                 .expect_get_validated_by_identifier()
-                .returning(|id| Some(*id));
+                .returning(|id| Some(U64Artifact::id_to_msg(*id, 1024)));
 
             ConsensusManagerSender::run(
                 log,
@@ -590,7 +590,7 @@ mod tests {
         });
 
         tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
-            advert: U64Artifact::message_to_advert(&1),
+            advert: U64Artifact::message_to_advert(&U64Artifact::id_to_msg(1, 1024)),
             is_latency_sensitive: false,
         }))
         .await
@@ -647,7 +647,7 @@ mod tests {
                 .returning(|_| Box::new(std::iter::empty()));
             mock_reader
                 .expect_get_validated_by_identifier()
-                .returning(|id| Some(*id));
+                .returning(|id| Some(U64Artifact::id_to_msg(*id, 1024)));
 
             ConsensusManagerSender::run(
                 log,
@@ -660,7 +660,7 @@ mod tests {
             )
         });
         tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
-            advert: U64Artifact::message_to_advert(&1),
+            advert: U64Artifact::message_to_advert(&U64Artifact::id_to_msg(1, 1024)),
             is_latency_sensitive: false,
         }))
         .await
@@ -705,7 +705,7 @@ mod tests {
                 .returning(|_| Box::new(std::iter::empty()));
             mock_reader
                 .expect_get_validated_by_identifier()
-                .returning(|id| Some(*id));
+                .returning(|id| Some(U64Artifact::id_to_msg(*id, 1024)));
 
             ConsensusManagerSender::run(
                 log,
@@ -719,7 +719,7 @@ mod tests {
         });
         // Send advert and verify commit it.
         tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
-            advert: U64Artifact::message_to_advert(&1),
+            advert: U64Artifact::message_to_advert(&U64Artifact::id_to_msg(1, 1024)),
             is_latency_sensitive: false,
         }))
         .await
@@ -728,7 +728,7 @@ mod tests {
 
         // Send second advert and observe commit id bump.
         tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
-            advert: U64Artifact::message_to_advert(&2),
+            advert: U64Artifact::message_to_advert(&U64Artifact::id_to_msg(2, 1024)),
             is_latency_sensitive: false,
         }))
         .await
@@ -737,7 +737,7 @@ mod tests {
         // Send purge and new advert and observe commit id increase by 2.
         tx.send(ArtifactProcessorEvent::Purge(2)).await.unwrap();
         tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
-            advert: U64Artifact::message_to_advert(&3),
+            advert: U64Artifact::message_to_advert(&U64Artifact::id_to_msg(3, 1024)),
             is_latency_sensitive: false,
         }))
         .await
@@ -782,7 +782,7 @@ mod tests {
                 .returning(|_| Box::new(std::iter::empty()));
             mock_reader
                 .expect_get_validated_by_identifier()
-                .returning(|id| Some(*id));
+                .returning(|id| Some(U64Artifact::id_to_msg(*id, 1024)));
 
             ConsensusManagerSender::run(
                 log,
@@ -796,7 +796,7 @@ mod tests {
         });
         // Send advert and verify commit id.
         tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
-            advert: U64Artifact::message_to_advert(&1),
+            advert: U64Artifact::message_to_advert(&U64Artifact::id_to_msg(1, 1024)),
             is_latency_sensitive: false,
         }))
         .await
@@ -805,7 +805,7 @@ mod tests {
 
         // Send same advert again. This should be noop.
         tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
-            advert: U64Artifact::message_to_advert(&1),
+            advert: U64Artifact::message_to_advert(&U64Artifact::id_to_msg(1, 1024)),
             is_latency_sensitive: false,
         }))
         .await
@@ -813,7 +813,7 @@ mod tests {
 
         // Check that new advert is advertised with correct commit id.
         tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
-            advert: U64Artifact::message_to_advert(&2),
+            advert: U64Artifact::message_to_advert(&U64Artifact::id_to_msg(2, 1024)),
             is_latency_sensitive: false,
         }))
         .await
@@ -860,7 +860,7 @@ mod tests {
                 .returning(|_| Box::new(std::iter::empty()));
             mock_reader
                 .expect_get_validated_by_identifier()
-                .returning(|id| Some(*id));
+                .returning(|id| Some(U64Artifact::id_to_msg(*id, 1024)));
 
             ConsensusManagerSender::run(
                 log,
@@ -874,7 +874,7 @@ mod tests {
         });
 
         tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
-            advert: U64Artifact::message_to_advert(&1),
+            advert: U64Artifact::message_to_advert(&U64Artifact::id_to_msg(1, 1024)),
             is_latency_sensitive: false,
         }))
         .await
