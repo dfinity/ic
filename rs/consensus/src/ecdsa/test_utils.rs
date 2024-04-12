@@ -19,7 +19,9 @@ use ic_interfaces_state_manager::{CertifiedStateSnapshot, Labeled};
 use ic_logger::ReplicaLogger;
 use ic_management_canister_types::EcdsaKeyId;
 use ic_metrics::MetricsRegistry;
-use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithEcdsaContext;
+use ic_replicated_state::metadata_state::subnet_call_context_manager::{
+    EcdsaDealingsContext, SignWithEcdsaContext,
+};
 use ic_replicated_state::ReplicatedState;
 use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
 use ic_test_utilities_consensus::{fake::*, EcdsaStatsNoOp};
@@ -48,8 +50,8 @@ use ic_types::crypto::canister_threshold_sig::{
 };
 use ic_types::crypto::AlgorithmId;
 use ic_types::messages::CallbackId;
-use ic_types::signature::*;
 use ic_types::time::UNIX_EPOCH;
+use ic_types::{signature::*, time};
 use ic_types::{Height, NodeId, PrincipalId, Randomness, RegistryVersion, SubnetId, Time};
 use rand::{CryptoRng, Rng};
 use std::collections::{BTreeMap, BTreeSet};
@@ -58,6 +60,18 @@ use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 
 use super::utils::get_context_request_id;
+
+pub(crate) fn dealings_context_from_reshare_request(
+    request: ecdsa::EcdsaReshareRequest,
+) -> EcdsaDealingsContext {
+    EcdsaDealingsContext {
+        request: RequestBuilder::new().build(),
+        key_id: request.key_id,
+        nodes: request.receiving_node_ids.into_iter().collect(),
+        registry_version: request.registry_version,
+        time: time::UNIX_EPOCH,
+    }
+}
 
 pub(crate) fn empty_response() -> ic_types::batch::ConsensusResponse {
     ic_types::batch::ConsensusResponse::new(
