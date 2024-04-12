@@ -34,7 +34,8 @@
 //! For more information, see the [README](https://crates.io/crates/pocket-ic).
 //!
 use crate::common::rest::{
-    ApiResponse, BlobCompression, BlobId, CreateInstanceResponse, DtsFlag, ExtendedSubnetConfigSet,
+    ApiResponse, BlobCompression, BlobId, CreateHttpGatewayResponse, CreateInstanceResponse,
+    DtsFlag, ExtendedSubnetConfigSet, HttpGatewayBackend, HttpGatewayConfig, HttpGatewayInfo,
     InstanceId, RawAddCycles, RawCanisterCall, RawCanisterId, RawCanisterResult, RawCycles,
     RawEffectivePrincipal, RawSetStableMemory, RawStableMemory, RawSubnetId, RawTime,
     RawVerifyCanisterSigArg, RawWasmResult, SubnetId, SubnetSpec, Topology,
@@ -207,6 +208,7 @@ impl PocketIcBuilder {
 pub struct PocketIc {
     /// The unique ID of this PocketIC instance.
     pub instance_id: InstanceId,
+    http_gateway: Option<HttpGatewayInfo>,
     topology: Topology,
     server_url: Url,
     reqwest_client: reqwest::blocking::Client,
@@ -258,6 +260,7 @@ impl PocketIc {
 
         Self {
             instance_id,
+            http_gateway: None,
             topology,
             server_url,
             reqwest_client,
@@ -373,10 +376,15 @@ impl PocketIc {
     /// Configures the IC to make progress automatically,
     /// i.e., periodically update the time of the IC
     /// to the real time and execute rounds on the subnets.
+    /// Returns the URL at which `/api/v2` requests
+    /// for this instance can be made.
     #[instrument(skip(self), fields(instance_id=self.instance_id))]
-    pub fn auto_progress(&self) {
+    pub fn auto_progress(&self) -> Url {
+        let now = std::time::SystemTime::now();
+        self.set_time(now);
         let endpoint = "auto_progress";
         self.post::<(), _>(endpoint, "");
+        self.instance_url()
     }
 
     /// Stops automatic progress (see `auto_progress`) on the IC.
@@ -384,6 +392,68 @@ impl PocketIc {
     pub fn stop_progress(&self) {
         let endpoint = "stop_progress";
         self.post::<(), _>(endpoint, "");
+    }
+
+    /// Creates an HTTP gateway for this IC instance
+    /// listening on an optionally specified port
+    /// and configures the IC instance to make progress
+    /// automatically, i.e., periodically update the time
+    /// of the IC to the real time and execute rounds on the subnets.
+    /// Returns the URL at which `/api/v2` requests
+    /// for this instance can be made.
+    #[instrument(skip(self), fields(instance_id=self.instance_id))]
+    pub fn make_live(&mut self, listen_at: Option<u16>) -> Url {
+        self.auto_progress();
+        if let Some(res) = &self.http_gateway {
+            return Url::parse(&format!("http://{}:{}/", LOCALHOST, res.port)).unwrap();
+        }
+        let endpoint = self.server_url.join("http_gateway").unwrap();
+        let http_gateway_config = HttpGatewayConfig {
+            listen_at,
+            forward_to: HttpGatewayBackend::PocketIcInstance(self.instance_id),
+        };
+        let res = self
+            .reqwest_client
+            .post(endpoint)
+            .json(&http_gateway_config)
+            .send()
+            .expect("HTTP failure")
+            .json::<CreateHttpGatewayResponse>()
+            .expect("Could not parse response for create HTTP gateway request");
+        match res {
+            CreateHttpGatewayResponse::Created(info) => {
+                let port = info.port;
+                self.http_gateway = Some(info);
+                Url::parse(&format!("http://{}:{}/", LOCALHOST, port)).unwrap()
+            }
+            CreateHttpGatewayResponse::Error { message } => {
+                panic!("Failed to crate http gateway: {}", message)
+            }
+        }
+    }
+
+    fn stop_http_gateway(&mut self) {
+        if let Some(info) = self.http_gateway.take() {
+            let stop_http_gateway_url = self
+                .server_url
+                .join(&format!("http_gateway/{}/stop", info.instance_id))
+                .unwrap();
+            self.reqwest_client
+                .post(stop_http_gateway_url)
+                .send()
+                .unwrap()
+                .json::<()>()
+                .expect("Could not parse response for stop HTTP gateway request");
+        }
+    }
+
+    /// Makes the IC instance deterministic by stopping automatic progress
+    /// (time updates and round executions) on the IC instance
+    /// and stops the HTTP gateway for this IC instance.
+    #[instrument(skip(self), fields(instance_id=self.instance_id))]
+    pub fn make_deterministic(&mut self) {
+        self.stop_http_gateway();
+        self.stop_progress();
     }
 
     /// Get the root key of this IC instance. Returns `None` if the IC has no NNS subnet.
@@ -950,6 +1020,7 @@ impl Default for PocketIc {
 
 impl Drop for PocketIc {
     fn drop(&mut self) {
+        self.stop_http_gateway();
         self.reqwest_client
             .delete(self.instance_url())
             .send()

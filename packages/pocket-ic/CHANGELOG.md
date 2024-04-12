@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   progress (updating time and executing rounds) automatically.
 - New subnet specification allowing to set very high instruction limits for (asymptotic) benchmarking canister code.
 - New field `dts_flag` in `SubnetSpec` controlling if DTS is enabled (enabled by default on all non-benchmarking subnets).
+- New functions `make_live` and `make_deterministic` configuring a PocketIc instance to automatically make progress (updating time and executing rounds)
+  and creating an HTTP gateway for that instance listening at a dedicated port (and reverting that configuration, respectively).
 
 ## Changed
 - `get` and `post` helpers which are used by all server-facing functions now poll on results, because 1) instances can be busy with other computations and 2) the `post`ed computations may take longer than the specified timeout or the `reqwest` client's own timeout. With this change, very long-running computations can be handled by the library. 

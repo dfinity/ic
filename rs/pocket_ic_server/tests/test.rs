@@ -1,19 +1,57 @@
 mod common;
 
-use crate::common::{
-    create_live_instance, raw_canister_id_range_into, start_server, start_server_helper,
-};
+use crate::common::raw_canister_id_range_into;
 use candid::Encode;
-use pocket_ic::common::rest::{
-    CreateHttpGatewayResponse, DtsFlag, HttpGatewayBackend, HttpGatewayConfig, SubnetConfigSet,
-};
-use pocket_ic::PocketIc;
+use pocket_ic::common::rest::SubnetConfigSet;
+use pocket_ic::{PocketIc, PocketIcBuilder};
 use reqwest::blocking::Client;
-use reqwest::StatusCode;
+use reqwest::{StatusCode, Url};
 use std::io::Read;
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Child, Command};
 use std::time::{Duration, Instant};
+
+pub const LOCALHOST: &str = "127.0.0.1";
+
+pub fn start_server_helper(
+    parent_pid: u32,
+    ttl: Option<u64>,
+    capture_stderr: bool,
+) -> (Url, Child) {
+    let bin_path = std::env::var_os("POCKET_IC_BIN").expect("Missing PocketIC binary");
+    let mut cmd = Command::new(PathBuf::from(bin_path));
+    cmd.arg("--pid").arg(parent_pid.to_string());
+    if let Some(ttl) = ttl {
+        cmd.arg("--ttl").arg(ttl.to_string());
+    }
+    if capture_stderr {
+        cmd.stderr(std::process::Stdio::piped());
+    }
+    let out = cmd.spawn().expect("Failed to start PocketIC binary");
+    let port_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.port", parent_pid));
+    let ready_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.ready", parent_pid));
+    let start = Instant::now();
+    let url = loop {
+        match ready_file_path.try_exists() {
+            Ok(true) => {
+                let port_string = std::fs::read_to_string(port_file_path)
+                    .expect("Failed to read port from port file");
+                let port: u16 = port_string.parse().expect("Failed to parse port to number");
+                break Url::parse(&format!("http://{}:{}/", LOCALHOST, port)).unwrap();
+            }
+            _ => std::thread::sleep(Duration::from_millis(20)),
+        }
+        if start.elapsed() > Duration::from_secs(5) {
+            panic!("Failed to start PocketIC service in time");
+        }
+    };
+    (url, out)
+}
+
+pub fn start_server() -> Url {
+    let parent_pid = std::os::unix::process::parent_id();
+    start_server_helper(parent_pid, None, false).0
+}
 
 #[test]
 fn test_status() {
@@ -164,29 +202,16 @@ fn test_port_file() {
 fn test_http_gateway() {
     use ic_utils::interfaces::ManagementCanister;
 
-    // create PocketIc instance in auto progress mode
-    let url = start_server();
-    let client = Client::new();
-    let (instance_id, _nns_subnet_id, _nns_config, _app_subnet_id, app_config) =
-        create_live_instance(&url, &client, DtsFlag::Enabled);
-
-    // start HTTP gateway
-    let http_gateway_url = url.join("http_gateway").unwrap();
-    let body = HttpGatewayConfig {
-        listen_at: None,
-        forward_to: HttpGatewayBackend::PocketIcInstance(instance_id),
-    };
-    let (http_gateway_id, http_gateway_port) = match client
-        .post(http_gateway_url)
-        .json(&body)
-        .send()
-        .unwrap()
-        .json::<CreateHttpGatewayResponse>()
-        .expect("Could not parse response for create HTTP gateway request")
-    {
-        CreateHttpGatewayResponse::Created { instance_id, port } => (instance_id, port),
-        CreateHttpGatewayResponse::Error { message } => panic!("{}", message),
-    };
+    // create live PocketIc instance
+    let mut pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .build();
+    let endpoint = pic.make_live(None);
+    let app_subnet = pic.topology().get_app_subnets()[0];
+    let effective_canister_id =
+        raw_canister_id_range_into(&pic.topology().0.get(&app_subnet).unwrap().canister_ranges[0])
+            .start;
 
     // deploy II canister to PocketIc instance proxying through HTTP gateway
     let rt = tokio::runtime::Builder::new_current_thread()
@@ -194,20 +219,18 @@ fn test_http_gateway() {
         .build()
         .unwrap();
     let ii_canister_id = rt.block_on(async {
-        let agent_endpoint = format!("http://localhost:{}", http_gateway_port);
         let agent = ic_agent::Agent::builder()
-            .with_url(agent_endpoint)
+            .with_url(endpoint.clone())
             .build()
             .unwrap();
         agent.fetch_root_key().await.unwrap();
 
         let ic00 = ManagementCanister::create(&agent);
 
-        let app_canister_id = raw_canister_id_range_into(&app_config.canister_ranges[0]).start;
         let (canister_id,) = ic00
             .create_canister()
             .as_provisional_create_with_amount(None)
-            .with_effective_canister_id(app_canister_id)
+            .with_effective_canister_id(effective_canister_id)
             .call_and_wait()
             .await
             .unwrap();
@@ -225,24 +248,16 @@ fn test_http_gateway() {
     });
 
     // perform frontend asset request for the title page
-    let ii_url = format!(
-        "http://localhost:{}/?canisterId={}",
-        http_gateway_port, ii_canister_id
-    );
+    let ii_url = endpoint
+        .join(&format!("?canisterId={}", ii_canister_id))
+        .unwrap();
+    let client = Client::new();
     let res = client.get(ii_url.clone()).send().unwrap();
     let page = String::from_utf8(res.bytes().unwrap().to_vec()).unwrap();
     assert!(page.contains("<title>Internet Identity</title>"));
 
-    // stop HTTP gateway
-    let stop_http_gateway_url = url
-        .join(&format!("http_gateway/{}/stop", http_gateway_id))
-        .unwrap();
-    client
-        .post(stop_http_gateway_url)
-        .send()
-        .unwrap()
-        .json::<()>()
-        .expect("Could not parse response for stop HTTP gateway request");
+    // stop HTTP gateway and make IC instance deterministic
+    pic.make_deterministic();
 
     // HTTP gateway requests should eventually stop and requests to it fail
     loop {

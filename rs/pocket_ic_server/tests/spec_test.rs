@@ -1,11 +1,11 @@
 mod common;
 
-use crate::common::{create_live_instance, raw_canister_id_range_into, start_server};
+use crate::common::raw_canister_id_range_into;
 use candid::Principal;
 use ic_registry_routing_table::{canister_id_into_u64, CanisterIdRange};
 use ic_registry_subnet_type::SubnetType;
 use pocket_ic::common::rest::DtsFlag;
-use reqwest::blocking::Client;
+use pocket_ic::PocketIcBuilder;
 use spec_compliance::run_ic_ref_test;
 
 const EXCLUDED: &[&str] = &[
@@ -44,11 +44,18 @@ fn subnet_config(
 }
 
 fn setup_and_run_ic_ref_test(test_nns: bool, excluded_tests: Vec<&str>, included_tests: Vec<&str>) {
-    let url = start_server();
-    let client = Client::new();
-    let (instance_id, nns_subnet_id, nns_config, app_subnet_id, app_config) =
-        create_live_instance(&url, &client, DtsFlag::Disabled);
-    let endpoint = url.join(&format!("instances/{instance_id}/")).unwrap();
+    // create live PocketIc instance
+    let mut pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .with_dts_flag(DtsFlag::Disabled)
+        .build();
+    let endpoint = pic.make_live(None);
+    let topo = pic.topology();
+    let app_subnet_id = topo.get_app_subnets()[0];
+    let app_config = topo.0.get(&app_subnet_id).unwrap();
+    let nns_subnet_id = topo.get_nns().unwrap();
+    let nns_config = topo.0.get(&nns_subnet_id).unwrap();
 
     // derive artifact paths
     let ic_ref_test_root = std::env::var_os("IC_REF_TEST_ROOT")
