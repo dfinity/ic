@@ -652,7 +652,7 @@ pub(crate) fn create_data_payload_helper_2(
 
     resharing::update_completed_reshare_requests(
         ecdsa_payload,
-        &resharing::make_reshare_dealings_response(ecdsa_dealings_contexts),
+        ecdsa_dealings_contexts,
         block_reader,
         transcript_builder,
         log,

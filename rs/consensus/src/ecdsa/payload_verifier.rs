@@ -703,21 +703,6 @@ mod test {
         .is_ok());
     }
 
-    fn make_dealings_response(
-        _request: &ecdsa::EcdsaReshareRequest,
-        initial_dealings: &InitialIDkgDealings,
-    ) -> Option<ic_types::batch::ConsensusResponse> {
-        use ic_management_canister_types::ComputeInitialEcdsaDealingsResponse;
-        let mut response = empty_response();
-        response.payload = ic_types::messages::Payload::Data(
-            ComputeInitialEcdsaDealingsResponse {
-                initial_dkg_dealings: initial_dealings.into(),
-            }
-            .encode(),
-        );
-        Some(response)
-    }
-
     #[test]
     fn test_validate_reshare_dealings() {
         let mut rng = reproducible_rng();
@@ -733,6 +718,17 @@ mod test {
         let req_2 = create_reshare_request(2, 2);
         let reshare_requests = BTreeSet::from([req_1.clone(), req_2.clone()]);
 
+        let contexts = BTreeMap::from([
+            (
+                ic_types::messages::CallbackId::from(0),
+                dealings_context_from_reshare_request(req_1.clone()),
+            ),
+            (
+                ic_types::messages::CallbackId::from(1),
+                dealings_context_from_reshare_request(req_2.clone()),
+            ),
+        ]);
+
         let (key_transcript, key_transcript_ref) = payload.generate_current_key(&env, &mut rng);
         block_reader.add_transcript(*key_transcript_ref.as_ref(), key_transcript);
         initiate_reshare_requests(&mut payload, reshare_requests.clone());
@@ -744,7 +740,7 @@ mod test {
         transcript_builder.add_dealings(reshare_params.transcript_id, dealings);
         update_completed_reshare_requests(
             &mut payload,
-            &make_dealings_response,
+            &contexts,
             &block_reader,
             &transcript_builder,
             &no_op_logger(),
@@ -778,7 +774,7 @@ mod test {
         let mut prev_payload = payload.clone();
         update_completed_reshare_requests(
             &mut payload,
-            &make_dealings_response,
+            &contexts,
             &block_reader,
             &transcript_builder,
             &no_op_logger(),
