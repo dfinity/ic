@@ -34,9 +34,9 @@ use hyper::header;
 use ic_http_endpoints_public::cors_layer;
 use ic_types::CanisterId;
 use pocket_ic::common::rest::{
-    self, ApiResponse, ExtendedSubnetConfigSet, HttpGatewayConfig, RawAddCycles, RawCanisterCall,
-    RawCanisterId, RawCanisterResult, RawCycles, RawSetStableMemory, RawStableMemory, RawSubnetId,
-    RawTime, RawWasmResult,
+    self, ApiResponse, ExtendedSubnetConfigSet, HttpGatewayConfig, HttpGatewayInfo, RawAddCycles,
+    RawCanisterCall, RawCanisterId, RawCanisterResult, RawCycles, RawSetStableMemory,
+    RawStableMemory, RawSubnetId, RawTime, RawWasmResult,
 };
 use pocket_ic::WasmResult;
 use serde::Serialize;
@@ -920,7 +920,10 @@ pub async fn create_http_gateway(
     let (instance_id, port) = api_state.create_http_gateway(http_gateway_config).await;
     (
         StatusCode::CREATED,
-        Json(rest::CreateHttpGatewayResponse::Created { instance_id, port }),
+        Json(rest::CreateHttpGatewayResponse::Created(HttpGatewayInfo {
+            instance_id,
+            port,
+        })),
     )
 }
 

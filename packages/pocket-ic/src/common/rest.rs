@@ -26,9 +26,15 @@ pub struct HttpGatewayConfig {
     pub forward_to: HttpGatewayBackend,
 }
 
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct HttpGatewayInfo {
+    pub instance_id: InstanceId,
+    pub port: u16,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub enum CreateHttpGatewayResponse {
-    Created { instance_id: InstanceId, port: u16 },
+    Created(HttpGatewayInfo),
     Error { message: String },
 }
 
