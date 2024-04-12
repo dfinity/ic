@@ -31,7 +31,6 @@ use std::collections::HashSet;
 use std::convert::TryInto;
 use std::fmt::Debug;
 use std::hash::Hash;
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
@@ -69,14 +68,15 @@ fn index_ng_wasm() -> Vec<u8> {
 }
 
 fn ledger_wasm() -> Vec<u8> {
-    ic_test_utilities_load_wasm::load_wasm(
-        PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
-            .parent()
-            .unwrap()
-            .join("ledger"),
-        "ic-icrc1-ledger",
-        &[],
-    )
+    let ledger_wasm_path = std::env::var("IC_ICRC1_LEDGER_WASM_PATH").expect(
+        "The Ledger wasm path must be set using the env variable IC_ICRC1_LEDGER_WASM_PATH",
+    );
+    std::fs::read(&ledger_wasm_path).unwrap_or_else(|e| {
+        panic!(
+            "failed to load Wasm file from path {} (env var IC_ICRC1_LEDGER_WASM_PATH): {}",
+            ledger_wasm_path, e
+        )
+    })
 }
 
 fn default_archive_options() -> ArchiveOptions {
