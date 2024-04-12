@@ -193,15 +193,15 @@ impl CanisterQueue {
     }
 
     /// Returns `Ok(())` if there exists at least one reserved response slot,
-    /// `Err(StateError::QueueFull)` otherwise.
+    /// `Err(StateError::InvariantBroken)` otherwise.
     ///
     /// Panics if `class` is `GuaranteedResponse` and no guaranteed response
     /// memory reservation exists.
     pub(super) fn check_has_reserved_response_slot(&self, class: Class) -> Result<(), StateError> {
         if self.request_slots + self.response_slots <= self.queue.len() {
-            return Err(StateError::QueueFull {
-                capacity: self.capacity,
-            });
+            return Err(StateError::InvariantBroken(
+                "No reserved response slot".to_string(),
+            ));
         }
 
         if class == Class::GuaranteedResponse {
@@ -219,7 +219,7 @@ impl CanisterQueue {
     /// Enqueues a response into a reserved slot, consuming the slot.
     ///
     /// Panics if there is no reserved response slot or if this is a guaranteed
-    /// response.and there is no matching guaranteed response memory reservation.
+    /// response and there is no matching guaranteed response memory reservation.
     pub(super) fn push_response(&mut self, id: MessageId) {
         self.check_has_reserved_response_slot(id.class()).unwrap();
 
@@ -236,7 +236,7 @@ impl CanisterQueue {
     /// a reserved slot, consuming the slot.
     ///
     /// Panics if there is no reserved response slot or if this is a guaranteed
-    /// response.call and there is no guaranteed response memory reservation.
+    /// response call and there is no guaranteed response memory reservation.
     pub(super) fn push_local_reject_response(&mut self, own_request: &Request) {
         let class = if own_request.deadline == NO_DEADLINE {
             Class::GuaranteedResponse

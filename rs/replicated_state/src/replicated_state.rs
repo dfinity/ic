@@ -717,6 +717,7 @@ impl ReplicatedState {
             None => {
                 let subnet_id = self.metadata.own_subnet_id.get_ref();
                 if msg.receiver().get_ref() == subnet_id {
+                    // FIXME Assert that this is a request; else check for a matching `Callback`.
                     push_input(
                         &mut self.subnet_queues,
                         msg,
