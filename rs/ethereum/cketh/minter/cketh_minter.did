@@ -283,6 +283,9 @@ type LedgerError = variant {
     // The allowance given to the minter is too low.
     InsufficientAllowance : record { allowance : nat; failed_burn_amount : nat; token_symbol : text; ledger_id : principal };
 
+    // The withdrawal amount is too low and doesn't cover the ledger transaction fee.
+    AmountTooLow : record { minimum_burn_amount : nat; failed_burn_amount : nat; token_symbol : text; ledger_id : principal };
+
     // The ledger is overloaded, retry the request.
     // The payload contains a human-readable message explaining what caused the unavailability.
     TemporarilyUnavailable : text;
