@@ -76,15 +76,15 @@ tmux -S release
 
 ./gitlab-ci/container/container-run.sh
 
-test_tmpdir="/tmp/$(whoami)/test_tmpdir"; \
-echo "test_tmpdir=$test_tmpdir"; \
-rm -rf "$test_tmpdir"; \
+TEST_TMPDIR="/tmp/$(whoami)/test_tmpdir"; \
+echo "TEST_TMPDIR=$TEST_TMPDIR"; \
+rm -rf "$TEST_TMPDIR"; \
     ict testnet create recovered_mainnet_nns \
         --lifetime-mins 1440 \
         --set-required-host-features=dc=zh1 \
         --verbose \
         -- \
-        --test_tmpdir="$test_tmpdir"
+        --test_tmpdir="$TEST_TMPDIR"
 ```
 
 Let us explain some of the arguments used above:
