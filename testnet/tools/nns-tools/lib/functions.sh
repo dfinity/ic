@@ -628,7 +628,8 @@ set_testnet_env_variables() {
         return
     fi
 
-    TEST_TMPDIR=${TEST_TMPDIR:-"/ic/test_tmpdir/_tmp"}
+    TEST_TMPDIR=${TEST_TMPDIR:-$"/tmp/$(whoami)/test_tmpdir"}
+    TEST_TMPDIR="${TEST_TMPDIR}/_tmp"
 
     # Check if the target directory exists
     if [ ! -d "${TEST_TMPDIR}" ]; then
