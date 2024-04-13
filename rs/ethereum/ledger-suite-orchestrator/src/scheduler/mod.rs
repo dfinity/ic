@@ -457,12 +457,18 @@ async fn install_ledger_suite<R: CanisterRuntime>(
     let ledger_canister_id =
         create_canister_once::<Ledger, _>(&args.contract, runtime, cycles_for_ledger_creation)
             .await?;
+
+    let more_controllers = read_state(|s| s.more_controller_ids().to_vec())
+        .into_iter()
+        .map(PrincipalId)
+        .collect();
     install_canister_once::<Ledger, _, _>(
         &args.contract,
         &args.ledger_compressed_wasm_hash,
         &LedgerArgument::Init(icrc1_ledger_init_arg(
             args.ledger_init_arg.clone(),
             runtime.id().into(),
+            more_controllers,
             cycles_for_archive_creation,
         )),
         runtime,
@@ -506,6 +512,7 @@ fn record_new_erc20_token_once(contract: Erc20Token, metadata: CanistersMetadata
 fn icrc1_ledger_init_arg(
     ledger_init_arg: LedgerInitArg,
     archive_controller_id: PrincipalId,
+    archive_more_controller_ids: Vec<PrincipalId>,
     cycles_for_archive_creation: Nat,
 ) -> LedgerInitArgs {
     use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as LedgerMetadataValue;
@@ -522,7 +529,11 @@ fn icrc1_ledger_init_arg(
             "icrc1:logo".to_string(),
             LedgerMetadataValue::from(ledger_init_arg.token_logo),
         )],
-        archive_options: icrc1_archive_options(archive_controller_id, cycles_for_archive_creation),
+        archive_options: icrc1_archive_options(
+            archive_controller_id,
+            archive_more_controller_ids,
+            cycles_for_archive_creation,
+        ),
         max_memo_length: ledger_init_arg.max_memo_length,
         feature_flags: ledger_init_arg.feature_flags,
         maximum_number_of_accounts: ledger_init_arg.maximum_number_of_accounts,
@@ -532,6 +543,7 @@ fn icrc1_ledger_init_arg(
 
 fn icrc1_archive_options(
     archive_controller_id: PrincipalId,
+    archive_more_controller_ids: Vec<PrincipalId>,
     cycles_for_archive_creation: Nat,
 ) -> ArchiveOptions {
     ArchiveOptions {
@@ -540,7 +552,7 @@ fn icrc1_archive_options(
         node_max_memory_size_bytes: Some(THREE_GIGA_BYTES),
         max_message_size_bytes: None,
         controller_id: archive_controller_id,
-        more_controller_ids: None,
+        more_controller_ids: Some(archive_more_controller_ids),
         cycles_for_archive_creation: Some(
             cycles_for_archive_creation
                 .0

@@ -10,6 +10,7 @@ use ic_ledger_suite_orchestrator::scheduler::TEN_TRILLIONS;
 use ic_ledger_suite_orchestrator_test_utils::arbitrary::arb_init_arg;
 use ic_ledger_suite_orchestrator_test_utils::{
     new_state_machine, supported_erc20_tokens, usdc, usdc_erc20_contract, LedgerSuiteOrchestrator,
+    NNS_ROOT_PRINCIPAL,
 };
 use ic_state_machine_tests::ErrorCode;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as LedgerMetadataValue;
@@ -124,6 +125,28 @@ fn should_spawn_ledger_with_correct_init_args() {
                 LedgerMetadataValue::from(80_u64),
             ),
         ]);
+}
+
+#[test]
+fn should_spawn_archive_from_ledger_with_correct_controllers() {
+    let orchestrator = LedgerSuiteOrchestrator::default();
+    let expected_controllers = vec![
+        orchestrator.ledger_suite_orchestrator_id.get().into(),
+        NNS_ROOT_PRINCIPAL,
+    ];
+    let embedded_ledger_wasm_hash = orchestrator.embedded_ledger_wasm_hash.clone();
+    let embedded_index_wasm_hash = orchestrator.embedded_index_wasm_hash.clone();
+    let usdc = usdc(
+        Principal::anonymous(),
+        embedded_ledger_wasm_hash,
+        embedded_index_wasm_hash,
+    );
+
+    orchestrator
+        .add_erc20_token(usdc.clone())
+        .expect_new_ledger_and_index_canisters()
+        .trigger_creation_of_archive()
+        .assert_all_controlled_by(&expected_controllers);
 }
 
 #[test]
