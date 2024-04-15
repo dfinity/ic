@@ -108,6 +108,28 @@ jobs:
       #       bazel-build-log*.json*
       #       bazel-bep.pb
       #       bazel-testlogs/**/test.xml
+
+  bazel-config-check-all-rebuild:
+    <<: *bazel-small-setup
+    name: Bazel-Config-Check-All-Rebuild
+    steps:
+      - <<: *checkout
+        with:
+          # Fetch all commits since gitlab-ci/src/bazel-ci/diff.sh needs to run
+          #   git merge-base HEAD origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME
+          # which not only requires the HEAD commit but also its history
+          # and the history of origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME.
+          fetch-depth: 0
+      - name: Run bazel build --config=check //rs/...
+        id: bazel-build-config-check
+        uses: ./.github/actions/bazel-test-all/
+        with:
+          BAZEL_COMMAND: "build"
+          BAZEL_TARGETS: "//rs/..."
+          BAZEL_CI_CONFIG: "--config=check"
+          # run on diff only if it is a pull request, otherwise run all targets
+          RUN_ON_DIFF_ONLY: ${{ contains(github.event_name, 'pull_request') && 'true' || 'false'}}
+
   bazel-test-macos:
     name: Bazel-Test-MacOS
     timeout-minutes: 90
