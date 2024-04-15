@@ -702,7 +702,7 @@ impl Hash for QuadrupleInCreation {
 
 impl QuadrupleInCreation {
     /// Initialization with the given random param pair.
-    pub fn new(
+    pub fn new_with_masked_kappa(
         _key_id: EcdsaKeyId,
         kappa_masked_config: RandomTranscriptParams,
         lambda_config: RandomTranscriptParams,
@@ -724,7 +724,8 @@ impl QuadrupleInCreation {
     }
 
     /// Initialization with unmasked kappa param.
-    pub fn new_with_unmasked_kappa(
+    pub fn new(
+        _key_id: EcdsaKeyId,
         kappa_unmasked_config: RandomUnmaskedTranscriptParams,
         lambda_config: RandomTranscriptParams,
     ) -> Self {

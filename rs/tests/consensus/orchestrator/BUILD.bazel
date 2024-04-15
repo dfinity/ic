@@ -47,7 +47,7 @@ system_test(
     name = "cup_compatibility_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = [
+    runtime_deps = MAINNET_REVISION_RUNTIME_DEPS + [
         "//rs/tests:cup_compatibility/binaries",
     ],
     deps = DEPENDENCIES + ["//rs/tests"],
