@@ -7,7 +7,6 @@ use tokio_metrics::TaskMonitor;
 use crate::ongoing::DownloadChunkError;
 
 const CHUNK_DOWNLOAD_STATUS_LABEL: &str = "status";
-const CHUNK_DOWNLOAD_STATUS_MORE_NEEDED: &str = "more_needed";
 const CHUNK_DOWNLOAD_STATUS_SUCCESS: &str = "success";
 
 #[derive(Debug, Clone)]
@@ -118,17 +117,12 @@ impl OngoingStateSyncMetrics {
     }
 
     /// Utility to record metrics for download result.
-    pub fn record_chunk_download_result(&self, res: &Result<bool, DownloadChunkError>) {
+    pub fn record_chunk_download_result(&self, res: &Result<(), DownloadChunkError>) {
         match res {
             // Received chunk
-            Ok(true) => {
+            Ok(()) => {
                 self.chunk_download_results_total
                     .with_label_values(&[CHUNK_DOWNLOAD_STATUS_SUCCESS])
-                    .inc();
-            }
-            Ok(false) => {
-                self.chunk_download_results_total
-                    .with_label_values(&[CHUNK_DOWNLOAD_STATUS_MORE_NEEDED])
                     .inc();
             }
             Err(e) => {
