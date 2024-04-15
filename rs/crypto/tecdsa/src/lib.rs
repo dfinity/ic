@@ -1,16 +1,16 @@
 use ic_crypto_internal_threshold_sig_ecdsa::ThresholdEcdsaDerivePublicKeyError;
 use ic_types::crypto::canister_threshold_sig::error::ThresholdEcdsaGetPublicKeyError;
 use ic_types::crypto::canister_threshold_sig::{
-    EcdsaPublicKey, ExtendedDerivationPath, MasterEcdsaPublicKey,
+    ExtendedDerivationPath, MasterPublicKey, PublicKey,
 };
 
-/// Derives the ECDSA public key from the specified `master_public_key` for
+/// Derives the threshold public key from the specified `master_public_key` for
 /// the given `extended_derivation_path`.
-pub fn derive_tecdsa_public_key(
-    master_public_key: &MasterEcdsaPublicKey,
+pub fn derive_threshold_public_key(
+    master_public_key: &MasterPublicKey,
     extended_derivation_path: &ExtendedDerivationPath,
-) -> Result<EcdsaPublicKey, ThresholdEcdsaGetPublicKeyError> {
-    ic_crypto_internal_threshold_sig_ecdsa::derive_ecdsa_public_key(
+) -> Result<PublicKey, ThresholdEcdsaGetPublicKeyError> {
+    ic_crypto_internal_threshold_sig_ecdsa::derive_threshold_public_key(
         master_public_key,
         &extended_derivation_path.into(),
     )

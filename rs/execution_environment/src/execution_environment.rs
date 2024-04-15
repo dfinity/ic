@@ -23,7 +23,7 @@ use ic_base_types::PrincipalId;
 use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_constants::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SIZE};
-use ic_crypto_tecdsa::derive_tecdsa_public_key;
+use ic_crypto_tecdsa::derive_threshold_public_key;
 use ic_cycles_account_manager::{
     is_delayed_ingress_induction_cost, CyclesAccountManager, IngressInductionCost,
     ResourceSaturation,
@@ -59,7 +59,7 @@ use ic_replicated_state::{
 use ic_system_api::{ExecutionParameters, InstructionLimits};
 use ic_types::{
     canister_http::CanisterHttpRequestContext,
-    crypto::canister_threshold_sig::{ExtendedDerivationPath, MasterEcdsaPublicKey},
+    crypto::canister_threshold_sig::{ExtendedDerivationPath, MasterPublicKey},
     crypto::threshold_sig::ni_dkg::NiDkgTargetId,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
@@ -458,7 +458,7 @@ impl ExecutionEnvironment {
         mut state: ReplicatedState,
         instruction_limits: InstructionLimits,
         rng: &mut dyn RngCore,
-        ecdsa_subnet_public_keys: &BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
+        ecdsa_subnet_public_keys: &BTreeMap<EcdsaKeyId, MasterPublicKey>,
         registry_settings: &RegistryExecutionSettings,
         round_limits: &mut RoundLimits,
     ) -> (ReplicatedState, Option<NumInstructions>) {
@@ -2389,7 +2389,7 @@ impl ExecutionEnvironment {
 
     fn get_ecdsa_public_key(
         &self,
-        subnet_public_key: &MasterEcdsaPublicKey,
+        subnet_public_key: &MasterPublicKey,
         principal_id: PrincipalId,
         derivation_path: Vec<Vec<u8>>,
         // TODO EXC-1060: get the right public key.
@@ -2399,7 +2399,7 @@ impl ExecutionEnvironment {
             caller: principal_id,
             derivation_path,
         };
-        derive_tecdsa_public_key(subnet_public_key, &path)
+        derive_threshold_public_key(subnet_public_key, &path)
             .map_err(|err| UserError::new(ErrorCode::CanisterRejectedMessage, format!("{}", err)))
             .map(|res| ECDSAPublicKeyResponse {
                 public_key: res.public_key,
@@ -3549,10 +3549,10 @@ pub fn execute_canister(
 }
 
 fn get_master_ecdsa_public_key<'a>(
-    ecdsa_subnet_public_keys: &'a BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
+    ecdsa_subnet_public_keys: &'a BTreeMap<EcdsaKeyId, MasterPublicKey>,
     subnet_id: SubnetId,
     key_id: &EcdsaKeyId,
-) -> Result<&'a MasterEcdsaPublicKey, UserError> {
+) -> Result<&'a MasterPublicKey, UserError> {
     match ecdsa_subnet_public_keys.get(key_id) {
         None => Err(UserError::new(
             ErrorCode::CanisterRejectedMessage,

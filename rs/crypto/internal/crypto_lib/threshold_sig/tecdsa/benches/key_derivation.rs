@@ -1,7 +1,7 @@
 use criterion::*;
 use ic_crypto_internal_threshold_sig_ecdsa::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use ic_types::crypto::canister_threshold_sig::MasterEcdsaPublicKey;
+use ic_types::crypto::canister_threshold_sig::MasterPublicKey;
 use ic_types::crypto::AlgorithmId;
 
 fn key_derivation(c: &mut Criterion) {
@@ -17,7 +17,7 @@ fn key_derivation(c: &mut Criterion) {
         let sk = EccScalar::random(curve, &mut rng);
         let pk = EccPoint::generator_g(curve).scalar_mul(&sk).unwrap();
 
-        let mpk = MasterEcdsaPublicKey {
+        let mpk = MasterPublicKey {
             algorithm_id,
             public_key: pk.serialize(),
         };
@@ -31,7 +31,7 @@ fn key_derivation(c: &mut Criterion) {
                 |b, size| {
                     b.iter_batched_ref(
                         || create_path_of_len(*size),
-                        |path| derive_ecdsa_public_key(&mpk, path),
+                        |path| derive_threshold_public_key(&mpk, path),
                         BatchSize::SmallInput,
                     )
                 },

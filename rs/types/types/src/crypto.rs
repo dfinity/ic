@@ -158,6 +158,14 @@ impl AlgorithmId {
     pub fn is_threshold_ecdsa(&self) -> bool {
         Self::all_threshold_ecdsa_algorithms().contains(self)
     }
+
+    pub const fn all_threshold_schnorr_algorithms() -> [AlgorithmId; 1] {
+        [Self::ThresholdSchnorrBip340]
+    }
+
+    pub fn is_threshold_schnorr(&self) -> bool {
+        Self::all_threshold_schnorr_algorithms().contains(self)
+    }
 }
 
 impl From<AlgorithmId> for u8 {

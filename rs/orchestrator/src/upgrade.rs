@@ -4,7 +4,7 @@ use crate::metrics::OrchestratorMetrics;
 use crate::process_manager::{Process, ProcessManager};
 use crate::registry_helper::RegistryHelper;
 use async_trait::async_trait;
-use ic_crypto::get_tecdsa_master_public_key;
+use ic_crypto::get_master_public_key_from_transcript;
 use ic_http_utils::file_downloader::FileDownloader;
 use ic_image_upgrader::error::{UpgradeError, UpgradeResult};
 use ic_image_upgrader::ImageUpgrader;
@@ -16,7 +16,7 @@ use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_replicator::RegistryReplicator;
 use ic_types::consensus::{CatchUpPackage, HasHeight};
-use ic_types::crypto::canister_threshold_sig::MasterEcdsaPublicKey;
+use ic_types::crypto::canister_threshold_sig::MasterPublicKey;
 use ic_types::{Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -684,7 +684,7 @@ fn reexec_current_process(logger: &ReplicaLogger) -> OrchestratorError {
 fn get_tecdsa_keys(
     cup: &CatchUpPackage,
     log: &ReplicaLogger,
-) -> BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey> {
+) -> BTreeMap<EcdsaKeyId, MasterPublicKey> {
     let mut public_keys = BTreeMap::new();
 
     let Some(ecdsa) = cup.content.block.get_value().payload.as_ref().as_ecdsa() else {
@@ -702,7 +702,7 @@ fn get_tecdsa_keys(
         return public_keys;
     };
 
-    match get_tecdsa_master_public_key(transcript) {
+    match get_master_public_key_from_transcript(transcript) {
         Ok(public_key) => {
             public_keys.insert(key_id, public_key);
         }
