@@ -2361,6 +2361,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "core2"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b49ba7ef1ad6107f8824dbe97de947cbaac53c44e7f9756a1fba0d37c1eec505"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "cpufeatures"
 version = "0.2.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2942,6 +2951,12 @@ dependencies = [
  "quote 1.0.35",
  "syn 2.0.48",
 ]
+
+[[package]]
+name = "dary_heap"
+version = "0.3.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7762d17f1241643615821a8455a0b2c3e803784b058693d990b11f2dce25a0ca"
 
 [[package]]
 name = "dashmap"
@@ -5631,7 +5646,7 @@ dependencies = [
  "ic-wasm-types",
  "lazy_static",
  "libc",
- "libflate",
+ "libflate 1.3.0",
  "memory_tracker",
  "mockall",
  "nix 0.24.3",
@@ -7570,7 +7585,7 @@ dependencies = [
  "insta",
  "lazy_static",
  "libc",
- "libflate",
+ "libflate 1.3.0",
  "maplit",
  "memory_tracker",
  "nix 0.24.3",
@@ -7672,7 +7687,7 @@ dependencies = [
  "ic-utils-lru-cache",
  "ic-wasm-types",
  "lazy_static",
- "libflate",
+ "libflate 1.3.0",
  "maplit",
  "memory_tracker",
  "num-rational",
@@ -11119,7 +11134,7 @@ dependencies = [
  "ic-wasm",
  "icp-ledger",
  "icrc-ledger-types",
- "libflate",
+ "libflate 1.3.0",
  "maplit",
  "pretty_assertions",
  "prost",
@@ -12132,14 +12147,14 @@ dependencies = [
 
 [[package]]
 name = "ic-wasm"
-version = "0.7.1"
+version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "41a41c085039129d3b18848abdf8e39aeb7efd6b8322cb8bcc4f67a72ae2f143"
+checksum = "a1f3f1ec63f08807d176691225de0b993e832b1fff71c631ed897df5888c7be4"
 dependencies = [
  "anyhow",
  "candid",
  "clap 4.4.6",
- "libflate",
+ "libflate 2.0.0",
  "rustc-demangle",
  "serde",
  "serde_json",
@@ -13353,7 +13368,20 @@ checksum = "97822bf791bd4d5b403713886a5fbe8bf49520fe78e323b0dc480ca1a03e50b0"
 dependencies = [
  "adler32",
  "crc32fast",
- "libflate_lz77",
+ "libflate_lz77 1.2.0",
+]
+
+[[package]]
+name = "libflate"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9f7d5654ae1795afc7ff76f4365c2c8791b0feb18e8996a96adad8ffd7c3b2bf"
+dependencies = [
+ "adler32",
+ "core2",
+ "crc32fast",
+ "dary_heap",
+ "libflate_lz77 2.0.0",
 ]
 
 [[package]]
@@ -13362,6 +13390,17 @@ version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a52d3a8bfc85f250440e4424db7d857e241a3aebbbe301f3eb606ab15c39acbf"
 dependencies = [
+ "rle-decode-fast",
+]
+
+[[package]]
+name = "libflate_lz77"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "be5f52fb8c451576ec6b79d3f4deb327398bc05bbdbd99021a6e77a4c855d524"
+dependencies = [
+ "core2",
+ "hashbrown 0.13.2",
  "rle-decode-fast",
 ]
 
@@ -15851,9 +15890,9 @@ dependencies = [
 
 [[package]]
 name = "quinn-proto"
-version = "0.10.6"
+version = "0.10.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "141bf7dfde2fbc246bfd3fe12f2455aa24b0fbd9af535d8c86c7bd1381ff2b1a"
+checksum = "2c78e758510582acc40acb90458401172d41f1016f8c9dde89e49677afb7eec1"
 dependencies = [
  "bytes",
  "rand 0.8.5",
@@ -15869,9 +15908,9 @@ dependencies = [
 
 [[package]]
 name = "quinn-udp"
-version = "0.4.1"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "055b4e778e8feb9f93c4e439f71dc2156ef13360b432b799e179a8c4cdf0b1d7"
+checksum = "6df19e284d93757a9fb91d63672f7741b129246a669db09d1c0063071debc0c0"
 dependencies = [
  "bytes",
  "libc",
@@ -18475,7 +18514,7 @@ dependencies = [
  "kube",
  "lazy_static",
  "leb128",
- "libflate",
+ "libflate 1.3.0",
  "lifeline",
  "maplit",
  "nix 0.24.3",

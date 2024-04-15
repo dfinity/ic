@@ -15,7 +15,7 @@ use ic_protobuf::registry::subnet::v1::{
     SubnetFeatures as SubnetFeaturesPb, SubnetRecord as SubnetRecordPb,
 };
 use ic_registry_keys::{make_ecdsa_signing_subnet_list_key, make_subnet_record_key};
-use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures};
+use ic_registry_subnet_features::{ChainKeyConfig, EcdsaConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{pb::v1::RegistryMutation, upsert};
 use ic_types::p2p::build_default_gossip_config;
@@ -380,6 +380,13 @@ fn merge_subnet_record(
     maybe_set!(subnet_record, max_instructions_per_install_code);
 
     maybe_set_option!(subnet_record, features);
+
+    // TODO[NNS1-2988]: Take value directly from `UpdateSubnetPayload.chain_key_config`.
+    {
+        let chain_key_config = ecdsa_config.clone().map(ChainKeyConfig::from);
+        maybe_set_option!(subnet_record, chain_key_config);
+    }
+    // TODO[NNS1-3006]: Stop updating the ecdsa_config field.
     maybe_set_option!(subnet_record, ecdsa_config);
 
     maybe_set!(subnet_record, max_number_of_canisters);
@@ -400,8 +407,8 @@ mod tests {
     use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId};
     use ic_nervous_system_common_test_keys::{TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL};
     use ic_protobuf::registry::subnet::v1::{
-        EcdsaConfig as EcdsaConfigPb, GossipConfig as GossipConfigPb,
-        SubnetRecord as SubnetRecordPb,
+        ChainKeyConfig as ChainKeyConfigPb, EcdsaConfig as EcdsaConfigPb,
+        GossipConfig as GossipConfigPb, SubnetRecord as SubnetRecordPb,
     };
     use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
     use ic_registry_subnet_type::SubnetType;
@@ -552,14 +559,16 @@ mod tests {
             chain_key_config: None,
         };
 
-        let legacy_ecdsa_config = EcdsaConfig {
+        let ecdsa_config = Some(EcdsaConfig {
             quadruples_to_create_in_advance: 10,
             key_ids: vec![make_ecdsa_key("key_id_1")],
             max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
-        };
-        let legacy_ecdsa_config_pb = EcdsaConfigPb::from(legacy_ecdsa_config.clone());
+        });
+
+        let ecdsa_config_pb = ecdsa_config.clone().map(EcdsaConfigPb::from);
+        let chain_key_config_pb = ecdsa_config_pb.clone().map(ChainKeyConfigPb::from);
 
         let payload = UpdateSubnetPayload {
             subnet_id: SubnetId::from(
@@ -599,7 +608,7 @@ mod tests {
                 }
                 .into(),
             ),
-            ecdsa_config: Some(legacy_ecdsa_config),
+            ecdsa_config,
             ecdsa_key_signing_enable: Some(vec![make_ecdsa_key("key_id_2")]),
             ecdsa_key_signing_disable: None,
             max_number_of_canisters: Some(10),
@@ -644,8 +653,8 @@ mod tests {
                     }
                     .into()
                 ),
-                ecdsa_config: Some(legacy_ecdsa_config_pb),
-                chain_key_config: None,
+                ecdsa_config: ecdsa_config_pb,
+                chain_key_config: chain_key_config_pb,
                 max_number_of_canisters: 10,
                 ssh_readonly_access: vec!["pub_key_0".to_string()],
                 ssh_backup_access: vec!["pub_key_1".to_string()],

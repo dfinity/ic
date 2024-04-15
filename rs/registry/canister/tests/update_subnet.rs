@@ -14,7 +14,10 @@ use ic_nns_test_utils::{
 };
 use ic_protobuf::registry::{
     crypto::v1::EcdsaSigningSubnetList,
-    subnet::v1::{EcdsaConfig as EcdsaConfigPb, GossipConfig, SubnetRecord},
+    subnet::v1::{
+        ChainKeyConfig as ChainKeyConfigPb, EcdsaConfig as EcdsaConfigPb, GossipConfig,
+        SubnetRecord,
+    },
 };
 use ic_registry_keys::{make_ecdsa_signing_subnet_list_key, make_subnet_record_key};
 use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
@@ -489,17 +492,17 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
         let signature_request_timeout_ns = Some(12345);
         let idkg_key_rotation_period_ms = Some(12345);
 
-        let legacy_ecdsa_config = EcdsaConfig {
+        let ecdsa_config = Some(EcdsaConfig {
             quadruples_to_create_in_advance: 10,
             key_ids: vec![make_ecdsa_key("key_id_1")],
             max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
             signature_request_timeout_ns,
             idkg_key_rotation_period_ms,
-        };
+        });
 
         // update payload message
         let mut payload = UpdateSubnetPayload {
-            ecdsa_config: Some(legacy_ecdsa_config.clone()),
+            ecdsa_config: ecdsa_config.clone(),
             ecdsa_key_signing_enable: Some(vec![make_ecdsa_key("key_id_1")]),
             ..empty_update_subnet_payload(subnet_id)
         };
@@ -551,7 +554,7 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
 
         // Trying again, this time in the correct order
         payload = UpdateSubnetPayload {
-            ecdsa_config: Some(legacy_ecdsa_config.clone()),
+            ecdsa_config: ecdsa_config.clone(),
             ecdsa_key_signing_enable: None,
             ..empty_update_subnet_payload(subnet_id)
         };
@@ -572,18 +575,20 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
         .await;
 
         // Should see the new value for the config reflected
-        let legacy_ecdsa_config_pb = EcdsaConfigPb::from(legacy_ecdsa_config.clone());
+        let ecdsa_config_pb = ecdsa_config.clone().map(EcdsaConfigPb::from);
+        let chain_key_config_pb = ecdsa_config_pb.clone().map(ChainKeyConfigPb::from);
         assert_eq!(
             new_subnet_record,
             SubnetRecord {
-                ecdsa_config: Some(legacy_ecdsa_config_pb),
+                ecdsa_config: ecdsa_config_pb,
+                chain_key_config: chain_key_config_pb,
                 ..subnet_record
             }
         );
 
         // This update should enable signing on our subnet for the given key.
         payload = UpdateSubnetPayload {
-            ecdsa_config: Some(legacy_ecdsa_config.clone()),
+            ecdsa_config: ecdsa_config.clone(),
             ecdsa_key_signing_enable: Some(vec![make_ecdsa_key("key_id_1")]),
             ..empty_update_subnet_payload(subnet_id)
         };
