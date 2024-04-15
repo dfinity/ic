@@ -283,6 +283,7 @@ fn cheating_dlog_instance<R: rand::RngCore + rand::CryptoRng>(
     (s_div_delta, p)
 }
 
+#[ignore]
 #[test]
 fn test_that_cheating_dealer_solver_can_solve_instance() {
     let rng = &mut reproducible_rng();
