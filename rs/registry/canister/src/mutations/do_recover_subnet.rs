@@ -16,7 +16,7 @@ use dfn_core::api::{call, CanisterId};
 use dfn_core::println;
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
 use ic_management_canister_types::{EcdsaKeyId, SetupInitialDKGArgs, SetupInitialDKGResponse};
-use ic_protobuf::registry::subnet::v1::RegistryStoreUri;
+use ic_protobuf::registry::subnet::v1::{ChainKeyConfig, EcdsaConfig, RegistryStoreUri};
 use ic_registry_keys::{
     make_catch_up_package_contents_key, make_crypto_threshold_signing_pubkey_key,
     make_subnet_record_key,
@@ -123,6 +123,16 @@ impl Registry {
 
                 // Update ECDSA configuration on subnet record to reflect new holdings
                 subnet_record.ecdsa_config = Some(new_ecdsa_config.clone().into());
+
+                let ecdsa_config = EcdsaConfig::from(new_ecdsa_config.clone());
+
+                // TODO[NNS1-2988]: Take value directly from `RecoverSubnetPayload.chain_key_config`.
+                let chain_key_config = ChainKeyConfig::from(ecdsa_config.clone());
+
+                // TODO[NNS1-3006]: Stop updating the ecdsa_config field.
+                subnet_record.ecdsa_config = Some(ecdsa_config);
+
+                subnet_record.chain_key_config = Some(chain_key_config);
             }
 
             // Push all of our subnet_record mutations
