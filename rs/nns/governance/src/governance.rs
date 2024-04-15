@@ -711,12 +711,8 @@ impl Proposal {
                             | NnsFunction::RemoveNodesFromSubnet
                             | NnsFunction::ChangeSubnetMembership
                             | NnsFunction::UpdateConfigOfSubnet => Topic::SubnetManagement,
-                            NnsFunction::UpdateElectedReplicaVersions => {
-                                Topic::ReplicaVersionManagement
-                            }
-                            NnsFunction::UpdateSubnetReplicaVersion => {
-                                Topic::SubnetReplicaVersionManagement
-                            }
+                            NnsFunction::UpdateElectedReplicaVersions => Topic::IcOsVersionElection,
+                            NnsFunction::UpdateSubnetReplicaVersion => Topic::IcOsVersionDeployment,
                             NnsFunction::NnsCanisterInstall
                             | NnsFunction::NnsCanisterUpgrade
                             | NnsFunction::NnsRootUpgrade
@@ -746,7 +742,7 @@ impl Proposal {
                             NnsFunction::UpdateSnsWasmSnsSubnetIds => Topic::SubnetManagement,
                             // Retired NnsFunctions
                             NnsFunction::BlessReplicaVersion
-                            | NnsFunction::RetireReplicaVersion => Topic::ReplicaVersionManagement,
+                            | NnsFunction::RetireReplicaVersion => Topic::IcOsVersionElection,
                             NnsFunction::AddApiBoundaryNode
                             | NnsFunction::RemoveApiBoundaryNodes
                             | NnsFunction::UpdateApiBoundaryNodesVersion => {

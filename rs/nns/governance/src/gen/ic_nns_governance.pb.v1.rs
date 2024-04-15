@@ -3194,11 +3194,28 @@ pub enum Topic {
     Kyc = 9,
     /// Topic for proposals to reward node providers.
     NodeProviderRewards = 10,
-    /// Proposals handling updates of a subnet's replica version.
-    /// The only proposal in this topic is UpdateSubnetReplicaVersion.
-    SubnetReplicaVersionManagement = 12,
-    /// All proposals dealing with blessing and retirement of replica versions.
-    ReplicaVersionManagement = 13,
+    /// IC OS upgrade proposals
+    /// -----------------------
+    /// ICP runs on a distributed network of nodes grouped into subnets. Each node runs a stack of
+    /// operating systems, including HostOS (runs on bare metal) and GuestOS (runs inside HostOS;
+    /// contains, e.g., the ICP replica process). HostOS and GuestOS are distributed via separate disk
+    /// images. The umbrella term IC OS refers to the whole stack.
+    ///
+    /// The IC OS upgrade process involves two phases, where the first phase is the election of a new
+    /// IC OS version and the second phase is the deployment of a previously elected IC OS version on
+    /// all nodes of a subnet or on some number of nodes (including nodes comprising subnets and
+    /// unassigned nodes).
+    ///
+    /// A special case is for API boundary nodes, special nodes that route API requests to a replica
+    /// of the right subnet. API boundary nodes run a different process than the replica, but their
+    /// executable is distributed via the same disk image as GuestOS. Therefore, electing a new GuestOS
+    /// version also results in a new version of boundary node software being elected.
+    ///
+    /// Proposals handling the deployment of IC OS to some nodes. It is possible to deploy only
+    /// the versions of IC OS that are in the set of elected IC OS versions.
+    IcOsVersionDeployment = 12,
+    /// Proposals for changing the set of elected IC OS versions.
+    IcOsVersionElection = 13,
     /// Proposals related to SNS and Community Fund.
     SnsAndCommunityFund = 14,
     /// Proposals related to the management of API Boundary Nodes
@@ -3222,8 +3239,8 @@ impl Topic {
             Topic::NetworkCanisterManagement => "TOPIC_NETWORK_CANISTER_MANAGEMENT",
             Topic::Kyc => "TOPIC_KYC",
             Topic::NodeProviderRewards => "TOPIC_NODE_PROVIDER_REWARDS",
-            Topic::SubnetReplicaVersionManagement => "TOPIC_SUBNET_REPLICA_VERSION_MANAGEMENT",
-            Topic::ReplicaVersionManagement => "TOPIC_REPLICA_VERSION_MANAGEMENT",
+            Topic::IcOsVersionDeployment => "TOPIC_IC_OS_VERSION_DEPLOYMENT",
+            Topic::IcOsVersionElection => "TOPIC_IC_OS_VERSION_ELECTION",
             Topic::SnsAndCommunityFund => "TOPIC_SNS_AND_COMMUNITY_FUND",
             Topic::ApiBoundaryNodeManagement => "TOPIC_API_BOUNDARY_NODE_MANAGEMENT",
         }
@@ -3242,8 +3259,8 @@ impl Topic {
             "TOPIC_NETWORK_CANISTER_MANAGEMENT" => Some(Self::NetworkCanisterManagement),
             "TOPIC_KYC" => Some(Self::Kyc),
             "TOPIC_NODE_PROVIDER_REWARDS" => Some(Self::NodeProviderRewards),
-            "TOPIC_SUBNET_REPLICA_VERSION_MANAGEMENT" => Some(Self::SubnetReplicaVersionManagement),
-            "TOPIC_REPLICA_VERSION_MANAGEMENT" => Some(Self::ReplicaVersionManagement),
+            "TOPIC_IC_OS_VERSION_DEPLOYMENT" => Some(Self::IcOsVersionDeployment),
+            "TOPIC_IC_OS_VERSION_ELECTION" => Some(Self::IcOsVersionElection),
             "TOPIC_SNS_AND_COMMUNITY_FUND" => Some(Self::SnsAndCommunityFund),
             "TOPIC_API_BOUNDARY_NODE_MANAGEMENT" => Some(Self::ApiBoundaryNodeManagement),
             _ => None,
