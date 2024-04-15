@@ -19,7 +19,8 @@ mod tls;
 
 use ic_crypto_internal_csp::vault::api::CspVault;
 pub use sign::{
-    get_tecdsa_master_public_key, retrieve_mega_public_key_from_registry, MegaKeyFromRegistryError,
+    get_master_public_key_from_transcript, retrieve_mega_public_key_from_registry,
+    MegaKeyFromRegistryError,
 };
 
 use crate::sign::ThresholdSigDataStoreImpl;

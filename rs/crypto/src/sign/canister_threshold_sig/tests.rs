@@ -1,18 +1,16 @@
-mod get_tecdsa_master_public_key {
-    use crate::get_tecdsa_master_public_key;
-    use crate::sign::canister_threshold_sig::ecdsa::IDkgReceivers;
-    use crate::sign::canister_threshold_sig::ecdsa::IDkgTranscript;
-    use crate::sign::canister_threshold_sig::ecdsa::IDkgTranscriptInternal;
-    use crate::sign::canister_threshold_sig::ecdsa::MasterPublicKeyExtractionError;
+mod get_master_public_key_from_transcript {
+    use crate::get_master_public_key_from_transcript;
+    use crate::sign::canister_threshold_sig::MasterPublicKeyExtractionError;
     use crate::sign::tests::REG_V1;
     use assert_matches::assert_matches;
     use ic_base_types::SubnetId;
+    use ic_crypto_internal_threshold_sig_ecdsa::IDkgTranscriptInternal;
     use ic_crypto_test_utils::set_of;
-    use ic_types::crypto::canister_threshold_sig::idkg::IDkgMaskedTranscriptOrigin;
-    use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
-    use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptType;
-    use ic_types::crypto::canister_threshold_sig::idkg::IDkgUnmaskedTranscriptOrigin;
-    use ic_types::crypto::canister_threshold_sig::MasterEcdsaPublicKey;
+    use ic_types::crypto::canister_threshold_sig::idkg::{
+        IDkgMaskedTranscriptOrigin, IDkgReceivers, IDkgTranscript, IDkgTranscriptId,
+        IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin,
+    };
+    use ic_types::crypto::canister_threshold_sig::MasterPublicKey;
     use ic_types::crypto::AlgorithmId;
     use ic_types::Height;
     use ic_types::PrincipalId;
@@ -22,7 +20,7 @@ mod get_tecdsa_master_public_key {
 
     #[test]
     fn should_return_error_if_transcript_type_is_masked() {
-        for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
+        for alg in all_canister_threshold_algorithms() {
             let transcript = dummy_transcript(
                 IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
                 alg,
@@ -30,7 +28,7 @@ mod get_tecdsa_master_public_key {
             );
 
             assert_matches!(
-                get_tecdsa_master_public_key(&transcript),
+                get_master_public_key_from_transcript(&transcript),
                 Err(MasterPublicKeyExtractionError::CannotExtractFromMasked)
             );
         }
@@ -38,7 +36,7 @@ mod get_tecdsa_master_public_key {
 
     #[test]
     fn should_return_error_if_internal_transcript_cannot_be_deserialized() {
-        for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
+        for alg in all_canister_threshold_algorithms() {
             let transcript = dummy_transcript(
                 IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareUnmasked(
                     dummy_transcript_id(),
@@ -48,7 +46,7 @@ mod get_tecdsa_master_public_key {
             );
 
             assert_matches!(
-                get_tecdsa_master_public_key(&transcript),
+                get_master_public_key_from_transcript(&transcript),
                 Err(MasterPublicKeyExtractionError::SerializationError( error ))
                     if error.contains("SerializationError")
             );
@@ -58,7 +56,9 @@ mod get_tecdsa_master_public_key {
     #[test]
     fn should_return_error_if_algorithm_id_is_invalid() {
         AlgorithmId::iter()
-            .filter(|algorithm_id| !algorithm_id.is_threshold_ecdsa())
+            .filter(|algorithm_id| {
+                !algorithm_id.is_threshold_ecdsa() && !algorithm_id.is_threshold_schnorr()
+            })
             .for_each(|wrong_algorithm_id| {
                 let transcript = dummy_transcript(
                     IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareUnmasked(
@@ -71,15 +71,15 @@ mod get_tecdsa_master_public_key {
                 );
 
                 assert_matches!(
-                    get_tecdsa_master_public_key(&transcript),
+                    get_master_public_key_from_transcript(&transcript),
                     Err(MasterPublicKeyExtractionError::UnsupportedAlgorithm(_))
                 );
             });
     }
 
     #[test]
-    fn should_return_master_ecdsa_public_key() {
-        for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
+    fn should_return_master_threshold_public_key() {
+        for alg in all_canister_threshold_algorithms() {
             let transcript = dummy_transcript(
                 IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareUnmasked(
                     dummy_transcript_id(),
@@ -89,12 +89,12 @@ mod get_tecdsa_master_public_key {
                     .serialize()
                     .expect("serialization of internal transcript raw should succeed"),
             );
-            let expected_valid_master_ecdsa_public_key = valid_master_ecdsa_public_key(alg);
+            let expected_valid_master_public_key = valid_master_public_key(alg);
 
             assert_matches!(
-                get_tecdsa_master_public_key(&transcript),
-                Ok(tecdsa_master_public_key)
-                    if tecdsa_master_public_key == expected_valid_master_ecdsa_public_key
+                get_master_public_key_from_transcript(&transcript),
+                Ok(master_public_key)
+                    if master_public_key == expected_valid_master_public_key
             );
         }
     }
@@ -115,11 +115,13 @@ mod get_tecdsa_master_public_key {
 
     fn valid_internal_transcript_raw(alg: AlgorithmId) -> IDkgTranscriptInternal {
         match alg {
-            AlgorithmId::ThresholdEcdsaSecp256k1 => IDkgTranscriptInternal::deserialize(
-                &hex::decode(VALID_SECP256K1_INTERNAL_TRANSCRIPT_RAW)
-                    .expect("hex decoding of valid internal transcript raw should succeed"),
-            )
-            .expect("deserialization of valid internal transcript raw bytes should succeed"),
+            AlgorithmId::ThresholdEcdsaSecp256k1 | AlgorithmId::ThresholdSchnorrBip340 => {
+                IDkgTranscriptInternal::deserialize(
+                    &hex::decode(VALID_SECP256K1_INTERNAL_TRANSCRIPT_RAW)
+                        .expect("hex decoding of valid internal transcript raw should succeed"),
+                )
+                .expect("deserialization of valid internal transcript raw bytes should succeed")
+            }
             AlgorithmId::ThresholdEcdsaSecp256r1 => IDkgTranscriptInternal::deserialize(
                 &hex::decode(VALID_SECP256R1_INTERNAL_TRANSCRIPT_RAW)
                     .expect("hex decoding of valid internal transcript raw should succeed"),
@@ -131,19 +133,26 @@ mod get_tecdsa_master_public_key {
         }
     }
 
-    fn valid_master_ecdsa_public_key(alg: AlgorithmId) -> MasterEcdsaPublicKey {
+    fn valid_master_public_key(alg: AlgorithmId) -> MasterPublicKey {
         match alg {
-            AlgorithmId::ThresholdEcdsaSecp256k1 => MasterEcdsaPublicKey {
+            AlgorithmId::ThresholdEcdsaSecp256k1 => MasterPublicKey {
                 algorithm_id: AlgorithmId::EcdsaSecp256k1,
                 public_key: hex::decode(
                     "0252a937b4c129d822412d79f39d3626f32e7a1cf85ba1dfb01c9671d7d434003f",
                 )
                 .expect("hex decoding of public key bytes should succeed"),
             },
-            AlgorithmId::ThresholdEcdsaSecp256r1 => MasterEcdsaPublicKey {
+            AlgorithmId::ThresholdEcdsaSecp256r1 => MasterPublicKey {
                 algorithm_id: AlgorithmId::EcdsaP256,
                 public_key: hex::decode(
                     "0279474d9bb87dce85dcfc0786c9b4a4ddcb662e36fd716c42a0781fa05d208afb",
+                )
+                .expect("hex decoding of public key bytes should succeed"),
+            },
+            AlgorithmId::ThresholdSchnorrBip340 => MasterPublicKey {
+                algorithm_id: AlgorithmId::SchnorrSecp256k1,
+                public_key: hex::decode(
+                    "0252a937b4c129d822412d79f39d3626f32e7a1cf85ba1dfb01c9671d7d434003f",
                 )
                 .expect("hex decoding of public key bytes should succeed"),
             },
@@ -175,5 +184,12 @@ mod get_tecdsa_master_public_key {
             algorithm_id,
             internal_transcript_raw,
         }
+    }
+
+    fn all_canister_threshold_algorithms() -> Vec<AlgorithmId> {
+        AlgorithmId::all_threshold_ecdsa_algorithms()
+            .into_iter()
+            .chain(AlgorithmId::all_threshold_schnorr_algorithms())
+            .collect()
     }
 }

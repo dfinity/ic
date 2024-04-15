@@ -19,7 +19,7 @@ pub use self::{
 };
 use crate::{
     consensus::ecdsa::QuadrupleId,
-    crypto::canister_threshold_sig::MasterEcdsaPublicKey,
+    crypto::canister_threshold_sig::MasterPublicKey,
     messages::{CallbackId, Payload, SignedIngress, NO_DEADLINE},
     time::CoarseTime,
     xnet::CertifiedStreamSlice,
@@ -63,7 +63,7 @@ pub struct Batch {
     /// A source of randomness for processing the Batch.
     pub randomness: Randomness,
     /// The ECDSA public keys of the subnet.
-    pub ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
+    pub ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterPublicKey>,
     /// The ECDSA quadruple Ids available to be matched with signature requests.
     pub ecdsa_quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<QuadrupleId>>,
     /// The version of the registry to be referenced when processing the batch.

@@ -187,7 +187,7 @@
 #![forbid(unsafe_code)]
 
 use ic_crypto_internal_seed::xmd::XmdError;
-use ic_types::crypto::canister_threshold_sig::{ExtendedDerivationPath, MasterEcdsaPublicKey};
+use ic_types::crypto::canister_threshold_sig::{ExtendedDerivationPath, MasterPublicKey};
 use ic_types::crypto::AlgorithmId;
 use ic_types::{NumberOfNodes, Randomness};
 use serde::{Deserialize, Serialize};
@@ -198,7 +198,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
     IDkgLoadTranscriptError, IDkgVerifyComplaintError, IDkgVerifyDealingPrivateError,
     IDkgVerifyTranscriptError,
 };
-pub use ic_types::crypto::canister_threshold_sig::EcdsaPublicKey;
+pub use ic_types::crypto::canister_threshold_sig::PublicKey;
 pub use ic_types::NodeIndex;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -1067,14 +1067,44 @@ impl From<ThresholdEcdsaError> for ThresholdEcdsaDerivePublicKeyError {
     }
 }
 
-pub fn derive_ecdsa_public_key(
-    master_public_key: &MasterEcdsaPublicKey,
+/// Returns a public key derived from `master_public_key` according to the
+/// `derivation_path`.  The algorithm id of the derived key is the same
+/// as the algorithm id of `master_public_key`.
+pub fn derive_threshold_public_key(
+    master_public_key: &MasterPublicKey,
     derivation_path: &DerivationPath,
-) -> Result<EcdsaPublicKey, ThresholdEcdsaDerivePublicKeyError> {
-    Ok(crate::signing::ecdsa::derive_public_key(
-        master_public_key,
-        derivation_path,
-    )?)
+) -> Result<PublicKey, ThresholdEcdsaDerivePublicKeyError> {
+    let expected_curve = match master_public_key.algorithm_id {
+        AlgorithmId::EcdsaSecp256k1 => EccCurveType::K256,
+        AlgorithmId::ThresholdEcdsaSecp256k1 => EccCurveType::K256,
+
+        AlgorithmId::EcdsaP256 => EccCurveType::P256,
+        AlgorithmId::ThresholdEcdsaSecp256r1 => EccCurveType::P256,
+
+        AlgorithmId::SchnorrSecp256k1 => EccCurveType::K256,
+        AlgorithmId::ThresholdSchnorrBip340 => EccCurveType::K256,
+
+        x => {
+            return Err(ThresholdEcdsaDerivePublicKeyError::InvalidArgument(
+                format!(
+                    "Not a known signature algo related to threshold signatures {:?}",
+                    x
+                ),
+            ))
+        }
+    };
+
+    let raw_master_pk = EccPoint::deserialize(expected_curve, &master_public_key.public_key)?;
+
+    let (key_tweak, chain_key) = derivation_path.derive_tweak(&raw_master_pk)?;
+    let tweak_g = EccPoint::mul_by_g(&key_tweak);
+    let public_key_point = tweak_g.add_points(&raw_master_pk)?;
+
+    Ok(PublicKey {
+        algorithm_id: master_public_key.algorithm_id,
+        public_key: public_key_point.serialize(),
+        chain_key,
+    })
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

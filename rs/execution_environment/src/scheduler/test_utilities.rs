@@ -48,7 +48,7 @@ use ic_test_utilities_types::{
 };
 use ic_types::{
     consensus::ecdsa::QuadrupleId,
-    crypto::{canister_threshold_sig::MasterEcdsaPublicKey, AlgorithmId},
+    crypto::{canister_threshold_sig::MasterPublicKey, AlgorithmId},
     ingress::{IngressState, IngressStatus},
     messages::{
         CallContextId, Ingress, MessageId, Request, RequestOrResponse, Response, NO_DEADLINE,
@@ -109,7 +109,7 @@ pub(crate) struct SchedulerTest {
     // Metrics Registry.
     metrics_registry: MetricsRegistry,
     // ECDSA subnet public keys.
-    ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
+    ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterPublicKey>,
     // ECDSA quadruple IDs.
     ecdsa_quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<QuadrupleId>>,
 }
@@ -738,13 +738,13 @@ impl SchedulerTestBuilder {
                 .ecdsa_keys_held
                 .insert(ecdsa_key.clone());
         }
-        let ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey> = self
+        let ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterPublicKey> = self
             .ecdsa_keys
             .into_iter()
             .map(|key| {
                 (
                     key,
-                    MasterEcdsaPublicKey {
+                    MasterPublicKey {
                         algorithm_id: AlgorithmId::Secp256k1,
                         public_key: b"abababab".to_vec(),
                     },

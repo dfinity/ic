@@ -1,12 +1,12 @@
 use assert_matches::assert_matches;
 use ic_base_types::PrincipalId;
-use ic_crypto::get_tecdsa_master_public_key;
+use ic_crypto::get_master_public_key_from_transcript;
 use ic_crypto::CryptoComponentImpl;
 use ic_crypto_internal_csp::vault::api::IDkgCreateDealingVaultError;
 use ic_crypto_internal_csp::Csp;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_internal_threshold_sig_ecdsa::test_utils::ComplaintCorrupter;
-use ic_crypto_tecdsa::derive_tecdsa_public_key;
+use ic_crypto_tecdsa::derive_threshold_public_key;
 use ic_crypto_temp_crypto::TempCryptoComponent;
 use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_idkg_transcript_id_for_tests;
 use ic_crypto_test_utils_canister_threshold_sigs::node::Node;
@@ -3406,10 +3406,11 @@ mod verify_combined_sig {
                 let (env, inputs, _, _) =
                     environment_with_sig_inputs(1..10, alg, use_random_unmasked_kappa, rng);
                 let combined_sig = run_tecdsa_protocol(&env, &inputs, rng);
-                let master_public_key = get_tecdsa_master_public_key(inputs.key_transcript())
-                    .expect("Master key extraction failed");
+                let master_public_key =
+                    get_master_public_key_from_transcript(inputs.key_transcript())
+                        .expect("Master key extraction failed");
                 let canister_public_key =
-                    derive_tecdsa_public_key(&master_public_key, inputs.derivation_path())
+                    derive_threshold_public_key(&master_public_key, inputs.derivation_path())
                         .expect("Public key derivation failed");
 
                 match alg {
@@ -3467,7 +3468,7 @@ mod get_tecdsa_master_public_key {
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
             let key_transcript = generate_key_transcript(&env, &dealers, &receivers, alg, rng);
-            let result = get_tecdsa_master_public_key(&key_transcript);
+            let result = get_master_public_key_from_transcript(&key_transcript);
             assert_matches!(result, Ok(_));
             let master_public_key = result.expect("Master key extraction failed");
 
@@ -3495,7 +3496,7 @@ mod get_tecdsa_master_public_key {
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
             let key_transcript = generate_key_transcript(&env, &dealers, &receivers, alg, rng);
-            let master_public_key = get_tecdsa_master_public_key(&key_transcript)
+            let master_public_key = get_master_public_key_from_transcript(&key_transcript)
                 .expect("Master key extraction failed");
 
             let derivation_path_1 = ExtendedDerivationPath {
@@ -3508,9 +3509,9 @@ mod get_tecdsa_master_public_key {
             };
 
             assert_eq!(derivation_path_1, derivation_path_2);
-            let derived_pk_1 = derive_tecdsa_public_key(&master_public_key, &derivation_path_1)
+            let derived_pk_1 = derive_threshold_public_key(&master_public_key, &derivation_path_1)
                 .expect("Public key derivation failed ");
-            let derived_pk_2 = derive_tecdsa_public_key(&master_public_key, &derivation_path_2)
+            let derived_pk_2 = derive_threshold_public_key(&master_public_key, &derivation_path_2)
                 .expect("Public key derivation failed ");
             assert_eq!(derived_pk_1, derived_pk_2);
         }
@@ -3526,7 +3527,7 @@ mod get_tecdsa_master_public_key {
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
             let key_transcript = generate_key_transcript(&env, &dealers, &receivers, alg, rng);
-            let master_public_key = get_tecdsa_master_public_key(&key_transcript)
+            let master_public_key = get_master_public_key_from_transcript(&key_transcript)
                 .expect("Master key extraction failed");
 
             let derivation_paths = [
@@ -3553,7 +3554,7 @@ mod get_tecdsa_master_public_key {
             ];
             let mut derived_keys = std::collections::HashSet::new();
             for derivation_path in &derivation_paths {
-                let derived_pk = derive_tecdsa_public_key(&master_public_key, derivation_path)
+                let derived_pk = derive_threshold_public_key(&master_public_key, derivation_path)
                     .unwrap_or_else(|_| {
                         panic!(
                             "Public key derivation failed for derivation path {:?}",
@@ -3584,7 +3585,7 @@ mod get_tecdsa_master_public_key {
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
             let key_transcript = generate_key_transcript(&env, &dealers, &receivers, alg, rng);
-            let master_ecdsa_key = get_tecdsa_master_public_key(&key_transcript);
+            let master_ecdsa_key = get_master_public_key_from_transcript(&key_transcript);
             assert_matches!(master_ecdsa_key, Ok(_));
             let derivation_path = ExtendedDerivationPath {
                 caller: PrincipalId::new_user_test_id(1),
@@ -3592,7 +3593,7 @@ mod get_tecdsa_master_public_key {
             };
 
             let derived_public_key =
-                derive_tecdsa_public_key(&master_ecdsa_key.unwrap(), &derivation_path);
+                derive_threshold_public_key(&master_ecdsa_key.unwrap(), &derivation_path);
 
             assert_matches!(derived_public_key, Ok(_));
         }
@@ -4781,7 +4782,8 @@ mod reshare_key_transcript {
                 source_subnet_nodes.run_idkg_and_create_and_verify_transcript(&unmasked_params, rng)
             };
             let source_tecdsa_master_public_key =
-                get_tecdsa_master_public_key(&source_key_transcript).expect("valid public key");
+                get_master_public_key_from_transcript(&source_key_transcript)
+                    .expect("valid public key");
 
             let reshare_params = IDkgTranscriptParams::new(
                 random_transcript_id(rng),
@@ -4829,7 +4831,8 @@ mod reshare_key_transcript {
                     .create_transcript_or_panic(&reshare_params, &dealings)
             };
             let target_tecdsa_master_public_key =
-                get_tecdsa_master_public_key(&reshared_key_transcript).expect("valid public key");
+                get_master_public_key_from_transcript(&reshared_key_transcript)
+                    .expect("valid public key");
 
             assert_eq!(
                 source_tecdsa_master_public_key,
@@ -4874,7 +4877,8 @@ mod reshare_key_transcript {
                 source_subnet_nodes.run_idkg_and_create_and_verify_transcript(&unmasked_params, rng)
             };
             let source_tecdsa_master_public_key =
-                get_tecdsa_master_public_key(&source_key_transcript).expect("valid public key");
+                get_master_public_key_from_transcript(&source_key_transcript)
+                    .expect("valid public key");
 
             let reshare_params = IDkgTranscriptParams::new(
                 random_transcript_id(rng),
@@ -4893,7 +4897,8 @@ mod reshare_key_transcript {
             let reshared_key_transcript = nodes_involved_in_resharing
                 .run_idkg_and_create_and_verify_transcript(&reshare_params, rng);
             let target_tecdsa_master_public_key =
-                get_tecdsa_master_public_key(&reshared_key_transcript).expect("valid public key");
+                get_master_public_key_from_transcript(&reshared_key_transcript)
+                    .expect("valid public key");
 
             assert_eq!(
                 source_tecdsa_master_public_key,
@@ -4931,7 +4936,8 @@ mod reshare_key_transcript {
                 source_subnet_nodes.run_idkg_and_create_and_verify_transcript(&key_params, rng)
             };
             let source_tecdsa_master_public_key =
-                get_tecdsa_master_public_key(&source_key_transcript).expect("valid public key");
+                get_master_public_key_from_transcript(&source_key_transcript)
+                    .expect("valid public key");
 
             let reshare_params = IDkgTranscriptParams::new(
                 random_transcript_id(rng),
@@ -4950,7 +4956,8 @@ mod reshare_key_transcript {
             let reshared_key_transcript = nodes_involved_in_resharing
                 .run_idkg_and_create_and_verify_transcript(&reshare_params, rng);
             let target_tecdsa_master_public_key =
-                get_tecdsa_master_public_key(&reshared_key_transcript).expect("valid public key");
+                get_master_public_key_from_transcript(&reshared_key_transcript)
+                    .expect("valid public key");
 
             assert_eq!(
                 source_tecdsa_master_public_key,
@@ -4970,7 +4977,7 @@ mod reshare_key_transcript {
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
             let key_transcript = generate_key_transcript(&env, &dealers, &receivers, alg, rng);
             let tecdsa_master_public_key =
-                get_tecdsa_master_public_key(&key_transcript).expect("valid public key");
+                get_master_public_key_from_transcript(&key_transcript).expect("valid public key");
 
             let new_dealers = receivers.get().clone();
             let new_receivers = dealers.get().clone();
@@ -4987,7 +4994,8 @@ mod reshare_key_transcript {
                 .nodes
                 .run_idkg_and_create_and_verify_transcript(&reshare_params, rng);
             let reshared_tecdsa_master_public_key =
-                get_tecdsa_master_public_key(&reshared_key_transcript).expect("valid public key");
+                get_master_public_key_from_transcript(&reshared_key_transcript)
+                    .expect("valid public key");
 
             assert_eq!(tecdsa_master_public_key, reshared_tecdsa_master_public_key);
         }
@@ -5004,7 +5012,7 @@ mod reshare_key_transcript {
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
             let key_transcript = generate_key_transcript(&env, &dealers, &receivers, alg, rng);
             let tecdsa_master_public_key =
-                get_tecdsa_master_public_key(&key_transcript).expect("valid public key");
+                get_master_public_key_from_transcript(&key_transcript).expect("valid public key");
 
             let receivers_with_new_node_ids: BTreeSet<_> = {
                 let mut new_receivers = receivers.get().clone();
@@ -5031,7 +5039,8 @@ mod reshare_key_transcript {
                 .nodes
                 .run_idkg_and_create_and_verify_transcript(&reshare_params, rng);
             let reshared_tecdsa_master_public_key =
-                get_tecdsa_master_public_key(&reshared_key_transcript).expect("valid public key");
+                get_master_public_key_from_transcript(&reshared_key_transcript)
+                    .expect("valid public key");
 
             assert_eq!(tecdsa_master_public_key, reshared_tecdsa_master_public_key);
         }
@@ -5048,7 +5057,7 @@ mod reshare_key_transcript {
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
             let key_transcript = generate_key_transcript(&env, &dealers, &receivers, alg, rng);
             let tecdsa_master_public_key =
-                get_tecdsa_master_public_key(&key_transcript).expect("valid public key");
+                get_master_public_key_from_transcript(&key_transcript).expect("valid public key");
 
             let receivers_without_removed_receiver = {
                 let num_receivers_to_remove = rng.gen_range(1..=receivers.get().len() - 1);
@@ -5075,7 +5084,8 @@ mod reshare_key_transcript {
                 .nodes
                 .run_idkg_and_create_and_verify_transcript(&reshare_params, rng);
             let reshared_tecdsa_master_public_key =
-                get_tecdsa_master_public_key(&reshared_key_transcript).expect("valid public key");
+                get_master_public_key_from_transcript(&reshared_key_transcript)
+                    .expect("valid public key");
 
             assert_eq!(tecdsa_master_public_key, reshared_tecdsa_master_public_key);
         }

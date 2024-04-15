@@ -1,6 +1,5 @@
 use crate::DerivationPath;
 use crate::*;
-use ic_types::crypto::canister_threshold_sig::MasterEcdsaPublicKey;
 
 // This is the conversion function used by ECDSA which returns the
 // x-coordinate of a point reduced modulo the modulus of the scalar
@@ -440,37 +439,4 @@ impl ThresholdEcdsaCombinedSigInternal {
         // accept:
         Ok(())
     }
-}
-
-/// Returns a public key derived from `master_public_key` according to the
-/// `derivation_path`.  The algorithm id of the derived key is the same
-/// as the algorithm id of `master_public_key`.
-pub fn derive_public_key(
-    master_public_key: &MasterEcdsaPublicKey,
-    derivation_path: &DerivationPath,
-) -> ThresholdEcdsaResult<EcdsaPublicKey> {
-    let raw_master_pk = match master_public_key.algorithm_id {
-        AlgorithmId::EcdsaSecp256k1 => {
-            EccPoint::deserialize(EccCurveType::K256, &master_public_key.public_key)?
-        }
-        AlgorithmId::EcdsaP256 => {
-            EccPoint::deserialize(EccCurveType::P256, &master_public_key.public_key)?
-        }
-        unsupported => {
-            return Err(ThresholdEcdsaError::InvalidArguments(format!(
-                "derive_public_key does not support alg {}",
-                unsupported
-            )));
-        }
-    };
-    // Compute tweak
-    let (key_tweak, chain_key) = derivation_path.derive_tweak(&raw_master_pk)?;
-    let tweak_g = EccPoint::mul_by_g(&key_tweak);
-    let public_key = tweak_g.add_points(&raw_master_pk)?;
-
-    Ok(EcdsaPublicKey {
-        algorithm_id: master_public_key.algorithm_id,
-        public_key: public_key.serialize(),
-        chain_key,
-    })
 }

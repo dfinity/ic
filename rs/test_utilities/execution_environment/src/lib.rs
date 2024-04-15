@@ -47,7 +47,7 @@ use ic_test_utilities::crypto::mock_random_number_generator;
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder};
 use ic_types::{
     batch::QueryStats,
-    crypto::{canister_threshold_sig::MasterEcdsaPublicKey, AlgorithmId},
+    crypto::{canister_threshold_sig::MasterPublicKey, AlgorithmId},
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
         AnonymousQuery, CallbackId, CanisterCall, CanisterMessage, CanisterTask, MessageId,
@@ -192,7 +192,7 @@ pub struct ExecutionTest {
     registry_settings: RegistryExecutionSettings,
     manual_execution: bool,
     caller_canister_id: Option<CanisterId>,
-    ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
+    ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterPublicKey>,
 
     // The actual implementation.
     exec_env: ExecutionEnvironment,
@@ -2037,7 +2037,7 @@ impl ExecutionTestBuilder {
             .map(|key| {
                 (
                     key,
-                    MasterEcdsaPublicKey {
+                    MasterPublicKey {
                         algorithm_id: AlgorithmId::EcdsaSecp256k1,
                         public_key: b"abababab".to_vec(),
                     },

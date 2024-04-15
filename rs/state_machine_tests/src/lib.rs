@@ -98,7 +98,7 @@ use ic_types::crypto::threshold_sig::ni_dkg::{
 };
 pub use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::crypto::{
-    canister_threshold_sig::MasterEcdsaPublicKey, AlgorithmId, CombinedThresholdSig,
+    canister_threshold_sig::MasterPublicKey, AlgorithmId, CombinedThresholdSig,
     CombinedThresholdSigOf, KeyPurpose, Signable, Signed,
 };
 use ic_types::malicious_flags::MaliciousFlags;
@@ -591,7 +591,7 @@ pub struct StateMachine {
     checkpoints_enabled: std::sync::atomic::AtomicBool,
     nonce: std::sync::atomic::AtomicU64,
     time: std::sync::atomic::AtomicU64,
-    ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
+    ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterPublicKey>,
     replica_logger: ReplicaLogger,
     pub nodes: Vec<StateMachineNode>,
 }
@@ -1176,7 +1176,7 @@ impl StateMachine {
         for ecdsa_key in ecdsa_keys {
             ecdsa_subnet_public_keys.insert(
                 ecdsa_key,
-                MasterEcdsaPublicKey {
+                MasterPublicKey {
                     algorithm_id: AlgorithmId::EcdsaSecp256k1,
                     public_key: ecdsa_secret_key.public_key().serialize_sec1(true),
                 },
@@ -1188,7 +1188,7 @@ impl StateMachine {
                 curve: EcdsaCurve::Secp256k1,
                 name: "master_ecdsa_public_key".to_string(),
             },
-            MasterEcdsaPublicKey {
+            MasterPublicKey {
                 algorithm_id: AlgorithmId::EcdsaSecp256k1,
                 public_key: ecdsa_secret_key.public_key().serialize_sec1(true),
             },

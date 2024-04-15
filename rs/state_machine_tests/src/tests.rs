@@ -80,7 +80,7 @@ fn check_derived_signature() {
 #[test]
 fn public_derivation_path() {
     use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
-    use ic_types::crypto::canister_threshold_sig::MasterEcdsaPublicKey;
+    use ic_types::crypto::canister_threshold_sig::MasterPublicKey;
     use ic_types::crypto::AlgorithmId;
     use ic_types::PrincipalId;
 
@@ -90,7 +90,7 @@ fn public_derivation_path() {
     let ecdsa_secret_key: PrivateKey =
         PrivateKey::deserialize_sec1(private_key_bytes.as_slice()).unwrap();
 
-    let master_public_key = MasterEcdsaPublicKey {
+    let master_public_key = MasterPublicKey {
         algorithm_id: AlgorithmId::EcdsaSecp256k1,
         public_key: ecdsa_secret_key.public_key().serialize_sec1(true),
     };
@@ -116,9 +116,12 @@ fn public_derivation_path() {
         .expect("couldn't derive ecdsa public key");
 
     assert_eq!(
-        ic_crypto_tecdsa::derive_tecdsa_public_key(&master_public_key, &extended_derivation_path)
-            .expect("failed to derive tecdsa key")
-            .public_key,
+        ic_crypto_tecdsa::derive_threshold_public_key(
+            &master_public_key,
+            &extended_derivation_path
+        )
+        .expect("failed to derive tecdsa key")
+        .public_key,
         derived_public_key_bytes.derived_public_key
     );
 }

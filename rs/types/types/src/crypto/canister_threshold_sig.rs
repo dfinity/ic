@@ -20,13 +20,13 @@ pub mod idkg;
 #[cfg(test)]
 mod tests;
 
-/// A threshold ECDSA public key.
+/// A public key for canister threshold signatures.
 ///
 /// The public key itself is stored as raw bytes.
 ///
-/// The chain key is included for BIP32-style key derivation
+/// The chain key is included for BIP32-style key derivation.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct EcdsaPublicKey {
+pub struct PublicKey {
     pub algorithm_id: AlgorithmId,
     #[serde(with = "serde_bytes")]
     pub public_key: Vec<u8>,
@@ -34,11 +34,11 @@ pub struct EcdsaPublicKey {
     pub chain_key: Vec<u8>,
 }
 
-/// A threshold ECDSA public key.
+/// A master public key for canister threshold signatures.
 ///
 /// The public key itself is stored as raw bytes.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct MasterEcdsaPublicKey {
+pub struct MasterPublicKey {
     pub algorithm_id: AlgorithmId,
     #[serde(with = "serde_bytes")]
     pub public_key: Vec<u8>,

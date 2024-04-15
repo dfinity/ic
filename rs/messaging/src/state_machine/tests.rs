@@ -20,7 +20,7 @@ use ic_test_utilities_types::{
 };
 use ic_types::consensus::ecdsa::QuadrupleId;
 use ic_types::messages::SignedIngress;
-use ic_types::{batch::BatchMessages, crypto::canister_threshold_sig::MasterEcdsaPublicKey};
+use ic_types::{batch::BatchMessages, crypto::canister_threshold_sig::MasterPublicKey};
 use ic_types::{Height, PrincipalId, SubnetId, Time};
 use maplit::btreemap;
 use mockall::{mock, predicate::*, Sequence};
@@ -34,7 +34,7 @@ mock! {
             &self,
             state: ic_replicated_state::ReplicatedState,
             randomness: ic_types::Randomness,
-            ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
+            ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterPublicKey>,
             ecdsa_quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<QuadrupleId>>,
             current_round: ExecutionRound,
             next_checkpoint_round: Option<ExecutionRound>,

@@ -2,7 +2,7 @@
 
 use assert_matches::assert_matches;
 use ic_crypto_internal_threshold_sig_ecdsa::*;
-use ic_types::crypto::canister_threshold_sig::MasterEcdsaPublicKey;
+use ic_types::crypto::canister_threshold_sig::MasterPublicKey;
 use ic_types::crypto::AlgorithmId;
 use ic_types::{NumberOfNodes, Randomness};
 use rand::{seq::IteratorRandom, Rng};
@@ -899,18 +899,21 @@ impl EcdsaSignatureProtocolSetup {
         })
     }
 
-    pub fn public_key(&self, path: &DerivationPath) -> Result<EcdsaPublicKey, ThresholdEcdsaError> {
+    pub fn public_key(&self, path: &DerivationPath) -> Result<PublicKey, ThresholdEcdsaError> {
         let mpk_alg = match self.setup.alg {
             AlgorithmId::ThresholdEcdsaSecp256r1 => AlgorithmId::EcdsaP256,
             AlgorithmId::ThresholdEcdsaSecp256k1 => AlgorithmId::EcdsaSecp256k1,
             _ => panic!("Unknown algorithm in ProtocolSetup"),
         };
-        let master_public_key = MasterEcdsaPublicKey {
+        let master_public_key = MasterPublicKey {
             algorithm_id: mpk_alg,
             public_key: self.key.transcript.constant_term().serialize(),
         };
-        ic_crypto_internal_threshold_sig_ecdsa::derive_ecdsa_public_key(&master_public_key, path)
-            .map_err(|e| ThresholdEcdsaError::InvalidArguments(format!("{:?}", e)))
+        ic_crypto_internal_threshold_sig_ecdsa::derive_threshold_public_key(
+            &master_public_key,
+            path,
+        )
+        .map_err(|e| ThresholdEcdsaError::InvalidArguments(format!("{:?}", e)))
     }
 
     pub fn alg(&self) -> AlgorithmId {

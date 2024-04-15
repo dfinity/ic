@@ -3,7 +3,7 @@
 use crate::consensus::metrics::EcdsaPayloadMetrics;
 use crate::ecdsa::complaints::{EcdsaTranscriptLoader, TranscriptLoadStatus};
 use ic_consensus_utils::pool_reader::PoolReader;
-use ic_crypto::get_tecdsa_master_public_key;
+use ic_crypto::get_master_public_key_from_transcript;
 use ic_interfaces::consensus_pool::ConsensusBlockChain;
 use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaChangeSet, EcdsaPool};
 use ic_interfaces_registry::RegistryClient;
@@ -26,7 +26,7 @@ use ic_types::consensus::{
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgTranscript, IDkgTranscriptOperation, InitialIDkgDealings,
 };
-use ic_types::crypto::canister_threshold_sig::{ExtendedDerivationPath, MasterEcdsaPublicKey};
+use ic_types::crypto::canister_threshold_sig::{ExtendedDerivationPath, MasterPublicKey};
 use ic_types::registry::RegistryClientError;
 use ic_types::{Height, RegistryVersion, SubnetId};
 use phantom_newtype::Id;
@@ -442,7 +442,7 @@ pub(crate) fn get_ecdsa_subnet_public_key(
     block: &Block,
     pool: &PoolReader<'_>,
     log: &ReplicaLogger,
-) -> Result<BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>, String> {
+) -> Result<BTreeMap<EcdsaKeyId, MasterPublicKey>, String> {
     let Some(ecdsa_payload) = block.payload.as_ref().as_ecdsa() else {
         return Ok(BTreeMap::new());
     };
@@ -491,8 +491,8 @@ pub(crate) fn get_ecdsa_subnet_public_key(
 fn get_ecdsa_subnet_public_key_(
     transcript: &IDkgTranscript,
     log: &ReplicaLogger,
-) -> Option<MasterEcdsaPublicKey> {
-    match get_tecdsa_master_public_key(transcript) {
+) -> Option<MasterPublicKey> {
+    match get_master_public_key_from_transcript(transcript) {
         Ok(public_key) => Some(public_key),
         Err(err) => {
             warn!(log, "Failed to retrieve ECDSA subnet public key: {:?}", err);
