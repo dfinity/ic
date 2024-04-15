@@ -2,7 +2,7 @@ load("@rules_motoko//motoko:defs.bzl", "motoko_binary", "motoko_library")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:candid.bzl", "did_git_test")
 load("//bazel:canisters.bzl", "rust_canister")
-load("//bazel:defs.bzl", "rust_ic_test")
+load("//bazel:defs.bzl", "rust_ic_test_suite")
 load("//bazel:prost.bzl", "generated_files_check")
 
 package(default_visibility = ["//visibility:public"])
@@ -86,30 +86,49 @@ rust_canister(
     ],
 )
 
-rust_ic_test(
+rust_ic_test_suite(
     name = "ledger_canister_integration_test",
     timeout = "long",
-    srcs = ["test/test.rs"],
+    srcs = [
+        "test/test.rs",
+        "test/upgrade_downgrade.rs",
+    ],
     data = [
         "ledger.did",
         "ledger_archive.did",
         ":ledger_proxy.wasm",
         ":test_notified_canister",
+        "//rs/pocket_ic_server:pocket-ic-server",
+        "//rs/rosetta-api/icp_ledger/archive:ledger-archive-node-canister-wasm",
+        "//rs/rosetta-api/icp_ledger/index:ic-icp-index-canister",
         "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm",
         "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method",
+        "@mainnet_icp_index_canister//file",
+        "@mainnet_icp_ledger-archive-node-canister//file",
+        "@mainnet_icp_ledger_canister//file",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/rosetta-api/icp_ledger",
+        "IC_ICP_INDEX_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/index:ic-icp-index-canister)",
+        "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/archive:ledger-archive-node-canister-wasm)",
         "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm)",
         "LEDGER_PROXY_WASM_PATH": "$(rootpath :ledger_proxy.wasm)",
         "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method)",
+        "MAINNET_ICP_LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath @mainnet_icp_ledger-archive-node-canister//file)",
+        "MAINNET_ICP_LEDGER_CANISTER_WASM_PATH": "$(rootpath @mainnet_icp_ledger_canister//file)",
+        "MAINNET_ICP_INDEX_CANISTER_WASM_PATH": "$(rootpath @mainnet_icp_index_canister//file)",
         "TEST_NOTIFIED_WASM_PATH": "$(rootpath :test_notified_canister)",
+        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
     },
     deps = [
         ":icp_ledger",
         "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
         "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//packages/pocket-ic",
         "//rs/canister_client/sender",
+        "//rs/nns/constants",
+        "//rs/rosetta-api/icp_ledger/index:ic-icp-index",
+        "//rs/rosetta-api/icp_ledger/test_utils",
         "//rs/rosetta-api/ledger_canister_core",
         "//rs/rosetta-api/ledger_core",
         "//rs/rust_canisters/canister_test",
@@ -120,6 +139,8 @@ rust_ic_test(
         "//rs/types/base_types",
         "@crate_index//:candid",
         "@crate_index//:candid_parser",
+        "@crate_index//:hex",
+        "@crate_index//:maplit",
         "@crate_index//:rand",
         "@crate_index//:rand_chacha",
         "@crate_index//:serde",
