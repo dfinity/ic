@@ -57,8 +57,6 @@ struct OngoingStateSync {
     chunks_to_download: Box<dyn Iterator<Item = ChunkId> + Send>,
     // Event tasks
     downloading_chunks: JoinMap<ChunkId, DownloadResult>,
-    // State sync
-    state_sync_finished: bool,
 }
 
 pub(crate) struct OngoingStateSyncHandle {
@@ -69,7 +67,7 @@ pub(crate) struct OngoingStateSyncHandle {
 
 pub(crate) struct DownloadResult {
     peer_id: NodeId,
-    result: Result<bool, DownloadChunkError>,
+    result: Result<(), DownloadChunkError>,
 }
 
 pub(crate) fn start_ongoing_state_sync<T: Send + 'static>(
@@ -92,7 +90,6 @@ pub(crate) fn start_ongoing_state_sync<T: Send + 'static>(
         allowed_downloads: 0,
         chunks_to_download: Box::new(std::iter::empty()),
         downloading_chunks: JoinMap::new(),
-        state_sync_finished: false,
     };
 
     let shutdown = Shutdown::spawn_on_with_cancellation(
@@ -162,13 +159,8 @@ impl OngoingStateSync {
             self.metrics
                 .peers_serving_state
                 .set(self.active_downloads.len() as i64);
-            if self.state_sync_finished || self.active_downloads.is_empty() {
-                info!(
-                    self.log,
-                    "Stopping ongoing state sync because: finished: {}; no peers: {};",
-                    self.state_sync_finished,
-                    self.active_downloads.is_empty(),
-                );
+            if self.active_downloads.is_empty() {
+                info!(self.log, "Stopping ongoing state sync because no peers.",);
                 break;
             }
         }
@@ -186,10 +178,7 @@ impl OngoingStateSync {
         self.metrics.record_chunk_download_result(&result);
         match result {
             // Received chunk
-            Ok(true) => {
-                self.state_sync_finished = true;
-            }
-            Ok(false) => {}
+            Ok(()) => {}
             Err(DownloadChunkError::NoContent) => {
                 if self.active_downloads.remove(&peer_id).is_some() {
                     self.allowed_downloads -= PARALLEL_CHUNK_DOWNLOADS;
@@ -331,8 +320,7 @@ impl OngoingStateSync {
                     chunk_id,
                     err: err.to_string(),
                 }
-            })?;
-            Ok(tracker_guard.completed())
+            })
         })
         .await
         .map_err(|err| DownloadChunkError::RequestError {
@@ -484,7 +472,6 @@ mod tests {
             c.expect_chunks_to_download()
                 .returning(|| Box::new(std::iter::once(ChunkId::from(1))));
             c.expect_add_chunk().return_const(Ok(()));
-            c.expect_completed().return_const(false);
 
             let rt = Runtime::new().unwrap();
             let ongoing = start_ongoing_state_sync(
