@@ -833,7 +833,7 @@ impl WasmtimeInstance {
                 })?
                 .get(&mut self.store, closure.func_idx)
                 .ok_or(HypervisorError::FunctionNotFound(0, closure.func_idx))?
-                .funcref()
+                .as_func()
                 .ok_or_else(|| {
                     HypervisorError::ContractViolation("not a function reference".to_string())
                 })?
