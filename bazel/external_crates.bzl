@@ -1388,19 +1388,20 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.2.50",
             ),
             "wasmtime": crate.spec(
-                version = "^18.0.2",
+                version = "^19.0.1",
                 default_features = False,
                 features = [
                     "cranelift",
+                    "gc",
                     "parallel-compilation",
                     "runtime",
                 ],
             ),
             "wasmtime-environ": crate.spec(
-                version = "^18.0.2",
+                version = "^19.0.1",
             ),
             "wasmtime-runtime": crate.spec(
-                version = "^18.0.2",
+                version = "^19.0.1",
             ),
             "wast": crate.spec(
                 version = "^53.0.0",

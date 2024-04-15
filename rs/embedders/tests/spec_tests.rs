@@ -2,8 +2,8 @@ use std::{ffi::OsString, fmt::Write, fs, path::PathBuf};
 
 use ic_embedders::wasm_utils::validation::wasmtime_validation_config;
 use wasmtime::{
-    Config, Engine, Global, GlobalType, Instance, Linker, Memory, MemoryType, Mutability, Store,
-    Table, TableType, Val, ValType,
+    Config, Engine, Global, GlobalType, Instance, Linker, Memory, MemoryType, Mutability, Ref,
+    RefType, Store, Table, TableType, Val, ValType,
 };
 use wast::{
     parser::ParseBuffer,
@@ -296,8 +296,8 @@ fn define_spectest_exports(linker: &mut Linker<()>, mut store: &mut Store<()>) {
 
     let table = Table::new(
         &mut store,
-        TableType::new(ValType::FuncRef, 10, Some(20)),
-        Val::FuncRef(None),
+        TableType::new(RefType::FUNCREF, 10, Some(20)),
+        Ref::Func(None),
     )
     .unwrap();
     linker

@@ -413,7 +413,7 @@ fn can_set_and_get_float_globals() {
 }
 
 #[test]
-#[should_panic(expected = "global of type I32 cannot be set to I64")]
+#[should_panic(expected = "attempt to set global to value of wrong type")]
 fn try_to_set_globals_with_wrong_types() {
     let _instance = WasmtimeInstanceBuilder::new()
         .with_wat(
