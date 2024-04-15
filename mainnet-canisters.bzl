@@ -8,7 +8,8 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_file")
 CANISTER_NAME_TO_WASM_METADATA = {
     "governance": ("d9e4d6e91c3675903d7b74b6e097d8f12f41ace3", "7f2a63edf204ff9e8fbb263f927c893e6ddb0c1df6e783a1eaf0d78d63162f2f"),
     "ledger": ("98eb213581b239c3829eee7076bea74acad9937b", "aca61e669e737133b552d0f1ddafc40299f3260daf8f57e352774b17aa82bbc1"),
-    "archive": ("acd7e2928237a8e8bc1aa5e73efd47c8a8dfb556", "569d498b638668733953a756f4a417533e1f513d1d41d55960abcd2f160d2aad"),
+    "archive": ("8d80b3b3703988645a604641f8d600d525bb5c21", "d7229caa5106454413c5382437cfb0864dedc36058611111debf94da0258998b"),
+    "index": ("463296c0bc82ad5999b70245e5f125c14ba7d090", "8157f5cba913d9db25a2c54ebf823d4edcc50cce00b97a18e5d33c2f73e59c93"),
     "root": ("7a3db052ed4c3306272ed372039d9775f189c0bc", "c18561e245a42b28add7e36d8fdd51affed75fc3e855f01d466354c9dd222f88"),
     "lifeline": ("87f48a595b6f666fbc7fe6ad4081aa98fd113d12", "6d3029dcd359f80cd64bb68bbc8bd95b810b08bd29b9ef1054118a5285f2abc5"),
     "genesis-token": ("87f48a595b6f666fbc7fe6ad4081aa98fd113d12", "dd71862512af57e938e01810be016e17431912d9ca0ea3952bc04015eb02acc4"),
@@ -72,6 +73,14 @@ def mainnet_core_nns_canisters():
         downloaded_file_path = "ledger-archive-node-canister.wasm.gz",
         sha256 = sha256,
         url = canister_url(git_commit_id, "ledger-archive-node-canister.wasm.gz"),
+    )
+
+    git_commit_id, sha256 = CANISTER_NAME_TO_WASM_METADATA["index"]
+    http_file(
+        name = "mainnet_icp_index_canister",
+        downloaded_file_path = "ic-icp-index-canister.wasm.gz",
+        sha256 = sha256,
+        url = canister_url(git_commit_id, "ic-icp-index-canister.wasm.gz"),
     )
 
     git_commit_id, sha256 = CANISTER_NAME_TO_WASM_METADATA["root"]

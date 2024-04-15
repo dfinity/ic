@@ -8700,7 +8700,18 @@ dependencies = [
 name = "ic-ledger-test-utils"
 version = "0.9.0"
 dependencies = [
+ "candid",
+ "candid_parser",
  "canister-test",
+ "ic-base-types",
+ "ic-icp-index",
+ "ic-ledger-core",
+ "ic-nns-constants",
+ "icp-ledger",
+ "icrc-ledger-types",
+ "maplit",
+ "pocket-ic",
+ "serde",
 ]
 
 [[package]]
@@ -12374,15 +12385,20 @@ dependencies = [
  "ic-canister-client-sender",
  "ic-canisters-http-types",
  "ic-crypto-sha2",
+ "ic-icp-index",
  "ic-ledger-canister-core",
  "ic-ledger-core",
  "ic-ledger-hash-of",
+ "ic-ledger-test-utils",
+ "ic-nns-constants",
  "ic-test-utilities-compare-dirs",
  "icrc-ledger-types",
  "lazy_static",
  "ledger-canister-protobuf-generator",
+ "maplit",
  "num-traits",
  "on_wire",
+ "pocket-ic",
  "proptest",
  "prost",
  "prost-derive",
