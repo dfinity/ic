@@ -299,7 +299,8 @@ fn make_new_quadruples_if_needed_helper(
         let quadruples_in_creation = &mut ecdsa_payload.quadruples_in_creation;
         let uid_generator = &mut ecdsa_payload.uid_generator;
         for _ in 0..(quadruples_to_create - unassigned_quadruples) {
-            let kappa_config = new_random_config(subnet_nodes, registry_version, uid_generator);
+            let kappa_config =
+                new_random_unmasked_config(subnet_nodes, registry_version, uid_generator);
             let lambda_config = new_random_config(subnet_nodes, registry_version, uid_generator);
             quadruples_in_creation.insert(
                 uid_generator.next_quadruple_id(),
@@ -370,7 +371,7 @@ pub(super) mod test_utils {
         NodeId, RegistryVersion,
     };
 
-    pub fn create_new_quadruple_in_creation(
+    pub fn create_new_quadruple_in_creation_masked_kappa(
         subnet_nodes: &[NodeId],
         registry_version: RegistryVersion,
         uid_generator: &mut ecdsa::EcdsaUIDGenerator,
@@ -381,7 +382,7 @@ pub(super) mod test_utils {
         let lambda_config_ref = new_random_config(subnet_nodes, registry_version, uid_generator);
         quadruples_in_creation.insert(
             uid_generator.next_quadruple_id(),
-            ecdsa::QuadrupleInCreation::new(
+            ecdsa::QuadrupleInCreation::new_with_masked_kappa(
                 key_id,
                 kappa_config_ref.clone(),
                 lambda_config_ref.clone(),
@@ -390,11 +391,11 @@ pub(super) mod test_utils {
         (kappa_config_ref, lambda_config_ref)
     }
 
-    pub fn create_new_quadruple_in_creation_unmasked_kappa(
+    pub fn create_new_quadruple_in_creation(
         subnet_nodes: &[NodeId],
         registry_version: RegistryVersion,
         uid_generator: &mut ecdsa::EcdsaUIDGenerator,
-        _key_id: EcdsaKeyId,
+        key_id: EcdsaKeyId,
         quadruples_in_creation: &mut BTreeMap<ecdsa::QuadrupleId, ecdsa::QuadrupleInCreation>,
     ) -> (
         ecdsa::RandomUnmaskedTranscriptParams,
@@ -405,7 +406,8 @@ pub(super) mod test_utils {
         let lambda_config_ref = new_random_config(subnet_nodes, registry_version, uid_generator);
         quadruples_in_creation.insert(
             uid_generator.next_quadruple_id(),
-            ecdsa::QuadrupleInCreation::new_with_unmasked_kappa(
+            ecdsa::QuadrupleInCreation::new(
+                key_id,
                 kappa_config_ref.clone(),
                 lambda_config_ref.clone(),
             ),
@@ -580,11 +582,11 @@ pub(super) mod tests {
         // Verify the generated transcript ids.
         let mut transcript_ids = BTreeSet::new();
         for quadruple in &ecdsa_payload.quadruples_in_creation {
-            let kappa_masked_config = quadruple.1.kappa_masked_config.clone().unwrap();
-            let kappa_transcript_id = kappa_masked_config.as_ref().transcript_id;
+            assert_quadruple_unmasked_kappa(Some(quadruple.1));
+            let kappa_unmasked_config = quadruple.1.kappa_unmasked_config.clone().unwrap();
+            let kappa_transcript_id = kappa_unmasked_config.as_ref().transcript_id;
             transcript_ids.insert(kappa_transcript_id);
             transcript_ids.insert(quadruple.1.lambda_config.as_ref().transcript_id);
-            assert_eq!(quadruple.1.kappa_unmasked_config, None);
         }
         assert_eq!(transcript_ids.len(), 2 * expected_quadruples_in_creation);
         assert_eq!(
@@ -605,7 +607,7 @@ pub(super) mod tests {
     }
 
     #[test]
-    fn test_ecdsa_update_quadruples_in_creation() {
+    fn test_ecdsa_update_quadruples_in_creation_masked_kappa() {
         let mut rng = reproducible_rng();
         let subnet_id = subnet_test_id(1);
         let key_id = fake_ecdsa_key_id();
@@ -614,7 +616,7 @@ pub(super) mod tests {
         let transcript_builder = TestEcdsaTranscriptBuilder::new();
 
         // Start quadruple creation
-        let (kappa_config_ref, lambda_config_ref) = create_new_quadruple_in_creation(
+        let (kappa_config_ref, lambda_config_ref) = create_new_quadruple_in_creation_masked_kappa(
             &env.nodes.ids::<Vec<_>>(),
             env.newest_registry_version,
             &mut payload.uid_generator,
@@ -808,7 +810,7 @@ pub(super) mod tests {
     }
 
     #[test]
-    fn test_ecdsa_update_quadruples_in_creation_unmasked_kappa() {
+    fn test_ecdsa_update_quadruples_in_creation() {
         let mut rng = reproducible_rng();
         let subnet_id = subnet_test_id(1);
         let key_id = fake_ecdsa_key_id();
@@ -817,14 +819,13 @@ pub(super) mod tests {
         let transcript_builder = TestEcdsaTranscriptBuilder::new();
 
         // Start quadruple creation
-        let (kappa_unmasked_config_ref, lambda_config_ref) =
-            create_new_quadruple_in_creation_unmasked_kappa(
-                &env.nodes.ids::<Vec<_>>(),
-                env.newest_registry_version,
-                &mut payload.uid_generator,
-                key_id,
-                &mut payload.quadruples_in_creation,
-            );
+        let (kappa_unmasked_config_ref, lambda_config_ref) = create_new_quadruple_in_creation(
+            &env.nodes.ids::<Vec<_>>(),
+            env.newest_registry_version,
+            &mut payload.uid_generator,
+            key_id,
+            &mut payload.quadruples_in_creation,
+        );
 
         // 0. No action case
         let cur_height = Height::new(1000);
