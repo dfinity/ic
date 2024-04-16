@@ -7,9 +7,7 @@ use ic_nervous_system_common::{E8, UNITS_PER_PERMYRIAD};
 use ic_nervous_system_runtime::{CdkRuntime, Runtime};
 use ic_nervous_system_string::clamp_debug_len;
 use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID};
-use ic_sns_swap_proto_library::pb::v1::{
-    GetDerivedStateRequest, GetDerivedStateResponse, GetInitRequest, GetInitResponse,
-};
+use ic_sns_swap_proto_library::pb::v1::{GetDerivedStateRequest, GetDerivedStateResponse};
 use icrc_ledger_types::icrc1::account::Account;
 use mockall::automock;
 use rust_decimal::Decimal;
@@ -307,20 +305,16 @@ impl<MyRuntime: Runtime + Send + Sync> IcpsPerSnsTokenClient<MyRuntime> {
     }
 
     async fn fetch_icps_per_sns_token(&self) -> Result<Decimal, ValuationError> {
-        // Call get_derived_state and get_init.
-        let (get_derived_state_response, get_init_response) = join!(
-            self.call(GetDerivedStateRequest {}),
-            self.call(GetInitRequest {}),
-        );
+        // Call swap's get_derived_state method.
+        let get_derived_state_response = self.call(GetDerivedStateRequest {}).await?;
 
-        // Unwrap responses, and if there were errors, return Err.
-        let get_derived_state_response = get_derived_state_response?;
-        let get_init_response = get_init_response?;
-
-        // Read the relevant fields out of the responses.
-        let buyer_total_icp_e8s =
+        // Read the relevant fields out of the responses. Here, a floating point field is used. In
+        // general, floating point should not be used for financial accounting, but it is ok here,
+        // because we are using this to come up with a valuation, and valuations are not super
+        // precise in the same way that (for example) a bank account balance is supposed to be.
+        let sns_tokens_per_icp: f64 =
             get_derived_state_response
-                .buyer_total_icp_e8s
+                .sns_tokens_per_icp
                 .ok_or_else(|| {
                     ValuationError::new_mismatch(format!(
                         "Response from swap ({}) get_derived_state call did not \
@@ -328,36 +322,23 @@ impl<MyRuntime: Runtime + Send + Sync> IcpsPerSnsTokenClient<MyRuntime> {
                         self.swap_canister_id, get_derived_state_response,
                     ))
                 })?;
-        let sns_token_e8s = get_init_response
-            .init
-            .ok_or_else(|| {
-                ValuationError::new_mismatch(format!(
-                    "init field in GetInitResponse from swap canister {} empty.",
-                    self.swap_canister_id,
-                ))
-            })?
-            .sns_token_e8s
-            .ok_or_else(|| {
-                ValuationError::new_mismatch(format!(
-                    "init.sns_token_e8es field in GetInitResponse from swap canister {} empty.",
-                    self.swap_canister_id,
-                ))
-            })?;
 
-        // Prepare to divide (for final result) by first converting to Decimal.
-        let buyer_total_icp_e8s = Decimal::from(buyer_total_icp_e8s);
-        let sns_token_e8s = Decimal::from(sns_token_e8s);
+        // Convert data type.
+        let sns_tokens_per_icp = Decimal::from_f64_retain(sns_tokens_per_icp).ok_or_else(|| {
+            ValuationError::new_arithmetic(format!(
+                "Unable to convert sns_tokens_per_icp {} (double precision \
+                 floating point) to Decimal.",
+                sns_tokens_per_icp,
+            ))
+        })?;
 
-        buyer_total_icp_e8s
-            .checked_div(sns_token_e8s)
-            // Swap is supposed to ensure that 0 is not returned. Therefore, this is just defense in
-            // depth.
+        // Raise to the -1 power.
+        Decimal::from(1)
+            .checked_div(sns_tokens_per_icp)
             .ok_or_else(|| {
                 ValuationError::new_arithmetic(format!(
-                    "Unable to determine the price of an SNS token (with respect to ICP), \
-                     because the sns_token_e8s field in the GetInitResponse from swap canister \
-                     ({}) was zero.",
-                    self.swap_canister_id,
+                    "Unable to perform 1 / sns_tokens_per_icp (where sns_tokens_per_icp = {}).",
+                    sns_tokens_per_icp,
                 ))
             })
     }
@@ -459,11 +440,6 @@ trait Request: CandidType + Send {
 impl Request for GetDerivedStateRequest {
     const METHOD_NAME: &'static str = "get_derived_state";
     type MyResponse = GetDerivedStateResponse;
-}
-
-impl Request for GetInitRequest {
-    const METHOD_NAME: &'static str = "get_init";
-    type MyResponse = GetInitResponse;
 }
 
 async fn call<MyRequest, MyRuntime>(

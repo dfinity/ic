@@ -893,7 +893,8 @@ pub struct DerivedState {
     /// the Neurons' Fund have the same controller.
     #[prost(uint64, optional, tag = "5")]
     pub cf_neuron_count: ::core::option::Option<u64>,
-    /// Current approximate rate SNS tokens per ICP.
+    /// Current approximate rate SNS tokens per ICP. Note that this should not be used for super
+    /// precise financial accounting, because this is floating point.
     #[prost(float, tag = "2")]
     pub sns_tokens_per_icp: f32,
     /// Current amount of contributions from direct swap participants.
