@@ -89,6 +89,7 @@ const METRIC_TIMED_OUT_REQUESTS_TOTAL: &str = "mr_timed_out_requests_total";
 const METRIC_SUBNET_SPLIT_HEIGHT: &str = "mr_subnet_split_height";
 const BLOCKS_PROPOSED_TOTAL: &str = "mr_blocks_proposed_total";
 const BLOCKS_NOT_PROPOSED_TOTAL: &str = "mr_blocks_not_proposed_total";
+const METRIC_NEXT_CHECKPOINT_HEIGHT: &str = "mr_next_checkpoint_height";
 
 const METRIC_WASM_CUSTOM_SECTIONS_MEMORY_USAGE_BYTES: &str =
     "mr_wasm_custom_sections_memory_usage_bytes";
@@ -315,6 +316,9 @@ pub(crate) struct MessageRoutingMetrics {
 
     /// Metrics for query stats aggregator
     pub query_stats_metrics: QueryStatsAggregatorMetrics,
+
+    /// Metrics for the `next_checkpoint_height` passed to `process_batch`.
+    next_checkpoint_height: IntGauge,
 }
 
 impl MessageRoutingMetrics {
@@ -400,6 +404,11 @@ impl MessageRoutingMetrics {
                 .error_counter(CRITICAL_ERROR_NON_INCREASING_BATCH_TIME),
 
             query_stats_metrics: QueryStatsAggregatorMetrics::new(metrics_registry),
+
+            next_checkpoint_height: metrics_registry.int_gauge(
+                METRIC_NEXT_CHECKPOINT_HEIGHT,
+                "Next checkpoint height passed to process_batch."
+            ),
         }
     }
 
@@ -1064,6 +1073,13 @@ impl BatchProcessor for BatchProcessorImpl {
                 self.state_manager.latest_state_height()
             ),
         };
+
+        if let Some(next_checkpoint) = batch.next_checkpoint_height {
+            self.metrics
+                .next_checkpoint_height
+                .set(next_checkpoint.get() as i64);
+        }
+
         // If the subnet is starting up after a split, execute splitting phase 2.
         if let Some(split_from) = state.metadata.split_from {
             info!(
