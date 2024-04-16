@@ -2405,7 +2405,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "label_replace(\nlabel_replace(\n  quic_transport_quinn_path_rtt_duration{job=\"replica\", ic=\"$ic\", ic_subnet=~\"$ic_subnet\", instance=~\"$instance\"},\n  \"ic_node\", \"$1\", \"ic_node\", \"(.*?)-.*-(.*?)\"),\n  \"peer\", \"$1\", \"peer\", \"(.*?)-.*-(.*?)\"\n)\n",
+          "expr": "label_replace(\nlabel_replace(\n  quic_transport_quinn_path_rtt_seconds{job=\"replica\", ic=\"$ic\", ic_subnet=~\"$ic_subnet\", instance=~\"$instance\"},\n  \"ic_node\", \"$1\", \"ic_node\", \"(.*?)-.*-(.*?)\"),\n  \"peer\", \"$1\", \"peer\", \"(.*?)-.*-(.*?)\"\n)\n",
           "interval": "",
           "legendFormat": "{{ic_node}} <-> {{peer}}",
           "range": true,
@@ -2480,9 +2480,9 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 90
+        "y": 91
       },
-      "id": 66,
+      "id": 87,
       "interval": "10s",
       "options": {
         "legend": {
@@ -2505,7 +2505,7 @@
           },
           "editorMode": "code",
           "exemplar": true,
-          "expr": "label_replace(\n  (\n    label_replace(\n    (\n      quic_transport_quinn_path_congestion_window{job=\"replica\", ic=\"$ic\", ic_subnet=~\"$ic_subnet\", instance=~\"$instance\"}\n      /\n      quic_transport_quinn_path_rtt_duration{job=\"replica\", ic=\"$ic\", ic_subnet=~\"$ic_subnet\", instance=~\"$instance\"}      \n    ),\n    \"ic_node\", \"$1\", \"ic_node\", \"(.*?)-.*-(.*?)\")\n  ),\n  \"peer\", \"$1\", \"peer\", \"(.*?)-.*-(.*?)\"\n)\n",
+          "expr": "label_replace(\n  (\n    label_replace(\n    (\n      quic_transport_quinn_path_congestion_window{job=\"replica\", ic=\"$ic\", ic_subnet=~\"$ic_subnet\", instance=~\"$instance\"}\n      /\n      quic_transport_quinn_path_rtt_seconds{job=\"replica\", ic=\"$ic\", ic_subnet=~\"$ic_subnet\", instance=~\"$instance\"}      \n    ),\n    \"ic_node\", \"$1\", \"ic_node\", \"(.*?)-.*-(.*?)\")\n  ),\n  \"peer\", \"$1\", \"peer\", \"(.*?)-.*-(.*?)\"\n)\n",
           "interval": "",
           "legendFormat": "{{ic_node}} <-> {{peer}}",
           "range": true,
@@ -2517,12 +2517,312 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "000000001"
+      },
+      "description": "Estimate of available bandwidth between nodes. Calculated with `CWND`/`RTT`.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "links": [],
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 99
+      },
+      "id": 88,
+      "interval": "10s",
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "asc"
+        }
+      },
+      "pluginVersion": "9.5.5",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "exemplar": true,
+          "expr": "label_replace(\n  (\n    label_replace(\n    (\n      rate(quic_transport_quinn_path_lost_packets{job=\"replica\", ic=\"$ic\", ic_subnet=~\"$ic_subnet\", instance=~\"$instance\"}[$period])/\n      rate(quic_transport_quinn_path_sent_packets{job=\"replica\", ic=\"$ic\", ic_subnet=~\"$ic_subnet\", instance=~\"$instance\"}[$period])\n    ),\n    \"ic_node\", \"$1\", \"ic_node\", \"(.*?)-.*-(.*?)\")\n  ),\n  \"peer\", \"$1\", \"peer\", \"(.*?)-.*-(.*?)\"\n)\n",
+          "interval": "",
+          "legendFormat": "{{ic_node}} <-> {{peer}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "packet loss path",
+      "transparent": true,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "000000001"
+      },
+      "description": "Estimate of available bandwidth between nodes. Calculated with `CWND`/`RTT`.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "links": [],
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "pps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 99
+      },
+      "id": 89,
+      "interval": "10s",
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "asc"
+        }
+      },
+      "pluginVersion": "9.5.5",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "exemplar": true,
+          "expr": "label_replace(\nlabel_replace(\n  sum by (peer,instance,ic_subnet) (rate(quic_transport_quinn_path_sent_packets{job=\"replica\", ic=\"$ic\", ic_subnet=~\"$ic_subnet\", instance=~\"$instance\"}[$period])),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([^-]+)-.*\"),\n  \"instance\", \"$1:...:$2\", \"instance\", \"(\\\\[(?:[^:]+[.:]){4}).*(:[^:]+\\\\]?):[0-9]+\"\n)",
+          "interval": "",
+          "legendFormat": "{{ic_subnet}} {{instance}} ",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "packet send rate",
+      "transparent": true,
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "000000001"
+      },
+      "description": "Estimate of available bandwidth between nodes. Calculated with `CWND`/`RTT`.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "links": [],
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "pps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 107
+      },
+      "id": 90,
+      "interval": "10s",
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "asc"
+        }
+      },
+      "pluginVersion": "9.5.5",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "editorMode": "code",
+          "exemplar": true,
+          "expr": "label_replace(\nlabel_replace(\n  sum by (peer,instance,ic_subnet) (rate(quic_transport_quinn_path_lost_packets{job=\"replica\", ic=\"$ic\", ic_subnet=~\"$ic_subnet\", instance=~\"$instance\"}[$period])),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([^-]+)-.*\"),\n  \"instance\", \"$1:...:$2\", \"instance\", \"(\\\\[(?:[^:]+[.:]){4}).*(:[^:]+\\\\]?):[0-9]+\"\n)",
+          "interval": "",
+          "legendFormat": "{{ic_subnet}} {{instance}} ",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "packet loss rate",
+      "transparent": true,
+      "type": "timeseries"
+    },
+    {
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 99
+        "y": 115
       },
       "id": 54,
       "panels": [],
@@ -2586,38 +2886,13 @@
           },
           "unit": "none"
         },
-        "overrides": [
-          {
-            "__systemRef": "hideSeriesFrom",
-            "matcher": {
-              "id": "byNames",
-              "options": {
-                "mode": "exclude",
-                "names": [
-                  "tpang [2600:c00:2:100::...::ecab] accept"
-                ],
-                "prefix": "All except:",
-                "readOnly": true
-              }
-            },
-            "properties": [
-              {
-                "id": "custom.hideFrom",
-                "value": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": true
-                }
-              }
-            ]
-          }
-        ]
+        "overrides": []
       },
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 100
+        "y": 116
       },
       "id": 51,
       "interval": "10s",
@@ -2716,7 +2991,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 100
+        "y": 116
       },
       "id": 52,
       "interval": "10s",
@@ -2815,7 +3090,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 108
+        "y": 124
       },
       "id": 79,
       "interval": "10s",
@@ -2906,7 +3181,7 @@
               }
             ]
           },
-          "unit": "none"
+          "unit": "s"
         },
         "overrides": []
       },
@@ -2914,7 +3189,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 108
+        "y": 124
       },
       "id": 81,
       "interval": "10s",
@@ -3005,7 +3280,7 @@
               }
             ]
           },
-          "unit": "none"
+          "unit": "s"
         },
         "overrides": []
       },
@@ -3013,7 +3288,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 116
+        "y": 132
       },
       "id": 80,
       "interval": "10s",
@@ -3112,7 +3387,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 116
+        "y": 132
       },
       "id": 85,
       "interval": "10s",
@@ -3211,7 +3486,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 124
+        "y": 140
       },
       "id": 86,
       "interval": "10s",
@@ -3253,7 +3528,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 132
+        "y": 148
       },
       "id": 68,
       "panels": [],
@@ -3323,7 +3598,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 133
+        "y": 149
       },
       "id": 53,
       "interval": "10s",
@@ -3422,7 +3697,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 133
+        "y": 149
       },
       "id": 55,
       "interval": "10s",
@@ -3521,7 +3796,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 141
+        "y": 157
       },
       "id": 58,
       "interval": "10s",
@@ -3620,7 +3895,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 141
+        "y": 157
       },
       "id": 56,
       "interval": "10s",
@@ -3719,7 +3994,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 149
+        "y": 165
       },
       "id": 59,
       "interval": "10s",
@@ -3818,7 +4093,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 149
+        "y": 165
       },
       "id": 57,
       "interval": "10s",
@@ -3862,11 +4137,6 @@
   "templating": {
     "list": [
       {
-        "current": {
-          "selected": false,
-          "text": "rejoin_test_large_state--1699863978386",
-          "value": "rejoin_test_large_state--1699863978386"
-        },
         "datasource": {
           "type": "prometheus",
           "uid": "000000001"
@@ -3966,7 +4236,7 @@
         "auto_count": 200,
         "auto_min": "20s",
         "current": {
-          "selected": true,
+          "selected": false,
           "text": "auto",
           "value": "$__auto_interval_period"
         },
