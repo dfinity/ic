@@ -1005,7 +1005,7 @@ fn get_effective_payload(
         | NnsFunction::UninstallCode
         | NnsFunction::UpdateNodeRewardsTable
         | NnsFunction::AddOrRemoveDataCenters
-        | NnsFunction::UpdateUnassignedNodesConfig
+        | NnsFunction::UpdateUnassignedNodesConfig // obsolete
         | NnsFunction::RemoveNodeOperators
         | NnsFunction::RerouteCanisterRanges
         | NnsFunction::PrepareCanisterMigration
@@ -1018,7 +1018,10 @@ fn get_effective_payload(
         | NnsFunction::InsertSnsWasmUpgradePathEntries
         | NnsFunction::AddApiBoundaryNode
         | NnsFunction::RemoveApiBoundaryNodes
-        | NnsFunction::UpdateApiBoundaryNodesVersion => Cow::Borrowed(payload),
+        | NnsFunction::UpdateApiBoundaryNodesVersion // obsolete
+        | NnsFunction::DeployGuestosToAllUnassignedNodes
+        | NnsFunction::UpdateSshReadonlyAccessForAllUnassignedNodes
+        | NnsFunction::DeployGuestosToSomeApiBoundaryNodes => Cow::Borrowed(payload),
     }
 }
 

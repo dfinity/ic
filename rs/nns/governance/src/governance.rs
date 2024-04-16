@@ -591,7 +591,12 @@ impl NnsFunction {
                 (REGISTRY_CANISTER_ID, "add_or_remove_data_centers")
             }
             NnsFunction::UpdateUnassignedNodesConfig => {
-                (REGISTRY_CANISTER_ID, "update_unassigned_nodes_config")
+                // Updating unassigned nodes config proposal is obsoleted and
+                // can no longer be used.
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    format!("{:?} is an obsoleted NnsFunction. Use DeployGuestosToAllUnassignedNodes or UpdateSshReadonlyAccessForAllUnassignedNodes instead", self),
+                ));
             }
             NnsFunction::RemoveNodeOperators => (REGISTRY_CANISTER_ID, "remove_node_operators"),
             NnsFunction::RerouteCanisterRanges => (REGISTRY_CANISTER_ID, "reroute_canister_ranges"),
@@ -629,8 +634,25 @@ impl NnsFunction {
                 (REGISTRY_CANISTER_ID, "remove_api_boundary_nodes")
             }
             NnsFunction::UpdateApiBoundaryNodesVersion => {
+                // Updating API boundary nodes version proposal is obsoleted and
+                // can no longer be used.
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    format!("{:?} is an obsoleted NnsFunction. Use DeployGuestosToSomeApiBoundaryNodes instead", self),
+                ));
+            }
+            NnsFunction::DeployGuestosToSomeApiBoundaryNodes => {
+                // TODO[NNS1-3000]: Rename Registry API for consistency.
                 (REGISTRY_CANISTER_ID, "update_api_boundary_nodes_version")
             }
+            NnsFunction::DeployGuestosToAllUnassignedNodes => (
+                REGISTRY_CANISTER_ID,
+                "deploy_guestos_to_all_unassigned_nodes",
+            ),
+            NnsFunction::UpdateSshReadonlyAccessForAllUnassignedNodes => (
+                REGISTRY_CANISTER_ID,
+                "update_ssh_readonly_access_for_all_unassigned_nodes",
+            ),
         };
         Ok((canister_id, method))
     }
@@ -704,7 +726,10 @@ impl Proposal {
                             | NnsFunction::RemoveNodes
                             | NnsFunction::UpdateUnassignedNodesConfig
                             | NnsFunction::UpdateElectedHostosVersions
-                            | NnsFunction::UpdateNodesHostosVersion => Topic::NodeAdmin,
+                            | NnsFunction::UpdateNodesHostosVersion
+                            | NnsFunction::UpdateSshReadonlyAccessForAllUnassignedNodes => {
+                                Topic::NodeAdmin
+                            }
                             NnsFunction::CreateSubnet
                             | NnsFunction::AddNodeToSubnet
                             | NnsFunction::RecoverSubnet
@@ -712,7 +737,11 @@ impl Proposal {
                             | NnsFunction::ChangeSubnetMembership
                             | NnsFunction::UpdateConfigOfSubnet => Topic::SubnetManagement,
                             NnsFunction::UpdateElectedReplicaVersions => Topic::IcOsVersionElection,
-                            NnsFunction::UpdateSubnetReplicaVersion => Topic::IcOsVersionDeployment,
+                            NnsFunction::UpdateSubnetReplicaVersion
+                            | NnsFunction::DeployGuestosToSomeApiBoundaryNodes
+                            | NnsFunction::DeployGuestosToAllUnassignedNodes => {
+                                Topic::IcOsVersionDeployment
+                            }
                             NnsFunction::NnsCanisterInstall
                             | NnsFunction::NnsCanisterUpgrade
                             | NnsFunction::NnsRootUpgrade

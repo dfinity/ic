@@ -21,8 +21,8 @@ use ic_protobuf::registry::replica_version::v1::BlessedReplicaVersions;
 use ic_registry_keys::make_blessed_replica_versions_key;
 use ic_types::ReplicaVersion;
 use registry_canister::mutations::{
+    do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
     do_update_elected_replica_versions::UpdateElectedReplicaVersionsPayload,
-    do_update_unassigned_nodes_config::UpdateUnassignedNodesConfigPayload,
 };
 
 async fn submit(
@@ -125,14 +125,13 @@ fn test_submit_and_accept_update_elected_replica_versions_proposal() {
         );
 
         // update unassigned version
-        let update_unassigned_payload = UpdateUnassignedNodesConfigPayload {
-            ssh_readonly_access: None,
-            replica_version: Some(unassigned_nodes_version.to_string()),
+        let deploy_unassigned_payload = DeployGuestosToAllUnassignedNodesPayload {
+            elected_replica_version: unassigned_nodes_version.to_string(),
         };
         let proposal_id = submit(
             gov,
-            NnsFunction::UpdateUnassignedNodesConfig,
-            update_unassigned_payload,
+            NnsFunction::DeployGuestosToAllUnassignedNodes,
+            deploy_unassigned_payload,
         )
         .await;
         let _result: ManageNeuronResponse = cast_votes(proposal_id).await.expect("Vote failed");

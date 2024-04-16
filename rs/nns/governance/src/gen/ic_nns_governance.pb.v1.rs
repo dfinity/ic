@@ -3573,7 +3573,7 @@ pub enum NnsFunction {
     UpdateNodeRewardsTable = 20,
     /// Add or remove Data Center records.
     AddOrRemoveDataCenters = 21,
-    /// Update the config for all unassigned nodes.
+    /// (obsolete) Update the config for all unassigned nodes.
     UpdateUnassignedNodesConfig = 22,
     /// Remove Node Operator from the registry.
     RemoveNodeOperators = 23,
@@ -3643,8 +3643,14 @@ pub enum NnsFunction {
     AddApiBoundaryNode = 43,
     /// A proposal to remove a set of API Boundary Nodes, which will designate them as unassigned nodes
     RemoveApiBoundaryNodes = 44,
-    /// A proposal to update the version of a set of API Boundary Nodes
+    /// (obsolete) A proposal to update the version of a set of API Boundary Nodes
     UpdateApiBoundaryNodesVersion = 46,
+    /// A proposal to update the version of a set of API Boundary Nodes
+    DeployGuestosToSomeApiBoundaryNodes = 47,
+    /// A proposal to update the version of all unassigned nodes
+    DeployGuestosToAllUnassignedNodes = 48,
+    /// A proposal to update SSH readonly access for all unassigned nodes
+    UpdateSshReadonlyAccessForAllUnassignedNodes = 49,
 }
 impl NnsFunction {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -3709,6 +3715,15 @@ impl NnsFunction {
             NnsFunction::UpdateApiBoundaryNodesVersion => {
                 "NNS_FUNCTION_UPDATE_API_BOUNDARY_NODES_VERSION"
             }
+            NnsFunction::DeployGuestosToSomeApiBoundaryNodes => {
+                "NNS_FUNCTION_DEPLOY_GUESTOS_TO_SOME_API_BOUNDARY_NODES"
+            }
+            NnsFunction::DeployGuestosToAllUnassignedNodes => {
+                "NNS_FUNCTION_DEPLOY_GUESTOS_TO_ALL_UNASSIGNED_NODES"
+            }
+            NnsFunction::UpdateSshReadonlyAccessForAllUnassignedNodes => {
+                "NNS_FUNCTION_UPDATE_SSH_READONLY_ACCESS_FOR_ALL_UNASSIGNED_NODES"
+            }
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -3769,6 +3784,15 @@ impl NnsFunction {
             "NNS_FUNCTION_REMOVE_API_BOUNDARY_NODES" => Some(Self::RemoveApiBoundaryNodes),
             "NNS_FUNCTION_UPDATE_API_BOUNDARY_NODES_VERSION" => {
                 Some(Self::UpdateApiBoundaryNodesVersion)
+            }
+            "NNS_FUNCTION_DEPLOY_GUESTOS_TO_SOME_API_BOUNDARY_NODES" => {
+                Some(Self::DeployGuestosToSomeApiBoundaryNodes)
+            }
+            "NNS_FUNCTION_DEPLOY_GUESTOS_TO_ALL_UNASSIGNED_NODES" => {
+                Some(Self::DeployGuestosToAllUnassignedNodes)
+            }
+            "NNS_FUNCTION_UPDATE_SSH_READONLY_ACCESS_FOR_ALL_UNASSIGNED_NODES" => {
+                Some(Self::UpdateSshReadonlyAccessForAllUnassignedNodes)
             }
             _ => None,
         }
