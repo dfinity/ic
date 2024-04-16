@@ -625,8 +625,6 @@ struct MemoryUsage {
     limit: NumBytes,
 
     /// The Wasm memory limit set by the developer in canister settings.
-    /// TODO: Enforce this limit in `update_available_memory`.
-    #[allow(dead_code)]
     wasm_memory_limit: Option<NumBytes>,
 
     /// The current amount of execution memory that the canister is using.
@@ -683,6 +681,50 @@ impl MemoryUsage {
             allocated_execution_memory: NumBytes::from(0),
             allocated_message_memory: NumBytes::from(0),
             memory_allocation,
+        }
+    }
+
+    /// Returns the effective Wasm memory limit depending on the message type.
+    /// If the result is `None`, then this means that the limit is not enforced
+    /// for this message type even if the corresponding field in canister
+    /// settings is not empty.
+    fn effective_wasm_memory_limit(&self, api_type: &ApiType) -> Option<NumBytes> {
+        match api_type {
+            ApiType::ReplicatedQuery { .. }
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::InspectMessage { .. } => {
+                // The Wasm memory limit is not enforced on query in order to
+                // allow developers to download data from the canister via the
+                // query endpoints.
+                None
+            }
+            ApiType::ReplyCallback { .. }
+            | ApiType::Cleanup { .. }
+            | ApiType::RejectCallback { .. } => {
+                // The Wasm memory limit is not enforced in response execution.
+                // The canister has already made a call to another canister, so
+                // introducing a new failure mode here might break canister
+                // invariants for existing canisters that were implemented before
+                // the Wasm memory limit was introduced.
+                None
+            }
+            ApiType::SystemTask { .. } => {
+                // The Wasm memory limit is not enforced in system tasks (timers
+                // and heartbeats) until canister logging is implemented.
+                // Without canister logging developers do not get error messages
+                // from system tasks.
+                // TODO(RUN-957): Enforce the limit after canister logging ships.
+                None
+            }
+            ApiType::PreUpgrade { .. } => {
+                // The Wasm memory limit is not enforced in pre-upgrade
+                // execution in order to allow the developer to upgrade a
+                // canister to a new version that uses less memory.
+                None
+            }
+            ApiType::Init { .. } | ApiType::Start { .. } | ApiType::Update { .. } => {
+                self.wasm_memory_limit
+            }
         }
     }
 
@@ -2473,13 +2515,34 @@ impl SystemApi for SystemApiImpl {
             if native_memory_grow_res == -1 {
                 return Ok(());
             }
-            let bytes = additional_wasm_pages
+            let new_bytes = additional_wasm_pages
                 .checked_mul(WASM_PAGE_SIZE_IN_BYTES as u64)
                 .map(NumBytes::new)
                 .ok_or(HypervisorError::OutOfMemory)?;
 
+            // The `memory.grow` instruction returns the previous size of the
+            // Wasm memory in pages.
+            let old_bytes = (native_memory_grow_res as u64)
+                .checked_mul(WASM_PAGE_SIZE_IN_BYTES as u64)
+                .map(NumBytes::new)
+                .ok_or(HypervisorError::OutOfMemory)?;
+
+            if let Some(wasm_memory_limit) = self
+                .memory_usage
+                .effective_wasm_memory_limit(&self.api_type)
+            {
+                let wasm_memory_usage =
+                    NumBytes::new(new_bytes.get().saturating_add(old_bytes.get()));
+                if wasm_memory_usage > wasm_memory_limit {
+                    return Err(HypervisorError::WasmMemoryLimitExceeded {
+                        bytes: wasm_memory_usage,
+                        limit: wasm_memory_limit,
+                    });
+                }
+            }
+
             match self.memory_usage.allocate_execution_memory(
-                bytes,
+                new_bytes,
                 &self.api_type,
                 &mut self.sandbox_safe_system_state,
                 &self.execution_parameters.subnet_memory_saturation,

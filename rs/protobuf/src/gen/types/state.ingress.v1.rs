@@ -239,6 +239,7 @@ pub enum ErrorCode {
     CanisterMethodNotFound = 536,
     CanisterWasmModuleNotFound = 537,
     CanisterAlreadyInstalled = 538,
+    CanisterWasmMemoryLimitExceeded = 539,
 }
 impl ErrorCode {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -354,6 +355,9 @@ impl ErrorCode {
             ErrorCode::CanisterMethodNotFound => "ERROR_CODE_CANISTER_METHOD_NOT_FOUND",
             ErrorCode::CanisterWasmModuleNotFound => "ERROR_CODE_CANISTER_WASM_MODULE_NOT_FOUND",
             ErrorCode::CanisterAlreadyInstalled => "ERROR_CODE_CANISTER_ALREADY_INSTALLED",
+            ErrorCode::CanisterWasmMemoryLimitExceeded => {
+                "ERROR_CODE_CANISTER_WASM_MEMORY_LIMIT_EXCEEDED"
+            }
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -466,6 +470,9 @@ impl ErrorCode {
             "ERROR_CODE_CANISTER_METHOD_NOT_FOUND" => Some(Self::CanisterMethodNotFound),
             "ERROR_CODE_CANISTER_WASM_MODULE_NOT_FOUND" => Some(Self::CanisterWasmModuleNotFound),
             "ERROR_CODE_CANISTER_ALREADY_INSTALLED" => Some(Self::CanisterAlreadyInstalled),
+            "ERROR_CODE_CANISTER_WASM_MEMORY_LIMIT_EXCEEDED" => {
+                Some(Self::CanisterWasmMemoryLimitExceeded)
+            }
             _ => None,
         }
     }

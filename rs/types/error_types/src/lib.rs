@@ -130,6 +130,7 @@ impl From<ErrorCode> for RejectCode {
             CanisterMethodNotFound => CanisterError,
             CanisterWasmModuleNotFound => CanisterError,
             CanisterAlreadyInstalled => CanisterError,
+            CanisterWasmMemoryLimitExceeded => CanisterError,
         }
     }
 }
@@ -212,6 +213,7 @@ pub enum ErrorCode {
     CanisterMethodNotFound = 536,
     CanisterWasmModuleNotFound = 537,
     CanisterAlreadyInstalled = 538,
+    CanisterWasmMemoryLimitExceeded = 539,
 }
 
 impl TryFrom<u64> for ErrorCode {
@@ -288,6 +290,7 @@ impl TryFrom<u64> for ErrorCode {
             536 => Ok(ErrorCode::CanisterMethodNotFound),
             537 => Ok(ErrorCode::CanisterWasmModuleNotFound),
             538 => Ok(ErrorCode::CanisterAlreadyInstalled),
+            539 => Ok(ErrorCode::CanisterWasmMemoryLimitExceeded),
             _ => Err(TryFromError::ValueOutOfRange(err)),
         }
     }
@@ -411,6 +414,9 @@ impl TryFrom<ErrorCodeProto> for ErrorCode {
             ErrorCodeProto::CanisterMethodNotFound => Ok(ErrorCode::CanisterMethodNotFound),
             ErrorCodeProto::CanisterWasmModuleNotFound => Ok(ErrorCode::CanisterWasmModuleNotFound),
             ErrorCodeProto::CanisterAlreadyInstalled => Ok(ErrorCode::CanisterAlreadyInstalled),
+            ErrorCodeProto::CanisterWasmMemoryLimitExceeded => {
+                Ok(ErrorCode::CanisterWasmMemoryLimitExceeded)
+            }
         }
     }
 }
@@ -522,6 +528,9 @@ impl From<ErrorCode> for ErrorCodeProto {
             ErrorCode::CanisterMethodNotFound => ErrorCodeProto::CanisterMethodNotFound,
             ErrorCode::CanisterWasmModuleNotFound => ErrorCodeProto::CanisterWasmModuleNotFound,
             ErrorCode::CanisterAlreadyInstalled => ErrorCodeProto::CanisterAlreadyInstalled,
+            ErrorCode::CanisterWasmMemoryLimitExceeded => {
+                ErrorCodeProto::CanisterWasmMemoryLimitExceeded
+            }
         }
     }
 }
@@ -640,7 +649,8 @@ impl UserError {
             | ErrorCode::ReservedCyclesLimitExceededInMemoryGrow
             | ErrorCode::InsufficientCyclesInMessageMemoryGrow
             | ErrorCode::CanisterSnapshotNotFound
-            | ErrorCode::CanisterHeapDeltaRateLimited => false,
+            | ErrorCode::CanisterHeapDeltaRateLimited
+            | ErrorCode::CanisterWasmMemoryLimitExceeded => false,
             // TODO: RUN-948: Backward compatibility
             ErrorCode::DeprecatedCanisterMethodNotFound
             | ErrorCode::DeprecatedCanisterAlreadyInstalled
