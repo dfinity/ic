@@ -1,5 +1,6 @@
 pub use super::event::{Event, EventType};
 use super::State;
+use crate::erc20::CkTokenSymbol;
 use crate::state::transactions::{Reimbursed, ReimbursementIndex};
 use crate::storage::{record_event, with_event_iter};
 
@@ -32,7 +33,12 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
             event_source,
             mint_block_index,
         } => {
-            state.record_successful_mint(*event_source, "ckETH", *mint_block_index, None);
+            state.record_successful_mint(
+                *event_source,
+                &CkTokenSymbol::cketh_symbol_from_state(state).to_string(),
+                *mint_block_index,
+                None,
+            );
         }
         EventType::MintedCkErc20 {
             event_source,
