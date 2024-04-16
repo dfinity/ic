@@ -13,15 +13,11 @@ NOTE: An ERC-20 token denotes a fungible token on the Ethereum blockchain that f
 |link:https://github.com/ethereum-lists/chains/blob/master/_data/chains/eip155-1.json[Ethereum Mainnet]
 |USDC
 |https://etherscan.io/token/0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48[0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48]
-
-|link:https://github.com/ethereum-lists/chains/blob/master/_data/chains/eip155-1.json[Ethereum Mainnet]
-|USDT
-|https://etherscan.io/token/0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48[0xdac17f958d2ee523a2206206994597c13d831ec7]
 |===
 
 == Architecture
 
-The ckERC20 implementation will consist of a suite of canisters:
+The ckERC20 implementation consists of a suite of canisters:
 
 . The existing ckETH minter is responsible for handling ERC-20 deposits and withdrawal requests. Each ERC-20 deposit and ckERC-20 withdrawal will result in a transaction on the ledger associated with that ERC-20 token. We reuse the ckETH minter to deal with ckERC-20 because a ckERC-20 withdrawal involves issuing an Ethereum transaction where the transaction fee is paid by the sender in ETH: ETH is needed to pay for ERC-20 transfers! Another canister would have another Ethereum address (because it would have another threshold ECDSA public key) and so that address would first need some ETH (which involves some costly Ethereum transfers) from the ckETH minter before being able to issue any ERC-20 transactions.
 . One ICRC1 ledger suite (ledger, index-ng, archive(s)) per ERC-20 token:
@@ -40,11 +36,11 @@ The ERC-20 deposit flow is similar to the ckETH deposit flow in that deposits wi
 
 The ERC-20 -> ckERC-20 flow involves the following steps:
 
-. The user submits an Ethereum transaction calling the `approve` function of the ERC-20 smart contract to allow the helper smart contract address to use some of the user’s funds. Depending on the amount specified, additional deposits may not need to be approved beforehand.
-. The user calls the `deposit` method of the helper smart contract specifying
+. The user submits an Ethereum transaction calling the `approve` function of the ERC-20 smart contract to allow the helper smart contract address to use some of the user’s funds. Depending on the amount specified, additional deposits may not need to be approved beforehand. The `approve` function can be invoked directly on the the contrat's Etherscan page after connecting any of Web3-capable wallets.
+. The user calls the `deposit` method of the helper smart contract (just as `approve` this method can be called from contrat's Ethersacn page) specifying
 .. The ERC-20 smart contract address. This identifies the ERC-20 token being deposited.
 .. The amount of ERC-20 tokens being deposited.
-.. The IC principal to which the amount of ckERC-20 should be minted.
+.. The IC principal to which the amount of ckERC-20 should be minted (the simplest way to convert your IC principal to the smart contract argument is to use the link:https://sv3dd-oaaaa-aaaar-qacoa-cai.raw.icp0.io/dashboard[minter dashboard]).
 . The helper smart contract does the following steps within the *same* Ethereum transaction
 .. Ensure that the ERC-20 token is allowed
 .. Call `transferFrom` on the ERC-20 smart contract to transfer the given amount of ERC-20 tokens from the user’s address to the minter’s address. (This requires that the smart contract’s address was previously approved as in step 2).
@@ -83,11 +79,23 @@ The exact cost will depend on the gas cost of the involved ERC-20 operations (`a
 The ckERC-20 → ERC-20 conversion flow involves the following steps:
 
 . The user calls the ckETH ledger to approve the minimum withdrawal amount to the primary Minter account (needed to pay transaction fees).
-. The user calls the ckERC20 ledger to approve the desired amount to the primary Minter account.
+[source,shell]
+----
+dfx canister --network ic call ledger icrc2_approve "(record { spender = record { owner = principal \"$(dfx canister id minter --network ic)\" }; amount = 1_000_000_000_000_000_000:nat })"
+----
+. The user calls the ckERC20 ledger to approve the desired amount to the primary Minter account. Note that the ledger id of the corresponding ckERC20 token is returned by the `get_minter_info` query on the minter and the `LARGE_AMOUNT_CK_TOKEN` should take the amount of decimals corresponding to the ERC20 contract being used.
+[source,shell]
+----
+dfx canister --network ic call CKERC20_LEDGER icrc2_approve "(record { spender = record { owner = principal \"$(dfx canister id minter --network ic)\" }; amount = LARGE_AMOUNT_CK_TOKEN:nat })"
+----
 . The user calls the `withdraw_erc20` endpoint on the ckETH minter that specifies
 .. ERC-20 token: e.g., USDC,
 .. the desired withdrawal amount
 .. the destination address.
+[source,shell]
+----
+dfx canister --network ic call minter withdraw_erc20 "(record {ckerc20_ledger_id = principal \"CKERC20_LEDGER\"; amount = AMOUNT_CK_TOKEN:nat; recipient = \"ETH_ADDRESS\"})"
+----
 . The minter checks the desired destination address against the blocklist, and rejects the request if the destination is blocked.
 . The ckETH minter attempts to burn the minimum withdrawal amount of ckETH (currently set to `30_000_000_000_000_000` wei corresponding to roughly 75 USD). We need some ETH to pay for the transaction fee and since the transaction has 0 ETH value we need some amount of ckETH up-front. The amount chosen is to allow the same behavior as with the  ckETH → ETH conversion and avoid stuck transactions as much as possible. Any error at this point (e.g., insufficient funds) terminates the withdrawal flow.
 . The ckETH minter attempts to burn the specified token amount from the user account on the ckERC20 ledger. If the burn succeeds, the minter schedules a withdrawal task and uses the burn transaction index as the request identifier. If the burn fails (e.g., insufficient funds), the minter schedules the reimbursement of the burnt ckETH amount from the previous step.
