@@ -1234,19 +1234,6 @@ impl From<CanisterInstallModeV2> for CanisterInstallMode {
     }
 }
 
-#[test]
-fn canister_install_mode_round_trip() {
-    fn canister_install_mode_round_trip_aux(mode: CanisterInstallMode) {
-        let pb_mode: i32 = (&mode).into();
-        let dec_mode = CanisterInstallMode::try_from(pb_mode).unwrap();
-        assert_eq!(mode, dec_mode);
-    }
-
-    canister_install_mode_round_trip_aux(CanisterInstallMode::Install);
-    canister_install_mode_round_trip_aux(CanisterInstallMode::Reinstall);
-    canister_install_mode_round_trip_aux(CanisterInstallMode::Upgrade);
-}
-
 impl Payload<'_> for CanisterStatusResultV2 {}
 
 /// Struct used for encoding/decoding
@@ -1479,38 +1466,6 @@ impl DataSize for PrincipalId {
     }
 }
 
-#[test]
-fn verify_max_bounded_controllers_length() {
-    const TEST_START: usize = 5;
-    const THRESHOLD: usize = 10;
-    const TEST_END: usize = 15;
-    for i in TEST_START..=TEST_END {
-        // Arrange.
-        let controllers = BoundedControllers::new(vec![PrincipalId::new_anonymous(); i]);
-
-        // Act.
-        let result = BoundedControllers::decode(&controllers.encode());
-
-        // Assert.
-        if i <= THRESHOLD {
-            // Verify decoding without errors for allowed sizes.
-            assert_eq!(result.unwrap(), controllers);
-        } else {
-            // Verify decoding with errors for disallowed sizes.
-            let error = result.unwrap_err();
-            assert_eq!(error.code(), ErrorCode::InvalidManagementPayload);
-            assert!(
-                error.description().contains(&format!(
-                    "Deserialize error: The number of elements exceeds maximum allowed {}",
-                    MAX_ALLOWED_CONTROLLERS_COUNT
-                )),
-                "Actual: {}",
-                error.description()
-            );
-        }
-    }
-}
-
 /// Struct used for encoding/decoding
 /// `(record {
 ///     controller: opt principal;
@@ -1714,52 +1669,6 @@ impl<'a> Payload<'a> for CreateCanisterArgs {
     }
 }
 
-#[test]
-fn test_create_canister_args_decode_empty_blob() {
-    // This test is added for backward compatibility to allow decoding an empty blob.
-    let encoded = EmptyBlob {}.encode();
-    let result = CreateCanisterArgs::decode(&encoded);
-    assert_eq!(result, Ok(CreateCanisterArgs::default()));
-}
-
-#[test]
-fn test_create_canister_args_decode_controllers_count() {
-    const TEST_START: usize = 5;
-    const THRESHOLD: usize = 10;
-    const TEST_END: usize = 15;
-    for i in TEST_START..=TEST_END {
-        // Arrange.
-        let args = CreateCanisterArgs {
-            settings: Some(
-                CanisterSettingsArgsBuilder::new()
-                    .with_controllers(vec![PrincipalId::new_anonymous(); i])
-                    .build(),
-            ),
-            sender_canister_version: None,
-        };
-
-        // Act.
-        let result = CreateCanisterArgs::decode(&args.encode());
-
-        // Assert.
-        if i <= THRESHOLD {
-            // Assert decoding without errors for allowed sizes.
-            assert_eq!(result.unwrap(), args);
-        } else {
-            // Assert decoding with errors for disallowed sizes.
-            let error = result.unwrap_err();
-            assert_eq!(error.code(), ErrorCode::InvalidManagementPayload);
-            assert!(
-                error
-                    .description()
-                    .contains("The number of elements exceeds maximum allowed "),
-                "Actual: {}",
-                error.description()
-            );
-        }
-    }
-}
-
 /// Struct used for encoding/decoding
 /// `(record {
 ///     node_ids : vec principal;
@@ -1919,16 +1828,6 @@ impl FromStr for EcdsaCurve {
     }
 }
 
-#[test]
-fn ecdsa_curve_round_trip() {
-    assert_eq!(
-        format!("{}", EcdsaCurve::Secp256k1)
-            .parse::<EcdsaCurve>()
-            .unwrap(),
-        EcdsaCurve::Secp256k1
-    );
-}
-
 /// Unique identifier for a key that can be used for ECDSA signatures. The name
 /// is just a identifier, but it may be used to convey some information about
 /// the key (e.g. that the key is meant to be used for testing purposes).
@@ -1985,17 +1884,6 @@ impl FromStr for EcdsaKeyId {
             curve: curve.parse::<EcdsaCurve>()?,
             name: name.to_string(),
         })
-    }
-}
-
-#[test]
-fn ecdsa_key_id_round_trip() {
-    for name in ["secp256k1", "", "other_key", "other key", "other:key"] {
-        let key = EcdsaKeyId {
-            curve: EcdsaCurve::Secp256k1,
-            name: name.to_string(),
-        };
-        assert_eq!(format!("{}", key).parse::<EcdsaKeyId>().unwrap(), key);
     }
 }
 
@@ -2152,102 +2040,6 @@ impl Payload<'_> for DerivationPath {}
 impl DataSize for ByteBuf {
     fn data_size(&self) -> usize {
         self.as_slice().data_size()
-    }
-}
-
-#[test]
-fn verify_max_derivation_path_length() {
-    for i in 0..=MAXIMUM_DERIVATION_PATH_LENGTH {
-        let path = DerivationPath::new(vec![ByteBuf::from(vec![0_u8, 32]); i]);
-        let encoded = path.encode();
-        assert_eq!(DerivationPath::decode(&encoded).unwrap(), path);
-
-        let sign_with_ecdsa = SignWithECDSAArgs {
-            message_hash: [1; 32],
-            derivation_path: path.clone(),
-            key_id: EcdsaKeyId {
-                curve: EcdsaCurve::Secp256k1,
-                name: "test".to_string(),
-            },
-        };
-
-        let encoded = sign_with_ecdsa.encode();
-        assert_eq!(
-            SignWithECDSAArgs::decode(&encoded).unwrap(),
-            sign_with_ecdsa
-        );
-
-        let ecdsa_public_key = ECDSAPublicKeyArgs {
-            canister_id: None,
-            derivation_path: path,
-            key_id: EcdsaKeyId {
-                curve: EcdsaCurve::Secp256k1,
-                name: "test".to_string(),
-            },
-        };
-
-        let encoded = ecdsa_public_key.encode();
-        assert_eq!(
-            ECDSAPublicKeyArgs::decode(&encoded).unwrap(),
-            ecdsa_public_key
-        );
-    }
-
-    for i in MAXIMUM_DERIVATION_PATH_LENGTH + 1..=MAXIMUM_DERIVATION_PATH_LENGTH + 100 {
-        let path = DerivationPath::new(vec![ByteBuf::from(vec![0_u8, 32]); i]);
-        let encoded = path.encode();
-        let result = DerivationPath::decode(&encoded).unwrap_err();
-        assert_eq!(result.code(), ErrorCode::InvalidManagementPayload);
-        assert!(
-            result.description().contains(&format!(
-                "Deserialize error: The number of elements exceeds maximum allowed {}",
-                MAXIMUM_DERIVATION_PATH_LENGTH
-            )),
-            "Actual: {}",
-            result.description()
-        );
-
-        let sign_with_ecdsa = SignWithECDSAArgs {
-            message_hash: [1; 32],
-            derivation_path: path.clone(),
-            key_id: EcdsaKeyId {
-                curve: EcdsaCurve::Secp256k1,
-                name: "test".to_string(),
-            },
-        };
-
-        let encoded = sign_with_ecdsa.encode();
-        let result = SignWithECDSAArgs::decode(&encoded).unwrap_err();
-        assert_eq!(result.code(), ErrorCode::InvalidManagementPayload);
-        assert!(
-            result.description().contains(&format!(
-                "Deserialize error: The number of elements exceeds maximum allowed {}",
-                MAXIMUM_DERIVATION_PATH_LENGTH
-            )),
-            "Actual: {}",
-            result.description()
-        );
-
-        let ecsda_public_key = ECDSAPublicKeyArgs {
-            canister_id: None,
-            derivation_path: path,
-            key_id: EcdsaKeyId {
-                curve: EcdsaCurve::Secp256k1,
-                name: "test".to_string(),
-            },
-        };
-
-        let encoded = ecsda_public_key.encode();
-        let result = ECDSAPublicKeyArgs::decode(&encoded).unwrap_err();
-        assert_eq!(result.code(), ErrorCode::InvalidManagementPayload);
-        assert!(
-            result.description().contains(&format!(
-                "Deserialize error: The number of elements exceeds maximum allowed {}",
-                MAXIMUM_DERIVATION_PATH_LENGTH
-            )),
-            "Actual: {}",
-            result.description()
-        );
     }
 }
 
@@ -3032,5 +2824,218 @@ impl<'a> Payload<'a> for DeleteCanisterSnapshotArgs {
             ));
         }
         Ok(args)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn canister_install_mode_round_trip() {
+        fn canister_install_mode_round_trip_aux(mode: CanisterInstallMode) {
+            let pb_mode: i32 = (&mode).into();
+            let dec_mode = CanisterInstallMode::try_from(pb_mode).unwrap();
+            assert_eq!(mode, dec_mode);
+        }
+
+        canister_install_mode_round_trip_aux(CanisterInstallMode::Install);
+        canister_install_mode_round_trip_aux(CanisterInstallMode::Reinstall);
+        canister_install_mode_round_trip_aux(CanisterInstallMode::Upgrade);
+    }
+
+    #[test]
+    fn verify_max_bounded_controllers_length() {
+        const TEST_START: usize = 5;
+        const THRESHOLD: usize = 10;
+        const TEST_END: usize = 15;
+        for i in TEST_START..=TEST_END {
+            // Arrange.
+            let controllers = BoundedControllers::new(vec![PrincipalId::new_anonymous(); i]);
+
+            // Act.
+            let result = BoundedControllers::decode(&controllers.encode());
+
+            // Assert.
+            if i <= THRESHOLD {
+                // Verify decoding without errors for allowed sizes.
+                assert_eq!(result.unwrap(), controllers);
+            } else {
+                // Verify decoding with errors for disallowed sizes.
+                let error = result.unwrap_err();
+                assert_eq!(error.code(), ErrorCode::InvalidManagementPayload);
+                assert!(
+                    error.description().contains(&format!(
+                        "Deserialize error: The number of elements exceeds maximum allowed {}",
+                        MAX_ALLOWED_CONTROLLERS_COUNT
+                    )),
+                    "Actual: {}",
+                    error.description()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_create_canister_args_decode_empty_blob() {
+        // This test is added for backward compatibility to allow decoding an empty blob.
+        let encoded = EmptyBlob {}.encode();
+        let result = CreateCanisterArgs::decode(&encoded);
+        assert_eq!(result, Ok(CreateCanisterArgs::default()));
+    }
+
+    #[test]
+    fn test_create_canister_args_decode_controllers_count() {
+        const TEST_START: usize = 5;
+        const THRESHOLD: usize = 10;
+        const TEST_END: usize = 15;
+        for i in TEST_START..=TEST_END {
+            // Arrange.
+            let args = CreateCanisterArgs {
+                settings: Some(
+                    CanisterSettingsArgsBuilder::new()
+                        .with_controllers(vec![PrincipalId::new_anonymous(); i])
+                        .build(),
+                ),
+                sender_canister_version: None,
+            };
+
+            // Act.
+            let result = CreateCanisterArgs::decode(&args.encode());
+
+            // Assert.
+            if i <= THRESHOLD {
+                // Assert decoding without errors for allowed sizes.
+                assert_eq!(result.unwrap(), args);
+            } else {
+                // Assert decoding with errors for disallowed sizes.
+                let error = result.unwrap_err();
+                assert_eq!(error.code(), ErrorCode::InvalidManagementPayload);
+                assert!(
+                    error
+                        .description()
+                        .contains("The number of elements exceeds maximum allowed "),
+                    "Actual: {}",
+                    error.description()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn ecdsa_curve_round_trip() {
+        assert_eq!(
+            format!("{}", EcdsaCurve::Secp256k1)
+                .parse::<EcdsaCurve>()
+                .unwrap(),
+            EcdsaCurve::Secp256k1
+        );
+    }
+
+    #[test]
+    fn ecdsa_key_id_round_trip() {
+        for name in ["secp256k1", "", "other_key", "other key", "other:key"] {
+            let key = EcdsaKeyId {
+                curve: EcdsaCurve::Secp256k1,
+                name: name.to_string(),
+            };
+            assert_eq!(format!("{}", key).parse::<EcdsaKeyId>().unwrap(), key);
+        }
+    }
+
+    #[test]
+    fn verify_max_derivation_path_length() {
+        for i in 0..=MAXIMUM_DERIVATION_PATH_LENGTH {
+            let path = DerivationPath::new(vec![ByteBuf::from(vec![0_u8, 32]); i]);
+            let encoded = path.encode();
+            assert_eq!(DerivationPath::decode(&encoded).unwrap(), path);
+
+            let sign_with_ecdsa = SignWithECDSAArgs {
+                message_hash: [1; 32],
+                derivation_path: path.clone(),
+                key_id: EcdsaKeyId {
+                    curve: EcdsaCurve::Secp256k1,
+                    name: "test".to_string(),
+                },
+            };
+
+            let encoded = sign_with_ecdsa.encode();
+            assert_eq!(
+                SignWithECDSAArgs::decode(&encoded).unwrap(),
+                sign_with_ecdsa
+            );
+
+            let ecdsa_public_key = ECDSAPublicKeyArgs {
+                canister_id: None,
+                derivation_path: path,
+                key_id: EcdsaKeyId {
+                    curve: EcdsaCurve::Secp256k1,
+                    name: "test".to_string(),
+                },
+            };
+
+            let encoded = ecdsa_public_key.encode();
+            assert_eq!(
+                ECDSAPublicKeyArgs::decode(&encoded).unwrap(),
+                ecdsa_public_key
+            );
+        }
+
+        for i in MAXIMUM_DERIVATION_PATH_LENGTH + 1..=MAXIMUM_DERIVATION_PATH_LENGTH + 100 {
+            let path = DerivationPath::new(vec![ByteBuf::from(vec![0_u8, 32]); i]);
+            let encoded = path.encode();
+            let result = DerivationPath::decode(&encoded).unwrap_err();
+            assert_eq!(result.code(), ErrorCode::InvalidManagementPayload);
+            assert!(
+                result.description().contains(&format!(
+                    "Deserialize error: The number of elements exceeds maximum allowed {}",
+                    MAXIMUM_DERIVATION_PATH_LENGTH
+                )),
+                "Actual: {}",
+                result.description()
+            );
+
+            let sign_with_ecdsa = SignWithECDSAArgs {
+                message_hash: [1; 32],
+                derivation_path: path.clone(),
+                key_id: EcdsaKeyId {
+                    curve: EcdsaCurve::Secp256k1,
+                    name: "test".to_string(),
+                },
+            };
+
+            let encoded = sign_with_ecdsa.encode();
+            let result = SignWithECDSAArgs::decode(&encoded).unwrap_err();
+            assert_eq!(result.code(), ErrorCode::InvalidManagementPayload);
+            assert!(
+                result.description().contains(&format!(
+                    "Deserialize error: The number of elements exceeds maximum allowed {}",
+                    MAXIMUM_DERIVATION_PATH_LENGTH
+                )),
+                "Actual: {}",
+                result.description()
+            );
+
+            let ecsda_public_key = ECDSAPublicKeyArgs {
+                canister_id: None,
+                derivation_path: path,
+                key_id: EcdsaKeyId {
+                    curve: EcdsaCurve::Secp256k1,
+                    name: "test".to_string(),
+                },
+            };
+
+            let encoded = ecsda_public_key.encode();
+            let result = ECDSAPublicKeyArgs::decode(&encoded).unwrap_err();
+            assert_eq!(result.code(), ErrorCode::InvalidManagementPayload);
+            assert!(
+                result.description().contains(&format!(
+                    "Deserialize error: The number of elements exceeds maximum allowed {}",
+                    MAXIMUM_DERIVATION_PATH_LENGTH
+                )),
+                "Actual: {}",
+                result.description()
+            );
+        }
     }
 }
