@@ -305,10 +305,10 @@ impl<MyRuntime: Runtime + Send + Sync> IcpsPerSnsTokenClient<MyRuntime> {
     }
 
     async fn fetch_icps_per_sns_token(&self) -> Result<Decimal, ValuationError> {
-        // Call swap's get_derived_state method.
+        // Fetch SNS token price from swap.
         let get_derived_state_response = self.call(GetDerivedStateRequest {}).await?;
 
-        // Read the relevant fields out of the responses. Here, a floating point field is used. In
+        // Read the relevant field(s) out of the responses. Here, a floating point field is used. In
         // general, floating point should not be used for financial accounting, but it is ok here,
         // because we are using this to come up with a valuation, and valuations are not super
         // precise in the same way that (for example) a bank account balance is supposed to be.
@@ -332,7 +332,7 @@ impl<MyRuntime: Runtime + Send + Sync> IcpsPerSnsTokenClient<MyRuntime> {
             ))
         })?;
 
-        // Raise to the -1 power.
+        // Flip the ratio from SNS tokens/ICP to ICPs/SNS token.
         Decimal::from(1)
             .checked_div(sns_tokens_per_icp)
             .ok_or_else(|| {
