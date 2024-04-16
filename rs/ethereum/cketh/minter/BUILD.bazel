@@ -84,15 +84,26 @@ rust_doc_test(
 rust_test(
     name = "lib_tests",
     crate = ":minter",
+    data = [
+        "test_resources/mainnet_events.gz",
+        "test_resources/sepolia_events.gz",
+    ],
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/ethereum/cketh/minter",
+    },
     deps = [
         ":minter",
         "//rs/crypto/test_utils/reproducible_rng",
         "@crate_index//:assert_matches",
         "@crate_index//:candid_parser",
         "@crate_index//:ethers-core",
+        "@crate_index//:flate2",
+        "@crate_index//:ic-agent",
         "@crate_index//:maplit",
         "@crate_index//:proptest",
         "@crate_index//:rand",
+        "@crate_index//:tempfile",
+        "@crate_index//:tokio",
     ],
 )
 

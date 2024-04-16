@@ -51,7 +51,9 @@ thousands = "0.2"
 assert_matches = { workspace = true }
 candid_parser = { workspace = true }
 ethers-core = "2.0.8"
+flate2 = "1.0.22"
 hex = { workspace = true }
+ic-agent = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
 ic-cketh-test-utils = { path = "../test_utils" }
 ic-ledger-suite-orchestrator-test-utils = { path = "../../ledger-suite-orchestrator/test_utils" }
@@ -62,3 +64,5 @@ maplit = "1"
 proptest = "1.0"
 rand = "0.8"
 scraper = "0.17.1"
+tempfile = "3.1.0"
+tokio = { workspace = true }
