@@ -8552,28 +8552,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-interfaces-transport"
-version = "0.9.0"
-dependencies = [
- "ic-base-types",
- "phantom_newtype",
- "serde",
- "serde_bytes",
- "strum 0.26.2",
- "strum_macros 0.26.2",
- "tower",
-]
-
-[[package]]
-name = "ic-interfaces-transport-mocks"
-version = "0.9.0"
-dependencies = [
- "ic-base-types",
- "ic-interfaces-transport",
- "mockall",
-]
-
-[[package]]
 name = "ic-ledger-canister-blocks-synchronizer"
 version = "0.1.0"
 dependencies = [
@@ -9666,52 +9644,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-p2p"
-version = "0.9.0"
-dependencies = [
- "crossbeam-channel",
- "ic-artifact-manager",
- "ic-artifact-pool",
- "ic-config",
- "ic-crypto-tls-interfaces",
- "ic-cycles-account-manager",
- "ic-execution-environment",
- "ic-https-outcalls-adapter-client",
- "ic-interfaces",
- "ic-interfaces-mocks",
- "ic-interfaces-registry",
- "ic-interfaces-transport",
- "ic-logger",
- "ic-metrics",
- "ic-protobuf",
- "ic-registry-client",
- "ic-registry-client-fake",
- "ic-registry-client-helpers",
- "ic-registry-nns-data-provider",
- "ic-registry-subnet-type",
- "ic-replica-setup-ic-network",
- "ic-test-utilities",
- "ic-test-utilities-consensus",
- "ic-test-utilities-metrics",
- "ic-test-utilities-registry",
- "ic-test-utilities-types",
- "ic-transport",
- "ic-types",
- "linked-hash-map",
- "lru",
- "parking_lot 0.12.1",
- "prometheus",
- "serde",
- "slog",
- "strum 0.26.2",
- "strum_macros 0.26.2",
- "tempfile",
- "threadpool",
- "tokio",
- "tower",
-]
-
-[[package]]
 name = "ic-p2p-test-utils"
 version = "0.1.0"
 dependencies = [
@@ -10372,7 +10304,6 @@ dependencies = [
 name = "ic-replica-setup-ic-network"
 version = "0.9.0"
 dependencies = [
- "crossbeam-channel",
  "either",
  "ic-artifact-manager",
  "ic-artifact-pool",
@@ -10389,10 +10320,8 @@ dependencies = [
  "ic-interfaces-adapter-client",
  "ic-interfaces-registry",
  "ic-interfaces-state-manager",
- "ic-interfaces-transport",
  "ic-logger",
  "ic-metrics",
- "ic-p2p",
  "ic-peer-manager",
  "ic-quic-transport",
  "ic-registry-client-helpers",
@@ -11568,7 +11497,6 @@ dependencies = [
  "ic-interfaces-registry",
  "ic-interfaces-state-manager",
  "ic-interfaces-state-manager-mocks",
- "ic-interfaces-transport",
  "ic-logger",
  "ic-metrics",
  "ic-protobuf",
@@ -11805,60 +11733,6 @@ dependencies = [
  "tracing",
  "tracing-flame",
  "tracing-subscriber",
-]
-
-[[package]]
-name = "ic-transport"
-version = "0.9.0"
-dependencies = [
- "async-trait",
- "bytes",
- "criterion",
- "futures",
- "h2 0.3.26",
- "http 0.2.9",
- "ic-async-utils",
- "ic-base-types",
- "ic-config",
- "ic-crypto-tls-interfaces",
- "ic-crypto-tls-interfaces-mocks",
- "ic-interfaces-transport",
- "ic-logger",
- "ic-metrics",
- "ic-test-utilities-logger",
- "ic-transport-test-utils",
- "prometheus",
- "serde",
- "slog",
- "strum 0.26.2",
- "tokio",
- "tokio-util",
- "tower",
- "tower-test",
-]
-
-[[package]]
-name = "ic-transport-test-utils"
-version = "0.9.0"
-dependencies = [
- "futures",
- "ic-base-types",
- "ic-config",
- "ic-crypto-temp-crypto",
- "ic-crypto-tls-interfaces",
- "ic-interfaces-transport",
- "ic-logger",
- "ic-metrics",
- "ic-protobuf",
- "ic-registry-client-fake",
- "ic-registry-keys",
- "ic-registry-proto-data-provider",
- "ic-test-utilities-registry",
- "ic-transport",
- "ic-types-test-utils",
- "tokio",
- "tower",
- "tower-test",
 ]
 
 [[package]]

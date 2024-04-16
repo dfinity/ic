@@ -94,7 +94,6 @@ mod unformatted {
 //!
 }
 
-pub mod manager;
 mod pool_readers;
 pub mod processors;
 

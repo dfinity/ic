@@ -3,9 +3,8 @@
 //! Specifically, it constructs all the artifact pools and the Consensus/P2P
 //! time source.
 
-use crossbeam_channel::{bounded, Sender};
 use either::Either;
-use ic_artifact_manager::{manager, *};
+use ic_artifact_manager::*;
 use ic_artifact_pool::{
     canister_http_pool::CanisterHttpPoolImpl,
     certification_pool::CertificationPoolImpl,
@@ -24,7 +23,7 @@ use ic_consensus_utils::{
     crypto::ConsensusCrypto, membership::Membership, pool_reader::PoolReader,
 };
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
-use ic_crypto_tls_interfaces::{TlsConfig, TlsHandshake};
+use ic_crypto_tls_interfaces::TlsConfig;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_https_outcalls_consensus::{
     gossip::CanisterHttpGossipImpl, payload_builder::CanisterHttpPayloadBuilderImpl,
@@ -46,13 +45,12 @@ use ic_interfaces_registry::{LocalStoreCertifiedTimeReader, RegistryClient};
 use ic_interfaces_state_manager::{StateManager, StateReader};
 use ic_logger::{info, replica_logger::ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_p2p::{start_p2p, MAX_ADVERT_BUFFER};
 use ic_quic_transport::DummyUdpSocket;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::state_sync::types::StateSyncMessage;
 use ic_types::{
-    artifact::{ArtifactKind, ArtifactTag, UnvalidatedArtifactMutation},
+    artifact::{ArtifactKind, UnvalidatedArtifactMutation},
     artifact_kind::{
         CanisterHttpArtifact, CertificationArtifact, ConsensusArtifact, DkgArtifact, EcdsaArtifact,
         IngressArtifact,
@@ -61,24 +59,17 @@ use ic_types::{
     consensus::CatchUpPackage,
     consensus::HasHeight,
     malicious_flags::MaliciousFlags,
-    p2p::GossipAdvert,
     replica_config::ReplicaConfig,
     NodeId, SubnetId,
 };
 use std::{
-    collections::HashMap,
     net::{IpAddr, SocketAddr},
     str::FromStr,
     sync::{Arc, Mutex, RwLock},
 };
 use tokio::sync::mpsc::{Sender as TokioSender, UnboundedSender};
 
-const ENABLE_NEW_P2P_CONSENSUS: bool = true;
-const ENABLE_NEW_P2P_CERTIFICATION: bool = true;
-const ENABLE_NEW_P2P_DKG: bool = true;
-const ENABLE_NEW_P2P_INGRESS: bool = true;
-const ENABLE_NEW_P2P_ECDSA: bool = true;
-const ENABLE_NEW_P2P_HTTPS_OUTCALLS: bool = true;
+pub const MAX_ADVERT_BUFFER: usize = 100_000;
 
 struct P2PSenders {
     consensus: Channel<ConsensusArtifact>,
@@ -89,7 +80,6 @@ struct P2PSenders {
     https_outcalls: Channel<CanisterHttpArtifact>,
 }
 enum Channel<A: ArtifactKind> {
-    Old(Sender<GossipAdvert>),
     New(TokioSender<ArtifactProcessorEvent<A>>),
 }
 
@@ -137,7 +127,6 @@ pub fn setup_consensus_and_p2p(
     node_id: NodeId,
     subnet_id: SubnetId,
     tls_config: Arc<dyn TlsConfig + Send + Sync>,
-    tls_handshake: Arc<dyn TlsHandshake + Send + Sync>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     consensus_pool: Arc<RwLock<ConsensusPoolImpl>>,
@@ -194,10 +183,6 @@ pub fn setup_consensus_and_p2p(
         )
     };
 
-    let (advert_tx, advert_rx) = bounded(MAX_ADVERT_BUFFER);
-    let mut backends: HashMap<ArtifactTag, Box<dyn manager::ArtifactManagerBackend>> =
-        HashMap::new();
-
     let mut new_p2p_consensus = ic_consensus_manager::ConsensusManagerBuilder::new(
         log.clone(),
         rt_handle.clone(),
@@ -213,38 +198,14 @@ pub fn setup_consensus_and_p2p(
     let (ecdsa_tx, ecdsa_rx) = tokio::sync::mpsc::channel(MAX_ADVERT_BUFFER);
     let (http_outcalls_tx, http_outcalls_rx) = tokio::sync::mpsc::channel(MAX_ADVERT_BUFFER);
     let advert_tx = P2PSenders {
-        consensus: if ENABLE_NEW_P2P_CONSENSUS {
-            Channel::New(consensus_advert_tx)
-        } else {
-            Channel::Old(advert_tx.clone())
-        },
-        certification: if ENABLE_NEW_P2P_CERTIFICATION {
-            Channel::New(certification_advert_tx)
-        } else {
-            Channel::Old(advert_tx.clone())
-        },
-        dkg: if ENABLE_NEW_P2P_DKG {
-            Channel::New(dkg_tx)
-        } else {
-            Channel::Old(advert_tx.clone())
-        },
-        ingress: if ENABLE_NEW_P2P_INGRESS {
-            Channel::New(ingress_tx)
-        } else {
-            Channel::Old(advert_tx.clone())
-        },
-        ecdsa: if ENABLE_NEW_P2P_ECDSA {
-            Channel::New(ecdsa_tx)
-        } else {
-            Channel::Old(advert_tx.clone())
-        },
-        https_outcalls: if ENABLE_NEW_P2P_HTTPS_OUTCALLS {
-            Channel::New(http_outcalls_tx)
-        } else {
-            Channel::Old(advert_tx)
-        },
+        consensus: Channel::New(consensus_advert_tx),
+        certification: Channel::New(certification_advert_tx),
+        dkg: Channel::New(dkg_tx),
+        ingress: Channel::New(ingress_tx),
+        ecdsa: Channel::New(ecdsa_tx),
+        https_outcalls: Channel::New(http_outcalls_tx),
     };
-    let (p2p_clients, mut join_handles, artifact_pools) = start_consensus(advert_tx);
+    let (p2p_clients, join_handles, artifact_pools) = start_consensus(advert_tx);
     let ArtifactPools {
         certification_pool,
         dkg_pool,
@@ -253,45 +214,27 @@ pub fn setup_consensus_and_p2p(
         ingress_pool,
     } = artifact_pools;
 
-    if ENABLE_NEW_P2P_CONSENSUS {
-        new_p2p_consensus.add_client(
-            consensus_rx,
-            consensus_pool,
-            p2p_clients.consensus.priority_fn_producer,
-            p2p_clients.consensus.client_handle.sender,
-        );
-    } else {
-        backends.insert(
-            ConsensusArtifact::TAG,
-            Box::new(p2p_clients.consensus.client_handle),
-        );
-    }
+    new_p2p_consensus.add_client(
+        consensus_rx,
+        consensus_pool,
+        p2p_clients.consensus.priority_fn_producer,
+        p2p_clients.consensus.client_handle.sender,
+    );
 
-    if ENABLE_NEW_P2P_CERTIFICATION {
-        new_p2p_consensus.add_client(
-            certification_rx,
-            certification_pool,
-            p2p_clients.certification.priority_fn_producer,
-            p2p_clients.certification.client_handle.sender,
-        );
-    } else {
-        backends.insert(
-            CertificationArtifact::TAG,
-            Box::new(p2p_clients.certification.client_handle),
-        );
-    }
+    new_p2p_consensus.add_client(
+        certification_rx,
+        certification_pool,
+        p2p_clients.certification.priority_fn_producer,
+        p2p_clients.certification.client_handle.sender,
+    );
 
-    if ENABLE_NEW_P2P_DKG {
-        new_p2p_consensus.add_client(
-            dkg_rx,
-            dkg_pool,
-            p2p_clients.dkg.priority_fn_producer,
-            p2p_clients.dkg.client_handle.sender,
-        );
-    } else {
-        backends.insert(DkgArtifact::TAG, Box::new(p2p_clients.dkg.client_handle));
-    }
-    let (ingress_sender, ingress_pool) = if ENABLE_NEW_P2P_INGRESS {
+    new_p2p_consensus.add_client(
+        dkg_rx,
+        dkg_pool,
+        p2p_clients.dkg.priority_fn_producer,
+        p2p_clients.dkg.client_handle.sender,
+    );
+    let (ingress_sender, ingress_pool) = {
         new_p2p_consensus.add_client(
             ingress_rx,
             ingress_pool.clone(),
@@ -299,43 +242,21 @@ pub fn setup_consensus_and_p2p(
             p2p_clients.ingress.client_handle.sender.clone(),
         );
         (p2p_clients.ingress.client_handle.sender, ingress_pool)
-    } else {
-        let ingress_sender = p2p_clients.ingress.client_handle.sender.clone();
-
-        backends.insert(
-            IngressArtifact::TAG,
-            Box::new(p2p_clients.ingress.client_handle),
-        );
-        (ingress_sender, ingress_pool)
     };
 
-    if ENABLE_NEW_P2P_ECDSA {
-        new_p2p_consensus.add_client(
-            ecdsa_rx,
-            ecdsa_pool,
-            p2p_clients.ecdsa.priority_fn_producer,
-            p2p_clients.ecdsa.client_handle.sender,
-        );
-    } else {
-        backends.insert(
-            EcdsaArtifact::TAG,
-            Box::new(p2p_clients.ecdsa.client_handle),
-        );
-    }
+    new_p2p_consensus.add_client(
+        ecdsa_rx,
+        ecdsa_pool,
+        p2p_clients.ecdsa.priority_fn_producer,
+        p2p_clients.ecdsa.client_handle.sender,
+    );
 
-    if ENABLE_NEW_P2P_HTTPS_OUTCALLS {
-        new_p2p_consensus.add_client(
-            http_outcalls_rx,
-            canister_http_pool,
-            p2p_clients.https_outcalls.priority_fn_producer,
-            p2p_clients.https_outcalls.client_handle.sender,
-        );
-    } else {
-        backends.insert(
-            CanisterHttpArtifact::TAG,
-            Box::new(p2p_clients.https_outcalls.client_handle),
-        );
-    }
+    new_p2p_consensus.add_client(
+        http_outcalls_rx,
+        canister_http_pool,
+        p2p_clients.https_outcalls.priority_fn_producer,
+        p2p_clients.https_outcalls.client_handle.sender,
+    );
     p2p_router = Some(
         new_p2p_consensus
             .router()
@@ -388,31 +309,6 @@ pub fn setup_consensus_and_p2p(
 
     let _cancellation_token = new_p2p_consensus.run(quic_transport, topology_watcher);
 
-    if !(ENABLE_NEW_P2P_CONSENSUS
-        && ENABLE_NEW_P2P_CERTIFICATION
-        && ENABLE_NEW_P2P_DKG
-        && ENABLE_NEW_P2P_INGRESS
-        && ENABLE_NEW_P2P_ECDSA
-        && ENABLE_NEW_P2P_HTTPS_OUTCALLS)
-    {
-        let artifact_manager = Arc::new(
-            manager::ArtifactManagerImpl::new_with_default_priority_fn(backends),
-        );
-
-        join_handles.push(start_p2p(
-            log,
-            metrics_registry,
-            rt_handle,
-            node_id,
-            subnet_id,
-            transport_config,
-            registry_client,
-            consensus_pool_cache,
-            artifact_manager,
-            advert_rx,
-            tls_handshake,
-        ));
-    }
     (ingress_pool, ingress_sender, join_handles)
 }
 
@@ -544,19 +440,6 @@ fn start_consensus(
                         .expect("Channel should not be closed");
                 })
             }
-
-            P2PSenders {
-                consensus: Channel::Old(advert_tx),
-                ..
-            } => {
-                let advert_tx = advert_tx.clone();
-
-                Box::new(move |req| {
-                    if let ArtifactProcessorEvent::Artifact(advert) = req {
-                        let _ = advert_tx.send(advert.advert.into());
-                    }
-                })
-            }
         };
 
         let (client, jh) = create_consensus_handlers(
@@ -591,19 +474,6 @@ fn start_consensus(
                         .expect("Channel should not be closed");
                 })
             }
-
-            P2PSenders {
-                ingress: Channel::Old(advert_tx),
-                ..
-            } => {
-                let advert_tx = advert_tx.clone();
-
-                Box::new(move |req| {
-                    if let ArtifactProcessorEvent::Artifact(advert) = req {
-                        let _ = advert_tx.send(advert.advert.into());
-                    }
-                })
-            }
         };
         // Create the ingress client.
         let (client, jh) = create_ingress_handlers(
@@ -634,19 +504,6 @@ fn start_consensus(
                     advert_tx
                         .blocking_send(req)
                         .expect("Channel should not be closed");
-                })
-            }
-
-            P2PSenders {
-                certification: Channel::Old(advert_tx),
-                ..
-            } => {
-                let advert_tx = advert_tx.clone();
-
-                Box::new(move |req| {
-                    if let ArtifactProcessorEvent::Artifact(advert) = req {
-                        let _ = advert_tx.send(advert.advert.into());
-                    }
                 })
             }
         };
@@ -689,18 +546,6 @@ fn start_consensus(
                     advert_tx
                         .blocking_send(req)
                         .expect("Channel should not be closed");
-                })
-            }
-            P2PSenders {
-                dkg: Channel::Old(advert_tx),
-                ..
-            } => {
-                let advert_tx = advert_tx.clone();
-
-                Box::new(move |req| {
-                    if let ArtifactProcessorEvent::Artifact(advert) = req {
-                        let _ = advert_tx.send(advert.advert.into());
-                    }
                 })
             }
         };
@@ -755,17 +600,6 @@ fn start_consensus(
                         .expect("Channel should not be closed");
                 })
             }
-            P2PSenders {
-                ecdsa: Channel::Old(advert_tx),
-                ..
-            } => {
-                let advert_tx = advert_tx.clone();
-                Box::new(move |req| {
-                    if let ArtifactProcessorEvent::Artifact(advert) = req {
-                        let _ = advert_tx.send(advert.advert.into());
-                    }
-                })
-            }
         };
 
         let ecdsa_gossip = Arc::new(ecdsa::EcdsaGossipImpl::new(
@@ -810,17 +644,6 @@ fn start_consensus(
                     advert_tx
                         .blocking_send(req)
                         .expect("Channel should not be closed");
-                })
-            }
-            P2PSenders {
-                https_outcalls: Channel::Old(advert_tx),
-                ..
-            } => {
-                let advert_tx = advert_tx.clone();
-                Box::new(move |req| {
-                    if let ArtifactProcessorEvent::Artifact(advert) = req {
-                        let _ = advert_tx.send(advert.advert.into());
-                    }
                 })
             }
         };

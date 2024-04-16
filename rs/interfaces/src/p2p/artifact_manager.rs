@@ -2,10 +2,8 @@
 use crate::p2p::consensus::ChangeResult;
 use crate::time_source::TimeSource;
 use derive_more::From;
-use ic_types::artifact::{
-    ArtifactKind, ArtifactPriorityFn, PriorityFn, UnvalidatedArtifactMutation,
-};
-use ic_types::{artifact, p2p, single_chunked, NodeId};
+use ic_types::artifact;
+use ic_types::artifact::{ArtifactKind, PriorityFn, UnvalidatedArtifactMutation};
 
 use super::consensus::ArtifactWithOpt;
 
@@ -113,72 +111,3 @@ pub trait ArtifactProcessor<Artifact: artifact::ArtifactKind>: Send {
         new_artifact_events: Vec<UnvalidatedArtifactMutation<Artifact>>,
     ) -> ChangeResult<Artifact>;
 }
-
-/// The Artifact Manager stores artifacts to be used by this and other nodes in
-/// the same subnet in the artifact pool.
-///
-/// The Artifact Manager is the API between P2P(Gossip+Transport) and
-/// its clients.
-///
-// tag::artifact_manager[]
-pub trait ArtifactManager: Send + Sync {
-    /// When a new artifact is received, it is forwarded to the
-    /// ArtifactManager together with its advert via the on_artifact call.
-    /// This then forwards them to be processed by the corresponding
-    /// ArtifactClient/ArtifactProcessor based on the artifact type.
-    /// Returns `OnArtifactError` if no clients were able to process it or
-    /// an error has occurred.
-    ///
-    /// See `ArtifactClient::on_artifact` for more details.
-    #[allow(clippy::result_large_err)]
-    fn on_artifact(&self, msg: artifact::Artifact, peer_id: &NodeId)
-        -> Result<(), OnArtifactError>;
-
-    /// Check if the artifact specified by the id already exists in the
-    /// corresponding artifact pool.
-    ///
-    /// Gossip calls `has_artifact` to determine if it should proceed with
-    /// downloading the corresponding artifact.
-    fn has_artifact(&self, artifact_id: &artifact::ArtifactId) -> bool;
-
-    /// Return a `ChunkableArtifact` implementation for the validated
-    /// artifact identified by the id. If the artifact doesn't exist then None is
-    /// returned.
-    ///
-    /// Gossip calls `get_validated_by_identifier` when it needs to send a
-    /// `Chunk`, from the artifact identified by the id, to the requesting peer.
-    fn get_validated_by_identifier(
-        &self,
-        artifact_id: &artifact::ArtifactId,
-    ) -> Option<Box<dyn single_chunked::ChunkableArtifact + '_>>;
-
-    /// Return a filter that is passed along to other peers when Gossip
-    /// sends a re-transmission/bootstrap request. This filter is a collection of all
-    /// filters returned by all Gossip clients. We do this aggregration because
-    /// re-transimission/bootstrap requests happen mainly when a peer joins
-    /// the subnet, so instead of requesting the filter for each Gossip client
-    /// individually we do it in bulk.
-    ///
-    /// See `ArtifactClient::get_filter` for more details.
-    fn get_filter(&self) -> artifact::ArtifactFilter;
-
-    /// Return adverts for all existing validated artifacts accepted
-    /// by the filter.
-    ///
-    /// After Gossip receives a re-tranmission/bootstrap request it calls
-    /// `get_all_validated_by_filter` to get a new set of adverts that sends to the
-    /// requesting peer.
-    ///
-    /// See `ArtifactClient::get_all_validated_by_filter` for more details.
-    fn get_all_validated_by_filter(
-        &self,
-        filter: &artifact::ArtifactFilter,
-    ) -> Vec<p2p::GossipAdvert>;
-
-    /// Return the priority function for a specific client that is identified by
-    /// the given artifact tag.
-    ///
-    /// See `ArtifactClient::get_priority_function` for more details.
-    fn get_priority_function(&self, tag: artifact::ArtifactTag) -> ArtifactPriorityFn;
-}
-// end::artifact_manager[]
