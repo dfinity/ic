@@ -803,7 +803,8 @@ message DerivedState {
   // May be greater than cf_participant_count if multiple neurons in
   // the Neurons' Fund have the same controller.
   optional uint64 cf_neuron_count = 5;
-  // Current approximate rate SNS tokens per ICP.
+  // Current approximate rate SNS tokens per ICP. Note that this should not be used for super
+  // precise financial accounting, because this is floating point.
   float sns_tokens_per_icp = 2;
   // Current amount of contributions from direct swap participants.
   optional uint64 direct_participation_icp_e8s = 6;
