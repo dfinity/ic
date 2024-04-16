@@ -1,6 +1,5 @@
 {
   "version": 1,
-  "dfx": "0.14.3",
   "canisters": {
     "minter": {
       "type": "custom",
@@ -12,6 +11,15 @@
       "shrink": false
     },
     "ledger": {
+      "type": "custom",
+      "build": [
+        "bazel build //rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm"
+      ],
+      "wasm": "../../../../bazel-bin/rs/rosetta-api/icrc1/ledger/ledger_canister_u256.wasm",
+      "candid": "../../../rosetta-api/icrc1/ledger/ledger.did",
+      "shrink": false
+    },
+    "ckusdc_ledger": {
       "type": "custom",
       "build": [
         "bazel build //rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm"
@@ -32,9 +40,9 @@
     "orchestrator": {
       "type": "custom",
       "build": [
-        "bazel build //rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm"
+        "bazel build //rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm.gz"
       ],
-      "wasm": "../../../../bazel-bin/rs/ethereum/ledger-suite-orchestrator/ledger_suite_orchestrator_canister.wasm",
+      "wasm": "../../../../bazel-bin/rs/ethereum/ledger-suite-orchestrator/ledger_suite_orchestrator_canister.wasm.gz",
       "candid": "../../ledger-suite-orchestrator/ledger_suite_orchestrator.did",
       "shrink": false
     }
