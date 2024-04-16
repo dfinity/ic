@@ -38,6 +38,7 @@ use registry_canister::{
         do_change_subnet_membership::ChangeSubnetMembershipPayload,
         do_create_subnet::CreateSubnetPayload,
         do_delete_subnet::DeleteSubnetPayload,
+        do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
         do_recover_subnet::RecoverSubnetPayload,
         do_remove_api_boundary_nodes::RemoveApiBoundaryNodesPayload,
         do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
@@ -50,6 +51,7 @@ use registry_canister::{
         do_update_node_operator_config::UpdateNodeOperatorConfigPayload,
         do_update_node_operator_config_directly::UpdateNodeOperatorConfigDirectlyPayload,
         do_update_nodes_hostos_version::UpdateNodesHostosVersionPayload,
+        do_update_ssh_readonly_access_for_all_unassigned_nodes::UpdateSshReadOnlyAccessForAllUnassignedNodesPayload,
         do_update_subnet::UpdateSubnetPayload,
         do_update_subnet_replica::UpdateSubnetReplicaVersionPayload,
         do_update_unassigned_nodes_config::UpdateUnassignedNodesConfigPayload,
@@ -756,6 +758,42 @@ fn update_unassigned_nodes_config() {
 #[candid_method(update, rename = "update_unassigned_nodes_config")]
 fn update_unassigned_nodes_config_(payload: UpdateUnassignedNodesConfigPayload) {
     registry_mut().do_update_unassigned_nodes_config(payload);
+    recertify_registry();
+}
+
+#[export_name = "canister_update deploy_guestos_to_all_unassigned_nodes"]
+fn deploy_guestos_to_all_unassigned_nodes() {
+    check_caller_is_governance_and_log("deploy_guestos_to_all_unassigned_nodes");
+    over(
+        candid_one,
+        |payload: DeployGuestosToAllUnassignedNodesPayload| {
+            deploy_guestos_to_all_unassigned_nodes_(payload)
+        },
+    );
+}
+
+#[candid_method(update, rename = "deploy_guestos_to_all_unassigned_nodes")]
+fn deploy_guestos_to_all_unassigned_nodes_(payload: DeployGuestosToAllUnassignedNodesPayload) {
+    registry_mut().do_deploy_guestos_to_all_unassigned_nodes(payload);
+    recertify_registry();
+}
+
+#[export_name = "canister_update update_ssh_readonly_access_for_all_unassigned_nodes"]
+fn update_ssh_readonly_access_for_all_unassigned_nodes() {
+    check_caller_is_governance_and_log("update_ssh_readonly_access_for_all_unassigned_nodes");
+    over(
+        candid_one,
+        |payload: UpdateSshReadOnlyAccessForAllUnassignedNodesPayload| {
+            update_ssh_readonly_access_for_all_unassigned_nodes_(payload)
+        },
+    );
+}
+
+#[candid_method(update, rename = "update_ssh_readonly_access_for_all_unassigned_nodes")]
+fn update_ssh_readonly_access_for_all_unassigned_nodes_(
+    payload: UpdateSshReadOnlyAccessForAllUnassignedNodesPayload,
+) {
+    registry_mut().do_update_ssh_readonly_access_for_all_unassigned_nodes(payload);
     recertify_registry();
 }
 

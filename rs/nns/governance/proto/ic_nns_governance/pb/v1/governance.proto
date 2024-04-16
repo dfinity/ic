@@ -555,7 +555,7 @@ enum NnsFunction {
   NNS_FUNCTION_UPDATE_NODE_REWARDS_TABLE = 20;
   // Add or remove Data Center records.
   NNS_FUNCTION_ADD_OR_REMOVE_DATA_CENTERS = 21;
-  // Update the config for all unassigned nodes.
+  // (obsolete) Update the config for all unassigned nodes.
   NNS_FUNCTION_UPDATE_UNASSIGNED_NODES_CONFIG = 22;
   // Remove Node Operator from the registry.
   NNS_FUNCTION_REMOVE_NODE_OPERATORS = 23;
@@ -634,8 +634,17 @@ enum NnsFunction {
   reserved 45;
   reserved "NNS_FUNCTION_UPDATE_API_BOUNDARY_NODE_DOMAIN";
 
-  // A proposal to update the version of a set of API Boundary Nodes
+  // (obsolete) A proposal to update the version of a set of API Boundary Nodes
   NNS_FUNCTION_UPDATE_API_BOUNDARY_NODES_VERSION = 46;
+
+  // A proposal to update the version of a set of API Boundary Nodes
+  NNS_FUNCTION_DEPLOY_GUESTOS_TO_SOME_API_BOUNDARY_NODES = 47;
+
+  // A proposal to update the version of all unassigned nodes
+  NNS_FUNCTION_DEPLOY_GUESTOS_TO_ALL_UNASSIGNED_NODES = 48;
+
+  // A proposal to update SSH readonly access for all unassigned nodes
+  NNS_FUNCTION_UPDATE_SSH_READONLY_ACCESS_FOR_ALL_UNASSIGNED_NODES = 49;
 }
 
 // Payload of a proposal that calls a function on another NNS

@@ -1,16 +1,12 @@
 use crate::{
     common::LOG_PREFIX,
-    mutations::common::{check_replica_version_is_blessed, encode_or_panic},
+    mutations::do_update_unassigned_nodes_config::UpdateUnassignedNodesConfigPayload,
     registry::Registry,
 };
 
 use candid::{CandidType, Deserialize};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
-use ic_nns_common::registry::decode_or_panic;
-use ic_protobuf::registry::unassigned_nodes_config::v1::UnassignedNodesConfigRecord;
-use ic_registry_keys::make_unassigned_nodes_config_record_key;
-use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation};
 use serde::Serialize;
 
 /// Updates the parameter that apply to all unassigned nodes in the Registry.
@@ -18,52 +14,27 @@ use serde::Serialize;
 /// This method is called by the Governance canister, after a proposal for
 /// updating the unassigned nodes config has been accepted.
 impl Registry {
-    pub fn do_update_unassigned_nodes_config(
+    pub fn do_update_ssh_readonly_access_for_all_unassigned_nodes(
         &mut self,
-        payload: UpdateUnassignedNodesConfigPayload,
+        payload: UpdateSshReadOnlyAccessForAllUnassignedNodesPayload,
     ) {
-        println!("{}do_update_unassigned_nodes: {:?}", LOG_PREFIX, payload);
+        println!(
+            "{}do_update_ssh_readonly_access_for_all_unassigned_nodes: {:?}",
+            LOG_PREFIX, payload
+        );
 
-        let unassigned_nodes_key = make_unassigned_nodes_config_record_key();
-        let (current_ssh_readonly_access, current_replica_version) = match self
-            .get(unassigned_nodes_key.as_bytes(), self.latest_version())
-        {
-            Some(encoded_config) => {
-                let config =
-                    decode_or_panic::<UnassignedNodesConfigRecord>(encoded_config.value.to_vec());
-                (config.ssh_readonly_access, config.replica_version)
-            }
-            None => (vec![], "".to_string()),
+        let update_unassigned_nodes_config_payload = UpdateUnassignedNodesConfigPayload {
+            ssh_readonly_access: Some(payload.ssh_readonly_keys),
+            replica_version: None,
         };
 
-        let config = UnassignedNodesConfigRecord {
-            ssh_readonly_access: match payload.ssh_readonly_access {
-                Some(keys) => keys,
-                None => current_ssh_readonly_access,
-            },
-            replica_version: match payload.replica_version {
-                Some(keys) => keys,
-                None => current_replica_version,
-            },
-        };
-
-        check_replica_version_is_blessed(self, &config.replica_version);
-
-        let mutations = vec![RegistryMutation {
-            mutation_type: registry_mutation::Type::Upsert as i32,
-            key: unassigned_nodes_key.as_bytes().to_vec(),
-            value: encode_or_panic(&config),
-        }];
-
-        // Check invariants before applying mutations
-        self.maybe_apply_mutation_internal(mutations);
+        self.do_update_unassigned_nodes_config(update_unassigned_nodes_config_payload);
     }
 }
 
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct UpdateUnassignedNodesConfigPayload {
-    pub ssh_readonly_access: Option<Vec<String>>,
-    pub replica_version: Option<String>,
+pub struct UpdateSshReadOnlyAccessForAllUnassignedNodesPayload {
+    pub ssh_readonly_keys: Vec<String>,
 }
 
 #[cfg(test)]
@@ -76,10 +47,16 @@ mod tests {
 
     use crate::{
         common::test_helpers::invariant_compliant_registry,
-        mutations::common::{decode_registry_value, encode_or_panic, get_unassigned_nodes_record},
+        mutations::{
+            common::{
+                decode_registry_value, encode_or_panic, get_blessed_replica_versions,
+                get_unassigned_nodes_record,
+            },
+            do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
+        },
     };
 
-    use super::UpdateUnassignedNodesConfigPayload;
+    use super::UpdateSshReadOnlyAccessForAllUnassignedNodesPayload;
 
     #[test]
     #[should_panic(expected = "version is NOT blessed")]
@@ -87,16 +64,15 @@ mod tests {
         let mut registry = invariant_compliant_registry(0);
 
         // Make a proposal to upgrade all unassigned nodes to a new version
-        let payload = UpdateUnassignedNodesConfigPayload {
-            ssh_readonly_access: None,
-            replica_version: Some("version".into()),
+        let payload = DeployGuestosToAllUnassignedNodesPayload {
+            elected_replica_version: "version".into(),
         };
 
-        registry.do_update_unassigned_nodes_config(payload);
+        registry.do_deploy_guestos_to_all_unassigned_nodes(payload);
     }
 
     #[test]
-    fn should_succeed_if_payload_is_valid() {
+    fn should_succeed_if_upgrade_proposal_is_valid() {
         let mut registry = invariant_compliant_registry(0);
 
         // Create and bless version
@@ -128,33 +104,55 @@ mod tests {
             ),
         ]);
 
-        let public_keys = vec!["keyX".into(), "keyY".into()];
-
         // Make a proposal to upgrade all unassigned nodes to a new blessed version
-        // and add readonly SSH keys
-        let payload = UpdateUnassignedNodesConfigPayload {
-            ssh_readonly_access: Some(public_keys.clone()),
-            replica_version: Some("version".into()),
+        let payload = DeployGuestosToAllUnassignedNodesPayload {
+            elected_replica_version: "version".into(),
         };
 
-        registry.do_update_unassigned_nodes_config(payload);
+        registry.do_deploy_guestos_to_all_unassigned_nodes(payload);
 
         let unassigned_nodes_record = get_unassigned_nodes_record(&registry)
             .expect("failed to get unassigned nodes config record");
         assert_eq!(unassigned_nodes_record.replica_version, "version");
+    }
+
+    #[test]
+    fn should_succeed_adding_and_removing_readonly_ssh_keys() {
+        let mut registry = invariant_compliant_registry(0);
+
+        // first we need to make sure that the unassigned nodes record has blessed replica version
+        let blessed_versions = get_blessed_replica_versions(&registry)
+            .expect("failed to get the blessed replica versions");
+        let payload = DeployGuestosToAllUnassignedNodesPayload {
+            elected_replica_version: blessed_versions
+                .blessed_version_ids
+                .first()
+                .expect("there is no blessed replica version")
+                .to_string(),
+        };
+        registry.do_deploy_guestos_to_all_unassigned_nodes(payload);
+
+        // Make a proposal to add two keys with read only access for the unassigned nodes
+        let public_keys = vec!["keyX".into(), "keyY".into()];
+        let payload = UpdateSshReadOnlyAccessForAllUnassignedNodesPayload {
+            ssh_readonly_keys: public_keys.clone(),
+        };
+
+        registry.do_update_ssh_readonly_access_for_all_unassigned_nodes(payload);
+
+        let unassigned_nodes_record = get_unassigned_nodes_record(&registry)
+            .expect("failed to get unassigned nodes config record");
         assert_eq!(unassigned_nodes_record.ssh_readonly_access, public_keys);
 
-        // Make a proposal to remove all SSH keys
-        let payload = UpdateUnassignedNodesConfigPayload {
-            ssh_readonly_access: Some(Vec::<String>::new()),
-            replica_version: None,
+        // Make a proposal to remove the keys
+        let payload = UpdateSshReadOnlyAccessForAllUnassignedNodesPayload {
+            ssh_readonly_keys: vec![],
         };
 
-        registry.do_update_unassigned_nodes_config(payload);
+        registry.do_update_ssh_readonly_access_for_all_unassigned_nodes(payload);
 
         let unassigned_nodes_record = get_unassigned_nodes_record(&registry)
             .expect("failed to get unassigned nodes config record");
-        assert_eq!(unassigned_nodes_record.replica_version, "version");
         assert_eq!(
             unassigned_nodes_record.ssh_readonly_access,
             Vec::<String>::new()
