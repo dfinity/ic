@@ -1,7 +1,6 @@
 //! The traits in this file define the interface between the `p2p` and `artifact_manager` crates/packages.
 use crate::p2p::consensus::ChangeResult;
 use crate::time_source::TimeSource;
-use derive_more::From;
 use ic_types::artifact;
 use ic_types::artifact::{ArtifactKind, PriorityFn, UnvalidatedArtifactMutation};
 
@@ -11,14 +10,6 @@ use super::consensus::ArtifactWithOpt;
 /// This is useful when the the event loop/actor has multiple handles and a separate object
 /// that does the shutdown is required.
 pub trait JoinGuard {}
-
-#[derive(From, Debug)]
-/// An error type that combines 'NotProcessed' status with an actual
-/// error that might be returned by artifact pools. It is used as
-/// the return type for the `on_artifact` function of `ArtifactManager`.
-pub enum OnArtifactError {
-    NotProcessed,
-}
 
 pub enum ArtifactProcessorEvent<Artifact: ArtifactKind> {
     Artifact(ArtifactWithOpt<Artifact>),

@@ -365,10 +365,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "dashmap": crate.spec(
                 version = "^5.3.4",
             ),
-            "derive_more": crate.spec(
-                git = "https://github.com/dfinity-lab/derive_more",
-                rev = "9f1b894e6fde640da4e9ea71a8fc0e4dd98d01da",
-            ),
             "digest": crate.spec(
                 version = "^0.9.0",
             ),
@@ -447,9 +443,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "group": crate.spec(
                 version = "^0.13",
-            ),
-            "h2": crate.spec(
-                version = "^0.3.26",
             ),
             "hashlink": crate.spec(
                 version = "^0.8.0",

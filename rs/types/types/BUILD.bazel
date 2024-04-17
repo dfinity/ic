@@ -57,7 +57,6 @@ rust_library(
     srcs = glob(["src/**"]),
     crate_name = "ic_types",
     proc_macro_deps = [
-        "@crate_index//:derive_more",
         "@crate_index//:strum_macros",
     ],
     rustc_flags = select({

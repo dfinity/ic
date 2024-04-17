@@ -164,7 +164,7 @@ pub(crate) async fn query(
     if health_status.load() != ReplicaHealthStatus::Healthy {
         let status = StatusCode::SERVICE_UNAVAILABLE;
         let text = format!(
-            "Replica is unhealthy: {}. Check the /api/v2/status for more information.",
+            "Replica is unhealthy: {:?}. Check the /api/v2/status for more information.",
             health_status.load(),
         );
         return (status, text).into_response();
