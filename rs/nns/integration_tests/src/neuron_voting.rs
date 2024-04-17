@@ -14,7 +14,7 @@ use ic_nns_test_utils::{
     },
     state_test_helpers::{
         get_pending_proposals, nns_cast_vote, nns_governance_get_full_neuron,
-        nns_governance_make_proposal, setup_nns_canisters,
+        nns_governance_make_proposal, setup_nns_canisters, state_machine_builder_for_nns_tests,
     },
 };
 use ic_state_machine_tests::StateMachine;
@@ -22,7 +22,7 @@ use ic_state_machine_tests::StateMachine;
 const INVALID_PROPOSAL_ID: u64 = 69420;
 
 fn setup_state_machine_with_nns_canisters() -> StateMachine {
-    let state_machine = StateMachine::new();
+    let state_machine = state_machine_builder_for_nns_tests().build();
     let nns_init_payloads = NnsInitPayloadsBuilder::new().with_test_neurons().build();
     setup_nns_canisters(&state_machine, nns_init_payloads);
     state_machine

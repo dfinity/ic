@@ -13,12 +13,15 @@ use ic_nns_governance::pb::v1::{
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     neuron_helpers::get_neuron_1,
-    state_test_helpers::{get_canister_status, nns_governance_make_proposal, setup_nns_canisters},
+    state_test_helpers::{
+        get_canister_status, nns_governance_make_proposal, setup_nns_canisters,
+        state_machine_builder_for_nns_tests,
+    },
 };
 use ic_state_machine_tests::StateMachine;
 
 fn setup_state_machine_with_nns_canisters() -> StateMachine {
-    let state_machine = StateMachine::new();
+    let state_machine = state_machine_builder_for_nns_tests().build();
     let nns_init_payloads = NnsInitPayloadsBuilder::new().with_test_neurons().build();
     setup_nns_canisters(&state_machine, nns_init_payloads);
     state_machine
@@ -34,8 +37,9 @@ fn upgrade_canister() {
         PrincipalId::new_anonymous(),
         ROOT_CANISTER_ID,
         lifeline_canister_id,
-    )
-    .unwrap();
+    );
+    println!("The error is {:?}", root_status_before);
+    let root_status_before = root_status_before.unwrap();
     let old_module_hash = root_status_before.module_hash.clone().unwrap();
     let wasm = lifeline::LIFELINE_CANISTER_WASM;
     let new_module_hash = &ic_crypto_sha2::Sha256::hash(wasm);

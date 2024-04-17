@@ -1,13 +1,14 @@
 use canister_test::Project;
 use dfn_candid::candid_one;
 use ic_base_types::PrincipalId;
-use ic_nns_test_utils::state_test_helpers::{create_canister, update_with_sender};
-use ic_state_machine_tests::StateMachine;
+use ic_nns_test_utils::state_test_helpers::{
+    create_canister, state_machine_builder_for_nns_tests, update_with_sender,
+};
 use std::time::Duration;
 
 #[test]
 fn test_canister_playground() {
-    let state_machine = StateMachine::new();
+    let state_machine = state_machine_builder_for_nns_tests().build();
 
     let canister_playground_wasm =
         Project::cargo_bin_maybe_from_env("canister-playground-canister", &[]);

@@ -14,6 +14,7 @@ use ic_nns_test_utils::{
     neuron_helpers::{get_neuron_1, get_neuron_2, get_neuron_3},
     state_test_helpers::{
         nns_set_followees_for_neuron, nns_split_neuron, query, setup_nns_canisters,
+        state_machine_builder_for_nns_tests,
     },
 };
 use ic_state_machine_tests::StateMachine;
@@ -86,7 +87,7 @@ fn assert_neuron_indexes_lens(
 
 #[test]
 fn test_neuron_indexes_migrations() {
-    let mut state_machine = StateMachine::new();
+    let mut state_machine = state_machine_builder_for_nns_tests().build();
     let nns_init_payloads = NnsInitPayloadsBuilder::new().with_test_neurons().build();
     setup_nns_canisters(&state_machine, nns_init_payloads);
 

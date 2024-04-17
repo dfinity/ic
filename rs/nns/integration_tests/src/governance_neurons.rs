@@ -25,10 +25,9 @@ use ic_nns_test_utils::{
     itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
     state_test_helpers::{
         list_neurons, nns_add_hot_key, nns_join_community_fund, nns_leave_community_fund,
-        nns_remove_hot_key, setup_nns_canisters,
+        nns_remove_hot_key, setup_nns_canisters, state_machine_builder_for_nns_tests,
     },
 };
-use ic_state_machine_tests::StateMachine;
 use icp_ledger::{tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Tokens};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -282,7 +281,7 @@ fn test_spawn_neuron() {
 /// to list_neurons).
 #[test]
 fn test_neuron_controller_is_not_removed_from_principal_to_neuron_index() {
-    let mut state_machine = StateMachine::new();
+    let mut state_machine = state_machine_builder_for_nns_tests().build();
     let nns_init_payloads = NnsInitPayloadsBuilder::new().with_test_neurons().build();
     setup_nns_canisters(&state_machine, nns_init_payloads);
 
@@ -328,7 +327,7 @@ fn test_neuron_controller_is_not_removed_from_principal_to_neuron_index() {
 fn test_hotkey_can_join_and_leave_community_fund() {
     // Step 1: Prepare the world.
 
-    let mut state_machine = StateMachine::new();
+    let mut state_machine = state_machine_builder_for_nns_tests().build();
     let nns_init_payloads = NnsInitPayloadsBuilder::new().with_test_neurons().build();
     setup_nns_canisters(&state_machine, nns_init_payloads);
 

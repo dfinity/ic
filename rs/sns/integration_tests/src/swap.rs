@@ -2,12 +2,12 @@ use candid::{Decode, Encode, Principal};
 use ic_sns_swap::pb::v1::{
     GetStateRequest, GetStateResponse, Init, NeuronBasketConstructionParameters,
 };
-use ic_state_machine_tests::StateMachine;
+use ic_sns_test_utils::state_test_helpers::state_machine_builder_for_sns_tests;
 use pretty_assertions::assert_eq;
 
 #[test]
 fn test_upgrade() {
-    let state_machine = StateMachine::new();
+    let state_machine = state_machine_builder_for_sns_tests().build();
 
     // install the swap canister
     let wasm = ic_test_utilities_load_wasm::load_wasm("../swap", "sns-swap-canister", &[]);
