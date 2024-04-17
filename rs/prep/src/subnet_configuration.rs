@@ -110,6 +110,10 @@ pub struct SubnetConfig {
 
     /// The status of the subnet, i.e., whether it is running or halted.
     pub running_state: SubnetRunningState,
+
+    /// The initial block height of this subnet in case it is initialized from a CUP.
+    /// Defaults to 0, but the system test API overwrites this with a large default.
+    pub initial_height: u64,
 }
 
 #[derive(Error, Debug)]
@@ -225,6 +229,7 @@ impl SubnetConfig {
         ssh_readonly_access: Vec<String>,
         ssh_backup_access: Vec<String>,
         running_state: SubnetRunningState,
+        initial_height: Option<u64>,
     ) -> Self {
         let scheduler_config = SchedulerConfig::default_for_subnet_type(subnet_type);
 
@@ -257,6 +262,7 @@ impl SubnetConfig {
             ssh_readonly_access,
             ssh_backup_access,
             running_state,
+            initial_height: initial_height.unwrap_or(0),
         }
     }
 
@@ -272,6 +278,7 @@ impl SubnetConfig {
         for (node_index, node_config) in self.membership {
             let node_path = InitializedSubnet::build_node_path(subnet_path.as_path(), node_index);
             let initialized_node = node_config.initialize(node_path.as_path())?;
+
             initialized_nodes.insert(node_index, initialized_node);
         }
 
@@ -351,6 +358,29 @@ impl SubnetConfig {
             &ni_dkg_transcript_high_threshold,
         )?);
 
+        let pk = ThresholdSigPublicKey::try_from(subnet_threshold_signing_public_key.clone())?;
+        let der_pk = threshold_sig_public_key_to_der(pk)?;
+        let subnet_id = SubnetId::from(PrincipalId::new_self_authenticating(&der_pk[..]));
+
+        let state_hash = if self.initial_height != 0 {
+            let state_hashes: Vec<_> = initialized_nodes
+                .values()
+                .map(|initialized_node| {
+                    initialized_node.generate_initial_state(subnet_id, self.subnet_type)
+                })
+                .collect();
+
+            // Make sure that all states have the same state shash
+            assert_eq!(
+                state_hashes,
+                vec![state_hashes[0].clone(); state_hashes.len()],
+                "Generated initial states do not have the same state hash"
+            );
+            state_hashes[0].clone()
+        } else {
+            vec![]
+        };
+
         let subnet_dkg = CatchUpPackageContents {
             initial_ni_dkg_transcript_low_threshold: Some(InitialNiDkgTranscriptRecord::from(
                 ni_dkg_transcript_low_threshold,
@@ -358,12 +388,10 @@ impl SubnetConfig {
             initial_ni_dkg_transcript_high_threshold: Some(InitialNiDkgTranscriptRecord::from(
                 ni_dkg_transcript_high_threshold,
             )),
+            state_hash,
+            height: self.initial_height,
             ..Default::default()
         };
-
-        let pk = ThresholdSigPublicKey::try_from(subnet_threshold_signing_public_key.clone())?;
-        let der_pk = threshold_sig_public_key_to_der(pk)?;
-        let subnet_id = SubnetId::from(PrincipalId::new_self_authenticating(&der_pk[..]));
 
         Ok(InitializedSubnet {
             subnet_index,

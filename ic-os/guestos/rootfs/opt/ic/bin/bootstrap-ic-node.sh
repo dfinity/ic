@@ -118,6 +118,10 @@ function process_bootstrap() {
         echo "Installing initial crypto material"
         cp -rL -T "${TMPDIR}/ic_crypto" "${STATE_ROOT}/crypto"
     fi
+    if [ -e "${TMPDIR}/ic_state" ]; then
+        echo "Installing initial state"
+        cp -rL -T "${TMPDIR}/ic_state" "${STATE_ROOT}/data/ic_state"
+    fi
     for ITEM in ic_registry_local_store nns_public_key.pem node_operator_private_key.pem; do
         if [ -e "${TMPDIR}/${ITEM}" ]; then
             echo "Setting up initial ${ITEM}"

@@ -161,6 +161,7 @@ pub fn run_ic_prep() -> (TempDir, IcPrepStateDir) {
             vec![],
             vec![],
             SubnetRunningState::Active,
+            None,
         ),
     );
 
