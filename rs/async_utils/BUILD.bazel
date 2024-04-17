@@ -6,9 +6,6 @@ rust_library(
     name = "async_utils",
     srcs = glob(["src/**"]),
     crate_name = "ic_async_utils",
-    proc_macro_deps = [
-        "@crate_index//:derive_more",
-    ],
     version = "0.9.0",
     deps = [
         "@crate_index//:async-stream",
@@ -18,6 +15,7 @@ rust_library(
         "@crate_index//:futures-util",
         "@crate_index//:hyper_0_14_27",
         "@crate_index//:slog",
+        "@crate_index//:thiserror",
         "@crate_index//:tokio",
         "@crate_index//:tonic",
     ],

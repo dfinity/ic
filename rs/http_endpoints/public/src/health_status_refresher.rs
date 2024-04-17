@@ -96,16 +96,16 @@ where
                 .map(|old| {
                     warn!(
                         self.log,
-                        "Replicas latest certified state {} is considerably behind last finalized height {} setting health status to {}",
+                        "Replicas latest certified state {} is considerably behind last finalized height {} setting health status to {:?}",
                         self.state_reader_executor.latest_certified_height(),
                         self.consensus_pool_cache.finalized_block().height,
-                        ReplicaHealthStatus::CertifiedStateBehind.to_string(),
+                        ReplicaHealthStatus::CertifiedStateBehind,
                     );
                     self.metrics
                         .health_status_transitions_total
                         .with_label_values(&[
-                            &old.to_string(),
-                            &ReplicaHealthStatus::CertifiedStateBehind.to_string(),
+                            &old.as_ref(),
+                            &ReplicaHealthStatus::CertifiedStateBehind.as_ref(),
                         ])
                         .inc();
                 })
@@ -125,10 +125,7 @@ where
                     );
                     self.metrics
                         .health_status_transitions_total
-                        .with_label_values(&[
-                            &old.to_string(),
-                            &ReplicaHealthStatus::Healthy.to_string(),
-                        ])
+                        .with_label_values(&[&old.as_ref(), &ReplicaHealthStatus::Healthy.as_ref()])
                         .inc();
                 })
                 .ok();

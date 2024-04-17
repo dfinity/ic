@@ -607,10 +607,10 @@ pub async fn metrics_middleware_status(
         .extensions()
         .get::<ReplicaHealthStatus>()
         .unwrap()
-        .to_string();
+        .as_ref();
 
     let HttpMetricParamsStatus { counter } = metric_params;
-    counter.with_label_values(&[health.as_str()]).inc();
+    counter.with_label_values(&[health]).inc();
 
     response
 }

@@ -10,11 +10,11 @@ documentation.workspace = true
 async-stream = "0.3.4"
 bytes = { workspace = true }
 byte-unit = "4.0.14"
-derive_more = { git = "https://github.com/dfinity-lab/derive_more", rev = "9f1b894e6fde640da4e9ea71a8fc0e4dd98d01da" }
 futures = { workspace = true }
 futures-util = { workspace = true }
 hyper = { version = "0.14.16", features = ["full"] }
 slog = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true }
 tonic = { workspace = true }
 

@@ -66,7 +66,7 @@ dependencies = [
  "brotli",
  "bytes",
  "bytestring",
- "derive_more 0.99.17",
+ "derive_more",
  "encoding_rs",
  "flate2",
  "futures-core",
@@ -181,7 +181,7 @@ dependencies = [
  "bytestring",
  "cfg-if 1.0.0",
  "cookie",
- "derive_more 0.99.17",
+ "derive_more",
  "encoding_rs",
  "futures-core",
  "futures-util",
@@ -295,7 +295,7 @@ dependencies = [
  "axum 0.7.4",
  "bytes",
  "cfg-if 1.0.0",
- "derive_more 0.99.17",
+ "derive_more",
  "http 1.0.0",
  "indexmap 2.1.0",
  "schemars",
@@ -1394,7 +1394,7 @@ name = "build-info-common"
 version = "0.0.27"
 source = "git+https://github.com/dfinity-lab/build-info?rev=701a696844fba5c87df162fbbc1ccef96f27c9d7#701a696844fba5c87df162fbbc1ccef96f27c9d7"
 dependencies = [
- "derive_more 0.99.17",
+ "derive_more",
  "semver",
  "serde",
 ]
@@ -2754,16 +2754,6 @@ dependencies = [
 
 [[package]]
 name = "derive_more"
-version = "0.99.8-alpha.0"
-source = "git+https://github.com/dfinity-lab/derive_more?rev=9f1b894e6fde640da4e9ea71a8fc0e4dd98d01da#9f1b894e6fde640da4e9ea71a8fc0e4dd98d01da"
-dependencies = [
- "proc-macro2 1.0.76",
- "quote 1.0.35",
- "syn 1.0.109",
-]
-
-[[package]]
-name = "derive_more"
 version = "0.99.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4fb810d30a7c1953f91334de7244731fc3f3c10d7fe163338a35b9f640960321"
@@ -2880,7 +2870,6 @@ dependencies = [
  "curve25519-dalek",
  "cvt",
  "dashmap",
- "derive_more 0.99.8-alpha.0",
  "digest 0.9.0",
  "dyn-clone",
  "ed25519-consensus",
@@ -2904,7 +2893,6 @@ dependencies = [
  "getrandom 0.2.10",
  "glob",
  "group 0.13.0",
- "h2 0.3.26",
  "hashlink",
  "hex",
  "hex-literal",
@@ -9112,7 +9100,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "35c0a159d0c45c12b20c5a844feb1fe4bea86e28f17b92a5f0c42193634d3782"
 dependencies = [
  "cfg-if 1.0.0",
- "derive_more 0.99.17",
+ "derive_more",
  "parity-scale-codec",
  "scale-info-derive",
 ]
@@ -9310,7 +9298,7 @@ checksum = "4eb30575f3638fc8f6815f448d50cb1a2e255b0897985c8c59f4d37b72a07b06"
 dependencies = [
  "bitflags 2.4.1",
  "cssparser",
- "derive_more 0.99.17",
+ "derive_more",
  "fxhash",
  "log",
  "new_debug_unreachable",

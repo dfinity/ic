@@ -1,5 +1,5 @@
 {
-  "checksum": "6d8aae69fd573c3a52c93da3d499a17da1f42066961e307066dec53decbbe0a4",
+  "checksum": "2ab547b3efa5f5f22cd5c3ae044a513444a7587035cebfcc3bf3e52a526ef17c",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -14072,100 +14072,6 @@
       },
       "license": "MIT"
     },
-    "derive_more 0.99.8-alpha.0": {
-      "name": "derive_more",
-      "version": "0.99.8-alpha.0",
-      "repository": {
-        "Git": {
-          "remote": "https://github.com/dfinity-lab/derive_more",
-          "commitish": {
-            "Rev": "9f1b894e6fde640da4e9ea71a8fc0e4dd98d01da"
-          }
-        }
-      },
-      "targets": [
-        {
-          "ProcMacro": {
-            "crate_name": "derive_more",
-            "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        }
-      ],
-      "library_target_name": "derive_more",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "add",
-            "add_assign",
-            "as_mut",
-            "as_ref",
-            "constructor",
-            "default",
-            "deref",
-            "deref_mut",
-            "display",
-            "error",
-            "from",
-            "from_str",
-            "index",
-            "index_mut",
-            "into",
-            "into_iterator",
-            "iterator",
-            "mul",
-            "mul_assign",
-            "not",
-            "sum",
-            "try_into"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "derive_more 0.99.8-alpha.0",
-              "target": "build_script_build"
-            },
-            {
-              "id": "proc-macro2 1.0.76",
-              "target": "proc_macro2"
-            },
-            {
-              "id": "quote 1.0.35",
-              "target": "quote"
-            },
-            {
-              "id": "syn 1.0.109",
-              "target": "syn"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.99.8-alpha.0"
-      },
-      "build_script_attrs": {
-        "data_glob": [
-          "**"
-        ]
-      },
-      "license": "MIT"
-    },
     "diff 0.1.13": {
       "name": "diff",
       "version": "0.1.13",
@@ -14713,10 +14619,6 @@
             {
               "id": "group 0.13.0",
               "target": "group"
-            },
-            {
-              "id": "h2 0.3.26",
-              "target": "h2"
             },
             {
               "id": "hashlink 0.8.4",
@@ -15687,10 +15589,6 @@
             {
               "id": "async-trait 0.1.74",
               "target": "async_trait"
-            },
-            {
-              "id": "derive_more 0.99.8-alpha.0",
-              "target": "derive_more"
             },
             {
               "id": "educe 0.4.23",
@@ -65577,7 +65475,6 @@
     "curve25519-dalek 4.1.2",
     "cvt 0.1.2",
     "dashmap 5.5.3",
-    "derive_more 0.99.8-alpha.0",
     "digest 0.9.0",
     "dyn-clone 1.0.14",
     "ed25519-consensus 2.1.0",
@@ -65601,7 +65498,6 @@
     "getrandom 0.2.10",
     "glob 0.3.1",
     "group 0.13.0",
-    "h2 0.3.26",
     "hashlink 0.8.4",
     "hex 0.4.3",
     "hex-literal 0.4.1",
