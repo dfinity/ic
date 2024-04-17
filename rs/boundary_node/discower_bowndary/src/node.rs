@@ -6,8 +6,10 @@ pub struct Node {
 }
 
 impl Node {
-    pub fn new(domain: String) -> Self {
-        Self { domain }
+    pub fn new<S: AsRef<str>>(domain: S) -> Self {
+        Self {
+            domain: domain.as_ref().to_string(),
+        }
     }
 }
 

@@ -41,7 +41,7 @@ impl NodesFetchActor {
             tokio::select! {
                 _ = interval.tick() => {
                         let snapshot = self.snapshot.load();
-                        let node = snapshot.random_node().expect("no node found");
+                        let node = snapshot.next().expect("no node found");
                         let nodes = self.fetcher.fetch(node.into()).await.unwrap();
                         let msg = Some(
                             FetchedNodes {nodes}
