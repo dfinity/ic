@@ -37,8 +37,9 @@ use crate::common::rest::{
     ApiResponse, BlobCompression, BlobId, CreateHttpGatewayResponse, CreateInstanceResponse,
     DtsFlag, ExtendedSubnetConfigSet, HttpGatewayBackend, HttpGatewayConfig, HttpGatewayInfo,
     InstanceId, RawAddCycles, RawCanisterCall, RawCanisterId, RawCanisterResult, RawCycles,
-    RawEffectivePrincipal, RawSetStableMemory, RawStableMemory, RawSubnetId, RawTime,
-    RawVerifyCanisterSigArg, RawWasmResult, SubnetId, SubnetSpec, Topology,
+    RawEffectivePrincipal, RawMessageId, RawSetStableMemory, RawStableMemory,
+    RawSubmitIngressResult, RawSubnetId, RawTime, RawVerifyCanisterSigArg, RawWasmResult, SubnetId,
+    SubnetSpec, Topology,
 };
 use candid::{
     decode_args, encode_args,
@@ -523,6 +524,60 @@ impl PocketIc {
         result.cycles
     }
 
+    /// Submit an update call (without executing it immediately).
+    pub fn submit_call(
+        &self,
+        canister_id: CanisterId,
+        sender: Principal,
+        method: &str,
+        payload: Vec<u8>,
+    ) -> Result<RawMessageId, UserError> {
+        self.submit_call_with_effective_principal(
+            canister_id,
+            RawEffectivePrincipal::None,
+            sender,
+            method,
+            payload,
+        )
+    }
+
+    /// Submit an update call with a provided effective principal (without executing it immediately).
+    pub fn submit_call_with_effective_principal(
+        &self,
+        canister_id: CanisterId,
+        effective_principal: RawEffectivePrincipal,
+        sender: Principal,
+        method: &str,
+        payload: Vec<u8>,
+    ) -> Result<RawMessageId, UserError> {
+        let endpoint = "update/submit_ingress_message";
+        let raw_canister_call = RawCanisterCall {
+            sender: sender.as_slice().to_vec(),
+            canister_id: canister_id.as_slice().to_vec(),
+            method: method.to_string(),
+            payload,
+            effective_principal,
+        };
+        let res: RawSubmitIngressResult = self.post(endpoint, raw_canister_call);
+        match res {
+            RawSubmitIngressResult::Ok(message_id) => Ok(message_id),
+            RawSubmitIngressResult::Err(user_error) => Err(user_error),
+        }
+    }
+
+    /// Await an update call submitted previously by `submit_call_with_effective_principal`.
+    pub fn await_call(&self, message_id: RawMessageId) -> Result<WasmResult, UserError> {
+        let endpoint = "update/await_ingress_message";
+        let result: RawCanisterResult = self.post(endpoint, message_id);
+        match result {
+            RawCanisterResult::Ok(raw_wasm_result) => match raw_wasm_result {
+                RawWasmResult::Reply(data) => Ok(WasmResult::Reply(data)),
+                RawWasmResult::Reject(text) => Ok(WasmResult::Reject(text)),
+            },
+            RawCanisterResult::Err(user_error) => Err(user_error),
+        }
+    }
+
     /// Execute an update call on a canister.
     #[instrument(skip(self, payload), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), sender = %sender.to_string(), method = %method, payload_len = %payload.len()))]
     pub fn update_call(
@@ -532,11 +587,9 @@ impl PocketIc {
         method: &str,
         payload: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
-        let endpoint = "update/execute_ingress_message";
-        self.canister_call(
-            endpoint,
-            RawEffectivePrincipal::None,
+        self.update_call_with_effective_principal(
             canister_id,
+            RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
             sender,
             method,
             payload,
@@ -1000,15 +1053,14 @@ impl PocketIc {
         method: &str,
         payload: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
-        let endpoint = "update/execute_ingress_message";
-        self.canister_call(
-            endpoint,
-            effective_principal,
+        let message_id = self.submit_call_with_effective_principal(
             canister_id,
+            effective_principal,
             sender,
             method,
             payload,
-        )
+        )?;
+        self.await_call(message_id)
     }
 }
 
