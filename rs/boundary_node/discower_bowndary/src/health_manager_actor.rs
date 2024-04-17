@@ -78,8 +78,9 @@ impl HealthManagerActor {
     async fn handle_health_changed(&mut self, msg: NodeHealthChanged) {
         let current_snapshot = self.snapshot.load_full();
         let mut new_snapshot: Snapshot = (*current_snapshot).clone();
-        new_snapshot.update_node((&msg.node, msg.health)).unwrap();
-        // Replace the snapshot with the new instance.
+        new_snapshot
+            .update_node_health(&msg.node, msg.health)
+            .unwrap();
         self.snapshot.store(Arc::new(new_snapshot));
     }
 
@@ -90,9 +91,13 @@ impl HealthManagerActor {
             .clone()
             .expect("can't be None as change was detected");
         println!("HealthManagerActor: fetched nodes received {:?}", nodes);
-        // TODO: compare received nodes with existing ones.
-        // Stop only removed ones and start only new ones.
-        // Also start nodes uniformly within time period for a better health overview.
+        let current_snapshot = self.snapshot.load_full();
+        let mut new_snapshot: Snapshot = (*current_snapshot).clone();
+        let _nodes_change = new_snapshot.sync_with(&nodes).unwrap();
+        self.snapshot.store(Arc::new(new_snapshot));
+        // TODO:
+        // 1. Stop only removed_nodes and start only added_nodes => self.stop_checks(nodes_change.removed_nodes).await;
+        // 2. Start nodes uniformly within time period for a better health overview.
         self.stop_checks().await;
         self.start_checks(nodes);
     }
