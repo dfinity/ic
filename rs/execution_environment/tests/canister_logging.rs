@@ -365,11 +365,16 @@ fn test_canister_log_record_index_increment_for_different_calls() {
             )
             .build(),
     );
+
+    // First call.
     let timestamp_01 = env.time_of_next_round();
     let _ = env.execute_ingress(canister_id, "test1", vec![]);
+
+    // Second call.
     env.advance_time(Duration::from_nanos(123_456));
     let timestamp_23 = env.time_of_next_round();
     let _ = env.execute_ingress(canister_id, "test2", vec![]);
+
     let result = fetch_canister_logs(env, controller, canister_id);
     assert_eq!(
         FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
@@ -420,14 +425,18 @@ fn test_canister_log_record_index_increment_after_node_restart() {
     );
     env.set_checkpoints_enabled(true);
 
+    // First call.
     let timestamp_01 = env.time_of_next_round();
     let _ = env.execute_ingress(canister_id, "test1", vec![]);
 
+    // Node restart.
     let env = restart_node(env, canister_logging);
     env.advance_time(Duration::from_nanos(123_456));
 
+    // Second call.
     let timestamp_23 = env.time_of_next_round();
     let _ = env.execute_ingress(canister_id, "test2", vec![]);
+
     let result = fetch_canister_logs(env, controller, canister_id);
     assert_eq!(
         FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
@@ -467,7 +476,7 @@ fn test_logging_in_trapped_wasm_execution() {
             .build(),
     );
     // Grow stable memory by 1 page (64kb), reading outside of the page should trap.
-    let now = env.time_of_next_round();
+    let timestamp = env.time_of_next_round();
     let _ = env.execute_ingress(canister_id, "test", vec![]);
     let result = fetch_canister_logs(env, controller, canister_id);
     assert_eq!(
@@ -475,7 +484,7 @@ fn test_logging_in_trapped_wasm_execution() {
         FetchCanisterLogsResponse {
             canister_log_records: vec![CanisterLogRecord {
                 idx: 0,
-                timestamp_nanos: system_time_to_nanos(now),
+                timestamp_nanos: system_time_to_nanos(timestamp),
                 content: b"[TRAP]: stable memory out of bounds".to_vec()
             }]
         }
@@ -488,7 +497,7 @@ fn test_logging_explicit_canister_trap_without_message() {
         FlagStatus::Enabled,
         wat_canister().update("test", wat_fn().trap()).build(),
     );
-    let now = env.time_of_next_round();
+    let timestamp = env.time_of_next_round();
     let _ = env.execute_ingress(canister_id, "test", vec![]);
     let result = fetch_canister_logs(env, controller, canister_id);
     assert_eq!(
@@ -496,7 +505,7 @@ fn test_logging_explicit_canister_trap_without_message() {
         FetchCanisterLogsResponse {
             canister_log_records: vec![CanisterLogRecord {
                 idx: 0,
-                timestamp_nanos: system_time_to_nanos(now),
+                timestamp_nanos: system_time_to_nanos(timestamp),
                 content: b"[TRAP]: (no message)".to_vec()
             }]
         }
@@ -511,7 +520,7 @@ fn test_logging_explicit_canister_trap_with_message() {
             .update("test", wat_fn().trap_with_blob(b"some text"))
             .build(),
     );
-    let now = env.time_of_next_round();
+    let timestamp = env.time_of_next_round();
     let _ = env.execute_ingress(canister_id, "test", vec![]);
     let result = fetch_canister_logs(env, controller, canister_id);
     assert_eq!(
@@ -519,7 +528,7 @@ fn test_logging_explicit_canister_trap_with_message() {
         FetchCanisterLogsResponse {
             canister_log_records: vec![CanisterLogRecord {
                 idx: 0,
-                timestamp_nanos: system_time_to_nanos(now),
+                timestamp_nanos: system_time_to_nanos(timestamp),
                 content: b"[TRAP]: some text".to_vec()
             }]
         }

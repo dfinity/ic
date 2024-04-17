@@ -40,43 +40,42 @@ impl WatFnCode {
     }
 
     /// Call the `ic0.stable_grow` function.
-    pub fn stable_grow(&mut self, additional_pages: i32) -> &mut Self {
+    pub fn stable_grow(mut self, additional_pages: i32) -> Self {
         self.calls.push(FnCall::StableGrow(additional_pages));
         self
     }
 
     /// Call the `ic0.stable_read` function.
-    pub fn stable_read(&mut self, offset: i32, size: i32) -> &mut Self {
+    pub fn stable_read(mut self, offset: i32, size: i32) -> Self {
         self.calls.push(FnCall::StableRead(offset, size));
         self
     }
 
     /// Call the `ic0.global_timer_set` function.
-    pub fn api_global_timer_set(&mut self, timestamp: i64) -> &mut Self {
+    pub fn api_global_timer_set(mut self, timestamp: i64) -> Self {
         self.calls.push(FnCall::GlobalTimerSet(timestamp));
         self
     }
 
     /// Call the `ic0.debug_print` function.
-    pub fn debug_print(&mut self, message: &[u8]) -> &mut Self {
+    pub fn debug_print(mut self, message: &[u8]) -> Self {
         self.calls.push(FnCall::DebugPrint(message.to_vec()));
         self
     }
 
     /// Call the `ic0.trap` function.
-    pub fn trap_with_blob(&mut self, message: &[u8]) -> &mut Self {
+    pub fn trap_with_blob(mut self, message: &[u8]) -> Self {
         self.calls.push(FnCall::Trap(message.to_vec()));
         self
     }
 
     /// Call the `ic0.trap` function.
-    pub fn trap(&mut self) -> &mut Self {
-        self.trap_with_blob(&[]);
-        self
+    pub fn trap(self) -> Self {
+        self.trap_with_blob(&[])
     }
 
     /// Wait for a given number of instructions.
-    pub fn wait(&mut self, instructions: i64) -> &mut Self {
+    pub fn wait(mut self, instructions: i64) -> Self {
         self.calls.push(FnCall::Wait(instructions));
         self
     }
@@ -214,8 +213,9 @@ impl fmt::Display for WatData {
     }
 }
 
-#[derive(EnumIter)]
+#[derive(Debug, Clone, Copy, PartialEq, EnumIter)]
 enum Method {
+    Start,
     Init,
     PreUpgrade,
     PostUpgrade,
@@ -236,18 +236,31 @@ struct WatFunc {
 impl fmt::Display for WatFunc {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let declaration = match self.method {
-            Method::Init => "$init (export \"canister_init\")".to_string(),
-            Method::PreUpgrade => "$pre_upgrade (export \"canister_pre_upgrade\")".to_string(),
-            Method::PostUpgrade => "$post_upgrade (export \"canister_post_upgrade\")".to_string(),
-            Method::InspectMessage => {
-                "$inspect_message (export \"canister_inspect_message\")".to_string()
+            Method::Start => format!(r#"start $start){INDENT}(func $start"#),
+            Method::Init => r#"func $init (export "canister_init")"#.to_string(),
+            Method::PreUpgrade => {
+                r#"func $pre_upgrade (export "canister_pre_upgrade")"#.to_string()
             }
-            Method::Heartbeat => "$heartbeat (export \"canister_heartbeat\")".to_string(),
-            Method::GlobalTimer => "$global_timer (export \"canister_global_timer\")".to_string(),
-            Method::Update => format!("${} (export \"canister_update {}\")", self.name, self.name),
-            Method::Query => format!("${} (export \"canister_query {}\")", self.name, self.name),
+            Method::PostUpgrade => {
+                r#"func $post_upgrade (export "canister_post_upgrade")"#.to_string()
+            }
+            Method::InspectMessage => {
+                r#"func $inspect_message (export "canister_inspect_message")"#.to_string()
+            }
+            Method::Heartbeat => r#"func $heartbeat (export "canister_heartbeat")"#.to_string(),
+            Method::GlobalTimer => {
+                r#"func $global_timer (export "canister_global_timer")"#.to_string()
+            }
+            Method::Update => format!(
+                r#"func ${} (export "canister_update {}")"#,
+                self.name, self.name
+            ),
+            Method::Query => format!(
+                r#"func ${} (export "canister_query {}")"#,
+                self.name, self.name
+            ),
             Method::CompositeQuery => format!(
-                "${} (export \"canister_composite_query {}\")",
+                r#"func ${} (export "canister_composite_query {}")"#,
                 self.name, self.name
             ),
         };
@@ -258,12 +271,9 @@ impl fmt::Display for WatFunc {
             .collect::<Vec<_>>()
             .join(&format!("{INDENT}{STEP}"));
         if !calls.is_empty() {
-            write!(
-                f,
-                "{INDENT}(func {declaration}{INDENT}{STEP}{calls}{INDENT})",
-            )
+            write!(f, "{INDENT}({declaration}{INDENT}{STEP}{calls}{INDENT})",)
         } else {
-            write!(f, "(func {declaration}{calls})",)
+            write!(f, "({declaration}{calls})",)
         }
     }
 }
@@ -290,103 +300,54 @@ impl WatCanisterBuilder {
         }
     }
 
-    /// Add an `canister_init` exported function to the WAT canister.
-    pub fn init(&mut self, code: &WatFnCode) -> &mut Self {
-        let calls = self.process_calls(code);
-        self.functions.push(WatFunc {
-            method: Method::Init,
-            name: "init".to_string(),
-            calls,
-        });
-        self
+    /// Add `start` function to the WAT canister.
+    pub fn start(&mut self, code: WatFnCode) -> &mut Self {
+        self.process_method(Method::Start, "start", code)
     }
 
-    /// Add a `canister_pre_upgrade` exported function to the WAT canister.
-    pub fn pre_upgrade(&mut self, code: &WatFnCode) -> &mut Self {
-        let calls = self.process_calls(code);
-        self.functions.push(WatFunc {
-            method: Method::PreUpgrade,
-            name: "pre_upgrade".to_string(),
-            calls,
-        });
-        self
+    /// Add `canister_init` exported function to the WAT canister.
+    pub fn init(&mut self, code: WatFnCode) -> &mut Self {
+        self.process_method(Method::Init, "init", code)
     }
 
-    /// Add a `canister_post_upgrade` exported function to the WAT canister.
-    pub fn post_upgrade(&mut self, code: &WatFnCode) -> &mut Self {
-        let calls = self.process_calls(code);
-        self.functions.push(WatFunc {
-            method: Method::PostUpgrade,
-            name: "post_upgrade".to_string(),
-            calls,
-        });
-        self
+    /// Add `canister_pre_upgrade` exported function to the WAT canister.
+    pub fn pre_upgrade(&mut self, code: WatFnCode) -> &mut Self {
+        self.process_method(Method::PreUpgrade, "pre_upgrade", code)
     }
 
-    /// Add a `canister_inspect_message` exported function to the WAT canister.
-    pub fn inspect_message(&mut self, code: &WatFnCode) -> &mut Self {
-        let calls = self.process_calls(code);
-        self.functions.push(WatFunc {
-            method: Method::InspectMessage,
-            name: "inspect_message".to_string(),
-            calls,
-        });
-        self
+    /// Add `canister_post_upgrade` exported function to the WAT canister.
+    pub fn post_upgrade(&mut self, code: WatFnCode) -> &mut Self {
+        self.process_method(Method::PostUpgrade, "post_upgrade", code)
     }
 
-    /// Add a `canister_heartbeat` exported function to the WAT canister.
-    pub fn heartbeat(&mut self, code: &WatFnCode) -> &mut Self {
-        let calls = self.process_calls(code);
-        self.functions.push(WatFunc {
-            method: Method::Heartbeat,
-            name: "heartbeat".to_string(),
-            calls,
-        });
-        self
+    /// Add `canister_inspect_message` exported function to the WAT canister.
+    pub fn inspect_message(&mut self, code: WatFnCode) -> &mut Self {
+        self.process_method(Method::InspectMessage, "inspect_message", code)
     }
 
-    /// Add a `canister_global_timer` exported function to the WAT canister.
-    pub fn global_timer(&mut self, code: &WatFnCode) -> &mut Self {
-        let calls = self.process_calls(code);
-        self.functions.push(WatFunc {
-            method: Method::GlobalTimer,
-            name: "global_timer".to_string(),
-            calls,
-        });
-        self
+    /// Add `canister_heartbeat` exported function to the WAT canister.
+    pub fn heartbeat(&mut self, code: WatFnCode) -> &mut Self {
+        self.process_method(Method::Heartbeat, "heartbeat", code)
     }
 
-    /// Add a `canister_update <name>` exported function to the WAT canister.
-    pub fn update(&mut self, name: &str, code: &WatFnCode) -> &mut Self {
-        let calls = self.process_calls(code);
-        self.functions.push(WatFunc {
-            method: Method::Update,
-            name: name.to_string(),
-            calls,
-        });
-        self
+    /// Add `canister_global_timer` exported function to the WAT canister.
+    pub fn global_timer(&mut self, code: WatFnCode) -> &mut Self {
+        self.process_method(Method::GlobalTimer, "global_timer", code)
     }
 
-    /// Add a `canister_query <name>` exported function to the WAT canister.
-    pub fn query(&mut self, name: &str, code: &WatFnCode) -> &mut Self {
-        let calls = self.process_calls(code);
-        self.functions.push(WatFunc {
-            method: Method::Query,
-            name: name.to_string(),
-            calls,
-        });
-        self
+    /// Add `canister_update <name>` exported function to the WAT canister.
+    pub fn update(&mut self, name: &str, code: WatFnCode) -> &mut Self {
+        self.process_method(Method::Update, name, code)
     }
 
-    /// Add a `canister_composite_query <name>` exported function to the WAT canister.
-    pub fn composite_query(&mut self, name: &str, code: &WatFnCode) -> &mut Self {
-        let calls = self.process_calls(code);
-        self.functions.push(WatFunc {
-            method: Method::CompositeQuery,
-            name: name.to_string(),
-            calls,
-        });
-        self
+    /// Add `canister_query <name>` exported function to the WAT canister.
+    pub fn query(&mut self, name: &str, code: WatFnCode) -> &mut Self {
+        self.process_method(Method::Query, name, code)
+    }
+
+    /// Add `canister_composite_query <name>` exported function to the WAT canister.
+    pub fn composite_query(&mut self, name: &str, code: WatFnCode) -> &mut Self {
+        self.process_method(Method::CompositeQuery, name, code)
     }
 
     /// Build the WAT canister.
@@ -477,7 +438,27 @@ impl WatCanisterBuilder {
             .collect()
     }
 
-    fn process_calls(&mut self, code: &WatFnCode) -> Vec<WatCall> {
+    fn process_method(&mut self, method: Method, name: &str, code: WatFnCode) -> &mut Self {
+        let name = name.to_string();
+        // It's OK to use linear search here because this is a test util
+        // and the number of functions is small.
+        if self
+            .functions
+            .iter()
+            .any(|f| f.method == method && f.name == *name)
+        {
+            panic!("Method '{method:?}' with the name '{name}' already exists");
+        }
+        let calls = self.process_calls(code);
+        self.functions.push(WatFunc {
+            method,
+            name,
+            calls,
+        });
+        self
+    }
+
+    fn process_calls(&mut self, code: WatFnCode) -> Vec<WatCall> {
         code.calls
             .iter()
             .map(|call| match call {
@@ -564,8 +545,89 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "Method 'Start' with the name 'start' already exists")]
+    fn test_wat_func_unique_start() {
+        wat_canister().start(wat_fn()).start(wat_fn());
+    }
+
+    #[test]
+    #[should_panic(expected = "Method 'Init' with the name 'init' already exists")]
+    fn test_wat_func_unique_init() {
+        wat_canister().init(wat_fn()).init(wat_fn());
+    }
+
+    #[test]
+    #[should_panic(expected = "Method 'PreUpgrade' with the name 'pre_upgrade' already exists")]
+    fn test_wat_func_unique_pre_upgrade() {
+        wat_canister().pre_upgrade(wat_fn()).pre_upgrade(wat_fn());
+    }
+
+    #[test]
+    #[should_panic(expected = "Method 'PostUpgrade' with the name 'post_upgrade' already exists")]
+    fn test_wat_func_unique_post_upgrade() {
+        wat_canister().post_upgrade(wat_fn()).post_upgrade(wat_fn());
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Method 'InspectMessage' with the name 'inspect_message' already exists"
+    )]
+    fn test_wat_func_unique_inspect_message() {
+        wat_canister()
+            .inspect_message(wat_fn())
+            .inspect_message(wat_fn());
+    }
+
+    #[test]
+    #[should_panic(expected = "Method 'Heartbeat' with the name 'heartbeat' already exists")]
+    fn test_wat_func_unique_heartbeat() {
+        wat_canister().heartbeat(wat_fn()).heartbeat(wat_fn());
+    }
+
+    #[test]
+    #[should_panic(expected = "Method 'GlobalTimer' with the name 'global_timer' already exists")]
+    fn test_wat_func_unique_global_timer() {
+        wat_canister().global_timer(wat_fn()).global_timer(wat_fn());
+    }
+
+    #[test]
+    #[should_panic(expected = "Method 'Update' with the name 'test_3' already exists")]
+    fn test_wat_func_unique_update() {
+        wat_canister()
+            .update("test_1", wat_fn())
+            .update("test_2", wat_fn());
+        wat_canister()
+            .update("test_3", wat_fn())
+            .update("test_3", wat_fn());
+    }
+
+    #[test]
+    #[should_panic(expected = "Method 'Query' with the name 'test_3' already exists")]
+    fn test_wat_func_unique_query() {
+        wat_canister()
+            .query("test_1", wat_fn())
+            .query("test_2", wat_fn());
+        wat_canister()
+            .query("test_3", wat_fn())
+            .query("test_3", wat_fn());
+    }
+
+    #[test]
+    #[should_panic(expected = "Method 'CompositeQuery' with the name 'test_3' already exists")]
+    fn test_wat_func_unique_composite_query() {
+        wat_canister()
+            .composite_query("test_1", wat_fn())
+            .composite_query("test_2", wat_fn());
+        wat_canister()
+            .composite_query("test_3", wat_fn())
+            .composite_query("test_3", wat_fn());
+    }
+
+    #[test]
     fn test_fmt_wat_func_no_calls() {
         for (method, expected) in Method::iter().zip(vec![
+            r#"(start $start)
+            (func $start)"#,
             r#"(func $init (export "canister_init"))"#,
             r#"(func $pre_upgrade (export "canister_pre_upgrade"))"#,
             r#"(func $post_upgrade (export "canister_post_upgrade"))"#,
@@ -635,6 +697,7 @@ mod tests {
     #[test]
     fn test_wat_canister_builder() {
         let wat = wat_canister()
+            .start(wat_fn().debug_print(b"start"))
             .init(wat_fn().debug_print(b"init").api_global_timer_set(1))
             .pre_upgrade(wat_fn().debug_print(b"pre_upgrade"))
             .post_upgrade(wat_fn().debug_print(b"post_upgrade"))
@@ -693,48 +756,53 @@ mod tests {
                 )
             )
             
+            (start $start)
+            (func $start
+                (call $ic0_debug_print (i32.const 1000) (i32.const 5))
+            )
+
             (func $init (export "canister_init")
-                (call $ic0_debug_print (i32.const 1000) (i32.const 4))
+                (call $ic0_debug_print (i32.const 1005) (i32.const 4))
                 (drop (call $ic0_global_timer_set (i64.const 1)))
             )
 
             (func $pre_upgrade (export "canister_pre_upgrade")
-                (call $ic0_debug_print (i32.const 1004) (i32.const 11))
+                (call $ic0_debug_print (i32.const 1009) (i32.const 11))
             )
 
             (func $post_upgrade (export "canister_post_upgrade")
-                (call $ic0_debug_print (i32.const 1015) (i32.const 12))
+                (call $ic0_debug_print (i32.const 1020) (i32.const 12))
             )
 
             (func $inspect_message (export "canister_inspect_message")
-                (call $ic0_debug_print (i32.const 1027) (i32.const 15))
+                (call $ic0_debug_print (i32.const 1032) (i32.const 15))
             )
 
             (func $heartbeat (export "canister_heartbeat")
-                (call $ic0_debug_print (i32.const 1042) (i32.const 9))
+                (call $ic0_debug_print (i32.const 1047) (i32.const 9))
             )
 
             (func $global_timer (export "canister_global_timer")
-                (call $ic0_debug_print (i32.const 1051) (i32.const 12))
+                (call $ic0_debug_print (i32.const 1056) (i32.const 12))
             )
 
             (func $test_1 (export "canister_update test_1")
-                (call $ic0_debug_print (i32.const 1063) (i32.const 2))
-                (call $ic0_debug_print (i32.const 1063) (i32.const 2))
-                (call $ic0_debug_print (i32.const 1065) (i32.const 3))
+                (call $ic0_debug_print (i32.const 1068) (i32.const 2))
+                (call $ic0_debug_print (i32.const 1068) (i32.const 2))
+                (call $ic0_debug_print (i32.const 1070) (i32.const 3))
                 (call $_wait (i64.const 5000))
-                (call $ic0_debug_print (i32.const 1068) (i32.const 4))
-                (call $ic0_trap (i32.const 1065) (i32.const 3))
+                (call $ic0_debug_print (i32.const 1073) (i32.const 4))
+                (call $ic0_trap (i32.const 1070) (i32.const 3))
             )
 
             (func $test_2 (export "canister_query test_2")
-                (call $ic0_debug_print (i32.const 1068) (i32.const 4))
+                (call $ic0_debug_print (i32.const 1073) (i32.const 4))
                 (call $_wait (i64.const 10000))
-                (call $ic0_trap (i32.const 1072) (i32.const 5))
+                (call $ic0_trap (i32.const 1077) (i32.const 5))
             )
 
             (func $test_3 (export "canister_composite_query test_3")
-                (call $ic0_trap (i32.const 1077) (i32.const 15))
+                (call $ic0_trap (i32.const 1082) (i32.const 15))
             )
 
             ;; Define memory
@@ -742,17 +810,18 @@ mod tests {
             (export "memory" (memory $memory))
 
             ;; Initialize memory with data
-            (data (i32.const 1000) "init")
-            (data (i32.const 1004) "pre_upgrade")
-            (data (i32.const 1015) "post_upgrade")
-            (data (i32.const 1027) "inspect_message")
-            (data (i32.const 1042) "heartbeat")
-            (data (i32.const 1051) "global_timer")
-            (data (i32.const 1063) "aa")
-            (data (i32.const 1065) "bbb")
-            (data (i32.const 1068) "cccc")
-            (data (i32.const 1072) "query")
-            (data (i32.const 1077) "composite_query")
+            (data (i32.const 1000) "start")
+            (data (i32.const 1005) "init")
+            (data (i32.const 1009) "pre_upgrade")
+            (data (i32.const 1020) "post_upgrade")
+            (data (i32.const 1032) "inspect_message")
+            (data (i32.const 1047) "heartbeat")
+            (data (i32.const 1056) "global_timer")
+            (data (i32.const 1068) "aa")
+            (data (i32.const 1070) "bbb")
+            (data (i32.const 1073) "cccc")
+            (data (i32.const 1077) "query")
+            (data (i32.const 1082) "composite_query")
         )"#
         );
     }
