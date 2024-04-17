@@ -90,9 +90,9 @@ pub struct Archive<Rt: Runtime, Wasm: ArchiveCanisterWasm> {
     // List of Archive Nodes.
     nodes: Vec<CanisterId>,
 
-    controller_id: PrincipalId,
+    pub controller_id: PrincipalId,
 
-    more_controller_ids: Option<Vec<PrincipalId>>,
+    pub more_controller_ids: Option<Vec<PrincipalId>>,
 
     // BlockIndices of Blocks stored in each archive node.
 
@@ -109,10 +109,10 @@ pub struct Archive<Rt: Runtime, Wasm: ArchiveCanisterWasm> {
     nodes_block_ranges: Vec<(u64, u64)>,
 
     // Maximum amount of data that can be stored in an Archive Node canister.
-    node_max_memory_size_bytes: u64,
+    pub node_max_memory_size_bytes: u64,
 
     // Maximum inter-canister message size in bytes.
-    max_message_size_bytes: u64,
+    pub max_message_size_bytes: u64,
 
     /// How many blocks have been sent to the archive.
     num_archived_blocks: u64,

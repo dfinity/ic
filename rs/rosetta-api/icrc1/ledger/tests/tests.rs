@@ -106,6 +106,20 @@ fn encode_init_args(args: ic_icrc1_ledger_sm_tests::InitArgs) -> LedgerArgument 
     })
 }
 
+fn encode_init_args_with_small_sized_archive(
+    args: ic_icrc1_ledger_sm_tests::InitArgs,
+) -> LedgerArgument {
+    match encode_init_args(args) {
+        LedgerArgument::Init(mut init_args) => {
+            init_args.archive_options.node_max_memory_size_bytes = Some(620);
+            LedgerArgument::Init(init_args)
+        }
+        LedgerArgument::Upgrade(_) => {
+            panic!("BUG: Expected Init argument")
+        }
+    }
+}
+
 #[test]
 fn test_metadata() {
     ic_icrc1_ledger_sm_tests::test_metadata(ledger_wasm(), encode_init_args)
@@ -114,6 +128,14 @@ fn test_metadata() {
 #[test]
 fn test_upgrade() {
     ic_icrc1_ledger_sm_tests::test_upgrade(ledger_wasm(), encode_init_args)
+}
+
+#[test]
+fn test_upgrade_archive_options() {
+    ic_icrc1_ledger_sm_tests::test_upgrade_archive_options(
+        ledger_wasm(),
+        encode_init_args_with_small_sized_archive,
+    );
 }
 
 #[test]

@@ -139,6 +139,7 @@ fn upgrade_ledger(
         feature_flags: None,
         maximum_number_of_accounts: None,
         accounts_overflow_trim_quantity: None,
+        change_archive_options: None,
     }));
     env.upgrade_canister(ledger_id, ledger_wasm(), Encode!(&args).unwrap())
         .unwrap()

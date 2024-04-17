@@ -8,11 +8,14 @@ use candid::{
     types::number::{Int, Nat},
     CandidType, Principal,
 };
+use ic_base_types::PrincipalId;
 use ic_canister_log::{log, Sink};
 use ic_crypto_tree_hash::{Label, MixedHashTree};
 use ic_icrc1::blocks::encoded_block_to_generic_block;
 use ic_icrc1::{Block, LedgerBalances, Transaction};
+use ic_ledger_canister_core::archive::Archive;
 pub use ic_ledger_canister_core::archive::ArchiveOptions;
+use ic_ledger_canister_core::runtime::Runtime;
 use ic_ledger_canister_core::{
     archive::ArchiveCanisterWasm,
     blockchain::Blockchain,
@@ -45,6 +48,7 @@ use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 use std::borrow::Cow;
 use std::collections::{BTreeMap, VecDeque};
+use std::ops::DerefMut;
 use std::time::Duration;
 
 const TRANSACTION_WINDOW: Duration = Duration::from_secs(24 * 60 * 60);
@@ -252,6 +256,47 @@ impl From<ChangeFeeCollector> for Option<FeeCollector<Account>> {
     }
 }
 
+#[derive(Deserialize, CandidType, Clone, Debug, Default, PartialEq, Eq)]
+pub struct ChangeArchiveOptions {
+    pub trigger_threshold: Option<usize>,
+    pub num_blocks_to_archive: Option<usize>,
+    pub node_max_memory_size_bytes: Option<u64>,
+    pub max_message_size_bytes: Option<u64>,
+    pub controller_id: Option<PrincipalId>,
+    pub more_controller_ids: Option<Vec<PrincipalId>>,
+    pub cycles_for_archive_creation: Option<u64>,
+    pub max_transactions_per_response: Option<u64>,
+}
+
+impl ChangeArchiveOptions {
+    pub fn apply<Rt: Runtime, Wasm: ArchiveCanisterWasm>(self, archive: &mut Archive<Rt, Wasm>) {
+        if let Some(trigger_threshold) = self.trigger_threshold {
+            archive.trigger_threshold = trigger_threshold;
+        }
+        if let Some(num_blocks_to_archive) = self.num_blocks_to_archive {
+            archive.num_blocks_to_archive = num_blocks_to_archive;
+        }
+        if let Some(node_max_memory_size_bytes) = self.node_max_memory_size_bytes {
+            archive.node_max_memory_size_bytes = node_max_memory_size_bytes;
+        }
+        if let Some(max_message_size_bytes) = self.max_message_size_bytes {
+            archive.max_message_size_bytes = max_message_size_bytes;
+        }
+        if let Some(controller_id) = self.controller_id {
+            archive.controller_id = controller_id;
+        }
+        if let Some(more_controller_ids) = self.more_controller_ids {
+            archive.more_controller_ids = Some(more_controller_ids);
+        }
+        if let Some(cycles_for_archive_creation) = self.cycles_for_archive_creation {
+            archive.cycles_for_archive_creation = cycles_for_archive_creation;
+        }
+        if let Some(max_transactions_per_response) = self.max_transactions_per_response {
+            archive.max_transactions_per_response = Some(max_transactions_per_response);
+        }
+    }
+}
+
 #[derive(Default, Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
 pub struct UpgradeArgs {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -272,6 +317,8 @@ pub struct UpgradeArgs {
     pub maximum_number_of_accounts: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub accounts_overflow_trim_quantity: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub change_archive_options: Option<ChangeArchiveOptions>,
 }
 
 #[derive(Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
@@ -623,6 +670,19 @@ impl<Tokens: TokensType> Ledger<Tokens> {
         if let Some(accounts_overflow_trim_quantity) = args.accounts_overflow_trim_quantity {
             self.accounts_overflow_trim_quantity =
                 accounts_overflow_trim_quantity.try_into().unwrap();
+        }
+        if let Some(change_archive_options) = args.change_archive_options {
+            let mut maybe_archive = self.blockchain.archive.write().expect(
+                "BUG: should be unreachable since upgrade has exclusive write access to the ledger",
+            );
+            if maybe_archive.is_none() {
+                ic_cdk::trap(
+                    "[ERROR]: Archive options cannot be changed, since there is no archive!",
+                );
+            }
+            if let Some(archive) = maybe_archive.deref_mut() {
+                change_archive_options.apply(archive);
+            }
         }
     }
 
