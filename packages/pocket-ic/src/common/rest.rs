@@ -75,6 +75,20 @@ pub enum RawEffectivePrincipal {
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+pub struct RawMessageId {
+    pub effective_principal: RawEffectivePrincipal,
+    #[serde(deserialize_with = "base64::deserialize")]
+    #[serde(serialize_with = "base64::serialize")]
+    pub message_id: Vec<u8>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+pub enum RawSubmitIngressResult {
+    Ok(RawMessageId),
+    Err(UserError),
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
 pub struct RawCanisterCall {
     #[serde(deserialize_with = "base64::deserialize")]
     #[serde(serialize_with = "base64::serialize")]

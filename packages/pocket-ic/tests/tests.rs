@@ -888,3 +888,137 @@ fn test_set_and_get_stable_memory_compressed() {
     let read_data = pic.get_stable_memory(canister_id);
     assert_eq!(data, read_data[..8]);
 }
+
+#[test]
+fn test_parallel_calls() {
+    let wat = r#"
+    (module
+        (import "ic0" "time" (func $ic0_time (result i64)))
+        (import "ic0" "msg_reply" (func $msg_reply))
+        (import "ic0" "msg_reply_data_append"
+            (func $msg_reply_data_append (param i32 i32)))
+        (func $time
+            (i64.store (i32.const 0) (call $ic0_time))
+            (call $msg_reply_data_append (i32.const 0) (i32.const 8))
+            (call $msg_reply))
+        (memory $memory 1)
+        (export "canister_update time" (func $time))
+    )
+"#;
+
+    let pic = PocketIc::new();
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, INIT_CYCLES);
+    let time_wasm = wat::parse_str(wat).unwrap();
+    pic.install_canister(canister_id, time_wasm, vec![], None);
+
+    let msg_id1 = pic
+        .submit_call(
+            canister_id,
+            Principal::anonymous(),
+            "time",
+            encode_one(()).unwrap(),
+        )
+        .unwrap();
+    let msg_id2 = pic
+        .submit_call(
+            canister_id,
+            Principal::anonymous(),
+            "time",
+            encode_one(()).unwrap(),
+        )
+        .unwrap();
+
+    let time1 = pic.await_call(msg_id1).unwrap();
+    let time2 = pic.await_call(msg_id2).unwrap();
+
+    // times should be equal since the update calls are parallel
+    // and should be executed in the same round
+    assert_eq!(time1, time2);
+
+    let time3 = pic
+        .update_call(
+            canister_id,
+            Principal::anonymous(),
+            "time",
+            encode_one(()).unwrap(),
+        )
+        .unwrap();
+
+    // now times should not be equal since the last update call
+    // was executed in a separate round and round times are strictly
+    // monotone
+    assert!(time1 != time3);
+}
+
+#[test]
+fn test_inspect_message() {
+    let wat = r#"
+    (module
+        (import "ic0" "accept_message" (func $accept_message))
+        (import "ic0" "msg_reply" (func $msg_reply))
+        (func $inspect
+            (i32.load (i32.const 0))
+            (if
+              (then)
+              (else
+                (call $accept_message)
+              )
+            )
+        )
+        (func $inc
+            ;; Increment a counter.
+            (i32.store
+                (i32.const 0)
+                (i32.add (i32.load (i32.const 0)) (i32.const 1)))
+            (call $msg_reply))
+        (memory $memory 1)
+        (export "canister_inspect_message" (func $inspect))
+        (export "canister_update inc" (func $inc))
+    )
+"#;
+
+    let pic = PocketIc::new();
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, INIT_CYCLES);
+    let inspect_wasm = wat::parse_str(wat).unwrap();
+    pic.install_canister(canister_id, inspect_wasm, vec![], None);
+
+    // the first call succeeds because the inspect_message accepts for counter = 0
+    pic.update_call(
+        canister_id,
+        Principal::anonymous(),
+        "inc",
+        encode_one(()).unwrap(),
+    )
+    .unwrap();
+
+    // the second call fails because the first (successful) call incremented the counter
+    // and the inspect_message does not accept for counter > 0
+    pic.update_call(
+        canister_id,
+        Principal::anonymous(),
+        "inc",
+        encode_one(()).unwrap(),
+    )
+    .unwrap_err();
+}
+
+#[should_panic]
+#[test]
+fn test_too_large_call() {
+    let pic = PocketIc::new();
+
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, INIT_CYCLES);
+    let counter_wasm = counter_wasm();
+    pic.install_canister(canister_id, counter_wasm, vec![], None);
+
+    pic.update_call(
+        canister_id,
+        Principal::anonymous(),
+        "inc",
+        vec![42; 16_000_000],
+    )
+    .unwrap_err();
+}
