@@ -98,6 +98,7 @@ use ic_nervous_system_governance::maturity_modulation::{
 use ic_nervous_system_lock::acquire;
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
+use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
 use ic_sns_governance_proposal_criticality::ProposalCriticality;
 use ic_sns_governance_token_valuation::Valuation;
 use icp_ledger::DEFAULT_TRANSFER_FEE as NNS_DEFAULT_TRANSFER_FEE;
@@ -2438,10 +2439,9 @@ impl Governance {
             upgrade
                 .canister_upgrade_arg
                 .unwrap_or_else(|| Encode!().unwrap()),
-            upgrade
-                .mode
-                .unwrap_or(CanisterInstallMode::Upgrade as i32)
-                .try_into()?,
+            CanisterInstallMode::try_from(CanisterInstallModeProto::try_from(
+                upgrade.mode.unwrap_or(CanisterInstallMode::Upgrade as i32),
+            )?)?,
         )
         .await
     }
@@ -5602,7 +5602,6 @@ mod tests {
         TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL, TEST_USER1_KEYPAIR,
     };
     use ic_nns_constants::SNS_WASM_CANISTER_ID;
-    use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
     use ic_sns_governance_token_valuation::{Token, ValuationFactors};
     use ic_sns_test_utils::itest_helpers::UserInfo;
     use ic_test_utilities_types::ids::canister_test_id;

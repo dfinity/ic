@@ -606,15 +606,29 @@ impl TryFrom<pb_canister_state_bits::canister_change::ChangeDetails> for Caniste
             }
             pb_canister_state_bits::canister_change::ChangeDetails::CanisterCodeDeployment(
                 canister_code_deployment,
-            ) => Ok(CanisterChangeDetails::code_deployment(
-                canister_code_deployment.mode.try_into().map_err(
-                    |e: CanisterInstallModeError| ProxyDecodeError::ValueOutOfRange {
+            ) => {
+                let mode = CanisterInstallMode::try_from(
+                    CanisterInstallModeProto::try_from(canister_code_deployment.mode).map_err(
+                        |_| ProxyDecodeError::ValueOutOfRange {
+                            typ: "CanisterInstallMode",
+                            err: format!(
+                                "Unexpected value for canister install mode {}",
+                                canister_code_deployment.mode
+                            ),
+                        },
+                    )?,
+                )
+                .map_err(|e: CanisterInstallModeError| {
+                    ProxyDecodeError::ValueOutOfRange {
                         typ: "CanisterInstallMode",
                         err: e.to_string(),
-                    },
-                )?,
-                try_decode_hash(canister_code_deployment.module_hash)?,
-            )),
+                    }
+                })?;
+
+                let module_hash = try_decode_hash(canister_code_deployment.module_hash)?;
+
+                Ok(CanisterChangeDetails::code_deployment(mode, module_hash))
+            }
             pb_canister_state_bits::canister_change::ChangeDetails::CanisterControllersChange(
                 canister_controllers_change,
             ) => Ok(CanisterChangeDetails::controllers_change(
@@ -1125,16 +1139,16 @@ impl From<&CanisterInstallMode> for i32 {
     }
 }
 
-impl TryFrom<i32> for CanisterInstallMode {
+impl TryFrom<CanisterInstallModeProto> for CanisterInstallMode {
     type Error = CanisterInstallModeError;
 
-    fn try_from(item: i32) -> Result<Self, Self::Error> {
-        match CanisterInstallModeProto::try_from(item).ok() {
-            Some(CanisterInstallModeProto::Install) => Ok(CanisterInstallMode::Install),
-            Some(CanisterInstallModeProto::Reinstall) => Ok(CanisterInstallMode::Reinstall),
-            Some(CanisterInstallModeProto::Upgrade) => Ok(CanisterInstallMode::Upgrade),
-            Some(CanisterInstallModeProto::Unspecified) | None => {
-                Err(CanisterInstallModeError(item.to_string()))
+    fn try_from(item: CanisterInstallModeProto) -> Result<Self, Self::Error> {
+        match item {
+            CanisterInstallModeProto::Install => Ok(CanisterInstallMode::Install),
+            CanisterInstallModeProto::Reinstall => Ok(CanisterInstallMode::Reinstall),
+            CanisterInstallModeProto::Upgrade => Ok(CanisterInstallMode::Upgrade),
+            CanisterInstallModeProto::Unspecified => {
+                Err(CanisterInstallModeError((item as i32).to_string()))
             }
         }
     }
@@ -2834,7 +2848,7 @@ mod tests {
     #[test]
     fn canister_install_mode_round_trip() {
         fn canister_install_mode_round_trip_aux(mode: CanisterInstallMode) {
-            let pb_mode: i32 = (&mode).into();
+            let pb_mode = CanisterInstallModeProto::from(&mode);
             let dec_mode = CanisterInstallMode::try_from(pb_mode).unwrap();
             assert_eq!(mode, dec_mode);
         }
