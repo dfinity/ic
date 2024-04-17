@@ -1183,6 +1183,7 @@ pub(crate) fn create_sig_inputs_with_args(
     );
 
     let presig_quadruple_ref = PreSignatureQuadrupleRef::new(
+        fake_ecdsa_key_id(),
         kappa_unmasked_ref,
         lambda_masked_ref,
         kappa_unmasked_times_lambda_masked_ref,

@@ -227,6 +227,7 @@ pub(super) fn update_quadruples_in_creation(
             payload.available_quadruples.insert(
                 quadruple_id,
                 ecdsa::PreSignatureQuadrupleRef::new(
+                    payload.key_transcript.key_id.clone(),
                     kappa_unmasked,
                     lambda_masked,
                     kappa_times_lambda,
