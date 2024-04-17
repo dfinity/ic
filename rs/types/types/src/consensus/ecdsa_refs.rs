@@ -703,12 +703,12 @@ impl Hash for QuadrupleInCreation {
 impl QuadrupleInCreation {
     /// Initialization with the given random param pair.
     pub fn new_with_masked_kappa(
-        _key_id: EcdsaKeyId,
+        key_id: EcdsaKeyId,
         kappa_masked_config: RandomTranscriptParams,
         lambda_config: RandomTranscriptParams,
     ) -> Self {
         Self {
-            key_id: None,
+            key_id: Some(key_id),
             kappa_masked_config: Some(kappa_masked_config),
             kappa_masked: None,
             lambda_config,
@@ -725,12 +725,12 @@ impl QuadrupleInCreation {
 
     /// Initialization with unmasked kappa param.
     pub fn new(
-        _key_id: EcdsaKeyId,
+        key_id: EcdsaKeyId,
         kappa_unmasked_config: RandomUnmaskedTranscriptParams,
         lambda_config: RandomTranscriptParams,
     ) -> Self {
         QuadrupleInCreation {
-            key_id: None,
+            key_id: Some(key_id),
             kappa_masked_config: None,
             kappa_masked: None,
             lambda_config,
@@ -1365,6 +1365,7 @@ pub enum PreSignatureQuadrupleError {
 
 impl PreSignatureQuadrupleRef {
     pub fn new(
+        key_id: EcdsaKeyId,
         kappa_unmasked_ref: UnmaskedTranscript,
         lambda_masked_ref: MaskedTranscript,
         kappa_times_lambda_ref: MaskedTranscript,
@@ -1372,7 +1373,7 @@ impl PreSignatureQuadrupleRef {
         key_unmasked_ref: UnmaskedTranscript,
     ) -> Self {
         Self {
-            key_id: None,
+            key_id: Some(key_id),
             kappa_unmasked_ref,
             lambda_masked_ref,
             kappa_times_lambda_ref,
