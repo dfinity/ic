@@ -2,11 +2,11 @@
 
 use crate::batch::ConsensusResponse;
 use crate::consensus::ecdsa::{
-    CompletedReshareRequest, CompletedSignature, EcdsaReshareRequest, MaskedTranscript,
-    PreSignatureQuadrupleRef, PseudoRandomId, QuadrupleId, QuadrupleInCreation,
-    RandomTranscriptParams, RandomUnmaskedTranscriptParams, RequestId, ReshareOfMaskedParams,
-    ReshareOfUnmaskedParams, ThresholdEcdsaSigInputsRef, UnmaskedTimesMaskedParams,
-    UnmaskedTranscript,
+    CompletedReshareRequest, CompletedSignature, EcdsaKeyTranscript, EcdsaReshareRequest,
+    KeyTranscriptCreation, MaskedTranscript, PreSignatureQuadrupleRef, PseudoRandomId, QuadrupleId,
+    QuadrupleInCreation, RandomTranscriptParams, RandomUnmaskedTranscriptParams, RequestId,
+    ReshareOfMaskedParams, ReshareOfUnmaskedParams, ThresholdEcdsaSigInputsRef,
+    UnmaskedTimesMaskedParams, UnmaskedTranscript, UnmaskedTranscriptWithAttributes,
 };
 use crate::consensus::hashed::Hashed;
 use crate::consensus::{BlockPayload, ConsensusMessageHashable};
@@ -742,6 +742,28 @@ impl ExhaustiveSet for EcdsaReshareRequest {
                 master_key_id: None,
                 receiving_node_ids: r.receiving_node_ids,
                 registry_version: r.registry_version,
+            })
+            .collect()
+    }
+}
+
+#[derive(Clone)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub struct DerivedEcdsaKeyTranscript {
+    pub current: Option<UnmaskedTranscriptWithAttributes>,
+    pub next_in_creation: KeyTranscriptCreation,
+    pub key_id: EcdsaKeyId,
+}
+
+impl ExhaustiveSet for EcdsaKeyTranscript {
+    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+        DerivedEcdsaKeyTranscript::exhaustive_set(rng)
+            .into_iter()
+            .map(|r| EcdsaKeyTranscript {
+                key_id: r.key_id,
+                master_key_id: None,
+                current: r.current,
+                next_in_creation: r.next_in_creation,
             })
             .collect()
     }

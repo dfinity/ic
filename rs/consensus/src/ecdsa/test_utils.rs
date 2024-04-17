@@ -1478,6 +1478,7 @@ pub(crate) fn empty_ecdsa_payload_with_key_ids(
             current: None,
             next_in_creation: KeyTranscriptCreation::Begin,
             key_id,
+            master_key_id: None,
         },
     }
 }

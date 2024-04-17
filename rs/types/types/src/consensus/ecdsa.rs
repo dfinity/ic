@@ -298,8 +298,7 @@ impl AsMut<TranscriptRef> for UnmaskedTranscriptWithAttributes {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[cfg_attr(test, derive(ExhaustiveSet))]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EcdsaKeyTranscript {
     /// The ECDSA key transcript used for the current interval.
     pub current: Option<UnmaskedTranscriptWithAttributes>,
@@ -307,6 +306,25 @@ pub struct EcdsaKeyTranscript {
     pub next_in_creation: KeyTranscriptCreation,
     /// Key id.
     pub key_id: EcdsaKeyId,
+    /// Master key Id allowing different signature schemes.
+    pub master_key_id: Option<MasterPublicKeyId>,
+}
+
+impl Hash for EcdsaKeyTranscript {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        let EcdsaKeyTranscript {
+            current,
+            next_in_creation,
+            key_id,
+            master_key_id,
+        } = self;
+        current.hash(state);
+        next_in_creation.hash(state);
+        key_id.hash(state);
+        if let Some(master_key_id) = master_key_id {
+            master_key_id.hash(state);
+        }
+    }
 }
 
 impl EcdsaKeyTranscript {
@@ -406,6 +424,7 @@ impl From<EcdsaKeyTranscript> for pb::EcdsaKeyTranscript {
                 &transcript.next_in_creation,
             )),
             key_id: Some(crypto_pb::EcdsaKeyId::from(&transcript.key_id)),
+            master_key_id: transcript.master_key_id.clone().map(|key_id| key_id.into()),
         }
     }
 }
@@ -433,10 +452,17 @@ impl TryFrom<pb::EcdsaKeyTranscript> for EcdsaKeyTranscript {
             "KeyTranscript::next_in_creation",
         )?;
 
+        let master_key_id = proto
+            .master_key_id
+            .clone()
+            .map(|key_id| key_id.try_into())
+            .transpose()?;
+
         Ok(Self {
             key_id,
             current,
             next_in_creation,
+            master_key_id,
         })
     }
 }
@@ -1481,6 +1507,7 @@ impl From<&EcdsaPayload> for pb::EcdsaPayload {
             key_id,
             current: current_key_transcript,
             next_in_creation: next_key_in_creation,
+            master_key_id: _,
         } = pb::EcdsaKeyTranscript::from(payload.key_transcript.clone());
 
         Self {
@@ -1523,6 +1550,7 @@ impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
                     key_id: payload.key_id.clone(),
                     current: payload.current_key_transcript.clone(),
                     next_in_creation: payload.next_key_in_creation.clone(),
+                    master_key_id: None,
                 }
             };
 

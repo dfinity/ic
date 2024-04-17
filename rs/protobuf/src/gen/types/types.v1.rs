@@ -427,6 +427,9 @@ pub struct EcdsaKeyTranscript {
     pub current: ::core::option::Option<UnmaskedTranscriptWithAttributes>,
     #[prost(message, optional, tag = "3")]
     pub next_in_creation: ::core::option::Option<KeyTranscriptCreation>,
+    #[prost(message, optional, tag = "4")]
+    pub master_key_id:
+        ::core::option::Option<super::super::registry::crypto::v1::MasterPublicKeyId>,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]

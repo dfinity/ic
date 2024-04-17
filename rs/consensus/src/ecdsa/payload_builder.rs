@@ -62,6 +62,7 @@ pub(crate) fn make_bootstrap_summary(
             current: None,
             next_in_creation: ecdsa::KeyTranscriptCreation::Begin,
             key_id,
+            master_key_id: None,
         },
     })
 }
@@ -88,6 +89,7 @@ pub(crate) fn make_bootstrap_summary_with_initial_dealings(
             current: None,
             next_in_creation: ecdsa::KeyTranscriptCreation::Begin,
             key_id,
+            master_key_id: None,
         },
     };
 
@@ -277,6 +279,7 @@ fn create_summary_payload_helper(
         current: created_key_transcript.or_else(|| current_key_transcript.cloned()),
         next_in_creation,
         key_id: ecdsa_payload.key_transcript.key_id.clone(),
+        master_key_id: None,
     };
 
     let mut ecdsa_summary = if is_new_key_transcript {
@@ -1691,6 +1694,7 @@ mod tests {
                     current_key_transcript.unmasked_transcript(),
                 ),
                 key_id: key_id.clone(),
+                master_key_id: None,
             };
 
             // Initial bootstrap payload should be created successfully
@@ -1727,6 +1731,7 @@ mod tests {
                     next_key_transcript.unmasked_transcript(),
                 ),
                 key_id: key_id.clone(),
+                master_key_id: None,
             };
 
             let mut payload_2 = payload_1.clone();
@@ -1742,6 +1747,7 @@ mod tests {
                     next_key_transcript.unmasked_transcript(),
                 ),
                 key_id,
+                master_key_id: None,
             };
 
             let payload_3 = create_summary_payload_helper(
@@ -1816,6 +1822,7 @@ mod tests {
                     current_key_transcript.unmasked_transcript(),
                 ),
                 key_id: key_id.clone(),
+                master_key_id: None,
             };
 
             let mut payload_0 =

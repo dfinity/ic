@@ -861,6 +861,7 @@ mod tests {
                     curve: EcdsaCurve::Secp256k1,
                     name: key_id.to_string(),
                 },
+                master_key_id: None,
             },
         };
 
