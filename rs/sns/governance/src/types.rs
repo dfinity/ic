@@ -948,6 +948,15 @@ impl From<NervousSystemError> for GovernanceError {
     }
 }
 
+impl From<prost::DecodeError> for GovernanceError {
+    fn from(decode_error: prost::DecodeError) -> Self {
+        GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            format!("Invalid mode for install_code: {}", decode_error),
+        )
+    }
+}
+
 impl From<CanisterInstallModeError> for GovernanceError {
     fn from(canister_install_mode_error: CanisterInstallModeError) -> Self {
         GovernanceError {
