@@ -52,16 +52,15 @@ fn mega_key_validity() -> ThresholdEcdsaResult<()> {
         if curve_type != EccCurveType::Ed25519 {
             // In compressed format flipping this bit is equivalent to
             // flipping the sign of y, which is equivalent to negating the
-            // point.  In all cases if pk_bytes is a valid encoding, this
-            // modification is also
+            // point. In all cases if pk_bytes is a valid encoding, this
+            // modification is also valid.
             pk_bytes[0] ^= 1;
             assert!(verify_mega_public_key(curve_type, &pk_bytes).is_ok());
+
+            // Invalid SEC1 header.
+            pk_bytes[0] ^= 2;
+            assert!(verify_mega_public_key(curve_type, &pk_bytes).is_err());
         }
-
-        // Invalid header:
-        pk_bytes[0] ^= 2;
-        assert!(verify_mega_public_key(curve_type, &pk_bytes).is_err());
-
         // This x is too large to be a field element (except for P-521)
         let mut max_x = vec![0xFF; curve_type.point_bytes()];
         max_x[0] = 2;
