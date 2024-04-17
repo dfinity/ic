@@ -69,6 +69,9 @@ use std::{
 use std::{os::unix::prelude::FileExt, str::FromStr};
 use tempfile::NamedTempFile;
 
+mod wat_canister;
+pub use wat_canister::{wat_canister, wat_fn, WatCanisterBuilder, WatFnCode};
+
 const INITIAL_CANISTER_CYCLES: Cycles = Cycles::new(1_000_000_000_000);
 
 /// A helper to create subnets.
