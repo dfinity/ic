@@ -25,9 +25,11 @@ use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     governance::{get_pending_proposals, wait_for_final_state, UpgradeRootProposal},
     itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
-    state_test_helpers::{nns_governance_make_proposal, setup_nns_canisters, update_with_sender},
+    state_test_helpers::{
+        nns_governance_make_proposal, setup_nns_canisters, state_machine_builder_for_nns_tests,
+        update_with_sender,
+    },
 };
-use ic_state_machine_tests::StateMachine;
 use std::time::Duration;
 
 #[test]
@@ -294,7 +296,7 @@ fn test_submit_and_accept_forced_root_canister_upgrade_proposal() {
 
 #[test]
 fn test_lifeline_canister_restarts_root_on_stop_canister_timeout() {
-    let mut state_machine = StateMachine::new();
+    let mut state_machine = state_machine_builder_for_nns_tests().build();
 
     let nns_init_payloads = NnsInitPayloadsBuilder::new().with_test_neurons().build();
     setup_nns_canisters(&state_machine, nns_init_payloads);

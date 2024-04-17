@@ -15,6 +15,7 @@ use ic_nns_test_utils::{
         get_neuron_ids, nns_cast_vote, nns_governance_get_full_neuron,
         nns_governance_get_proposal_info, nns_governance_get_proposal_info_as_anonymous,
         nns_set_followees_for_neuron, nns_split_neuron, setup_nns_canisters,
+        state_machine_builder_for_nns_tests,
     },
 };
 use ic_state_machine_tests::StateMachine;
@@ -28,7 +29,7 @@ const VOTING_POWER_NEURON_2: u64 = 140_400_410;
 const VOTING_POWER_NEURON_3: u64 = 14_040_040;
 
 fn setup_state_machine_with_nns_canisters() -> StateMachine {
-    let state_machine = StateMachine::new();
+    let state_machine = state_machine_builder_for_nns_tests().build();
     let nns_init_payloads = NnsInitPayloadsBuilder::new().with_test_neurons().build();
     setup_nns_canisters(&state_machine, nns_init_payloads);
     state_machine

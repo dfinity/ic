@@ -21,36 +21,35 @@ use ic_nns_governance::pb::v1::{
     proposal::Action,
     CreateServiceNervousSystem, Proposal,
 };
-use ic_nns_test_utils::neuron_helpers::get_test_neurons_maturity_snapshot;
-use ic_nns_test_utils::state_test_helpers::{
-    get_controllers, nns_wait_for_proposal_failure, sns_swap_get_auto_finalization_status,
-};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    neuron_helpers::get_neuron_1,
+    neuron_helpers::{get_neuron_1, get_test_neurons_maturity_snapshot},
     sns_wasm::add_real_wasms_to_sns_wasms,
     state_test_helpers::{
-        get_canister_status_from_root, list_deployed_snses, nns_governance_make_proposal,
-        nns_wait_for_proposal_execution, set_controllers, set_up_universal_canister,
+        get_canister_status_from_root, get_controllers, list_deployed_snses,
+        nns_governance_make_proposal, nns_wait_for_proposal_execution,
+        nns_wait_for_proposal_failure, set_controllers, set_up_universal_canister,
         setup_nns_canisters, sns_get_icp_treasury_account_balance, sns_governance_get_mode,
+        sns_swap_get_auto_finalization_status,
     },
 };
-use ic_sns_governance::pb::v1::{
-    governance::Mode::{Normal, PreInitializationSwap},
-    ListNeurons,
+use ic_sns_governance::{
+    pb::v1::{
+        governance::Mode::{Normal, PreInitializationSwap},
+        ListNeurons,
+    },
+    types::ONE_DAY_SECONDS,
 };
-use ic_sns_governance::types::ONE_DAY_SECONDS;
 use ic_sns_swap::pb::v1::Lifecycle;
 use ic_sns_test_utils::state_test_helpers::{
     get_lifecycle, get_sns_canisters_summary, list_community_fund_participants,
-    participate_in_swap, sns_governance_list_neurons,
+    participate_in_swap, sns_governance_list_neurons, state_machine_builder_for_sns_tests,
 };
 use ic_state_machine_tests::StateMachine;
 use icp_ledger::DEFAULT_TRANSFER_FEE;
 use lazy_static::lazy_static;
 use maplit::hashmap;
-use std::collections::HashMap;
-use std::time::UNIX_EPOCH;
+use std::{collections::HashMap, time::UNIX_EPOCH};
 
 // Valid images to be used in the CreateServiceNervousSystem proposal.
 pub const IMAGE_1: &str = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAD0lEQVQIHQEEAPv/AAD/DwIRAQ8HgT3GAAAAAElFTkSuQmCC";
@@ -158,7 +157,7 @@ pub struct SnsInitializationFlowTestSetup {
 impl SnsInitializationFlowTestSetup {
     /// The default test setup for exercising the 1-proposal SNS Initialization flow
     pub fn default_setup() -> Self {
-        let state_machine = StateMachine::new();
+        let state_machine = state_machine_builder_for_sns_tests().build();
 
         let funded_principals: Vec<_> = (0..10).map(PrincipalId::new_user_test_id).collect();
         let developer_principal_id = *TEST_NEURON_1_OWNER_PRINCIPAL;

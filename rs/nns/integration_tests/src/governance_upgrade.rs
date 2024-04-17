@@ -29,10 +29,10 @@ use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     itest_helpers::install_governance_canister,
     state_test_helpers::{
-        create_canister_id_at_position, setup_nns_root_with_correct_canister_id, update_with_sender,
+        create_canister_id_at_position, setup_nns_root_with_correct_canister_id,
+        state_machine_builder_for_nns_tests, update_with_sender,
     },
 };
-use ic_state_machine_tests::StateMachine;
 use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
 use std::time::Duration;
 
@@ -97,7 +97,7 @@ fn test_upgrade_after_state_shrink() {
 
 #[test]
 fn test_root_restarts_canister_during_upgrade_canister_with_stop_canister_timeout() {
-    let state_machine = StateMachine::new();
+    let state_machine = state_machine_builder_for_nns_tests().build();
     let governance_id = create_canister_id_at_position(
         &state_machine,
         GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET,

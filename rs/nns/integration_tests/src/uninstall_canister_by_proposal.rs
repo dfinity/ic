@@ -13,7 +13,10 @@ use ic_nns_governance::pb::v1::{
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     neuron_helpers::get_neuron_1,
-    state_test_helpers::{nns_governance_make_proposal, setup_nns_canisters, update_with_sender},
+    state_test_helpers::{
+        nns_governance_make_proposal, setup_nns_canisters, state_machine_builder_for_nns_tests,
+        update_with_sender,
+    },
 };
 use ic_state_machine_tests::StateMachine;
 
@@ -34,7 +37,7 @@ Success::
 */
 
 fn setup_state_machine_with_nns_canisters() -> StateMachine {
-    let state_machine = StateMachine::new();
+    let state_machine = state_machine_builder_for_nns_tests().build();
     let nns_init_payloads = NnsInitPayloadsBuilder::new().with_test_neurons().build();
     setup_nns_canisters(&state_machine, nns_init_payloads);
     state_machine

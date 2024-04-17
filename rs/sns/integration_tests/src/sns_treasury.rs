@@ -31,7 +31,8 @@ use ic_sns_swap::pb::v1::{Init as SwapInit, NeuronBasketConstructionParameters};
 use ic_sns_test_utils::{
     itest_helpers::SnsTestsInitPayloadBuilder,
     state_test_helpers::{
-        participate_in_swap, setup_sns_canisters, sns_cast_vote, SnsTestCanisterIds,
+        participate_in_swap, setup_sns_canisters, sns_cast_vote,
+        state_machine_builder_for_sns_tests, SnsTestCanisterIds,
     },
 };
 use ic_state_machine_tests::StateMachine;
@@ -280,7 +281,7 @@ fn test_sns_treasury_can_transfer_funds_via_proposals() {
     // Step 1: Prepare the world.
 
     state_test_helpers::reduce_state_machine_logging_unless_env_set();
-    let mut state_machine = StateMachine::new();
+    let mut state_machine = state_machine_builder_for_sns_tests().build();
 
     let (whale_neuron_id, sns_test_canister_ids) = new_treasury_scenario(&mut state_machine);
 
@@ -517,7 +518,7 @@ fn test_transfer_sns_treasury_funds_proposals_that_are_too_big_get_blocked_at_su
     // tokens that proposals can transfer from the treasury.
 
     state_test_helpers::reduce_state_machine_logging_unless_env_set();
-    let mut state_machine = StateMachine::new();
+    let mut state_machine = state_machine_builder_for_sns_tests().build();
 
     let (whale_neuron_id, sns_test_canister_ids) = new_treasury_scenario(&mut state_machine);
 
@@ -688,7 +689,7 @@ fn test_transfer_sns_treasury_funds_upper_bound_is_enforced_at_execution() {
     // Step 1: Prepare the world.
 
     state_test_helpers::reduce_state_machine_logging_unless_env_set();
-    let mut state_machine = StateMachine::new();
+    let mut state_machine = state_machine_builder_for_sns_tests().build();
 
     let (whale_neuron_id, sns_test_canister_ids) = new_treasury_scenario(&mut state_machine);
 
@@ -855,7 +856,7 @@ fn sns_can_mint_funds_via_proposals() {
     // Step 1: Prepare the world.
 
     state_test_helpers::reduce_state_machine_logging_unless_env_set();
-    let mut state_machine = StateMachine::new();
+    let mut state_machine = state_machine_builder_for_sns_tests().build();
 
     let (whale_neuron_id, sns_test_canister_ids) = new_treasury_scenario(&mut state_machine);
 

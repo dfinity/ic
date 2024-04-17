@@ -22,16 +22,16 @@ use ic_nns_governance::{
         Vote,
     },
 };
-use ic_nns_test_utils::state_test_helpers::setup_nns_canisters_with_features;
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     sns_wasm::add_real_wasms_to_sns_wasms,
     state_test_helpers::{
         create_canister_id_at_position, list_deployed_snses, nns_governance_make_proposal,
         nns_list_proposals, nns_wait_for_proposal_execution, set_controllers,
+        setup_nns_canisters_with_features, state_machine_builder_for_nns_tests,
     },
 };
-use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
+use ic_state_machine_tests::StateMachine;
 use lazy_static::lazy_static;
 use maplit::hashset;
 use std::collections::{HashMap, HashSet};
@@ -50,7 +50,7 @@ const ONE_TRILLION: u128 = 1_000_000_000_000;
 fn test_several_proposals() {
     // Step 1: Prepare the world.
 
-    let mut state_machine = StateMachineBuilder::new().with_current_time().build();
+    let mut state_machine = state_machine_builder_for_nns_tests().build();
 
     // Step 1.1: Boot up NNS.
     let nns_init_payload = NnsInitPayloadsBuilder::new()
