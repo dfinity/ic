@@ -519,13 +519,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "http2",
                 ],
             ),
-            "hyper-socks2": crate.spec(
-                version = "^0.8.0",
-                default_features = False,
-                features = [
-                    "rustls",
-                ],
-            ),
             "hyperlocal-next": crate.spec(
                 version = "^0.9.0",
             ),
@@ -833,6 +826,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             "pathdiff": crate.spec(
                 version = "^0.2.1",
             ),
+            "pcre2": crate.spec(
+                version = "^0.2.6",
+            ),
             "pem": crate.spec(
                 version = "^1.0.1",
             ),
@@ -886,9 +882,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "proptest": crate.spec(
                 version = "^1.0.0",
-            ),
-            "test-strategy": crate.spec(
-                version = "^0.3.1",
             ),
             "prometheus-parse": crate.spec(
                 version = "^0.2.4",
@@ -968,6 +961,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "json",
                     "multipart",
                     "rustls-tls-webpki-roots",
+                    "socks",
                     "stream",
                 ],
             ),
@@ -1194,6 +1188,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "tester": crate.spec(
                 version = "^0.7.0",
+            ),
+            "test-strategy": crate.spec(
+                version = "^0.3.1",
             ),
             "textplots": crate.spec(
                 version = "^0.8",
@@ -1438,9 +1435,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
             ),
             "zstd": crate.spec(
                 version = "^0.13.0",
-            ),
-            "pcre2": crate.spec(
-                version = "^0.2.6",
             ),
         },
         splicing_config = splicing_config(
