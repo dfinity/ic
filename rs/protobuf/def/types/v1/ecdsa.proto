@@ -42,6 +42,7 @@ message EcdsaKeyTranscript {
   registry.crypto.v1.EcdsaKeyId key_id = 1;
   UnmaskedTranscriptWithAttributes current = 2;
   KeyTranscriptCreation next_in_creation = 3;
+  registry.crypto.v1.MasterPublicKeyId master_key_id = 4;
 }
 
 message OngoingSignature {

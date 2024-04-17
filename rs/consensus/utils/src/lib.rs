@@ -805,6 +805,7 @@ mod tests {
                 current: None,
                 next_in_creation: KeyTranscriptCreation::Begin,
                 key_id: EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
+                master_key_id: None,
             },
         }
     }

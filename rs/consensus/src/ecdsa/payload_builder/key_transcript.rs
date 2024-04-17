@@ -222,6 +222,7 @@ mod tests {
             current: None,
             next_in_creation: ecdsa::KeyTranscriptCreation::Created(key_transcript_ref),
             key_id: EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
+            master_key_id: None,
         };
 
         let created_key_transcript =
@@ -245,6 +246,7 @@ mod tests {
             current: None,
             next_in_creation: ecdsa::KeyTranscriptCreation::Begin,
             key_id: EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
+            master_key_id: None,
         };
 
         let created_key_transcript =
