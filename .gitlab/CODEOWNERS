@@ -50,11 +50,6 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /packages/pocket-ic/                 @dfinity-lab/teams/ic-testing-verification
 /packages/ic-vetkd-utils/            @dfinity-lab/teams/crypto-owners
 
-# [Documentation]
-/docs/                                                     @dfinity-lab/teams/docs-owners
-/docs/spec/replica/protocol/consensus_layer/               @dfinity-lab/teams/consensus-owners
-/docs/internal/testing/testing-plan.adoc                   @dfinity-lab/teams/ic-testing-verification
-
 # [IC-OS]
 /ic-os/                                          @dfinity-lab/teams/node-team
 /ic-os/boundary-guestos/                         @dfinity-lab/teams/boundarynode-team @dfinity-lab/teams/node-team
@@ -66,9 +61,6 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /ic-os/hostos/rootfs/etc/systemd/system/metrics-proxy.service           @dfinity-lab/teams/DRE
 /ic-os/guestos/rootfs/etc/metrics-proxy.yaml                             @dfinity-lab/teams/DRE
 /ic-os/guestos/rootfs/etc/systemd/system/metrics-proxy.service           @dfinity-lab/teams/DRE
-
-# [nss_icos]
-/rs/ic_os/nss_icos/                                                           @dfinity-lab/teams/DRE
 
 # [GitLab-CI]
 /.pre-commit-config.yaml                                                @dfinity-lab/teams/idx
@@ -144,6 +136,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/https_outcalls/consensus/                           @dfinity-lab/teams/consensus-owners
 /rs/ic_os/                                              @dfinity-lab/teams/node-team
 /rs/ic_os/fstrim_tool/                                  @dfinity-lab/teams/node-team @dfinity-lab/teams/crypto-owners
+/rs/ic_os/nss_icos/                                     @dfinity-lab/teams/DRE
 /rs/ingress_manager/                                    @dfinity-lab/teams/consensus-owners
 /rs/interfaces/                                         @dfinity-lab/teams/interface-owners
 /rs/interfaces/adapter_client/                          @dfinity-lab/teams/networking-team
@@ -160,7 +153,6 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/interfaces/src/p2p.rs                               @dfinity-lab/teams/networking-team
 /rs/interfaces/src/p2p/                                 @dfinity-lab/teams/networking-team
 /rs/interfaces/state_manager/                           @dfinity-lab/teams/message-routing-owners
-/rs/interfaces/transport/                               @dfinity-lab/teams/networking-team
 /rs/log_analyzer/                                       @dfinity-lab/teams/ic-testing-verification
 /rs/memory_tracker/                                     @dfinity-lab/teams/runtime-owners
 /rs/messaging/                                          @dfinity-lab/teams/message-routing-owners
@@ -279,7 +271,6 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/tests/src/tecdsa/                                   @dfinity-lab/teams/consensus-owners @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/idx
 /rs/tests/k8s/                                          @dfinity-lab/teams/idx @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/node-team
 /rs/tools/check_did/                                    @dfinity-lab/teams/financial-integrations
-/rs/transport/                                          @dfinity-lab/teams/networking-team
 /rs/tree_deserializer/                                  @dfinity-lab/teams/message-routing-owners
 /rs/types/                                              @dfinity-lab/teams/interface-owners
 /rs/types/exhaustive_derive/                            @dfinity-lab/teams/consensus-owners
