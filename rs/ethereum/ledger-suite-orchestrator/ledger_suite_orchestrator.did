@@ -40,6 +40,9 @@ type UpgradeArg = record {
    // This exact version will be used for upgrading all existing archive canisters managed by the orchestrator.
    // Leaving this field empty will not upgrade the archive canisters.
    archive_compressed_wasm_hash: opt text;
+
+   // Update the cycles management of the canisters managed by the orchestrator.
+   cycles_management: opt UpdateCyclesManagement;
 };
 
 type AddErc20Arg = record {
@@ -113,7 +116,24 @@ type CyclesManagement = record {
 
    //Number of cycles to add to a canister managed by the orchestrator whose cycles balance is running low.
    cycles_top_up_increment: nat;
-}
+};
+
+type UpdateCyclesManagement = record {
+   // Change the number of cycles when creating a new ICRC1 ledger canister.
+   // Previously created canisters are not affected.
+   cycles_for_ledger_creation: opt nat;
+
+   // Change the number of cycles when creating a new ICRC1 archive canister.
+   // Previously created canisters are not affected.
+   cycles_for_archive_creation: opt nat;
+
+   // Change the number of cycles when creating a new ICRC1 index canister.
+   // Previously created canisters are not affected.
+   cycles_for_index_creation: opt nat;
+
+   // Change the number of cycles to add to a canister managed by the orchestrator whose cycles balance is running low.
+   cycles_top_up_increment: opt nat;
+};
 
 service : (OrchestratorArg) -> {
 

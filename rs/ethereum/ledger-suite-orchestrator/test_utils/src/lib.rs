@@ -193,7 +193,7 @@ pub fn usdc_erc20_contract() -> Erc20Contract {
     }
 }
 
-fn usdt(
+pub fn usdt(
     minter: Principal,
     ledger_compressed_wasm_hash: WasmHash,
     index_compressed_wasm_hash: WasmHash,

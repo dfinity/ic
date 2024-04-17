@@ -25,6 +25,7 @@ pub struct UpgradeArg {
     pub ledger_compressed_wasm_hash: Option<String>,
     pub index_compressed_wasm_hash: Option<String>,
     pub archive_compressed_wasm_hash: Option<String>,
+    pub cycles_management: Option<UpdateCyclesManagement>,
 }
 
 impl UpgradeArg {
@@ -168,5 +169,32 @@ impl CyclesManagement {
     /// The chosen amount must ensure that the ledger should be able to spawn an archive canister at any time.
     pub fn minimum_monitored_canister_cycles(&self) -> Nat {
         self.cycles_for_archive_creation.clone() + 2_u8 * self.cycles_top_up_increment.clone()
+    }
+}
+
+#[derive(
+    CandidType, serde::Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq, Ord, PartialOrd,
+)]
+pub struct UpdateCyclesManagement {
+    pub cycles_for_ledger_creation: Option<Nat>,
+    pub cycles_for_archive_creation: Option<Nat>,
+    pub cycles_for_index_creation: Option<Nat>,
+    pub cycles_top_up_increment: Option<Nat>,
+}
+
+impl UpdateCyclesManagement {
+    pub fn apply(self, old: &mut CyclesManagement) {
+        if let Some(cycles_for_ledger_creation) = self.cycles_for_ledger_creation {
+            old.cycles_for_ledger_creation = cycles_for_ledger_creation;
+        }
+        if let Some(cycles_for_archive_creation) = self.cycles_for_archive_creation {
+            old.cycles_for_archive_creation = cycles_for_archive_creation;
+        }
+        if let Some(cycles_for_index_creation) = self.cycles_for_index_creation {
+            old.cycles_for_index_creation = cycles_for_index_creation;
+        }
+        if let Some(cycles_top_up_increment) = self.cycles_top_up_increment {
+            old.cycles_top_up_increment = cycles_top_up_increment;
+        }
     }
 }

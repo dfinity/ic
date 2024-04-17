@@ -158,6 +158,26 @@ impl ManagedCanistersAssert {
         self
     }
 
+    pub fn assert_ledger_has_cycles(self, expected: u128) -> Self {
+        assert_eq!(
+            self.setup
+                .canister_status_of(self.ledger_canister_id())
+                .cycles(),
+            expected
+        );
+        self
+    }
+
+    pub fn assert_index_has_cycles(self, expected: u128) -> Self {
+        assert_eq!(
+            self.setup
+                .canister_status_of(self.index_canister_id())
+                .cycles(),
+            expected
+        );
+        self
+    }
+
     fn call_index_ledger_id(&self) -> Principal {
         Decode!(
             &assert_reply(
