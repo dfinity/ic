@@ -2908,7 +2908,6 @@ dependencies = [
  "hyper 1.2.0",
  "hyper-rustls 0.24.2",
  "hyper-rustls 0.26.0",
- "hyper-socks2",
  "hyper-util",
  "hyperlocal-next",
  "ic-agent",
@@ -4596,23 +4595,6 @@ dependencies = [
  "tokio-rustls 0.25.0",
  "tower-service",
  "webpki-roots 0.26.1",
-]
-
-[[package]]
-name = "hyper-socks2"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc38166fc2732d450e9372388d269eb38ff0b75a3cfb4c542e65b2f6893629c4"
-dependencies = [
- "async-socks5",
- "futures",
- "http 0.2.9",
- "hyper 0.14.27",
- "hyper-rustls 0.24.2",
- "rustls 0.21.10",
- "rustls-native-certs 0.6.3",
- "thiserror",
- "tokio",
 ]
 
 [[package]]
@@ -8594,6 +8576,7 @@ dependencies = [
  "system-configuration",
  "tokio",
  "tokio-rustls 0.24.1",
+ "tokio-socks",
  "tokio-util",
  "tower-service",
  "url",
