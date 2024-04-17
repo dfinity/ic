@@ -46,8 +46,8 @@ use registry_canister::mutations::{
     do_add_nodes_to_subnet::AddNodesToSubnetPayload,
     do_change_subnet_membership::ChangeSubnetMembershipPayload,
     do_create_subnet::CreateSubnetPayload,
+    do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
     do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
-    do_update_unassigned_nodes_config::UpdateUnassignedNodesConfigPayload,
 };
 use slog::info;
 use slog::Logger;
@@ -647,16 +647,14 @@ pub async fn submit_update_unassigned_node_version_proposal(
     sender: Sender,
     neuron_id: NeuronId,
     version: String,
-    readonly_public_key: String,
 ) -> ProposalId {
     submit_external_update_proposal_allowing_error(
         governance,
         sender,
         neuron_id,
-        NnsFunction::UpdateUnassignedNodesConfig,
-        UpdateUnassignedNodesConfigPayload {
-            ssh_readonly_access: Some(vec![readonly_public_key]),
-            replica_version: Some(version.clone()),
+        NnsFunction::DeployGuestosToAllUnassignedNodes,
+        DeployGuestosToAllUnassignedNodesPayload {
+            elected_replica_version: version.clone(),
         },
         format!("Update unassigned nodes version to: {}", version.clone()),
         "".to_string(),

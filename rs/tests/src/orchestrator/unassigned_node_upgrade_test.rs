@@ -143,7 +143,6 @@ pub fn test(env: TestEnv) {
             proposal_sender.clone(),
             test_neuron_id,
             target_version.clone(),
-            readonly_public_key.clone(),
         )
         .await;
         vote_execute_proposal_assert_executed(&governance_canister, proposal2_id).await;
