@@ -1355,10 +1355,9 @@ impl Validator {
                         "CatchUpPackage integrity check failed".to_string(),
                     ));
                 }
-                let verification = self.verify_artifact(pool_reader, &catch_up_package);
-
-                let verification =
-                    self.maybe_hold_back_cup(verification, &catch_up_package, pool_reader);
+                let verification = self
+                    .verify_artifact(pool_reader, &catch_up_package)
+                    .and_then(|_| self.maybe_hold_back_cup(&catch_up_package, pool_reader));
 
                 self.compute_action_from_artifact_verification(
                     pool_reader,
@@ -1573,58 +1572,56 @@ impl Validator {
     /// After a while, if we did not catch up via computing, we will still load the CUP.
     fn maybe_hold_back_cup(
         &self,
-        verification: Result<(), ValidationError<PermanentError, TransientError>>,
         catch_up_package: &CatchUpPackage,
         pool_reader: &PoolReader<'_>,
     ) -> Result<(), ValidationError<PermanentError, TransientError>> {
-        match verification {
-            Ok(()) => {
-                let cup_height = catch_up_package.height();
+        let cup_height = catch_up_package.height();
 
-                // Check that this is a CUP that is close to the current state we have
-                // in the state manager, i.e. there is a chance to catch up via recomputing
-                if cup_height
-                    .get()
-                    .saturating_sub(self.state_manager.latest_state_height().get())
-                    //< CATCH_UP_NEGLIGIBLE_HEIGHT
-                    < Self::get_next_interval_length(catch_up_package).get() / 4
-                    // Check that the finalized height is higher than this cup
-                    // In order to validate the finalization of height `h` we need to have a valid random beacon
-                    // of height `h-1` and a valid block of height `h`.
-                    // In order to have a valid block of height `h` you need to have a valid block of height `h-1`.
-                    // The same is true for the random beacon.
-                    // Thus, if this condition is true, we know that we have all blocks and random beacons between the
-                    // latest CUP height and finalized height and are therefore able to recompute.
-                    && pool_reader.get_finalized_height() >= cup_height
-                {
-                    // Check that this CUP has not been in the pool for too long
-                    // If it has, we validate the CUP nonetheless
-                    // This is a safety measure
-                    let now = self.time_source.get_relative_time();
-                    match pool_reader
-                        .pool()
-                        .unvalidated()
-                        .get_timestamp(&catch_up_package.get_id())
-                    {
-                        Some(timestamp) if now > timestamp + CATCH_UP_HOLD_OF_TIME => {
-                            warn!(
-                                self.log,
-                                "Validating CUP at height {} after holding it back for {} seconds",
-                                cup_height,
-                                CATCH_UP_HOLD_OF_TIME.as_secs()
-                            );
-                            Ok(())
-                        }
-                        Some(_) => Err(ValidationError::Transient(
-                            TransientError::CatchUpHeightNegligible,
-                        )),
-                        None => Ok(()),
-                    }
-                } else {
+        // Check that this is a CUP that is close to the current state we have
+        // in the state manager, i.e. there is a chance to catch up via recomputing
+        if cup_height
+            .get()
+            .saturating_sub(self.state_manager.latest_state_height().get())
+            < Self::get_next_interval_length(catch_up_package).get() / 4
+            // Check that the finalized height is higher than this cup
+            // In order to validate the finalization of height `h` we need to have
+            // a valid random beacon of height `h-1` and a valid block of height `h`.
+            // In order to have a valid block of height `h` you need to have
+            // a valid block of height `h-1`.
+            // The same is true for the random beacon.
+            // Thus, if this condition is true, we know that we have all blocks and random beacons
+            // between the latest CUP height and finalized height and are therefore
+            // able to recompute.
+            && pool_reader.get_finalized_height() >= cup_height
+            // If the state height exceeded the cup height, we can validate the cup, as it won't
+            // trigger the state sync.
+            && self.state_manager.latest_state_height() < cup_height
+        {
+            // Check that this CUP has not been in the pool for too long
+            // If it has, we validate the CUP nonetheless
+            // This is a safety measure
+            let now = self.time_source.get_relative_time();
+            match pool_reader
+                .pool()
+                .unvalidated()
+                .get_timestamp(&catch_up_package.get_id())
+            {
+                Some(timestamp) if now > timestamp + CATCH_UP_HOLD_OF_TIME => {
+                    warn!(
+                        self.log,
+                        "Validating CUP at height {} after holding it back for {} seconds",
+                        cup_height,
+                        CATCH_UP_HOLD_OF_TIME.as_secs()
+                    );
                     Ok(())
                 }
+                Some(_) => Err(ValidationError::Transient(
+                    TransientError::CatchUpHeightNegligible,
+                )),
+                None => Ok(()),
             }
-            _ => verification,
+        } else {
+            Ok(())
         }
     }
 
@@ -3201,7 +3198,48 @@ pub mod test {
     }
 
     #[test]
-    fn test_validate_catch_up_package() {
+    fn test_should_validate_catch_up_package_state_behind_the_cup_height() {
+        test_validate_catch_up_package(
+            /*state_height=*/ Height::new(1),
+            /*held_back_duration*/ Duration::from_secs(0),
+            /*expected_to_validate*/ true,
+        );
+    }
+
+    #[test]
+    fn test_should_not_validate_catch_up_package_when_state_close_to_the_cup_height() {
+        test_validate_catch_up_package(
+            /*state_height=*/ Height::new(9),
+            /*held_back_duration*/ Duration::from_secs(0),
+            /*expected_to_validate*/ false,
+        );
+    }
+
+    #[test]
+    fn test_should_validate_catch_up_package_when_held_back_for_too_long() {
+        test_validate_catch_up_package(
+            /*state_height=*/ Height::new(9),
+            /*held_back_duration*/ CATCH_UP_HOLD_OF_TIME + Duration::from_secs(1),
+            /*expected_to_validate*/ true,
+        );
+    }
+
+    #[test]
+    fn test_should_validate_catch_up_package_when_state_exceeds_the_cup_height() {
+        test_validate_catch_up_package(
+            /*state_height=*/ Height::new(10),
+            /*held_back_duration*/ Duration::from_secs(0),
+            /*expected_to_validate=*/ true,
+        );
+    }
+
+    /// Tests whether we can validate a CUP at height `10`.
+    fn test_validate_catch_up_package(
+        state_height: Height,
+        // How long has the CUP been in the pool
+        held_back_duration: Duration,
+        expected_to_validate: bool,
+    ) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             // Setup validator dependencies.
             let ValidatorDependencies {
@@ -3219,17 +3257,79 @@ pub mod test {
             } = setup_dependencies(pool_config, &(0..4).map(node_test_id).collect::<Vec<_>>());
 
             pool.advance_round_normal_operation_n(9);
+            // Create, notarize, and finalize a block at the CUP height, but don't create a CUP.
             pool.prepare_round().dont_add_catch_up_package().advance();
 
-            let block = pool.latest_notarized_blocks().next().unwrap();
-            pool.finalize_block(&block);
             let finalization = pool.validated().finalization().get_highest().unwrap();
             let catch_up_package = pool.make_catch_up_package(finalization.height());
             pool.insert_unvalidated(catch_up_package.clone());
-            let mut old_replica_version_cup = catch_up_package.clone();
-            old_replica_version_cup.content.version =
-                ReplicaVersion::try_from("old_version").unwrap();
-            pool.insert_unvalidated(old_replica_version_cup.clone());
+
+            state_manager
+                .get_mut()
+                .expect_get_state_hash_at()
+                .return_const(Ok(CryptoHashOfState::from(CryptoHash(Vec::new()))));
+            state_manager
+                .get_mut()
+                .expect_latest_state_height()
+                .return_const(state_height);
+
+            let validator = Validator::new(
+                replica_config,
+                membership,
+                registry_client,
+                crypto,
+                payload_builder,
+                state_manager,
+                message_routing,
+                dkg_pool,
+                no_op_logger(),
+                ValidatorMetrics::new(MetricsRegistry::new()),
+                Arc::clone(&time_source) as Arc<_>,
+            );
+
+            time_source.advance_time(held_back_duration);
+
+            let mut changeset = validator.on_state_change(&PoolReader::new(&pool));
+            if expected_to_validate {
+                assert_eq!(changeset.len(), 1);
+                assert_eq!(
+                    changeset.pop(),
+                    Some(ChangeAction::MoveToValidated(
+                        ConsensusMessage::CatchUpPackage(catch_up_package)
+                    ))
+                );
+            } else {
+                assert_eq!(changeset.len(), 0);
+            }
+        })
+    }
+
+    #[test]
+    fn test_should_not_validate_catch_up_package_when_wrong_version() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            // Setup validator dependencies.
+            let ValidatorDependencies {
+                payload_builder,
+                membership,
+                state_manager,
+                message_routing,
+                crypto,
+                registry_client,
+                mut pool,
+                dkg_pool,
+                time_source,
+                replica_config,
+                ..
+            } = setup_dependencies(pool_config, &(0..4).map(node_test_id).collect::<Vec<_>>());
+
+            pool.advance_round_normal_operation_n(9);
+            // Create, notarize, and finalize a block at the CUP height, but don't create a CUP.
+            pool.prepare_round().dont_add_catch_up_package().advance();
+
+            let finalization = pool.validated().finalization().get_highest().unwrap();
+            let mut catch_up_package = pool.make_catch_up_package(finalization.height());
+            catch_up_package.content.version = ReplicaVersion::try_from("old_version").unwrap();
+            pool.insert_unvalidated(catch_up_package.clone());
 
             state_manager
                 .get_mut()
@@ -3255,16 +3355,11 @@ pub mod test {
             );
 
             let mut changeset = validator.on_state_change(&PoolReader::new(&pool));
-            assert_eq!(changeset.len(), 2);
+            assert_eq!(changeset.len(), 1);
+
             assert_eq!(
                 changeset.pop(),
                 Some(ChangeAction::RemoveFromUnvalidated(
-                    ConsensusMessage::CatchUpPackage(old_replica_version_cup)
-                ))
-            );
-            assert_eq!(
-                changeset.pop(),
-                Some(ChangeAction::MoveToValidated(
                     ConsensusMessage::CatchUpPackage(catch_up_package)
                 ))
             );
