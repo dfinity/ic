@@ -20,7 +20,8 @@ pub const REQUEST_LIFETIME: Duration = Duration::from_secs(300);
 
 /// Bit encoding the message kind (request or response).
 #[repr(u64)]
-enum Kind {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Kind {
     Request = 0,
     Response = Self::BIT,
 }
@@ -32,7 +33,8 @@ impl Kind {
 
 /// Bit encoding the message context (inbound or outbound).
 #[repr(u64)]
-enum Context {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Context {
     Inbound = 0,
     Outbound = Self::BIT,
 }
@@ -69,12 +71,20 @@ impl MessageId {
         Self(kind as u64 | context as u64 | class as u64 | generator << MessageId::BITMASK_LEN)
     }
 
-    pub(super) fn is_response(&self) -> bool {
-        self.0 & Kind::BIT == Kind::Response as u64
+    pub(super) fn kind(&self) -> Kind {
+        if self.0 & Kind::BIT == Kind::Request as u64 {
+            Kind::Request
+        } else {
+            Kind::Response
+        }
     }
 
-    pub(super) fn is_outbound(&self) -> bool {
-        self.0 & Context::BIT == Context::Outbound as u64
+    pub(super) fn context(&self) -> Context {
+        if self.0 & Context::BIT == Context::Inbound as u64 {
+            Context::Inbound
+        } else {
+            Context::Outbound
+        }
     }
 
     pub(super) fn class(&self) -> Class {
@@ -294,7 +304,7 @@ impl MessagePool {
     ///
     /// Panics if the provided ID was generated for a `Response`.
     pub(crate) fn get_request(&self, id: MessageId) -> Option<&RequestOrResponse> {
-        assert!(!id.is_response());
+        assert_eq!(Kind::Request, id.kind());
 
         self.messages.get(&id)
     }
@@ -303,7 +313,7 @@ impl MessagePool {
     ///
     /// Panics if the provided ID was generated for a `Request`.
     pub(crate) fn get_response(&self, id: MessageId) -> Option<&RequestOrResponse> {
-        assert!(id.is_response());
+        assert_eq!(Kind::Response, id.kind());
 
         self.messages.get(&id)
     }

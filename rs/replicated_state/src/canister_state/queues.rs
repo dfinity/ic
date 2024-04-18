@@ -3,7 +3,7 @@ mod queue;
 #[cfg(test)]
 mod tests;
 
-use self::message_pool::{MessageId, MessagePool};
+use self::message_pool::{Context, MessageId, MessagePool};
 use self::queue::{CanisterQueue, IngressQueue, MessageReference};
 use crate::canister_state::queues::message_pool::Class;
 use crate::replicated_state::MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN;
@@ -1242,7 +1242,7 @@ impl CanisterQueues {
         local_canisters: &BTreeMap<CanisterId, CanisterState>,
     ) {
         self.memory_usage_stats -= MemoryUsageStats::stats_delta(QueueOp::Pop, msg);
-        if id.is_outbound() {
+        if id.context() == Context::Outbound {
             // Sanity check: ensure that we were the sender.
             debug_assert_eq!(own_canister_id, &msg.sender());
 
@@ -1269,7 +1269,7 @@ impl CanisterQueues {
 
         // Update memory usage stats.
         // And, depending on where the message was, the input or output queue stats.
-        if id.is_outbound() {
+        if id.context() == Context::Outbound {
             let msg = RequestOrResponse::Response(response);
 
             // Push response, update stats.
