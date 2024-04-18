@@ -1,3 +1,4 @@
+// TODO(MR-569) Remove when `CanisterQueues` has been updated to use this.
 #![allow(dead_code)]
 
 use ic_types::messages::{

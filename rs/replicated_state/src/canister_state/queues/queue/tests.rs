@@ -1,12 +1,12 @@
 use super::super::message_pool::tests::*;
 use super::*;
 use assert_matches::assert_matches;
-use ic_test_utilities_types::{
-    arbitrary,
-    ids::{canister_test_id, message_test_id, user_test_id},
-    messages::{IngressBuilder, RequestBuilder, ResponseBuilder},
-};
-use ic_types::{messages::RequestOrResponse, time::UNIX_EPOCH, Time};
+use ic_test_utilities_types::arbitrary;
+use ic_test_utilities_types::ids::{canister_test_id, message_test_id, user_test_id};
+use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, ResponseBuilder};
+use ic_types::messages::RequestOrResponse;
+use ic_types::time::{CoarseTime, UNIX_EPOCH};
+use ic_types::Time;
 use proptest::prelude::*;
 
 #[test]

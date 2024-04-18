@@ -1,4 +1,5 @@
-#![allow(unused)]
+// TODO(MR-569) Remove when `CanisterQueues` has been updated to use this.
+#![allow(dead_code)]
 
 use super::message_pool::{Class, MessageId, MessagePool};
 use crate::StateError;
@@ -6,16 +7,12 @@ use ic_base_types::CanisterId;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::state::{ingress::v1 as pb_ingress, queues::v1 as pb_queues};
 use ic_types::messages::{CallbackId, Ingress, Request, RequestOrResponse, Response, NO_DEADLINE};
-use ic_types::time::CoarseTime;
 use ic_types::{CountBytes, Cycles, Time};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
+use std::convert::{From, TryFrom, TryInto};
 use std::iter::Sum;
-use std::{
-    collections::VecDeque,
-    convert::{From, TryFrom, TryInto},
-    mem::size_of,
-    sync::Arc,
-};
+use std::mem::size_of;
+use std::sync::Arc;
 
 #[cfg(test)]
 mod tests;
@@ -30,23 +27,27 @@ pub(super) enum MessageReference {
     ///
     /// Guaranteed response call requests in output queues and best-effort requests
     /// in input or output queues may time out and be dropped from the pool. Such
-    /// stale references can be safely ignored.
+    /// stale references can be safely ignored. Guaranteed response call requests in
+    /// input queues never time out.
     ///
-    /// Guaranteed response call requests in input queues never time out.
+    /// All best-effort requests are subject to load shedding and may be dropped
+    /// from the pool at any time.
     Request(MessageId),
 
     /// Weak reference to a `Response` held in the message pool.
     ///
     /// Best-effort responses in output queues may time out and be dropped from the
-    /// pool. Stale response references in output queues can be safely ignored.
+    /// pool. Guaranteed responses never time out. All best-effort responses are
+    /// subject to load shedding and may be dropped from the pool at any time.
     ///
-    /// A dangling response reference is enqueued into an input queue as a
-    /// `SYS_UNKNOWN` reject response marker. A matching response may or may not be
-    /// inserted into the pool while the reference is backlogged in the input queue.
-    /// Meaning that dangling response references in input queues are `SYS_UNKNOWN`
-    /// reject responses.
+    /// Stale response references in output queues can be safely ignored.
     ///
-    /// Guaranteed responses never time out.
+    /// Stale response references in input queues were either enqueued as dangling
+    /// timeout reject response markers (with the corresponding response never
+    /// inserted into the pool); or they are the result of shedding a best-effort
+    /// response. Meaning that stale response references in input queues are always
+    /// `SYS_UNKNOWN` reject responses to best-effort calls ("timeout" if deadline
+    /// has expired, "drop" otherwise.)
     Response(MessageId),
 
     /// Local known (i.e. `SYS_TRANSIENT`) reject response: "timeout" if deadline
