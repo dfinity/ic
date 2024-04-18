@@ -68,11 +68,11 @@ dfx deploy --network ic index --argument '(opt variant {Init = record { ledger_i
 
 ```shell
 dfx canister create orchestrator
-dfx deploy orchestrator --network ic --argument "(variant { InitArg = record { more_controller_ids = vec { principal \"mf7xa-laaaa-aaaar-qaaaa-cai\"; }; minter_id = opt principal \"$(dfx canister --network ic id minter)\"; cycles_management = opt record { cycles_for_ledger_creation = 1_000_000_000_000 ; cycles_for_archive_creation = 100_000_000_000; cycles_for_index_creation = 1_000_000_000_000; cycles_top_up_increment = 500_000_000_000 } }})"
+dfx deploy orchestrator --network ic --argument "(variant { InitArg = record { more_controller_ids = vec { principal \"mf7xa-laaaa-aaaar-qaaaa-cai\"; }; minter_id = opt principal \"$(dfx canister --network ic id minter)\"; cycles_management = opt record { cycles_for_ledger_creation = 2_000_000_000_000 ; cycles_for_archive_creation = 1_000_000_000_000; cycles_for_index_creation = 1_000_000_000_000; cycles_top_up_increment = 500_000_000_000 } }})"
 ```
 
 ### Mainnet
 
 ```shell
-dfx deploy orchestrator --network ic --argument "(variant { InitArg = record { more_controller_ids = vec { principal \"mf7xa-laaaa-aaaar-qaaaa-cai\"; }; minter_id = opt principal \"$(dfx canister --network ic id minter)\"; cycles_management = opt record { cycles_for_ledger_creation = 1_000_000_000_000 ; cycles_for_archive_creation = 100_000_000_000; cycles_for_index_creation = 1_000_000_000_000; cycles_top_up_increment = 500_000_000_000 } }})"
+dfx deploy orchestrator --network ic --argument "(variant { InitArg = record { more_controller_ids = vec { principal \"mf7xa-laaaa-aaaar-qaaaa-cai\"; }; minter_id = opt principal \"$(dfx canister --network ic id minter)\"; cycles_management = opt record { cycles_for_ledger_creation = 2_000_000_000_000 ; cycles_for_archive_creation = 1_000_000_000_000; cycles_for_index_creation = 1_000_000_000_000; cycles_top_up_increment = 500_000_000_000 } }})"
 ```
