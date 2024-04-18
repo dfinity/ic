@@ -2,8 +2,10 @@
 
 set -e
 
+# Source the functions required for writing metrics
+source /opt/ic/bin/metrics.sh
+
 SCRIPT="$(basename "$0")[$$]"
-METRICS_DIR="/run/node_exporter/collector_textfile"
 GUESTOS_VERSION_FILE="/opt/ic/share/version.txt"
 
 write_log() {
@@ -14,25 +16,6 @@ write_log() {
     fi
 
     logger -t "${SCRIPT}" "${message}"
-}
-
-write_metric_attr() {
-    local name=$1
-    local attr=$2
-    local value=$3
-    local help=$4
-    local type=$5
-
-    echo -e "# HELP ${name} ${help}\n# TYPE ${type}\n${name}${attr} ${value}" >"${METRICS_DIR}/${name}.prom"
-}
-
-write_metric() {
-    local name=$1
-    local value=$2
-    local help=$3
-    local type=$4
-
-    echo -e "# HELP ${name} ${help}\n# TYPE ${type}\n${name} ${value}" >"${METRICS_DIR}/${name}.prom"
 }
 
 function get_guestos_version_noreport() {

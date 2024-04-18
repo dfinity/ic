@@ -78,6 +78,7 @@ rootfs_files = {
     Label("opt/ic/bin/generate-replica-config.sh"): "/opt/ic/bin/generate-replica-config.sh",
     Label("opt/ic/bin/ipv4-connectivity-check.sh"): "/opt/ic/bin/ipv4-connectivity-check.sh",
     Label("opt/ic/bin/manageboot.sh"): "/opt/ic/bin/manageboot.sh",
+    Label("opt/ic/bin/metrics.sh"): "/opt/ic/bin/metrics.sh",
     Label("opt/ic/bin/monitor-expand-shared-data.py"): "/opt/ic/bin/monitor-expand-shared-data.py",
     Label("opt/ic/bin/provision-ssh-keys.sh"): "/opt/ic/bin/provision-ssh-keys.sh",
     Label("opt/ic/bin/read-ssh-keys.sh"): "/opt/ic/bin/read-ssh-keys.sh",
