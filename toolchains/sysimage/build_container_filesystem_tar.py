@@ -3,7 +3,12 @@
 # Build a container image and extract the single flattened filesystem into a tar file.
 from __future__ import annotations
 
+import atexit
+import os
+import shutil
+import subprocess
 import sys
+import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -60,6 +65,17 @@ def load_base_image_tar_file(container_cmd: str, tar_file: Path):
     """
     cmd = f"{container_cmd} image load --quiet --input {tar_file}"
     invoke.run(cmd)
+
+
+def arrange_rootfs_files(context_dir, rootfs_files):
+    """Add rootfs files into the context directory by copying them to their defined paths."""
+    for rootfs_file in rootfs_files:
+        source_file, install_target = rootfs_file.split(":")
+        if install_target[0] == "/":
+            install_target = install_target[1:]
+        install_target = os.path.join(context_dir, install_target)
+        os.makedirs(os.path.dirname(install_target), exist_ok=True)
+        shutil.copy(source_file, install_target)
 
 
 def build_container(container_cmd: str,
@@ -210,9 +226,20 @@ def get_args():
     )
 
     parser.add_argument(
-        "--context-dir",
+        "--context-file",
+        dest="context_files",
         type=str,
-        help="Directory to be used as docker build context.",
+        action="append",
+        help="Files to drop directly into the build context.",
+        required=True
+    )
+
+    parser.add_argument(
+        "--rootfs-file",
+        dest="rootfs_files",
+        type=str,
+        action="append",
+        help="Files to include in rootfs; expects list of sourcefile:targetfile",
         required=True
     )
 
@@ -267,9 +294,20 @@ def main():
 
     # Use the unique destination filename as the image tag.
     image_tag = generate_image_tag(destination_tar_filename)
-    context_dir = args.context_dir
+    context_files = args.context_files
+    rootfs_files = args.rootfs_files
     no_cache = args.no_cache
     temp_sys_dir = process_temp_sys_dir_args(args.temp_container_sys_dir, args.tmpfs_container_sys_dir)
+
+    context_dir = tempfile.mkdtemp(prefix="icosbuild")
+    atexit.register(lambda: subprocess.run(["rm", "-rf", context_dir], check=True))
+
+    # Add all context files directly into dir
+    for context_file in context_files:
+        shutil.copy(context_file, context_dir)
+
+    # Fill context with remaining rootfs files from map
+    arrange_rootfs_files(context_dir, rootfs_files)
 
     # Bazel can't read files. (: Resolve them here, instead.
     if args.file_build_args:

@@ -2,6 +2,7 @@
 Hold manifest common to all HostOS variants.
 """
 
+load("//ic-os/hostos/rootfs:defs.bzl", "rootfs_files")
 load("//toolchains/sysimage:toolchain.bzl", "lvm_image")
 
 # Declare the dependencies that we will have for the built filesystem images.
@@ -37,7 +38,8 @@ def image_deps(mode, _malicious = False):
         },
 
         # Set various configuration values
-        "container_context_files": Label("//ic-os/hostos/rootfs:rootfs-files"),
+        "container_context_files": Label("//ic-os/hostos/rootfs:context-files"),
+        "rootfs_files": rootfs_files,
         "partition_table": Label("//ic-os/hostos:partitions.csv"),
         "volume_table": Label("//ic-os/hostos:volumes.csv"),
         "rootfs_size": "3G",

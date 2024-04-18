@@ -2,6 +2,8 @@
 Hold manifest common to all GuestOS variants.
 """
 
+load("//ic-os/guestos/rootfs:defs.bzl", "rootfs_files")
+
 # Declare the dependencies that we will have for the built filesystem images.
 # This needs to be done separately from the build rules because we want to
 # compute the hash over all inputs going into the image and derive the
@@ -50,7 +52,8 @@ def image_deps(mode, malicious = False):
         },
 
         # Set various configuration values
-        "container_context_files": Label("//ic-os/guestos/rootfs:rootfs-files"),
+        "container_context_files": Label("//ic-os/guestos/rootfs:context-files"),
+        "rootfs_files": rootfs_files,
         "partition_table": Label("//ic-os/guestos:partitions.csv"),
         "expanded_size": "50G",
         "rootfs_size": "3G",
