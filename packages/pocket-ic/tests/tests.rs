@@ -340,7 +340,11 @@ fn very_slow_wasm(n: u64) -> Vec<u8> {
     wat::parse_str(wat).unwrap()
 }
 
-fn run_very_slow_method(pic: &PocketIc, dts_flag: DtsFlag) -> Result<WasmResult, UserError> {
+fn run_very_slow_method(
+    pic: &PocketIc,
+    loop_iterations: u64,
+    dts_flag: DtsFlag,
+) -> Result<WasmResult, UserError> {
     // Create a canister.
     let t0 = pic.get_time();
     let can_id = pic.create_canister();
@@ -351,7 +355,7 @@ fn run_very_slow_method(pic: &PocketIc, dts_flag: DtsFlag) -> Result<WasmResult,
     pic.add_cycles(can_id, 100 * INIT_CYCLES);
 
     // Install the very slow canister wasm file on the canister.
-    pic.install_canister(can_id, very_slow_wasm(200_000), vec![], None);
+    pic.install_canister(can_id, very_slow_wasm(loop_iterations), vec![], None);
 
     let t0 = pic.get_time();
     let res = pic.update_call(can_id, Principal::anonymous(), "run", vec![]);
@@ -370,13 +374,13 @@ fn test_benchmarking_subnet() {
     let pic = PocketIcBuilder::new()
         .with_benchmarking_application_subnet()
         .build();
-    run_very_slow_method(&pic, DtsFlag::Disabled).unwrap();
+    run_very_slow_method(&pic, 200_000, DtsFlag::Disabled).unwrap();
 }
 
 #[test]
 fn very_slow_method_on_application_subnet() {
     let pic = PocketIcBuilder::new().with_application_subnet().build();
-    run_very_slow_method(&pic, DtsFlag::Enabled).unwrap_err();
+    run_very_slow_method(&pic, 200_000, DtsFlag::Enabled).unwrap_err();
 }
 
 fn test_dts(dts_flag: DtsFlag) {
@@ -384,28 +388,7 @@ fn test_dts(dts_flag: DtsFlag) {
         .with_application_subnet()
         .with_dts_flag(dts_flag)
         .build();
-
-    // Create a canister.
-    let t0 = pic.get_time();
-    let can_id = pic.create_canister();
-    let t1 = pic.get_time();
-    assert_eq!(t1, t0 + Duration::from_nanos(1)); // canister creation should take one round, i.e., 1ns
-
-    // Charge the canister with 2T cycles.
-    pic.add_cycles(can_id, 100 * INIT_CYCLES);
-
-    // Install the very slow canister wasm file on the canister.
-    pic.install_canister(can_id, very_slow_wasm(60_000), vec![], None);
-
-    let t0 = pic.get_time();
-    pic.update_call(can_id, Principal::anonymous(), "run", vec![])
-        .unwrap();
-    let t1 = pic.get_time();
-    if let DtsFlag::Enabled = dts_flag {
-        assert!(t1 >= t0 + Duration::from_nanos(10)); // DTS takes at least 10 rounds
-    } else {
-        assert_eq!(t1, t0 + Duration::from_nanos(1)); // update call should take one round, i.e., 1ns without DTS
-    }
+    run_very_slow_method(&pic, 60_000, dts_flag).unwrap();
 }
 
 #[test]
