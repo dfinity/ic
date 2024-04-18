@@ -23,19 +23,11 @@ pub mod validator;
 mod proptests;
 
 use crate::consensus::{
-    block_maker::BlockMaker,
-    catchup_package_maker::CatchUpPackageMaker,
-    dkg_key_manager::DkgKeyManager,
-    finalizer::Finalizer,
-    metrics::{ConsensusGossipMetrics, ConsensusMetrics},
-    notary::Notary,
-    payload_builder::PayloadBuilderImpl,
-    priority::get_priority_function,
-    purger::Purger,
-    random_beacon_maker::RandomBeaconMaker,
-    random_tape_maker::RandomTapeMaker,
-    share_aggregator::ShareAggregator,
-    validator::Validator,
+    block_maker::BlockMaker, catchup_package_maker::CatchUpPackageMaker,
+    dkg_key_manager::DkgKeyManager, finalizer::Finalizer, metrics::ConsensusMetrics,
+    notary::Notary, payload_builder::PayloadBuilderImpl, priority::get_priority_function,
+    purger::Purger, random_beacon_maker::RandomBeaconMaker, random_tape_maker::RandomTapeMaker,
+    share_aggregator::ShareAggregator, validator::Validator,
 };
 use ic_consensus_utils::{
     crypto::ConsensusCrypto, get_notarization_delay_settings, is_root_subnet,
@@ -61,7 +53,7 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{
     artifact::{ConsensusMessageFilter, ConsensusMessageId, PriorityFn},
     artifact_kind::ConsensusArtifact,
-    consensus::{ConsensusMessageAttribute, ConsensusMessageHashable},
+    consensus::ConsensusMessageHashable,
     malicious_flags::MaliciousFlags,
     replica_config::ReplicaConfig,
     replica_version::ReplicaVersion,
@@ -610,19 +602,12 @@ fn add_to_validated<T: ConsensusMessageHashable>(timestamp: Time, msg: Option<T>
 /// Implement Consensus Gossip interface.
 pub struct ConsensusGossipImpl {
     message_routing: Arc<dyn MessageRouting>,
-    metrics: ConsensusGossipMetrics,
 }
 
 impl ConsensusGossipImpl {
     /// Create a new [ConsensusGossipImpl].
-    pub fn new(
-        message_routing: Arc<dyn MessageRouting>,
-        metrics_registry: MetricsRegistry,
-    ) -> Self {
-        ConsensusGossipImpl {
-            message_routing,
-            metrics: ConsensusGossipMetrics::new(metrics_registry),
-        }
+    pub fn new(message_routing: Arc<dyn MessageRouting>) -> Self {
+        ConsensusGossipImpl { message_routing }
     }
 }
 
@@ -630,15 +615,8 @@ impl<Pool: ConsensusPool> PriorityFnAndFilterProducer<ConsensusArtifact, Pool>
     for ConsensusGossipImpl
 {
     /// Return a priority function that matches the given consensus pool.
-    fn get_priority_function(
-        &self,
-        pool: &Pool,
-    ) -> PriorityFn<ConsensusMessageId, ConsensusMessageAttribute> {
-        get_priority_function(
-            pool,
-            self.message_routing.expected_batch_height(),
-            &self.metrics,
-        )
+    fn get_priority_function(&self, pool: &Pool) -> PriorityFn<ConsensusMessageId, ()> {
+        get_priority_function(pool, self.message_routing.expected_batch_height())
     }
 
     /// Return a filter that represents what artifacts are needed above the
@@ -710,11 +688,11 @@ pub fn setup(
             time_source,
             stable_registry_version_age,
             malicious_flags,
-            metrics_registry.clone(),
+            metrics_registry,
             logger,
             local_store_time_reader,
         ),
-        ConsensusGossipImpl::new(message_routing, metrics_registry),
+        ConsensusGossipImpl::new(message_routing),
     )
 }
 

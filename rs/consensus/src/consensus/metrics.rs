@@ -111,25 +111,6 @@ impl ConsensusMetrics {
     }
 }
 
-pub struct ConsensusGossipMetrics {
-    pub get_priority_update_block_duration: HistogramVec,
-}
-
-impl ConsensusGossipMetrics {
-    pub fn new(metrics_registry: MetricsRegistry) -> Self {
-        Self {
-            get_priority_update_block_duration: metrics_registry.histogram_vec(
-                "consensus_get_priority_update_block_duration",
-                "The time it took to execute the update_block sections of get_priority",
-                // 0.1ms, 0.2ms, 0.5ms, 1ms, 2ms, 5ms, 10ms, 20ms, 50ms, 100ms, 200ms, 500ms,
-                // 1s, 2s, 5s, 10s, 20s, 50s, 100s, 200s, 500s
-                decimal_buckets(-4, 2),
-                &["block_type"],
-            ),
-        }
-    }
-}
-
 // Block related stats
 pub struct BlockStats {
     pub block_hash: String,

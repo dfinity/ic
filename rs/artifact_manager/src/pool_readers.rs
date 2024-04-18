@@ -14,7 +14,7 @@ use ic_types::{
         dkg::DkgMessageId,
         dkg::Message as DkgMessage,
         ecdsa::{EcdsaMessage, EcdsaMessageAttribute},
-        ConsensusMessage, ConsensusMessageAttribute,
+        ConsensusMessage,
     },
     malicious_flags::MaliciousFlags,
     messages::SignedIngress,
@@ -79,7 +79,7 @@ impl<
     }
 
     /// The method returns the priority function.
-    fn get_priority_function(&self) -> PriorityFn<ConsensusMessageId, ConsensusMessageAttribute> {
+    fn get_priority_function(&self) -> PriorityFn<ConsensusMessageId, ()> {
         let pool = &*self.pool.read().unwrap();
         self.priority_fn_and_filter.get_priority_function(pool)
     }

@@ -7,25 +7,6 @@ import "registry/subnet/v1/subnet.proto";
 import "types/v1/canister_http.proto";
 import "types/v1/ecdsa.proto";
 
-message ConsensusMessageAttribute {
-  oneof kind {
-    FinalizationAttribute finalization = 2;
-    NotarizationAttribute notarization = 3;
-    google.protobuf.Empty empty = 12;
-  }
-  reserved 1, 4, 5, 6, 7, 8, 9, 10, 11;
-}
-
-message FinalizationAttribute {
-  bytes block_hash = 1;
-  reserved 2;
-}
-
-message NotarizationAttribute {
-  bytes block_hash = 1;
-  reserved 2;
-}
-
 message EcdsaMessageAttribute {
   oneof kind {
     registry.subnet.v1.IDkgTranscriptId signed_dealing = 1;
