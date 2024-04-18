@@ -197,6 +197,7 @@ jobs:
   python-ci-tests:
     name: Python-CI-Tests
     <<: *default-setup
+    runs-on: ubuntu-latest
     steps:
       - <<: *checkout
       - name: Run Python CI Tests
