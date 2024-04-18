@@ -1493,6 +1493,7 @@ pub fn n_random_dealer_indexes<R: RngCore + CryptoRng>(
         .choose_multiple(rng, n)
 }
 
+/// Creates a crypto component with a new, randomly generated node ID that is not in `receivers`.
 pub fn random_crypto_component_not_in_receivers<R: RngCore + CryptoRng>(
     env: &CanisterThresholdSigTestEnvironment,
     receivers: &IDkgReceivers,

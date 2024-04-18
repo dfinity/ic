@@ -231,6 +231,16 @@ rust_bench(
 )
 
 rust_bench(
+    name = "tschnorr_bench",
+    testonly = True,
+    srcs = ["benches/tschnorr.rs"],
+    aliases = ALIASES,
+    pin_cpu = True,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_bench(
     name = "multi_sig_bench",
     testonly = True,
     srcs = ["benches/multi_sig.rs"],
