@@ -977,6 +977,8 @@ fn get_effective_payload(
         NnsFunction::Unspecified
         | NnsFunction::UpdateElectedHostosVersions
         | NnsFunction::UpdateNodesHostosVersion
+        | NnsFunction::ReviseElectedHostosVersions
+        | NnsFunction::DeployHostosToSomeNodes
         | NnsFunction::AssignNoid
         | NnsFunction::CreateSubnet
         | NnsFunction::AddNodeToSubnet

@@ -690,7 +690,8 @@ pub async fn submit_update_elected_hostos_versions_proposal(
         governance,
         sender,
         neuron_id,
-        NnsFunction::UpdateElectedHostosVersions,
+        NnsFunction::ReviseElectedHostosVersions,
+        // TODO[NNS1-3000]: Rename Registry APIs for consistency with NNS Governance.
         UpdateElectedHostosVersionsPayload {
             hostos_version_to_elect: Some(String::from(version)),
             release_package_sha256_hex: Some(sha256.clone()),
@@ -731,7 +732,8 @@ pub async fn submit_update_nodes_hostos_version_proposal(
         governance,
         sender,
         neuron_id,
-        NnsFunction::UpdateNodesHostosVersion,
+        NnsFunction::DeployHostosToSomeNodes,
+        // TODO[NNS1-3000]: Rename Registry APIs according to NNS1-3000
         UpdateNodesHostosVersionPayload {
             node_ids: node_ids.clone(),
             hostos_version_id: Some(String::from(version.clone())),

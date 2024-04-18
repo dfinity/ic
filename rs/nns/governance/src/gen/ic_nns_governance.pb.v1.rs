@@ -3623,16 +3623,9 @@ pub enum NnsFunction {
     /// This ensures that the replica cannot upgrade to these versions anymore.
     UpdateElectedReplicaVersions = 38,
     BitcoinSetConfig = 39,
-    /// A proposal to update currently elected HostOS versions, by electing a new
-    /// version, and/or unelecting multiple unused versions. The version to elect
-    /// (often identified by the hash of the installation image) is added to the
-    /// registry. By itself, this proposal does not effect any upgrade. The
-    /// specified versions to unelect are removed from the registry. This ensures
-    /// that the HostOS cannot upgrade to these versions anymore.
+    /// OBSOLETE: use NNS_FUNCTION_REVISE_ELECTED_HOSTOS_VERSIONS instead
     UpdateElectedHostosVersions = 40,
-    /// Update the HostOS version running on a given list of nodes.
-    /// The proposal changes the HostOS version that is used on the specified
-    /// nodes. The version must be contained in the list of HostOS versions.
+    /// OBSOLETE: use NNS_FUNCTION_UPGRADE_HOSTOS_FOR_SOME_NODES instead
     UpdateNodesHostosVersion = 41,
     /// Uninstall and Install Root with the WASM provided in the function.  If InitArgs are provided
     /// They will be passed to the canister_init function of the WASM provided.
@@ -3651,6 +3644,16 @@ pub enum NnsFunction {
     DeployGuestosToAllUnassignedNodes = 48,
     /// A proposal to update SSH readonly access for all unassigned nodes
     UpdateSshReadonlyAccessForAllUnassignedNodes = 49,
+    /// A proposal to change the set of currently elected HostOS versions, by electing a new version,
+    /// and/or unelecting some priorly elected versions. HostOS versions are identified by the hash
+    /// of the installation image. The version to elect is added to the Registry, and the versions
+    /// to unelect are removed from the Registry, ensuring that HostOS cannot upgrade to these versions
+    /// anymore. This proposal does not actually perform the upgrade; for deployment of an elected
+    /// version, please refer to `NNS_FUNCTION_DEPLOY_HOSTOS_TO_SOME_NODES`.
+    ReviseElectedHostosVersions = 50,
+    /// Deploy a HostOS version to a given set of nodes. The proposal changes the HostOS version that
+    /// is used on the specified nodes.
+    DeployHostosToSomeNodes = 51,
 }
 impl NnsFunction {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -3724,6 +3727,10 @@ impl NnsFunction {
             NnsFunction::UpdateSshReadonlyAccessForAllUnassignedNodes => {
                 "NNS_FUNCTION_UPDATE_SSH_READONLY_ACCESS_FOR_ALL_UNASSIGNED_NODES"
             }
+            NnsFunction::ReviseElectedHostosVersions => {
+                "NNS_FUNCTION_REVISE_ELECTED_HOSTOS_VERSIONS"
+            }
+            NnsFunction::DeployHostosToSomeNodes => "NNS_FUNCTION_DEPLOY_HOSTOS_TO_SOME_NODES",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -3794,6 +3801,10 @@ impl NnsFunction {
             "NNS_FUNCTION_UPDATE_SSH_READONLY_ACCESS_FOR_ALL_UNASSIGNED_NODES" => {
                 Some(Self::UpdateSshReadonlyAccessForAllUnassignedNodes)
             }
+            "NNS_FUNCTION_REVISE_ELECTED_HOSTOS_VERSIONS" => {
+                Some(Self::ReviseElectedHostosVersions)
+            }
+            "NNS_FUNCTION_DEPLOY_HOSTOS_TO_SOME_NODES" => Some(Self::DeployHostosToSomeNodes),
             _ => None,
         }
     }
