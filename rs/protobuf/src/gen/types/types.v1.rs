@@ -1404,41 +1404,6 @@ pub mod canister_http_response_message {
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ConsensusMessageAttribute {
-    #[prost(oneof = "consensus_message_attribute::Kind", tags = "2, 3, 12")]
-    pub kind: ::core::option::Option<consensus_message_attribute::Kind>,
-}
-/// Nested message and enum types in `ConsensusMessageAttribute`.
-pub mod consensus_message_attribute {
-    #[derive(serde::Serialize, serde::Deserialize)]
-    #[allow(clippy::derive_partial_eq_without_eq)]
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Kind {
-        #[prost(message, tag = "2")]
-        Finalization(super::FinalizationAttribute),
-        #[prost(message, tag = "3")]
-        Notarization(super::NotarizationAttribute),
-        #[prost(message, tag = "12")]
-        Empty(()),
-    }
-}
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct FinalizationAttribute {
-    #[prost(bytes = "vec", tag = "1")]
-    pub block_hash: ::prost::alloc::vec::Vec<u8>,
-}
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct NotarizationAttribute {
-    #[prost(bytes = "vec", tag = "1")]
-    pub block_hash: ::prost::alloc::vec::Vec<u8>,
-}
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct EcdsaMessageAttribute {
     #[prost(oneof = "ecdsa_message_attribute::Kind", tags = "1, 2, 3, 4, 5")]
     pub kind: ::core::option::Option<ecdsa_message_attribute::Kind>,
