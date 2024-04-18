@@ -10,5 +10,7 @@ rust_library(
     deps = [
         "//rs/crypto/internal/crypto_lib/threshold_sig/tecdsa",
         "@crate_index//:rand",
+        "@crate_index//:schnorr_fun",
+        "@crate_index//:sha2",
     ],
 )

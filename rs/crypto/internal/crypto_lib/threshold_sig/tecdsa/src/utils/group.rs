@@ -32,7 +32,7 @@ impl EccCurveType {
     ///
     /// Scalar here refers to the byte size of an integer which has the range
     /// [0,z) where z is the group order.
-    pub fn scalar_bits(&self) -> usize {
+    pub const fn scalar_bits(&self) -> usize {
         match self {
             EccCurveType::K256 => 256,
             EccCurveType::P256 => 256,
@@ -44,7 +44,7 @@ impl EccCurveType {
     ///
     /// Scalar here refers to the byte size of an integer which has the range
     /// [0,z) where z is the group order.
-    pub fn scalar_bytes(&self) -> usize {
+    pub const fn scalar_bytes(&self) -> usize {
         (self.scalar_bits() + 7) / 8
     }
 
@@ -60,11 +60,22 @@ impl EccCurveType {
     }
 
     /// Return the size of encoded points, in bytes
-    pub fn point_bytes(&self) -> usize {
+    pub const fn point_bytes(&self) -> usize {
         match self {
             EccCurveType::K256 => 32 + 1,
             EccCurveType::P256 => 32 + 1,
             EccCurveType::Ed25519 => 32,
+        }
+    }
+
+    /// Return the size of encoded points, in bytes. BIP340 supports only even y
+    /// coordinates, omitting 1 byte for storing the y coordinate in the SEC1 format.
+    ///
+    /// Returns None for curves that do not support BIP340.
+    pub const fn point_bytes_bip340(&self) -> Option<usize> {
+        match self {
+            EccCurveType::K256 => Some(self.point_bytes() - 1),
+            _ => None,
         }
     }
 
@@ -1097,7 +1108,7 @@ impl EccPoint {
         sec1.push(0x02);
         sec1.extend_from_slice(pt);
 
-        Self::deserialize(curve, pt)
+        Self::deserialize(curve, &sec1)
     }
 
     /// Serialize a point in compressed form with a curve ID tag

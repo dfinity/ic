@@ -717,3 +717,31 @@ fn commitment_opening_p256_serialization_is_stable() -> Result<(), ThresholdEcds
 
     Ok(())
 }
+
+#[test]
+fn bip340_combined_share_serialization_roundtrip_works_correctly() {
+    let nodes = 5;
+    let threshold = 2;
+    let seed = Seed::from_bytes(b"ic-crypto-tecdsa-fixed-seed");
+    let signed_message = seed.derive("message").into_rng().gen::<[u8; 32]>().to_vec();
+    let random_beacon =
+        ic_types::Randomness::from(seed.derive("beacon").into_rng().gen::<[u8; 32]>());
+    let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
+
+    let setup =
+        Bip340SignatureProtocolSetup::new(nodes, threshold, 0, seed.derive("setup")).unwrap();
+    let proto = Bip340SignatureProtocolExecution::new(
+        setup,
+        signed_message,
+        random_beacon,
+        derivation_path,
+    );
+    let shares = proto.generate_shares().unwrap();
+    let comb_share = proto.generate_signature(&shares).unwrap();
+
+    let serialized_comb_share = comb_share.serialize().unwrap();
+    let deserialized_comb_share =
+        ThresholdBip340CombinedSignatureInternal::deserialize(&serialized_comb_share).unwrap();
+
+    assert_eq!(comb_share, deserialized_comb_share);
+}

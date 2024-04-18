@@ -24,7 +24,7 @@ pub(crate) fn get_tecdsa_master_public_key_from_internal_transcript(
     idkg_transcript_internal: &IDkgTranscriptInternal,
 ) -> Result<MasterPublicKey, MasterPublicKeyExtractionError> {
     let pub_key = idkg_transcript_internal.constant_term();
-    let alg = match pub_key.curve_type() {
+    let algorithm_id = match pub_key.curve_type() {
         EccCurveType::K256 => AlgorithmId::EcdsaSecp256k1,
         EccCurveType::P256 => AlgorithmId::EcdsaP256,
         x => {
@@ -35,7 +35,7 @@ pub(crate) fn get_tecdsa_master_public_key_from_internal_transcript(
     };
 
     Ok(MasterPublicKey {
-        algorithm_id: alg,
+        algorithm_id,
         public_key: pub_key.serialize(),
     })
 }

@@ -48,8 +48,9 @@ pub mod internal {
         BasicSigVerifier, BasicSigner, CheckKeysWithRegistryError, CurrentNodePublicKeysError,
         IDkgDealingEncryptionKeyRotationError, IDkgKeyRotationResult, IDkgProtocol, KeyManager,
         LoadTranscriptResult, MultiSigVerifier, MultiSigner, NiDkgAlgorithm,
-        ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner, ThresholdSigVerifier,
-        ThresholdSigVerifierByPublicKey, ThresholdSigner,
+        ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner, ThresholdSchnorrSigVerifier,
+        ThresholdSchnorrSigner, ThresholdSigVerifier, ThresholdSigVerifierByPublicKey,
+        ThresholdSigner,
     };
     use ic_interfaces::time_source::TimeSource;
     use ic_interfaces_registry::RegistryClient;
@@ -69,6 +70,8 @@ pub mod internal {
         IDkgVerifyInitialDealingsError, IDkgVerifyOpeningError, IDkgVerifyTranscriptError,
         ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
         ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
+        ThresholdSchnorrCombineSigSharesError, ThresholdSchnorrCreateSigShareError,
+        ThresholdSchnorrVerifyCombinedSigError, ThresholdSchnorrVerifySigShareError,
     };
     use ic_types::crypto::canister_threshold_sig::idkg::{
         BatchSignedIDkgDealings, IDkgComplaint, IDkgOpening, IDkgTranscript, IDkgTranscriptParams,
@@ -76,6 +79,7 @@ pub mod internal {
     };
     use ic_types::crypto::canister_threshold_sig::{
         ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
+        ThresholdSchnorrCombinedSignature, ThresholdSchnorrSigInputs, ThresholdSchnorrSigShare,
     };
     use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgConfig;
     use ic_types::crypto::threshold_sig::ni_dkg::errors::{
@@ -644,7 +648,7 @@ pub mod internal {
             &self,
             inputs: &ThresholdEcdsaSigInputs,
         ) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaSignShareError> {
-            self.crypto_component.sign_share(inputs)
+            ThresholdEcdsaSigner::sign_share(&self.crypto_component, inputs)
         }
     }
 
@@ -657,8 +661,12 @@ pub mod internal {
             inputs: &ThresholdEcdsaSigInputs,
             share: &ThresholdEcdsaSigShare,
         ) -> Result<(), ThresholdEcdsaVerifySigShareError> {
-            self.crypto_component
-                .verify_sig_share(signer, inputs, share)
+            ThresholdEcdsaSigVerifier::verify_sig_share(
+                &self.crypto_component,
+                signer,
+                inputs,
+                share,
+            )
         }
 
         fn combine_sig_shares(
@@ -666,7 +674,7 @@ pub mod internal {
             inputs: &ThresholdEcdsaSigInputs,
             shares: &BTreeMap<NodeId, ThresholdEcdsaSigShare>,
         ) -> Result<ThresholdEcdsaCombinedSignature, ThresholdEcdsaCombineSigSharesError> {
-            self.crypto_component.combine_sig_shares(inputs, shares)
+            ThresholdEcdsaSigVerifier::combine_sig_shares(&self.crypto_component, inputs, shares)
         }
 
         fn verify_combined_sig(
@@ -674,7 +682,61 @@ pub mod internal {
             inputs: &ThresholdEcdsaSigInputs,
             signature: &ThresholdEcdsaCombinedSignature,
         ) -> Result<(), ThresholdEcdsaVerifyCombinedSignatureError> {
-            self.crypto_component.verify_combined_sig(inputs, signature)
+            ThresholdEcdsaSigVerifier::verify_combined_sig(
+                &self.crypto_component,
+                inputs,
+                signature,
+            )
+        }
+    }
+
+    impl<C: CryptoServiceProvider, R: CryptoComponentRng> ThresholdSchnorrSigner
+        for TempCryptoComponentGeneric<C, R>
+    {
+        fn create_sig_share(
+            &self,
+            inputs: &ThresholdSchnorrSigInputs,
+        ) -> Result<ThresholdSchnorrSigShare, ThresholdSchnorrCreateSigShareError> {
+            ThresholdSchnorrSigner::create_sig_share(&self.crypto_component, inputs)
+        }
+    }
+
+    impl<C: CryptoServiceProvider, R: CryptoComponentRng> ThresholdSchnorrSigVerifier
+        for TempCryptoComponentGeneric<C, R>
+    {
+        fn verify_sig_share(
+            &self,
+            signer: NodeId,
+            inputs: &ThresholdSchnorrSigInputs,
+            share: &ThresholdSchnorrSigShare,
+        ) -> Result<(), ThresholdSchnorrVerifySigShareError> {
+            ThresholdSchnorrSigVerifier::verify_sig_share(
+                &self.crypto_component,
+                signer,
+                inputs,
+                share,
+            )
+        }
+
+        fn combine_sig_shares(
+            &self,
+            inputs: &ThresholdSchnorrSigInputs,
+            shares: &BTreeMap<NodeId, ThresholdSchnorrSigShare>,
+        ) -> Result<ThresholdSchnorrCombinedSignature, ThresholdSchnorrCombineSigSharesError>
+        {
+            ThresholdSchnorrSigVerifier::combine_sig_shares(&self.crypto_component, inputs, shares)
+        }
+
+        fn verify_combined_sig(
+            &self,
+            inputs: &ThresholdSchnorrSigInputs,
+            signature: &ThresholdSchnorrCombinedSignature,
+        ) -> Result<(), ThresholdSchnorrVerifyCombinedSigError> {
+            ThresholdSchnorrSigVerifier::verify_combined_sig(
+                &self.crypto_component,
+                inputs,
+                signature,
+            )
         }
     }
 
