@@ -2,24 +2,22 @@ use super::{parse_principal_id, verify_principal_ids};
 use crate::{
     common::{into_cbor, Cbor},
     state_reader_executor::StateReaderExecutor,
-    verify_cbor_content_header, HttpError, ReplicaHealthStatus,
+    HttpError, ReplicaHealthStatus,
 };
 
 use axum::{extract::State, response::IntoResponse, Router};
-use bytes::Bytes;
 use crossbeam::atomic::AtomicCell;
 use hyper::StatusCode;
 use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path, TooLongPathError};
 use ic_types::{
     messages::{
         Blob, Certificate, CertificateDelegation, HttpReadStateContent, HttpReadStateResponse,
-        HttpRequest, HttpRequestEnvelope, ReadState, SignedRequestBytes,
+        HttpRequest, HttpRequestEnvelope, ReadState,
     },
     CanisterId, PrincipalId,
 };
 use std::convert::TryFrom;
 use std::sync::{Arc, RwLock};
-use tower::ServiceBuilder;
 
 #[derive(Clone)]
 pub(crate) struct SubnetReadStateService {
@@ -48,12 +46,7 @@ impl SubnetReadStateService {
         };
         Router::new().route_service(
             Self::route(),
-            axum::routing::post(read_state_subnet)
-                .with_state(state)
-                .layer(
-                    ServiceBuilder::new()
-                        .layer(axum::middleware::from_fn(verify_cbor_content_header)),
-                ),
+            axum::routing::post(read_state_subnet).with_state(state),
         )
     }
 }
@@ -65,7 +58,7 @@ pub(crate) async fn read_state_subnet(
         delegation_from_nns,
         state_reader_executor,
     }): State<SubnetReadStateService>,
-    body: Bytes,
+    Cbor(request): Cbor<HttpRequestEnvelope<HttpReadStateContent>>,
 ) -> impl IntoResponse {
     if health_status.load() != ReplicaHealthStatus::Healthy {
         let status = StatusCode::SERVICE_UNAVAILABLE;
@@ -81,16 +74,6 @@ pub(crate) async fn read_state_subnet(
         let status = StatusCode::SERVICE_UNAVAILABLE;
         let text = "Certified state is not available yet. Please try again...".to_string();
         (status, text).into_response()
-    };
-    let request = match <HttpRequestEnvelope<HttpReadStateContent>>::try_from(
-        &SignedRequestBytes::from(body.to_vec()),
-    ) {
-        Ok(request) => request,
-        Err(e) => {
-            let status = StatusCode::BAD_REQUEST;
-            let text = format!("Could not parse body as read request: {}", e);
-            return (status, text).into_response();
-        }
     };
 
     // Convert the message to a strongly-typed struct.
