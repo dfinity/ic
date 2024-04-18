@@ -128,7 +128,7 @@ pub struct CyclesAccount {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Global {
-    #[prost(oneof = "global::Global", tags = "1, 2, 3, 4")]
+    #[prost(oneof = "global::Global", tags = "1, 2, 3, 4, 5")]
     pub global: ::core::option::Option<global::Global>,
 }
 /// Nested message and enum types in `Global`.
@@ -144,6 +144,8 @@ pub mod global {
         F32(f32),
         #[prost(double, tag = "4")]
         F64(f64),
+        #[prost(bytes, tag = "5")]
+        V128(::prost::alloc::vec::Vec<u8>),
     }
 }
 #[allow(clippy::derive_partial_eq_without_eq)]

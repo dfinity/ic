@@ -967,7 +967,7 @@ fn validate_global_section(module: &Module, max_globals: usize) -> Result<(), Wa
     }
     for global in &module.globals {
         match global.ty.content_type {
-            ValType::I32 | ValType::I64 | ValType::F32 | ValType::F64 => (),
+            ValType::I32 | ValType::I64 | ValType::F32 | ValType::F64 | ValType::V128 => (),
             _ => {
                 return Err(WasmValidationError::InvalidGlobalSection(format!(
                     "Unsupported global type: {:?}",
