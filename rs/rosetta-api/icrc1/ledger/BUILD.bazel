@@ -89,6 +89,25 @@ package(default_visibility = ["//visibility:public"])
                 "//rs/rosetta-api/icrc1/tokens_u256",
             ],
         ),
+        (
+            "_getblocksdisabled",
+            ["get-blocks-disabled"],
+            [
+                ":ledger",
+                "//rs/rosetta-api/icrc1/tokens_u64",
+            ],
+        ),
+        (
+            "_u256_getblocksdisabled",
+            [
+                "get-blocks-disabled",
+                "u256-tokens",
+            ],
+            [
+                ":ledger_u256",
+                "//rs/rosetta-api/icrc1/tokens_u256",
+            ],
+        ),
     ]
 ]
 
