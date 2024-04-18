@@ -1,10 +1,11 @@
 use crate::{state_reader_executor::StateReaderExecutor, HttpError};
-use axum::{body::Body, response::IntoResponse};
+use axum::{body::Body, extract::FromRequest, response::IntoResponse};
+use bytes::Bytes;
 use http::{
     header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE},
-    HeaderValue, Method,
+    HeaderMap, HeaderValue, Method,
 };
-use http_body_util::{BodyExt, Empty};
+use http_body_util::BodyExt;
 use hyper::{header, Response, StatusCode};
 use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path, TooLongPathError};
 use ic_error_types::UserError;
@@ -16,7 +17,7 @@ use ic_types::{
     crypto::threshold_sig::ThresholdSigPublicKey, messages::MessageId, RegistryVersion, SubnetId,
 };
 use ic_validator::RequestValidationError;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_cbor::value::Value as CBOR;
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -130,6 +131,46 @@ where
     }
 }
 
+fn cbor_content_type(headers: &HeaderMap) -> bool {
+    let Some(content_type) = headers.get(header::CONTENT_TYPE) else {
+        return false;
+    };
+
+    let Ok(content_type) = content_type.to_str() else {
+        return false;
+    };
+
+    content_type.to_lowercase() == "application/cbor"
+}
+
+#[async_trait::async_trait]
+impl<T, S> FromRequest<S> for Cbor<T>
+where
+    T: for<'a> Deserialize<'a>,
+    S: Send + Sync,
+{
+    type Rejection = (StatusCode, String);
+    async fn from_request(req: axum::extract::Request, state: &S) -> Result<Self, Self::Rejection> {
+        if cbor_content_type(req.headers()) {
+            let bytes = Bytes::from_request(req, state)
+                .await
+                .map_err(|e| (e.status(), e.body_text()))?;
+            match serde_cbor::from_slice(&bytes) {
+                Ok(value) => Ok(Cbor(value)),
+                Err(err) => Err((
+                    StatusCode::BAD_REQUEST,
+                    format!("Failed to deserialize cbor request: {err}"),
+                )),
+            }
+        } else {
+            Err((
+                StatusCode::BAD_REQUEST,
+                format!("Unexpected content-type, expected {}.", CONTENT_TYPE_CBOR),
+            ))
+        }
+    }
+}
+
 /// Converts a user error into an HTTP response.
 ///
 /// We need this conversion because we validate user requests twice:
@@ -164,13 +205,6 @@ impl IntoResponse for CborUserError {
         ]));
         Cbor(reject_response).into_response()
     }
-}
-
-/// Empty response.
-pub(crate) fn empty_response() -> Response<Body> {
-    let mut response = Response::new(Body::new(Empty::new().map_err(BoxError::from)));
-    *response.status_mut() = StatusCode::NO_CONTENT;
-    response
 }
 
 pub(crate) fn validation_error_to_http_error(
