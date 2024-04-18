@@ -53,6 +53,7 @@ rootfs_files = {
     Label("opt/ic/bin/generate-guestos-config.sh"): "/opt/ic/bin/generate-guestos-config.sh",
     Label("opt/ic/bin/install-upgrade.sh"): "/opt/ic/bin/install-upgrade.sh",
     Label("opt/ic/bin/manageboot.sh"): "/opt/ic/bin/manageboot.sh",
+    Label("opt/ic/bin/metrics.sh"): "/opt/ic/bin/metrics.sh",
     Label("opt/ic/bin/monitor-guestos.sh"): "/opt/ic/bin/monitor-guestos.sh",
     Label("opt/ic/bin/monitor-nvme.sh"): "/opt/ic/bin/monitor-nvme.sh",
     Label("opt/ic/bin/monitor-power.sh"): "/opt/ic/bin/monitor-power.sh",

@@ -4,8 +4,10 @@ set -e
 
 # Start the GuestOS virtual machine.
 
+# Source the functions required for writing metrics
+source /opt/ic/bin/metrics.sh
+
 SCRIPT="$(basename $0)[$$]"
-METRICS_DIR="/run/node_exporter/collector_textfile"
 
 # Get keyword arguments
 for argument in "${@}"; do
@@ -38,15 +40,6 @@ write_log() {
     fi
 
     logger -t ${SCRIPT} "${message}"
-}
-
-write_metric() {
-    local name=$1
-    local value=$2
-    local help=$3
-    local type=$4
-
-    echo -e "# HELP ${name} ${help}\n# TYPE ${type}\n${name} ${value}" >"${METRICS_DIR}/${name}.prom"
 }
 
 function define_guestos() {
