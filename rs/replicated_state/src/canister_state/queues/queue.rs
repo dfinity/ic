@@ -206,6 +206,10 @@ impl CanisterQueue {
 
         if class == Class::GuaranteedResponse {
             // Guaranteed response, we must have a memory reservation for it.
+            //
+            // It is safe to assert here, as this is either an outbound response and we made
+            // a memory reservation for it; or an inbound response and we checked its class
+            // against that of the matching call context when inducting it).
             assert!(self.response_memory_reservations > 0);
         }
         Ok(())

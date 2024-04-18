@@ -1093,8 +1093,8 @@ impl SystemState {
     ///
     /// On failure, returns the provided message along with a `StateError`:
     ///  * `QueueFull` if either the input queue or the matching output queue is
-    ///    full when pushing a `Request`; or when pushing a `Response` when none
-    ///    is expected.
+    ///    full when pushing a `Request`;
+    ///  * `InvariantBroken` when pushing a `Response` when none is expected.
     ///  * `CanisterOutOfCycles` if the canister does not have enough cycles.
     ///  * `OutOfMemory` if the necessary guaranteed response memory reservation
     ///    is larger than `subnet_available_memory``.

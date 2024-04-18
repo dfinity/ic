@@ -397,8 +397,8 @@ impl CanisterQueues {
     ///  * `QueueFull` if pushing a `Request` and the corresponding input or
     ///    output queues are full.
     ///
-    ///  * `QueueFull` if pushing a `Response` and the receiving canister is not
-    ///  expecting one.
+    ///  * `InvariantBroken` if pushing a `Response` and the receiving canister is
+    ///    not expecting one.
     pub(super) fn push_input(
         &mut self,
         msg: RequestOrResponse,
