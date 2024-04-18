@@ -607,16 +607,9 @@ enum NnsFunction {
 
   NNS_FUNCTION_BITCOIN_SET_CONFIG = 39;
 
-  // A proposal to update currently elected HostOS versions, by electing a new
-  // version, and/or unelecting multiple unused versions. The version to elect
-  // (often identified by the hash of the installation image) is added to the
-  // registry. By itself, this proposal does not effect any upgrade. The
-  // specified versions to unelect are removed from the registry. This ensures
-  // that the HostOS cannot upgrade to these versions anymore.
+  // OBSOLETE: use NNS_FUNCTION_REVISE_ELECTED_HOSTOS_VERSIONS instead
   NNS_FUNCTION_UPDATE_ELECTED_HOSTOS_VERSIONS = 40;
-  // Update the HostOS version running on a given list of nodes.
-  // The proposal changes the HostOS version that is used on the specified
-  // nodes. The version must be contained in the list of HostOS versions.
+  // OBSOLETE: use NNS_FUNCTION_UPGRADE_HOSTOS_FOR_SOME_NODES instead
   NNS_FUNCTION_UPDATE_NODES_HOSTOS_VERSION = 41;
 
   // Uninstall and Install Root with the WASM provided in the function.  If InitArgs are provided
@@ -645,6 +638,18 @@ enum NnsFunction {
 
   // A proposal to update SSH readonly access for all unassigned nodes
   NNS_FUNCTION_UPDATE_SSH_READONLY_ACCESS_FOR_ALL_UNASSIGNED_NODES = 49;
+
+  // A proposal to change the set of currently elected HostOS versions, by electing a new version,
+  // and/or unelecting some priorly elected versions. HostOS versions are identified by the hash
+  // of the installation image. The version to elect is added to the Registry, and the versions
+  // to unelect are removed from the Registry, ensuring that HostOS cannot upgrade to these versions
+  // anymore. This proposal does not actually perform the upgrade; for deployment of an elected
+  // version, please refer to `NNS_FUNCTION_DEPLOY_HOSTOS_TO_SOME_NODES`.
+  NNS_FUNCTION_REVISE_ELECTED_HOSTOS_VERSIONS = 50;
+
+  // Deploy a HostOS version to a given set of nodes. The proposal changes the HostOS version that
+  // is used on the specified nodes.
+  NNS_FUNCTION_DEPLOY_HOSTOS_TO_SOME_NODES = 51;
 }
 
 // Payload of a proposal that calls a function on another NNS

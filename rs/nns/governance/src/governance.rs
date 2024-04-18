@@ -562,9 +562,31 @@ impl NnsFunction {
                 (REGISTRY_CANISTER_ID, "update_subnet_replica_version")
             }
             NnsFunction::UpdateElectedHostosVersions => {
-                (REGISTRY_CANISTER_ID, "update_elected_hostos_versions")
+                // UpdateElectedHostosVersions is deprecated and can no longer be used.
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    format!(
+                        "NNS function {:?} is obsolete. Use `ReviseElectedHostosVersions` instead.",
+                        self
+                    ),
+                ));
             }
             NnsFunction::UpdateNodesHostosVersion => {
+                // UpdateNodesHostosVersion is deprecated and can no longer be used.
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    format!(
+                        "{:?} is a deprecated NnsFunction. Use DeployHostosToSomeNodes instead",
+                        self
+                    ),
+                ));
+            }
+            NnsFunction::ReviseElectedHostosVersions => {
+                // TODO[NNS1-3000]: Rename Registry API ednpoints callable only by NNS Governance.
+                (REGISTRY_CANISTER_ID, "update_elected_hostos_versions")
+            }
+            NnsFunction::DeployHostosToSomeNodes => {
+                // TODO[NNS1-3000]: Rename Registry API ednpoints callable only by NNS Governance.
                 (REGISTRY_CANISTER_ID, "update_nodes_hostos_version")
             }
             NnsFunction::UpdateConfigOfSubnet => (REGISTRY_CANISTER_ID, "update_subnet"),
@@ -736,8 +758,12 @@ impl Proposal {
                             | NnsFunction::RemoveNodesFromSubnet
                             | NnsFunction::ChangeSubnetMembership
                             | NnsFunction::UpdateConfigOfSubnet => Topic::SubnetManagement,
-                            NnsFunction::UpdateElectedReplicaVersions => Topic::IcOsVersionElection,
-                            NnsFunction::UpdateSubnetReplicaVersion
+                            NnsFunction::UpdateElectedReplicaVersions
+                            | NnsFunction::ReviseElectedHostosVersions => {
+                                Topic::IcOsVersionElection
+                            }
+                            NnsFunction::DeployHostosToSomeNodes
+                            | NnsFunction::UpdateSubnetReplicaVersion
                             | NnsFunction::DeployGuestosToSomeApiBoundaryNodes
                             | NnsFunction::DeployGuestosToAllUnassignedNodes => {
                                 Topic::IcOsVersionDeployment
