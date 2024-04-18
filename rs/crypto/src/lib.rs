@@ -43,8 +43,9 @@ use std::fmt;
 use std::sync::Arc;
 
 /// Defines the maximum number of entries contained in the
-/// `ThresholdSigDataStore`.
-pub const THRESHOLD_SIG_DATA_STORE_CAPACITY: usize = ThresholdSigDataStoreImpl::CAPACITY;
+/// `ThresholdSigDataStore` per tag, where tag is of type `NiDkgTag`.
+pub const THRESHOLD_SIG_DATA_STORE_CAPACITY_PER_TAG: usize =
+    ThresholdSigDataStoreImpl::CAPACITY_PER_TAG;
 
 /// A type alias for `CryptoComponentImpl<Csp>`.
 /// See the Rust documentation of `CryptoComponentImpl`.
