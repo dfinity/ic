@@ -505,8 +505,9 @@ impl IDkgTranscriptParams {
 
     fn ensure_algorithm_id_supported(&self) -> Result<(), IDkgParamsValidationError> {
         match self.algorithm_id {
-            AlgorithmId::ThresholdEcdsaSecp256k1 => Ok(()),
-            AlgorithmId::ThresholdEcdsaSecp256r1 => Ok(()),
+            AlgorithmId::ThresholdEcdsaSecp256k1
+            | AlgorithmId::ThresholdEcdsaSecp256r1
+            | AlgorithmId::ThresholdSchnorrBip340 => Ok(()),
             _ => Err(IDkgParamsValidationError::UnsupportedAlgorithmId {
                 algorithm_id: self.algorithm_id,
             }),

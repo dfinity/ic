@@ -251,8 +251,8 @@ pub fn verify_combined_sig(
                 &DerivationPath::from(inputs.derivation_path()),
                 inputs.message(),
                 *inputs.nonce(),
-                &key,
                 &blinder_unmasked,
+                &key,
             )
             .map_err(|e| {
                 type F = ThresholdBip340VerifySignatureInternalError;

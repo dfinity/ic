@@ -35,6 +35,7 @@ MACRO_DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
+    "//rs/crypto/internal/crypto_lib/threshold_sig/tecdsa/test_utils",
     "//rs/crypto/test_utils/reproducible_rng",
     "@crate_index//:bip32",
     "@crate_index//:criterion",

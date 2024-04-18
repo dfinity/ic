@@ -14,11 +14,11 @@ use ic_crypto_test_utils_canister_threshold_sigs::node::Nodes;
 use ic_crypto_test_utils_canister_threshold_sigs::{
     build_params_from_previous, copy_dealing_in_transcript,
     corrupt_dealings_and_generate_complaints_for_random_complainer,
-    corrupt_random_dealing_and_generate_complaint, generate_ecdsa_presig_quadruple,
-    generate_key_transcript, node_id, random_crypto_component_not_in_receivers, random_dealer_id,
-    random_dealer_id_excluding, random_node_id_excluding, random_receiver_for_inputs,
-    random_receiver_id, random_receiver_id_excluding, run_tecdsa_protocol,
-    sig_share_from_each_receiver, swap_two_dealings_in_transcript,
+    corrupt_random_dealing_and_generate_complaint, ecdsa_sig_share_from_each_receiver,
+    generate_ecdsa_presig_quadruple, generate_key_transcript, node_id,
+    random_crypto_component_not_in_receivers, random_dealer_id, random_dealer_id_excluding,
+    random_node_id_excluding, random_receiver_for_inputs, random_receiver_id,
+    random_receiver_id_excluding, run_tecdsa_protocol, swap_two_dealings_in_transcript,
     CanisterThresholdSigTestEnvironment, IntoBuilder,
 };
 use ic_crypto_test_utils_canister_threshold_sigs::{setup_masked_random_params, IDkgParticipants};
@@ -226,7 +226,7 @@ mod create_dealing {
                     rng,
                 );
                 let dealer = env.nodes.random_dealer(&reshare_params, rng);
-                dealer.load_input_transcripts(&inputs);
+                dealer.load_tecdsa_sig_transcripts(&inputs);
 
                 // make sure creating dealings succeeds with all the transcripts
                 let result = dealer.create_dealing(&reshare_params);
@@ -2133,7 +2133,7 @@ mod sign_share {
                 let receiver = env
                     .nodes
                     .random_filtered_by_receivers(inputs.receivers(), rng);
-                receiver.load_input_transcripts(&inputs);
+                receiver.load_tecdsa_sig_transcripts(&inputs);
                 let result = receiver.sign_share(&inputs);
                 assert_matches!(result, Ok(_));
             }
@@ -2236,7 +2236,7 @@ mod sign_share {
                 let receiver = env
                     .nodes
                     .random_filtered_by_receivers(inputs.receivers(), rng);
-                receiver.load_input_transcripts(&inputs);
+                receiver.load_tecdsa_sig_transcripts(&inputs);
                 assert_matches!(receiver.sign_share(&inputs), Ok(_));
                 let another_key_transcript =
                     generate_key_transcript(&env, &dealers, &receivers, alg, rng);
@@ -2394,7 +2394,7 @@ mod sign_share {
                         let receiver = env
                             .nodes
                             .random_filtered_by_receivers(inputs.receivers(), &mut inner_rng);
-                        receiver.load_input_transcripts(&inputs);
+                        receiver.load_tecdsa_sig_transcripts(&inputs);
                         assert_matches!(
                             receiver.sign_share(&inputs),
                             Ok(_),
@@ -2699,7 +2699,7 @@ mod verify_sig_share {
         let signer = env
             .nodes
             .random_filtered_by_receivers(inputs.receivers(), rng);
-        signer.load_input_transcripts(inputs);
+        signer.load_tecdsa_sig_transcripts(inputs);
         let sig_share = signer
             .sign_share(inputs)
             .expect("failed to generate sig share");
@@ -3182,7 +3182,7 @@ mod combine_sig_shares {
             for use_random_unmasked_kappa in [false, true] {
                 let (env, inputs, _, _) =
                     environment_with_sig_inputs(1..10, alg, use_random_unmasked_kappa, rng);
-                let sig_shares = sig_share_from_each_receiver(&env, &inputs);
+                let sig_shares = ecdsa_sig_share_from_each_receiver(&env, &inputs);
                 let combiner =
                     random_crypto_component_not_in_receivers(&env, inputs.receivers(), rng);
 
@@ -3200,7 +3200,7 @@ mod combine_sig_shares {
             for use_random_unmasked_kappa in [false, true] {
                 let (env, inputs, _, _) =
                     environment_with_sig_inputs(1..10, alg, use_random_unmasked_kappa, rng);
-                let insufficient_sig_shares = sig_share_from_each_receiver(&env, &inputs)
+                let insufficient_sig_shares = ecdsa_sig_share_from_each_receiver(&env, &inputs)
                     .into_iter()
                     .take(inputs.reconstruction_threshold().get() as usize - 1)
                     .collect();
@@ -3231,7 +3231,7 @@ mod verify_combined_sig {
             for use_random_unmasked_kappa in [false, true] {
                 let (env, inputs, _, _) =
                     environment_with_sig_inputs(1..10, alg, use_random_unmasked_kappa, rng);
-                let sig_shares = sig_share_from_each_receiver(&env, &inputs);
+                let sig_shares = ecdsa_sig_share_from_each_receiver(&env, &inputs);
                 let combiner_crypto_component =
                     random_crypto_component_not_in_receivers(&env, inputs.receivers(), rng);
                 let signature = combiner_crypto_component
@@ -3254,7 +3254,7 @@ mod verify_combined_sig {
             for use_random_unmasked_kappa in [false, true] {
                 let (env, inputs, _, _) =
                     environment_with_sig_inputs(1..10, alg, use_random_unmasked_kappa, rng);
-                let sig_shares = sig_share_from_each_receiver(&env, &inputs);
+                let sig_shares = ecdsa_sig_share_from_each_receiver(&env, &inputs);
                 let combiner_crypto_component =
                     random_crypto_component_not_in_receivers(&env, inputs.receivers(), rng);
                 let corrupted_signature = combiner_crypto_component
@@ -3282,7 +3282,7 @@ mod verify_combined_sig {
             for use_random_unmasked_kappa in [false, true] {
                 let (env, inputs, _, _) =
                     environment_with_sig_inputs(1..10, alg, use_random_unmasked_kappa, rng);
-                let sig_shares = sig_share_from_each_receiver(&env, &inputs);
+                let sig_shares = ecdsa_sig_share_from_each_receiver(&env, &inputs);
                 let combiner_crypto_component =
                     random_crypto_component_not_in_receivers(&env, inputs.receivers(), rng);
                 let mut corrupted_signature = combiner_crypto_component
@@ -3310,7 +3310,7 @@ mod verify_combined_sig {
             for use_random_unmasked_kappa in [false, true] {
                 let (env, inputs, dealers, receivers) =
                     environment_with_sig_inputs(1..10, alg, use_random_unmasked_kappa, rng);
-                let sig_shares = sig_share_from_each_receiver(&env, &inputs);
+                let sig_shares = ecdsa_sig_share_from_each_receiver(&env, &inputs);
                 let combiner_crypto_component =
                     random_crypto_component_not_in_receivers(&env, inputs.receivers(), rng);
                 let signature = combiner_crypto_component
@@ -3357,7 +3357,7 @@ mod verify_combined_sig {
             for use_random_unmasked_kappa in [false, true] {
                 let (env, inputs, _, _) =
                     environment_with_sig_inputs(1..10, alg, use_random_unmasked_kappa, rng);
-                let sig_shares = sig_share_from_each_receiver(&env, &inputs);
+                let sig_shares = ecdsa_sig_share_from_each_receiver(&env, &inputs);
                 let combiner =
                     random_crypto_component_not_in_receivers(&env, inputs.receivers(), rng);
                 let signature = combiner

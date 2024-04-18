@@ -252,8 +252,7 @@ pub use crate::utils::poly::*;
 pub use crate::utils::ro::*;
 
 pub use crate::signing::bip340::{
-    derive_bip340_public_key, ThresholdBip340CombinedSignatureInternal,
-    ThresholdBip340SignatureShareInternal,
+    ThresholdBip340CombinedSignatureInternal, ThresholdBip340SignatureShareInternal,
 };
 pub use crate::signing::ecdsa::{
     ThresholdEcdsaCombinedSigInternal, ThresholdEcdsaSigShareInternal,

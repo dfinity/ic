@@ -1,4 +1,12 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_doc", "rust_doc_test", "rust_library", "rust_test", "rust_test_suite")
+load(
+    "@rules_rust//rust:defs.bzl",
+    "rust_binary",
+    "rust_doc",
+    "rust_doc_test",
+    "rust_library",
+    "rust_test",
+    "rust_test_suite",
+)
 load("//bazel:defs.bzl", "rust_bench")
 
 package(default_visibility = ["//visibility:public"])
@@ -57,6 +65,7 @@ DEV_DEPENDENCIES = [
     "//rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1",
     "//rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256r1",
     "//rs/crypto/internal/crypto_lib/basic_sig/rsa_pkcs1",
+    "//rs/crypto/internal/crypto_lib/threshold_sig/tecdsa/test_utils",
     "//rs/crypto/internal/crypto_lib/tls",
     "//rs/crypto/internal/crypto_service_provider/csp_proptest_utils",
     "//rs/crypto/internal/csp_test_utils",
@@ -86,6 +95,7 @@ DEV_DEPENDENCIES = [
     "//rs/types/types_test_utils",
     "@crate_index//:assert_matches",
     "@crate_index//:criterion",
+    "@crate_index//:k256",
     "@crate_index//:maplit",
     "@crate_index//:mockall",
     "@crate_index//:proptest",
@@ -148,10 +158,7 @@ rust_test(
 rust_test_suite(
     name = "integration_suite",
     srcs = glob(
-        ["tests/**/*.rs"],
-        exclude = [
-            "tests/parallelism/*.rs",
-        ],
+        ["tests/*.rs"],
     ),
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,

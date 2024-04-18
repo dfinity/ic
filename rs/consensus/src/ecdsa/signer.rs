@@ -1651,7 +1651,7 @@ mod tests {
                     .nodes
                     .filter_by_receivers(&sig_inputs)
                     .map(|receiver| {
-                        receiver.load_input_transcripts(&sig_inputs);
+                        receiver.load_tecdsa_sig_transcripts(&sig_inputs);
                         let share = receiver
                             .sign_share(&sig_inputs)
                             .expect("failed to create sig share");
