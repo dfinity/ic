@@ -2174,6 +2174,16 @@ impl CorruptBytes for ThresholdEcdsaCombinedSignature {
     }
 }
 
+impl CorruptBytes for ThresholdSchnorrCombinedSignature {
+    type Type = Self;
+
+    fn clone_with_bit_flipped(&self) -> Self {
+        Self {
+            signature: self.signature.clone_with_bit_flipped(),
+        }
+    }
+}
+
 impl CorruptBytes for Randomness {
     type Type = Self;
 
