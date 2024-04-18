@@ -12,11 +12,9 @@ def _build_container_base_image_impl(ctx):
     args.extend(["--output", output_tar_file.path])
     outputs.append(output_tar_file)
 
-    # All files in the rootfs are inputs.
-    # But only the directory is passed to the script
-    context_dir = ctx.files.context_files[0].dirname
     inputs += ctx.files.context_files
-    args.extend(["--context_dir", context_dir])
+    for context_file in ctx.files.context_files:
+        args.extend(["--context-file", context_file.path])
 
     args.extend(["--image_tag", ctx.attr.image_tag])
 
@@ -51,7 +49,6 @@ def _build_container_base_image_impl(ctx):
 build_container_base_image = rule(
     implementation = _build_container_base_image_impl,
     attrs = {
-        # Glob of files from the rootfs
         "context_files": attr.label_list(
             allow_files = True,
         ),
@@ -77,11 +74,13 @@ def _build_container_filesystem_impl(ctx):
     args.extend(["--output", output_tar_file.path])
     outputs.append(output_tar_file)
 
-    # All files in the rootfs are inputs.
-    # But only the directory is passed to the script
-    context_dir = ctx.files.context_files[0].dirname
     inputs += ctx.files.context_files
-    args.extend(["--context-dir", context_dir])
+    for context_file in ctx.files.context_files:
+        args.extend(["--context-file", context_file.path])
+
+    for input_target, install_target in ctx.attr.rootfs_files.items():
+        args.extend(["--rootfs-file", input_target.files.to_list()[0].path + ":" + install_target])
+        inputs += input_target.files.to_list()
 
     config_file = ctx.file.config_file
     inputs.append(config_file)
@@ -118,8 +117,10 @@ def _build_container_filesystem_impl(ctx):
 build_container_filesystem = rule(
     implementation = _build_container_filesystem_impl,
     attrs = {
-        # Glob of files from the rootfs
         "context_files": attr.label_list(
+            allow_files = True,
+        ),
+        "rootfs_files": attr.label_keyed_string_dict(
             allow_files = True,
         ),
         "config_file": attr.label(
