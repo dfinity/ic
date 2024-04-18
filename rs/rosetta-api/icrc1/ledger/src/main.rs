@@ -17,11 +17,13 @@ use ic_ledger_core::tokens::Zero;
 use ic_ledger_core::{approvals::Approvals, timestamp::TimeStamp};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc3::blocks::DataCertificate;
+#[cfg(not(feature = "get-blocks-disabled"))]
+use icrc_ledger_types::icrc3::blocks::GetBlocksResponse;
 use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value,
     icrc3::{
         archive::ArchiveInfo,
-        blocks::{GetBlocksRequest, GetBlocksResponse},
+        blocks::GetBlocksRequest,
         transactions::{GetTransactionsRequest, GetTransactionsResponse},
     },
 };
@@ -498,6 +500,7 @@ fn get_transactions(req: GetTransactionsRequest) -> GetTransactionsResponse {
     Access::with_ledger(|ledger| ledger.get_transactions(start, length as usize))
 }
 
+#[cfg(not(feature = "get-blocks-disabled"))]
 #[query]
 #[candid_method(query)]
 fn get_blocks(req: GetBlocksRequest) -> GetBlocksResponse {

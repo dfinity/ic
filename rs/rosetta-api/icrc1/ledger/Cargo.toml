@@ -46,3 +46,4 @@ proptest = "1.0"
 [features]
 default = []
 u256-tokens = ["dep:ic-icrc1-tokens-u256"]
+get-blocks-disabled = []

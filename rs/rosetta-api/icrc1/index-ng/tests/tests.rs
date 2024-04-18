@@ -2,8 +2,6 @@ use candid::{Decode, Encode, Nat, Principal};
 use ic_agent::identity::Identity;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canisters_http_types::{HttpRequest, HttpResponse};
-use ic_icrc1::blocks::generic_block_to_encoded_block;
-use ic_icrc1::Block;
 use ic_icrc1_index_ng::{
     FeeCollectorRanges, GetAccountTransactionsArgs, GetAccountTransactionsResponse,
     GetAccountTransactionsResult, GetBlocksResponse, IndexArg, InitArg as IndexInitArg,
@@ -16,19 +14,20 @@ use ic_icrc1_ledger::{
 use ic_icrc1_test_utils::{
     minter_identity, valid_transactions_strategy, ArgWithCaller, LedgerEndpointArg,
 };
-use ic_icrc1_tokens_u64::U64;
 use ic_ledger_canister_core::archive::ArchiveOptions;
-use ic_ledger_core::block::BlockType;
 use ic_state_machine_tests::{StateMachine, WasmResult};
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferArg, TransferError};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
-use icrc_ledger_types::icrc3::blocks::{BlockRange, GenericBlock, GetBlocksRequest};
+#[cfg(feature = "icrc3_disabled")]
+use icrc_ledger_types::icrc3::archive::{ArchivedRange, QueryBlockArchiveFn};
+#[cfg(not(feature = "icrc3_disabled"))]
+use icrc_ledger_types::icrc3::blocks::{ArchivedBlocks, BlockWithId};
+use icrc_ledger_types::icrc3::blocks::{BlockRange, GetBlocksRequest};
 use icrc_ledger_types::icrc3::transactions::{Mint, Transaction, Transfer};
 use num_traits::cast::ToPrimitive;
 use proptest::test_runner::{Config as TestRunnerConfig, TestRunner};
 use std::collections::HashSet;
-use std::convert::TryInto;
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::sync::Arc;
@@ -243,54 +242,214 @@ fn icrc1_balance_of(env: &StateMachine, canister_id: CanisterId, account: Accoun
         .expect("Balance must be a u64!")
 }
 
-// Retrieves blocks from the Ledger and the Archives.
-fn ledger_get_all_blocks(
+#[cfg(feature = "icrc3_disabled")]
+fn archive_get_blocks(
+    env: &StateMachine,
+    archived: ArchivedRange<QueryBlockArchiveFn>,
+) -> BlockRange {
+    let req = GetBlocksRequest {
+        start: archived.start,
+        length: archived.length,
+    };
+    let req = Encode!(&req).expect("Failed to encode GetBlocksRequest for archive node");
+    let canister_id =
+        CanisterId::unchecked_from_principal(PrincipalId(archived.callback.canister_id));
+    let res = env
+        .query(canister_id, archived.callback.method, req)
+        .expect("Failed to send get_blocks request to archive")
+        .bytes();
+    Decode!(&res, BlockRange).expect("Failed to decode get_blocks response from archive node")
+}
+
+#[cfg(feature = "icrc3_disabled")]
+fn archive_get_all_blocks(
+    env: &StateMachine,
+    archived: ArchivedRange<QueryBlockArchiveFn>,
+) -> BlockRange {
+    let mut res = BlockRange { blocks: vec![] };
+    while res.blocks.len() < archived.length.clone() {
+        let start = archived.start.clone() + res.blocks.len();
+        let length = archived.length.clone() - res.blocks.len();
+        let archived_range = ArchivedRange {
+            start,
+            length,
+            callback: archived.callback.clone(),
+        };
+        let tmp_res = archive_get_blocks(env, archived_range);
+        if tmp_res.blocks.is_empty() {
+            break;
+        }
+        res.blocks.extend(tmp_res.blocks);
+    }
+    res
+}
+
+#[cfg(not(feature = "icrc3_disabled"))]
+fn icrc3_archive_get_blocks(
+    env: &StateMachine,
+    archived: ArchivedBlocks,
+) -> icrc_ledger_types::icrc3::blocks::GetBlocksResult {
+    let req = Encode!(&archived.args).expect("Failed to encode Vec of GetBlocksRequest");
+    let canister_id =
+        CanisterId::unchecked_from_principal(PrincipalId(archived.callback.canister_id));
+    let res = env
+        .query(canister_id, archived.callback.method, req)
+        .expect("Failed to send icrc3_get_blocks request to archive")
+        .bytes();
+    Decode!(&res, icrc_ledger_types::icrc3::blocks::GetBlocksResult)
+        .expect("Failed to decode icrc3_get_blocks response from archive node")
+}
+
+#[cfg(not(feature = "icrc3_disabled"))]
+fn icrc3_archive_get_all_blocks(env: &StateMachine, archived: ArchivedBlocks) -> BlockRange {
+    // sanity check: in these tests we expect a single range per archive
+    assert_eq!(archived.args.len(), 1);
+    let mut res = BlockRange { blocks: vec![] };
+    while res.blocks.len() < archived.args[0].length.clone() {
+        let start = archived.args[0].start.clone() + res.blocks.len();
+        let length = archived.args[0].length.clone() - res.blocks.len();
+        let archived_blocks = ArchivedBlocks {
+            args: vec![GetBlocksRequest { start, length }],
+            callback: archived.callback.clone(),
+        };
+        let tmp_res = icrc3_archive_get_blocks(env, archived_blocks);
+        if tmp_res.blocks.is_empty() {
+            break;
+        }
+        for BlockWithId { block, .. } in tmp_res.blocks {
+            res.blocks
+                .push(icrc_ledger_types::icrc::generic_value::Value::from(block));
+        }
+    }
+    res
+}
+
+// Calls ICRC-3 get_blocks but uses a single range
+#[cfg(not(feature = "icrc3_disabled"))]
+fn icrc3_get_blocks(
+    env: &StateMachine,
+    ledger_id: CanisterId,
+    start: u64,
+    length: u64,
+) -> icrc_ledger_types::icrc3::blocks::GetBlocksResult {
+    let req = vec![GetBlocksRequest {
+        start: Nat::from(start),
+        length: Nat::from(length),
+    }];
+    let req = Encode!(&req).expect("Failed to encode Vec of GetBlocksRequest");
+    let res = env
+        .query(ledger_id, "icrc3_get_blocks", req)
+        .expect("Failed to send icrc3_get_blocks request")
+        .bytes();
+    Decode!(&res, icrc_ledger_types::icrc3::blocks::GetBlocksResult)
+        .expect("Failed to decode GetBlocksResult")
+}
+
+#[cfg(not(feature = "icrc3_disabled"))]
+fn icrc3_get_all_blocks(
+    env: &StateMachine,
+    ledger_id: CanisterId,
+    start: u64,
+    length: u64,
+) -> GetBlocksResponse {
+    let mut res = GetBlocksResponse {
+        chain_length: icrc3_get_blocks(env, ledger_id, 0, 0)
+            .log_length
+            .0
+            .to_u64()
+            .expect("log_length should be a u64!"),
+        blocks: vec![],
+    };
+    while length > res.blocks.len() as u64 {
+        let start = start + res.blocks.len() as u64;
+        let length = length - res.blocks.len() as u64;
+        let tmp_res = icrc3_get_blocks(env, ledger_id, start, length);
+        for archived_range in tmp_res.archived_blocks {
+            let archived_res = icrc3_archive_get_all_blocks(env, archived_range);
+            res.blocks.extend(archived_res.blocks);
+        }
+        if tmp_res.blocks.is_empty() {
+            break;
+        }
+        for BlockWithId { block, .. } in tmp_res.blocks {
+            res.blocks
+                .push(icrc_ledger_types::icrc::generic_value::Value::from(block));
+        }
+    }
+    res
+}
+
+#[cfg(feature = "icrc3_disabled")]
+fn ledger_get_blocks(
     env: &StateMachine,
     ledger_id: CanisterId,
     start: u64,
     length: u64,
 ) -> icrc_ledger_types::icrc3::blocks::GetBlocksResponse {
     let req = GetBlocksRequest {
-        start: start.into(),
-        length: length.into(),
+        start: Nat::from(start),
+        length: Nat::from(length),
     };
     let req = Encode!(&req).expect("Failed to encode GetBlocksRequest");
     let res = env
         .query(ledger_id, "get_blocks", req)
         .expect("Failed to send get_blocks request")
         .bytes();
-    let res = Decode!(&res, icrc_ledger_types::icrc3::blocks::GetBlocksResponse)
-        .expect("Failed to decode GetBlocksResponse");
-    let mut blocks = vec![];
-    for archived in &res.archived_blocks {
-        // Archive nodes paginate their results. We need to fetch all the
-        // blocks and therefore we loop until all of them
-        // have been fetched.
-        let mut curr_start = archived.start.clone();
-        while curr_start < archived.length {
-            let req = GetBlocksRequest {
-                start: curr_start.clone(),
-                length: archived.length.clone() - (curr_start.clone() - archived.start.clone()),
-            };
-            let req = Encode!(&req).expect("Failed to encode GetBlocksRequest for archive node");
-            let canister_id = archived.callback.canister_id.as_ref().try_into().unwrap();
-            let res = env
-                .query(canister_id, archived.callback.method.clone(), req)
-                .expect("Failed to send get_blocks request to archive")
-                .bytes();
-            let res = Decode!(&res, BlockRange)
-                .expect("Failed to decode get_blocks response for archive node")
-                .blocks;
-            assert!(!res.is_empty());
-            curr_start += res.len();
-            blocks.extend(res);
-        }
-    }
-    blocks.extend(res.blocks);
-    icrc_ledger_types::icrc3::blocks::GetBlocksResponse { blocks, ..res }
+    Decode!(&res, icrc_ledger_types::icrc3::blocks::GetBlocksResponse)
+        .expect("Failed to decode GetBlocksResponse")
 }
 
-fn get_blocks(
+// Retrieves blocks from the Ledger and the Archives.
+#[cfg(feature = "icrc3_disabled")]
+fn ledger_get_all_blocks_wo_icrc3(
+    env: &StateMachine,
+    ledger_id: CanisterId,
+    start: u64,
+    length: u64,
+) -> GetBlocksResponse {
+    let mut res = GetBlocksResponse {
+        chain_length: ledger_get_blocks(env, ledger_id, 0, 0).chain_length,
+        blocks: vec![],
+    };
+    while length > res.blocks.len() as u64 {
+        let start = start + res.blocks.len() as u64;
+        let length = length - res.blocks.len() as u64;
+        let tmp_res = ledger_get_blocks(env, ledger_id, start, length);
+        for archived_range in tmp_res.archived_blocks {
+            let archived_res = archive_get_all_blocks(env, archived_range);
+            res.blocks.extend(archived_res.blocks);
+        }
+        if tmp_res.blocks.is_empty() {
+            break;
+        }
+        res.blocks.extend(tmp_res.blocks);
+    }
+    res
+}
+
+#[cfg(feature = "icrc3_disabled")]
+#[inline(always)]
+fn ledger_get_all_blocks(
+    env: &StateMachine,
+    ledger_id: CanisterId,
+    start: u64,
+    length: u64,
+) -> GetBlocksResponse {
+    ledger_get_all_blocks_wo_icrc3(env, ledger_id, start, length)
+}
+
+#[cfg(not(feature = "icrc3_disabled"))]
+#[inline(always)]
+fn ledger_get_all_blocks(
+    env: &StateMachine,
+    ledger_id: CanisterId,
+    start: u64,
+    length: u64,
+) -> GetBlocksResponse {
+    icrc3_get_all_blocks(env, ledger_id, start, length)
+}
+
+fn index_get_blocks(
     env: &StateMachine,
     index_id: CanisterId,
     start: u64,
@@ -314,15 +473,20 @@ fn index_get_all_blocks(
     index_id: CanisterId,
     start: u64,
     length: u64,
-) -> Vec<GenericBlock> {
-    let length = length.min(get_blocks(env, index_id, 0, 0).chain_length);
-    let mut res = vec![];
-    let mut curr_start = start;
-    while length > res.len() as u64 {
-        let blocks = get_blocks(env, index_id, curr_start, length - (curr_start - start)).blocks;
-        assert!(!blocks.is_empty());
-        curr_start += blocks.len() as u64;
-        res.extend(blocks);
+) -> GetBlocksResponse {
+    let chain_length = index_get_blocks(env, index_id, 0, 0).chain_length;
+    let mut res = GetBlocksResponse {
+        blocks: vec![],
+        chain_length,
+    };
+    while length > res.blocks.len() as u64 {
+        let start = start + res.blocks.len() as u64;
+        let length = length - res.blocks.len() as u64;
+        let blocks = index_get_blocks(env, index_id, start, length).blocks;
+        if blocks.is_empty() {
+            return res;
+        }
+        res.blocks.extend(blocks);
     }
     res
 }
@@ -523,28 +687,66 @@ fn get_fee_collectors_ranges(env: &StateMachine, index: CanisterId) -> FeeCollec
 // Assert that the index canister contains the same blocks as the ledger.
 #[track_caller]
 fn assert_ledger_index_parity(env: &StateMachine, ledger_id: CanisterId, index_id: CanisterId) {
-    let ledger_blocks = ledger_get_all_blocks(env, ledger_id, 0, u64::MAX).blocks;
+    let ledger_blocks = ledger_get_all_blocks(env, ledger_id, 0, u64::MAX);
     let index_blocks = index_get_all_blocks(env, index_id, 0, u64::MAX);
-    assert_eq!(ledger_blocks.len(), index_blocks.len());
+    assert_eq!(ledger_blocks.chain_length, index_blocks.chain_length);
+    assert_eq!(ledger_blocks.blocks.len(), index_blocks.blocks.len());
+    for (index, (ledger_block, index_block)) in ledger_blocks
+        .blocks
+        .into_iter()
+        .zip(index_blocks.blocks.into_iter())
+        .enumerate()
+    {
+        // If the hash matches then they are the same block.
+        // We use the hash because nat64 and nat are not equal
+        // but ICRC-3 doesn't have nat64.
+        if ledger_block.hash() != index_block.hash() {
+            panic!("Ledger block at index {} is different from the index block at the same index\nLedger block: {:?}\nIndex block:  {:?}", index, ledger_block, index_block);
+        }
+    }
+}
 
-    for idx in 0..ledger_blocks.len() {
-        let generic_block_ledger = ledger_blocks[idx].clone();
-        let generic_block_index = index_blocks[idx].clone();
-        let encoded_block_ledger =
-            generic_block_to_encoded_block(generic_block_ledger.clone()).unwrap();
-        let encoded_block_index =
-            generic_block_to_encoded_block(generic_block_index.clone()).unwrap();
-        let block_ledger = Block::<U64>::decode(encoded_block_ledger.clone()).unwrap();
-        let block_index = Block::<U64>::decode(encoded_block_index.clone()).unwrap();
-
-        assert_eq!(
-            generic_block_ledger, generic_block_index,
-            "block_index: {}",
-            idx
-        );
-        assert_eq!(generic_block_ledger, generic_block_index);
-        assert_eq!(encoded_block_ledger, encoded_block_index);
-        assert_eq!(block_ledger, block_index);
+#[cfg(any(feature = "get_blocks_disabled", feature = "icrc3_disabled"))]
+#[test]
+fn sanity_check_ledger() {
+    // check that the endpoints are properly disabled in the Ledger
+    let env = &StateMachine::new();
+    let ledger_id = install_ledger(
+        env,
+        vec![],
+        default_archive_options(),
+        None,
+        minter_identity().sender().unwrap(),
+    );
+    #[cfg(feature = "get_blocks_disabled")]
+    {
+        let req = Encode!(&GetBlocksRequest {
+            start: Nat::from(0u64),
+            length: Nat::from(0u64)
+        })
+        .unwrap();
+        match env
+            .query(ledger_id, "get_blocks", req)
+            .map_err(|err| err.code())
+        {
+            Err(ic_state_machine_tests::ErrorCode::CanisterMethodNotFound) => {}
+            r => panic!("get_blocks not disabled in the Ledger! (call result: {r:?})"),
+        }
+    }
+    #[cfg(feature = "icrc3_disabled")]
+    {
+        let req = Encode!(&vec![GetBlocksRequest {
+            start: Nat::from(0u64),
+            length: Nat::from(0u64)
+        }])
+        .unwrap();
+        match env
+            .query(ledger_id, "icrc3_get_blocks", req)
+            .map_err(|err| err.code())
+        {
+            Err(ic_state_machine_tests::ErrorCode::CanisterMethodNotFound) => {}
+            r => panic!("icrc3_get_blocks not disabled in the Ledger! (call result: {r:?})"),
+        }
     }
 }
 
