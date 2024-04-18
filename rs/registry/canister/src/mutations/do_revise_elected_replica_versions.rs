@@ -33,11 +33,11 @@ impl Registry {
     ///
     /// This method is called by the governance canister, after a proposal
     /// for updating the elected replica versions has been accepted.
-    pub fn do_update_elected_replica_versions(
+    pub fn do_revise_elected_replica_versions(
         &mut self,
-        payload: UpdateElectedReplicaVersionsPayload,
+        payload: ReviseElectedGuestosVersionsPayload,
     ) {
-        println!("{LOG_PREFIX}do_update_elected_replica_versions: {payload:?}");
+        println!("{LOG_PREFIX}do_revise_elected_replica_versions: {payload:?}");
         payload
             .validate()
             .map_err(|e| panic!("{LOG_PREFIX}Failed to validate payload: {e}"))
@@ -60,7 +60,7 @@ impl Registry {
         if let Some(version) = payload.replica_version_to_elect.as_ref() {
             assert!(
                 !versions_to_remove.contains(version),
-                "{LOG_PREFIX}UpdateElectedReplicaVersionsPayload cannot elect and unelect the same version.",
+                "{LOG_PREFIX}ReviseElectedGuestosVersionsPayload cannot elect and unelect the same version.",
             );
 
             versions.push(version.clone());
@@ -186,11 +186,11 @@ impl Registry {
 ///
 /// To decouple proposal payload and registry content, this does not directly
 /// import any part of the registry schema. However it is required that, from a
-/// UpdateElectedReplicaVersionsPayload, it is possible to construct a ReplicaVersionRecord.
+/// ReviseElectedGuestosVersionsPayload, it is possible to construct a ReplicaVersionRecord.
 ///
 /// See /rs/protobuf/def/registry/replica_version/v1/replica_version.proto
 #[derive(CandidType, Serialize, Deserialize, Default, Clone, Debug, PartialEq, Eq)]
-pub struct UpdateElectedReplicaVersionsPayload {
+pub struct ReviseElectedGuestosVersionsPayload {
     /// Version ID. This can be anything, it has not semantics. The reason it is
     /// part of the payload is that it will be needed in the subsequent step
     /// of upgrading individual subnets.
@@ -211,7 +211,7 @@ pub struct UpdateElectedReplicaVersionsPayload {
     pub replica_versions_to_unelect: Vec<String>,
 }
 
-impl UpdateElectedReplicaVersionsPayload {
+impl ReviseElectedGuestosVersionsPayload {
     pub fn is_electing_a_version(&self) -> Result<bool, String> {
         let elect_params = [
             self.replica_version_to_elect.as_ref(),

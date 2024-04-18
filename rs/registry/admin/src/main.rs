@@ -126,19 +126,19 @@ use registry_canister::mutations::{
     do_add_nodes_to_subnet::AddNodesToSubnetPayload,
     do_change_subnet_membership::ChangeSubnetMembershipPayload,
     do_create_subnet::{CreateSubnetPayload, EcdsaInitialConfig, EcdsaKeyRequest},
+    do_deploy_guestos_to_all_subnet_nodes::DeployGuestosToAllSubnetNodesPayload,
     do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
     do_recover_subnet::RecoverSubnetPayload,
     do_remove_api_boundary_nodes::RemoveApiBoundaryNodesPayload,
     do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
+    do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload,
     do_set_firewall_config::SetFirewallConfigPayload,
     do_update_api_boundary_nodes_version::UpdateApiBoundaryNodesVersionPayload,
     do_update_elected_hostos_versions::UpdateElectedHostosVersionsPayload,
-    do_update_elected_replica_versions::UpdateElectedReplicaVersionsPayload,
     do_update_node_operator_config::UpdateNodeOperatorConfigPayload,
     do_update_nodes_hostos_version::UpdateNodesHostosVersionPayload,
     do_update_ssh_readonly_access_for_all_unassigned_nodes::UpdateSshReadOnlyAccessForAllUnassignedNodesPayload,
     do_update_subnet::UpdateSubnetPayload,
-    do_update_subnet_replica::UpdateSubnetReplicaVersionPayload,
     firewall::{
         add_firewall_rules_compute_entries, compute_firewall_ruleset_hash,
         remove_firewall_rules_compute_entries, update_firewall_rules_compute_entries,
@@ -309,15 +309,19 @@ enum SubCommand {
     GetSubnetList,
     /// Get info about a Replica version
     GetReplicaVersion(GetReplicaVersionCmd),
-    /// Propose updating a subnet's Replica version
-    ProposeToUpdateSubnetReplicaVersion(ProposeToUpdateSubnetReplicaVersionCmd),
+    /// Deprecated. Please use `ProposeToDeployGuestosToAllSubnetNodes` instead.
+    ProposeToUpdateSubnetReplicaVersion(ProposeToDeployGuestosToAllSubnetNodesCmd),
+    /// Propose to deploy a priorly elected GuestOS version to all subnet nodes.
+    ProposeToDeployGuestosToAllSubnetNodes(ProposeToDeployGuestosToAllSubnetNodesCmd),
     /// Get the list of blessed Replica versions.
     GetBlessedReplicaVersions,
     /// Get the latest routing table.
     GetRoutingTable,
-    /// Submits a proposal to update currently elected replica versions, by electing
-    /// a new version and/or unelecting multiple versions.
-    ProposeToUpdateElectedReplicaVersions(ProposeToUpdateElectedReplicaVersionsCmd),
+    /// Deprecated. Please use `ProposeToReviseElectedGuestosVersions` instead.
+    ProposeToUpdateElectedReplicaVersions(ProposeToReviseElectedGuestssVersionsCmd),
+    /// Submits a proposal to change the set of currently elected GuestOS versions, by electing
+    /// a new version and/or unelecting multiple priorly elected versions.
+    ProposeToReviseElectedGuestosVersions(ProposeToReviseElectedGuestssVersionsCmd),
     /// Submits a proposal to create a new subnet.
     ProposeToCreateSubnet(ProposeToCreateSubnetCmd),
     /// Submits a proposal to create a new service nervous system (usually referred to as SNS).
@@ -722,7 +726,7 @@ struct GetReplicaVersionCmd {
 /// subnet to the given (blessed) version.
 #[derive_common_proposal_fields]
 #[derive(ProposalMetadata, Parser)]
-struct ProposeToUpdateSubnetReplicaVersionCmd {
+struct ProposeToDeployGuestosToAllSubnetNodesCmd {
     /// The subnet to update.
     subnet: SubnetDescriptor,
     /// The new Replica version to use.
@@ -775,7 +779,7 @@ fn shortened_subnet_string(subnet: &SubnetDescriptor) -> String {
     }
 }
 
-impl ProposalTitle for ProposeToUpdateSubnetReplicaVersionCmd {
+impl ProposalTitle for ProposeToDeployGuestosToAllSubnetNodesCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
@@ -789,11 +793,13 @@ impl ProposalTitle for ProposeToUpdateSubnetReplicaVersionCmd {
 }
 
 #[async_trait]
-impl ProposalPayload<UpdateSubnetReplicaVersionPayload> for ProposeToUpdateSubnetReplicaVersionCmd {
-    async fn payload(&self, agent: &Agent) -> UpdateSubnetReplicaVersionPayload {
+impl ProposalPayload<DeployGuestosToAllSubnetNodesPayload>
+    for ProposeToDeployGuestosToAllSubnetNodesCmd
+{
+    async fn payload(&self, agent: &Agent) -> DeployGuestosToAllSubnetNodesPayload {
         let registry_canister = RegistryCanister::new_with_agent(agent.clone());
         let subnet_id = self.subnet.get_id(&registry_canister).await;
-        UpdateSubnetReplicaVersionPayload {
+        DeployGuestosToAllSubnetNodesPayload {
             subnet_id: subnet_id.get(),
             replica_version_id: self.replica_version_id.clone(),
         }
@@ -968,7 +974,7 @@ impl ProposalPayload<StopOrStartCanisterRequest> for StopCanisterCmd {
 /// Sub-command to submit a proposal to update elected replica versions.
 #[derive_common_proposal_fields]
 #[derive(ProposalMetadata, Parser)]
-struct ProposeToUpdateElectedReplicaVersionsCmd {
+struct ProposeToReviseElectedGuestssVersionsCmd {
     #[clap(long)]
     /// The replica version ID to elect.
     pub replica_version_to_elect: Option<String>,
@@ -988,7 +994,7 @@ struct ProposeToUpdateElectedReplicaVersionsCmd {
     pub replica_versions_to_unelect: Vec<String>,
 }
 
-impl ProposalTitle for ProposeToUpdateElectedReplicaVersionsCmd {
+impl ProposalTitle for ProposeToReviseElectedGuestssVersionsCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
@@ -1001,11 +1007,11 @@ impl ProposalTitle for ProposeToUpdateElectedReplicaVersionsCmd {
 }
 
 #[async_trait]
-impl ProposalPayload<UpdateElectedReplicaVersionsPayload>
-    for ProposeToUpdateElectedReplicaVersionsCmd
+impl ProposalPayload<ReviseElectedGuestosVersionsPayload>
+    for ProposeToReviseElectedGuestssVersionsCmd
 {
-    async fn payload(&self, _: &Agent) -> UpdateElectedReplicaVersionsPayload {
-        let payload = UpdateElectedReplicaVersionsPayload {
+    async fn payload(&self, _: &Agent) -> ReviseElectedGuestosVersionsPayload {
+        let payload = ReviseElectedGuestosVersionsPayload {
             replica_version_to_elect: self.replica_version_to_elect.clone(),
             release_package_sha256_hex: self.release_package_sha256_hex.clone(),
             release_package_urls: self.release_package_urls.clone(),
@@ -4360,6 +4366,7 @@ async fn main() {
         //
         // TODO(NNS1-486): Remove ic-admin command whitelist for sender
         match opts.subcmd {
+            SubCommand::ProposeToDeployGuestosToAllSubnetNodes(_) => (),
             SubCommand::ProposeToUpdateSubnetReplicaVersion(_) => (),
             SubCommand::ProposeToCreateSubnet(_) => (),
             SubCommand::ProposeToAddNodesToSubnet(_) => (),
@@ -4370,6 +4377,7 @@ async fn main() {
             SubCommand::ProposeToHardResetNnsRootToVersion(_) => (),
             SubCommand::ProposeToUninstallCode(_) => (),
             SubCommand::ProposeToAddNnsCanister(_) => (),
+            SubCommand::ProposeToReviseElectedGuestosVersions(_) => (),
             SubCommand::ProposeToUpdateElectedReplicaVersions(_) => (),
             SubCommand::ProposeToUpdateSubnet(_) => (),
             SubCommand::ProposeToClearProvisionalWhitelist(_) => (),
@@ -4652,11 +4660,12 @@ async fn main() {
                 exit(1);
             }
         }
-        SubCommand::ProposeToUpdateSubnetReplicaVersion(cmd) => {
+        SubCommand::ProposeToUpdateSubnetReplicaVersion(cmd)
+        | SubCommand::ProposeToDeployGuestosToAllSubnetNodes(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
             propose_external_proposal_from_command(
                 cmd,
-                NnsFunction::UpdateSubnetReplicaVersion,
+                NnsFunction::DeployGuestosToAllSubnetNodes,
                 make_canister_client(
                     reachable_nns_urls,
                     opts.verify_nns_responses,
@@ -4703,11 +4712,12 @@ async fn main() {
                 println!("KeyId {:?}: {:?}", key_id, subnets);
             }
         }
-        SubCommand::ProposeToUpdateElectedReplicaVersions(cmd) => {
+        SubCommand::ProposeToUpdateElectedReplicaVersions(cmd)
+        | SubCommand::ProposeToReviseElectedGuestosVersions(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
             propose_external_proposal_from_command(
                 cmd,
-                NnsFunction::UpdateElectedReplicaVersions,
+                NnsFunction::ReviseElectedGuestosVersions,
                 make_canister_client(
                     reachable_nns_urls,
                     opts.verify_nns_responses,

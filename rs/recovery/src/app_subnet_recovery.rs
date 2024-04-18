@@ -314,7 +314,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
 
             StepType::UpgradeVersion => {
                 if let Some(upgrade_version) = &self.params.upgrade_version {
-                    Ok(Box::new(self.recovery.update_subnet_replica_version(
+                    Ok(Box::new(self.recovery.deploy_guestos_to_all_subnet_nodes(
                         self.params.subnet_id,
                         upgrade_version,
                     )))

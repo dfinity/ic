@@ -15,9 +15,12 @@ use ic_registry_keys::make_subnet_record_key;
 use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation, RegistryValue};
 
 impl Registry {
-    pub fn do_update_subnet_replica_version(&mut self, payload: UpdateSubnetReplicaVersionPayload) {
+    pub fn do_deploy_guestos_to_all_subnet_nodes(
+        &mut self,
+        payload: DeployGuestosToAllSubnetNodesPayload,
+    ) {
         println!(
-            "{}do_update_subnet_replica_version: {:?}",
+            "{}do_deploy_guestos_to_all_subnet_nodes: {:?}",
             LOG_PREFIX, payload
         );
 
@@ -55,7 +58,7 @@ impl Registry {
 ///
 /// The replica will be mutated only if the given version is, indeed, blessed.
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct UpdateSubnetReplicaVersionPayload {
+pub struct DeployGuestosToAllSubnetNodesPayload {
     /// The subnet to update.
     pub subnet_id: PrincipalId, // SubnetId See NNS-73
     /// The new Replica version to use.

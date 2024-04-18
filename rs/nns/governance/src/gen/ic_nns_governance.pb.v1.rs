@@ -3539,12 +3539,10 @@ pub enum NnsFunction {
     /// with respect to IMF SDRs) as well as the rewards paid for nodes, which
     /// are expected to be specified in terms of IMF SDRs as well.
     IcpXdrConversionRate = 10,
-    /// Update the replica version running on a given subnet.
-    /// The proposal changes the replica version that is used on the specified
-    /// subnet. The version must be contained in the list of blessed replica
-    /// versions. The upgrade is performed when the subnet creates the next
-    /// regular CUP.
-    UpdateSubnetReplicaVersion = 11,
+    /// Deploy a GuestOS version to a given subnet. The proposal changes the GuestOS version that is
+    /// used on the specified subnet. The version must be contained in the list of elected GuestOS
+    /// versions. The upgrade is completed when the subnet creates the next regular CUP.
+    DeployGuestosToAllSubnetNodes = 11,
     /// Clear the provisional whitelist.
     /// The proposal changes the provisional whitelist to the empty list.
     ClearProvisionalWhitelist = 12,
@@ -3613,15 +3611,11 @@ pub enum NnsFunction {
     RetireReplicaVersion = 36,
     /// Insert custom upgrade path entries into SNS-W for all SNSes, or for an SNS specified by its governance canister ID.
     InsertSnsWasmUpgradePathEntries = 37,
-    /// A proposal to update currently elected replica versions, by electing a new version,
-    /// and/or unelecting multiple unused versions. The version to elect (identified by the hash of the
-    /// installation image) is added to the registry. Besides creating a record for that
-    /// version, the proposal also appends that version to the list of elected versions
-    /// that can be installed on a subnet. By itself, this proposal
-    /// does not effect any upgrade.
-    /// The specified versions to unelect are removed from the registry and the elected versions record.
-    /// This ensures that the replica cannot upgrade to these versions anymore.
-    UpdateElectedReplicaVersions = 38,
+    /// A proposal to change the set of elected GuestOS versions. The version to elect (identified by
+    /// the hash of the installation image) is added to the registry. Besides creating a record for
+    /// that version, the proposal also appends that version to the list of elected versions that can
+    /// be installed on nodes of a subnet. Only elected GuestOS versions can be deployed.
+    ReviseElectedGuestosVersions = 38,
     BitcoinSetConfig = 39,
     /// OBSOLETE: use NNS_FUNCTION_REVISE_ELECTED_HOSTOS_VERSIONS instead
     UpdateElectedHostosVersions = 40,
@@ -3673,7 +3667,9 @@ impl NnsFunction {
             NnsFunction::AssignNoid => "NNS_FUNCTION_ASSIGN_NOID",
             NnsFunction::NnsRootUpgrade => "NNS_FUNCTION_NNS_ROOT_UPGRADE",
             NnsFunction::IcpXdrConversionRate => "NNS_FUNCTION_ICP_XDR_CONVERSION_RATE",
-            NnsFunction::UpdateSubnetReplicaVersion => "NNS_FUNCTION_UPDATE_SUBNET_REPLICA_VERSION",
+            NnsFunction::DeployGuestosToAllSubnetNodes => {
+                "NNS_FUNCTION_DEPLOY_GUESTOS_TO_ALL_SUBNET_NODES"
+            }
             NnsFunction::ClearProvisionalWhitelist => "NNS_FUNCTION_CLEAR_PROVISIONAL_WHITELIST",
             NnsFunction::RemoveNodesFromSubnet => "NNS_FUNCTION_REMOVE_NODES_FROM_SUBNET",
             NnsFunction::SetAuthorizedSubnetworks => "NNS_FUNCTION_SET_AUTHORIZED_SUBNETWORKS",
@@ -3704,8 +3700,8 @@ impl NnsFunction {
             NnsFunction::InsertSnsWasmUpgradePathEntries => {
                 "NNS_FUNCTION_INSERT_SNS_WASM_UPGRADE_PATH_ENTRIES"
             }
-            NnsFunction::UpdateElectedReplicaVersions => {
-                "NNS_FUNCTION_UPDATE_ELECTED_REPLICA_VERSIONS"
+            NnsFunction::ReviseElectedGuestosVersions => {
+                "NNS_FUNCTION_REVISE_ELECTED_GUESTOS_VERSIONS"
             }
             NnsFunction::BitcoinSetConfig => "NNS_FUNCTION_BITCOIN_SET_CONFIG",
             NnsFunction::UpdateElectedHostosVersions => {
@@ -3747,7 +3743,9 @@ impl NnsFunction {
             "NNS_FUNCTION_ASSIGN_NOID" => Some(Self::AssignNoid),
             "NNS_FUNCTION_NNS_ROOT_UPGRADE" => Some(Self::NnsRootUpgrade),
             "NNS_FUNCTION_ICP_XDR_CONVERSION_RATE" => Some(Self::IcpXdrConversionRate),
-            "NNS_FUNCTION_UPDATE_SUBNET_REPLICA_VERSION" => Some(Self::UpdateSubnetReplicaVersion),
+            "NNS_FUNCTION_DEPLOY_GUESTOS_TO_ALL_SUBNET_NODES" => {
+                Some(Self::DeployGuestosToAllSubnetNodes)
+            }
             "NNS_FUNCTION_CLEAR_PROVISIONAL_WHITELIST" => Some(Self::ClearProvisionalWhitelist),
             "NNS_FUNCTION_REMOVE_NODES_FROM_SUBNET" => Some(Self::RemoveNodesFromSubnet),
             "NNS_FUNCTION_SET_AUTHORIZED_SUBNETWORKS" => Some(Self::SetAuthorizedSubnetworks),
@@ -3778,8 +3776,8 @@ impl NnsFunction {
             "NNS_FUNCTION_INSERT_SNS_WASM_UPGRADE_PATH_ENTRIES" => {
                 Some(Self::InsertSnsWasmUpgradePathEntries)
             }
-            "NNS_FUNCTION_UPDATE_ELECTED_REPLICA_VERSIONS" => {
-                Some(Self::UpdateElectedReplicaVersions)
+            "NNS_FUNCTION_REVISE_ELECTED_GUESTOS_VERSIONS" => {
+                Some(Self::ReviseElectedGuestosVersions)
             }
             "NNS_FUNCTION_BITCOIN_SET_CONFIG" => Some(Self::BitcoinSetConfig),
             "NNS_FUNCTION_UPDATE_ELECTED_HOSTOS_VERSIONS" => {

@@ -552,7 +552,7 @@ impl Recovery {
 
     /// Return an [AdminStep] step upgrading the given subnet to the given
     /// replica version.
-    pub fn update_subnet_replica_version(
+    pub fn deploy_guestos_to_all_subnet_nodes(
         &self,
         subnet_id: SubnetId,
         upgrade_version: &ReplicaVersion,
@@ -561,7 +561,10 @@ impl Recovery {
             logger: self.logger.clone(),
             ic_admin_cmd: self
                 .admin_helper
-                .get_propose_to_update_subnet_replica_version_command(subnet_id, upgrade_version),
+                .get_propose_to_deploy_guestos_to_all_subnet_nodes_command(
+                    subnet_id,
+                    upgrade_version,
+                ),
         }
     }
 
