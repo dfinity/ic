@@ -17,9 +17,9 @@ use ic_crypto_test_utils_canister_threshold_sigs::{
     corrupt_random_dealing_and_generate_complaint, ecdsa_sig_share_from_each_receiver,
     generate_ecdsa_presig_quadruple, generate_key_transcript, node_id,
     random_crypto_component_not_in_receivers, random_dealer_id, random_dealer_id_excluding,
-    random_node_id_excluding, random_receiver_for_inputs, random_receiver_id,
-    random_receiver_id_excluding, run_tecdsa_protocol, swap_two_dealings_in_transcript,
-    CanisterThresholdSigTestEnvironment, IntoBuilder,
+    random_node_id_excluding, random_receiver_id, random_receiver_id_excluding,
+    run_tecdsa_protocol, swap_two_dealings_in_transcript, CanisterThresholdSigTestEnvironment,
+    IntoBuilder,
 };
 use ic_crypto_test_utils_canister_threshold_sigs::{setup_masked_random_params, IDkgParticipants};
 use ic_crypto_test_utils_local_csp_vault::MockLocalCspVault;
@@ -812,7 +812,7 @@ mod create_transcript {
             // consider them eligible to sign
             let (removed_receiver_id, modified_params) = {
                 let mut modified_receivers = params.receivers().get().clone();
-                let removed_node_id = random_receiver_id(&params, rng);
+                let removed_node_id = random_receiver_id(params.receivers(), rng);
                 assert!(modified_receivers.remove(&removed_node_id));
                 let modified_params = IDkgTranscriptParams::new(
                     params.transcript_id(),
@@ -2623,7 +2623,7 @@ mod verify_sig_share {
     }
 
     #[test]
-    fn should_fail_deserializing_sig_share() {
+    fn should_fail_deserializing_invalid_sig_share() {
         let rng = &mut reproducible_rng();
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
             for use_random_unmasked_kappa in [false, true] {
@@ -2632,7 +2632,7 @@ mod verify_sig_share {
                 let verifier = env
                     .nodes
                     .random_filtered_by_receivers(inputs.receivers(), rng);
-                let signer_id = random_receiver_for_inputs(&inputs, rng);
+                let signer_id = random_receiver_id(inputs.receivers(), rng);
                 let invalid_sig_share = ThresholdEcdsaSigShare {
                     sig_share_raw: Vec::new(),
                 };

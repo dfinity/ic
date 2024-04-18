@@ -1335,12 +1335,11 @@ impl CanisterThresholdSigTestEnvironment {
     }
 }
 
-pub fn random_receiver_for_inputs<R: RngCore + CryptoRng>(
-    inputs: &ThresholdEcdsaSigInputs,
+pub fn random_receiver_id<R: RngCore + CryptoRng>(
+    receivers: &IDkgReceivers,
     rng: &mut R,
 ) -> NodeId {
-    *inputs
-        .receivers()
+    *receivers
         .get()
         .iter()
         .choose(rng)
@@ -1413,14 +1412,6 @@ pub fn n_random_node_ids<R: RngCore + CryptoRng>(n: usize, rng: &mut R) -> BTree
 
 fn random_node_id<R: RngCore + CryptoRng>(rng: &mut R) -> NodeId {
     node_id(rng.gen())
-}
-
-pub fn random_receiver_id<R: RngCore + CryptoRng>(
-    params: &IDkgTranscriptParams,
-    rng: &mut R,
-) -> NodeId {
-    *random_receiver_id_excluding_set(params.receivers(), &BTreeSet::new(), rng)
-        .expect("receivers is empty")
 }
 
 pub fn random_receiver_id_excluding<R: RngCore + CryptoRng>(
@@ -2163,6 +2154,16 @@ impl CorruptBytes for ThresholdEcdsaSigShare {
     }
 }
 
+impl CorruptBytes for ThresholdSchnorrSigShare {
+    type Type = Self;
+
+    fn clone_with_bit_flipped(&self) -> Self::Type {
+        Self {
+            sig_share_raw: self.sig_share_raw.clone_with_bit_flipped(),
+        }
+    }
+}
+
 impl CorruptBytes for ThresholdEcdsaCombinedSignature {
     type Type = Self;
 
@@ -2464,6 +2465,51 @@ impl IntoBuilder for ThresholdEcdsaSigInputs {
             hashed_message: Vec::from(self.hashed_message()),
             nonce: *self.nonce(),
             presig_quadruple: self.presig_quadruple().clone(),
+            key_transcript: self.key_transcript().clone(),
+        }
+    }
+}
+
+pub struct ThresholdSchnorrSigInputsBuilder {
+    derivation_path: ExtendedDerivationPath,
+    message: Vec<u8>,
+    nonce: Randomness,
+    presig_transcript: SchnorrPreSignatureTranscript,
+    key_transcript: IDkgTranscript,
+}
+
+impl ThresholdSchnorrSigInputsBuilder {
+    pub fn build(self) -> ThresholdSchnorrSigInputs {
+        ThresholdSchnorrSigInputs::new(
+            &self.derivation_path,
+            &self.message,
+            self.nonce,
+            self.presig_transcript,
+            self.key_transcript,
+        )
+        .expect("invalid threshold Schnorr sig inputs")
+    }
+
+    pub fn corrupt_message(mut self) -> Self {
+        self.message = self.message.clone_with_bit_flipped();
+        self
+    }
+
+    pub fn corrupt_nonce(mut self) -> Self {
+        self.nonce = self.nonce.clone_with_bit_flipped();
+        self
+    }
+}
+
+impl IntoBuilder for ThresholdSchnorrSigInputs {
+    type BuilderType = ThresholdSchnorrSigInputsBuilder;
+
+    fn into_builder(self) -> Self::BuilderType {
+        ThresholdSchnorrSigInputsBuilder {
+            derivation_path: self.derivation_path().clone(),
+            message: Vec::from(self.message()),
+            nonce: *self.nonce(),
+            presig_transcript: self.presig_transcript().clone(),
             key_transcript: self.key_transcript().clone(),
         }
     }
