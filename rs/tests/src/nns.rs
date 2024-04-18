@@ -40,8 +40,8 @@ use ic_registry_keys::make_subnet_list_record_key;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{p2p, CanisterId, PrincipalId, ReplicaVersion, SubnetId};
-use registry_canister::mutations::do_update_elected_replica_versions::UpdateElectedReplicaVersionsPayload;
-use registry_canister::mutations::do_update_subnet_replica::UpdateSubnetReplicaVersionPayload;
+use registry_canister::mutations::do_deploy_guestos_to_all_subnet_nodes::DeployGuestosToAllSubnetNodesPayload;
+use registry_canister::mutations::do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload;
 use registry_canister::mutations::{
     do_add_nodes_to_subnet::AddNodesToSubnetPayload,
     do_change_subnet_membership::ChangeSubnetMembershipPayload,
@@ -493,8 +493,8 @@ pub async fn submit_update_elected_replica_versions_proposal(
         governance,
         sender,
         neuron_id,
-        NnsFunction::UpdateElectedReplicaVersions,
-        UpdateElectedReplicaVersionsPayload {
+        NnsFunction::ReviseElectedGuestosVersions,
+        ReviseElectedGuestosVersionsPayload {
             replica_version_to_elect: Some(String::from(version.clone())),
             release_package_sha256_hex: Some(sha256.clone()),
             release_package_urls: upgrade_urls,
@@ -528,7 +528,7 @@ pub async fn submit_update_elected_replica_versions_proposal(
 /// must eventually fail.
 ///
 /// Eventually returns the identifier of the newly submitted proposal.
-pub async fn submit_update_subnet_replica_version_proposal(
+pub async fn submit_deploy_guestos_to_all_subnet_nodes_proposal(
     governance: &Canister<'_>,
     sender: Sender,
     neuron_id: NeuronId,
@@ -539,8 +539,8 @@ pub async fn submit_update_subnet_replica_version_proposal(
         governance,
         sender,
         neuron_id,
-        NnsFunction::UpdateSubnetReplicaVersion,
-        UpdateSubnetReplicaVersionPayload {
+        NnsFunction::DeployGuestosToAllSubnetNodes,
+        DeployGuestosToAllSubnetNodesPayload {
             subnet_id: subnet_id.get(),
             replica_version_id: String::from(version.clone()),
         },
@@ -552,7 +552,7 @@ pub async fn submit_update_subnet_replica_version_proposal(
         "".to_string(),
     )
     .await
-    .expect("submit_update_subnet_replica_version_proposal failed")
+    .expect("submit_deploy_guestos_to_all_subnet_nodes_proposal failed")
 }
 
 /// Submits a proposal for creating an application subnet.

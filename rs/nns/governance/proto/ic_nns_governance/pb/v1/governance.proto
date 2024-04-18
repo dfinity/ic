@@ -521,12 +521,10 @@ enum NnsFunction {
   // with respect to IMF SDRs) as well as the rewards paid for nodes, which
   // are expected to be specified in terms of IMF SDRs as well.
   NNS_FUNCTION_ICP_XDR_CONVERSION_RATE = 10;
-  // Update the replica version running on a given subnet.
-  // The proposal changes the replica version that is used on the specified
-  // subnet. The version must be contained in the list of blessed replica
-  // versions. The upgrade is performed when the subnet creates the next
-  // regular CUP.
-  NNS_FUNCTION_UPDATE_SUBNET_REPLICA_VERSION = 11;
+  // Deploy a GuestOS version to a given subnet. The proposal changes the GuestOS version that is
+  // used on the specified subnet. The version must be contained in the list of elected GuestOS
+  // versions. The upgrade is completed when the subnet creates the next regular CUP.
+  NNS_FUNCTION_DEPLOY_GUESTOS_TO_ALL_SUBNET_NODES = 11;
   // Clear the provisional whitelist.
   // The proposal changes the provisional whitelist to the empty list.
   NNS_FUNCTION_CLEAR_PROVISIONAL_WHITELIST = 12;
@@ -595,15 +593,11 @@ enum NnsFunction {
   NNS_FUNCTION_RETIRE_REPLICA_VERSION = 36;
   // Insert custom upgrade path entries into SNS-W for all SNSes, or for an SNS specified by its governance canister ID.
   NNS_FUNCTION_INSERT_SNS_WASM_UPGRADE_PATH_ENTRIES = 37;
-  // A proposal to update currently elected replica versions, by electing a new version,
-  // and/or unelecting multiple unused versions. The version to elect (identified by the hash of the
-  // installation image) is added to the registry. Besides creating a record for that
-  // version, the proposal also appends that version to the list of elected versions
-  // that can be installed on a subnet. By itself, this proposal
-  // does not effect any upgrade.
-  // The specified versions to unelect are removed from the registry and the elected versions record.
-  // This ensures that the replica cannot upgrade to these versions anymore.
-  NNS_FUNCTION_UPDATE_ELECTED_REPLICA_VERSIONS = 38;
+  // A proposal to change the set of elected GuestOS versions. The version to elect (identified by
+  // the hash of the installation image) is added to the registry. Besides creating a record for
+  // that version, the proposal also appends that version to the list of elected versions that can
+  // be installed on nodes of a subnet. Only elected GuestOS versions can be deployed.
+  NNS_FUNCTION_REVISE_ELECTED_GUESTOS_VERSIONS = 38;
 
   NNS_FUNCTION_BITCOIN_SET_CONFIG = 39;
 

@@ -380,8 +380,8 @@ impl NnsFunction {
             self,
             NnsFunction::NnsRootUpgrade
                 | NnsFunction::NnsCanisterUpgrade
-                | NnsFunction::UpdateElectedReplicaVersions
-                | NnsFunction::UpdateSubnetReplicaVersion
+                | NnsFunction::ReviseElectedGuestosVersions
+                | NnsFunction::DeployGuestosToAllSubnetNodes
         )
     }
 }
@@ -552,14 +552,14 @@ impl NnsFunction {
                 (LIFELINE_CANISTER_ID, "hard_reset_root_to_version")
             }
             NnsFunction::RecoverSubnet => (REGISTRY_CANISTER_ID, "recover_subnet"),
-            NnsFunction::UpdateElectedReplicaVersions => {
-                (REGISTRY_CANISTER_ID, "update_elected_replica_versions")
+            NnsFunction::ReviseElectedGuestosVersions => {
+                (REGISTRY_CANISTER_ID, "revise_elected_replica_versions")
             }
             NnsFunction::UpdateNodeOperatorConfig => {
                 (REGISTRY_CANISTER_ID, "update_node_operator_config")
             }
-            NnsFunction::UpdateSubnetReplicaVersion => {
-                (REGISTRY_CANISTER_ID, "update_subnet_replica_version")
+            NnsFunction::DeployGuestosToAllSubnetNodes => {
+                (REGISTRY_CANISTER_ID, "deploy_guestos_to_all_subnet_nodes")
             }
             NnsFunction::UpdateElectedHostosVersions => {
                 // UpdateElectedHostosVersions is deprecated and can no longer be used.
@@ -648,7 +648,10 @@ impl NnsFunction {
                 // can no longer be used.
                 return Err(GovernanceError::new_with_message(
                     ErrorType::InvalidProposal,
-                    format!("{:?} is a deprecated NnsFunction. Use UpdateElectedReplicaVersions instead", self),
+                    format!(
+                        "{:?} is a deprecated NnsFunction. Use ReviseElectedGuestosVersions instead",
+                        self
+                    ),
                 ));
             }
             NnsFunction::AddApiBoundaryNode => (REGISTRY_CANISTER_ID, "add_api_boundary_node"),
@@ -758,12 +761,12 @@ impl Proposal {
                             | NnsFunction::RemoveNodesFromSubnet
                             | NnsFunction::ChangeSubnetMembership
                             | NnsFunction::UpdateConfigOfSubnet => Topic::SubnetManagement,
-                            NnsFunction::UpdateElectedReplicaVersions
+                            NnsFunction::ReviseElectedGuestosVersions
                             | NnsFunction::ReviseElectedHostosVersions => {
                                 Topic::IcOsVersionElection
                             }
                             NnsFunction::DeployHostosToSomeNodes
-                            | NnsFunction::UpdateSubnetReplicaVersion
+                            | NnsFunction::DeployGuestosToAllSubnetNodes
                             | NnsFunction::DeployGuestosToSomeApiBoundaryNodes
                             | NnsFunction::DeployGuestosToAllUnassignedNodes => {
                                 Topic::IcOsVersionDeployment

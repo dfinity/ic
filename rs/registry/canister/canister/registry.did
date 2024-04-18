@@ -95,6 +95,10 @@ type DataCenterRecord = record {
   owner : text;
 };
 type DeleteSubnetPayload = record { subnet_id : opt principal };
+type DeployGuestosToAllSubnetNodesPayload = record {
+  subnet_id : principal;
+  replica_version_id : text;
+};
 type DeployGuestosToAllUnassignedNodesPayload = record {
   elected_replica_version : text;
 };
@@ -196,6 +200,13 @@ type Result_2 = variant {
 type Result_3 = variant { Ok : NodeProvidersMonthlyXdrRewards; Err : text };
 type Result_4 = variant { Ok : GetSubnetForCanisterResponse; Err : text };
 type RetireReplicaVersionPayload = record { replica_version_ids : vec text };
+type ReviseElectedGuestosVersionsPayload = record {
+  release_package_urls : vec text;
+  replica_versions_to_unelect : vec text;
+  replica_version_to_elect : opt text;
+  guest_launch_measurement_sha256_hex : opt text;
+  release_package_sha256_hex : opt text;
+};
 type SetFirewallConfigPayload = record {
   ipv4_prefixes : vec text;
   firewall_config : text;
@@ -215,13 +226,6 @@ type UpdateElectedHostosVersionsPayload = record {
   release_package_urls : vec text;
   hostos_version_to_elect : opt text;
   hostos_versions_to_unelect : vec text;
-  release_package_sha256_hex : opt text;
-};
-type UpdateElectedReplicaVersionsPayload = record {
-  release_package_urls : vec text;
-  replica_versions_to_unelect : vec text;
-  replica_version_to_elect : opt text;
-  guest_launch_measurement_sha256_hex : opt text;
   release_package_sha256_hex : opt text;
 };
 type UpdateNodeDirectlyPayload = record {
@@ -291,10 +295,6 @@ type UpdateSubnetPayload = record {
   subnet_type : opt SubnetType;
   ssh_readonly_access : opt vec text;
 };
-type UpdateSubnetReplicaVersionPayload = record {
-  subnet_id : principal;
-  replica_version_id : text;
-};
 type UpdateUnassignedNodesConfigPayload = record {
   replica_version : opt text;
   ssh_readonly_access : opt vec text;
@@ -314,6 +314,9 @@ service : {
     );
   create_subnet : (CreateSubnetPayload) -> ();
   delete_subnet : (DeleteSubnetPayload) -> ();
+  deploy_guestos_to_all_subnet_nodes : (
+      DeployGuestosToAllSubnetNodesPayload,
+    ) -> ();
   deploy_guestos_to_all_unassigned_nodes : (
       DeployGuestosToAllUnassignedNodesPayload,
     ) -> ();
@@ -331,12 +334,13 @@ service : {
   remove_nodes_from_subnet : (RemoveNodesPayload) -> ();
   reroute_canister_ranges : (RerouteCanisterRangesPayload) -> (Result_1);
   retire_replica_version : (RetireReplicaVersionPayload) -> ();
+  revise_elected_replica_versions : (ReviseElectedGuestosVersionsPayload) -> ();
   set_firewall_config : (SetFirewallConfigPayload) -> ();
   update_api_boundary_nodes_version : (
       UpdateApiBoundaryNodesVersionPayload,
     ) -> ();
   update_elected_hostos_versions : (UpdateElectedHostosVersionsPayload) -> ();
-  update_elected_replica_versions : (UpdateElectedReplicaVersionsPayload) -> ();
+  update_elected_replica_versions : (ReviseElectedGuestosVersionsPayload) -> ();
   update_firewall_rules : (AddFirewallRulesPayload) -> ();
   update_node_directly : (UpdateNodeDirectlyPayload) -> (Result_1);
   update_node_domain_directly : (UpdateNodeDomainDirectlyPayload) -> (Result_1);
@@ -353,6 +357,6 @@ service : {
       UpdateSshReadOnlyAccessForAllUnassignedNodesPayload,
     ) -> ();
   update_subnet : (UpdateSubnetPayload) -> ();
-  update_subnet_replica_version : (UpdateSubnetReplicaVersionPayload) -> ();
+  update_subnet_replica_version : (DeployGuestosToAllSubnetNodesPayload) -> ();
   update_unassigned_nodes_config : (UpdateUnassignedNodesConfigPayload) -> ();
 }

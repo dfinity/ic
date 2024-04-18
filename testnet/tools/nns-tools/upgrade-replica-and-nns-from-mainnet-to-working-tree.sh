@@ -42,7 +42,7 @@ ensure_variable_set IC_ADMIN
 "${IC_ADMIN}" \
     -r "${NNS_URL}" \
     -s "${PEM}" \
-    propose-to-update-elected-replica-versions \
+    propose-to-revise-elected-guestos-versions \
     --replica-version-to-elect "${CUSTOM_GIT_SHA}" \
     --release-package-urls https://download.dfinity.systems/ic/"${CUSTOM_GIT_SHA}"/guest-os/update-img/update-img.tar.zst \
     --release-package-sha256-hex "${REPLICA_SHA_HEX}" \
@@ -55,7 +55,7 @@ get_latest_nns_proposal
 "${IC_ADMIN}" \
     -r "${NNS_URL}" \
     -s "${PEM}" \
-    propose-to-update-subnet-replica-version tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe \
+    propose-to-deploy-guestos-to-all-subnet-nodes tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe \
     "${CUSTOM_GIT_SHA}" \
     --proposer "${NEURON_ID}" \
     --summary "Update root subnet to replica with old metering_type"

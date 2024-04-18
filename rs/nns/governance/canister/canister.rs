@@ -991,9 +991,9 @@ fn get_effective_payload(
         | NnsFunction::RecoverSubnet
         | NnsFunction::BlessReplicaVersion
         | NnsFunction::RetireReplicaVersion
-        | NnsFunction::UpdateElectedReplicaVersions
+        | NnsFunction::ReviseElectedGuestosVersions
         | NnsFunction::UpdateNodeOperatorConfig
-        | NnsFunction::UpdateSubnetReplicaVersion
+        | NnsFunction::DeployGuestosToAllSubnetNodes
         | NnsFunction::UpdateConfigOfSubnet
         | NnsFunction::IcpXdrConversionRate
         | NnsFunction::ClearProvisionalWhitelist
