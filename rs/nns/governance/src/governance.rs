@@ -112,6 +112,7 @@ use std::{
 mod ledger_helper;
 mod manage_neuron_request;
 mod merge_neurons;
+mod restore_aging;
 pub mod test_data;
 #[cfg(test)]
 mod tests;
@@ -1739,7 +1740,7 @@ impl Governance {
         let (heap_neurons, topic_followee_map, heap_governance_proto) =
             split_governance_proto(governance_proto);
 
-        Self {
+        let mut governance = Self {
             heap_data: heap_governance_proto,
             neuron_store: NeuronStore::new_restored((heap_neurons, topic_followee_map)),
             env,
@@ -1750,7 +1751,12 @@ impl Governance {
             latest_gc_num_proposals: 0,
             neuron_data_validator: NeuronDataValidator::new(),
             minting_node_provider_rewards: false,
-        }
+        };
+
+        // TODO(NNS1-3015): delete after release.
+        governance.maybe_restore_pre_aged_neurons();
+
+        governance
     }
 
     /// After calling this method, the proto and neuron_store (the heap neurons at least)

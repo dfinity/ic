@@ -4,7 +4,7 @@ use crate::pb::v1::{
     },
     neuron::Followees,
     Governance as GovernanceProto, MostRecentMonthlyNodeProviderRewards, NetworkEconomics, Neuron,
-    NeuronStakeTransfer, NodeProvider, ProposalData, RewardEvent,
+    NeuronStakeTransfer, NodeProvider, ProposalData, RestoreAgingSummary, RewardEvent,
     XdrConversionRate as XdrConversionRatePb,
 };
 use std::collections::{BTreeMap, HashMap};
@@ -33,6 +33,7 @@ pub struct HeapGovernanceData {
     pub making_sns_proposal: Option<MakingSnsProposal>,
     pub migrations: Option<Migrations>,
     pub xdr_conversion_rate: XdrConversionRate,
+    pub restore_aging_summary: Option<RestoreAgingSummary>,
 }
 
 /// Internal representation for `XdrConversionRatePb`.
@@ -121,6 +122,7 @@ pub fn split_governance_proto(
         migrations,
         topic_followee_index,
         xdr_conversion_rate,
+        restore_aging_summary,
     } = governance_proto;
 
     let neuron_management_voting_period_seconds =
@@ -157,6 +159,7 @@ pub fn split_governance_proto(
             making_sns_proposal,
             migrations,
             xdr_conversion_rate,
+            restore_aging_summary,
         },
     )
 }
@@ -193,6 +196,7 @@ pub fn reassemble_governance_proto(
         making_sns_proposal,
         migrations,
         xdr_conversion_rate,
+        restore_aging_summary,
     } = heap_governance_proto;
 
     let neuron_management_voting_period_seconds = Some(neuron_management_voting_period_seconds);
@@ -221,6 +225,7 @@ pub fn reassemble_governance_proto(
         migrations,
         topic_followee_index,
         xdr_conversion_rate: Some(xdr_conversion_rate),
+        restore_aging_summary,
     }
 }
 
@@ -274,6 +279,7 @@ mod tests {
                 timestamp_seconds: Some(1),
                 xdr_permyriad_per_icp: Some(50_000),
             }),
+            restore_aging_summary: None,
         }
     }
 

@@ -2388,6 +2388,9 @@ pub struct Governance {
     /// Local cache for XDR-related conversion rates (the source of truth is in the CMC canister).
     #[prost(message, optional, tag = "26")]
     pub xdr_conversion_rate: ::core::option::Option<XdrConversionRate>,
+    /// The summary of restore aging event.
+    #[prost(message, optional, tag = "27")]
+    pub restore_aging_summary: ::core::option::Option<RestoreAgingSummary>,
 }
 /// Nested message and enum types in `Governance`.
 pub mod governance {
@@ -3070,7 +3073,7 @@ pub struct AuditEvent {
     /// The timestamp of the event.
     #[prost(uint64, tag = "1")]
     pub timestamp_seconds: u64,
-    #[prost(oneof = "audit_event::Payload", tags = "2")]
+    #[prost(oneof = "audit_event::Payload", tags = "2, 3")]
     pub payload: ::core::option::Option<audit_event::Payload>,
 }
 /// Nested message and enum types in `AuditEvent`.
@@ -3112,11 +3115,144 @@ pub mod audit_event {
     }
     #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
     #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct RestoreAging {
+        /// The neuron id whose aging was restored.
+        #[prost(uint64, optional, tag = "1")]
+        pub neuron_id: ::core::option::Option<u64>,
+        /// The aging_since_timestamp_seconds before restore.
+        #[prost(uint64, optional, tag = "2")]
+        pub previous_aging_since_timestamp_seconds: ::core::option::Option<u64>,
+        /// The aging_since_timestamp_seconds after restore.
+        #[prost(uint64, optional, tag = "3")]
+        pub new_aging_since_timestamp_seconds: ::core::option::Option<u64>,
+        /// Neuron's stake at the time of restore.
+        #[prost(uint64, optional, tag = "6")]
+        pub neuron_stake_e8s: ::core::option::Option<u64>,
+        /// Neuron's dissolve state at the time of restore.
+        #[prost(oneof = "restore_aging::NeuronDissolveState", tags = "4, 5")]
+        pub neuron_dissolve_state: ::core::option::Option<restore_aging::NeuronDissolveState>,
+    }
+    /// Nested message and enum types in `RestoreAging`.
+    pub mod restore_aging {
+        /// Neuron's dissolve state at the time of restore.
+        #[derive(
+            candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable,
+        )]
+        #[allow(clippy::derive_partial_eq_without_eq)]
+        #[derive(Clone, PartialEq, ::prost::Oneof)]
+        pub enum NeuronDissolveState {
+            #[prost(uint64, tag = "4")]
+            WhenDissolvedTimestampSeconds(u64),
+            #[prost(uint64, tag = "5")]
+            DissolveDelaySeconds(u64),
+        }
+    }
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Payload {
         /// Reset aging timestamps for <https://forum.dfinity.org/t/icp-neuron-age-is-52-years/21261/26>
         #[prost(message, tag = "2")]
         ResetAging(ResetAging),
+        /// Restore aging timestamp that were incorrectly reset.
+        #[prost(message, tag = "3")]
+        RestoreAging(RestoreAging),
+    }
+}
+/// The summary of the restore aging event.
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RestoreAgingSummary {
+    /// The timestamp of the restore aging event.
+    #[prost(uint64, optional, tag = "1")]
+    pub timestamp_seconds: ::core::option::Option<u64>,
+    /// Groups of neurons that were considered for restoring their aging.
+    #[prost(message, repeated, tag = "2")]
+    pub groups: ::prost::alloc::vec::Vec<restore_aging_summary::RestoreAgingNeuronGroup>,
+}
+/// Nested message and enum types in `RestoreAgingSummary`.
+pub mod restore_aging_summary {
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct RestoreAgingNeuronGroup {
+        #[prost(enumeration = "NeuronGroupType", tag = "1")]
+        pub group_type: i32,
+        /// The number of neurons in this group.
+        #[prost(uint64, optional, tag = "2")]
+        pub count: ::core::option::Option<u64>,
+        /// The previous total stake of neurons in this group when the aging was reset.
+        #[prost(uint64, optional, tag = "3")]
+        pub previous_total_stake_e8s: ::core::option::Option<u64>,
+        /// The current total stake of neurons in this group when considering to restore aging.
+        #[prost(uint64, optional, tag = "4")]
+        pub current_total_stake_e8s: ::core::option::Option<u64>,
+    }
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        Copy,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+        PartialOrd,
+        Ord,
+        ::prost::Enumeration,
+    )]
+    #[repr(i32)]
+    pub enum NeuronGroupType {
+        Unspecified = 0,
+        /// The neurons in this group were not pre-aging. We don't restore their aging.
+        NotPreAging = 1,
+        /// The neurons in this group are dissolving or dissolved. We don't restore their aging because
+        /// it's invalid for a dissolving/dissolved neuron to have age.
+        DissolvingOrDissolved = 2,
+        /// The neurons in this group have their stake changed. We restore them to be pre-aged.
+        StakeChanged = 3,
+        /// The neurons in this group have their stake remain the same and aging changed. We restore them
+        /// to be pre-aged.
+        StakeSameAgingChanged = 4,
+        /// The neurons in this group have their stake remain the same and aging remain the same. We
+        /// restore them to be pre-aged.
+        StakeSameAgingSame = 5,
+    }
+    impl NeuronGroupType {
+        /// String value of the enum field names used in the ProtoBuf definition.
+        ///
+        /// The values are not transformed in any way and thus are considered stable
+        /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+        pub fn as_str_name(&self) -> &'static str {
+            match self {
+                NeuronGroupType::Unspecified => "NEURON_GROUP_TYPE_UNSPECIFIED",
+                NeuronGroupType::NotPreAging => "NEURON_GROUP_TYPE_NOT_PRE_AGING",
+                NeuronGroupType::DissolvingOrDissolved => {
+                    "NEURON_GROUP_TYPE_DISSOLVING_OR_DISSOLVED"
+                }
+                NeuronGroupType::StakeChanged => "NEURON_GROUP_TYPE_STAKE_CHANGED",
+                NeuronGroupType::StakeSameAgingChanged => {
+                    "NEURON_GROUP_TYPE_STAKE_SAME_AGING_CHANGED"
+                }
+                NeuronGroupType::StakeSameAgingSame => "NEURON_GROUP_TYPE_STAKE_SAME_AGING_SAME",
+            }
+        }
+        /// Creates an enum from field names used in the ProtoBuf definition.
+        pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+            match value {
+                "NEURON_GROUP_TYPE_UNSPECIFIED" => Some(Self::Unspecified),
+                "NEURON_GROUP_TYPE_NOT_PRE_AGING" => Some(Self::NotPreAging),
+                "NEURON_GROUP_TYPE_DISSOLVING_OR_DISSOLVED" => Some(Self::DissolvingOrDissolved),
+                "NEURON_GROUP_TYPE_STAKE_CHANGED" => Some(Self::StakeChanged),
+                "NEURON_GROUP_TYPE_STAKE_SAME_AGING_CHANGED" => Some(Self::StakeSameAgingChanged),
+                "NEURON_GROUP_TYPE_STAKE_SAME_AGING_SAME" => Some(Self::StakeSameAgingSame),
+                _ => None,
+            }
+        }
     }
 }
 /// Proposal types are organized into topics. Neurons can automatically

@@ -2263,6 +2263,9 @@ message Governance {
 
   // Local cache for XDR-related conversion rates (the source of truth is in the CMC canister).
   optional XdrConversionRate xdr_conversion_rate = 26;
+
+  // The summary of restore aging event.
+  optional RestoreAgingSummary restore_aging_summary = 27;
 }
 
 message XdrConversionRate {
@@ -2548,6 +2551,8 @@ message AuditEvent {
   oneof payload {
     // Reset aging timestamps for https://forum.dfinity.org/t/icp-neuron-age-is-52-years/21261/26
     ResetAging reset_aging = 2;
+    // Restore aging timestamp that were incorrectly reset.
+    RestoreAging restore_aging = 3;
   }
 
   message ResetAging {
@@ -2568,5 +2573,60 @@ message AuditEvent {
 
     // Neuron's stake at the time of reset.
     uint64 neuron_stake_e8s = 6;
+  }
+
+  message RestoreAging {
+    // The neuron id whose aging was restored.
+    optional uint64 neuron_id = 1;
+
+    // The aging_since_timestamp_seconds before restore.
+    optional uint64 previous_aging_since_timestamp_seconds = 2;
+
+    // The aging_since_timestamp_seconds after restore.
+    optional uint64 new_aging_since_timestamp_seconds = 3;
+
+    // Neuron's dissolve state at the time of restore.
+    oneof neuron_dissolve_state {
+      uint64 when_dissolved_timestamp_seconds = 4;
+      uint64 dissolve_delay_seconds = 5;
+    }
+
+    // Neuron's stake at the time of restore.
+    optional uint64 neuron_stake_e8s = 6;
+  }
+}
+
+// The summary of the restore aging event.
+message RestoreAgingSummary {
+  // The timestamp of the restore aging event.
+  optional uint64 timestamp_seconds = 1;
+  // Groups of neurons that were considered for restoring their aging.
+  repeated RestoreAgingNeuronGroup groups = 2;
+
+  enum NeuronGroupType {
+    NEURON_GROUP_TYPE_UNSPECIFIED = 0;
+    // The neurons in this group were not pre-aging. We don't restore their aging.
+    NEURON_GROUP_TYPE_NOT_PRE_AGING = 1;
+    // The neurons in this group are dissolving or dissolved. We don't restore their aging because
+    // it's invalid for a dissolving/dissolved neuron to have age.
+    NEURON_GROUP_TYPE_DISSOLVING_OR_DISSOLVED = 2;
+    // The neurons in this group have their stake changed. We restore them to be pre-aged.
+    NEURON_GROUP_TYPE_STAKE_CHANGED = 3;
+    // The neurons in this group have their stake remain the same and aging changed. We restore them
+    // to be pre-aged.
+    NEURON_GROUP_TYPE_STAKE_SAME_AGING_CHANGED = 4;
+    // The neurons in this group have their stake remain the same and aging remain the same. We
+    // restore them to be pre-aged.
+    NEURON_GROUP_TYPE_STAKE_SAME_AGING_SAME = 5;
+  }
+
+  message RestoreAgingNeuronGroup {
+    NeuronGroupType group_type = 1;
+    // The number of neurons in this group.
+    optional uint64 count = 2;
+    // The previous total stake of neurons in this group when the aging was reset.
+    optional uint64 previous_total_stake_e8s = 3;
+    // The current total stake of neurons in this group when considering to restore aging.
+    optional uint64 current_total_stake_e8s = 4;
   }
 }
