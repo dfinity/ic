@@ -340,7 +340,7 @@ pub fn append_inert(wasm: Option<&Wasm>) -> Wasm {
 /// Submits a proposal to upgrade the root canister.
 pub async fn upgrade_root_canister_by_proposal(
     governance: &Canister<'_>,
-    lifeline: &Canister<'_>,
+    root: &Canister<'_>,
     wasm: Wasm,
 ) {
     let wasm = wasm.bytes();
@@ -366,8 +366,8 @@ pub async fn upgrade_root_canister_by_proposal(
         ProposalStatus::Executed
     );
 
-    loop {
-        let status: CanisterStatusResult = lifeline
+    for _ in 0..100 {
+        let status: CanisterStatusResult = root
             .update_(
                 "canister_status",
                 candid_one,
@@ -378,9 +378,10 @@ pub async fn upgrade_root_canister_by_proposal(
         if status.module_hash.unwrap().as_slice() == new_module_hash
             && status.status == CanisterStatusType::Running
         {
-            break;
+            return;
         }
     }
+    panic!("Root canister upgrade did not complete in time.");
 }
 
 /// Perform a change on a canister by upgrading it or

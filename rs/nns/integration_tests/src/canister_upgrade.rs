@@ -1,10 +1,9 @@
 use assert_matches::assert_matches;
 use candid::Encode;
-use ic_base_types::{CanisterId, PrincipalId};
-use ic_management_canister_types::CanisterInstallMode;
-use ic_nervous_system_clients::canister_status::CanisterStatusType;
+use ic_base_types::CanisterId;
+use ic_management_canister_types::{CanisterInstallMode, CanisterStatusType};
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
-use ic_nns_constants::{LIFELINE_CANISTER_INDEX_IN_NNS_SUBNET, ROOT_CANISTER_ID};
+use ic_nns_constants::LIFELINE_CANISTER_INDEX_IN_NNS_SUBNET;
 use ic_nns_governance::pb::v1::{
     manage_neuron_response::{Command, MakeProposalResponse},
     proposal::Action,
@@ -14,7 +13,7 @@ use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     neuron_helpers::get_neuron_1,
     state_test_helpers::{
-        get_canister_status, nns_governance_make_proposal, setup_nns_canisters,
+        get_root_canister_status, nns_governance_make_proposal, setup_nns_canisters,
         state_machine_builder_for_nns_tests,
     },
 };
@@ -32,15 +31,8 @@ fn upgrade_canister() {
     let mut state_machine = setup_state_machine_with_nns_canisters();
     let n1 = get_neuron_1();
     let lifeline_canister_id = CanisterId::from_u64(LIFELINE_CANISTER_INDEX_IN_NNS_SUBNET);
-    let root_status_before = get_canister_status(
-        &state_machine,
-        PrincipalId::new_anonymous(),
-        ROOT_CANISTER_ID,
-        lifeline_canister_id,
-    );
-    println!("The error is {:?}", root_status_before);
-    let root_status_before = root_status_before.unwrap();
-    let old_module_hash = root_status_before.module_hash.clone().unwrap();
+    let root_status_before = get_root_canister_status(&state_machine).unwrap();
+    let old_module_hash = root_status_before.module_hash().clone().unwrap();
     let wasm = lifeline::LIFELINE_CANISTER_WASM;
     let new_module_hash = &ic_crypto_sha2::Sha256::hash(wasm);
 
@@ -75,35 +67,24 @@ fn upgrade_canister() {
 
     // wait until canister is running again
     loop {
-        if let Ok(root_status) = get_canister_status(
-            &state_machine,
-            PrincipalId::new_anonymous(),
-            ROOT_CANISTER_ID,
-            lifeline_canister_id,
-        ) {
-            if root_status.status == CanisterStatusType::Running {
+        if let Ok(root_status) = get_root_canister_status(&state_machine) {
+            if root_status.status() == CanisterStatusType::Running {
                 break;
             }
         }
     }
-    let root_status_after = get_canister_status(
-        &state_machine,
-        PrincipalId::new_anonymous(),
-        ROOT_CANISTER_ID,
-        lifeline_canister_id,
-    )
-    .unwrap();
+    let root_status_after = get_root_canister_status(&state_machine).unwrap();
 
     // there was a memory increase in `root` due to storing the Wasm
-    assert!(root_status_after.memory_size > root_status_before.memory_size);
+    assert!(root_status_after.memory_size() > root_status_before.memory_size());
     // the other fields didn't change
     assert_eq!(
-        root_status_before.module_hash,
-        root_status_after.module_hash
+        root_status_before.module_hash(),
+        root_status_after.module_hash()
     );
     assert_eq!(
-        root_status_before.settings.controllers,
-        root_status_after.settings.controllers
+        root_status_before.controllers(),
+        root_status_after.controllers()
     );
-    assert_eq!(root_status_before.cycles, root_status_after.cycles);
+    assert_eq!(root_status_before.cycles(), root_status_after.cycles());
 }
