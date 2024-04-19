@@ -281,7 +281,7 @@ impl SetupBuilder {
             "ICP Ledger",
             LEDGER_CANISTER_ID,
             Encode!(&ledger_canister_init_payload).unwrap(),
-            ledger_wasm,
+            ledger_wasm.bytes(),
             None,
         );
 
@@ -291,7 +291,7 @@ impl SetupBuilder {
             "ICP Index",
             LEDGER_INDEX_CANISTER_ID,
             Encode!(&index_canister_init_args).unwrap(),
-            index_wasm,
+            index_wasm.bytes(),
             None,
         );
 

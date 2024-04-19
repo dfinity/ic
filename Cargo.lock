@@ -8017,11 +8017,10 @@ dependencies = [
  "ic-ledger-canister-core",
  "ic-ledger-core",
  "ic-ledger-hash-of",
- "ic-management-canister-types",
  "ic-rosetta-api",
  "ic-rosetta-test-utils",
- "ic-starter-tests",
  "ic-test-utilities-load-wasm",
+ "ic-utils 0.34.0",
  "icrc-ledger-agent",
  "icrc-ledger-types",
  "indicatif",
@@ -8029,6 +8028,7 @@ dependencies = [
  "num-bigint 0.4.4",
  "num-traits",
  "once_cell",
+ "pocket-ic",
  "proptest",
  "rand 0.8.5",
  "reqwest 0.12.3",
@@ -12291,6 +12291,29 @@ dependencies = [
  "strum 0.26.2",
  "strum_macros 0.26.2",
  "tempfile",
+]
+
+[[package]]
+name = "icp-rosetta-integration-tests"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "ic-agent",
+ "ic-icrc1",
+ "ic-ledger-test-utils",
+ "ic-rosetta-api",
+ "ic-test-utilities-load-wasm",
+ "icp-ledger",
+ "icrc-ledger-agent",
+ "icrc-ledger-types",
+ "ledger-canister",
+ "pocket-ic",
+ "reqwest 0.12.3",
+ "rosetta-core",
+ "serde",
+ "tempfile",
+ "tokio",
+ "url",
 ]
 
 [[package]]

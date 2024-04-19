@@ -1,5 +1,4 @@
 use candid::{CandidType, Decode, Encode, Nat, Principal};
-use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nns_constants::ALL_NNS_CANISTER_IDS;
 use pocket_ic::{CanisterSettings, PocketIc, WasmResult};
@@ -15,7 +14,7 @@ pub fn install_canister(
     name: &str,
     canister_id: CanisterId,
     arg: Vec<u8>,
-    wasm: Wasm,
+    wasm_bytes: Vec<u8>,
     controller: Option<PrincipalId>,
 ) {
     let controller_principal = controller.map(|c| c.0);
@@ -32,7 +31,7 @@ pub fn install_canister(
     let canister_id = pocket_ic
         .create_canister_with_id(controller_principal, settings, canister_id.into())
         .unwrap();
-    pocket_ic.install_canister(canister_id, wasm.bytes(), arg, controller_principal);
+    pocket_ic.install_canister(canister_id, wasm_bytes, arg, controller_principal);
     pocket_ic.add_cycles(canister_id, STARTING_CYCLES_PER_CANISTER);
     let subnet_id = pocket_ic.get_subnet(canister_id).unwrap();
     println!(
