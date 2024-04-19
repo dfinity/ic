@@ -109,7 +109,6 @@ rust_test(
 
 rust_test(
     name = "unit_tests",
-    srcs = ["src/dashboard/tests.rs"],
     crate = ":_wasm_cketh_minter",
     data = [":cketh_minter.did"],
     env = {
@@ -125,10 +124,7 @@ rust_test(
 
 [rust_canister(
     name = "cketh_minter" + target_suffix,
-    srcs = [
-        "src/dashboard.rs",
-        "src/main.rs",
-    ],
+    srcs = glob(["src/**/*.rs"]),
     compile_data = [
         "templates/dashboard.html",
         "templates/principal_to_bytes.js",

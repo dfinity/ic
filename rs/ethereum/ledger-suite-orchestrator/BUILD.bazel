@@ -73,7 +73,6 @@ rust_test(
 
 rust_test(
     name = "canister_unit_tests",
-    srcs = ["src/dashboard/tests.rs"],
     crate = ":_wasm_ledger_suite_orchestrator_canister",
     data = [":ledger_suite_orchestrator.did"],
     env = {
