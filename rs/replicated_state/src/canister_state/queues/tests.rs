@@ -413,6 +413,10 @@ impl CanisterQueuesMultiFixture {
     fn remote_schedule(&self) -> Vec<CanisterId> {
         self.queues.remote_subnet_input_schedule.clone().into()
     }
+
+    fn pool_is_empty(&self) -> bool {
+        self.queues.pool.len() == 0
+    }
 }
 
 /// Enqueues 3 requests and 1 response, then pops them and verifies the
@@ -498,6 +502,7 @@ fn test_message_picking_round_robin() {
 
     assert!(!queues.has_input());
     assert!(queues.pop_input().is_none());
+    assert!(queues.pool_is_empty());
 }
 
 /// Enqueues 4 input requests across 3 canisters and consumes them, ensuring
@@ -675,7 +680,9 @@ fn test_peek_round_robin() {
     let peeked_input = CanisterMessage::Request(Arc::new(remote_requests.get(1).unwrap().clone()));
     assert_eq!(queues.peek_input().unwrap(), peeked_input);
     assert_eq!(queues.pop_input().unwrap(), peeked_input);
+
     assert!(!queues.has_input());
+    assert!(queues.pool.len() == 0);
 }
 
 #[test]
@@ -793,6 +800,7 @@ fn test_output_into_iter() {
     }
 
     assert_eq!(0, queues.output_message_count());
+    assert!(queues.pool.len() == 0);
 }
 
 /// Tests that an encode-decode roundtrip yields a result equal to the
@@ -1714,6 +1722,7 @@ fn test_reject_subnet_output_request() {
     // And after popping it, there are no messages or reserved slots left.
     queues.garbage_collect();
     assert!(queues.canister_queues.is_empty());
+    assert!(queues.pool.len() == 0);
 }
 
 #[test]
@@ -1801,6 +1810,8 @@ fn test_output_queues_for_each() {
 
     // No output left.
     assert!(!queues.has_output());
+    // And the pool is also empty.
+    assert!(queues.pool.len() == 0);
 }
 
 // Must be duplicated here, because the `ic_test_utilities` one pulls in the
@@ -1836,6 +1847,7 @@ proptest! {
 
         assert_eq!(output_iter.next(), None);
         assert_eq!(raw_requests.len(), popped);
+        assert!(canister_queues.pool.len() == 0);
     }
 
     #[test]
@@ -1895,6 +1907,8 @@ proptest! {
 
         // Ensure that there are no messages left in the canister queues.
         assert_eq!(canister_queues.output_message_count(), 0);
+        // And the pool is empty.
+        assert!(canister_queues.pool.len() == 0);
     }
 
     #[test]
@@ -1942,6 +1956,8 @@ proptest! {
 
         // Ensure that there are no messages left in the canister queues.
         assert_eq!(canister_queues.output_message_count(), 0);
+        // And the pool is empty.
+        assert!(canister_queues.pool.len() == 0);
     }
 
     #[test]

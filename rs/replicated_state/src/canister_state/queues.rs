@@ -329,7 +329,8 @@ impl CanisterQueues {
         for (canister_id, (_, queue)) in self.canister_queues.iter_mut() {
             while let Some(reference) = queue.peek() {
                 // FIXME: Generate a reject response.
-                let msg = match self.pool.get(reference.id().unwrap()) {
+                let id = reference.id().unwrap();
+                let msg = match self.pool.get(id) {
                     // Actual message.
                     Some(msg) => msg,
 
@@ -349,9 +350,11 @@ impl CanisterQueues {
                     // Message consumed, pop it and update the stats.
                     Ok(_) => {
                         queue.pop();
+                        let msg = self.pool.take(id).unwrap();
 
-                        self.output_queues_stats -= OutputQueuesStats::stats_delta(msg);
-                        self.memory_usage_stats -= MemoryUsageStats::stats_delta(QueueOp::Pop, msg);
+                        self.output_queues_stats -= OutputQueuesStats::stats_delta(&msg);
+                        self.memory_usage_stats -=
+                            MemoryUsageStats::stats_delta(QueueOp::Pop, &msg);
                     }
                 }
             }
