@@ -94,21 +94,17 @@ mod unformatted {
 //!
 }
 
-mod pool_readers;
 pub mod processors;
 
 use ic_interfaces::{
     p2p::{
-        artifact_manager::{ArtifactClient, ArtifactProcessor, ArtifactProcessorEvent, JoinGuard},
-        consensus::{
-            ChangeResult, ChangeSetProducer, MutablePool, PriorityFnAndFilterProducer,
-            ValidatedPoolReader,
-        },
+        artifact_manager::{ArtifactProcessor, ArtifactProcessorEvent, JoinGuard},
+        consensus::{ChangeResult, ChangeSetProducer, MutablePool, ValidatedPoolReader},
     },
     time_source::TimeSource,
 };
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
-use ic_types::{artifact::*, artifact_kind::*, malicious_flags::MaliciousFlags};
+use ic_types::{artifact::*, artifact_kind::*};
 use prometheus::{histogram_opts, labels, Histogram};
 use std::{
     sync::{
@@ -337,25 +333,13 @@ fn process_messages<
 /// Periodic duration of `PollEvent` in milliseconds.
 const ARTIFACT_MANAGER_TIMER_DURATION_MSEC: u64 = 200;
 
-/// The struct contains all relevant interfaces for P2P to operate.
-pub struct ArtifactClientHandle<Artifact: ArtifactKind + 'static> {
-    /// To send the process requests
-    pub sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
-    /// Reference to the artifact client.
-    /// TODO: long term we can remove the 'ArtifactClient' and directly use
-    /// 'ValidatedPoolReader' and ' PriorityFnAndFilterProducer' traits.
-    pub pool_reader: Box<dyn ArtifactClient<Artifact>>,
-}
-
 pub fn create_ingress_handlers<
     PoolIngress: MutablePool<IngressArtifact> + Send + Sync + ValidatedPoolReader<IngressArtifact> + 'static,
-    G: PriorityFnAndFilterProducer<IngressArtifact, PoolIngress> + 'static,
     S: Fn(ArtifactProcessorEvent<IngressArtifact>) + Send + 'static,
 >(
     send_advert: S,
     time_source: Arc<dyn TimeSource>,
     ingress_pool: Arc<RwLock<PoolIngress>>,
-    priority_fn_and_filter_producer: Arc<G>,
     ingress_handler: Arc<
         dyn ChangeSetProducer<
                 PoolIngress,
@@ -364,8 +348,10 @@ pub fn create_ingress_handlers<
             + Sync,
     >,
     metrics_registry: MetricsRegistry,
-    malicious_flags: MaliciousFlags,
-) -> (ArtifactClientHandle<IngressArtifact>, Box<dyn JoinGuard>) {
+) -> (
+    UnboundedSender<UnvalidatedArtifactMutation<IngressArtifact>>,
+    Box<dyn JoinGuard>,
+) {
     let client = processors::IngressProcessor::new(ingress_pool.clone(), ingress_handler);
     let (jh, sender) = run_artifact_processor(
         time_source.clone(),
@@ -373,17 +359,7 @@ pub fn create_ingress_handlers<
         Box::new(client),
         send_advert,
     );
-    (
-        ArtifactClientHandle {
-            sender,
-            pool_reader: Box::new(pool_readers::IngressClient::new(
-                ingress_pool,
-                priority_fn_and_filter_producer,
-                malicious_flags,
-            )),
-        },
-        jh,
-    )
+    (sender, jh)
 }
 
 pub fn create_consensus_handlers<
@@ -392,16 +368,17 @@ pub fn create_consensus_handlers<
             PoolConsensus,
             ChangeSet = <PoolConsensus as MutablePool<ConsensusArtifact>>::ChangeSet,
         > + 'static,
-    G: PriorityFnAndFilterProducer<ConsensusArtifact, PoolConsensus> + 'static,
     S: Fn(ArtifactProcessorEvent<ConsensusArtifact>) + Send + 'static,
 >(
     send_advert: S,
     consensus: C,
-    consensus_gossip: Arc<G>,
     time_source: Arc<dyn TimeSource>,
     consensus_pool: Arc<RwLock<PoolConsensus>>,
     metrics_registry: MetricsRegistry,
-) -> (ArtifactClientHandle<ConsensusArtifact>, Box<dyn JoinGuard>) {
+) -> (
+    UnboundedSender<UnvalidatedArtifactMutation<ConsensusArtifact>>,
+    Box<dyn JoinGuard>,
+) {
     let client = processors::Processor::new(consensus_pool.clone(), consensus);
     let (jh, sender) = run_artifact_processor(
         time_source.clone(),
@@ -409,16 +386,7 @@ pub fn create_consensus_handlers<
         Box::new(client),
         send_advert,
     );
-    (
-        ArtifactClientHandle {
-            sender,
-            pool_reader: Box::new(pool_readers::ConsensusClient::new(
-                consensus_pool,
-                consensus_gossip,
-            )),
-        },
-        jh,
-    )
+    (sender, jh)
 }
 
 pub fn create_certification_handlers<
@@ -431,17 +399,15 @@ pub fn create_certification_handlers<
             PoolCertification,
             ChangeSet = <PoolCertification as MutablePool<CertificationArtifact>>::ChangeSet,
         > + 'static,
-    G: PriorityFnAndFilterProducer<CertificationArtifact, PoolCertification> + 'static,
     S: Fn(ArtifactProcessorEvent<CertificationArtifact>) + Send + 'static,
 >(
     send_advert: S,
     certifier: C,
-    certifier_gossip: Arc<G>,
     time_source: Arc<dyn TimeSource>,
     certification_pool: Arc<RwLock<PoolCertification>>,
     metrics_registry: MetricsRegistry,
 ) -> (
-    ArtifactClientHandle<CertificationArtifact>,
+    UnboundedSender<UnvalidatedArtifactMutation<CertificationArtifact>>,
     Box<dyn JoinGuard>,
 ) {
     let client = processors::Processor::new(certification_pool.clone(), certifier);
@@ -451,32 +417,24 @@ pub fn create_certification_handlers<
         Box::new(client),
         send_advert,
     );
-    (
-        ArtifactClientHandle {
-            sender,
-            pool_reader: Box::new(pool_readers::CertificationClient::new(
-                certification_pool,
-                certifier_gossip,
-            )),
-        },
-        jh,
-    )
+    (sender, jh)
 }
 
 pub fn create_dkg_handlers<
     PoolDkg: MutablePool<DkgArtifact> + Send + Sync + ValidatedPoolReader<DkgArtifact> + 'static,
     C: ChangeSetProducer<PoolDkg, ChangeSet = <PoolDkg as MutablePool<DkgArtifact>>::ChangeSet>
         + 'static,
-    G: PriorityFnAndFilterProducer<DkgArtifact, PoolDkg> + 'static,
     S: Fn(ArtifactProcessorEvent<DkgArtifact>) + Send + 'static,
 >(
     send_advert: S,
     dkg: C,
-    dkg_gossip: Arc<G>,
     time_source: Arc<dyn TimeSource>,
     dkg_pool: Arc<RwLock<PoolDkg>>,
     metrics_registry: MetricsRegistry,
-) -> (ArtifactClientHandle<DkgArtifact>, Box<dyn JoinGuard>) {
+) -> (
+    UnboundedSender<UnvalidatedArtifactMutation<DkgArtifact>>,
+    Box<dyn JoinGuard>,
+) {
     let client = processors::Processor::new(dkg_pool.clone(), dkg);
     let (jh, sender) = run_artifact_processor(
         time_source.clone(),
@@ -484,13 +442,7 @@ pub fn create_dkg_handlers<
         Box::new(client),
         send_advert,
     );
-    (
-        ArtifactClientHandle::<DkgArtifact> {
-            sender,
-            pool_reader: Box::new(pool_readers::DkgClient::new(dkg_pool, dkg_gossip)),
-        },
-        jh,
-    )
+    (sender, jh)
 }
 
 pub fn create_ecdsa_handlers<
@@ -499,16 +451,17 @@ pub fn create_ecdsa_handlers<
             PoolEcdsa,
             ChangeSet = <PoolEcdsa as MutablePool<EcdsaArtifact>>::ChangeSet,
         > + 'static,
-    G: PriorityFnAndFilterProducer<EcdsaArtifact, PoolEcdsa> + 'static,
     S: Fn(ArtifactProcessorEvent<EcdsaArtifact>) + Send + 'static,
 >(
     send_advert: S,
     ecdsa: C,
-    ecdsa_gossip: Arc<G>,
     time_source: Arc<dyn TimeSource>,
     ecdsa_pool: Arc<RwLock<PoolEcdsa>>,
     metrics_registry: MetricsRegistry,
-) -> (ArtifactClientHandle<EcdsaArtifact>, Box<dyn JoinGuard>) {
+) -> (
+    UnboundedSender<UnvalidatedArtifactMutation<EcdsaArtifact>>,
+    Box<dyn JoinGuard>,
+) {
     let client = processors::Processor::new(ecdsa_pool.clone(), ecdsa);
     let (jh, sender) = run_artifact_processor(
         time_source.clone(),
@@ -516,13 +469,7 @@ pub fn create_ecdsa_handlers<
         Box::new(client),
         send_advert,
     );
-    (
-        ArtifactClientHandle::<EcdsaArtifact> {
-            sender,
-            pool_reader: Box::new(pool_readers::EcdsaClient::new(ecdsa_pool, ecdsa_gossip)),
-        },
-        jh,
-    )
+    (sender, jh)
 }
 
 pub fn create_https_outcalls_handlers<
@@ -535,17 +482,15 @@ pub fn create_https_outcalls_handlers<
             PoolCanisterHttp,
             ChangeSet = <PoolCanisterHttp as MutablePool<CanisterHttpArtifact>>::ChangeSet,
         > + 'static,
-    G: PriorityFnAndFilterProducer<CanisterHttpArtifact, PoolCanisterHttp> + Send + Sync + 'static,
     S: Fn(ArtifactProcessorEvent<CanisterHttpArtifact>) + Send + 'static,
 >(
     send_advert: S,
     pool_manager: C,
-    canister_http_gossip: Arc<G>,
     time_source: Arc<dyn TimeSource>,
     canister_http_pool: Arc<RwLock<PoolCanisterHttp>>,
     metrics_registry: MetricsRegistry,
 ) -> (
-    ArtifactClientHandle<CanisterHttpArtifact>,
+    UnboundedSender<UnvalidatedArtifactMutation<CanisterHttpArtifact>>,
     Box<dyn JoinGuard>,
 ) {
     let client = processors::Processor::new(canister_http_pool.clone(), pool_manager);
@@ -555,14 +500,5 @@ pub fn create_https_outcalls_handlers<
         Box::new(client),
         send_advert,
     );
-    (
-        ArtifactClientHandle::<CanisterHttpArtifact> {
-            sender,
-            pool_reader: Box::new(pool_readers::CanisterHttpClient::new(
-                canister_http_pool,
-                canister_http_gossip,
-            )),
-        },
-        jh,
-    )
+    (sender, jh)
 }

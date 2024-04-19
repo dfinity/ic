@@ -353,7 +353,6 @@ fn start_consensus(
         let (client, jh) = create_consensus_handlers(
             send_advert,
             consensus_setup,
-            consensus_gossip.clone(),
             time_source.clone(),
             consensus_pool.clone(),
             metrics_registry.clone(),
@@ -361,12 +360,7 @@ fn start_consensus(
 
         join_handles.push(jh);
 
-        new_p2p_consensus.add_client(
-            consensus_rx,
-            consensus_pool,
-            consensus_gossip,
-            client.sender,
-        );
+        new_p2p_consensus.add_client(consensus_rx, consensus_pool, consensus_gossip, client);
     };
 
     let ingress_sender = {
@@ -383,10 +377,8 @@ fn start_consensus(
             send_advert,
             Arc::clone(&time_source) as Arc<_>,
             Arc::clone(&artifact_pools.ingress_pool),
-            ingress_prioritizer.clone(),
             ingress_manager,
             metrics_registry.clone(),
-            malicious_flags.clone(),
         );
 
         join_handles.push(jh);
@@ -394,9 +386,9 @@ fn start_consensus(
             ingress_rx,
             artifact_pools.ingress_pool.clone(),
             ingress_prioritizer,
-            client.sender.clone(),
+            client.clone(),
         );
-        client.sender
+        client
     };
 
     {
@@ -421,7 +413,6 @@ fn start_consensus(
         let (client, jh) = create_certification_handlers(
             send_advert,
             certifier,
-            certifier_gossip.clone(),
             Arc::clone(&time_source) as Arc<_>,
             Arc::clone(&artifact_pools.certification_pool),
             metrics_registry.clone(),
@@ -431,7 +422,7 @@ fn start_consensus(
             certification_rx,
             artifact_pools.certification_pool,
             certifier_gossip,
-            client.sender,
+            client,
         );
     };
 
@@ -453,13 +444,12 @@ fn start_consensus(
                 metrics_registry.clone(),
                 log.clone(),
             ),
-            dkg_gossip.clone(),
             Arc::clone(&time_source) as Arc<_>,
             Arc::clone(&artifact_pools.dkg_pool),
             metrics_registry.clone(),
         );
         join_handles.push(jh);
-        new_p2p_consensus.add_client(dkg_rx, artifact_pools.dkg_pool, dkg_gossip, client.sender);
+        new_p2p_consensus.add_client(dkg_rx, artifact_pools.dkg_pool, dkg_gossip, client);
     };
 
     {
@@ -501,7 +491,6 @@ fn start_consensus(
                 log.clone(),
                 malicious_flags,
             ),
-            ecdsa_gossip.clone(),
             Arc::clone(&time_source) as Arc<_>,
             Arc::clone(&artifact_pools.ecdsa_pool),
             metrics_registry.clone(),
@@ -509,12 +498,7 @@ fn start_consensus(
 
         join_handles.push(jh);
 
-        new_p2p_consensus.add_client(
-            ecdsa_rx,
-            artifact_pools.ecdsa_pool,
-            ecdsa_gossip,
-            client.sender,
-        );
+        new_p2p_consensus.add_client(ecdsa_rx, artifact_pools.ecdsa_pool, ecdsa_gossip, client);
     };
 
     {
@@ -543,7 +527,6 @@ fn start_consensus(
                 metrics_registry.clone(),
                 log.clone(),
             ),
-            canister_http_gossip.clone(),
             Arc::clone(&time_source) as Arc<_>,
             Arc::clone(&artifact_pools.canister_http_pool),
             metrics_registry.clone(),
@@ -554,7 +537,7 @@ fn start_consensus(
             http_outcalls_rx,
             artifact_pools.canister_http_pool,
             canister_http_gossip,
-            client.sender,
+            client,
         );
     };
 
