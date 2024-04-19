@@ -980,22 +980,12 @@ impl CanisterManager {
         };
 
         match context.mode {
-            CanisterInstallModeV2::Install | CanisterInstallModeV2::Reinstall => execute_install(
-                context,
-                canister,
-                original,
-                round.clone(),
-                round_limits,
-                Arc::clone(&self.fd_factory),
-            ),
-            CanisterInstallModeV2::Upgrade(..) => execute_upgrade(
-                context,
-                canister,
-                original,
-                round.clone(),
-                round_limits,
-                Arc::clone(&self.fd_factory),
-            ),
+            CanisterInstallModeV2::Install | CanisterInstallModeV2::Reinstall => {
+                execute_install(context, canister, original, round.clone(), round_limits)
+            }
+            CanisterInstallModeV2::Upgrade(..) => {
+                execute_upgrade(context, canister, original, round.clone(), round_limits)
+            }
         }
     }
 

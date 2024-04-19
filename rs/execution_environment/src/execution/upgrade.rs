@@ -3,8 +3,6 @@
 //! See https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-install_code
 //! and https://internetcomputer.org/docs/current/references/ic-interface-spec/#system-api-upgrades
 
-use std::sync::Arc;
-
 use crate::as_round_instructions;
 use crate::canister_manager::{
     DtsInstallCodeResult, InstallCodeContext, PausedInstallCodeExecution,
@@ -20,9 +18,8 @@ use ic_embedders::wasm_executor::{CanisterStateChanges, PausedWasmExecution, Was
 use ic_interfaces::execution_environment::{HypervisorError, WasmExecutionOutput};
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_management_canister_types::CanisterInstallModeV2;
-use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::{
-    metadata_state::subnet_call_context_manager::InstallCodeCallId, CanisterState, SystemState,
+    metadata_state::subnet_call_context_manager::InstallCodeCallId, CanisterState,
 };
 use ic_system_api::ApiType;
 use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
@@ -96,7 +93,6 @@ pub(crate) fn execute_upgrade(
     original: OriginalContext,
     round: RoundContext,
     round_limits: &mut RoundLimits,
-    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 ) -> DtsInstallCodeResult {
     let mut helper = InstallCodeHelper::new(&clean_canister, &original);
 
@@ -146,7 +142,6 @@ pub(crate) fn execute_upgrade(
             original,
             round,
             round_limits,
-            fd_factory,
         )
     } else {
         let wasm_execution_result = round.hypervisor.execute_dts(
@@ -174,7 +169,6 @@ pub(crate) fn execute_upgrade(
                     original,
                     round,
                     round_limits,
-                    fd_factory,
                 )
             }
             WasmExecutionResult::Paused(slice, paused_wasm_execution) => {
@@ -192,7 +186,6 @@ pub(crate) fn execute_upgrade(
                     paused_helper: helper.pause(),
                     context,
                     original,
-                    fd_factory,
                 });
                 DtsInstallCodeResult::Paused {
                     canister: clean_canister,
@@ -214,7 +207,6 @@ fn upgrade_stage_1_process_pre_upgrade_result(
     original: OriginalContext,
     round: RoundContext,
     round_limits: &mut RoundLimits,
-    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 ) -> DtsInstallCodeResult {
     let (instructions_consumed, result) =
         helper.handle_wasm_execution(canister_state_changes, output, &original, &round);
@@ -239,7 +231,6 @@ fn upgrade_stage_1_process_pre_upgrade_result(
         original,
         round,
         round_limits,
-        fd_factory,
     )
 }
 
@@ -251,7 +242,6 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
     original: OriginalContext,
     round: RoundContext,
     round_limits: &mut RoundLimits,
-    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 ) -> DtsInstallCodeResult {
     let canister_id = helper.canister().canister_id();
     let context_sender = context.sender();
@@ -320,7 +310,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
         let wasm_execution_result = round.hypervisor.execute_dts(
             ApiType::start(original.time),
             execution_state,
-            &SystemState::new_for_start(canister_id, fd_factory),
+            &helper.canister().system_state,
             helper.canister_memory_usage(),
             helper.canister_message_memory_usage(),
             helper.execution_parameters().clone(),
@@ -518,7 +508,6 @@ struct PausedPreUpgradeExecution {
     paused_helper: PausedInstallCodeHelper,
     context: InstallCodeContext,
     original: OriginalContext,
-    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 }
 
 impl PausedInstallCodeExecution for PausedPreUpgradeExecution {
@@ -566,7 +555,6 @@ impl PausedInstallCodeExecution for PausedPreUpgradeExecution {
                     self.original,
                     round,
                     round_limits,
-                    self.fd_factory,
                 )
             }
             WasmExecutionResult::Paused(slice, paused_wasm_execution) => {

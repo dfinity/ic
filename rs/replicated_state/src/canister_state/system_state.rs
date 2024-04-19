@@ -733,26 +733,6 @@ impl SystemState {
         }
     }
 
-    /// Create a SystemState only having a canister_id -- this is the
-    /// state that is expected when the "start" method of the wasm
-    /// module is run. There is nothing interesting in the system state
-    /// that can be accessed at that point in time, hence this
-    /// "slightly" fake system state.
-    pub fn new_for_start(
-        canister_id: CanisterId,
-        fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
-    ) -> Self {
-        let controller = *canister_id.get_ref();
-        Self::new_internal(
-            canister_id,
-            controller,
-            Cycles::zero(),
-            NumSeconds::from(0),
-            CanisterStatus::Stopped,
-            WasmChunkStore::new(fd_factory),
-        )
-    }
-
     #[allow(clippy::too_many_arguments)]
     pub fn new_from_checkpoint(
         controllers: BTreeSet<PrincipalId>,
