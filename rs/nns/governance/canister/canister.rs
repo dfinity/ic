@@ -51,8 +51,8 @@ use ic_nns_governance::{
         Governance as GovernanceProto, GovernanceError, ListKnownNeuronsResponse, ListNeurons,
         ListNeuronsResponse, ListNodeProvidersResponse, ListProposalInfo, ListProposalInfoResponse,
         ManageNeuron, ManageNeuronResponse, MostRecentMonthlyNodeProviderRewards, NetworkEconomics,
-        Neuron, NeuronInfo, NnsFunction, NodeProvider, Proposal, ProposalInfo, RewardEvent,
-        RewardNodeProviders, SettleCommunityFundParticipation,
+        Neuron, NeuronInfo, NnsFunction, NodeProvider, Proposal, ProposalInfo, RestoreAgingSummary,
+        RewardEvent, RewardNodeProviders, SettleCommunityFundParticipation,
         SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse,
         UpdateNodeProvider, Vote,
     },
@@ -926,6 +926,18 @@ fn get_migrations_() -> Migrations {
         .migrations
         .clone()
         .unwrap_or_default()
+}
+
+#[export_name = "canister_query get_restore_aging_summary"]
+fn get_restore_aging_summary() {
+    over(candid, |()| -> RestoreAgingSummary {
+        get_restore_aging_summary_()
+    })
+}
+
+#[candid_method(query, rename = "get_restore_aging_summary")]
+fn get_restore_aging_summary_() -> RestoreAgingSummary {
+    governance().get_restore_aging_summary().unwrap_or_default()
 }
 
 #[export_name = "canister_query http_request"]
