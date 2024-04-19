@@ -88,7 +88,7 @@ def build_container(container_cmd: str,
     """Run container build command with given args. Return the given tag."""
     assert image_tag and context_dir, "Arguments can not be empty"
 
-    build_arg_strings = [f"--build-arg {v}" for v in build_args]
+    build_arg_strings = [f"--build-arg \"{v}\"" for v in build_args]
     build_arg_strings_joined = ' '.join(build_arg_strings)
 
     cmd = f"{container_cmd} "
