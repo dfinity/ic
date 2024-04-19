@@ -25,9 +25,8 @@ pub mod block_maker;
 pub mod catchup;
 pub mod certification;
 pub mod dkg;
-pub mod ecdsa;
-mod ecdsa_refs;
 pub mod hashed;
+pub mod idkg;
 mod payload;
 pub mod thunk;
 

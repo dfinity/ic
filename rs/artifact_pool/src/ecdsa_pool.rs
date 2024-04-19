@@ -24,7 +24,7 @@ use ic_metrics::MetricsRegistry;
 use ic_types::artifact::{ArtifactKind, EcdsaMessageId};
 use ic_types::artifact_kind::EcdsaArtifact;
 use ic_types::consensus::{
-    ecdsa::{
+    idkg::{
         EcdsaArtifactId, EcdsaComplaint, EcdsaMessage, EcdsaMessageType, EcdsaOpening,
         EcdsaPrefixOf, EcdsaSigShare, EcdsaStats,
     },
@@ -477,7 +477,7 @@ mod tests {
     use ic_test_utilities_consensus::EcdsaStatsNoOp;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::ids::{NODE_1, NODE_2, NODE_3, NODE_4, NODE_5, NODE_6};
-    use ic_types::consensus::ecdsa::{dealing_support_prefix, EcdsaObject};
+    use ic_types::consensus::idkg::{dealing_support_prefix, EcdsaObject};
     use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
     use ic_types::crypto::{CryptoHash, CryptoHashOf};
     use ic_types::signature::BasicSignature;

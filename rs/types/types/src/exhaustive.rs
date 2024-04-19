@@ -1,14 +1,16 @@
 //! Implementations and serialization tests of the ExhaustiveSet trait
 
 use crate::batch::ConsensusResponse;
-use crate::consensus::ecdsa::{
+use crate::consensus::hashed::Hashed;
+use crate::consensus::idkg::ecdsa::{
+    PreSignatureQuadrupleRef, QuadrupleInCreation, ThresholdEcdsaSigInputsRef,
+};
+use crate::consensus::idkg::{
     CompletedReshareRequest, CompletedSignature, EcdsaKeyTranscript, EcdsaReshareRequest,
-    KeyTranscriptCreation, MaskedTranscript, PreSignatureQuadrupleRef, PseudoRandomId, QuadrupleId,
-    QuadrupleInCreation, RandomTranscriptParams, RandomUnmaskedTranscriptParams, RequestId,
-    ReshareOfMaskedParams, ReshareOfUnmaskedParams, ThresholdEcdsaSigInputsRef,
+    KeyTranscriptCreation, MaskedTranscript, PseudoRandomId, QuadrupleId, RandomTranscriptParams,
+    RandomUnmaskedTranscriptParams, RequestId, ReshareOfMaskedParams, ReshareOfUnmaskedParams,
     UnmaskedTimesMaskedParams, UnmaskedTranscript, UnmaskedTranscriptWithAttributes,
 };
-use crate::consensus::hashed::Hashed;
 use crate::consensus::{BlockPayload, ConsensusMessageHashable};
 use crate::consensus::{CatchUpContent, CatchUpPackage, HashedBlock, HashedRandomBeacon};
 use crate::crypto::canister_threshold_sig::idkg::{

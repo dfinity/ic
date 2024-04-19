@@ -16,9 +16,9 @@ use ic_metrics::MetricsRegistry;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithEcdsaContext;
 use ic_replicated_state::ReplicatedState;
 use ic_types::artifact::EcdsaMessageId;
-use ic_types::consensus::ecdsa::{
-    sig_share_prefix, EcdsaBlockReader, EcdsaMessage, EcdsaSigShare, EcdsaStats, HasEcdsaKeyId,
-    RequestId, ThresholdEcdsaSigInputsRef,
+use ic_types::consensus::idkg::{
+    ecdsa::ThresholdEcdsaSigInputsRef, sig_share_prefix, EcdsaBlockReader, EcdsaMessage,
+    EcdsaSigShare, EcdsaStats, HasEcdsaKeyId, RequestId,
 };
 use ic_types::crypto::canister_threshold_sig::{
     error::ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaCombinedSignature,
@@ -651,7 +651,7 @@ mod tests {
         canister_test_id, subnet_test_id, user_test_id, NODE_1, NODE_2, NODE_3,
     };
     use ic_test_utilities_types::messages::RequestBuilder;
-    use ic_types::consensus::ecdsa::*;
+    use ic_types::consensus::idkg::*;
     use ic_types::crypto::{canister_threshold_sig::ExtendedDerivationPath, AlgorithmId};
     use ic_types::time::UNIX_EPOCH;
     use ic_types::{Height, Randomness};

@@ -34,7 +34,7 @@ use ic_types::{
     consensus::{
         dkg,
         dkg::{DealingContent, DkgMessageId, Message, Summary},
-        ecdsa, get_faults_tolerated, Block, BlockPayload, CatchUpContent, CatchUpPackage,
+        get_faults_tolerated, idkg, Block, BlockPayload, CatchUpContent, CatchUpPackage,
         HashedBlock, HashedRandomBeacon, Payload, RandomBeaconContent, Rank,
     },
     crypto::{
@@ -1559,7 +1559,7 @@ fn bootstrap_ecdsa_summary_from_cup_contents(
     cup_contents: &CatchUpPackageContents,
     subnet_id: SubnetId,
     logger: &ReplicaLogger,
-) -> Result<ecdsa::Summary, String> {
+) -> Result<idkg::Summary, String> {
     let initial_dealings = inspect_ecdsa_initializations(&cup_contents.ecdsa_initializations)?;
     if initial_dealings.is_empty() {
         return Ok(None);
@@ -1586,7 +1586,7 @@ fn bootstrap_ecdsa_summary(
     registry_version: RegistryVersion,
     registry_client: &dyn RegistryClient,
     logger: &ReplicaLogger,
-) -> Result<ecdsa::Summary, String> {
+) -> Result<idkg::Summary, String> {
     if let Some(summary) =
         bootstrap_ecdsa_summary_from_cup_contents(cup_contents, subnet_id, logger)?
     {
@@ -1639,7 +1639,7 @@ mod tests {
     };
     use ic_types::{
         batch::BatchPayload,
-        consensus::{ecdsa, DataPayload, HasVersion},
+        consensus::{idkg, DataPayload, HasVersion},
         crypto::threshold_sig::ni_dkg::{
             NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
         },
@@ -3503,7 +3503,7 @@ mod tests {
                 BlockPayload::Data(DataPayload {
                     batch: BatchPayload::default(),
                     dealings: dkg::Dealings::new(Height::from(0), messages.clone()),
-                    ecdsa: ecdsa::Payload::default(),
+                    ecdsa: idkg::Payload::default(),
                 }),
             );
             let mut parent = Block::from(pool.make_next_block());

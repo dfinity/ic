@@ -194,7 +194,7 @@ use ic_types::crypto::canister_threshold_sig::error::IDkgRetainKeysError;
 use ic_types::{
     artifact::{EcdsaMessageId, Priority, PriorityFn},
     artifact_kind::EcdsaArtifact,
-    consensus::ecdsa::{EcdsaBlockReader, EcdsaMessageAttribute, RequestId},
+    consensus::idkg::{EcdsaBlockReader, EcdsaMessageAttribute, RequestId},
     crypto::canister_threshold_sig::idkg::IDkgTranscriptId,
     malicious_flags::MaliciousFlags,
     Height, NodeId, SubnetId,
@@ -596,9 +596,9 @@ mod tests {
     use super::test_utils::fake_ecdsa_key_id;
     use super::*;
     use ic_test_utilities::state_manager::RefMockStateManager;
-    use ic_types::consensus::ecdsa::{EcdsaUIDGenerator, QuadrupleId};
+    use ic_types::consensus::idkg::{EcdsaUIDGenerator, QuadrupleId};
     use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
-    use ic_types::{consensus::ecdsa::RequestId, PrincipalId, SubnetId};
+    use ic_types::{consensus::idkg::RequestId, PrincipalId, SubnetId};
     use tests::test_utils::create_sig_inputs;
 
     #[test]

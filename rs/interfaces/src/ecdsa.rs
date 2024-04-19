@@ -1,7 +1,7 @@
 //! ECDSA related public interfaces.
 
 use ic_types::artifact::EcdsaMessageId;
-use ic_types::consensus::ecdsa::{
+use ic_types::consensus::idkg::{
     EcdsaComplaint, EcdsaMessage, EcdsaOpening, EcdsaPrefixOf, EcdsaSigShare, EcdsaStats,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing};

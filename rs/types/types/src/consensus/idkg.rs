@@ -1,13 +1,15 @@
 //! Defines types used for threshold ECDSA key generation.
 
-pub use crate::consensus::ecdsa_refs::{
+pub use crate::consensus::idkg::common::{
     unpack_reshare_of_unmasked_params, EcdsaBlockReader, IDkgTranscriptAttributes,
-    IDkgTranscriptOperationRef, IDkgTranscriptParamsRef, MaskedTranscript,
-    PreSignatureQuadrupleRef, PseudoRandomId, QuadrupleId, QuadrupleInCreation,
-    RandomTranscriptParams, RandomUnmaskedTranscriptParams, RequestId, ReshareOfMaskedParams,
-    ReshareOfUnmaskedParams, ThresholdEcdsaSigInputsError, ThresholdEcdsaSigInputsRef,
-    TranscriptAttributes, TranscriptCastError, TranscriptLookupError, TranscriptParamsError,
-    TranscriptRef, UnmaskedTimesMaskedParams, UnmaskedTranscript,
+    IDkgTranscriptOperationRef, IDkgTranscriptParamsRef, MaskedTranscript, PseudoRandomId,
+    QuadrupleId, RandomTranscriptParams, RandomUnmaskedTranscriptParams, RequestId,
+    ReshareOfMaskedParams, ReshareOfUnmaskedParams, TranscriptAttributes, TranscriptCastError,
+    TranscriptLookupError, TranscriptParamsError, TranscriptRef, UnmaskedTimesMaskedParams,
+    UnmaskedTranscript,
+};
+use crate::consensus::idkg::ecdsa::{
+    PreSignatureQuadrupleRef, QuadrupleInCreation, ThresholdEcdsaSigInputsRef,
 };
 use crate::{
     consensus::BasicSignature,
@@ -44,6 +46,10 @@ use std::{
     time::Duration,
 };
 use strum_macros::EnumIter;
+
+pub mod common;
+pub mod ecdsa;
+pub mod schnorr;
 
 /// For completed signature requests, we differentiate between those
 /// that have already been reported and those that have not. This is

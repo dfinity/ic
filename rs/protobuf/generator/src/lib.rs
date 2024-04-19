@@ -383,7 +383,7 @@ fn build_types_proto(def: &Path, out: &Path) {
         def.join("types/v1/types.proto"),
         def.join("types/v1/dkg.proto"),
         def.join("types/v1/consensus.proto"),
-        def.join("types/v1/ecdsa.proto"),
+        def.join("types/v1/idkg.proto"),
         def.join("types/v1/signature.proto"),
         def.join("types/v1/p2p.proto"),
         def.join("types/v1/canister_http.proto"),

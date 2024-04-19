@@ -15,7 +15,7 @@ use crate::{
     canister_http::CanisterHttpResponseShare,
     consensus::{
         certification::{CertificationMessage, CertificationMessageHash},
-        ecdsa::EcdsaArtifactId,
+        idkg::EcdsaArtifactId,
         ConsensusMessage, ConsensusMessageHash, ConsensusMessageHashable, HasHash, HasHeight,
     },
     crypto::{crypto_hash, CryptoHash},

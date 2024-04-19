@@ -8,7 +8,7 @@ use ic_interfaces::{
 use ic_protobuf::types::v1 as pb;
 use ic_types::{
     batch::ValidationContext,
-    consensus::ecdsa::{EcdsaBlockReader, EcdsaStats, RequestId},
+    consensus::idkg::{EcdsaBlockReader, EcdsaStats, RequestId},
     consensus::{
         dkg, Block, BlockPayload, CatchUpContent, CatchUpPackage, ConsensusMessageHashable,
         HasHeight, HashedBlock, HashedRandomBeacon, Payload, RandomBeaconContent, Rank,

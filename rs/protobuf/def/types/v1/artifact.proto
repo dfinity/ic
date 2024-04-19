@@ -5,7 +5,7 @@ package types.v1;
 import "google/protobuf/empty.proto";
 import "registry/subnet/v1/subnet.proto";
 import "types/v1/canister_http.proto";
-import "types/v1/ecdsa.proto";
+import "types/v1/idkg.proto";
 
 message EcdsaMessageAttribute {
   oneof kind {

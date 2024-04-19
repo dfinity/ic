@@ -3,7 +3,7 @@
 use crate::consensus::metrics::{
     EcdsaQuadrupleMetrics, EcdsaSignatureMetrics, EcdsaTranscriptMetrics,
 };
-use ic_types::consensus::ecdsa::{EcdsaBlockReader, EcdsaStats, QuadrupleId, RequestId};
+use ic_types::consensus::idkg::{EcdsaBlockReader, EcdsaStats, QuadrupleId, RequestId};
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgDealingSupport, IDkgTranscriptId, IDkgTranscriptParams,
 };

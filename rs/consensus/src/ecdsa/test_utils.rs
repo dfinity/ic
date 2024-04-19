@@ -31,14 +31,15 @@ use ic_test_utilities_types::ids::{node_test_id, NODE_1, NODE_2};
 use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::artifact::EcdsaMessageId;
 use ic_types::consensus::certification::Certification;
-use ic_types::consensus::ecdsa::{
-    self, EcdsaArtifactId, EcdsaBlockReader, EcdsaComplaint, EcdsaComplaintContent,
-    EcdsaKeyTranscript, EcdsaMessage, EcdsaOpening, EcdsaOpeningContent, EcdsaPayload,
-    EcdsaReshareRequest, EcdsaSigShare, EcdsaUIDGenerator, IDkgTranscriptAttributes,
-    IDkgTranscriptOperationRef, IDkgTranscriptParamsRef, KeyTranscriptCreation, MaskedTranscript,
-    PreSignatureQuadrupleRef, QuadrupleId, RequestId, ReshareOfMaskedParams,
-    ThresholdEcdsaSigInputsRef, TranscriptAttributes, TranscriptLookupError, TranscriptRef,
-    UnmaskedTranscript, UnmaskedTranscriptWithAttributes,
+use ic_types::consensus::idkg::{
+    self,
+    ecdsa::{PreSignatureQuadrupleRef, ThresholdEcdsaSigInputsRef},
+    EcdsaArtifactId, EcdsaBlockReader, EcdsaComplaint, EcdsaComplaintContent, EcdsaKeyTranscript,
+    EcdsaMessage, EcdsaOpening, EcdsaOpeningContent, EcdsaPayload, EcdsaReshareRequest,
+    EcdsaSigShare, EcdsaUIDGenerator, IDkgTranscriptAttributes, IDkgTranscriptOperationRef,
+    IDkgTranscriptParamsRef, KeyTranscriptCreation, MaskedTranscript, QuadrupleId, RequestId,
+    ReshareOfMaskedParams, TranscriptAttributes, TranscriptLookupError, TranscriptRef,
+    UnmaskedTranscript,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgComplaint, IDkgDealing, IDkgDealingSupport, IDkgMaskedTranscriptOrigin, IDkgOpening,
@@ -63,7 +64,7 @@ use std::sync::{Arc, Mutex};
 use super::utils::get_context_request_id;
 
 pub(crate) fn dealings_context_from_reshare_request(
-    request: ecdsa::EcdsaReshareRequest,
+    request: idkg::EcdsaReshareRequest,
 ) -> EcdsaDealingsContext {
     EcdsaDealingsContext {
         request: RequestBuilder::new().build(),
@@ -1549,8 +1550,8 @@ pub(crate) fn generate_key_transcript(
     height: Height,
 ) -> (
     IDkgTranscript,
-    ecdsa::UnmaskedTranscript,
-    UnmaskedTranscriptWithAttributes,
+    idkg::UnmaskedTranscript,
+    idkg::UnmaskedTranscriptWithAttributes,
 ) {
     let (dealers, receivers) =
         env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
@@ -1562,10 +1563,9 @@ pub(crate) fn generate_key_transcript(
         AlgorithmId::ThresholdEcdsaSecp256k1,
         rng,
     );
-    let key_transcript_ref =
-        ecdsa::UnmaskedTranscript::try_from((height, &key_transcript)).unwrap();
+    let key_transcript_ref = idkg::UnmaskedTranscript::try_from((height, &key_transcript)).unwrap();
 
-    let with_attributes = ecdsa::UnmaskedTranscriptWithAttributes::new(
+    let with_attributes = idkg::UnmaskedTranscriptWithAttributes::new(
         key_transcript.to_attributes(),
         key_transcript_ref,
     );
@@ -1582,7 +1582,7 @@ pub(crate) trait EcdsaPayloadTestHelper {
         &mut self,
         env: &CanisterThresholdSigTestEnvironment,
         rng: &mut ReproducibleRng,
-    ) -> (IDkgTranscript, ecdsa::UnmaskedTranscript);
+    ) -> (IDkgTranscript, idkg::UnmaskedTranscript);
 
     /// Retrieves the only key transcript in the ecdsa payload.
     ///
@@ -1607,7 +1607,7 @@ impl EcdsaPayloadTestHelper for EcdsaPayload {
         &mut self,
         env: &CanisterThresholdSigTestEnvironment,
         rng: &mut ReproducibleRng,
-    ) -> (IDkgTranscript, ecdsa::UnmaskedTranscript) {
+    ) -> (IDkgTranscript, idkg::UnmaskedTranscript) {
         let (key_transcript, key_transcript_ref, current) =
             generate_key_transcript(env, rng, Height::new(100));
 
