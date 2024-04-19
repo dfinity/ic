@@ -166,6 +166,7 @@ type Governance = record {
   node_providers : vec NodeProvider;
   cached_daily_maturity_modulation_basis_points : opt int32;
   economics : opt NetworkEconomics;
+  restore_aging_summary : opt RestoreAgingSummary;
   spawning_neurons : opt bool;
   latest_reward_event : opt RewardEvent;
   to_claim_transfers : vec NeuronStakeTransfer;
@@ -526,6 +527,16 @@ type ProposalInfo = record {
 };
 type RegisterVote = record { vote : int32; proposal : opt NeuronId };
 type RemoveHotKey = record { hot_key_to_remove : opt principal };
+type RestoreAgingNeuronGroup = record {
+  count : opt nat64;
+  previous_total_stake_e8s : opt nat64;
+  current_total_stake_e8s : opt nat64;
+  group_type : int32;
+};
+type RestoreAgingSummary = record {
+  groups : vec RestoreAgingNeuronGroup;
+  timestamp_seconds : opt nat64;
+};
 type Result = variant { Ok; Err : GovernanceError };
 type Result_1 = variant { Error : GovernanceError; NeuronId : NeuronId };
 type Result_10 = variant { Ok : Ok_1; Err : GovernanceError };
@@ -674,6 +685,7 @@ service : (Governance) -> {
   get_node_provider_by_caller : (null) -> (Result_7) query;
   get_pending_proposals : () -> (vec ProposalInfo) query;
   get_proposal_info : (nat64) -> (opt ProposalInfo) query;
+  get_restore_aging_summary : () -> (RestoreAgingSummary) query;
   list_known_neurons : () -> (ListKnownNeuronsResponse) query;
   list_neurons : (ListNeurons) -> (ListNeuronsResponse) query;
   list_node_providers : () -> (ListNodeProvidersResponse) query;
