@@ -2770,26 +2770,26 @@ impl<'a> Payload<'a> for TakeCanisterSnapshotArgs {
 ///      total_size: nat;
 /// })`
 #[derive(Default, Clone, CandidType, Deserialize, Debug, PartialEq, Eq)]
-pub struct TakeCanisterSnapshotResponse {
+pub struct CanisterSnapshotResponse {
     #[serde(with = "serde_bytes")]
-    pub snapshot_id: Vec<u8>,
+    pub id: Vec<u8>,
     pub taken_at_timestamp: u64,
     pub total_size: candid::Nat,
 }
 
-impl Payload<'_> for TakeCanisterSnapshotResponse {}
+impl Payload<'_> for CanisterSnapshotResponse {}
 
-impl TakeCanisterSnapshotResponse {
+impl CanisterSnapshotResponse {
     pub fn new(snapshot_id: &SnapshotId, taken_at_timestamp: u64, total_size: NumBytes) -> Self {
         Self {
-            snapshot_id: snapshot_id.to_vec(),
+            id: snapshot_id.to_vec(),
             taken_at_timestamp,
             total_size: candid::Nat::from(total_size.get()),
         }
     }
 
     pub fn snapshot_id(&self) -> SnapshotId {
-        SnapshotId::try_from(&self.snapshot_id).unwrap()
+        SnapshotId::try_from(&self.id).unwrap()
     }
 
     pub fn total_size(&self) -> u64 {
@@ -2840,6 +2840,29 @@ impl<'a> Payload<'a> for DeleteCanisterSnapshotArgs {
         Ok(args)
     }
 }
+
+/// Struct used for encoding/decoding
+/// `(record {
+///     canister_id: principal;
+/// })`
+#[derive(Default, Clone, CandidType, Deserialize, Debug, PartialEq, Eq)]
+pub struct ListCanisterSnapshotArgs {
+    canister_id: PrincipalId,
+}
+
+impl ListCanisterSnapshotArgs {
+    pub fn new(canister_id: CanisterId) -> Self {
+        Self {
+            canister_id: canister_id.get(),
+        }
+    }
+
+    pub fn get_canister_id(&self) -> CanisterId {
+        CanisterId::unchecked_from_principal(self.canister_id)
+    }
+}
+
+impl Payload<'_> for ListCanisterSnapshotArgs {}
 
 #[cfg(test)]
 mod tests {
