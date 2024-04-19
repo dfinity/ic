@@ -6,22 +6,58 @@ pub type CanisterId = Principal;
 
 /// Canister settings.
 ///
+/// The settings are optional. If they are not explicitly set, the default values will be applied automatically.
+///
 /// See [`settings`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-create_canister).
 #[derive(
     CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Default,
 )]
 pub struct CanisterSettings {
-    /// A list of principals. Must be between 0 and 10 in size.
+    /// A list of at most 10 principals.
+    ///
+    /// The principals in this list become the *controllers* of the canister.
+    ///
+    /// Default value: A list containing only the caller of the create_canister call.
     pub controllers: Option<Vec<Principal>>,
     /// Must be a number between 0 and 100, inclusively.
+    ///
+    /// It indicates how much compute power should be guaranteed to this canister,
+    /// expressed as a percentage of the maximum compute power that a single canister can allocate.
+    ///
+    /// If the IC cannot provide the requested allocation,
+    /// for example because it is oversubscribed, the call will be **rejected**.
+    ///
+    /// Default value: 0
     pub compute_allocation: Option<Nat>,
-    /// Must be a number between 0 and 2^48^ (i.e 256TB), inclusively.
+    /// Must be a number between 0 and 2<sup>48</sup> (i.e 256TB), inclusively.
+    ///
+    /// It indicates how much memory the canister is allowed to use in total.
+    ///
+    /// If the IC cannot provide the requested allocation,
+    /// for example because it is oversubscribed, the call will be **rejected**.
+    ///
+    /// If set to 0, then memory growth of the canister will be best-effort and subject to the available memory on the IC.
+    ///
+    /// Default value: 0
     pub memory_allocation: Option<Nat>,
-    /// Must be a number between 0 and 2^64^-1, inclusively, and indicates a length of time in seconds.
+    /// Must be a number between 0 and 2<sup>64</sup>-1, inclusively.
+    ///
+    /// It indicates a length of time in seconds.
+    ///
+    /// Default value: 2592000 (approximately 30 days).
     pub freezing_threshold: Option<Nat>,
-    /// Must be a number between 0 and 2^128^-1, inclusively, and indicates the
-    /// upper limit on cycles in the `reserved_cycles` balance of the canister.
+    /// Must be a number between 0 and 2<sup>128</sup>-1, inclusively.
+    ///
+    /// It indicates the upper limit on `reserved_cycles` of the canister.
+    ///
+    /// Default value: 5_000_000_000_000 (5 trillion cycles).
     pub reserved_cycles_limit: Option<Nat>,
+    /// Must be a number between 0 and 2<sup>48</sup>-1 (i.e 256TB), inclusively.
+    ///
+    /// It indicates the upper limit on the WASM heap memory consumption of the canister.
+    ///
+    /// Default value: 3_221_225_472 (3 GiB).
+    pub wasm_memory_limit: Option<Nat>,
 }
 
 /// Argument type of [create_canister](super::create_canister).
@@ -281,6 +317,8 @@ pub struct DefiniteCanisterSettings {
     pub freezing_threshold: Nat,
     /// Reserved cycles limit.
     pub reserved_cycles_limit: Nat,
+    /// The Wasm memory limit.
+    pub wasm_memory_limit: Nat,
 }
 
 /// Query statistics, returned by [canister_status](super::canister_status).
