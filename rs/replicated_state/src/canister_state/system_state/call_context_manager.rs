@@ -393,32 +393,35 @@ impl CallContextManager {
 
     /// Validates the given response before inducting it into the queue.
     /// Verifies that the stored respondent and originator associated with the
-    /// `callback_id` match with details provided by the response.
+    /// `callback_id`, as well as its deadline match those of the response.
     ///
     /// Returns a `StateError::NonMatchingResponse` if the `callback_id` was not found
     /// or if the response is not valid.
     pub(crate) fn validate_response(&self, response: &Response) -> Result<(), StateError> {
         match self.callback(response.originator_reply_callback) {
             Some(callback) if response.respondent != callback.respondent
-                    || response.originator != callback.originator => {
+                    || response.originator != callback.originator
+                    || response.deadline != callback.deadline => {
                 Err(StateError::NonMatchingResponse {
                     err_str: format!(
-                        "invalid details, expected => [originator => {}, respondent => {}], but got response with",
-                        callback.originator, callback.respondent,
+                        "invalid details, expected => [originator => {}, respondent => {}, deadline => {}], but got response with",
+                        callback.originator, callback.respondent, Time::from(callback.deadline)
                     ),
                     originator: response.originator,
                     callback_id: response.originator_reply_callback,
                     respondent: response.respondent,
+                    deadline: response.deadline,
                 })
             }
             Some(_) => Ok(()),
             None => {
                 // Received an unknown callback ID.
                 Err(StateError::NonMatchingResponse {
-                    err_str: "unknown callback id".to_string(),
+                    err_str: "unknown callback ID".to_string(),
                     originator: response.originator,
                     callback_id: response.originator_reply_callback,
                     respondent: response.respondent,
+                    deadline: response.deadline,
                 })
             }
         }
