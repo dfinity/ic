@@ -8,7 +8,7 @@ use ic_metrics::{
 use ic_types::{
     batch::BatchPayload,
     consensus::{
-        ecdsa::{
+        idkg::{
             CompletedReshareRequest, CompletedSignature, EcdsaPayload, HasEcdsaKeyId,
             KeyTranscriptCreation,
         },

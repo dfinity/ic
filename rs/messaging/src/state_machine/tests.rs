@@ -18,7 +18,7 @@ use ic_test_utilities_metrics::fetch_int_counter_vec;
 use ic_test_utilities_types::{
     batch::BatchBuilder, ids::subnet_test_id, messages::SignedIngressBuilder,
 };
-use ic_types::consensus::ecdsa::QuadrupleId;
+use ic_types::consensus::idkg::QuadrupleId;
 use ic_types::messages::SignedIngress;
 use ic_types::{batch::BatchMessages, crypto::canister_threshold_sig::MasterPublicKey};
 use ic_types::{Height, PrincipalId, SubnetId, Time};

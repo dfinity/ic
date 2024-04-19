@@ -817,7 +817,7 @@ mod tests {
     use ic_types::{
         batch::ValidationContext,
         consensus::{
-            ecdsa::{self, EcdsaKeyTranscript, EcdsaUIDGenerator, TranscriptAttributes},
+            idkg::{self, EcdsaKeyTranscript, EcdsaUIDGenerator, TranscriptAttributes},
             Block, BlockPayload, CatchUpContent, HashedBlock, HashedRandomBeacon, Payload,
             RandomBeacon, RandomBeaconContent, Rank, SummaryPayload,
         },
@@ -835,9 +835,9 @@ mod tests {
         key_transcript: Option<&IDkgTranscript>,
     ) -> CatchUpPackage {
         let unmasked = key_transcript.map(|t| {
-            ecdsa::UnmaskedTranscriptWithAttributes::new(
+            idkg::UnmaskedTranscriptWithAttributes::new(
                 t.to_attributes(),
-                ecdsa::UnmaskedTranscript::try_from((h, t)).unwrap(),
+                idkg::UnmaskedTranscript::try_from((h, t)).unwrap(),
             )
         });
 
@@ -845,7 +845,7 @@ mod tests {
             .map(|t| BTreeMap::from_iter(vec![(t.transcript_id, t.clone())]))
             .unwrap_or_default();
 
-        let ecdsa = ecdsa::EcdsaPayload {
+        let ecdsa = idkg::EcdsaPayload {
             signature_agreements: BTreeMap::new(),
             deprecated_ongoing_signatures: BTreeMap::new(),
             available_quadruples: BTreeMap::new(),
@@ -856,7 +856,7 @@ mod tests {
             xnet_reshare_agreements: BTreeMap::new(),
             key_transcript: EcdsaKeyTranscript {
                 current: unmasked,
-                next_in_creation: ecdsa::KeyTranscriptCreation::Begin,
+                next_in_creation: idkg::KeyTranscriptCreation::Begin,
                 key_id: EcdsaKeyId {
                     curve: EcdsaCurve::Secp256k1,
                     name: key_id.to_string(),

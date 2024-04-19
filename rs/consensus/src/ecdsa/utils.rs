@@ -14,12 +14,12 @@ use ic_registry_client_helpers::ecdsa_keys::EcdsaKeysRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_features::EcdsaConfig;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithEcdsaContext;
-use ic_types::consensus::ecdsa::{PreSignatureQuadrupleRef, QuadrupleId};
+use ic_types::consensus::idkg::ecdsa::{PreSignatureQuadrupleRef, ThresholdEcdsaSigInputsRef};
 use ic_types::consensus::Block;
 use ic_types::consensus::{
-    ecdsa::{
-        EcdsaBlockReader, EcdsaMessage, IDkgTranscriptParamsRef, RequestId,
-        ThresholdEcdsaSigInputsRef, TranscriptLookupError, TranscriptRef,
+    idkg::{
+        EcdsaBlockReader, EcdsaMessage, IDkgTranscriptParamsRef, QuadrupleId, RequestId,
+        TranscriptLookupError, TranscriptRef,
     },
     HasHeight,
 };
@@ -533,7 +533,7 @@ mod tests {
     use ic_types::{
         batch::ValidationContext,
         consensus::{
-            ecdsa::{EcdsaPayload, UnmaskedTranscript},
+            idkg::{EcdsaPayload, UnmaskedTranscript},
             BlockPayload, Payload, SummaryPayload,
         },
         crypto::{AlgorithmId, CryptoHashOf},

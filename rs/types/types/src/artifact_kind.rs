@@ -8,7 +8,7 @@ use crate::{
         certification::CertificationMessage,
         dkg::DkgMessageId,
         dkg::Message as DkgMessage,
-        ecdsa::{EcdsaMessage, EcdsaMessageAttribute},
+        idkg::{EcdsaMessage, EcdsaMessageAttribute},
         ConsensusMessage,
     },
     crypto::crypto_hash,

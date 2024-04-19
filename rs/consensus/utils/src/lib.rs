@@ -13,9 +13,7 @@ use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_client_helpers::subnet::{NotarizationDelaySettings, SubnetRegistry};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    consensus::{
-        ecdsa::EcdsaPayload, Block, BlockProposal, HasCommittee, HasHeight, HasRank, Rank,
-    },
+    consensus::{idkg::EcdsaPayload, Block, BlockProposal, HasCommittee, HasHeight, HasRank, Rank},
     crypto::{
         threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript},
         CryptoHash, CryptoHashable, Signed,
@@ -613,9 +611,9 @@ mod tests {
         messages::RequestBuilder,
     };
     use ic_types::{
-        consensus::ecdsa::{
-            EcdsaKeyTranscript, EcdsaUIDGenerator, KeyTranscriptCreation, MaskedTranscript,
-            PreSignatureQuadrupleRef, QuadrupleId, UnmaskedTranscript,
+        consensus::idkg::{
+            ecdsa::PreSignatureQuadrupleRef, EcdsaKeyTranscript, EcdsaUIDGenerator,
+            KeyTranscriptCreation, MaskedTranscript, QuadrupleId, UnmaskedTranscript,
         },
         crypto::{
             canister_threshold_sig::idkg::{

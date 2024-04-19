@@ -282,7 +282,7 @@ mod tests {
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
-        consensus::{ecdsa::QuadrupleId, BlockPayload, Payload, SummaryPayload},
+        consensus::{idkg::QuadrupleId, BlockPayload, Payload, SummaryPayload},
         crypto::CryptoHash,
         CryptoHashOfState, Height, RegistryVersion,
     };

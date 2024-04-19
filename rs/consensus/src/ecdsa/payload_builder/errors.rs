@@ -1,7 +1,7 @@
 use ic_crypto::MegaKeyFromRegistryError;
 use ic_interfaces_state_manager::StateManagerError;
 use ic_types::{
-    consensus::ecdsa,
+    consensus::idkg,
     crypto::canister_threshold_sig::{
         error::{
             EcdsaPresignatureQuadrupleCreationError, IDkgParamsValidationError,
@@ -29,14 +29,14 @@ pub(crate) enum EcdsaPayloadError {
     IDkgParamsValidationError(IDkgParamsValidationError),
     IDkgTranscriptIdError(IDkgTranscriptIdError),
     ThresholdEcdsaSigInputsCreationError(ThresholdEcdsaSigInputsCreationError),
-    TranscriptLookupError(ecdsa::TranscriptLookupError),
-    TranscriptCastError(ecdsa::TranscriptCastError),
+    TranscriptLookupError(idkg::TranscriptLookupError),
+    TranscriptCastError(idkg::TranscriptCastError),
     InvalidChainCacheError(InvalidChainCacheError),
     InitialIDkgDealingsNotUnmaskedParams(Box<InitialIDkgDealings>),
 }
 
-impl From<ecdsa::TranscriptLookupError> for EcdsaPayloadError {
-    fn from(err: ecdsa::TranscriptLookupError) -> Self {
+impl From<idkg::TranscriptLookupError> for EcdsaPayloadError {
+    fn from(err: idkg::TranscriptLookupError) -> Self {
         EcdsaPayloadError::TranscriptLookupError(err)
     }
 }
@@ -77,8 +77,8 @@ impl From<ThresholdEcdsaSigInputsCreationError> for EcdsaPayloadError {
     }
 }
 
-impl From<ecdsa::TranscriptCastError> for EcdsaPayloadError {
-    fn from(err: ecdsa::TranscriptCastError) -> Self {
+impl From<idkg::TranscriptCastError> for EcdsaPayloadError {
+    fn from(err: idkg::TranscriptCastError) -> Self {
         EcdsaPayloadError::TranscriptCastError(err)
     }
 }

@@ -40,8 +40,7 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::ValidationContext,
     consensus::{
-        ecdsa,
-        ecdsa::{EcdsaBlockReader, TranscriptRef},
+        idkg::{self, ecdsa, EcdsaBlockReader, TranscriptRef},
         Block, BlockPayload, HasHeight,
     },
     crypto::canister_threshold_sig::{
@@ -79,7 +78,7 @@ pub(crate) enum PermanentError {
     UnexpectedDataPayload(Option<EcdsaPayloadError>),
     InvalidChainCacheError(InvalidChainCacheError),
     ThresholdEcdsaSigInputsError(ecdsa::ThresholdEcdsaSigInputsError),
-    TranscriptParamsError(ecdsa::TranscriptParamsError),
+    TranscriptParamsError(idkg::TranscriptParamsError),
     ThresholdEcdsaVerifyCombinedSignatureError(ThresholdEcdsaVerifyCombinedSignatureError),
     IDkgVerifyTranscriptError(IDkgVerifyTranscriptError),
     IDkgVerifyInitialDealingsError(IDkgVerifyInitialDealingsError),
@@ -93,11 +92,11 @@ pub(crate) enum PermanentError {
     NewTranscriptNotFound(IDkgTranscriptId),
     NewTranscriptMiscount(u64),
     NewTranscriptMissingParams(IDkgTranscriptId),
-    NewSignatureUnexpected(ecdsa::PseudoRandomId),
-    NewSignatureMissingInput(ecdsa::PseudoRandomId),
-    NewSignatureMissingContext(ecdsa::PseudoRandomId),
-    XNetReshareAgreementWithoutRequest(ecdsa::EcdsaReshareRequest),
-    XNetReshareRequestDisappeared(ecdsa::EcdsaReshareRequest),
+    NewSignatureUnexpected(idkg::PseudoRandomId),
+    NewSignatureMissingInput(idkg::PseudoRandomId),
+    NewSignatureMissingContext(idkg::PseudoRandomId),
+    XNetReshareAgreementWithoutRequest(idkg::EcdsaReshareRequest),
+    XNetReshareRequestDisappeared(idkg::EcdsaReshareRequest),
     DecodingError(String),
 }
 
@@ -125,8 +124,8 @@ impl From<ecdsa::ThresholdEcdsaSigInputsError> for PermanentError {
     }
 }
 
-impl From<ecdsa::TranscriptParamsError> for PermanentError {
-    fn from(err: ecdsa::TranscriptParamsError) -> Self {
+impl From<idkg::TranscriptParamsError> for PermanentError {
+    fn from(err: idkg::TranscriptParamsError) -> Self {
         PermanentError::TranscriptParamsError(err)
     }
 }
@@ -214,7 +213,7 @@ fn validate_summary_payload(
     pool_reader: &PoolReader<'_>,
     context: &ValidationContext,
     parent_block: &Block,
-    summary_payload: Option<&ecdsa::EcdsaPayload>,
+    summary_payload: Option<&idkg::EcdsaPayload>,
 ) -> ValidationResult<EcdsaValidationError> {
     let height = parent_block.height().increment();
     let registry_version = pool_reader
@@ -270,7 +269,7 @@ fn validate_data_payload(
     state_manager: &dyn StateManager<State = ReplicatedState>,
     context: &ValidationContext,
     parent_block: &Block,
-    data_payload: Option<&ecdsa::EcdsaPayload>,
+    data_payload: Option<&idkg::EcdsaPayload>,
     metrics: &HistogramVec,
 ) -> ValidationResult<EcdsaValidationError> {
     if parent_block.payload.as_ref().as_ecdsa().is_none() {
@@ -395,7 +394,7 @@ fn validate_data_payload(
 struct CachedBuilder {
     transcripts: BTreeMap<IDkgTranscriptId, IDkgTranscript>,
     dealings: BTreeMap<IDkgTranscriptId, Vec<SignedIDkgDealing>>,
-    signatures: BTreeMap<ecdsa::PseudoRandomId, ThresholdEcdsaCombinedSignature>,
+    signatures: BTreeMap<idkg::PseudoRandomId, ThresholdEcdsaCombinedSignature>,
 }
 
 impl EcdsaTranscriptBuilder for CachedBuilder {
@@ -430,8 +429,8 @@ impl EcdsaSignatureBuilder for CachedBuilder {
 fn validate_transcript_refs(
     crypto: &dyn ConsensusCrypto,
     block_reader: &dyn EcdsaBlockReader,
-    prev_payload: &ecdsa::EcdsaPayload,
-    curr_payload: &ecdsa::EcdsaPayload,
+    prev_payload: &idkg::EcdsaPayload,
+    curr_payload: &idkg::EcdsaPayload,
     curr_height: Height,
 ) -> Result<BTreeMap<IDkgTranscriptId, IDkgTranscript>, EcdsaValidationError> {
     use PermanentError::*;
@@ -474,13 +473,13 @@ fn validate_transcript_refs(
 fn validate_reshare_dealings(
     crypto: &dyn ConsensusCrypto,
     block_reader: &dyn EcdsaBlockReader,
-    prev_payload: &ecdsa::EcdsaPayload,
-    curr_payload: &ecdsa::EcdsaPayload,
+    prev_payload: &idkg::EcdsaPayload,
+    curr_payload: &idkg::EcdsaPayload,
 ) -> Result<BTreeMap<IDkgTranscriptId, Vec<SignedIDkgDealing>>, EcdsaValidationError> {
     use PermanentError::*;
     let mut new_reshare_agreement = BTreeMap::new();
     for (request, dealings) in curr_payload.xnet_reshare_agreements.iter() {
-        if let ecdsa::CompletedReshareRequest::Unreported(dealings) = &dealings {
+        if let idkg::CompletedReshareRequest::Unreported(dealings) = &dealings {
             if prev_payload.xnet_reshare_agreements.get(request).is_none() {
                 if prev_payload.ongoing_xnet_reshares.get(request).is_none() {
                     return Err(XNetReshareAgreementWithoutRequest(request.clone()).into());
@@ -524,10 +523,9 @@ fn validate_new_signature_agreements(
     crypto: &dyn ConsensusCrypto,
     block_reader: &dyn EcdsaBlockReader,
     state: &ReplicatedState,
-    prev_payload: &ecdsa::EcdsaPayload,
-    curr_payload: &ecdsa::EcdsaPayload,
-) -> Result<BTreeMap<ecdsa::PseudoRandomId, ThresholdEcdsaCombinedSignature>, EcdsaValidationError>
-{
+    prev_payload: &idkg::EcdsaPayload,
+    curr_payload: &idkg::EcdsaPayload,
+) -> Result<BTreeMap<idkg::PseudoRandomId, ThresholdEcdsaCombinedSignature>, EcdsaValidationError> {
     use PermanentError::*;
     let mut new_signatures = BTreeMap::new();
     let context_map = state
@@ -537,7 +535,7 @@ fn validate_new_signature_agreements(
         .collect::<BTreeMap<_, _>>();
 
     for (random_id, completed) in curr_payload.signature_agreements.iter() {
-        if let ecdsa::CompletedSignature::Unreported(response) = completed {
+        if let idkg::CompletedSignature::Unreported(response) = completed {
             if let ic_types::messages::Payload::Data(data) = &response.payload {
                 use ic_management_canister_types::{Payload, SignWithECDSAReply};
                 let reply = SignWithECDSAReply::decode(data)
@@ -588,7 +586,10 @@ mod test {
     use ic_test_utilities::crypto::CryptoReturningOk;
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
-        consensus::ecdsa::CompletedSignature, crypto::AlgorithmId, messages::CallbackId, Height,
+        consensus::idkg::{ecdsa::PreSignatureQuadrupleRef, CompletedSignature},
+        crypto::AlgorithmId,
+        messages::CallbackId,
+        Height,
     };
     use std::{collections::BTreeSet, str::FromStr};
 
@@ -639,17 +640,15 @@ mod test {
 
         // Add the reference
         prev_payload.key_transcript.next_in_creation =
-            ecdsa::KeyTranscriptCreation::RandomTranscriptParams(
-                ecdsa::RandomTranscriptParams::new(
-                    transcript_id_0,
-                    env.nodes.ids(),
-                    env.nodes.ids(),
-                    registry_version,
-                    algorithm_id,
-                ),
-            );
+            idkg::KeyTranscriptCreation::RandomTranscriptParams(idkg::RandomTranscriptParams::new(
+                transcript_id_0,
+                env.nodes.ids(),
+                env.nodes.ids(),
+                registry_version,
+                algorithm_id,
+            ));
         curr_payload.key_transcript.next_in_creation =
-            ecdsa::KeyTranscriptCreation::Created(transcript_ref_0);
+            idkg::KeyTranscriptCreation::Created(transcript_ref_0);
         let res = validate_transcript_refs(
             crypto,
             &block_reader,
@@ -677,7 +676,7 @@ mod test {
         let (transcript_1, transcript_ref_1, _) =
             generate_key_transcript(&env, &mut rng, height_100);
         curr_payload.key_transcript.next_in_creation =
-            ecdsa::KeyTranscriptCreation::Created(transcript_ref_1);
+            idkg::KeyTranscriptCreation::Created(transcript_ref_1);
         assert_matches!(
             validate_transcript_refs(
                 crypto,
@@ -748,7 +747,7 @@ mod test {
         assert_eq!(payload.xnet_reshare_agreements.len(), 1);
         assert_matches!(
             payload.xnet_reshare_agreements.get(&req_1).unwrap(),
-            ecdsa::CompletedReshareRequest::Unreported(_)
+            idkg::CompletedReshareRequest::Unreported(_)
         );
 
         // The payload should verify, and should return 1 dealing.
@@ -1020,7 +1019,7 @@ mod test {
     #[test]
     fn should_not_verify_same_transcript_many_times() {
         let mut rng = reproducible_rng();
-        use ic_types::consensus::ecdsa::*;
+        use ic_types::consensus::idkg::*;
         let num_of_nodes = 4;
         let subnet_id = subnet_test_id(1);
         let env = CanisterThresholdSigTestEnvironment::new(num_of_nodes, &mut rng);
@@ -1042,7 +1041,7 @@ mod test {
             let transcript_id = transcript_id_0.increment();
             let dealers: BTreeSet<_> = env.nodes.ids();
             let receivers = dealers.clone();
-            let param = ecdsa::RandomTranscriptParams::new(
+            let param = idkg::RandomTranscriptParams::new(
                 transcript_id,
                 dealers,
                 receivers,
@@ -1055,7 +1054,7 @@ mod test {
             )
         };
         let masked_transcript_1 =
-            ecdsa::MaskedTranscript::try_from((Height::new(10), &transcript_1)).unwrap();
+            idkg::MaskedTranscript::try_from((Height::new(10), &transcript_1)).unwrap();
         block_reader.add_transcript(
             TranscriptRef::new(Height::new(10), transcript_1.transcript_id),
             transcript_1,
@@ -1066,7 +1065,7 @@ mod test {
             .insert(transcript_id_0, transcript_0.clone());
 
         // Add the reference
-        let random_params = ecdsa::RandomTranscriptParams::new(
+        let random_params = idkg::RandomTranscriptParams::new(
             transcript_id_0,
             env.nodes.ids(),
             env.nodes.ids(),
@@ -1074,15 +1073,14 @@ mod test {
             algorithm_id,
         );
         prev_payload.key_transcript.next_in_creation =
-            ecdsa::KeyTranscriptCreation::RandomTranscriptParams(random_params);
+            idkg::KeyTranscriptCreation::RandomTranscriptParams(random_params);
         curr_payload.key_transcript.next_in_creation =
-            ecdsa::KeyTranscriptCreation::Created(transcript_ref_0);
+            idkg::KeyTranscriptCreation::Created(transcript_ref_0);
 
         const NUM_MALICIOUS_REFS: i32 = 10_000;
         for i in 0..NUM_MALICIOUS_REFS {
             let malicious_transcript_ref =
-                ecdsa::UnmaskedTranscript::try_from((Height::new(i as u64), &transcript_0))
-                    .unwrap();
+                idkg::UnmaskedTranscript::try_from((Height::new(i as u64), &transcript_0)).unwrap();
             curr_payload.available_quadruples.insert(
                 curr_payload.uid_generator.next_quadruple_id(),
                 PreSignatureQuadrupleRef {

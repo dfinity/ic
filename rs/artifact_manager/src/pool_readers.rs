@@ -13,7 +13,7 @@ use ic_types::{
         certification::CertificationMessage,
         dkg::DkgMessageId,
         dkg::Message as DkgMessage,
-        ecdsa::{EcdsaMessage, EcdsaMessageAttribute},
+        idkg::{EcdsaMessage, EcdsaMessageAttribute},
         ConsensusMessage,
     },
     malicious_flags::MaliciousFlags,

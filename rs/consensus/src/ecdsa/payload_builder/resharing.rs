@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use ic_logger::{warn, ReplicaLogger};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::EcdsaDealingsContext;
 use ic_types::{
-    consensus::ecdsa::{self, EcdsaBlockReader, EcdsaReshareRequest},
+    consensus::idkg::{self, EcdsaBlockReader, EcdsaReshareRequest},
     crypto::canister_threshold_sig::{
         error::InitialIDkgDealingsValidationError, idkg::InitialIDkgDealings,
     },
@@ -13,12 +13,12 @@ use ic_types::{
 use crate::ecdsa::pre_signer::EcdsaTranscriptBuilder;
 
 /// Checks for new reshare requests from execution and initiates the processing
-/// by adding a new [`ecdsa::ReshareOfUnmaskedParams`] config to ongoing xnet reshares.
+/// by adding a new [`idkg::ReshareOfUnmaskedParams`] config to ongoing xnet reshares.
 // TODO: in future, we may need to maintain a key transcript per supported key_id,
 // and reshare the one specified by reshare_request.key_id.
 pub(crate) fn initiate_reshare_requests(
-    payload: &mut ecdsa::EcdsaPayload,
-    reshare_requests: BTreeSet<ecdsa::EcdsaReshareRequest>,
+    payload: &mut idkg::EcdsaPayload,
+    reshare_requests: BTreeSet<idkg::EcdsaReshareRequest>,
 ) {
     let Some(key_transcript) = &payload.key_transcript.current else {
         return;
@@ -39,7 +39,7 @@ pub(crate) fn initiate_reshare_requests(
             .iter()
             .copied()
             .collect::<BTreeSet<_>>();
-        let transcript_params = ecdsa::ReshareOfUnmaskedParams::new(
+        let transcript_params = idkg::ReshareOfUnmaskedParams::new(
             transcript_id,
             receivers,
             request.registry_version,
@@ -77,9 +77,9 @@ fn make_reshare_dealings_response(
 /// - getting the validated dealings for each ongoing xnet reshare transcript
 /// - attempting to build the new [`InitialIDkgDealings`] (fails if there aren't enough dealings)
 /// - if successful, moving the request to completed agreements as
-///   [`ecdsa::CompletedReshareRequest::Unreported`].
+///   [`idkg::CompletedReshareRequest::Unreported`].
 pub(crate) fn update_completed_reshare_requests(
-    payload: &mut ecdsa::EcdsaPayload,
+    payload: &mut idkg::EcdsaPayload,
     ecdsa_dealings_contexts: &BTreeMap<CallbackId, EcdsaDealingsContext>,
     resolver: &dyn EcdsaBlockReader,
     transcript_builder: &dyn EcdsaTranscriptBuilder,
@@ -123,17 +123,16 @@ pub(crate) fn update_completed_reshare_requests(
     payload
         .xnet_reshare_agreements
         .iter_mut()
-        .for_each(|(_, value)| *value = ecdsa::CompletedReshareRequest::ReportedToExecution);
+        .for_each(|(_, value)| *value = idkg::CompletedReshareRequest::ReportedToExecution);
 
     for (request, initial_dealings) in completed_reshares {
         if let Some(response) =
             make_reshare_dealings_response(&request, &initial_dealings, ecdsa_dealings_contexts)
         {
             payload.ongoing_xnet_reshares.remove(&request);
-            payload.xnet_reshare_agreements.insert(
-                request,
-                ecdsa::CompletedReshareRequest::Unreported(response),
-            );
+            payload
+                .xnet_reshare_agreements
+                .insert(request, idkg::CompletedReshareRequest::Unreported(response));
         } else {
             warn!(
                 log,
@@ -146,7 +145,7 @@ pub(crate) fn update_completed_reshare_requests(
 /// Translates the reshare requests in the replicated state to the internal format
 pub(super) fn get_reshare_requests(
     ecdsa_dealings_contexts: &BTreeMap<CallbackId, EcdsaDealingsContext>,
-) -> BTreeSet<ecdsa::EcdsaReshareRequest> {
+) -> BTreeSet<idkg::EcdsaReshareRequest> {
     ecdsa_dealings_contexts
         .values()
         .map(reshare_request_from_dealings_context)
@@ -155,8 +154,8 @@ pub(super) fn get_reshare_requests(
 
 fn reshare_request_from_dealings_context(
     context: &EcdsaDealingsContext,
-) -> ecdsa::EcdsaReshareRequest {
-    ecdsa::EcdsaReshareRequest {
+) -> idkg::EcdsaReshareRequest {
+    idkg::EcdsaReshareRequest {
         key_id: context.key_id.clone(),
         master_key_id: None,
         receiving_node_ids: context.nodes.iter().copied().collect(),
@@ -176,8 +175,8 @@ pub mod test_utils {
         key_id: EcdsaKeyId,
         num_nodes: u64,
         registry_version: u64,
-    ) -> ecdsa::EcdsaReshareRequest {
-        ecdsa::EcdsaReshareRequest {
+    ) -> idkg::EcdsaReshareRequest {
+        idkg::EcdsaReshareRequest {
             key_id,
             master_key_id: None,
             receiving_node_ids: (0..num_nodes).map(node_test_id).collect::<Vec<_>>(),
@@ -202,7 +201,7 @@ mod tests {
     use ic_management_canister_types::{ComputeInitialEcdsaDealingsResponse, EcdsaKeyId};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
-        consensus::ecdsa::{EcdsaPayload, EcdsaReshareRequest},
+        consensus::idkg::{EcdsaPayload, EcdsaReshareRequest},
         crypto::AlgorithmId,
         RegistryVersion,
     };
@@ -352,7 +351,7 @@ mod tests {
         let request = create_reshare_request(key_id, 1, 1);
         payload.xnet_reshare_agreements.insert(
             request.clone(),
-            ecdsa::CompletedReshareRequest::ReportedToExecution,
+            idkg::CompletedReshareRequest::ReportedToExecution,
         );
 
         initiate_reshare_requests(&mut payload, BTreeSet::from([request]));
@@ -412,7 +411,7 @@ mod tests {
         assert_eq!(payload.xnet_reshare_agreements.len(), 1);
         assert_eq!(
             *payload.xnet_reshare_agreements.get(&request_1).unwrap(),
-            ecdsa::CompletedReshareRequest::Unreported(consensus_response(
+            idkg::CompletedReshareRequest::Unreported(consensus_response(
                 callback_1,
                 &InitialIDkgDealings::new(
                     reshare_params_1.translate(&block_reader).unwrap(),
@@ -443,11 +442,11 @@ mod tests {
         assert_eq!(payload.xnet_reshare_agreements.len(), 2);
         assert_eq!(
             *payload.xnet_reshare_agreements.get(&request_1).unwrap(),
-            ecdsa::CompletedReshareRequest::ReportedToExecution
+            idkg::CompletedReshareRequest::ReportedToExecution
         );
         assert_eq!(
             *payload.xnet_reshare_agreements.get(&request_2).unwrap(),
-            ecdsa::CompletedReshareRequest::Unreported(consensus_response(
+            idkg::CompletedReshareRequest::Unreported(consensus_response(
                 callback_2,
                 &InitialIDkgDealings::new(
                     reshare_params_2.translate(&block_reader).unwrap(),
@@ -468,11 +467,11 @@ mod tests {
         assert_eq!(payload.xnet_reshare_agreements.len(), 2);
         assert_matches!(
             payload.xnet_reshare_agreements.get(&request_1).unwrap(),
-            ecdsa::CompletedReshareRequest::ReportedToExecution
+            idkg::CompletedReshareRequest::ReportedToExecution
         );
         assert_matches!(
             payload.xnet_reshare_agreements.get(&request_2).unwrap(),
-            ecdsa::CompletedReshareRequest::ReportedToExecution
+            idkg::CompletedReshareRequest::ReportedToExecution
         );
     }
 }

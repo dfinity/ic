@@ -1667,7 +1667,7 @@ pub mod test {
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
         consensus::{
-            ecdsa::QuadrupleId, BlockPayload, CatchUpPackageShare, Finalization, FinalizationShare,
+            idkg::QuadrupleId, BlockPayload, CatchUpPackageShare, Finalization, FinalizationShare,
             HashedBlock, HashedRandomBeacon, NotarizationShare, Payload, RandomBeaconContent,
             RandomTapeContent, SummaryPayload,
         },

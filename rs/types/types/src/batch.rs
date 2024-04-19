@@ -18,7 +18,7 @@ pub use self::{
     xnet::XNetPayload,
 };
 use crate::{
-    consensus::ecdsa::QuadrupleId,
+    consensus::idkg::QuadrupleId,
     crypto::canister_threshold_sig::MasterPublicKey,
     messages::{CallbackId, Payload, SignedIngress, NO_DEADLINE},
     time::CoarseTime,
