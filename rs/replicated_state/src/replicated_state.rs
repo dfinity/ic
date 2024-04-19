@@ -19,6 +19,7 @@ use ic_types::{
     batch::{ConsensusResponse, RawQueryStats},
     ingress::IngressStatus,
     messages::{CallbackId, CanisterMessage, Ingress, MessageId, RequestOrResponse, Response},
+    time::CoarseTime,
     xnet::QueueId,
     CanisterId, MemoryAllocation, NumBytes, SubnetId, Time,
 };
@@ -85,6 +86,7 @@ pub enum StateError {
         originator: CanisterId,
         callback_id: CallbackId,
         respondent: CanisterId,
+        deadline: CoarseTime,
     },
 
     /// Message enqueuing failed due to calling a subnet method with
@@ -282,10 +284,10 @@ impl std::fmt::Display for StateError {
                 "Cannot enqueue management message. Method {} is unknown.",
                 method
             ),
-            StateError::NonMatchingResponse {err_str, originator, callback_id, respondent} => write!(
+            StateError::NonMatchingResponse {err_str, originator, callback_id, respondent, deadline} => write!(
                 f,
-                "Cannot enqueue response with callback id {} due to {} : originator => {}, respondent => {}",
-                callback_id, err_str, originator, respondent
+                "Cannot enqueue response with callback id {} due to {} : originator => {}, respondent => {}, deadline => {}",
+                callback_id, err_str, originator, respondent, Time::from(*deadline)
             ),
             StateError::InvalidSubnetPayload => write!(
                 f,
