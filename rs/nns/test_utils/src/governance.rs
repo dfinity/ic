@@ -367,14 +367,16 @@ pub async fn upgrade_root_canister_by_proposal(
     );
 
     for _ in 0..100 {
-        let status: CanisterStatusResult = root
+        let Ok(status): Result<CanisterStatusResult, _> = root
             .update_(
                 "canister_status",
                 candid_one,
                 CanisterIdRecord::from(ROOT_CANISTER_ID),
             )
             .await
-            .unwrap();
+        else {
+            continue;
+        };
         if status.module_hash.unwrap().as_slice() == new_module_hash
             && status.status == CanisterStatusType::Running
         {
