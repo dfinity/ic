@@ -10,7 +10,7 @@ use crate::invariants::common::{
 use ic_base_types::SubnetId;
 use ic_base_types::{NodeId, PrincipalId};
 use ic_nns_common::registry::{decode_or_panic, MAX_NUM_SSH_KEYS};
-use ic_protobuf::registry::subnet::v1::{SubnetRecord, SubnetType};
+use ic_protobuf::registry::subnet::v1::{ChainKeyConfig, SubnetRecord, SubnetType};
 use ic_registry_keys::{make_node_record_key, make_subnet_record_key, SUBNET_RECORD_KEY_PREFIX};
 
 /// Subnet invariants hold iff:
@@ -119,6 +119,95 @@ pub(crate) fn check_subnet_invariants(
     //}
 
     Ok(())
+}
+
+// TODO[NNS1-2986]: Remove this function after the migration has been performed.
+pub fn subnet_record_mutations_from_ecdsa_configs_to_chain_key_configs(
+    snapshot: &RegistrySnapshot,
+) -> Vec<ic_registry_transport::pb::v1::RegistryMutation> {
+    #[cfg(target_arch = "wasm32")]
+    use dfn_core::println;
+
+    let mut subnet_records_map = get_subnet_records_map(snapshot);
+    let subnet_id_list = get_subnet_ids_from_snapshot(snapshot);
+    let mut mutations = vec![];
+
+    for subnet_id in subnet_id_list {
+        let mut subnet_record = subnet_records_map
+            .remove(&make_subnet_record_key(subnet_id).into_bytes())
+            .unwrap_or_else(|| {
+                panic!(
+                    "Subnet {:} is in subnet list but no record exists",
+                    subnet_id
+                );
+            });
+
+        let chain_key_config = match (
+            subnet_record.ecdsa_config.as_ref(),
+            subnet_record.chain_key_config.as_ref(),
+        ) {
+            (None, None) => {
+                println!(
+                    "Neither ecdsa_config nor chain_key_config are specified in subnet record \
+                     of subnet ID {:?}. Skipping this subnet record.",
+                    subnet_id,
+                );
+                continue;
+            }
+            (None, Some(chain_key_config)) => {
+                // This code should not be reachable, as all operations that set `ecdsa_config`
+                // in subnet records should also set `chain_key_config` to an equavalent value.
+                panic!(
+                    "ecdsa_config not specified, but chain_key_config is specified in subnet \
+                     record of subnet ID {:?}. chain_key_config = {:?}. There must be a bug. \
+                     Aborting Registry upgrade ...",
+                    subnet_id, chain_key_config,
+                );
+            }
+            (Some(ecdsa_config), None) => {
+                // The normal case: We need to retrofit data into `chain_key_config`.
+                let chain_key_config = ChainKeyConfig::from(ecdsa_config.clone());
+                println!(
+                    "Retrofitting data from ecdsa_config to initialize chain_key_config \
+                     in subnet record of subnet ID {:?}. \
+                     ecdsa_config = {:?}. chain_key_config = {:?}.",
+                    subnet_id, ecdsa_config, chain_key_config,
+                );
+                chain_key_config
+            }
+            (Some(ecdsa_config), Some(chain_key_config)) => {
+                // This might happen only if someone invoked a Registry operation that set or
+                // changed the value of the `subnet_record.ecdsa_config` field, thereby setting
+                // a value also for `subnet_record.chain_key_config`.
+                // Comparing debug string representations to circumvent the fact that these types
+                // do not implement `PartialEq`.
+                assert_eq!(
+                    format!("{:?}", chain_key_config),
+                    format!("{:?}", ChainKeyConfig::from(ecdsa_config.clone())),
+                    "Inconsistency detected between already-present chain_key_config and data \
+                     from ecdsa_config. There must be a bug. Aborting Registry upgrade ..."
+                );
+                println!(
+                    "Both ecdsa_config and chain_key_config are specified in subnet record \
+                     of subnet ID {:?}. chain_key_config = f(ecdsa_config) = {:?}. \
+                     Skipping this subnet record.",
+                    subnet_id, chain_key_config,
+                );
+                continue;
+            }
+        };
+
+        subnet_record.chain_key_config = Some(chain_key_config);
+
+        let subnet_record_mutation = ic_registry_transport::upsert(
+            make_subnet_record_key(subnet_id).into_bytes(),
+            crate::mutations::common::encode_or_panic(&subnet_record),
+        );
+
+        mutations.push(subnet_record_mutation);
+    }
+
+    mutations
 }
 
 // Return all subnet records in the snapshot
