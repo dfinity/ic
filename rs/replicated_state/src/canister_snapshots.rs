@@ -1,4 +1,4 @@
-use ic_types::{CanisterId, SnapshotId, Time};
+use ic_types::{CanisterId, NumBytes, SnapshotId, Time};
 use ic_wasm_types::CanisterModule;
 
 use crate::{
@@ -7,7 +7,10 @@ use crate::{
     PageMap,
 };
 
-use std::{collections::BTreeMap, sync::Arc};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+};
 
 /// A collection of canister snapshots and their IDs.
 ///
@@ -17,13 +20,19 @@ use std::{collections::BTreeMap, sync::Arc};
 pub struct CanisterSnapshots {
     pub(crate) snapshots: BTreeMap<SnapshotId, Arc<CanisterSnapshot>>,
     pub(crate) unflushed_changes: Vec<SnapshotOperation>,
+    /// The set of snapshots ids grouped by canisters.
+    pub(crate) snapshot_ids: BTreeMap<CanisterId, BTreeSet<SnapshotId>>,
 }
 
 impl CanisterSnapshots {
-    pub fn new(snapshots: BTreeMap<SnapshotId, Arc<CanisterSnapshot>>) -> Self {
+    pub fn new(
+        snapshots: BTreeMap<SnapshotId, Arc<CanisterSnapshot>>,
+        snapshot_ids: BTreeMap<CanisterId, BTreeSet<SnapshotId>>,
+    ) -> Self {
         Self {
             snapshots,
             unflushed_changes: vec![],
+            snapshot_ids,
         }
     }
 
@@ -32,11 +41,12 @@ impl CanisterSnapshots {
     /// Additionally, adds a new item to the `unflushed_changes`
     /// which represents the new backup accumulated since the last flush to the disk.
     pub fn push(&mut self, snapshot_id: SnapshotId, snapshot: Arc<CanisterSnapshot>) -> SnapshotId {
-        self.unflushed_changes.push(SnapshotOperation::Backup(
-            snapshot.canister_id(),
-            snapshot_id,
-        ));
+        let canister_id = snapshot.canister_id();
+        self.unflushed_changes
+            .push(SnapshotOperation::Backup(canister_id, snapshot_id));
         self.snapshots.insert(snapshot_id, snapshot);
+        let snapshot_ids = self.snapshot_ids.entry(canister_id).or_default();
+        snapshot_ids.insert(snapshot_id);
         snapshot_id
     }
 
@@ -55,6 +65,15 @@ impl CanisterSnapshots {
             Some(snapshot) => {
                 self.unflushed_changes
                     .push(SnapshotOperation::Delete(snapshot_id));
+
+                // The snapshot ID if present in the `self.snapshots`,
+                // must also be present in the `self.snapshot_ids`.
+                let canister_id = snapshot.canister_id();
+                debug_assert!(self.snapshot_ids.contains_key(&canister_id));
+                let snapshot_ids = self.snapshot_ids.get_mut(&canister_id).unwrap();
+                debug_assert!(snapshot_ids.contains(&snapshot_id));
+                snapshot_ids.remove(&snapshot_id);
+
                 Some(snapshot)
             }
             None => {
@@ -62,6 +81,25 @@ impl CanisterSnapshots {
                 None
             }
         }
+    }
+
+    /// Selects the snapshots associated with the provided canister ID.
+    /// Returns a list of tuples containing the ID and the canister snapshot.
+    pub fn list_snapshots(
+        &self,
+        canister_id: CanisterId,
+    ) -> Vec<(SnapshotId, Arc<CanisterSnapshot>)> {
+        let mut snapshots = vec![];
+
+        if let Some(snapshot_ids) = self.snapshot_ids.get(&canister_id) {
+            for snapshot_id in snapshot_ids {
+                // The snapshot ID if present in the `self.snapshot_ids`,
+                // must also be present in the `self.snapshot`.
+                let snapshot = self.snapshots.get(snapshot_id).unwrap();
+                snapshots.push((*snapshot_id, snapshot.clone()))
+            }
+        }
+        snapshots
     }
 
     /// Returns true if snapshot ID can be found in the collection.
@@ -119,6 +157,8 @@ pub struct CanisterSnapshot {
     taken_at_timestamp: Time,
     /// The canister version at the time of taking the snapshot.
     canister_version: u64,
+    /// Amount of memory used by a snapshot in bytes.
+    size: NumBytes,
     /// The certified data blob belonging to the canister.
     certified_data: Vec<u8>,
     /// Snapshot of chunked store.
@@ -136,6 +176,7 @@ impl CanisterSnapshot {
         certified_data: Vec<u8>,
         chunk_store: WasmChunkStore,
         execution_snapshot: Option<ExecutionStateSnapshot>,
+        size: NumBytes,
     ) -> CanisterSnapshot {
         Self {
             canister_id,
@@ -144,6 +185,7 @@ impl CanisterSnapshot {
             certified_data,
             chunk_store,
             execution_snapshot,
+            size,
         }
     }
 
@@ -165,6 +207,7 @@ impl CanisterSnapshot {
             certified_data: canister.system_state.certified_data.clone(),
             chunk_store: canister.system_state.wasm_chunk_store.clone(),
             execution_snapshot,
+            size: canister.snapshot_memory_usage(),
         }
     }
 
@@ -178,6 +221,10 @@ impl CanisterSnapshot {
 
     pub fn taken_at_timestamp(&self) -> &Time {
         &self.taken_at_timestamp
+    }
+
+    pub fn size(&self) -> NumBytes {
+        self.size
     }
 
     pub fn stable_memory(&self) -> Option<&PageMemory> {
@@ -231,23 +278,35 @@ mod tests {
                 size: NumWasmPages::new(10),
             },
         };
+        let canister_id = canister_test_id(0);
         let snapshot = CanisterSnapshot::new(
-            canister_test_id(0),
+            canister_id,
             UNIX_EPOCH,
             0,
             vec![],
             WasmChunkStore::new_for_testing(NumBytes::from(20)),
             Some(execution_snapshot),
+            NumBytes::from(0),
         );
         let mut snapshot_manager = CanisterSnapshots::default();
         assert_eq!(snapshot_manager.snapshots.len(), 0);
         assert_eq!(snapshot_manager.unflushed_changes.len(), 0);
+        assert_eq!(snapshot_manager.snapshot_ids.len(), 0);
 
         // Pushing new snapshot updates the `unflushed_changes` collection.
         let snapshot_id = SnapshotId::from((canister_test_id(0), 1));
         snapshot_manager.push(snapshot_id, Arc::<CanisterSnapshot>::new(snapshot));
         assert_eq!(snapshot_manager.snapshots.len(), 1);
         assert_eq!(snapshot_manager.unflushed_changes.len(), 1);
+        assert_eq!(snapshot_manager.snapshot_ids.len(), 1);
+        assert_eq!(
+            snapshot_manager
+                .snapshot_ids
+                .get(&canister_id)
+                .unwrap()
+                .len(),
+            1
+        );
 
         let unflushed_changes = snapshot_manager.take_unflushed_changes();
         assert_eq!(snapshot_manager.snapshots.len(), 1);
@@ -261,5 +320,14 @@ mod tests {
         let unflushed_changes = snapshot_manager.take_unflushed_changes();
         assert_eq!(snapshot_manager.unflushed_changes.len(), 0);
         assert_eq!(unflushed_changes.len(), 1);
+        assert_eq!(snapshot_manager.snapshot_ids.len(), 1);
+        assert_eq!(
+            snapshot_manager
+                .snapshot_ids
+                .get(&canister_id)
+                .unwrap()
+                .len(),
+            0
+        );
     }
 }

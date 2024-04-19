@@ -168,6 +168,7 @@ pub struct CanisterStateBits {
     pub canister_log: CanisterLog,
     pub wasm_memory_limit: Option<NumBytes>,
     pub next_snapshot_id: u64,
+    // TODO(EXC-1597): Deprecated field.
     pub snapshot_ids: BTreeSet<SnapshotId>,
 }
 
@@ -1963,12 +1964,6 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             .map(|v| v.try_into())
             .collect::<Result<_, _>>()?;
 
-        let snapshot_ids = value
-            .snapshot_ids
-            .into_iter()
-            .map(SnapshotId::try_from)
-            .collect::<Result<_, _>>()?;
-
         let mut consumed_cycles_since_replica_started_by_use_cases = BTreeMap::new();
         for x in value
             .consumed_cycles_since_replica_started_by_use_cases
@@ -2067,7 +2062,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             ),
             wasm_memory_limit: value.wasm_memory_limit.map(NumBytes::from),
             next_snapshot_id: value.next_snapshot_id,
-            snapshot_ids,
+            snapshot_ids: BTreeSet::new(),
         })
     }
 }
