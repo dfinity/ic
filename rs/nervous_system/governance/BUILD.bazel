@@ -26,7 +26,6 @@ rust_library(
 
 rust_test(
     name = "governance_test",
-    srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate = ":governance",
     proc_macro_deps = MACRO_DEPENDENCIES,

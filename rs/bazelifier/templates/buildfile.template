@@ -3,7 +3,7 @@
 load("@rules_rust//rust:defs.bzl", "{{ build_type }}", "rust_binary", "rust_test", "rust_test_suite")
 
 {%- if build_script %}
-load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
+load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 {% let build_script_extra = " + [\":build_script\"]" -%}
 {% else -%}
 {% let build_script_extra = "" -%}

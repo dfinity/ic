@@ -50,7 +50,6 @@ rust_library(
 rust_test(
     name = "token_valuation_test",
     srcs = glob(["src/**"]),
-    crate = ":token_valuation",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

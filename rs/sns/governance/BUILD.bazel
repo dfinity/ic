@@ -1,4 +1,4 @@
-load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
+load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
@@ -180,7 +180,6 @@ rust_test(
     name = "governance_test",
     srcs = glob(["src/**"]),
     aliases = ALIASES,
-    crate = ":governance",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = [":governance"] + DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
 )

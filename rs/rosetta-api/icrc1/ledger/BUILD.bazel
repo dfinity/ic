@@ -7,10 +7,7 @@ package(default_visibility = ["//visibility:public"])
 [
     rust_library(
         name = "ledger" + name_suffix,
-        srcs = [
-            "src/cdk_runtime.rs",
-            "src/lib.rs",
-        ],
+        srcs = glob(["src/**/*.rs"]),
         compile_data = [
             "//rs/rosetta-api/icrc1/archive:archive_canister" + name_suffix + ".wasm.gz",
         ],
@@ -191,7 +188,6 @@ rust_test(
 
 rust_test(
     name = "ledger_unit_test",
-    srcs = ["src/tests.rs"],
     compile_data = [
         "//rs/rosetta-api/icrc1/archive:archive_canister.wasm.gz",
     ],

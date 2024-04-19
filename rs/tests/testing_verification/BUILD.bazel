@@ -194,9 +194,6 @@ rust_test(
 
 rust_test(
     name = "generic_workload_engine",
-    srcs = [
-        "//rs/tests:src/generic_workload_engine/metrics.rs",
-    ],
     aliases = ALIASES,
     crate = "//rs/tests",
 )

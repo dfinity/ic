@@ -36,7 +36,6 @@ rust_library(
 rust_test(
     name = "test",
     size = "small",
-    srcs = glob(["src/**"]),
     crate = ":vsock_lib",
     deps = DEPENDENCIES,
 )

@@ -33,7 +33,6 @@ rust_binary(
 rust_test(
     name = "test",
     size = "small",
-    srcs = glob(["src/**/*.rs"]),
     crate = ":guestos_tool",
     deps = DEPENDENCIES,
 )
