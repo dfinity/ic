@@ -8,6 +8,8 @@ use ic_crypto_tree_hash::{
     first_sub_witness, flat_map::FlatMap, prune_witness, sub_witness, Label, LabeledTree,
     TreeHashError, Witness,
 };
+use ic_interfaces_certified_stream_store::{CertifiedStreamStore, DecodeStreamError};
+use ic_logger::{info, ReplicaLogger};
 use ic_metrics::{
     buckets::{decimal_buckets, decimal_buckets_with_zero},
     MetricsRegistry,
@@ -17,12 +19,13 @@ use ic_protobuf::proxy::{ProtoProxy, ProxyDecodeError};
 use ic_types::{
     consensus::certification::Certification,
     xnet::{CertifiedStreamSlice, StreamIndex},
-    CountBytes, SubnetId,
+    CountBytes, RegistryVersion, SubnetId,
 };
 use messages::Messages;
 use prometheus::{Histogram, IntCounterVec, IntGauge};
 use std::collections::BTreeMap;
 use std::convert::{From, TryFrom, TryInto};
+use std::sync::Arc;
 
 const LABEL_STREAMS: &[u8] = b"streams";
 const LABEL_HEADER: &[u8] = b"header";
@@ -172,7 +175,7 @@ mod messages {
     use super::*;
 
     /// Wrapper around slice messages plus transient metadata.
-    #[derive(Debug, PartialEq)]
+    #[derive(Clone, Debug, PartialEq)]
     pub(super) struct Messages {
         /// Slice messages.
         ///
@@ -336,7 +339,7 @@ mod messages {
 }
 
 /// Unpacked `CertifiedStreamSlice::payload`, plus transient metadata.
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 struct Payload {
     /// The intended destination subnet of this stream slice.
     subnet_id: Label,
@@ -753,7 +756,7 @@ impl From<Payload> for Vec<u8> {
 /// An unpacked `CertifiedStreamSlice`: a slice of the stream of messages
 /// produced by a subnet together with a cryptographic proof that the majority
 /// of that subnet agrees on it.
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct UnpackedStreamSlice {
     /// Stream slice contents.
     payload: Payload,
@@ -964,6 +967,9 @@ impl From<UnpackedStreamSlice> for CertifiedStreamSlice {
 /// Error type returned when a pool operation failed due to an invalid slice.
 #[derive(Debug)]
 pub enum CertifiedSliceError {
+    /// `LabeledTree` decoding error or invalid signature.
+    DecodeStreamError(DecodeStreamError),
+
     /// Payload is malformed, slice was dropped from pool (or will be, on the
     /// first mutation).
     InvalidPayload(InvalidSlice),
@@ -1015,6 +1021,7 @@ impl CertifiedSliceError {
     /// Maps the error to a string slice suitable for use as metric label.
     pub fn to_label_value(&self) -> &'static str {
         match self {
+            Self::DecodeStreamError(_) => "DecodeStreamError",
             Self::InvalidPayload(_) => "InvalidPayload",
             Self::InvalidWitness(_) => "InvalidWitness",
             Self::WitnessPruningFailed(_) => "WitnessPruningFailed",
@@ -1045,6 +1052,12 @@ impl From<ProxyDecodeError> for CertifiedSliceError {
     }
 }
 
+impl From<DecodeStreamError> for CertifiedSliceError {
+    fn from(err: DecodeStreamError) -> Self {
+        Self::DecodeStreamError(err)
+    }
+}
+
 /// Converts a `LabeledTree` or `Witness` label into a `StreamIndex`.
 fn to_stream_index(label: &Label) -> Result<StreamIndex, InvalidSlice> {
     StreamIndex::from_label(label.as_bytes()).ok_or(NotAStreamIndex)
@@ -1070,16 +1083,23 @@ pub struct CertifiedSlicePool {
     /// advanced to the end of the slice returned by a `take_slice()` call.
     stream_positions: BTreeMap<SubnetId, ExpectedIndices>,
 
+    /// Used for validating incoming slices.
+    certified_stream_store: Arc<dyn CertifiedStreamStore>,
+
     metrics: CertifiedSlicePoolMetrics,
 }
 
 impl CertifiedSlicePool {
     /// Creates a new pool instance using the given `MetricsRegistry` for
     /// instrumentation.
-    pub fn new(metrics_registry: &MetricsRegistry) -> Self {
+    pub fn new(
+        certified_stream_store: Arc<dyn CertifiedStreamStore>,
+        metrics_registry: &MetricsRegistry,
+    ) -> Self {
         Self {
             slices: Default::default(),
             stream_positions: Default::default(),
+            certified_stream_store,
             metrics: CertifiedSlicePoolMetrics::new(metrics_registry),
         }
     }
@@ -1087,6 +1107,9 @@ impl CertifiedSlicePool {
     /// Takes a sub-slice of the stream from `subnet_id` starting at `begin`,
     /// respecting the given message count and byte limits; or, if the provided
     /// `byte_limit` is too small for a header-only slice, returns `Ok(None)`.
+    ///
+    /// If a `begin` index was provided, garbage collects all messages before it,
+    /// regardless of whether a non-empty slice was returned.
     ///
     /// If all messages are taken, the slice is removed from the pool.
     ///
@@ -1125,6 +1148,8 @@ impl CertifiedSlicePool {
     }
 
     /// Helper function to allow easy instrumentation of `take_slice` results.
+    /// If a `begin` index was provided, garbage collects all messages before it,
+    /// regardless of whether a non-empty slice was returned.
     ///
     /// On success, returns a prefix respecting the given limits.
     ///
@@ -1290,12 +1315,23 @@ impl CertifiedSlicePool {
     /// one (e.g. because it has an exceedingly high `signals_end`).
     ///
     /// Returns `Err(InvalidPayload)` or `Err(WitnessPruningFailed)` if
-    /// `slice` is malformed.
+    /// `slice` is malformed. Returns `Err(DecodeStreamError)` if the slice could
+    /// not be decoded or its certification was invalid.
     pub fn put(
         &mut self,
         subnet_id: SubnetId,
         slice: CertifiedStreamSlice,
+        registry_version: RegistryVersion,
+        log: ReplicaLogger,
     ) -> CertifiedSliceResult<()> {
+        validate_slice(
+            &slice,
+            subnet_id,
+            self.certified_stream_store.as_ref(),
+            registry_version,
+            log,
+        )?;
+
         self.put_impl(subnet_id, slice.try_into()?)
     }
 
@@ -1312,28 +1348,47 @@ impl CertifiedSlicePool {
     /// Returns `Err(InvalidPayload)`,  `Err(InvalidWitness)` or
     /// `Err(WitnessPruningFailed)` if `self` or `partial` are malformed.
     /// Returns `Err(InvalidAppend)` if the two slices do not match.
+    /// Returns `Err(DecodeStreamError)` if the partial slice could not be decoded
+    /// or the certification was invalid for the merged slice.
     pub fn append(
         &mut self,
         subnet_id: SubnetId,
         partial: CertifiedStreamSlice,
+        registry_version: RegistryVersion,
+        log: ReplicaLogger,
     ) -> CertifiedSliceResult<()> {
         let partial: UnpackedStreamSlice = partial.try_into()?;
 
-        let (res, slice) = match self.slices.remove(&subnet_id) {
+        // Query the pool for an existing slice, without removing it. This way, if
+        // unpacking or validation fail, we can simply bail out without mutating the
+        // pool.
+        let slice = match self.slices.get(&subnet_id) {
             // We have a pooled slice, try appending to it.
-            Some(mut pooled) => (pooled.append(partial), pooled),
+            Some(pooled) => {
+                let mut pooled = pooled.clone();
+                pooled.append(partial)?;
+                pooled
+            }
 
             // No existing slice, retain the partial slice (and ensure it's actually complete).
             None => {
                 if !partial.is_complete()? {
                     return Err(CertifiedSliceError::InvalidAppend(IndexMismatch));
                 }
-                (Ok(()), partial)
+                partial
             }
         };
 
+        validate_slice(
+            &slice.clone().into(),
+            subnet_id,
+            self.certified_stream_store.as_ref(),
+            registry_version,
+            log,
+        )?;
+
         self.put_impl(subnet_id, slice)?;
-        res
+        Ok(())
     }
 
     /// Garbage collects the provided slice and pools the rest, if any.
@@ -1470,6 +1525,30 @@ fn witness_count_bytes(
     let fork_nodes_bytes = (pruned_nodes + slice_len - 1) * FORK_NODE_BYTES;
 
     NO_MESSAGES_WITNESS_BYTES + pruned_nodes_bytes + known_nodes_bytes + fork_nodes_bytes
+}
+
+/// Decodes the certified stream slice coming from `subnet_id` and validates
+/// its signature with respect to the given `registry_version`.
+///
+/// Returns `Err(DecodeStreamError)` if the slice could not be decoded or its
+/// certification was invalid.
+fn validate_slice(
+    slice: &CertifiedStreamSlice,
+    subnet_id: SubnetId,
+    certified_stream_store: &dyn CertifiedStreamStore,
+    registry_version: RegistryVersion,
+    log: ReplicaLogger,
+) -> CertifiedSliceResult<()> {
+    match certified_stream_store.decode_certified_stream_slice(subnet_id, registry_version, slice) {
+        Ok(_) => Ok(()),
+        Err(err) => {
+            info!(
+                log,
+                "Failed to decode stream slice from subnet {}: {}", subnet_id, err
+            );
+            Err(err.into())
+        }
+    }
 }
 
 /// Internal functionality, exposed for use by integration tests.
