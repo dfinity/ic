@@ -1,9 +1,6 @@
 use candid::Encode;
-use dfn_candid::candid_one;
-use ic_base_types::{CanisterId, PrincipalId};
-use ic_nervous_system_clients::{
-    canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResult,
-};
+use ic_base_types::CanisterId;
+use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
 use ic_nns_constants::LIFELINE_CANISTER_INDEX_IN_NNS_SUBNET;
 use ic_nns_governance::pb::v1::{
     manage_neuron_response::{Command, MakeProposalResponse},
@@ -14,8 +11,8 @@ use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     neuron_helpers::get_neuron_1,
     state_test_helpers::{
-        nns_governance_make_proposal, setup_nns_canisters, state_machine_builder_for_nns_tests,
-        update_with_sender,
+        get_canister_status_from_root, nns_governance_make_proposal, setup_nns_canisters,
+        state_machine_builder_for_nns_tests,
     },
 };
 use ic_state_machine_tests::StateMachine;
@@ -48,17 +45,10 @@ fn uninstall_canister_by_proposal() {
     let mut state_machine = setup_state_machine_with_nns_canisters();
     // Pick some installed nns canister for testing
     let canister_id = CanisterId::from_u64(LIFELINE_CANISTER_INDEX_IN_NNS_SUBNET);
-    // Confirm that canister exists and has some code installed
+    // Confirm that canister exists and has some code installed (module_hash is Some)
     assert!(state_machine.canister_exists(canister_id));
-    let status: Result<CanisterStatusResult, String> = update_with_sender(
-        &state_machine,
-        canister_id,
-        "canister_status",
-        candid_one,
-        &CanisterIdRecord::from(canister_id),
-        PrincipalId::new_anonymous(),
-    );
-    assert!(status.unwrap().module_hash.is_some());
+    let status = get_canister_status_from_root(&state_machine, canister_id);
+    assert!(status.module_hash.is_some());
     // Prepare a proposal to uninstall canister code
     let proposal = Proposal {
         title: Some("<proposal to uninstall an NNS canister>".to_string()),
@@ -84,16 +74,9 @@ fn uninstall_canister_by_proposal() {
         }) => id,
         _ => panic!("Response did not contain a proposal_id: {:#?}", response),
     };
-    // Verify that now calling a canister method fails.
-    let status: Result<CanisterStatusResult, String> = update_with_sender(
-        &state_machine,
-        canister_id,
-        "canister_status",
-        candid_one,
-        &CanisterIdRecord::from(canister_id),
-        PrincipalId::new_anonymous(),
-    );
-    assert!(status.err().unwrap().to_lowercase().contains("no wasm"));
+    // Verify that the canister no longer has code install (module_hash is None)
+    let status = get_canister_status_from_root(&state_machine, canister_id);
+    assert_eq!(status.module_hash, None);
     // Canister itself should still exist though
     assert!(state_machine.canister_exists(canister_id));
 }

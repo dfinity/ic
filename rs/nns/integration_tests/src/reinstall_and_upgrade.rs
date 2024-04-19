@@ -99,7 +99,7 @@ fn test_reinstall_and_upgrade_canisters_canonical_ordering() {
                 // Root Upgrade via Lifeline
                 upgrade_root_canister_by_proposal(
                     &nns_canisters.governance,
-                    &nns_canisters.lifeline,
+                    &nns_canisters.root,
                     wasm,
                 )
                 .await;
@@ -221,7 +221,7 @@ fn test_reinstall_and_upgrade_canisters_with_state_changes() {
                     // Root Upgrade via Lifeline
                     upgrade_root_canister_by_proposal(
                         &nns_canisters.governance,
-                        &nns_canisters.lifeline,
+                        &nns_canisters.root,
                         wasm,
                     )
                     .await;

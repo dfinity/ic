@@ -3,10 +3,7 @@
 
 use crate::{
     common::NnsInitPayloads,
-    governance::{
-        get_pending_proposals, submit_external_update_proposal,
-        submit_external_update_proposal_binary, wait_for_final_state,
-    },
+    governance::{submit_external_update_proposal, wait_for_final_state},
 };
 use candid::Encode;
 use canister_test::{
@@ -710,53 +707,6 @@ pub fn append_inert(wasm: Option<&Wasm>) -> Wasm {
     // times.
     wasm.append(&mut vec![0, 2, 1, 97]);
     Wasm::from_bytes(wasm)
-}
-
-/// Upgrades the root canister via a proposal.
-pub async fn upgrade_root_canister_by_proposal(
-    governance: &Canister<'_>,
-    lifeline: &Canister<'_>,
-    wasm: Wasm,
-) {
-    let wasm = wasm.bytes();
-    let new_module_hash = &ic_crypto_sha2::Sha256::hash(&wasm);
-
-    let proposal_id = submit_external_update_proposal_binary(
-        governance,
-        Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
-        NeuronId(TEST_NEURON_1_ID),
-        NnsFunction::NnsRootUpgrade,
-        Encode!(&wasm, &Vec::<u8>::new(), &false).expect(
-            "Could not candid-serialize the argument tuple for the NnsRootUpgrade proposal.",
-        ),
-        "Upgrade Root Canister".to_string(),
-        "<proposal created by upgrade_root_canister_by_proposal>".to_string(),
-    )
-    .await;
-
-    assert_eq!(
-        wait_for_final_state(governance, proposal_id).await.status(),
-        ProposalStatus::Executed
-    );
-
-    let pending_proposals = get_pending_proposals(governance).await;
-    assert_eq!(pending_proposals.len(), 0);
-
-    loop {
-        let status: CanisterStatusResult = lifeline
-            .update_(
-                "canister_status",
-                candid_one,
-                CanisterIdRecord::from(ROOT_CANISTER_ID),
-            )
-            .await
-            .unwrap();
-        if status.module_hash.unwrap().as_slice() == new_module_hash
-            && status.status == CanisterStatusType::Running
-        {
-            break;
-        }
-    }
 }
 
 /// Perform a change on a canister by upgrading it or
