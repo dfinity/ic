@@ -2,8 +2,6 @@
 //! `install`/`reinstall` is executed.
 //! See https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-install_code
 
-use std::sync::Arc;
-
 use crate::as_round_instructions;
 use crate::canister_manager::{
     DtsInstallCodeResult, InstallCodeContext, PausedInstallCodeExecution,
@@ -18,9 +16,8 @@ use ic_base_types::PrincipalId;
 use ic_embedders::wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult};
 use ic_interfaces::execution_environment::WasmExecutionOutput;
 use ic_logger::{info, warn, ReplicaLogger};
-use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::{
-    metadata_state::subnet_call_context_manager::InstallCodeCallId, CanisterState, SystemState,
+    metadata_state::subnet_call_context_manager::InstallCodeCallId, CanisterState,
 };
 use ic_system_api::ApiType;
 use ic_types::funds::Cycles;
@@ -79,7 +76,6 @@ pub(crate) fn execute_install(
     original: OriginalContext,
     round: RoundContext,
     round_limits: &mut RoundLimits,
-    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 ) -> DtsInstallCodeResult {
     let mut helper = InstallCodeHelper::new(&clean_canister, &original);
 
@@ -151,7 +147,7 @@ pub(crate) fn execute_install(
         let wasm_execution_result = round.hypervisor.execute_dts(
             ApiType::start(original.time),
             execution_state,
-            &SystemState::new_for_start(canister_id, fd_factory),
+            &helper.canister().system_state,
             helper.canister_memory_usage(),
             helper.canister_message_memory_usage(),
             helper.execution_parameters().clone(),

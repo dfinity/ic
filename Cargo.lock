@@ -7547,6 +7547,7 @@ dependencies = [
  "canister-test",
  "criterion",
  "embedders_bench",
+ "ic-base-types",
  "ic-config",
  "ic-cycles-account-manager",
  "ic-interfaces",
