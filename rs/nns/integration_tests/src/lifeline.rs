@@ -1,11 +1,8 @@
 use canister_test::Project;
 use dfn_candid::candid_one;
-use ic_base_types::{CanisterId, PrincipalId};
-use ic_management_canister_types::CanisterInstallMode;
-use ic_nervous_system_clients::{
-    canister_id_record::CanisterIdRecord,
-    canister_status::{CanisterStatusResult, CanisterStatusType},
-};
+use ic_base_types::CanisterId;
+use ic_management_canister_types::{CanisterInstallMode, CanisterStatusType};
+use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
 };
@@ -298,48 +295,24 @@ fn test_lifeline_canister_restarts_root_on_stop_canister_timeout() {
 
     state_machine.tick();
 
-    let status: CanisterStatusResult = update_with_sender(
-        &state_machine,
-        LIFELINE_CANISTER_ID,
-        "canister_status",
-        candid_one,
-        ic_management_canister_types::CanisterIdRecord::from(ROOT_CANISTER_ID),
-        PrincipalId::new_anonymous(),
-    )
-    .unwrap();
+    let status = get_root_canister_status(&state_machine).unwrap();
     // Assert root canister is still in a stopping state
-    assert_eq!(status.status, CanisterStatusType::Stopping);
+    assert_eq!(status.status(), CanisterStatusType::Stopping);
     // After 60 seconds, canister is still trying to stop...
     state_machine.advance_time(Duration::from_secs(60));
     state_machine.tick();
 
-    let status: CanisterStatusResult = update_with_sender(
-        &state_machine,
-        LIFELINE_CANISTER_ID,
-        "canister_status",
-        candid_one,
-        ic_management_canister_types::CanisterIdRecord::from(ROOT_CANISTER_ID),
-        PrincipalId::new_anonymous(),
-    )
-    .unwrap();
+    let status = get_root_canister_status(&state_machine).unwrap();
     // Assert root canister is still in a stopping state
-    assert_eq!(status.status, CanisterStatusType::Stopping);
+    assert_eq!(status.status(), CanisterStatusType::Stopping);
 
     state_machine.advance_time(Duration::from_secs(241));
     state_machine.tick();
     state_machine.tick();
+    state_machine.tick();
 
     // Now it should be running
-    let status: CanisterStatusResult = update_with_sender(
-        &state_machine,
-        LIFELINE_CANISTER_ID,
-        "canister_status",
-        candid_one,
-        ic_management_canister_types::CanisterIdRecord::from(ROOT_CANISTER_ID),
-        PrincipalId::new_anonymous(),
-    )
-    .unwrap();
-
+    let status = get_root_canister_status(&state_machine).unwrap();
     // Assert root canister is still in a stopping state
-    assert_eq!(status.status, CanisterStatusType::Running);
+    assert_eq!(status.status(), CanisterStatusType::Running);
 }

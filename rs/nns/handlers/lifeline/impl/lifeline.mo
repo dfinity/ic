@@ -20,7 +20,6 @@ actor {
         wasm_module : Blob;
         arg : Blob;
       } -> async ();
-      canister_status : CanisterIdRecord -> async CanisterStatusResult;
       start_canister : CanisterIdRecord -> async ();
       stop_canister : CanisterIdRecord -> async ();
       uninstall_code : CanisterIdRecord -> async ()
@@ -87,8 +86,4 @@ actor {
         cycles : Nat;
         settings: DefiniteCanisterSettings;
     };
-
-    public shared func canister_status(id : CanisterIdRecord) : async CanisterStatusResult {
-      await ic00.canister_status(id);
-    }
 }
