@@ -14,7 +14,7 @@ You can use one of the numerous link:https://sepoliafaucet.com/[Sepolia Faucet] 
 == Quick Links
 
 |===
-|Ethereum Chain |Helper smart contract |Minter dashboard|Ledger|`dfx` commands in
+|Ethereum Chain |ckETH helper smart contract |Minter dashboard|Ledger|`dfx` commands in
 
 |link:https://github.com/ethereum-lists/chains/blob/master/_data/chains/eip155-1.json[Ethereum Mainnet]
 |link:https://etherscan.io/address/0x7574eB42cA208A4f6960ECCAfDF186D627dCC175[0x7574eB42cA208A4f6960ECCAfDF186D627dCC175]
@@ -36,27 +36,28 @@ TIP: To interact with the minter or ledger as exemplified below with `dfx`, make
 We would greatly appreciate any feedback you may have.
 Please feel free to reach out by leaving a comment in this link:https://forum.dfinity.org/t/cketh-a-canister-issued-ether-twin-token-on-the-ic/22819/1[forum post].
 
+[#deposit_eth_to_cketh]
 == Deposit: ETH to ckETH
 
 ----
- ┌────┐               ┌───────────────┐             ┌──────┐
- │User│               │Helper Contract│             │Minter│
- └─┬──┘               └───────┬───────┘             └──┬───┘
-   │                          │                        │
-   │deposit(amount, principal)│                        │
-   │─────────────────────────>│                        │
-   │                          │                        │
-   │                          │       get_events       │
-   │                          │<───────────────────────│
-   │                          │                        │
-   │                          │Events(amout, principal)│
-   │                          │───────────────────────>│
-   │                          │                        │
-   │              mint(amout, principal)               │
-   │<──────────────────────────────────────────────────│
- ┌─┴──┐               ┌───────┴───────┐             ┌──┴───┐
- │User│               │Helper Contract│             │Minter│
- └────┘               └───────────────┘             └──────┘
+ ┌────┐               ┌───────────────┐              ┌──────┐
+ │User│               │Helper Contract│              │Minter│
+ └─┬──┘               └───────┬───────┘              └──┬───┘
+   │                          │                         │
+   │deposit(amount, principal)│                         │
+   │─────────────────────────>│                         │
+   │                          │                         │
+   │                          │       get_events        │
+   │                          │<────────────────────────│
+   │                          │                         │
+   │                          │Events(amount, principal)│
+   │                          │────────────────────────>│
+   │                          │                         │
+   │              mint(amount, principal)               │
+   │<───────────────────────────────────────────────────│
+ ┌─┴──┐               ┌───────┴───────┐              ┌──┴───┐
+ │User│               │Helper Contract│              │Minter│
+ └────┘               └───────────────┘              └──────┘
 ----
 
 Converting ETH into ckETH requires a call to a smart contract on Ethereum and passing your IC principal as argument, in the form of a `bytes32` array.
@@ -124,6 +125,7 @@ dfx canister --network ic call ledger icrc1_balance_of 'record {owner = principa
 ----
 ====
 
+[#withdrawal_eth_to_cketh]
 == Withdrawal: ckETH to ETH
 
 ----
