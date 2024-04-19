@@ -728,3 +728,92 @@ fn test_canister_log_preserved_after_disabling_and_enabling_again() {
         }
     );
 }
+
+#[test]
+fn test_logging_debug_print_persists_over_upgrade() {
+    let step = Duration::from_nanos(111_111);
+    let (env, canister_id, controller) = setup_with_controller(
+        FlagStatus::Enabled,
+        wat_canister()
+            .start(wat_fn().debug_print(b"start_1"))
+            .init(wat_fn().debug_print(b"init_1"))
+            .pre_upgrade(wat_fn().debug_print(b"pre_upgrade_1"))
+            .post_upgrade(wat_fn().debug_print(b"post_upgrade_1"))
+            .update("test", wat_fn().debug_print(b"update_1"))
+            .build(),
+    );
+    let timestamp_init = env.time();
+    env.advance_time(step);
+
+    // Pre-populate log.
+    let timestamp_before_upgrade = env.time_of_next_round();
+    let _ = env.execute_ingress(canister_id, "test", vec![]);
+    env.advance_time(step);
+
+    // Upgrade canister.
+    let timestamp_upgrade = env.time_of_next_round();
+    let _ = env.upgrade_canister(
+        canister_id,
+        wat::parse_str(
+            wat_canister()
+                .start(wat_fn().debug_print(b"start_2"))
+                .init(wat_fn().debug_print(b"init_2"))
+                .pre_upgrade(wat_fn().debug_print(b"pre_upgrade_2"))
+                .post_upgrade(wat_fn().debug_print(b"post_upgrade_2"))
+                .update("test", wat_fn().debug_print(b"update_2"))
+                .build(),
+        )
+        .unwrap(),
+        vec![],
+    );
+    env.advance_time(step);
+
+    let timestamp_after_upgrade = env.time_of_next_round();
+    let _ = env.execute_ingress(canister_id, "test", vec![]);
+    env.advance_time(step);
+
+    let result = fetch_canister_logs(env, controller, canister_id);
+    assert_eq!(
+        FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
+        FetchCanisterLogsResponse {
+            canister_log_records: vec![
+                CanisterLogRecord {
+                    idx: 0,
+                    timestamp_nanos: system_time_to_nanos(timestamp_init),
+                    content: b"start_1".to_vec()
+                },
+                CanisterLogRecord {
+                    idx: 1,
+                    timestamp_nanos: system_time_to_nanos(timestamp_init),
+                    content: b"init_1".to_vec()
+                },
+                CanisterLogRecord {
+                    idx: 2,
+                    timestamp_nanos: system_time_to_nanos(timestamp_before_upgrade),
+                    content: b"update_1".to_vec()
+                },
+                // Preserved log records before the upgrade and continued incrementing the index.
+                CanisterLogRecord {
+                    idx: 3,
+                    timestamp_nanos: system_time_to_nanos(timestamp_upgrade),
+                    content: b"pre_upgrade_1".to_vec()
+                },
+                CanisterLogRecord {
+                    idx: 4,
+                    timestamp_nanos: system_time_to_nanos(timestamp_upgrade),
+                    content: b"start_2".to_vec()
+                },
+                CanisterLogRecord {
+                    idx: 5,
+                    timestamp_nanos: system_time_to_nanos(timestamp_upgrade),
+                    content: b"post_upgrade_2".to_vec()
+                },
+                CanisterLogRecord {
+                    idx: 6,
+                    timestamp_nanos: system_time_to_nanos(timestamp_after_upgrade),
+                    content: b"update_2".to_vec()
+                }
+            ]
+        }
+    );
+}

@@ -623,10 +623,14 @@ impl InstallCodeHelper {
     pub fn handle_wasm_execution(
         &mut self,
         canister_state_changes: Option<CanisterStateChanges>,
-        output: WasmExecutionOutput,
+        mut output: WasmExecutionOutput,
         original: &OriginalContext,
         round: &RoundContext,
     ) -> (NumInstructions, Result<(), CanisterManagerError>) {
+        self.canister
+            .system_state
+            .canister_log
+            .append(&mut output.canister_log);
         self.steps.push(InstallCodeStep::HandleWasmExecution {
             canister_state_changes: canister_state_changes.clone(),
             output: output.clone(),
