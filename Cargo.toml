@@ -250,6 +250,7 @@ members = [
     "rs/rosetta-api/icp_ledger/ledger",
     "rs/rosetta-api/icp_ledger/protobuf_generator",
     "rs/rosetta-api/icp_ledger/index",
+    "rs/rosetta-api/icp_ledger/rosetta-integration-tests",
     "rs/rosetta-api/icp_ledger/test_utils",
     "rs/rosetta-api/ledger_core",
     "rs/rosetta-api/ledger_canister_core",

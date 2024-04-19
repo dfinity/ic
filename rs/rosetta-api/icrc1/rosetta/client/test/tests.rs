@@ -1,8 +1,9 @@
 use ic_icrc_rosetta_client::RosettaClient;
 use ic_icrc_rosetta_runner::start_rosetta;
 use ic_icrc_rosetta_runner::RosettaOptions;
-use ic_starter_tests::{start_replica, ReplicaBins, ReplicaStarterConfig};
+use pocket_ic::PocketIcBuilder;
 use std::path::PathBuf;
+use tokio::runtime::Runtime;
 
 fn path_from_env(var: &str) -> PathBuf {
     std::fs::canonicalize(std::env::var(var).unwrap_or_else(|_| panic!("Unable to find {}", var)))
@@ -11,33 +12,27 @@ fn path_from_env(var: &str) -> PathBuf {
 
 // only test_health is in here to check that the client works
 // as intended. All the other tests are in the rosetta tests.
-#[tokio::test]
-async fn test_health() {
-    let canister_launcher = path_from_env("CANISTER_LAUNCHER");
-    let replica_bin = path_from_env("REPLICA_BIN");
-    let sandbox_launcher = path_from_env("SANDBOX_LAUNCHER");
-    let starter_bin = path_from_env("STARTER_BIN");
-    let replica_bins = ReplicaBins {
-        canister_launcher,
-        replica_bin,
-        sandbox_launcher,
-        starter_bin,
-    };
-    let context = start_replica(&replica_bins, &ReplicaStarterConfig::default())
-        .await
-        .expect("Unable to start the replica");
-    let replica_url = format!("http://localhost:{}", context.port);
-
+#[test]
+fn test() {
+    let rt = Runtime::new().unwrap();
+    let mut pocket_ic = PocketIcBuilder::new().with_nns_subnet().build();
+    let endpoint = pocket_ic.make_live(None);
+    let port = endpoint.port().unwrap();
+    let replica_url = format!("http://localhost:{}", port);
     let rosetta_bin = path_from_env("ROSETTA_BIN_PATH");
-    let context = start_rosetta(
-        &rosetta_bin,
-        RosettaOptions {
-            network_url: Some(replica_url),
-            ..RosettaOptions::default()
-        },
-    )
-    .await;
-    let client = RosettaClient::from_str_url(&format!("http://0.0.0.0:{}", context.port))
-        .expect("Unable to parse url");
-    assert!(client.health().await.is_ok())
+
+    // Wrap async calls in a blocking Block
+    rt.block_on(async {
+        let context = start_rosetta(
+            &rosetta_bin,
+            RosettaOptions {
+                network_url: Some(replica_url),
+                ..RosettaOptions::default()
+            },
+        )
+        .await;
+        let client = RosettaClient::from_str_url(&format!("http://0.0.0.0:{}", context.port))
+            .expect("Unable to parse url");
+        assert!(client.health().await.is_ok())
+    });
 }
