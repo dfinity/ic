@@ -424,6 +424,9 @@ type Event = record {
             mint_block_index : nat;
             ckerc20_token_symbol: text;
         };
+        QuarantinedDeposit : record {
+            event_source : EventSource;
+        };
     };
 };
 

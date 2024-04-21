@@ -216,23 +216,21 @@ impl ManagedCanistersAssert {
 
 macro_rules! assert_ledger {
     ($name:expr, $ty:ty) => {
-        impl ManagedCanistersAssert {
-            paste::paste! {
-                fn [<call_ledger_$name:snake >](&self) -> $ty {
-                    candid::Decode!(
-                        &assert_reply(
-                            self.setup
-                                .env
-                                .query(self.ledger_canister_id(), $name, candid::Encode!().unwrap())
-                                .expect("failed to query on the ledger")
-                        ),
-                        $ty
-                    )
-                    .unwrap()
-                }
-
+        paste::paste! {
+            pub fn [<call_ledger_$name:snake >](env: &ic_state_machine_tests::StateMachine, ledger_canister_id: ic_state_machine_tests::CanisterId) -> $ty {
+                candid::Decode!(
+                    &assert_reply(
+                            env
+                            .query(ledger_canister_id, $name, candid::Encode!().unwrap())
+                            .expect("failed to query on the ledger")
+                    ),
+                    $ty
+                )
+                .unwrap()
+            }
+            impl ManagedCanistersAssert {
                 pub fn [<assert_ledger_$name:snake>]<T: Into<$ty>>(self, expected: T) -> Self {
-                    assert_eq!(self.[<call_ledger_$name:snake >](), expected.into(), "BUG: unexpected value for ledger {}", stringify!($name));
+                    assert_eq!([<call_ledger_$name:snake >](&self.setup.env, self.ledger_canister_id()), expected.into(), "BUG: unexpected value for ledger {}", stringify!($name));
                     self
                 }
             }

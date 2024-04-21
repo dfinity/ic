@@ -6005,6 +6005,7 @@ dependencies = [
  "proptest",
  "rand 0.8.5",
  "rlp",
+ "scopeguard",
  "scraper",
  "serde",
  "serde_bytes",

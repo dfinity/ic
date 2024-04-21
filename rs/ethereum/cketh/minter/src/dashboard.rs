@@ -15,7 +15,7 @@ use ic_cketh_minter::numeric::{
 use ic_cketh_minter::state::transactions::{
     ReimbursementIndex, TransactionCallData, WithdrawalRequest,
 };
-use ic_cketh_minter::state::{EthBalance, MintedEvent, State};
+use ic_cketh_minter::state::{EthBalance, InvalidEventReason, MintedEvent, State};
 use ic_cketh_minter::tx::Eip1559TransactionRequest;
 use ic_ethereum_types::Address;
 use std::cmp::Reverse;
@@ -132,7 +132,7 @@ pub struct DashboardTemplate {
     pub ledger_id: Principal,
     pub minted_events: Vec<MintedEvent>,
     pub pending_deposits: Vec<DashboardPendingDeposit>,
-    pub rejected_deposits: BTreeMap<EventSource, String>,
+    pub invalid_events: BTreeMap<EventSource, InvalidEventReason>,
     pub withdrawal_requests: Vec<DashboardWithdrawalRequest>,
     pub pending_transactions: Vec<DashboardPendingTransaction>,
     pub finalized_transactions: Vec<DashboardFinalizedTransaction>,
@@ -301,7 +301,7 @@ impl DashboardTemplate {
             last_observed_block: state.last_observed_block_number,
             minted_events,
             pending_deposits,
-            rejected_deposits: state.invalid_events.clone(),
+            invalid_events: state.invalid_events.clone(),
             withdrawal_requests,
             pending_transactions,
             finalized_transactions,

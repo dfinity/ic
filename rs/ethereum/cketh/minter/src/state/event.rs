@@ -140,6 +140,15 @@ pub enum EventType {
     /// The minter could not burn the given amount of ckERC20 tokens.
     #[n(20)]
     FailedErc20WithdrawalRequest(#[n(0)] ReimbursementRequest),
+    /// The minter unexpectedly panic while processing a deposit.
+    /// The deposit is quarantined to prevent any double minting and
+    /// will not be processed without further manual intervention.
+    #[n(21)]
+    QuarantinedDeposit {
+        /// The unique identifier of the deposit on the Ethereum network.
+        #[n(0)]
+        event_source: EventSource,
+    },
 }
 
 impl ReceivedEvent {

@@ -380,5 +380,8 @@ pub mod events {
             ckerc20_token_symbol: String,
             erc20_contract_address: String,
         },
+        QuarantinedDeposit {
+            event_source: EventSource,
+        },
     }
 }

@@ -1,24 +1,26 @@
 use assert_matches::assert_matches;
 use candid::{Nat, Principal};
+use ic_base_types::CanisterId;
 use ic_cketh_minter::endpoints::events::{EventPayload, EventSource};
 use ic_cketh_minter::endpoints::CandidBlockTag::Finalized;
 use ic_cketh_minter::endpoints::{AddCkErc20Token, CkErc20Token, Erc20Balance, MinterInfo};
 use ic_cketh_minter::memo::MintMemo;
 use ic_cketh_minter::numeric::BlockNumber;
-use ic_cketh_minter::SCRAPPING_ETH_LOGS_INTERVAL;
+use ic_cketh_minter::{MINT_RETRY_DELAY, SCRAPPING_ETH_LOGS_INTERVAL};
 use ic_cketh_test_utils::ckerc20::{CkErc20DepositParams, CkErc20Setup, Erc20Token, ONE_USDC};
 use ic_cketh_test_utils::flow::DepositParams;
 use ic_cketh_test_utils::mock::{JsonRpcMethod, MockJsonRpcProviders};
 use ic_cketh_test_utils::response::{block_response, empty_logs, Erc20LogEntry};
 use ic_cketh_test_utils::{
     format_ethereum_address_to_eip_55, CkEthSetup, CKETH_MINIMUM_WITHDRAWAL_AMOUNT,
-    DEFAULT_DEPOSIT_FROM_ADDRESS, DEFAULT_DEPOSIT_LOG_INDEX, DEFAULT_DEPOSIT_TRANSACTION_HASH,
-    DEFAULT_ERC20_DEPOSIT_LOG_INDEX, DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH,
-    ERC20_HELPER_CONTRACT_ADDRESS, ETH_HELPER_CONTRACT_ADDRESS,
-    LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MAX_ETH_LOGS_BLOCK_RANGE, MINTER_ADDRESS,
-    RECEIVED_ERC20_EVENT_TOPIC, RECEIVED_ETH_EVENT_TOPIC,
+    DEFAULT_DEPOSIT_BLOCK_NUMBER, DEFAULT_DEPOSIT_FROM_ADDRESS, DEFAULT_DEPOSIT_LOG_INDEX,
+    DEFAULT_DEPOSIT_TRANSACTION_HASH, DEFAULT_ERC20_DEPOSIT_LOG_INDEX,
+    DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH, ERC20_HELPER_CONTRACT_ADDRESS,
+    ETH_HELPER_CONTRACT_ADDRESS, LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL, MAX_ETH_LOGS_BLOCK_RANGE,
+    MINTER_ADDRESS, RECEIVED_ERC20_EVENT_TOPIC, RECEIVED_ETH_EVENT_TOPIC,
 };
 use ic_ethereum_types::Address;
+use ic_ledger_suite_orchestrator_test_utils::flow::call_ledger_icrc1_total_supply;
 use ic_ledger_suite_orchestrator_test_utils::{supported_erc20_tokens, usdc};
 use ic_state_machine_tests::ErrorCode;
 use ic_state_machine_tests::{CanisterStatusType, WasmResult};
@@ -1128,6 +1130,104 @@ fn should_deposit_cketh_and_ckerc20() {
             })),
             created_at_time: None,
         });
+}
+
+#[test]
+fn should_deposit_cketh_and_ckerc20_when_ledger_temporary_offline() {
+    let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
+    let ckusdc = ckerc20.find_ckerc20_token("ckUSDC");
+    let caller = ckerc20.caller();
+
+    let stop_res = ckerc20.env.stop_canister(ckerc20.cketh.ledger_id);
+    assert_matches!(
+        stop_res,
+        Ok(WasmResult::Reply(_)),
+        "Failed to stop ckETH ledger"
+    );
+    ckerc20.stop_ckerc20_ledger(ckusdc.ledger_canister_id);
+
+    let deposit_flow = ckerc20.deposit_cketh_and_ckerc20(
+        CKETH_MINIMUM_WITHDRAWAL_AMOUNT,
+        ONE_USDC,
+        ckusdc.clone(),
+        caller,
+    );
+    deposit_flow.handle_log_scraping();
+    deposit_flow.setup.env.tick();
+
+    let ckerc20 = deposit_flow
+        .setup
+        .check_events()
+        .assert_has_unique_events_in_order(&vec![
+            EventPayload::AcceptedDeposit {
+                transaction_hash: DEFAULT_DEPOSIT_TRANSACTION_HASH.to_string(),
+                block_number: Nat::from(DEFAULT_DEPOSIT_BLOCK_NUMBER),
+                log_index: Nat::from(DEFAULT_DEPOSIT_LOG_INDEX),
+                from_address: format_ethereum_address_to_eip_55(DEFAULT_DEPOSIT_FROM_ADDRESS),
+                value: CKETH_MINIMUM_WITHDRAWAL_AMOUNT.into(),
+                principal: caller,
+            },
+            EventPayload::AcceptedErc20Deposit {
+                transaction_hash: DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH.to_string(),
+                block_number: Nat::from(DEFAULT_DEPOSIT_BLOCK_NUMBER),
+                log_index: Nat::from(DEFAULT_ERC20_DEPOSIT_LOG_INDEX),
+                from_address: format_ethereum_address_to_eip_55(DEFAULT_DEPOSIT_FROM_ADDRESS),
+                value: ONE_USDC.into(),
+                principal: caller,
+                erc20_contract_address: ckusdc.erc20_contract_address.clone(),
+            },
+        ])
+        .check_events()
+        .assert_has_no_event_satisfying(|event| {
+            matches!(
+                event,
+                EventPayload::MintedCkEth { .. } | EventPayload::MintedCkErc20 { .. }
+            )
+        });
+
+    let start_res = ckerc20.env.start_canister(ckerc20.cketh.ledger_id);
+    assert_matches!(
+        start_res,
+        Ok(WasmResult::Reply(_)),
+        "Failed to start ckETH ledger"
+    );
+    ckerc20.start_ckerc20_ledger(ckusdc.ledger_canister_id);
+
+    ckerc20.env.advance_time(MINT_RETRY_DELAY);
+    ckerc20.env.tick();
+
+    let ckerc20 = ckerc20
+        .check_events()
+        .assert_has_unique_events_in_order(&vec![
+            EventPayload::MintedCkEth {
+                event_source: EventSource {
+                    transaction_hash: DEFAULT_DEPOSIT_TRANSACTION_HASH.to_string(),
+                    log_index: Nat::from(DEFAULT_DEPOSIT_LOG_INDEX),
+                },
+                mint_block_index: Nat::from(0_u8),
+            },
+            EventPayload::MintedCkErc20 {
+                event_source: EventSource {
+                    transaction_hash: DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH.to_string(),
+                    log_index: Nat::from(DEFAULT_ERC20_DEPOSIT_LOG_INDEX),
+                },
+                ckerc20_token_symbol: ckusdc.ckerc20_token_symbol,
+                erc20_contract_address: ckusdc.erc20_contract_address,
+                mint_block_index: Nat::from(0_u8),
+            },
+        ]);
+
+    assert_eq!(
+        call_ledger_icrc1_total_supply(&ckerc20.env, ckerc20.cketh.ledger_id,),
+        Nat::from(CKETH_MINIMUM_WITHDRAWAL_AMOUNT)
+    );
+    assert_eq!(
+        call_ledger_icrc1_total_supply(
+            &ckerc20.env,
+            CanisterId::unchecked_from_principal(ckusdc.ledger_canister_id.into()),
+        ),
+        Nat::from(ONE_USDC)
+    );
 }
 
 #[test]

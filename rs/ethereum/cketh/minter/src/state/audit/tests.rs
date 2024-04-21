@@ -418,6 +418,9 @@ impl GetEventsFile {
                     ckerc20_token_symbol,
                     erc20_contract_address: erc20_contract_address.parse().unwrap(),
                 },
+                EventPayload::QuarantinedDeposit { event_source } => ET::QuarantinedDeposit {
+                    event_source: map_event_source(event_source),
+                },
             },
         }
     }
