@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New endpoint `/read_graph/:state_label/:op_id` for polling on a long-running operation. The state_label and op_id are returned by `ApiResponse::Started{state_label, op_id}`. 
 - New CLI option `--port-file` to specify a file to which the PocketIC server port should be written.
 - New endpoints `/http_gateway` and `/http_gateway/:id/stop` to start and stop an HTTP gateway.
+- DTS is enabled on a subnet based on a new field `dts_flag` in `SubnetSpec`.
+- New endpoints `submit_ingress_message` (submit an ingress message without executing it) and `await_ingress_message` (execute rounds on the PocketIc instance until the message is executed).
 
 ### Fixed
 

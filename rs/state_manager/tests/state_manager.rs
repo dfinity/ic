@@ -5338,6 +5338,109 @@ fn checkpoints_are_readonly() {
 }
 
 #[test]
+fn can_downgrade_state_sync() {
+    with_test_replica_logger(|log| {
+        let tmp = tmpdir("sm");
+        let mut config = Config::new(tmp.path().into());
+        config.lsmt_config = lsmt_with_sharding();
+        let metrics_registry = MetricsRegistry::new();
+        let own_subnet = subnet_test_id(42);
+        let verifier: Arc<dyn Verifier> = Arc::new(FakeVerifier::new());
+
+        let src_state_manager = Arc::new(StateManagerImpl::new(
+            verifier,
+            own_subnet,
+            SubnetType::Application,
+            log.clone(),
+            &metrics_registry,
+            &config,
+            None,
+            ic_types::malicious_flags::MaliciousFlags::default(),
+        ));
+        let src_state_sync = StateSync::new(src_state_manager.clone(), log);
+
+        let (_height, state) = src_state_manager.take_tip();
+        src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        wait_for_checkpoint(&*src_state_manager, height(1));
+
+        let (_height, mut state) = src_state_manager.take_tip();
+        insert_dummy_canister(&mut state, canister_test_id(1));
+        let canister_state = state.canister_state_mut(&canister_test_id(1)).unwrap();
+        let execution_state = canister_state.execution_state.as_mut().unwrap();
+        const NEW_WASM_PAGE: u64 = 100;
+        execution_state.wasm_memory.page_map.update(&[
+            (PageIndex::new(0), &[1u8; PAGE_SIZE]),
+            (PageIndex::new(NEW_WASM_PAGE), &[2u8; PAGE_SIZE]),
+        ]);
+        src_state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+        let hash = wait_for_checkpoint(&*src_state_manager, height(2));
+
+        assert!(!vmemory0_base_exists(
+            &src_state_manager,
+            &canister_test_id(1),
+            height(2)
+        ));
+        assert!(vmemory0_num_overlays(&src_state_manager, &canister_test_id(1), height(2)) > 0);
+
+        let id = StateSyncArtifactId {
+            height: height(2),
+            hash: hash.get(),
+        };
+
+        let msg = src_state_sync
+            .get_validated_by_identifier(&id)
+            .expect("failed to get state sync messages");
+        with_test_replica_logger(|log| {
+            let tmp = tmpdir("sm");
+            let mut config = Config::new(tmp.path().into());
+            config.lsmt_config = lsmt_disabled();
+            let metrics_registry = MetricsRegistry::new();
+            let own_subnet = subnet_test_id(42);
+            let verifier: Arc<dyn Verifier> = Arc::new(FakeVerifier::new());
+
+            let dst_state_manager = Arc::new(StateManagerImpl::new(
+                verifier,
+                own_subnet,
+                SubnetType::Application,
+                log.clone(),
+                &metrics_registry,
+                &config,
+                None,
+                ic_types::malicious_flags::MaliciousFlags::default(),
+            ));
+            let dst_state_sync = StateSync::new(dst_state_manager.clone(), log);
+            let (_height, state) = dst_state_manager.take_tip();
+            dst_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+            wait_for_checkpoint(&*dst_state_manager, height(1));
+            let chunkable =
+                set_fetch_state_and_start_start_sync(&dst_state_manager, &dst_state_sync, &id);
+            pipe_state_sync(msg, chunkable);
+            // Retrieved state has overlays.
+            assert!(!vmemory0_base_exists(
+                &dst_state_manager,
+                &canister_test_id(1),
+                height(2)
+            ));
+            assert!(vmemory0_num_overlays(&dst_state_manager, &canister_test_id(1), height(2)) > 0);
+            assert!(!any_manifest_was_incremental(&metrics_registry));
+            let (_height, state) = dst_state_manager.take_tip();
+            dst_state_manager.commit_and_certify(state, height(3), CertificationScope::Full);
+            wait_for_checkpoint(&*dst_state_manager, height(3));
+            // After one checkpoint interval the state has no overlays.
+            assert!(vmemory0_base_exists(
+                &dst_state_manager,
+                &canister_test_id(1),
+                height(3)
+            ));
+            assert_eq!(
+                vmemory0_num_overlays(&dst_state_manager, &canister_test_id(1), height(3)),
+                0
+            );
+        });
+    });
+}
+
+#[test]
 fn can_downgrade_from_lsmt() {
     state_manager_restart_test_with_lsmt(
         lsmt_with_sharding(),

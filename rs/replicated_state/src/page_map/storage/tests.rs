@@ -8,11 +8,11 @@ use std::{
 
 use crate::page_map::{
     storage::{
-        test_utils::{ShardedTestStorageLayout, TestStorageLayout},
         Checkpoint, FileIndex, MergeCandidate, MergeDestination, OverlayFile, PageIndexRange,
         Shard, Storage, StorageLayout, CURRENT_OVERLAY_VERSION, PAGE_INDEX_RANGE_NUM_BYTES,
         SIZE_NUM_BYTES, VERSION_NUM_BYTES,
     },
+    test_utils::{ShardedTestStorageLayout, TestStorageLayout},
     FileDescriptor, MemoryInstructions, MemoryMapOrData, PageAllocator, PageDelta, PageMap,
     PersistenceError, StorageMetrics, MAX_NUMBER_OF_FILES,
 };
@@ -356,9 +356,12 @@ fn storage_files(dir: &Path) -> StorageFiles {
 
 /// Verify that the storage in the `dir` directory is equivalent to `expected`.
 fn verify_storage(dir: &Path, expected: &PageDelta) {
-    let StorageFiles { base, overlays } = storage_files(dir);
-
-    let storage = Storage::load(base.as_deref(), &overlays).unwrap();
+    let storage = Storage::load(&ShardedTestStorageLayout {
+        dir_path: dir.to_path_buf(),
+        base: dir.join("vmemory_0.bin"),
+        overlay_suffix: "vmemory_0.overlay".to_owned(),
+    })
+    .unwrap();
 
     let expected_num_pages = if let Some(max) = expected.max_page_index() {
         max.get() + 1
@@ -1305,6 +1308,100 @@ fn can_write_shards() {
             tempdir.path().join("000000_010_vmemory_0.overlay"),
         ]
     );
+}
+
+#[test]
+fn overlapping_shards_is_an_error() {
+    let tempdir = tempdir().unwrap();
+
+    let instructions = vec![WriteOverlay(vec![9, 10])];
+
+    write_overlays_and_verify_with_tempdir(
+        instructions,
+        &LsmtConfig {
+            lsmt_status: FlagStatus::Enabled,
+            shard_num_pages: 1,
+        },
+        &tempdir,
+    );
+    let files = storage_files(tempdir.path());
+    assert_eq!(
+        files.overlays,
+        vec![
+            tempdir.path().join("000000_009_vmemory_0.overlay"),
+            tempdir.path().join("000000_010_vmemory_0.overlay"),
+        ]
+    );
+    assert!(Storage::load(&ShardedTestStorageLayout {
+        dir_path: tempdir.path().to_path_buf(),
+        base: tempdir.path().join("vmemory_0.bin"),
+        overlay_suffix: "vmemory_0.overlay".to_owned(),
+    })
+    .is_ok());
+    std::fs::copy(
+        tempdir.path().join("000000_010_vmemory_0.overlay"),
+        tempdir.path().join("000000_011_vmemory_0.overlay"),
+    )
+    .unwrap();
+    assert!(Storage::load(&ShardedTestStorageLayout {
+        dir_path: tempdir.path().to_path_buf(),
+        base: tempdir.path().join("vmemory_0.bin"),
+        overlay_suffix: "vmemory_0.overlay".to_owned(),
+    })
+    .is_err());
+}
+#[test]
+fn sharded_base_file() {
+    // Base only files; expect get_base_memory_instructions to be exhaustive
+    let dir = tempdir().unwrap();
+    write_overlays_and_verify_with_tempdir(
+        vec![WriteOverlay(vec![1, 10]), WriteOverlay(vec![5])],
+        &lsmt_config_sharded(),
+        &dir,
+    );
+    let storage = Storage::load(&ShardedTestStorageLayout {
+        dir_path: dir.path().to_path_buf(),
+        base: dir.path().join("vmemory_0.bin"),
+        overlay_suffix: "vmemory_0.overlay".to_owned(),
+    })
+    .unwrap();
+    let full_range = PageIndex::new(0)..PageIndex::new(11);
+    let filter = BitVec::from_elem(
+        (full_range.end.get() - full_range.start.get()) as usize,
+        false,
+    );
+    // get_base_memory_instructions is exhaustive => empty get_memory_instructions.
+    assert!(storage
+        .get_memory_instructions(full_range.clone(), &mut filter.clone())
+        .instructions
+        .is_empty());
+    assert!(!storage
+        .get_base_memory_instructions()
+        .instructions
+        .is_empty());
+
+    // Base files plus one overlay on top; some instructions needed beyond
+    // get_base_memory_instructions.
+    let dir = tempdir().unwrap();
+    write_overlays_and_verify_with_tempdir(
+        vec![
+            WriteOverlay(vec![1, 10]),
+            WriteOverlay(vec![5]),
+            WriteOverlay(vec![5]),
+        ],
+        &lsmt_config_sharded(),
+        &dir,
+    );
+    let storage = Storage::load(&ShardedTestStorageLayout {
+        dir_path: dir.path().to_path_buf(),
+        base: dir.path().join("vmemory_0.bin"),
+        overlay_suffix: "vmemory_0.overlay".to_owned(),
+    })
+    .unwrap();
+    assert!(!storage
+        .get_memory_instructions(full_range, &mut filter.clone())
+        .instructions
+        .is_empty())
 }
 
 #[test]

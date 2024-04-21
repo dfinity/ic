@@ -112,6 +112,7 @@ use std::{
 mod ledger_helper;
 mod manage_neuron_request;
 mod merge_neurons;
+mod restore_aging;
 pub mod test_data;
 #[cfg(test)]
 mod tests;
@@ -177,7 +178,7 @@ pub const MAX_NEURON_RECENT_BALLOTS: usize = 100;
 pub const REWARD_DISTRIBUTION_PERIOD_SECONDS: u64 = ONE_DAY_SECONDS;
 
 /// The maximum number of neurons supported.
-pub const MAX_NUMBER_OF_NEURONS: usize = 280_000;
+pub const MAX_NUMBER_OF_NEURONS: usize = 350_000;
 
 /// The maximum number results returned by the method `list_proposals`.
 pub const MAX_LIST_PROPOSAL_RESULTS: u32 = 100;
@@ -380,8 +381,8 @@ impl NnsFunction {
             self,
             NnsFunction::NnsRootUpgrade
                 | NnsFunction::NnsCanisterUpgrade
-                | NnsFunction::UpdateElectedReplicaVersions
-                | NnsFunction::UpdateSubnetReplicaVersion
+                | NnsFunction::ReviseElectedGuestosVersions
+                | NnsFunction::DeployGuestosToAllSubnetNodes
         )
     }
 }
@@ -552,19 +553,41 @@ impl NnsFunction {
                 (LIFELINE_CANISTER_ID, "hard_reset_root_to_version")
             }
             NnsFunction::RecoverSubnet => (REGISTRY_CANISTER_ID, "recover_subnet"),
-            NnsFunction::UpdateElectedReplicaVersions => {
-                (REGISTRY_CANISTER_ID, "update_elected_replica_versions")
+            NnsFunction::ReviseElectedGuestosVersions => {
+                (REGISTRY_CANISTER_ID, "revise_elected_replica_versions")
             }
             NnsFunction::UpdateNodeOperatorConfig => {
                 (REGISTRY_CANISTER_ID, "update_node_operator_config")
             }
-            NnsFunction::UpdateSubnetReplicaVersion => {
-                (REGISTRY_CANISTER_ID, "update_subnet_replica_version")
+            NnsFunction::DeployGuestosToAllSubnetNodes => {
+                (REGISTRY_CANISTER_ID, "deploy_guestos_to_all_subnet_nodes")
             }
             NnsFunction::UpdateElectedHostosVersions => {
-                (REGISTRY_CANISTER_ID, "update_elected_hostos_versions")
+                // UpdateElectedHostosVersions is deprecated and can no longer be used.
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    format!(
+                        "NNS function {:?} is obsolete. Use `ReviseElectedHostosVersions` instead.",
+                        self
+                    ),
+                ));
             }
             NnsFunction::UpdateNodesHostosVersion => {
+                // UpdateNodesHostosVersion is deprecated and can no longer be used.
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    format!(
+                        "{:?} is a deprecated NnsFunction. Use DeployHostosToSomeNodes instead",
+                        self
+                    ),
+                ));
+            }
+            NnsFunction::ReviseElectedHostosVersions => {
+                // TODO[NNS1-3000]: Rename Registry API ednpoints callable only by NNS Governance.
+                (REGISTRY_CANISTER_ID, "update_elected_hostos_versions")
+            }
+            NnsFunction::DeployHostosToSomeNodes => {
+                // TODO[NNS1-3000]: Rename Registry API ednpoints callable only by NNS Governance.
                 (REGISTRY_CANISTER_ID, "update_nodes_hostos_version")
             }
             NnsFunction::UpdateConfigOfSubnet => (REGISTRY_CANISTER_ID, "update_subnet"),
@@ -591,7 +614,12 @@ impl NnsFunction {
                 (REGISTRY_CANISTER_ID, "add_or_remove_data_centers")
             }
             NnsFunction::UpdateUnassignedNodesConfig => {
-                (REGISTRY_CANISTER_ID, "update_unassigned_nodes_config")
+                // Updating unassigned nodes config proposal is obsoleted and
+                // can no longer be used.
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    format!("{:?} is an obsoleted NnsFunction. Use DeployGuestosToAllUnassignedNodes or UpdateSshReadonlyAccessForAllUnassignedNodes instead", self),
+                ));
             }
             NnsFunction::RemoveNodeOperators => (REGISTRY_CANISTER_ID, "remove_node_operators"),
             NnsFunction::RerouteCanisterRanges => (REGISTRY_CANISTER_ID, "reroute_canister_ranges"),
@@ -621,7 +649,10 @@ impl NnsFunction {
                 // can no longer be used.
                 return Err(GovernanceError::new_with_message(
                     ErrorType::InvalidProposal,
-                    format!("{:?} is a deprecated NnsFunction. Use UpdateElectedReplicaVersions instead", self),
+                    format!(
+                        "{:?} is a deprecated NnsFunction. Use ReviseElectedGuestosVersions instead",
+                        self
+                    ),
                 ));
             }
             NnsFunction::AddApiBoundaryNode => (REGISTRY_CANISTER_ID, "add_api_boundary_node"),
@@ -629,8 +660,25 @@ impl NnsFunction {
                 (REGISTRY_CANISTER_ID, "remove_api_boundary_nodes")
             }
             NnsFunction::UpdateApiBoundaryNodesVersion => {
+                // Updating API boundary nodes version proposal is obsoleted and
+                // can no longer be used.
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    format!("{:?} is an obsoleted NnsFunction. Use DeployGuestosToSomeApiBoundaryNodes instead", self),
+                ));
+            }
+            NnsFunction::DeployGuestosToSomeApiBoundaryNodes => {
+                // TODO[NNS1-3000]: Rename Registry API for consistency.
                 (REGISTRY_CANISTER_ID, "update_api_boundary_nodes_version")
             }
+            NnsFunction::DeployGuestosToAllUnassignedNodes => (
+                REGISTRY_CANISTER_ID,
+                "deploy_guestos_to_all_unassigned_nodes",
+            ),
+            NnsFunction::UpdateSshReadonlyAccessForAllUnassignedNodes => (
+                REGISTRY_CANISTER_ID,
+                "update_ssh_readonly_access_for_all_unassigned_nodes",
+            ),
         };
         Ok((canister_id, method))
     }
@@ -704,18 +752,25 @@ impl Proposal {
                             | NnsFunction::RemoveNodes
                             | NnsFunction::UpdateUnassignedNodesConfig
                             | NnsFunction::UpdateElectedHostosVersions
-                            | NnsFunction::UpdateNodesHostosVersion => Topic::NodeAdmin,
+                            | NnsFunction::UpdateNodesHostosVersion
+                            | NnsFunction::UpdateSshReadonlyAccessForAllUnassignedNodes => {
+                                Topic::NodeAdmin
+                            }
                             NnsFunction::CreateSubnet
                             | NnsFunction::AddNodeToSubnet
                             | NnsFunction::RecoverSubnet
                             | NnsFunction::RemoveNodesFromSubnet
                             | NnsFunction::ChangeSubnetMembership
                             | NnsFunction::UpdateConfigOfSubnet => Topic::SubnetManagement,
-                            NnsFunction::UpdateElectedReplicaVersions => {
-                                Topic::ReplicaVersionManagement
+                            NnsFunction::ReviseElectedGuestosVersions
+                            | NnsFunction::ReviseElectedHostosVersions => {
+                                Topic::IcOsVersionElection
                             }
-                            NnsFunction::UpdateSubnetReplicaVersion => {
-                                Topic::SubnetReplicaVersionManagement
+                            NnsFunction::DeployHostosToSomeNodes
+                            | NnsFunction::DeployGuestosToAllSubnetNodes
+                            | NnsFunction::DeployGuestosToSomeApiBoundaryNodes
+                            | NnsFunction::DeployGuestosToAllUnassignedNodes => {
+                                Topic::IcOsVersionDeployment
                             }
                             NnsFunction::NnsCanisterInstall
                             | NnsFunction::NnsCanisterUpgrade
@@ -746,7 +801,7 @@ impl Proposal {
                             NnsFunction::UpdateSnsWasmSnsSubnetIds => Topic::SubnetManagement,
                             // Retired NnsFunctions
                             NnsFunction::BlessReplicaVersion
-                            | NnsFunction::RetireReplicaVersion => Topic::ReplicaVersionManagement,
+                            | NnsFunction::RetireReplicaVersion => Topic::IcOsVersionElection,
                             NnsFunction::AddApiBoundaryNode
                             | NnsFunction::RemoveApiBoundaryNodes
                             | NnsFunction::UpdateApiBoundaryNodesVersion => {
@@ -1685,7 +1740,7 @@ impl Governance {
         let (heap_neurons, topic_followee_map, heap_governance_proto) =
             split_governance_proto(governance_proto);
 
-        Self {
+        let mut governance = Self {
             heap_data: heap_governance_proto,
             neuron_store: NeuronStore::new_restored((heap_neurons, topic_followee_map)),
             env,
@@ -1696,7 +1751,12 @@ impl Governance {
             latest_gc_num_proposals: 0,
             neuron_data_validator: NeuronDataValidator::new(),
             minting_node_provider_rewards: false,
-        }
+        };
+
+        // TODO(NNS1-3015): delete after release.
+        governance.maybe_restore_pre_aged_neurons();
+
+        governance
     }
 
     /// After calling this method, the proto and neuron_store (the heap neurons at least)
@@ -1965,7 +2025,7 @@ impl Governance {
             ));
         }
 
-        if !neuron.controller.unwrap().is_self_authenticating() {
+        if !neuron.controller().is_self_authenticating() {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
                 "Cannot add neuron, controller PrincipalId must be self-authenticating".to_string(),
@@ -2105,7 +2165,7 @@ impl Governance {
 
         let ids_are_valid = neuron_ids.iter().all(|id| {
             self.with_neuron(id, |neuron| {
-                neuron.controller.as_ref() == Some(GENESIS_TOKEN_CANISTER_ID.get_ref())
+                neuron.controller() == *GENESIS_TOKEN_CANISTER_ID.get_ref()
             })
             .unwrap_or(false)
         });
@@ -2122,10 +2182,7 @@ impl Governance {
         for neuron_id in neuron_ids {
             self.with_neuron_mut(&neuron_id, |neuron| {
                 neuron.created_timestamp_seconds = now;
-                neuron
-                    .controller
-                    .replace(new_controller)
-                    .expect("Neuron must have a controller")
+                neuron.set_controller(new_controller)
             })
             .unwrap();
         }
@@ -2152,10 +2209,8 @@ impl Governance {
         let (is_donor_controlled_by_gtc, donor_subaccount, donor_cached_neuron_stake_e8s) = self
             .with_neuron(donor_neuron_id, |donor_neuron| {
                 let is_donor_controlled_by_gtc =
-                    donor_neuron.controller.as_ref() == Some(GENESIS_TOKEN_CANISTER_ID.get_ref());
-                let donor_subaccount = donor_neuron
-                    .subaccount()
-                    .expect("Couldn't create a Subaccount from donor_neuron");
+                    donor_neuron.controller() == *GENESIS_TOKEN_CANISTER_ID.get_ref();
+                let donor_subaccount = donor_neuron.subaccount();
                 let donor_cached_neuron_stake_e8s = donor_neuron.cached_neuron_stake_e8s;
                 (
                     is_donor_controlled_by_gtc,
@@ -2164,9 +2219,7 @@ impl Governance {
                 )
             })?;
         let recipient_subaccount = self.with_neuron(recipient_neuron_id, |recipient_neuron| {
-            recipient_neuron
-                .subaccount()
-                .expect("Couldn't create a Subaccount from recipient_neuron")
+            recipient_neuron.subaccount()
         })?;
 
         if !is_donor_controlled_by_gtc {
@@ -2276,8 +2329,6 @@ impl Governance {
             ));
         }
 
-        let from_subaccount = neuron_subaccount?;
-
         // If no account was provided, transfer to the caller's account.
         let to_account: AccountIdentifier = match disburse.to_account.as_ref() {
             None => AccountIdentifier::new(*caller, None),
@@ -2334,7 +2385,7 @@ impl Governance {
                 .transfer_funds(
                     fees_amount_e8s,
                     0, // Burning transfers don't pay a fee.
-                    Some(from_subaccount),
+                    Some(neuron_subaccount),
                     governance_minting_account(),
                     now,
                 )
@@ -2361,7 +2412,7 @@ impl Governance {
             .transfer_funds(
                 disburse_amount_e8s,
                 transaction_fee_e8s,
-                Some(from_subaccount),
+                Some(neuron_subaccount),
                 to_account,
                 now,
             )
@@ -2467,7 +2518,7 @@ impl Governance {
         let created_timestamp_seconds = self.env.now();
         let child_nid = self.neuron_store.new_neuron_id(&mut *self.env);
 
-        let from_subaccount = parent_neuron.subaccount()?;
+        let from_subaccount = parent_neuron.subaccount();
 
         let to_subaccount = Subaccount(self.env.random_byte_array());
 
@@ -2861,13 +2912,10 @@ impl Governance {
 
         // Validate that if a child neuron controller was provided, it is a valid
         // principal.
-        let child_controller = if let Some(child_controller_) = &spawn.new_controller {
-            child_controller_
+        let child_controller = if let Some(child_controller) = &spawn.new_controller {
+            *child_controller
         } else {
-            parent_neuron
-                .controller
-                .as_ref()
-                .expect("The parent neuron doesn't have a controller.")
+            parent_neuron.controller()
         };
 
         let economics = self
@@ -2894,7 +2942,7 @@ impl Governance {
         let to_subaccount = match spawn.nonce {
             None => Subaccount(self.env.random_byte_array()),
             Some(nonce_val) => {
-                ledger::compute_neuron_staking_subaccount(*child_controller, nonce_val)
+                ledger::compute_neuron_staking_subaccount(child_controller, nonce_val)
             }
         };
 
@@ -2923,7 +2971,7 @@ impl Governance {
         let child_neuron = NeuronBuilder::new(
             child_nid,
             to_subaccount,
-            *child_controller,
+            child_controller,
             DissolveStateAndAge::DissolvingOrDissolved {
                 when_dissolved_timestamp_seconds: dissolve_and_spawn_at_timestamp_seconds,
             },
@@ -3181,7 +3229,7 @@ impl Governance {
         }
 
         let child_nid = self.neuron_store.new_neuron_id(&mut *self.env);
-        let from_subaccount = parent_neuron.subaccount()?;
+        let from_subaccount = parent_neuron.subaccount();
 
         // The account is derived from the new owner's principal so it can be found by
         // the owner on the ledger. There is no need to length-prefix the
@@ -4203,14 +4251,10 @@ impl Governance {
                 // neuron.
                 match mgmt.get_neuron_id_or_subaccount() {
                     Ok(Some(ref managed_neuron_id)) => {
-                        if let Some(controller) = self
-                            .with_neuron_by_neuron_id_or_subaccount(
-                                managed_neuron_id,
-                                |managed_neuron| managed_neuron.controller,
-                            )
-                            .ok()
-                            .and_then(|controller| controller)
-                        {
+                        if let Ok(controller) = self.with_neuron_by_neuron_id_or_subaccount(
+                            managed_neuron_id,
+                            |managed_neuron| managed_neuron.controller(),
+                        ) {
                             let result = self.manage_neuron(&controller, &mgmt).await;
                             match result.command {
                                 Some(manage_neuron_response::Command::Error(err)) => {
@@ -4224,7 +4268,7 @@ impl Governance {
                                 Err(GovernanceError::new_with_message(
                                     ErrorType::NotAuthorized,
                                     "Couldn't execute manage neuron proposal.\
-                                          The neuron doesn't have a controller.",
+                                        The neuron was not found.",
                                 )),
                             );
                         }
@@ -4624,7 +4668,7 @@ impl Governance {
         for principal in principal_set {
             for neuron_id in self.get_neuron_ids_by_principal(principal) {
                 self.with_neuron_mut(&neuron_id, |neuron| {
-                    if neuron.controller.as_ref() == Some(principal) {
+                    if neuron.controller() == *principal {
                         neuron.kyc_verified = true;
                     }
                 })
@@ -5670,7 +5714,7 @@ impl Governance {
         let (nid, subaccount) = match id {
             NeuronIdOrSubaccount::NeuronId(neuron_id) => {
                 let neuron_subaccount =
-                    self.with_neuron(&neuron_id, |neuron| neuron.subaccount())??;
+                    self.with_neuron(&neuron_id, |neuron| neuron.subaccount())?;
                 (neuron_id, neuron_subaccount)
             }
             NeuronIdOrSubaccount::Subaccount(subaccount_bytes) => {
@@ -6323,7 +6367,7 @@ impl Governance {
                         .expect("Neuron should exist, just found in list");
 
                     let maturity = neuron.maturity_e8s_equivalent;
-                    let subaccount = neuron.account.clone();
+                    let subaccount = neuron.subaccount();
 
                     let neuron_stake: u64 = match apply_maturity_modulation(
                         maturity,
@@ -6369,10 +6413,7 @@ impl Governance {
                             neuron_stake,
                             0, // Minting transfer don't pay a fee.
                             None,
-                            neuron_subaccount(
-                                Subaccount::try_from(&subaccount[..])
-                                    .expect("Couldn't convert neuron.account"),
-                            ),
+                            neuron_subaccount(subaccount),
                             now_seconds,
                         )
                         .await

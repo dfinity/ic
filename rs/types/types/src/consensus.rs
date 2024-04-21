@@ -25,9 +25,8 @@ pub mod block_maker;
 pub mod catchup;
 pub mod certification;
 pub mod dkg;
-pub mod ecdsa;
-mod ecdsa_refs;
 pub mod hashed;
+pub mod idkg;
 mod payload;
 pub mod thunk;
 
@@ -1116,58 +1115,6 @@ impl TryFrom<&pb::ConsensusMessageHash> for ConsensusMessageHash {
     }
 }
 
-/// ConsensusMessageAttribute has the same variants as [ConsensusMessage], but
-/// contains only the attributes for each variant. The attributes are the values
-/// that are used in the p2p layer to determine whether an artifact is
-/// interesting to a replica before fetching the full artifact.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum ConsensusMessageAttribute {
-    Finalization(CryptoHashOf<Block>),
-    Notarization(CryptoHashOf<Block>),
-    Empty(()),
-}
-
-impl From<ConsensusMessageAttribute> for pb::ConsensusMessageAttribute {
-    fn from(value: ConsensusMessageAttribute) -> Self {
-        use pb::consensus_message_attribute::Kind;
-        let kind = match value.clone() {
-            ConsensusMessageAttribute::Finalization(hash) => {
-                Kind::Finalization(pb::FinalizationAttribute {
-                    block_hash: hash.get().0,
-                })
-            }
-            ConsensusMessageAttribute::Notarization(hash) => {
-                Kind::Notarization(pb::NotarizationAttribute {
-                    block_hash: hash.get().0,
-                })
-            }
-            ConsensusMessageAttribute::Empty(_) => Kind::Empty(()),
-        };
-        Self { kind: Some(kind) }
-    }
-}
-
-impl TryFrom<pb::ConsensusMessageAttribute> for ConsensusMessageAttribute {
-    type Error = ProxyDecodeError;
-    fn try_from(value: pb::ConsensusMessageAttribute) -> Result<Self, Self::Error> {
-        use pb::consensus_message_attribute::Kind;
-        let Some(kind) = value.kind.clone() else {
-            return Err(ProxyDecodeError::MissingField(
-                "ConsensusMessageAttribute::kind",
-            ));
-        };
-        Ok(match kind {
-            Kind::Finalization(x) => {
-                Self::Finalization(CryptoHashOf::new(CryptoHash(x.block_hash)))
-            }
-            Kind::Notarization(x) => {
-                Self::Notarization(CryptoHashOf::new(CryptoHash(x.block_hash)))
-            }
-            Kind::Empty(()) => Self::Empty(()),
-        })
-    }
-}
-
 /// Useful to compare equality by content, for example Signed<C,S> can be
 /// compared by equality on C.
 pub trait ContentEq {
@@ -1305,20 +1252,6 @@ impl ConsensusMessageHash {
             ConsensusMessageHash::RandomTapeShare(hash) => hash.get_ref(),
             ConsensusMessageHash::CatchUpPackage(hash) => hash.get_ref(),
             ConsensusMessageHash::CatchUpPackageShare(hash) => hash.get_ref(),
-        }
-    }
-}
-
-impl From<&ConsensusMessage> for ConsensusMessageAttribute {
-    fn from(msg: &ConsensusMessage) -> ConsensusMessageAttribute {
-        match msg {
-            ConsensusMessage::Finalization(x) => {
-                ConsensusMessageAttribute::Finalization(x.content.block.clone())
-            }
-            ConsensusMessage::Notarization(x) => {
-                ConsensusMessageAttribute::Notarization(x.content.block.clone())
-            }
-            _ => ConsensusMessageAttribute::Empty(()),
         }
     }
 }

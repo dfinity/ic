@@ -16,8 +16,8 @@ root_hash_re = re.compile("Root hash:[ \t]+([a-f0-9]+).*")
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-i", "--input", help="Input (tar) file of tree to operate in", type=str)
-    parser.add_argument("-o", "--output", help="Target (tar) file of tree to write to", type=str)
+    parser.add_argument("-i", "--input", help="Input (tzst) file of tree to operate in", type=str)
+    parser.add_argument("-o", "--output", help="Target (tzst) file of tree to write to", type=str)
     parser.add_argument("-r", "--root-hash", help="Output file containing root hash", type=str)
     parser.add_argument(
         "-s",
@@ -36,10 +36,12 @@ def main():
         type=int,
         default=10 * 1024 * 1024 * 1024 - 128 * 1024 * 1024,
     )
+    parser.add_argument("-d", "--dflate", help="Path to dflate", type=str)
 
     args = parser.parse_args(sys.argv[1:])
 
     tmpdir = tempfile.mkdtemp(prefix="icosbuild")
+    partition = os.path.join(tmpdir, "partition.img")
     atexit.register(lambda: subprocess.run(["rm", "-rf", tmpdir], check=True))
 
     subprocess.run(
@@ -56,8 +58,8 @@ def main():
     verity_cmdline = [
         "/usr/sbin/veritysetup",
         "format",
-        os.path.join(tmpdir, "partition.img"),
-        os.path.join(tmpdir, "partition.img"),
+        partition,
+        partition,
         "--hash-offset",
         str(args.hash_offset),
         "--uuid",
@@ -86,20 +88,28 @@ def main():
     with open(args.root_hash, "w") as f:
         f.write(root_hash + "\n")
 
+    # If dflate is ever misbehaving, it can be replaced with:
+    # tar cf <output> --sort=name --owner=root:0 --group=root:0 --mtime="UTC 1970-01-01 00:00:00" --sparse --hole-detection=raw -C <context_path> <item>
+    temp_tar = os.path.join(tmpdir, "partition.tar")
     subprocess.run(
         [
-            "tar",
-            "cf",
+            args.dflate,
+            "--input",
+            partition,
+            "--output",
+            temp_tar,
+        ],
+        check=True,
+    )
+
+    subprocess.run(
+        [
+            "zstd",
+            "-q",
+            "--threads=0",
+            temp_tar,
+            "-o",
             args.output,
-            "--sort=name",
-            "--owner=root:0",
-            "--group=root:0",
-            "--mtime=UTC 1970-01-01 00:00:00",
-            "--sparse",
-            "--hole-detection=raw",
-            "-C",
-            tmpdir,
-            "partition.img",
         ],
         check=True,
     )

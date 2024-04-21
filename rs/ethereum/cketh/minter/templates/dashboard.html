@@ -198,14 +198,16 @@
                 <thead>
                 <tr>
                     <th>Token Symbol</th>
+                    <th>Total managed (base unit)</th>
                     <th>Contract Address</th>
                     <th>Ledger Canister Id</th>
                 </tr>
                 </thead>
                 <tbody>
                 {% for token in supported_ckerc20_tokens -%}
-                <tr>
-                  <td>{{ token.ckerc20_token_symbol.to_string() }}</td>
+                <tr id="supported-ckerc20-{{ token.ckerc20_ledger_id}}">
+                    <td>{{ token.ckerc20_token_symbol.to_string() }}</td>
+                    <td class="numeric">{{ token.balance }}</td>
                     <td>{% call etherscan_address_link(token.erc20_contract_address.to_string()) %}</td>
                     <td><code>{{ token.ckerc20_ledger_id.to_string() }}</code></td>
                 </tr>
@@ -388,15 +390,17 @@
                     <tr>
                         <th>Ledger Burn Index</th>
                         <th>Ledger Mint Index</th>
-                        <th>Value (Wei)</th>
+                        <th>Token Symbol</th>
+                        <th>Value (base unit)</th>
                         <th>Txn Hash</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for r in reimbursed_transactions %}
                     <tr>
-                        <td class="numeric">{{ r.burn_in_block }}</td>
+                        <td class="numeric">{{ r.cketh_ledger_burn_index }}</td>
                         <td class="numeric">{{ r.reimbursed_in_block }}</td>
+                        <td>{{ r.token_symbol }}</td>
                         <td class="numeric">{{ r.reimbursed_amount }}</td>
                         <td>{% if r.transaction_hash.is_some() %}{% call etherscan_tx_link(r.transaction_hash.unwrap()) %}{% else%}N/A{% endif %}</td>
                     </tr>

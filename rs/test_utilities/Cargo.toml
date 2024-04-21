@@ -26,7 +26,6 @@ ic-interfaces-certified-stream-store = { path = "../interfaces/certified_stream_
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
 ic-interfaces-state-manager-mocks = { path = "../interfaces/state_manager/mocks" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
-ic-interfaces-transport = { path = "../interfaces/transport" }
 ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-protobuf = { path = "../protobuf" }

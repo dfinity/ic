@@ -15,8 +15,8 @@ use crate::state::event::{Event, EventType};
 use crate::state::transactions::{Erc20WithdrawalRequest, ReimbursementIndex};
 use crate::state::{Erc20Balances, State};
 use crate::tx::{
-    AccessList, AccessListItem, Eip1559Signature, Eip1559TransactionRequest, ResubmissionStrategy,
-    SignedEip1559TransactionRequest, StorageKey, TransactionPriceEstimate,
+    AccessList, AccessListItem, Eip1559Signature, Eip1559TransactionRequest, GasFeeEstimate,
+    ResubmissionStrategy, SignedEip1559TransactionRequest, StorageKey,
 };
 use candid::{Nat, Principal};
 use ethnum::u256;
@@ -273,6 +273,7 @@ fn received_erc20_event() -> ReceivedErc20Event {
 mod upgrade {
     use crate::eth_rpc::BlockTag;
     use crate::lifecycle::upgrade::UpgradeArg;
+    use crate::lifecycle::EthereumNetwork;
     use crate::numeric::{TransactionNonce, Wei};
     use crate::state::tests::initial_state;
     use crate::state::InvalidStateError;
@@ -305,6 +306,26 @@ mod upgrade {
         );
 
         let mut state = initial_state();
+        state.ethereum_network = EthereumNetwork::Mainnet;
+        assert_matches!(
+            state.upgrade(UpgradeArg {
+                minimum_withdrawal_amount: Some(Nat::from(2_000_000_000_000_u64 - 1)),
+                ..Default::default()
+            }),
+            Err(InvalidStateError::InvalidMinimumWithdrawalAmount(_))
+        );
+
+        let mut state = initial_state();
+        state.ethereum_network = EthereumNetwork::Sepolia;
+        assert_matches!(
+            state.upgrade(UpgradeArg {
+                minimum_withdrawal_amount: Some(Nat::from(10_000_000_000_u64 - 1)),
+                ..Default::default()
+            }),
+            Err(InvalidStateError::InvalidMinimumWithdrawalAmount(_))
+        );
+
+        let mut state = initial_state();
         assert_matches!(
             state.upgrade(UpgradeArg {
                 ethereum_contract_address: Some("invalid".to_string()),
@@ -331,7 +352,7 @@ mod upgrade {
         let mut state = initial_state();
         let upgrade_arg = UpgradeArg {
             next_transaction_nonce: Some(Nat::from(15_u8)),
-            minimum_withdrawal_amount: Some(Nat::from(100_u8)),
+            minimum_withdrawal_amount: Some(Nat::from(10_000_000_000_000_000_u64)),
             ethereum_contract_address: Some(
                 "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34".to_string(),
             ),
@@ -345,7 +366,10 @@ mod upgrade {
             state.eth_transactions.next_transaction_nonce(),
             TransactionNonce::from(15_u64)
         );
-        assert_eq!(state.minimum_withdrawal_amount, Wei::from(100_u64));
+        assert_eq!(
+            state.cketh_minimum_withdrawal_amount,
+            Wei::new(10_000_000_000_000_000)
+        );
         assert_eq!(
             state.eth_helper_contract_address,
             Some(Address::from_str("0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34").unwrap())
@@ -960,7 +984,7 @@ fn state_equivalence() {
             public_key: vec![1; 32],
             chain_code: vec![2; 32],
         }),
-        minimum_withdrawal_amount: Wei::new(1_000_000_000_000_000),
+        cketh_minimum_withdrawal_amount: Wei::new(1_000_000_000_000_000),
         ethereum_block_height: BlockTag::Finalized,
         first_scraped_block_number: BlockNumber::new(1_000_001),
         last_scraped_block_number: BlockNumber::new(1_000_000),
@@ -1056,7 +1080,7 @@ fn state_equivalence() {
     assert_ne!(
         Ok(()),
         state.is_equivalent_to(&State {
-            minimum_withdrawal_amount: Wei::new(1),
+            cketh_minimum_withdrawal_amount: Wei::new(1),
             ..state.clone()
         }),
         "changing essential fields should break equivalence",
@@ -1216,8 +1240,8 @@ fn state_equivalence() {
         state.is_equivalent_to(&State {
             last_transaction_price_estimate: Some((
                 0,
-                TransactionPriceEstimate {
-                    max_fee_per_gas: WeiPerGas::new(100_000_000),
+                GasFeeEstimate {
+                    base_fee_per_gas: WeiPerGas::new(10_000_000),
                     max_priority_fee_per_gas: WeiPerGas::new(1_000_000),
                 }
             )),

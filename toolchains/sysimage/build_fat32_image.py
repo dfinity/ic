@@ -2,10 +2,10 @@
 #
 # Packs contents of a tar file into a fat32 image (possibly taking only a
 # subdirectory of the full tar file). The (sparse) fat32 image itself is then
-# wrapped into a tar file itself.
+# wrapped into a tzst file.
 #
 # Call example:
-#   build_fat32_image -s 10M -o partition.img.tar -p boot/efi -i dockerimg.tar
+#   build_fat32_image -s 10M -o partition.img.tzst -p boot/efi -i dockerimg.tar
 #
 import argparse
 import atexit
@@ -86,7 +86,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-l", "--label", help="Label to add to partition", type=str)
     parser.add_argument("-s", "--size", help="Size of image to build", type=str)
-    parser.add_argument("-o", "--output", help="Target (tar) file to write partition image to", type=str)
+    parser.add_argument("-o", "--output", help="Target (tzst) file to write partition image to", type=str)
     parser.add_argument(
         "-i", "--input", help="Source (tar) file to take files from", type=str, default="", required=False
     )
@@ -105,6 +105,7 @@ def main():
         nargs="*",
         help="Extra files to install; expects list of sourcefile:targetfile:mode",
     )
+    parser.add_argument("-d", "--dflate", help="Path to dflate", type=str)
 
     args = parser.parse_args(sys.argv[1:])
 
@@ -141,20 +142,28 @@ def main():
 
     install_extra_files(image_file, extra_files, path_transform)
 
+    # If dflate is ever misbehaving, it can be replaced with:
+    # tar cf <output> --sort=name --owner=root:0 --group=root:0 --mtime="UTC 1970-01-01 00:00:00" --sparse --hole-detection=raw -C <context_path> <item>
+    temp_tar = os.path.join(tmpdir, "partition.tar")
     subprocess.run(
         [
-            "tar",
-            "cf",
+            args.dflate,
+            "--input",
+            image_file,
+            "--output",
+            temp_tar,
+        ],
+        check=True,
+    )
+
+    subprocess.run(
+        [
+            "zstd",
+            "-q",
+            "--threads=0",
+            temp_tar,
+            "-o",
             out_file,
-            "--sort=name",
-            "--owner=root:0",
-            "--group=root:0",
-            "--mtime=UTC 1970-01-01 00:00:00",
-            "--sparse",
-            "--hole-detection=raw",
-            "-C",
-            tmpdir,
-            "partition.img",
         ],
         check=True,
     )

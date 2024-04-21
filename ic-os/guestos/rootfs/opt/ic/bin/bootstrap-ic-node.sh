@@ -13,8 +13,10 @@
 
 set -eo pipefail
 
+# Source the functions required for writing metrics
+source /opt/ic/bin/metrics.sh
+
 SCRIPT="$(basename $0)[$$]"
-METRICS_DIR="/run/node_exporter/collector_textfile"
 GUESTOS_VERSION_FILE="/opt/ic/share/version.txt"
 
 write_log() {
@@ -25,25 +27,6 @@ write_log() {
     fi
 
     logger -t ${SCRIPT} "${message}"
-}
-
-write_metric_attr() {
-    local name=$1
-    local attr=$2
-    local value=$3
-    local help=$4
-    local type=$5
-
-    echo -e "# HELP ${name} ${help}\n# TYPE ${type}\n${name}${attr} ${value}" >"${METRICS_DIR}/${name}.prom"
-}
-
-write_metric() {
-    local name=$1
-    local value=$2
-    local help=$3
-    local type=$4
-
-    echo -e "# HELP ${name} ${help}\n# TYPE ${type}\n${name} ${value}" >"${METRICS_DIR}/${name}.prom"
 }
 
 function get_guestos_version() {
@@ -118,6 +101,10 @@ function process_bootstrap() {
         echo "Installing initial crypto material"
         cp -rL -T "${TMPDIR}/ic_crypto" "${STATE_ROOT}/crypto"
     fi
+    if [ -e "${TMPDIR}/ic_state" ]; then
+        echo "Installing initial state"
+        cp -rL -T "${TMPDIR}/ic_state" "${STATE_ROOT}/data/ic_state"
+    fi
     for ITEM in ic_registry_local_store nns_public_key.pem node_operator_private_key.pem; do
         if [ -e "${TMPDIR}/${ITEM}" ]; then
             echo "Setting up initial ${ITEM}"
@@ -159,7 +146,6 @@ write_metric_attr "guestos_boot_action" \
 
 if [ -f /boot/config/CONFIGURED ]; then
     echo "Bootstrap completed already"
-    exit 0
 fi
 
 while [ ! -f /boot/config/CONFIGURED ]; do
@@ -200,3 +186,13 @@ while [ ! -f /boot/config/CONFIGURED ]; do
         umount /mnt
     fi
 done
+
+node_operator_private_key_exists=0
+if [ -f "/var/lib/ic/data/node_operator_private_key.pem" ]; then
+    node_operator_private_key_exists=1
+fi
+
+write_metric "guestos_node_operator_private_key_exists" \
+    "${node_operator_private_key_exists}" \
+    "Existence of a Node Operator private key indicates the node deployment method" \
+    "gauge"

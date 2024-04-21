@@ -2,6 +2,7 @@
 Hold manifest common to all HostOS variants.
 """
 
+load("//ic-os/hostos/rootfs:defs.bzl", "rootfs_files")
 load("//toolchains/sysimage:toolchain.bzl", "lvm_image")
 
 # Declare the dependencies that we will have for the built filesystem images.
@@ -21,7 +22,7 @@ def image_deps(mode, _malicious = False):
     """
 
     deps = {
-        "base_dockerfile": "//ic-os/hostos:rootfs/Dockerfile.base",
+        "base_dockerfile": "//ic-os/hostos/rootfs:Dockerfile.base",
 
         # Extra files to be added to rootfs and bootfs
         "bootfs": {},
@@ -37,13 +38,14 @@ def image_deps(mode, _malicious = False):
         },
 
         # Set various configuration values
-        "container_context_files": Label("//ic-os/hostos:rootfs-files"),
+        "container_context_files": Label("//ic-os/hostos/rootfs:context-files"),
+        "rootfs_files": rootfs_files,
         "partition_table": Label("//ic-os/hostos:partitions.csv"),
         "volume_table": Label("//ic-os/hostos:volumes.csv"),
         "rootfs_size": "3G",
         "bootfs_size": "100M",
         "grub_config": Label("//ic-os/hostos:grub.cfg"),
-        "extra_boot_args": Label("//ic-os/hostos:rootfs/extra_boot_args"),
+        "extra_boot_args": Label("//ic-os/hostos/rootfs:extra_boot_args"),
 
         # Add any custom partitions to the manifest
         "custom_partitions": _custom_partitions,
@@ -74,22 +76,20 @@ def image_deps(mode, _malicious = False):
 # earlier in the pipeline, and is depended on by the final disk image.
 def _custom_partitions():
     lvm_image(
-        name = "partition-hostlvm.tar",
+        name = "partition-hostlvm.tzst",
         layout = Label("//ic-os/hostos:volumes.csv"),
         partitions = [
-            Label("//ic-os/hostos:partition-config.tar"),
-            ":partition-boot.tar",
-            ":partition-root.tar",
+            Label("//ic-os/hostos:partition-config.tzst"),
+            ":partition-boot.tzst",
+            ":partition-root.tzst",
         ],
         vg_name = "hostlvm",
         vg_uuid = "4c7GVZ-Df82-QEcJ-xXtV-JgRL-IjLE-hK0FgA",
         pv_uuid = "eu0VQE-HlTi-EyRc-GceP-xZtn-3j6t-iqEwyv",
-        # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
-        # TODO(IDX-2221): remove no-remote-cache when CI jobs and bazel infrastructure will run in the same clusters.
-        tags = ["no-remote-cache", "manual"],
+        tags = ["manual"],
         target_compatible_with = [
             "@platforms//os:linux",
         ],
     )
 
-    return [":partition-hostlvm.tar"]
+    return [":partition-hostlvm.tzst"]

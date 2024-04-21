@@ -4,11 +4,10 @@
 # table description. The actual disk image is wrapped up into a tar file
 # because the raw image file is sparse.
 #
-# The input partition images are also expected to be given as tar files,
-# where each tar archive must contain a single file named "partition.img".
+# The input partition images are also expected to be given as tzst files,
 #
 # Call example:
-#   build_disk_image -p partitions.csv -o disk.img.tar part1.tar part2.tar ...
+#   build_disk_image -p partitions.csv -o disk.img.tar part1.tzst part2.tzst ...
 #
 import argparse
 import atexit
@@ -98,7 +97,14 @@ def _copyfile(source, target, size):
         size -= len(data)
 
 
-def write_partition_image_from_tar(gpt_entry, image_file, partition_tf):
+def write_partition_image_from_tzst(gpt_entry, image_file, partition_tzst):
+    tmpdir = tempfile.mkdtemp(prefix="icosbuild")
+    atexit.register(lambda: subprocess.run(["rm", "-rf", tmpdir], check=True))
+
+    partition_tf = os.path.join(tmpdir, "partition.tar")
+    subprocess.run(["zstd", "-q", "--threads=0", "-f", "-d", partition_tzst, "-o", partition_tf], check=True)
+
+    partition_tf = tarfile.open(partition_tf, mode="r:")
     base = gpt_entry["start"] * 512
     with os.fdopen(os.open(image_file, os.O_RDWR), "wb+") as target:
         for member in partition_tf:
@@ -139,6 +145,7 @@ def main():
         nargs="*",
         help="Partitions to write. These must match the CSV partition table entries.",
     )
+    parser.add_argument("-d", "--dflate", help="Path to dflate", type=str)
 
     args = parser.parse_args(sys.argv[1:])
 
@@ -172,7 +179,7 @@ def main():
         partition_file = select_partition_file(name, partition_files)
 
         if partition_file:
-            write_partition_image_from_tar(entry, disk_image, tarfile.open(partition_file, mode="r:"))
+            write_partition_image_from_tzst(entry, disk_image, partition_file)
         else:
             print("No partition file for '%s' found, leaving empty" % name)
 
@@ -180,20 +187,15 @@ def main():
     if args.expanded_size:
         subprocess.run(["truncate", "--size", args.expanded_size, disk_image], check=True)
 
+    # If dflate is ever misbehaving, it can be replaced with:
+    # tar cf <output> --sort=name --owner=root:0 --group=root:0 --mtime="UTC 1970-01-01 00:00:00" --sparse --hole-detection=raw -C <context_path> <item>
     subprocess.run(
         [
-            "tar",
-            "cf",
+            args.dflate,
+            "--input",
+            disk_image,
+            "--output",
             out_file,
-            "--sort=name",
-            "--owner=root:0",
-            "--group=root:0",
-            "--mtime=UTC 1970-01-01 00:00:00",
-            "--sparse",
-            "--hole-detection=raw",
-            "-C",
-            tmpdir,
-            "disk.img",
         ],
         check=True,
     )

@@ -8,6 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 candid = { workspace = true }
+ic-cdk = { workspace = true }
 ciborium = { workspace = true }
 dfn_candid = { path = "../../../rust_canisters/dfn_candid" }
 dfn_core = { path = "../../../rust_canisters/dfn_core" }
@@ -24,3 +25,5 @@ serde = { workspace = true }
 
 [dev-dependencies]
 candid_parser = { workspace = true }
+ic-ledger-test-utils = { path = "../test_utils" }
+pocket-ic = { path = "../../../../packages/pocket-ic" }

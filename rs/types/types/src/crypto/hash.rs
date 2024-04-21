@@ -8,7 +8,7 @@ use crate::consensus::{
         Certification, CertificationContent, CertificationMessage, CertificationShare,
     },
     dkg as consensus_dkg,
-    ecdsa::{
+    idkg::{
         EcdsaComplaintContent, EcdsaMessage, EcdsaOpeningContent, EcdsaSigShare, EcdsaTranscript,
     },
     Block, BlockMetadata, BlockPayload, CatchUpContent, CatchUpContentProtobufBytes,

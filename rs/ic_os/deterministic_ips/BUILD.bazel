@@ -29,9 +29,5 @@ rust_library(
 
 rust_test(
     name = "tests",
-    srcs = glob(
-        ["src/**/*.rs"],
-        exclude = ["src/main.rs"],
-    ),
     crate = ":deterministic_ips",
 )

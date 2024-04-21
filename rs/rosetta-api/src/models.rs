@@ -5,12 +5,12 @@ pub mod timestamp;
 
 use crate::errors::convert_to_error;
 use crate::{convert::from_hex, errors, errors::ApiError, request_types::RequestType};
-pub use ic_canister_client_sender::Ed25519KeyPair as EdKeypair;
 use ic_types::messages::{
     HttpCallContent, HttpCanisterUpdate, HttpReadStateContent, HttpRequestEnvelope,
 };
 pub use rosetta_core::identifiers::*;
 pub use rosetta_core::miscellaneous::*;
+pub use rosetta_core::models::Ed25519KeyPair as EdKeypair;
 pub use rosetta_core::objects::*;
 pub use rosetta_core::request_types::*;
 pub use rosetta_core::response_types::*;

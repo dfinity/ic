@@ -2,7 +2,8 @@
 
 use assert_matches::assert_matches;
 use ic_crypto_internal_threshold_sig_ecdsa::*;
-use ic_types::crypto::canister_threshold_sig::MasterEcdsaPublicKey;
+use ic_crypto_internal_threshold_sig_ecdsa_test_utils::verify_bip340_signature_using_third_party;
+use ic_types::crypto::canister_threshold_sig::MasterPublicKey;
 use ic_types::crypto::AlgorithmId;
 use ic_types::{NumberOfNodes, Randomness};
 use rand::{seq::IteratorRandom, Rng};
@@ -68,17 +69,6 @@ fn verify_ecdsa_signature_using_third_party(
     }
 }
 
-pub fn verify_bip340_signature_using_third_party(pk: &[u8], sig: &[u8], msg: &[u8]) -> bool {
-    use k256::ecdsa::signature::hazmat::PrehashVerifier;
-
-    assert_eq!(pk.len(), 32);
-    assert_eq!(sig.len(), 64);
-
-    let vk = k256::schnorr::VerifyingKey::from_bytes(pk).unwrap();
-    let sig = k256::schnorr::Signature::try_from(sig).unwrap();
-    vk.verify_prehash(msg, &sig).is_ok()
-}
-
 #[derive(Debug, Clone)]
 pub struct ProtocolSetup {
     alg: AlgorithmId,
@@ -102,6 +92,7 @@ impl ProtocolSetup {
         let alg = match cfg.signature_curve() {
             EccCurveType::K256 => AlgorithmId::ThresholdEcdsaSecp256k1,
             EccCurveType::P256 => AlgorithmId::ThresholdEcdsaSecp256r1,
+            EccCurveType::Ed25519 => AlgorithmId::ThresholdEd25519,
         };
 
         let rng = &mut seed.into_rng();
@@ -810,6 +801,19 @@ impl ProtocolRound {
     }
 }
 
+pub fn compute_public_key(
+    alg: AlgorithmId,
+    key_transcript: &IDkgTranscriptInternal,
+    path: &DerivationPath,
+) -> Result<PublicKey, ThresholdEcdsaError> {
+    let master_public_key = MasterPublicKey {
+        algorithm_id: alg,
+        public_key: key_transcript.constant_term().serialize(),
+    };
+    ic_crypto_internal_threshold_sig_ecdsa::derive_threshold_public_key(&master_public_key, path)
+        .map_err(|e| ThresholdEcdsaError::InvalidArguments(format!("{:?}", e)))
+}
+
 #[derive(Clone, Debug)]
 pub struct EcdsaSignatureProtocolSetup {
     setup: ProtocolSetup,
@@ -898,18 +902,8 @@ impl EcdsaSignatureProtocolSetup {
         })
     }
 
-    pub fn public_key(&self, path: &DerivationPath) -> Result<EcdsaPublicKey, ThresholdEcdsaError> {
-        let mpk_alg = match self.setup.alg {
-            AlgorithmId::ThresholdEcdsaSecp256r1 => AlgorithmId::EcdsaP256,
-            AlgorithmId::ThresholdEcdsaSecp256k1 => AlgorithmId::EcdsaSecp256k1,
-            _ => panic!("Unknown algorithm in ProtocolSetup"),
-        };
-        let master_public_key = MasterEcdsaPublicKey {
-            algorithm_id: mpk_alg,
-            public_key: self.key.transcript.constant_term().serialize(),
-        };
-        ic_crypto_internal_threshold_sig_ecdsa::derive_ecdsa_public_key(&master_public_key, path)
-            .map_err(|e| ThresholdEcdsaError::InvalidArguments(format!("{:?}", e)))
+    pub fn public_key(&self, path: &DerivationPath) -> Result<PublicKey, ThresholdEcdsaError> {
+        compute_public_key(self.setup.alg, &self.key.transcript, path)
     }
 
     pub fn alg(&self) -> AlgorithmId {
@@ -1066,7 +1060,7 @@ impl Bip340SignatureProtocolSetup {
     }
 
     pub fn public_key(&self, path: &DerivationPath) -> Result<Vec<u8>, ThresholdEcdsaError> {
-        Ok(derive_bip340_public_key(&self.key.transcript, path)?.to_vec())
+        Ok(compute_public_key(self.setup.alg, &self.key.transcript, path)?.public_key)
     }
 }
 

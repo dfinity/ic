@@ -1235,7 +1235,9 @@ mod tests {
         mock_transport.expect_rpc().returning(|_, _| {
             Ok(Response::builder()
                 .body(Bytes::from(
-                    <<U64Artifact as ArtifactKind>::PbMessage>::proxy_encode(0_u64),
+                    <<U64Artifact as ArtifactKind>::PbMessage>::proxy_encode(
+                        U64Artifact::id_to_msg(0, 1024),
+                    ),
                 ))
                 .unwrap())
         });
@@ -1263,7 +1265,7 @@ mod tests {
         // Check that we received downloaded artifact.
         assert_eq!(
             channels.unvalidated_artifact_receiver.recv().await.unwrap(),
-            UnvalidatedArtifactMutation::Insert((0, NODE_1))
+            UnvalidatedArtifactMutation::Insert((U64Artifact::id_to_msg(0, 1024), NODE_1))
         );
     }
 
@@ -1719,7 +1721,9 @@ mod tests {
             .returning(|_, _| {
                 Ok(Response::builder()
                     .body(Bytes::from(
-                        <<U64Artifact as ArtifactKind>::PbMessage>::proxy_encode(1_u64),
+                        <<U64Artifact as ArtifactKind>::PbMessage>::proxy_encode(
+                            U64Artifact::id_to_msg(1, 1024),
+                        ),
                     ))
                     .unwrap())
             })
@@ -1732,7 +1736,9 @@ mod tests {
                 // Respond with artifact that does correspond to the advertised ID
                 Ok(Response::builder()
                     .body(Bytes::from(
-                        <<U64Artifact as ArtifactKind>::PbMessage>::proxy_encode(0_u64),
+                        <<U64Artifact as ArtifactKind>::PbMessage>::proxy_encode(
+                            U64Artifact::id_to_msg(0, 1024),
+                        ),
                     ))
                     .unwrap())
             })
@@ -1761,7 +1767,7 @@ mod tests {
                     ConsensusManagerMetrics::new::<U64Artifact>(&MetricsRegistry::default()),
                 )
                 .await,
-                Ok((0, NODE_1))
+                Ok((U64Artifact::id_to_msg(0, 1024), NODE_1))
             )
         });
     }

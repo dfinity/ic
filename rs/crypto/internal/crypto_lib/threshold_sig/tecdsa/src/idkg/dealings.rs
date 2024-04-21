@@ -16,54 +16,38 @@ pub enum SecretShares {
 
 impl Debug for SecretShares {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self {
-            Self::Random => write!(f, "SecretShares::Random"),
-            Self::RandomUnmasked => write!(f, "SecretShares::RandomUnmasked"),
-            Self::ReshareOfUnmasked(EccScalar::K256(_)) => write!(
-                f,
-                "SecretShares::ReshareOfUnmasked(EccScalar::K256) - REDACTED"
-            ),
-            Self::ReshareOfUnmasked(EccScalar::P256(_)) => write!(
-                f,
-                "SecretShares::ReshareOfUnmasked(EccScalar::P256) - REDACTED"
-            ),
-            Self::ReshareOfMasked(EccScalar::K256(_), EccScalar::K256(_)) => write!(
-                f,
-                "SecretShares::ReshareOfMasked(EccScalar::K256) - REDACTED"
-            ),
-            Self::ReshareOfMasked(EccScalar::P256(_), EccScalar::P256(_)) => write!(
-                f,
-                "SecretShares::ReshareOfMasked(EccScalar::P256) - REDACTED"
-            ),
-            Self::ReshareOfMasked(_, _) => write!(
-                f,
-                "Unsupported curve combination in SecretShares::ReshareOfMasked!"
-            ),
-            Self::UnmaskedTimesMasked(
-                EccScalar::K256(_),
-                (EccScalar::K256(_), EccScalar::K256(_)),
-            ) => {
-                write!(
-                    f,
-                    "SecretShares::UnmaskedTimesMasked(EccScalar::K256) - REDACTED"
-                )
+        let name = match self {
+            Self::Random => "Random",
+            Self::RandomUnmasked => "RandomUnmasked",
+            Self::ReshareOfUnmasked(_) => "ReshareOfUnmasked",
+            Self::ReshareOfMasked(_, _) => "ReshareOfMasked",
+            Self::UnmaskedTimesMasked(_, _) => "UnmaskedTimesMasked",
+        };
+
+        fn format_curve_id(curves: &[EccCurveType]) -> String {
+            if curves.is_empty() {
+                return "".to_string();
             }
-            Self::UnmaskedTimesMasked(
-                EccScalar::P256(_),
-                (EccScalar::P256(_), EccScalar::P256(_)),
-            ) => {
-                write!(
-                    f,
-                    "SecretShares::UnmaskedTimesMasked(EccScalar::P256) - REDACTED"
-                )
-            }
-            Self::UnmaskedTimesMasked(_, (_, _)) => {
-                write!(
-                    f,
-                    "Unsupported curve combination in SecretShares::UnmaskedTimesMasked!"
-                )
+
+            if curves.windows(2).all(|w| w[0] == w[1]) {
+                format!("({:?})", curves[0])
+            } else {
+                format!(" unsupported curve combination {:?}", curves)
             }
         }
+
+        let curve = match self {
+            Self::Random => "".to_string(),
+            Self::RandomUnmasked => "".to_string(),
+            Self::ReshareOfUnmasked(s) => format_curve_id(&[s.curve_type()]),
+            Self::ReshareOfMasked(s1, s2) => format_curve_id(&[s1.curve_type(), s2.curve_type()]),
+            Self::UnmaskedTimesMasked(s1, (s2, s3)) => {
+                format_curve_id(&[s1.curve_type(), s2.curve_type(), s3.curve_type()])
+            }
+        };
+
+        let redacted = if curve.is_empty() { "" } else { " - REDACTED" };
+        write!(f, "SecretShares::{}{}{}", name, curve, redacted)
     }
 }
 

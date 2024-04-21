@@ -51,8 +51,8 @@ use ic_nns_governance::{
         Governance as GovernanceProto, GovernanceError, ListKnownNeuronsResponse, ListNeurons,
         ListNeuronsResponse, ListNodeProvidersResponse, ListProposalInfo, ListProposalInfoResponse,
         ManageNeuron, ManageNeuronResponse, MostRecentMonthlyNodeProviderRewards, NetworkEconomics,
-        Neuron, NeuronInfo, NnsFunction, NodeProvider, Proposal, ProposalInfo, RewardEvent,
-        RewardNodeProviders, SettleCommunityFundParticipation,
+        Neuron, NeuronInfo, NnsFunction, NodeProvider, Proposal, ProposalInfo, RestoreAgingSummary,
+        RewardEvent, RewardNodeProviders, SettleCommunityFundParticipation,
         SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse,
         UpdateNodeProvider, Vote,
     },
@@ -928,6 +928,18 @@ fn get_migrations_() -> Migrations {
         .unwrap_or_default()
 }
 
+#[export_name = "canister_query get_restore_aging_summary"]
+fn get_restore_aging_summary() {
+    over(candid, |()| -> RestoreAgingSummary {
+        get_restore_aging_summary_()
+    })
+}
+
+#[candid_method(query, rename = "get_restore_aging_summary")]
+fn get_restore_aging_summary_() -> RestoreAgingSummary {
+    governance().get_restore_aging_summary().unwrap_or_default()
+}
+
 #[export_name = "canister_query http_request"]
 fn http_request() {
     dfn_http_metrics::serve_metrics(|metrics_encoder| {
@@ -977,6 +989,8 @@ fn get_effective_payload(
         NnsFunction::Unspecified
         | NnsFunction::UpdateElectedHostosVersions
         | NnsFunction::UpdateNodesHostosVersion
+        | NnsFunction::ReviseElectedHostosVersions
+        | NnsFunction::DeployHostosToSomeNodes
         | NnsFunction::AssignNoid
         | NnsFunction::CreateSubnet
         | NnsFunction::AddNodeToSubnet
@@ -989,9 +1003,9 @@ fn get_effective_payload(
         | NnsFunction::RecoverSubnet
         | NnsFunction::BlessReplicaVersion
         | NnsFunction::RetireReplicaVersion
-        | NnsFunction::UpdateElectedReplicaVersions
+        | NnsFunction::ReviseElectedGuestosVersions
         | NnsFunction::UpdateNodeOperatorConfig
-        | NnsFunction::UpdateSubnetReplicaVersion
+        | NnsFunction::DeployGuestosToAllSubnetNodes
         | NnsFunction::UpdateConfigOfSubnet
         | NnsFunction::IcpXdrConversionRate
         | NnsFunction::ClearProvisionalWhitelist
@@ -1005,7 +1019,7 @@ fn get_effective_payload(
         | NnsFunction::UninstallCode
         | NnsFunction::UpdateNodeRewardsTable
         | NnsFunction::AddOrRemoveDataCenters
-        | NnsFunction::UpdateUnassignedNodesConfig
+        | NnsFunction::UpdateUnassignedNodesConfig // obsolete
         | NnsFunction::RemoveNodeOperators
         | NnsFunction::RerouteCanisterRanges
         | NnsFunction::PrepareCanisterMigration
@@ -1018,7 +1032,10 @@ fn get_effective_payload(
         | NnsFunction::InsertSnsWasmUpgradePathEntries
         | NnsFunction::AddApiBoundaryNode
         | NnsFunction::RemoveApiBoundaryNodes
-        | NnsFunction::UpdateApiBoundaryNodesVersion => Cow::Borrowed(payload),
+        | NnsFunction::UpdateApiBoundaryNodesVersion // obsolete
+        | NnsFunction::DeployGuestosToAllUnassignedNodes
+        | NnsFunction::UpdateSshReadonlyAccessForAllUnassignedNodes
+        | NnsFunction::DeployGuestosToSomeApiBoundaryNodes => Cow::Borrowed(payload),
     }
 }
 

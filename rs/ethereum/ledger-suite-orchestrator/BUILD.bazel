@@ -1,5 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:defs.bzl", "gzip_compress")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -72,7 +73,6 @@ rust_test(
 
 rust_test(
     name = "canister_unit_tests",
-    srcs = ["src/dashboard/tests.rs"],
     crate = ":_wasm_ledger_suite_orchestrator_canister",
     data = [":ledger_suite_orchestrator.did"],
     env = {
@@ -110,6 +110,11 @@ rust_canister(
         "@crate_index//:ic-metrics-encoder",
         "@crate_index//:serde",
     ],
+)
+
+gzip_compress(
+    name = "ledger_suite_orchestrator_canister" + ".wasm.gz",
+    srcs = [":ledger_suite_orchestrator_canister"],
 )
 
 rust_test(

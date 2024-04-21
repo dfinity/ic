@@ -735,11 +735,14 @@ impl MutablePool<ConsensusArtifact> for ConsensusPoolImpl {
                     self.clear_instants(height);
                     unvalidated_ops.purge_below(height);
                 }
-                ChangeAction::HandleInvalid(to_remove, s) => {
+                ChangeAction::HandleInvalid(to_remove, error_message) => {
                     self.invalidated_artifacts.inc();
                     warn!(
                         self.log,
-                        "Invalid consensus artifact ({}): {:?}", s, to_remove
+                        "Invalid consensus artifact ({}) at height {}: {:?}",
+                        error_message,
+                        to_remove.height(),
+                        to_remove
                     );
                     unvalidated_ops.remove(to_remove.get_id());
                 }

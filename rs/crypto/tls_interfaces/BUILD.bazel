@@ -19,9 +19,7 @@ package(default_visibility = [
 
 rust_library(
     name = "tls_interfaces",
-    srcs = [
-        "src/lib.rs",
-    ],
+    srcs = glob(["src/**/*.rs"]),
     crate_name = "ic_crypto_tls_interfaces",
     proc_macro_deps = [
         "@crate_index//:async-trait",
@@ -40,7 +38,6 @@ rust_library(
 
 rust_test(
     name = "tls_interfaces_test",
-    srcs = glob(["src/**/*.rs"]),
     crate = ":tls_interfaces",
     deps = [
         "//rs/crypto/test_utils/reproducible_rng",

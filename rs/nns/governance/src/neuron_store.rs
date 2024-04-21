@@ -683,7 +683,7 @@ impl NeuronStore {
         };
         self.map_heap_neurons_filtered(filter, |n| NeuronsFundNeuron {
             id: n.id(),
-            controller: n.controller.unwrap(),
+            controller: n.controller(),
             maturity_equivalent_icp_e8s: n.maturity_e8s_equivalent,
         })
         .into_iter()

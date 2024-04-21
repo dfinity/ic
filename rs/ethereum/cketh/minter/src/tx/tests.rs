@@ -4,9 +4,7 @@ use proptest::strategy::Strategy;
 mod estimate_transaction_price {
     use crate::eth_rpc::FeeHistory;
     use crate::numeric::{BlockNumber, WeiPerGas};
-    use crate::tx::{
-        estimate_transaction_price, TransactionPriceEstimate, TransactionPriceEstimationError,
-    };
+    use crate::tx::{estimate_transaction_fee, GasFeeEstimate, TransactionFeeEstimationError};
     use assert_matches::assert_matches;
     use proptest::collection::vec;
     use proptest::prelude::any;
@@ -27,15 +25,13 @@ mod estimate_transaction_price {
                 max(median, 1_500_000_000_u64)
             };
             let fee_history = fee_history(base_fee_per_gas, reward);
-            let expected_max_fee_per_gas =
-                2_u128 * (expected_base_fee_per_gas as u128) + (expected_max_priority_fee_per_gas as u128);
 
-            let result = estimate_transaction_price(&fee_history);
+            let result = estimate_transaction_fee(&fee_history);
 
             prop_assert_eq!(
                 result,
-                Ok(TransactionPriceEstimate {
-                    max_fee_per_gas: WeiPerGas::from(expected_max_fee_per_gas),
+                Ok(GasFeeEstimate {
+                    base_fee_per_gas: WeiPerGas::from(expected_base_fee_per_gas),
                     max_priority_fee_per_gas: WeiPerGas::from(expected_max_priority_fee_per_gas),
                 })
             )
@@ -56,16 +52,16 @@ mod estimate_transaction_price {
             vec![0_u8, 0, 0, 0, 0],
         );
 
-        let result = estimate_transaction_price(&fee_history);
+        let result = estimate_transaction_fee(&fee_history);
 
-        assert_matches!(result, Err(TransactionPriceEstimationError::Overflow(_)));
+        assert_matches!(result, Err(TransactionFeeEstimationError::Overflow(_)));
     }
 
     #[test]
     fn should_fail_when_max_priority_fee_per_gas_overflows() {
         let fee_history = fee_history(vec![0_u8, 0, 0, 0, 0, 1], [WeiPerGas::MAX; 5].to_vec());
-        let result = estimate_transaction_price(&fee_history);
-        assert_matches!(result, Err(TransactionPriceEstimationError::Overflow(_)));
+        let result = estimate_transaction_fee(&fee_history);
+        assert_matches!(result, Err(TransactionFeeEstimationError::Overflow(_)));
     }
 
     fn fee_history<U: Into<WeiPerGas>, V: Into<WeiPerGas>>(

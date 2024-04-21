@@ -24,18 +24,16 @@ use ic_protobuf::{
     log::consensus_log_entry::v1::ConsensusLogEntry,
     registry::{crypto::v1::PublicKey as PublicKeyProto, subnet::v1::InitialNiDkgTranscriptRecord},
 };
+use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::{
     batch::{Batch, BatchMessages, BlockmakerMetrics, ConsensusResponse},
     consensus::{
-        ecdsa::{self, CompletedSignature},
+        idkg::{self, CompletedSignature},
         Block,
     },
     crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTranscript},
     messages::{CallbackId, Payload, RejectContext},
     Height, PrincipalId, Randomness, ReplicaVersion, SubnetId,
-};
-use ic_types::{
-    crypto::threshold_sig::ThresholdSigPublicKey, messages::NO_DEADLINE, CanisterId, Cycles,
 };
 use std::collections::BTreeMap;
 
@@ -349,14 +347,7 @@ pub fn generate_responses_to_setup_initial_dkg_calls(
             log,
         );
         if let Some(payload) = payload {
-            consensus_responses.push(ConsensusResponse {
-                callback,
-                payload,
-                originator: Some(CanisterId::ic_00()),
-                respondent: Some(CanisterId::ic_00()),
-                refund: Some(Cycles::zero()),
-                deadline: Some(NO_DEADLINE),
-            });
+            consensus_responses.push(ConsensusResponse::new(callback, payload));
         }
     }
     consensus_responses
@@ -437,7 +428,7 @@ fn generate_dkg_response_payload(
 /// Creates responses to `SignWithECDSA` system calls with the computed
 /// signature.
 pub fn generate_responses_to_sign_with_ecdsa_calls(
-    ecdsa_payload: &ecdsa::EcdsaPayload,
+    ecdsa_payload: &idkg::EcdsaPayload,
 ) -> Vec<ConsensusResponse> {
     let mut consensus_responses = Vec::new();
     for completed in ecdsa_payload.signature_agreements.values() {
@@ -451,11 +442,11 @@ pub fn generate_responses_to_sign_with_ecdsa_calls(
 /// Creates responses to `ComputeInitialEcdsaDealingsArgs` system calls with the initial
 /// dealings.
 fn generate_responses_to_initial_dealings_calls(
-    ecdsa_payload: &ecdsa::EcdsaPayload,
+    ecdsa_payload: &idkg::EcdsaPayload,
 ) -> Vec<ConsensusResponse> {
     let mut consensus_responses = Vec::new();
     for agreement in ecdsa_payload.xnet_reshare_agreements.values() {
-        if let ecdsa::CompletedReshareRequest::Unreported(response) = agreement {
+        if let idkg::CompletedReshareRequest::Unreported(response) = agreement {
             consensus_responses.push(response.clone());
         }
     }

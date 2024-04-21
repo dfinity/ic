@@ -1,5 +1,5 @@
 use crate::{
-    pagemaptypes_with_num_pages, CheckpointError, CheckpointMetrics, TipRequest,
+    pagemaptypes_with_num_pages, CheckpointError, CheckpointMetrics, HasDowngrade, TipRequest,
     CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN, NUMBER_OF_CHECKPOINT_THREADS,
 };
 use crossbeam_channel::{unbounded, Sender};
@@ -8,7 +8,7 @@ use ic_config::flag_status::FlagStatus;
 use ic_logger::error;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_snapshots::CanisterSnapshots;
-use ic_replicated_state::page_map::{PageAllocatorFileDescriptor, StorageLayout};
+use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::{
     canister_state::execution_state::WasmBinary, page_map::PageMap, CanisterMetrics, CanisterState,
     ExecutionState, ReplicatedState, SchedulerState, SystemState,
@@ -57,7 +57,7 @@ pub(crate) fn make_checkpoint(
     thread_pool: &mut scoped_threadpool::Pool,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     lsmt_storage: FlagStatus,
-) -> Result<(CheckpointLayout<ReadOnly>, ReplicatedState), CheckpointError> {
+) -> Result<(CheckpointLayout<ReadOnly>, ReplicatedState, HasDowngrade), CheckpointError> {
     {
         let _timer = metrics
             .make_checkpoint_step_duration
@@ -78,7 +78,7 @@ pub(crate) fn make_checkpoint(
         })
         .unwrap();
 
-    let cp = {
+    let (cp, has_downgrade) = {
         let _timer = metrics
             .make_checkpoint_step_duration
             .with_label_values(&["tip_to_checkpoint"])
@@ -91,17 +91,18 @@ pub(crate) fn make_checkpoint(
                 sender: send,
             })
             .unwrap();
-        let cp = recv.recv().unwrap()?;
+        let (cp, has_downgrade) = recv.recv().unwrap()?;
         // With lsmt storage, ResetTipAndMerge happens later (after manifest).
         if lsmt_storage == FlagStatus::Disabled {
             tip_channel
                 .send(TipRequest::ResetTipAndMerge {
                     checkpoint_layout: cp.clone(),
                     pagemaptypes_with_num_pages: pagemaptypes_with_num_pages(state),
+                    is_initializing_tip: false,
                 })
                 .unwrap();
         }
-        cp
+        (cp, has_downgrade)
     };
 
     if lsmt_storage == FlagStatus::Disabled {
@@ -130,7 +131,7 @@ pub(crate) fn make_checkpoint(
         )?
     };
 
-    Ok((cp, state))
+    Ok((cp, state, has_downgrade))
 }
 
 /// Calls [load_checkpoint] with a newly created thread pool.
@@ -322,12 +323,7 @@ pub fn load_canister_state<P: ReadPolicy>(
             let starting_time = Instant::now();
             let wasm_memory_layout = canister_layout.vmemory_0();
             let wasm_memory = Memory::new(
-                PageMap::open(
-                    &wasm_memory_layout.base(),
-                    &wasm_memory_layout.existing_overlays()?,
-                    height,
-                    Arc::clone(&fd_factory),
-                )?,
+                PageMap::open(&wasm_memory_layout, height, Arc::clone(&fd_factory))?,
                 execution_state_bits.heap_size,
             );
             durations.insert("wasm_memory", starting_time.elapsed());
@@ -335,12 +331,7 @@ pub fn load_canister_state<P: ReadPolicy>(
             let starting_time = Instant::now();
             let stable_memory_layout = canister_layout.stable_memory();
             let stable_memory = Memory::new(
-                PageMap::open(
-                    &stable_memory_layout.base(),
-                    &stable_memory_layout.existing_overlays()?,
-                    height,
-                    Arc::clone(&fd_factory),
-                )?,
+                PageMap::open(&stable_memory_layout, height, Arc::clone(&fd_factory))?,
                 canister_state_bits.stable_memory_size,
             );
             durations.insert("stable_memory", starting_time.elapsed());
@@ -395,12 +386,8 @@ pub fn load_canister_state<P: ReadPolicy>(
 
     let starting_time = Instant::now();
     let wasm_chunk_store_layout = canister_layout.wasm_chunk_store();
-    let wasm_chunk_store_data = PageMap::open(
-        &wasm_chunk_store_layout.base(),
-        &wasm_chunk_store_layout.existing_overlays()?,
-        height,
-        Arc::clone(&fd_factory),
-    )?;
+    let wasm_chunk_store_data =
+        PageMap::open(&wasm_chunk_store_layout, height, Arc::clone(&fd_factory))?;
     durations.insert("wasm_chunk_store", starting_time.elapsed());
 
     let system_state = SystemState::new_from_checkpoint(
@@ -426,7 +413,6 @@ pub fn load_canister_state<P: ReadPolicy>(
         canister_state_bits.canister_log,
         canister_state_bits.wasm_memory_limit,
         canister_state_bits.next_snapshot_id,
-        canister_state_bits.snapshot_ids,
     );
 
     let canister_state = CanisterState {

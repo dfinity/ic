@@ -78,14 +78,20 @@ rust_binary(
 rust_test(
     name = "orchestrator_test",
     crate = ":lib",
+    data = [
+        "testdata/nftables_assigned_replica.conf.golden",
+        "//ic-os/guestos/rootfs:opt/ic/share/ic.json5.template",
+    ],
     deps = [
         "//rs/crypto/temp_crypto",
         "//rs/crypto/test_utils/canister_threshold_sigs",
         "//rs/crypto/test_utils/reproducible_rng",
         "//rs/registry/fake",
+        "//rs/test_utilities",
         "//rs/test_utilities/consensus",
         "//rs/test_utilities/in_memory_logger",
         "//rs/test_utilities/logger",
+        "//rs/test_utilities/registry",
         "//rs/test_utilities/time",
         "//rs/test_utilities/types",
         "@crate_index//:mockall",

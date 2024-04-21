@@ -7,6 +7,7 @@ load("//bazel:defs.bzl", "gzip_compress", "sha256sum2url", "zstd_compress")
 load("//bazel:output_files.bzl", "output_files")
 load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
 load("//ic-os/bootloader:defs.bzl", "build_grub_partition")
+load("//ic-os/boundary-guestos/rootfs:defs.bzl", boundary_rootfs_files = "rootfs_files")
 load("//toolchains/sysimage:toolchain.bzl", "build_container_base_image", "build_container_filesystem", "disk_image", "ext4_image", "inject_files", "sha256sum", "tar_extract", "upgrade_image")
 
 def icos_build(
@@ -65,7 +66,7 @@ def icos_build(
 
     # -------------------- Build grub partition --------------------
 
-    build_grub_partition("partition-grub.tar", grub_config = image_deps.get("grub_config", default = None), tags = ["manual"])
+    build_grub_partition("partition-grub.tzst", grub_config = image_deps.get("grub_config", default = None), tags = ["manual"])
 
     # -------------------- Build the container image --------------------
 
@@ -90,6 +91,7 @@ def icos_build(
         build_container_filesystem(
             name = "rootfs-tree.tar",
             context_files = [image_deps["container_context_files"]],
+            rootfs_files = image_deps["rootfs_files"],
             config_file = build_container_filesystem_config_file,
             base_image_tar_file = ":base_image.tar",
             base_image_tar_file_tag = base_image_tag,
@@ -100,6 +102,7 @@ def icos_build(
         build_container_filesystem(
             name = "rootfs-tree.tar",
             context_files = [image_deps["container_context_files"]],
+            rootfs_files = image_deps["rootfs_files"],
             config_file = build_container_filesystem_config_file,
             target_compatible_with = ["@platforms//os:linux"],
             tags = ["manual"],
@@ -118,7 +121,7 @@ def icos_build(
     # -------------------- Extract root partition --------------------
 
     ext4_image(
-        name = "static-partition-root-unsigned.tar",
+        name = "static-partition-root-unsigned.tzst",
         src = ":rootfs-tree.tar",
         file_contexts = ":file_contexts",
         partition_size = image_deps["rootfs_size"],
@@ -136,7 +139,7 @@ def icos_build(
     # -------------------- Extract boot partition --------------------
 
     ext4_image(
-        name = "static-partition-boot.tar",
+        name = "static-partition-boot.tzst",
         src = ":rootfs-tree.tar",
         file_contexts = ":file_contexts",
         partition_size = image_deps["bootfs_size"],
@@ -151,8 +154,8 @@ def icos_build(
     # -------------------- Inject extra files --------------------
 
     inject_files(
-        name = "partition-root-unsigned.tar",
-        base = "static-partition-root-unsigned.tar",
+        name = "partition-root-unsigned.tzst",
+        base = "static-partition-root-unsigned.tzst",
         file_contexts = ":file_contexts",
         extra_files = {
             k: v
@@ -163,8 +166,8 @@ def icos_build(
 
     if upgrades:
         inject_files(
-            name = "partition-root-test-unsigned.tar",
-            base = "static-partition-root-unsigned.tar",
+            name = "partition-root-test-unsigned.tzst",
+            base = "static-partition-root-unsigned.tzst",
             file_contexts = ":file_contexts",
             extra_files = {
                 k: v
@@ -175,22 +178,22 @@ def icos_build(
 
     # When boot_args are fixed, don't bother signing
     if "boot_args_template" not in image_deps:
-        native.alias(name = "partition-root.tar", actual = ":partition-root-unsigned.tar", tags = ["manual"])
+        native.alias(name = "partition-root.tzst", actual = ":partition-root-unsigned.tzst", tags = ["manual"])
         native.alias(name = "extra_boot_args", actual = image_deps["extra_boot_args"], tags = ["manual"])
 
         if upgrades:
-            native.alias(name = "partition-root-test.tar", actual = ":partition-root-test-unsigned.tar", tags = ["manual"])
+            native.alias(name = "partition-root-test.tzst", actual = ":partition-root-test-unsigned.tzst", tags = ["manual"])
             native.alias(name = "extra_boot_test_args", actual = image_deps["extra_boot_args"], tags = ["manual"])
     else:
         native.alias(name = "extra_boot_args_template", actual = image_deps["boot_args_template"], tags = ["manual"])
 
         native.genrule(
             name = "partition-root-sign",
-            srcs = ["partition-root-unsigned.tar"],
-            outs = ["partition-root.tar", "partition-root-hash"],
-            cmd = "$(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root.tar) -r $(location partition-root-hash)",
+            srcs = ["partition-root-unsigned.tzst"],
+            outs = ["partition-root.tzst", "partition-root-hash"],
+            cmd = "$(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root.tzst) -r $(location partition-root-hash) -d $(location //rs/ic_os/dflate)",
             executable = False,
-            tools = ["//toolchains/sysimage:verity_sign.py"],
+            tools = ["//toolchains/sysimage:verity_sign.py", "//rs/ic_os/dflate"],
             tags = ["manual"],
         )
 
@@ -208,10 +211,10 @@ def icos_build(
         if upgrades:
             native.genrule(
                 name = "partition-root-test-sign",
-                srcs = ["partition-root-test-unsigned.tar"],
-                outs = ["partition-root-test.tar", "partition-root-test-hash"],
-                cmd = "$(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root-test.tar) -r $(location partition-root-test-hash)",
-                tools = ["//toolchains/sysimage:verity_sign.py"],
+                srcs = ["partition-root-test-unsigned.tzst"],
+                outs = ["partition-root-test.tzst", "partition-root-test-hash"],
+                cmd = "$(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root-test.tzst) -r $(location partition-root-test-hash) -d $(location //rs/ic_os/dflate)",
+                tools = ["//toolchains/sysimage:verity_sign.py", "//rs/ic_os/dflate"],
                 tags = ["manual"],
             )
 
@@ -227,8 +230,8 @@ def icos_build(
             )
 
     inject_files(
-        name = "partition-boot.tar",
-        base = "static-partition-boot.tar",
+        name = "partition-boot.tzst",
+        base = "static-partition-boot.tzst",
         file_contexts = ":file_contexts",
         prefix = "/boot",
         extra_files = {
@@ -245,8 +248,8 @@ def icos_build(
 
     if upgrades:
         inject_files(
-            name = "partition-boot-test.tar",
-            base = "static-partition-boot.tar",
+            name = "partition-boot-test.tzst",
+            base = "static-partition-boot.tzst",
             file_contexts = ":file_contexts",
             prefix = "/boot",
             extra_files = {
@@ -273,10 +276,10 @@ def icos_build(
         name = "disk-img.tar",
         layout = image_deps["partition_table"],
         partitions = [
-            "//ic-os/bootloader:partition-esp.tar",
-            ":partition-grub.tar",
-            ":partition-boot.tar",
-            ":partition-root.tar",
+            "//ic-os/bootloader:partition-esp.tzst",
+            ":partition-grub.tzst",
+            ":partition-boot.tzst",
+            ":partition-root.tzst",
         ] + custom_partitions,
         expanded_size = image_deps.get("expanded_size", default = None),
         tags = ["manual"],
@@ -325,8 +328,8 @@ def icos_build(
     if upgrades:
         upgrade_image(
             name = "update-img.tar",
-            boot_partition = ":partition-boot.tar",
-            root_partition = ":partition-root.tar",
+            boot_partition = ":partition-boot.tzst",
+            root_partition = ":partition-root.tzst",
             tags = ["manual"],
             target_compatible_with = [
                 "@platforms//os:linux",
@@ -371,8 +374,8 @@ def icos_build(
 
         upgrade_image(
             name = "update-img-test.tar",
-            boot_partition = ":partition-boot-test.tar",
-            root_partition = ":partition-root-test.tar",
+            boot_partition = ":partition-boot-test.tzst",
+            root_partition = ":partition-root-test.tzst",
             tags = ["manual"],
             target_compatible_with = [
                 "@platforms//os:linux",
@@ -629,20 +632,21 @@ def boundary_node_icos_build(
         tags = ["manual"],
     )
 
-    build_grub_partition("partition-grub.tar", tags = ["manual"])
+    build_grub_partition("partition-grub.tzst", tags = ["manual"])
 
     build_container_filesystem_config_file = Label(image_deps["build_container_filesystem_config_file"])
 
     build_container_filesystem(
         name = "rootfs-tree.tar",
-        context_files = ["//ic-os/boundary-guestos:rootfs-files"],
+        context_files = ["//ic-os/boundary-guestos/rootfs:context-files"],
+        rootfs_files = boundary_rootfs_files,
         config_file = build_container_filesystem_config_file,
         target_compatible_with = ["@platforms//os:linux"],
         tags = ["manual"],
     )
 
     ext4_image(
-        name = "partition-config.tar",
+        name = "partition-config.tzst",
         partition_size = "100M",
         target_compatible_with = [
             "@platforms//os:linux",
@@ -659,7 +663,7 @@ def boundary_node_icos_build(
     )
 
     ext4_image(
-        name = "static-partition-boot.tar",
+        name = "static-partition-boot.tzst",
         src = ":rootfs-tree.tar",
         partition_size = "1G",
         subdir = "boot/",
@@ -670,8 +674,8 @@ def boundary_node_icos_build(
     )
 
     inject_files(
-        name = "partition-boot.tar",
-        base = "static-partition-boot.tar",
+        name = "partition-boot.tzst",
+        base = "static-partition-boot.tzst",
         prefix = "/boot",
         extra_files = {
             k: v
@@ -686,7 +690,7 @@ def boundary_node_icos_build(
     )
 
     ext4_image(
-        name = "static-partition-root-unsigned.tar",
+        name = "static-partition-root-unsigned.tzst",
         src = ":rootfs-tree.tar",
         partition_size = "3G",
         strip_paths = [
@@ -700,8 +704,8 @@ def boundary_node_icos_build(
     )
 
     inject_files(
-        name = "partition-root-unsigned.tar",
-        base = "static-partition-root-unsigned.tar",
+        name = "partition-root-unsigned.tzst",
+        base = "static-partition-root-unsigned.tzst",
         extra_files = {
             k: v
             for k, v in (image_deps["rootfs"].items() + [(":version.txt", "/opt/ic/share/version.txt:0644")])
@@ -711,11 +715,11 @@ def boundary_node_icos_build(
 
     native.genrule(
         name = "partition-root-sign",
-        srcs = ["partition-root-unsigned.tar"],
-        outs = ["partition-root.tar", "partition-root-hash"],
-        cmd = "$(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root.tar) -r $(location partition-root-hash)",
+        srcs = ["partition-root-unsigned.tzst"],
+        outs = ["partition-root.tzst", "partition-root-hash"],
+        cmd = "$(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root.tzst) -r $(location partition-root-hash) -d $(location //rs/ic_os/dflate)",
         executable = False,
-        tools = ["//toolchains/sysimage:verity_sign.py"],
+        tools = ["//toolchains/sysimage:verity_sign.py", "//rs/ic_os/dflate"],
         tags = ["manual"],
     )
 
@@ -734,11 +738,11 @@ def boundary_node_icos_build(
         name = "disk-img.tar",
         layout = "//ic-os/boundary-guestos:partitions.csv",
         partitions = [
-            "//ic-os/bootloader:partition-esp.tar",
-            ":partition-grub.tar",
-            ":partition-config.tar",
-            ":partition-boot.tar",
-            ":partition-root.tar",
+            "//ic-os/bootloader:partition-esp.tzst",
+            ":partition-grub.tzst",
+            ":partition-config.tzst",
+            ":partition-boot.tzst",
+            ":partition-root.tzst",
         ],
         expanded_size = "50G",
         tags = ["manual"],

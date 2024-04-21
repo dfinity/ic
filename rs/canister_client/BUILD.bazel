@@ -28,7 +28,7 @@ DEPENDENCIES = [
     "//rs/types/types",
     "@crate_index//:backoff",
     "@crate_index//:futures-util",
-    "@crate_index//:hyper",
+    "@crate_index//:hyper_0_14_27",
     "@crate_index//:hyper-rustls",
     "@crate_index//:itertools",
     "@crate_index//:prost",

@@ -21,8 +21,8 @@ use ic_protobuf::registry::replica_version::v1::BlessedReplicaVersions;
 use ic_registry_keys::make_blessed_replica_versions_key;
 use ic_types::ReplicaVersion;
 use registry_canister::mutations::{
-    do_update_elected_replica_versions::UpdateElectedReplicaVersionsPayload,
-    do_update_unassigned_nodes_config::UpdateUnassignedNodesConfigPayload,
+    do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
+    do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload,
 };
 
 async fn submit(
@@ -63,7 +63,7 @@ fn test_submit_and_accept_update_elected_replica_versions_proposal() {
         let sender = Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR);
 
         let update_versions_payload =
-            |elect: Option<String>, unelect: Vec<&str>| UpdateElectedReplicaVersionsPayload {
+            |elect: Option<String>, unelect: Vec<&str>| ReviseElectedGuestosVersionsPayload {
                 release_package_sha256_hex: elect.as_ref().map(|_| {
                     "C0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEED00D".into()
                 }),
@@ -75,10 +75,10 @@ fn test_submit_and_accept_update_elected_replica_versions_proposal() {
                 guest_launch_measurement_sha256_hex: None,
                 replica_versions_to_unelect: unelect.iter().map(|s| s.to_string()).collect(),
             };
-        let bless_version_payload = |version_id: &str| -> UpdateElectedReplicaVersionsPayload {
+        let bless_version_payload = |version_id: &str| -> ReviseElectedGuestosVersionsPayload {
             update_versions_payload(Some(version_id.into()), vec![])
         };
-        let retire_version_payload = |ids: Vec<&str>| -> UpdateElectedReplicaVersionsPayload {
+        let retire_version_payload = |ids: Vec<&str>| -> ReviseElectedGuestosVersionsPayload {
             update_versions_payload(None, ids)
         };
         let cast_votes = |id| {
@@ -100,7 +100,7 @@ fn test_submit_and_accept_update_elected_replica_versions_proposal() {
         ];
 
         for payload in setup {
-            let proposal_id = submit(gov, NnsFunction::UpdateElectedReplicaVersions, payload).await;
+            let proposal_id = submit(gov, NnsFunction::ReviseElectedGuestosVersions, payload).await;
             let _result: ManageNeuronResponse = cast_votes(proposal_id).await.expect("Vote failed");
             assert_eq!(
                 wait_for_final_state(gov, proposal_id).await.status(),
@@ -125,14 +125,13 @@ fn test_submit_and_accept_update_elected_replica_versions_proposal() {
         );
 
         // update unassigned version
-        let update_unassigned_payload = UpdateUnassignedNodesConfigPayload {
-            ssh_readonly_access: None,
-            replica_version: Some(unassigned_nodes_version.to_string()),
+        let deploy_unassigned_payload = DeployGuestosToAllUnassignedNodesPayload {
+            elected_replica_version: unassigned_nodes_version.to_string(),
         };
         let proposal_id = submit(
             gov,
-            NnsFunction::UpdateUnassignedNodesConfig,
-            update_unassigned_payload,
+            NnsFunction::DeployGuestosToAllUnassignedNodes,
+            deploy_unassigned_payload,
         )
         .await;
         let _result: ManageNeuronResponse = cast_votes(proposal_id).await.expect("Vote failed");
@@ -162,7 +161,7 @@ fn test_submit_and_accept_update_elected_replica_versions_proposal() {
                 Some("currently deployed to unassigned nodes"),
             ),
             (
-                UpdateElectedReplicaVersionsPayload {
+                ReviseElectedGuestosVersionsPayload {
                     replica_version_to_elect: Some("version_with_missing_hash".into()),
                     ..Default::default()
                 },
@@ -190,7 +189,7 @@ fn test_submit_and_accept_update_elected_replica_versions_proposal() {
         ];
 
         for (payload, expected_failure) in test_cases {
-            let proposal_id = submit(gov, NnsFunction::UpdateElectedReplicaVersions, payload).await;
+            let proposal_id = submit(gov, NnsFunction::ReviseElectedGuestosVersions, payload).await;
             let _result: ManageNeuronResponse = cast_votes(proposal_id).await.expect("Vote failed");
             if let Some(reason) = expected_failure {
                 assert_failed_with_reason(gov, proposal_id, reason).await;

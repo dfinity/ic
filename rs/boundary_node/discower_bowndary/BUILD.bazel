@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -9,14 +9,19 @@ DEPENDENCIES = [
     "@crate_index//:prost",
     "@crate_index//:thiserror",
     "@crate_index//:tokio",
+    "@crate_index//:tokio-util",
+    "@crate_index//:arc-swap",
     "@crate_index//:url",
+    "@crate_index//:ic-agent",
+    "@crate_index//:candid",
+    "@crate_index//:tracing",
 ]
 
 VERSION = "0.1.0"
 
 rust_library(
     name = "discower-bowndary",
-    srcs = ["src/lib.rs"] + ["src/api_nodes_discovery.rs"] + ["src/route_provider.rs"],
+    srcs = glob(["src/**"]),
     aliases = {},
     proc_macro_deps = ["@crate_index//:async-trait"],
     version = VERSION,
@@ -29,4 +34,13 @@ rust_test(
     crate = ":discower-bowndary",
     proc_macro_deps = [],
     deps = DEPENDENCIES,
+)
+
+rust_binary(
+    name = "discower-bowndary-example",
+    srcs = ["examples/main.rs"],
+    aliases = {},
+    proc_macro_deps = [],
+    version = VERSION,
+    deps = DEPENDENCIES + [":discower-bowndary"],
 )

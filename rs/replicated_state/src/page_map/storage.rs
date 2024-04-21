@@ -2,6 +2,7 @@
 //! represented on disk, without any parts of a PageMap which are purely represented in memory.
 
 use std::{
+    collections::{BTreeMap, BTreeSet},
     fs::{File, OpenOptions},
     io::Write,
     ops::Range,
@@ -110,8 +111,8 @@ enum BaseFile {
     /// A base file simply contains pages from PageIndex(0) to PageIndex(n) for some n.
     /// The `Checkpoint` handles the full range of page indices, returning zeroes for pages > n.
     Base(Checkpoint),
-    /// An overlay file optimized for fast mmapping, i.e. containing a single range.
-    Overlay(OverlayFile),
+    /// Overlay files optimized for fast mmapping, i.e. containing a single range.
+    Overlay(Vec<OverlayFile>),
 }
 
 impl Default for BaseFile {
@@ -124,15 +125,20 @@ impl BaseFile {
     fn serialize(&self) -> BaseFileSerialization {
         match self {
             BaseFile::Base(base) => BaseFileSerialization::Base(base.serialize()),
-            BaseFile::Overlay(overlay) => BaseFileSerialization::Overlay(overlay.serialize()),
+            BaseFile::Overlay(overlay) => {
+                BaseFileSerialization::Overlay(overlay.iter().map(|o| o.serialize()).collect())
+            }
         }
     }
     pub fn deserialize(serialized: BaseFileSerialization) -> Result<Self, PersistenceError> {
         Ok(match serialized {
             BaseFileSerialization::Base(base) => BaseFile::Base(Checkpoint::deserialize(base)?),
-            BaseFileSerialization::Overlay(overlay) => {
-                BaseFile::Overlay(OverlayFile::deserialize(overlay)?)
-            }
+            BaseFileSerialization::Overlay(overlays) => BaseFile::Overlay(
+                overlays
+                    .into_iter()
+                    .map(OverlayFile::deserialize)
+                    .collect::<Result<Vec<OverlayFile>, _>>()?,
+            ),
         })
     }
 }
@@ -154,21 +160,68 @@ pub(crate) struct Storage {
 }
 
 impl Storage {
-    pub fn load(
-        base_path: Option<&Path>,
-        overlay_paths: &[PathBuf],
-    ) -> Result<Self, PersistenceError> {
-        let mut overlays: Vec<OverlayFile> = overlay_paths
-            .iter()
-            .map(|path| OverlayFile::load(path))
-            .collect::<Result<Vec<_>, _>>()?;
-
-        let base = if let Some(base) = base_path.map(Checkpoint::open).transpose()? {
-            BaseFile::Base(base)
-        } else if !overlays.is_empty() && overlays[0].index_iter().count() == 1 {
-            BaseFile::Overlay(overlays.remove(0))
+    pub fn load(storage_layout: &dyn StorageLayout) -> Result<Self, PersistenceError> {
+        // For each shard, the oldest (i.e. lowest height) overlay belongs to `BaseFile` if it
+        // consists of a single range.
+        let base_file = storage_layout.base();
+        let base_path = if base_file.exists() {
+            Some(base_file)
         } else {
-            BaseFile::Base(Checkpoint::default())
+            None
+        };
+        let overlay_paths = storage_layout.existing_overlays().map_err(|err| {
+            PersistenceError::FileSystemError {
+                path: "".to_string(),
+                context: "Failed to get overlays".to_string(),
+                internal_error: err.to_string(),
+            }
+        })?;
+        let mut shards_with_overlays = BTreeSet::<Shard>::new();
+        let mut range_by_shard = BTreeMap::<Shard, Range<PageIndex>>::new();
+        let mut base_overlays = Vec::<OverlayFile>::new();
+        let mut overlays = Vec::<OverlayFile>::new();
+        for path in overlay_paths.iter() {
+            let overlay = OverlayFile::load(path).unwrap();
+            let start_page_index = overlay
+                .index_iter()
+                .next()
+                .expect("Verified overlay cannot be empty")
+                .start_page;
+            let last_page_index = PageIndex::new(overlay.end_logical_pages() as u64);
+            let shard = storage_layout.overlay_shard(path).unwrap();
+            range_by_shard
+                .entry(shard)
+                .and_modify(|ref mut range| {
+                    range.start = std::cmp::min(range.start, start_page_index);
+                    range.end = std::cmp::max(range.end, last_page_index);
+                })
+                .or_insert(start_page_index..last_page_index);
+            // For each shard the lowest height version is a base, if it can be loaded fast.
+            // It can be mmapped fast if it contains a single range, hence one mmap.
+            if base_path.is_none()
+                && !shards_with_overlays.contains(&shard)
+                && overlay.index_iter().count() == 1
+            {
+                base_overlays.push(overlay);
+            } else {
+                overlays.push(overlay);
+            }
+            shards_with_overlays.insert(shard);
+        }
+        for prev_next in range_by_shard.values().collect::<Vec<_>>().windows(2) {
+            if prev_next[0].end > prev_next[1].start {
+                return Err(PersistenceError::InvalidOverlay {
+                    path: overlay_paths[0].display().to_string(),
+                    message: "Overlapping sharding".to_string(),
+                });
+            }
+        }
+
+        let base = if let Some(base) = base_path.as_deref().map(Checkpoint::open).transpose()? {
+            assert!(base_overlays.is_empty());
+            BaseFile::Base(base)
+        } else {
+            BaseFile::Overlay(base_overlays)
         };
 
         Ok(Self { base, overlays })
@@ -184,7 +237,10 @@ impl Storage {
             Some(bytes) => bytes,
             None => match &self.base {
                 BaseFile::Base(base) => base.get_page(page_index),
-                BaseFile::Overlay(overlay) => overlay.get_page(page_index).unwrap_or(&ZEROED_PAGE),
+                BaseFile::Overlay(overlays) => overlays
+                    .iter()
+                    .find_map(|overlay| overlay.get_page(page_index))
+                    .unwrap_or(&ZEROED_PAGE),
             },
         }
     }
@@ -193,7 +249,13 @@ impl Storage {
     pub fn get_base_memory_instructions(&self) -> MemoryInstructions {
         match &self.base {
             BaseFile::Base(base) => base.get_memory_instructions(),
-            BaseFile::Overlay(overlay) => overlay.get_base_memory_instructions(),
+            BaseFile::Overlay(overlays) => MemoryInstructions {
+                range: PageIndex::from(0)..PageIndex::from(u64::MAX),
+                instructions: overlays
+                    .iter()
+                    .flat_map(|o| o.get_base_memory_instructions().instructions)
+                    .collect(),
+            },
         }
     }
 
@@ -228,7 +290,11 @@ impl Storage {
     pub(crate) fn num_logical_pages(&self) -> usize {
         let base = match &self.base {
             BaseFile::Base(base) => base.num_pages(),
-            BaseFile::Overlay(overlay) => overlay.end_logical_pages(),
+            BaseFile::Overlay(overlays) => overlays
+                .iter()
+                .map(|o| o.end_logical_pages())
+                .max()
+                .unwrap_or(0),
         };
         let overlays = self
             .overlays
@@ -1514,7 +1580,7 @@ fn write_overlay(
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum BaseFileSerialization {
     Base(CheckpointSerialization),
-    Overlay(OverlayFileSerialization),
+    Overlay(Vec<OverlayFileSerialization>),
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -1528,6 +1594,5 @@ pub struct OverlayFileSerialization {
     pub mapping: MappingSerialization,
 }
 
-pub mod test_utils;
 #[cfg(any(test, feature = "fuzzing_code"))]
 pub mod tests;

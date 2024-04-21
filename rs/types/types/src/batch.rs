@@ -18,8 +18,8 @@ pub use self::{
     xnet::XNetPayload,
 };
 use crate::{
-    consensus::ecdsa::QuadrupleId,
-    crypto::canister_threshold_sig::MasterEcdsaPublicKey,
+    consensus::idkg::QuadrupleId,
+    crypto::canister_threshold_sig::MasterPublicKey,
     messages::{CallbackId, Payload, SignedIngress, NO_DEADLINE},
     time::CoarseTime,
     xnet::CertifiedStreamSlice,
@@ -63,7 +63,7 @@ pub struct Batch {
     /// A source of randomness for processing the Batch.
     pub randomness: Randomness,
     /// The ECDSA public keys of the subnet.
-    pub ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
+    pub ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterPublicKey>,
     /// The ECDSA quadruple Ids available to be matched with signature requests.
     pub ecdsa_quadruple_ids: BTreeMap<EcdsaKeyId, BTreeSet<QuadrupleId>>,
     /// The version of the registry to be referenced when processing the batch.
@@ -186,12 +186,25 @@ impl BlockmakerMetrics {
 /// TODO: Remove optional fields
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConsensusResponse {
-    pub originator: Option<CanisterId>,
-    pub respondent: Option<CanisterId>,
+    pub(crate) originator: Option<CanisterId>,
+    pub(crate) respondent: Option<CanisterId>,
     pub callback: CallbackId,
-    pub refund: Option<Cycles>,
+    pub(crate) refund: Option<Cycles>,
     pub payload: Payload,
-    pub deadline: Option<CoarseTime>,
+    pub(crate) deadline: Option<CoarseTime>,
+}
+
+impl ConsensusResponse {
+    pub fn new(callback: CallbackId, payload: Payload) -> Self {
+        Self {
+            callback,
+            payload,
+            originator: None,
+            respondent: None,
+            refund: None,
+            deadline: None,
+        }
+    }
 }
 
 /// Custom hash implementation, ensuring consistency with previous version

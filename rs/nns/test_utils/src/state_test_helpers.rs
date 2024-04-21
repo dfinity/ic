@@ -59,7 +59,7 @@ use ic_sns_wasm::{
     init::SnsWasmCanisterInitPayload,
     pb::v1::{ListDeployedSnsesRequest, ListDeployedSnsesResponse},
 };
-use ic_state_machine_tests::StateMachine;
+use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_test_utilities::universal_canister::{
     call_args, wasm as universal_canister_argument_builder, UNIVERSAL_CANISTER_WASM,
 };
@@ -74,6 +74,10 @@ use on_wire::{FromWire, IntoWire, NewType};
 use prost::Message;
 use serde::Serialize;
 use std::{convert::TryInto, env, time::Duration};
+
+pub fn state_machine_builder_for_nns_tests() -> StateMachineBuilder {
+    StateMachineBuilder::new().with_current_time().with_dts()
+}
 
 /// Turn down state machine logging to just errors to reduce noise in tests where this is not relevant
 pub fn reduce_state_machine_logging_unless_env_set() {
@@ -334,6 +338,12 @@ pub fn get_canister_status(
         &CanisterIdRecord::from(target),
         sender,
     )
+}
+
+pub fn get_root_canister_status(machine: &StateMachine) -> Result<CanisterStatusResultV2, String> {
+    machine
+        .canister_status_as(PrincipalId::from(ROOT_CANISTER_ID), ROOT_CANISTER_ID)
+        .unwrap()
 }
 
 pub fn get_canister_status_from_root(

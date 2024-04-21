@@ -5,8 +5,10 @@ use crate::{
         v1::{
             add_wasm_response, AddWasmRequest, AddWasmResponse, DappCanistersTransferResult,
             DeployNewSnsRequest, DeployNewSnsResponse, DeployedSns,
-            GetDeployedSnsByProposalIdRequest, GetNextSnsVersionRequest, GetNextSnsVersionResponse,
-            GetSnsSubnetIdsResponse, GetWasmRequest, GetWasmResponse,
+            GetDeployedSnsByProposalIdRequest, GetDeployedSnsByProposalIdResponse,
+            GetNextSnsVersionRequest, GetNextSnsVersionResponse, GetSnsSubnetIdsResponse,
+            GetWasmMetadataRequest as GetWasmMetadataRequestPb,
+            GetWasmMetadataResponse as GetWasmMetadataResponsePb, GetWasmRequest, GetWasmResponse,
             InsertUpgradePathEntriesRequest, InsertUpgradePathEntriesResponse,
             ListDeployedSnsesRequest, ListDeployedSnsesResponse, ListUpgradeStep,
             ListUpgradeStepsRequest, ListUpgradeStepsResponse, SnsCanisterIds, SnsCanisterType,
@@ -15,6 +17,7 @@ use crate::{
         },
     },
     stable_memory::SnsWasmStableMemory,
+    wasm_metadata::MetadataSection,
 };
 use candid::Encode;
 use ic_base_types::{CanisterId, PrincipalId};
@@ -31,6 +34,7 @@ use ic_sns_governance::pb::v1::governance::Version;
 use ic_sns_init::{pb::v1::SnsInitPayload, SnsCanisterInitPayloads};
 use ic_sns_root::GetSnsCanistersSummaryResponse;
 use ic_types::{Cycles, SubnetId};
+use ic_wasm;
 use maplit::{btreemap, hashmap};
 use std::{
     cell::RefCell,
@@ -40,7 +44,6 @@ use std::{
     thread::LocalKey,
 };
 
-use crate::pb::v1::GetDeployedSnsByProposalIdResponse;
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 
@@ -295,11 +298,88 @@ where
         }
     }
 
-    /// Read a WASM with the given hash from stable memory, if such a WASM exists
+    /// Read a WASM with the given hash from stable memory, if such a WASM exists.
     fn read_wasm(&self, hash: &[u8; 32]) -> Option<SnsWasm> {
         self.wasm_indexes
             .get(hash)
             .and_then(|index| self.stable_memory.read_wasm(index.offset, index.size).ok())
+    }
+
+    pub fn get_wasm_metadata(
+        &self,
+        #[allow(unused_variables)] get_wasm_metadata_payload: GetWasmMetadataRequestPb,
+    ) -> GetWasmMetadataResponsePb {
+        // TODO[NNS1-2997]: Enable this feature on mainnet.
+        #[cfg(feature = "test")]
+        let result = self.get_wasm_metadata_impl(get_wasm_metadata_payload);
+
+        #[cfg(not(feature = "test"))]
+        let result = Err("get_wasm_metadata is not implemented yet.".to_string());
+
+        GetWasmMetadataResponsePb::from(result)
+    }
+
+    pub fn get_wasm_metadata_impl(
+        &self,
+        get_wasm_metadata_payload: GetWasmMetadataRequestPb,
+    ) -> Result<Vec<MetadataSection>, String> {
+        let module_hash = <[u8; 32]>::try_from(get_wasm_metadata_payload)?;
+
+        let wasm_metadata = self.read_wasm_metadata_or_err(&module_hash)?;
+
+        Ok(wasm_metadata)
+    }
+
+    /// Try reading the metadata sections of a WASM with the given hash from stable memory,
+    /// if such a WASM exists.
+    fn read_wasm_metadata_or_err(&self, hash: &[u8; 32]) -> Result<Vec<MetadataSection>, String> {
+        use ic_wasm::{metadata, utils};
+
+        let Some(wasm) = self.read_wasm(hash) else {
+            return Err(format!("Cannot find WASM stored under key `{:?}`.", hash));
+        };
+
+        // We don't care for symbol names in the WASM module as we just want the custom sections
+        // containing the metadata.
+        let wasm_module = utils::parse_wasm(&wasm.wasm, false)
+            .map_err(|err| format!("Cannot parse WASM: {}", err))?;
+
+        let sections = metadata::list_metadata(&wasm_module);
+
+        let sections = sections
+            .into_iter()
+            .filter_map(|section| {
+                let mut section: Vec<&str> = section.split(' ').collect();
+                if section.is_empty() {
+                    // This cannot practically happen, as it would imply that all characters of
+                    // the section are whitespaces.
+                    return None;
+                }
+                // Save this section's visibility specification, e.g. "icp:public" or "icp:private".
+                let visibility = section.remove(0).to_string();
+
+                // The conjunction of the remaining parts are the section's name.
+                let name = section.join(" ");
+
+                // Read the actual contents of this section.
+                let contents = metadata::get_metadata(&wasm_module, &name);
+
+                // Represent the absence of contents as an empty byte vector.
+                let contents = if let Some(contents) = contents {
+                    contents.to_vec()
+                } else {
+                    vec![]
+                };
+
+                Some(MetadataSection {
+                    visibility,
+                    name,
+                    contents,
+                })
+            })
+            .collect();
+
+        Ok(sections)
     }
 
     /// Adds a WASM to the canister's storage, validating that the expected hash matches that of the
@@ -4759,5 +4839,214 @@ mod test {
             },
         )
         .await;
+    }
+
+    // TODO[NNS1-2997]: remove `#[cfg(feature = "test")]`.
+    #[cfg(feature = "test")]
+    mod get_wasm_metadata {
+        use super::*;
+        use crate::pb::v1::{
+            get_wasm_metadata_response, GetWasmMetadataRequest as GetWasmMetadataRequestPb,
+            GetWasmMetadataResponse as GetWasmMetadataResponsePb,
+            MetadataSection as MetadataSectionPb,
+        };
+        use libflate::gzip;
+        use pretty_assertions::assert_eq;
+
+        // Adds section "icp:[public|private] $name$contents" to `wasm`, returning `wasm`'s new hash.
+        fn annotate_wasm_with_metadata(
+            wasm: &mut SnsWasm,
+            is_public: bool,
+            name: &str,
+            contents: Vec<u8>,
+        ) -> Vec<u8> {
+            use ic_wasm::{metadata, utils};
+
+            let kind = if is_public {
+                metadata::Kind::Public
+            } else {
+                metadata::Kind::Private
+            };
+
+            let mut wasm_module = utils::parse_wasm(&wasm.wasm, false).unwrap();
+            metadata::add_metadata(&mut wasm_module, kind, name, contents);
+
+            wasm.wasm = wasm_module.emit_wasm();
+
+            Sha256::hash(&wasm.wasm).to_vec()
+        }
+
+        // Gzips a wasm, returning the hash of its compressed representation.
+        fn gzip_wasm(wasm: &mut SnsWasm) -> Vec<u8> {
+            wasm.wasm = {
+                let mut encoder = gzip::Encoder::new(Vec::new()).unwrap();
+                std::io::copy(&mut &wasm.wasm[..], &mut encoder).unwrap();
+                encoder.finish().into_result().unwrap()
+            };
+
+            Sha256::hash(&wasm.wasm).to_vec()
+        }
+
+        #[test]
+        fn test_read_metadata_no_sections() {
+            let mut canister = new_wasm_canister();
+
+            let wasm = smallest_valid_wasm();
+            let hash = Sha256::hash(&wasm.wasm);
+            canister.add_wasm(AddWasmRequest {
+                wasm: Some(wasm.clone()),
+                hash: hash.to_vec(),
+            });
+
+            // Run code under test
+            let response = canister.get_wasm_metadata(GetWasmMetadataRequestPb {
+                hash: Some(hash.to_vec()),
+            });
+
+            use get_wasm_metadata_response::{Ok, Result};
+            assert_eq!(
+                response,
+                GetWasmMetadataResponsePb {
+                    result: Some(Result::Ok(Ok { sections: vec![] }))
+                }
+            );
+        }
+
+        #[test]
+        fn test_read_metadata_one_section() {
+            let git_commit_id = "ABCDEFG".to_string();
+            let git_commit_id = git_commit_id.as_bytes();
+
+            let mut wasm = smallest_valid_wasm();
+            let hash = annotate_wasm_with_metadata(
+                &mut wasm,
+                true,
+                "git_commit_id",
+                git_commit_id.to_vec(),
+            );
+
+            let mut canister = new_wasm_canister();
+            canister.add_wasm(AddWasmRequest {
+                wasm: Some(wasm.clone()),
+                hash: hash.clone(),
+            });
+
+            // Run code under test
+            let response =
+                canister.get_wasm_metadata(GetWasmMetadataRequestPb { hash: Some(hash) });
+
+            use get_wasm_metadata_response::{Ok, Result};
+            assert_eq!(
+                response,
+                GetWasmMetadataResponsePb {
+                    result: Some(Result::Ok(Ok {
+                        sections: vec![MetadataSectionPb {
+                            visibility: Some("icp:public".to_string()),
+                            name: Some("git_commit_id".to_string()),
+                            contents: Some(git_commit_id.to_vec()),
+                        }],
+                    }))
+                }
+            );
+        }
+
+        #[test]
+        fn test_read_metadata_two_sections() {
+            let git_commit_id = "ABCDEFG".to_string();
+            let git_commit_id = git_commit_id.as_bytes();
+
+            let other_contents = "123456".to_string();
+            let other_contents = other_contents.as_bytes();
+
+            let mut wasm = smallest_valid_wasm();
+
+            let hash = {
+                annotate_wasm_with_metadata(
+                    &mut wasm,
+                    true,
+                    "git_commit_id",
+                    git_commit_id.to_vec(),
+                );
+                annotate_wasm_with_metadata(
+                    &mut wasm,
+                    false,
+                    "other_contents",
+                    other_contents.to_vec(),
+                )
+            };
+
+            let mut canister = new_wasm_canister();
+            canister.add_wasm(AddWasmRequest {
+                wasm: Some(wasm.clone()),
+                hash: hash.clone(),
+            });
+
+            // Run code under test
+            let response =
+                canister.get_wasm_metadata(GetWasmMetadataRequestPb { hash: Some(hash) });
+
+            use get_wasm_metadata_response::{Ok, Result};
+            assert_eq!(
+                response,
+                GetWasmMetadataResponsePb {
+                    result: Some(Result::Ok(Ok {
+                        sections: vec![
+                            MetadataSectionPb {
+                                visibility: Some("icp:public".to_string()),
+                                name: Some("git_commit_id".to_string()),
+                                contents: Some(git_commit_id.to_vec()),
+                            },
+                            MetadataSectionPb {
+                                visibility: Some("icp:private".to_string()),
+                                name: Some("other_contents".to_string()),
+                                contents: Some(other_contents.to_vec()),
+                            },
+                        ],
+                    }))
+                }
+            );
+        }
+
+        #[test]
+        fn test_read_metadata_gzipped() {
+            let git_commit_id = "ABCDEFG".to_string();
+            let git_commit_id = git_commit_id.as_bytes();
+
+            let mut wasm = smallest_valid_wasm();
+
+            let hash = {
+                annotate_wasm_with_metadata(
+                    &mut wasm,
+                    true,
+                    "git_commit_id",
+                    git_commit_id.to_vec(),
+                );
+                gzip_wasm(&mut wasm)
+            };
+
+            let mut canister = new_wasm_canister();
+            canister.add_wasm(AddWasmRequest {
+                wasm: Some(wasm.clone()),
+                hash: hash.clone(),
+            });
+
+            // Run code under test
+            let response =
+                canister.get_wasm_metadata(GetWasmMetadataRequestPb { hash: Some(hash) });
+
+            use get_wasm_metadata_response::{Ok, Result};
+            assert_eq!(
+                response,
+                GetWasmMetadataResponsePb {
+                    result: Some(Result::Ok(Ok {
+                        sections: vec![MetadataSectionPb {
+                            visibility: Some("icp:public".to_string()),
+                            name: Some("git_commit_id".to_string()),
+                            contents: Some(git_commit_id.to_vec()),
+                        }],
+                    }))
+                }
+            );
+        }
     }
 }

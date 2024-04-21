@@ -15,7 +15,7 @@ dfn_core = { path = "../../rust_canisters/dfn_core" }
 dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
 hex = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
-ic-crypto-sha2 = { path = "../../crypto/sha2/" }
+ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-ledger-canister-core = { path = "../ledger_canister_core" }
 ic-ledger-core = { path = "../ledger_core" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
@@ -36,8 +36,13 @@ candid_parser = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
+ic-icp-index = { path = "index" }
+ic-ledger-test-utils = { path = "test_utils" }
+ic-nns-constants = { path = "../../nns/constants" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
 ledger-canister-protobuf-generator = { path = "./protobuf_generator" }
+maplit = "1.0.2"
+pocket-ic = { path = "../../../packages/pocket-ic" }
 proptest = "1"
 rand = "0.8"
 rand_chacha = "0.3"
@@ -46,6 +51,10 @@ tempfile = "3.1.0"
 [[test]]
 name = "test"
 path = "test/test.rs"
+
+[[test]]
+name = "upgrade_downgrade"
+path = "test/upgrade_downgrade.rs"
 
 [[test]]
 name = "check_generated_files"

@@ -1,6 +1,6 @@
 use crate::common::local_replica;
-use crate::common::local_replica::get_custom_agent;
 use crate::common::local_replica::test_identity;
+use crate::common::local_replica::{create_and_install_icrc_ledger, get_custom_agent};
 use candid::Nat;
 use ic_agent::identity::BasicIdentity;
 use ic_agent::Identity;
@@ -22,6 +22,7 @@ use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;
 use num_bigint::BigUint;
 use num_traits::ToPrimitive;
+use pocket_ic::PocketIcBuilder;
 use proptest::prelude::*;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -48,38 +49,33 @@ proptest! {
     ).no_shrink()) {
         // Create a tokio environment to conduct async calls
         let rt = Runtime::new().unwrap();
+        let mut pocket_ic = PocketIcBuilder::new().with_nns_subnet().with_sns_subnet().build();
+        let init_args = InitArgsBuilder::for_tests()
+            .with_minting_account(MINTER_IDENTITY.clone().sender().unwrap())
+            .with_transfer_fee(DEFAULT_TRANSFER_FEE)
+            .with_feature_flags(FeatureFlags {icrc2:true})
+            .with_archive_options(ArchiveOptions {
+                // Create archive after every ten blocks
+                trigger_threshold: 10,
+                num_blocks_to_archive: 5,
+                node_max_memory_size_bytes: None,
+                max_message_size_bytes: None,
+                controller_id: PrincipalId::new_user_test_id(100),
+                more_controller_ids: None,
+                cycles_for_archive_creation: None,
+                max_transactions_per_response: None,
+            })
+            .build();
+        let icrc_ledger_canister_id = create_and_install_icrc_ledger(&pocket_ic, init_args);
+        let endpoint = pocket_ic.make_live(None);
+        let port = endpoint.port().unwrap();
 
         // Wrap async calls in a blocking Block
         rt.block_on(async {
-
-            // Spin up a local replica
-            let replica_context = local_replica::start_new_local_replica().await;
-
-            // Deploy an icrc ledger canister and make sure an archive is created
-            let icrc_ledger_canister_id =
-            local_replica::deploy_icrc_ledger_with_custom_args(&replica_context,
-                InitArgsBuilder::for_tests()
-                .with_minting_account(MINTER_IDENTITY.clone().sender().unwrap())
-                .with_transfer_fee(DEFAULT_TRANSFER_FEE)
-                .with_feature_flags(FeatureFlags {icrc2:true})
-                .with_archive_options(ArchiveOptions {
-                    // Create archive after every ten blocks
-                    trigger_threshold: 10,
-                    num_blocks_to_archive: 5,
-                    node_max_memory_size_bytes: None,
-                    max_message_size_bytes: None,
-                    controller_id: PrincipalId::new_user_test_id(100),
-more_controller_ids: None,
-                    cycles_for_archive_creation: None,
-                    max_transactions_per_response: None,
-                })
-                .build()
-            ).await;
-
             // Create a testing agent
             let agent = Arc::new(Icrc1Agent {
-                agent: local_replica::get_testing_agent(&replica_context).await,
-                ledger_canister_id: icrc_ledger_canister_id.into(),
+                agent: local_replica::get_testing_agent(port).await,
+                ledger_canister_id: icrc_ledger_canister_id,
             });
 
             // Create the storage client where blocks will be stored
@@ -102,7 +98,10 @@ more_controller_ids: None,
                 arg,
                 principal_to_basic_identity:_
             } in args_with_caller.iter() {
-                let caller_agent = Icrc1Agent { agent: get_custom_agent(caller.clone(),&replica_context).await,ledger_canister_id: icrc_ledger_canister_id.into(),};
+                let caller_agent = Icrc1Agent {
+                    agent: get_custom_agent(caller.clone(), port).await,
+                    ledger_canister_id: icrc_ledger_canister_id
+                };
                 let (block_idx,account1,account2) = match arg {
                     LedgerEndpointArg::ApproveArg(approve_arg) => {
                         let block_idx = caller_agent.approve(approve_arg.clone()).await.unwrap().unwrap().0.to_u64().unwrap();

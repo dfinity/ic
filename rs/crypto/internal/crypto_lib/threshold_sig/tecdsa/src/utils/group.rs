@@ -9,6 +9,7 @@ use subtle::Choice;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 mod algos;
+mod ed25519;
 mod secp256k1;
 mod secp256r1;
 
@@ -23,6 +24,7 @@ mod tests;
 pub enum EccCurveType {
     K256,
     P256,
+    Ed25519,
 }
 
 impl EccCurveType {
@@ -30,10 +32,11 @@ impl EccCurveType {
     ///
     /// Scalar here refers to the byte size of an integer which has the range
     /// [0,z) where z is the group order.
-    pub fn scalar_bits(&self) -> usize {
+    pub const fn scalar_bits(&self) -> usize {
         match self {
             EccCurveType::K256 => 256,
             EccCurveType::P256 => 256,
+            EccCurveType::Ed25519 => 255,
         }
     }
 
@@ -41,25 +44,8 @@ impl EccCurveType {
     ///
     /// Scalar here refers to the byte size of an integer which has the range
     /// [0,z) where z is the group order.
-    pub fn scalar_bytes(&self) -> usize {
+    pub const fn scalar_bytes(&self) -> usize {
         (self.scalar_bits() + 7) / 8
-    }
-
-    /// Return the length of the underlying field (in bits)
-    pub fn field_bits(&self) -> usize {
-        match self {
-            EccCurveType::K256 => 256,
-            EccCurveType::P256 => 256,
-        }
-    }
-
-    /// Return the length of the underlying field (in bytes)
-    ///
-    /// If the field size is not an even multiple of 8 it is rounded up to the
-    /// next byte size.
-    pub fn field_bytes(&self) -> usize {
-        // Round up to the nearest byte length
-        (self.field_bits() + 7) / 8
     }
 
     /// Security level of the curve, in bits
@@ -69,13 +55,28 @@ impl EccCurveType {
         match self {
             EccCurveType::K256 => 128,
             EccCurveType::P256 => 128,
+            EccCurveType::Ed25519 => 128,
         }
     }
 
     /// Return the size of encoded points, in bytes
-    pub fn point_bytes(&self) -> usize {
-        // 1 byte header with y parity plus an affine x field element
-        1 + self.field_bytes()
+    pub const fn point_bytes(&self) -> usize {
+        match self {
+            EccCurveType::K256 => 32 + 1,
+            EccCurveType::P256 => 32 + 1,
+            EccCurveType::Ed25519 => 32,
+        }
+    }
+
+    /// Return the size of encoded points, in bytes. BIP340 supports only even y
+    /// coordinates, omitting 1 byte for storing the y coordinate in the SEC1 format.
+    ///
+    /// Returns None for curves that do not support BIP340.
+    pub const fn point_bytes_bip340(&self) -> Option<usize> {
+        match self {
+            EccCurveType::K256 => Some(self.point_bytes() - 1),
+            _ => None,
+        }
     }
 
     /// Return a unique small integer for this curve type
@@ -85,6 +86,7 @@ impl EccCurveType {
         match self {
             EccCurveType::K256 => 1,
             EccCurveType::P256 => 2,
+            EccCurveType::Ed25519 => 3,
         }
     }
 
@@ -92,6 +94,7 @@ impl EccCurveType {
         match tag {
             1 => Some(EccCurveType::K256),
             2 => Some(EccCurveType::P256),
+            3 => Some(EccCurveType::Ed25519),
             _ => None,
         }
     }
@@ -101,7 +104,16 @@ impl EccCurveType {
             AlgorithmId::ThresholdEcdsaSecp256k1 => Some(EccCurveType::K256),
             AlgorithmId::ThresholdEcdsaSecp256r1 => Some(EccCurveType::P256),
             AlgorithmId::ThresholdSchnorrBip340 => Some(EccCurveType::K256),
+            AlgorithmId::ThresholdEd25519 => Some(EccCurveType::Ed25519),
             _ => None,
+        }
+    }
+
+    pub(crate) fn valid_for_ecdsa(&self) -> bool {
+        match self {
+            EccCurveType::K256 => true,
+            EccCurveType::P256 => true,
+            EccCurveType::Ed25519 => false,
         }
     }
 
@@ -109,7 +121,11 @@ impl EccCurveType {
     ///
     /// This is mostly useful for tests
     pub fn all() -> Vec<EccCurveType> {
-        vec![EccCurveType::K256, EccCurveType::P256]
+        vec![
+            EccCurveType::K256,
+            EccCurveType::P256,
+            EccCurveType::Ed25519,
+        ]
     }
 }
 
@@ -118,6 +134,7 @@ impl fmt::Display for EccCurveType {
         let curve_name = match self {
             Self::K256 => "secp256k1",
             Self::P256 => "secp256r1",
+            Self::Ed25519 => "ed25519",
         };
 
         write!(f, "{}", curve_name)
@@ -128,6 +145,7 @@ impl fmt::Display for EccCurveType {
 pub enum EccScalar {
     K256(secp256k1::Scalar),
     P256(secp256r1::Scalar),
+    Ed25519(ed25519::Scalar),
 }
 
 impl fmt::Debug for EccScalar {
@@ -146,6 +164,7 @@ impl EccScalar {
         match self {
             Self::K256(_) => EccCurveType::K256,
             Self::P256(_) => EccCurveType::P256,
+            Self::Ed25519(_) => EccCurveType::Ed25519,
         }
     }
 
@@ -154,6 +173,7 @@ impl EccScalar {
         match (self, other) {
             (Self::K256(s1), Self::K256(s2)) => Ok(Self::K256(s1.add(s2))),
             (Self::P256(s1), Self::P256(s2)) => Ok(Self::P256(s1.add(s2))),
+            (Self::Ed25519(s1), Self::Ed25519(s2)) => Ok(Self::Ed25519(s1.add(s2))),
             (_, _) => Err(ThresholdEcdsaError::CurveMismatch),
         }
     }
@@ -163,6 +183,7 @@ impl EccScalar {
         match (self, other) {
             (Self::K256(s1), Self::K256(s2)) => Ok(Self::K256(s1.sub(s2))),
             (Self::P256(s1), Self::P256(s2)) => Ok(Self::P256(s1.sub(s2))),
+            (Self::Ed25519(s1), Self::Ed25519(s2)) => Ok(Self::Ed25519(s1.sub(s2))),
             (_, _) => Err(ThresholdEcdsaError::CurveMismatch),
         }
     }
@@ -172,6 +193,7 @@ impl EccScalar {
         match (self, other) {
             (Self::K256(s1), Self::K256(s2)) => Ok(Self::K256(s1.mul(s2))),
             (Self::P256(s1), Self::P256(s2)) => Ok(Self::P256(s1.mul(s2))),
+            (Self::Ed25519(s1), Self::Ed25519(s2)) => Ok(Self::Ed25519(s1.mul(s2))),
             (_, _) => Err(ThresholdEcdsaError::CurveMismatch),
         }
     }
@@ -183,27 +205,43 @@ impl EccScalar {
         match self {
             Self::K256(s) => s.invert().map(Self::K256),
             Self::P256(s) => s.invert().map(Self::P256),
+            Self::Ed25519(s) => s.invert().map(Self::Ed25519),
         }
     }
 
-    /// Serialize the scalar in SEC1 format
+    /// Serialize the scalar
     ///
-    /// In this context SEC1 format is just the big-endian fixed length encoding
-    /// of the integer, with leading zero bytes included if necessary.
+    /// For P-256 and secp256k1 this uses a big-endian encoding.
+    /// For Ed25519 a little endian encoding is used.
     pub fn serialize(&self) -> Vec<u8> {
         match self {
-            Self::K256(s) => s.as_bytes().to_vec(),
-            Self::P256(s) => s.as_bytes().to_vec(),
+            Self::K256(s) => s.to_bytes().to_vec(),
+            Self::P256(s) => s.to_bytes().to_vec(),
+            Self::Ed25519(s) => s.to_bytes().to_vec(),
         }
     }
 
-    /// Serialize the scalar in SEC1 format (with curve tag)
+    /// Access the bits of the scalar
+    ///
+    /// This always returns a big endian value
+    pub(crate) fn scalar_bits_be(&self) -> Vec<u8> {
+        let mut bits = self.serialize();
+
+        if self.curve_type() == EccCurveType::Ed25519 {
+            bits.reverse();
+        }
+
+        bits
+    }
+
+    /// Serialize the scalar (with curve tag prefix)
     pub(crate) fn serialize_tagged(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(1 + self.curve_type().scalar_bytes());
         bytes.push(self.curve_type().tag());
         bytes.extend_from_slice(&match self {
-            Self::K256(s) => s.as_bytes(),
-            Self::P256(s) => s.as_bytes(),
+            Self::K256(s) => s.to_bytes(),
+            Self::P256(s) => s.to_bytes(),
+            Self::Ed25519(s) => s.to_bytes(),
         });
         bytes
     }
@@ -250,7 +288,7 @@ impl EccScalar {
         Ok(out)
     }
 
-    /// Deserialize a SEC1 formatted scalar value (with tag)
+    /// Deserialize a scalar value (with tag)
     pub fn deserialize_tagged(bytes: &[u8]) -> ThresholdEcdsaSerializationResult<Self> {
         if bytes.is_empty() {
             return Err(ThresholdEcdsaSerializationError(
@@ -266,7 +304,7 @@ impl EccScalar {
         }
     }
 
-    /// Deserialize a SEC1 formatted scalar value
+    /// Deserialize a scalar value
     pub fn deserialize(
         curve: EccCurveType,
         bytes: &[u8],
@@ -290,6 +328,12 @@ impl EccScalar {
                 })?;
                 Ok(Self::P256(s))
             }
+            EccCurveType::Ed25519 => {
+                let s = ed25519::Scalar::deserialize(bytes).ok_or_else(|| {
+                    ThresholdEcdsaSerializationError("Invalid point encoding".to_string())
+                })?;
+                Ok(Self::Ed25519(s))
+            }
         }
     }
 
@@ -309,6 +353,11 @@ impl EccScalar {
                 let s = secp256r1::Scalar::from_wide_bytes(bytes)
                     .ok_or(ThresholdEcdsaError::InvalidScalar)?;
                 Ok(Self::P256(s))
+            }
+            EccCurveType::Ed25519 => {
+                let s = ed25519::Scalar::from_wide_bytes(bytes)
+                    .ok_or(ThresholdEcdsaError::InvalidScalar)?;
+                Ok(Self::Ed25519(s))
             }
         }
     }
@@ -338,14 +387,16 @@ impl EccScalar {
         match self {
             Self::K256(s) => s.is_zero(),
             Self::P256(s) => s.is_zero(),
+            Self::Ed25519(s) => s.is_zero(),
         }
     }
 
     /// Return true iff self is >= order / 2
-    pub fn is_high(&self) -> bool {
+    pub fn is_high(&self) -> ThresholdEcdsaResult<bool> {
         match self {
-            Self::K256(s) => s.is_high(),
-            Self::P256(s) => s.is_high(),
+            Self::K256(s) => Ok(s.is_high()),
+            Self::P256(s) => Ok(s.is_high()),
+            Self::Ed25519(_) => Err(ThresholdEcdsaError::CurveMismatch),
         }
     }
 
@@ -358,6 +409,7 @@ impl EccScalar {
         match self {
             Self::K256(s) => Self::K256(s.negate()),
             Self::P256(s) => Self::P256(s.negate()),
+            Self::Ed25519(s) => Self::Ed25519(s.negate()),
         }
     }
 
@@ -369,6 +421,7 @@ impl EccScalar {
         match curve {
             EccCurveType::K256 => Self::K256(secp256k1::Scalar::zero()),
             EccCurveType::P256 => Self::P256(secp256r1::Scalar::zero()),
+            EccCurveType::Ed25519 => Self::Ed25519(ed25519::Scalar::zero()),
         }
     }
 
@@ -380,6 +433,7 @@ impl EccScalar {
         match curve {
             EccCurveType::K256 => Self::K256(secp256k1::Scalar::one()),
             EccCurveType::P256 => Self::P256(secp256r1::Scalar::one()),
+            EccCurveType::Ed25519 => Self::Ed25519(ed25519::Scalar::one()),
         }
     }
 
@@ -388,6 +442,7 @@ impl EccScalar {
         match curve {
             EccCurveType::K256 => Self::K256(secp256k1::Scalar::from(n)),
             EccCurveType::P256 => Self::P256(secp256r1::Scalar::from(n)),
+            EccCurveType::Ed25519 => Self::Ed25519(ed25519::Scalar::from(n)),
         }
     }
 
@@ -419,6 +474,7 @@ impl<'de> Deserialize<'de> for EccScalar {
 pub enum EccScalarBytes {
     K256(Box<[u8; 32]>),
     P256(Box<[u8; 32]>),
+    Ed25519(Box<[u8; 32]>),
 }
 
 impl EccScalarBytes {
@@ -426,6 +482,7 @@ impl EccScalarBytes {
         match self {
             Self::K256(_) => EccCurveType::K256,
             Self::P256(_) => EccCurveType::P256,
+            Self::Ed25519(_) => EccCurveType::Ed25519,
         }
     }
 }
@@ -437,6 +494,9 @@ impl TryFrom<&EccScalarBytes> for EccScalar {
         match bytes {
             EccScalarBytes::K256(raw) => EccScalar::deserialize(EccCurveType::K256, raw.as_ref()),
             EccScalarBytes::P256(raw) => EccScalar::deserialize(EccCurveType::P256, raw.as_ref()),
+            EccScalarBytes::Ed25519(raw) => {
+                EccScalar::deserialize(EccCurveType::Ed25519, raw.as_ref())
+            }
         }
     }
 }
@@ -455,6 +515,11 @@ impl TryFrom<&EccScalar> for EccScalarBytes {
                 Ok(Self::P256(scalar.serialize().try_into().map_err(|e| {
                     ThresholdEcdsaSerializationError(format!("{:?}", e))
                 })?))
+            }
+            EccCurveType::Ed25519 => {
+                Ok(Self::Ed25519(scalar.serialize().try_into().map_err(
+                    |e| ThresholdEcdsaSerializationError(format!("{:?}", e)),
+                )?))
             }
         }
     }
@@ -490,6 +555,7 @@ impl PartialEq for EccPoint {
 pub enum EccPointInternal {
     K256(secp256k1::Point),
     P256(secp256r1::Point),
+    Ed25519(ed25519::Point),
 }
 
 impl fmt::Debug for EccPoint {
@@ -509,6 +575,7 @@ impl EccPoint {
         match curve {
             EccCurveType::K256 => Self::from(secp256k1::Point::identity()),
             EccCurveType::P256 => Self::from(secp256r1::Point::identity()),
+            EccCurveType::Ed25519 => Self::from(ed25519::Point::identity()),
         }
     }
 
@@ -517,6 +584,7 @@ impl EccPoint {
         match curve {
             EccCurveType::K256 => Self::from(secp256k1::Point::generator()),
             EccCurveType::P256 => Self::from(secp256r1::Point::generator()),
+            EccCurveType::Ed25519 => Self::from(ed25519::Point::generator()),
         }
     }
 
@@ -538,6 +606,7 @@ impl EccPoint {
         match curve {
             EccCurveType::K256 => Self::from(secp256k1::Point::generator_h()),
             EccCurveType::P256 => Self::from(secp256r1::Point::generator_h()),
+            EccCurveType::Ed25519 => Self::from(ed25519::Point::generator_h()),
         }
     }
 
@@ -545,6 +614,7 @@ impl EccPoint {
         match self.point {
             EccPointInternal::K256(_) => EccCurveType::K256,
             EccPointInternal::P256(_) => EccCurveType::P256,
+            EccPointInternal::Ed25519(_) => EccCurveType::Ed25519,
         }
     }
 
@@ -562,8 +632,9 @@ impl EccPoint {
         dst: &[u8],
     ) -> ThresholdEcdsaResult<Self> {
         match curve {
-            EccCurveType::P256 => Ok(Self::from(secp256r1::Point::hash2curve(input, dst))),
             EccCurveType::K256 => Ok(Self::from(secp256k1::Point::hash2curve(input, dst))),
+            EccCurveType::P256 => Ok(Self::from(secp256r1::Point::hash2curve(input, dst))),
+            EccCurveType::Ed25519 => Ok(Self::from(ed25519::Point::hash2curve(input, dst))),
         }
     }
 
@@ -574,6 +645,9 @@ impl EccPoint {
                 Ok(Self::from(pt1.add(pt2)))
             }
             (EccPointInternal::P256(pt1), EccPointInternal::P256(pt2)) => {
+                Ok(Self::from(pt1.add(pt2)))
+            }
+            (EccPointInternal::Ed25519(pt1), EccPointInternal::Ed25519(pt2)) => {
                 Ok(Self::from(pt1.add(pt2)))
             }
             _ => Err(ThresholdEcdsaError::CurveMismatch),
@@ -589,6 +663,9 @@ impl EccPoint {
             (EccPointInternal::P256(pt1), EccPointInternal::P256(pt2)) => {
                 Ok(Self::from(pt1.sub(pt2)))
             }
+            (EccPointInternal::Ed25519(pt1), EccPointInternal::Ed25519(pt2)) => {
+                Ok(Self::from(pt1.sub(pt2)))
+            }
             (_, _) => Err(ThresholdEcdsaError::CurveMismatch),
         }
     }
@@ -598,6 +675,7 @@ impl EccPoint {
         match (&self.point, scalar) {
             (EccPointInternal::K256(pt), EccScalar::K256(s)) => Ok(Self::from(pt.mul(s))),
             (EccPointInternal::P256(pt), EccScalar::P256(s)) => Ok(Self::from(pt.mul(s))),
+            (EccPointInternal::Ed25519(pt), EccScalar::Ed25519(s)) => Ok(Self::from(pt.mul(s))),
             _ => Err(ThresholdEcdsaError::CurveMismatch),
         }
     }
@@ -607,6 +685,7 @@ impl EccPoint {
         match &self.point {
             EccPointInternal::K256(pt) => Self::from(pt.double()),
             EccPointInternal::P256(pt) => Self::from(pt.double()),
+            EccPointInternal::Ed25519(pt) => Self::from(pt.double()),
         }
     }
 
@@ -615,6 +694,7 @@ impl EccPoint {
         match &self.point {
             EccPointInternal::K256(pt) => Self::from(pt.negate()),
             EccPointInternal::P256(pt) => Self::from(pt.negate()),
+            EccPointInternal::Ed25519(pt) => Self::from(pt.negate()),
         }
     }
 
@@ -667,6 +747,13 @@ impl EccPoint {
                 EccPointInternal::P256(pt2),
                 EccScalar::P256(s2),
             ) => Ok(Self::from(secp256r1::Point::lincomb(pt1, s1, pt2, s2))),
+
+            (
+                EccPointInternal::Ed25519(pt1),
+                EccScalar::Ed25519(s1),
+                EccPointInternal::Ed25519(pt2),
+                EccScalar::Ed25519(s2),
+            ) => Ok(Self::from(ed25519::Point::lincomb(pt1, s1, pt2, s2))),
 
             _ => Err(ThresholdEcdsaError::CurveMismatch),
         }
@@ -895,7 +982,7 @@ impl EccPoint {
             if p.curve_type() != s.curve_type() {
                 return Err(ThresholdEcdsaError::CurveMismatch);
             }
-            let sb = (*s).serialize();
+            let sb = (*s).scalar_bits_be();
 
             let mut window = vec![0u8; num_windows];
             for (i, w) in window.iter_mut().enumerate() {
@@ -948,6 +1035,9 @@ impl EccPoint {
             (EccScalar::P256(x), EccScalar::P256(y)) => {
                 Ok(Self::from(secp256r1::Point::pedersen(x, y)))
             }
+            (EccScalar::Ed25519(x), EccScalar::Ed25519(y)) => {
+                Ok(Self::from(ed25519::Point::pedersen(x, y)))
+            }
             (_, _) => Err(ThresholdEcdsaError::CurveMismatch),
         }
     }
@@ -956,18 +1046,22 @@ impl EccPoint {
         match scalar {
             EccScalar::K256(s) => Self::from(secp256k1::Point::mul_by_g(s)),
             EccScalar::P256(s) => Self::from(secp256r1::Point::mul_by_g(s)),
+            EccScalar::Ed25519(s) => Self::from(ed25519::Point::mul_by_g(s)),
         }
     }
 
     /// Serialize a point in compressed form
     ///
-    /// The output is in SEC1 format, and will be 1 header byte
-    /// followed by a single field element, which for K256 and P256 is
-    /// 32 bytes long.
+    /// For most curves the output is in SEC1 format, and will be 1
+    /// header byte followed by a single field element, which for K256
+    /// and P256 is 32 bytes long.
+    ///
+    /// For Ed25519 the format is as defined in RFC 8032
     pub fn serialize(&self) -> Vec<u8> {
         match &self.point {
             EccPointInternal::K256(pt) => pt.serialize(),
             EccPointInternal::P256(pt) => pt.serialize(),
+            EccPointInternal::Ed25519(pt) => pt.serialize(),
         }
     }
 
@@ -1005,12 +1099,16 @@ impl EccPoint {
     }
 
     pub fn deserialize_bip340(curve: EccCurveType, pt: &[u8]) -> ThresholdEcdsaResult<Self> {
+        if curve != EccCurveType::K256 {
+            return Err(ThresholdEcdsaError::CurveMismatch);
+        }
+
         let mut sec1 = Vec::with_capacity(1 + pt.len());
 
         sec1.push(0x02);
         sec1.extend_from_slice(pt);
 
-        Self::deserialize(curve, pt)
+        Self::deserialize(curve, &sec1)
     }
 
     /// Serialize a point in compressed form with a curve ID tag
@@ -1018,37 +1116,29 @@ impl EccPoint {
     /// The output is the same as serialize but prefixed with the
     /// (arbitrarily chosen) tag from EccCurveType::tag()
     pub(crate) fn serialize_tagged(&self) -> Vec<u8> {
-        let mut bytes = Vec::with_capacity(1 + self.curve_type().point_bytes());
-        bytes.push(self.curve_type().tag());
-
-        bytes.extend_from_slice(&match &self.point {
-            EccPointInternal::K256(pt) => pt.serialize(),
-            EccPointInternal::P256(pt) => pt.serialize(),
-        });
-
+        let curve = self.curve_type();
+        let mut bytes = Vec::with_capacity(1 + curve.point_bytes());
+        bytes.push(curve.tag());
+        bytes.extend_from_slice(&self.serialize());
         bytes
-    }
-
-    /// Serialize a point in uncompressed form
-    ///
-    /// The output is in SEC1 format, and will be 1 header byte
-    /// followed by a two field elements, which for K256 and P256 is
-    /// 32 bytes long each.
-    pub fn serialize_uncompressed(&self) -> Vec<u8> {
-        match &self.point {
-            EccPointInternal::K256(pt) => pt.serialize_uncompressed(),
-            EccPointInternal::P256(pt) => pt.serialize_uncompressed(),
-        }
     }
 
     /// Return the binary encoding of the affine X coordinate of this point
     pub fn affine_x_bytes(&self) -> ThresholdEcdsaResult<Vec<u8>> {
+        if self.curve_type() == EccCurveType::Ed25519 {
+            return Err(ThresholdEcdsaError::CurveMismatch);
+        }
+
         // We can just strip off the SEC1 header to get the encoding of x
         Ok(self.serialize()[1..].to_vec())
     }
 
     /// Return if the affine Y coordinate of this point is even
     pub fn is_y_even(&self) -> ThresholdEcdsaResult<bool> {
+        if self.curve_type() == EccCurveType::Ed25519 {
+            return Err(ThresholdEcdsaError::CurveMismatch);
+        }
+
         let compressed = self.serialize();
 
         match compressed.first() {
@@ -1063,6 +1153,7 @@ impl EccPoint {
         match &self.point {
             EccPointInternal::K256(pt) => Ok(pt.is_infinity()),
             EccPointInternal::P256(pt) => Ok(pt.is_infinity()),
+            EccPointInternal::Ed25519(pt) => Ok(pt.is_infinity()),
         }
     }
 
@@ -1084,28 +1175,30 @@ impl EccPoint {
             return Err(ThresholdEcdsaError::InvalidPoint);
         }
 
-        // We encode the point at infinity as all-zero byte string of the same
-        // length as a compressed point. This is non-standard (per SEC1) but a
-        // fixed length point format is easier to reason about.
-        //
-        // This check is not constant time but is only triggered in the
-        // event that the first byte is 0 which is otherwise invalid. So this
-        // would leak the first non-zero byte in an invalid point, which
-        // does not seem to be interesting from a side channel perspective.
-        //
-        // The initial check of bytes[0] == 0 may seem redundant, but
-        // [`iter::all`] does not guarantee the direction it examines the
-        // iterator. If it for example worked in the reverse order, it would
-        // leak information about valid non-infinity points. The initial check
-        // ensures that [`iter::all`] is only invoked in the case of a leading 0
-        // byte and can only leak information about invalid points.
-        if bytes[0] == 0 && bytes.iter().all(|x| *x == 0x00) {
-            return Ok(Self::identity(curve));
-        }
+        if curve != EccCurveType::Ed25519 {
+            // We encode the point at infinity as all-zero byte string of the same
+            // length as a compressed point. This is non-standard (per SEC1) but a
+            // fixed length point format is easier to reason about.
+            //
+            // This check is not constant time but is only triggered in the
+            // event that the first byte is 0 which is otherwise invalid. So this
+            // would leak the first non-zero byte in an invalid point, which
+            // does not seem to be interesting from a side channel perspective.
+            //
+            // The initial check of bytes[0] == 0 may seem redundant, but
+            // [`iter::all`] does not guarantee the direction it examines the
+            // iterator. If it for example worked in the reverse order, it would
+            // leak information about valid non-infinity points. The initial check
+            // ensures that [`iter::all`] is only invoked in the case of a leading 0
+            // byte and can only leak information about invalid points.
+            if bytes[0] == 0 && bytes.iter().all(|x| *x == 0x00) {
+                return Ok(Self::identity(curve));
+            }
 
-        // If not all zeros, then first byte should be 2 or 3 indicating sign of y
-        if bytes[0] != 2 && bytes[0] != 3 {
-            return Err(ThresholdEcdsaError::InvalidPoint);
+            // If not all zeros, then first byte should be 2 or 3 indicating sign of y
+            if bytes[0] != 2 && bytes[0] != 3 {
+                return Err(ThresholdEcdsaError::InvalidPoint);
+            }
         }
 
         Self::deserialize_any_format(curve, bytes)
@@ -1124,6 +1217,11 @@ impl EccPoint {
                     .ok_or(ThresholdEcdsaError::InvalidPoint)?;
                 Ok(Self::from(pt))
             }
+            EccCurveType::Ed25519 => {
+                let pt =
+                    ed25519::Point::deserialize(bytes).ok_or(ThresholdEcdsaError::InvalidPoint)?;
+                Ok(Self::from(pt))
+            }
         }
     }
 
@@ -1138,6 +1236,9 @@ impl EccPoint {
             (EccPointInternal::P256(pt_a), EccPointInternal::P256(pt_b)) => Ok(Self::from(
                 secp256r1::Point::conditional_select(pt_a, pt_b, choice),
             )),
+            (EccPointInternal::Ed25519(pt_a), EccPointInternal::Ed25519(pt_b)) => Ok(Self::from(
+                ed25519::Point::conditional_select(pt_a, pt_b, choice),
+            )),
             _ => Err(ThresholdEcdsaError::CurveMismatch),
         }
     }
@@ -1148,6 +1249,16 @@ impl EccPoint {
     fn conditional_assign(&mut self, other: &Self, choice: Choice) -> ThresholdEcdsaResult<()> {
         *self = Self::conditional_select(self, other, choice)?;
         Ok(())
+    }
+}
+
+/// Converts `ed25519` point to `EccPoint`
+impl From<ed25519::Point> for EccPoint {
+    fn from(point: ed25519::Point) -> Self {
+        Self {
+            point: EccPointInternal::Ed25519(point),
+            precompute: None,
+        }
     }
 }
 
@@ -1278,7 +1389,7 @@ impl Naf {
 
     /// Converts `scalar` to its NAF representation.
     pub fn from_scalar_vartime(scalar: &EccScalar) -> Self {
-        let bytes = scalar.serialize();
+        let bytes = scalar.scalar_bits_be();
         Naf::from_be_bytes_vartime(&bytes[..])
     }
 

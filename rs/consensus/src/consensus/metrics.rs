@@ -8,7 +8,7 @@ use ic_metrics::{
 use ic_types::{
     batch::BatchPayload,
     consensus::{
-        ecdsa::{
+        idkg::{
             CompletedReshareRequest, CompletedSignature, EcdsaPayload, HasEcdsaKeyId,
             KeyTranscriptCreation,
         },
@@ -111,25 +111,6 @@ impl ConsensusMetrics {
     }
 }
 
-pub struct ConsensusGossipMetrics {
-    pub get_priority_update_block_duration: HistogramVec,
-}
-
-impl ConsensusGossipMetrics {
-    pub fn new(metrics_registry: MetricsRegistry) -> Self {
-        Self {
-            get_priority_update_block_duration: metrics_registry.histogram_vec(
-                "consensus_get_priority_update_block_duration",
-                "The time it took to execute the update_block sections of get_priority",
-                // 0.1ms, 0.2ms, 0.5ms, 1ms, 2ms, 5ms, 10ms, 20ms, 50ms, 100ms, 200ms, 500ms,
-                // 1s, 2s, 5s, 10s, 20s, 50s, 100s, 200s, 500s
-                decimal_buckets(-4, 2),
-                &["block_type"],
-            ),
-        }
-    }
-}
-
 // Block related stats
 pub struct BlockStats {
     pub block_hash: String,
@@ -184,7 +165,6 @@ type CounterPerEcdsaKeyId = BTreeMap<Option<EcdsaKeyId>, usize>;
 pub struct EcdsaStats {
     pub signature_agreements: usize,
     pub key_transcript_created: CounterPerEcdsaKeyId,
-    pub ongoing_signatures: CounterPerEcdsaKeyId,
     pub available_quadruples: CounterPerEcdsaKeyId,
     pub quadruples_in_creation: CounterPerEcdsaKeyId,
     pub ongoing_xnet_reshares: CounterPerEcdsaKeyId,
@@ -220,7 +200,6 @@ impl From<&EcdsaPayload> for EcdsaStats {
                 .values()
                 .filter(|status| matches!(status, CompletedSignature::Unreported(_)))
                 .count(),
-            ongoing_signatures: count_by_ecdsa_key_id(payload.ongoing_signatures.keys(), &keys),
             available_quadruples: count_by_ecdsa_key_id(payload.available_quadruples.keys(), &keys),
             quadruples_in_creation: count_by_ecdsa_key_id(
                 payload.quadruples_in_creation.keys(),
@@ -272,7 +251,6 @@ pub struct FinalizerMetrics {
     // ecdsa payload related metrics
     pub ecdsa_key_transcript_created: IntCounterVec,
     pub ecdsa_signature_agreements: IntCounter,
-    pub ecdsa_ongoing_signatures: IntGaugeVec,
     pub ecdsa_available_quadruples: IntGaugeVec,
     pub ecdsa_quadruples_in_creation: IntGaugeVec,
     pub ecdsa_ongoing_xnet_reshares: IntGaugeVec,
@@ -328,11 +306,6 @@ impl FinalizerMetrics {
             ecdsa_signature_agreements: metrics_registry.int_counter(
                 "consensus_ecdsa_signature_agreements",
                 "Total number of ECDSA signature agreements created",
-            ),
-            ecdsa_ongoing_signatures: metrics_registry.int_gauge_vec(
-                "consensus_ecdsa_ongoing_signatures",
-                "The number of ongoing ECDSA signatures",
-                &[ECDSA_KEY_ID_LABEL],
             ),
             ecdsa_available_quadruples: metrics_registry.int_gauge_vec(
                 "consensus_ecdsa_available_quadruples",
@@ -410,7 +383,6 @@ impl FinalizerMetrics {
                 &self.ecdsa_key_transcript_created,
                 &ecdsa.key_transcript_created,
             );
-            set(&self.ecdsa_ongoing_signatures, &ecdsa.ongoing_signatures);
             self.ecdsa_signature_agreements
                 .inc_by(ecdsa.signature_agreements as u64);
             set(
@@ -831,10 +803,6 @@ impl EcdsaPayloadMetrics {
         self.payload_metrics_set_without_key_id_label(
             "signature_agreements",
             payload.signature_agreements.len(),
-        );
-        self.payload_metrics_set(
-            "ongoing_signatures",
-            count_by_ecdsa_key_id(payload.ongoing_signatures.keys(), &expected_keys),
         );
         self.payload_metrics_set(
             "available_quadruples",

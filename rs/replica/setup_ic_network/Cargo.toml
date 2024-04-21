@@ -7,7 +7,6 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-crossbeam-channel = { workspace = true }
 either = "1.6.0"
 ic-artifact-manager = { path = "../../artifact_manager" }
 ic-artifact-pool = { path = "../../artifact_pool" }
@@ -24,10 +23,8 @@ ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-adapter-client = { path = "../../interfaces/adapter_client" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../../interfaces/state_manager" }
-ic-interfaces-transport = { path = "../../interfaces/transport" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
-ic-p2p = { path = "../../p2p" }
 ic-peer-manager = { path = "../../p2p/peer_manager" }
 ic-quic-transport = { path = "../../p2p/quic_transport" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }

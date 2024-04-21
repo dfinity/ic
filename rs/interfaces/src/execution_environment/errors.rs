@@ -142,6 +142,10 @@ pub enum HypervisorError {
         threshold: Cycles,
         reveal_top_up: bool,
     },
+    WasmMemoryLimitExceeded {
+        bytes: NumBytes,
+        limit: NumBytes,
+    },
 }
 
 impl From<WasmInstrumentationError> for HypervisorError {
@@ -370,6 +374,22 @@ impl HypervisorError {
                 ),
                 )
             }
+
+            Self::WasmMemoryLimitExceeded { bytes, limit } => {
+                UserError::new(
+                    E::CanisterWasmMemoryLimitExceeded,
+                    format!(
+                        "Canister exceeded its current Wasm memory limit of {} bytes. \
+                        The peak Wasm memory usage was {} bytes.\
+                        If the canister reaches 4GiB, then it may stop functioning and may become unrecoverable. \
+                        Please reach out to the canister owner to investigate the reason for the increased memory usage. \
+                        It might be necessary to move data from the Wasm memory to the stable memory. \
+                        If such high Wasm memory usage is expected and safe, then the developer can increase \
+                        the Wasm memory limit in the canister settings.",
+                        limit.get(), bytes.get()
+                     )
+                )
+            }
         }
     }
 
@@ -405,6 +425,7 @@ impl HypervisorError {
             HypervisorError::InsufficientCyclesInMessageMemoryGrow { .. } => {
                 "InsufficientCyclesInMessageMemoryGrow"
             }
+            HypervisorError::WasmMemoryLimitExceeded { .. } => "WasmMemoryLimitExceeded",
         }
     }
 }

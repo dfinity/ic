@@ -17,11 +17,13 @@ use ic_ledger_core::tokens::Zero;
 use ic_ledger_core::{approvals::Approvals, timestamp::TimeStamp};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc3::blocks::DataCertificate;
+#[cfg(not(feature = "get-blocks-disabled"))]
+use icrc_ledger_types::icrc3::blocks::GetBlocksResponse;
 use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value,
     icrc3::{
         archive::ArchiveInfo,
-        blocks::{GetBlocksRequest, GetBlocksResponse},
+        blocks::GetBlocksRequest,
         transactions::{GetTransactionsRequest, GetTransactionsResponse},
     },
 };
@@ -31,7 +33,10 @@ use icrc_ledger_types::{
 };
 use icrc_ledger_types::{
     icrc1::transfer::Memo,
-    icrc3::archive::{GetArchivesArgs, GetArchivesResult},
+    icrc3::{
+        archive::{GetArchivesArgs, GetArchivesResult},
+        blocks::GetBlocksResult,
+    },
 };
 use icrc_ledger_types::{
     icrc1::transfer::{TransferArg, TransferError},
@@ -478,6 +483,10 @@ fn supported_standards() -> Vec<StandardRecord> {
             name: "ICRC-2".to_string(),
             url: "https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-2".to_string(),
         },
+        StandardRecord {
+            name: "ICRC-3".to_string(),
+            url: "https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-3".to_string(),
+        },
     ];
     standards
 }
@@ -491,6 +500,7 @@ fn get_transactions(req: GetTransactionsRequest) -> GetTransactionsResponse {
     Access::with_ledger(|ledger| ledger.get_transactions(start, length as usize))
 }
 
+#[cfg(not(feature = "get-blocks-disabled"))]
 #[query]
 #[candid_method(query)]
 fn get_blocks(req: GetBlocksRequest) -> GetBlocksResponse {
@@ -651,6 +661,12 @@ fn icrc3_supported_block_types() -> Vec<icrc_ledger_types::icrc3::blocks::Suppor
                 .to_string(),
         },
     ]
+}
+
+#[query]
+#[candid_method(query)]
+fn icrc3_get_blocks(args: Vec<GetBlocksRequest>) -> GetBlocksResult {
+    Access::with_ledger(|ledger| ledger.icrc3_get_blocks(args))
 }
 
 candid::export_service!();

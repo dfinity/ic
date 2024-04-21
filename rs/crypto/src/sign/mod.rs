@@ -5,7 +5,6 @@ use crate::sign::basic_sig::BasicSignerInternal;
 use crate::sign::multi_sig::MultiSigVerifierInternal;
 use crate::sign::multi_sig::MultiSignerInternal;
 use crate::sign::threshold_sig::{ThresholdSigVerifierInternal, ThresholdSignerInternal};
-pub use canister_threshold_sig::ecdsa::get_tecdsa_master_public_key;
 use ic_crypto_interfaces_sig_verification::{BasicSigVerifierByPublicKey, CanisterSigVerifier};
 use ic_crypto_internal_csp::types::{CspPublicKey, CspSignature};
 use ic_crypto_internal_csp::CryptoServiceProvider;
@@ -46,7 +45,8 @@ mod multi_sig;
 mod threshold_sig;
 
 pub use canister_threshold_sig::{
-    retrieve_mega_public_key_from_registry, MegaKeyFromRegistryError,
+    get_master_public_key_from_transcript, retrieve_mega_public_key_from_registry,
+    MegaKeyFromRegistryError,
 };
 
 #[cfg(test)]

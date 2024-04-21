@@ -7,20 +7,21 @@
 /// These issues will be resolved with Axum 0.7 along with Hyper 1.0, as hyper::Body will be going away.
 use byte_unit::Byte;
 use bytes::{Bytes, BytesMut};
-use derive_more::Display;
 use futures_util::StreamExt;
 use hyper::{body::HttpBody, Body};
-use std::{error::Error, time::Duration};
+use std::time::Duration;
+use thiserror::Error;
 use tokio::time::timeout;
 
-#[derive(Debug, PartialEq, Eq, Display)]
+#[derive(Debug, PartialEq, Eq, Error)]
 pub enum BodyReceiveError {
+    #[error("body is too large `{0}`")]
     TooLarge(String),
+    #[error("receiving body takes too long `{0}`")]
     Timeout(String),
+    #[error("body is unavailable `{0}`")]
     Unavailable(String),
 }
-
-impl Error for BodyReceiveError {}
 
 pub async fn receive_body_without_timeout(
     mut body: Body,

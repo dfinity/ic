@@ -5,7 +5,6 @@ use crate::rosetta_tests::lib::convert::neuron_account_from_public_key;
 use crate::rosetta_tests::lib::convert::neuron_subaccount_bytes_from_public_key;
 use crate::rosetta_tests::rosetta_client::RosettaApiClient;
 use candid::Principal;
-use ic_canister_client_sender::Secp256k1KeyPair;
 use ic_ledger_core::block::BlockIndex;
 use ic_ledger_core::Tokens;
 use ic_nns_common::pb::v1::NeuronId;
@@ -44,7 +43,7 @@ use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
 use rand::{thread_rng, SeedableRng};
 use rosetta_core::convert::principal_id_from_public_key;
-use rosetta_core::models::RosettaSupportedKeyPair;
+use rosetta_core::models::{RosettaSupportedKeyPair, Secp256k1KeyPair};
 use rosetta_core::objects::ObjectMap;
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -648,7 +647,7 @@ pub fn create_custom_neuron(
     // Create neuron info.
     NeuronDetails {
         account_id: aid,
-        key_pair: *kp,
+        key_pair: kp.clone(),
         public_key: pb,
         principal_id: pid,
         neuron_subaccount_identifier,

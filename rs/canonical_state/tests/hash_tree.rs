@@ -79,3 +79,63 @@ fn large_history_and_canisters_state_old_vs_new_hashing() {
 
     assert_eq!(hash_tree, crypto_hash_tree);
 }
+
+/// Guards against changes in `ic_error_types::ErrorCode`. This will fail if
+/// - A code is added, removed or changed
+/// - A variant's name is changed
+/// - The printer is changed, i.e. the result of `.to_string()` is changed.
+#[test]
+fn error_code_change_guard() {
+    use ic_crypto_sha2::Sha256;
+    use ic_error_types::ErrorCode;
+    use std::hash::Hash;
+    use strum::IntoEnumIterator;
+
+    let mut hasher = Sha256::new();
+    for variant in ErrorCode::iter() {
+        (
+            variant,
+            variant as u64,
+            // TODO: Replace this roundtrip with the protobuf roundtrip once EXC-1583 is done.
+            ErrorCode::try_from(variant as u64).unwrap(),
+            format!("{variant:?}"),
+            variant.to_string(),
+        )
+            .hash(&mut hasher);
+    }
+
+    // If this assert fails, you have made a potentially incompatible change to
+    // `ErrorCode`. This is problematic because `ErrorCode` values are encoded into
+    // the certified state tree and successive replica releases must have identical
+    // representation of the certified state tree.
+    //
+    // Changes to `ErrorCode` must be rolled out in stages, across multiple replica
+    // releases. You must also ensure that a release is deployed to every subnet
+    // before proceeding with the next stage of the release.
+    //
+    //  * If you are removing an `ErrorCode` variant, in the first stage remove all
+    //   uses of said variant from production code (except its definition and any
+    //   conversion logic); only once this change has been deployed to all subnets,
+    //   in the second phase, remove the variant and update this test.
+    //
+    //  * If you are adding an `ErrorCode` variant, in the first stage define the
+    //    variant and the necessary conversion logic, without using it anywhere (and
+    //    update this test); once the replica release has been deployed to all
+    //    subnets, it is safe to begin using the new variant in production code.
+    //
+    //  * Renaming a variant should be safe to do in one go, provided its numeric
+    //    and `ToString` representations do not change. Just update this test.
+    //
+    //  * If you are remapping the numeric code behind a variant, you must do it as
+    //    concurrent removal and addition operations (see above). You can also
+    //    rename the variant you are removing to `Deprecated<Name>` as part of the
+    //    first step, so you can concurrently define the new variant and preserve
+    //    the name.
+    assert_eq!(
+        [
+            40, 143, 92, 4, 52, 206, 227, 226, 205, 73, 209, 165, 32, 242, 108, 149, 240, 31, 106,
+            117, 7, 120, 87, 149, 254, 5, 242, 192, 171, 103, 10, 251
+        ],
+        hasher.finish()
+    );
+}

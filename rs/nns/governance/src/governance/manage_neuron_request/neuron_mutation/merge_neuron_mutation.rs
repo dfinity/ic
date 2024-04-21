@@ -165,11 +165,11 @@ impl GovernanceNeuronMutation for MergeNeuronMutation {
             let transaction_fee_e8s = gov.transaction_fee();
             let to_subaccount = gov.with_neuron(&self.target_neuron_id, |target_neuron| {
                 target_neuron.subaccount()
-            })??;
+            })?;
 
             let from_subaccount = gov.with_neuron(&self.source_neuron_id, |source_neuron| {
                 source_neuron.subaccount()
-            })??;
+            })?;
 
             let original_delta_cached_neuron_stake_e8s = source_delta.cached_neuron_stake_e8s;
             let original_delta_aging_since_timestamp_seconds =

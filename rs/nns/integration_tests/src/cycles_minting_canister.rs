@@ -33,7 +33,7 @@ use ic_nns_test_utils::{
     neuron_helpers::get_neuron_1,
     state_test_helpers::{
         cmc_set_default_authorized_subnetworks, set_up_universal_canister, setup_cycles_ledger,
-        setup_nns_canisters, update_with_sender,
+        setup_nns_canisters, state_machine_builder_for_nns_tests, update_with_sender,
     },
 };
 use ic_state_machine_tests::{StateMachine, WasmResult};
@@ -303,7 +303,7 @@ fn test_cmc_notify_create_with_settings() {
     let icpts = Tokens::new(100, 0).unwrap();
     let neuron = get_neuron_1();
 
-    let mut state_machine = StateMachine::new();
+    let mut state_machine = state_machine_builder_for_nns_tests().build();
     let nns_init_payloads = NnsInitPayloadsBuilder::new()
         .with_test_neurons()
         .with_ledger_account(account, icpts)
@@ -428,7 +428,7 @@ fn test_cmc_cycles_create_with_settings() {
     let icpts = Tokens::new(100, 0).unwrap();
     let neuron = get_neuron_1();
 
-    let mut state_machine = StateMachine::new();
+    let mut state_machine = state_machine_builder_for_nns_tests().build();
     let nns_init_payloads = NnsInitPayloadsBuilder::new()
         .with_test_neurons()
         .with_ledger_account(account, icpts)
@@ -950,7 +950,7 @@ fn cmc_notify_mint_cycles() {
     };
     let icpts = Tokens::new(100, 0).unwrap();
 
-    let state_machine = StateMachine::new();
+    let state_machine = state_machine_builder_for_nns_tests().build();
     let nns_init_payloads = NnsInitPayloadsBuilder::new()
         .with_test_neurons()
         .with_ledger_account(account, icpts)

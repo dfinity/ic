@@ -52,10 +52,9 @@ use axum::{
     extract::{DefaultBodyLimit, MatchedPath, State},
     middleware::Next,
     response::Redirect,
-    routing::{get, post_service},
+    routing::get,
     Router,
 };
-use bytes::Bytes;
 use crossbeam::atomic::AtomicCell;
 use http_body_util::{BodyExt, Full, LengthLimitError};
 use hyper::{body::Incoming, Request, Response, StatusCode};
@@ -143,14 +142,12 @@ pub struct HttpError {
     pub message: String,
 }
 
-pub(crate) type EndpointService = BoxCloneService<Request<Body>, Response<Body>, Infallible>;
-
 /// Struct that holds all endpoint services.
 #[derive(Clone)]
 struct HttpHandler {
     call_router: Router,
     query_router: Router,
-    catchup_service: EndpointService,
+    catchup_router: Router,
     dashboard_router: Router,
     status_router: Router,
     canister_read_state_router: Router,
@@ -184,8 +181,8 @@ fn start_server_initialization(
         metrics
             .health_status_transitions_total
             .with_label_values(&[
-                &health_status.load().to_string(),
-                &ReplicaHealthStatus::WaitingForCertifiedState.to_string(),
+                &health_status.load().as_ref(),
+                &ReplicaHealthStatus::WaitingForCertifiedState.as_ref(),
             ])
             .inc();
         health_status.store(ReplicaHealthStatus::WaitingForCertifiedState);
@@ -217,8 +214,8 @@ fn start_server_initialization(
         metrics
             .health_status_transitions_total
             .with_label_values(&[
-                &health_status.load().to_string(),
-                &ReplicaHealthStatus::Healthy.to_string(),
+                &health_status.load().as_ref(),
+                &ReplicaHealthStatus::Healthy.as_ref(),
             ])
             .inc();
         health_status.store(ReplicaHealthStatus::Healthy);
@@ -369,7 +366,7 @@ pub fn start_server(
     );
     let dashboard_router =
         DashboardService::new_router(config.clone(), subnet_type, state_reader_executor.clone());
-    let catchup_service = CatchUpPackageService::new_service(consensus_pool_cache.clone());
+    let catchup_router = CatchUpPackageService::new_router(consensus_pool_cache.clone());
 
     let pprof_home_router = PprofHomeService::new_router();
     let pprof_profile_router = PprofProfileService::new_router(pprof_collector.clone());
@@ -403,7 +400,7 @@ pub fn start_server(
         call_router,
         query_router,
         status_router,
-        catchup_service,
+        catchup_router,
         dashboard_router,
         canister_read_state_router,
         subnet_read_state_router,
@@ -445,6 +442,9 @@ pub fn start_server(
         loop {
             match tcp_listener.accept().await {
                 Ok((tcp_stream, _)) => {
+                    if let Err(err) = tcp_stream.set_nodelay(true) {
+                        error!(log, "Failed to set nodelay, error = {}", err);
+                    }
                     metrics.connections_total.inc();
                     // Start recording connection setup duration.
                     let mut conn_svc = conn_svc.clone();
@@ -661,26 +661,10 @@ fn make_router(
     metrics: HttpHandlerMetrics,
     health_status_refresher: HealthStatusRefreshLayer,
 ) -> Router {
-    let catch_up_package_service = http_handler.catchup_service.clone();
-
-    let post_router: Router = Router::new().route(
-        "/_/catch_up_package",
-        post_service(
-            ServiceBuilder::new()
-                .layer(HandleErrorLayer::new(map_box_error_to_response))
-                .load_shed()
-                .layer(GlobalConcurrencyLimitLayer::new(
-                    config.max_catch_up_package_concurrent_requests,
-                ))
-                .layer(axum::middleware::from_fn(verify_cbor_content_header))
-                .service(catch_up_package_service),
-        ),
-    );
-
     let pprof_concurrency_limiter =
         GlobalConcurrencyLimitLayer::new(config.max_pprof_concurrent_requests);
 
-    let get_router = Router::new()
+    let base_router = Router::new()
         // TODO this is 303 instead of 302
         .route(
             "/",
@@ -694,8 +678,7 @@ fn make_router(
             make_plaintext_response(StatusCode::NOT_FOUND, "Endpoint not found.".to_string())
         });
 
-    let final_router = get_router
-        .merge(post_router)
+    let final_router = base_router
         .merge(
             http_handler.status_router.layer(
                 ServiceBuilder::new()
@@ -743,6 +726,16 @@ fn make_router(
                     .load_shed()
                     .layer(GlobalConcurrencyLimitLayer::new(
                         config.max_read_state_concurrent_requests,
+                    )),
+            ),
+        )
+        .merge(
+            http_handler.catchup_router.layer(
+                ServiceBuilder::new()
+                    .layer(HandleErrorLayer::new(map_box_error_to_response))
+                    .load_shed()
+                    .layer(GlobalConcurrencyLimitLayer::new(
+                        config.max_catch_up_package_concurrent_requests,
                     )),
             ),
         )
@@ -878,26 +871,6 @@ async fn collect_timer_metric(
         .with_label_values(&[&path])
         .observe(resp.body().size_hint().lower() as f64);
     resp
-}
-
-async fn receive_request_body(body: Body) -> Result<Bytes, Response<Body>> {
-    match body.collect().await.map_err(|e| e.into_inner()) {
-        Ok(b) => Ok(b.to_bytes()),
-        Err(e) if e.is::<LengthLimitError>() => {
-            let res = make_plaintext_response(
-                StatusCode::PAYLOAD_TOO_LARGE,
-                "Http body too large".to_string(),
-            );
-            Err(res)
-        }
-        Err(_) => {
-            let res = make_plaintext_response(
-                StatusCode::BAD_REQUEST,
-                "Unable to receive http body".to_string(),
-            );
-            Err(res)
-        }
-    }
 }
 
 // Fetches a delegation from the NNS subnet to allow this subnet to issue
@@ -1181,6 +1154,7 @@ async fn get_random_node_from_nns_subnet(
 
 #[cfg(test)]
 mod tests {
+    use bytes::Bytes;
     use futures_util::{future::select_all, stream::pending, FutureExt};
     use http::{
         header::{
@@ -1195,59 +1169,46 @@ mod tests {
     use ic_logger::replica_logger::no_op_logger;
     use ic_types::{CanisterId, Height};
 
-    use crate::{call::CallService, query::QueryService};
+    use crate::{call::CallService, common::Cbor, query::QueryService};
 
     use super::*;
 
+    fn empty_cbor() -> Bytes {
+        Bytes::from(serde_cbor::to_vec(&()).unwrap())
+    }
+
     fn dummy_router(config: Config) -> Router {
-        let dummy_service = BoxCloneService::new(service_fn(|req: Request<Body>| async move {
-            match receive_request_body(req.into_body()).await {
-                Ok(_) => Ok(Response::new(Body::new("success".to_string()))),
-                Err(e) => Ok(e),
-            }
-        }));
+        async fn dummy(_body: Bytes) -> String {
+            "success".to_string()
+        }
+        async fn dummy_cbor(_body: Cbor<()>) -> String {
+            "success".to_string()
+        }
         let http_handler = HttpHandler {
-            call_router: Router::new().route(
-                CallService::route(),
-                axum::routing::post_service(dummy_service.clone()),
+            call_router: Router::new().route(CallService::route(), axum::routing::post(dummy)),
+            query_router: Router::new()
+                .route(QueryService::route(), axum::routing::post(dummy_cbor)),
+            catchup_router: Router::new().route(
+                CatchUpPackageService::route(),
+                axum::routing::post(dummy_cbor),
             ),
-            query_router: Router::new().route(
-                QueryService::route(),
-                axum::routing::post_service(dummy_service.clone()),
-            ),
-            catchup_service: dummy_service.clone(),
-            dashboard_router: Router::new().route(
-                DashboardService::route(),
-                axum::routing::get_service(dummy_service.clone()),
-            ),
-            status_router: Router::new().route(
-                StatusService::route(),
-                axum::routing::get_service(dummy_service.clone()),
-            ),
+            dashboard_router: Router::new()
+                .route(DashboardService::route(), axum::routing::get(dummy)),
+            status_router: Router::new().route(StatusService::route(), axum::routing::get(dummy)),
             canister_read_state_router: Router::new().route(
                 CanisterReadStateService::route(),
-                axum::routing::post_service(dummy_service.clone()),
+                axum::routing::post(dummy),
             ),
-            subnet_read_state_router: Router::new().route(
-                SubnetReadStateService::route(),
-                axum::routing::post_service(dummy_service.clone()),
-            ),
-            pprof_home_router: Router::new().route(
-                PprofHomeService::route(),
-                axum::routing::get_service(dummy_service.clone()),
-            ),
-            pprof_profile_router: Router::new().route(
-                PprofProfileService::route(),
-                axum::routing::get_service(dummy_service.clone()),
-            ),
-            pprof_flamegraph_router: Router::new().route(
-                PprofFlamegraphService::route(),
-                axum::routing::get_service(dummy_service.clone()),
-            ),
-            tracing_flamegraph_router: Router::new().route(
-                TracingFlamegraphService::route(),
-                axum::routing::get_service(dummy_service.clone()),
-            ),
+            subnet_read_state_router: Router::new()
+                .route(SubnetReadStateService::route(), axum::routing::post(dummy)),
+            pprof_home_router: Router::new()
+                .route(PprofHomeService::route(), axum::routing::get(dummy)),
+            pprof_profile_router: Router::new()
+                .route(PprofProfileService::route(), axum::routing::get(dummy)),
+            pprof_flamegraph_router: Router::new()
+                .route(PprofFlamegraphService::route(), axum::routing::get(dummy)),
+            tracing_flamegraph_router: Router::new()
+                .route(TracingFlamegraphService::route(), axum::routing::get(dummy)),
         };
 
         let metrics = HttpHandlerMetrics::new(&MetricsRegistry::default());
@@ -1382,7 +1343,7 @@ mod tests {
             .uri(format!("/api/v2/canister/{}/query", CanisterId::ic_00()))
             .header(CONTENT_TYPE, CONTENT_TYPE_CBOR)
             .method(hyper::Method::POST)
-            .body(Body::new(Empty::new()))
+            .body(Body::new(Full::new(empty_cbor())))
             .unwrap();
         let resp = router.oneshot(req).await.unwrap();
         assert!(resp.headers().contains_key(ACCESS_CONTROL_ALLOW_ORIGIN));
@@ -1502,7 +1463,7 @@ mod tests {
             .uri("/_/catch_up_package")
             .header(CONTENT_TYPE, CONTENT_TYPE_CBOR)
             .method(hyper::Method::POST)
-            .body(Body::new(Empty::new()))
+            .body(Body::new(Full::new(empty_cbor())))
             .unwrap();
         let resp = router.oneshot(req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::OK);

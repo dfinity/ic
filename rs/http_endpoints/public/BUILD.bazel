@@ -1,4 +1,4 @@
-load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
+load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
@@ -42,8 +42,8 @@ DEPENDENCIES = [
     "@crate_index//:hex",
     "@crate_index//:http_1_0_0",
     "@crate_index//:http_body_1_0_0",
-    "@crate_index//:http_body_util_0_1_0",
-    "@crate_index//:hyper_1_0_0",
+    "@crate_index//:http-body-util",
+    "@crate_index//:hyper",
     "@crate_index//:hyper-util",
     "@crate_index//:inferno",
     "@crate_index//:mockall",

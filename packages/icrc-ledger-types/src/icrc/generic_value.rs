@@ -25,6 +25,20 @@ pub enum ICRC3Value {
     Map(ICRC3Map),
 }
 
+impl std::fmt::Display for ICRC3Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // TODO(FI-1263): copy the Value fmt function to avoid cloning self
+        write!(f, "{}", Value::from(self.to_owned()))
+    }
+}
+
+impl ICRC3Value {
+    pub fn hash(self) -> Hash {
+        // TODO(FI-1263): copy the value hash function to avoid cloning self
+        Value::from(self).hash()
+    }
+}
+
 /// Deprecated, use `ICRC3Value` instead
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Value {

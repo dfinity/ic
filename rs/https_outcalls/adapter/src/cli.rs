@@ -4,7 +4,7 @@
 
 use crate::config::Config;
 use clap::Parser;
-use http::Uri;
+use reqwest::Url;
 use slog::Level;
 use std::{fs::File, io, path::PathBuf};
 use thiserror::Error;
@@ -50,12 +50,12 @@ impl Cli {
 
         // Validate proxy URL.
         // Check for general validation errors.
-        let uri = &config
+        let url = &config
             .socks_proxy
-            .parse::<Uri>()
+            .parse::<Url>()
             .map_err(|_| CliError::Validation("Failed to parse socks_proxy url".to_string()))?;
         // scheme, host, port should be present. 'socks5://someproxy.com:80'
-        if uri.scheme().is_none() || uri.host().is_none() || uri.port().is_none() {
+        if url.scheme().is_empty() || url.host().is_none() || url.port().is_none() {
             return Err(CliError::Validation(
                 "Make sure socks proxy url contains (scheme,host,port)".to_string(),
             ));
@@ -200,7 +200,9 @@ pub mod test {
         assert!(result.is_err());
         let error = result.unwrap_err();
         let matches = match error {
-            CliError::Validation(message) => message.contains("Failed to parse socks_proxy url"),
+            CliError::Validation(message) => {
+                message.contains("Make sure socks proxy url contains (scheme,host,port)")
+            }
             _ => false,
         };
         assert!(matches);

@@ -12,14 +12,19 @@ use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::{BlockIndex, BlockType};
 use ic_ledger_hash_of::{HashOf, HASH_LENGTH};
 use ic_state_machine_tests::StateMachine;
-use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
+use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
+use icrc_ledger_types::icrc::generic_value::Value;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use icrc_ledger_types::icrc2::allowance::Allowance;
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
-use icrc_ledger_types::icrc3::archive::{GetArchivesArgs, GetArchivesResult};
+use icrc_ledger_types::icrc3::archive::{GetArchivesArgs, GetArchivesResult, QueryArchiveFn};
+use icrc_ledger_types::icrc3::blocks::{
+    ArchivedBlocks, BlockWithId, GetBlocksRequest, GetBlocksResponse, GetBlocksResult,
+};
 use num_traits::ToPrimitive;
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 #[derive(CandidType, Clone, Debug, PartialEq, Eq)]
@@ -30,13 +35,13 @@ pub struct LegacyInitArgs {
     pub transfer_fee: u64,
     pub token_name: String,
     pub token_symbol: String,
-    pub metadata: Vec<(String, Value)>,
+    pub metadata: Vec<(String, MetadataValue)>,
     pub archive_options: ArchiveOptions,
 }
 
 #[derive(CandidType, Clone, Debug, Default, PartialEq, Eq)]
 pub struct LegacyUpgradeArgs {
-    pub metadata: Option<Vec<(String, Value)>>,
+    pub metadata: Option<Vec<(String, MetadataValue)>>,
     pub token_name: Option<String>,
     pub token_symbol: Option<String>,
     pub transfer_fee: Option<u64>,
@@ -79,10 +84,10 @@ fn encode_init_args(args: ic_icrc1_ledger_sm_tests::InitArgs) -> LedgerArgument 
         decimals: Some(DECIMAL_PLACES),
         token_symbol: TOKEN_SYMBOL.to_string(),
         metadata: vec![
-            Value::entry(NAT_META_KEY, NAT_META_VALUE),
-            Value::entry(INT_META_KEY, INT_META_VALUE),
-            Value::entry(TEXT_META_KEY, TEXT_META_VALUE),
-            Value::entry(BLOB_META_KEY, BLOB_META_VALUE),
+            MetadataValue::entry(NAT_META_KEY, NAT_META_VALUE),
+            MetadataValue::entry(INT_META_KEY, INT_META_VALUE),
+            MetadataValue::entry(TEXT_META_KEY, TEXT_META_VALUE),
+            MetadataValue::entry(BLOB_META_KEY, BLOB_META_VALUE),
         ],
         archive_options: ArchiveOptions {
             trigger_threshold: ARCHIVE_TRIGGER_THRESHOLD as usize,
@@ -101,6 +106,20 @@ fn encode_init_args(args: ic_icrc1_ledger_sm_tests::InitArgs) -> LedgerArgument 
     })
 }
 
+fn encode_init_args_with_small_sized_archive(
+    args: ic_icrc1_ledger_sm_tests::InitArgs,
+) -> LedgerArgument {
+    match encode_init_args(args) {
+        LedgerArgument::Init(mut init_args) => {
+            init_args.archive_options.node_max_memory_size_bytes = Some(620);
+            LedgerArgument::Init(init_args)
+        }
+        LedgerArgument::Upgrade(_) => {
+            panic!("BUG: Expected Init argument")
+        }
+    }
+}
+
 #[test]
 fn test_metadata() {
     ic_icrc1_ledger_sm_tests::test_metadata(ledger_wasm(), encode_init_args)
@@ -109,6 +128,14 @@ fn test_metadata() {
 #[test]
 fn test_upgrade() {
     ic_icrc1_ledger_sm_tests::test_upgrade(ledger_wasm(), encode_init_args)
+}
+
+#[test]
+fn test_upgrade_archive_options() {
+    ic_icrc1_ledger_sm_tests::test_upgrade_archive_options(
+        ledger_wasm(),
+        encode_init_args_with_small_sized_archive,
+    );
 }
 
 #[test]
@@ -357,10 +384,10 @@ fn test_upgrade_from_first_version() {
         token_name: TOKEN_NAME.to_string(),
         token_symbol: TOKEN_SYMBOL.to_string(),
         metadata: vec![
-            Value::entry(NAT_META_KEY, NAT_META_VALUE),
-            Value::entry(INT_META_KEY, INT_META_VALUE),
-            Value::entry(TEXT_META_KEY, TEXT_META_VALUE),
-            Value::entry(BLOB_META_KEY, BLOB_META_VALUE),
+            MetadataValue::entry(NAT_META_KEY, NAT_META_VALUE),
+            MetadataValue::entry(INT_META_KEY, INT_META_VALUE),
+            MetadataValue::entry(TEXT_META_KEY, TEXT_META_VALUE),
+            MetadataValue::entry(BLOB_META_KEY, BLOB_META_VALUE),
         ],
         archive_options: ArchiveOptions {
             trigger_threshold: ARCHIVE_TRIGGER_THRESHOLD as usize,
@@ -504,6 +531,52 @@ fn icrc3_get_archives(
     Decode!(&res, GetArchivesResult).unwrap()
 }
 
+fn icrc3_get_blocks(
+    env: &StateMachine,
+    ledger_id: CanisterId,
+    args: Vec<GetBlocksRequest>,
+) -> GetBlocksResult {
+    let args = Encode!(&args).unwrap();
+    let res = env
+        .query(ledger_id, "icrc3_get_blocks", args)
+        .expect("Unable to call icrc3_get_blocks")
+        .bytes();
+    Decode!(&res, GetBlocksResult).unwrap()
+}
+
+fn get_blocks(
+    env: &StateMachine,
+    ledger_id: CanisterId,
+    args: GetBlocksRequest,
+) -> GetBlocksResponse {
+    let args = Encode!(&args).unwrap();
+    let res = env
+        .query(ledger_id, "get_blocks", args)
+        .expect("Unable to call get_blocks")
+        .bytes();
+    Decode!(&res, GetBlocksResponse).unwrap()
+}
+
+// Runs the callback `f` returned by a Ledger against the state machine
+// `env` with argument `arg`.
+#[track_caller]
+fn run_archive_fn<I, O>(env: &StateMachine, f: QueryArchiveFn<I, O>, arg: I) -> O
+where
+    I: CandidType,
+    O: CandidType + for<'a> candid::Deserialize<'a>,
+{
+    let arg = Encode!(&arg).unwrap();
+    let res = env
+        .query(
+            CanisterId::unchecked_from_principal(PrincipalId(f.canister_id)),
+            f.method,
+            arg,
+        )
+        .unwrap()
+        .bytes();
+    Decode!(&res, O).unwrap()
+}
+
 #[cfg(not(feature = "u256-tokens"))]
 pub type Tokens = ic_icrc1_tokens_u64::U64;
 
@@ -607,11 +680,354 @@ fn test_icrc3_get_archives() {
     assert_eq!(0, actual.len());
 }
 
+#[test]
+fn test_icrc3_get_blocks() {
+    let env = StateMachine::new();
+    let minting_account = account(111);
+
+    // Trigger block archival every 10 blocks local to the ledger and
+    // archive all blocks immediately
+    let trigger_threshold = 10;
+    let num_blocks_to_archive = 10;
+
+    let args = LedgerArgument::Init(InitArgs {
+        minting_account,
+        fee_collector_account: None,
+        initial_balances: vec![],
+        transfer_fee: Nat::from(0u64),
+        decimals: None,
+        token_name: "Not a Token".to_string(),
+        token_symbol: "NAT".to_string(),
+        metadata: vec![],
+        archive_options: ArchiveOptions {
+            trigger_threshold,
+            num_blocks_to_archive,
+            node_max_memory_size_bytes: None,
+            max_message_size_bytes: None,
+            controller_id: PrincipalId(minting_account.owner),
+            more_controller_ids: None,
+            cycles_for_archive_creation: None,
+            max_transactions_per_response: None,
+        },
+        max_memo_length: None,
+        feature_flags: None,
+        maximum_number_of_accounts: None,
+        accounts_overflow_trim_quantity: None,
+    });
+    let args = Encode!(&args).unwrap();
+    let ledger_id = env
+        .install_canister(ledger_wasm(), args, None)
+        .expect("Unable to install the ledger");
+
+    // This test is split in 2:
+    // 1. check that all the blocks and the archives
+    //    containing them are returned and are consistent
+    //    with `get_blocks`
+    // 2. Use 1. to check various ranges
+
+    ////////
+    // 1. check that all the blocks and the archives
+
+    let icrc3_get_blocks_ = |ranges: Vec<(u64, u64)>| {
+        let ranges = ranges
+            .into_iter()
+            .map(|(start, length)| GetBlocksRequest {
+                start: Nat::from(start),
+                length: Nat::from(length),
+            })
+            .collect();
+        icrc3_get_blocks(&env, ledger_id, ranges)
+    };
+
+    let get_blocks_ = |start: u64, length: u64| {
+        let arg = GetBlocksRequest {
+            start: Nat::from(start),
+            length: Nat::from(length),
+        };
+        get_blocks(&env, ledger_id, arg)
+    };
+
+    fn check_old_vs_icrc3_blocks<T>(
+        block_index: T,
+        expected_block: Value,
+        BlockWithId { id, block }: BlockWithId,
+    ) where
+        Nat: From<T>,
+    {
+        let block_index = Nat::from(block_index);
+        assert_eq!(id, block_index);
+        // block is an ICRC3Value while expected_block is a Value.
+        // We can check they are "the same" by checking that their hash
+        // is the same.
+        assert_eq!(
+            expected_block.hash(),
+            block.clone().hash(),
+            "Block {} is different.\nExpected Block: {}\nActual   Block: {}",
+            block_index,
+            expected_block,
+            block,
+        )
+    }
+
+    // query empty range
+    let res = icrc3_get_blocks_(vec![]);
+    assert_eq!(res.log_length, 0u64);
+    assert_eq!(res.blocks, vec![]);
+    assert_eq!(res.archived_blocks, vec![]);
+
+    // query the full range
+    let res = icrc3_get_blocks_(vec![(0, u64::MAX)]);
+    assert_eq!(res.log_length, 0u64);
+    assert_eq!(res.blocks, vec![]);
+    assert_eq!(res.archived_blocks, vec![]);
+
+    // Create 1 archive with 10 blocks (1 mint and 9 transfers)
+    let _ = transfer(
+        &env,
+        ledger_id,
+        minting_account,
+        account(1),
+        1_000_000_000_000,
+    );
+    for _block_id in 1..10 {
+        let _ = transfer(&env, ledger_id, account(1), account(2), 100_000_000);
+    }
+
+    // Add 4 blocks local to the Ledger
+    for _block_id in 10..14 {
+        let _ = transfer(&env, ledger_id, account(1), account(2), 100_000_000);
+    }
+
+    // Use the "old" API to fetch the blocks
+    let expected_res = get_blocks_(0, u64::MAX);
+    // sanity check
+    assert_eq!(expected_res.chain_length, 14);
+    assert_eq!(expected_res.blocks.len(), 4);
+    assert_eq!(expected_res.archived_blocks.len(), 1);
+
+    // Query empty range
+    let actual_res = icrc3_get_blocks_(vec![]);
+    assert_eq!(actual_res.log_length, 14u64);
+    assert_eq!(actual_res.blocks, vec![]);
+    assert_eq!(actual_res.archived_blocks, vec![]);
+
+    // Query the full range and check everything in the response.
+    // This set of check is the baseline for further testing
+    let actual_res = icrc3_get_blocks_(vec![(0, u64::MAX)]);
+    assert_eq!(actual_res.log_length, 14u64);
+
+    // check the local blocks
+    assert_eq!(actual_res.blocks.len(), 4);
+    for (local_index, (actual_block, expected_block)) in actual_res
+        .blocks
+        .into_iter()
+        .zip(expected_res.blocks.into_iter())
+        .enumerate()
+    {
+        check_old_vs_icrc3_blocks(
+            10 + local_index,
+            expected_block.clone(),
+            actual_block.clone(),
+        );
+    }
+
+    // check the archived blocks info
+    assert_eq!(actual_res.archived_blocks.len(), 1);
+    let actual_archived = &actual_res.archived_blocks[0];
+    let expected_archived = &expected_res.archived_blocks[0];
+    // check that the archive id is correct
+    assert_eq!(
+        &expected_archived.callback.canister_id,
+        &actual_archived.callback.canister_id,
+    );
+    assert_eq!("icrc3_get_blocks", &actual_archived.callback.method);
+    // check that the arguments are correct
+    assert_eq!(
+        vec![GetBlocksRequest {
+            start: expected_archived.start.clone(),
+            length: expected_archived.length.clone(),
+        }],
+        actual_archived.args
+    );
+
+    // fetch the archived blocks and check them too
+    let expected_archived_blocks = run_archive_fn(
+        &env,
+        expected_archived.callback.clone(),
+        GetBlocksRequest {
+            start: expected_archived.start.clone(),
+            length: expected_archived.length.clone(),
+        },
+    );
+    let actual_archived_blocks = run_archive_fn(
+        &env,
+        actual_archived.callback.clone(),
+        actual_archived.args.clone(),
+    );
+    assert_eq!(expected_archived_blocks.blocks.len(), 10);
+    assert_eq!(actual_archived_blocks.blocks.len(), 10);
+    // the archive has no archived blocks
+    assert_eq!(actual_archived_blocks.archived_blocks.len(), 0);
+    // the archive only knows the length of its local chain
+    assert_eq!(actual_archived_blocks.log_length, 10u64);
+
+    for (block_index, (actual_block, expected_block)) in actual_archived_blocks
+        .blocks
+        .into_iter()
+        .zip(expected_archived_blocks.blocks.into_iter())
+        .enumerate()
+    {
+        check_old_vs_icrc3_blocks(block_index, expected_block.clone(), actual_block.clone());
+    }
+
+    ////////
+    // 2. At this point we know that icrc3_get_blocks returns the correct
+    // blocks when the full range is asked. We use that result to check
+    // various inputs.
+
+    let get_all_blocks = |ranges: Vec<(u64, u64)>| {
+        let ranges = ranges
+            .into_iter()
+            .map(|(start, length)| GetBlocksRequest {
+                start: Nat::from(start),
+                length: Nat::from(length),
+            })
+            .collect();
+        let mut res = icrc3_get_blocks(&env, ledger_id, ranges);
+        let mut blocks = vec![];
+        for ArchivedBlocks { callback, args } in res.archived_blocks {
+            let mut archived_res = run_archive_fn(&env, callback, args);
+            // sanity check
+            assert_eq!(archived_res.archived_blocks.len(), 0);
+            blocks.append(&mut archived_res.blocks);
+        }
+        blocks.append(&mut res.blocks);
+        blocks
+    };
+
+    // Baseline to use to run all the rest of the tests.
+    // We know this works because of the previous part of the test.
+    let expected_blocks_by_id = get_all_blocks(vec![(0, u64::MAX)])
+        .into_iter()
+        .map(|BlockWithId { id, block }| (id, block))
+        .collect::<BTreeMap<_, _>>();
+
+    let check_icrc3_get_blocks = |ranges: Vec<(u64, u64)>| {
+        for (pos, BlockWithId { id, block }) in get_all_blocks(ranges).into_iter().enumerate() {
+            let expected_block = match expected_blocks_by_id.get(&id) {
+                None => panic!("Got block with id {id} at position {pos} which doesn't exist"),
+                Some(expected_block) => expected_block,
+            };
+            assert_eq!(expected_block, &block, "id: {}, position: {}", id, pos);
+        }
+    };
+
+    // sanity check
+    check_icrc3_get_blocks(vec![]);
+    check_icrc3_get_blocks(vec![(0, u64::MAX)]);
+
+    // Run tests for various ranges
+
+    // empty range and empty range multiple times
+    check_icrc3_get_blocks(vec![(0, 0)]);
+    check_icrc3_get_blocks(vec![(0, 0), (0, 0)]);
+
+    // one block
+    check_icrc3_get_blocks(vec![(0, 1)]);
+
+    // two blocks but in two ranges
+    check_icrc3_get_blocks(vec![(0, 1), (1, 1)]);
+
+    // one block twice
+    check_icrc3_get_blocks(vec![(1, 2), (1, 2)]);
+
+    // out of range and out of range multiple times
+    check_icrc3_get_blocks(vec![(15, 1)]);
+    check_icrc3_get_blocks(vec![(15, 1), (15, 1)]);
+
+    // first high block index
+    check_icrc3_get_blocks(vec![(2, 3), (1, 1)]);
+
+    // multiple ranges
+    check_icrc3_get_blocks(vec![(2, 3), (1, 2), (0, 10), (10, 5)]);
+}
+
+#[test]
+fn test_icrc3_get_blocks_number_of_blocks_limit() {
+    let env = StateMachine::new();
+    let minting_account = account(111);
+
+    // Create 1000 mint blocks
+    const NUM_MINT_BLOCKS: usize = 1000;
+    let initial_balances = (0..NUM_MINT_BLOCKS)
+        .map(|i| (account(i as u64), Nat::from(1_000_000_000u64)))
+        .collect();
+
+    let args = LedgerArgument::Init(InitArgs {
+        minting_account,
+        fee_collector_account: None,
+        initial_balances,
+        transfer_fee: Nat::from(0u64),
+        decimals: None,
+        token_name: "Not a Token".to_string(),
+        token_symbol: "NAT".to_string(),
+        metadata: vec![],
+        archive_options: ArchiveOptions {
+            // we don't want to archive ever
+            trigger_threshold: 2 * NUM_MINT_BLOCKS,
+            num_blocks_to_archive: 10,
+            node_max_memory_size_bytes: None,
+            max_message_size_bytes: None,
+            controller_id: PrincipalId(minting_account.owner),
+            more_controller_ids: None,
+            cycles_for_archive_creation: None,
+            max_transactions_per_response: None,
+        },
+        max_memo_length: None,
+        feature_flags: None,
+        maximum_number_of_accounts: None,
+        accounts_overflow_trim_quantity: None,
+    });
+
+    let args = Encode!(&args).unwrap();
+    let ledger_id = env
+        .install_canister(ledger_wasm(), args, None)
+        .expect("Unable to install the ledger");
+
+    let check_icrc3_get_block_limit = |ranges: Vec<(u64, u64)>| {
+        let req_ranges: Vec<_> = ranges
+            .iter()
+            .map(|(start, length)| GetBlocksRequest {
+                start: Nat::from(*start),
+                length: Nat::from(*length),
+            })
+            .collect();
+        let res = icrc3_get_blocks(&env, ledger_id, req_ranges);
+        // sanity check
+        assert_eq!(res.log_length, NUM_MINT_BLOCKS);
+        assert_eq!(res.archived_blocks.len(), 0);
+
+        // check that no more than 100 blocks were returned
+        // regardless of the input
+        assert!(
+            res.blocks.len() <= 100,
+            "expected <= 100 blocks but got {} for ranges {ranges:?}",
+            res.blocks.len()
+        );
+    };
+
+    check_icrc3_get_block_limit(vec![(0, u64::MAX)]);
+    check_icrc3_get_block_limit(vec![(0, u64::MAX), (0, u64::MAX)]);
+    check_icrc3_get_block_limit(vec![(0, 101)]);
+    check_icrc3_get_block_limit(vec![(0, 100), (0, 1)]);
+    check_icrc3_get_block_limit(vec![(0, 1), (0, 100)]);
+}
+
 mod verify_written_blocks {
     use super::*;
     use ic_icrc1_ledger::FeatureFlags;
     use ic_icrc1_ledger_sm_tests::{system_time_to_nanos, MINTER};
-    use ic_state_machine_tests::{StateMachine, Time, WasmResult};
+    use ic_state_machine_tests::{StateMachine, WasmResult};
     use icrc_ledger_types::icrc1::account::Account;
     use icrc_ledger_types::icrc1::transfer::{Memo, NumTokens, TransferArg};
     use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
@@ -621,12 +1037,10 @@ mod verify_written_blocks {
     };
     use num_traits::ToPrimitive;
     use serde_bytes::ByteBuf;
-    use std::time::SystemTime;
 
     const DEFAULT_FEE: u64 = 10_000;
     const DEFAULT_AMOUNT: u64 = 1_000_000;
     const DEFAULT_MEMO: [u8; 10] = [0u8; 10];
-    const GENESIS: Time = Time::from_nanos_since_unix_epoch(1_620_328_630_000_000_000);
 
     #[test]
     fn test_verify_written_mint_block() {
@@ -851,10 +1265,10 @@ mod verify_written_blocks {
                 decimals: Some(DECIMAL_PLACES),
                 token_symbol: TOKEN_SYMBOL.to_string(),
                 metadata: vec![
-                    Value::entry(NAT_META_KEY, NAT_META_VALUE),
-                    Value::entry(INT_META_KEY, INT_META_VALUE),
-                    Value::entry(TEXT_META_KEY, TEXT_META_VALUE),
-                    Value::entry(BLOB_META_KEY, BLOB_META_VALUE),
+                    MetadataValue::entry(NAT_META_KEY, NAT_META_VALUE),
+                    MetadataValue::entry(INT_META_KEY, INT_META_VALUE),
+                    MetadataValue::entry(TEXT_META_KEY, TEXT_META_VALUE),
+                    MetadataValue::entry(BLOB_META_KEY, BLOB_META_VALUE),
                 ],
                 archive_options: ArchiveOptions {
                     trigger_threshold: ARCHIVE_TRIGGER_THRESHOLD as usize,
@@ -876,7 +1290,6 @@ mod verify_written_blocks {
             let env = StateMachine::new();
             let ledger_id = env.install_canister(ledger_wasm(), args, None).unwrap();
 
-            env.set_time(SystemTime::from(GENESIS));
             let current_time_ns_since_unix_epoch = system_time_to_nanos(env.time());
 
             Self {

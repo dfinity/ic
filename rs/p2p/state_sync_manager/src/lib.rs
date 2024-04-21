@@ -289,7 +289,6 @@ mod tests {
             let finished_c = finished.clone();
             let mut s = MockStateSync::<TestMessage>::default();
             let mut seq = Sequence::new();
-            let mut seq2 = Sequence::new();
             s.expect_should_cancel().returning(move |_| false);
             s.expect_available_states().return_const(vec![]);
             let mut t = MockTransport::default();
@@ -322,14 +321,6 @@ mod tests {
                     Ok(())
                 })
                 .in_sequence(&mut seq);
-            c.expect_completed()
-                .times(49)
-                .return_const(false)
-                .in_sequence(&mut seq2);
-            c.expect_completed()
-                .once()
-                .return_once(|| true)
-                .in_sequence(&mut seq2);
             s.expect_start_state_sync()
                 .once()
                 .return_once(|_| Some(Box::new(c)));

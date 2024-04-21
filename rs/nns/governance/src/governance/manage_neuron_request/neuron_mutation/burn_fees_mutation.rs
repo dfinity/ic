@@ -88,7 +88,7 @@ impl GovernanceNeuronMutation for BurnFeesMutation {
 
         let from_subaccount = gov
             .neuron_store
-            .with_neuron(&self.neuron_id, |n| n.subaccount())??;
+            .with_neuron(&self.neuron_id, |n| n.subaccount())?;
 
         let _result = gov
             .ledger

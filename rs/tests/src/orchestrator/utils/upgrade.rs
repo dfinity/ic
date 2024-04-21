@@ -1,8 +1,8 @@
 use crate::{
     driver::test_env_api::*,
     nns::{
-        get_governance_canister, submit_update_elected_replica_versions_proposal,
-        submit_update_subnet_replica_version_proposal, vote_execute_proposal_assert_executed,
+        get_governance_canister, submit_deploy_guestos_to_all_subnet_nodes_proposal,
+        submit_update_elected_replica_versions_proposal, vote_execute_proposal_assert_executed,
     },
     retry_with_msg, retry_with_msg_async,
     util::runtime_from_url,
@@ -347,7 +347,7 @@ pub(crate) async fn bless_replica_version_with_urls(
     info!(logger, "Updated: {:?}", blessed_versions);
 }
 
-pub(crate) async fn update_subnet_replica_version(
+pub(crate) async fn deploy_guestos_to_all_subnet_nodes(
     nns_node: &IcNodeSnapshot,
     new_replica_version: &ReplicaVersion,
     subnet_id: SubnetId,
@@ -356,7 +356,7 @@ pub(crate) async fn update_subnet_replica_version(
     let governance_canister = get_governance_canister(&nns);
     let test_neuron_id = NeuronId(TEST_NEURON_1_ID);
     let proposal_sender = Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR);
-    let proposal_id = submit_update_subnet_replica_version_proposal(
+    let proposal_id = submit_deploy_guestos_to_all_subnet_nodes_proposal(
         &governance_canister,
         proposal_sender.clone(),
         test_neuron_id,

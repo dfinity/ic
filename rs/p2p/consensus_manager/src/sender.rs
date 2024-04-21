@@ -32,6 +32,8 @@ use crate::{
     metrics::ConsensusManagerMetrics, uri_prefix, CommitId, SlotNumber, SlotUpdate, Update,
 };
 
+use self::available_slot_set::{AvailableSlot, AvailableSlotSet};
+
 /// The size threshold for an artifact to be pushed. Artifacts smaller than this constant
 /// in size are pushed.
 const ARTIFACT_PUSH_THRESHOLD_BYTES: usize = 1024; // 1KB
@@ -66,7 +68,7 @@ pub(crate) struct ConsensusManagerSender<Artifact: ArtifactKind> {
     adverts_to_send: Receiver<ArtifactProcessorEvent<Artifact>>,
     slot_manager: AvailableSlotSet,
     current_commit_id: CommitId,
-    active_adverts: HashMap<Artifact::Id, (CancellationToken, SlotNumber)>,
+    active_adverts: HashMap<Artifact::Id, (CancellationToken, AvailableSlot)>,
     join_set: JoinSet<()>,
     cancellation_token: CancellationToken,
 }
@@ -187,7 +189,7 @@ impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
         if let Entry::Vacant(entry) = entry {
             self.metrics.send_view_consensus_new_adverts_total.inc();
 
-            let slot = self.slot_manager.pop();
+            let used_slot = self.slot_manager.pop();
 
             let child_token = self.cancellation_token.child_token();
             let child_token_clone = child_token.clone();
@@ -198,14 +200,14 @@ impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
                 self.metrics.clone(),
                 self.transport.clone(),
                 self.current_commit_id,
-                slot,
+                used_slot.slot_number(),
                 new_artifact,
                 self.pool_reader.clone(),
                 child_token_clone,
             );
 
             self.join_set.spawn_on(send_future, &self.rt_handle);
-            entry.insert((child_token, slot));
+            entry.insert((child_token, used_slot));
         } else {
             self.metrics.send_view_consensus_dup_adverts_total.inc();
         }
@@ -352,55 +354,67 @@ async fn send_advert_to_peer(
     }
 }
 
-struct AvailableSlotSet {
-    next_free_slot: SlotNumber,
-    free_slots: Vec<SlotNumber>,
-    log: ReplicaLogger,
-    metrics: ConsensusManagerMetrics,
-    service_name: &'static str,
-}
+mod available_slot_set {
+    use super::*;
 
-impl AvailableSlotSet {
-    fn new(
-        log: ReplicaLogger,
-        metrics: ConsensusManagerMetrics,
-        service_name: &'static str,
-    ) -> Self {
-        Self {
-            next_free_slot: 0.into(),
-            free_slots: vec![],
-            log,
-            metrics,
-            service_name,
+    pub struct AvailableSlot(u64);
+
+    impl AvailableSlot {
+        pub fn slot_number(&self) -> SlotNumber {
+            self.0.into()
         }
     }
 
-    fn push(&mut self, slot: SlotNumber) {
-        self.free_slots.push(slot);
-        self.metrics.slot_set_in_use_slots.dec();
+    pub struct AvailableSlotSet {
+        next_free_slot: u64,
+        free_slots: Vec<AvailableSlot>,
+        log: ReplicaLogger,
+        metrics: ConsensusManagerMetrics,
+        service_name: &'static str,
     }
 
-    /// Returns available slot.
-    fn pop(&mut self) -> SlotNumber {
-        self.metrics.slot_set_in_use_slots.inc();
-        match self.free_slots.pop() {
-            Some(slot) => slot,
-            None => {
-                if self.next_free_slot.get() > SLOT_TABLE_THRESHOLD {
-                    warn!(
-                        self.log,
-                        "Slot table threshold exceeded for service {}. Slots in use = {}.",
-                        self.service_name,
-                        self.next_free_slot
-                    );
+    impl AvailableSlotSet {
+        pub fn new(
+            log: ReplicaLogger,
+            metrics: ConsensusManagerMetrics,
+            service_name: &'static str,
+        ) -> Self {
+            Self {
+                next_free_slot: 0,
+                free_slots: vec![],
+                log,
+                metrics,
+                service_name,
+            }
+        }
+
+        pub fn push(&mut self, slot: AvailableSlot) {
+            self.free_slots.push(slot);
+            self.metrics.slot_set_in_use_slots.dec();
+        }
+
+        /// Returns available slot.
+        pub fn pop(&mut self) -> AvailableSlot {
+            self.metrics.slot_set_in_use_slots.inc();
+            match self.free_slots.pop() {
+                Some(slot) => slot,
+                None => {
+                    if self.next_free_slot > SLOT_TABLE_THRESHOLD {
+                        warn!(
+                            self.log,
+                            "Slot table threshold exceeded for service {}. Slots in use = {}.",
+                            self.service_name,
+                            self.next_free_slot
+                        );
+                    }
+
+                    let new_slot = AvailableSlot(self.next_free_slot);
+                    self.next_free_slot += 1;
+
+                    self.metrics.slot_set_allocated_slots_total.inc();
+
+                    new_slot
                 }
-
-                let new_slot = self.next_free_slot;
-                self.next_free_slot.inc_assign();
-
-                self.metrics.slot_set_allocated_slots_total.inc();
-
-                new_slot
             }
         }
     }
@@ -447,10 +461,10 @@ mod tests {
             // Initial validated pool contains one element.
             mock_reader
                 .expect_get_all_validated_by_filter()
-                .returning(|_| Box::new(std::iter::once(1)));
+                .returning(|_| Box::new(std::iter::once(U64Artifact::id_to_msg(1, 1024))));
             mock_reader
                 .expect_get_validated_by_identifier()
-                .returning(|id| Some(*id));
+                .returning(|id| Some(U64Artifact::id_to_msg(*id, 1024)));
 
             let (_tx, rx) = tokio::sync::mpsc::channel(100);
             ConsensusManagerSender::run(
@@ -501,7 +515,7 @@ mod tests {
                 .returning(|_| Box::new(std::iter::empty()));
             mock_reader
                 .expect_get_validated_by_identifier()
-                .returning(|id| Some(*id));
+                .returning(|id| Some(U64Artifact::id_to_msg(*id, 1024)));
 
             ConsensusManagerSender::run(
                 log,
@@ -515,7 +529,7 @@ mod tests {
         });
 
         tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
-            advert: U64Artifact::message_to_advert(&1),
+            advert: U64Artifact::message_to_advert(&U64Artifact::id_to_msg(1, 1024)),
             is_latency_sensitive: false,
         }))
         .await
@@ -576,7 +590,7 @@ mod tests {
                 .returning(|_| Box::new(std::iter::empty()));
             mock_reader
                 .expect_get_validated_by_identifier()
-                .returning(|id| Some(*id));
+                .returning(|id| Some(U64Artifact::id_to_msg(*id, 1024)));
 
             ConsensusManagerSender::run(
                 log,
@@ -590,7 +604,7 @@ mod tests {
         });
 
         tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
-            advert: U64Artifact::message_to_advert(&1),
+            advert: U64Artifact::message_to_advert(&U64Artifact::id_to_msg(1, 1024)),
             is_latency_sensitive: false,
         }))
         .await
@@ -647,7 +661,7 @@ mod tests {
                 .returning(|_| Box::new(std::iter::empty()));
             mock_reader
                 .expect_get_validated_by_identifier()
-                .returning(|id| Some(*id));
+                .returning(|id| Some(U64Artifact::id_to_msg(*id, 1024)));
 
             ConsensusManagerSender::run(
                 log,
@@ -660,7 +674,7 @@ mod tests {
             )
         });
         tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
-            advert: U64Artifact::message_to_advert(&1),
+            advert: U64Artifact::message_to_advert(&U64Artifact::id_to_msg(1, 1024)),
             is_latency_sensitive: false,
         }))
         .await
@@ -705,7 +719,7 @@ mod tests {
                 .returning(|_| Box::new(std::iter::empty()));
             mock_reader
                 .expect_get_validated_by_identifier()
-                .returning(|id| Some(*id));
+                .returning(|id| Some(U64Artifact::id_to_msg(*id, 1024)));
 
             ConsensusManagerSender::run(
                 log,
@@ -719,7 +733,7 @@ mod tests {
         });
         // Send advert and verify commit it.
         tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
-            advert: U64Artifact::message_to_advert(&1),
+            advert: U64Artifact::message_to_advert(&U64Artifact::id_to_msg(1, 1024)),
             is_latency_sensitive: false,
         }))
         .await
@@ -728,7 +742,7 @@ mod tests {
 
         // Send second advert and observe commit id bump.
         tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
-            advert: U64Artifact::message_to_advert(&2),
+            advert: U64Artifact::message_to_advert(&U64Artifact::id_to_msg(2, 1024)),
             is_latency_sensitive: false,
         }))
         .await
@@ -737,7 +751,7 @@ mod tests {
         // Send purge and new advert and observe commit id increase by 2.
         tx.send(ArtifactProcessorEvent::Purge(2)).await.unwrap();
         tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
-            advert: U64Artifact::message_to_advert(&3),
+            advert: U64Artifact::message_to_advert(&U64Artifact::id_to_msg(3, 1024)),
             is_latency_sensitive: false,
         }))
         .await
@@ -782,7 +796,7 @@ mod tests {
                 .returning(|_| Box::new(std::iter::empty()));
             mock_reader
                 .expect_get_validated_by_identifier()
-                .returning(|id| Some(*id));
+                .returning(|id| Some(U64Artifact::id_to_msg(*id, 1024)));
 
             ConsensusManagerSender::run(
                 log,
@@ -796,7 +810,7 @@ mod tests {
         });
         // Send advert and verify commit id.
         tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
-            advert: U64Artifact::message_to_advert(&1),
+            advert: U64Artifact::message_to_advert(&U64Artifact::id_to_msg(1, 1024)),
             is_latency_sensitive: false,
         }))
         .await
@@ -805,7 +819,7 @@ mod tests {
 
         // Send same advert again. This should be noop.
         tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
-            advert: U64Artifact::message_to_advert(&1),
+            advert: U64Artifact::message_to_advert(&U64Artifact::id_to_msg(1, 1024)),
             is_latency_sensitive: false,
         }))
         .await
@@ -813,7 +827,7 @@ mod tests {
 
         // Check that new advert is advertised with correct commit id.
         tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
-            advert: U64Artifact::message_to_advert(&2),
+            advert: U64Artifact::message_to_advert(&U64Artifact::id_to_msg(2, 1024)),
             is_latency_sensitive: false,
         }))
         .await
@@ -860,7 +874,7 @@ mod tests {
                 .returning(|_| Box::new(std::iter::empty()));
             mock_reader
                 .expect_get_validated_by_identifier()
-                .returning(|id| Some(*id));
+                .returning(|id| Some(U64Artifact::id_to_msg(*id, 1024)));
 
             ConsensusManagerSender::run(
                 log,
@@ -874,7 +888,7 @@ mod tests {
         });
 
         tx.send(ArtifactProcessorEvent::Artifact(ArtifactWithOpt {
-            advert: U64Artifact::message_to_advert(&1),
+            advert: U64Artifact::message_to_advert(&U64Artifact::id_to_msg(1, 1024)),
             is_latency_sensitive: false,
         }))
         .await
@@ -898,14 +912,20 @@ mod tests {
         );
 
         // Take more than SLOT_TABLE_THRESHOLD number of slots
+        let mut used_slots = Vec::new();
         for i in 0..(SLOT_TABLE_THRESHOLD * 5) {
-            assert_eq!(sm.pop().get(), i);
+            let new_slot = sm.pop();
+            assert_eq!(new_slot.slot_number(), SlotNumber::from(i));
+            used_slots.push(new_slot);
         }
         // Give back all the slots.
-        for i in 0..(SLOT_TABLE_THRESHOLD * 5) {
-            sm.push(SlotNumber::from(i));
+        for slot in used_slots {
+            sm.push(slot);
         }
         // Check that we get the slot that was returned last
-        assert_eq!(sm.pop().get(), SLOT_TABLE_THRESHOLD * 5 - 1);
+        assert_eq!(
+            sm.pop().slot_number(),
+            SlotNumber::from(SLOT_TABLE_THRESHOLD * 5 - 1)
+        );
     }
 }

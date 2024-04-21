@@ -20,9 +20,9 @@ use ic_interfaces::execution_environment::{
 };
 use ic_logger::{error, fatal, info, ReplicaLogger};
 use ic_management_canister_types::{
-    CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterStatusResultV2,
-    CanisterStatusType, ChunkHash, InstallChunkedCodeArgs, InstallCodeArgsV2, Method as Ic00Method,
-    StoredChunksReply, TakeCanisterSnapshotResponse, UploadChunkReply,
+    CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterSnapshotResponse,
+    CanisterStatusResultV2, CanisterStatusType, ChunkHash, InstallChunkedCodeArgs,
+    InstallCodeArgsV2, Method as Ic00Method, StoredChunksReply, UploadChunkReply,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
@@ -980,22 +980,12 @@ impl CanisterManager {
         };
 
         match context.mode {
-            CanisterInstallModeV2::Install | CanisterInstallModeV2::Reinstall => execute_install(
-                context,
-                canister,
-                original,
-                round.clone(),
-                round_limits,
-                Arc::clone(&self.fd_factory),
-            ),
-            CanisterInstallModeV2::Upgrade(..) => execute_upgrade(
-                context,
-                canister,
-                original,
-                round.clone(),
-                round_limits,
-                Arc::clone(&self.fd_factory),
-            ),
+            CanisterInstallModeV2::Install | CanisterInstallModeV2::Reinstall => {
+                execute_install(context, canister, original, round.clone(), round_limits)
+            }
+            CanisterInstallModeV2::Upgrade(..) => {
+                execute_upgrade(context, canister, original, round.clone(), round_limits)
+            }
         }
     }
 
@@ -1809,7 +1799,7 @@ impl CanisterManager {
         state: &mut ReplicatedState,
         round_limits: &mut RoundLimits,
         resource_saturation: &ResourceSaturation,
-    ) -> Result<TakeCanisterSnapshotResponse, CanisterManagerError> {
+    ) -> Result<CanisterSnapshotResponse, CanisterManagerError> {
         // Check sender is a controller.
         validate_controller(canister, &sender)?;
 
@@ -1943,11 +1933,40 @@ impl CanisterManager {
         state
             .canister_snapshots
             .push(snapshot_id, Arc::new(new_snapshot));
-        Ok(TakeCanisterSnapshotResponse::new(
+        Ok(CanisterSnapshotResponse::new(
             &snapshot_id,
             state.time().as_nanos_since_unix_epoch(),
             new_snapshot_size,
         ))
+    }
+
+    /// Returns the canister snapshots list, or
+    /// an error if it failed to retrieve the information.
+    ///
+    /// Retrieving the canister snapshots list can only be initiated by the controllers.
+    pub(crate) fn list_canister_snapshot(
+        &self,
+        sender: PrincipalId,
+        canister: &CanisterState,
+        state: &ReplicatedState,
+    ) -> Result<Vec<CanisterSnapshotResponse>, CanisterManagerError> {
+        // Check sender is a controller.
+        validate_controller(canister, &sender)?;
+
+        let mut responses = vec![];
+        for (snapshot_id, snapshot) in state
+            .canister_snapshots
+            .list_snapshots(canister.canister_id())
+        {
+            let snapshot_response = CanisterSnapshotResponse::new(
+                &snapshot_id,
+                snapshot.taken_at_timestamp().as_nanos_since_unix_epoch(),
+                snapshot.size(),
+            );
+            responses.push(snapshot_response);
+        }
+
+        Ok(responses)
     }
 }
 

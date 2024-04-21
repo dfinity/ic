@@ -1,5 +1,9 @@
+#[cfg(test)]
+mod tests;
+
 pub use super::event::{Event, EventType};
 use super::State;
+use crate::erc20::CkTokenSymbol;
 use crate::state::transactions::{Reimbursed, ReimbursementIndex};
 use crate::storage::{record_event, with_event_iter};
 
@@ -32,7 +36,12 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
             event_source,
             mint_block_index,
         } => {
-            state.record_successful_mint(*event_source, "ckETH", *mint_block_index, None);
+            state.record_successful_mint(
+                *event_source,
+                &CkTokenSymbol::cketh_symbol_from_state(state).to_string(),
+                *mint_block_index,
+                None,
+            );
         }
         EventType::MintedCkErc20 {
             event_source,
@@ -150,17 +159,23 @@ pub fn process_event(state: &mut State, payload: EventType) {
 ///   * The first event in the log is not an Init event.
 ///   * One of the events in the log invalidates the minter's state invariants.
 pub fn replay_events() -> State {
-    with_event_iter(|mut iter| {
-        let mut state = match iter.next().expect("the event log should not be empty") {
-            Event {
-                payload: EventType::Init(init_arg),
-                ..
-            } => State::try_from(init_arg).expect("state initialization should succeed"),
-            other => panic!("the first event must be an Init event, got: {other:?}"),
-        };
-        for event in iter {
-            apply_state_transition(&mut state, &event.payload);
-        }
-        state
-    })
+    with_event_iter(|iter| replay_events_internal(iter))
+}
+
+fn replay_events_internal<T: IntoIterator<Item = Event>>(events: T) -> State {
+    let mut events_iter = events.into_iter();
+    let mut state = match events_iter
+        .next()
+        .expect("the event log should not be empty")
+    {
+        Event {
+            payload: EventType::Init(init_arg),
+            ..
+        } => State::try_from(init_arg).expect("state initialization should succeed"),
+        other => panic!("the first event must be an Init event, got: {other:?}"),
+    };
+    for event in events_iter {
+        apply_state_transition(&mut state, &event.payload);
+    }
+    state
 }

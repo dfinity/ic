@@ -31,7 +31,7 @@ use crate::{
         submit_update_unassigned_node_version_proposal, vote_execute_proposal_assert_executed,
     },
     orchestrator::utils::ssh_access::{
-        generate_key_strings, get_updateunassignednodespayload,
+        generate_key_strings, get_updatesshreadonlyaccesskeyspayload,
         wait_until_authentication_is_granted, AuthMean,
     },
     orchestrator::utils::upgrade::{fetch_unassigned_node_version, get_blessed_replica_versions},
@@ -70,7 +70,7 @@ pub fn test(env: TestEnv) {
 
     // obtain readonly access
     let (readonly_private_key, readonly_public_key) = generate_key_strings();
-    let payload = get_updateunassignednodespayload(Some(vec![readonly_public_key.clone()]));
+    let payload = get_updatesshreadonlyaccesskeyspayload(vec![readonly_public_key.clone()]);
     block_on(update_ssh_keys_for_all_unassigned_nodes(
         nns_node.get_public_url(),
         payload,
@@ -143,7 +143,6 @@ pub fn test(env: TestEnv) {
             proposal_sender.clone(),
             test_neuron_id,
             target_version.clone(),
-            readonly_public_key.clone(),
         )
         .await;
         vote_execute_proposal_assert_executed(&governance_canister, proposal2_id).await;

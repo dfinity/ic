@@ -74,7 +74,7 @@ pub fn ic_xc_ledger_suite_orchestrator_test(env: TestEnv) {
 
     let ledger_orchestrator_wasm = wasm_from_path(
         &env,
-        "rs/ethereum/ledger-suite-orchestrator/ledger_suite_orchestrator_canister.wasm",
+        "rs/ethereum/ledger-suite-orchestrator/ledger_suite_orchestrator_canister.wasm.gz",
     );
     let ledger_orchestrator = block_on(async {
         let init_args = OrchestratorArg::InitArg(InitArg {

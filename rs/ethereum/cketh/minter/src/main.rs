@@ -26,8 +26,10 @@ use ic_cketh_minter::state::transactions::{
     Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed, ReimbursementRequest,
 };
 use ic_cketh_minter::state::{lazy_call_ecdsa_public_key, mutate_state, read_state, State, STATE};
+use ic_cketh_minter::tx::lazy_refresh_gas_fee_estimate;
 use ic_cketh_minter::withdraw::{
-    process_reimbursement, process_retrieve_eth_requests, CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
+    process_reimbursement, process_retrieve_eth_requests, CKERC20_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
+    CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
 };
 use ic_cketh_minter::{endpoints, erc20};
 use ic_cketh_minter::{
@@ -137,7 +139,6 @@ async fn smart_contract_address() -> String {
 
 /// Estimate price of EIP-1559 transaction based on the
 /// `base_fee_per_gas` included in the last finalized block.
-/// See https://www.blocknative.com/blog/eip-1559-fees
 #[query]
 async fn eip_1559_transaction_price() -> Eip1559TransactionPrice {
     match read_state(|s| s.last_transaction_price_estimate.clone()) {
@@ -184,13 +185,13 @@ async fn get_minter_info() -> MinterInfo {
             eth_helper_contract_address: s.eth_helper_contract_address.map(|a| a.to_string()),
             erc20_helper_contract_address: s.erc20_helper_contract_address.map(|a| a.to_string()),
             supported_ckerc20_tokens,
-            minimum_withdrawal_amount: Some(s.minimum_withdrawal_amount.into()),
+            minimum_withdrawal_amount: Some(s.cketh_minimum_withdrawal_amount.into()),
             ethereum_block_height: Some(s.ethereum_block_height.into()),
             last_observed_block_number: s.last_observed_block_number.map(|n| n.into()),
             eth_balance: Some(s.eth_balance.eth_balance().into()),
             last_gas_fee_estimate: s.last_transaction_price_estimate.as_ref().map(
                 |(timestamp, estimate)| GasFeeEstimate {
-                    max_fee_per_gas: estimate.max_fee_per_gas.into(),
+                    max_fee_per_gas: estimate.estimate_max_fee_per_gas().into(),
                     max_priority_fee_per_gas: estimate.max_priority_fee_per_gas.into(),
                     timestamp: *timestamp,
                 },
@@ -223,7 +224,7 @@ async fn withdraw_eth(
 
     let amount = Wei::try_from(amount).expect("failed to convert Nat to u256");
 
-    let minimum_withdrawal_amount = read_state(|s| s.minimum_withdrawal_amount);
+    let minimum_withdrawal_amount = read_state(|s| s.cketh_minimum_withdrawal_amount);
     if amount < minimum_withdrawal_amount {
         return Err(WithdrawalError::AmountTooLow {
             min_withdrawal_amount: minimum_withdrawal_amount.into(),
@@ -317,7 +318,9 @@ async fn withdraw_erc20(
             }
         })?;
     let cketh_ledger = read_state(LedgerClient::cketh_ledger_from_state);
-    let erc20_tx_fee = estimate_erc20_transaction_fee();
+    let erc20_tx_fee = estimate_erc20_transaction_fee().await.ok_or_else(|| {
+        WithdrawErc20Error::TemporarilyUnavailable("Failed to retrieve current gas fee".to_string())
+    })?;
     let now = ic_cdk::api::time();
     log!(INFO, "[withdraw_erc20]: burning {:?} ckETH", erc20_tx_fee);
     match cketh_ledger
@@ -380,6 +383,7 @@ async fn withdraw_erc20(
                     let reimbursed_amount = match &ckerc20_burn_error {
                         LedgerBurnError::TemporarilyUnavailable { .. } => erc20_tx_fee, //don't penalize user in case of an error outside of their control
                         LedgerBurnError::InsufficientFunds { .. }
+                        | LedgerBurnError::AmountTooLow { .. }
                         | LedgerBurnError::InsufficientAllowance { .. } => erc20_tx_fee
                             .checked_sub(CKETH_LEDGER_TRANSACTION_FEE)
                             .unwrap_or(Wei::ZERO),
@@ -412,9 +416,14 @@ async fn withdraw_erc20(
     }
 }
 
-fn estimate_erc20_transaction_fee() -> Wei {
-    //TODO XC-58: better fee estimation
-    read_state(|s| s.minimum_withdrawal_amount)
+async fn estimate_erc20_transaction_fee() -> Option<Wei> {
+    lazy_refresh_gas_fee_estimate()
+        .await
+        .map(|gas_fee_estimate| {
+            gas_fee_estimate
+                .to_price(CKERC20_WITHDRAWAL_TRANSACTION_GAS_LIMIT)
+                .max_transaction_fee()
+        })
 }
 
 #[query]
@@ -804,7 +813,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "cketh_minter_last_max_fee_per_gas",
                     s.last_transaction_price_estimate
                         .clone()
-                        .map(|(_, fee)| fee.max_fee_per_gas.as_f64())
+                        .map(|(_, fee)| fee.estimate_max_fee_per_gas().as_f64())
                         .unwrap_or_default(),
                     "Last max fee per gas",
                 )?;

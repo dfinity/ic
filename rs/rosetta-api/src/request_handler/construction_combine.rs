@@ -6,12 +6,10 @@ use crate::models::{
 };
 use crate::request_handler::{make_sig_data, verify_network_id, RosettaRequestHandler};
 use crate::{convert, models};
-use ic_canister_client_sender::Ed25519KeyPair as EdKeypair;
-use ic_canister_client_sender::Secp256k1KeyPair;
 use ic_types::messages::{
     Blob, HttpCallContent, HttpReadStateContent, HttpRequestEnvelope, MessageId,
 };
-use rosetta_core::models::RosettaSupportedKeyPair;
+use rosetta_core::models::{Ed25519KeyPair, RosettaSupportedKeyPair, Secp256k1KeyPair};
 use std::collections::HashMap;
 use std::str::FromStr;
 
@@ -70,8 +68,8 @@ impl RosettaRequestHandler {
                     SignatureType::Ed25519 => Ok(HttpRequestEnvelope::<HttpCallContent> {
                         content: HttpCallContent::Call { update },
                         sender_pubkey: Some(Blob(
-                            EdKeypair::der_encode_pk(
-                                EdKeypair::hex_decode_pk(
+                            Ed25519KeyPair::der_encode_pk(
+                                Ed25519KeyPair::hex_decode_pk(
                                     &transaction_signature.public_key.hex_bytes,
                                 )
                                 .map_err(|err| {
@@ -125,8 +123,8 @@ impl RosettaRequestHandler {
                     SignatureType::Ed25519 => Ok(HttpRequestEnvelope::<HttpReadStateContent> {
                         content: HttpReadStateContent::ReadState { read_state },
                         sender_pubkey: Some(Blob(
-                            EdKeypair::der_encode_pk(
-                                EdKeypair::hex_decode_pk(
+                            Ed25519KeyPair::der_encode_pk(
+                                Ed25519KeyPair::hex_decode_pk(
                                     &read_state_signature.public_key.hex_bytes,
                                 )
                                 .map_err(|err| {

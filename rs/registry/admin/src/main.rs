@@ -126,18 +126,19 @@ use registry_canister::mutations::{
     do_add_nodes_to_subnet::AddNodesToSubnetPayload,
     do_change_subnet_membership::ChangeSubnetMembershipPayload,
     do_create_subnet::{CreateSubnetPayload, EcdsaInitialConfig, EcdsaKeyRequest},
+    do_deploy_guestos_to_all_subnet_nodes::DeployGuestosToAllSubnetNodesPayload,
+    do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
     do_recover_subnet::RecoverSubnetPayload,
     do_remove_api_boundary_nodes::RemoveApiBoundaryNodesPayload,
     do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
+    do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload,
     do_set_firewall_config::SetFirewallConfigPayload,
     do_update_api_boundary_nodes_version::UpdateApiBoundaryNodesVersionPayload,
     do_update_elected_hostos_versions::UpdateElectedHostosVersionsPayload,
-    do_update_elected_replica_versions::UpdateElectedReplicaVersionsPayload,
     do_update_node_operator_config::UpdateNodeOperatorConfigPayload,
     do_update_nodes_hostos_version::UpdateNodesHostosVersionPayload,
+    do_update_ssh_readonly_access_for_all_unassigned_nodes::UpdateSshReadOnlyAccessForAllUnassignedNodesPayload,
     do_update_subnet::UpdateSubnetPayload,
-    do_update_subnet_replica::UpdateSubnetReplicaVersionPayload,
-    do_update_unassigned_nodes_config::UpdateUnassignedNodesConfigPayload,
     firewall::{
         add_firewall_rules_compute_entries, compute_firewall_ruleset_hash,
         remove_firewall_rules_compute_entries, update_firewall_rules_compute_entries,
@@ -308,15 +309,19 @@ enum SubCommand {
     GetSubnetList,
     /// Get info about a Replica version
     GetReplicaVersion(GetReplicaVersionCmd),
-    /// Propose updating a subnet's Replica version
-    ProposeToUpdateSubnetReplicaVersion(ProposeToUpdateSubnetReplicaVersionCmd),
+    /// Deprecated. Please use `ProposeToDeployGuestosToAllSubnetNodes` instead.
+    ProposeToUpdateSubnetReplicaVersion(ProposeToDeployGuestosToAllSubnetNodesCmd),
+    /// Propose to deploy a priorly elected GuestOS version to all subnet nodes.
+    ProposeToDeployGuestosToAllSubnetNodes(ProposeToDeployGuestosToAllSubnetNodesCmd),
     /// Get the list of blessed Replica versions.
     GetBlessedReplicaVersions,
     /// Get the latest routing table.
     GetRoutingTable,
-    /// Submits a proposal to update currently elected replica versions, by electing
-    /// a new version and/or unelecting multiple versions.
-    ProposeToUpdateElectedReplicaVersions(ProposeToUpdateElectedReplicaVersionsCmd),
+    /// Deprecated. Please use `ProposeToReviseElectedGuestosVersions` instead.
+    ProposeToUpdateElectedReplicaVersions(ProposeToReviseElectedGuestssVersionsCmd),
+    /// Submits a proposal to change the set of currently elected GuestOS versions, by electing
+    /// a new version and/or unelecting multiple priorly elected versions.
+    ProposeToReviseElectedGuestosVersions(ProposeToReviseElectedGuestssVersionsCmd),
     /// Submits a proposal to create a new subnet.
     ProposeToCreateSubnet(ProposeToCreateSubnetCmd),
     /// Submits a proposal to create a new service nervous system (usually referred to as SNS).
@@ -401,8 +406,15 @@ enum SubCommand {
     GetNodeRewardsTable,
     /// Submit a proposal to update the node rewards table
     ProposeToUpdateNodeRewardsTable(ProposeToUpdateNodeRewardsTableCmd),
-    /// Submit a proposal to update the unassigned nodes
+    /// Submit a proposal to update the unassigned nodes. This subcommand is obsolete; please use
+    /// `ProposeToDeployGuestosToAllUnassignedNodes` or `ProposeToUpdateSshReadonlyAccessForAllUnassignedNodes` instead.
     ProposeToUpdateUnassignedNodesConfig(ProposeToUpdateUnassignedNodesConfigCmd),
+    /// Propose to deploy the GuestOS version to all unassigned nodes.
+    ProposeToDeployGuestosToAllUnassignedNodes(ProposeToDeployGuestosToAllUnassignedNodesCmd),
+    /// Propose to update the SSH keys that have read-only access to all unassigned nodes.
+    ProposeToUpdateSshReadonlyAccessForAllUnassignedNodes(
+        ProposeToUpdateSshReadonlyAccessForAllUnassignedNodesCmd,
+    ),
     /// Get the SSH key access lists for unassigned nodes
     GetUnassignedNodes,
     /// Get the monthly Node Provider rewards
@@ -450,8 +462,11 @@ enum SubCommand {
     ProposeToAddApiBoundaryNode(ProposeToAddApiBoundaryNodeCmd),
     /// Propose to remove a set of API Boundary Nodes
     ProposeToRemoveApiBoundaryNodes(ProposeToRemoveApiBoundaryNodesCmd),
-    /// Propose to update the version of a set of API Boundary Nodes
+    /// Propose to update the version of a set of API Boundary Nodes. This subcommand is obsolete; please use
+    /// `ProposeToDeployGuestosToSomeApiBoundaryNodes` instead.
     ProposeToUpdateApiBoundaryNodesVersion(ProposeToUpdateApiBoundaryNodesVersionCmd),
+    /// Propose to upgrade the GuestOS version of a set of API Boundary Nodes.
+    ProposeToDeployGuestosToSomeApiBoundaryNodes(ProposeToDeployGuestosToSomeApiBoundaryNodesCmd),
     /// Sub-command to fetch an API Boundary Node record from the registry.
     /// Retrieve an API Boundary Node record
     GetApiBoundaryNode(GetApiBoundaryNodeCmd),
@@ -711,7 +726,7 @@ struct GetReplicaVersionCmd {
 /// subnet to the given (blessed) version.
 #[derive_common_proposal_fields]
 #[derive(ProposalMetadata, Parser)]
-struct ProposeToUpdateSubnetReplicaVersionCmd {
+struct ProposeToDeployGuestosToAllSubnetNodesCmd {
     /// The subnet to update.
     subnet: SubnetDescriptor,
     /// The new Replica version to use.
@@ -764,7 +779,7 @@ fn shortened_subnet_string(subnet: &SubnetDescriptor) -> String {
     }
 }
 
-impl ProposalTitle for ProposeToUpdateSubnetReplicaVersionCmd {
+impl ProposalTitle for ProposeToDeployGuestosToAllSubnetNodesCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
@@ -778,57 +793,91 @@ impl ProposalTitle for ProposeToUpdateSubnetReplicaVersionCmd {
 }
 
 #[async_trait]
-impl ProposalPayload<UpdateSubnetReplicaVersionPayload> for ProposeToUpdateSubnetReplicaVersionCmd {
-    async fn payload(&self, agent: &Agent) -> UpdateSubnetReplicaVersionPayload {
+impl ProposalPayload<DeployGuestosToAllSubnetNodesPayload>
+    for ProposeToDeployGuestosToAllSubnetNodesCmd
+{
+    async fn payload(&self, agent: &Agent) -> DeployGuestosToAllSubnetNodesPayload {
         let registry_canister = RegistryCanister::new_with_agent(agent.clone());
         let subnet_id = self.subnet.get_id(&registry_canister).await;
-        UpdateSubnetReplicaVersionPayload {
+        DeployGuestosToAllSubnetNodesPayload {
             subnet_id: subnet_id.get(),
             replica_version_id: self.replica_version_id.clone(),
         }
     }
 }
 
-/// Sub-command to  submit a proposal change public keys with "readonly" access
-/// privileges or the replica version for the set of all unassigned nodes. There
-/// is no easy way to set a privilege to an empty list.
+/// Obsolete; please use `ProposeToDeployGuestosToAllUnassignedNodes` or
+/// `ProposeToUpdateSshReadonlyAccessForAllUnassignedNodes` instead.
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Parser, Clone)]
+struct ProposeToUpdateUnassignedNodesConfigCmd {}
+
+/// Sub-command to  submit a proposal to deploy a specific replica version to the set of all
+/// unassigned nodes.
 #[derive_common_proposal_fields]
 #[derive(ProposalMetadata, Parser)]
-struct ProposeToUpdateUnassignedNodesConfigCmd {
-    /// The list of public keys whose owners have "readonly" SSH access to all
-    /// unassigned nodes.
-    #[clap(long, multiple_values(true))]
-    pub ssh_readonly_access: Option<Vec<String>>,
-
+struct ProposeToDeployGuestosToAllUnassignedNodesCmd {
     /// The ID of the replica version that all the unassigned nodes run.
     #[clap(long)]
-    pub replica_version_id: Option<String>,
+    pub replica_version_id: String,
 }
 
-impl ProposalTitle for ProposeToUpdateUnassignedNodesConfigCmd {
+impl ProposalTitle for ProposeToDeployGuestosToAllUnassignedNodesCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
-            None => "Update all unassigned nodes".to_string(),
+            None => "Deploy a guestos version to all unassigned nodes".to_string(),
         }
     }
 }
 
 #[async_trait]
-impl ProposalPayload<UpdateUnassignedNodesConfigPayload>
-    for ProposeToUpdateUnassignedNodesConfigCmd
+impl ProposalPayload<DeployGuestosToAllUnassignedNodesPayload>
+    for ProposeToDeployGuestosToAllUnassignedNodesCmd
 {
-    async fn payload(&self, _: &Agent) -> UpdateUnassignedNodesConfigPayload {
-        UpdateUnassignedNodesConfigPayload {
-            ssh_readonly_access: self.ssh_readonly_access.as_ref().map(|keys| {
-                keys.iter()
-                    .filter_map(|k| match k.trim() {
-                        "" => None,
-                        k => Some(k.to_string()),
-                    })
-                    .collect::<Vec<_>>()
-            }),
-            replica_version: self.replica_version_id.clone(),
+    async fn payload(&self, _: &Agent) -> DeployGuestosToAllUnassignedNodesPayload {
+        DeployGuestosToAllUnassignedNodesPayload {
+            elected_replica_version: self.replica_version_id.clone(),
+        }
+    }
+}
+
+/// Sub-command to submit a proposal to change the public keys with "readonly"
+/// access privileges. There is no easy way to set a privilege to an empty list.
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Parser)]
+struct ProposeToUpdateSshReadonlyAccessForAllUnassignedNodesCmd {
+    /// The list of public keys whose owners have "readonly" SSH access to all
+    /// unassigned nodes.
+    #[clap(long, multiple_values(true))]
+    pub ssh_readonly_access: Vec<String>,
+}
+
+impl ProposalTitle for ProposeToUpdateSshReadonlyAccessForAllUnassignedNodesCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => {
+                "Update public keys with SSH readonly access for all unassigned nodes".to_string()
+            }
+        }
+    }
+}
+
+#[async_trait]
+impl ProposalPayload<UpdateSshReadOnlyAccessForAllUnassignedNodesPayload>
+    for ProposeToUpdateSshReadonlyAccessForAllUnassignedNodesCmd
+{
+    async fn payload(&self, _: &Agent) -> UpdateSshReadOnlyAccessForAllUnassignedNodesPayload {
+        UpdateSshReadOnlyAccessForAllUnassignedNodesPayload {
+            ssh_readonly_keys: self
+                .ssh_readonly_access
+                .iter()
+                .filter_map(|k| match k.trim() {
+                    "" => None,
+                    k => Some(k.to_string()),
+                })
+                .collect::<Vec<_>>(),
         }
     }
 }
@@ -925,7 +974,7 @@ impl ProposalPayload<StopOrStartCanisterRequest> for StopCanisterCmd {
 /// Sub-command to submit a proposal to update elected replica versions.
 #[derive_common_proposal_fields]
 #[derive(ProposalMetadata, Parser)]
-struct ProposeToUpdateElectedReplicaVersionsCmd {
+struct ProposeToReviseElectedGuestssVersionsCmd {
     #[clap(long)]
     /// The replica version ID to elect.
     pub replica_version_to_elect: Option<String>,
@@ -945,7 +994,7 @@ struct ProposeToUpdateElectedReplicaVersionsCmd {
     pub replica_versions_to_unelect: Vec<String>,
 }
 
-impl ProposalTitle for ProposeToUpdateElectedReplicaVersionsCmd {
+impl ProposalTitle for ProposeToReviseElectedGuestssVersionsCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
@@ -958,11 +1007,11 @@ impl ProposalTitle for ProposeToUpdateElectedReplicaVersionsCmd {
 }
 
 #[async_trait]
-impl ProposalPayload<UpdateElectedReplicaVersionsPayload>
-    for ProposeToUpdateElectedReplicaVersionsCmd
+impl ProposalPayload<ReviseElectedGuestosVersionsPayload>
+    for ProposeToReviseElectedGuestssVersionsCmd
 {
-    async fn payload(&self, _: &Agent) -> UpdateElectedReplicaVersionsPayload {
-        let payload = UpdateElectedReplicaVersionsPayload {
+    async fn payload(&self, _: &Agent) -> ReviseElectedGuestosVersionsPayload {
+        let payload = ReviseElectedGuestosVersionsPayload {
             replica_version_to_elect: self.replica_version_to_elect.clone(),
             release_package_sha256_hex: self.release_package_sha256_hex.clone(),
             release_package_urls: self.release_package_urls.clone(),
@@ -4106,9 +4155,14 @@ impl ProposalPayload<RemoveApiBoundaryNodesPayload> for ProposeToRemoveApiBounda
     }
 }
 
+/// Obsolete; please use `ProposeToDeployGuestosToSomeApiBoundaryNodes` instead.
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Parser, Clone)]
+struct ProposeToUpdateApiBoundaryNodesVersionCmd {}
+
 #[derive_common_proposal_fields]
 #[derive(ProposalMetadata, Parser)]
-struct ProposeToUpdateApiBoundaryNodesVersionCmd {
+struct ProposeToDeployGuestosToSomeApiBoundaryNodesCmd {
     #[clap(long, required = true, multiple_values(true), alias = "node-ids")]
     /// The set of API Boundary Nodes that should have their version updated
     nodes: Vec<PrincipalId>,
@@ -4118,7 +4172,7 @@ struct ProposeToUpdateApiBoundaryNodesVersionCmd {
     version: String,
 }
 
-impl ProposalTitle for ProposeToUpdateApiBoundaryNodesVersionCmd {
+impl ProposalTitle for ProposeToDeployGuestosToSomeApiBoundaryNodesCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
@@ -4136,7 +4190,7 @@ impl ProposalTitle for ProposeToUpdateApiBoundaryNodesVersionCmd {
 
 #[async_trait]
 impl ProposalPayload<UpdateApiBoundaryNodesVersionPayload>
-    for ProposeToUpdateApiBoundaryNodesVersionCmd
+    for ProposeToDeployGuestosToSomeApiBoundaryNodesCmd
 {
     async fn payload(&self, _: &Agent) -> UpdateApiBoundaryNodesVersionPayload {
         UpdateApiBoundaryNodesVersionPayload {
@@ -4312,6 +4366,7 @@ async fn main() {
         //
         // TODO(NNS1-486): Remove ic-admin command whitelist for sender
         match opts.subcmd {
+            SubCommand::ProposeToDeployGuestosToAllSubnetNodes(_) => (),
             SubCommand::ProposeToUpdateSubnetReplicaVersion(_) => (),
             SubCommand::ProposeToCreateSubnet(_) => (),
             SubCommand::ProposeToAddNodesToSubnet(_) => (),
@@ -4322,6 +4377,7 @@ async fn main() {
             SubCommand::ProposeToHardResetNnsRootToVersion(_) => (),
             SubCommand::ProposeToUninstallCode(_) => (),
             SubCommand::ProposeToAddNnsCanister(_) => (),
+            SubCommand::ProposeToReviseElectedGuestosVersions(_) => (),
             SubCommand::ProposeToUpdateElectedReplicaVersions(_) => (),
             SubCommand::ProposeToUpdateSubnet(_) => (),
             SubCommand::ProposeToClearProvisionalWhitelist(_) => (),
@@ -4339,7 +4395,13 @@ async fn main() {
             SubCommand::VoteOnRootProposalToUpgradeGovernanceCanister(_) => (),
             SubCommand::ProposeToAddOrRemoveDataCenters(_) => (),
             SubCommand::ProposeToUpdateNodeRewardsTable(_) => (),
-            SubCommand::ProposeToUpdateUnassignedNodesConfig(_) => (),
+            SubCommand::ProposeToUpdateUnassignedNodesConfig(_) => panic!(
+                "Subcommand ProposeToUpdateUnassignedNodesConfig is obsolete; please use \
+                ProposeToDeployGuestosToAllUnassignedNodesCmd or \
+                ProposeToUpdateSshReadonlyAccessForAllUnassignedNodes instead"
+            ),
+            SubCommand::ProposeToDeployGuestosToAllUnassignedNodes(_) => (),
+            SubCommand::ProposeToUpdateSshReadonlyAccessForAllUnassignedNodes(_) => (),
             SubCommand::ProposeToAddNodeOperator(_) => (),
             SubCommand::ProposeToRemoveNodeOperators(_) => (),
             SubCommand::ProposeToAddWasmToSnsWasm(_) => (),
@@ -4358,7 +4420,11 @@ async fn main() {
             SubCommand::ProposeToSetBitcoinConfig(_) => (),
             SubCommand::ProposeToAddApiBoundaryNode(_) => (),
             SubCommand::ProposeToRemoveApiBoundaryNodes(_) => (),
-            SubCommand::ProposeToUpdateApiBoundaryNodesVersion(_) => (),
+            SubCommand::ProposeToUpdateApiBoundaryNodesVersion(_) => panic!(
+                "Subcommand ProposeToUpdateApiBoundaryNodesVersion is obsolete; please use \
+                ProposeToDeployGuestosToSomeApiBoundaryNodes instead"
+            ),
+            SubCommand::ProposeToDeployGuestosToSomeApiBoundaryNodes(_) => (),
             SubCommand::ProposeToOpenSnsTokenSwap(_) => panic!(
                 "Subcommand OpenSnsTokenSwap is obsolete; please use \
                 ProposeToCreateServiceNervousSystem instead"
@@ -4594,11 +4660,12 @@ async fn main() {
                 exit(1);
             }
         }
-        SubCommand::ProposeToUpdateSubnetReplicaVersion(cmd) => {
+        SubCommand::ProposeToUpdateSubnetReplicaVersion(cmd)
+        | SubCommand::ProposeToDeployGuestosToAllSubnetNodes(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
             propose_external_proposal_from_command(
                 cmd,
-                NnsFunction::UpdateSubnetReplicaVersion,
+                NnsFunction::DeployGuestosToAllSubnetNodes,
                 make_canister_client(
                     reachable_nns_urls,
                     opts.verify_nns_responses,
@@ -4645,11 +4712,12 @@ async fn main() {
                 println!("KeyId {:?}: {:?}", key_id, subnets);
             }
         }
-        SubCommand::ProposeToUpdateElectedReplicaVersions(cmd) => {
+        SubCommand::ProposeToUpdateElectedReplicaVersions(cmd)
+        | SubCommand::ProposeToReviseElectedGuestosVersions(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
             propose_external_proposal_from_command(
                 cmd,
-                NnsFunction::UpdateElectedReplicaVersions,
+                NnsFunction::ReviseElectedGuestosVersions,
                 make_canister_client(
                     reachable_nns_urls,
                     opts.verify_nns_responses,
@@ -5264,11 +5332,26 @@ async fn main() {
             )
             .await;
         }
-        SubCommand::ProposeToUpdateUnassignedNodesConfig(cmd) => {
+        SubCommand::ProposeToDeployGuestosToAllUnassignedNodes(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
             propose_external_proposal_from_command(
                 cmd,
-                NnsFunction::UpdateUnassignedNodesConfig,
+                NnsFunction::DeployGuestosToAllUnassignedNodes,
+                make_canister_client(
+                    reachable_nns_urls,
+                    opts.verify_nns_responses,
+                    opts.nns_public_key_pem_file,
+                    sender,
+                ),
+                proposer,
+            )
+            .await;
+        }
+        SubCommand::ProposeToUpdateSshReadonlyAccessForAllUnassignedNodes(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            propose_external_proposal_from_command(
+                cmd,
+                NnsFunction::UpdateSshReadonlyAccessForAllUnassignedNodes,
                 make_canister_client(
                     reachable_nns_urls,
                     opts.verify_nns_responses,
@@ -5545,11 +5628,11 @@ async fn main() {
             )
             .await;
         }
-        SubCommand::ProposeToUpdateApiBoundaryNodesVersion(cmd) => {
+        SubCommand::ProposeToDeployGuestosToSomeApiBoundaryNodes(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
             propose_external_proposal_from_command(
                 cmd,
-                NnsFunction::UpdateApiBoundaryNodesVersion,
+                NnsFunction::DeployGuestosToSomeApiBoundaryNodes,
                 make_canister_client(
                     reachable_nns_urls,
                     opts.verify_nns_responses,

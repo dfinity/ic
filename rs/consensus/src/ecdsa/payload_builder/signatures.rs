@@ -1,136 +1,27 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use ic_error_types::RejectCode;
-use ic_logger::{debug, ReplicaLogger};
 use ic_management_canister_types::{EcdsaKeyId, Payload, SignWithECDSAReply};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithEcdsaContext;
 use ic_types::{
-    consensus::ecdsa,
-    crypto::canister_threshold_sig::ExtendedDerivationPath,
+    consensus::idkg,
     messages::{CallbackId, RejectContext},
-    CanisterId, Time,
+    Time,
 };
-use phantom_newtype::Id;
 
 use crate::{consensus::metrics::EcdsaPayloadMetrics, ecdsa::signer::EcdsaSignatureBuilder};
-
-use super::EcdsaPayloadError;
-
-/// Update signature agreements in the data payload by:
-/// - dropping agreements that don't have a [SignWithEcdsaContext] anymore (because
-///   the response has been delivered)
-/// - setting remaining agreements to "Reported" (the signing response was delivered
-///   in the previous round, the context will be removed when the previous block is
-///   finalized)
-/// - adding new agreements as "Unreported" by combining shares in the ECDSA pool.
-pub(crate) fn update_signature_agreements(
-    all_requests: &BTreeMap<CallbackId, SignWithEcdsaContext>,
-    signature_builder: &dyn EcdsaSignatureBuilder,
-    payload: &mut ecdsa::EcdsaPayload,
-) {
-    let all_random_ids = all_requests
-        .iter()
-        .map(|(callback_id, context)| (context.pseudo_random_id, (callback_id, context)))
-        .collect::<BTreeMap<_, _>>();
-    // We first clean up the existing signature_agreements by keeping those
-    // that can still be found in the signing_requests for dedup purpose.
-    // We only need the "Reported" status because they would have already
-    // been reported when the previous block become finalized.
-    let mut new_agreements = BTreeMap::new();
-    let mut old_agreements = BTreeMap::new();
-    std::mem::swap(&mut payload.signature_agreements, &mut old_agreements);
-    for (random_id, _) in old_agreements.into_iter() {
-        if all_random_ids.get(&random_id).is_some() {
-            new_agreements.insert(random_id, ecdsa::CompletedSignature::ReportedToExecution);
-        }
-    }
-    payload.signature_agreements = new_agreements;
-
-    // Then we collect new signatures into the signature_agreements
-    let mut completed = BTreeMap::new();
-    for request_id in payload.ongoing_signatures.keys() {
-        let Some((callback_id, context)) = all_random_ids.get(&request_id.pseudo_random_id) else {
-            continue;
-        };
-
-        let Some(signature) = signature_builder.get_completed_signature(request_id) else {
-            continue;
-        };
-
-        let response = ic_types::batch::ConsensusResponse {
-            callback: **callback_id,
-            payload: ic_types::messages::Payload::Data(
-                SignWithECDSAReply {
-                    signature: signature.signature.clone(),
-                }
-                .encode(),
-            ),
-            originator: Some(context.request.sender),
-            respondent: Some(CanisterId::ic_00()),
-            refund: Some(context.request.payment),
-            deadline: Some(context.request.deadline),
-        };
-
-        completed.insert(
-            request_id.clone(),
-            ecdsa::CompletedSignature::Unreported(response),
-        );
-    }
-
-    for (request_id, signature) in completed {
-        payload.ongoing_signatures.remove(&request_id);
-        payload
-            .signature_agreements
-            .insert(request_id.pseudo_random_id, signature);
-    }
-}
-
-/// For every new signing request, we only start to work on them if
-/// their matched quadruple has been fully produced.
-pub(crate) fn update_ongoing_signatures(
-    new_requests: BTreeMap<ecdsa::RequestId, &SignWithEcdsaContext>,
-    max_ongoing_signatures: u32,
-    payload: &mut ecdsa::EcdsaPayload,
-    log: &ReplicaLogger,
-) -> Result<(), EcdsaPayloadError> {
-    if let Some(key_transcript) = &payload.key_transcript.current {
-        debug!(
-            log,
-            "update_ongoing_signatures: number of new_requests={}",
-            new_requests.len()
-        );
-        for (request_id, context) in new_requests.into_iter() {
-            if (payload.ongoing_signatures.len() as u32) >= max_ongoing_signatures {
-                return Ok(());
-            }
-            if let Some(quadruple) = payload
-                .available_quadruples
-                .remove(&request_id.quadruple_id)
-            {
-                let sign_inputs = build_signature_inputs(context, &quadruple, key_transcript);
-                payload.ongoing_signatures.insert(request_id, sign_inputs);
-            }
-        }
-    }
-    Ok(())
-}
 
 /// Helper to create a reject response to the management canister
 /// with the given code and message
 fn reject_response(
     callback_id: CallbackId,
-    context: &SignWithEcdsaContext,
     code: RejectCode,
     message: impl ToString,
 ) -> ic_types::batch::ConsensusResponse {
-    ic_types::batch::ConsensusResponse {
-        callback: callback_id,
-        payload: ic_types::messages::Payload::Reject(RejectContext::new(code, message)),
-        originator: Some(context.request.sender),
-        respondent: Some(CanisterId::ic_00()),
-        refund: Some(context.request.payment),
-        deadline: Some(context.request.deadline),
-    }
+    ic_types::batch::ConsensusResponse::new(
+        callback_id,
+        ic_types::messages::Payload::Reject(RejectContext::new(code, message)),
+    )
 }
 
 /// Update signature agreements in the data payload by:
@@ -141,11 +32,11 @@ fn reject_response(
 ///   finalized)
 /// - rejecting signature contexts that are expired or request an invalid key.
 /// - adding new agreements as "Unreported" by combining shares in the ECDSA pool.
-pub(crate) fn update_signature_agreements_improved_latency(
+pub(crate) fn update_signature_agreements(
     all_requests: &BTreeMap<CallbackId, SignWithEcdsaContext>,
     signature_builder: &dyn EcdsaSignatureBuilder,
     request_expiry_time: Option<Time>,
-    payload: &mut ecdsa::EcdsaPayload,
+    payload: &mut idkg::EcdsaPayload,
     valid_keys: &BTreeSet<EcdsaKeyId>,
     ecdsa_payload_metrics: Option<&EcdsaPayloadMetrics>,
 ) {
@@ -162,7 +53,7 @@ pub(crate) fn update_signature_agreements_improved_latency(
         .signature_agreements
         .keys()
         .filter(|random_id| all_random_ids.contains(*random_id))
-        .map(|random_id| (*random_id, ecdsa::CompletedSignature::ReportedToExecution))
+        .map(|random_id| (*random_id, idkg::CompletedSignature::ReportedToExecution))
         .collect();
 
     // Then we collect new signatures into the signature_agreements
@@ -178,9 +69,8 @@ pub(crate) fn update_signature_agreements_improved_latency(
             // Note that no quadruples are consumed at this stage.
             payload.signature_agreements.insert(
                 context.pseudo_random_id,
-                ecdsa::CompletedSignature::Unreported(reject_response(
+                idkg::CompletedSignature::Unreported(reject_response(
                     *callback_id,
-                    context,
                     RejectCode::CanisterReject,
                     format!("Invalid key_id in signature request: {:?}", context.key_id),
                 )),
@@ -202,9 +92,8 @@ pub(crate) fn update_signature_agreements_improved_latency(
         if request_expiry_time.is_some_and(|expiry| context.batch_time < expiry) {
             payload.signature_agreements.insert(
                 context.pseudo_random_id,
-                ecdsa::CompletedSignature::Unreported(reject_response(
+                idkg::CompletedSignature::Unreported(reject_response(
                     *callback_id,
-                    context,
                     RejectCode::CanisterError,
                     "Signature request expired",
                 )),
@@ -224,9 +113,8 @@ pub(crate) fn update_signature_agreements_improved_latency(
         if !payload.available_quadruples.contains_key(quadruple_id) {
             payload.signature_agreements.insert(
                 context.pseudo_random_id,
-                ecdsa::CompletedSignature::Unreported(reject_response(
+                idkg::CompletedSignature::Unreported(reject_response(
                     *callback_id,
-                    context,
                     RejectCode::CanisterError,
                     "Signature request was matched to non-existent pre-signature.",
                 )),
@@ -239,50 +127,25 @@ pub(crate) fn update_signature_agreements_improved_latency(
             continue;
         }
 
-        let Some(signature) = signature_builder.get_completed_signature_from_context(context)
-        else {
+        let Some(signature) = signature_builder.get_completed_signature(context) else {
             continue;
         };
 
-        let response = ic_types::batch::ConsensusResponse {
-            callback: *callback_id,
-            payload: ic_types::messages::Payload::Data(
+        let response = ic_types::batch::ConsensusResponse::new(
+            *callback_id,
+            ic_types::messages::Payload::Data(
                 SignWithECDSAReply {
                     signature: signature.signature.clone(),
                 }
                 .encode(),
             ),
-            originator: Some(context.request.sender),
-            respondent: Some(CanisterId::ic_00()),
-            refund: Some(context.request.payment),
-            deadline: Some(context.request.deadline),
-        };
+        );
         payload.signature_agreements.insert(
             context.pseudo_random_id,
-            ecdsa::CompletedSignature::Unreported(response),
+            idkg::CompletedSignature::Unreported(response),
         );
         payload.available_quadruples.remove(quadruple_id);
     }
-}
-
-/// Helper to build threshold signature inputs from the context and
-/// the pre-signature quadruple
-pub(crate) fn build_signature_inputs(
-    context: &SignWithEcdsaContext,
-    quadruple_ref: &ecdsa::PreSignatureQuadrupleRef,
-    key_transcript_ref: &ecdsa::UnmaskedTranscriptWithAttributes,
-) -> ecdsa::ThresholdEcdsaSigInputsRef {
-    let extended_derivation_path = ExtendedDerivationPath {
-        caller: context.request.sender.into(),
-        derivation_path: context.derivation_path.clone(),
-    };
-    ecdsa::ThresholdEcdsaSigInputsRef::new(
-        extended_derivation_path,
-        context.message_hash,
-        Id::from(context.pseudo_random_id),
-        quadruple_ref.clone(),
-        key_transcript_ref.unmasked_transcript(),
-    )
 }
 
 #[cfg(test)]
@@ -291,19 +154,16 @@ mod tests {
 
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-    use ic_logger::replica_logger::no_op_logger;
     use ic_management_canister_types::EcdsaKeyId;
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
-        consensus::ecdsa::{EcdsaPayload, RequestId},
+        consensus::idkg::{EcdsaPayload, RequestId},
         crypto::canister_threshold_sig::ThresholdEcdsaCombinedSignature,
         Height,
     };
 
     use crate::ecdsa::{
-        payload_builder::{
-            get_signing_requests, quadruples::test_utils::create_available_quadruple,
-        },
+        payload_builder::quadruples::test_utils::create_available_quadruple,
         test_utils::{
             empty_ecdsa_payload_with_key_ids, empty_response,
             fake_completed_sign_with_ecdsa_context, fake_ecdsa_key_id,
@@ -339,214 +199,33 @@ mod tests {
         (ecdsa_payload, contexts)
     }
 
-    fn create_request_id_with_available_quadruple(
-        ecdsa_payload: &mut EcdsaPayload,
-        key_id: EcdsaKeyId,
-        pseudo_random_id: [u8; 32],
-    ) -> ecdsa::RequestId {
-        let quadruple_id = create_available_quadruple(ecdsa_payload, key_id, pseudo_random_id[0]);
-
-        ecdsa::RequestId {
-            quadruple_id,
-            pseudo_random_id,
-            height: Height::from(0),
-        }
-    }
-
     fn pseudo_random_id(i: u8) -> [u8; 32] {
         [i; 32]
     }
 
     #[test]
-    fn test_get_signing_requests_returns_nothing_when_no_quadruples_available() {
-        let valid_key_id = fake_ecdsa_key_id();
-        let (mut ecdsa_payload, contexts) = set_up(
-            /*should_create_key_transcript=*/ true,
-            /*pseudo_random_ids=*/ vec![],
-            valid_key_id.clone(),
-        );
-
-        let result = get_signing_requests(
-            Height::from(1),
-            /*request_expiry_time=*/ None,
-            &mut ecdsa_payload,
-            &contexts,
-            &BTreeSet::from([valid_key_id]),
-            /*ecdsa_payload_metrics=*/ None,
-        );
-
-        assert!(result.is_empty());
-    }
-
-    #[test]
-    fn test_get_signing_requests() {
-        let height = Height::new(789);
-        let pseudo_random_id = pseudo_random_id(0);
-        let valid_key_id = fake_ecdsa_key_id();
-        let (mut ecdsa_payload, contexts) = set_up(
-            /*should_create_key_transcript=*/ true,
-            /*pseudo_random_ids=*/ vec![pseudo_random_id],
-            valid_key_id.clone(),
-        );
-        // Add a quadruple
-        let quadruple_id = create_available_quadruple(&mut ecdsa_payload, valid_key_id.clone(), 10);
-        let _quadruple_id_2 =
-            create_available_quadruple(&mut ecdsa_payload, valid_key_id.clone(), 11);
-
-        let signing_requests = get_signing_requests(
-            height,
-            /*request_expiry_time=*/ None,
-            &mut ecdsa_payload,
-            &contexts,
-            &BTreeSet::from([valid_key_id.clone()]),
-            /*ecdsa_payload_metrics=*/ None,
-        );
-
-        assert_eq!(signing_requests.len(), 1);
-        // Check if it is matched with the smaller quadruple ID
-        assert_eq!(
-            *signing_requests.keys().next().unwrap(),
-            ecdsa::RequestId {
-                quadruple_id,
-                pseudo_random_id,
-                height,
-            }
-        );
-    }
-
-    #[test]
-    fn test_update_ongoing_signatures_returns_nothing_when_no_created_keys() {
-        let key_id = fake_ecdsa_key_id();
-        let (mut ecdsa_payload, contexts) = set_up(
-            /*should_create_key_transcript=*/ false,
-            /*pseudo_random_ids=*/ vec![pseudo_random_id(0), pseudo_random_id(1)],
-            key_id.clone(),
-        );
-        let mut requests = BTreeMap::new();
-        for context in contexts.values() {
-            let request_id = create_request_id_with_available_quadruple(
-                &mut ecdsa_payload,
-                key_id.clone(),
-                context.pseudo_random_id,
-            );
-
-            requests.insert(request_id, context);
-        }
-
-        update_ongoing_signatures(
-            requests,
-            /*max_ongoing_signatures=*/ 10,
-            &mut ecdsa_payload,
-            &no_op_logger(),
-        )
-        .expect("Should successfully execute");
-
-        assert!(ecdsa_payload.ongoing_signatures.is_empty());
-        assert_eq!(ecdsa_payload.available_quadruples.len(), 2);
-    }
-
-    #[test]
-    fn test_update_ongoing_signatures_respects_max_ongoing_signatures() {
-        let contexts_count: usize = 10;
-        let max_ongoing_signatures: usize = 6;
-        let key_id = fake_ecdsa_key_id();
-        let (mut ecdsa_payload, contexts) = set_up(
-            /*should_create_key_transcript=*/ true,
-            /*pseudo_random_ids=*/
-            (0..contexts_count)
-                .map(|i| pseudo_random_id(i as u8))
-                .collect(),
-            key_id.clone(),
-        );
-        let mut requests = BTreeMap::new();
-        for context in contexts.values() {
-            let request_id = create_request_id_with_available_quadruple(
-                &mut ecdsa_payload,
-                key_id.clone(),
-                context.pseudo_random_id,
-            );
-
-            requests.insert(request_id, context);
-        }
-
-        update_ongoing_signatures(
-            requests,
-            max_ongoing_signatures as u32,
-            &mut ecdsa_payload,
-            &no_op_logger(),
-        )
-        .expect("Should successfully execute");
-
-        assert_eq!(
-            ecdsa_payload.ongoing_signatures.len(),
-            max_ongoing_signatures
-        );
-        assert_eq!(
-            ecdsa_payload.available_quadruples.len(),
-            contexts_count - max_ongoing_signatures
-        );
-    }
-
-    #[test]
-    fn test_update_signature_agreements() {
+    fn test_update_signature_agreements_reporting() {
         let delivered_pseudo_random_id = pseudo_random_id(0);
         let old_pseudo_random_id = pseudo_random_id(1);
         let new_pseudo_random_id = pseudo_random_id(2);
+        let key_id = fake_ecdsa_key_id();
         let (mut ecdsa_payload, contexts) = set_up(
             /*should_create_key_transcript=*/ true,
             vec![old_pseudo_random_id, new_pseudo_random_id],
-            fake_ecdsa_key_id(),
+            key_id.clone(),
         );
         ecdsa_payload.signature_agreements.insert(
             delivered_pseudo_random_id,
-            ecdsa::CompletedSignature::Unreported(empty_response()),
+            idkg::CompletedSignature::Unreported(empty_response()),
         );
         ecdsa_payload.signature_agreements.insert(
             old_pseudo_random_id,
-            ecdsa::CompletedSignature::Unreported(empty_response()),
+            idkg::CompletedSignature::Unreported(empty_response()),
         );
 
         // old signature in the agreement AND in state is replaced by `ReportedToExecution`
         // old signature in the agreement but NOT in state is removed.
         update_signature_agreements(
-            &contexts,
-            &TestEcdsaSignatureBuilder::new(),
-            &mut ecdsa_payload,
-        );
-
-        assert_eq!(ecdsa_payload.signature_agreements.len(), 1);
-        assert_eq!(
-            ecdsa_payload.signature_agreements,
-            BTreeMap::from([(
-                old_pseudo_random_id,
-                ecdsa::CompletedSignature::ReportedToExecution
-            )])
-        );
-    }
-
-    #[test]
-    fn test_update_signature_agreements_reporting_improved_latency() {
-        let delivered_pseudo_random_id = pseudo_random_id(0);
-        let old_pseudo_random_id = pseudo_random_id(1);
-        let new_pseudo_random_id = pseudo_random_id(2);
-        let key_id = fake_ecdsa_key_id();
-        let (mut ecdsa_payload, contexts) = set_up(
-            /*should_create_key_transcript=*/ true,
-            vec![old_pseudo_random_id, new_pseudo_random_id],
-            key_id.clone(),
-        );
-        ecdsa_payload.signature_agreements.insert(
-            delivered_pseudo_random_id,
-            ecdsa::CompletedSignature::Unreported(empty_response()),
-        );
-        ecdsa_payload.signature_agreements.insert(
-            old_pseudo_random_id,
-            ecdsa::CompletedSignature::Unreported(empty_response()),
-        );
-
-        // old signature in the agreement AND in state is replaced by `ReportedToExecution`
-        // old signature in the agreement but NOT in state is removed.
-        update_signature_agreements_improved_latency(
             &contexts,
             &TestEcdsaSignatureBuilder::new(),
             None,
@@ -560,7 +239,7 @@ mod tests {
             ecdsa_payload.signature_agreements,
             BTreeMap::from([(
                 old_pseudo_random_id,
-                ecdsa::CompletedSignature::ReportedToExecution
+                idkg::CompletedSignature::ReportedToExecution
             )])
         );
     }
@@ -592,7 +271,7 @@ mod tests {
         // insert agreement for completed request
         ecdsa_payload.signature_agreements.insert(
             [2; 32],
-            ecdsa::CompletedSignature::Unreported(empty_response()),
+            idkg::CompletedSignature::Unreported(empty_response()),
         );
 
         let mut signature_builder = TestEcdsaSignatureBuilder::new();
@@ -610,7 +289,7 @@ mod tests {
         }
 
         // Only the uncompleted request with available quadruple should be completed
-        update_signature_agreements_improved_latency(
+        update_signature_agreements(
             &contexts,
             &signature_builder,
             None,
@@ -626,7 +305,7 @@ mod tests {
             .contains_key(&quadruple_ids[1]));
 
         assert_eq!(ecdsa_payload.signature_agreements.len(), 3);
-        let Some(ecdsa::CompletedSignature::Unreported(response_1)) =
+        let Some(idkg::CompletedSignature::Unreported(response_1)) =
             ecdsa_payload.signature_agreements.get(&[1; 32])
         else {
             panic!("Request 1 should have a response");
@@ -635,10 +314,10 @@ mod tests {
 
         assert_matches!(
             ecdsa_payload.signature_agreements.get(&[2; 32]),
-            Some(ecdsa::CompletedSignature::ReportedToExecution)
+            Some(idkg::CompletedSignature::ReportedToExecution)
         );
 
-        let Some(ecdsa::CompletedSignature::Unreported(response_3)) =
+        let Some(idkg::CompletedSignature::Unreported(response_3)) =
             ecdsa_payload.signature_agreements.get(&[4; 32])
         else {
             panic!("Request 3 should have a response");

@@ -9,10 +9,6 @@ async-stream = "0.3.2"
 byte-unit = "4.0.14"
 clap = { version = "3.2.25", features = ["derive"] }
 futures = { workspace = true }
-http = "0.2"
-hyper = { version = "0.14.18", features = ["full"] }
-hyper-socks2 = { workspace = true }
-hyper-rustls = { workspace = true }
 ic-adapter-metrics-server = { path = "../../monitoring/adapter_metrics_server" }
 ic-async-utils = { path = "../../async_utils" }
 ic-config = { path = "../../config" }
@@ -20,6 +16,7 @@ ic-https-outcalls-service = { path = "../service" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
 prometheus = { workspace = true }
+reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }

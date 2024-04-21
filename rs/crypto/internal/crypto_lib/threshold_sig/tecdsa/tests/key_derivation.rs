@@ -389,14 +389,14 @@ fn should_secp256k1_derivation_match_external_bip32_lib() -> Result<(), Threshol
 
 #[test]
 fn key_derivation_on_unsupported_alg_fails() {
-    let mpk = ic_types::crypto::canister_threshold_sig::MasterEcdsaPublicKey {
+    let mpk = ic_types::crypto::canister_threshold_sig::MasterPublicKey {
         algorithm_id: ic_types::crypto::AlgorithmId::Secp256k1,
         public_key: vec![0x42; 64],
     };
 
     let path = DerivationPath::new_bip32(&[1, 2, 3]);
 
-    let derived = ic_crypto_internal_threshold_sig_ecdsa::derive_ecdsa_public_key(&mpk, &path);
+    let derived = ic_crypto_internal_threshold_sig_ecdsa::derive_threshold_public_key(&mpk, &path);
 
     assert_matches!(
         derived,

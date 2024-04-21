@@ -18,7 +18,7 @@ use ic_nns_test_utils::{
         nns_wait_for_proposal_execution, setup_nns_canisters,
     },
 };
-use ic_state_machine_tests::StateMachine;
+use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_types::time::GENESIS;
 use ic_xrc_types::{Asset, AssetClass, ExchangeRateError, ExchangeRateMetadata};
 use std::time::Duration;
@@ -130,7 +130,7 @@ fn new_icp_cxdr_mock_exchange_rate_canister_init_payload(
 #[test]
 fn test_enable_retrieving_rate_from_exchange_rate_canister() {
     // Step 1: Prepare the world.
-    let state_machine = StateMachine::new();
+    let state_machine = StateMachineBuilder::new().with_dts().build();
 
     // Set up NNS.
     let nns_init_payload = NnsInitPayloadsBuilder::new()
@@ -335,7 +335,7 @@ fn test_enable_retrieving_rate_from_exchange_rate_canister() {
 #[test]
 fn test_disabling_and_reenabling_exchange_rate_canister_calling_via_exchange_rate_proposal() {
     // Step 1: Prepare the world.
-    let mut state_machine = StateMachine::new();
+    let mut state_machine = StateMachineBuilder::new().with_dts().build();
 
     // Set up NNS.
     let nns_init_payload = NnsInitPayloadsBuilder::new()

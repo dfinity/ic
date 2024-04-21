@@ -16,7 +16,9 @@ use ic_sns_governance::pb::v1::{
 };
 use ic_sns_test_utils::{
     itest_helpers::SnsTestsInitPayloadBuilder,
-    state_test_helpers::{setup_sns_canisters, SnsTestCanisterIds},
+    state_test_helpers::{
+        setup_sns_canisters, state_machine_builder_for_sns_tests, SnsTestCanisterIds,
+    },
 };
 use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
@@ -27,7 +29,7 @@ const DEFAULT_NEURON_STAKE: u64 = 500500000000;
 
 #[test]
 fn test_manage_ledger_parameters_change_transfer_fee() {
-    let state_machine = StateMachine::new();
+    let state_machine = state_machine_builder_for_sns_tests().build();
 
     let user = PrincipalId::new_user_test_id(1000);
 

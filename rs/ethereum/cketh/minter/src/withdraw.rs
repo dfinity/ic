@@ -1,7 +1,5 @@
 use crate::eth_rpc::JsonRpcResult;
-use crate::eth_rpc::{
-    BlockSpec, BlockTag, FeeHistory, FeeHistoryParams, Quantity, SendRawTransactionResult,
-};
+use crate::eth_rpc::{BlockSpec, BlockTag, SendRawTransactionResult};
 use crate::eth_rpc_client::requests::GetTransactionCountParams;
 use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::eth_rpc_client::EthRpcClient;
@@ -15,7 +13,7 @@ use crate::state::transactions::{
     ReimbursementRequest, WithdrawalRequest,
 };
 use crate::state::{mutate_state, read_state, State, TaskType};
-use crate::tx::{estimate_transaction_price, TransactionPriceEstimate};
+use crate::tx::{lazy_refresh_gas_fee_estimate, GasFeeEstimate};
 use candid::Nat;
 use futures::future::join_all;
 use ic_canister_log::log;
@@ -141,38 +139,17 @@ pub async fn process_retrieve_eth_requests() {
         return;
     }
 
-    let fee_history = match eth_fee_history().await {
-        Ok(fee_history) => fee_history,
-        Err(e) => {
+    let gas_fee_estimate = match lazy_refresh_gas_fee_estimate().await {
+        Some(gas_fee_estimate) => gas_fee_estimate,
+        None => {
             log!(
                 INFO,
-                "Failed retrieving fee history to process ETH requests: {e:?}",
+                "Failed retrieving gas fee estimate to process ETH requests",
             );
             return;
         }
     };
-    // Transaction price is estimated everytime since the estimate uses the latest fee history
-    // and a block on Ethereum is produced every 12s while making an HTTPs outcall on fiduciary subnet takes around 15s.
-    let gas_fee_estimate = match estimate_transaction_price(&fee_history) {
-        Ok(estimate) => {
-            mutate_state(|s| {
-                s.last_transaction_price_estimate = Some((ic_cdk::api::time(), estimate.clone()));
-            });
-            estimate
-        }
-        Err(e) => {
-            log!(
-                INFO,
-                "Failed estimating transaction price to process ETH requests: {e:?}",
-            );
-            return;
-        }
-    };
-    log!(
-        INFO,
-        "[withdraw]: Estimated transaction fee: {:?}",
-        gas_fee_estimate,
-    );
+
     let latest_transaction_count = latest_transaction_count().await;
     resubmit_transactions_batch(latest_transaction_count, &gas_fee_estimate).await;
     create_transactions_batch(gas_fee_estimate);
@@ -206,7 +183,7 @@ async fn latest_transaction_count() -> Option<TransactionCount> {
 }
 async fn resubmit_transactions_batch(
     latest_transaction_count: Option<TransactionCount>,
-    gas_fee_estimate: &TransactionPriceEstimate,
+    gas_fee_estimate: &GasFeeEstimate,
 ) {
     if read_state(|s| s.eth_transactions.is_sent_tx_empty()) {
         return;
@@ -245,7 +222,7 @@ async fn resubmit_transactions_batch(
     }
 }
 
-fn create_transactions_batch(gas_fee_estimate: TransactionPriceEstimate) {
+fn create_transactions_batch(gas_fee_estimate: GasFeeEstimate) {
     for request in read_state(|s| {
         s.eth_transactions
             .withdrawal_requests_batch(WITHDRAWAL_REQUESTS_BATCH_SIZE)
@@ -462,14 +439,4 @@ async fn finalized_transaction_count() -> Result<TransactionCount, MultiCallErro
         })
         .await
         .reduce_with_equality()
-}
-
-pub async fn eth_fee_history() -> Result<FeeHistory, MultiCallError<FeeHistory>> {
-    read_state(EthRpcClient::from_state)
-        .eth_fee_history(FeeHistoryParams {
-            block_count: Quantity::from(5_u8),
-            highest_block: BlockSpec::Tag(BlockTag::Latest),
-            reward_percentiles: vec![20],
-        })
-        .await
 }

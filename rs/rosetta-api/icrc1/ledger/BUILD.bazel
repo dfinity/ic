@@ -7,10 +7,7 @@ package(default_visibility = ["//visibility:public"])
 [
     rust_library(
         name = "ledger" + name_suffix,
-        srcs = [
-            "src/cdk_runtime.rs",
-            "src/lib.rs",
-        ],
+        srcs = glob(["src/**/*.rs"]),
         compile_data = [
             "//rs/rosetta-api/icrc1/archive:archive_canister" + name_suffix + ".wasm.gz",
         ],
@@ -84,6 +81,25 @@ package(default_visibility = ["//visibility:public"])
         (
             "_u256",
             ["u256-tokens"],
+            [
+                ":ledger_u256",
+                "//rs/rosetta-api/icrc1/tokens_u256",
+            ],
+        ),
+        (
+            "_getblocksdisabled",
+            ["get-blocks-disabled"],
+            [
+                ":ledger",
+                "//rs/rosetta-api/icrc1/tokens_u64",
+            ],
+        ),
+        (
+            "_u256_getblocksdisabled",
+            [
+                "get-blocks-disabled",
+                "u256-tokens",
+            ],
             [
                 ":ledger_u256",
                 "//rs/rosetta-api/icrc1/tokens_u256",
@@ -172,7 +188,6 @@ rust_test(
 
 rust_test(
     name = "ledger_unit_test",
-    srcs = ["src/tests.rs"],
     compile_data = [
         "//rs/rosetta-api/icrc1/archive:archive_canister.wasm.gz",
     ],

@@ -13,9 +13,7 @@ use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_client_helpers::subnet::{NotarizationDelaySettings, SubnetRegistry};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    consensus::{
-        ecdsa::EcdsaPayload, Block, BlockProposal, HasCommittee, HasHeight, HasRank, Rank,
-    },
+    consensus::{idkg::EcdsaPayload, Block, BlockProposal, HasCommittee, HasHeight, HasRank, Rank},
     crypto::{
         threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript},
         CryptoHash, CryptoHashable, Signed,
@@ -613,9 +611,9 @@ mod tests {
         messages::RequestBuilder,
     };
     use ic_types::{
-        consensus::ecdsa::{
-            EcdsaKeyTranscript, EcdsaUIDGenerator, KeyTranscriptCreation, MaskedTranscript,
-            PreSignatureQuadrupleRef, QuadrupleId, UnmaskedTranscript,
+        consensus::idkg::{
+            ecdsa::PreSignatureQuadrupleRef, EcdsaKeyTranscript, EcdsaUIDGenerator,
+            KeyTranscriptCreation, MaskedTranscript, QuadrupleId, UnmaskedTranscript,
         },
         crypto::{
             canister_threshold_sig::idkg::{
@@ -795,7 +793,7 @@ mod tests {
         EcdsaPayload {
             signature_agreements: BTreeMap::new(),
             available_quadruples: BTreeMap::new(),
-            ongoing_signatures: BTreeMap::new(),
+            deprecated_ongoing_signatures: BTreeMap::new(),
             quadruples_in_creation: BTreeMap::new(),
             uid_generator: EcdsaUIDGenerator::new(subnet_test_id(0), Height::new(0)),
             idkg_transcripts: BTreeMap::new(),
@@ -805,6 +803,7 @@ mod tests {
                 current: None,
                 next_in_creation: KeyTranscriptCreation::Begin,
                 key_id: EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
+                master_key_id: None,
             },
         }
     }
@@ -844,7 +843,7 @@ mod tests {
         key_unmasked.transcript_id = fake_transcript_id(id + 4);
         let h = Height::from(0);
         PreSignatureQuadrupleRef {
-            key_id: EcdsaKeyId::from_str("Secp256k1:some_key").ok(),
+            key_id: Some(EcdsaKeyId::from_str("Secp256k1:some_key").unwrap()),
             kappa_unmasked_ref: UnmaskedTranscript::try_from((h, &kappa_unmasked)).unwrap(),
             lambda_masked_ref: MaskedTranscript::try_from((h, &lambda_masked)).unwrap(),
             kappa_times_lambda_ref: MaskedTranscript::try_from((h, &kappa_times_lambda)).unwrap(),

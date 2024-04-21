@@ -30,6 +30,7 @@ pub fn query_stats_config(env: TestEnv) {
                 .with_unit_delay(Duration::from_millis(200))
                 .with_initial_notary_delay(Duration::from_millis(200))
                 .with_dkg_interval_length(Height::from(99))
+                .with_random_height()
                 .with_query_stats_epoch_length(QUERY_STATS_TEST_EPOCH_LENGTH)
                 .add_nodes(4),
         )

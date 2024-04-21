@@ -23,7 +23,7 @@ use ic_base_types::PrincipalId;
 use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_constants::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SIZE};
-use ic_crypto_tecdsa::derive_tecdsa_public_key;
+use ic_crypto_tecdsa::derive_threshold_public_key;
 use ic_cycles_account_manager::{
     is_delayed_ingress_induction_cost, CyclesAccountManager, IngressInductionCost,
     ResourceSaturation,
@@ -38,10 +38,10 @@ use ic_management_canister_types::{
     CanisterInfoResponse, CanisterSettingsArgs, CanisterStatusType, ClearChunkStoreArgs,
     ComputeInitialEcdsaDealingsArgs, CreateCanisterArgs, DeleteCanisterSnapshotArgs,
     ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaKeyId, EmptyBlob, InstallChunkedCodeArgs,
-    InstallCodeArgsV2, Method as Ic00Method, NodeMetricsHistoryArgs, Payload as Ic00Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs, SetupInitialDKGArgs,
-    SignWithECDSAArgs, StoredChunksArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs,
-    UpdateSettingsArgs, UploadChunkArgs, IC_00,
+    InstallCodeArgsV2, ListCanisterSnapshotArgs, Method as Ic00Method, NodeMetricsHistoryArgs,
+    Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
+    SetupInitialDKGArgs, SignWithECDSAArgs, StoredChunksArgs, TakeCanisterSnapshotArgs,
+    UninstallCodeArgs, UpdateSettingsArgs, UploadChunkArgs, IC_00,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -59,7 +59,7 @@ use ic_replicated_state::{
 use ic_system_api::{ExecutionParameters, InstructionLimits};
 use ic_types::{
     canister_http::CanisterHttpRequestContext,
-    crypto::canister_threshold_sig::{ExtendedDerivationPath, MasterEcdsaPublicKey},
+    crypto::canister_threshold_sig::{ExtendedDerivationPath, MasterPublicKey},
     crypto::threshold_sig::ni_dkg::NiDkgTargetId,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
@@ -458,7 +458,7 @@ impl ExecutionEnvironment {
         mut state: ReplicatedState,
         instruction_limits: InstructionLimits,
         rng: &mut dyn RngCore,
-        ecdsa_subnet_public_keys: &BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
+        ecdsa_subnet_public_keys: &BTreeMap<EcdsaKeyId, MasterPublicKey>,
         registry_settings: &RegistryExecutionSettings,
         round_limits: &mut RoundLimits,
     ) -> (ReplicatedState, Option<NumInstructions>) {
@@ -1296,12 +1296,11 @@ impl ExecutionEnvironment {
 
             Ok(Ic00Method::ListCanisterSnapshots) => match self.config.canister_snapshots {
                 FlagStatus::Enabled => {
-                    // TODO(EXC-1531): Implement list_canister_snapshot.
+                    let res = ListCanisterSnapshotArgs::decode(payload).and_then(|args| {
+                        self.list_canister_snapshot(*msg.sender(), &mut state, args)
+                    });
                     ExecuteSubnetMessageResult::Finished {
-                        response: Err(UserError::new(
-                            ErrorCode::CanisterRejectedMessage,
-                            "Canister snapshotting API is not yet implemented.",
-                        )),
+                        response: res,
                         refund: msg.take_cycles(),
                     }
                 }
@@ -1929,6 +1928,23 @@ impl ExecutionEnvironment {
         result
     }
 
+    /// Lists the snapshots belonging to the specified canister.
+    fn list_canister_snapshot(
+        &self,
+        sender: PrincipalId,
+        state: &mut ReplicatedState,
+        args: ListCanisterSnapshotArgs,
+    ) -> Result<Vec<u8>, UserError> {
+        let canister = get_canister(args.get_canister_id(), state)?;
+
+        let result = self
+            .canister_manager
+            .list_canister_snapshot(sender, canister, state)
+            .map_err(UserError::from)?;
+
+        Ok(Encode!(&result).unwrap())
+    }
+
     fn node_metrics_history(
         &self,
         state: &ReplicatedState,
@@ -2389,7 +2405,7 @@ impl ExecutionEnvironment {
 
     fn get_ecdsa_public_key(
         &self,
-        subnet_public_key: &MasterEcdsaPublicKey,
+        subnet_public_key: &MasterPublicKey,
         principal_id: PrincipalId,
         derivation_path: Vec<Vec<u8>>,
         // TODO EXC-1060: get the right public key.
@@ -2399,7 +2415,7 @@ impl ExecutionEnvironment {
             caller: principal_id,
             derivation_path,
         };
-        derive_tecdsa_public_key(subnet_public_key, &path)
+        derive_threshold_public_key(subnet_public_key, &path)
             .map_err(|err| UserError::new(ErrorCode::CanisterRejectedMessage, format!("{}", err)))
             .map(|res| ECDSAPublicKeyResponse {
                 public_key: res.public_key,
@@ -2422,13 +2438,9 @@ impl ExecutionEnvironment {
         // We already ensured message_hash is 32 byte statically, so there is
         // no need to check length here.
 
+        let topology = &state.metadata.network_topology;
         // If the request isn't from the NNS, then we need to charge for it.
-        // Consensus will return any remaining cycles.
-        let source_subnet = state
-            .metadata
-            .network_topology
-            .routing_table
-            .route(request.sender.get());
+        let source_subnet = topology.routing_table.route(request.sender.get());
         if source_subnet != Some(state.metadata.network_topology.nns_subnet_id) {
             let signature_fee = self.cycles_account_manager.ecdsa_signature_fee(subnet_size);
             if request.payment < signature_fee {
@@ -2450,15 +2462,18 @@ impl ExecutionEnvironment {
             }
         }
 
-        let mut pseudo_random_id = [0u8; 32];
-        rng.fill_bytes(&mut pseudo_random_id);
-
-        info!(
-            self.log,
-            "Assigned the pseudo_random_id {:?} to the new sign_with_ECDSA request from {:?}",
-            pseudo_random_id,
-            request.sender()
-        );
+        if !topology
+            .ecdsa_signing_subnets(&key_id)
+            .contains(&state.metadata.own_subnet_id)
+        {
+            return Err(UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "sign_with_ecdsa request could not be handled, invalid or disabled key {}.",
+                    key_id
+                ),
+            ));
+        }
 
         if state
             .metadata
@@ -2473,6 +2488,16 @@ impl ExecutionEnvironment {
                     .to_string(),
             ));
         }
+
+        let mut pseudo_random_id = [0u8; 32];
+        rng.fill_bytes(&mut pseudo_random_id);
+
+        info!(
+            self.log,
+            "Assigned the pseudo_random_id {:?} to the new sign_with_ECDSA request from {:?}",
+            pseudo_random_id,
+            request.sender()
+        );
 
         state
             .metadata
@@ -3540,10 +3565,10 @@ pub fn execute_canister(
 }
 
 fn get_master_ecdsa_public_key<'a>(
-    ecdsa_subnet_public_keys: &'a BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
+    ecdsa_subnet_public_keys: &'a BTreeMap<EcdsaKeyId, MasterPublicKey>,
     subnet_id: SubnetId,
     key_id: &EcdsaKeyId,
-) -> Result<&'a MasterEcdsaPublicKey, UserError> {
+) -> Result<&'a MasterPublicKey, UserError> {
     match ecdsa_subnet_public_keys.get(key_id) {
         None => Err(UserError::new(
             ErrorCode::CanisterRejectedMessage,

@@ -125,6 +125,17 @@ type ChangeFeeCollector = variant {
     Unset; SetTo: Account;
 };
 
+type ChangeArchiveOptions = record {
+    num_blocks_to_archive : opt nat64;
+    max_transactions_per_response : opt nat64;
+    trigger_threshold : opt nat64;
+    max_message_size_bytes : opt nat64;
+    cycles_for_archive_creation : opt nat64;
+    node_max_memory_size_bytes : opt nat64;
+    controller_id : opt principal;
+    more_controller_ids : opt vec principal;
+};
+
 type UpgradeArgs = record {
     metadata : opt vec record { text; MetadataValue };
     token_symbol : opt text;
@@ -135,6 +146,7 @@ type UpgradeArgs = record {
     feature_flags : opt FeatureFlags;
     maximum_number_of_accounts: opt nat64;
     accounts_overflow_trim_quantity: opt nat64;
+    change_archive_options : opt ChangeArchiveOptions;
 };
 
 type LedgerArg = variant {
@@ -243,14 +255,14 @@ type Transfer = record {
   spender : opt Account;
 };
 
-type Value = variant { 
-    Blob : blob; 
-    Text : text; 
+type Value = variant {
+    Blob : blob;
+    Text : text;
     Nat : nat;
-    Nat64: nat64; 
+    Nat64: nat64;
     Int : int;
-    Array : vec Value; 
-    Map : Map; 
+    Array : vec Value;
+    Map : Map;
 };
 
 type Map = vec record { text; Value };
@@ -364,6 +376,15 @@ type ArchiveInfo = record {
     block_range_end: BlockIndex;
 };
 
+type ICRC3Value = variant {
+    Blob : blob;
+    Text : text;
+    Nat : nat;
+    Int : int;
+    Array : vec ICRC3Value;
+    Map : vec record { text; ICRC3Value };
+};
+
 type GetArchivesArgs = record {
     // The last archive seen by the client.
     // The Ledger will return archives coming
@@ -383,6 +404,19 @@ type GetArchivesResult = vec record {
     end : nat;
 };
 
+type GetBlocksResult = record {
+    // Total number of blocks in the
+    // block log
+    log_length : nat;
+
+    blocks : vec record { id : nat; block: ICRC3Value };
+
+    archived_blocks : vec record {
+        args : vec GetBlocksArgs;
+        callback : func (vec GetBlocksArgs) -> (GetBlocksResult) query;
+    };
+};
+
 type ICRC3DataCertificate = record {
   // See https://internetcomputer.org/docs/current/references/ic-interface-spec#certification
   certificate : blob;
@@ -394,8 +428,8 @@ type ICRC3DataCertificate = record {
 service : (ledger_arg : LedgerArg) -> {
     archives : () -> (vec ArchiveInfo) query;
     get_transactions : (GetTransactionsRequest) -> (GetTransactionsResponse) query;
-    get_blocks : (GetBlocksArgs) -> (GetBlocksResponse) query;  
-    get_data_certificate : () -> (DataCertificate) query; 
+    get_blocks : (GetBlocksArgs) -> (GetBlocksResponse) query;
+    get_data_certificate : () -> (DataCertificate) query;
 
     icrc1_name : () -> (text) query;
     icrc1_symbol : () -> (text) query;
@@ -407,12 +441,13 @@ service : (ledger_arg : LedgerArg) -> {
     icrc1_balance_of : (Account) -> (Tokens) query;
     icrc1_transfer : (TransferArg) -> (TransferResult);
     icrc1_supported_standards : () -> (vec StandardRecord) query;
-  
+
     icrc2_approve : (ApproveArgs) -> (ApproveResult);
     icrc2_allowance : (AllowanceArgs) -> (Allowance) query;
     icrc2_transfer_from : (TransferFromArgs) -> (TransferFromResult);
 
     icrc3_get_archives : (GetArchivesArgs) -> (GetArchivesResult) query;
     icrc3_get_tip_certificate : () -> (opt ICRC3DataCertificate) query;
+    icrc3_get_blocks : (vec GetBlocksArgs) -> (GetBlocksResult) query;
     icrc3_supported_block_types : () -> (vec record { block_type : text; url : text }) query;
 }

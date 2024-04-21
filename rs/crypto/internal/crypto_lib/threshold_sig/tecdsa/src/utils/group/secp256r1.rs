@@ -3,7 +3,7 @@ use p256::elliptic_curve::{
     group::{ff::PrimeField, GroupEncoding},
     ops::{LinearCombination, Reduce},
     scalar::IsHigh,
-    sec1::{FromEncodedPoint, ToEncodedPoint},
+    sec1::FromEncodedPoint,
     Field, Group,
 };
 use std::ops::{Mul, Neg};
@@ -173,7 +173,7 @@ impl Scalar {
     ///
     /// The return value is fixed length big endian encoding, with
     /// zero padding if required
-    pub fn as_bytes(&self) -> [u8; Self::BYTES] {
+    pub fn to_bytes(&self) -> [u8; Self::BYTES] {
         self.s.to_bytes().into()
     }
 }
@@ -296,15 +296,6 @@ impl Point {
     /// Serialize the point to bytes in compressed format
     pub fn serialize(&self) -> Vec<u8> {
         self.p.to_affine().to_bytes().to_vec()
-    }
-
-    /// Serialize the point to bytes in uncompressed format
-    pub fn serialize_uncompressed(&self) -> Vec<u8> {
-        self.p
-            .to_affine()
-            .to_encoded_point(false)
-            .as_bytes()
-            .to_vec()
     }
 
     /// Check if the point is the point at infinity

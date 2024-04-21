@@ -24,7 +24,7 @@ impl From<Erc20WithdrawalRequest> for RetrieveErc20Request {
     }
 }
 
-#[derive(CandidType, Deserialize, Debug, PartialEq)]
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
 pub enum WithdrawErc20Error {
     TokenNotSupported {
         supported_tokens: Vec<crate::endpoints::CkErc20Token>,
@@ -39,12 +39,19 @@ pub enum WithdrawErc20Error {
         cketh_block_index: Nat,
         error: LedgerError,
     },
+    TemporarilyUnavailable(String),
 }
 
-#[derive(CandidType, Deserialize, Debug, PartialEq)]
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq)]
 pub enum LedgerError {
     InsufficientFunds {
         balance: Nat,
+        failed_burn_amount: Nat,
+        token_symbol: String,
+        ledger_id: Principal,
+    },
+    AmountTooLow {
+        minimum_burn_amount: Nat,
         failed_burn_amount: Nat,
         token_symbol: String,
         ledger_id: Principal,
@@ -80,6 +87,16 @@ impl From<LedgerBurnError> for LedgerError {
                 ledger,
             } => LedgerError::InsufficientAllowance {
                 allowance,
+                failed_burn_amount,
+                token_symbol: ledger.token_symbol.to_string(),
+                ledger_id: ledger.id,
+            },
+            LedgerBurnError::AmountTooLow {
+                minimum_burn_amount,
+                failed_burn_amount,
+                ledger,
+            } => LedgerError::AmountTooLow {
+                minimum_burn_amount,
                 failed_burn_amount,
                 token_symbol: ledger.token_symbol.to_string(),
                 ledger_id: ledger.id,

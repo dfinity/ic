@@ -1,0 +1,99 @@
+table filter {
+  set rate_limit {
+    type ipv4_addr
+    size 65535
+    flags dynamic
+  }
+
+  set connection_limit {
+    type ipv4_addr
+    size 65535
+    flags dynamic
+  }
+
+  chain INPUT {
+    type filter hook input priority 0; policy drop;
+    iif lo accept
+    ct state new add @rate_limit { ip saddr limit rate over 1000/minute burst 500 packets } log prefix "Drop - rate limit: " drop
+    #  Notes about the rule below:
+    #   - The rule allows a maximum of 100 persistent connections to any ip address.
+    #   - The rule drops all new connections that goes over the configured limit.
+    ct state new add @connection_limit { ip saddr ct count over 100 } log prefix "Drop - connection limit: " drop
+    icmp type parameter-problem accept
+    icmp type echo-request accept
+    icmp type echo-reply accept
+    ip saddr {1.1.1.1,2.2.2.2} ct state { new } tcp dport {2497,4100,8080} accept # Automatic node whitelisting
+ip saddr {5.5.5.5} ct state { new } tcp dport {1005} accept # node_gwp4o-eaaaa-aaaaa-aaaap-2ai
+ip saddr {3.3.3.3} ct state { new } tcp dport {1003} accept # subnet_yndj2-3ybaa-aaaaa-aaaap-yai
+ip saddr {4.4.4.4} ct state { new } tcp dport {1004} accept # replica_nodes
+ip saddr {6.6.6.6} ct state { new } tcp dport {1006} accept # global
+    ip saddr {1.1.1.1,2.2.2.2} udp dport {4100} accept # Automatic node whitelisting
+    ct state { invalid } drop
+    #   - The rule accepts all established and related connections. It's required for the IPv4 connectivity check.
+    ct state { established, related } accept
+    log prefix "Drop - default policy: "
+  }
+
+  chain FORWARD {
+    type filter hook forward priority 0; policy drop;
+  }
+
+  chain OUTPUT {
+    type filter hook output priority 0; policy accept;
+    meta skuid ic-http-adapter ip daddr { 127.0.0.0/8 } ct state { new } tcp dport { 1-19999 } reject # Block restricted localhost ic-http-adapter HTTPS access
+    meta skuid ic-http-adapter ip daddr {1.1.1.1,2.2.2.2} ct state { new } tcp dport {22,2497,4100,7070,8080,9090,9091,9100,19100,19531} reject # Automatic blacklisting for ic-http-adapter
+  }
+}
+
+table ip6 filter {
+  set rate_limit {
+    type ipv6_addr
+    size 65535
+    flags dynamic
+  }
+
+  set connection_limit {
+    type ipv6_addr
+    size 65535
+    flags dynamic
+  }
+
+  chain INPUT {
+    type filter hook input priority 0; policy drop;
+    iif lo accept
+    ct state { invalid } drop
+    ct state { established, related } accept
+    ct state new add @rate_limit { ip6 saddr limit rate over 1000/minute burst 500 packets } log prefix "Drop - rate limit: " drop
+    #  Notes about the rule below:
+    #   - The rule allows a maximum of 100 persistent connections to any ip6 address.
+    #   - The rule drops all new connections that goes over the configured limit.
+    ct state new add @connection_limit { ip6 saddr ct count over 100 } log prefix "Drop - connection limit: " drop
+    icmpv6 type destination-unreachable accept
+    icmpv6 type packet-too-big accept
+    icmpv6 type time-exceeded accept
+    icmpv6 type parameter-problem accept
+    icmpv6 type echo-request accept
+    icmpv6 type echo-reply accept
+    icmpv6 type nd-router-advert accept
+    icmpv6 type nd-neighbor-solicit accept
+    icmpv6 type nd-neighbor-advert accept
+    ip6 saddr { hostos } ct state { new } tcp dport { 42372 } accept # Allow access from HostOS metrics-proxy so GuestOS metrics-proxy can proxy certain metrics to HostOS.
+    ip6 saddr {::ffff:5.5.5.5} ct state { new } tcp dport {1005} accept # node_gwp4o-eaaaa-aaaaa-aaaap-2ai
+ip6 saddr {::ffff:3.3.3.3} ct state { new } tcp dport {1003} accept # subnet_yndj2-3ybaa-aaaaa-aaaap-yai
+ip6 saddr {::ffff:4.4.4.4} ct state { new } tcp dport {1004} accept # replica_nodes
+ip6 saddr {::ffff:6.6.6.6} ct state { new } tcp dport {1006} accept # global
+    
+    log prefix "Drop - default policy: "
+  }
+
+  chain FORWARD {
+    type filter hook forward priority 0; policy drop;
+  }
+
+  chain OUTPUT {
+    type filter hook output priority 0; policy accept;
+    meta skuid ic-http-adapter ip6 daddr { ::1/128 } ct state { new } tcp dport { 1-19999 } reject # Block restricted localhost ic-http-adapter HTTPS access
+    meta skuid ic-http-adapter ip6 daddr { 2a00:fb01:400:42::/64, 2001:4d78:40d::/48, 2602:fb2b:110::/48, 2607:fb58:9005::/48, 2602:fb2b:100::/48, 2607:f6f0:3004::/48, 2602:fb2b:120::/48, 2a05:d01c:d9:2b00::/56, 2a05:d01c:e2c:a700::/56 } ct state { new } tcp dport { 1-19999 } reject # Block restricted outbound ic-http-adapter HTTPS access
+    
+  }
+}

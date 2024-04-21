@@ -1,7 +1,7 @@
 /// This module contains the core state of the PocketIc server.
 /// Axum handlers operate on a global state of type ApiState, whose
 /// interface guarantees consistency and determinism.
-use crate::pocket_ic::{AdvanceTimeAndTick, PocketIc};
+use crate::pocket_ic::{AdvanceTimeAndTick, EffectivePrincipal, PocketIc};
 use crate::InstanceId;
 use crate::{OpId, Operation};
 use base64;
@@ -179,6 +179,7 @@ pub enum OpOut {
     Error(PocketIcError),
     ApiV2Response((u16, BTreeMap<String, Vec<u8>>, Vec<u8>)),
     Pruned,
+    MessageId((EffectivePrincipal, Vec<u8>)),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
@@ -258,6 +259,14 @@ impl std::fmt::Debug for OpOut {
                 )
             }
             OpOut::Pruned => write!(f, "Pruned"),
+            OpOut::MessageId((effective_principal, message_id)) => {
+                write!(
+                    f,
+                    "MessageId({:?},{})",
+                    effective_principal,
+                    hex::encode(message_id)
+                )
+            }
         }
     }
 }
@@ -347,8 +356,8 @@ impl ApiState {
 
     pub async fn add_instance(&self, instance: PocketIc) -> InstanceId {
         let mut instances = self.instances.write().await;
-        instances.push(Mutex::new(InstanceState::Available(instance)));
         let mut progress_threads = self.progress_threads.write().await;
+        instances.push(Mutex::new(InstanceState::Available(instance)));
         progress_threads.push(Mutex::new(None));
         instances.len() - 1
     }

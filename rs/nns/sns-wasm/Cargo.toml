@@ -33,7 +33,9 @@ ic-sns-governance = { path = "../../sns/governance" }
 ic-sns-init = { path = "../../sns/init" }
 ic-sns-root = { path = "../../sns/root" }
 ic-types = { path = "../../types/types" }
+ic-wasm = "^0.7.1"
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
+libflate = "1.1.2"
 maplit = "1.0.2"
 serde = { workspace = true }
 serde_json = { workspace = true }

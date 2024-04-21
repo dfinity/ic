@@ -8,8 +8,8 @@ use crate::{
         certification::CertificationMessage,
         dkg::DkgMessageId,
         dkg::Message as DkgMessage,
-        ecdsa::{EcdsaMessage, EcdsaMessageAttribute},
-        ConsensusMessage, ConsensusMessageAttribute,
+        idkg::{EcdsaMessage, EcdsaMessageAttribute},
+        ConsensusMessage,
     },
     crypto::crypto_hash,
     messages::SignedIngress,
@@ -32,9 +32,9 @@ impl ArtifactKind for ConsensusArtifact {
     type PbMessage = ic_protobuf::types::v1::ConsensusMessage;
     type Message = ConsensusMessage;
     type PbMessageError = ProxyDecodeError;
-    type PbAttribute = ic_protobuf::types::v1::ConsensusMessageAttribute;
-    type PbAttributeError = ProxyDecodeError;
-    type Attribute = ConsensusMessageAttribute;
+    type PbAttribute = ();
+    type PbAttributeError = Infallible;
+    type Attribute = ();
     type PbFilter = ic_protobuf::types::v1::ConsensusMessageFilter;
     type PbFilterError = ProxyDecodeError;
     type Filter = ConsensusMessageFilter;
@@ -44,7 +44,7 @@ impl ArtifactKind for ConsensusArtifact {
     fn message_to_advert(msg: &ConsensusMessage) -> Advert<ConsensusArtifact> {
         Advert {
             id: ConsensusMessageId::from(msg),
-            attribute: ConsensusMessageAttribute::from(msg),
+            attribute: (),
             size: bincode::serialized_size(&msg).unwrap() as usize,
             integrity_hash: crypto_hash(msg).get(),
         }

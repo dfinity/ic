@@ -11,8 +11,7 @@ use std::{
 
 use candid::{CandidType, Principal};
 use ic_agent::{
-    agent::http_transport::reqwest_transport::ReqwestHttpReplicaV2Transport,
-    identity::BasicIdentity, Agent,
+    agent::http_transport::reqwest_transport::ReqwestTransport, identity::BasicIdentity, Agent,
 };
 use ic_utils::{
     canister::Argument,
@@ -367,7 +366,7 @@ fn create_agent_fn(identity: Arc<BasicIdentity>, root_key: Option<Vec<u8>>) -> i
             socket_addr,
         } = node_route;
 
-        let transport = ReqwestHttpReplicaV2Transport::create(format!("http://{}", socket_addr))
+        let transport = ReqwestTransport::create(format!("http://{}", socket_addr))
             .context("failed to create transport")?;
 
         let identity = Arc::clone(&identity);
@@ -907,8 +906,8 @@ mod tests {
             assert_eq!(route.node_id, "node-1");
             assert_eq!(route.socket_addr, "socket-1");
 
-            let transport = ReqwestHttpReplicaV2Transport::create("http://test")
-                .context("failed to create transport")?;
+            let transport =
+                ReqwestTransport::create("http://test").context("failed to create transport")?;
 
             let agent = Agent::builder().with_transport(transport).build()?;
 

@@ -4,12 +4,13 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_canisters_http_types::HttpRequest;
 use ic_icrc1_ledger::FeatureFlags as LedgerFeatureFlags;
 use ic_ledger_suite_orchestrator::candid::{
-    AddErc20Arg, LedgerInitArg, OrchestratorArg, UpgradeArg,
+    AddErc20Arg, LedgerInitArg, OrchestratorArg, UpdateCyclesManagement, UpgradeArg,
 };
 use ic_ledger_suite_orchestrator::scheduler::TEN_TRILLIONS;
 use ic_ledger_suite_orchestrator_test_utils::arbitrary::arb_init_arg;
 use ic_ledger_suite_orchestrator_test_utils::{
-    new_state_machine, supported_erc20_tokens, usdc, usdc_erc20_contract, LedgerSuiteOrchestrator,
+    new_state_machine, supported_erc20_tokens, usdc, usdc_erc20_contract, usdt,
+    LedgerSuiteOrchestrator, NNS_ROOT_PRINCIPAL,
 };
 use ic_state_machine_tests::ErrorCode;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as LedgerMetadataValue;
@@ -124,6 +125,70 @@ fn should_spawn_ledger_with_correct_init_args() {
                 LedgerMetadataValue::from(80_u64),
             ),
         ]);
+}
+
+#[test]
+fn should_change_cycles_for_canister_creation() {
+    let orchestrator = LedgerSuiteOrchestrator::default();
+    let embedded_ledger_wasm_hash = orchestrator.embedded_ledger_wasm_hash.clone();
+    let embedded_index_wasm_hash = orchestrator.embedded_index_wasm_hash.clone();
+
+    let orchestrator = orchestrator
+        .add_erc20_token(usdc(
+            Principal::anonymous(),
+            embedded_ledger_wasm_hash.clone(),
+            embedded_index_wasm_hash.clone(),
+        ))
+        .expect_new_ledger_and_index_canisters()
+        .assert_ledger_has_cycles(100_000_000_000_000_u128)
+        .assert_index_has_cycles(100_000_000_000_000_u128)
+        .setup;
+
+    orchestrator
+        .upgrade_ledger_suite_orchestrator(&OrchestratorArg::UpgradeArg(UpgradeArg {
+            git_commit_hash: None,
+            ledger_compressed_wasm_hash: None,
+            index_compressed_wasm_hash: None,
+            archive_compressed_wasm_hash: None,
+            cycles_management: Some(UpdateCyclesManagement {
+                cycles_for_ledger_creation: Some(200_000_000_000_000_u128.into()),
+                cycles_for_index_creation: Some(50_000_000_000_000_u128.into()),
+                ..Default::default()
+            }),
+        }))
+        .unwrap();
+
+    orchestrator
+        .add_erc20_token(usdt(
+            Principal::anonymous(),
+            embedded_ledger_wasm_hash.clone(),
+            embedded_index_wasm_hash,
+        ))
+        .expect_new_ledger_and_index_canisters()
+        .assert_ledger_has_cycles(200_000_000_000_000_u128)
+        .assert_index_has_cycles(50_000_000_000_000_u128);
+}
+
+#[test]
+fn should_spawn_archive_from_ledger_with_correct_controllers() {
+    let orchestrator = LedgerSuiteOrchestrator::default();
+    let expected_controllers = vec![
+        orchestrator.ledger_suite_orchestrator_id.get().into(),
+        NNS_ROOT_PRINCIPAL,
+    ];
+    let embedded_ledger_wasm_hash = orchestrator.embedded_ledger_wasm_hash.clone();
+    let embedded_index_wasm_hash = orchestrator.embedded_index_wasm_hash.clone();
+    let usdc = usdc(
+        Principal::anonymous(),
+        embedded_ledger_wasm_hash,
+        embedded_index_wasm_hash,
+    );
+
+    orchestrator
+        .add_erc20_token(usdc.clone())
+        .expect_new_ledger_and_index_canisters()
+        .trigger_creation_of_archive()
+        .assert_all_controlled_by(&expected_controllers);
 }
 
 #[test]
@@ -273,6 +338,7 @@ fn should_reject_upgrade_with_invalid_args() {
         ledger_compressed_wasm_hash: None,
         index_compressed_wasm_hash: None,
         archive_compressed_wasm_hash: None,
+        cycles_management: None,
     };
 
     test_upgrade_with_invalid_args(

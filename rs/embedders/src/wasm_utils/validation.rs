@@ -1343,6 +1343,7 @@ pub fn wasmtime_validation_config() -> wasmtime::Config {
     config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Disable);
     config.wasm_bulk_memory(true);
     config.wasm_function_references(false);
+    config.wasm_gc(false);
     // Wasm memory64 and multi-memory features are disabled during validation,
     // but enabled during execution for the Wasm-native stable memory
     // implementation.

@@ -1,7 +1,7 @@
 use crate::candid::{AddErc20Arg, InitArg, UpgradeArg};
 use crate::logs::INFO;
 use crate::scheduler::{schedule_now, InstallLedgerSuiteArgs, Task, UpgradeOrchestratorArgs};
-use crate::state::{init_state, read_state, GitCommitHash, State};
+use crate::state::{init_state, mutate_state, read_state, GitCommitHash, State};
 use crate::storage::{mutate_wasm_store, read_wasm_store, record_icrc1_ledger_suite_wasms};
 use ic_canister_log::log;
 use std::str::FromStr;
@@ -42,6 +42,9 @@ pub fn post_upgrade(upgrade_arg: Option<UpgradeArg>) {
                     arg, e
                 ));
             }
+        }
+        if let Some(update) = arg.cycles_management {
+            mutate_state(|s| update.apply(s.cycles_management_mut()));
         }
     }
     read_state(|s| s.validate_config().expect("ERROR: invalid state"));

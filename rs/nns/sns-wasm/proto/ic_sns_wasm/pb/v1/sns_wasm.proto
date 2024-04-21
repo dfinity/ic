@@ -323,7 +323,35 @@ message GetDeployedSnsByProposalIdRequest {
 // NNS that created it.
 message GetDeployedSnsByProposalIdResponse {
   oneof get_deployed_sns_by_proposal_id_result {
-      SnsWasmError error = 1;
-      DeployedSns deployed_sns = 2;
-    }
+    SnsWasmError error = 1;
+    DeployedSns deployed_sns = 2;
+  }
+}
+
+// The argument for get_wasm, which consists of the WASM hash to be retrieved.
+message GetWasmMetadataRequest {
+  optional bytes hash = 1;
+}
+
+message MetadataSection {
+  // First part of the section. Normally, this is either "icp:private" or "icp:public".
+  optional string visibility = 1;
+
+  // Second part of the section. For example, this might be "candid:service".
+  optional string name = 2;
+
+  // Last part of the section, containing its raw contents.
+  optional bytes contents = 3;
+}
+
+// The response for get_wasm, which returns a WASM if it is found, or None.
+message GetWasmMetadataResponse {
+  message Ok {
+    repeated MetadataSection sections = 1;
+  }
+
+  oneof result {
+    Ok ok = 1;
+    SnsWasmError error = 2;
+  }
 }

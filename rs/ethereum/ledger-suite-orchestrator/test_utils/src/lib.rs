@@ -20,6 +20,8 @@ const MAX_TICKS: usize = 10;
 const GIT_COMMIT_HASH: &str = "6a8e5fca2c6b4e12966638c444e994e204b42989";
 pub const CKERC20_TRANSFER_FEE: u64 = 4_000; //0.004 USD for ckUSDC/ckUSDT
 
+pub const NNS_ROOT_PRINCIPAL: Principal = Principal::from_slice(&[0_u8]);
+
 pub struct LedgerSuiteOrchestrator {
     pub env: Arc<StateMachine>,
     pub ledger_suite_orchestrator_id: CanisterId,
@@ -32,7 +34,7 @@ impl Default for LedgerSuiteOrchestrator {
         Self::new(
             Arc::new(new_state_machine()),
             InitArg {
-                more_controller_ids: vec![],
+                more_controller_ids: vec![NNS_ROOT_PRINCIPAL],
                 minter_id: None,
                 cycles_management: None,
             },
@@ -191,7 +193,7 @@ pub fn usdc_erc20_contract() -> Erc20Contract {
     }
 }
 
-fn usdt(
+pub fn usdt(
     minter: Principal,
     ledger_compressed_wasm_hash: WasmHash,
     index_compressed_wasm_hash: WasmHash,

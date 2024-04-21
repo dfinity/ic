@@ -172,7 +172,7 @@ async fn query_error_response() {
     .await;
 
     match result {
-        Err(XNetClientError::ErrorResponse(reqwest::StatusCode::INTERNAL_SERVER_ERROR, _)) => (),
+        Err(XNetClientError::ErrorResponse(hyper::StatusCode::INTERNAL_SERVER_ERROR, _)) => (),
         _ => panic!("Expecting Err(ErrorResponse(_)), got {:?}", result),
     }
     assert_eq!(

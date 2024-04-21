@@ -1,14 +1,16 @@
 //! Implementations and serialization tests of the ExhaustiveSet trait
 
 use crate::batch::ConsensusResponse;
-use crate::consensus::ecdsa::{
-    CompletedReshareRequest, CompletedSignature, EcdsaReshareRequest, MaskedTranscript,
-    PreSignatureQuadrupleRef, PseudoRandomId, QuadrupleId, QuadrupleInCreation,
-    RandomTranscriptParams, RandomUnmaskedTranscriptParams, RequestId, ReshareOfMaskedParams,
-    ReshareOfUnmaskedParams, ThresholdEcdsaSigInputsRef, UnmaskedTimesMaskedParams,
-    UnmaskedTranscript,
-};
 use crate::consensus::hashed::Hashed;
+use crate::consensus::idkg::ecdsa::{
+    PreSignatureQuadrupleRef, QuadrupleInCreation, ThresholdEcdsaSigInputsRef,
+};
+use crate::consensus::idkg::{
+    CompletedReshareRequest, CompletedSignature, EcdsaKeyTranscript, EcdsaReshareRequest,
+    KeyTranscriptCreation, MaskedTranscript, PseudoRandomId, QuadrupleId, RandomTranscriptParams,
+    RandomUnmaskedTranscriptParams, RequestId, ReshareOfMaskedParams, ReshareOfUnmaskedParams,
+    UnmaskedTimesMaskedParams, UnmaskedTranscript, UnmaskedTranscriptWithAttributes,
+};
 use crate::consensus::{BlockPayload, ConsensusMessageHashable};
 use crate::consensus::{CatchUpContent, CatchUpPackage, HashedBlock, HashedRandomBeacon};
 use crate::crypto::canister_threshold_sig::idkg::{
@@ -649,6 +651,7 @@ impl ExhaustiveSet for IDkgTranscriptOperation {
 #[derive(Clone)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct DerivedQuadrupleInCreation {
+    pub key_id: EcdsaKeyId,
     pub random_config: RandomTranscriptParams,
     pub random_unmasked_config: RandomUnmaskedTranscriptParams,
     pub reshare_config: ReshareOfMaskedParams,
@@ -662,9 +665,9 @@ impl ExhaustiveSet for QuadrupleInCreation {
         let mut result = DerivedQuadrupleInCreation::exhaustive_set(rng)
             .into_iter()
             .map(|q| QuadrupleInCreation {
-                key_id: None,
-                kappa_masked_config: Some(q.random_config.clone()),
-                kappa_masked: Some(q.masked),
+                key_id: Some(q.key_id),
+                kappa_masked_config: None,
+                kappa_masked: None,
                 lambda_config: q.random_config.clone(),
                 lambda_masked: Some(q.masked),
                 kappa_unmasked_config: Some(q.random_unmasked_config.clone()),
@@ -678,12 +681,14 @@ impl ExhaustiveSet for QuadrupleInCreation {
             .collect::<Vec<_>>();
 
         result.push(QuadrupleInCreation {
-            key_id: None,
-            kappa_masked_config: Some(RandomTranscriptParams::exhaustive_set(rng)[0].clone()),
+            key_id: Some(EcdsaKeyId::exhaustive_set(rng)[0].clone()),
+            kappa_masked_config: None,
             kappa_masked: None,
-            lambda_config: RandomTranscriptParams::exhaustive_set(rng)[1].clone(),
+            lambda_config: RandomTranscriptParams::exhaustive_set(rng)[0].clone(),
             lambda_masked: None,
-            kappa_unmasked_config: None,
+            kappa_unmasked_config: Some(
+                RandomUnmaskedTranscriptParams::exhaustive_set(rng)[0].clone(),
+            ),
             unmask_kappa_config: None,
             kappa_unmasked: None,
             key_times_lambda_config: None,
@@ -698,6 +703,7 @@ impl ExhaustiveSet for QuadrupleInCreation {
 #[derive(Clone)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct PreSignatureQuadrupleRefsOnly {
+    pub key_id: EcdsaKeyId,
     pub kappa_unmasked_ref: UnmaskedTranscript,
     pub lambda_masked_ref: MaskedTranscript,
     pub kappa_times_lambda_ref: MaskedTranscript,
@@ -710,7 +716,7 @@ impl ExhaustiveSet for PreSignatureQuadrupleRef {
         PreSignatureQuadrupleRefsOnly::exhaustive_set(rng)
             .into_iter()
             .map(|q| PreSignatureQuadrupleRef {
-                key_id: None,
+                key_id: Some(q.key_id),
                 kappa_unmasked_ref: q.kappa_unmasked_ref,
                 lambda_masked_ref: q.lambda_masked_ref,
                 kappa_times_lambda_ref: q.kappa_times_lambda_ref,
@@ -721,18 +727,55 @@ impl ExhaustiveSet for PreSignatureQuadrupleRef {
     }
 }
 
+#[derive(Clone)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub struct DerivedEcdsaReshareRequest {
+    pub key_id: EcdsaKeyId,
+    pub receiving_node_ids: Vec<NodeId>,
+    pub registry_version: RegistryVersion,
+}
+
+impl ExhaustiveSet for EcdsaReshareRequest {
+    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+        DerivedEcdsaReshareRequest::exhaustive_set(rng)
+            .into_iter()
+            .map(|r| EcdsaReshareRequest {
+                key_id: r.key_id,
+                master_key_id: None,
+                receiving_node_ids: r.receiving_node_ids,
+                registry_version: r.registry_version,
+            })
+            .collect()
+    }
+}
+
+#[derive(Clone)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub struct DerivedEcdsaKeyTranscript {
+    pub current: Option<UnmaskedTranscriptWithAttributes>,
+    pub next_in_creation: KeyTranscriptCreation,
+    pub key_id: EcdsaKeyId,
+}
+
+impl ExhaustiveSet for EcdsaKeyTranscript {
+    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+        DerivedEcdsaKeyTranscript::exhaustive_set(rng)
+            .into_iter()
+            .map(|r| EcdsaKeyTranscript {
+                key_id: r.key_id,
+                master_key_id: None,
+                current: r.current,
+                next_in_creation: r.next_in_creation,
+            })
+            .collect()
+    }
+}
+
 impl ExhaustiveSet for ConsensusResponse {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
         Response::exhaustive_set(rng)
             .into_iter()
-            .map(|r| ConsensusResponse {
-                originator: Some(r.originator),
-                respondent: Some(r.respondent),
-                callback: r.originator_reply_callback,
-                refund: Some(r.refund),
-                payload: r.response_payload,
-                deadline: Some(r.deadline),
-            })
+            .map(|r| ConsensusResponse::new(r.originator_reply_callback, r.response_payload))
             .collect()
     }
 }

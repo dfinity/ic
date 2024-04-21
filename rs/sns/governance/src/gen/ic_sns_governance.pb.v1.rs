@@ -919,8 +919,6 @@ pub struct ProposalData {
     /// no reward event taking this proposal into consideration happened yet.
     ///
     /// This field matches field round in RewardEvent.
-    ///
-    /// This field is invalid when .is_eligible_for_rewards is false.
     #[prost(uint64, tag = "13")]
     pub reward_event_round: u64,
     /// The proposal's wait-for-quiet state. This needs to be saved in stable memory.
@@ -937,14 +935,13 @@ pub struct ProposalData {
     /// GenericNervousSystemFunction validator_canister.
     #[prost(string, optional, tag = "15")]
     pub payload_text_rendering: ::core::option::Option<::prost::alloc::string::String>,
-    /// False if both (initial|final)_reward_rate_basis_points are zero when the
-    /// proposal was made.
-    /// This field is not very useful and will be removed in the future. The plan
-    /// is to treat all proposals as eligible for rewards, and not distribute
-    /// anything if the reward rate is zero.
-    /// The original purpose of this field is to make sure that proposals that are
-    /// not eligible for rewards are not be blocked from garbage collection,
-    /// which normally only happens after rewards are distributed.
+    /// Deprecated. From now on, this field will be set to true when new proposals
+    /// are created. However, there ARE old proposals where this is set to false.
+    ///
+    /// When set to false, the proposal skips past the ReadyToSettle reward status
+    /// directly to Settled
+    ///
+    /// TODO(NNS1-2731): Delete this.
     #[prost(bool, tag = "16")]
     pub is_eligible_for_rewards: bool,
     /// The initial voting period of the proposal, identical in meaning to the one in
@@ -1286,6 +1283,13 @@ pub struct NeuronPermissionList {
 }
 /// A record of when voting rewards were determined, and neuron maturity
 /// increased for participation in voting on proposals.
+///
+/// This has diverged from NNS: this uses the same tag for different fields.
+/// Therefore, we cannot simply move one of the definitions to a shared library.
+///
+/// To make it a little easier to eventually deduplicate NNS and SNS governance
+/// code, tags should be chosen so that it is new to BOTH this and the NNS
+/// RewardEvent. (This also applies to other message definitions.)
 #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -1344,7 +1348,7 @@ pub struct RewardEvent {
     /// rounds have passed since the last time rewards were distributed (rather
     /// than being rolled over).
     ///
-    /// For the genesis reward event, this field will be zero.
+    /// For the genesis pseudo-reward event, this field will be zero.
     ///
     /// In normal operation, this field will almost always be 1. There are two
     /// reasons that rewards might not be distributed in a given round.
@@ -1359,6 +1363,18 @@ pub struct RewardEvent {
     /// In both of these cases, the rewards purse rolls over into the next round.
     #[prost(uint64, optional, tag = "6")]
     pub rounds_since_last_distribution: ::core::option::Option<u64>,
+    /// The total amount of rewards that was available during the reward event.
+    ///
+    /// The e8s_equivalent_to_be_rolled_over method returns this when
+    /// there are no proposals (per the settled_proposals field).
+    ///
+    /// This is mostly copied from NNS.
+    ///
+    /// Warning: There is a field with the same name in NNS, but different tags are
+    /// used. Also, this uses the `optional` keyword (whereas, the NNS analog does
+    /// not).
+    #[prost(uint64, optional, tag = "8")]
+    pub total_available_e8s_equivalent: ::core::option::Option<u64>,
 }
 /// The representation of the whole governance system, containing all
 /// information about the governance system that must be kept

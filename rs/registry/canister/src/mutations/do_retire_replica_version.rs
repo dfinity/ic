@@ -2,7 +2,7 @@ use candid::{CandidType, Deserialize};
 use serde::Serialize;
 
 /// DEPRECATED
-/// This payload and proposal type is superseded by UpdateElectedReplicaVersions
+/// This payload and proposal type is superseded by ReviseElectedGuestosVersions
 ///
 /// The payload of a proposal to retire a set of replica versions.
 ///

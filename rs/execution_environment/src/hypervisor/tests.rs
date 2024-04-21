@@ -6774,3 +6774,268 @@ fn yield_for_dirty_page_copy_does_not_trigger_on_system_subnets_without_dts() {
         NextExecution::None
     );
 }
+
+#[test]
+fn table_grow_fails_with_too_many_elements() {
+    let wat = r#"
+        (module
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (import "ic0" "msg_reply_data_append"
+                (func $msg_reply_data_append (param i32 i32))
+            )
+            (func (export "canister_update table_grow")
+                (i32.store (i32.const 0)
+                    (table.grow 0 (ref.null extern) (i32.const 2000000))
+                )
+                (call $msg_reply_data_append (i32.const 0) (i32.const 4))
+                (call $msg_reply)
+            )
+            (table 0 externref)
+            (memory 1)
+        )
+    "#;
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let ingress_id = test.ingress_raw(canister_id, "table_grow", vec![]).0;
+    test.execute_message(canister_id);
+    let ingress_status = test.ingress_status(&ingress_id);
+    let ingress_state = match ingress_status {
+        IngressStatus::Known { state, .. } => state,
+        IngressStatus::Unknown => unreachable!("Expected known ingress status"),
+    };
+    assert_eq!(
+        IngressState::Completed(WasmResult::Reply((-1_i32).to_le_bytes().to_vec())),
+        ingress_state
+    );
+}
+
+#[test]
+fn declaring_too_many_tables_fails() {
+    let wat = format!("(module {})", "(table 0 externref)".repeat(100));
+    let mut test = ExecutionTestBuilder::new().build();
+    let err = test.canister_from_wat(wat).unwrap_err();
+    assert_eq!(ErrorCode::CanisterWasmEngineError, err.code());
+    assert!(err.description().contains("table count too high"));
+}
+
+// Forces the universal canister to use at least `bytes` of Wasm memory and
+// produces a reply from `bytes`.
+fn use_wasm_memory_and_reply(bytes: u64) -> Vec<u8> {
+    wasm()
+        .stable64_grow(
+            (bytes + WASM_PAGE_SIZE_IN_BYTES as u64 - 1) / WASM_PAGE_SIZE_IN_BYTES as u64,
+        )
+        .stable64_read(0, bytes)
+        .blob_length()
+        .reply_int()
+        .build()
+}
+
+/// Sets the `wasm_memory_limit` of the given canister to its current memory
+/// usage plus the given allowance:
+/// - `wasm_memory_limit = wasm_memory_usage + allowance`
+fn set_wasm_memory_limit(test: &mut ExecutionTest, canister_id: CanisterId, allowance: NumBytes) {
+    let wasm_memory_usage =
+        { test.execution_state(canister_id).wasm_memory.size.get() * WASM_PAGE_SIZE_IN_BYTES };
+
+    test.canister_update_wasm_memory_limit(
+        canister_id,
+        NumBytes::new(wasm_memory_usage as u64) + allowance,
+    )
+    .unwrap();
+}
+
+#[test]
+fn wasm_memory_limit_is_enforced_in_updates() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    // Warm up the canister before getting its memory usage.
+    let result = test
+        .ingress(canister_id, "update", use_wasm_memory_and_reply(100))
+        .unwrap();
+    assert_eq!(WasmResult::Reply(100_i32.to_le_bytes().to_vec()), result);
+
+    set_wasm_memory_limit(&mut test, canister_id, NumBytes::from(5_000_000));
+
+    // Using a small amount of memory should succeed.
+    let result = test
+        .ingress(canister_id, "update", use_wasm_memory_and_reply(100))
+        .unwrap();
+    assert_eq!(WasmResult::Reply(100_i32.to_le_bytes().to_vec()), result);
+
+    // Using a large amount of memory should fail.
+    let err = test
+        .ingress(canister_id, "update", use_wasm_memory_and_reply(10_000_000))
+        .unwrap_err();
+
+    assert_eq!(err.code(), ErrorCode::CanisterWasmMemoryLimitExceeded);
+}
+
+#[test]
+fn wasm_memory_limit_is_not_enforced_in_queries() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+
+    // Warm up the canister before getting its memory usage.
+    let result = test
+        .ingress(canister_id, "query", use_wasm_memory_and_reply(100))
+        .unwrap();
+    assert_eq!(WasmResult::Reply(100_i32.to_le_bytes().to_vec()), result);
+
+    set_wasm_memory_limit(&mut test, canister_id, NumBytes::from(5_000_000));
+
+    // Using a large amount of memory should succeed because the Wasm memory
+    // limit is not enforced in queries.
+    let result = test
+        .ingress(canister_id, "query", use_wasm_memory_and_reply(10_000_000))
+        .unwrap();
+    assert_eq!(
+        WasmResult::Reply(10_000_000_i32.to_le_bytes().to_vec()),
+        result
+    );
+}
+
+#[test]
+fn wasm_memory_limit_is_not_enforced_in_timer() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+    let set_timer = wasm()
+        .set_global_timer_method(
+            wasm()
+                .stable64_grow(200)
+                .stable64_read(0, 10_000_000)
+                .push_bytes(&[1, 2, 3])
+                .set_global_data_from_stack()
+                .build(),
+        )
+        .reply()
+        .build();
+
+    // Warm up the canister before getting its memory usage.
+    let result = test
+        .ingress(canister_id, "update", use_wasm_memory_and_reply(100))
+        .unwrap();
+    assert_eq!(WasmResult::Reply(100_i32.to_le_bytes().to_vec()), result);
+
+    set_wasm_memory_limit(&mut test, canister_id, NumBytes::from(5_000_000));
+
+    let _ = test.ingress(canister_id, "update", set_timer).unwrap();
+
+    test.canister_task(canister_id, CanisterTask::GlobalTimer);
+
+    // The timer task should succeed because the Wasm memory limit is not
+    // enforced in system tasks. Note that this will change in future after
+    // canister logging is implemented, which will allow enforcing the limit in
+    // system tasks as well.
+    let result = test
+        .ingress(
+            canister_id,
+            "update",
+            wasm().get_global_data().append_and_reply().build(),
+        )
+        .unwrap();
+
+    assert_eq!(WasmResult::Reply(vec![1, 2, 3]), result);
+}
+
+#[test]
+fn wasm_memory_limit_is_not_enforced_in_response_callback() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let caller_id = test.universal_canister().unwrap();
+    let callee_id = test.universal_canister().unwrap();
+    let callee = wasm().message_payload().reply().build();
+    let caller = |size| {
+        wasm()
+            .inter_update(
+                callee_id,
+                call_args()
+                    .other_side(callee.clone())
+                    .on_reply(use_wasm_memory_and_reply(size)),
+            )
+            .build()
+    };
+
+    // Warm up the canister before getting its memory usage.
+    let result = test.ingress(caller_id, "update", caller(100)).unwrap();
+    assert_eq!(WasmResult::Reply(100_i32.to_le_bytes().to_vec()), result);
+
+    set_wasm_memory_limit(&mut test, caller_id, NumBytes::from(5_000_000));
+
+    // Using a large amount of memory should succeed because the Wasm memory
+    // limit is not enforced in the response callback.
+    let result = test
+        .ingress(caller_id, "update", caller(10_000_000))
+        .unwrap();
+    assert_eq!(
+        WasmResult::Reply(10_000_000_i32.to_le_bytes().to_vec()),
+        result
+    );
+}
+
+#[test]
+fn wasm_memory_limit_is_not_enforced_in_pre_upgrade() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (func (export "canister_pre_upgrade")
+                (drop (memory.grow (i32.const 10)))
+            )
+            (memory 0)
+        )"#;
+    let canister_id = test.canister_from_wat(wat).unwrap();
+
+    test.canister_update_wasm_memory_limit(canister_id, NumBytes::new(1))
+        .unwrap();
+
+    let wasm = wat::parse_str(wat).unwrap();
+
+    // The pre-upgrade must succeed because the Wasm memory limit is not
+    // enforced there.
+    test.upgrade_canister(canister_id, wasm).unwrap();
+}
+
+#[test]
+fn wasm_memory_limit_is_enforced_in_post_upgrade() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (func (export "canister_post_upgrade")
+                (drop (memory.grow (i32.const 10)))
+            )
+            (memory 0)
+        )"#;
+    let canister_id = test.canister_from_wat(wat).unwrap();
+
+    test.canister_update_wasm_memory_limit(canister_id, NumBytes::new(1))
+        .unwrap();
+
+    let wasm = wat::parse_str(wat).unwrap();
+
+    // The post-upgrade is expected to fail.
+    let err = test.upgrade_canister(canister_id, wasm).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterWasmMemoryLimitExceeded);
+}
+
+#[test]
+fn wasm_memory_limit_is_enforced_in_init() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (func (export "canister_init")
+                (drop (memory.grow (i32.const 10)))
+            )
+            (memory 0)
+        )"#;
+
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
+
+    test.canister_update_wasm_memory_limit(canister_id, NumBytes::new(1))
+        .unwrap();
+
+    let wasm = wat::parse_str(wat).unwrap();
+
+    // The canister init is expected to fail.
+    let err = test.install_canister(canister_id, wasm).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterWasmMemoryLimitExceeded);
+}

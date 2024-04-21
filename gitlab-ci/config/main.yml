@@ -493,35 +493,7 @@ benchmarks:
   tags:
     - rust-benchmarks
   script:
-    - |
-      set -eEuo pipefail
-
-      TARGET_LIST=$(bazel query "attr(tags, 'rust_bench', ${TARGETS:-'//rs/...'})")
-      for TARGET in $TARGET_LIST; do
-          BAZEL_TARGETS="$TARGET"
-          time ./gitlab-ci/src/bazel-ci/main.sh
-      done
-      find -L ./bazel-out -name 'benchmark.json'
-
-      set -x
-      while IFS= read -r bench_dir; do
-        echo '{}' | jq -cMr \
-          --slurpfile benchmark "$bench_dir/benchmark.json" \
-          --slurpfile estimates "$bench_dir/estimates.json" \
-          --arg system x86_64-linux \
-          --arg timestamp "$(date --utc --iso-8601=seconds)" \
-          --arg rev "$CI_COMMIT_SHA" \
-          '.benchmark = $benchmark[] |
-          .estimates = $estimates[] |
-          .package = "replica-benchmarks" |
-          .system = $system |
-          .timestamp = $timestamp |
-          .rev = $rev |
-          .revCount = 1' \
-          > report.json
-        curl --fail --retry 2 -sS -o /dev/null -X POST -H 'Content-Type: application/json' --data @report.json \
-          "https://elasticsearch.testnet.dfinity.network/ci-performance-test/_doc"
-      done < <(find -L ./bazel-out -type d -path '*/new')
+    - ./gitlab-ci/src/ci-scripts/rust-benchmarks.sh
   parallel:
     matrix:
       - TARGETS: "//rs/crypto/..."
@@ -587,6 +559,9 @@ build-determinism:
 
           # ignore *.wasm.did files
           sed -i -e '/.wasm.did/d' "$PATH0/SHA256SUMS" "$PATH1/SHA256SUMS"
+          # TODO(IDX): remove when issue is identified and addressed
+          # https://gitlab.com/dfinity-lab/public/ic/-/snippets/3697069
+          sed -i -e '/wasm.wasm.gz/d' "$PATH0/SHA256SUMS" "$PATH1/SHA256SUMS"
 
           # for hostos / guestos we only care about update-img
           if [ "${DISKIMG:-}" != "true" ]; then
@@ -733,7 +708,8 @@ bazel-test-bare-metal:
   needs: [] # don't wait on other jobs
   script:
     - |
-      bazel "${BAZEL_STARTUP_ARGS}" run "${BAZEL_CI_CONFIG}" \
+      # shellcheck disable=SC2046,SC2086
+      bazel ${BAZEL_STARTUP_ARGS} run ${BAZEL_CI_CONFIG} \
         //ic-os/setupos/envs/dev:launch_bare_metal -- \
           --config_path "$(realpath  ./ic-os/utils/bare_metal_deployment/zh2-dll01.yaml)" \
           --csv_filename "$(realpath "$ZH2_DLL01_CSV_SECRETS_PATH")" \
@@ -741,10 +717,21 @@ bazel-test-bare-metal:
           --file_share_username ci_interim \
           --ci_mode
 
-      bazel "${BAZEL_STARTUP_ARGS}" run "${BAZEL_CI_CONFIG}" \
+      # shellcheck disable=SC2046,SC2086
+      bazel ${BAZEL_STARTUP_ARGS} run ${BAZEL_CI_CONFIG} \
         //ic-os/setupos/envs/prod:launch_bare_metal -- \
           --config_path "$(realpath  ./ic-os/utils/bare_metal_deployment/zh2-dll01.yaml)" \
           --csv_filename "$(realpath "$ZH2_DLL01_CSV_SECRETS_PATH")" \
           --file_share_ssh_key "$(realpath "$ZH2_FILE_SHARE_KEY_PATH")" \
           --file_share_username ci_interim \
           --ci_mode
+
+sync-codeowners:
+  needs: []
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes:
+        - gitlab-ci/src/ci-scripts/sync-codeowners.sh
+        - .gitlab/CODEOWNERS
+  script:
+    - ./gitlab-ci/src/ci-scripts/sync-codeowners.sh

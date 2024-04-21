@@ -97,18 +97,20 @@ rust_test(
 
 [
     rust_test(
-        name = "index_ng_test" + name_suffix,
+        name = "index_ng_test" + conf["test_suffix"],
         srcs = ["tests/tests.rs"],
+        crate_features = conf["crate_features"],
         data = [
-            ":index_ng_canister" + name_suffix + ".wasm",
             "//rs/rosetta-api/icrc1/index:index_canister.wasm",
-            "//rs/rosetta-api/icrc1/ledger:ledger_canister" + name_suffix + ".wasm",
+        ] + [
+            conf["index_wasm"],
+            conf["ledger_wasm"],
         ],
         env = {
             "CARGO_MANIFEST_DIR": "rs/rosetta-api/icrc1/index-ng",
             "IC_ICRC1_INDEX_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/index:index_canister.wasm)",
-            "IC_ICRC1_INDEX_NG_WASM_PATH": "$(rootpath :index_ng_canister" + name_suffix + ".wasm)",
-            "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister" + name_suffix + ".wasm)",
+            "IC_ICRC1_INDEX_NG_WASM_PATH": "$(rootpath " + conf["index_wasm"] + ")",
+            "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath " + conf["ledger_wasm"] + ")",
         },
         deps = [
             ":index-ng",
@@ -134,8 +136,50 @@ rust_test(
             "@crate_index//:serde_json",
         ],
     )
-    for name_suffix in [
-        "",
-        "_u256",
+    for conf in [
+        # The Index must be backward compatible with the version of the Ledger
+        # that doesn't support ICRC-3 yet. Therefore we run a set of tests for
+        # the Ledger in the current commit, which supports ICRC-3, as well as
+        # a set of tests for the Ledger without ICRC-3 downloaded from a
+        # previous commit.
+        # - Ledger with ICRC-3 and with get-blocks
+        {
+            "crate_features": [],
+            "ledger_wasm": "//rs/rosetta-api/icrc1/ledger:ledger_canister.wasm",
+            "index_wasm": ":index_ng_canister.wasm",
+            "test_suffix": "",
+        },
+        {
+            "crate_features": [],
+            "ledger_wasm": "//rs/rosetta-api/icrc1/ledger:ledger_canister_u256.wasm",
+            "index_wasm": ":index_ng_canister_u256.wasm",
+            "test_suffix": "_u256",
+        },
+        # - Ledger with ICRC-3 and without get-blocks
+        {
+            "crate_features": ["get_blocks_disabled"],
+            "ledger_wasm": "//rs/rosetta-api/icrc1/ledger:ledger_canister_getblocksdisabled.wasm",
+            "index_wasm": ":index_ng_canister.wasm",
+            "test_suffix": "_wo_getblocks",
+        },
+        {
+            "crate_features": ["get_blocks_disabled"],
+            "ledger_wasm": "//rs/rosetta-api/icrc1/ledger:ledger_canister_u256_getblocksdisabled.wasm",
+            "index_wasm": ":index_ng_canister_u256.wasm",
+            "test_suffix": "_u256_wo_getblocks",
+        },
+        # - Ledger without ICRC-3 and with get-blocks
+        {
+            "crate_features": ["icrc3_disabled"],
+            "ledger_wasm": "@ic-icrc1-ledger-wo-icrc-3.wasm.gz//file",
+            "index_wasm": ":index_ng_canister.wasm",
+            "test_suffix": "_wo_icrc3",
+        },
+        {
+            "crate_features": ["icrc3_disabled"],
+            "ledger_wasm": "@ic-icrc1-ledger-wo-icrc-3-u256.wasm.gz//file",
+            "index_wasm": ":index_ng_canister_u256.wasm",
+            "test_suffix": "_wo_icrc3_u256",
+        },
     ]
 ]

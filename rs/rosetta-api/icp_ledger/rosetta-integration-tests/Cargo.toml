@@ -1,0 +1,26 @@
+[package]
+name = "icp-rosetta-integration-tests"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+ic-icrc1 = { path = "../../icrc1" }
+ic-rosetta-api = { path = "../.." }
+ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
+icp-ledger = { path = ".." }
+icrc-ledger-agent = { path = "../../../../packages/icrc-ledger-agent" }
+icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
+ledger-canister = { path = "../ledger" }
+pocket-ic = { path = "../../../../packages/pocket-ic" }
+rosetta-core = { path = "../../rosetta_core" }
+candid = { workspace = true }
+ic-agent = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+tempfile = "3.1.0"
+url = "2.2.1"
+tokio = { workspace = true }
+ic-ledger-test-utils = { path = "../test_utils" }

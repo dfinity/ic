@@ -190,6 +190,13 @@ impl From<LedgerBurnError> for WithdrawalError {
             LedgerBurnError::InsufficientAllowance { allowance, .. } => {
                 Self::InsufficientAllowance { allowance }
             }
+            LedgerBurnError::AmountTooLow {
+                minimum_burn_amount,
+                failed_burn_amount,
+                ledger,
+            } => {
+                panic!("BUG: withdrawal amount {failed_burn_amount} on the ckETH ledger {ledger:?} should always be higher than the ledger transaction fee {minimum_burn_amount}")
+            }
         }
     }
 }

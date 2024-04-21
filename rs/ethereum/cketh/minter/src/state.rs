@@ -11,7 +11,7 @@ use crate::numeric::{
     BlockNumber, Erc20Value, LedgerBurnIndex, LedgerMintIndex, TransactionNonce, Wei,
 };
 use crate::state::transactions::{Erc20WithdrawalRequest, TransactionCallData};
-use crate::tx::TransactionPriceEstimate;
+use crate::tx::GasFeeEstimate;
 use candid::Principal;
 use ic_canister_log::log;
 use ic_cdk::api::management_canister::ecdsa::EcdsaPublicKeyResponse;
@@ -55,7 +55,7 @@ pub struct State {
     pub eth_helper_contract_address: Option<Address>,
     pub erc20_helper_contract_address: Option<Address>,
     pub ecdsa_public_key: Option<EcdsaPublicKeyResponse>,
-    pub minimum_withdrawal_amount: Wei,
+    pub cketh_minimum_withdrawal_amount: Wei,
     pub ethereum_block_height: BlockTag,
     pub first_scraped_block_number: BlockNumber,
     pub last_scraped_block_number: BlockNumber,
@@ -85,7 +85,7 @@ pub struct State {
     /// Used to correlate request and response in logs.
     pub http_request_counter: u64,
 
-    pub last_transaction_price_estimate: Option<(u64, TransactionPriceEstimate)>,
+    pub last_transaction_price_estimate: Option<(u64, GasFeeEstimate)>,
 
     /// Canister ID of the ledger suite orchestrator that
     /// can add new ERC-20 token to the minter
@@ -131,9 +131,20 @@ impl State {
                 "eth_helper_contract_address cannot be the zero address".to_string(),
             ));
         }
-        if self.minimum_withdrawal_amount == Wei::ZERO {
+        if self.cketh_minimum_withdrawal_amount == Wei::ZERO {
             return Err(InvalidStateError::InvalidMinimumWithdrawalAmount(
                 "minimum_withdrawal_amount must be positive".to_string(),
+            ));
+        }
+        let cketh_ledger_transfer_fee = match self.ethereum_network {
+            EthereumNetwork::Mainnet => Wei::new(2_000_000_000_000),
+            EthereumNetwork::Sepolia => Wei::new(10_000_000_000),
+        };
+        if self.cketh_minimum_withdrawal_amount < cketh_ledger_transfer_fee {
+            return Err(InvalidStateError::InvalidMinimumWithdrawalAmount(
+                "minimum_withdrawal_amount must cover ledger transaction fee, \
+                otherwise ledger can return a BadBurn error that should be returned to the user"
+                    .to_string(),
             ));
         }
         Ok(())
@@ -213,6 +224,13 @@ impl State {
         self.ckerc20_tokens
             .get_entry_alt(erc20_contract_address)
             .map(|(symbol, _)| symbol)
+    }
+
+    pub fn ckerc20_token_symbol_for_ledger(&self, ledger_id: &Principal) -> Option<&CkTokenSymbol> {
+        self.ckerc20_tokens
+            .iter()
+            .find(|(_, _, id)| *id == ledger_id)
+            .map(|(symbol, _, _)| symbol)
     }
 
     fn record_invalid_deposit(&mut self, source: EventSource, error: String) -> bool {
@@ -404,7 +422,7 @@ impl State {
             let minimum_withdrawal_amount = Wei::try_from(amount).map_err(|e| {
                 InvalidStateError::InvalidMinimumWithdrawalAmount(format!("ERROR: {}", e))
             })?;
-            self.minimum_withdrawal_amount = minimum_withdrawal_amount;
+            self.cketh_minimum_withdrawal_amount = minimum_withdrawal_amount;
         }
         if let Some(address) = ethereum_contract_address {
             let eth_helper_contract_address = Address::from_str(&address).map_err(|e| {
@@ -452,8 +470,8 @@ impl State {
             other.eth_helper_contract_address
         );
         ensure_eq!(
-            self.minimum_withdrawal_amount,
-            other.minimum_withdrawal_amount
+            self.cketh_minimum_withdrawal_amount,
+            other.cketh_minimum_withdrawal_amount
         );
         ensure_eq!(
             self.first_scraped_block_number,
@@ -678,6 +696,7 @@ pub enum TaskType {
     Mint,
     RetrieveEth,
     ScrapEthLogs,
+    RefreshGasFeeEstimate,
     Reimbursement,
     MintCkErc20,
 }

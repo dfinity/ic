@@ -25,7 +25,7 @@ DEPENDENCIES = [
     "@crate_index//:pem",
     "@crate_index//:prometheus",
     "@crate_index//:rcgen",
-    "@crate_index//:reqwest",
+    "@crate_index//:reqwest_0_11_27",
     "@crate_index//:serde_cbor",
     "@crate_index//:serde_json",
     "@crate_index//:sha2",

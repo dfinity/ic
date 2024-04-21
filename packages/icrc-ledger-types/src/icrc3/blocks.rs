@@ -41,7 +41,7 @@ pub struct GetBlocksResult {
     pub archived_blocks: Vec<ArchivedBlocks>,
 }
 
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct GetBlocksRequest {
     pub start: BlockIndex,
     pub length: Nat,

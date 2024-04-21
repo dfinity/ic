@@ -1,5 +1,12 @@
-use std::time::Instant;
+use std::{
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+    time::{Duration, Instant},
+};
 
+use anyhow::{Context, Error};
 use async_trait::async_trait;
 use http::Version;
 use http_body::{combinators::UnsyncBoxBody, Body as HttpBody, LengthLimitError, Limited};
@@ -7,23 +14,82 @@ use hyper::body;
 use reqwest::{Error as ReqwestError, Request, Response};
 use rustls::Error as RustlsError;
 
-use crate::{core::error_source, dns::DnsError, metrics::WithMetrics, routes::ErrorCause};
+use crate::{
+    cli::Cli,
+    core::{error_source, SERVICE_NAME},
+    dns::{DnsError, DnsResolver},
+    metrics::WithMetrics,
+    routes::ErrorCause,
+};
 
 /// Standard response used to pass between middlewares
 pub type AxumResponse = http::Response<UnsyncBoxBody<bytes::Bytes, axum::Error>>;
 
-// TODO remove this wrapper?
 #[async_trait]
 pub trait HttpClient: Send + Sync {
     async fn execute(&self, req: Request) -> Result<Response, ReqwestError>;
 }
 
-pub struct ReqwestClient(pub reqwest::Client);
+pub struct ReqwestClient(Vec<reqwest::Client>, AtomicUsize);
+
+impl ReqwestClient {
+    pub fn new(
+        cli: &Cli,
+        rustls_config: rustls::ClientConfig,
+        dns_resolver: Arc<DnsResolver>,
+    ) -> Result<Self, Error> {
+        // Create a number of HTTP clients
+        let mut clients = vec![];
+        for _ in 0..cli.listen.http_client_count {
+            clients.push(Self::create_client(
+                cli,
+                rustls_config.clone(),
+                dns_resolver.clone(),
+            )?);
+        }
+
+        Ok(Self(clients, AtomicUsize::new(0)))
+    }
+
+    fn create_client(
+        cli: &Cli,
+        rustls_config: rustls::ClientConfig,
+        dns_resolver: Arc<DnsResolver>,
+    ) -> Result<reqwest::Client, Error> {
+        let keepalive = Duration::from_secs(cli.listen.http_keepalive);
+
+        let cli = reqwest::Client::builder()
+            .timeout(Duration::from_millis(cli.listen.http_timeout))
+            .connect_timeout(Duration::from_millis(cli.listen.http_timeout_connect))
+            .pool_idle_timeout(Some(Duration::from_secs(cli.listen.http_idle_timeout))) // After this duration the idle connection is closed (default 90s)
+            .http2_keep_alive_interval(Some(keepalive)) // Keepalive interval for http2 connections
+            .http2_keep_alive_timeout(Duration::from_secs(cli.listen.http_keepalive_timeout)) // Close connection if no reply after timeout
+            .http2_keep_alive_while_idle(true) // Also ping connections that have no streams open
+            .http2_adaptive_window(true) // Enable HTTP2 adaptive window size control
+            .tcp_nodelay(true) // Disable Nagle algorithm
+            .tcp_keepalive(Some(keepalive)) // Enable TCP keepalives
+            .user_agent(SERVICE_NAME)
+            .redirect(reqwest::redirect::Policy::none())
+            .no_proxy()
+            .use_preconfigured_tls(rustls_config)
+            .dns_resolver(dns_resolver)
+            .build()
+            .context("unable to build HTTP client")?;
+
+        Ok(cli)
+    }
+
+    // Pick a client in a round-robin fashion
+    fn pick_client(&self) -> &reqwest::Client {
+        let next = self.1.fetch_add(1, Ordering::SeqCst) % self.0.len();
+        &self.0[next]
+    }
+}
 
 #[async_trait]
 impl HttpClient for ReqwestClient {
     async fn execute(&self, req: Request) -> Result<Response, ReqwestError> {
-        self.0.execute(req).await
+        self.pick_client().execute(req).await
     }
 }
 

@@ -30,14 +30,20 @@ DEPENDENCIES = [
     "//rs/types/wasm_types",
     "//rs/universal_canister/lib",
     "@crate_index//:maplit",
+    "@crate_index//:strum",
     "@crate_index//:tempfile",
     "@crate_index//:wat",
+]
+
+MACRO_DEPENDENCIES = [
+    "@crate_index//:strum_macros",
 ]
 
 rust_library(
     name = "execution_environment",
     srcs = glob(["src/**"]),
     crate_name = "ic_test_utilities_execution_environment",
+    proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
     deps = DEPENDENCIES,
 )

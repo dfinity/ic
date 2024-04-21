@@ -155,6 +155,7 @@ mod tests {
                 vec![],
                 vec![],
                 SubnetRunningState::Active,
+                None,
             ),
         );
 

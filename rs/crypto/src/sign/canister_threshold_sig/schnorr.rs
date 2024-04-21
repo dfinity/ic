@@ -1,11 +1,12 @@
 //! Implementations of ThresholdSchnorrSigner and ThresholdSchnorrVerifier
 
+use super::MasterPublicKeyExtractionError;
 use ic_crypto_internal_csp::vault::api::{
     CspVault, IDkgTranscriptInternalBytes, ThresholdSchnorrCreateSigShareVaultError,
 };
 use ic_crypto_internal_threshold_sig_ecdsa::{
     combine_bip340_signature_shares, verify_bip340_signature_share,
-    verify_threshold_bip340_signature, DerivationPath, IDkgTranscriptInternal,
+    verify_threshold_bip340_signature, DerivationPath, EccCurveType, IDkgTranscriptInternal,
     ThresholdBip340CombineSigSharesInternalError, ThresholdBip340CombinedSignatureInternal,
     ThresholdBip340SignatureShareInternal, ThresholdBip340VerifySigShareInternalError,
     ThresholdBip340VerifySignatureInternalError,
@@ -17,12 +18,33 @@ use ic_types::{
             ThresholdSchnorrVerifyCombinedSigError, ThresholdSchnorrVerifySigShareError,
         },
         idkg::IDkgReceivers,
-        ThresholdSchnorrCombinedSignature, ThresholdSchnorrSigInputs, ThresholdSchnorrSigShare,
+        MasterPublicKey, ThresholdSchnorrCombinedSignature, ThresholdSchnorrSigInputs,
+        ThresholdSchnorrSigShare,
     },
     crypto::AlgorithmId,
     NodeId, NodeIndex,
 };
 use std::collections::BTreeMap;
+
+/// Extracts the Schnorr master public key from the given `idkg_transcript`.
+pub(crate) fn get_tschnorr_master_public_key_from_internal_transcript(
+    idkg_transcript_internal: &IDkgTranscriptInternal,
+) -> Result<MasterPublicKey, MasterPublicKeyExtractionError> {
+    let pub_key = idkg_transcript_internal.constant_term();
+    let alg = match pub_key.curve_type() {
+        EccCurveType::K256 => AlgorithmId::SchnorrSecp256k1,
+        EccCurveType::Ed25519 => AlgorithmId::Ed25519,
+        x => {
+            return Err(MasterPublicKeyExtractionError::UnsupportedAlgorithm(
+                format!("Schnorr does not support curve {:?}", x),
+            ))
+        }
+    };
+    Ok(MasterPublicKey {
+        algorithm_id: alg,
+        public_key: pub_key.serialize(),
+    })
+}
 
 pub fn create_sig_share(
     vault: &dyn CspVault,
@@ -229,8 +251,8 @@ pub fn verify_combined_sig(
                 &DerivationPath::from(inputs.derivation_path()),
                 inputs.message(),
                 *inputs.nonce(),
-                &key,
                 &blinder_unmasked,
+                &key,
             )
             .map_err(|e| {
                 type F = ThresholdBip340VerifySignatureInternalError;

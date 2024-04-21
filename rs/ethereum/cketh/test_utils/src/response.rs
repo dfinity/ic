@@ -7,7 +7,7 @@ use crate::{
 use ethers_core::abi::AbiDecode;
 use ethers_core::utils::rlp;
 use ic_ethereum_types::Address;
-use serde_json::json;
+use serde_json::{json, Value};
 use std::str::FromStr;
 
 #[derive(Clone)]
@@ -158,7 +158,12 @@ pub fn transaction_count_response(count: u32) -> String {
 }
 
 pub fn fee_history() -> ethers_core::types::FeeHistory {
-    let json_value = json!({
+    let json_value = fee_history_json_value();
+    serde_json::from_value(json_value).expect("BUG: invalid fee history")
+}
+
+pub fn fee_history_json_value() -> Value {
+    json!({
         "oldestBlock": "0x1134b57",
         "reward": [
             ["0x25ed41c"],
@@ -182,8 +187,7 @@ pub fn fee_history() -> ethers_core::types::FeeHistory {
             0.5756615333333334,
             0.3254294
         ]
-    });
-    serde_json::from_value(json_value).expect("BUG: invalid fee history")
+    })
 }
 
 pub fn default_signed_eip_1559_transaction() -> (

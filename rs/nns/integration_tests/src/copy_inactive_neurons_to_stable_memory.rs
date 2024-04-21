@@ -5,11 +5,9 @@ use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance::pb::v1::governance::migration::MigrationStatus;
 use ic_nns_test_utils::state_test_helpers::{
     get_canister_status, get_gauge, nns_create_super_powerful_neuron, nns_get_migrations,
-    nns_propose_upgrade_nns_canister, scrape_metrics,
+    nns_propose_upgrade_nns_canister, scrape_metrics, state_machine_builder_for_nns_tests,
 };
-use ic_state_machine_tests::StateMachineBuilder;
-use std::fs;
-use std::{env, io::Write, path::Path, process::Command, str::FromStr};
+use std::{env, fs, io::Write, path::Path, process::Command, str::FromStr};
 use tempfile::TempDir;
 
 const NNS_STATE_TARBALL_PATH: &str = "nns_state.tar.zst";
@@ -47,13 +45,12 @@ fn test_copy_inactive_neurons_to_stable_memory() {
     // Step 1.1: Populate StateMachine from a state_dir.
     let state_dir = populate_state_dir();
     println!("Building StateMachine...");
-    let mut state_machine = StateMachineBuilder::new()
+    let mut state_machine = state_machine_builder_for_nns_tests()
         .with_state_dir(state_dir)
         // Patch StateMachine. This is a bit of a hack that we need because we are initializing from
         // a state_dir.
         .with_nns_subnet_id(nns_subnet_id)
         .with_subnet_id(nns_subnet_id)
-        .with_current_time()
         .build();
     println!("Done building StateMachine...");
 

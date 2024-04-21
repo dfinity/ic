@@ -5,24 +5,21 @@ use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{LIFELINE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance::{
     init::TEST_NEURON_1_ID,
-    {
-        pb::v1::{manage_neuron_response::Command, NnsFunction},
-        proposals::proposal_submission::create_external_update_proposal_candid,
-    },
+    pb::v1::{manage_neuron_response::Command, NnsFunction},
+    proposals::proposal_submission::create_external_update_proposal_candid,
 };
 use ic_nns_test_utils::{
     common::{build_root_wasm, modify_wasm_bytes, NnsInitPayloadsBuilder},
     governance::HardResetNnsRootToVersionPayload,
     state_test_helpers::{
         nns_governance_make_proposal, nns_wait_for_proposal_execution, setup_nns_canisters,
-        update_with_sender,
+        state_machine_builder_for_nns_tests, update_with_sender,
     },
 };
-use ic_state_machine_tests::StateMachine;
 
 #[test]
 fn test_reset_root_with_governance_proposal() {
-    let mut state_machine = StateMachine::new();
+    let mut state_machine = state_machine_builder_for_nns_tests().build();
     let nns_init_payloads = NnsInitPayloadsBuilder::new().with_test_neurons().build();
     setup_nns_canisters(&state_machine, nns_init_payloads);
 
@@ -77,7 +74,7 @@ fn test_reset_root_with_governance_proposal() {
 
 #[test]
 fn test_other_controllers_cannot_reset_root() {
-    let state_machine = StateMachine::new();
+    let state_machine = state_machine_builder_for_nns_tests().build();
     let nns_init_payloads = NnsInitPayloadsBuilder::new().with_test_neurons().build();
     setup_nns_canisters(&state_machine, nns_init_payloads);
 

@@ -30,9 +30,10 @@ use ic_sns_test_utils::{
         install_swap_canister, local_test_on_sns_subnet, SnsCanisters, SnsTestsInitPayloadBuilder,
         UserInfo,
     },
-    state_test_helpers::{setup_sns_canisters, sns_root_register_dapp_canisters},
+    state_test_helpers::{
+        setup_sns_canisters, sns_root_register_dapp_canisters, state_machine_builder_for_sns_tests,
+    },
 };
-use ic_state_machine_tests::StateMachine;
 use ic_universal_canister::{wasm, UNIVERSAL_CANISTER_WASM};
 use itertools::Itertools;
 use lazy_static::lazy_static;
@@ -48,7 +49,7 @@ lazy_static! {
 
 #[test]
 fn test_upgrade_canister_proposal_is_successful() {
-    let state_machine = StateMachine::new();
+    let state_machine = state_machine_builder_for_sns_tests().build();
     // Step 1.a: Boot up SNS with one user.
     let user = PrincipalId::new_user_test_id(0);
     let alloc = Tokens::from_tokens(1000).unwrap();

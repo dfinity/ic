@@ -481,125 +481,374 @@ impl Firewall {
     }
 }
 
-#[test]
-fn test_firewall_rule_compilation() {
-    let max_simultaneous_connections_per_ip_address: u32 = 5;
-    let ipv4_rule_template = format!(
-        "{} {} {} {}",
-        "<<IPv4_PREFIXES>>", "<<PORTS>>", "<<ACTION>>", "<<COMMENT>>"
-    );
-    let ipv6_rule_template = format!(
-        "{} {} {} {}",
-        "<<IPv6_PREFIXES>>", "<<PORTS>>", "<<ACTION>>", "<<COMMENT>>"
-    );
-    let file_template = format!(
-        "{} {} {} {} {}",
-        "<<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>>",
-        "<<IPv4_TCP_RULES>>",
-        "<<IPv4_UDP_RULES>>",
-        "<<IPv6_TCP_RULES>>",
-        "<<IPv6_UDP_RULES>>",
-    );
+#[cfg(test)]
+mod tests {
+    use std::{io::Write, path::Path};
 
-    let tcp_rules = vec![
-        FirewallRule {
-            ipv4_prefixes: vec!["test_ipv4_1".to_string()],
-            ipv6_prefixes: vec!["test_ipv6_1".to_string()],
-            ports: vec![1, 2, 3],
+    use ic_config::{ConfigOptional, ConfigSource};
+    use ic_logger::replica_logger::no_op_logger;
+    use ic_protobuf::registry::firewall::v1::FirewallRuleSet;
+    use ic_registry_client_fake::FakeRegistryClient;
+    use ic_registry_client_helpers::node_operator::{ConnectionEndpoint, NodeRecord};
+    use ic_registry_keys::{make_firewall_rules_record_key, make_node_record_key};
+    use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+    use ic_test_utilities::crypto::CryptoReturningOk;
+    use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
+    use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
+
+    use super::*;
+
+    const CFG_TEMPLATE_BYTES: &[u8] =
+        include_bytes!("../../../ic-os/guestos/rootfs/opt/ic/share/ic.json5.template");
+    const NFTABLES_GOLDEN_BYTES: &[u8] =
+        include_bytes!("../testdata/nftables_assigned_replica.conf.golden");
+
+    #[test]
+    fn test_firewall_rule_compilation() {
+        let max_simultaneous_connections_per_ip_address: u32 = 5;
+        let ipv4_rule_template = format!(
+            "{} {} {} {}",
+            "<<IPv4_PREFIXES>>", "<<PORTS>>", "<<ACTION>>", "<<COMMENT>>"
+        );
+        let ipv6_rule_template = format!(
+            "{} {} {} {}",
+            "<<IPv6_PREFIXES>>", "<<PORTS>>", "<<ACTION>>", "<<COMMENT>>"
+        );
+        let file_template = format!(
+            "{} {} {} {} {}",
+            "<<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>>",
+            "<<IPv4_TCP_RULES>>",
+            "<<IPv4_UDP_RULES>>",
+            "<<IPv6_TCP_RULES>>",
+            "<<IPv6_UDP_RULES>>",
+        );
+
+        let tcp_rules = vec![
+            FirewallRule {
+                ipv4_prefixes: vec!["test_ipv4_1".to_string()],
+                ipv6_prefixes: vec!["test_ipv6_1".to_string()],
+                ports: vec![1, 2, 3],
+                action: 1,
+                comment: "comment1".to_string(),
+                user: None,
+                direction: Some(FirewallRuleDirection::Inbound as i32),
+            },
+            FirewallRule {
+                ipv4_prefixes: vec!["test_ipv4_2".to_string()],
+                ipv6_prefixes: vec![],
+                ports: vec![4, 5, 6],
+                action: 2,
+                comment: "comment2".to_string(),
+                user: None,
+                direction: Some(FirewallRuleDirection::Inbound as i32),
+            },
+            FirewallRule {
+                ipv4_prefixes: vec![],
+                ipv6_prefixes: vec!["test_ipv6_3".to_string()],
+                ports: vec![7, 8, 9],
+                action: 2,
+                comment: "comment3".to_string(),
+                user: None,
+                direction: Some(FirewallRuleDirection::Inbound as i32),
+            },
+            FirewallRule {
+                ipv4_prefixes: vec![],
+                ipv6_prefixes: vec![],
+                ports: vec![10, 11, 12],
+                action: 1,
+                comment: "comment4".to_string(),
+                user: None,
+                direction: Some(FirewallRuleDirection::Inbound as i32),
+            },
+        ];
+
+        let udp_rules = vec![FirewallRule {
+            ipv4_prefixes: vec!["test_ipv4_5_udp".to_string()],
+            ipv6_prefixes: vec!["test_ipv6_5_udp".to_string()],
+            ports: vec![13, 14, 15],
             action: 1,
-            comment: "comment1".to_string(),
+            comment: "comment5".to_string(),
             user: None,
             direction: Some(FirewallRuleDirection::Inbound as i32),
-        },
-        FirewallRule {
-            ipv4_prefixes: vec!["test_ipv4_2".to_string()],
-            ipv6_prefixes: vec![],
-            ports: vec![4, 5, 6],
-            action: 2,
-            comment: "comment2".to_string(),
-            user: None,
-            direction: Some(FirewallRuleDirection::Inbound as i32),
-        },
-        FirewallRule {
-            ipv4_prefixes: vec![],
-            ipv6_prefixes: vec!["test_ipv6_3".to_string()],
-            ports: vec![7, 8, 9],
-            action: 2,
-            comment: "comment3".to_string(),
-            user: None,
-            direction: Some(FirewallRuleDirection::Inbound as i32),
-        },
-        FirewallRule {
-            ipv4_prefixes: vec![],
-            ipv6_prefixes: vec![],
-            ports: vec![10, 11, 12],
-            action: 1,
-            comment: "comment4".to_string(),
-            user: None,
-            direction: Some(FirewallRuleDirection::Inbound as i32),
-        },
-    ];
+        }];
 
-    let udp_rules = vec![FirewallRule {
-        ipv4_prefixes: vec!["test_ipv4_5_udp".to_string()],
-        ipv6_prefixes: vec!["test_ipv6_5_udp".to_string()],
-        ports: vec![13, 14, 15],
-        action: 1,
-        comment: "comment5".to_string(),
-        user: None,
-        direction: Some(FirewallRuleDirection::Inbound as i32),
-    }];
+        let expected_tcp_rules_compiled_v4 = [
+            format!("{} {} {} {}", "test_ipv4_1", "1,2,3", "accept", "comment1"),
+            format!("{} {} {} {}", "test_ipv4_2", "4,5,6", "drop", "comment2"),
+        ];
 
-    let expected_tcp_rules_compiled_v4 = [
-        format!("{} {} {} {}", "test_ipv4_1", "1,2,3", "accept", "comment1"),
-        format!("{} {} {} {}", "test_ipv4_2", "4,5,6", "drop", "comment2"),
-    ];
+        let expected_udp_rules_compiled_v4 = [format!(
+            "{} {} {} {}",
+            "test_ipv4_5_udp", "13,14,15", "accept", "comment5"
+        )];
 
-    let expected_udp_rules_compiled_v4 = [format!(
-        "{} {} {} {}",
-        "test_ipv4_5_udp", "13,14,15", "accept", "comment5"
-    )];
+        let expected_tcp_rules_compiled_v6 = [
+            format!("{} {} {} {}", "test_ipv6_1", "1,2,3", "accept", "comment1"),
+            format!("{} {} {} {}", "test_ipv6_3", "7,8,9", "drop", "comment3"),
+        ];
 
-    let expected_tcp_rules_compiled_v6 = [
-        format!("{} {} {} {}", "test_ipv6_1", "1,2,3", "accept", "comment1"),
-        format!("{} {} {} {}", "test_ipv6_3", "7,8,9", "drop", "comment3"),
-    ];
+        let expected_udp_rules_compiled_v6 = [format!(
+            "{} {} {} {}",
+            "test_ipv6_5_udp", "13,14,15", "accept", "comment5"
+        )];
 
-    let expected_udp_rules_compiled_v6 = [format!(
-        "{} {} {} {}",
-        "test_ipv6_5_udp", "13,14,15", "accept", "comment5"
-    )];
+        let expected_file_content = format!(
+            "{} {} {} {} {}",
+            max_simultaneous_connections_per_ip_address,
+            expected_tcp_rules_compiled_v4.join("\n"),
+            expected_udp_rules_compiled_v4.join("\n"),
+            expected_tcp_rules_compiled_v6.join("\n"),
+            expected_udp_rules_compiled_v6.join("\n"),
+        );
 
-    let expected_file_content = format!(
-        "{} {} {} {} {}",
-        max_simultaneous_connections_per_ip_address,
-        expected_tcp_rules_compiled_v4.join("\n"),
-        expected_udp_rules_compiled_v4.join("\n"),
-        expected_tcp_rules_compiled_v6.join("\n"),
-        expected_udp_rules_compiled_v6.join("\n"),
-    );
+        let config = FirewallConfig {
+            config_file: PathBuf::default(),
+            file_template,
 
-    let config = FirewallConfig {
-        config_file: PathBuf::default(),
-        file_template,
+            ipv4_tcp_rule_template: ipv4_rule_template.clone(),
+            ipv4_udp_rule_template: ipv4_rule_template,
 
-        ipv4_tcp_rule_template: ipv4_rule_template.clone(),
-        ipv4_udp_rule_template: ipv4_rule_template,
+            ipv6_tcp_rule_template: ipv6_rule_template.clone(),
+            ipv6_udp_rule_template: ipv6_rule_template,
 
-        ipv6_tcp_rule_template: ipv6_rule_template.clone(),
-        ipv6_udp_rule_template: ipv6_rule_template,
+            ipv4_user_output_rule_template: "".to_string(),
+            ipv6_user_output_rule_template: "".to_string(),
+            default_rules: vec![],
+            tcp_ports_for_node_whitelist: vec![],
+            udp_ports_for_node_whitelist: vec![],
+            ports_for_http_adapter_blacklist: vec![],
+            max_simultaneous_connections_per_ip_address,
+        };
 
-        ipv4_user_output_rule_template: "".to_string(),
-        ipv6_user_output_rule_template: "".to_string(),
-        default_rules: vec![],
-        tcp_ports_for_node_whitelist: vec![],
-        udp_ports_for_node_whitelist: vec![],
-        ports_for_http_adapter_blacklist: vec![],
-        max_simultaneous_connections_per_ip_address,
-    };
+        assert_eq!(
+            expected_file_content,
+            Firewall::generate_firewall_file_content_full(&config, tcp_rules, udp_rules)
+        );
+    }
 
-    assert_eq!(
-        expected_file_content,
-        Firewall::generate_firewall_file_content_full(&config, tcp_rules, udp_rules)
-    );
+    #[tokio::test]
+    async fn nftables_golden_test() {
+        golden_test(NFTABLES_GOLDEN_BYTES, "assigned_replica").await
+    }
+
+    /// Runs [`Firewall::check_for_firewall_config`] and compares the output against the specified
+    /// golden output.
+    async fn golden_test(golden_bytes: &[u8], label: &str) {
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let nftables_config_path = tmp_dir.path().join("nftables.conf");
+        let config = get_config();
+        let mut replica_firewall_config = config.firewall.unwrap();
+        replica_firewall_config.config_file = nftables_config_path.clone();
+        let mut firewall = set_up_firewall_dependencies(replica_firewall_config, tmp_dir.path());
+
+        firewall
+            .check_for_firewall_config(RegistryVersion::new(1))
+            .await
+            .expect("Should successfully produce a firewall config");
+
+        let golden = String::from_utf8(golden_bytes.to_vec()).unwrap();
+        let nftables = std::fs::read_to_string(&nftables_config_path).unwrap();
+        let file_name = format!("nftables_{}.conf", label);
+        if nftables != golden {
+            maybe_write_golden(nftables, &file_name);
+            panic!(
+                "The output doesn't match the golden. \
+                In order to see the generated `nftables.conf` file please \
+                look inside `outputs.zip` file under `bazel-testlogs`"
+            );
+        }
+    }
+
+    /// Returns the `ic.json5` config filled with some dummy values.
+    fn get_config() -> ConfigOptional {
+        // Make the string parsable by filling the template placeholders with dummy values
+        let cfg = String::from_utf8(CFG_TEMPLATE_BYTES.to_vec())
+            .unwrap()
+            .replace("{{ node_index }}", "0")
+            .replace("{{ ipv6_address }}", "::")
+            .replace("{{ backup_retention_time_secs }}", "0")
+            .replace("{{ backup_purging_interval_secs }}", "0")
+            .replace("{{ replica_log_debug_overrides }}", "[]")
+            .replace("{{ nns_url }}", "http://www.fakeurl.com/")
+            .replace("{{ malicious_behavior }}", "null")
+            .replace("{{ query_stats_aggregation }}", "\"Disabled\"")
+            .replace("{{ query_stats_epoch_length }}", "1800");
+        let config_source = ConfigSource::Literal(cfg);
+
+        let config: ConfigOptional = config_source.load().unwrap();
+
+        config
+    }
+
+    /// When `TEST_UNDECLARED_OUTPUTS_DIR` is set, writes the `content` to a file in the specified
+    /// directory. Later that file can be inspected manually, i.e. it won't be erased by the test
+    /// runner.
+    ///
+    /// See: the `TEST_UNDECLARED_OUTPUTS_DIR` in https://bazel.build/reference/test-encyclopedia
+    fn maybe_write_golden(content: String, file_name: &str) {
+        let Ok(dir_str) = std::env::var("TEST_UNDECLARED_OUTPUTS_DIR") else {
+            return;
+        };
+
+        let dir = PathBuf::from(dir_str);
+        let mut file = std::fs::File::options()
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .open(dir.join(file_name))
+            .unwrap();
+        file.write_all(content.as_bytes()).unwrap();
+    }
+
+    /// Sets up all the necessary dependencies of the [`Firewall`]
+    fn set_up_firewall_dependencies(config: FirewallConfig, tmp_dir: &Path) -> Firewall {
+        let node = node_test_id(0);
+
+        let registry = set_up_registry(node);
+
+        let registry_helper = Arc::new(RegistryHelper::new(node, registry, no_op_logger()));
+
+        let catch_up_package_provider = CatchUpPackageProvider::new(
+            registry_helper.clone(),
+            tmp_dir.join("cups"),
+            Arc::new(CryptoReturningOk::default()),
+            no_op_logger(),
+            node,
+        );
+
+        Firewall::new(
+            node,
+            registry_helper,
+            Arc::new(OrchestratorMetrics::new(&ic_metrics::MetricsRegistry::new())),
+            config,
+            Arc::new(catch_up_package_provider),
+            no_op_logger(),
+        )
+    }
+
+    /// Sets up the registry with:
+    /// 1) two node records - one for the specified node + another one,
+    /// 2) a bunch of firewall rules,
+    /// 3) a Subnet record,
+    /// and returns a registry client.
+    fn set_up_registry(node: NodeId) -> Arc<FakeRegistryClient> {
+        let registry_version = RegistryVersion::new(1);
+        let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
+
+        let subnet_record = SubnetRecordBuilder::from(&[node]).build();
+
+        // add [`NodeRecord`] for the given node
+        add_node_record(
+            &registry_data_provider,
+            registry_version,
+            node,
+            /*ip=*/ "1.1.1.1",
+        );
+        // add [`NodeRecord`] for some other node
+        add_node_record(
+            &registry_data_provider,
+            registry_version,
+            node_test_id(123),
+            /*ip=*/ "2.2.2.2",
+        );
+
+        // Add a bunch of firewall rules for different scopes.
+        add_firewall_rules_record(
+            &registry_data_provider,
+            registry_version,
+            &FirewallRulesScope::Subnet(subnet_test_id(1)),
+            /*ip=*/ "3.3.3.3",
+            /*port=*/ 1003,
+        );
+        add_firewall_rules_record(
+            &registry_data_provider,
+            registry_version,
+            &FirewallRulesScope::ReplicaNodes,
+            /*ip=*/ "4.4.4.4",
+            /*port=*/ 1004,
+        );
+        add_firewall_rules_record(
+            &registry_data_provider,
+            registry_version,
+            &FirewallRulesScope::Node(node),
+            /*ip=*/ "5.5.5.5",
+            /*port=*/ 1005,
+        );
+        add_firewall_rules_record(
+            &registry_data_provider,
+            registry_version,
+            &FirewallRulesScope::Global,
+            /*ip=*/ "6.6.6.6",
+            /*port=*/ 1006,
+        );
+
+        add_subnet_record(
+            &registry_data_provider,
+            registry_version.get(),
+            subnet_test_id(1),
+            subnet_record,
+        );
+
+        let registry = Arc::new(FakeRegistryClient::new(
+            Arc::clone(&registry_data_provider) as Arc<_>
+        ));
+
+        registry.update_to_latest_version();
+
+        registry
+    }
+
+    /// Adds a [`NodeRecord`] to the registry.
+    fn add_node_record(
+        registry_data_provider: &Arc<ProtoRegistryDataProvider>,
+        registry_version: RegistryVersion,
+        node: NodeId,
+        ip: &str,
+    ) {
+        registry_data_provider
+            .add(
+                &make_node_record_key(node),
+                registry_version,
+                Some(NodeRecord {
+                    http: Some(ConnectionEndpoint {
+                        ip_addr: String::from(ip),
+                        port: 80,
+                    }),
+                    xnet: None,
+                    node_operator_id: vec![],
+                    chip_id: None,
+                    hostos_version_id: None,
+                    public_ipv4_config: None,
+                    domain: None,
+                }),
+            )
+            .expect("Failed to add node record.");
+    }
+
+    /// Adds a [`FirewallRule`] to the registry.
+    fn add_firewall_rules_record(
+        registry_data_provider: &Arc<ProtoRegistryDataProvider>,
+        registry_version: RegistryVersion,
+        scope: &FirewallRulesScope,
+        ip: &str,
+        port: u32,
+    ) {
+        registry_data_provider
+            .add(
+                &make_firewall_rules_record_key(scope),
+                registry_version,
+                Some(FirewallRuleSet {
+                    entries: vec![FirewallRule {
+                        ipv4_prefixes: vec![String::from(ip)],
+                        ipv6_prefixes: vec![format!("::ffff:{}", ip)],
+                        ports: vec![port],
+                        action: FirewallAction::Allow as i32,
+                        comment: scope.to_string(),
+                        user: None,
+                        direction: Some(FirewallRuleDirection::Inbound as i32),
+                    }],
+                }),
+            )
+            .unwrap();
+    }
 }

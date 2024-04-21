@@ -4,7 +4,7 @@ use ic_crypto_prng::Csprng;
 use ic_interfaces::execution_environment::RegistryExecutionSettings;
 use ic_management_canister_types::EcdsaKeyId;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithEcdsaContext;
-use ic_types::{consensus::ecdsa::QuadrupleId, messages::CallbackId, ExecutionRound, Height};
+use ic_types::{consensus::idkg::QuadrupleId, messages::CallbackId, ExecutionRound, Height};
 use rand::RngCore;
 
 use super::SchedulerMetrics;

@@ -9,3 +9,5 @@ documentation.workspace = true
 [dependencies]
 ic-crypto-internal-threshold-sig-ecdsa = { path = ".." }
 rand = "0.8"
+schnorr_fun = "0.10"
+sha2 = "0.10"

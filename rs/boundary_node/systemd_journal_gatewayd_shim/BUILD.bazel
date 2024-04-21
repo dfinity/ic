@@ -8,7 +8,7 @@ DEPENDENCIES = [
     "@crate_index//:clap_3_2_25",
     "@crate_index//:http",
     "@crate_index//:itertools",
-    "@crate_index//:reqwest",
+    "@crate_index//:reqwest_0_11_27",
     "@crate_index//:thiserror",
     "@crate_index//:tokio",
     "@crate_index//:url",

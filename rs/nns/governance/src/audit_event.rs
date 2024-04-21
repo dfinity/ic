@@ -1,5 +1,9 @@
 use crate::{
-    pb::v1::{audit_event::reset_aging::NeuronDissolveState, neuron::DissolveState, AuditEvent},
+    pb::v1::{
+        audit_event::{restore_aging::NeuronDissolveState, Payload, ResetAging},
+        neuron::DissolveState,
+        AuditEvent,
+    },
     storage::with_audit_events_log,
 };
 
@@ -32,7 +36,17 @@ impl Storable for AuditEvent {
     const BOUND: Bound = Bound::Unbounded;
 }
 
-#[allow(dead_code)]
+pub fn reset_aging_audit_events() -> Vec<ResetAging> {
+    with_audit_events_log(|log| {
+        log.iter()
+            .flat_map(|audit_event| match audit_event.payload {
+                Some(Payload::ResetAging(reset_aging)) => Some(reset_aging),
+                _ => None,
+            })
+            .collect()
+    })
+}
+
 pub fn add_audit_event(event: AuditEvent) {
     with_audit_events_log(|log| {
         log.append(&event).expect("failed to append an event");

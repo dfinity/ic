@@ -1,7 +1,9 @@
 use crate::events::MinterEventAssert;
 use crate::flow::{DepositParams, LedgerTransactionAssert, ProcessWithdrawal};
-use crate::mock::{JsonRpcMethod, MockJsonRpcProviders};
-use crate::response::{block_response, empty_logs, Erc20LogEntry};
+use crate::mock::{
+    JsonRpcMethod, JsonRpcRequestMatcher, MockJsonRpcProviders, MockJsonRpcProvidersBuilder,
+};
+use crate::response::{block_response, empty_logs, fee_history, Erc20LogEntry};
 use crate::{
     assert_reply, format_ethereum_address_to_eip_55, new_state_machine, CkEthSetup,
     DEFAULT_DEPOSIT_BLOCK_NUMBER, DEFAULT_DEPOSIT_FROM_ADDRESS, DEFAULT_DEPOSIT_LOG_INDEX,
@@ -29,7 +31,7 @@ use ic_state_machine_tests::{ErrorCode, MessageId, StateMachine};
 use icrc_ledger_types::icrc1::account::Account;
 use num_traits::ToPrimitive;
 use serde_json::json;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::convert::identity;
 use std::iter::zip;
 use std::str::FromStr;
@@ -290,7 +292,7 @@ impl CkErc20Setup {
         amount: A,
         ckerc20_ledger_id: Principal,
         recipient: R,
-    ) -> Erc20WithdrawalFlow {
+    ) -> RefreshGasFeeEstimate {
         let arg = WithdrawErc20Arg {
             amount: amount.into(),
             ckerc20_ledger_id,
@@ -302,7 +304,7 @@ impl CkErc20Setup {
             "withdraw_erc20",
             Encode!(&arg).expect("failed to encode withdraw args"),
         );
-        Erc20WithdrawalFlow {
+        RefreshGasFeeEstimate {
             setup: self,
             message_id,
         }
@@ -573,9 +575,49 @@ impl CkErc20DepositFlow {
     }
 }
 
+pub struct RefreshGasFeeEstimate {
+    pub setup: CkErc20Setup,
+    pub message_id: MessageId,
+}
+
+impl RefreshGasFeeEstimate {
+    pub fn expect_refresh_gas_fee_estimate<
+        F: FnMut(MockJsonRpcProvidersBuilder) -> MockJsonRpcProvidersBuilder,
+    >(
+        self,
+        mut override_mock: F,
+    ) -> Erc20WithdrawalFlow {
+        let default_eth_fee_history = MockJsonRpcProviders::when(JsonRpcMethod::EthFeeHistory)
+            .respond_for_all_with(fee_history());
+        (override_mock)(default_eth_fee_history)
+            .build()
+            .expect_rpc_calls(&self.setup);
+        Erc20WithdrawalFlow {
+            setup: self.setup,
+            message_id: self.message_id,
+        }
+    }
+
+    pub fn expect_no_refresh_gas_fee_estimate(self) -> Erc20WithdrawalFlow {
+        assert_eq!(
+            JsonRpcRequestMatcher::new_for_all_providers(JsonRpcMethod::EthFeeHistory)
+                .iter()
+                .filter(|(_provider, matcher)| matcher.find_rpc_call(&self.setup.env).is_some())
+                .collect::<BTreeMap<_, _>>(),
+            BTreeMap::new(),
+            "BUG: unexpected EthFeeHistory RPC call"
+        );
+
+        Erc20WithdrawalFlow {
+            setup: self.setup,
+            message_id: self.message_id,
+        }
+    }
+}
+
 pub struct Erc20WithdrawalFlow {
-    setup: CkErc20Setup,
-    message_id: MessageId,
+    pub setup: CkErc20Setup,
+    pub message_id: MessageId,
 }
 
 impl Erc20WithdrawalFlow {

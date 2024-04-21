@@ -1,7 +1,8 @@
 //! Module that deals with requests to /api/v2/canister/.../call
 
 use crate::{
-    common::CborUserError, validator_executor::ValidatorExecutor, verify_cbor_content_header,
+    common::{Cbor, CborUserError},
+    validator_executor::ValidatorExecutor,
     HttpError, IngressFilterService,
 };
 
@@ -11,7 +12,6 @@ use axum::{
     response::{IntoResponse, Response},
     Router,
 };
-use bytes::Bytes;
 use http::Request;
 use hyper::StatusCode;
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
@@ -27,7 +27,7 @@ use ic_types::{
     artifact::UnvalidatedArtifactMutation,
     artifact_kind::IngressArtifact,
     malicious_flags::MaliciousFlags,
-    messages::{SignedIngress, SignedIngressContent, SignedRequestBytes},
+    messages::{HttpCallContent, HttpRequestEnvelope, SignedIngress, SignedIngressContent},
     CanisterId, CountBytes, NodeId, RegistryVersion, SubnetId,
 };
 use std::convert::{Infallible, TryInto};
@@ -118,11 +118,9 @@ impl CallServiceBuilder {
         };
         Router::new().route_service(
             CallService::route(),
-            axum::routing::post(call).with_state(state).layer(
-                ServiceBuilder::new()
-                    .layer(DefaultBodyLimit::disable())
-                    .layer(axum::middleware::from_fn(verify_cbor_content_header)),
-            ),
+            axum::routing::post(call)
+                .with_state(state)
+                .layer(ServiceBuilder::new().layer(DefaultBodyLimit::disable())),
         )
     }
 
@@ -193,9 +191,9 @@ pub(crate) async fn call(
         ingress_throttler,
         ingress_tx,
     }): State<CallService>,
-    body: Bytes,
+    Cbor(request): Cbor<HttpRequestEnvelope<HttpCallContent>>,
 ) -> impl IntoResponse {
-    let msg: SignedIngress = match SignedRequestBytes::from(body.to_vec()).try_into() {
+    let msg: SignedIngress = match request.try_into() {
         Ok(msg) => msg,
         Err(e) => {
             let status = StatusCode::BAD_REQUEST;
