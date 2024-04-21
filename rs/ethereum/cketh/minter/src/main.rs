@@ -705,6 +705,9 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     to,
                     to_subaccount: to_subaccount.map(|s| s.0),
                 },
+                EventType::QuarantinedDeposit { event_source } => EP::QuarantinedDeposit {
+                    event_source: map_event_source(event_source),
+                },
             },
         }
     }

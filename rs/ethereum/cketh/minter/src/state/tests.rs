@@ -69,7 +69,7 @@ mod mint_transaction {
     use crate::lifecycle::EthereumNetwork;
     use crate::numeric::{LedgerMintIndex, LogIndex};
     use crate::state::tests::{initial_state, received_erc20_event, received_eth_event};
-    use crate::state::MintedEvent;
+    use crate::state::{InvalidEventReason, MintedEvent};
 
     #[test]
     fn should_record_mint_task_from_event() {
@@ -198,10 +198,29 @@ mod mint_transaction {
         assert_ne!(error, other_error);
 
         assert!(state.record_invalid_deposit(event.source(), error.to_string()));
-        assert_eq!(state.invalid_events[&event.source()], error.to_string());
+        assert_eq!(
+            state.invalid_events[&event.source()],
+            InvalidEventReason::InvalidDeposit(error.to_string())
+        );
 
         assert!(!state.record_invalid_deposit(event.source(), other_error.to_string()));
-        assert_eq!(state.invalid_events[&event.source()], error.to_string());
+        assert_eq!(
+            state.invalid_events[&event.source()],
+            InvalidEventReason::InvalidDeposit(error.to_string())
+        );
+    }
+
+    #[test]
+    fn should_quarantine_deposit() {
+        let mut state = initial_state();
+        let event = received_eth_event();
+        state.record_event_to_mint(&event.clone().into());
+        assert_eq!(state.events_to_mint.len(), 1);
+
+        state.record_quarantined_deposit(event.source());
+
+        assert!(state.events_to_mint.is_empty());
+        assert!(state.invalid_events.contains_key(&event.source()));
     }
 
     #[test]
@@ -784,7 +803,7 @@ fn state_equivalence() {
     use crate::state::transactions::{
         EthTransactions, EthWithdrawalRequest, Reimbursed, ReimbursementRequest,
     };
-    use crate::state::MintedEvent;
+    use crate::state::{InvalidEventReason, MintedEvent};
     use crate::tx::{
         Eip1559Signature, Eip1559TransactionRequest, SignedTransactionRequest, TransactionRequest,
     };
@@ -1016,7 +1035,7 @@ fn state_equivalence() {
             }
         },
         invalid_events: btreemap! {
-            source("0x05c6ec45699c9a6a4b1a4ea2058b0cee852ea2f19b18fb8313c04bf8156efde4", 11) => "failed to decode principal from bytes 0x00333c125dc9f41abaf2b8b85d49fdc7ff75b2a4000000000000000000000000".to_string(),
+            source("0x05c6ec45699c9a6a4b1a4ea2058b0cee852ea2f19b18fb8313c04bf8156efde4", 11) => InvalidEventReason::InvalidDeposit("failed to decode principal from bytes 0x00333c125dc9f41abaf2b8b85d49fdc7ff75b2a4000000000000000000000000".to_string()),
         },
         eth_transactions: eth_transactions.clone(),
         pending_withdrawal_principals: Default::default(),

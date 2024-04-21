@@ -27,7 +27,7 @@ use ic_ethereum_types::Address;
 pub use ic_ledger_suite_orchestrator::candid::AddErc20Arg as Erc20Token;
 use ic_ledger_suite_orchestrator::candid::InitArg as LedgerSuiteOrchestratorInitArg;
 use ic_ledger_suite_orchestrator_test_utils::{supported_erc20_tokens, LedgerSuiteOrchestrator};
-use ic_state_machine_tests::{ErrorCode, MessageId, StateMachine};
+use ic_state_machine_tests::{ErrorCode, MessageId, StateMachine, WasmResult};
 use icrc_ledger_types::icrc1::account::Account;
 use num_traits::ToPrimitive;
 use serde_json::json;
@@ -216,6 +216,30 @@ impl CkErc20Setup {
         current_balance
     }
 
+    pub fn stop_ckerc20_ledger(&self, ledger_id: Principal) {
+        let stop_res = self.env.stop_canister_as(
+            self.orchestrator.ledger_suite_orchestrator_id.get(),
+            CanisterId::unchecked_from_principal(ledger_id.into()),
+        );
+        assert_matches!(
+            stop_res,
+            Ok(WasmResult::Reply(_)),
+            "Failed to stop ckERC20 ledger"
+        );
+    }
+
+    pub fn start_ckerc20_ledger(&self, ledger_id: Principal) {
+        let start_res = self.env.start_canister_as(
+            self.orchestrator.ledger_suite_orchestrator_id.get(),
+            CanisterId::unchecked_from_principal(ledger_id.into()),
+        );
+        assert_matches!(
+            start_res,
+            Ok(WasmResult::Reply(_)),
+            "Failed to start ckERC20 ledger"
+        );
+    }
+
     pub fn balance_of_ledger(&self, ledger_id: Principal, account: impl Into<Account>) -> Nat {
         self.cketh.balance_of_ledger(
             CanisterId::unchecked_from_principal(ledger_id.into()),
@@ -381,7 +405,7 @@ impl CkErc20DepositParams {
 }
 
 pub struct CkErc20DepositFlow {
-    setup: CkErc20Setup,
+    pub setup: CkErc20Setup,
     params: CkErc20DepositParams,
 }
 
@@ -501,7 +525,7 @@ impl CkErc20DepositFlow {
         self.setup
     }
 
-    fn handle_log_scraping(&self) {
+    pub fn handle_log_scraping(&self) {
         let latest_finalized_block =
             LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1 + MAX_ETH_LOGS_BLOCK_RANGE;
         self.setup.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);

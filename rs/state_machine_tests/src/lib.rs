@@ -2285,7 +2285,18 @@ impl StateMachine {
 
     /// Starts the canister with the specified ID.
     pub fn start_canister(&self, canister_id: CanisterId) -> Result<WasmResult, UserError> {
-        self.execute_ingress(
+        self.start_canister_as(PrincipalId::new_anonymous(), canister_id)
+    }
+
+    /// Starts the canister with the specified ID.
+    /// Use this if the `canister_id`` is controlled by `sender``.
+    pub fn start_canister_as(
+        &self,
+        sender: PrincipalId,
+        canister_id: CanisterId,
+    ) -> Result<WasmResult, UserError> {
+        self.execute_ingress_as(
+            sender,
             CanisterId::ic_00(),
             "start_canister",
             (CanisterIdRecord::from(canister_id)).encode(),
@@ -2294,7 +2305,18 @@ impl StateMachine {
 
     /// Stops the canister with the specified ID.
     pub fn stop_canister(&self, canister_id: CanisterId) -> Result<WasmResult, UserError> {
-        self.execute_ingress(
+        self.stop_canister_as(PrincipalId::new_anonymous(), canister_id)
+    }
+
+    /// Stops the canister with the specified ID.
+    /// Use this if the `canister_id`` is controlled by `sender``.
+    pub fn stop_canister_as(
+        &self,
+        sender: PrincipalId,
+        canister_id: CanisterId,
+    ) -> Result<WasmResult, UserError> {
+        self.execute_ingress_as(
+            sender,
             CanisterId::ic_00(),
             "stop_canister",
             (CanisterIdRecord::from(canister_id)).encode(),

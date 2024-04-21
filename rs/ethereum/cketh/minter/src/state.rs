@@ -19,6 +19,7 @@ use ic_crypto_ecdsa_secp256k1::PublicKey;
 use ic_ethereum_types::Address;
 use std::cell::RefCell;
 use std::collections::{btree_map, BTreeMap, BTreeSet, HashSet};
+use std::fmt::{Display, Formatter};
 use strum_macros::EnumIter;
 use transactions::EthTransactions;
 
@@ -63,7 +64,7 @@ pub struct State {
     pub last_observed_block_number: Option<BlockNumber>,
     pub events_to_mint: BTreeMap<EventSource, ReceivedEvent>,
     pub minted_events: BTreeMap<EventSource, MintedEvent>,
-    pub invalid_events: BTreeMap<EventSource, String>,
+    pub invalid_events: BTreeMap<EventSource, InvalidEventReason>,
     pub eth_transactions: EthTransactions,
     pub skipped_blocks: BTreeSet<BlockNumber>,
 
@@ -108,6 +109,33 @@ pub enum InvalidStateError {
     InvalidMinimumWithdrawalAmount(String),
     InvalidLastScrapedBlockNumber(String),
     InvalidLastErc20ScrapedBlockNumber(String),
+}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
+pub enum InvalidEventReason {
+    /// Deposit is invalid and was never minted.
+    /// This is most likely due to a user error (e.g., user's IC principal cannot be decoded)
+    /// or there is a critical issue in the logs returned from the JSON-RPC providers.
+    InvalidDeposit(String),
+
+    /// Deposit is valid but it's unknown whether it was minted or not,
+    /// most likely because there was an unexpected panic in the callback.
+    /// The deposit is quarantined to avoid any double minting and
+    /// will not be further processed without manual intervention.
+    QuarantinedDeposit,
+}
+
+impl Display for InvalidEventReason {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            InvalidEventReason::InvalidDeposit(reason) => {
+                write!(f, "Invalid deposit: {}", reason)
+            }
+            InvalidEventReason::QuarantinedDeposit => {
+                write!(f, "Quarantined deposit")
+            }
+        }
+    }
 }
 
 impl State {
@@ -233,6 +261,20 @@ impl State {
             .map(|(symbol, _, _)| symbol)
     }
 
+    /// Quarantine the deposit event to prevent double minting.
+    /// WARNING!: It's crucial that this method does not panic,
+    /// since it's called inside the clean-up callback, when an unexpected panic did occur before.
+    fn record_quarantined_deposit(&mut self, source: EventSource) -> bool {
+        self.events_to_mint.remove(&source);
+        match self.invalid_events.entry(source) {
+            btree_map::Entry::Occupied(_) => false,
+            btree_map::Entry::Vacant(entry) => {
+                entry.insert(InvalidEventReason::QuarantinedDeposit);
+                true
+            }
+        }
+    }
+
     fn record_invalid_deposit(&mut self, source: EventSource, error: String) -> bool {
         assert!(
             !self.events_to_mint.contains_key(&source),
@@ -246,7 +288,7 @@ impl State {
         match self.invalid_events.entry(source) {
             btree_map::Entry::Occupied(_) => false,
             btree_map::Entry::Vacant(entry) => {
-                entry.insert(error);
+                entry.insert(InvalidEventReason::InvalidDeposit(error));
                 true
             }
         }

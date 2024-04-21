@@ -141,6 +141,9 @@ pub fn apply_state_transition(state: &mut State, payload: &EventType) {
                 cketh_reimbursement_request.clone(),
             )
         }
+        EventType::QuarantinedDeposit { event_source } => {
+            state.record_quarantined_deposit(*event_source);
+        }
     }
 }
 
