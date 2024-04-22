@@ -1968,6 +1968,42 @@ impl CanisterManager {
 
         Ok(responses)
     }
+
+    /// Deletes the specified canister snapshot if it exists,
+    /// or returns an error if it failed.
+    ///
+    /// Deleting a canister snapshot can only be initiated by the controllers.
+    pub(crate) fn delete_canister_snapshot(
+        &self,
+        sender: PrincipalId,
+        canister: &mut CanisterState,
+        delete_snapshot_id: SnapshotId,
+        state: &mut ReplicatedState,
+    ) -> Result<(), CanisterManagerError> {
+        // Check sender is a controller.
+        validate_controller(canister, &sender)?;
+
+        match state.canister_snapshots.get(delete_snapshot_id) {
+            None => {
+                // If not found, the operation fails due to invalid parameters.
+                return Err(CanisterManagerError::CanisterSnapshotNotFound {
+                    canister_id: canister.canister_id(),
+                    snapshot_id: delete_snapshot_id,
+                });
+            }
+            Some(delete_snapshot) => {
+                // Verify the provided `delete_snapshot_id` belongs to this canister.
+                if delete_snapshot.canister_id() != canister.canister_id() {
+                    return Err(CanisterManagerError::CanisterSnapshotInvalidOwnership {
+                        canister_id: canister.canister_id(),
+                        snapshot_id: delete_snapshot_id,
+                    });
+                }
+            }
+        }
+        state.canister_snapshots.remove(delete_snapshot_id);
+        Ok(())
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -2316,7 +2352,7 @@ impl From<CanisterManagerError> for UserError {
                 Self::new(
                     ErrorCode::CanisterRejectedMessage,
                     format!(
-                        " The snapshot {} does not belong to canister {}", snapshot_id, canister_id,
+                        "The snapshot {} does not belong to canister {}", snapshot_id, canister_id,
                     )
                 )
             }

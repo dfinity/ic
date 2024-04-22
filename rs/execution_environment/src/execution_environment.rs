@@ -1318,16 +1318,9 @@ impl ExecutionEnvironment {
 
             Ok(Ic00Method::DeleteCanisterSnapshot) => match self.config.canister_snapshots {
                 FlagStatus::Enabled => {
-                    let res = match DeleteCanisterSnapshotArgs::decode(payload) {
-                        Err(err) => Err(err),
-                        Ok(_) => {
-                            // TODO(EXC-1532): Implement delete_canister_snapshot.
-                            Err(UserError::new(
-                                ErrorCode::CanisterRejectedMessage,
-                                "Canister snapshotting API is not yet implemented.",
-                            ))
-                        }
-                    };
+                    let res = DeleteCanisterSnapshotArgs::decode(payload).and_then(|args| {
+                        self.delete_canister_snapshot(*msg.sender(), &mut state, args)
+                    });
                     ExecuteSubnetMessageResult::Finished {
                         response: res,
                         refund: msg.take_cycles(),
@@ -1943,6 +1936,36 @@ impl ExecutionEnvironment {
             .map_err(UserError::from)?;
 
         Ok(Encode!(&result).unwrap())
+    }
+
+    /// Deletes the specified canister snapshot if it exists.
+    fn delete_canister_snapshot(
+        &self,
+        sender: PrincipalId,
+        state: &mut ReplicatedState,
+        args: DeleteCanisterSnapshotArgs,
+    ) -> Result<Vec<u8>, UserError> {
+        let canister_id = args.get_canister_id();
+        // Take canister out.
+        let mut canister = match state.take_canister_state(&canister_id) {
+            None => {
+                return Err(UserError::new(
+                    ErrorCode::CanisterNotFound,
+                    format!("Canister {} not found.", &canister_id),
+                ))
+            }
+            Some(canister) => canister,
+        };
+
+        let result = self
+            .canister_manager
+            .delete_canister_snapshot(sender, &mut canister, args.get_snapshot_id(), state)
+            .map(|()| EmptyBlob.encode())
+            .map_err(|err| err.into());
+
+        // Put canister back.
+        state.put_canister_state(canister);
+        result
     }
 
     fn node_metrics_history(
