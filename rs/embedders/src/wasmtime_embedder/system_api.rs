@@ -21,6 +21,7 @@ use wasmtime::{AsContextMut, Caller, Global, Linker, Val};
 use crate::InternalErrorCode;
 use std::convert::TryFrom;
 
+use crate::wasm_utils::instrumentation::WasmMemoryType;
 use crate::wasmtime_embedder::system_api_complexity::system_api;
 use ic_system_api::SystemApiImpl;
 
@@ -308,6 +309,7 @@ pub(crate) fn syscalls(
     stable_memory_dirty_page_limit: NumPages,
     stable_memory_access_page_limit: NumPages,
     metering_type: MeteringType,
+    main_memory_type: WasmMemoryType,
 ) {
     fn with_system_api<T>(
         mut caller: &mut Caller<'_, StoreData>,
@@ -1056,21 +1058,39 @@ pub(crate) fn syscalls(
         })
         .unwrap();
 
-    linker
-        .func_wrap("__", "try_grow_wasm_memory", {
-            move |mut caller: Caller<'_, StoreData>,
-                  native_memory_grow_res: i32,
-                  additional_wasm_pages: u32| {
-                with_system_api(&mut caller, |s| {
-                    s.try_grow_wasm_memory(
-                        native_memory_grow_res as i64,
-                        additional_wasm_pages as u64,
-                    )
+    match main_memory_type {
+        WasmMemoryType::Wasm32 => {
+            linker
+                .func_wrap("__", "try_grow_wasm_memory", {
+                    move |mut caller: Caller<'_, StoreData>,
+                          native_memory_grow_res: i32,
+                          additional_wasm_pages: u32| {
+                        with_system_api(&mut caller, |s| {
+                            s.try_grow_wasm_memory(
+                                native_memory_grow_res as i64,
+                                additional_wasm_pages as u64,
+                            )
+                        })
+                        .map(|()| native_memory_grow_res)
+                    }
                 })
-                .map(|()| native_memory_grow_res)
-            }
-        })
-        .unwrap();
+                .unwrap();
+        }
+        WasmMemoryType::Wasm64 => {
+            linker
+                .func_wrap("__", "try_grow_wasm_memory", {
+                    move |mut caller: Caller<'_, StoreData>,
+                          native_memory_grow_res: i64,
+                          additional_wasm_pages: u64| {
+                        with_system_api(&mut caller, |s| {
+                            s.try_grow_wasm_memory(native_memory_grow_res, additional_wasm_pages)
+                        })
+                        .map(|()| native_memory_grow_res)
+                    }
+                })
+                .unwrap();
+        }
+    }
 
     linker
         .func_wrap("__", "try_grow_stable_memory", {

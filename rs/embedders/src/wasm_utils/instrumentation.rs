@@ -136,6 +136,12 @@ use wasmparser::{
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum WasmMemoryType {
+    Wasm32,
+    Wasm64,
+}
+
 // The indices of injected function imports.
 pub(crate) enum InjectedImports {
     OutOfInstructions = 0,
@@ -472,6 +478,7 @@ const BYTEMAP_SIZE_IN_WASM_PAGES: u64 =
     MAX_WASM_MEMORY_IN_BYTES / (PAGE_SIZE as u64) / (WASM_PAGE_SIZE as u64);
 
 const MAX_STABLE_MEMORY_IN_WASM_PAGES: u64 = MAX_STABLE_MEMORY_IN_BYTES / (WASM_PAGE_SIZE as u64);
+const MAX_WASM_MEMORY_IN_WASM_PAGES: u64 = MAX_WASM_MEMORY_IN_BYTES / (WASM_PAGE_SIZE as u64);
 /// There is one byte for each OS page in the stable memory.
 const STABLE_BYTEMAP_SIZE_IN_WASM_PAGES: u64 = MAX_STABLE_MEMORY_IN_WASM_PAGES / (PAGE_SIZE as u64);
 
@@ -558,10 +565,17 @@ fn mutate_function_indices(module: &mut Module, f: impl Fn(u32) -> u32) {
 /// added as the last imports, we'd need to increment only non imported
 /// functions, since imported functions precede all others in the function index
 /// space, but this would be error-prone).
-fn inject_helper_functions(mut module: Module, wasm_native_stable_memory: FlagStatus) -> Module {
+fn inject_helper_functions(
+    mut module: Module,
+    wasm_native_stable_memory: FlagStatus,
+    mem_type: WasmMemoryType,
+) -> Module {
     // insert types
     let ooi_type = FuncType::new([], []);
-    let tgwm_type = FuncType::new([ValType::I32, ValType::I32], [ValType::I32]);
+    let tgwm_type = match mem_type {
+        WasmMemoryType::Wasm32 => FuncType::new([ValType::I32, ValType::I32], [ValType::I32]),
+        WasmMemoryType::Wasm64 => FuncType::new([ValType::I64, ValType::I64], [ValType::I64]),
+    };
 
     let ooi_type_idx = add_func_type(&mut module, ooi_type);
     let tgwm_type_idx = add_func_type(&mut module, tgwm_type);
@@ -670,8 +684,14 @@ pub(super) fn instrument(
     subnet_type: SubnetType,
     dirty_page_overhead: NumInstructions,
 ) -> Result<InstrumentationOutput, WasmInstrumentationError> {
+    let mut main_memory_type = WasmMemoryType::Wasm32;
+    if let Some(mem) = module.memories.first() {
+        if mem.memory64 {
+            main_memory_type = WasmMemoryType::Wasm64;
+        }
+    }
     let stable_memory_index;
-    let mut module = inject_helper_functions(module, wasm_native_stable_memory);
+    let mut module = inject_helper_functions(module, wasm_native_stable_memory, main_memory_type);
     module = export_table(module);
     (module, stable_memory_index) =
         update_memories(module, write_barrier, wasm_native_stable_memory);
@@ -753,7 +773,7 @@ pub(super) fn instrument(
     if !func_types.is_empty() {
         let func_bodies = &mut module.code_sections;
         for (func_ix, func_type) in func_types.into_iter() {
-            inject_try_grow_wasm_memory(&mut func_bodies[func_ix], &func_type);
+            inject_try_grow_wasm_memory(&mut func_bodies[func_ix], &func_type, main_memory_type);
             if write_barrier == FlagStatus::Enabled {
                 inject_mem_barrier(&mut func_bodies[func_ix], &func_type);
             }
@@ -1456,7 +1476,11 @@ fn inject_mem_barrier(func_body: &mut ic_wasm_transform::Body, func_type: &FuncT
 // Scans through the function and adds instrumentation after each `memory.grow`
 // instruction to make sure that there's enough available memory left to support
 // the requested extra memory.
-fn inject_try_grow_wasm_memory(func_body: &mut ic_wasm_transform::Body, func_type: &FuncType) {
+fn inject_try_grow_wasm_memory(
+    func_body: &mut ic_wasm_transform::Body,
+    func_type: &FuncType,
+    mem_type: WasmMemoryType,
+) {
     use Operator::*;
     let mut injection_points: Vec<usize> = Vec::new();
     {
@@ -1474,7 +1498,10 @@ fn inject_try_grow_wasm_memory(func_body: &mut ic_wasm_transform::Body, func_typ
         // over the first field gives the total number of locals.
         let n_locals: u32 = func_body.locals.iter().map(|x| x.0).sum();
         let memory_local_ix = func_type.params().len() as u32 + n_locals;
-        func_body.locals.push((1, ValType::I32));
+        match mem_type {
+            WasmMemoryType::Wasm32 => func_body.locals.push((1, ValType::I32)),
+            WasmMemoryType::Wasm64 => func_body.locals.push((1, ValType::I64)),
+        };
 
         let orig_elems = &func_body.instructions;
         let mut elems: Vec<Operator> = Vec::new();
@@ -1704,6 +1731,12 @@ fn update_memories(
     wasm_native_stable_memory: FlagStatus,
 ) -> (Module, u32) {
     let mut stable_index = 0;
+
+    if let Some(mem) = module.memories.first_mut() {
+        if mem.memory64 && mem.maximum.is_none() {
+            mem.maximum = Some(MAX_WASM_MEMORY_IN_WASM_PAGES);
+        }
+    }
 
     let mut memory_already_exported = false;
     for export in &mut module.exports {

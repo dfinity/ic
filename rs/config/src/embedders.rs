@@ -81,6 +81,8 @@ pub struct FeatureFlags {
     // TODO(IC-272): remove this flag once the feature is enabled by default.
     /// Indicates whether canister logging feature is enabled or not.
     pub canister_logging: FlagStatus,
+    /// Indicates whether the support for 64 bit main memory is enabled
+    pub wasm64: FlagStatus,
 }
 
 impl FeatureFlags {
@@ -90,6 +92,7 @@ impl FeatureFlags {
             write_barrier: FlagStatus::Disabled,
             wasm_native_stable_memory: FlagStatus::Enabled,
             canister_logging: FlagStatus::Disabled,
+            wasm64: FlagStatus::Disabled,
         }
     }
 }
