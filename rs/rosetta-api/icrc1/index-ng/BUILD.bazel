@@ -1,6 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
-load("//bazel:defs.bzl", "gzip_compress")
+load("//bazel:defs.bzl", "gzip_compress", "rust_ic_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -96,7 +96,7 @@ rust_test(
 )
 
 [
-    rust_test(
+    rust_ic_test(
         name = "index_ng_test" + conf["test_suffix"],
         srcs = ["tests/tests.rs"],
         crate_features = conf["crate_features"],

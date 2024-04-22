@@ -76,7 +76,7 @@ use serde::Serialize;
 use std::{convert::TryInto, env, time::Duration};
 
 pub fn state_machine_builder_for_nns_tests() -> StateMachineBuilder {
-    StateMachineBuilder::new().with_current_time().with_dts()
+    StateMachineBuilder::new().with_current_time()
 }
 
 /// Turn down state machine logging to just errors to reduce noise in tests where this is not relevant

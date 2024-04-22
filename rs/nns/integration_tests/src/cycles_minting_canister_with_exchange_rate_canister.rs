@@ -130,7 +130,7 @@ fn new_icp_cxdr_mock_exchange_rate_canister_init_payload(
 #[test]
 fn test_enable_retrieving_rate_from_exchange_rate_canister() {
     // Step 1: Prepare the world.
-    let state_machine = StateMachineBuilder::new().with_dts().build();
+    let state_machine = StateMachineBuilder::new().build();
 
     // Set up NNS.
     let nns_init_payload = NnsInitPayloadsBuilder::new()
@@ -335,7 +335,7 @@ fn test_enable_retrieving_rate_from_exchange_rate_canister() {
 #[test]
 fn test_disabling_and_reenabling_exchange_rate_canister_calling_via_exchange_rate_proposal() {
     // Step 1: Prepare the world.
-    let mut state_machine = StateMachineBuilder::new().with_dts().build();
+    let mut state_machine = StateMachineBuilder::new().build();
 
     // Set up NNS.
     let nns_init_payload = NnsInitPayloadsBuilder::new()

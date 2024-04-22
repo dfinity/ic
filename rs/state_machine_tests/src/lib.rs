@@ -662,7 +662,7 @@ impl StateMachineBuilder {
             is_root_subnet: false,
             seq_no: 0,
             with_extra_canister_range: None,
-            dts: false,
+            dts: true,
         }
     }
 
@@ -803,8 +803,8 @@ impl StateMachineBuilder {
     }
 
     /// Only use from pocket-ic-server binary.
-    pub fn with_dts(self) -> Self {
-        Self { dts: true, ..self }
+    pub fn no_dts(self) -> Self {
+        Self { dts: false, ..self }
     }
 
     pub fn build_internal(self) -> StateMachine {
@@ -1088,11 +1088,7 @@ impl StateMachine {
             sm_config.lsmt_config = lsmt_override;
         }
 
-        if !(dts
-            || (std::env::var("SANDBOX_BINARY").is_ok()
-                && std::env::var("LAUNCHER_BINARY").is_ok()
-                && std::env::var("COMPILER_BINARY").is_ok()))
-        {
+        if !dts {
             hypervisor_config.canister_sandboxing_flag = FlagStatus::Disabled;
             hypervisor_config.deterministic_time_slicing = FlagStatus::Disabled;
         }
