@@ -37,7 +37,7 @@ use memory_tracker::{DirtyPageTracking, PageBitmap, SigsegvMemoryTracker};
 use signal_stack::WasmtimeSignalStack;
 
 use crate::wasm_utils::instrumentation::{
-    ACCESSED_PAGES_COUNTER_GLOBAL_NAME, DIRTY_PAGES_COUNTER_GLOBAL_NAME,
+    WasmMemoryType, ACCESSED_PAGES_COUNTER_GLOBAL_NAME, DIRTY_PAGES_COUNTER_GLOBAL_NAME,
     INSTRUCTIONS_COUNTER_GLOBAL_NAME,
 };
 use crate::{
@@ -189,7 +189,7 @@ impl WasmtimeEmbedder {
     /// canisters __except__ the `host_memory`.
     #[doc(hidden)]
     pub fn wasmtime_execution_config(embedder_config: &EmbeddersConfig) -> wasmtime::Config {
-        let mut config = wasmtime_validation_config();
+        let mut config = wasmtime_validation_config(embedder_config);
 
         // Wasmtime features that differ between Wasm validation and execution.
         // Currently these are multi-memories and the 64-bit memory needed for
@@ -229,12 +229,23 @@ impl WasmtimeEmbedder {
 
     pub fn pre_instantiate(&self, module: &Module) -> HypervisorResult<InstancePre<StoreData>> {
         let mut linker: wasmtime::Linker<StoreData> = Linker::new(module.engine());
+        let mut main_memory_type = WasmMemoryType::Wasm32;
+
+        if let Some(export) = module.get_export(WASM_HEAP_MEMORY_NAME) {
+            if let Some(mem) = export.memory() {
+                if mem.is_64() {
+                    main_memory_type = WasmMemoryType::Wasm64;
+                }
+            }
+        }
+
         system_api::syscalls(
             &mut linker,
             self.config.feature_flags,
             self.config.stable_memory_dirty_page_limit,
             self.config.stable_memory_accessed_page_limit,
             self.config.metering_type,
+            main_memory_type,
         );
 
         let instance_pre = linker.instantiate_pre(module).map_err(|e| {

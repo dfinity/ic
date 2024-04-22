@@ -1324,7 +1324,7 @@ fn validate_code_section(
 }
 
 /// Returns a Wasmtime config that is used for Wasm validation.
-pub fn wasmtime_validation_config() -> wasmtime::Config {
+pub fn wasmtime_validation_config(embedders_config: &EmbeddersConfig) -> wasmtime::Config {
     let mut config = wasmtime::Config::default();
 
     // Keep this in the alphabetical order to simplify comparison with new
@@ -1344,10 +1344,14 @@ pub fn wasmtime_validation_config() -> wasmtime::Config {
     config.wasm_bulk_memory(true);
     config.wasm_function_references(false);
     config.wasm_gc(false);
-    // Wasm memory64 and multi-memory features are disabled during validation,
+    if embedders_config.feature_flags.wasm64 == ic_config::flag_status::FlagStatus::Enabled {
+        config.wasm_memory64(true);
+    } else {
+        config.wasm_memory64(false);
+    }
+    // Wasm multi-memory feature is disabled during validation,
     // but enabled during execution for the Wasm-native stable memory
     // implementation.
-    config.wasm_memory64(false);
     config.wasm_multi_memory(false);
     config.wasm_reference_types(true);
     // The SIMD instructions are disable for determinism.
@@ -1376,12 +1380,15 @@ pub fn wasmtime_validation_config() -> wasmtime::Config {
 
 #[test]
 fn can_create_engine_from_validation_config() {
-    let config = wasmtime_validation_config();
+    let config = wasmtime_validation_config(&EmbeddersConfig::default());
     wasmtime::Engine::new(&config).expect("Cannot create engine from validation config");
 }
 
-fn can_compile(wasm: &BinaryEncodedWasm) -> Result<(), WasmValidationError> {
-    let config = wasmtime_validation_config();
+fn can_compile(
+    wasm: &BinaryEncodedWasm,
+    embedders_config: &EmbeddersConfig,
+) -> Result<(), WasmValidationError> {
+    let config = wasmtime_validation_config(embedders_config);
     let engine = wasmtime::Engine::new(&config).expect("Failed to create wasmtime::Engine");
     wasmtime::Module::validate(&engine, wasm.as_slice()).map_err(|err| {
         WasmValidationError::WasmtimeValidation(format!(
@@ -1435,7 +1442,7 @@ pub(super) fn validate_wasm_binary<'a>(
     config: &EmbeddersConfig,
 ) -> Result<(WasmValidationDetails, Module<'a>), WasmValidationError> {
     check_code_section_size(wasm)?;
-    can_compile(wasm)?;
+    can_compile(wasm, config)?;
     let module = Module::parse(wasm.as_slice(), false)
         .map_err(|err| WasmValidationError::DecodingError(format!("{}", err)))?;
     let imports_details = validate_import_section(&module)?;

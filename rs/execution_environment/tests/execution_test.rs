@@ -1105,6 +1105,54 @@ fn canister_with_memory_allocation_cannot_grow_wasm_memory_above_allocation() {
 }
 
 #[test]
+fn canister_with_memory_allocation_cannot_grow_wasm_memory_above_allocation_wasm64() {
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
+    let mut embedders_config = ic_config::embedders::Config::default();
+    embedders_config.feature_flags.wasm64 = ic_config::flag_status::FlagStatus::Enabled;
+    let env = StateMachine::new_with_config(StateMachineConfig::new(
+        subnet_config,
+        HypervisorConfig {
+            subnet_memory_capacity: NumBytes::from(100_000_000),
+            subnet_memory_reservation: NumBytes::from(0),
+            embedders_config,
+            ..Default::default()
+        },
+    ));
+
+    let wat = r#"
+        (module
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (import "ic0" "msg_reply_data_append"
+                (func $msg_reply_data_append (param i32 i32)))
+            (func $update
+                (if (i64.ne (memory.grow (i64.const 400)) (i64.const 1))
+                  (then (unreachable))
+                )
+                (call $msg_reply)
+            )
+            (memory $memory i64 1)
+            (export "canister_update update" (func $update))
+        )"#;
+
+    let wasm = wat::parse_str(wat).unwrap();
+
+    let a_id = create_canister_with_cycles(
+        &env,
+        wasm.clone(),
+        Some(
+            CanisterSettingsArgsBuilder::new()
+                .with_memory_allocation(300 * 64 * 1024)
+                .with_freezing_threshold(0)
+                .build(),
+        ),
+        INITIAL_CYCLES_BALANCE,
+    );
+
+    let err = env.execute_ingress(a_id, "update", vec![]).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterOutOfMemory);
+}
+
+#[test]
 fn canister_with_memory_allocation_cannot_grow_stable_memory_above_allocation() {
     let subnet_config = SubnetConfig::new(SubnetType::Application);
     let env = StateMachine::new_with_config(StateMachineConfig::new(
