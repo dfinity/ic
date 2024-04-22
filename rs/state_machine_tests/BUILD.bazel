@@ -1,4 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("//bazel:defs.bzl", "rust_ic_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -105,14 +106,21 @@ rust_binary(
     deps = BIN_DEPENDENCIES,
 )
 
-rust_test(
+rust_ic_test(
     name = "state_machine_multi_subnet_test",
     srcs = ["tests/multi_subnet.rs"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = [":state_machine_tests"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
-rust_test(
+rust_ic_test(
+    name = "state_machine_dts_test",
+    srcs = ["tests/dts.rs"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = [":state_machine_tests"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_ic_test(
     name = "ic-test-state-machine-tests",
     srcs = ["tests/tests.rs"],
     data = [

@@ -1,5 +1,6 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library")
 load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:defs.bzl", "rust_ic_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -29,7 +30,7 @@ rust_canister(
     ],
 )
 
-rust_test(
+rust_ic_test(
     name = "tests",
     srcs = ["tests/stable_memory_integrity.rs"],
     aliases = {},
