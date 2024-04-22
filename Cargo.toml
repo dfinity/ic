@@ -464,7 +464,7 @@ ic-response-verification = "2.3.0"
 ic-http-certification = "2.3.0"
 ic-certification = "2.3.0"
 ic-cbor = "2.3.0"
-ic-stable-structures = "0.6.2"
+ic-stable-structures = "0.6.4"
 ic-utils = { version = "0.34.0", features = ["raw"] }
 ic-btc-interface = { git = "https://github.com/dfinity/bitcoin-canister", rev = "62a71e47c491fb842ccc257b1c675651501f4b82" }
 ic-btc-validation = { git = "https://github.com/dfinity/bitcoin-canister", rev = "0e996988693f2d55fc9533c44dc20ae5310a1894" }

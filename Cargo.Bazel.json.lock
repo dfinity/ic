@@ -1,5 +1,5 @@
 {
-  "checksum": "e374b36ba4abf241163cac459b436f9afc6cfdd548d0df351f7b5a0b0048f78c",
+  "checksum": "3e1576ae4cc2613b87b9da76e8cd8b573f1bc26cdc93897c861904ec28790015",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -16936,7 +16936,7 @@
               "target": "ic_response_verification"
             },
             {
-              "id": "ic-stable-structures 0.6.2",
+              "id": "ic-stable-structures 0.6.4",
               "target": "ic_stable_structures"
             },
             {
@@ -28120,14 +28120,14 @@
       ],
       "license_file": null
     },
-    "ic-stable-structures 0.6.2": {
+    "ic-stable-structures 0.6.4": {
       "name": "ic-stable-structures",
-      "version": "0.6.2",
+      "version": "0.6.4",
       "package_url": "https://github.com/dfinity/stable-structures",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-stable-structures/0.6.2/download",
-          "sha256": "774d7d26420c095f2b5f0f71f7b2ff4a5b58b87e0959dccc78b3d513a7db5112"
+          "url": "https://static.crates.io/crates/ic-stable-structures/0.6.4/download",
+          "sha256": "07e2282054c8ddf0cb2a7abf5c174c373917b4345c9a096ae4aa7f7185cdcdc7"
         }
       },
       "targets": [
@@ -28159,7 +28159,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.6.2"
+        "version": "0.6.4"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -76032,7 +76032,7 @@
     "ic-http-certification 2.3.0",
     "ic-metrics-encoder 1.1.1",
     "ic-response-verification 2.3.0",
-    "ic-stable-structures 0.6.2",
+    "ic-stable-structures 0.6.4",
     "ic-test-state-machine-client 3.0.1",
     "ic-utils 0.34.0",
     "ic-wasm 0.7.1",
