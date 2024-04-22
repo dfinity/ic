@@ -27,6 +27,7 @@ rootfs_files = {
     Label("etc/sysctl.d/dfn-max-map-count.conf"): "/etc/sysctl.d/dfn-max-map-count.conf",
     Label("etc/sysctl.d/network-tweaks.conf"): "/etc/sysctl.d/network-tweaks.conf",
     Label("etc/sysctl.d/privileged-ports.conf"): "/etc/sysctl.d/privileged-ports.conf",
+    Label("etc/sysfs.d/hugepage.conf"): "/etc/sysfs.d/hugepage.conf",
     Label("etc/systemd/resolved.conf.d/fallback.conf"): "/etc/systemd/resolved.conf.d/fallback.conf",
     Label("etc/systemd/system-generators/mount-generator"): "/etc/systemd/system-generators/mount-generator",
     Label("etc/systemd/system-generators/systemd-gpt-auto-generator"): "/etc/systemd/system-generators/systemd-gpt-auto-generator",
