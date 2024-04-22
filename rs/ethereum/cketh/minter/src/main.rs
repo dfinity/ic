@@ -156,6 +156,7 @@ async fn eip_1559_transaction_price() -> Eip1559TransactionPrice {
 /// Returns the current parameters used by the minter.
 /// This includes information that can be retrieved form other endpoints as well.
 /// To retain some flexibility in the API all fields in the return value are optional.
+#[allow(deprecated)]
 #[query]
 async fn get_minter_info() -> MinterInfo {
     read_state(|s| {
@@ -182,6 +183,7 @@ async fn get_minter_info() -> MinterInfo {
 
         MinterInfo {
             minter_address: s.minter_address().map(|a| a.to_string()),
+            smart_contract_address: s.eth_helper_contract_address.map(|a| a.to_string()),
             eth_helper_contract_address: s.eth_helper_contract_address.map(|a| a.to_string()),
             erc20_helper_contract_address: s.erc20_helper_contract_address.map(|a| a.to_string()),
             supported_ckerc20_tokens,

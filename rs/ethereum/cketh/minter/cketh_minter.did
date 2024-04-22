@@ -134,7 +134,11 @@ type MinterInfo = record {
     // Ethereum address controlled by the minter via threshold ECDSA.
     minter_address: opt text;
 
-    // Address of the helper smart contract.
+    // (Deprecated) Address of the ETH helper smart contract.
+    // Use `eth_helper_contract_address`.
+    smart_contract_address: opt text;
+
+    // Address of the ETH helper smart contract.
     eth_helper_contract_address: opt text;
 
     // Address of the ERC20 helper smart contract

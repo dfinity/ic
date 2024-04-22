@@ -1305,6 +1305,7 @@ fn should_fail_to_mint_from_unsupported_erc20_contract_address() {
         });
 }
 
+#[allow(deprecated)]
 #[test]
 fn should_retrieve_minter_info() {
     let ckerc20 = CkErc20Setup::default().add_supported_erc20_tokens();
@@ -1337,6 +1338,9 @@ fn should_retrieve_minter_info() {
         info_at_start,
         MinterInfo {
             minter_address: Some(format_ethereum_address_to_eip_55(MINTER_ADDRESS)),
+            smart_contract_address: Some(format_ethereum_address_to_eip_55(
+                ETH_HELPER_CONTRACT_ADDRESS
+            )),
             eth_helper_contract_address: Some(format_ethereum_address_to_eip_55(
                 ETH_HELPER_CONTRACT_ADDRESS
             )),

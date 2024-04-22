@@ -54,6 +54,8 @@ pub struct Erc20Balance {
 #[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
 pub struct MinterInfo {
     pub minter_address: Option<String>,
+    #[deprecated(note = "use eth_helper_contract_address instead")]
+    pub smart_contract_address: Option<String>,
     pub eth_helper_contract_address: Option<String>,
     pub erc20_helper_contract_address: Option<String>,
     pub supported_ckerc20_tokens: Option<Vec<CkErc20Token>>,
