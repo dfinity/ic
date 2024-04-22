@@ -698,15 +698,141 @@ fn test_delete_canister_snapshot_decode_round_trip() {
 }
 
 #[test]
-fn test_delete_canister_snapshot_decode_fails() {
-    let canister_id = canister_test_id(4);
-    let args = ic00::DeleteCanisterSnapshotArgs {
-        canister_id: canister_id.get(),
-        snapshot_id: vec![4, 5, 6, 6], // Invalid snapshot ID.
-    };
-    let encoded_args = args.encode();
-    let err = DeleteCanisterSnapshotArgs::decode(encoded_args.as_slice()).unwrap_err();
-    assert_eq!(err.code(), ErrorCode::InvalidManagementPayload,);
+fn delete_canister_snapshot_fails_canister_not_found() {
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_snapshots(FlagStatus::Enabled)
+        .with_caller(own_subnet, caller_canister)
+        .build();
+
+    let canister_id = canister_test_id(10);
+    let snapshot_id = SnapshotId::from((canister_id, 3));
+    let args: DeleteCanisterSnapshotArgs =
+        DeleteCanisterSnapshotArgs::new(canister_id, snapshot_id);
+    let error = test
+        .subnet_message("delete_canister_snapshot", args.encode())
+        .unwrap_err();
+    assert_eq!(error.code(), ErrorCode::CanisterNotFound);
+    let message = format!("Canister {} not found.", canister_id,).to_string();
+    assert!(error.description().contains(&message));
+}
+
+#[test]
+fn delete_canister_snapshot_fails_snapshot_not_found() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000);
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_snapshots(FlagStatus::Enabled)
+        .with_caller(own_subnet, caller_canister)
+        .build();
+
+    // Create canister.
+    let canister_id = test
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .unwrap();
+
+    // Delete canister snapshot fails because snapshot does not exist.
+    let snapshot_id = SnapshotId::from((canister_id, 3));
+    let args: DeleteCanisterSnapshotArgs =
+        DeleteCanisterSnapshotArgs::new(canister_id, snapshot_id);
+    let error = test
+        .subnet_message("delete_canister_snapshot", args.encode())
+        .unwrap_err();
+    assert_eq!(error.code(), ErrorCode::CanisterSnapshotNotFound);
+    let message = format!(
+        "Could not find the snapshot ID {} for canister {}",
+        snapshot_id, canister_id,
+    )
+    .to_string();
+    assert!(error.description().contains(&message));
+    assert!(test.state().canister_state(&canister_id).is_some());
+}
+
+#[test]
+fn delete_canister_snapshot_fails_snapshot_does_not_belong_to_canister() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000);
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_snapshots(FlagStatus::Enabled)
+        .with_caller(own_subnet, caller_canister)
+        .build();
+
+    // Create canister.
+    let canister_id_1 = test
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .unwrap();
+    let canister_id_2 = test
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .unwrap();
+
+    // Take a snapshot.
+    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id_1, None);
+    let result = test.subnet_message("take_canister_snapshot", args.encode());
+    assert!(result.is_ok());
+    let response = CanisterSnapshotResponse::decode(&result.unwrap().bytes()).unwrap();
+    let snapshot_id = response.snapshot_id();
+    assert!(test.state().canister_snapshots.get(snapshot_id).is_some());
+
+    let initial_canister_state = test.state().canister_state(&canister_id_2).unwrap().clone();
+
+    // Delete canister snapshot fails because snapshot does not belong to `canister_id_2`.
+    let args: DeleteCanisterSnapshotArgs =
+        DeleteCanisterSnapshotArgs::new(canister_id_2, snapshot_id);
+    let error = test
+        .subnet_message("delete_canister_snapshot", args.encode())
+        .unwrap_err();
+    assert_eq!(error.code(), ErrorCode::CanisterRejectedMessage);
+    let message = format!(
+        "The snapshot {} does not belong to canister {}",
+        snapshot_id, canister_id_2,
+    )
+    .to_string();
+    assert!(error.description().contains(&message));
+    assert!(test.state().canister_state(&canister_id_2).is_some());
+    assert_eq!(
+        initial_canister_state,
+        test.state().canister_state(&canister_id_2).unwrap().clone()
+    );
+}
+
+#[test]
+fn delete_canister_snapshot_succeeds() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000);
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_snapshots(FlagStatus::Enabled)
+        .with_caller(own_subnet, caller_canister)
+        .build();
+
+    // Create canister.
+    let canister_id = test
+        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.into())
+        .unwrap();
+
+    // Take a snapshot.
+    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
+    let result = test.subnet_message("take_canister_snapshot", args.encode());
+    assert!(result.is_ok());
+    let response = CanisterSnapshotResponse::decode(&result.unwrap().bytes()).unwrap();
+    let snapshot_id = response.snapshot_id();
+    assert!(test.state().canister_snapshots.get(snapshot_id).is_some());
+
+    // Deletes canister snapshot successfully.
+    let args: DeleteCanisterSnapshotArgs =
+        DeleteCanisterSnapshotArgs::new(canister_id, snapshot_id);
+    let result = test.subnet_message("delete_canister_snapshot", args.encode());
+
+    assert!(result.is_ok());
+    assert!(test.state().canister_snapshots.get(snapshot_id).is_none());
+    assert!(test.state().canister_state(&canister_id).is_some());
 }
 
 #[test]
