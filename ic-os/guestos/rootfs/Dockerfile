@@ -36,9 +36,11 @@ COPY --chmod=644 etc/hostname /etc/hostname
 COPY --chmod=644 etc/resolv.conf /etc/resolv.conf
 
 # Update POSIX permissions in /etc/
+# TODO: [NODE-1348] Some of the original execute bits are lost here
 RUN find /etc -type d -exec chmod 0755 {} \+ && \
     find /etc -type f -not -path "/etc/hostname" -not -path "/etc/hosts" -not -path "/etc/resolv.conf" -exec chmod 0644 {} \+ && \
     chmod 0755 /etc/systemd/system-generators/* && \
+    chmod 0755 /etc/init.d/* && \
     chmod 0440 /etc/sudoers && \
     chmod 755 /etc/initramfs-tools/scripts/init-bottom/set-machine-id && \
     chmod 755 /etc/initramfs-tools/scripts/init-premount/verity-root && \
