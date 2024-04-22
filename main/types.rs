@@ -102,7 +102,7 @@ pub(crate) struct UpdateSettingsArgumentExtended {
     pub sender_canister_version: Option<u64>,
 }
 
-/// Argument type of [update_chunk](super::update_chunk).
+/// Argument type of [update_chunk](super::upload_chunk).
 #[derive(
     CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone,
 )]
