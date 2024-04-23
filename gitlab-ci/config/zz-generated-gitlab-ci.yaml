@@ -691,6 +691,7 @@ bazel-system-test-hotfix:
   tags:
     - dfinity-ic
     - bazel
+    - zh
   variables:
     BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
     BAZEL_COMMAND: test
@@ -753,6 +754,7 @@ bazel-system-test-hourly:
   tags:
     - dfinity-ic
     - bazel
+    - zh
   timeout: 120 minutes
   variables:
     BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
@@ -823,6 +825,7 @@ bazel-system-test-nightly:
   tags:
     - dfinity-ic
     - bazel
+    - zh
   timeout: 7h 30m
   variables:
     BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
@@ -956,6 +959,7 @@ bazel-system-test-staging:
   tags:
     - dfinity-ic
     - bazel
+    - zh
   variables:
     BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
     BAZEL_COMMAND: test
@@ -1090,6 +1094,7 @@ bazel-test-all:
   tags:
     - dfinity-ic
     - bazel
+    - zh
   timeout: 80 minutes
   variables:
     BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
@@ -1155,6 +1160,7 @@ bazel-test-all-rebuild:
   tags:
     - dfinity-ic
     - bazel
+    - zh
   timeout: 2h
   variables:
     BAZEL_CI_CONFIG: "--config=ci"
