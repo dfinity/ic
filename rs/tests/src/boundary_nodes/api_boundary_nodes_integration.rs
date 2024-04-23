@@ -1,3 +1,9 @@
+use discower_bowndary::{
+    check::{HealthCheck, HealthCheckImpl},
+    fetch::{NodesFetcher, NodesFetcherImpl},
+    route_provider::HealthCheckRouteProvider,
+    test_helpers::{assert_routed_domains, route_n_times},
+};
 use k256::SecretKey;
 
 use crate::boundary_nodes::{
@@ -31,13 +37,15 @@ use registry_canister::mutations::{
     do_add_api_boundary_node::AddApiBoundaryNodePayload,
     node_management::do_update_node_domain_directly::UpdateNodeDomainDirectlyPayload,
 };
-use reqwest::{redirect::Policy, ClientBuilder};
-use std::net::Ipv6Addr;
+use std::{net::Ipv6Addr, sync::Arc};
 use std::{net::SocketAddr, time::Duration};
 
 use anyhow::bail;
 use ic_agent::{
-    agent::http_transport::{route_provider::RoundRobinRouteProvider, ReqwestTransport},
+    agent::http_transport::{
+        reqwest_transport::reqwest::{redirect::Policy, ClientBuilder},
+        ReqwestTransport,
+    },
     export::Principal,
     identity::{AnonymousIdentity, Secp256k1Identity},
     Agent,
@@ -248,15 +256,41 @@ pub fn decentralization_test(env: TestEnv) {
         "Successfully installed {} counter canisters",
         canister_ids.len()
     );
+
+    info!(
+        log,
+        "Creating an agent with a HealthCheckRouteProvider (from API BN Discovery Library) to route traffic against healthy BNs",
+    );
+
+    let route_provider = {
+        let fetch_interval = Duration::from_secs(5);
+        let fetcher = Arc::new(NodesFetcherImpl::new(http_client.clone(), canister_ids[0]));
+        let health_timeout = Duration::from_secs(5);
+        let check_interval = Duration::from_secs(1);
+        let checker = Arc::new(HealthCheckImpl::new(http_client.clone(), health_timeout));
+        let seed_domains = vec!["api1.com", "api2.com"];
+        let route_provider = Arc::new(HealthCheckRouteProvider::new(
+            Arc::clone(&fetcher) as Arc<dyn NodesFetcher>,
+            fetch_interval,
+            Arc::clone(&checker) as Arc<dyn HealthCheck>,
+            check_interval,
+            seed_domains,
+        ));
+        block_on(route_provider.run());
+        // Do an additional assertions that routing works correctly.
+        let routed_domains = route_n_times(6, Arc::clone(&route_provider));
+        assert_routed_domains(
+            routed_domains,
+            vec!["api1.com".into(), "api2.com".into()],
+            3,
+        );
+        // TODO: remove this once ic-agent 0.35.0 is released + call route_provider.stop() at the end
+        Arc::try_unwrap(route_provider).unwrap()
+    };
+
     let api_bn_agent = {
         // This agent routes directly via ipv6 addresses and doesn't employ domain names.
         // Ideally, domains with valid certificates should be used in testing.
-        info!(log, "Creating an agent with routing over both API BNs ...");
-        let api_bn_urls: Vec<String> = api_bns
-            .into_iter()
-            .map(|bn| format!("https://[{}]", bn.ipv6_address.parse::<Ipv6Addr>().unwrap()))
-            .collect();
-        let route_provider = RoundRobinRouteProvider::new(api_bn_urls).unwrap();
         let transport =
             ReqwestTransport::create_with_client_route(Box::new(route_provider), http_client)
                 .unwrap();

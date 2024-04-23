@@ -1,12 +1,8 @@
 use std::{fmt::Debug, sync::Arc, time::Duration};
 
 use crate::{
-    check::{HealthCheck, NodeHealthCheckerMock},
-    fetch::{NodesFetchMock, NodesFetcher},
-    fetch_actor::NodesFetchActor,
-    health_manager_actor::HealthManagerActor,
-    snapshot::{Snapshot, SEED_DOMAIN},
-    types::GlobalShared,
+    check::HealthCheck, fetch::NodesFetcher, fetch_actor::NodesFetchActor,
+    health_manager_actor::HealthManagerActor, snapshot::Snapshot, types::GlobalShared,
 };
 use arc_swap::ArcSwap;
 use ic_agent::{agent::http_transport::route_provider::RouteProvider, AgentError};
@@ -40,13 +36,14 @@ impl HealthCheckRouteProvider {
         fetch_period: Duration,
         checker: Arc<dyn HealthCheck>,
         check_period: Duration,
+        seed_domains: Vec<&str>,
     ) -> Self {
         Self {
             fetcher,
             fetch_period,
             checker,
             check_period,
-            snapshot: Arc::new(ArcSwap::from_pointee(Snapshot::new())),
+            snapshot: Arc::new(ArcSwap::from_pointee(Snapshot::new(seed_domains))),
             tracker: TaskTracker::new(),
             token: CancellationToken::new(),
         }
@@ -92,87 +89,33 @@ impl HealthCheckRouteProvider {
     }
 }
 
-impl Default for HealthCheckRouteProvider {
-    // TODO: remove these mocks in the future
-    fn default() -> Self {
-        let fetcher = Arc::new(NodesFetchMock::new());
-        fetcher.overwrite_existing_domains(vec![SEED_DOMAIN]);
-        let checker = Arc::new(NodeHealthCheckerMock::new());
-        checker.modify_domains_health(vec![(SEED_DOMAIN, true)]);
-        Self {
-            fetcher: Arc::clone(&fetcher) as Arc<dyn NodesFetcher>,
-            fetch_period: Duration::from_secs(5),
-            checker: Arc::clone(&checker) as Arc<dyn HealthCheck>,
-            check_period: Duration::from_secs(1),
-            snapshot: Arc::new(ArcSwap::from_pointee(Snapshot::new())),
-            tracker: TaskTracker::new(),
-            token: CancellationToken::new(),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-    use std::hash::Hash;
-
     use super::*;
-    use crate::check::{HealthCheck, NodeHealthCheckerMock};
-    use crate::fetch::{NodesFetchMock, NodesFetcher};
-    use crate::snapshot::SEED_DOMAIN;
-
-    fn route_n_times(n: usize, f: Arc<HealthCheckRouteProvider>) -> Vec<String> {
-        (0..n)
-            .map(|_| f.route().unwrap().domain().unwrap().to_string())
-            .collect()
-    }
-
-    fn assert_routed_domains<T>(actual: Vec<T>, expected: Vec<T>, expected_repetitions: usize)
-    where
-        T: AsRef<str> + Eq + Hash + Debug + Ord,
-    {
-        fn build_count_map<T>(items: &[T]) -> HashMap<&T, usize>
-        where
-            T: Eq + Hash,
-        {
-            items.iter().fold(HashMap::new(), |mut map, item| {
-                *map.entry(item).or_insert(0) += 1;
-                map
-            })
-        }
-        let count_actual = build_count_map(&actual);
-        let count_expected = build_count_map(&expected);
-
-        let mut keys_actual = count_actual.keys().collect::<Vec<_>>();
-        keys_actual.sort();
-        let mut keys_expected = count_expected.keys().collect::<Vec<_>>();
-        keys_expected.sort();
-        // Assert all routed domains are present.
-        assert_eq!(keys_actual, keys_expected);
-
-        // Assert the expected repetition count of each routed domain.
-        let actual_repetitions = count_actual.values().collect::<Vec<_>>();
-        assert!(actual_repetitions
-            .iter()
-            .all(|&x| x == &expected_repetitions));
-    }
+    use crate::check::HealthCheck;
+    use crate::checker_mock::NodeHealthCheckerMock;
+    use crate::fetch::NodesFetcher;
+    use crate::fetcher_mock::NodesFetchMock;
+    use crate::snapshot::IC0_SEED_DOMAIN;
+    use crate::test_helpers::{assert_routed_domains, route_n_times};
 
     #[tokio::test]
     async fn test_routing_with_topology_and_node_health_updates() {
         // Arrange.
         // A single healthy node exists in the topology. This node happens to be the seed node.
         let fetcher = Arc::new(NodesFetchMock::new());
-        fetcher.overwrite_existing_domains(vec![SEED_DOMAIN]);
+        fetcher.overwrite_existing_domains(vec![IC0_SEED_DOMAIN]);
         let fetch_interval = Duration::from_secs(3); // periodicity of checking current topology
         let fetch_delta = Duration::from_secs(1);
         let checker = Arc::new(NodeHealthCheckerMock::new());
-        checker.modify_domains_health(vec![(SEED_DOMAIN, true)]);
+        checker.modify_domains_health(vec![(IC0_SEED_DOMAIN, true)]);
         let check_interval = Duration::from_secs(1); // periodicity of checking node's health
         let route_provider = Arc::new(HealthCheckRouteProvider::new(
             Arc::clone(&fetcher) as Arc<dyn NodesFetcher>,
             fetch_interval,
             Arc::clone(&checker) as Arc<dyn HealthCheck>,
             check_interval,
+            vec![IC0_SEED_DOMAIN],
         ));
         route_provider.run().await;
 

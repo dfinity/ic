@@ -7,14 +7,10 @@ edition = "2021"
 arc-swap = "1"
 async-trait = { workspace = true }
 ic-agent = { workspace = true }
-prost = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
+http = "0.2.9"
 url = "2.4.0"
-thiserror = { workspace = true }
-ic-protobuf = { path = "../../protobuf" }
-ic-registry-client = { path = "../../registry/client" }
-ic-registry-nns-data-provider-wrappers = { path = "../../registry/nns_data_provider_wrappers" }
 
 [lib]
 name = "discower_bowndary"

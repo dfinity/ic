@@ -1,3 +1,4 @@
+use ic_agent::agent::ApiBoundaryNode;
 use url::Url;
 
 #[derive(Debug, Clone)]
@@ -16,5 +17,11 @@ impl Node {
 impl From<Node> for Url {
     fn from(node: Node) -> Self {
         Url::parse(&format!("https://{}/api/v2/", node.domain)).expect("failed to parse URL")
+    }
+}
+
+impl From<&ApiBoundaryNode> for Node {
+    fn from(api_bn: &ApiBoundaryNode) -> Self {
+        Node::new(api_bn.domain.as_str())
     }
 }

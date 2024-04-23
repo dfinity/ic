@@ -2,6 +2,7 @@ use std::{sync::Arc, time::Duration};
 
 use tokio::time;
 use tokio_util::sync::CancellationToken;
+use url::Url;
 
 use crate::{
     fetch::NodesFetcher,
@@ -42,7 +43,8 @@ impl NodesFetchActor {
                 _ = interval.tick() => {
                         let snapshot = self.snapshot.load();
                         let node = snapshot.next().expect("no node found");
-                        let nodes = self.fetcher.fetch(node.into()).await.unwrap();
+                        let url = Url::parse(&format!("https://{}", node.domain)).unwrap();
+                        let nodes = self.fetcher.fetch(url).await.unwrap();
                         let msg = Some(
                             FetchedNodes {nodes}
                         );
