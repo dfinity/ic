@@ -374,7 +374,11 @@ fn update_metrics(state: &ReplicatedState, metrics: &QueryStatsAggregatorMetrics
             + 1,
     );
 
-    let num_records: usize = state.stats.values().map(|records| records.len()).sum();
+    let num_records: usize = state
+        .stats
+        .values()
+        .map(|records| records.values().len())
+        .sum();
     metrics
         .query_stats_aggregator_num_records
         .set(num_records as i64)
