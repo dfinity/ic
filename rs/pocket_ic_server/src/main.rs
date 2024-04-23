@@ -78,8 +78,8 @@ fn current_binary_path() -> Option<PathBuf> {
 fn main() {
     let current_binary_path = current_binary_path().unwrap();
     let current_binary_name = current_binary_path.file_name().unwrap().to_str().unwrap();
-    if current_binary_name != "pocket-ic-server" {
-        panic!("The PocketIc server binary name must be \"pocket-ic-server\" (without quotes).")
+    if current_binary_name != "pocket-ic" && current_binary_name != "pocket-ic-server" {
+        panic!("The PocketIc server binary name must be \"pocket-ic\" or \"pocket-ic-server\" (without quotes).")
     }
     // Check if `pocket-ic-server` is running in the canister sandbox mode where it waits
     // for commands from the parent process. This check has to be performed

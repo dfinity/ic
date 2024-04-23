@@ -20,7 +20,13 @@ const SANDBOX_EXECUTABLE_NAME: &str = "canister_sandbox";
 const LAUNCHER_EXECUTABLE_NAME: &str = "sandbox_launcher";
 
 // These binaries support running in the canister sandbox mode.
-const RUNNABLE_AS_SANDBOX: &[&str] = &["drun", "ic-replay", "ic-recovery", "pocket-ic-server"];
+const RUNNABLE_AS_SANDBOX: &[&str] = &[
+    "drun",
+    "ic-replay",
+    "ic-recovery",
+    "pocket-ic",
+    "pocket-ic-server",
+];
 
 enum SandboxCrate {
     SandboxLauncher,
