@@ -38,7 +38,9 @@ use ic_btc_types_internal::{
 use ic_crypto_internal_types::NodeIndex;
 use ic_error_types::RejectCode;
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId};
+use ic_management_canister_types::{
+    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
+};
 use ic_protobuf::types::v1 as pb;
 use phantom_newtype::{AmountOf, Id};
 use prost::Message;
@@ -758,8 +760,8 @@ impl ExhaustiveSet for EcdsaReshareRequest {
         DerivedEcdsaReshareRequest::exhaustive_set(rng)
             .into_iter()
             .map(|r| EcdsaReshareRequest {
-                key_id: r.key_id,
-                master_key_id: None,
+                key_id: r.key_id.clone(),
+                master_key_id: Some(MasterPublicKeyId::Ecdsa(r.key_id)),
                 receiving_node_ids: r.receiving_node_ids,
                 registry_version: r.registry_version,
             })
