@@ -242,7 +242,7 @@ impl DtsEnvConfig {
                     .ten_update_instructions_execution_fee
                     * (num_pages * dirty_page_overhead / 10)
             }
-            MeteringType::Old | MeteringType::None => Cycles::new(0),
+            MeteringType::None => Cycles::new(0),
         }
     }
 }

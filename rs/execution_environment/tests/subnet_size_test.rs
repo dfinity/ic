@@ -35,12 +35,10 @@ const TEST_CANISTER_INSTALL_EXECUTION_INSTRUCTIONS: u64 = 0;
 // instruction cost of executing inc method on the test canister
 fn inc_instruction_cost(config: HypervisorConfig) -> u64 {
     use ic_config::embedders::MeteringType;
-    use ic_embedders::wasm_utils::instrumentation::instruction_to_cost as instruction_to_cost_old;
-    use ic_embedders::wasm_utils::instrumentation::instruction_to_cost_new;
+    use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
 
     let instruction_to_cost = match config.embedders_config.metering_type {
-        MeteringType::New => instruction_to_cost_new,
-        MeteringType::Old => instruction_to_cost_old,
+        MeteringType::New => instruction_to_cost,
         MeteringType::None => |_op: &wasmparser::Operator| 0u64,
     };
 
@@ -64,15 +62,13 @@ fn inc_instruction_cost(config: HypervisorConfig) -> u64 {
     let ca = instruction_to_cost(&wasmparser::Operator::I32Add);
     let ccall = instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 });
     let csys = match config.embedders_config.metering_type {
-        MeteringType::New => ic_embedders::wasmtime_embedder::system_api_complexity::overhead::new::MSG_REPLY_DATA_APPEND
-        .get() + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::new::MSG_REPLY
-        .get(),
-        MeteringType::Old => ic_embedders::wasmtime_embedder::system_api_complexity::overhead::old::MSG_REPLY_DATA_APPEND
-        .get() + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::old::MSG_REPLY
-        .get(),
+        MeteringType::New => {
+            ic_embedders::wasmtime_embedder::system_api_complexity::overhead::MSG_REPLY_DATA_APPEND
+                .get()
+                + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::MSG_REPLY.get()
+        }
         MeteringType::None => 0,
-    }
-        ;
+    };
 
     let cd = if let MeteringType::New = config.embedders_config.metering_type {
         ic_config::subnet_config::SchedulerConfig::application_subnet()

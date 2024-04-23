@@ -163,21 +163,6 @@ impl InjectedImports {
 
 // Gets the cost of an instruction.
 pub fn instruction_to_cost(i: &Operator) -> u64 {
-    match i {
-        // The following instructions are mostly signaling the start/end of code blocks,
-        // so we assign 0 cost to them.
-        Operator::Block { .. } => 0,
-        Operator::Else => 0,
-        Operator::End => 0,
-        Operator::Loop { .. } => 0,
-
-        // Default cost of an instruction is 1.
-        _ => 1,
-    }
-}
-
-// Gets the cost of an instruction.
-pub fn instruction_to_cost_new(i: &Operator) -> u64 {
     // This aims to be a complete list of all instructions that can be executed, with certain exceptions.
     // The exceptions are: SIMD instructions, atomic instructions, and the dynamic cost of
     // of operations such as table/memory fill, copy, init. This
@@ -788,7 +773,6 @@ pub(super) fn instrument(
             special_indices,
             subnet_type,
             dirty_page_overhead,
-            metering_type,
         )
     }
 
@@ -872,7 +856,6 @@ fn replace_system_api_functions(
     special_indices: SpecialIndices,
     subnet_type: SubnetType,
     dirty_page_overhead: NumInstructions,
-    metering_type: MeteringType,
 ) {
     let api_indexes = calculate_api_indexes(module);
     let number_of_func_imports = module
@@ -884,12 +867,9 @@ fn replace_system_api_functions(
     // Collect a single map of all the function indexes that need to be
     // replaced.
     let mut func_index_replacements = BTreeMap::new();
-    for (api, (ty, body)) in replacement_functions(
-        special_indices,
-        subnet_type,
-        dirty_page_overhead,
-        metering_type,
-    ) {
+    for (api, (ty, body)) in
+        replacement_functions(special_indices, subnet_type, dirty_page_overhead)
+    {
         if let Some(old_index) = api_indexes.get(&api) {
             let type_idx = add_func_type(module, ty);
             let new_index = (number_of_func_imports + module.functions.len()) as u32;
@@ -1198,9 +1178,8 @@ fn inject_metering(
     metering_type: MeteringType,
 ) {
     let points = match metering_type {
-        MeteringType::Old => injections_old(code),
         MeteringType::None => Vec::new(),
-        MeteringType::New => injections_new(code),
+        MeteringType::New => injections(code),
     };
     let points = points.iter().filter(|point| match point.cost_detail {
         InjectionPointCostDetail::StaticCost {
@@ -1535,67 +1514,8 @@ fn inject_try_grow_wasm_memory(
 // at the beginning of every basic block (straight-line sequence of instructions
 // with no branches) and before each bulk memory instruction. An injection point
 // contains a "hint" about the context of every basic block, specifically if
-// it's re-entrant or not. This version over-estimates the cost of code with
-// returns and jumps.
-fn injections_old(code: &[Operator]) -> Vec<InjectionPoint> {
-    let mut res = Vec::new();
-    let mut stack = Vec::new();
-    use Operator::*;
-    // The function itself is a re-entrant code block.
-    let mut curr = InjectionPoint::new_static_cost(0, Scope::ReentrantBlockStart, 0);
-    for (position, i) in code.iter().enumerate() {
-        curr.cost_detail.increment_cost(instruction_to_cost(i));
-        match i {
-            // Start of a re-entrant code block.
-            Loop { .. } => {
-                stack.push(curr);
-                curr = InjectionPoint::new_static_cost(position + 1, Scope::ReentrantBlockStart, 0);
-            }
-            // Start of a non re-entrant code block.
-            If { .. } | Block { .. } => {
-                stack.push(curr);
-                curr =
-                    InjectionPoint::new_static_cost(position + 1, Scope::NonReentrantBlockStart, 0);
-            }
-            // End of a code block but still more code left.
-            Else | Br { .. } | BrIf { .. } | BrTable { .. } => {
-                res.push(curr);
-                curr = InjectionPoint::new_static_cost(position + 1, Scope::BlockEnd, 0);
-            }
-            // `End` signals the end of a code block. If there's nothing more on the stack, we've
-            // gone through all the code.
-            End => {
-                res.push(curr);
-                curr = match stack.pop() {
-                    Some(val) => val,
-                    None => break,
-                };
-            }
-            // Bulk memory instructions require injected metering __before__ the instruction
-            // executes so that size arguments can be read from the stack at runtime.
-            MemoryFill { .. }
-            | MemoryCopy { .. }
-            | MemoryInit { .. }
-            | TableCopy { .. }
-            | TableInit { .. }
-            | TableFill { .. } => {
-                res.push(InjectionPoint::new_dynamic_cost(position));
-            }
-            // Nothing special to be done for other instructions.
-            _ => (),
-        }
-    }
-
-    res.sort_by_key(|k| k.position);
-    res
-}
-
-// This function scans through the Wasm code and creates an injection point
-// at the beginning of every basic block (straight-line sequence of instructions
-// with no branches) and before each bulk memory instruction. An injection point
-// contains a "hint" about the context of every basic block, specifically if
 // it's re-entrant or not.
-fn injections_new(code: &[Operator]) -> Vec<InjectionPoint> {
+fn injections(code: &[Operator]) -> Vec<InjectionPoint> {
     let mut res = Vec::new();
     use Operator::*;
     // The function itself is a re-entrant code block.
@@ -1603,7 +1523,7 @@ fn injections_new(code: &[Operator]) -> Vec<InjectionPoint> {
     // functions should consume at least some fuel.
     let mut curr = InjectionPoint::new_static_cost(0, Scope::ReentrantBlockStart, 1);
     for (position, i) in code.iter().enumerate() {
-        curr.cost_detail.increment_cost(instruction_to_cost_new(i));
+        curr.cost_detail.increment_cost(instruction_to_cost(i));
         match i {
             // Start of a re-entrant code block.
             Loop { .. } => {
