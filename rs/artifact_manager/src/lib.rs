@@ -1,104 +1,8 @@
-#[rustfmt::skip]
-mod unformatted {
-//! <h1>Overview</h1>
-//!
-//! The *Artifact Manager* stores artifacts in the artifact pool. These
-//! artifacts are used by the node it is running on and other nodes in the same
-//! subnet. The *Artifact Manager* interacts with *Gossip* and its application
-//! components:
-//!
-//!   * *Consensus*
-//!   * *Distributed Key Generation*
-//!   * *Certification*
-//!   * *Ingress Manager*
-//!   * *State Sync*
-//!
-//! It acts as a dispatcher for *Gossip* and ensures that the artifacts are
-//! processed by the correct application components. It (de)multiplexes
-//! artifacts to and from the different application components on behalf of
-//! *Gossip* and bundles filters and priority functions.
-//!
-//! In order to let the *Consensus* components be stateless, the artifact
-//! manager notifies the application components of artifacts received from
-//! peers. The application components can then check if they are valid and
-//! change their artifact pools (with a write lock to prevent conflicts and to
-//! allow concurrent reads to the artifact pools).
-//!
-//! <h1>Properties</h1>
-//!
-//!   * All artifacts in the validated part of the artifact pool have been
-//!     checked to be valid by the corresponding application component.
-//!   * When new artifacts have been added to the artifact pool or when
-//!     triggered by *Gossip*, the *Artifact Manager* asks the application
-//!     components to check if they want to add new artifacts or move artifacts
-//!     from the unvalidated part to the validated part of the pool.
-//!   * When artifacts are added to the validated part of the artifact pool, the
-//!     *Artifact Manager* notifies *Gossip* of adverts to send to peers.
-//!     checked to be valid by the corresponding application component
-//!   * When new artifacts have been added to the artifact pool or when
-//!     triggered by Gossip the Artifact Manager asks the application components
-//!     to check if they want to add new artifacts or move artifacts from the
-//!     unvalidated part to the validated part of the pool
-//!   * When artifacts are added to the validated part of the artifact pool, the
-//!     Artifact Manager notifies Gossip of adverts to send to peers.
-//!
-//! <h1>High Level View</h1>
-//!
-//!
-//!#                                                                 --------------------------
-//!#                                                                 | ArtifactManagerBackend |
-//!#                                                           |->   |     (Consensus)        |
-//!#                                                           |     -------------------------
-//!#                                                           |     --------------------------
-//!#                                                           |     | ArtifactManagerBackend |
-//!#                                                           |->   |       (Dkg)            |
-//!#                                                           |     -------------------------
-//!#     --------------          ------------------------      |     --------------------------
-//!#     |   P2P      | <------> |  ArtifactManagerImpl |  ----|->   | ArtifactManagerBackend |
-//!#     --------------          ------------------------      |     |     (Certification)    |
-//!#                                                           |     --------------------------
-//!#                                                           |     --------------------------
-//!#                                                           |     | ArtifactManagerBackend |
-//!#                                                           |->   |     (Ingress)          |
-//!#                                                           |     -------------------------
-//!#                                                           |     --------------------------
-//!#                                                           |     | ArtifactManagerBackend |
-//!#                                                           |->   |     (State Sync)       |
-//!#                                                                 -------------------------
-//!
-//!  The main components are:
-//!   * Front end
-//!     manager::ArtifactManagerImpl implements the ArtifactManager trait and talks
-//!     to P2P. It maintains the map of backends, one for each client: consensus, DKG,
-//!     certification, ingress, state sync. It is just a light weight layer that routes the
-//!     requests to the appropriate backend
-//!
-//!   * Back ends
-//!     clients::ArtifactManagerBackend is a per-client wrapper that has two parts:
-//!     1. Sync: Requests that can be served in the caller's context are processed by the
-//!        sync part (e.g) has_artifact(), get_validated_by_identifier() that only need to
-//!        look up the artifact pool
-//!
-//!        clients::ConsensusClient, etc implement the per-client sync part
-//!
-//!     2. Async: Processes the received artifacts via on_artifact(). The new artifacts are
-//!        queued to a background worker thread. The thread runs a loop that calls into the
-//!        per-client ArtifactProcessor implementation with the newly received artifacts
-//!
-//!        a. processors::ArtifactProcessorJoinGuard manages the life cycle of these back ground
-//!           threads, and queues the requests to the background thread via a crossbeam channel
-//!        b. processors::ConsensusProcessor, etc implement the per-client ArtifactProcessor
-//!           logic called by the threads. These roughly perform the sequence: add the new
-//!           artifacts to the unvalidated pool, call the client.on_state_change(), apply the
-//!           returned changes(mutations) to the artifact pools
-//!
-}
-
 pub mod processors;
 
 use ic_interfaces::{
     p2p::{
-        artifact_manager::{ArtifactProcessor, ArtifactProcessorEvent, JoinGuard},
+        artifact_manager::{ArtifactProcessorEvent, JoinGuard},
         consensus::{ChangeResult, ChangeSetProducer, MutablePool, ValidatedPoolReader},
     },
     time_source::TimeSource,
@@ -187,6 +91,28 @@ impl ArtifactProcessorMetrics {
         self.last_update = std::time::Instant::now();
         result
     }
+}
+
+/// An abstraction of processing changes for each artifact client.
+pub trait ArtifactProcessor<Artifact: ArtifactKind>: Send {
+    /// Process changes to the client's state, which includes but not
+    /// limited to:
+    ///   - newly arrived artifacts (passed as input parameters)
+    ///   - changes in dependencies
+    ///   - changes in time
+    ///
+    /// As part of the processing, it may also modify its own state
+    /// including both unvalidated and validated pools. The return
+    /// result includes a list of adverts for P2P to disseminate to
+    /// peers, deleted artifact,  as well as a result flag indicating
+    /// if there are more changes to be processed so that the caller
+    /// can decide whether this function should be called again
+    /// immediately, or after certain period of time.
+    fn process_changes(
+        &self,
+        time_source: &dyn TimeSource,
+        new_artifact_events: Vec<UnvalidatedArtifactMutation<Artifact>>,
+    ) -> ChangeResult<Artifact>;
 }
 
 /// Manages the life cycle of the client specific artifact processor thread.
@@ -362,138 +288,22 @@ pub fn create_ingress_handlers<
     (sender, jh)
 }
 
-pub fn create_consensus_handlers<
-    PoolConsensus: MutablePool<ConsensusArtifact> + Send + Sync + ValidatedPoolReader<ConsensusArtifact> + 'static,
-    C: ChangeSetProducer<
-            PoolConsensus,
-            ChangeSet = <PoolConsensus as MutablePool<ConsensusArtifact>>::ChangeSet,
-        > + 'static,
-    S: Fn(ArtifactProcessorEvent<ConsensusArtifact>) + Send + 'static,
+pub fn create_artifact_handler<
+    Artifact: ArtifactKind + Send + Sync,
+    Pool: MutablePool<Artifact> + Send + Sync + ValidatedPoolReader<Artifact> + 'static,
+    C: ChangeSetProducer<Pool, ChangeSet = <Pool as MutablePool<Artifact>>::ChangeSet> + 'static,
+    S: Fn(ArtifactProcessorEvent<Artifact>) + Send + 'static,
 >(
     send_advert: S,
-    consensus: C,
+    change_set_producer: C,
     time_source: Arc<dyn TimeSource>,
-    consensus_pool: Arc<RwLock<PoolConsensus>>,
+    pool: Arc<RwLock<Pool>>,
     metrics_registry: MetricsRegistry,
 ) -> (
-    UnboundedSender<UnvalidatedArtifactMutation<ConsensusArtifact>>,
+    UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
     Box<dyn JoinGuard>,
 ) {
-    let client = processors::Processor::new(consensus_pool.clone(), consensus);
-    let (jh, sender) = run_artifact_processor(
-        time_source.clone(),
-        metrics_registry,
-        Box::new(client),
-        send_advert,
-    );
-    (sender, jh)
-}
-
-pub fn create_certification_handlers<
-    PoolCertification: MutablePool<CertificationArtifact>
-        + ValidatedPoolReader<CertificationArtifact>
-        + Send
-        + Sync
-        + 'static,
-    C: ChangeSetProducer<
-            PoolCertification,
-            ChangeSet = <PoolCertification as MutablePool<CertificationArtifact>>::ChangeSet,
-        > + 'static,
-    S: Fn(ArtifactProcessorEvent<CertificationArtifact>) + Send + 'static,
->(
-    send_advert: S,
-    certifier: C,
-    time_source: Arc<dyn TimeSource>,
-    certification_pool: Arc<RwLock<PoolCertification>>,
-    metrics_registry: MetricsRegistry,
-) -> (
-    UnboundedSender<UnvalidatedArtifactMutation<CertificationArtifact>>,
-    Box<dyn JoinGuard>,
-) {
-    let client = processors::Processor::new(certification_pool.clone(), certifier);
-    let (jh, sender) = run_artifact_processor(
-        time_source.clone(),
-        metrics_registry,
-        Box::new(client),
-        send_advert,
-    );
-    (sender, jh)
-}
-
-pub fn create_dkg_handlers<
-    PoolDkg: MutablePool<DkgArtifact> + Send + Sync + ValidatedPoolReader<DkgArtifact> + 'static,
-    C: ChangeSetProducer<PoolDkg, ChangeSet = <PoolDkg as MutablePool<DkgArtifact>>::ChangeSet>
-        + 'static,
-    S: Fn(ArtifactProcessorEvent<DkgArtifact>) + Send + 'static,
->(
-    send_advert: S,
-    dkg: C,
-    time_source: Arc<dyn TimeSource>,
-    dkg_pool: Arc<RwLock<PoolDkg>>,
-    metrics_registry: MetricsRegistry,
-) -> (
-    UnboundedSender<UnvalidatedArtifactMutation<DkgArtifact>>,
-    Box<dyn JoinGuard>,
-) {
-    let client = processors::Processor::new(dkg_pool.clone(), dkg);
-    let (jh, sender) = run_artifact_processor(
-        time_source.clone(),
-        metrics_registry,
-        Box::new(client),
-        send_advert,
-    );
-    (sender, jh)
-}
-
-pub fn create_ecdsa_handlers<
-    PoolEcdsa: MutablePool<EcdsaArtifact> + Send + Sync + ValidatedPoolReader<EcdsaArtifact> + 'static,
-    C: ChangeSetProducer<
-            PoolEcdsa,
-            ChangeSet = <PoolEcdsa as MutablePool<EcdsaArtifact>>::ChangeSet,
-        > + 'static,
-    S: Fn(ArtifactProcessorEvent<EcdsaArtifact>) + Send + 'static,
->(
-    send_advert: S,
-    ecdsa: C,
-    time_source: Arc<dyn TimeSource>,
-    ecdsa_pool: Arc<RwLock<PoolEcdsa>>,
-    metrics_registry: MetricsRegistry,
-) -> (
-    UnboundedSender<UnvalidatedArtifactMutation<EcdsaArtifact>>,
-    Box<dyn JoinGuard>,
-) {
-    let client = processors::Processor::new(ecdsa_pool.clone(), ecdsa);
-    let (jh, sender) = run_artifact_processor(
-        time_source.clone(),
-        metrics_registry,
-        Box::new(client),
-        send_advert,
-    );
-    (sender, jh)
-}
-
-pub fn create_https_outcalls_handlers<
-    PoolCanisterHttp: MutablePool<CanisterHttpArtifact>
-        + ValidatedPoolReader<CanisterHttpArtifact>
-        + Send
-        + Sync
-        + 'static,
-    C: ChangeSetProducer<
-            PoolCanisterHttp,
-            ChangeSet = <PoolCanisterHttp as MutablePool<CanisterHttpArtifact>>::ChangeSet,
-        > + 'static,
-    S: Fn(ArtifactProcessorEvent<CanisterHttpArtifact>) + Send + 'static,
->(
-    send_advert: S,
-    pool_manager: C,
-    time_source: Arc<dyn TimeSource>,
-    canister_http_pool: Arc<RwLock<PoolCanisterHttp>>,
-    metrics_registry: MetricsRegistry,
-) -> (
-    UnboundedSender<UnvalidatedArtifactMutation<CanisterHttpArtifact>>,
-    Box<dyn JoinGuard>,
-) {
-    let client = processors::Processor::new(canister_http_pool.clone(), pool_manager);
+    let client = processors::Processor::new(pool.clone(), change_set_producer);
     let (jh, sender) = run_artifact_processor(
         time_source.clone(),
         metrics_registry,
