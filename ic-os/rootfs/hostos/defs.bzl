@@ -42,6 +42,7 @@ rootfs_files = {
     Label("etc/systemd/system/setup-node_exporter-keys.service"): "/etc/systemd/system/setup-node_exporter-keys.service",
     Label("etc/systemd/system/setup-ssh-account-keys.service"): "/etc/systemd/system/setup-ssh-account-keys.service",
     Label("etc/systemd/system/setup-ssh-keys.service"): "/etc/systemd/system/setup-ssh-keys.service",
+    Label("etc/systemd/system/user@.service"): "/etc/systemd/system/user@.service",
     Label("etc/systemd/system/vsock-agent.service"): "/etc/systemd/system/vsock-agent.service",
     Label("etc/tmpfiles.d/ic-node.conf"): "/etc/tmpfiles.d/ic-node.conf",
     Label("etc/udev/rules.d/10-vhost-vsock.rules"): "/etc/udev/rules.d/10-vhost-vsock.rules",

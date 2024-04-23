@@ -6,9 +6,6 @@ exports_files([
     "Dockerfile.base",
     "allow_console_root",
     "extra_boot_args.template",
-    "dev-certs/canister_http_test_ca.cert",
-    "dev-certs/canister_http_test_ca.key",
-    "opt/ic/share/ic.json5.template",
 ])
 
 filegroup(
