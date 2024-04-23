@@ -114,6 +114,7 @@ RUN systemctl disable \
     apt-daily-upgrade.service \
     apt-daily-upgrade.timer \
     motd-news.service \
+    motd-news.timer \
     fstrim.service \
     fstrim.timer
 
