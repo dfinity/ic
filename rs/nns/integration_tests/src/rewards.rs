@@ -21,14 +21,14 @@ use ic_nns_governance::{
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     governance::wait_for_final_state,
-    itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
 };
 use icp_ledger::{tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Subaccount, Tokens};
 
 /// Tests that we can add and reward a node provider.
 #[test]
 fn test_node_provider_rewards() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let nns_init_payload = NnsInitPayloadsBuilder::new().with_test_neurons().build();
         let nns_canisters = NnsCanisters::set_up(&runtime, nns_init_payload).await;
 

@@ -1752,6 +1752,7 @@ dependencies = [
  "ic-management-canister-types",
  "ic-registry-transport",
  "ic-replica-tests",
+ "ic-state-machine-tests",
  "ic-types",
  "on_wire",
  "rand 0.8.5",
