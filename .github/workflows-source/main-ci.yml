@@ -209,8 +209,9 @@ jobs:
 
   python-ci-tests:
     name: Python-CI-Tests
-    <<: *default-setup
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: ${{ vars.RUN_CI == 'true' }}
     steps:
       - <<: *checkout
       - name: Run Python CI Tests
@@ -218,7 +219,7 @@ jobs:
         shell: bash
         run: |
           set -xeuo pipefail
-          export PYTHONPATH=$PWD/gitlab-ci/src:$PWD/gitlab-ci/src/dependencies:$PYTHONPATH
+          export PYTHONPATH=$PWD/gitlab-ci/src:$PWD/gitlab-ci/src/dependencies
           pip3 install --ignore-installed -r requirements.txt
           cd gitlab-ci/src
           pytest --ignore=gitlab_config/ --ignore=git_changes/ -v -o junit_family=xunit1 --junitxml=../../test_report.xml --cov=. --cov-report=term --cov-report=term-missing --cov-report=html --cov-branch
