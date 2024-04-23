@@ -1,11 +1,9 @@
 //! The module contains implementations of the 'ArtifactProcessor' trait for all
 //! P2P clients that require consensus over their artifacts.
 
+use crate::ArtifactProcessor;
 use ic_interfaces::{
-    p2p::{
-        artifact_manager::ArtifactProcessor,
-        consensus::{ChangeResult, ChangeSetProducer, MutablePool, UnvalidatedArtifact},
-    },
+    p2p::consensus::{ChangeResult, ChangeSetProducer, MutablePool, UnvalidatedArtifact},
     time_source::TimeSource,
 };
 use ic_types::{artifact::*, artifact_kind::*};
