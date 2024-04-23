@@ -68,7 +68,3 @@ ic-base-types = { path = "../types/base_types" }
 ic-types = { path = "../types/types" }
 proptest = "1.0"
 rand_chacha = "0.3.1"
-
-[[test]]
-name = "rosetta-api-tests"
-path = "test/test_utils.rs"

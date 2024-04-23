@@ -1,6 +1,12 @@
-use super::*;
-
+use crate::test_utils::TestLedger;
+use ic_ledger_canister_blocks_synchronizer_test_utils::sample_data::Scribe;
+use ic_rosetta_api::request_handler::RosettaRequestHandler;
+use ic_rosetta_api::rosetta_server::RosettaApiServer;
+use std::process::Command;
+use std::sync::Arc;
 use tracing::log::debug;
+
+mod test_utils;
 
 fn rosetta_cli() -> String {
     match std::env::var("ROSETTA_CLI").ok() {
@@ -57,7 +63,7 @@ async fn rosetta_cli_data_test() {
         .args([
             "check:data",
             "--configuration-file",
-            local("test/rosetta-cli_data_test.json").as_str(),
+            local("tests/rosetta-cli_data_test.json").as_str(),
         ])
         .output()
         .expect("failed to execute rosetta-cli");
@@ -120,7 +126,7 @@ async fn rosetta_cli_construction_create_account_test() {
         .args([
             "check:construction",
             "--configuration-file",
-            local("test/rosetta-cli_construction_create_account_test.json").as_str(),
+            local("tests/rosetta-cli_construction_create_account_test.json").as_str(),
         ])
         .output()
         .expect("failed to execute rosetta-cli");
@@ -202,7 +208,7 @@ async fn rosetta_cli_construction_test() {
         .args([
             "check:construction",
             "--configuration-file",
-            local("test/rosetta-cli_construction_test.json").as_str(),
+            local("tests/rosetta-cli_construction_test.json").as_str(),
         ])
         .output()
         .expect("failed to execute rosetta-cli");

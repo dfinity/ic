@@ -39,7 +39,7 @@ rust_library(
 
 rust_test(
     name = "ic-icrc-rosetta-client-tests",
-    srcs = ["test/tests.rs"],
+    srcs = ["tests/tests.rs"],
     data = [
         "//rs/canister_sandbox",
         "//rs/canister_sandbox:sandbox_launcher",
