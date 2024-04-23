@@ -26,6 +26,28 @@ async fn main() -> Result<(), Error> {
     println!("Opening root partition");
     let mut rootfs = ExtPartition::open(cli.image_path, Some(6)).await?;
 
+    // Overwrite age checks
+    println!("Clearing SetupOS-age checks");
+    let check_setupos_age = NamedTempFile::new()?;
+    fs::write(
+        check_setupos_age.path(),
+        indoc::formatdoc!(
+            r#"
+                #!/usr/bin/env bash
+                echo "Skipping SetupOS-age checks."
+            "#
+        ),
+    )
+    .await
+    .context("failed to write file")?;
+    fs::set_permissions(check_setupos_age.path(), Permissions::from_mode(0o755)).await?;
+    rootfs
+        .write_file(
+            check_setupos_age.path(),
+            Path::new("/opt/ic/bin/check-setupos-age.sh"),
+        )
+        .await?;
+
     // Overwrite hardware checks
     println!("Clearing hardware checks");
     let hardware = NamedTempFile::new()?;
