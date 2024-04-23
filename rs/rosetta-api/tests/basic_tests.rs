@@ -1,13 +1,16 @@
-use super::*;
-
+use crate::test_utils::{get_balance, TestLedger};
+use ic_ledger_canister_blocks_synchronizer::blocks::Blocks;
+use ic_ledger_canister_blocks_synchronizer::blocks::HashedBlock;
 use ic_ledger_canister_blocks_synchronizer_test_utils::create_tmp_dir;
-use ic_ledger_canister_blocks_synchronizer_test_utils::sample_data::Scribe;
+use ic_ledger_canister_blocks_synchronizer_test_utils::sample_data::{acc_id, Scribe};
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::tokens::CheckedAdd;
-use ic_rosetta_api::convert::{block_id, from_hash, to_hash};
+use ic_rosetta_api::convert::{block_id, from_hash, to_hash, to_model_account_identifier};
+use ic_rosetta_api::errors::ApiError;
 use ic_rosetta_api::ledger_client::LedgerAccess;
 use ic_rosetta_api::models::amount::tokens_to_amount;
 use ic_rosetta_api::models::Amount;
+use ic_rosetta_api::models::{AccountBalanceRequest, PartialBlockIdentifier};
 use ic_rosetta_api::models::{
     AccountBalanceResponse, BlockIdentifier, BlockRequest, BlockTransaction,
     BlockTransactionRequest, ConstructionDeriveRequest, ConstructionDeriveResponse,
@@ -17,10 +20,15 @@ use ic_rosetta_api::models::{
 };
 use ic_rosetta_api::request_handler::RosettaRequestHandler;
 use ic_rosetta_api::transaction_id::TransactionIdentifier;
+use ic_rosetta_api::DEFAULT_TOKEN_SYMBOL;
 use ic_rosetta_api::{models, API_VERSION, NODE_VERSION};
+use icp_ledger::{self, AccountIdentifier, Block, BlockIndex, Tokens};
 use rosetta_core::request_types::MetadataRequest;
 use rosetta_core::response_types::{MempoolResponse, NetworkListResponse};
+use std::collections::BTreeMap;
 use std::sync::Arc;
+
+mod test_utils;
 
 #[actix_rt::test]
 async fn smoke_test() {

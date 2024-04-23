@@ -4,6 +4,7 @@ load("@io_bazel_rules_docker//contrib:passwd.bzl", "passwd_entry", "passwd_file"
 load("@rules_pkg//:pkg.bzl", "pkg_tar")
 load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_mkdirs")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -104,14 +105,13 @@ rust_test(
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
-rust_test(
+rust_test_suite_with_extra_srcs(
     name = "rosetta-api-tests",
-    srcs = glob(["test/**/*.rs"]),
+    srcs = glob(["tests/*.rs"]),
     aliases = ALIASES,
-    crate_root = "test/test_utils.rs",
     data = glob([
-        "test/*.json",
-        "test/*.ros",
+        "tests/*.json",
+        "tests/*.ros",
     ]) + [
         "@rosetta-cli//:rosetta-cli",
     ],
@@ -119,6 +119,7 @@ rust_test(
         "ROSETTA_CLI": "$(rootpath @rosetta-cli//:rosetta-cli)",
         "CARGO_MANIFEST_DIR": "rs/rosetta-api/",
     },
+    extra_srcs = ["tests/test_utils/mod.rs"],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     version = ROSETTA_VERSION,
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [":rosetta-api"],

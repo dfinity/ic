@@ -11,3 +11,7 @@ candid = { workspace = true }
 tokio = { workspace = true }
 anyhow = { workspace = true }
 icrc-ledger-types = { path = "../../../../../packages/icrc-ledger-types" }
+
+[dev-dependencies]
+pocket-ic = { path = "../../../../../packages/pocket-ic" }
+reqwest = { workspace = true }

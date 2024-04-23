@@ -74,8 +74,8 @@ motoko_binary(
 
 rust_canister(
     name = "test_notified_canister",
-    srcs = ["test/notified.rs"],
-    service_file = ":test/notified.did",
+    srcs = ["tests/notified.rs"],
+    service_file = ":tests/notified.did",
     deps = [
         ":icp_ledger",
         "//rs/rust_canisters/dfn_candid",
@@ -90,8 +90,8 @@ rust_ic_test_suite(
     name = "ledger_canister_integration_test",
     timeout = "long",
     srcs = [
-        "test/test.rs",
-        "test/upgrade_downgrade.rs",
+        "tests/tests.rs",
+        "tests/upgrade_downgrade.rs",
     ],
     data = [
         "ledger.did",
@@ -150,7 +150,7 @@ rust_ic_test_suite(
 
 rust_test(
     name = "protobuf_encoding_test",
-    srcs = ["test/protobuf_encoding.rs"],
+    srcs = ["tests/protobuf_encoding.rs"],
     deps = [
         ":icp_ledger",
         "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
@@ -168,7 +168,7 @@ did_git_test(
 
 generated_files_check(
     name = "check_generated_files",
-    srcs = ["test/check_generated_files.rs"],
+    srcs = ["tests/check_generated_files.rs"],
     data = [
         ":protos",
         "//rs/types/base_types:protos",
