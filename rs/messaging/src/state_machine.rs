@@ -119,7 +119,7 @@ impl StateMachine for StateMachineImpl {
 
         // Time out requests.
         // let timed_out_requests = state.time_out_requests();
-        // FIXME
+        // FIXME: We're now also timing out responses, update the relevant metrics.
         let timed_out_requests = state.time_out_messages();
         self.metrics
             .timed_out_requests_total

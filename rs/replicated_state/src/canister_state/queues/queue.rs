@@ -337,6 +337,33 @@ impl CanisterQueue {
         })
     }
 
+    /// Counts guaranteed response request references (live or stale) in the queue.
+    ///
+    /// Time complexity: `O(n)`.
+    pub(super) fn count_guaranteed_request_references(&self) -> usize {
+        use MessageReference::*;
+
+        self.calculate_reference_stat_sum(|reference| match reference {
+            Request(id) => (id.class() == Class::GuaranteedResponse) as usize,
+            Response(_) => 0,
+            LocalRejectResponse(_) => 0,
+        })
+    }
+
+    /// Counts guaranteed response references in the queue.
+    ///
+    /// Time complexity: `O(n)`.
+    pub(super) fn count_guaranteed_response_references(&self) -> usize {
+        use MessageReference::*;
+
+        self.calculate_reference_stat_sum(|reference| match reference {
+            Request(_) => 0,
+            Response(id) => (id.class() == Class::GuaranteedResponse) as usize,
+            // FIXME: Some of these may be guaranteed responses.
+            LocalRejectResponse(_) => 0,
+        })
+    }
+
     /// Calculates the sum of the given stat across all (non-stale) enqueued
     /// messages.
     ///

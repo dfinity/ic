@@ -1117,7 +1117,8 @@ fn test_memory_usage_stats_oversized_requests() {
         queues.pool.memory_usage_stats()
     );
 
-    // Insert a bunch of oversized requests.
+    // Insert one best-effort and one guaranteed oversized request each into an
+    // input and an output queue.
     let best_effort = request(
         MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize + 1000,
         time(10),
@@ -1130,7 +1131,7 @@ fn test_memory_usage_stats_oversized_requests() {
     let guaranteed_size_bytes = guaranteed.count_bytes();
     // The 2000 bytes we added above; plus the method name provided by
     // `RequestBuilder`; plus any difference in size between the `Request` and
-    // `Response` structs, so better to compute it
+    // `Response` structs, so better compute it.
     let guaranteed_extra_bytes = guaranteed_size_bytes - MAX_RESPONSE_COUNT_BYTES;
 
     queues
@@ -1146,12 +1147,14 @@ fn test_memory_usage_stats_oversized_requests() {
         .push_output_request(guaranteed.clone().into(), UNIX_EPOCH)
         .unwrap();
 
-    // A new input queue, two inbound messages and two reserved slots.
+    // One input queue, two inbound messages and two reserved slots.
     let expected_iq_stats = InputQueuesStats {
         message_count: 2,
         response_count: 0,
         reserved_slots: 2,
         size_bytes: iq_size + best_effort_size_bytes + guaranteed_size_bytes,
+        guaranteed_request_count: 1,
+        guaranteed_response_count: 0,
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     // Two messages in output queues.
@@ -1188,6 +1191,8 @@ fn test_memory_usage_stats_oversized_requests() {
         response_count: 0,
         reserved_slots: 2,
         size_bytes: iq_size,
+        guaranteed_request_count: 0,
+        guaranteed_response_count: 0,
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     // Still two messages in output queues.
@@ -1284,6 +1289,8 @@ fn test_stats() {
             response_count: 0,
             reserved_slots: 0,
             size_bytes: iq_size + msg_size[i],
+            guaranteed_request_count: 1,
+            guaranteed_response_count: 0,
         };
         assert_eq!(expected_iq_stats, queues.input_queues_stats);
         assert_eq!(expected_oq_stats, queues.output_queues_stats);
@@ -1304,6 +1311,8 @@ fn test_stats() {
         response_count: 0,
         reserved_slots: 0,
         size_bytes: msg_size[0],
+        guaranteed_request_count: 1,
+        guaranteed_response_count: 0,
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     assert_eq!(expected_oq_stats, queues.output_queues_stats);
@@ -1415,6 +1424,8 @@ fn test_stats() {
         response_count: 1,
         reserved_slots: -1,
         size_bytes: msg_size[5],
+        guaranteed_request_count: 0,
+        guaranteed_response_count: 1,
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     assert_eq!(expected_oq_stats, queues.output_queues_stats);
@@ -1440,6 +1451,8 @@ fn test_stats() {
         response_count: 0,
         reserved_slots: 0,
         size_bytes: msg_size[1],
+        guaranteed_request_count: 1,
+        guaranteed_response_count: 0,
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     assert_eq!(expected_oq_stats, queues.output_queues_stats);
@@ -1457,6 +1470,8 @@ fn test_stats() {
         response_count: 0,
         reserved_slots: 0,
         size_bytes: msg_size[2],
+        guaranteed_request_count: 1,
+        guaranteed_response_count: 0,
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     assert_eq!(expected_oq_stats, queues.output_queues_stats);
@@ -1474,6 +1489,8 @@ fn test_stats() {
         response_count: 1,
         reserved_slots: 0,
         size_bytes: msg_size[5],
+        guaranteed_request_count: 0,
+        guaranteed_response_count: 1,
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     assert_eq!(expected_oq_stats, queues.output_queues_stats);
@@ -1529,6 +1546,8 @@ fn test_stats_induct_message_to_self() {
         response_count: 0,
         reserved_slots: 0,
         size_bytes: request_size,
+        guaranteed_request_count: 1,
+        guaranteed_response_count: 0,
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     // We now have guaranteed response memory reservations (for the same request) in
@@ -1544,6 +1563,8 @@ fn test_stats_induct_message_to_self() {
         response_count: 0,
         reserved_slots: 0,
         size_bytes: request_size,
+        guaranteed_request_count: 1,
+        guaranteed_response_count: 0,
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     // Memory usage stats unchanged, as the response memory reservations are still there.
@@ -1576,6 +1597,8 @@ fn test_stats_induct_message_to_self() {
         response_count: 1,
         reserved_slots: -1,
         size_bytes: response_size,
+        guaranteed_request_count: 0,
+        guaranteed_response_count: 1,
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     // Consumed input queue response memory reservation but response is still there
@@ -1591,6 +1614,8 @@ fn test_stats_induct_message_to_self() {
         response_count: 1,
         reserved_slots: 0,
         size_bytes: response_size,
+        guaranteed_request_count: 0,
+        guaranteed_response_count: 1,
     };
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     // Zero response bytes, zero response memory reservations.
