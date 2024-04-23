@@ -55,7 +55,6 @@ fn default_canister_state_bits() -> CanisterStateBits {
         canister_log: Default::default(),
         wasm_memory_limit: None,
         next_snapshot_id: 0,
-        snapshot_ids: BTreeSet::new(),
     }
 }
 
