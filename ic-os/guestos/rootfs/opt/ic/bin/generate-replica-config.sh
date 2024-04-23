@@ -234,8 +234,8 @@ BACKUP_PURGING_INTERVAL_SECS="${backup_purging_interval_secs:-3600}"
 REPLICA_LOG_DEBUG_OVERRIDES="${replica_log_debug_overrides:-[]}"
 # Default is null (None)
 MALICIOUS_BEHAVIOR="${malicious_behavior:-null}"
-# Defaults to disabled
-QUERY_STATS_AGGREGATION="${query_stats_aggregation:-\"Disabled\"}"
+# Defaults to enabled
+QUERY_STATS_AGGREGATION="${query_stats_aggregation:-\"Enabled\"}"
 # Default is 600 blocks i.e. around 10min
 QUERY_STATS_EPOCH_LENGTH="${query_stats_epoch_length:-600}"
 
