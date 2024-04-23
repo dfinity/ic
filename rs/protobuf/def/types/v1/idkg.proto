@@ -179,6 +179,18 @@ message ThresholdEcdsaSigInputsRef {
   UnmaskedTranscript key_transcript_ref = 5;
 }
 
+message TranscriptInCreation {
+  registry.crypto.v1.SchnorrKeyId key_id = 1;
+  RandomUnmaskedTranscriptParams blinder_unmasked_config = 2;
+  UnmaskedTranscript blinder_unmasked = 3;
+}
+
+message PreSignatureTranscriptRef {
+  registry.crypto.v1.SchnorrKeyId key_id = 1;
+  UnmaskedTranscript blinder_unmasked_ref = 2;
+  UnmaskedTranscript key_unmasked_ref = 3;
+}
+
 message CompletedSignature {
   reserved 1;
   reserved 2;

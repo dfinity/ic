@@ -666,6 +666,28 @@ pub struct ThresholdEcdsaSigInputsRef {
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct TranscriptInCreation {
+    #[prost(message, optional, tag = "1")]
+    pub key_id: ::core::option::Option<super::super::registry::crypto::v1::SchnorrKeyId>,
+    #[prost(message, optional, tag = "2")]
+    pub blinder_unmasked_config: ::core::option::Option<RandomUnmaskedTranscriptParams>,
+    #[prost(message, optional, tag = "3")]
+    pub blinder_unmasked: ::core::option::Option<UnmaskedTranscript>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PreSignatureTranscriptRef {
+    #[prost(message, optional, tag = "1")]
+    pub key_id: ::core::option::Option<super::super::registry::crypto::v1::SchnorrKeyId>,
+    #[prost(message, optional, tag = "2")]
+    pub blinder_unmasked_ref: ::core::option::Option<UnmaskedTranscript>,
+    #[prost(message, optional, tag = "3")]
+    pub key_unmasked_ref: ::core::option::Option<UnmaskedTranscript>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CompletedSignature {
     #[prost(message, optional, tag = "3")]
     pub unreported: ::core::option::Option<ConsensusResponse>,
