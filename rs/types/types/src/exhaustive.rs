@@ -38,7 +38,7 @@ use ic_btc_types_internal::{
 use ic_crypto_internal_types::NodeIndex;
 use ic_error_types::RejectCode;
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId};
+use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId};
 use ic_protobuf::types::v1 as pb;
 use phantom_newtype::{AmountOf, Id};
 use prost::Message;
@@ -345,6 +345,24 @@ impl ExhaustiveSet for EcdsaKeyId {
             .into_iter()
             .map(|elem| Self {
                 curve: elem.0,
+                name: elem.1,
+            })
+            .collect()
+    }
+}
+
+impl ExhaustiveSet for SchnorrAlgorithm {
+    fn exhaustive_set<R: RngCore + CryptoRng>(_: &mut R) -> Vec<Self> {
+        SchnorrAlgorithm::iter().collect()
+    }
+}
+
+impl ExhaustiveSet for SchnorrKeyId {
+    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+        <(SchnorrAlgorithm, String)>::exhaustive_set(rng)
+            .into_iter()
+            .map(|elem| Self {
+                algorithm: elem.0,
                 name: elem.1,
             })
             .collect()
