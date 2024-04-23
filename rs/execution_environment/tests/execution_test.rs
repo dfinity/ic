@@ -15,6 +15,7 @@ use ic_state_machine_tests::{
 use ic_test_utilities_metrics::fetch_int_counter;
 use ic_types::{ingress::WasmResult, CanisterId, Cycles, NumBytes};
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+use more_asserts::{assert_le, assert_lt};
 use std::{convert::TryInto, sync::Arc, time::Duration};
 
 /// One billion for better cycles readability.
@@ -578,8 +579,9 @@ fn test_state_machine_consumes_instructions() {
     env.execute_ingress(canister_id, "inc", vec![]).unwrap();
 
     let consumed = env.instructions_consumed();
-    assert!(
-        consumed >= 1000.0,
+    assert_le!(
+        1000.0,
+        consumed,
         "Expected the state machine to consume at least 1000 instructions, got {:?}",
         consumed
     );
@@ -903,7 +905,7 @@ fn subnet_memory_reservation_works() {
 fn subnet_memory_reservation_scales_with_number_of_cores() {
     let subnet_config = SubnetConfig::new(SubnetType::Application);
     let num_cores = subnet_config.scheduler_config.scheduler_cores as u64;
-    assert!(num_cores > 1);
+    assert_lt!(1, num_cores);
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config,
         HypervisorConfig {
@@ -1296,7 +1298,7 @@ fn canister_with_reserved_balance_is_not_frozen_too_early() {
         env.replace_canister_state(Arc::new(state), canister_id);
     }
 
-    assert!(env.cycle_balance(canister_id) < freezing_threshold);
+    assert_lt!(env.cycle_balance(canister_id), freezing_threshold);
 
     let res = env.execute_ingress(
         canister_id,

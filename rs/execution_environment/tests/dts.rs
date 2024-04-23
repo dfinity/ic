@@ -20,6 +20,7 @@ use ic_state_machine_tests::{
 };
 use ic_types::{ingress::WasmResult, Cycles, NumInstructions};
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+use more_asserts::assert_ge;
 
 const INITIAL_CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
 
@@ -1800,7 +1801,7 @@ fn dts_canister_uninstalled_due_resource_charges_with_aborted_update() {
             }
         }
     }
-    assert!(errors >= 1);
+    assert_ge!(errors, 1);
 }
 
 #[test]

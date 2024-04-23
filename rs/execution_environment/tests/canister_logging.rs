@@ -14,6 +14,7 @@ use ic_state_machine_tests::{
 };
 use ic_test_utilities_execution_environment::{get_reply, wat_canister, wat_fn};
 use ic_types::{ingress::WasmResult, CanisterId, Cycles};
+use more_asserts::{assert_le, assert_lt};
 use proptest::{prelude::ProptestConfig, prop_assume};
 use std::time::{Duration, SystemTime};
 
@@ -556,7 +557,10 @@ fn test_canister_log_stays_within_limit() {
     let result = fetch_canister_logs(env, controller, canister_id);
     let response = FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap();
     // Expect that the total size of the log records is less than the limit.
-    assert!(response.canister_log_records.data_size() <= MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE);
+    assert_le!(
+        response.canister_log_records.data_size(),
+        MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE
+    );
 }
 
 #[test]
@@ -603,8 +607,8 @@ fn test_canister_log_in_state_stays_within_limit() {
     }
     // Expect that the total size of the log in canister state is not zero and less than the limit.
     let log_size = env.canister_log(canister_id).used_space();
-    assert!(0 < log_size);
-    assert!(log_size <= MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE);
+    assert_lt!(0, log_size);
+    assert_le!(log_size, MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE);
 }
 
 #[test]
