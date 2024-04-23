@@ -168,8 +168,6 @@ pub struct CanisterStateBits {
     pub canister_log: CanisterLog,
     pub wasm_memory_limit: Option<NumBytes>,
     pub next_snapshot_id: u64,
-    // TODO(EXC-1597): Deprecated field.
-    pub snapshot_ids: BTreeSet<SnapshotId>,
 }
 
 /// This struct contains bits of the `CanisterSnapshot` that are not already
@@ -1910,11 +1908,6 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             next_canister_log_record_idx: item.canister_log.next_idx(),
             wasm_memory_limit: item.wasm_memory_limit.map(|v| v.get()),
             next_snapshot_id: item.next_snapshot_id,
-            snapshot_ids: item
-                .snapshot_ids
-                .into_iter()
-                .map(|snapshot_id| snapshot_id.into())
-                .collect(),
         }
     }
 }
@@ -2062,7 +2055,6 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             ),
             wasm_memory_limit: value.wasm_memory_limit.map(NumBytes::from),
             next_snapshot_id: value.next_snapshot_id,
-            snapshot_ids: BTreeSet::new(),
         })
     }
 }

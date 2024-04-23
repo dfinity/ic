@@ -643,10 +643,6 @@ pub struct CanisterStateBits {
     /// The next local snapshot ID.
     #[prost(uint64, tag = "46")]
     pub next_snapshot_id: u64,
-    /// TODO(EXC-1597): Deprecated field.
-    /// The set of snapshots ids of the canister.
-    #[prost(message, repeated, tag = "47")]
-    pub snapshot_ids: ::prost::alloc::vec::Vec<SnapshotId>,
     #[prost(oneof = "canister_state_bits::CanisterStatus", tags = "11, 12, 13")]
     pub canister_status: ::core::option::Option<canister_state_bits::CanisterStatus>,
 }
