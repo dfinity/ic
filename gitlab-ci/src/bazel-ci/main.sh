@@ -63,15 +63,16 @@ echo "${GITLAB_API_TOKEN:-}" >"${GITLAB_TOKEN}"
 ic_version_rc_only="0000000000000000000000000000000000000000"
 if [ "$CI_COMMIT_REF_PROTECTED" = "true" ]; then
     ic_version_rc_only="${CI_COMMIT_SHA}"
+    s3_upload="True"
 fi
 
 if [[ "${CI_COMMIT_BRANCH:-}" =~ ^hotfix-.+-rc--.+ ]]; then
     ic_version_rc_only="${CI_COMMIT_SHA}"
+    s3_upload="True"
 fi
 
-if [[ "${CI_COMMIT_TAG:-}" =~ ^release-.+ ]]; then
-    # upload artifacts also to cloudflare r2
-    RC="True"
+if [[ "${CI_MERGE_REQUEST_TITLE:-}" == *"[S3_UPLOAD]"* ]]; then
+    s3_upload="True"
 fi
 
 # shellcheck disable=SC2086
@@ -83,7 +84,7 @@ buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" "${CI_JOB_NAME}-bazel-cmd" 
     --build_metadata=BUILDBUDDY_LINKS="[CI Job](${CI_JOB_URL})" \
     --ic_version="${CI_COMMIT_SHA}" \
     --ic_version_rc_only="${ic_version_rc_only}" \
-    --rc="${RC:-"False"}" \
+    --s3_upload="${s3_upload:-"False"}" \
     ${BAZEL_EXTRA_ARGS:-} \
     ${BAZEL_TARGETS} \
     2>&1 \

@@ -73,7 +73,7 @@ build --cxxopt='-std=c++17'
 build --flag_alias=ic_version=//bazel:ic_version
 build --flag_alias=ic_version_rc_only=//bazel:ic_version_rc_only
 build --flag_alias=s3_endpoint=//gitlab-ci/src/artifacts:s3_endpoint
-build --flag_alias=rc=//gitlab-ci/src/artifacts:rc
+build --flag_alias=s3_upload=//gitlab-ci/src/artifacts:s3_upload
 build --flag_alias=k8s=//rs/tests:k8s
 build --flag_alias=timeout_value=//bazel:timeout_value
 
