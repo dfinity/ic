@@ -49,8 +49,6 @@ pub mod ingress_status_completed {
 pub struct IngressStatusFailed {
     #[prost(message, optional, tag = "1")]
     pub user_id: ::core::option::Option<super::super::super::types::v1::UserId>,
-    #[prost(uint64, tag = "2")]
-    pub err_code_old: u64,
     #[prost(string, tag = "3")]
     pub err_description: ::prost::alloc::string::String,
     #[prost(uint64, tag = "4")]
