@@ -42,21 +42,24 @@ write_line() {
     #    Sampling period:                          00000005 Seconds.
     #    Power reading state is:                   activated
 
-    ipmi_output="$(ipmitool dcmi power reading)"
+    ipmi_output="$(ipmitool dcmi power reading 2>/dev/null)"
 
     value=$(echo "${ipmi_output}" | grep "Instantaneous power reading:" | awk '{print $4}')
+    value=${value:-"-1"}
     write_line "instantaneous_watts" \
         "${value}" \
         "Instantaneous power reading, Watts" \
         "gauge"
 
     value=$(echo "${ipmi_output}" | grep "Average power reading over sample period:" | awk '{print $7}')
+    value=${value:-"-1"}
     write_line "average_watts" \
         "${value}" \
         "Average power reading, Watts" \
         "gauge"
 
     value=$(echo "${ipmi_output}" | grep "Sampling period:" | awk '{print $3}')
+    value=${value:-"-1"}
     write_line "sampling_period_seconds" \
         "${value}" \
         "Power sampling period, seconds" \
