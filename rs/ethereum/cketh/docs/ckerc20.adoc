@@ -180,7 +180,7 @@ The ckERC-20 → ERC-20 conversion flow is similar to the ckETH → ETH conversi
    │                             │                         │                  │                                          │
    │                             │                         │                  │                                          │
    │                             │                         │                  │                                          │
-   │                   withdraw_eth(destination_eth_address, amount)          │                                          │
+   │    withdraw_erc20(ckerc20_ledger_id, amount, destination_eth_address)    │                                          │
    │─────────────────────────────────────────────────────────────────────────>│                                          │
    │                             │                         │                  │                                          │
    │                             │                         │                  │ eth_sendRawTransaction                   │
@@ -215,7 +215,7 @@ dfx canister --network ic call CKERC20_LEDGER icrc2_approve "(record { spender =
 +
 [source,shell]
 ----
-dfx canister --network ic call minter withdraw_erc20 "(record {ckerc20_ledger_id = principal \"CKERC20_LEDGER\"; amount = AMOUNT_CK_TOKEN:nat; recipient = \"ETH_ADDRESS\"})"
+dfx canister --network ic call minter withdraw_erc20 "(record { amount = AMOUNT_CK_TOKEN:nat; ckerc20_ledger_id = principal \"CKERC20_LEDGER\"; recipient = \"ETH_ADDRESS\"})"
 ----
 
 After having called `withdraw_erc20`, the user does not need to do anything else. The minter will take care of the rest:
