@@ -5,19 +5,19 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/crypto/ecdsa_secp256k1",
-    "//rs/types/types",
     "//rs/crypto/ed25519",
+    "//rs/types/types",
     "@crate_index//:anyhow",
-    "@crate_index//:serde",
-    "@crate_index//:rand",
-    "@crate_index//:serde_cbor",
-    "@crate_index//:serde_bytes",
-    "@crate_index//:hex",
-    "@crate_index//:serde_json",
-    "@crate_index//:serde_with",
     "@crate_index//:candid",
+    "@crate_index//:hex",
     "@crate_index//:ic-agent",
     "@crate_index//:num-bigint",
+    "@crate_index//:rand",
+    "@crate_index//:serde",
+    "@crate_index//:serde_bytes",
+    "@crate_index//:serde_cbor",
+    "@crate_index//:serde_json",
+    "@crate_index//:serde_with",
 ]
 
 MACRO_DEPENDENCIES = [

@@ -92,8 +92,8 @@ rust_ic_test(
     env = {
         "CARGO_MANIFEST_DIR": "rs/rosetta-api/icp_ledger/index",
         "IC_ICP_INDEX_WASM_PATH": "$(rootpath :ic-icp-index-canister.wasm)",
-        "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm)",
         "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method)",
+        "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm)",
     },
     deps = [":ic-icp-index"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
