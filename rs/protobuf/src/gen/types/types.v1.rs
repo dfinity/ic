@@ -602,6 +602,46 @@ pub struct UnmaskedTimesMaskedParams {
     pub transcript_ref: ::core::option::Option<IDkgTranscriptParamsRef>,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::large_enum_variant)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PreSignatureInCreation {
+    #[prost(oneof = "pre_signature_in_creation::Msg", tags = "1, 2")]
+    pub msg: ::core::option::Option<pre_signature_in_creation::Msg>,
+}
+/// Nested message and enum types in `PreSignatureInCreation`.
+pub mod pre_signature_in_creation {
+    #[derive(serde::Serialize, serde::Deserialize)]
+    #[allow(clippy::large_enum_variant)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Msg {
+        #[prost(message, tag = "1")]
+        Ecdsa(super::QuadrupleInCreation),
+        #[prost(message, tag = "2")]
+        Schnorr(super::TranscriptInCreation),
+    }
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PreSignatureRef {
+    #[prost(oneof = "pre_signature_ref::Msg", tags = "1, 2")]
+    pub msg: ::core::option::Option<pre_signature_ref::Msg>,
+}
+/// Nested message and enum types in `PreSignatureRef`.
+pub mod pre_signature_ref {
+    #[derive(serde::Serialize, serde::Deserialize)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Msg {
+        #[prost(message, tag = "1")]
+        Ecdsa(super::PreSignatureQuadrupleRef),
+        #[prost(message, tag = "2")]
+        Schnorr(super::PreSignatureTranscriptRef),
+    }
+}
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct QuadrupleInCreation {

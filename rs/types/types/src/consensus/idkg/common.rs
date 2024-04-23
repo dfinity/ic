@@ -20,8 +20,10 @@ use std::collections::BTreeSet;
 use std::convert::{AsMut, AsRef, TryFrom};
 use std::hash::{Hash, Hasher};
 
-// TODO: remove after payload is generalized
-use super::ecdsa::PreSignatureQuadrupleRef;
+use super::{
+    ecdsa::{PreSignatureQuadrupleRef, QuadrupleInCreation},
+    schnorr::{PreSignatureTranscriptRef, TranscriptInCreation},
+};
 
 /// PseudoRandomId is defined in execution context as plain 32-byte vector, we give it a synonym here.
 pub type PseudoRandomId = [u8; 32];
@@ -972,5 +974,120 @@ impl IDkgTranscriptParamsRef {
     /// Updates the height of the references.
     pub fn update(&mut self, height: Height) {
         self.operation_type_ref.update(height);
+    }
+}
+
+#[derive(Hash, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub enum PreSignatureInCreation {
+    Ecdsa(QuadrupleInCreation),
+    Schnorr(TranscriptInCreation),
+}
+
+impl PreSignatureInCreation {
+    /// Return an iterator of all transcript configs that have no matching
+    /// results yet.
+    pub fn iter_transcript_configs_in_creation(
+        &self,
+    ) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_> {
+        match self {
+            Self::Schnorr(x) => x.iter_transcript_configs_in_creation(),
+            Self::Ecdsa(x) => x.iter_transcript_configs_in_creation(),
+        }
+    }
+
+    /// Returns the refs held
+    pub fn get_refs(&self) -> Vec<TranscriptRef> {
+        match self {
+            Self::Schnorr(x) => x.get_refs(),
+            Self::Ecdsa(x) => x.get_refs(),
+        }
+    }
+
+    /// Updates the height of the references.
+    pub fn update(&mut self, height: Height) {
+        match self {
+            Self::Schnorr(x) => x.update(height),
+            Self::Ecdsa(x) => x.update(height),
+        }
+    }
+}
+
+impl From<&PreSignatureInCreation> for pb::PreSignatureInCreation {
+    fn from(value: &PreSignatureInCreation) -> Self {
+        use pb::pre_signature_in_creation::Msg;
+        let msg = match value {
+            PreSignatureInCreation::Schnorr(x) => Msg::Schnorr(x.into()),
+            PreSignatureInCreation::Ecdsa(x) => Msg::Ecdsa(x.into()),
+        };
+        Self { msg: Some(msg) }
+    }
+}
+
+impl TryFrom<&pb::PreSignatureInCreation> for PreSignatureInCreation {
+    type Error = ProxyDecodeError;
+    fn try_from(pre_signature: &pb::PreSignatureInCreation) -> Result<Self, Self::Error> {
+        use pb::pre_signature_in_creation::Msg;
+        let Some(msg) = pre_signature.msg.as_ref() else {
+            return Err(ProxyDecodeError::MissingField(
+                "PreSignatureInCreation::msg",
+            ));
+        };
+        Ok(match msg {
+            Msg::Schnorr(x) => PreSignatureInCreation::Schnorr(x.try_into()?),
+            Msg::Ecdsa(x) => PreSignatureInCreation::Ecdsa(x.try_into()?),
+        })
+    }
+}
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub enum PreSignatureRef {
+    Ecdsa(PreSignatureQuadrupleRef),
+    Schnorr(PreSignatureTranscriptRef),
+}
+
+impl PreSignatureRef {
+    /// Returns the refs held
+    pub fn get_refs(&self) -> Vec<TranscriptRef> {
+        match self {
+            Self::Schnorr(x) => x.get_refs(),
+            Self::Ecdsa(x) => x.get_refs(),
+        }
+    }
+
+    /// Updates the height of the references.
+    pub fn update(&mut self, height: Height) {
+        match self {
+            Self::Schnorr(x) => x.update(height),
+            Self::Ecdsa(x) => x.update(height),
+        }
+    }
+}
+
+impl From<&PreSignatureRef> for pb::PreSignatureRef {
+    fn from(value: &PreSignatureRef) -> Self {
+        use pb::pre_signature_ref::Msg;
+        let msg = match value {
+            PreSignatureRef::Schnorr(x) => Msg::Schnorr(x.into()),
+            PreSignatureRef::Ecdsa(x) => Msg::Ecdsa(x.into()),
+        };
+        Self { msg: Some(msg) }
+    }
+}
+
+impl TryFrom<&pb::PreSignatureRef> for PreSignatureRef {
+    type Error = ProxyDecodeError;
+    fn try_from(pre_signature: &pb::PreSignatureRef) -> Result<Self, Self::Error> {
+        use pb::pre_signature_ref::Msg;
+        let Some(msg) = pre_signature.msg.as_ref() else {
+            return Err(ProxyDecodeError::MissingField(
+                "PreSignatureInCreation::msg",
+            ));
+        };
+        Ok(match msg {
+            Msg::Schnorr(x) => PreSignatureRef::Schnorr(x.try_into()?),
+            Msg::Ecdsa(x) => PreSignatureRef::Ecdsa(x.try_into()?),
+        })
     }
 }
