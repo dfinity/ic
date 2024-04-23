@@ -9,6 +9,7 @@ use super::{
 };
 use cvt::{cvt, cvt_r};
 use ic_sys::{page_bytes_from_ptr, PageBytes, PageIndex, PAGE_SIZE};
+use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 use libc::{c_void, close};
 use nix::sys::mman::{madvise, mmap, munmap, MapFlags, MmapAdvise, ProtFlags};
 use serde::{Deserialize, Serialize};
@@ -76,7 +77,12 @@ impl PageInner {
                 // initialized immediately after allocation.
                 assert!(self.is_valid());
             }
-            std::ptr::copy_nonoverlapping(slice.as_ptr(), self.ptr.0.add(offset), slice.len());
+            // Manually copy page one byte at a time. Compiler is able to optimize this
+            // better than std::ptr::copy_nonoverlapping().
+            deterministic_copy_from_slice(
+                std::slice::from_raw_parts_mut(self.ptr.0.add(offset), PAGE_SIZE),
+                slice,
+            );
             // Update the validation information if it wasn't initialized yet or
             // became invalid.
             if self.validation.non_zero_word_value == 0 || !self.is_valid() {
