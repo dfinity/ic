@@ -244,7 +244,6 @@ impl WasmtimeEmbedder {
             self.config.feature_flags,
             self.config.stable_memory_dirty_page_limit,
             self.config.stable_memory_accessed_page_limit,
-            self.config.metering_type,
             main_memory_type,
         );
 

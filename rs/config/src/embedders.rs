@@ -105,7 +105,6 @@ impl Default for FeatureFlags {
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum MeteringType {
-    Old,
     New,
     /// for testing and benchmarking
     None,

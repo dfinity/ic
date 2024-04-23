@@ -1,7 +1,7 @@
 use assert_matches::assert_matches;
 use ic_config::{embedders::Config, flag_status::FlagStatus};
 use ic_embedders::{
-    wasm_utils::instrumentation::instruction_to_cost_new, wasmtime_embedder::system_api_complexity,
+    wasm_utils::instrumentation::instruction_to_cost, wasmtime_embedder::system_api_complexity,
 };
 use ic_interfaces::execution_environment::{HypervisorError, SystemApi, TrapCode};
 use ic_registry_subnet_type::SubnetType;
@@ -90,13 +90,13 @@ fn correctly_count_instructions() {
     let system_api = &instance.store_data().system_api().unwrap();
     let instructions_used = system_api.slice_instructions_executed(instruction_counter);
 
-    let const_cost = instruction_to_cost_new(&wasmparser::Operator::I32Const { value: 1 });
-    let call_cost = instruction_to_cost_new(&wasmparser::Operator::Call { function_index: 0 });
+    let const_cost = instruction_to_cost(&wasmparser::Operator::I32Const { value: 1 });
+    let call_cost = instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 });
 
     let expected_instructions = 1 // Function is 1 instruction.
             + 3 * const_cost
             + call_cost
-            + system_api_complexity::overhead::new::MSG_ARG_DATA_COPY.get()
+            + system_api_complexity::overhead::MSG_ARG_DATA_COPY.get()
             + data_size;
     assert_eq!(instructions_used.get(), expected_instructions);
 }
@@ -144,11 +144,10 @@ fn instruction_limit_traps() {
 fn correctly_report_performance_counter() {
     let data_size = 1024;
 
-    let const_cost = instruction_to_cost_new(&wasmparser::Operator::I32Const { value: 1 });
-    let call_cost = instruction_to_cost_new(&wasmparser::Operator::Call { function_index: 0 });
-    let drop_const_cost = instruction_to_cost_new(&wasmparser::Operator::Drop) + const_cost;
-    let global_set_cost =
-        instruction_to_cost_new(&wasmparser::Operator::GlobalSet { global_index: 0 });
+    let const_cost = instruction_to_cost(&wasmparser::Operator::I32Const { value: 1 });
+    let call_cost = instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 });
+    let drop_const_cost = instruction_to_cost(&wasmparser::Operator::Drop) + const_cost;
+    let global_set_cost = instruction_to_cost(&wasmparser::Operator::GlobalSet { global_index: 0 });
 
     // Note: the instrumentation is a stack machine, which counts and subtracts
     // the number of instructions for the whole block. The "dynamic" part of
@@ -166,12 +165,12 @@ fn correctly_report_performance_counter() {
     let expected_instructions_counter1 = 1 // Function is 1 instruction.
             + 3 * const_cost
             + call_cost
-            + system_api_complexity::overhead::new::MSG_ARG_DATA_COPY.get()
+            + system_api_complexity::overhead::MSG_ARG_DATA_COPY.get()
             + data_size
             + drop_const_cost
             + const_cost
             + call_cost
-            + system_api_complexity::overhead::new::PERFORMANCE_COUNTER.get()
+            + system_api_complexity::overhead::PERFORMANCE_COUNTER.get()
             + global_set_cost
             + 2 * drop_const_cost
             + 3 * const_cost
@@ -181,9 +180,9 @@ fn correctly_report_performance_counter() {
             + global_set_cost;
     // Includes dynamic part for second data copy and performance counter calls
     let expected_instructions_counter2 = expected_instructions_counter1
-        + system_api_complexity::overhead::new::MSG_ARG_DATA_COPY.get()
+        + system_api_complexity::overhead::MSG_ARG_DATA_COPY.get()
         + data_size
-        + system_api_complexity::overhead::new::PERFORMANCE_COUNTER.get();
+        + system_api_complexity::overhead::PERFORMANCE_COUNTER.get();
     let expected_instructions = expected_instructions_counter2;
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_wat(
@@ -1530,12 +1529,9 @@ fn passive_data_segment() {
 
 /// Calculate debug_print instruction cost from the message length.
 fn debug_print_cost(bytes: usize) -> u64 {
-    let const_cost = instruction_to_cost_new(&wasmparser::Operator::I32Const { value: 1 });
-    let call_cost = instruction_to_cost_new(&wasmparser::Operator::Call { function_index: 0 });
-    3 * const_cost
-        + call_cost
-        + system_api_complexity::overhead::new::DEBUG_PRINT.get()
-        + bytes as u64
+    let const_cost = instruction_to_cost(&wasmparser::Operator::I32Const { value: 1 });
+    let call_cost = instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 });
+    3 * const_cost + call_cost + system_api_complexity::overhead::DEBUG_PRINT.get() + bytes as u64
 }
 
 // The maximum allowed size of a canister log buffer.
