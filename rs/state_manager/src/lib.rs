@@ -150,6 +150,7 @@ pub struct StateManagerMetrics {
     decode_slice_status: IntCounterVec,
     height_update_time_seconds: Histogram,
     storage_metrics: StorageMetrics,
+    merge_metrics: MergeMetrics,
     latest_hash_tree_size: IntGauge,
     latest_hash_tree_max_index: IntGauge,
 }
@@ -242,6 +243,50 @@ impl CheckpointMetrics {
             page_map_flushes,
             page_map_flush_skips,
             log: replica_logger,
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct MergeMetrics {
+    disk_size_bytes: IntGauge,
+    memory_size_bytes: IntGauge,
+    estimated_storage_savings_bytes: Histogram,
+    num_page_maps_merged: HistogramVec,
+}
+
+impl MergeMetrics {
+    pub fn new(metrics_registry: &MetricsRegistry) -> Self {
+        let disk_size_bytes = metrics_registry.int_gauge(
+            "state_manager_merge_disk_size_bytes",
+            "Number of bytes of on disk for all PageMaps, measured before merging.",
+        );
+
+        let memory_size_bytes = metrics_registry.int_gauge(
+            "state_manager_merge_memory_size_bytes",
+            "Number of bytes of memory for all PageMaps, not counting duplicate data in overlays, measured before merging.",
+        );
+
+        let estimated_storage_savings_bytes = metrics_registry.histogram(
+            "state_manager_merge_estimated_storage_savings_bytes",
+            "Estimated number of bytes saved in disk space across all PageMaps for a merge, estimated by the merge strategy.",
+            // 10MB, 20MB, 50MB, 100MB, 200MB, 500MB, …, 100GB, 200GB, 500GB
+            decimal_buckets(7, 11),
+        );
+
+        let num_page_maps_merged = metrics_registry.histogram_vec(
+            "state_manager_num_page_maps_merged",
+            "Number of PapeMaps merged separated by which part of the merge strategy triggered the merge.",
+            // 1, 2, 5, 10, 20, 50, …, 10k, 20k, 50k
+            decimal_buckets(0, 4),
+            &["reason"],
+        );
+
+        Self {
+            disk_size_bytes,
+            memory_size_bytes,
+            estimated_storage_savings_bytes,
+            num_page_maps_merged,
         }
     }
 }
@@ -389,6 +434,7 @@ impl StateManagerMetrics {
             decode_slice_status,
             height_update_time_seconds,
             storage_metrics: StorageMetrics::new(metrics_registry),
+            merge_metrics: MergeMetrics::new(metrics_registry),
             latest_hash_tree_size,
             latest_hash_tree_max_index,
         }
