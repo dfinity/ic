@@ -15,6 +15,7 @@ rootfs_files = {
     Label("etc/systemd/system/generate-network-config.service"): "/etc/systemd/system/generate-network-config.service",
     Label("etc/systemd/system/serial-getty@.service"): "/etc/systemd/system/serial-getty@.service",
     Label("etc/systemd/system/setupos.service"): "/etc/systemd/system/setupos.service",
+    Label("opt/ic/bin/check-setupos-age.sh"): "/opt/ic/bin/check-setupos-age.sh",
     Label("opt/ic/bin/config.sh"): "/opt/ic/bin/config.sh",
     Label("opt/ic/bin/devices.sh"): "/opt/ic/bin/devices.sh",
     Label("opt/ic/bin/disk.sh"): "/opt/ic/bin/disk.sh",

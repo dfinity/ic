@@ -54,3 +54,6 @@ RUN curl -LsSf --remote-name https://github.com/dfinity/AMDSEV/releases/download
     -o -name "System*generic" \
     | xargs rm \
     && find /usr/lib/modules -maxdepth 1 -type d -name "*generic" | xargs rm -rf
+
+# build-time checked in setupOS installation to verify images < six weeks old
+RUN date +%s > build-time
