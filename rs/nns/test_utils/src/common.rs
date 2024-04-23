@@ -313,6 +313,11 @@ pub fn build_registry_wasm() -> Wasm {
     let features = [];
     Project::cargo_bin_maybe_from_env("registry-canister", &features)
 }
+/// Build mainnet Wasm for NNS Registry canister
+pub fn build_mainnet_registry_wasm() -> Wasm {
+    let features = [];
+    Project::cargo_bin_maybe_from_env("mainnet-registry-canister", &features)
+}
 /// Build Wasm for NNS Ledger canister
 pub fn build_ledger_wasm() -> Wasm {
     let features = ["notify-method"];

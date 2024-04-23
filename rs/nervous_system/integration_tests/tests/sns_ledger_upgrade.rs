@@ -164,7 +164,7 @@ fn test_upgrade_existing_sns() {
 
         // Install the (mainnet) NNS canisters.
         let with_mainnet_nns_canisters = true;
-        install_nns_canisters(&pocket_ic, vec![], with_mainnet_nns_canisters);
+        install_nns_canisters(&pocket_ic, vec![], with_mainnet_nns_canisters, None);
 
         // Publish (mainnet) SNS Wasms to SNS-W.
         let with_mainnet_sns_wasms = true;
