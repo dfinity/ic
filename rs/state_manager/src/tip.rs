@@ -573,12 +573,14 @@ fn merge(
         .iter()
         .map(|m| m.storage_size_bytes_before() as i64 - m.storage_size_bytes_after() as i64)
         .sum();
+    let mut merges_by_storage = 0;
     for m in merge_candidates.into_iter() {
         if storage_saved >= storage_to_save {
             break;
         }
 
         storage_saved += m.storage_size_bytes_before() as i64 - m.storage_size_bytes_after() as i64;
+        merges_by_storage += 1;
         // Only full merges reduce overhead, and there should be enough of them to reach
         // `storage_to_save` before tapping into partial merges.
         debug_assert!(m.is_full_merge());
@@ -595,6 +597,29 @@ fn merge(
         storage_saved,
         merges_by_filenum,
     );
+
+    metrics
+        .merge_metrics
+        .disk_size_bytes
+        .set(storage_info.disk_size as i64);
+    metrics
+        .merge_metrics
+        .memory_size_bytes
+        .set(storage_info.mem_size as i64);
+    metrics
+        .merge_metrics
+        .estimated_storage_savings_bytes
+        .observe(storage_saved as f64);
+    metrics
+        .merge_metrics
+        .num_page_maps_merged
+        .with_label_values(&["file_num"])
+        .observe(merges_by_filenum as f64);
+    metrics
+        .merge_metrics
+        .num_page_maps_merged
+        .with_label_values(&["storage"])
+        .observe(merges_by_storage as f64);
 
     parallel_map(thread_pool, scheduled_merges.iter(), |m| {
         m.apply(&metrics.storage_metrics)
