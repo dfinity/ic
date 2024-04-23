@@ -142,6 +142,20 @@ message UnmaskedTimesMaskedParams {
   IDkgTranscriptParamsRef transcript_ref = 1;
 }
 
+message PreSignatureInCreation {
+  oneof msg {
+    QuadrupleInCreation ecdsa = 1;
+    TranscriptInCreation schnorr = 2;
+  }
+}
+
+message PreSignatureRef {
+  oneof msg {
+    PreSignatureQuadrupleRef ecdsa = 1;
+    PreSignatureTranscriptRef schnorr = 2;
+  }
+}
+
 message QuadrupleInCreation {
   RandomTranscriptParams kappa_masked_config = 1;
   MaskedTranscript kappa_masked = 2;
