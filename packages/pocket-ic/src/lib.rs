@@ -49,7 +49,7 @@ use candid::{
 pub use ic_cdk::api::management_canister::main::CanisterSettings;
 use ic_cdk::api::management_canister::main::{
     CanisterId, CanisterIdRecord, CanisterInstallMode, CanisterStatusResponse, InstallCodeArgument,
-    UpdateSettingsArgument,
+    SkipPreUpgrade, UpdateSettingsArgument,
 };
 use reqwest::Url;
 use schemars::JsonSchema;
@@ -779,7 +779,7 @@ impl PocketIc {
             sender.unwrap_or(Principal::anonymous()),
             "install_code",
             (InstallCodeArgument {
-                mode: CanisterInstallMode::Upgrade,
+                mode: CanisterInstallMode::Upgrade(Some(SkipPreUpgrade(Some(false)))),
                 canister_id,
                 wasm_module,
                 arg,
