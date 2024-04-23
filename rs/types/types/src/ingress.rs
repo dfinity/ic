@@ -2,7 +2,7 @@
 
 use crate::artifact::IngressMessageId;
 use crate::{CanisterId, CountBytes, PrincipalId, Time, UserId};
-use ic_error_types::{ErrorCode, TryFromError, UserError};
+use ic_error_types::{ErrorCode, UserError};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::ingress::v1 as pb_ingress,
@@ -259,7 +259,6 @@ impl From<&IngressStatus> for pb_ingress::IngressStatus {
                     status: Some(Status::Failed(pb_ingress::IngressStatusFailed {
                         receiver: Some(pb_types::PrincipalId::from(*receiver)),
                         user_id: Some(crate::user_id_into_protobuf(*user_id)),
-                        err_code_old: error.code() as u64,
                         err_description: error.description().to_string(),
                         time_nanos: time.as_nanos_since_unix_epoch(),
                         err_code: pb_ingress::ErrorCode::from(error.code()).into(),
@@ -324,45 +323,23 @@ impl TryFrom<pb_ingress::IngressStatus> for IngressStatus {
                         "IngressStatus::Completed::wasm_result",
                     )?),
                 },
-                Status::Failed(f) => {
-                    // A value of 0 for `err_code_old` indicates that the field
-                    // was not set, i.e. we are past a replica version that has
-                    // populated the new field `err_code` and we can use that
-                    // instead. Otherwise, we should still use the old field
-                    // when decoding.
-                    let err_code = if f.err_code_old == 0 {
+                Status::Failed(f) => IngressStatus::Known {
+                    receiver: try_from_option_field(f.receiver, "IngressStatus::Failed::receiver")?,
+                    time: Time::from_nanos_since_unix_epoch(f.time_nanos),
+                    user_id: crate::user_id_try_from_protobuf(try_from_option_field(
+                        f.user_id,
+                        "IngressStatus::Failed::user_id",
+                    )?)?,
+                    state: IngressState::Failed(UserError::from_proto(
                         ErrorCode::try_from(pb_ingress::ErrorCode::try_from(f.err_code).map_err(
                             |_| ProxyDecodeError::ValueOutOfRange {
                                 typ: "ErrorCode",
                                 err: f.err_code.to_string(),
                             },
-                        )?)?
-                    } else {
-                        ErrorCode::try_from(f.err_code_old).map_err(|err| match err {
-                            TryFromError::ValueOutOfRange(code) => {
-                                ProxyDecodeError::ValueOutOfRange {
-                                    typ: "ErrorCode",
-                                    err: code.to_string(),
-                                }
-                            }
-                        })?
-                    };
-                    IngressStatus::Known {
-                        receiver: try_from_option_field(
-                            f.receiver,
-                            "IngressStatus::Failed::receiver",
-                        )?,
-                        time: Time::from_nanos_since_unix_epoch(f.time_nanos),
-                        user_id: crate::user_id_try_from_protobuf(try_from_option_field(
-                            f.user_id,
-                            "IngressStatus::Failed::user_id",
                         )?)?,
-                        state: IngressState::Failed(UserError::from_proto(
-                            err_code,
-                            f.err_description,
-                        )),
-                    }
-                }
+                        f.err_description,
+                    )),
+                },
                 Status::Processing(p) => IngressStatus::Known {
                     receiver: try_from_option_field(
                         p.receiver,
