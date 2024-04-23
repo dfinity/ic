@@ -17,11 +17,14 @@ use ic_nns_governance::{
         Proposal, ProposalInfo, Vote,
     },
 };
-use ic_nns_test_utils::{common::NnsInitPayloadsBuilder, itest_helpers::NnsCanisters};
+use ic_nns_test_utils::{
+    common::NnsInitPayloadsBuilder,
+    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
+};
 
 #[test]
 fn test_deadline_is_extended_with_wait_for_quiet() {
-    ic_nns_test_utils::itest_helpers::local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let mut nns_init_payload_builder = NnsInitPayloadsBuilder::new();
 
         nns_init_payload_builder.with_initial_invariant_compliant_mutations();
