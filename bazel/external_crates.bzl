@@ -757,6 +757,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                     "future",
                 ],
             ),
+            "more-asserts": crate.spec(
+                version = "^0.3.1",
+            ),
             "nix": crate.spec(
                 version = "^0.24.3",
             ),

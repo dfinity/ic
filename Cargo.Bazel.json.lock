@@ -1,5 +1,5 @@
 {
-  "checksum": "55571a479b8050fedce066189b7e597a435c95bec5e2561f8f806dba6a2103f2",
+  "checksum": "1e4d5d3f3d7d03305b921be78c06c7600942d856529e54b89aa8b63497a81c5e",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17118,6 +17118,10 @@
             {
               "id": "moka 0.12.1",
               "target": "moka"
+            },
+            {
+              "id": "more-asserts 0.3.1",
+              "target": "more_asserts"
             },
             {
               "id": "nix 0.24.3",
@@ -37804,6 +37808,47 @@
       "license_ids": [
         "Apache-2.0",
         "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "more-asserts 0.3.1": {
+      "name": "more-asserts",
+      "version": "0.3.1",
+      "package_url": "https://github.com/thomcc/rust-more-asserts",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/more-asserts/0.3.1/download",
+          "sha256": "1fafa6961cabd9c63bcd77a45d7e3b7f3b552b70417831fb0f56db717e72407e"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "more_asserts",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "more_asserts",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2018",
+        "version": "0.3.1"
+      },
+      "license": "Unlicense OR MIT OR Apache-2.0 OR CC0-1.0",
+      "license_ids": [
+        "Apache-2.0",
+        "CC0-1.0",
+        "MIT",
+        "Unlicense"
       ],
       "license_file": "LICENSE-APACHE"
     },
@@ -76147,6 +76192,7 @@
     "mockall 0.11.4",
     "mockito 1.2.0",
     "moka 0.12.1",
+    "more-asserts 0.3.1",
     "nix 0.24.3",
     "notify 4.0.17",
     "num 0.4.1",
