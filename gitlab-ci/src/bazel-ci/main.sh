@@ -16,7 +16,7 @@ if [[ "${CI_MERGE_REQUEST_TITLE:-}" == *"[RUN_ALL_BAZEL_TARGETS]"* ]]; then
 fi
 
 if [ "${RUN_ON_DIFF_ONLY:-}" == "true" ] \
-    && [ "${CI_PIPELINE_SOURCE:-}" == "merge_request_event" ] \
+    && [ "${CI_PIPELINE_SOURCE:-}" == "merge_request_event" -o "${CI_PIPELINE_SOURCE:-}" == "pull_request" ] \
     && [ "${CI_MERGE_REQUEST_EVENT_TYPE:-}" != "merge_train" ] \
     && [[ "${CI_MERGE_REQUEST_TARGET_BRANCH_NAME:-}" != "rc--"* ]]; then
     # get bazel targets that changed within the MR
