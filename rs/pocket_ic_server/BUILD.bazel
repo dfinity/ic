@@ -118,6 +118,7 @@ rust_test(
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
         "II_WASM": "external/ii_dev_canister/file/internet_identity_dev.wasm.gz",
     },
+    tags = ["cpu:8"],
     deps = TEST_DEPENDENCIES,
 )
 
@@ -136,5 +137,6 @@ rust_test(
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
         "IC_REF_TEST_ROOT": "rs/tests/ic-hs",
     },
+    tags = ["cpu:8"],
     deps = SPEC_TEST_DEPENDENCIES,
 )
