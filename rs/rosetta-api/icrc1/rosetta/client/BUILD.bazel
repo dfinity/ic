@@ -4,22 +4,22 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//rs/crypto/ecdsa_secp256k1",
+    "//rs/crypto/ed25519",
     "//rs/rosetta-api",
     "//rs/rosetta-api/icrc1/rosetta:ic-icrc-rosetta",
     "//rs/rosetta-api/rosetta_core:rosetta-core",
-    "//rs/crypto/ecdsa_secp256k1",
-    "//rs/crypto/ed25519",
     "@crate_index//:anyhow",
     "@crate_index//:candid",
+    "@crate_index//:clap",  # no clap because feature derive
     "@crate_index//:ed25519-consensus",
     "@crate_index//:hex",
-    "@crate_index//:reqwest",
     "@crate_index//:ic-agent",
-    "@crate_index//:serde",
-    "@crate_index//:url",
-    "@crate_index//:tokio",
-    "@crate_index//:clap",  # no clap because feature derive
     "@crate_index//:num-bigint",
+    "@crate_index//:reqwest",
+    "@crate_index//:serde",
+    "@crate_index//:tokio",
+    "@crate_index//:url",
 ]
 
 DEV_DEPENDENCIES = [

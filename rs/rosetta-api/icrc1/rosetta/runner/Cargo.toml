@@ -6,11 +6,11 @@ description = "Build Once. Integrate Your Blockchain Everywhere. "
 edition = "2021"
 
 [dependencies]
-tempfile = "3.1.0"
-candid = { workspace = true }
-tokio = { workspace = true }
 anyhow = { workspace = true }
+candid = { workspace = true }
 icrc-ledger-types = { path = "../../../../../packages/icrc-ledger-types" }
+tempfile = "3.1.0"
+tokio = { workspace = true }
 
 [dev-dependencies]
 pocket-ic = { path = "../../../../../packages/pocket-ic" }

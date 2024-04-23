@@ -9,34 +9,35 @@ load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
     "//rs/canister_client",
     "//rs/constants",
-    "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
+    "//rs/crypto/ecdsa_secp256k1",
     "//rs/crypto/sha2",
     "//rs/crypto/tree_hash",
     "//rs/crypto/utils/threshold_sig_der",
-    "//rs/types/types",
     "//rs/nns/common",
     "//rs/nns/constants",
     "//rs/nns/governance",
     "//rs/rosetta-api/icp_ledger",
     "//rs/rosetta-api/ledger_canister_blocks_synchronizer:ledger_canister_blocks_synchronizer_lib",
     "//rs/rosetta-api/ledger_canister_core",
-    "//rs/crypto/ecdsa_secp256k1",
     "//rs/rosetta-api/ledger_core",
+    "//rs/rosetta-api/rosetta_core:rosetta-core",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_protobuf",
     "//rs/rust_canisters/on_wire",
-    "//rs/rosetta-api/rosetta_core:rosetta-core",
-    "@crate_index//:anyhow",
+    "//rs/types/types",
     "@crate_index//:actix-rt",
     "@crate_index//:actix-web",
+    "@crate_index//:anyhow",
     "@crate_index//:base64",
     "@crate_index//:candid",
     "@crate_index//:clap_3_2_25",
     "@crate_index//:hex",
     "@crate_index//:ic-agent",
     "@crate_index//:lazy_static",
+    "@crate_index//:num-bigint",
     "@crate_index//:prometheus",
     "@crate_index//:rand",
     "@crate_index//:reqwest",
@@ -50,14 +51,13 @@ DEPENDENCIES = [
     "@crate_index//:tracing-appender",
     "@crate_index//:tracing-subscriber",
     "@crate_index//:url",
-    "@crate_index//:num-bigint",
 ]
 
 MACRO_DEPENDENCIES = [
     "//rs/rust_canisters/dfn_macro",
     "@crate_index//:async-trait",
-    "@crate_index//:strum_macros",
     "@crate_index//:serde_derive",
+    "@crate_index//:strum_macros",
 ]
 
 DEV_DEPENDENCIES = [
@@ -116,8 +116,8 @@ rust_test_suite_with_extra_srcs(
         "@rosetta-cli//:rosetta-cli",
     ],
     env = {
-        "ROSETTA_CLI": "$(rootpath @rosetta-cli//:rosetta-cli)",
         "CARGO_MANIFEST_DIR": "rs/rosetta-api/",
+        "ROSETTA_CLI": "$(rootpath @rosetta-cli//:rosetta-cli)",
     },
     extra_srcs = ["tests/test_utils/mod.rs"],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
