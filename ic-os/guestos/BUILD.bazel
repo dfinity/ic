@@ -17,9 +17,9 @@ ext4_image(
 
 sh_test(
     name = "validate-ic-json5",
-    srcs = ["//ic-os/guestos/rootfs:opt/ic/bin/validate-replica-config.sh"],
-    args = ["$(execpath //ic-os/guestos/rootfs:opt/ic/share/ic.json5.template)"],
-    data = ["//ic-os/guestos/rootfs:opt/ic/share/ic.json5.template"],
+    srcs = ["//ic-os/rootfs/guestos:opt/ic/bin/validate-replica-config.sh"],
+    args = ["$(execpath //ic-os/rootfs/guestos:opt/ic/share/ic.json5.template)"],
+    data = ["//ic-os/rootfs/guestos:opt/ic/share/ic.json5.template"],
     tags = ["manual"],
 )
 

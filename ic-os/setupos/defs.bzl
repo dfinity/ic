@@ -4,7 +4,7 @@ Hold manifest common to all SetupOS variants.
 
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 load("@rules_pkg//:pkg.bzl", "pkg_tar")
-load("//ic-os/setupos/rootfs:defs.bzl", "rootfs_files")
+load("//ic-os/rootfs/setupos:defs.bzl", "rootfs_files")
 load("//toolchains/sysimage:toolchain.bzl", "ext4_image", "fat32_image")
 
 # Declare the dependencies that we will have for the built filesystem images.

@@ -499,7 +499,7 @@ mod tests {
     use super::*;
 
     const CFG_TEMPLATE_BYTES: &[u8] =
-        include_bytes!("../../../ic-os/guestos/rootfs/opt/ic/share/ic.json5.template");
+        include_bytes!("../../../ic-os/rootfs/guestos/opt/ic/share/ic.json5.template");
     const NFTABLES_GOLDEN_BYTES: &[u8] =
         include_bytes!("../testdata/nftables_assigned_replica.conf.golden");
 

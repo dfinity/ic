@@ -2,7 +2,7 @@
 Hold manifest common to all GuestOS variants.
 """
 
-load("//ic-os/guestos/rootfs:defs.bzl", "rootfs_files")
+load("//ic-os/rootfs/guestos:defs.bzl", "rootfs_files")
 
 # Declare the dependencies that we will have for the built filesystem images.
 # This needs to be done separately from the build rules because we want to

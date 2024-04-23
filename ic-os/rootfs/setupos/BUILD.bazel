@@ -1,0 +1,4 @@
+exports_files(
+    glob(["**"]),
+    ["//ic-os/setupos:__subpackages__"],
+)

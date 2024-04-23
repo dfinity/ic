@@ -72,7 +72,7 @@ pub(crate) const _EMPTY_WASM: &[u8] = &[0, 97, 115, 109, 1, 0, 0, 0];
 pub(crate) const MESSAGE_CANISTER_WASM: &[u8] = include_bytes!("message.wasm");
 
 pub(crate) const CFG_TEMPLATE_BYTES: &[u8] =
-    include_bytes!("../../../ic-os/guestos/rootfs/opt/ic/share/ic.json5.template");
+    include_bytes!("../../../ic-os/rootfs/guestos/opt/ic/share/ic.json5.template");
 
 pub fn get_identity() -> ic_agent::identity::BasicIdentity {
     ic_agent::identity::BasicIdentity::from_pem(IDENTITY_PEM.as_bytes())
