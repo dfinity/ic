@@ -201,11 +201,9 @@ jobs:
         #  rm -rf "${CI_PROJECT_DIR}/" # this doesn't work, TODO: figure out if and where data gets stored
   python-ci-tests:
     name: Python-CI-Tests
-    container:
-      image: dfinity/ic-build:abbdc66c19bf32eda2109f97e39fde519ef9b452ab54aee52b234af8638983d8
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     if: ${{ vars.RUN_CI == 'true' }}
-    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -214,7 +212,7 @@ jobs:
         shell: bash
         run: |
           set -xeuo pipefail
-          export PYTHONPATH=$PWD/gitlab-ci/src:$PWD/gitlab-ci/src/dependencies:$PYTHONPATH
+          export PYTHONPATH=$PWD/gitlab-ci/src:$PWD/gitlab-ci/src/dependencies
           pip3 install --ignore-installed -r requirements.txt
           cd gitlab-ci/src
           pytest --ignore=gitlab_config/ --ignore=git_changes/ -v -o junit_family=xunit1 --junitxml=../../test_report.xml --cov=. --cov-report=term --cov-report=term-missing --cov-report=html --cov-branch
