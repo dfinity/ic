@@ -63,6 +63,7 @@ pub enum Global {
     I64(i64),
     F32(f32),
     F64(f64),
+    V128(u128),
 }
 
 impl Global {
@@ -72,6 +73,7 @@ impl Global {
             Global::I64(_) => "i64",
             Global::F32(_) => "f32",
             Global::F64(_) => "f64",
+            Global::V128(_) => "v128",
         }
     }
 }
@@ -83,6 +85,7 @@ impl Hash for Global {
             Global::I64(val) => val.to_le_bytes().to_vec(),
             Global::F32(val) => val.to_le_bytes().to_vec(),
             Global::F64(val) => val.to_le_bytes().to_vec(),
+            Global::V128(val) => val.to_le_bytes().to_vec(),
         };
         bytes.hash(state)
     }
@@ -95,6 +98,7 @@ impl PartialEq<Global> for Global {
             (Global::I64(val), Global::I64(other_val)) => val == other_val,
             (Global::F32(val), Global::F32(other_val)) => val == other_val,
             (Global::F64(val), Global::F64(other_val)) => val == other_val,
+            (Global::V128(val), Global::V128(other_val)) => val == other_val,
             _ => false,
         }
     }
@@ -115,6 +119,9 @@ impl From<&Global> for pb::Global {
             Global::F64(value) => Self {
                 global: Some(pb::global::Global::F64(*value)),
             },
+            Global::V128(value) => Self {
+                global: Some(pb::global::Global::V128(value.to_le_bytes().to_vec())),
+            },
         }
     }
 }
@@ -127,6 +134,9 @@ impl TryFrom<pb::Global> for Global {
             pb::global::Global::I64(value) => Ok(Self::I64(value)),
             pb::global::Global::F32(value) => Ok(Self::F32(value)),
             pb::global::Global::F64(value) => Ok(Self::F64(value)),
+            pb::global::Global::V128(value) => Ok(Self::V128(u128::from_le_bytes(
+                value.as_slice().try_into().unwrap(),
+            ))),
         }
     }
 }

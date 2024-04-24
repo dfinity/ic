@@ -420,6 +420,7 @@ impl WasmtimeEmbedder {
                                 Global::I64(val) => Val::I64(*val),
                                 Global::F32(val) => Val::F32((val).to_bits()),
                                 Global::F64(val) => Val::F64((val).to_bits()),
+                                Global::V128(val) => Val::V128((*val).into()),
                             },
                         )
                         .unwrap_or_else(|e| {
@@ -428,6 +429,7 @@ impl WasmtimeEmbedder {
                                 Global::I64(val) => (val).to_string(),
                                 Global::F32(val) => (val).to_string(),
                                 Global::F64(val) => (val).to_string(),
+                                Global::V128(val) => (val).to_string(),
                             };
                             fatal!(
                                 self.log,
@@ -1146,8 +1148,11 @@ impl WasmtimeInstance {
                 ValType::F64 => Ok(Global::F64(
                     g.get(&mut self.store).f64().expect("global f64"),
                 )),
+                ValType::V128 => Ok(Global::V128(
+                    g.get(&mut self.store).v128().expect("global v128").into(),
+                )),
                 _ => Err(HypervisorError::WasmEngineError(WasmEngineError::Other(
-                    "unexpected global value type".to_string(),
+                    "Unexpected global value type".to_string(),
                 ))),
             })
             .collect()
