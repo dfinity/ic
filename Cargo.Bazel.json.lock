@@ -1,5 +1,5 @@
 {
-  "checksum": "24e6ec6c48cc2575465df8d202f7ae0e80bf1900235ff6493600a5a7a4cc6264",
+  "checksum": "57cf7f158cd633d4e4f7e05b7851f9e9255fd4c828b2df22d140d0427a0fc6e3",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -197,7 +197,7 @@
               "target": "bitflags"
             },
             {
-              "id": "bytes 1.5.0",
+              "id": "bytes 1.6.0",
               "target": "bytes"
             },
             {
@@ -217,7 +217,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             },
             {
@@ -325,7 +325,7 @@
               "target": "brotli"
             },
             {
-              "id": "bytes 1.5.0",
+              "id": "bytes 1.6.0",
               "target": "bytes"
             },
             {
@@ -397,7 +397,7 @@
               "target": "smallvec"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             },
             {
@@ -601,7 +601,7 @@
               "target": "futures_core"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             }
           ],
@@ -696,7 +696,7 @@
               "target": "socket2"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             },
             {
@@ -908,7 +908,7 @@
               "target": "ahash"
             },
             {
-              "id": "bytes 1.5.0",
+              "id": "bytes 1.6.0",
               "target": "bytes"
             },
             {
@@ -1628,7 +1628,7 @@
               "target": "axum"
             },
             {
-              "id": "bytes 1.5.0",
+              "id": "bytes 1.6.0",
               "target": "bytes"
             },
             {
@@ -3389,7 +3389,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             },
             {
@@ -3565,7 +3565,7 @@
               "target": "pin_project"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             }
           ],
@@ -3617,7 +3617,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             }
           ],
@@ -4113,7 +4113,7 @@
               "target": "bitflags"
             },
             {
-              "id": "bytes 1.5.0",
+              "id": "bytes 1.6.0",
               "target": "bytes"
             },
             {
@@ -4181,7 +4181,7 @@
               "target": "sync_wrapper"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             },
             {
@@ -4299,7 +4299,7 @@
               "target": "axum_core"
             },
             {
-              "id": "bytes 1.5.0",
+              "id": "bytes 1.6.0",
               "target": "bytes"
             },
             {
@@ -4371,7 +4371,7 @@
               "target": "sync_wrapper"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             },
             {
@@ -4477,7 +4477,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "bytes 1.5.0",
+              "id": "bytes 1.6.0",
               "target": "bytes"
             },
             {
@@ -4593,7 +4593,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "bytes 1.5.0",
+              "id": "bytes 1.6.0",
               "target": "bytes"
             },
             {
@@ -4718,7 +4718,7 @@
               "target": "axum_core"
             },
             {
-              "id": "bytes 1.5.0",
+              "id": "bytes 1.6.0",
               "target": "bytes"
             },
             {
@@ -4979,7 +4979,7 @@
               "target": "arc_swap"
             },
             {
-              "id": "bytes 1.5.0",
+              "id": "bytes 1.6.0",
               "target": "bytes"
             },
             {
@@ -5011,7 +5011,7 @@
               "target": "rustls_pemfile"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             },
             {
@@ -5081,7 +5081,7 @@
               "target": "arc_swap"
             },
             {
-              "id": "bytes 1.5.0",
+              "id": "bytes 1.6.0",
               "target": "bytes"
             },
             {
@@ -5121,7 +5121,7 @@
               "target": "rustls_pemfile"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             },
             {
@@ -5254,7 +5254,7 @@
               "target": "pin_project"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             }
           ],
@@ -8816,14 +8816,14 @@
       ],
       "license_file": "LICENSE-MIT"
     },
-    "bytes 1.5.0": {
+    "bytes 1.6.0": {
       "name": "bytes",
-      "version": "1.5.0",
+      "version": "1.6.0",
       "package_url": "https://github.com/tokio-rs/bytes",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/bytes/1.5.0/download",
-          "sha256": "a2bd12c1caf447e69cd4528f47f94d203fd2582878ecb9e9465484c4148a8223"
+          "url": "https://static.crates.io/crates/bytes/1.6.0/download",
+          "sha256": "514de17de45fdb8dc022b1a7975556c53c86f9f0aa5f534b98977b171857c2c9"
         }
       },
       "targets": [
@@ -8863,7 +8863,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.5.0"
+        "version": "1.6.0"
       },
       "license": "MIT",
       "license_ids": [
@@ -8903,7 +8903,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.5.0",
+              "id": "bytes 1.6.0",
               "target": "bytes"
             }
           ],
@@ -13505,7 +13505,7 @@
               "target": "tinytemplate"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             },
             {
@@ -15636,7 +15636,7 @@
               "target": "retain_mut"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             }
           ],
@@ -16615,7 +16615,7 @@
               "target": "byteorder"
             },
             {
-              "id": "bytes 1.5.0",
+              "id": "bytes 1.6.0",
               "target": "bytes"
             },
             {
@@ -17563,7 +17563,7 @@
               "target": "time"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             },
             {
@@ -20268,7 +20268,7 @@
               "target": "arrayvec"
             },
             {
-              "id": "bytes 1.5.0",
+              "id": "bytes 1.6.0",
               "target": "bytes"
             },
             {
@@ -23746,7 +23746,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.5.0",
+              "id": "bytes 1.6.0",
               "target": "bytes"
             },
             {
@@ -23778,7 +23778,7 @@
               "target": "slab"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             },
             {
@@ -23833,7 +23833,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.5.0",
+              "id": "bytes 1.6.0",
               "target": "bytes"
             },
             {
@@ -23865,7 +23865,7 @@
               "target": "slab"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             },
             {
@@ -24239,7 +24239,7 @@
               "target": "bitflags"
             },
             {
-              "id": "bytes 1.5.0",
+              "id": "bytes 1.6.0",
               "target": "bytes"
             },
             {
@@ -24310,7 +24310,7 @@
               "target": "base64"
             },
             {
-              "id": "bytes 1.5.0",
+              "id": "bytes 1.6.0",
               "target": "bytes"
             },
             {
@@ -25220,7 +25220,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.5.0",
+              "id": "bytes 1.6.0",
               "target": "bytes"
             },
             {
@@ -25283,7 +25283,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.5.0",
+              "id": "bytes 1.6.0",
               "target": "bytes"
             },
             {
@@ -25339,7 +25339,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.5.0",
+              "id": "bytes 1.6.0",
               "target": "bytes"
             },
             {
@@ -25394,7 +25394,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.5.0",
+              "id": "bytes 1.6.0",
               "target": "bytes"
             },
             {
@@ -25445,7 +25445,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.5.0",
+              "id": "bytes 1.6.0",
               "target": "bytes"
             },
             {
@@ -25501,7 +25501,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.5.0",
+              "id": "bytes 1.6.0",
               "target": "bytes"
             },
             {
@@ -25893,7 +25893,7 @@
               "target": "bstr"
             },
             {
-              "id": "bytes 1.5.0",
+              "id": "bytes 1.6.0",
               "target": "bytes"
             },
             {
@@ -25941,7 +25941,7 @@
               "target": "serde_urlencoded"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             }
           ],
@@ -26092,7 +26092,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.5.0",
+              "id": "bytes 1.6.0",
               "target": "bytes"
             },
             {
@@ -26140,7 +26140,7 @@
               "target": "socket2"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             },
             {
@@ -26210,7 +26210,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.5.0",
+              "id": "bytes 1.6.0",
               "target": "bytes"
             },
             {
@@ -26254,7 +26254,7 @@
               "target": "smallvec"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             },
             {
@@ -26344,7 +26344,7 @@
               "target": "rustls_native_certs"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             },
             {
@@ -26541,7 +26541,7 @@
               "alias": "pki_types"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             },
             {
@@ -26610,7 +26610,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             },
             {
@@ -26677,7 +26677,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.5.0",
+              "id": "bytes 1.6.0",
               "target": "bytes"
             },
             {
@@ -26709,7 +26709,7 @@
               "target": "socket2"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             },
             {
@@ -26798,7 +26798,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             },
             {
@@ -27159,7 +27159,7 @@
                 "target": "webpki"
               },
               {
-                "id": "tokio 1.36.0",
+                "id": "tokio 1.37.0",
                 "target": "tokio"
               },
               {
@@ -31896,7 +31896,7 @@
               "target": "base64"
             },
             {
-              "id": "bytes 1.5.0",
+              "id": "bytes 1.6.0",
               "target": "bytes"
             },
             {
@@ -32217,7 +32217,7 @@
               "target": "base64"
             },
             {
-              "id": "bytes 1.5.0",
+              "id": "bytes 1.6.0",
               "target": "bytes"
             },
             {
@@ -32309,7 +32309,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             },
             {
@@ -32584,7 +32584,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             },
             {
@@ -34844,7 +34844,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             },
             {
@@ -36680,7 +36680,7 @@
               "target": "simple_logger"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             },
             {
@@ -37641,7 +37641,7 @@
               "target": "similar"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             }
           ],
@@ -37902,7 +37902,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.5.0",
+              "id": "bytes 1.6.0",
               "target": "bytes"
             },
             {
@@ -40445,7 +40445,7 @@
               "target": "arrayvec"
             },
             {
-              "id": "bytes 1.5.0",
+              "id": "bytes 1.6.0",
               "target": "bytes"
             },
             {
@@ -40510,7 +40510,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.5.0",
+              "id": "bytes 1.6.0",
               "target": "bytes"
             },
             {
@@ -41580,7 +41580,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             },
             {
@@ -46870,7 +46870,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.5.0",
+              "id": "bytes 1.6.0",
               "target": "bytes"
             }
           ],
@@ -46935,7 +46935,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.5.0",
+              "id": "bytes 1.6.0",
               "target": "bytes"
             },
             {
@@ -47830,7 +47830,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.5.0",
+              "id": "bytes 1.6.0",
               "target": "bytes"
             },
             {
@@ -47860,7 +47860,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             },
             {
@@ -47923,7 +47923,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.5.0",
+              "id": "bytes 1.6.0",
               "target": "bytes"
             },
             {
@@ -48013,7 +48013,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.5.0",
+              "id": "bytes 1.6.0",
               "target": "bytes"
             },
             {
@@ -50617,7 +50617,7 @@
               "target": "base64"
             },
             {
-              "id": "bytes 1.5.0",
+              "id": "bytes 1.6.0",
               "target": "bytes"
             },
             {
@@ -50716,7 +50716,7 @@
                 "target": "rustls_pemfile"
               },
               {
-                "id": "tokio 1.36.0",
+                "id": "tokio 1.37.0",
                 "target": "tokio"
               },
               {
@@ -50932,7 +50932,7 @@
               "target": "base64"
             },
             {
-              "id": "bytes 1.5.0",
+              "id": "bytes 1.6.0",
               "target": "bytes"
             },
             {
@@ -51043,7 +51043,7 @@
                 "target": "rustls_pki_types"
               },
               {
-                "id": "tokio 1.36.0",
+                "id": "tokio 1.37.0",
                 "target": "tokio"
               },
               {
@@ -51823,7 +51823,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.5.0",
+              "id": "bytes 1.6.0",
               "target": "bytes"
             },
             {
@@ -60266,7 +60266,7 @@
               "target": "rand"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             }
           ],
@@ -61413,7 +61413,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             },
             {
@@ -62880,14 +62880,14 @@
       ],
       "license_file": "LICENSE-APACHE.md"
     },
-    "tokio 1.36.0": {
+    "tokio 1.37.0": {
       "name": "tokio",
-      "version": "1.36.0",
+      "version": "1.37.0",
       "package_url": "https://github.com/tokio-rs/tokio",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/tokio/1.36.0/download",
-          "sha256": "61285f6515fa018fb2d1e46eb21223fff441ee8db5d0f1435e8ab4f5cdb80931"
+          "url": "https://static.crates.io/crates/tokio/1.37.0/download",
+          "sha256": "1adbebffeca75fcfd058afa480fb6c0b81e165a0323f9c9d39c9697e37c46787"
         }
       },
       "targets": [
@@ -62949,7 +62949,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.5.0",
+              "id": "bytes 1.6.0",
               "target": "bytes"
             },
             {
@@ -63010,7 +63010,7 @@
           ],
           "selects": {}
         },
-        "version": "1.36.0"
+        "version": "1.37.0"
       },
       "license": "MIT",
       "license_ids": [
@@ -63054,7 +63054,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             }
           ],
@@ -63173,7 +63173,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             },
             {
@@ -63237,7 +63237,7 @@
               "target": "rustls"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             }
           ],
@@ -63430,7 +63430,7 @@
               "alias": "pki_types"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             }
           ],
@@ -63494,7 +63494,7 @@
               "alias": "bincode_crate"
             },
             {
-              "id": "bytes 1.5.0",
+              "id": "bytes 1.6.0",
               "target": "bytes"
             },
             {
@@ -63583,7 +63583,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             }
           ],
@@ -63645,7 +63645,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             }
           ],
@@ -63696,7 +63696,7 @@
               "target": "async_stream"
             },
             {
-              "id": "bytes 1.5.0",
+              "id": "bytes 1.6.0",
               "target": "bytes"
             },
             {
@@ -63704,7 +63704,7 @@
               "target": "futures_core"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             },
             {
@@ -63772,7 +63772,7 @@
               "target": "log"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             },
             {
@@ -63837,7 +63837,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.5.0",
+              "id": "bytes 1.6.0",
               "target": "bytes"
             },
             {
@@ -63861,7 +63861,7 @@
               "target": "slab"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             },
             {
@@ -64096,7 +64096,7 @@
               "target": "base64"
             },
             {
-              "id": "bytes 1.5.0",
+              "id": "bytes 1.6.0",
               "target": "bytes"
             },
             {
@@ -64132,7 +64132,7 @@
               "target": "prost"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             },
             {
@@ -64348,7 +64348,7 @@
               "target": "slab"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             },
             {
@@ -64448,7 +64448,7 @@
               "target": "bitflags"
             },
             {
-              "id": "bytes 1.5.0",
+              "id": "bytes 1.6.0",
               "target": "bytes"
             },
             {
@@ -64480,7 +64480,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             },
             {
@@ -64583,7 +64583,7 @@
               "target": "bitflags"
             },
             {
-              "id": "bytes 1.5.0",
+              "id": "bytes 1.6.0",
               "target": "bytes"
             },
             {
@@ -64607,7 +64607,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             },
             {
@@ -64821,7 +64821,7 @@
               "target": "pin_project"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             },
             {
@@ -64912,7 +64912,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             },
             {
@@ -65846,7 +65846,7 @@
               "target": "tinyvec"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             },
             {
@@ -65958,7 +65958,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             },
             {
@@ -66074,7 +66074,7 @@
               "target": "byteorder"
             },
             {
-              "id": "bytes 1.5.0",
+              "id": "bytes 1.6.0",
               "target": "bytes"
             },
             {
@@ -66164,7 +66164,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.5.0",
+              "id": "bytes 1.6.0",
               "target": "bytes"
             },
             {
@@ -66188,7 +66188,7 @@
               "target": "scoped_tls"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             },
             {
@@ -68360,7 +68360,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.5.0",
+              "id": "bytes 1.6.0",
               "target": "bytes"
             },
             {
@@ -68428,7 +68428,7 @@
               "target": "serde_urlencoded"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             },
             {
@@ -73582,7 +73582,7 @@
               "target": "serde_json"
             },
             {
-              "id": "tokio 1.36.0",
+              "id": "tokio 1.37.0",
               "target": "tokio"
             }
           ],
@@ -75955,7 +75955,7 @@
     "by_address 1.1.0",
     "byte-unit 4.0.19",
     "byteorder 1.5.0",
-    "bytes 1.5.0",
+    "bytes 1.6.0",
     "cached 0.49.2",
     "candid 0.10.6",
     "candid_parser 0.1.2",
@@ -76202,7 +76202,7 @@
     "thousands 0.2.0",
     "threadpool 1.8.1",
     "time 0.3.31",
-    "tokio 1.36.0",
+    "tokio 1.37.0",
     "tokio-io-timeout 1.2.0",
     "tokio-metrics 0.3.1",
     "tokio-rustls 0.24.1",
