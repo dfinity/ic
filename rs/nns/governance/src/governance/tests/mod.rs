@@ -1,18 +1,10 @@
 use super::*;
 use crate::{
-    audit_event::add_audit_event,
-    governance::restore_aging::PRE_AGED_NEURON_AGING_SINCE_TIMESTAMP_SECONDS,
     neuron::types::{DissolveStateAndAge, NeuronBuilder},
     pb::v1::{
-        audit_event::{
-            reset_aging::NeuronDissolveState as ResetAgingDissolveState,
-            restore_aging::NeuronDissolveState as RestoreAgingDissolveState, Payload, ResetAging,
-            RestoreAging,
-        },
         governance::{followers_map::Followers, FollowersMap},
-        AuditEvent, Neuron as NeuronProto,
+        Neuron as NeuronProto,
     },
-    storage::with_audit_events_log,
     test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
 };
 use ic_base_types::PrincipalId;
@@ -1228,136 +1220,6 @@ mod cast_vote_and_cascade_follow {
             }
         );
     }
-}
-
-#[test]
-fn test_restore_pre_aged_neurons() {
-    let mut governance = Governance::new(
-        GovernanceProto::default(),
-        Box::<MockEnvironment>::default(),
-        Box::new(StubIcpLedger {}),
-        Box::new(StubCMC {}),
-    );
-    // The exact value does not matter in the test, as long as the aging_since_timestamp_seconds
-    // matches the ones in the audit log.
-    let genesis_timestamp_seconds = 123_456_789;
-
-    // This neuron should be reset.
-    governance
-        .add_neuron(
-            1,
-            NeuronBuilder::new(
-                NeuronId { id: 1 },
-                Subaccount::try_from(&[1u8; 32] as &[u8]).unwrap(),
-                PrincipalId::new_self_authenticating(b"SID1"),
-                DissolveStateAndAge::NotDissolving {
-                    dissolve_delay_seconds: 300_000_000,
-                    aging_since_timestamp_seconds: genesis_timestamp_seconds,
-                },
-                42,
-            )
-            .with_cached_neuron_stake_e8s(2_000_000_000)
-            .build(),
-        )
-        .unwrap();
-    // This neuron should not be reset since it's dissolving/dissolved.
-    governance
-        .add_neuron(
-            2,
-            NeuronBuilder::new(
-                NeuronId { id: 2 },
-                Subaccount::try_from(&[2u8; 32] as &[u8]).unwrap(),
-                PrincipalId::new_self_authenticating(b"SID2"),
-                DissolveStateAndAge::DissolvingOrDissolved {
-                    when_dissolved_timestamp_seconds: 234_567_890,
-                },
-                42,
-            )
-            .with_cached_neuron_stake_e8s(3_000_000_000)
-            .build(),
-        )
-        .unwrap();
-
-    // Let the audit log show that the two neurons were modified by the "great age reset".
-    add_audit_event(AuditEvent {
-        timestamp_seconds: 1,
-        payload: Some(Payload::ResetAging(ResetAging {
-            neuron_id: 1,
-            previous_aging_since_timestamp_seconds: PRE_AGED_NEURON_AGING_SINCE_TIMESTAMP_SECONDS,
-            new_aging_since_timestamp_seconds: genesis_timestamp_seconds,
-            neuron_dissolve_state: Some(ResetAgingDissolveState::DissolveDelaySeconds(234_567_890)),
-            neuron_stake_e8s: 2_000_000_000,
-        })),
-    });
-    add_audit_event(AuditEvent {
-        timestamp_seconds: 1,
-        payload: Some(Payload::ResetAging(ResetAging {
-            neuron_id: 2,
-            previous_aging_since_timestamp_seconds: PRE_AGED_NEURON_AGING_SINCE_TIMESTAMP_SECONDS,
-            new_aging_since_timestamp_seconds: genesis_timestamp_seconds,
-            neuron_dissolve_state: Some(ResetAgingDissolveState::DissolveDelaySeconds(234_567_890)),
-            neuron_stake_e8s: 3_000_000_000,
-        })),
-    });
-
-    // Call code under test. Restoring pre-aging happens in new_restored.
-    let governance_state = governance.take_heap_proto();
-    let mut governance = Governance::new_restored(
-        governance_state,
-        Box::<MockEnvironment>::default(),
-        Box::new(StubIcpLedger {}),
-        Box::new(StubCMC {}),
-    );
-
-    let get_neuron_aging_since_timestamp_seconds = |neuron_id: u64| {
-        governance
-            .neuron_store
-            .with_neuron(&NeuronId { id: neuron_id }, |n| {
-                n.aging_since_timestamp_seconds
-            })
-            .unwrap()
-    };
-    // Neuron 1 is now pre-aged.
-    assert_eq!(
-        get_neuron_aging_since_timestamp_seconds(1),
-        PRE_AGED_NEURON_AGING_SINCE_TIMESTAMP_SECONDS
-    );
-    // Neuron 2 still has 0 age.
-    assert_eq!(get_neuron_aging_since_timestamp_seconds(2), u64::MAX);
-
-    // There were 2 entries added prior to executing the code under test (Governance::new_restored)
-    // for the 2 neurons that were reset. There should be one new entry.
-    assert_eq!(with_audit_events_log(|log| log.len()), 3);
-    let restore_audit_event_log = with_audit_events_log(|log| {
-        log.iter()
-            .find(|event| matches!(event.payload, Some(Payload::RestoreAging(_))))
-            .unwrap()
-    });
-    assert_eq!(
-        restore_audit_event_log.payload,
-        Some(Payload::RestoreAging(RestoreAging {
-            neuron_id: Some(1),
-            previous_aging_since_timestamp_seconds: Some(genesis_timestamp_seconds),
-            new_aging_since_timestamp_seconds: Some(PRE_AGED_NEURON_AGING_SINCE_TIMESTAMP_SECONDS),
-            // The current dissolve state is recorded (instead of the previous dissolve state at
-            // reset time).
-            neuron_dissolve_state: Some(RestoreAgingDissolveState::DissolveDelaySeconds(
-                300_000_000,
-            )),
-            // The current stake is recorded (instead of the previous stake at reset time).
-            neuron_stake_e8s: Some(2_000_000_000),
-        })),
-    );
-
-    // Make sure if we run another upgrade, no more restore should be done.
-    let governance_state = governance.take_heap_proto();
-    let _governance = Governance::new_restored(
-        governance_state,
-        Box::<MockEnvironment>::default(),
-        Box::new(StubIcpLedger {}),
-        Box::new(StubCMC {}),
-    );
-    assert_eq!(with_audit_events_log(|log| log.len()), 3);
 }
 
 #[test]
