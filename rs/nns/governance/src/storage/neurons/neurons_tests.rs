@@ -1,7 +1,7 @@
 use super::*;
 
 use crate::{
-    neuron::types::{DissolveStateAndAge, NeuronBuilder},
+    neuron::{DissolveStateAndAge, NeuronBuilder},
     pb::v1::{abridged_neuron::DissolveState, Vote},
 };
 use ic_base_types::PrincipalId;
