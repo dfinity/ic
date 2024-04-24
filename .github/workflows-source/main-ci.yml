@@ -91,6 +91,8 @@ jobs:
   bazel-test-all:
     name: Bazel-Test-All
     <<: *bazel-large-setup
+    outputs:
+      artifacts_produced: ${{ steps.bazel-test-all.outputs.upload_artifacts }}
     steps:
       - <<: *checkout
         uses: actions/checkout@v3 # v4 does not work with bazel-runner-large
@@ -116,25 +118,13 @@ jobs:
       - <<: *after-script
       - name: Upload bazel-targets
         uses: actions/upload-artifact@v3
-        if: success() || failure() # don't run if CI job is cancelled
+        if: ${{ needs.bazel-test-all.outputs.upload_artifacts == 'true' }}
         with:
           name: bazel-targets
           retention-days: 1
           if-no-files-found: error
           path: |
             bazel-targets
-      # - name: Upload Bazel artifacts
-      #   uses: actions/upload-artifact@v3
-      #   if: success() || failure() # don't run if CI job is cancelled
-      #   with:
-      #     name: bazel-artifacts
-      #     retention-days: 2
-      #     if-no-files-found: ignore
-      #     compression-level: 7
-      #     path: |
-      #       bazel-build-log*.json*
-      #       bazel-bep.pb
-      #       bazel-testlogs/**/test.xml
 
   bazel-config-check-all-rebuild:
     <<: *bazel-large-setup
@@ -250,6 +240,8 @@ jobs:
   build-ic:
     name: Build-IC
     <<: *bazel-large-setup
+    outputs:
+      artifacts_produced: ${{ steps.build-ic.outputs.upload_artifacts }}
     steps:
       - <<: *checkout
         uses: actions/checkout@v3 # v4 does not work with bazel-runner-large
@@ -276,7 +268,7 @@ jobs:
           BAZEL_COMMAND: "build"
       - name: Upload build-ic.tar
         uses: actions/upload-artifact@v3
-        if: success() || failure() # don't run if CI job is cancelled
+        if: ${{ needs.build-ic.outputs.upload_artifacts == 'true' }}
         with:
           name: build-ic
           retention-days: 1
@@ -288,6 +280,7 @@ jobs:
     name: Build Determinism
     <<: *default-setup
     needs: [build-ic, bazel-test-all]
+    if: ${{ needs.build-ic.outputs.artifacts_produced == 'true' && needs.bazel-test-all.outputs.artifacts_produced == 'true' }}
     strategy:
       matrix:
         include:

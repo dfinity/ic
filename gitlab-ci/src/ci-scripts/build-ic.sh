@@ -66,3 +66,6 @@ EXTERNAL_URL="https://objects.$(echo "${NODE_NAME:-}" | cut -d'-' -f1)-idx1.dfin
 echo -e "Node: ${NODE_NAME:-}\nURL: ${URL}\nExternal URL: ${EXTERNAL_URL}" >./build-ic/info
 echo "${EXTERNAL_URL}" >./build-ic/url
 tar -cf build-ic.tar build-ic
+if [ -n "${GITHUB_OUTPUT:-}" ]; then
+    echo "upload_artifacts=true" >>"$GITHUB_OUTPUT"
+fi
