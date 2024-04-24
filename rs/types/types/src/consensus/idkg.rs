@@ -47,6 +47,8 @@ use std::{
 };
 use strum_macros::EnumIter;
 
+use self::common::{PreSignatureInCreation, PreSignatureRef};
+
 pub mod common;
 pub mod ecdsa;
 pub mod schnorr;
@@ -1520,7 +1522,9 @@ impl From<&EcdsaPayload> for pb::EcdsaPayload {
             signature_agreements,
             ongoing_signatures,
             available_quadruples,
+            available_pre_signatures: vec![],
             quadruples_in_creation,
+            pre_signatures_in_creation: vec![],
             next_unused_transcript_id,
             next_unused_quadruple_id: payload.uid_generator.next_unused_quadruple_id,
             idkg_transcripts,
@@ -1616,6 +1620,19 @@ impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
             )?;
             available_quadruples.insert(quadruple_id, quadruple);
         }
+        for available_pre_signature in &payload.available_pre_signatures {
+            let pre_signature_id = QuadrupleId(available_pre_signature.pre_signature_id, None);
+            let pre_signature: PreSignatureRef = try_from_option_field(
+                available_pre_signature.pre_signature.as_ref(),
+                "EcdsaPayload::available_pre_signature::pre_signature",
+            )?;
+            let PreSignatureRef::Ecdsa(quadruple) = pre_signature else {
+                return Err(ProxyDecodeError::Other(
+                    "EcdsaPayload:: Schnorr pre-signatures are not supported yet".into(),
+                ));
+            };
+            available_quadruples.insert(pre_signature_id, quadruple);
+        }
 
         // quadruples_in_creation
         let mut quadruples_in_creation = BTreeMap::new();
@@ -1631,6 +1648,19 @@ impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
                 "EcdsaPayload::quadruple_in_creation::quadruple",
             )?;
             quadruples_in_creation.insert(quadruple_id, quadruple);
+        }
+        for pre_signature_in_creation in &payload.pre_signatures_in_creation {
+            let pre_signature_id = QuadrupleId(pre_signature_in_creation.pre_signature_id, None);
+            let pre_signature: PreSignatureInCreation = try_from_option_field(
+                pre_signature_in_creation.pre_signature.as_ref(),
+                "EcdsaPayload::pre_signature_in_creation::pre_signature",
+            )?;
+            let PreSignatureInCreation::Ecdsa(quadruple) = pre_signature else {
+                return Err(ProxyDecodeError::Other(
+                    "EcdsaPayload:: Schnorr pre-signature in creation not supported yet".into(),
+                ));
+            };
+            quadruples_in_creation.insert(pre_signature_id, quadruple);
         }
 
         let next_unused_transcript_id: IDkgTranscriptId = try_from_option_field(

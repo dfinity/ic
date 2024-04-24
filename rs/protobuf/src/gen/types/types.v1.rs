@@ -360,10 +360,6 @@ pub struct EcdsaPayload {
     pub signature_agreements: ::prost::alloc::vec::Vec<CompletedSignature>,
     #[prost(message, repeated, tag = "2")]
     pub ongoing_signatures: ::prost::alloc::vec::Vec<OngoingSignature>,
-    #[prost(message, repeated, tag = "3")]
-    pub available_quadruples: ::prost::alloc::vec::Vec<AvailableQuadruple>,
-    #[prost(message, repeated, tag = "4")]
-    pub quadruples_in_creation: ::prost::alloc::vec::Vec<QuadrupleInProgress>,
     #[prost(message, optional, tag = "5")]
     pub next_unused_transcript_id:
         ::core::option::Option<super::super::registry::subnet::v1::IDkgTranscriptId>,
@@ -378,6 +374,10 @@ pub struct EcdsaPayload {
     pub next_unused_quadruple_id: u64,
     #[prost(message, repeated, tag = "13")]
     pub key_transcripts: ::prost::alloc::vec::Vec<EcdsaKeyTranscript>,
+    #[prost(message, repeated, tag = "14")]
+    pub available_pre_signatures: ::prost::alloc::vec::Vec<AvailablePreSignature>,
+    #[prost(message, repeated, tag = "15")]
+    pub pre_signatures_in_creation: ::prost::alloc::vec::Vec<PreSignatureInProgress>,
     /// TODO: retire these fields, once we start using `key_transcripts`.
     #[prost(message, optional, tag = "9")]
     pub current_key_transcript: ::core::option::Option<UnmaskedTranscriptWithAttributes>,
@@ -385,6 +385,11 @@ pub struct EcdsaPayload {
     pub next_key_in_creation: ::core::option::Option<KeyTranscriptCreation>,
     #[prost(message, optional, tag = "12")]
     pub key_id: ::core::option::Option<super::super::registry::crypto::v1::EcdsaKeyId>,
+    /// TODO: retire these fields, once we start using `pre_signatures`.
+    #[prost(message, repeated, tag = "3")]
+    pub available_quadruples: ::prost::alloc::vec::Vec<AvailableQuadruple>,
+    #[prost(message, repeated, tag = "4")]
+    pub quadruples_in_creation: ::prost::alloc::vec::Vec<QuadrupleInProgress>,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -463,6 +468,24 @@ pub struct QuadrupleInProgress {
     /// Deprecated. Use `quadruple.key_id` instead.
     #[prost(message, optional, tag = "3")]
     pub key_id: ::core::option::Option<super::super::registry::crypto::v1::EcdsaKeyId>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AvailablePreSignature {
+    #[prost(uint64, tag = "1")]
+    pub pre_signature_id: u64,
+    #[prost(message, optional, tag = "2")]
+    pub pre_signature: ::core::option::Option<PreSignatureRef>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PreSignatureInProgress {
+    #[prost(uint64, tag = "1")]
+    pub pre_signature_id: u64,
+    #[prost(message, optional, tag = "2")]
+    pub pre_signature: ::core::option::Option<PreSignatureInCreation>,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
