@@ -138,12 +138,6 @@ pub trait ArtifactKind: Send + Sized + 'static {
         + Sync
         + 'static;
 
-    type PbFilter: prost::Message + Default;
-    type PbFilterError: std::error::Error + Into<ProxyDecodeError>;
-    type Filter: Into<Self::PbFilter>
-        + TryFrom<Self::PbFilter, Error = Self::PbFilterError>
-        + Default;
-
     /// Returns the advert of the given message.
     fn message_to_advert(msg: &<Self as ArtifactKind>::Message) -> Advert<Self>;
 }
@@ -389,40 +383,3 @@ pub type EcdsaMessageId = EcdsaArtifactId;
 // CanisterHttp artifacts
 
 pub type CanisterHttpResponseId = CanisterHttpResponseShare;
-
-// ------------------------------------------------------------------------------
-// Conversions
-
-impl From<ConsensusMessageFilter> for pb::ConsensusMessageFilter {
-    fn from(filter: ConsensusMessageFilter) -> Self {
-        Self {
-            height: filter.height.get(),
-        }
-    }
-}
-
-impl TryFrom<pb::ConsensusMessageFilter> for ConsensusMessageFilter {
-    type Error = ProxyDecodeError;
-    fn try_from(filter: pb::ConsensusMessageFilter) -> Result<Self, Self::Error> {
-        Ok(Self {
-            height: Height::from(filter.height),
-        })
-    }
-}
-
-impl From<CertificationMessageFilter> for pb::CertificationMessageFilter {
-    fn from(filter: CertificationMessageFilter) -> Self {
-        Self {
-            height: filter.height.get(),
-        }
-    }
-}
-
-impl TryFrom<pb::CertificationMessageFilter> for CertificationMessageFilter {
-    type Error = ProxyDecodeError;
-    fn try_from(filter: pb::CertificationMessageFilter) -> Result<Self, Self::Error> {
-        Ok(Self {
-            height: Height::from(filter.height),
-        })
-    }
-}

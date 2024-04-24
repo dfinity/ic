@@ -64,13 +64,6 @@ pub trait MutablePool<Artifact: ArtifactKind> {
 pub trait PriorityFnAndFilterProducer<Artifact: ArtifactKind, Pool>: Send + Sync {
     /// Returns a priority function for the given pool.
     fn get_priority_function(&self, pool: &Pool) -> PriorityFn<Artifact::Id, Artifact::Attribute>;
-
-    /// Returns a filter that represents what artifacts are needed.
-    /// The filter is derived from the (persisted) state of the client and not directly
-    /// from a pool content. Hence, no pool reference is used here.
-    fn get_filter(&self) -> Artifact::Filter {
-        Artifact::Filter::default()
-    }
 }
 
 /// ValidatedPoolReader trait is the generic interface used by P2P to interact
@@ -87,14 +80,11 @@ pub trait ValidatedPoolReader<T: ArtifactKind> {
     /// - `None`: Artifact does not exist in the validated pool.
     fn get_validated_by_identifier(&self, id: &T::Id) -> Option<T::Message>;
 
-    /// Get all validated artifacts by the filter
+    /// Get all validated artifacts.
     ///
     /// #Returns:
     /// A iterator over all the validated artifacts.
-    fn get_all_validated_by_filter(
-        &self,
-        filter: &T::Filter,
-    ) -> Box<dyn Iterator<Item = T::Message> + '_>;
+    fn get_all_validated(&self) -> Box<dyn Iterator<Item = T::Message> + '_>;
 }
 
 /// Unvalidated artifact

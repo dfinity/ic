@@ -27,14 +27,11 @@ impl ArtifactKind for U64Artifact {
     type PbIdError = Infallible;
     type PbMessageError = Infallible;
     type PbAttributeError = Infallible;
-    type PbFilterError = Infallible;
     type Message = Vec<u8>;
     type PbId = u64;
     type Id = u64;
     type PbAttribute = ();
     type Attribute = ();
-    type PbFilter = ();
-    type Filter = ();
 
     /// The function converts a U64ArtifactMessage to an advert for a
     /// U64Artifact.
@@ -285,9 +282,8 @@ impl ValidatedPoolReader<U64Artifact> for TestConsensus<U64Artifact> {
     ) -> Option<<U64Artifact as ArtifactKind>::Message> {
         self.my_pool().get(id).map(|id| self.id_to_msg(*id))
     }
-    fn get_all_validated_by_filter(
+    fn get_all_validated(
         &self,
-        _filter: &<U64Artifact as ArtifactKind>::Filter,
     ) -> Box<dyn Iterator<Item = <U64Artifact as ArtifactKind>::Message> + '_> {
         Box::new(self.my_pool().into_iter().map(|id| self.id_to_msg(id)))
     }
@@ -304,8 +300,5 @@ impl PriorityFnAndFilterProducer<U64Artifact, TestConsensus<U64Artifact>>
         <U64Artifact as ArtifactKind>::Attribute,
     > {
         Box::new(|_, _| Priority::Fetch)
-    }
-    fn get_filter(&self) -> <U64Artifact as ArtifactKind>::Filter {
-        todo!()
     }
 }

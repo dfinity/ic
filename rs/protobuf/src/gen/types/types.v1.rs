@@ -1316,20 +1316,6 @@ pub struct IngressPayload {
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ConsensusMessageFilter {
-    #[prost(uint64, tag = "1")]
-    pub height: u64,
-}
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct CertificationMessageFilter {
-    #[prost(uint64, tag = "1")]
-    pub height: u64,
-}
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct HttpHeader {
     #[prost(string, tag = "1")]
     pub name: ::prost::alloc::string::String,

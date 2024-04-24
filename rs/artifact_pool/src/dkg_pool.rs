@@ -157,7 +157,7 @@ impl ValidatedPoolReader<DkgArtifact> for DkgPoolImpl {
         self.validated.get(id).cloned()
     }
 
-    fn get_all_validated_by_filter(&self, _filter: &()) -> Box<dyn Iterator<Item = dkg::Message>> {
+    fn get_all_validated(&self) -> Box<dyn Iterator<Item = dkg::Message>> {
         Box::new(std::iter::empty())
     }
 }

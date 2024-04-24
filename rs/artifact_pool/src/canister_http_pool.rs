@@ -174,10 +174,7 @@ impl ValidatedPoolReader<CanisterHttpArtifact> for CanisterHttpPoolImpl {
         self.validated.get(id).map(|()| id.clone())
     }
 
-    fn get_all_validated_by_filter(
-        &self,
-        _filter: &(),
-    ) -> Box<dyn Iterator<Item = CanisterHttpResponseShare> + '_> {
+    fn get_all_validated(&self) -> Box<dyn Iterator<Item = CanisterHttpResponseShare> + '_> {
         Box::new(std::iter::empty())
     }
 }

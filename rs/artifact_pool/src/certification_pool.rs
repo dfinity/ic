@@ -398,10 +398,9 @@ impl ValidatedPoolReader<CertificationArtifact> for CertificationPoolImpl {
         }
     }
 
-    fn get_all_validated_by_filter(
-        &self,
-        filter: &CertificationMessageFilter,
-    ) -> Box<dyn Iterator<Item = CertificationMessage> + '_> {
+    fn get_all_validated(&self) -> Box<dyn Iterator<Item = CertificationMessage> + '_> {
+        let filter = CertificationMessageFilter::default();
+
         // In case we received a filter of u64::MAX, don't overflow.
         let Some(filter) = filter.height.get().checked_add(1).map(Height::from) else {
             return Box::new(std::iter::empty());
@@ -816,7 +815,7 @@ mod tests {
     }
 
     #[test]
-    fn test_get_all_validated_by_filter() {
+    fn test_get_all_validated() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let node = node_test_id(3);
             let mut pool = CertificationPoolImpl::new(
@@ -827,9 +826,7 @@ mod tests {
             );
 
             let height_offset = 5_000_000_000;
-            let filter = CertificationMessageFilter {
-                height: Height::from(height_offset + 10),
-            };
+            let filter = CertificationMessageFilter::default();
 
             // Create shares from 5 nodes for 20 heights, only add an aggregate on even heights.
             let mut messages = Vec::new();
@@ -853,7 +850,7 @@ mod tests {
             };
 
             let mut heights = HashSet::new();
-            pool.get_all_validated_by_filter(&filter).for_each(|m| {
+            pool.get_all_validated().for_each(|m| {
                 assert!(m.height() >= filter.height);
                 if m.height().get() % 2 == 0 {
                     assert!(!m.is_share());
@@ -866,17 +863,8 @@ mod tests {
                 }
                 assert!(heights.insert(m.height()));
             });
-            assert_eq!(heights.len(), 10);
-
-            let min_filter = CertificationMessageFilter {
-                height: Height::from(u64::MIN),
-            };
-            assert_eq!(pool.get_all_validated_by_filter(&min_filter).count(), 20);
-
-            let max_filter = CertificationMessageFilter {
-                height: Height::from(u64::MAX),
-            };
-            assert_eq!(pool.get_all_validated_by_filter(&max_filter).count(), 0);
+            assert_eq!(heights.len(), 20);
+            assert_eq!(pool.get_all_validated().count(), 20);
         });
     }
 }
