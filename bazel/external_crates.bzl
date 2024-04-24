@@ -1365,7 +1365,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.2",
             ),
             "wasm-encoder": crate.spec(
-                version = "^0.38.1",
+                version = "^0.201.0",
                 features = [
                     "wasmparser",
                 ],
@@ -1378,7 +1378,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "wasmparser": crate.spec(
-                version = "^0.118.1",
+                version = "^0.201.0",
             ),
             "wasmprinter": crate.spec(
                 version = "^0.2.50",

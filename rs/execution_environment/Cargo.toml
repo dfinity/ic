@@ -82,7 +82,7 @@ proptest = "1.0"
 tempfile = "3.1.0"
 test-strategy = "0.3.1"
 wat = "1.0.52"
-wasmparser = "0.118.1"
+wasmparser = "0.201.0"
 
 [build-dependencies]
 escargot = "0.5"
