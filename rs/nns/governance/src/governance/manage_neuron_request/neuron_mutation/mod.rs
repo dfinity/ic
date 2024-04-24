@@ -1,4 +1,4 @@
-use crate::{governance::Governance, neuron::types::Neuron, pb::v1::GovernanceError};
+use crate::{governance::Governance, neuron::Neuron, pb::v1::GovernanceError};
 use async_trait::async_trait;
 use ic_nns_common::pb::v1::NeuronId;
 use std::{
@@ -236,10 +236,10 @@ impl NeuronDeltas {
             neuron.staked_maturity_e8s_equivalent = Some(staked_maturity_e8s_equivalent_new_value);
         }
 
-        neuron.aging_since_timestamp_seconds = saturating_add_or_subtract_u64_i128(
-            neuron.aging_since_timestamp_seconds,
+        neuron.deprecated_set_aging_since_timestamp_seconds(saturating_add_or_subtract_u64_i128(
+            neuron.deprecated_aging_since_timestamp_seconds(),
             self.aging_since_timestamp_seconds,
-        );
+        ));
     }
 }
 

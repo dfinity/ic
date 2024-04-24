@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
     governance::{Governance, MockEnvironment},
-    neuron::types::{DissolveStateAndAge, NeuronBuilder},
+    neuron::{DissolveStateAndAge, NeuronBuilder},
     pb::v1::{
         neuron::{DissolveState, Followees},
         Governance as GovernanceProto, KnownNeuronData,

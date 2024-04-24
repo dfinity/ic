@@ -221,7 +221,7 @@ mod tests {
     use super::*;
     use crate::{
         governance::{ONE_DAY_SECONDS, ONE_YEAR_SECONDS},
-        neuron::types::{DissolveStateAndAge, NeuronBuilder},
+        neuron::{DissolveStateAndAge, NeuronBuilder},
         pb::v1::NeuronType,
     };
     use ic_base_types::PrincipalId;

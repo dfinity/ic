@@ -13,7 +13,7 @@ use crate::{
         reassemble_governance_proto, split_governance_proto, HeapGovernanceData, XdrConversionRate,
     },
     migrations::maybe_run_migrations,
-    neuron::types::{DissolveStateAndAge, Neuron, NeuronBuilder},
+    neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
     neuron_store::{NeuronMetrics, NeuronStore},
     neurons_fund::{

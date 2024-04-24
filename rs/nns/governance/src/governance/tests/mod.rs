@@ -1,6 +1,6 @@
 use super::*;
 use crate::{
-    neuron::types::{DissolveStateAndAge, NeuronBuilder},
+    neuron::{DissolveStateAndAge, NeuronBuilder},
     pb::v1::{
         governance::{followers_map::Followers, FollowersMap},
         Neuron as NeuronProto,
@@ -887,7 +887,7 @@ mod metrics_tests {
 }
 
 mod neuron_archiving_tests {
-    use crate::neuron::types::{DissolveStateAndAge, NeuronBuilder};
+    use crate::neuron::{DissolveStateAndAge, NeuronBuilder};
     use ic_base_types::PrincipalId;
     use ic_nns_common::pb::v1::NeuronId;
     use icp_ledger::Subaccount;
@@ -1040,7 +1040,7 @@ mod neuron_archiving_tests {
 mod cast_vote_and_cascade_follow {
     use crate::{
         governance::{Governance, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS},
-        neuron::types::{DissolveStateAndAge, Neuron, NeuronBuilder},
+        neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
         neuron_store::NeuronStore,
         pb::v1::{neuron::Followees, Ballot, Topic, Vote},
     };

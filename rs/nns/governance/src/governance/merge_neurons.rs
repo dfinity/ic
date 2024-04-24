@@ -3,7 +3,7 @@ use crate::{
         combine_aged_stakes,
         ledger_helper::{BurnNeuronFeesOperation, NeuronStakeTransferOperation},
     },
-    neuron::types::{DissolveStateAndAge, Neuron},
+    neuron::{DissolveStateAndAge, Neuron},
     neuron_store::NeuronStore,
     pb::v1::{
         governance_error::ErrorType, manage_neuron::Merge, manage_neuron::NeuronIdOrSubaccount,
@@ -68,7 +68,7 @@ impl MergeNeuronsEffect {
 
     pub fn source_effect(&self) -> MergeNeuronsSourceEffect {
         MergeNeuronsSourceEffect {
-            dissolve_state_and_age: self.source_neuron_dissolve_state_and_age.clone(),
+            dissolve_state_and_age: self.source_neuron_dissolve_state_and_age,
             subtract_maturity: self.transfer_maturity_e8s,
             subtract_staked_maturity: self.transfer_staked_maturity_e8s,
         }
@@ -76,7 +76,7 @@ impl MergeNeuronsEffect {
 
     pub fn target_effect(&self) -> MergeNeuronsTargetEffect {
         MergeNeuronsTargetEffect {
-            dissolve_state_and_age: self.target_neuron_dissolve_state_and_age.clone(),
+            dissolve_state_and_age: self.target_neuron_dissolve_state_and_age,
             add_maturity: self.transfer_maturity_e8s,
             add_staked_maturity: self.transfer_staked_maturity_e8s,
         }
@@ -620,7 +620,7 @@ fn is_neuron_involved_with_open_proposals(
 mod tests {
     use super::*;
     use crate::{
-        neuron::types::{DissolveStateAndAge, NeuronBuilder},
+        neuron::{DissolveStateAndAge, NeuronBuilder},
         pb::v1::{neuron::Followees, proposal::Action, ManageNeuron, NeuronType, Proposal, Topic},
     };
     use assert_matches::assert_matches;

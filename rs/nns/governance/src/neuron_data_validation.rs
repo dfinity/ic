@@ -1,5 +1,5 @@
 use crate::{
-    neuron::types::Neuron,
+    neuron::Neuron,
     neuron_store::NeuronStore,
     pb::v1::Topic,
     storage::{with_stable_neuron_indexes, with_stable_neuron_store},
@@ -683,7 +683,7 @@ mod tests {
     use maplit::{btreemap, hashmap};
 
     use crate::{
-        neuron::types::{DissolveStateAndAge, NeuronBuilder},
+        neuron::{DissolveStateAndAge, NeuronBuilder},
         pb::v1::{neuron::Followees, KnownNeuronData},
         storage::{with_stable_neuron_indexes_mut, with_stable_neuron_store_mut},
     };
