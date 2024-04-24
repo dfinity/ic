@@ -1351,8 +1351,9 @@ impl Topic {
     fn reward_weight(&self) -> f64 {
         match self {
             // We provide higher voting rewards for neuron holders
-            // who vote on governance proposals.
+            // who vote on Governance and SnsAndCommunityFund proposals.
             Topic::Governance => 20.0,
+            Topic::SnsAndCommunityFund => 20.0,
             // Lower voting rewards for exchange rate proposals.
             Topic::ExchangeRate => 0.01,
             // Other topics are unit weighted. Typically a handful of
