@@ -1,5 +1,5 @@
 {
-  "checksum": "1e4d5d3f3d7d03305b921be78c06c7600942d856529e54b89aa8b63497a81c5e",
+  "checksum": "24e6ec6c48cc2575465df8d202f7ae0e80bf1900235ff6493600a5a7a4cc6264",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17696,7 +17696,7 @@
               "target": "wasm_bindgen"
             },
             {
-              "id": "wasm-encoder 0.38.1",
+              "id": "wasm-encoder 0.201.0",
               "target": "wasm_encoder"
             },
             {
@@ -17704,7 +17704,7 @@
               "target": "wasm_smith"
             },
             {
-              "id": "wasmparser 0.118.2",
+              "id": "wasmparser 0.201.0",
               "target": "wasmparser"
             },
             {
@@ -69121,63 +69121,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "wasm-encoder 0.38.1": {
-      "name": "wasm-encoder",
-      "version": "0.38.1",
-      "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasm-encoder",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/wasm-encoder/0.38.1/download",
-          "sha256": "0ad2b51884de9c7f4fe2fd1043fccb8dcad4b1e29558146ee57a144d15779f3f"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "wasm_encoder",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "wasm_encoder",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "wasmparser"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "leb128 0.2.5",
-              "target": "leb128"
-            },
-            {
-              "id": "wasmparser 0.118.2",
-              "target": "wasmparser"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.38.1"
-      },
-      "license": "Apache-2.0 WITH LLVM-exception",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": "LICENSE"
-    },
     "wasm-encoder 0.201.0": {
       "name": "wasm-encoder",
       "version": "0.201.0",
@@ -69496,57 +69439,6 @@
         },
         "edition": "2021",
         "version": "0.108.0"
-      },
-      "license": "Apache-2.0 WITH LLVM-exception",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": "LICENSE"
-    },
-    "wasmparser 0.118.2": {
-      "name": "wasmparser",
-      "version": "0.118.2",
-      "package_url": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasmparser",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/wasmparser/0.118.2/download",
-          "sha256": "77f1154f1ab868e2a01d9834a805faca7bf8b50d041b4ca714d005d0dab1c50c"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "wasmparser",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": false,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "wasmparser",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "indexmap 2.1.0",
-              "target": "indexmap"
-            },
-            {
-              "id": "semver 1.0.18",
-              "target": "semver"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.118.2"
       },
       "license": "Apache-2.0 WITH LLVM-exception",
       "license_ids": [
@@ -76343,9 +76235,9 @@
     "walrus 0.19.0",
     "warp 0.3.6",
     "wasm-bindgen 0.2.87",
-    "wasm-encoder 0.38.1",
+    "wasm-encoder 0.201.0",
     "wasm-smith 0.201.0",
-    "wasmparser 0.118.2",
+    "wasmparser 0.201.0",
     "wasmprinter 0.2.60",
     "wasmtime 19.0.2",
     "wasmtime-environ 19.0.2",
