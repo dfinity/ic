@@ -319,8 +319,8 @@ fn hitting_page_delta_limit_fails_message() {
     assert_eq!(result.code(), ErrorCode::CanisterMemoryAccessLimitExceeded);
     assert_eq!(
         result.description(),
-        "Canister exceeded memory access limits: Exceeded the limit for the \
-    number of modified pages in the stable memory in a single message execution: limit: 40 KB."
+        format!("Error from Canister {canister_id}: Canister exceeded memory access limits: Exceeded the limit for the \
+    number of modified pages in the stable memory in a single message execution: limit: 40 KB.")
     );
 }
 
@@ -336,8 +336,8 @@ fn hitting_page_delta_limit_fails_message_non_native_stable() {
     assert_eq!(result.code(), ErrorCode::CanisterMemoryAccessLimitExceeded);
     assert_eq!(
         result.description(),
-        "Canister exceeded memory access limits: Exceeded the limit for the \
-    number of modified pages in the stable memory in a single message execution: limit: 40 KB."
+        format!("Error from Canister {canister_id}: Canister exceeded memory access limits: Exceeded the limit for the \
+    number of modified pages in the stable memory in a single message execution: limit: 40 KB.")
     );
 }
 
@@ -390,7 +390,7 @@ fn dts_update_resume_fails_due_to_cycles_change() {
     assert_eq!(
         err.description(),
         format!(
-            "Canister {} encountered a Wasm engine error: \
+            "Error from Canister {}: Canister encountered a Wasm engine error: \
              Failed to apply system changes: Mismatch in cycles \
              balance when resuming an update call",
             a_id
@@ -454,7 +454,7 @@ fn dts_update_resume_fails_due_to_call_context_change() {
     assert_eq!(
         err.description(),
         format!(
-            "Canister {} encountered a Wasm engine error: \
+            "Error from Canister {}: Canister encountered a Wasm engine error: \
              Failed to apply system changes: Mismatch in call \
              context id when resuming an update call",
             a_id
@@ -715,7 +715,7 @@ fn dts_uninstall_with_aborted_update() {
     assert_eq!(
         err.description(),
         format!(
-            "Attempt to execute a message on canister {} which contains no Wasm module",
+            "Error from Canister {}: Attempt to execute a message, but the canister contains no Wasm module",
             canister_id
         )
     );
@@ -796,8 +796,7 @@ fn stable_grow_returns_allocated_memory_on_error() {
         UserError::new(
             ErrorCode::CanisterTrapped,
             format!(
-                "Canister {} trapped: 32 bit stable memory api used on a memory larger than 4GB",
-                canister_id
+                "Error from Canister {canister_id}: Canister trapped: 32 bit stable memory api used on a memory larger than 4GB"
             )
         )
     );

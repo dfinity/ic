@@ -56,15 +56,15 @@ fn get_system_state_with_cycles(cycles_amount: Cycles) -> SystemState {
 }
 
 fn assert_api_supported<T>(res: HypervisorResult<T>) {
-    if let Err(HypervisorError::ContractViolation(err)) = res {
-        assert!(!err.contains("cannot be executed"), "{}", err)
+    if let Err(HypervisorError::ContractViolation { error, .. }) = res {
+        assert!(!error.contains("cannot be executed"), "{}", error)
     }
 }
 
 fn assert_api_not_supported<T>(res: HypervisorResult<T>) {
     match res {
-        Err(HypervisorError::ContractViolation(err)) => {
-            assert!(err.contains("cannot be executed"), "{}", err)
+        Err(HypervisorError::ContractViolation { error, .. }) => {
+            assert!(error.contains("cannot be executed"), "{}", error)
         }
         _ => unreachable!("Expected api to be unsupported."),
     }

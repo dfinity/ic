@@ -95,7 +95,11 @@ fn mark_writes_on_bytemap(
         _ => {
             return Err(process_err(
                 caller,
-                HypervisorError::ContractViolation("Failed to access heap bitmap".to_string()),
+                HypervisorError::ContractViolation {
+                    error: "Failed to access heap bitmap".to_string(),
+                    suggestion: "".to_string(),
+                    doc_link: "".to_string(),
+                },
             ))
         }
     };
@@ -283,10 +287,11 @@ fn ic0_performance_counter_helper(
         1 => caller.data().system_api()?.ic0_performance_counter(
             PerformanceCounterType::CallContextInstructions(instruction_counter),
         ),
-        _ => Err(HypervisorError::ContractViolation(format!(
-            "Error getting performance counter type {}",
-            counter_type
-        ))),
+        _ => Err(HypervisorError::ContractViolation {
+            error: format!("Error getting performance counter type {}", counter_type),
+            suggestion: "".to_string(),
+            doc_link: "".to_string(),
+        }),
     }
 }
 
@@ -321,17 +326,18 @@ pub(crate) fn syscalls(
     ) -> Result<T, anyhow::Error> {
         caller
             .get_export(WASM_HEAP_MEMORY_NAME)
-            .ok_or_else(|| {
-                HypervisorError::ContractViolation(
-                    "WebAssembly module must define memory".to_string(),
-                )
+            .ok_or_else(|| HypervisorError::ContractViolation {
+                error: "WebAssembly module must define memory".to_string(),
+                suggestion: "".to_string(),
+                doc_link: "".to_string(),
             })
             .and_then(|ext| {
-                ext.into_memory().ok_or_else(|| {
-                    HypervisorError::ContractViolation(
-                        "export 'memory' is not a memory".to_string(),
-                    )
-                })
+                ext.into_memory()
+                    .ok_or_else(|| HypervisorError::ContractViolation {
+                        error: "export 'memory' is not a memory".to_string(),
+                        suggestion: "".to_string(),
+                        doc_link: "".to_string(),
+                    })
             })
             .and_then(|mem| {
                 let (mem, store) = mem.data_and_store_mut(&mut caller);
