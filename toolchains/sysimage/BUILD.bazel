@@ -13,6 +13,7 @@ exports_files([
     "build_vfat_image.py",
     "inject_files.py",
     "verity_sign.py",
+    "mke2fs",
 ])
 
 # Creates a tar file as output

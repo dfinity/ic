@@ -69,7 +69,6 @@ def save_image(container_cmd: str, image_tag: str, output_file: str):
     log.info("Saving image to tar file")
     cmd = f"{container_cmd} image save --output {output_file} {image_tag}"
     invoke.run(cmd)
-    invoke.run("sync") # For determinism (?)
 
     # Using sudo w/ podman requires changing permissions on the output tar file (not the tar contents)
     output_path = Path(output_file)

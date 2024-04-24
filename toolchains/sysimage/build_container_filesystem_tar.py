@@ -130,7 +130,6 @@ def export_container_filesystem(container_cmd: str,
     container_name = image_tag + "_container"
     invoke.run(f"{container_cmd} create --name {container_name} {image_tag}")
     invoke.run(f"{container_cmd} export -o {destination_tar_filename} {container_name}")
-    invoke.run("sync")
     invoke.run(f"{container_cmd} container rm {container_name}")
 
     destination_tar_path = Path(destination_tar_filename)

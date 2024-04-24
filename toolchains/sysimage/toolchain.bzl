@@ -275,6 +275,7 @@ fat32_image = rule(
 
 def _ext4_image_impl(ctx):
     tool = ctx.files._build_ext4_image[0]
+    mke2fs = ctx.files._mke2fs[0]
     dflate = ctx.files._dflate[0]
 
     out = ctx.actions.declare_file(ctx.label.name)
@@ -288,6 +289,8 @@ def _ext4_image_impl(ctx):
     args += [
         "-o",
         out.path,
+        "-m",
+        mke2fs.path,
         "-s",
         ctx.attr.partition_size,
         "-p",
@@ -295,9 +298,6 @@ def _ext4_image_impl(ctx):
         "-d",
         dflate.path,
     ]
-    if len(ctx.files.file_contexts) > 0:
-        args += ["-S", ctx.files.file_contexts[0].path]
-        inputs += ctx.files.file_contexts
 
     if len(ctx.attr.strip_paths) > 0:
         args += ["--strip-paths"] + ctx.attr.strip_paths
@@ -307,7 +307,7 @@ def _ext4_image_impl(ctx):
         arguments = args,
         inputs = inputs,
         outputs = [out],
-        tools = [tool, dflate],
+        tools = [tool, mke2fs, dflate],
     )
 
     return [DefaultInfo(files = depset([out]))]
@@ -317,10 +317,6 @@ ext4_image = rule(
     attrs = {
         "src": attr.label(
             allow_files = True,
-        ),
-        "file_contexts": attr.label(
-            allow_files = True,
-            mandatory = False,
         ),
         "strip_paths": attr.string_list(),
         "partition_size": attr.string(
@@ -332,6 +328,10 @@ ext4_image = rule(
         "_build_ext4_image": attr.label(
             allow_files = True,
             default = ":build_ext4_image.py",
+        ),
+        "_mke2fs": attr.label(
+            allow_files = True,
+            default = "//toolchains/sysimage:mke2fs",
         ),
         "_dflate": attr.label(
             allow_files = True,

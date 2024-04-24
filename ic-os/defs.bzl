@@ -123,7 +123,6 @@ def icos_build(
     ext4_image(
         name = "static-partition-root-unsigned.tzst",
         src = ":rootfs-tree.tar",
-        file_contexts = ":file_contexts",
         partition_size = image_deps["rootfs_size"],
         strip_paths = [
             "/run",
@@ -141,7 +140,6 @@ def icos_build(
     ext4_image(
         name = "static-partition-boot.tzst",
         src = ":rootfs-tree.tar",
-        file_contexts = ":file_contexts",
         partition_size = image_deps["bootfs_size"],
         subdir = "boot/",
         target_compatible_with = [
