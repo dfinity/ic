@@ -2671,6 +2671,12 @@ impl StateMachine {
             .clone()
     }
 
+    /// Returns the size estimate of canisters heap delta in bytes.
+    pub fn heap_delta_estimate_bytes(&self) -> u64 {
+        let state = self.state_manager.get_latest_state().take();
+        state.metadata.heap_delta_estimate.get()
+    }
+
     pub fn deliver_query_stats(&self, query_stats: QueryStatsPayload) -> Height {
         self.execute_payload(PayloadBuilder::new().with_query_stats(Some(query_stats)))
     }
