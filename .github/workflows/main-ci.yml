@@ -390,8 +390,8 @@ jobs:
       labels: bazel-runner-small
     container:
       image: dfinity/ic-build:abbdc66c19bf32eda2109f97e39fde519ef9b452ab54aee52b234af8638983d8
-    timeout-minutes: 30
     if: ${{ vars.RUN_CI == 'true' }}
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v4

@@ -356,6 +356,7 @@ jobs:
   cargo-build-release-linux:
     name: Cargo-Build-Release-Linux
     <<: *bazel-small-setup
+    timeout-minutes: 60
     steps:
       - <<: *checkout
       - <<: *cargo-filters
