@@ -37,14 +37,14 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                 .map_err(|e| ThresholdSchnorrCreateSigShareVaultError::SerializationError(e.0))
         }
 
+        let start_time = self.metrics.now();
+
         let key_transcript = deserialize_transcript(key_raw.as_ref())?;
         let presig_transcript = deserialize_transcript(presig_raw.as_ref())?;
         let key_opening =
             self.combined_commitment_opening_from_sks(&key_transcript.combined_commitment)?;
         let presig_opening =
             self.combined_commitment_opening_from_sks(&presig_transcript.combined_commitment)?;
-
-        let start_time = self.metrics.now();
 
         let derivation_path = DerivationPath::from(&extended_derivation_path);
 
