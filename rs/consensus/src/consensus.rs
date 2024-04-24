@@ -51,13 +51,13 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    artifact::{ConsensusMessageFilter, ConsensusMessageId, PriorityFn},
+    artifact::{ConsensusMessageId, PriorityFn},
     artifact_kind::ConsensusArtifact,
     consensus::ConsensusMessageHashable,
     malicious_flags::MaliciousFlags,
     replica_config::ReplicaConfig,
     replica_version::ReplicaVersion,
-    Height, Time,
+    Time,
 };
 pub use metrics::ValidatorMetrics;
 use std::{
@@ -618,19 +618,6 @@ impl<Pool: ConsensusPool> PriorityFnAndFilterProducer<ConsensusArtifact, Pool>
     fn get_priority_function(&self, pool: &Pool) -> PriorityFn<ConsensusMessageId, ()> {
         get_priority_function(pool, self.message_routing.expected_batch_height())
     }
-
-    /// Return a filter that represents what artifacts are needed above the
-    /// filter height.
-    fn get_filter(&self) -> ConsensusMessageFilter {
-        let expected_batch_height = self.message_routing.expected_batch_height();
-        assert!(
-            expected_batch_height > Height::from(0),
-            "Expected batch height must be 1 more higher"
-        );
-        ConsensusMessageFilter {
-            height: expected_batch_height.decrement(),
-        }
-    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -715,7 +702,7 @@ mod tests {
     use ic_test_utilities_registry::{FakeLocalStoreCertifiedTimeReader, SubnetRecordBuilder};
     use ic_test_utilities_time::FastForwardTimeSource;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
-    use ic_types::{crypto::CryptoHash, CryptoHashOfState, SubnetId};
+    use ic_types::{crypto::CryptoHash, CryptoHashOfState, Height, SubnetId};
     use std::{sync::Arc, time::Duration};
 
     fn set_up_consensus_with_subnet_record(

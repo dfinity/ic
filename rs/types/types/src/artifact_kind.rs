@@ -35,9 +35,6 @@ impl ArtifactKind for ConsensusArtifact {
     type PbAttribute = ();
     type PbAttributeError = Infallible;
     type Attribute = ();
-    type PbFilter = ic_protobuf::types::v1::ConsensusMessageFilter;
-    type PbFilterError = ProxyDecodeError;
-    type Filter = ConsensusMessageFilter;
 
     /// The function converts a `ConsensusMessage` into an advert for a
     /// `ConsensusArtifact`.
@@ -67,9 +64,6 @@ impl ArtifactKind for IngressArtifact {
     type PbAttribute = ();
     type PbAttributeError = Infallible;
     type Attribute = ();
-    type PbFilter = ();
-    type PbFilterError = Infallible;
-    type Filter = ();
 
     /// The function converts a `SignedIngress` into an advert for an
     /// `IngressArtifact`.
@@ -99,9 +93,6 @@ impl ArtifactKind for CertificationArtifact {
     type PbAttribute = ();
     type PbAttributeError = Infallible;
     type Attribute = ();
-    type PbFilter = ic_protobuf::types::v1::CertificationMessageFilter;
-    type PbFilterError = ProxyDecodeError;
-    type Filter = CertificationMessageFilter;
 
     /// The function converts a `CertificationMessage` into an advert for a
     /// `CertificationArtifact`.
@@ -131,9 +122,6 @@ impl ArtifactKind for DkgArtifact {
     type PbAttribute = ();
     type PbAttributeError = Infallible;
     type Attribute = ();
-    type PbFilter = ();
-    type PbFilterError = Infallible;
-    type Filter = ();
 
     /// The function converts a `DkgMessage` into an advert for a
     /// `DkgArtifact`.
@@ -163,9 +151,6 @@ impl ArtifactKind for EcdsaArtifact {
     type PbAttribute = ic_protobuf::types::v1::EcdsaMessageAttribute;
     type PbAttributeError = ProxyDecodeError;
     type Attribute = EcdsaMessageAttribute;
-    type PbFilter = ();
-    type PbFilterError = Infallible;
-    type Filter = ();
 
     /// The function converts a `EcdsaMessage` into an advert for a
     /// `EcdsaArtifact`.
@@ -195,9 +180,6 @@ impl ArtifactKind for CanisterHttpArtifact {
     type PbAttribute = ();
     type PbAttributeError = Infallible;
     type Attribute = ();
-    type PbFilterError = Infallible;
-    type PbFilter = ();
-    type Filter = ();
 
     /// This function converts a `CanisterHttpResponseShare` into an advert for a
     /// `CanisterHttpArtifact`.

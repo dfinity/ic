@@ -1786,14 +1786,11 @@ mod tests {
             type PbIdError = Infallible;
             type PbMessageError = Infallible;
             type PbAttributeError = Infallible;
-            type PbFilterError = Infallible;
             type Message = Vec<u8>;
             type PbId = ();
             type Id = ();
             type PbAttribute = ();
             type Attribute = ();
-            type PbFilter = ();
-            type Filter = ();
 
             fn message_to_advert(_: &Self::Message) -> Advert<BigArtifact> {
                 todo!()

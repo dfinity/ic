@@ -462,7 +462,7 @@ impl ValidatedPoolReader<EcdsaArtifact> for EcdsaPoolImpl {
         self.validated.as_pool_section().get(msg_id)
     }
 
-    fn get_all_validated_by_filter(&self, _filter: &()) -> Box<dyn Iterator<Item = EcdsaMessage>> {
+    fn get_all_validated(&self) -> Box<dyn Iterator<Item = EcdsaMessage>> {
         Box::new(std::iter::empty())
     }
 }

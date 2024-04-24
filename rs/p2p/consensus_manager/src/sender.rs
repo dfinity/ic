@@ -108,9 +108,7 @@ impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
         // This can for example happen if the node restarts.
         let artifacts_in_validated_pool: Vec<Artifact::Message> = {
             let pool_read_lock = self.pool_reader.read().unwrap();
-            pool_read_lock
-                .get_all_validated_by_filter(&Artifact::Filter::default())
-                .collect()
+            pool_read_lock.get_all_validated().collect()
         };
 
         for artifact in artifacts_in_validated_pool {
@@ -460,8 +458,8 @@ mod tests {
                 });
             // Initial validated pool contains one element.
             mock_reader
-                .expect_get_all_validated_by_filter()
-                .returning(|_| Box::new(std::iter::once(U64Artifact::id_to_msg(1, 1024))));
+                .expect_get_all_validated()
+                .returning(|| Box::new(std::iter::once(U64Artifact::id_to_msg(1, 1024))));
             mock_reader
                 .expect_get_validated_by_identifier()
                 .returning(|id| Some(U64Artifact::id_to_msg(*id, 1024)));
@@ -511,8 +509,8 @@ mod tests {
                     Ok(())
                 });
             mock_reader
-                .expect_get_all_validated_by_filter()
-                .returning(|_| Box::new(std::iter::empty()));
+                .expect_get_all_validated()
+                .returning(|| Box::new(std::iter::empty()));
             mock_reader
                 .expect_get_validated_by_identifier()
                 .returning(|id| Some(U64Artifact::id_to_msg(*id, 1024)));
@@ -586,8 +584,8 @@ mod tests {
                     Ok(())
                 });
             mock_reader
-                .expect_get_all_validated_by_filter()
-                .returning(|_| Box::new(std::iter::empty()));
+                .expect_get_all_validated()
+                .returning(|| Box::new(std::iter::empty()));
             mock_reader
                 .expect_get_validated_by_identifier()
                 .returning(|id| Some(U64Artifact::id_to_msg(*id, 1024)));
@@ -657,8 +655,8 @@ mod tests {
                     Ok(())
                 });
             mock_reader
-                .expect_get_all_validated_by_filter()
-                .returning(|_| Box::new(std::iter::empty()));
+                .expect_get_all_validated()
+                .returning(|| Box::new(std::iter::empty()));
             mock_reader
                 .expect_get_validated_by_identifier()
                 .returning(|id| Some(U64Artifact::id_to_msg(*id, 1024)));
@@ -715,8 +713,8 @@ mod tests {
                     Ok(())
                 });
             mock_reader
-                .expect_get_all_validated_by_filter()
-                .returning(|_| Box::new(std::iter::empty()));
+                .expect_get_all_validated()
+                .returning(|| Box::new(std::iter::empty()));
             mock_reader
                 .expect_get_validated_by_identifier()
                 .returning(|id| Some(U64Artifact::id_to_msg(*id, 1024)));
@@ -792,8 +790,8 @@ mod tests {
                     Ok(())
                 });
             mock_reader
-                .expect_get_all_validated_by_filter()
-                .returning(|_| Box::new(std::iter::empty()));
+                .expect_get_all_validated()
+                .returning(|| Box::new(std::iter::empty()));
             mock_reader
                 .expect_get_validated_by_identifier()
                 .returning(|id| Some(U64Artifact::id_to_msg(*id, 1024)));
@@ -870,8 +868,8 @@ mod tests {
                 });
 
             mock_reader
-                .expect_get_all_validated_by_filter()
-                .returning(|_| Box::new(std::iter::empty()));
+                .expect_get_all_validated()
+                .returning(|| Box::new(std::iter::empty()));
             mock_reader
                 .expect_get_validated_by_identifier()
                 .returning(|id| Some(U64Artifact::id_to_msg(*id, 1024)));

@@ -414,10 +414,7 @@ impl ValidatedPoolReader<IngressArtifact> for IngressPoolImpl {
         self.validated.get(id).map(|a| a.msg.signed_ingress.clone())
     }
 
-    fn get_all_validated_by_filter<'a>(
-        &'a self,
-        _filter: &(),
-    ) -> Box<dyn Iterator<Item = SignedIngress> + 'a> {
+    fn get_all_validated<'a>(&'a self) -> Box<dyn Iterator<Item = SignedIngress> + 'a> {
         Box::new(vec![].into_iter())
     }
 }
@@ -591,7 +588,7 @@ mod tests {
     }
 
     #[test]
-    fn test_get_all_validated_by_filter() {
+    fn test_get_all_validated() {
         with_test_replica_logger(|log| {
             ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
                 let time_source = FastForwardTimeSource::new();
@@ -624,7 +621,7 @@ mod tests {
                     );
                 }
                 // empty
-                let filtered_msgs = ingress_pool.get_all_validated_by_filter(&());
+                let filtered_msgs = ingress_pool.get_all_validated();
                 assert!(filtered_msgs.count() == 0);
             })
         })
