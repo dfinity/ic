@@ -8648,6 +8648,7 @@ dependencies = [
  "ic-icrc1-ledger",
  "ic-ledger-suite-orchestrator-test-utils",
  "ic-management-canister-types",
+ "ic-metrics-encoder",
  "ic-stable-structures",
  "ic-state-machine-tests",
  "ic0 0.21.1",

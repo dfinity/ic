@@ -234,7 +234,7 @@ fn ledger_init_arg<U: Into<String>, V: Into<String>>(
     }
 }
 
-fn assert_reply(result: WasmResult) -> Vec<u8> {
+pub fn assert_reply(result: WasmResult) -> Vec<u8> {
     match result {
         WasmResult::Reply(bytes) => bytes,
         WasmResult::Reject(reject) => {
