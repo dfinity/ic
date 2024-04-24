@@ -64,6 +64,7 @@ use std::{
     convert::{TryFrom, TryInto},
     mem::size_of,
 };
+use strum_macros::EnumIter;
 
 /// Time after which a response is considered timed out and a timeout error will be returned to execution
 pub const CANISTER_HTTP_TIMEOUT_INTERVAL: Duration = Duration::from_secs(60);
@@ -524,11 +525,11 @@ pub struct CanisterHttpHeader {
 }
 
 /// Specifies the HTTP method that is used in the [`CanisterHttpRequest`].
-#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, EnumIter, Hash, PartialEq, Serialize, Deserialize)]
 pub enum CanisterHttpMethod {
-    GET,
-    POST,
-    HEAD,
+    GET = 1,
+    POST = 2,
+    HEAD = 3,
 }
 
 impl From<&CanisterHttpMethod> for pb_metadata::HttpMethod {
@@ -631,6 +632,8 @@ mod tests {
 
     use super::*;
 
+    use strum::IntoEnumIterator;
+
     #[test]
     fn test_request_arg_variable_size() {
         let context = CanisterHttpRequestContext {
@@ -708,6 +711,28 @@ mod tests {
         assert_eq!(
             context.variable_parts_size(),
             NumBytes::from(expected_size as u64)
+        );
+    }
+
+    #[test]
+    fn canister_http_method_proto_round_trip() {
+        for initial in CanisterHttpMethod::iter() {
+            let encoded = pb_metadata::HttpMethod::from(&initial);
+            let round_trip = CanisterHttpMethod::try_from(encoded).unwrap();
+
+            assert_eq!(initial, round_trip);
+        }
+    }
+
+    #[test]
+    fn compatibility_for_canister_http_method() {
+        // If this fails, you are making a potentially incompatible change to `CanisterHttpMethod`.
+        // See note [Handling changes to Enums in Replicated State] for how to proceed.
+        assert_eq!(
+            CanisterHttpMethod::iter()
+                .map(|x| x as i32)
+                .collect::<Vec<i32>>(),
+            [1, 2, 3]
         );
     }
 }

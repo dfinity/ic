@@ -623,4 +623,23 @@ mod tests {
             assert_eq!(initial, round_trip);
         }
     }
+
+    #[test]
+    #[rustfmt::skip]
+    fn compatibility_for_error_code() {
+        // If this fails, you are making a potentially incompatible change to `ErrorCode`.
+        // See note [Handling changes to Enums in Replicated State] for how to proceed.
+        assert_eq!(
+            ErrorCode::iter().map(|x| x as i32).collect::<Vec<i32>>(),
+            [
+                101, 102,
+                201, 202, 203, 204, 205, 206, 207, 208, 209, 210,
+                301, 302, 303, 304, 305,
+                402, 403, 404, 405, 406, 407, 408,
+                501, 502, 503, 504, 505, 506, 507, 508, 509, 510, 511, 512, 513,
+                514, 515, 516, 517, 518, 519, 520, 521, 522, 523, 524, 525, 526,
+                527, 528, 529, 530, 531, 532, 533, 534, 535, 536, 537, 538, 539
+            ]
+        );
+    }
 }

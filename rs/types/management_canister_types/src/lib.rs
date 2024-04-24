@@ -709,9 +709,9 @@ impl Payload<'_> for UninstallCodeArgs {}
 pub enum LogVisibility {
     #[default]
     #[serde(rename = "controllers")]
-    Controllers,
+    Controllers = 1,
     #[serde(rename = "public")]
-    Public,
+    Public = 2,
 }
 
 impl From<LogVisibility> for pb_canister_state_bits::LogVisibility {
@@ -1023,7 +1023,18 @@ impl fmt::Display for CanisterStatusType {
 
 /// The mode with which a canister is installed.
 #[derive(
-    Clone, Debug, Deserialize, PartialEq, Serialize, Eq, EnumString, Hash, CandidType, Copy, Default,
+    Clone,
+    Debug,
+    Deserialize,
+    PartialEq,
+    Serialize,
+    Eq,
+    EnumIter,
+    EnumString,
+    Hash,
+    CandidType,
+    Copy,
+    Default,
 )]
 pub enum CanisterInstallMode {
     /// A fresh install of a new canister.
@@ -1039,17 +1050,6 @@ pub enum CanisterInstallMode {
     #[serde(rename = "upgrade")]
     #[strum(serialize = "upgrade")]
     Upgrade = 3,
-}
-
-impl CanisterInstallMode {
-    pub fn iter() -> Iter<'static, CanisterInstallMode> {
-        static MODES: [CanisterInstallMode; 3] = [
-            CanisterInstallMode::Install,
-            CanisterInstallMode::Reinstall,
-            CanisterInstallMode::Upgrade,
-        ];
-        MODES.iter()
-    }
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, Eq, Hash, CandidType, Copy, Default)]
@@ -2867,6 +2867,7 @@ impl Payload<'_> for ListCanisterSnapshotArgs {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use strum::IntoEnumIterator;
 
     #[test]
     fn canister_install_mode_round_trip() {
@@ -2879,6 +2880,18 @@ mod tests {
         canister_install_mode_round_trip_aux(CanisterInstallMode::Install);
         canister_install_mode_round_trip_aux(CanisterInstallMode::Reinstall);
         canister_install_mode_round_trip_aux(CanisterInstallMode::Upgrade);
+    }
+
+    #[test]
+    fn compatibility_for_canister_install_mode() {
+        // If this fails, you are making a potentially incompatible change to `CanisterInstallMode`.
+        // See note [Handling changes to Enums in Replicated State] for how to proceed.
+        assert_eq!(
+            CanisterInstallMode::iter()
+                .map(|x| x as i32)
+                .collect::<Vec<i32>>(),
+            [1, 2, 3]
+        );
     }
 
     #[test]
