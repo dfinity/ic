@@ -972,8 +972,7 @@ fn dts_uninstall_with_aborted_upgrade() {
     assert_eq!(
         err.description(),
         format!(
-            "Attempt to execute a message on canister {} which contains no Wasm module",
-            canister_id,
+            "Error from Canister {canister_id}: Attempt to execute a message, but the canister contains no Wasm module",
         )
     );
 }

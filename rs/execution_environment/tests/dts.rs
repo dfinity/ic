@@ -1793,7 +1793,7 @@ fn dts_canister_uninstalled_due_resource_charges_with_aborted_update() {
                 assert_eq!(
                     err.description(),
                     format!(
-                        "Attempt to execute a message on canister {} which contains no Wasm module",
+                        "Error from Canister {}: Attempt to execute a message, but the canister contains no Wasm module",
                         canisters[i]
                     )
                 );

@@ -415,18 +415,18 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
 #[test]
 fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
     const ENABLE_BEFORE_ADDING_REJECT_MSG: &str = "Canister rejected with \
-    message: IC0503: Canister rwlgt-iiaaa-aaaaa-aaaaa-cai trapped explicitly: \
-    Panicked at '[Registry] Proposal attempts to enable signing for ECDSA key \
-    'Secp256k1:key_id_1' on Subnet \
+    message: IC0503: Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister \
+    trapped explicitly: Panicked at '[Registry] Proposal attempts to enable \
+    signing for ECDSA key 'Secp256k1:key_id_1' on Subnet \
     'bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae', but the \
     subnet does not hold the given key. A proposal to add that key to the subnet \
     must first be separately submitted.'";
 
     const NO_ECDSA_CONFIG_REJECT_MSG: &str = "Canister rejected with message: \
-    IC0503: Canister rwlgt-iiaaa-aaaaa-aaaaa-cai trapped explicitly: Panicked at \
-    '[Registry]  invariant check failed with message: The subnet \
-    bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae does not \
-    have an ECDSA config'";
+    IC0503: Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister trapped \
+    explicitly: Panicked at '[Registry]  invariant check failed with message: \
+    The subnet bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae \
+    does not have an ECDSA config'";
 
     local_test_on_nns_subnet(|runtime| async move {
         let subnet_id = SubnetId::from(

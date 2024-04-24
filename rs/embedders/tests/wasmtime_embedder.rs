@@ -44,9 +44,11 @@ fn cannot_execute_wasm_without_memory() {
         Err(err) => {
             assert_eq!(
                 err,
-                ic_interfaces::execution_environment::HypervisorError::ContractViolation(
-                    "WebAssembly module must define memory".to_string()
-                )
+                ic_interfaces::execution_environment::HypervisorError::ContractViolation {
+                    error: "WebAssembly module must define memory".to_string(),
+                    suggestion: "".to_string(),
+                    doc_link: "".to_string()
+                }
             );
         }
     }
@@ -503,9 +505,11 @@ fn calling_function_with_invalid_signature_fails() {
         .unwrap_err();
     assert_eq!(
         err,
-        HypervisorError::ContractViolation(
-            "function invocation does not match its signature".to_string()
-        )
+        HypervisorError::ContractViolation {
+            error: "function invocation does not match its signature".to_string(),
+            suggestion: "".to_string(),
+            doc_link: "".to_string()
+        }
     );
 }
 

@@ -959,7 +959,10 @@ fn subnet_memory_reservation_scales_with_number_of_cores() {
     let err = env.execute_ingress(a_id, "update", a).unwrap_err();
     assert_eq!(
         err.description(),
-        format!("Canister {} trapped: stable memory out of bounds", a_id)
+        format!(
+            "Error from Canister {}: Canister trapped: stable memory out of bounds",
+            a_id
+        )
     );
     assert_eq!(err.code(), ErrorCode::CanisterTrapped);
 }
@@ -1567,4 +1570,36 @@ fn test_consensus_queue_invariant_on_exceeding_heap_delta_limit() {
     env.tick();
     // Tick #3: round is executed normally.
     env.tick();
+}
+
+#[test]
+fn toolchain_error_message() {
+    let sm = StateMachine::new();
+
+    // Will fail validation because two memories are defined.
+    let wat = r#"
+        (module
+            (func $update)
+            (memory 1)
+            (memory 1)
+            (export "canister_update update" (func $update))
+        )"#;
+
+    let wasm = wat::parse_str(wat).unwrap();
+
+    let err = sm
+        .install_canister_with_cycles(wasm, vec![], None, INITIAL_CYCLES_BALANCE)
+        .unwrap_err();
+
+    assert_eq!(
+        err.description(),
+        "Error from Canister \
+    rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister's Wasm module is not valid: Wasmtime \
+    failed to validate wasm module wasmtime::Module::validate() failed with \
+    multiple memories (at offset 0x14).\n\
+    This is likely an error with the compiler/CDK toolchain being used to \
+    build the canister. Please report the error to IC devs on the forum: \
+    https://forum.dfinity.org and include which language/CDK was used to \
+    create the canister."
+    );
 }

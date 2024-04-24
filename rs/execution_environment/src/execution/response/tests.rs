@@ -1453,9 +1453,8 @@ fn dts_response_concurrent_cycles_change_fails() {
     assert_eq!(
         err.description(),
         format!(
-            "Canister {} is out of cycles: \
+            "Error from Canister {a_id}: Canister {a_id} is out of cycles: \
              please top up the canister with at least {} additional cycles",
-            a_id,
             (freezing_threshold + call_charge) - (initial_cycles + refund - cycles_debit)
         )
     );
