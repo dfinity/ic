@@ -6,7 +6,8 @@ use ic_config::{
 };
 use ic_management_canister_types::{
     CanisterIdRecord, CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
-    CreateCanisterArgs, EmptyBlob, Method, Payload, UpdateSettingsArgs, IC_00,
+    CreateCanisterArgs, DerivationPath, EcdsaKeyId, EmptyBlob, Method, Payload, SignWithECDSAArgs,
+    UpdateSettingsArgs, IC_00,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
@@ -16,7 +17,7 @@ use ic_test_utilities_metrics::fetch_int_counter;
 use ic_types::{ingress::WasmResult, CanisterId, Cycles, NumBytes};
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use more_asserts::{assert_le, assert_lt};
-use std::{convert::TryInto, sync::Arc, time::Duration};
+use std::{convert::TryInto, str::FromStr, sync::Arc, time::Duration};
 
 /// One billion for better cycles readability.
 const B: u128 = 1e9 as u128;
@@ -1509,4 +1510,61 @@ fn execution_observes_oversize_messages() {
         )
         .unwrap()
     );
+}
+
+#[test]
+fn test_consensus_queue_invariant_on_exceeding_heap_delta_limit() {
+    // Test consensus queue invariant for the case of exceeding heap delta limit.
+    // Empirical value that has to be below the limit on tick #1 and above the limit on tick #2.
+    let heap_delta_limit = 65_540;
+    let mut subnet_config = SubnetConfig::new(SubnetType::Application);
+    subnet_config.scheduler_config.subnet_heap_delta_capacity = NumBytes::new(heap_delta_limit);
+    let key_id = EcdsaKeyId::from_str("Secp256k1:valid_key").unwrap();
+    let env = StateMachineBuilder::new()
+        .with_checkpoints_enabled(false)
+        .with_config(Some(StateMachineConfig::new(
+            subnet_config,
+            HypervisorConfig::default(),
+        )))
+        .with_ecdsa_key(key_id.clone())
+        .build();
+    let canister_id = env
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            vec![],
+            None,
+            Cycles::new(100_000_000_000),
+        )
+        .unwrap();
+
+    // Send SignWithECDSA message to trigger non-empty consensus queue.
+    let _msg_id = env.send_ingress(
+        PrincipalId::new_anonymous(),
+        canister_id,
+        "update",
+        wasm()
+            .call_with_cycles(
+                IC_00,
+                Method::SignWithECDSA,
+                call_args().other_side(
+                    Encode!(&SignWithECDSAArgs {
+                        message_hash: [0; 32],
+                        derivation_path: DerivationPath::new(Vec::new()),
+                        key_id
+                    })
+                    .unwrap(),
+                ),
+                Cycles::new(2_000_000_000),
+            )
+            .build(),
+    );
+
+    // Tick #1: heap delta is below the limit, process sign_with_ecdsa message, no response in this round.
+    assert_lt!(env.heap_delta_estimate_bytes(), heap_delta_limit);
+    env.tick();
+    // Tick #2: heap delta is above the limit, the response is added to consensus queue before executing the payload.
+    assert_lt!(heap_delta_limit, env.heap_delta_estimate_bytes());
+    env.tick();
+    // Tick #3: round is executed normally.
+    env.tick();
 }
