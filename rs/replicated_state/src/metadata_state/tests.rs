@@ -1926,6 +1926,18 @@ fn canister_state_bits_cycles_use_case_round_trip() {
     }
 }
 
+#[test]
+fn compatibility_for_cycles_use_case() {
+    // If this fails, you are making a potentially incompatible change to `CyclesUseCase`.
+    // See note [Handling changes to Enums in Replicated State] for how to proceed.
+    assert_eq!(
+        CyclesUseCase::iter()
+            .map(|x| x as i32)
+            .collect::<Vec<i32>>(),
+        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    );
+}
+
 const MAX_NUM_DAYS: usize = BLOCKMAKER_METRICS_TIME_SERIES_NUM_SNAPSHOTS + 10;
 const MAX_NUM_DAYS_NANOS: u64 = MAX_NUM_DAYS as u64 * 24 * 3600 * 1_000_000_000;
 // The compiler doesn't see the use of these constants inside the `proptest!` macro.
