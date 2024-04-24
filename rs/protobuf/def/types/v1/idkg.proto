@@ -26,16 +26,12 @@ message EcdsaPayload {
 }
 
 message ConsensusResponse {
-  types.v1.CanisterId originator = 1;
-  types.v1.CanisterId respondent = 2;
+  reserved 1, 2, 4, 7, 8;
   uint64 callback = 3;
-  state.queues.v1.Funds refund = 4;
   oneof payload {
     bytes data = 5;
     state.queues.v1.RejectContext reject = 6;
   }
-  state.queues.v1.Cycles cycles_refund = 7;
-  optional uint32 deadline_seconds = 8;
 }
 
 message EcdsaKeyTranscript {
