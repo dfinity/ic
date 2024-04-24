@@ -47,7 +47,7 @@ fn file_backed_memory_allocator_default() -> FlagStatus {
 
 pub fn lsmt_config_default() -> LsmtConfig {
     LsmtConfig {
-        lsmt_status: FlagStatus::Disabled,
+        lsmt_status: FlagStatus::Enabled,
         // 40GiB
         // DO NOT CHANGE after LSMT is enabled, as it would crash the new replica trying to merge
         // old data.
