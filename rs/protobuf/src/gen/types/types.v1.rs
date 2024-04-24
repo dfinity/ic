@@ -395,18 +395,8 @@ pub struct EcdsaPayload {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ConsensusResponse {
-    #[prost(message, optional, tag = "1")]
-    pub originator: ::core::option::Option<CanisterId>,
-    #[prost(message, optional, tag = "2")]
-    pub respondent: ::core::option::Option<CanisterId>,
     #[prost(uint64, tag = "3")]
     pub callback: u64,
-    #[prost(message, optional, tag = "4")]
-    pub refund: ::core::option::Option<super::super::state::queues::v1::Funds>,
-    #[prost(message, optional, tag = "7")]
-    pub cycles_refund: ::core::option::Option<super::super::state::queues::v1::Cycles>,
-    #[prost(uint32, optional, tag = "8")]
-    pub deadline_seconds: ::core::option::Option<u32>,
     #[prost(oneof = "consensus_response::Payload", tags = "5, 6")]
     pub payload: ::core::option::Option<consensus_response::Payload>,
 }

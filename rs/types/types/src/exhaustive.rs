@@ -1,6 +1,5 @@
 //! Implementations and serialization tests of the ExhaustiveSet trait
 
-use crate::batch::ConsensusResponse;
 use crate::consensus::hashed::Hashed;
 use crate::consensus::idkg::ecdsa::{
     PreSignatureQuadrupleRef, QuadrupleInCreation, ThresholdEcdsaSigInputsRef,
@@ -26,7 +25,6 @@ use crate::crypto::{
     crypto_hash, AlgorithmId, BasicSig, BasicSigOf, CombinedThresholdSig, CombinedThresholdSigOf,
     CryptoHash, CryptoHashOf, CryptoHashable, Signed,
 };
-use crate::messages::Response;
 use crate::signature::{BasicSignature, BasicSignatureBatch, ThresholdSignature};
 use crate::xnet::CertifiedStreamSlice;
 use crate::{CryptoHashOfState, ReplicaVersion};
@@ -787,15 +785,6 @@ impl ExhaustiveSet for EcdsaKeyTranscript {
                 current: r.current,
                 next_in_creation: r.next_in_creation,
             })
-            .collect()
-    }
-}
-
-impl ExhaustiveSet for ConsensusResponse {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
-        Response::exhaustive_set(rng)
-            .into_iter()
-            .map(|r| ConsensusResponse::new(r.originator_reply_callback, r.response_payload))
             .collect()
     }
 }
