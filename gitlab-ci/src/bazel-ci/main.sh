@@ -75,6 +75,10 @@ if [[ "${CI_MERGE_REQUEST_TITLE:-}" == *"[S3_UPLOAD]"* ]]; then
     s3_upload="True"
 fi
 
+if [ -n "${GITHUB_OUTPUT:-}" ]; then
+    echo "upload_artifacts=true" >>"$GITHUB_OUTPUT"
+fi
+
 # shellcheck disable=SC2086
 # ${BAZEL_...} variables are expected to contain several arguments. We have `set -f` set above to disable globbing (and therefore only allow splitting)"
 buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" "${CI_JOB_NAME}-bazel-cmd" -- bazel \

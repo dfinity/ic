@@ -38,6 +38,8 @@ jobs:
       image: dfinity/ic-build:abbdc66c19bf32eda2109f97e39fde519ef9b452ab54aee52b234af8638983d8
     timeout-minutes: 90
     if: ${{ vars.RUN_CI == 'true' }} # needed to avoid running on public dfinity org until published
+    outputs:
+      artifacts_produced: ${{ steps.bazel-test-all.outputs.upload_artifacts }}
     steps:
       - name: Checkout
         uses: actions/checkout@v3 # v4 does not work with bazel-runner-large
@@ -75,25 +77,13 @@ jobs:
         #  rm -rf "${CI_PROJECT_DIR}/" # this doesn't work, TODO: figure out if and where data gets stored
       - name: Upload bazel-targets
         uses: actions/upload-artifact@v3
-        if: success() || failure() # don't run if CI job is cancelled
+        if: ${{ needs.bazel-test-all.outputs.upload_artifacts == 'true' }}
         with:
           name: bazel-targets
           retention-days: 1
           if-no-files-found: error
           path: |
             bazel-targets
-          # - name: Upload Bazel artifacts
-          #   uses: actions/upload-artifact@v3
-          #   if: success() || failure() # don't run if CI job is cancelled
-          #   with:
-          #     name: bazel-artifacts
-          #     retention-days: 2
-          #     if-no-files-found: ignore
-          #     compression-level: 7
-          #     path: |
-          #       bazel-build-log*.json*
-          #       bazel-bep.pb
-          #       bazel-testlogs/**/test.xml
   bazel-config-check-all-rebuild:
     runs-on:
       labels: bazel-runner-large
@@ -258,6 +248,8 @@ jobs:
       image: dfinity/ic-build:abbdc66c19bf32eda2109f97e39fde519ef9b452ab54aee52b234af8638983d8
     timeout-minutes: 90
     if: ${{ vars.RUN_CI == 'true' }} # needed to avoid running on public dfinity org until published
+    outputs:
+      artifacts_produced: ${{ steps.build-ic.outputs.upload_artifacts }}
     steps:
       - name: Checkout
         uses: actions/checkout@v3 # v4 does not work with bazel-runner-large
@@ -291,7 +283,7 @@ jobs:
           BAZEL_COMMAND: "build"
       - name: Upload build-ic.tar
         uses: actions/upload-artifact@v3
-        if: success() || failure() # don't run if CI job is cancelled
+        if: ${{ needs.build-ic.outputs.upload_artifacts == 'true' }}
         with:
           name: build-ic
           retention-days: 1
@@ -305,8 +297,8 @@ jobs:
     container:
       image: dfinity/ic-build:abbdc66c19bf32eda2109f97e39fde519ef9b452ab54aee52b234af8638983d8
     timeout-minutes: 30
-    if: ${{ vars.RUN_CI == 'true' }}
     needs: [build-ic, bazel-test-all]
+    if: ${{ needs.build-ic.outputs.artifacts_produced == 'true' && needs.bazel-test-all.outputs.artifacts_produced == 'true' }}
     strategy:
       matrix:
         include:
