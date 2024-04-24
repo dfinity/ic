@@ -1,3 +1,5 @@
+# To be moved to the rootfs BUILD.bazel as references are updated
+
 PUBLIC_EXPORTS = [
     "opt/ic/share/ic.json5.template",
     "dev-certs/canister_http_test_ca.cert",

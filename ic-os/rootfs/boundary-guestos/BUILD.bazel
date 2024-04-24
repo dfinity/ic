@@ -1,4 +1,0 @@
-exports_files(
-    glob(["**"]),
-    ["//ic-os/boundary-guestos:__subpackages__"],
-)
