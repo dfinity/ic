@@ -80,7 +80,7 @@ impl PageInner {
             // Manually copy page one byte at a time. Compiler is able to optimize this
             // better than std::ptr::copy_nonoverlapping().
             deterministic_copy_from_slice(
-                std::slice::from_raw_parts_mut(self.ptr.0.add(offset), PAGE_SIZE),
+                std::slice::from_raw_parts_mut(self.ptr.0.add(offset), slice.len()),
                 slice,
             );
             // Update the validation information if it wasn't initialized yet or
