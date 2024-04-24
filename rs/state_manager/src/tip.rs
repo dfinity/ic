@@ -44,6 +44,9 @@ use std::time::Instant;
 
 const DEFRAG_SIZE: u64 = 1 << 29; // 500 MB
 const DEFRAG_SAMPLE: usize = 100;
+/// We merge starting from MAX_NUMBER_OF_FILES, we take up to 4 rounds to iterate over whole state,
+/// there are 2 overlays created each checkpoint.
+const NUMBER_OF_FILES_HARD_LIMIT: usize = MAX_NUMBER_OF_FILES + 8;
 
 /// Tip directory can be in following states:
 ///    Empty: no data available. The only possible request is ResetTipAndMerge to populate it
@@ -539,7 +542,8 @@ fn merge(
     let merges_by_filenum = merge_candidates
         .iter()
         .scan(0, |state, m| {
-            if *state >= storage_to_merge_for_filenum
+            if (*state >= storage_to_merge_for_filenum
+                && m.num_files_before() <= NUMBER_OF_FILES_HARD_LIMIT as u64)
                 || (m.num_files_before() <= MAX_NUMBER_OF_FILES as u64
                     && (*state + m.page_map_size_bytes() >= min_storage_to_merge))
             {

@@ -23,7 +23,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::system_state::wasm_chunk_store::WasmChunkStore,
     metadata_state::ApiBoundaryNodeEntry,
-    page_map::{PageIndex, StorageLayout},
+    page_map::{PageIndex, Shard, StorageLayout},
     testing::ReplicatedStateTesting,
     Memory, NetworkTopology, NumWasmPages, PageMap, ReplicatedState, Stream, SubnetTopology,
 };
@@ -292,7 +292,7 @@ fn read_and_assert_eq(env: &StateMachine, canister_id: CanisterId, expected: i32
 }
 
 #[test]
-fn merge_overhead() {
+fn lsmt_merge_overhead() {
     fn checkpoint_size(checkpoint: &CheckpointLayout<ReadOnly>) -> f64 {
         let mut size = 0.0;
         for canister_id in checkpoint.canister_ids().unwrap() {
@@ -5438,6 +5438,84 @@ fn can_downgrade_state_sync() {
             );
         });
     });
+}
+
+#[test]
+fn can_merge_unexpected_number_of_files() {
+    state_manager_restart_test_with_lsmt(
+        lsmt_with_sharding(),
+        |_metrics, state_manager, restart_fn| {
+            let (_height, mut state) = state_manager.take_tip();
+
+            insert_dummy_canister(&mut state, canister_test_id(1));
+            let canister_state = state.canister_state_mut(&canister_test_id(1)).unwrap();
+            let execution_state = canister_state.execution_state.as_mut().unwrap();
+
+            const NUM_PAGES: usize = 100;
+            for page in 0..NUM_PAGES {
+                execution_state
+                    .wasm_memory
+                    .page_map
+                    .update(&[(PageIndex::new(page as u64), &[1u8; PAGE_SIZE])]);
+            }
+
+            state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+            const HEIGHT: u64 = 30;
+            for i in 2..HEIGHT {
+                let (_height, state) = state_manager.take_tip();
+                state_manager.commit_and_certify(state, height(i), CertificationScope::Full);
+            }
+
+            wait_for_checkpoint(&state_manager, height(HEIGHT - 1));
+            let pm_layout = state_manager
+                .state_layout()
+                .checkpoint(height(HEIGHT - 1))
+                .unwrap()
+                .canister(&canister_test_id(1))
+                .unwrap()
+                .vmemory_0();
+            let existing_overlays = pm_layout.existing_overlays().unwrap();
+            assert_eq!(existing_overlays.len(), NUM_PAGES); // single page per shard
+
+            // Copy each shard for heights 1..HEIGHT; now each file is beyond the hard limit,
+            // triggering forced merge for all shards back to one overlay.
+            #[allow(clippy::needless_range_loop)]
+            for shard in 0..NUM_PAGES {
+                assert_eq!(
+                    existing_overlays[shard],
+                    pm_layout.overlay(height(1), Shard::new(shard as u64))
+                );
+                for h in 2..HEIGHT {
+                    std::fs::copy(
+                        &existing_overlays[shard],
+                        pm_layout.overlay(height(h), Shard::new(shard as u64)),
+                    )
+                    .unwrap();
+                }
+            }
+            assert_eq!(
+                pm_layout.existing_overlays().unwrap().len(),
+                (HEIGHT as usize - 1) * NUM_PAGES
+            );
+            let (_metrics, state_manager) = restart_fn(state_manager, None, lsmt_with_sharding());
+            let (_height, state) = state_manager.take_tip();
+            state_manager.commit_and_certify(state, height(HEIGHT), CertificationScope::Full);
+            wait_for_checkpoint(&state_manager, height(HEIGHT));
+            assert_eq!(
+                state_manager
+                    .state_layout()
+                    .checkpoint(height(HEIGHT))
+                    .unwrap()
+                    .canister(&canister_test_id(1))
+                    .unwrap()
+                    .vmemory_0()
+                    .existing_overlays()
+                    .unwrap()
+                    .len(),
+                NUM_PAGES
+            );
+        },
+    );
 }
 
 #[test]
