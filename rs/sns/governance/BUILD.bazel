@@ -1,7 +1,7 @@
 load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
-load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
+load("//bazel:defs.bzl", "gzip_compress", "rust_test_suite_with_extra_srcs")
 load("//bazel:prost.bzl", "generated_files_check")
 
 package(default_visibility = ["//visibility:public"])
@@ -174,6 +174,11 @@ rust_canister(
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":canister/governance_test.did",
     deps = DEPENDENCIES + [":governance--test_feature"] + [":build_script"],
+)
+
+gzip_compress(
+    name = "sns-governance-canister-test.wasm.gz",
+    srcs = [":sns-governance-canister-test"],
 )
 
 rust_test(
