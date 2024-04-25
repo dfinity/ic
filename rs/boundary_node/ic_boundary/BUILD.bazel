@@ -1,4 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("//bazel:defs.bzl", "rust_bench")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -91,6 +92,7 @@ MACRO_DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
+    "@crate_index//:criterion",
 ]
 
 MACRO_DEV_DEPENDENCIES = []
@@ -140,8 +142,28 @@ rust_library(
         exclude = ["src/main.rs"],
     ),
     aliases = ALIASES,
-    crate_features = ["tls"],
+    crate_features = [
+        "tls",
+        "bench",
+    ],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     version = VERSION,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_bench(
+    name = "ic_boundary_bench",
+    testonly = True,
+    srcs = glob(
+        [
+            "benches/**",
+            "src/**",
+        ],
+        exclude = ["src/main.rs"],
+    ),
+    aliases = ALIASES,
+    crate_root = "benches/perf.rs",
+    pin_cpu = True,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":ic_boundary"],
 )
