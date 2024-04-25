@@ -79,7 +79,7 @@ async fn rpc_handler<Artifact: ArtifactKind>(
         let artifact = pool
             .read()
             .unwrap()
-            .get_validated_by_identifier(&id)
+            .get(&id)
             .ok_or(StatusCode::NO_CONTENT)?;
         Ok::<_, StatusCode>(Bytes::from(Artifact::PbMessage::proxy_encode(artifact)))
     });

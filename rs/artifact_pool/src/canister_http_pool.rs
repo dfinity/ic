@@ -59,6 +59,12 @@ impl CanisterHttpPoolImpl {
             log,
         }
     }
+
+    // todo: remove because it is used only in tests
+    #[allow(dead_code)]
+    fn contains(&self, id: &CanisterHttpResponseId) -> bool {
+        self.unvalidated.contains_key(id) || self.validated.contains_key(id)
+    }
 }
 
 impl CanisterHttpPool for CanisterHttpPoolImpl {
@@ -163,14 +169,7 @@ impl MutablePool<CanisterHttpArtifact> for CanisterHttpPoolImpl {
 }
 
 impl ValidatedPoolReader<CanisterHttpArtifact> for CanisterHttpPoolImpl {
-    fn contains(&self, id: &CanisterHttpResponseId) -> bool {
-        self.unvalidated.contains_key(id) || self.validated.contains_key(id)
-    }
-
-    fn get_validated_by_identifier(
-        &self,
-        id: &CanisterHttpResponseId,
-    ) -> Option<CanisterHttpResponseShare> {
+    fn get(&self, id: &CanisterHttpResponseId) -> Option<CanisterHttpResponseShare> {
         self.validated.get(id).map(|()| id.clone())
     }
 
@@ -265,7 +264,7 @@ mod tests {
         assert!(result.poll_immediately);
         assert!(result.purged.is_empty());
         assert_eq!(share, pool.lookup_validated(&id).unwrap());
-        assert_eq!(share, pool.get_validated_by_identifier(&id).unwrap());
+        assert_eq!(share, pool.get(&id).unwrap());
         assert_eq!(
             response,
             pool.get_response_content_by_hash(&content_hash).unwrap()

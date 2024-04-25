@@ -78,6 +78,12 @@ impl DkgPoolImpl {
         }
         validated_keys
     }
+
+    // todo: remove because it is used only in tests
+    #[allow(dead_code)]
+    fn contains(&self, id: &DkgMessageId) -> bool {
+        self.unvalidated.contains_key(id) || self.validated.contains_key(id)
+    }
 }
 
 impl MutablePool<DkgArtifact> for DkgPoolImpl {
@@ -149,11 +155,7 @@ impl MutablePool<DkgArtifact> for DkgPoolImpl {
 }
 
 impl ValidatedPoolReader<DkgArtifact> for DkgPoolImpl {
-    fn contains(&self, id: &DkgMessageId) -> bool {
-        self.unvalidated.contains_key(id) || self.validated.contains_key(id)
-    }
-
-    fn get_validated_by_identifier(&self, id: &DkgMessageId) -> Option<dkg::Message> {
+    fn get(&self, id: &DkgMessageId) -> Option<dkg::Message> {
         self.validated.get(id).cloned()
     }
 

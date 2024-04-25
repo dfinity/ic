@@ -235,10 +235,8 @@ impl<Artifact: ArtifactKind> ConsensusManagerSender<Artifact> {
         // Try to push artifact if size below threshold or it is latency sensitive.
         let artifact = if size < ARTIFACT_PUSH_THRESHOLD_BYTES || is_latency_sensitive {
             let id = id.clone();
-            let artifact = tokio::task::spawn_blocking(move || {
-                pool_reader.read().unwrap().get_validated_by_identifier(&id)
-            })
-            .await;
+            let artifact =
+                tokio::task::spawn_blocking(move || pool_reader.read().unwrap().get(&id)).await;
 
             match artifact {
                 Ok(Some(artifact)) => Some(artifact),
@@ -461,7 +459,7 @@ mod tests {
                 .expect_get_all_validated()
                 .returning(|| Box::new(std::iter::once(U64Artifact::id_to_msg(1, 1024))));
             mock_reader
-                .expect_get_validated_by_identifier()
+                .expect_get()
                 .returning(|id| Some(U64Artifact::id_to_msg(*id, 1024)));
 
             let (_tx, rx) = tokio::sync::mpsc::channel(100);
@@ -512,7 +510,7 @@ mod tests {
                 .expect_get_all_validated()
                 .returning(|| Box::new(std::iter::empty()));
             mock_reader
-                .expect_get_validated_by_identifier()
+                .expect_get()
                 .returning(|id| Some(U64Artifact::id_to_msg(*id, 1024)));
 
             ConsensusManagerSender::run(
@@ -587,7 +585,7 @@ mod tests {
                 .expect_get_all_validated()
                 .returning(|| Box::new(std::iter::empty()));
             mock_reader
-                .expect_get_validated_by_identifier()
+                .expect_get()
                 .returning(|id| Some(U64Artifact::id_to_msg(*id, 1024)));
 
             ConsensusManagerSender::run(
@@ -658,7 +656,7 @@ mod tests {
                 .expect_get_all_validated()
                 .returning(|| Box::new(std::iter::empty()));
             mock_reader
-                .expect_get_validated_by_identifier()
+                .expect_get()
                 .returning(|id| Some(U64Artifact::id_to_msg(*id, 1024)));
 
             ConsensusManagerSender::run(
@@ -716,7 +714,7 @@ mod tests {
                 .expect_get_all_validated()
                 .returning(|| Box::new(std::iter::empty()));
             mock_reader
-                .expect_get_validated_by_identifier()
+                .expect_get()
                 .returning(|id| Some(U64Artifact::id_to_msg(*id, 1024)));
 
             ConsensusManagerSender::run(
@@ -793,7 +791,7 @@ mod tests {
                 .expect_get_all_validated()
                 .returning(|| Box::new(std::iter::empty()));
             mock_reader
-                .expect_get_validated_by_identifier()
+                .expect_get()
                 .returning(|id| Some(U64Artifact::id_to_msg(*id, 1024)));
 
             ConsensusManagerSender::run(
@@ -871,7 +869,7 @@ mod tests {
                 .expect_get_all_validated()
                 .returning(|| Box::new(std::iter::empty()));
             mock_reader
-                .expect_get_validated_by_identifier()
+                .expect_get()
                 .returning(|id| Some(U64Artifact::id_to_msg(*id, 1024)));
 
             ConsensusManagerSender::run(

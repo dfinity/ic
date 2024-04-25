@@ -273,10 +273,7 @@ impl TestConsensus<U64Artifact> {
 }
 
 impl ValidatedPoolReader<U64Artifact> for TestConsensus<U64Artifact> {
-    fn contains(&self, id: &<U64Artifact as ArtifactKind>::Id) -> bool {
-        self.my_pool().contains(id)
-    }
-    fn get_validated_by_identifier(
+    fn get(
         &self,
         id: &<U64Artifact as ArtifactKind>::Id,
     ) -> Option<<U64Artifact as ArtifactKind>::Message> {

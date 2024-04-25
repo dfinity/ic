@@ -638,6 +638,12 @@ impl ConsensusPoolImpl {
             }
         }
     }
+
+    // todo: remove because it is used only in tests
+    #[allow(dead_code)]
+    fn contains(&self, id: &ConsensusMessageId) -> bool {
+        self.unvalidated.contains(id) || self.validated.contains(id)
+    }
 }
 
 impl ConsensusPool for ConsensusPoolImpl {
@@ -807,11 +813,7 @@ fn is_latency_sensitive(msg: &ConsensusMessage) -> bool {
 }
 
 impl ValidatedPoolReader<ConsensusArtifact> for ConsensusPoolImpl {
-    fn contains(&self, id: &ConsensusMessageId) -> bool {
-        self.unvalidated.contains(id) || self.validated.contains(id)
-    }
-
-    fn get_validated_by_identifier(&self, id: &ConsensusMessageId) -> Option<ConsensusMessage> {
+    fn get(&self, id: &ConsensusMessageId) -> Option<ConsensusMessage> {
         self.validated.get(id)
     }
 

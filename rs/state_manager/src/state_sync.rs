@@ -97,10 +97,7 @@ impl StateSync {
         }
     }
 
-    pub fn get_validated_by_identifier(
-        &self,
-        msg_id: &StateSyncArtifactId,
-    ) -> Option<StateSyncMessage> {
+    pub fn get(&self, msg_id: &StateSyncArtifactId) -> Option<StateSyncMessage> {
         let mut file_group_to_populate: Option<Arc<FileGroupChunks>> = None;
 
         let state_sync_message = self
@@ -310,7 +307,7 @@ impl StateSyncClient for StateSync {
 
     /// Blocking. Makes synchronous file system calls.
     fn chunk(&self, id: &StateSyncArtifactId, chunk_id: ChunkId) -> Option<Chunk> {
-        let msg = self.get_validated_by_identifier(id)?;
+        let msg = self.get(id)?;
         msg.get_chunk(chunk_id)
     }
 }

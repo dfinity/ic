@@ -70,15 +70,12 @@ pub trait PriorityFnAndFilterProducer<Artifact: ArtifactKind, Pool>: Send + Sync
 /// with the validated portion of an artifact pool without resulting in any mutations.
 /// Every pool needs to implement this trait.
 pub trait ValidatedPoolReader<T: ArtifactKind> {
-    /// Check if an artifact exists by its Id.
-    fn contains(&self, id: &T::Id) -> bool;
-
     /// Get a validated artifact by its identifier
     ///
     /// #Returns:
     /// - 'Some`: Artifact from the validated pool.
     /// - `None`: Artifact does not exist in the validated pool.
-    fn get_validated_by_identifier(&self, id: &T::Id) -> Option<T::Message>;
+    fn get(&self, id: &T::Id) -> Option<T::Message>;
 
     /// Get all validated artifacts.
     ///
