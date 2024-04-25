@@ -108,13 +108,10 @@ impl<T: IngressPool> ChangeSetProducer<T> for IngressManager {
                 "ingress_message_insert_validated";
                 ingress_message.message_id => format!("{}", ingress_object.message_id),
             );
-            let integrity_hash = ic_types::crypto::crypto_hash(ingress_message.binary()).get();
             MoveToValidated((
                 IngressMessageId::from(ingress_object),
                 artifact.peer_id,
                 size,
-                (),
-                integrity_hash,
             ))
         }));
 
@@ -196,7 +193,6 @@ mod tests {
                     .sign_for_randomly_generated_sender()
                     .build();
                 let message_id = IngressMessageId::from(&ingress_message);
-                let integrity_hash = ic_types::crypto::crypto_hash(ingress_message.binary()).get();
 
                 let change_set = access_ingress_pool(&ingress_pool, |ingress_pool| {
                     ingress_pool.insert(UnvalidatedArtifact {
@@ -208,13 +204,8 @@ mod tests {
                 });
 
                 let size = ingress_message.count_bytes();
-                let expected_change_action = ChangeAction::MoveToValidated((
-                    message_id,
-                    node_test_id(0),
-                    size,
-                    (),
-                    integrity_hash,
-                ));
+                let expected_change_action =
+                    ChangeAction::MoveToValidated((message_id, node_test_id(0), size));
                 assert!(change_set.contains(&expected_change_action));
             },
         )
@@ -401,8 +392,6 @@ mod tests {
                     .expiry_time(current_time + MAX_INGRESS_TTL / 2)
                     .sign_for_randomly_generated_sender()
                     .build();
-                let good_msg_integrity_hash =
-                    ic_types::crypto::crypto_hash(good_msg.binary()).get();
                 let bad_msg = SignedIngressBuilder::new()
                     .expiry_time(current_time + MAX_INGRESS_TTL)
                     .sign_for_randomly_generated_sender()
@@ -430,8 +419,6 @@ mod tests {
                     good_id,
                     node_test_id(0),
                     good_msg.count_bytes(),
-                    (),
-                    good_msg_integrity_hash,
                 ));
                 let expected_change_action2 = ChangeAction::RemoveFromUnvalidated(bad_id);
                 assert_eq!(change_set.len(), 3);
