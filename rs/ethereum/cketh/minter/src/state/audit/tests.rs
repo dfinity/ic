@@ -7,7 +7,7 @@ use crate::lifecycle::EthereumNetwork;
 use crate::numeric::Wei;
 use crate::state::audit::{replay_events_internal, Event};
 use crate::state::transactions::{
-    Erc20WithdrawalRequest, Reimbursed, ReimbursementRequest, Subaccount,
+    Erc20WithdrawalRequest, Reimbursed, ReimbursementIndex, ReimbursementRequest, Subaccount,
 };
 use crate::tx::{
     AccessList, AccessListItem, Eip1559TransactionRequest, SignedEip1559TransactionRequest,
@@ -89,12 +89,14 @@ impl GetEventsFile {
     fn map_event(CandidEvent { timestamp, payload }: CandidEvent) -> Event {
         use crate::endpoints::events::{
             AccessListItem as CandidAccessListItem, EventSource as CandidEventSource,
+            ReimbursementIndex as CandidReimbursementIndex,
             TransactionStatus as CandidTransactionStatus,
         };
         use crate::eth_logs::EventSource;
         use crate::state::audit::EventType as ET;
         use crate::state::transactions::EthWithdrawalRequest;
         use crate::state::TransactionStatus;
+
         fn map_event_source(
             CandidEventSource {
                 transaction_hash,
@@ -104,6 +106,25 @@ impl GetEventsFile {
             EventSource {
                 transaction_hash: transaction_hash.parse().unwrap(),
                 log_index: log_index.try_into().unwrap(),
+            }
+        }
+
+        fn map_reimbursement_index(index: CandidReimbursementIndex) -> ReimbursementIndex {
+            match index {
+                CandidReimbursementIndex::CkEth { ledger_burn_index } => {
+                    ReimbursementIndex::CkEth {
+                        ledger_burn_index: map_nat(ledger_burn_index),
+                    }
+                }
+                CandidReimbursementIndex::CkErc20 {
+                    cketh_ledger_burn_index,
+                    ledger_id,
+                    ckerc20_ledger_burn_index,
+                } => ReimbursementIndex::CkErc20 {
+                    cketh_ledger_burn_index: map_nat(cketh_ledger_burn_index),
+                    ledger_id,
+                    ckerc20_ledger_burn_index: map_nat(ckerc20_ledger_burn_index),
+                },
             }
         }
 
@@ -420,6 +441,9 @@ impl GetEventsFile {
                 },
                 EventPayload::QuarantinedDeposit { event_source } => ET::QuarantinedDeposit {
                     event_source: map_event_source(event_source),
+                },
+                EventPayload::QuarantinedReimbursement { index } => ET::QuarantinedReimbursement {
+                    index: map_reimbursement_index(index),
                 },
             },
         }

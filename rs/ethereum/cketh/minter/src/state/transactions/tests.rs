@@ -28,9 +28,13 @@ const DEFAULT_ERC20_CONTRACT_ADDRESS: &str = "0xa0b86991c6218b36c1d19d4a2e9eb0ce
 const DEFAULT_CKERC20_LEDGER_ID: &str = "sa4so-piaaa-aaaar-qacnq-cai";
 
 mod eth_transactions {
+    use crate::endpoints::{EthTransaction, RetrieveEthStatus};
     use crate::numeric::{LedgerBurnIndex, TransactionNonce};
-    use crate::state::transactions::tests::cketh_withdrawal_request_with_index;
-    use crate::state::transactions::{EthTransactions, TransactionStatus};
+    use crate::state::transactions::tests::{
+        cketh_withdrawal_request_with_index, create_and_record_transaction, gas_fee_estimate,
+        sign_transaction, transaction_receipt,
+    };
+    use crate::state::transactions::{EthTransactions, TransactionStatus, WithdrawalRequest};
 
     mod record_withdrawal_request {
         use super::*;
@@ -1726,19 +1730,48 @@ mod eth_transactions {
         }
     }
 
+    mod record_quarantined_reimbursement {
+        use crate::eth_rpc_client::responses::TransactionStatus;
+        use crate::numeric::TransactionNonce;
+        use crate::state::transactions::tests::create_ck_withdrawal_requests;
+        use crate::state::transactions::tests::eth_transactions::withdrawal_flow;
+        use crate::state::transactions::{EthTransactions, ReimbursedError, ReimbursementIndex};
+        use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+        use maplit::btreemap;
+
+        #[test]
+        fn should_quarantine_reimbursement() {
+            let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
+            let mut rng = reproducible_rng();
+            let [withdrawal_request] = create_ck_withdrawal_requests(&mut rng);
+            let reimbursement_index = ReimbursementIndex::from(&withdrawal_request);
+            let _eth_transaction = withdrawal_flow(
+                &mut transactions,
+                withdrawal_request,
+                TransactionStatus::Failure,
+            );
+
+            transactions.record_quarantined_reimbursement(reimbursement_index.clone());
+
+            assert_eq!(transactions.maybe_reimburse, btreemap! {});
+            assert_eq!(transactions.reimbursement_requests, btreemap! {});
+            assert_eq!(
+                transactions.reimbursed,
+                btreemap! {
+                    reimbursement_index => Err(ReimbursedError::Quarantined)
+                }
+            )
+        }
+    }
+
     mod transaction_status {
-        use crate::endpoints::{EthTransaction, RetrieveEthStatus, TxFinalizedStatus};
+        use crate::endpoints::{RetrieveEthStatus, TxFinalizedStatus};
         use crate::numeric::{LedgerBurnIndex, LedgerMintIndex, TransactionNonce};
         use crate::state::transactions::tests::{
             ckerc20_withdrawal_request_with_index, cketh_withdrawal_request_with_index,
-            create_ck_withdrawal_requests,
+            create_ck_withdrawal_requests, eth_transactions::withdrawal_flow,
         };
-        use crate::state::transactions::tests::{
-            create_and_record_transaction, gas_fee_estimate, sign_transaction, transaction_receipt,
-        };
-        use crate::state::transactions::{
-            EthTransactions, ReimbursementIndex, TransactionStatus, WithdrawalRequest,
-        };
+        use crate::state::transactions::{EthTransactions, ReimbursementIndex, TransactionStatus};
         use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 
         #[test]
@@ -1847,46 +1880,67 @@ mod eth_transactions {
             );
         }
 
-        fn withdrawal_flow<T: Into<WithdrawalRequest>>(
-            transactions: &mut EthTransactions,
-            withdrawal_request: T,
-            status: TransactionStatus,
-        ) -> EthTransaction {
-            let withdrawal_request = withdrawal_request.into();
-            let cketh_ledger_burn_index = withdrawal_request.cketh_ledger_burn_index();
+        #[test]
+        fn should_have_status_pending_reimbursement_for_quarantined_reimbursement() {
+            let mut transactions = EthTransactions::new(TransactionNonce::ZERO);
+            let mut rng = reproducible_rng();
+            let [withdrawal_request] = create_ck_withdrawal_requests(&mut rng);
+            let reimbursement_index = ReimbursementIndex::from(&withdrawal_request);
+            let eth_transaction = withdrawal_flow(
+                &mut transactions,
+                withdrawal_request,
+                TransactionStatus::Failure,
+            );
+            transactions.record_quarantined_reimbursement(reimbursement_index.clone());
 
             assert_eq!(
-                transactions.transaction_status(&cketh_ledger_burn_index),
-                RetrieveEthStatus::NotFound
+                transactions.transaction_status(&reimbursement_index.withdrawal_id()),
+                RetrieveEthStatus::TxFinalized(TxFinalizedStatus::PendingReimbursement(
+                    eth_transaction.clone()
+                ))
             );
-            transactions.record_withdrawal_request(withdrawal_request.clone());
-            assert_eq!(
-                transactions.transaction_status(&cketh_ledger_burn_index),
-                RetrieveEthStatus::Pending
-            );
-
-            let created_tx =
-                create_and_record_transaction(transactions, withdrawal_request, gas_fee_estimate());
-            assert_eq!(
-                transactions.transaction_status(&cketh_ledger_burn_index),
-                RetrieveEthStatus::TxCreated
-            );
-
-            let signed_tx = sign_transaction(created_tx);
-            let eth_transaction = EthTransaction {
-                transaction_hash: signed_tx.hash().to_string(),
-            };
-            transactions.record_signed_transaction(signed_tx.clone());
-            assert_eq!(
-                transactions.transaction_status(&cketh_ledger_burn_index),
-                RetrieveEthStatus::TxSent(eth_transaction.clone())
-            );
-            transactions.record_finalized_transaction(
-                cketh_ledger_burn_index,
-                transaction_receipt(&signed_tx, status),
-            );
-            eth_transaction
         }
+    }
+
+    pub fn withdrawal_flow<T: Into<WithdrawalRequest>>(
+        transactions: &mut EthTransactions,
+        withdrawal_request: T,
+        status: TransactionStatus,
+    ) -> EthTransaction {
+        let withdrawal_request = withdrawal_request.into();
+        let cketh_ledger_burn_index = withdrawal_request.cketh_ledger_burn_index();
+
+        assert_eq!(
+            transactions.transaction_status(&cketh_ledger_burn_index),
+            RetrieveEthStatus::NotFound
+        );
+        transactions.record_withdrawal_request(withdrawal_request.clone());
+        assert_eq!(
+            transactions.transaction_status(&cketh_ledger_burn_index),
+            RetrieveEthStatus::Pending
+        );
+
+        let created_tx =
+            create_and_record_transaction(transactions, withdrawal_request, gas_fee_estimate());
+        assert_eq!(
+            transactions.transaction_status(&cketh_ledger_burn_index),
+            RetrieveEthStatus::TxCreated
+        );
+
+        let signed_tx = sign_transaction(created_tx);
+        let eth_transaction = EthTransaction {
+            transaction_hash: signed_tx.hash().to_string(),
+        };
+        transactions.record_signed_transaction(signed_tx.clone());
+        assert_eq!(
+            transactions.transaction_status(&cketh_ledger_burn_index),
+            RetrieveEthStatus::TxSent(eth_transaction.clone())
+        );
+        transactions.record_finalized_transaction(
+            cketh_ledger_burn_index,
+            transaction_receipt(&signed_tx, status),
+        );
+        eth_transaction
     }
 }
 

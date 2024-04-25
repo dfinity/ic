@@ -155,20 +155,40 @@ pub struct Erc20WithdrawalRequest {
     pub created_at: u64,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Encode, Decode)]
 pub enum ReimbursementIndex {
+    #[n(0)]
     CkEth {
         /// Burn index on the ckETH ledger
+        #[cbor(n(0), with = "crate::cbor::id")]
         ledger_burn_index: LedgerBurnIndex,
     },
-
+    #[n(1)]
     CkErc20 {
+        #[cbor(n(0), with = "crate::cbor::id")]
         cketh_ledger_burn_index: LedgerBurnIndex,
         /// The ckERC20 ledger canister ID identifying the ledger on which the burn to be reimbursed was made.
+        #[cbor(n(1), with = "crate::cbor::principal")]
         ledger_id: Principal,
         /// Burn index on the ckERC20 ledger
+        #[cbor(n(2), with = "crate::cbor::id")]
         ckerc20_ledger_burn_index: LedgerBurnIndex,
     },
+}
+
+impl From<&WithdrawalRequest> for ReimbursementIndex {
+    fn from(value: &WithdrawalRequest) -> Self {
+        match value {
+            WithdrawalRequest::CkEth(request) => ReimbursementIndex::CkEth {
+                ledger_burn_index: request.ledger_burn_index,
+            },
+            WithdrawalRequest::CkErc20(request) => ReimbursementIndex::CkErc20 {
+                cketh_ledger_burn_index: request.cketh_ledger_burn_index,
+                ledger_id: request.ckerc20_ledger_id,
+                ckerc20_ledger_burn_index: request.ckerc20_ledger_burn_index,
+            },
+        }
+    }
 }
 
 impl ReimbursementIndex {
@@ -222,6 +242,17 @@ pub struct Reimbursed {
     pub reimbursed_amount: CkTokenAmount,
     #[n(3)]
     pub transaction_hash: Option<Hash>,
+}
+
+pub type ReimbursedResult = Result<Reimbursed, ReimbursedError>;
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum ReimbursedError {
+    /// Whether reimbursement was minted or not is unknown,
+    /// most likely because there was an unexpected panic in the callback.
+    /// The reimbursement request is quarantined to avoid any double minting and
+    /// will not be further processed without manual intervention.
+    Quarantined,
 }
 
 #[derive(Clone, Eq, PartialEq, Encode, Decode)]
@@ -319,7 +350,7 @@ pub struct EthTransactions {
 
     pub(in crate::state) maybe_reimburse: BTreeMap<LedgerBurnIndex, WithdrawalRequest>,
     pub(in crate::state) reimbursement_requests: BTreeMap<ReimbursementIndex, ReimbursementRequest>,
-    pub(in crate::state) reimbursed: BTreeMap<ReimbursementIndex, Reimbursed>,
+    pub(in crate::state) reimbursed: BTreeMap<ReimbursementIndex, ReimbursedResult>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -371,18 +402,14 @@ impl EthTransactions {
 
     pub fn reimbursed_transactions_iter(
         &self,
-    ) -> impl Iterator<Item = (&ReimbursementIndex, &Reimbursed)> {
+    ) -> impl Iterator<Item = (&ReimbursementIndex, &ReimbursedResult)> {
         self.reimbursed.iter()
-    }
-
-    pub fn get_reimbursed_transactions(&self) -> Vec<Reimbursed> {
-        self.reimbursed.values().cloned().collect()
     }
 
     fn find_reimbursed_transaction_by_cketh_ledger_burn_index(
         &self,
         searched_burn_index: &LedgerBurnIndex,
-    ) -> Option<&Reimbursed> {
+    ) -> Option<&ReimbursedResult> {
         self.reimbursed
             .iter()
             .find_map(|(index, value)| match index {
@@ -646,11 +673,12 @@ impl EthTransactions {
         let maybe_reimburse = self.maybe_reimburse.remove(&ledger_burn_index).expect(
             "failed to remove entry from maybe_reimburse map with block index: {ledger_burn_index}",
         );
+        let index = ReimbursementIndex::from(&maybe_reimburse);
         match &maybe_reimburse {
             WithdrawalRequest::CkEth(request) => {
                 if receipt.status == TransactionStatus::Failure {
                     self.record_reimbursement_request(
-                        ReimbursementIndex::CkEth { ledger_burn_index },
+                        index,
                         ReimbursementRequest {
                             ledger_burn_index,
                             to: request.from,
@@ -664,11 +692,7 @@ impl EthTransactions {
             WithdrawalRequest::CkErc20(request) => {
                 if receipt.status == TransactionStatus::Failure {
                     self.record_reimbursement_request(
-                        ReimbursementIndex::CkErc20 {
-                            cketh_ledger_burn_index: ledger_burn_index,
-                            ledger_id: request.ckerc20_ledger_id,
-                            ckerc20_ledger_burn_index: request.ckerc20_ledger_burn_index,
-                        },
+                        index,
                         ReimbursementRequest {
                             ledger_burn_index: request.ckerc20_ledger_burn_index,
                             reimbursed_amount: request.withdrawal_amount.change_units(),
@@ -688,10 +712,29 @@ impl EthTransactions {
         request: ReimbursementRequest,
     ) {
         assert_eq!(
+            self.maybe_reimburse.get(&index.withdrawal_id()),
+            None,
+            "BUG: withdrawal request still in maybe_reimburse could lead to double minting!"
+        );
+        assert_eq!(
+            self.reimbursed.get(&index),
+            None,
+            "BUG: reimbursement request was already processed"
+        );
+        assert_eq!(
             self.reimbursement_requests.insert(index.clone(), request),
             None,
             "BUG: reimbursement request for withdrawal {index:?} already exists"
         );
+    }
+
+    /// Quarantine the reimbursement request identified by its index to prevent double minting.
+    /// WARNING!: It's crucial that this method does not panic,
+    /// since it's called inside the clean-up callback, when an unexpected panic did occur before.
+    pub fn record_quarantined_reimbursement(&mut self, index: ReimbursementIndex) {
+        self.reimbursement_requests.remove(&index);
+        self.reimbursed
+            .insert(index, Err(ReimbursedError::Quarantined));
     }
 
     pub fn record_finalized_reimbursement(
@@ -707,12 +750,12 @@ impl EthTransactions {
         assert_eq!(
             self.reimbursed.insert(
                 index,
-                Reimbursed {
+                Ok(Reimbursed {
                     burn_in_block,
                     reimbursed_in_block,
                     reimbursed_amount: reimbursement_request.reimbursed_amount,
                     transaction_hash: reimbursement_request.transaction_hash,
-                },
+                }),
             ),
             None
         );
@@ -736,7 +779,7 @@ impl EthTransactions {
         }
 
         if let Some(tx) = self.finalized_tx.get_alt(burn_index) {
-            if let Some(reimbursed) =
+            if let Some(Ok(reimbursed)) =
                 self.find_reimbursed_transaction_by_cketh_ledger_burn_index(burn_index)
             {
                 return RetrieveEthStatus::TxFinalized(TxFinalizedStatus::Reimbursed {

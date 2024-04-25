@@ -967,12 +967,12 @@ fn state_equivalence() {
             }
         },
         reimbursed: btreemap! {
-           ReimbursementIndex::CkEth { ledger_burn_index: LedgerBurnIndex::new(6) } => Reimbursed {
+           ReimbursementIndex::CkEth { ledger_burn_index: LedgerBurnIndex::new(6) } => Ok(Reimbursed {
                 transaction_hash: Some("0x06afc3c693dc2ba2c19b5c287c4dddce040d766bea5fd13c8a7268b04aa94f2d".parse().unwrap()),
                 reimbursed_in_block: LedgerMintIndex::new(150),
                 reimbursed_amount: CkTokenAmount::new(10_000_000_000_000),
                 burn_in_block: LedgerBurnIndex::new(6),
-            },
+            }),
         },
     };
     let mut ckerc20_tokens = MultiKeyMap::default();

@@ -393,17 +393,31 @@
                         <th>Token Symbol</th>
                         <th>Value (base unit)</th>
                         <th>Txn Hash</th>
+                        <th>Status</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for r in reimbursed_transactions %}
+                    {% match r %}
+                    {% when DashboardReimbursedTransaction::Reimbursed with {cketh_ledger_burn_index, reimbursed_in_block, reimbursed_amount, token_symbol, transaction_hash} %}
                     <tr>
-                        <td class="numeric">{{ r.cketh_ledger_burn_index }}</td>
-                        <td class="numeric">{{ r.reimbursed_in_block }}</td>
-                        <td>{{ r.token_symbol }}</td>
-                        <td class="numeric">{{ r.reimbursed_amount }}</td>
-                        <td>{% if r.transaction_hash.is_some() %}{% call etherscan_tx_link(r.transaction_hash.unwrap()) %}{% else%}N/A{% endif %}</td>
+                        <td class="numeric">{{ cketh_ledger_burn_index }}</td>
+                        <td class="numeric">{{ reimbursed_in_block }}</td>
+                        <td>{{ token_symbol }}</td>
+                        <td class="numeric">{{ reimbursed_amount }}</td>
+                        <td>{% if transaction_hash.is_some() %}{% call etherscan_tx_link(transaction_hash.unwrap()) %}{% else%}N/A{% endif %}</td>
+                        <td>Reimbursed</td>
                     </tr>
+                    {% when DashboardReimbursedTransaction::Quarantined with {cketh_ledger_burn_index, token_symbol} %}
+                    <tr>
+                        <td class="numeric">{{ cketh_ledger_burn_index }}</td>
+                        <td class="numeric">N/A</td>
+                        <td>{{ token_symbol }}</td>
+                        <td class="numeric">N/A</td>
+                        <td>N/A</td>
+                        <td>Quarantined</td>
+                    </tr>
+                    {% endmatch %}
                     {% endfor %}
                 </tbody>
             </table>
