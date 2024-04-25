@@ -189,7 +189,7 @@ fn run_benchmark<G, I, W, R>(
     group: G,
     id: I,
     wat: W,
-    expected_instructions: u64,
+    expected_ops: u64,
     routine: R,
     exec_env: &ExecutionEnvironment,
 ) where
@@ -201,16 +201,16 @@ fn run_benchmark<G, I, W, R>(
     let mut group = c.benchmark_group(group.as_ref());
     let mut bench_args = None;
     group
-        .throughput(criterion::Throughput::Elements(expected_instructions))
+        .throughput(criterion::Throughput::Elements(expected_ops))
         .bench_function(id.as_ref(), |b| {
             b.iter_batched(
                 || {
                     // Lazily setup the benchmark arguments
                     if bench_args.is_none() {
                         println!(
-                            "\n    Instructions per bench iteration: {} ({}M)",
-                            expected_instructions,
-                            expected_instructions / 1_000_000
+                            "\n    Operations per benchmark iteration: {} ({}M)",
+                            expected_ops,
+                            expected_ops / 1_000_000
                         );
                         println!("    WAT: {}", wat.as_ref());
                         bench_args = Some(get_execution_args(exec_env, wat.as_ref()));
@@ -218,7 +218,7 @@ fn run_benchmark<G, I, W, R>(
                     bench_args.as_ref().unwrap().clone()
                 },
                 |args| {
-                    routine(exec_env, expected_instructions, args);
+                    routine(exec_env, expected_ops, args);
                 },
                 BatchSize::SmallInput,
             );
@@ -298,13 +298,13 @@ where
             .scheduler_config
             .upload_wasm_chunk_instructions,
     );
-    for Benchmark(id, wat, expected_instructions) in benchmarks {
+    for Benchmark(id, wat, expected_ops) in benchmarks {
         run_benchmark(
             c,
             group.as_ref(),
             id,
             wat,
-            *expected_instructions,
+            *expected_ops,
             routine,
             &exec_env,
         );
