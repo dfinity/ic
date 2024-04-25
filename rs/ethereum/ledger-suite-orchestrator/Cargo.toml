@@ -32,6 +32,7 @@ num-traits = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_bytes = { workspace = true }
+time = { workspace = true }
 
 [dev-dependencies]
 ic-ledger-suite-orchestrator-test-utils = { path = "test_utils" }

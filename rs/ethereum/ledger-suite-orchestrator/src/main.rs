@@ -4,6 +4,7 @@ use ic_ledger_suite_orchestrator::candid::{ManagedCanisterIds, OrchestratorArg};
 use ic_ledger_suite_orchestrator::lifecycle;
 use ic_ledger_suite_orchestrator::scheduler::Erc20Token;
 use ic_ledger_suite_orchestrator::state::read_state;
+use ic_ledger_suite_orchestrator::storage::read_wasm_store;
 use ic_ledger_suite_orchestrator::storage::TASKS;
 
 mod dashboard;
@@ -62,7 +63,9 @@ fn http_request(
 
     match req.path() {
         "/dashboard" => {
-            let dashboard = read_state(DashboardTemplate::from_state);
+            let dashboard = read_wasm_store(|wasm_store| {
+                read_state(|s| DashboardTemplate::from_state(s, wasm_store))
+            });
             HttpResponseBuilder::ok()
                 .header("Content-Type", "text/html; charset=utf-8")
                 .with_body_and_content_length(dashboard.render().unwrap())
