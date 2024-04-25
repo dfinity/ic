@@ -99,15 +99,6 @@ impl<T: AsRef<IngressPoolObject>> IngressPoolSection<T> {
         removed
     }
 
-    fn exists(&self, message_id: &IngressMessageId) -> bool {
-        let _timer = self
-            .metrics
-            .op_duration
-            .with_label_values(&["exists"])
-            .start_timer();
-        self.artifacts.contains_key(message_id)
-    }
-
     // Purge below an expiry prefix (non-inclusive), and return the purged artifacts
     // as an iterator.
     fn purge_below(&mut self, expiry: Time) -> Box<dyn Iterator<Item = T> + '_> {
@@ -251,11 +242,6 @@ impl IngressPoolImpl {
                 None
             }
         }
-    }
-
-    // todo: remove because it is used only in tests
-    pub fn contains(&self, id: &IngressMessageId) -> bool {
-        self.unvalidated.exists(id) || self.validated.exists(id)
     }
 }
 
@@ -518,7 +504,7 @@ mod tests {
                         timestamp: UNIX_EPOCH,
                     },
                 );
-                assert!(ingress_pool.contains(&message_id));
+                assert!(ingress_pool.validated.artifacts.contains_key(&message_id));
             })
         })
     }
@@ -550,7 +536,10 @@ mod tests {
 
                 // Ingress message not in the pool
                 let ingress_msg = SignedIngressBuilder::new().nonce(3).build();
-                assert!(!ingress_pool.contains(&IngressMessageId::from(&ingress_msg)));
+                assert!(!ingress_pool
+                    .validated
+                    .artifacts
+                    .contains_key(&IngressMessageId::from(&ingress_msg)));
             })
         })
     }
@@ -572,10 +561,10 @@ mod tests {
                     peer_id: node_test_id(0),
                     timestamp: time_source.get_relative_time(),
                 });
-                assert!(ingress_pool.contains(&message_id));
+                assert!(ingress_pool.unvalidated.artifacts.contains_key(&message_id));
 
                 ingress_pool.remove(&message_id);
-                assert!(!ingress_pool.contains(&message_id));
+                assert!(!ingress_pool.unvalidated.artifacts.contains_key(&message_id));
             })
         })
     }
@@ -633,7 +622,7 @@ mod tests {
                 let message_id0 = IngressMessageId::from(&ingress_msg_0);
 
                 ingress_pool.insert(UnvalidatedArtifact {
-                    message: ingress_msg_0,
+                    message: ingress_msg_0.clone(),
                     peer_id: node_test_id(0),
                     timestamp: time_source.get_relative_time(),
                 });
@@ -670,6 +659,8 @@ mod tests {
                 assert_eq!(result.artifacts_with_opt.len(), 1);
                 assert_eq!(result.artifacts_with_opt[0].advert.id, message_id0);
                 assert!(!result.poll_immediately);
+                // Check that message is indeed in the pool
+                assert_eq!(ingress_msg_0, ingress_pool.get(&message_id0).unwrap());
                 // Check timestamp is carried over for msg_0.
                 assert_eq!(ingress_pool.unvalidated.get_timestamp(&message_id0), None);
                 assert_eq!(

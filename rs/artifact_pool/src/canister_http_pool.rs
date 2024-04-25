@@ -59,12 +59,6 @@ impl CanisterHttpPoolImpl {
             log,
         }
     }
-
-    // todo: remove because it is used only in tests
-    #[allow(dead_code)]
-    fn contains(&self, id: &CanisterHttpResponseId) -> bool {
-        self.unvalidated.contains_key(id) || self.validated.contains_key(id)
-    }
 }
 
 impl CanisterHttpPool for CanisterHttpPoolImpl {
@@ -238,12 +232,12 @@ mod tests {
         let id = share.clone();
 
         pool.insert(to_unvalidated(share.clone()));
-        assert!(pool.contains(&id));
+        assert!(pool.get(&id).is_none());
 
         assert_eq!(share, pool.lookup_unvalidated(&id).unwrap());
 
         pool.remove(&id);
-        assert!(!pool.contains(&id));
+        assert!(pool.lookup_unvalidated(&id).is_none());
     }
 
     #[test]
@@ -259,7 +253,6 @@ mod tests {
             CanisterHttpChangeAction::AddToValidated(fake_share(456), fake_response(456)),
         ]);
 
-        assert!(pool.contains(&id));
         assert_eq!(result.artifacts_with_opt[0].advert.id, id);
         assert!(result.poll_immediately);
         assert!(result.purged.is_empty());
@@ -275,7 +268,6 @@ mod tests {
             CanisterHttpChangeAction::RemoveContent(content_hash.clone()),
         ]);
 
-        assert!(!pool.contains(&id));
         assert!(result.artifacts_with_opt.is_empty());
         assert!(result.poll_immediately);
         assert_eq!(result.purged[0], id);
@@ -300,8 +292,7 @@ mod tests {
             CanisterHttpChangeAction::MoveToValidated(share1.clone()),
         ]);
 
-        assert!(pool.contains(&id1));
-        assert!(!pool.contains(&id2));
+        assert!(pool.lookup_validated(&id2).is_none());
         assert!(result.poll_immediately);
         assert!(result.purged.is_empty());
         assert_eq!(share1, pool.lookup_validated(&id1).unwrap());
@@ -314,13 +305,13 @@ mod tests {
         let id = share.clone();
 
         pool.insert(to_unvalidated(share.clone()));
-        assert!(pool.contains(&id));
+        assert_eq!(share, pool.lookup_unvalidated(&id).unwrap());
 
         let result = pool.apply_changes(vec![CanisterHttpChangeAction::RemoveUnvalidated(
             id.clone(),
         )]);
 
-        assert!(!pool.contains(&id));
+        assert!(pool.lookup_unvalidated(&id).is_none());
         assert!(result.poll_immediately);
         assert!(result.purged.is_empty());
         assert!(result.artifacts_with_opt.is_empty());
@@ -333,14 +324,14 @@ mod tests {
         let id = share.clone();
 
         pool.insert(to_unvalidated(share.clone()));
-        assert!(pool.contains(&id));
+        assert_eq!(share, pool.lookup_unvalidated(&id).unwrap());
 
         let result = pool.apply_changes(vec![CanisterHttpChangeAction::HandleInvalid(
             id.clone(),
             "TEST REASON".to_string(),
         )]);
 
-        assert!(!pool.contains(&id));
+        assert!(pool.lookup_unvalidated(&id).is_none());
         assert!(result.poll_immediately);
         assert!(result.purged.is_empty());
         assert!(result.artifacts_with_opt.is_empty());

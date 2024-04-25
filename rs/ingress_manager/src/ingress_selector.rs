@@ -644,7 +644,7 @@ mod tests {
     use ic_interfaces::{
         execution_environment::IngressHistoryError,
         ingress_pool::ChangeAction,
-        p2p::consensus::{MutablePool, UnvalidatedArtifact},
+        p2p::consensus::{MutablePool, UnvalidatedArtifact, ValidatedPoolReader},
         time_source::TimeSource,
     };
     use ic_management_canister_types::{CanisterIdRecord, Payload, IC_00};
@@ -799,7 +799,7 @@ mod tests {
                             m.count_bytes(),
                         ))]);
                         // check that message is indeed in the pool
-                        assert!(ingress_pool.contains(&message_id));
+                        assert!(ingress_pool.get(&message_id).is_some());
                     });
                 }
 
@@ -1552,7 +1552,7 @@ mod tests {
                             m.count_bytes(),
                         ))]);
                         // check that message is indeed in the pool
-                        assert!(ingress_pool.contains(&message_id));
+                        assert!(ingress_pool.get(&message_id).is_some());
                     });
                 }
 
@@ -1965,7 +1965,7 @@ mod tests {
                     m.count_bytes(),
                 ))]);
                 // check that message is indeed in the pool
-                assert!(ingress_pool.contains(&message_id));
+                assert!(ingress_pool.get(&message_id).is_some());
             });
         }
     }

@@ -78,12 +78,6 @@ impl DkgPoolImpl {
         }
         validated_keys
     }
-
-    // todo: remove because it is used only in tests
-    #[allow(dead_code)]
-    fn contains(&self, id: &DkgMessageId) -> bool {
-        self.unvalidated.contains_key(id) || self.validated.contains_key(id)
-    }
 }
 
 impl MutablePool<DkgArtifact> for DkgPoolImpl {
@@ -237,11 +231,11 @@ mod test {
             peer_id: node_test_id(1),
             timestamp: UNIX_EPOCH,
         });
-        assert!(pool.contains(&id));
+        assert!(pool.unvalidated.contains_key(&id));
 
         // remove unvalidated
         pool.remove(&id);
-        assert!(!pool.contains(&id));
+        assert!(!pool.unvalidated.contains_key(&id));
     }
 
     #[test]
