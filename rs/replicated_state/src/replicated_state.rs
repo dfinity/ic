@@ -171,23 +171,34 @@ impl std::iter::Iterator for OutputIterator<'_> {
     /// for that canister, the canister iterator is moved to the back of the
     /// iteration order.
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(mut canister_iterator) = self.canister_iterators.pop_front() {
-            if let Some((queue_id, msg)) = canister_iterator.next() {
-                self.size -= 1;
+        // FIXME: Add a test for a canister iterator with all-stale entries.
+        while let Some(mut canister_iterator) = self.canister_iterators.pop_front() {
+            // `next()` may consume an arbitrary number of stale references.
+            self.size -= canister_iterator.size();
+            let next = canister_iterator.next();
+            self.size += canister_iterator.size();
+
+            if let Some((queue_id, msg)) = next {
                 if !canister_iterator.is_empty() {
                     self.canister_iterators.push_back(canister_iterator);
                 }
-                debug_assert_eq!(Self::compute_size(&self.canister_iterators), self.size);
 
+                debug_assert!(Self::compute_size(&self.canister_iterators) <= self.size);
                 return Some((queue_id, msg));
             }
         }
+
+        debug_assert_eq!(0, self.size);
         None
     }
 
-    /// Returns the exact number of messages left in the iterator.
+    /// Returns the bounds on the remaining length of the iterator.
+    ///
+    /// Since any message reference may or may not be stale (due to expiration /
+    /// load shedding), there may be anywhere between 0 and `size` messages left in
+    /// the iterator.
     fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.size, Some(self.size))
+        (0, Some(self.size))
     }
 }
 
@@ -200,6 +211,10 @@ pub trait PeekableOutputIterator: std::iter::Iterator<Item = (QueueId, RequestOr
     /// with the same sender and receiver as the next). The messages are retained
     /// in the output queue.
     fn exclude_queue(&mut self);
+
+    /// Returns the number of (potentially stale) message references left in the
+    /// iterator.
+    fn size(&self) -> usize;
 }
 
 impl PeekableOutputIterator for OutputIterator<'_> {
@@ -210,7 +225,7 @@ impl PeekableOutputIterator for OutputIterator<'_> {
                 break;
             }
             self.canister_iterators.pop_front();
-            debug_assert_eq!(Self::compute_size(&self.canister_iterators), self.size);
+            debug_assert!(Self::compute_size(&self.canister_iterators) <= self.size);
         }
         self.canister_iterators.front_mut()?.peek()
     }
@@ -221,8 +236,12 @@ impl PeekableOutputIterator for OutputIterator<'_> {
             if !canister_iterator.is_empty() {
                 self.canister_iterators.push_front(canister_iterator);
             }
-            debug_assert_eq!(Self::compute_size(&self.canister_iterators), self.size);
+            debug_assert!(Self::compute_size(&self.canister_iterators) <= self.size);
         }
+    }
+
+    fn size(&self) -> usize {
+        self.size
     }
 }
 

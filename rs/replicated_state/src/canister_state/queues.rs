@@ -140,7 +140,7 @@ pub struct CanisterOutputQueuesIterator<'a> {
 
     pool: &'a mut MessagePool,
 
-    /// Number of messages that can be popped before the iterator finishes.
+    /// Number of (potentially stale) message references left in output queues.
     size: usize,
 
     /// The canister's memory usage stats, to be updated as messages are popped.
@@ -223,6 +223,8 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
     pub fn pop(&mut self) -> Option<(QueueId, RequestOrResponse)> {
         while let Some((receiver, queue)) = self.queues.pop_front() {
             while let Some(reference) = queue.pop() {
+                // FIXME: Add a test that covers skipping over stale references.
+                self.size -= 1;
                 let queue_id = QueueId {
                     src_canister: self.owner,
                     dst_canister: *receiver,
@@ -245,7 +247,6 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
 
                 *self.memory_stats -= MemoryUsageStats::stats_delta(QueueOp::Pop, &msg);
                 *self.queue_stats -= OutputQueuesStats::stats_delta(&msg);
-                self.size -= 1;
                 debug_assert_eq!(Self::compute_size(&self.queues), self.size);
 
                 return Some((queue_id, msg));
@@ -275,6 +276,12 @@ impl<'a> CanisterOutputQueuesIterator<'a> {
     /// Checks if the iterator has finished.
     pub fn is_empty(&self) -> bool {
         self.queues.is_empty()
+    }
+
+    /// Returns the number of (potentially stale) message references left in output
+    /// queues.
+    pub fn size(&self) -> usize {
+        self.size
     }
 
     /// Computes the number of messages left in `queues`.
@@ -1854,7 +1861,7 @@ pub mod testing {
         fn output_queue_iter_for_testing(
             &self,
             canister_id: CanisterId,
-        ) -> Option<impl Iterator<Item = Option<RequestOrResponse>>>;
+        ) -> Option<impl Iterator<Item = RequestOrResponse>>;
     }
 
     impl CanisterQueuesTesting for CanisterQueues {
@@ -1916,7 +1923,7 @@ pub mod testing {
         fn output_queue_iter_for_testing(
             &self,
             canister_id: CanisterId,
-        ) -> Option<impl Iterator<Item = Option<RequestOrResponse>>> {
+        ) -> Option<impl Iterator<Item = RequestOrResponse>> {
             self.canister_queues
                 .get(&canister_id)
                 .map(|(_, output_queue)| output_queue.iter_for_testing(&self.pool))

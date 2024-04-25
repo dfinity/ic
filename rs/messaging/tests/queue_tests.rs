@@ -175,7 +175,7 @@ impl SubnetPairProxy {
 
     /// Generates a snapshot of the output queue on the local canister and
     /// returns it as a vector of messages; or 'None' if no output queue exists.
-    fn local_output_queue_snapshot(&self) -> Option<Vec<Option<RequestOrResponse>>> {
+    fn local_output_queue_snapshot(&self) -> Option<Vec<RequestOrResponse>> {
         get_output_queue_iter(
             &self.local_env.get_latest_state(),
             self.local_canister_id,
@@ -186,7 +186,7 @@ impl SubnetPairProxy {
 
     /// Generates a snapshot of the output queue on the remote canister and
     /// returns it as a vector of messages; or 'None' if no output queue exists.
-    fn remote_output_queue_snapshot(&self) -> Option<Vec<Option<RequestOrResponse>>> {
+    fn remote_output_queue_snapshot(&self) -> Option<Vec<RequestOrResponse>> {
         get_output_queue_iter(
             &self.remote_env.get_latest_state(),
             self.remote_canister_id,
@@ -276,7 +276,7 @@ fn get_output_queue_iter(
     state: &Arc<ReplicatedState>,
     local_canister_id: CanisterId,
     remote_canister_id: CanisterId,
-) -> Option<impl Iterator<Item = Option<RequestOrResponse>> + '_> {
+) -> Option<impl Iterator<Item = RequestOrResponse> + '_> {
     state
         .canister_states
         .get(&local_canister_id)
@@ -446,7 +446,7 @@ fn test_response_in_output_queue_causes_backpressure() {
     induct_from_head_of_stream(&subnets.remote_env, &subnets.local_env, Some(1)).unwrap();
     assert_matches!(
         subnets.local_output_queue_snapshot().as_deref(),
-        Some([Some(RequestOrResponse::Response(_))])
+        Some([RequestOrResponse::Response(_)])
     );
 
     // Call the 'start' method on canister 1 to restart sending requests using
@@ -466,10 +466,10 @@ fn test_response_in_output_queue_causes_backpressure() {
     })
     .unwrap();
 
-    // Check the local output queue is indeed of the shape [ response, None, ... ].
+    // Check that the local output queue only contains the response.
     assert_matches!(
         subnets.local_output_queue_snapshot().as_deref(),
-        Some([Some(RequestOrResponse::Response(_)), None, ..])
+        Some([RequestOrResponse::Response(_)])
     );
 
     // Call the 'stop' method on the local canister, then induct a request from the local subnet
@@ -954,10 +954,10 @@ fn state_machine_subnet_splitting_test() {
             old_subnets_proxy.remote_output_queue_snapshot(),
         ) {
             (Some(local_q), Some(remote_q)) => {
-                Ok(local_q.iter().any(|msg| matches!(msg, Some(Request(_))))
-                    && local_q.iter().any(|msg| matches!(msg, Some(Response(_))))
-                    && remote_q.iter().any(|msg| matches!(msg, Some(Request(_))))
-                    && remote_q.iter().any(|msg| matches!(msg, Some(Response(_)))))
+                Ok(local_q.iter().any(|msg| matches!(msg, Request(_)))
+                    && local_q.iter().any(|msg| matches!(msg, Response(_)))
+                    && remote_q.iter().any(|msg| matches!(msg, Request(_)))
+                    && remote_q.iter().any(|msg| matches!(msg, Response(_))))
             }
             _ => Ok(false),
         }

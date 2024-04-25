@@ -311,7 +311,7 @@ impl StreamBuilderImpl {
             let msg = msg.clone();
             // Safeguard to guarantee that iteration always terminates. Will always loop at
             // least once, if messages are available.
-            let output_size = output_iter.size_hint().0;
+            let output_size = output_iter.size();
             debug_assert!(output_size < last_output_size);
             if output_size >= last_output_size {
                 error!(
