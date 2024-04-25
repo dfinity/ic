@@ -585,8 +585,9 @@ impl TryFrom<pb_queues::Request> for Request {
 impl From<&RejectContext> for pb_queues::RejectContext {
     fn from(rc: &RejectContext) -> Self {
         Self {
-            reject_code: rc.code as u64,
+            reject_code_old: rc.code as u64,
             reject_message: rc.message.clone(),
+            reject_code: pb_types::RejectCode::from(rc.code).into(),
         }
     }
 }
@@ -595,13 +596,28 @@ impl TryFrom<pb_queues::RejectContext> for RejectContext {
     type Error = ProxyDecodeError;
 
     fn try_from(rc: pb_queues::RejectContext) -> Result<Self, Self::Error> {
-        Ok(RejectContext {
-            code: rc.reject_code.try_into().map_err(|err| match err {
+        // A value of 0 for `reject_code_old` indicates that the field
+        // was not set, i.e. we are past a replica version that has
+        // populated the new field `reject_code` and we can use that
+        // instead. Otherwise, we should still use the old field
+        // when decoding.
+        let code = if rc.reject_code_old == 0 {
+            RejectCode::try_from(pb_types::RejectCode::try_from(rc.reject_code).map_err(|_| {
+                ProxyDecodeError::ValueOutOfRange {
+                    typ: "RejectContext",
+                    err: format!("Unexpected value for reject code {}", rc.reject_code),
+                }
+            })?)?
+        } else {
+            rc.reject_code_old.try_into().map_err(|err| match err {
                 TryFromError::ValueOutOfRange(code) => ProxyDecodeError::ValueOutOfRange {
                     typ: "RejectContext",
                     err: code.to_string(),
                 },
-            })?,
+            })?
+        };
+        Ok(RejectContext {
+            code,
             message: rc.reject_message,
         })
     }

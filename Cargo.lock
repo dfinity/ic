@@ -11842,6 +11842,7 @@ dependencies = [
 name = "ic-types-test-utils"
 version = "0.9.0"
 dependencies = [
+ "ic-protobuf",
  "ic-types",
  "proptest",
  "strum 0.26.2",

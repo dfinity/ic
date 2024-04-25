@@ -1,6 +1,9 @@
 //! A crate that groups user-facing and internal error types and codes produced
 //! by the Internet Computer.
-use ic_protobuf::{proxy::ProxyDecodeError, state::ingress::v1::ErrorCode as ErrorCodeProto};
+use ic_protobuf::{
+    proxy::ProxyDecodeError, state::ingress::v1::ErrorCode as ErrorCodeProto,
+    types::v1::RejectCode as RejectCodeProto,
+};
 use ic_utils::str::StrEllipsize;
 use serde::{Deserialize, Serialize};
 use std::{convert::TryFrom, fmt};
@@ -40,6 +43,36 @@ impl RejectCode {
             RejectCode::DestinationInvalid => "DESTINATION_INVALID",
             RejectCode::CanisterReject => "CANISTER_REJECT",
             RejectCode::CanisterError => "CANISTER_ERROR",
+        }
+    }
+}
+
+impl From<RejectCode> for RejectCodeProto {
+    fn from(value: RejectCode) -> Self {
+        match value {
+            RejectCode::SysFatal => RejectCodeProto::SysFatal,
+            RejectCode::SysTransient => RejectCodeProto::SysTransient,
+            RejectCode::DestinationInvalid => RejectCodeProto::DestinationInvalid,
+            RejectCode::CanisterReject => RejectCodeProto::CanisterReject,
+            RejectCode::CanisterError => RejectCodeProto::CanisterError,
+        }
+    }
+}
+
+impl TryFrom<RejectCodeProto> for RejectCode {
+    type Error = ProxyDecodeError;
+
+    fn try_from(value: RejectCodeProto) -> Result<Self, Self::Error> {
+        match value {
+            RejectCodeProto::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
+                typ: "RejectCode",
+                err: format!("Unexpected value for reject code {:?}", value),
+            }),
+            RejectCodeProto::SysFatal => Ok(RejectCode::SysFatal),
+            RejectCodeProto::SysTransient => Ok(RejectCode::SysTransient),
+            RejectCodeProto::DestinationInvalid => Ok(RejectCode::DestinationInvalid),
+            RejectCodeProto::CanisterReject => Ok(RejectCode::CanisterReject),
+            RejectCodeProto::CanisterError => Ok(RejectCode::CanisterError),
         }
     }
 }
@@ -640,6 +673,26 @@ mod tests {
                 514, 515, 516, 517, 518, 519, 520, 521, 522, 523, 524, 525, 526,
                 527, 528, 529, 530, 531, 532, 533, 534, 535, 536, 537, 538, 539
             ]
+        );
+    }
+
+    #[test]
+    fn reject_code_round_trip() {
+        for initial in RejectCode::iter() {
+            let encoded = RejectCodeProto::from(initial);
+            let round_trip = RejectCode::try_from(encoded).unwrap();
+
+            assert_eq!(initial, round_trip);
+        }
+    }
+
+    #[test]
+    fn compatibility_for_reject_code() {
+        // If this fails, you are making a potentially incompatible change to `RejectCode`.
+        // See note [Handling changes to Enums in Replicated State] for how to proceed.
+        assert_eq!(
+            RejectCode::iter().map(|x| x as i32).collect::<Vec<i32>>(),
+            [1, 2, 3, 4, 5]
         );
     }
 }
