@@ -603,6 +603,16 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 },
             )],
         ),
+        (
+            "call_with_best_effort_response",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValType::I32],
+                    return_type: vec![],
+                },
+            )],
+        ),
     ];
 
     valid_system_apis
