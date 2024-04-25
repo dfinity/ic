@@ -63,8 +63,7 @@ mock! {
     pub ValidatedPoolReader<A: ArtifactKind> {}
 
     impl<A: ArtifactKind> ValidatedPoolReader<A> for ValidatedPoolReader<A> {
-        fn contains(&self, id: &A::Id) -> bool;
-        fn get_validated_by_identifier(&self, id: &A::Id) -> Option<A::Message>;
+        fn get(&self, id: &A::Id) -> Option<A::Message>;
         fn get_all_validated(
             &self,
         ) -> Box<dyn Iterator<Item = A::Message>>;

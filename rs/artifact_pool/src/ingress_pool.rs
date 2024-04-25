@@ -252,6 +252,11 @@ impl IngressPoolImpl {
             }
         }
     }
+
+    // todo: remove because it is used only in tests
+    pub fn contains(&self, id: &IngressMessageId) -> bool {
+        self.unvalidated.exists(id) || self.validated.exists(id)
+    }
 }
 
 impl IngressPool for IngressPoolImpl {
@@ -405,12 +410,7 @@ impl MutablePool<IngressArtifact> for IngressPoolImpl {
 }
 
 impl ValidatedPoolReader<IngressArtifact> for IngressPoolImpl {
-    /// Check if an Ingress message exists by its hash
-    fn contains(&self, id: &IngressMessageId) -> bool {
-        self.unvalidated.exists(id) || self.validated.exists(id)
-    }
-
-    fn get_validated_by_identifier(&self, id: &IngressMessageId) -> Option<SignedIngress> {
+    fn get(&self, id: &IngressMessageId) -> Option<SignedIngress> {
         self.validated.get(id).map(|a| a.msg.signed_ingress.clone())
     }
 

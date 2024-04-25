@@ -18,7 +18,7 @@ use ic_constants::MAX_INGRESS_TTL;
 use ic_interfaces::{
     ingress_manager::IngressSelector,
     ingress_pool::ChangeAction,
-    p2p::consensus::{MutablePool, UnvalidatedArtifact, ValidatedPoolReader},
+    p2p::consensus::{MutablePool, UnvalidatedArtifact},
     time_source::TimeSource,
 };
 use ic_test_utilities_state::{CanisterStateBuilder, ReplicatedStateBuilder};

@@ -164,6 +164,12 @@ impl CertificationPoolImpl {
             .with_label_values(&[CERTIFICATION_SHARE_ARTIFACT_TYPE])
             .set(self.unvalidated_share_index.size() as i64);
     }
+
+    // todo: remove because it is used only in tests
+    #[allow(dead_code)]
+    fn contains(&self, id: &CertificationMessageId) -> bool {
+        self.unvalidated.contains_key(&id.hash) || self.persistent_pool.get(id).is_some()
+    }
 }
 
 impl MutablePool<CertificationArtifact> for CertificationPoolImpl {
@@ -373,14 +379,7 @@ impl CertificationPool for CertificationPoolImpl {
 }
 
 impl ValidatedPoolReader<CertificationArtifact> for CertificationPoolImpl {
-    fn contains(&self, id: &CertificationMessageId) -> bool {
-        self.unvalidated.contains_key(&id.hash) || self.persistent_pool.get(id).is_some()
-    }
-
-    fn get_validated_by_identifier(
-        &self,
-        id: &CertificationMessageId,
-    ) -> Option<CertificationMessage> {
+    fn get(&self, id: &CertificationMessageId) -> Option<CertificationMessage> {
         match &id.hash {
             CertificationMessageHash::CertificationShare(hash) => self
                 .shares_at_height(id.height)

@@ -644,7 +644,7 @@ mod tests {
     use ic_interfaces::{
         execution_environment::IngressHistoryError,
         ingress_pool::ChangeAction,
-        p2p::consensus::{MutablePool, UnvalidatedArtifact, ValidatedPoolReader},
+        p2p::consensus::{MutablePool, UnvalidatedArtifact},
         time_source::TimeSource,
     };
     use ic_management_canister_types::{CanisterIdRecord, Payload, IC_00};
