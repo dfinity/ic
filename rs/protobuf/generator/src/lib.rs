@@ -391,6 +391,7 @@ fn build_types_proto(def: &Path, out: &Path) {
         def.join("types/v1/signature.proto"),
         def.join("types/v1/canister_http.proto"),
         def.join("types/v1/artifact.proto"),
+        def.join("types/v1/errors.proto"),
     ];
     compile_protos(config, def, &files);
 }
