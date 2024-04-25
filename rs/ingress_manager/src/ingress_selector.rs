@@ -658,7 +658,6 @@ mod tests {
         ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id},
         messages::SignedIngressBuilder,
     };
-    use ic_types::crypto::crypto_hash;
     use ic_types::{
         artifact::IngressMessageId,
         batch::IngressPayload,
@@ -798,8 +797,6 @@ mod tests {
                             message_id.clone(),
                             node_test_id(0),
                             m.count_bytes(),
-                            (),
-                            crypto_hash(m.binary()).get(),
                         ))]);
                         // check that message is indeed in the pool
                         assert!(ingress_pool.contains(&message_id));
@@ -984,8 +981,6 @@ mod tests {
                         message_id,
                         node_test_id(0),
                         ingress_size1,
-                        (),
-                        crypto_hash(ingress_msg1.binary()).get(),
                     ))]);
                 });
 
@@ -1040,8 +1035,6 @@ mod tests {
                         message_id,
                         node_test_id(0),
                         ingress_size1,
-                        (),
-                        crypto_hash(ingress_msg1.binary()).get(),
                     ))]);
                 });
 
@@ -1112,8 +1105,6 @@ mod tests {
                         message_id,
                         node_test_id(0),
                         ingress_msg1.count_bytes(),
-                        (),
-                        crypto_hash(ingress_msg1.binary()).get(),
                     ))]);
 
                     let message_id = IngressMessageId::from(&ingress_msg2);
@@ -1126,8 +1117,6 @@ mod tests {
                         message_id,
                         node_test_id(0),
                         ingress_msg2.count_bytes(),
-                        (),
-                        crypto_hash(ingress_msg2.binary()).get(),
                     ))]);
                 });
 
@@ -1194,8 +1183,6 @@ mod tests {
                         message_id,
                         node_test_id(0),
                         ingress_msg1.count_bytes(),
-                        (),
-                        crypto_hash(ingress_msg1.binary()).get(),
                     ))]);
 
                     let message_id = IngressMessageId::from(&ingress_msg2);
@@ -1208,8 +1195,6 @@ mod tests {
                         message_id,
                         node_test_id(0),
                         ingress_msg2.count_bytes(),
-                        (),
-                        crypto_hash(ingress_msg2.binary()).get(),
                     ))]);
                 });
 
@@ -1373,8 +1358,6 @@ mod tests {
                         message_id1,
                         node_test_id(0),
                         ingress_msg1.count_bytes(),
-                        (),
-                        crypto_hash(ingress_msg1.binary()).get(),
                     ))]);
                     ingress_pool.insert(UnvalidatedArtifact {
                         message: ingress_msg2.clone(),
@@ -1385,8 +1368,6 @@ mod tests {
                         message_id2,
                         node_test_id(0),
                         ingress_msg2.count_bytes(),
-                        (),
-                        crypto_hash(ingress_msg2.binary()).get(),
                     ))]);
                 });
 
@@ -1569,8 +1550,6 @@ mod tests {
                             message_id.clone(),
                             node_test_id(0),
                             m.count_bytes(),
-                            (),
-                            crypto_hash(m.binary()).get(),
                         ))]);
                         // check that message is indeed in the pool
                         assert!(ingress_pool.contains(&message_id));
@@ -1936,7 +1915,6 @@ mod tests {
                     .build();
 
                 let msg_id = IngressMessageId::from(&msg);
-                let msg_hash = crypto_hash(msg.binary()).get();
                 let _payload = IngressPayload::from(vec![msg.clone()]);
 
                 ingress_pool.write().unwrap().insert(UnvalidatedArtifact {
@@ -1951,8 +1929,6 @@ mod tests {
                         msg_id,
                         node_test_id(0),
                         0,
-                        (),
-                        msg_hash,
                     ))]);
 
                 let validation_context = ValidationContext {
@@ -1987,8 +1963,6 @@ mod tests {
                     message_id.clone(),
                     node_test_id(0),
                     m.count_bytes(),
-                    (),
-                    crypto_hash(m.binary()).get(),
                 ))]);
                 // check that message is indeed in the pool
                 assert!(ingress_pool.contains(&message_id));

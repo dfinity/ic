@@ -151,14 +151,10 @@ pub enum UnvalidatedArtifactMutation<Artifact: ArtifactKind> {
 /// A helper type that represents a type-indexed Advert.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Advert<Artifact: ArtifactKind> {
+    /// The id _must_ contain the integrity hash of the message.
     pub id: Artifact::Id,
     pub attribute: Artifact::Attribute,
     pub size: usize,
-    // IntegrityHash is just a CryptoHash
-    // We don't polimorphise over different Artifacts because it makes no sense,
-    // they are never compared, except in one instance where we compare something
-    // in GossipAdvert and Advert<T>, so we can't make a mistake.
-    pub integrity_hash: CryptoHash,
 }
 
 // -----------------------------------------------------------------------------

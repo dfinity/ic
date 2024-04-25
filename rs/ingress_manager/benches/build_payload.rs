@@ -159,7 +159,6 @@ fn prepare(
             .build();
         let message_id = IngressMessageId::from(&ingress);
         let peer_id = (i % 10) as u64;
-        let integrity_hash = ic_types::crypto::crypto_hash(ingress.binary()).get();
         pool.insert(UnvalidatedArtifact {
             message: ingress,
             peer_id: node_test_id(peer_id),
@@ -169,8 +168,6 @@ fn prepare(
             message_id,
             node_test_id(peer_id),
             0,
-            (),
-            integrity_hash,
         )));
     }
     pool.apply_changes(changeset);

@@ -12,7 +12,6 @@ use ic_interfaces::p2p::consensus::{
 use ic_logger::ReplicaLogger;
 use ic_types::{
     artifact::{Advert, ArtifactKind, ArtifactTag, Priority},
-    crypto::CryptoHash,
     NodeId,
 };
 use serde::{Deserialize, Serialize};
@@ -41,7 +40,6 @@ impl ArtifactKind for U64Artifact {
             attribute: (),
             size: msg.len(),
             id,
-            integrity_hash: CryptoHash(vec![]),
         }
     }
 }
