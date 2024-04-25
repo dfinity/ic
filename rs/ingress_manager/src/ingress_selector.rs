@@ -179,9 +179,6 @@ impl IngressSelector for IngressManager {
                     match result {
                         Ok(()) => (),
                         Err(ValidationError::Permanent(
-                            IngressPermanentError::IngressPayloadTooBig(_, _),
-                        )) => break 'outer,
-                        Err(ValidationError::Permanent(
                             IngressPermanentError::IngressPayloadTooManyMessages(_, _),
                         )) => break 'outer,
                         _ => {
