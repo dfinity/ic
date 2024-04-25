@@ -17,7 +17,7 @@ use universal_canister::Ops;
 /// `rs/universal_canister`.
 pub const UNIVERSAL_CANISTER_WASM: &[u8] = include_bytes!("universal-canister.wasm");
 pub const UNIVERSAL_CANISTER_WASM_SHA256: [u8; 32] =
-    hex!("68fdfb339cb5ce5351a63ef8910cce62ebc8e00ca8d5a6f01ac2b18d79a04985");
+    hex!("7cf8d80c76fdeb5eab6e442e91542485d239ca57edadd3cb7c385fde43364953");
 
 /// A succinct shortcut for creating a `PayloadBuilder`, which is used to encode
 /// instructions to be executed by the UC.
@@ -267,7 +267,7 @@ impl PayloadBuilder {
         method: S,
         call_args: CallArgs,
     ) -> Self {
-        self = self.call_helper(callee, method, call_args, None);
+        self = self.call_helper(callee, method, call_args, None, None);
         self
     }
 
@@ -278,7 +278,25 @@ impl PayloadBuilder {
         call_args: CallArgs,
         cycles: Cycles,
     ) -> Self {
-        self = self.call_helper(callee, method, call_args, Some(cycles));
+        self = self.call_helper(callee, method, call_args, Some(cycles), None);
+        self
+    }
+
+    pub fn call_with_cycles_and_best_effort_response<P: AsRef<[u8]>, S: ToString>(
+        mut self,
+        callee: P,
+        method: S,
+        call_args: CallArgs,
+        cycles: Cycles,
+        timeout_seconds: u32,
+    ) -> Self {
+        self = self.call_helper(
+            callee,
+            method,
+            call_args,
+            Some(cycles),
+            Some(timeout_seconds),
+        );
         self
     }
 
@@ -288,6 +306,7 @@ impl PayloadBuilder {
         method: S,
         call_args: CallArgs,
         cycles: Option<Cycles>,
+        timeout_secounds: Option<u32>,
     ) -> Self {
         self = self.push_bytes(callee.as_ref());
         self = self.push_bytes(method.to_string().as_bytes());
@@ -305,6 +324,10 @@ impl PayloadBuilder {
             self = self.push_int64(high_amount);
             self = self.push_int64(low_amount);
             self.0.push(Ops::CallCyclesAdd128 as u8);
+        }
+        if let Some(timeout) = timeout_secounds {
+            self = self.push_int(timeout);
+            self.0.push(Ops::CallWithBestEffortResponse as u8);
         }
         self.0.push(Ops::CallPerform as u8);
         self

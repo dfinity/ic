@@ -413,6 +413,7 @@ fn eval(ops_bytes: OpsBytes) {
                 stack.push_blob(data);
             }
             Ops::InReplicatedExecution => stack.push_int(api::in_replicated_execution()),
+            Ops::CallWithBestEffortResponse => api::call_with_best_effort_response(stack.pop_int()),
         }
     }
 }

@@ -1519,7 +1519,7 @@ fn execution_observes_oversize_messages() {
 fn test_consensus_queue_invariant_on_exceeding_heap_delta_limit() {
     // Test consensus queue invariant for the case of exceeding heap delta limit.
     // Empirical value that has to be below the limit on tick #1 and above the limit on tick #2.
-    let heap_delta_limit = 65_540;
+    let heap_delta_limit = 61_439;
     let mut subnet_config = SubnetConfig::new(SubnetType::Application);
     subnet_config.scheduler_config.subnet_heap_delta_capacity = NumBytes::new(heap_delta_limit);
     let key_id = EcdsaKeyId::from_str("Secp256k1:valid_key").unwrap();

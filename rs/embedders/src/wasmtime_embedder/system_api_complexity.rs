@@ -25,6 +25,7 @@ pub mod overhead {
     pub const CALL_NEW: NumInstructions = NumInstructions::new(1_500);
     pub const CALL_ON_CLEANUP: NumInstructions = NumInstructions::new(500);
     pub const CALL_PERFORM: NumInstructions = NumInstructions::new(5_000);
+    pub const CALL_WITH_BEST_EFFORT_RESPONSE: NumInstructions = NumInstructions::new(500);
     pub const CANISTER_CYCLE_BALANCE: NumInstructions = NumInstructions::new(500);
     pub const CANISTER_CYCLE_BALANCE128: NumInstructions = NumInstructions::new(500);
     pub const CANISTER_SELF_COPY: NumInstructions = NumInstructions::new(500);

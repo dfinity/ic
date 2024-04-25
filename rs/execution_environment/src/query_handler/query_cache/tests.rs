@@ -1466,6 +1466,7 @@ fn query_cache_future_proof_test() {
         | SystemApiCallId::CallNew
         | SystemApiCallId::CallOnCleanup
         | SystemApiCallId::CallPerform
+        | SystemApiCallId::CallWithBestEffortResponse
         | SystemApiCallId::CanisterCycleBalance
         | SystemApiCallId::CanisterCycleBalance128
         | SystemApiCallId::CanisterSelfCopy
