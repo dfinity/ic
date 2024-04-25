@@ -4,7 +4,8 @@ use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::lifecycle::{init::InitArg, upgrade::UpgradeArg};
 use crate::numeric::{BlockNumber, LedgerBurnIndex, LedgerMintIndex};
 use crate::state::transactions::{
-    Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed, ReimbursementRequest,
+    Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed, ReimbursementIndex,
+    ReimbursementRequest,
 };
 use crate::tx::{Eip1559TransactionRequest, SignedEip1559TransactionRequest};
 use candid::Principal;
@@ -148,6 +149,15 @@ pub enum EventType {
         /// The unique identifier of the deposit on the Ethereum network.
         #[n(0)]
         event_source: EventSource,
+    },
+    /// The minter unexpectedly panic while processing a reimbursement.
+    /// The reimbursement is quarantined to prevent any double minting and
+    /// will not be processed without further manual intervention.
+    #[n(22)]
+    QuarantinedReimbursement {
+        /// The unique identifier of the reimbursement.
+        #[n(0)]
+        index: ReimbursementIndex,
     },
 }
 

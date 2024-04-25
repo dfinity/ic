@@ -242,6 +242,18 @@ pub mod events {
     }
 
     #[derive(CandidType, Deserialize, Debug, Clone, PartialEq, Eq)]
+    pub enum ReimbursementIndex {
+        CkEth {
+            ledger_burn_index: Nat,
+        },
+        CkErc20 {
+            cketh_ledger_burn_index: Nat,
+            ledger_id: Principal,
+            ckerc20_ledger_burn_index: Nat,
+        },
+    }
+
+    #[derive(CandidType, Deserialize, Debug, Clone, PartialEq, Eq)]
     pub struct AccessListItem {
         pub address: String,
         pub storage_keys: Vec<ByteBuf>,
@@ -384,6 +396,9 @@ pub mod events {
         },
         QuarantinedDeposit {
             event_source: EventSource,
+        },
+        QuarantinedReimbursement {
+            index: ReimbursementIndex,
         },
     }
 }

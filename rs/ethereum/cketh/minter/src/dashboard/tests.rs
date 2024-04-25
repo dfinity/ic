@@ -11,7 +11,8 @@ use ic_cketh_minter::numeric::{
 };
 use ic_cketh_minter::state::audit::{apply_state_transition, EventType};
 use ic_cketh_minter::state::transactions::{
-    create_transaction, Erc20WithdrawalRequest, EthWithdrawalRequest, Subaccount, WithdrawalRequest,
+    create_transaction, Erc20WithdrawalRequest, EthWithdrawalRequest, ReimbursementIndex,
+    Subaccount, WithdrawalRequest,
 };
 use ic_cketh_minter::state::State;
 use ic_cketh_minter::tx::{
@@ -712,27 +713,48 @@ fn should_display_reimbursed_requests() {
             },
         );
 
-        for (req, tx, signed_tx, receipt) in vec![
-            cketh_withdrawal_flow(
-                LedgerBurnIndex::new(15),
-                TransactionNonce::from(0_u8),
-                TransactionStatus::Success,
+        for ((req, tx, signed_tx, receipt), is_reimbursed) in vec![
+            (
+                cketh_withdrawal_flow(
+                    LedgerBurnIndex::new(15),
+                    TransactionNonce::from(0_u8),
+                    TransactionStatus::Success,
+                ),
+                true,
             ),
-            cketh_withdrawal_flow(
-                LedgerBurnIndex::new(16),
-                TransactionNonce::from(1_u8),
-                TransactionStatus::Failure,
+            (
+                cketh_withdrawal_flow(
+                    LedgerBurnIndex::new(16),
+                    TransactionNonce::from(1_u8),
+                    TransactionStatus::Failure,
+                ),
+                true,
             ),
-            cketh_withdrawal_flow(
-                LedgerBurnIndex::new(17),
-                TransactionNonce::from(2_u8),
-                TransactionStatus::Failure,
+            (
+                cketh_withdrawal_flow(
+                    LedgerBurnIndex::new(17),
+                    TransactionNonce::from(2_u8),
+                    TransactionStatus::Failure,
+                ),
+                true,
             ),
-            ckerc20_withdrawal_flow(
-                LedgerBurnIndex::new(18),
-                TransactionNonce::from(3_u8),
-                &ckusdc(),
-                TransactionStatus::Failure,
+            (
+                ckerc20_withdrawal_flow(
+                    LedgerBurnIndex::new(18),
+                    TransactionNonce::from(3_u8),
+                    &ckusdc(),
+                    TransactionStatus::Failure,
+                ),
+                true,
+            ),
+            (
+                ckerc20_withdrawal_flow(
+                    LedgerBurnIndex::new(19),
+                    TransactionNonce::from(4_u8),
+                    &ckusdc(),
+                    TransactionStatus::Failure,
+                ),
+                false,
             ),
         ] {
             let id = req.cketh_ledger_burn_index();
@@ -762,33 +784,42 @@ fn should_display_reimbursed_requests() {
                 },
             );
             if receipt.status == TransactionStatus::Failure {
-                match req {
-                    WithdrawalRequest::CkEth(_) => {
-                        apply_state_transition(
-                            &mut state,
-                            &EventType::ReimbursedEthWithdrawal(Reimbursed {
-                                transaction_hash: Some(receipt.transaction_hash),
-                                burn_in_block: id,
-                                reimbursed_in_block,
-                                reimbursed_amount,
-                            }),
-                        );
-                    }
-                    WithdrawalRequest::CkErc20(r) => {
-                        apply_state_transition(
-                            &mut state,
-                            &EventType::ReimbursedErc20Withdrawal {
-                                cketh_ledger_burn_index: id,
-                                ckerc20_ledger_id: r.ckerc20_ledger_id,
-                                reimbursed: Reimbursed {
+                if is_reimbursed {
+                    match req {
+                        WithdrawalRequest::CkEth(_) => {
+                            apply_state_transition(
+                                &mut state,
+                                &EventType::ReimbursedEthWithdrawal(Reimbursed {
                                     transaction_hash: Some(receipt.transaction_hash),
-                                    burn_in_block: r.ckerc20_ledger_burn_index,
+                                    burn_in_block: id,
                                     reimbursed_in_block,
                                     reimbursed_amount,
+                                }),
+                            );
+                        }
+                        WithdrawalRequest::CkErc20(r) => {
+                            apply_state_transition(
+                                &mut state,
+                                &EventType::ReimbursedErc20Withdrawal {
+                                    cketh_ledger_burn_index: id,
+                                    ckerc20_ledger_id: r.ckerc20_ledger_id,
+                                    reimbursed: Reimbursed {
+                                        transaction_hash: Some(receipt.transaction_hash),
+                                        burn_in_block: r.ckerc20_ledger_burn_index,
+                                        reimbursed_in_block,
+                                        reimbursed_amount,
+                                    },
                                 },
-                            },
-                        );
+                            );
+                        }
                     }
+                } else {
+                    apply_state_transition(
+                        &mut state,
+                        &EventType::QuarantinedReimbursement {
+                            index: ReimbursementIndex::from(&req),
+                        },
+                    )
                 }
             }
         }
@@ -799,6 +830,19 @@ fn should_display_reimbursed_requests() {
     DashboardAssert::assert_that(dashboard)
         .has_finalized_transactions(
             1,
+            &vec![
+                "19",
+                "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
+                "ckUSDC",
+                "2_000_000",
+                "65_000_000_000_000",
+                "5558738",
+                "0x132db1a0a7d5fd70b73fc4b36bce26d3c0625bcfafe0a17b4016de6acaa1852c",
+                "Failure",
+            ],
+        )
+        .has_finalized_transactions(
+            2,
             &vec![
                 "18",
                 "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
@@ -811,7 +855,7 @@ fn should_display_reimbursed_requests() {
             ],
         )
         .has_finalized_transactions(
-            2,
+            3,
             &vec![
                 "17",
                 "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
@@ -824,7 +868,7 @@ fn should_display_reimbursed_requests() {
             ],
         )
         .has_finalized_transactions(
-            3,
+            4,
             &vec![
                 "16",
                 "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
@@ -837,7 +881,7 @@ fn should_display_reimbursed_requests() {
             ],
         )
         .has_finalized_transactions(
-            4,
+            5,
             &vec![
                 "15",
                 "0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34",
@@ -849,34 +893,38 @@ fn should_display_reimbursed_requests() {
                 "Success",
             ],
         )
+        .has_reimbursed_transactions(1, &vec!["19", "N/A", "ckUSDC", "N/A", "N/A", "Quarantined"])
         .has_reimbursed_transactions(
-            1,
+            2,
             &vec![
                 "18",
                 "123",
                 "ckUSDC",
                 "2_000_000",
                 "0xb5115ef5e39db0cfca5589ac2dca8a91e59825af1216c01826fbf39c3eaeb0c2",
+                "Reimbursed",
             ],
         )
         .has_reimbursed_transactions(
-            2,
+            3,
             &vec![
                 "17",
                 "123",
                 "ckETH",
                 "1_058_000_000_000_000",
                 "0xada056f5d3942fac34371527524b5ee8a45833eb5edc41a06ac7a742a6a59762",
+                "Reimbursed",
             ],
         )
         .has_reimbursed_transactions(
-            3,
+            4,
             &vec![
                 "16",
                 "123",
                 "ckETH",
                 "1_058_000_000_000_000",
                 "0x9a4793ece4b3a487679a43dd465d8a4855fa2a23adc128a59eaaa9eb5837105e",
+                "Reimbursed",
             ],
         );
 }

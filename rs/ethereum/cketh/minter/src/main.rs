@@ -23,7 +23,8 @@ use ic_cketh_minter::memo::BurnMemo;
 use ic_cketh_minter::numeric::{Erc20Value, LedgerBurnIndex, Wei};
 use ic_cketh_minter::state::audit::{process_event, Event, EventType};
 use ic_cketh_minter::state::transactions::{
-    Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed, ReimbursementRequest,
+    Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed, ReimbursementIndex,
+    ReimbursementRequest,
 };
 use ic_cketh_minter::state::{lazy_call_ecdsa_public_key, mutate_state, read_state, State, STATE};
 use ic_cketh_minter::tx::lazy_refresh_gas_fee_estimate;
@@ -465,7 +466,8 @@ async fn get_canister_status() -> ic_cdk::api::management_canister::main::Canist
 #[query]
 fn get_events(arg: GetEventsArg) -> GetEventsResult {
     use ic_cketh_minter::endpoints::events::{
-        AccessListItem, TransactionReceipt as CandidTransactionReceipt,
+        AccessListItem, ReimbursementIndex as CandidReimbursementIndex,
+        TransactionReceipt as CandidTransactionReceipt,
         TransactionStatus as CandidTransactionStatus, UnsignedTransaction,
     };
     use ic_cketh_minter::eth_rpc_client::responses::TransactionReceipt;
@@ -483,6 +485,23 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
         CandidEventSource {
             transaction_hash: transaction_hash.to_string(),
             log_index: log_index.into(),
+        }
+    }
+
+    fn map_reimbursement_index(index: ReimbursementIndex) -> CandidReimbursementIndex {
+        match index {
+            ReimbursementIndex::CkEth { ledger_burn_index } => CandidReimbursementIndex::CkEth {
+                ledger_burn_index: ledger_burn_index.get().into(),
+            },
+            ReimbursementIndex::CkErc20 {
+                cketh_ledger_burn_index,
+                ledger_id,
+                ckerc20_ledger_burn_index,
+            } => CandidReimbursementIndex::CkErc20 {
+                cketh_ledger_burn_index: cketh_ledger_burn_index.get().into(),
+                ledger_id,
+                ckerc20_ledger_burn_index: ckerc20_ledger_burn_index.get().into(),
+            },
         }
     }
 
@@ -709,6 +728,9 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                 },
                 EventType::QuarantinedDeposit { event_source } => EP::QuarantinedDeposit {
                     event_source: map_event_source(event_source),
+                },
+                EventType::QuarantinedReimbursement { index } => EP::QuarantinedReimbursement {
+                    index: map_reimbursement_index(index),
                 },
             },
         }
