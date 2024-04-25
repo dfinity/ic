@@ -84,6 +84,45 @@ jobs:
           if-no-files-found: error
           path: |
             bazel-targets
+  bazel-test-all-rebuild:
+    name: Bazel-Test-All-Rebuild
+    runs-on:
+      labels: bazel-runner-large
+    container:
+      image: dfinity/ic-build:abbdc66c19bf32eda2109f97e39fde519ef9b452ab54aee52b234af8638983d8
+    timeout-minutes: 90
+    if: ${{ vars.RUN_CI == 'true' }} # needed to avoid running on public dfinity org until published
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3 # v4 does not work with bazel-runner-large
+        if: ${{ github.event_name == 'pull_request' }}
+        with:
+          fetch-depth: 256
+      # TODO: only on master
+      - name: Checkout
+        uses: actions/checkout@v3
+        if: ${{ github.event_name != 'pull_request' }}
+      - name: Docker RO SA login
+        id: docker-ro-login
+        shell: bash
+        run: |
+          docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
+          if which docker-bin 2>/dev/null; then
+              docker-bin login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
+          fi
+      - name: Run Bazel Test All Rebuild
+        id: bazel-test-all-rebuild
+        uses: ./.github/actions/bazel-test-all/
+        with:
+          BAZEL_CI_CONFIG: "--config=ci"
+          BAZEL_COMMAND: "build"
+          BAZEL_EXTRA_ARGS: "--repository_cache= --disk_cache= --noremote_accept_cached --remote_instance_name=${CI_COMMIT_SHA} --@rules_rust//rust/settings:pipelined_compilation=True"
+      - name: After script
+        id: after-script
+        shell: bash
+        run: |
+          bazel clean
+        #  rm -rf "${CI_PROJECT_DIR}/" # this doesn't work, TODO: figure out if and where data gets stored
   bazel-config-check-all-rebuild:
     runs-on:
       labels: bazel-runner-large
