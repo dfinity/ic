@@ -18,7 +18,7 @@ use serde::Serialize;
 use std::borrow::Cow;
 use std::cell::RefCell;
 
-pub(crate) type WasmStore = BTreeMap<WasmHash, StoredWasm, StableMemory>;
+pub type WasmStore = BTreeMap<WasmHash, StoredWasm, StableMemory>;
 
 pub struct TaskQueue {
     pub queue: BTreeMap<TaskExecution, (), StableMemory>,
@@ -80,6 +80,20 @@ pub struct StoredWasm {
     binary: Vec<u8>,
     /// Encodes which type of wasm this is.
     marker: u8,
+}
+
+impl StoredWasm {
+    pub fn timestamp(&self) -> u64 {
+        self.timestamp
+    }
+
+    pub fn git_commit(&self) -> &GitCommitHash {
+        &self.git_commit
+    }
+
+    pub fn marker(&self) -> u8 {
+        self.marker
+    }
 }
 
 pub trait StorableWasm {

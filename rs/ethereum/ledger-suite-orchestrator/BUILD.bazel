@@ -81,6 +81,7 @@ rust_test(
     deps = [
         ":ledger_suite_orchestrator",
         "@crate_index//:candid_parser",
+        "@crate_index//:ic-stable-structures",
         "@crate_index//:scraper",
     ],
 )
@@ -109,6 +110,7 @@ rust_canister(
         "@crate_index//:ic-cdk",
         "@crate_index//:ic-metrics-encoder",
         "@crate_index//:serde",
+        "@crate_index//:time",
     ],
 )
 

@@ -5,13 +5,20 @@ use candid::Principal;
 use fixtures::{usdc, usdt, USDC_ADDRESS, USDT_ADDRESS};
 use ic_ledger_suite_orchestrator::candid::InitArg;
 use ic_ledger_suite_orchestrator::scheduler::Erc20Token;
-use ic_ledger_suite_orchestrator::state::{CanistersMetadata, Index, Ledger, State, WasmHash};
+use ic_ledger_suite_orchestrator::state::{
+    ArchiveWasm, CanistersMetadata, GitCommitHash, Index, IndexWasm, Ledger, LedgerWasm, State,
+    WasmHash,
+};
+use ic_ledger_suite_orchestrator::storage::{wasm_store_try_insert, WasmStore};
+use ic_stable_structures::memory_manager::{MemoryId, MemoryManager};
+use ic_stable_structures::DefaultMemoryImpl;
 use std::str::FromStr;
 
 #[test]
 fn should_display_managed_canisters() {
     DashboardAssert::assert_that(initial_dashboard())
-        .has_no_elements_matching("#managed-canisters");
+        .has_no_elements_matching("#managed-canisters")
+        .has_no_elements_matching("#wasm-store");
 
     const USDC_LEDGER_ID: &str = "apia6-jaaaa-aaaar-qabma-cai";
     const USDC_INDEX_ID: &str = "s3zol-vqaaa-aaaar-qacpa-cai";
@@ -143,8 +150,51 @@ fn should_display_etherscan_links_according_to_chain_id() {
     DashboardAssert::assert_that_dashboard_from_state(&state).has_no_elements_matching("a");
 }
 
+#[test]
+fn should_display_stored_wasms() {
+    let mut store = empty_wasm_store();
+    let git_commit_hash: GitCommitHash =
+        "3f9cf5e990a99c3b27af97b3bfbc8a0ace776cab".parse().unwrap();
+    let ledger_wasm = LedgerWasm::new("ledger".as_bytes().to_vec());
+    let index_wasm = IndexWasm::new("index".as_bytes().to_vec());
+    let archive_wasm = ArchiveWasm::new("archive".as_bytes().to_vec());
+
+    wasm_store_try_insert(&mut store, 0, git_commit_hash.clone(), ledger_wasm).unwrap();
+    wasm_store_try_insert(&mut store, 0, git_commit_hash.clone(), index_wasm).unwrap();
+    wasm_store_try_insert(&mut store, 0, git_commit_hash, archive_wasm).unwrap();
+
+    DashboardAssert::assert_that_dashboard_from_wasm_store(&store)
+        .has_stored_wasm(
+            1,
+            &vec![
+                "1970-01-01T00:00:00+00:00",
+                "Ledger",
+                "3f9cf5e990a99c3b27af97b3bfbc8a0ace776cab",
+                "fe14010b4fe83303852f0467c919ef9a7ca089b91e96e3aad7d426dd87079297",
+            ],
+        )
+        .has_stored_wasm(
+            2,
+            &vec![
+                "1970-01-01T00:00:00+00:00",
+                "Index",
+                "3f9cf5e990a99c3b27af97b3bfbc8a0ace776cab",
+                "1bc04b5291c26a46d918139138b992d2de976d6851d0893b0476b85bfbdfc6e6",
+            ],
+        )
+        .has_stored_wasm(
+            3,
+            &vec![
+                "1970-01-01T00:00:00+00:00",
+                "Archive",
+                "3f9cf5e990a99c3b27af97b3bfbc8a0ace776cab",
+                "0eb3e36bfb24dcd9bb1d1bece1531216b59539a8fde17ee80224af0653c92aa3",
+            ],
+        );
+}
+
 fn initial_dashboard() -> DashboardTemplate {
-    DashboardTemplate::from_state(&initial_state())
+    DashboardTemplate::from_state(&initial_state(), &empty_wasm_store())
 }
 
 fn initial_state() -> State {
@@ -156,9 +206,15 @@ fn initial_state() -> State {
     .unwrap()
 }
 
+pub fn empty_wasm_store() -> WasmStore {
+    WasmStore::init(MemoryManager::init(DefaultMemoryImpl::default()).get(MemoryId::new(0)))
+}
+
 mod assertions {
+    use crate::dashboard::tests::{empty_wasm_store, initial_state};
     use crate::dashboard::DashboardTemplate;
     use ic_ledger_suite_orchestrator::state::State;
+    use ic_ledger_suite_orchestrator::storage::WasmStore;
     use scraper::{Html, Selector};
 
     pub struct DashboardAssert {
@@ -168,7 +224,11 @@ mod assertions {
 
     impl DashboardAssert {
         pub fn assert_that_dashboard_from_state(state: &State) -> Self {
-            Self::assert_that(DashboardTemplate::from_state(state))
+            Self::assert_that(DashboardTemplate::from_state(state, &empty_wasm_store()))
+        }
+
+        pub fn assert_that_dashboard_from_wasm_store(wasm_store: &WasmStore) -> Self {
+            Self::assert_that(DashboardTemplate::from_state(&initial_state(), wasm_store))
         }
 
         pub fn assert_that(actual: DashboardTemplate) -> Self {
@@ -189,6 +249,14 @@ mod assertions {
                 self.rendered_html
             );
             self
+        }
+
+        pub fn has_stored_wasm(&self, row_index: u8, expected_wasm: &Vec<&str>) -> &Self {
+            self.has_table_row_string_value(
+                &format!("#wasm-store + table > tbody > tr:nth-child({row_index})"),
+                expected_wasm,
+                "wrong stored wasm",
+            )
         }
 
         pub fn has_erc20(
@@ -237,6 +305,27 @@ mod assertions {
                     );
                 }
             }
+            self
+        }
+
+        fn has_table_row_string_value(
+            &self,
+            selector: &str,
+            expected_value: &Vec<&str>,
+            error_msg: &str,
+        ) -> &Self {
+            let selector = Selector::parse(selector).unwrap();
+            let actual_value = only_one(&mut self.actual.select(&selector));
+            let string_value = actual_value
+                .text()
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty())
+                .collect::<Vec<_>>();
+            assert_eq!(
+                &string_value, expected_value,
+                "{}. Rendered html: {}",
+                error_msg, self.rendered_html
+            );
             self
         }
     }
