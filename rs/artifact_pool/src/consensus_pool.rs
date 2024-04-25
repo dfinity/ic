@@ -638,12 +638,6 @@ impl ConsensusPoolImpl {
             }
         }
     }
-
-    // todo: remove because it is used only in tests
-    #[allow(dead_code)]
-    fn contains(&self, id: &ConsensusMessageId) -> bool {
-        self.unvalidated.contains(id) || self.validated.contains(id)
-    }
 }
 
 impl ConsensusPool for ConsensusPoolImpl {
@@ -1286,10 +1280,10 @@ mod tests {
                 peer_id: node_test_id(0),
                 timestamp: time_source.get_relative_time(),
             });
-            assert!(pool.contains(&id));
+            assert!(pool.unvalidated.contains(&id));
 
             pool.remove(&id);
-            assert!(!pool.contains(&id));
+            assert!(!pool.unvalidated.contains(&id));
         });
     }
 

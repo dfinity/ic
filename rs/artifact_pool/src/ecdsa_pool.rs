@@ -357,12 +357,6 @@ impl EcdsaPoolImpl {
 
         self.apply_changes(change_set);
     }
-
-    #[allow(dead_code)]
-    fn contains(&self, msg_id: &EcdsaMessageId) -> bool {
-        self.unvalidated.as_pool_section().contains(msg_id)
-            || self.validated.as_pool_section().contains(msg_id)
-    }
 }
 
 impl EcdsaPool for EcdsaPoolImpl {
@@ -543,7 +537,6 @@ mod tests {
         assert_eq!(validated.len(), validated_expected.len());
         for id in &validated {
             assert!(validated_expected.contains(id));
-            assert!(ecdsa_pool.contains(id));
             assert!(ecdsa_pool.get(id).is_some());
 
             assert!(ecdsa_pool.validated().contains(id));
@@ -556,7 +549,6 @@ mod tests {
         assert_eq!(unvalidated.len(), unvalidated_expected.len());
         for id in &unvalidated {
             assert!(unvalidated_expected.contains(id));
-            assert!(ecdsa_pool.contains(id));
             assert!(ecdsa_pool.get(id).is_none());
 
             assert!(ecdsa_pool.unvalidated().contains(id));

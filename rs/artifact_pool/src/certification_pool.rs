@@ -164,12 +164,6 @@ impl CertificationPoolImpl {
             .with_label_values(&[CERTIFICATION_SHARE_ARTIFACT_TYPE])
             .set(self.unvalidated_share_index.size() as i64);
     }
-
-    // todo: remove because it is used only in tests
-    #[allow(dead_code)]
-    fn contains(&self, id: &CertificationMessageId) -> bool {
-        self.unvalidated.contains_key(&id.hash) || self.persistent_pool.get(id).is_some()
-    }
 }
 
 impl MutablePool<CertificationArtifact> for CertificationPoolImpl {
@@ -566,9 +560,9 @@ mod tests {
             );
 
             for id in [id1, id2, id3, id4] {
-                assert!(pool.contains(&id));
+                assert!(pool.unvalidated.contains_key(&id.hash));
                 pool.remove(&id);
-                assert!(!pool.contains(&id));
+                assert!(!pool.unvalidated.contains_key(&id.hash));
             }
         })
     }
@@ -772,13 +766,21 @@ mod tests {
             let share_msg = fake_share(7, 0);
             let cert_msg = fake_cert(8);
 
-            assert!(!pool.contains(&CertificationMessageId::from(&share_msg)));
-            assert!(!pool.contains(&CertificationMessageId::from(&cert_msg)));
+            assert!(!pool
+                .unvalidated
+                .contains_key(&CertificationMessageId::from(&share_msg).hash));
+            assert!(!pool
+                .unvalidated
+                .contains_key(&CertificationMessageId::from(&cert_msg).hash));
 
             pool.insert(to_unvalidated(share_msg.clone()));
 
-            assert!(pool.contains(&CertificationMessageId::from(&share_msg)));
-            assert!(!pool.contains(&CertificationMessageId::from(&cert_msg)));
+            assert!(pool
+                .unvalidated
+                .contains_key(&CertificationMessageId::from(&share_msg).hash));
+            assert!(!pool
+                .unvalidated
+                .contains_key(&CertificationMessageId::from(&cert_msg).hash));
         });
     }
 
@@ -794,8 +796,14 @@ mod tests {
             let share_msg = fake_share(7, 0);
             let cert_msg = fake_cert(8);
 
-            assert!(!pool.contains(&CertificationMessageId::from(&share_msg)));
-            assert!(!pool.contains(&CertificationMessageId::from(&cert_msg)));
+            assert!(pool
+                .persistent_pool
+                .get(&CertificationMessageId::from(&share_msg))
+                .is_none());
+            assert!(pool
+                .persistent_pool
+                .get(&CertificationMessageId::from(&cert_msg))
+                .is_none());
 
             let result = pool.apply_changes(vec![
                 ChangeAction::AddToValidated(share_msg.clone()),
@@ -808,8 +816,18 @@ mod tests {
                 pool.certification_at_height(Height::from(8)),
                 Some(msg_to_cert(cert_msg.clone()))
             );
-            assert!(pool.contains(&CertificationMessageId::from(&share_msg)));
-            assert!(pool.contains(&CertificationMessageId::from(&cert_msg)));
+            assert_eq!(
+                share_msg,
+                pool.persistent_pool
+                    .get(&CertificationMessageId::from(&share_msg))
+                    .unwrap()
+            );
+            assert_eq!(
+                cert_msg,
+                pool.persistent_pool
+                    .get(&CertificationMessageId::from(&cert_msg))
+                    .unwrap()
+            );
         });
     }
 

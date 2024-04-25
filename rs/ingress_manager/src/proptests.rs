@@ -18,7 +18,7 @@ use ic_constants::MAX_INGRESS_TTL;
 use ic_interfaces::{
     ingress_manager::IngressSelector,
     ingress_pool::ChangeAction,
-    p2p::consensus::{MutablePool, UnvalidatedArtifact},
+    p2p::consensus::{MutablePool, UnvalidatedArtifact, ValidatedPoolReader},
     time_source::TimeSource,
 };
 use ic_test_utilities_state::{CanisterStateBuilder, ReplicatedStateBuilder};
@@ -86,7 +86,7 @@ proptest! {
                             crypto_hash(m.binary()).get(),
                         ))]);
                         // check that message is indeed in the pool
-                        assert!(ingress_pool.contains(&message_id));
+                        assert!(ingress_pool.get(&message_id).is_some());
                     });
                 }
 
