@@ -20,10 +20,13 @@ use ic_types::{
 };
 mod basic;
 mod helper;
+mod simd;
 
 pub fn wasm_instructions_bench(c: &mut Criterion) {
-    // List of benchmarks to run: benchmark id (name), WAT, expected number of instructions.
-    let benchmarks = basic::benchmarks();
+    // List of benchmarks to run.
+    let mut benchmarks = vec![];
+    benchmarks.extend(basic::benchmarks());
+    benchmarks.extend(simd::benchmarks());
 
     ////////////////////////////////////////////////////////////////////
     // Benchmark function.
