@@ -6,7 +6,6 @@ use ic_icrc1_ledger::FeatureFlags as LedgerFeatureFlags;
 use ic_ledger_suite_orchestrator::candid::{
     AddErc20Arg, LedgerInitArg, OrchestratorArg, UpdateCyclesManagement, UpgradeArg,
 };
-use ic_ledger_suite_orchestrator::scheduler::TEN_TRILLIONS;
 use ic_ledger_suite_orchestrator_test_utils::arbitrary::arb_init_arg;
 use ic_ledger_suite_orchestrator_test_utils::{
     assert_reply, new_state_machine, supported_erc20_tokens, usdc, usdc_erc20_contract, usdt,
@@ -22,6 +21,8 @@ use std::sync::Arc;
 
 const MAX_TICKS: usize = 10;
 const GIT_COMMIT_HASH: &str = "6a8e5fca2c6b4e12966638c444e994e204b42989";
+
+pub const TEN_TRILLIONS: u64 = 10_000_000_000_000; // 10 TC
 
 proptest! {
     #![proptest_config(ProptestConfig {
@@ -240,20 +241,11 @@ fn should_top_up_spawned_canisters() {
     let pre_top_up_balance_ledger = orchestrator.canister_status_of(ledger_canister_id).cycles();
     let pre_top_up_balance_index = orchestrator.canister_status_of(index_canister_id).cycles();
 
-    orchestrator
-        .env
-        .advance_time(std::time::Duration::from_secs(60 * 60 + 1));
-    orchestrator.env.tick();
-    orchestrator.env.tick();
-    orchestrator.env.tick();
-    orchestrator.env.tick();
-    orchestrator.env.tick();
-
+    orchestrator.advance_time_for_cycles_top_up();
     let balance_ledger_after_first_top_up =
         orchestrator.canister_status_of(ledger_canister_id).cycles();
     let balance_index_after_first_top_up =
         orchestrator.canister_status_of(index_canister_id).cycles();
-
     assert_eq!(
         balance_index_after_first_top_up - pre_top_up_balance_index,
         TEN_TRILLIONS as u128
@@ -263,20 +255,11 @@ fn should_top_up_spawned_canisters() {
         TEN_TRILLIONS as u128
     );
 
-    orchestrator
-        .env
-        .advance_time(std::time::Duration::from_secs(60 * 60 + 1));
-    orchestrator.env.tick();
-    orchestrator.env.tick();
-    orchestrator.env.tick();
-    orchestrator.env.tick();
-    orchestrator.env.tick();
-
+    orchestrator.advance_time_for_cycles_top_up();
     let balance_ledger_after_second_top_up =
         orchestrator.canister_status_of(ledger_canister_id).cycles();
     let balance_index_after_second_top_up =
         orchestrator.canister_status_of(index_canister_id).cycles();
-
     assert_eq!(
         balance_index_after_second_top_up - balance_index_after_first_top_up,
         TEN_TRILLIONS as u128

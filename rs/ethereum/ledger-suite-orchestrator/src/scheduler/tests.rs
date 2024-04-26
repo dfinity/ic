@@ -1,11 +1,8 @@
-use crate::candid::{AddCkErc20Token, InitArg, LedgerInitArg};
+use crate::candid::{AddCkErc20Token, CyclesManagement, InitArg, LedgerInitArg};
 use crate::management::{CallError, Reason};
 use crate::scheduler::test_fixtures::{usdc, usdc_metadata};
 use crate::scheduler::tests::mock::MockCanisterRuntime;
-use crate::scheduler::{
-    InstallLedgerSuiteArgs, Task, TaskError, TaskExecution, MINIMUM_MONITORED_CANISTER_CYCLES,
-    MINIMUM_ORCHESTRATOR_CYCLES,
-};
+use crate::scheduler::{cycles_to_u128, InstallLedgerSuiteArgs, Task, TaskError, TaskExecution};
 use crate::state::test_fixtures::new_state;
 use crate::state::{
     read_state, Canisters, GitCommitHash, IndexCanister, LedgerCanister, ManagedCanisterStatus,
@@ -59,8 +56,11 @@ async fn should_install_ledger_suite() {
 async fn should_top_up_canister() {
     use mockall::Sequence;
     init_state();
+    let cycles_management = CyclesManagement::default();
+    let orchestrator_cycles = cycles_to_u128(cycles_management.minimum_orchestrator_cycles()) * 2;
+    let low_cycles = cycles_to_u128(cycles_management.minimum_monitored_canister_cycles()) / 2;
+    let enough_cycles = cycles_to_u128(cycles_management.minimum_monitored_canister_cycles());
     let mut runtime = MockCanisterRuntime::new();
-
     runtime.expect_id().return_const(ORCHESTRATOR_PRINCIPAL);
     expect_create_canister_returning(
         &mut runtime,
@@ -82,14 +82,14 @@ async fn should_top_up_canister() {
     let mut seq = Sequence::new();
     runtime
         .expect_canister_cycles()
-        .times(2)
-        .in_sequence(&mut seq)
-        .return_const(Ok(MINIMUM_MONITORED_CANISTER_CYCLES as u128 / 2));
-    runtime
-        .expect_canister_cycles()
         .times(1)
         .in_sequence(&mut seq)
-        .return_const(Ok(MINIMUM_ORCHESTRATOR_CYCLES as u128 * 2));
+        .return_const(Ok(orchestrator_cycles));
+    runtime
+        .expect_canister_cycles()
+        .times(2)
+        .in_sequence(&mut seq)
+        .return_const(Ok(low_cycles));
 
     runtime
         .expect_send_cycles()
@@ -103,15 +103,14 @@ async fn should_top_up_canister() {
     let mut seq = Sequence::new();
     runtime
         .expect_canister_cycles()
-        .times(2)
-        .in_sequence(&mut seq)
-        .return_const(Ok(MINIMUM_MONITORED_CANISTER_CYCLES as u128 / 2));
-    runtime
-        .expect_canister_cycles()
         .times(1)
         .in_sequence(&mut seq)
-        .return_const(Ok(MINIMUM_ORCHESTRATOR_CYCLES as u128 * 2));
-
+        .return_const(Ok(orchestrator_cycles));
+    runtime
+        .expect_canister_cycles()
+        .times(2)
+        .in_sequence(&mut seq)
+        .return_const(Ok(low_cycles));
     runtime
         .expect_send_cycles()
         .times(1)
@@ -120,15 +119,20 @@ async fn should_top_up_canister() {
             reason: Reason::OutOfCycles,
         }));
     runtime.expect_send_cycles().times(1).return_const(Ok(()));
-
     assert_eq!(task.execute(&runtime).await, Ok(()));
 
+    let mut seq = Sequence::new();
     runtime
         .expect_canister_cycles()
-        .times(3)
-        .return_const(Ok(MINIMUM_MONITORED_CANISTER_CYCLES as u128));
+        .times(1)
+        .in_sequence(&mut seq)
+        .return_const(Ok(orchestrator_cycles));
+    runtime
+        .expect_canister_cycles()
+        .times(2)
+        .in_sequence(&mut seq)
+        .return_const(Ok(enough_cycles));
     runtime.expect_send_cycles().never();
-
     assert_eq!(task.execute(&runtime).await, Ok(()));
 }
 
