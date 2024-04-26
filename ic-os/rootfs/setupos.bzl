@@ -34,5 +34,7 @@ rootfs_files = {
     Label("setupos/prep/prep.sh"): "/prep/prep.sh",
     Label("setupos/prep/systemd-fixes/systemd-fixes.if"): "/prep/systemd-fixes/systemd-fixes.if",
     Label("setupos/prep/systemd-fixes/systemd-fixes.te"): "/prep/systemd-fixes/systemd-fixes.te",
+
+    # consolidated files:
     Label("systemd-generators/systemd-gpt-auto-generator"): "/etc/systemd/system-generators/systemd-gpt-auto-generator",
 }
