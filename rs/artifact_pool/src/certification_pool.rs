@@ -15,7 +15,6 @@ use ic_types::consensus::IsShare;
 use ic_types::crypto::crypto_hash;
 use ic_types::NodeId;
 use ic_types::{
-    artifact::CertificationMessageFilter,
     artifact::CertificationMessageId,
     artifact_kind::CertificationArtifact,
     consensus::certification::{
@@ -398,23 +397,15 @@ impl ValidatedPoolReader<CertificationArtifact> for CertificationPoolImpl {
     }
 
     fn get_all_validated(&self) -> Box<dyn Iterator<Item = CertificationMessage> + '_> {
-        let filter = CertificationMessageFilter::default();
-
-        // In case we received a filter of u64::MAX, don't overflow.
-        let Some(filter) = filter.height.get().checked_add(1).map(Height::from) else {
-            return Box::new(std::iter::empty());
-        };
-
         let certification_range = self.persistent_pool.certifications().height_range();
         let share_range = self.persistent_pool.certification_shares().height_range();
 
         let ranges = [certification_range.as_ref(), share_range.as_ref()]
             .into_iter()
             .flatten();
-        let Some(min_height) = ranges.clone().map(|range| range.min).min() else {
+        let Some(min) = ranges.clone().map(|range| range.min).min() else {
             return Box::new(std::iter::empty());
         };
-        let min = min_height.max(filter);
         let max = ranges.map(|range| range.max).max().unwrap_or(min);
 
         // For all heights above the minimum, return the validated certification of the subnet,
@@ -825,7 +816,6 @@ mod tests {
             );
 
             let height_offset = 5_000_000_000;
-            let filter = CertificationMessageFilter::default();
 
             // Create shares from 5 nodes for 20 heights, only add an aggregate on even heights.
             let mut messages = Vec::new();
@@ -850,7 +840,6 @@ mod tests {
 
             let mut heights = HashSet::new();
             pool.get_all_validated().for_each(|m| {
-                assert!(m.height() >= filter.height);
                 if m.height().get() % 2 == 0 {
                     assert!(!m.is_share());
                 }

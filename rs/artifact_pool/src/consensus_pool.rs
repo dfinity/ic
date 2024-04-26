@@ -25,8 +25,8 @@ use ic_protobuf::types::v1 as pb;
 use ic_types::crypto::CryptoHashOf;
 use ic_types::NodeId;
 use ic_types::{
-    artifact::ArtifactKind, artifact::ConsensusMessageFilter, artifact::ConsensusMessageId,
-    artifact_kind::ConsensusArtifact, consensus::*, Height, SubnetId, Time,
+    artifact::ArtifactKind, artifact::ConsensusMessageId, artifact_kind::ConsensusArtifact,
+    consensus::*, Height, SubnetId, Time,
 };
 use prometheus::{histogram_opts, labels, opts, Histogram, IntCounter, IntGauge};
 use std::collections::BTreeMap;
@@ -818,8 +818,6 @@ impl ValidatedPoolReader<ConsensusArtifact> for ConsensusPoolImpl {
     }
 
     fn get_all_validated(&self) -> Box<dyn Iterator<Item = ConsensusMessage> + '_> {
-        let filter = ConsensusMessageFilter::default();
-
         let node_id = self.node_id;
         let max_catch_up_height = self
             .validated
@@ -829,15 +827,9 @@ impl ValidatedPoolReader<ConsensusArtifact> for ConsensusPoolImpl {
             .unwrap();
         // Since random beacon of previous height is required, min_random_beacon_height
         // should be one less than the normal min height.
-        let min_random_beacon_height = max_catch_up_height.max(filter.height);
-        // In case we received a filter of u64::MAX, don't overflow.
-        let Some(min) = min_random_beacon_height
-            .get()
-            .checked_add(1)
-            .map(Height::from)
-        else {
-            return Box::new(std::iter::empty());
-        };
+        let min_random_beacon_height = max_catch_up_height;
+        let min = min_random_beacon_height.increment();
+
         let max_finalized_height = self
             .validated
             .finalization()
@@ -927,7 +919,7 @@ impl ValidatedPoolReader<ConsensusArtifact> for ConsensusPoolImpl {
             self.validated
                 .catch_up_package()
                 .get_by_height_range(HeightRange {
-                    min: max_catch_up_height.max(filter.height),
+                    min: max_catch_up_height,
                     max: max_catch_up_height,
                 })
                 .map(|x| x.into_message())
@@ -1309,7 +1301,6 @@ mod tests {
             );
 
             let height_offset = 5_000_000_000;
-            let filter = ConsensusMessageFilter::default();
 
             let fake_block = |height: Height| {
                 Block::new(
@@ -1451,7 +1442,6 @@ mod tests {
             };
 
             pool.get_all_validated().for_each(|m| {
-                assert!(m.height() >= filter.height);
                 if m.height().get() <= height_offset + 15 {
                     assert!(!m.is_share());
                 }
