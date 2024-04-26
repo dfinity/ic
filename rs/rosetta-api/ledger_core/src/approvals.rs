@@ -184,15 +184,15 @@ where
 
             match table.allowances.entry(key.clone()) {
                 Entry::Vacant(e) => {
-                    if amount == Tokens::zero() {
-                        return Ok(amount);
-                    }
                     if let Some(expected_allowance) = expected_allowance {
                         if !expected_allowance.is_zero() {
                             return Err(ApproveError::AllowanceChanged {
                                 current_allowance: Tokens::zero(),
                             });
                         }
+                    }
+                    if amount == Tokens::zero() {
+                        return Ok(amount);
                     }
                     if let Some(expires_at) = expires_at {
                         table.expiration_queue.insert((expires_at, key.clone()));

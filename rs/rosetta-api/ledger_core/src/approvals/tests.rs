@@ -612,3 +612,26 @@ fn expected_allowance_not_checked_against_expired() {
         }
     );
 }
+
+#[test]
+fn expected_allowance_if_zero_no_approval() {
+    let mut table = TestAllowanceTable::default();
+
+    // If there were no approvals present, we used to always accept 0 approvals
+    // without checking the expected_allowance.
+    assert_eq!(
+        table
+            .approve(
+                &Account(1),
+                &Account(2),
+                tokens(0),
+                None,
+                ts(1),
+                Some(tokens(4))
+            )
+            .unwrap_err(),
+        ApproveError::AllowanceChanged {
+            current_allowance: tokens(0)
+        }
+    );
+}
