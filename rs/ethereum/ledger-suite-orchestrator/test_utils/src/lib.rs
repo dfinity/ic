@@ -99,6 +99,17 @@ impl LedgerSuiteOrchestrator {
         .unwrap()
     }
 
+    pub fn advance_time_for_cycles_top_up(&self) {
+        self.env
+            .advance_time(std::time::Duration::from_secs(60 * 60 + 1));
+        self.env.tick();
+        self.env.tick();
+        self.env.tick();
+        self.env.tick();
+        self.env.tick();
+        self.env.tick();
+    }
+
     pub fn canister_status_of(&self, controlled_canister_id: CanisterId) -> CanisterStatusResultV2 {
         self.env
             .canister_status_as(
