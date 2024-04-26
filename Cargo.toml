@@ -405,6 +405,9 @@ debug = false
 lto = true
 opt-level = 'z'
 
+[profile.dev.package.curve25519-dalek]
+opt-level = 3
+
 [profile.dev.package.ic_bls12_381]
 opt-level = 3
 
