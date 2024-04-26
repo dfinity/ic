@@ -78,6 +78,34 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         ],
     );
 
+    // Add serde_bytes for efficiently parsing blobs.
+    let blob_fields = vec![
+        "NeuronId.id",
+        "ExecuteGenericNervousSystemFunction.payload",
+        "UpgradeSnsControlledCanister.new_canister_wasm",
+        "Governance.Version.root_wasm_hash",
+        "Governance.Version.governance_wasm_hash",
+        "Governance.Version.ledger_wasm_hash",
+        "Governance.Version.swap_wasm_hash",
+        "Governance.Version.archive_wasm_hash",
+        "Governance.Version.index_wasm_hash",
+        "ManageNeuron.subaccount",
+        "Subaccount.subaccount",
+    ];
+    for field in blob_fields {
+        config.field_attribute(
+            format!(".ic_sns_governance.pb.v1.{}", field),
+            "#[serde(with = \"serde_bytes\")]",
+        );
+    }
+    let option_blob_fields = vec!["UpgradeSnsControlledCanister.canister_upgrade_arg"];
+    for field in option_blob_fields {
+        config.field_attribute(
+            format!(".ic_sns_governance.pb.v1.{}", field),
+            "#[serde(deserialize_with = \"ic_utils::deserialize::deserialize_option_blob\")]",
+        );
+    }
+
     std::fs::create_dir_all(out).expect("failed to create output directory");
     config.out_dir(out);
 

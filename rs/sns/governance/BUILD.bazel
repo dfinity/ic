@@ -38,6 +38,7 @@ DEPENDENCIES = [
     "//rs/sns/governance/proposals_amount_total_limit",
     "//rs/types/base_types",
     "//rs/types/management_canister_types",
+    "//rs/utils",
     "@crate_index//:base64",
     "@crate_index//:build-info",
     "@crate_index//:candid",
@@ -53,6 +54,7 @@ DEPENDENCIES = [
     "@crate_index//:rand_chacha",
     "@crate_index//:rust_decimal",
     "@crate_index//:serde",
+    "@crate_index//:serde_bytes",
     "@crate_index//:strum",
 ]
 
