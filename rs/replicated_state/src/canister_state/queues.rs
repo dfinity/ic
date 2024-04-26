@@ -1139,6 +1139,34 @@ impl CanisterQueues {
         }
     }
 
+    /// Computes the number of reserved slots for outbound calls.
+    ///
+    /// Time complexity: `O(canister_queues.len())`.
+    // FIXME
+    #[allow(dead_code)]
+    fn calculate_input_queue_reserved_slots(
+        canister_queues: &BTreeMap<CanisterId, (CanisterQueue, CanisterQueue)>,
+    ) -> usize {
+        canister_queues
+            .values()
+            .map(|(iq, _)| iq.reserved_slots())
+            .sum()
+    }
+
+    /// Computes the number of reserved slots for inbound calls.
+    ///
+    /// Time complexity: `O(canister_queues.len())`.
+    // FIXME
+    #[allow(dead_code)]
+    fn calculate_output_queue_reserved_slots(
+        canister_queues: &BTreeMap<CanisterId, (CanisterQueue, CanisterQueue)>,
+    ) -> usize {
+        canister_queues
+            .values()
+            .map(|(_, oq)| oq.reserved_slots())
+            .sum()
+    }
+
     /// Queries whether the deadline of any message in the pool has expired.
     ///
     /// Time complexity: `O(1)`.

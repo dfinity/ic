@@ -983,6 +983,8 @@ fn request(payload_size: usize, deadline: CoarseTime) -> Request {
         .build()
 }
 
+// FIXME
+#[allow(dead_code)]
 fn response_with_payload(payload_size: usize, deadline: CoarseTime) -> Response {
     ResponseBuilder::new()
         .respondent(canister_test_id(13))
@@ -1510,7 +1512,7 @@ fn test_stats_induct_message_to_self() {
     let mut queues = CanisterQueues::default();
     let mut expected_iq_stats = InputQueuesStats::default();
     let mut expected_mu_stats = MemoryUsageStats::default();
-    let mut expected_pool_mu_stats = message_pool::MemoryUsageStats::default();
+    let expected_pool_mu_stats = message_pool::MemoryUsageStats::default();
     assert_eq!(expected_iq_stats, queues.input_queues_stats);
     assert_eq!(expected_mu_stats, queues.memory_usage_stats);
     assert_eq!(&expected_pool_mu_stats, queues.pool.memory_usage_stats());
