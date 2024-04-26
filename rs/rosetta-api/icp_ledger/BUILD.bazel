@@ -74,8 +74,8 @@ motoko_binary(
 
 rust_canister(
     name = "test_notified_canister",
-    srcs = ["test/notified.rs"],
-    service_file = ":test/notified.did",
+    srcs = ["tests/notified.rs"],
+    service_file = ":tests/notified.did",
     deps = [
         ":icp_ledger",
         "//rs/rust_canisters/dfn_candid",
@@ -90,8 +90,8 @@ rust_ic_test_suite(
     name = "ledger_canister_integration_test",
     timeout = "long",
     srcs = [
-        "test/test.rs",
-        "test/upgrade_downgrade.rs",
+        "tests/tests.rs",
+        "tests/upgrade_downgrade.rs",
     ],
     data = [
         "ledger.did",
@@ -111,14 +111,14 @@ rust_ic_test_suite(
         "CARGO_MANIFEST_DIR": "rs/rosetta-api/icp_ledger",
         "IC_ICP_INDEX_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/index:ic-icp-index-canister)",
         "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/archive:ledger-archive-node-canister-wasm)",
+        "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method)",
         "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm)",
         "LEDGER_PROXY_WASM_PATH": "$(rootpath :ledger_proxy.wasm)",
-        "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method)",
+        "MAINNET_ICP_INDEX_CANISTER_WASM_PATH": "$(rootpath @mainnet_icp_index_canister//file)",
         "MAINNET_ICP_LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath @mainnet_icp_ledger-archive-node-canister//file)",
         "MAINNET_ICP_LEDGER_CANISTER_WASM_PATH": "$(rootpath @mainnet_icp_ledger_canister//file)",
-        "MAINNET_ICP_INDEX_CANISTER_WASM_PATH": "$(rootpath @mainnet_icp_index_canister//file)",
-        "TEST_NOTIFIED_WASM_PATH": "$(rootpath :test_notified_canister)",
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+        "TEST_NOTIFIED_WASM_PATH": "$(rootpath :test_notified_canister)",
     },
     deps = [
         ":icp_ledger",
@@ -150,7 +150,7 @@ rust_ic_test_suite(
 
 rust_test(
     name = "protobuf_encoding_test",
-    srcs = ["test/protobuf_encoding.rs"],
+    srcs = ["tests/protobuf_encoding.rs"],
     deps = [
         ":icp_ledger",
         "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
@@ -168,7 +168,7 @@ did_git_test(
 
 generated_files_check(
     name = "check_generated_files",
-    srcs = ["test/check_generated_files.rs"],
+    srcs = ["tests/check_generated_files.rs"],
     data = [
         ":protos",
         "//rs/types/base_types:protos",

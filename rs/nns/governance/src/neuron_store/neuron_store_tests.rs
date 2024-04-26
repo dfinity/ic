@@ -1,6 +1,6 @@
 use super::*;
 use crate::{
-    neuron::types::{DissolveStateAndAge, NeuronBuilder},
+    neuron::{DissolveStateAndAge, NeuronBuilder},
     pb::v1::neuron::Followees,
     storage::with_stable_neuron_indexes,
 };

@@ -37,18 +37,17 @@ fi
     "$f" \
     "public-s3:dfinity-download-public/ic/${VERSION}/@@REMOTE_SUBDIR@@/"
 
-if [ "@@RC@@" == "True" ]; then
-    unset RCLONE_S3_ENDPOINT
-    AWS_PROFILE=cf "@@RCLONE@@" \
-        --config="@@RCLONE_CONFIG@@" \
-        --stats-one-line \
-        --checksum \
-        --immutable \
-        --s3-upload-cutoff=5G \
-        copy \
-        "$f" \
-        "public-s3-cf:dfinity-download-public/ic/${VERSION}/@@REMOTE_SUBDIR@@/"
-fi
+# Upload to Cloudflare's R2 (S3)
+unset RCLONE_S3_ENDPOINT
+AWS_PROFILE=cf "@@RCLONE@@" \
+    --config="@@RCLONE_CONFIG@@" \
+    --stats-one-line \
+    --checksum \
+    --immutable \
+    --s3-upload-cutoff=5G \
+    copy \
+    "$f" \
+    "public-s3-cf:dfinity-download-public/ic/${VERSION}/@@REMOTE_SUBDIR@@/"
 
 URL_PATH="ic/${VERSION}/@@REMOTE_SUBDIR@@/$(basename $f)"
 echo "https://download.dfinity.systems/${URL_PATH}" > "$2"

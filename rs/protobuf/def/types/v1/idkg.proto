@@ -11,31 +11,30 @@ import "types/v1/types.proto";
 message EcdsaPayload {
   repeated CompletedSignature signature_agreements = 1;
   repeated OngoingSignature ongoing_signatures = 2;
-  repeated AvailableQuadruple available_quadruples = 3;
-  repeated QuadrupleInProgress quadruples_in_creation = 4;
   registry.subnet.v1.IDkgTranscriptId next_unused_transcript_id = 5;
   repeated registry.subnet.v1.IDkgTranscript idkg_transcripts = 6;
   repeated OngoingXnetReshare ongoing_xnet_reshares = 7;
   repeated XnetReshareAgreement xnet_reshare_agreements = 8;
   uint64 next_unused_quadruple_id = 10;
   repeated EcdsaKeyTranscript key_transcripts = 13;
+  repeated AvailablePreSignature available_pre_signatures = 14;
+  repeated PreSignatureInProgress pre_signatures_in_creation = 15;
   // TODO: retire these fields, once we start using `key_transcripts`.
   UnmaskedTranscriptWithAttributes current_key_transcript = 9;
   KeyTranscriptCreation next_key_in_creation = 11;
   registry.crypto.v1.EcdsaKeyId key_id = 12;
+  // TODO: retire these fields, once we start using `pre_signatures`.
+  repeated AvailableQuadruple available_quadruples = 3;
+  repeated QuadrupleInProgress quadruples_in_creation = 4;
 }
 
 message ConsensusResponse {
-  types.v1.CanisterId originator = 1;
-  types.v1.CanisterId respondent = 2;
+  reserved 1, 2, 4, 7, 8;
   uint64 callback = 3;
-  state.queues.v1.Funds refund = 4;
   oneof payload {
     bytes data = 5;
     state.queues.v1.RejectContext reject = 6;
   }
-  state.queues.v1.Cycles cycles_refund = 7;
-  optional uint32 deadline_seconds = 8;
 }
 
 message EcdsaKeyTranscript {
@@ -62,6 +61,16 @@ message QuadrupleInProgress {
   QuadrupleInCreation quadruple = 2;
   // Deprecated. Use `quadruple.key_id` instead.
   registry.crypto.v1.EcdsaKeyId key_id = 3;
+}
+
+message AvailablePreSignature {
+  uint64 pre_signature_id = 1;
+  PreSignatureRef pre_signature = 2;
+}
+
+message PreSignatureInProgress {
+  uint64 pre_signature_id = 1;
+  PreSignatureInCreation pre_signature = 2;
 }
 
 message OngoingXnetReshare {
@@ -142,6 +151,20 @@ message UnmaskedTimesMaskedParams {
   IDkgTranscriptParamsRef transcript_ref = 1;
 }
 
+message PreSignatureInCreation {
+  oneof msg {
+    QuadrupleInCreation ecdsa = 1;
+    TranscriptInCreation schnorr = 2;
+  }
+}
+
+message PreSignatureRef {
+  oneof msg {
+    PreSignatureQuadrupleRef ecdsa = 1;
+    PreSignatureTranscriptRef schnorr = 2;
+  }
+}
+
 message QuadrupleInCreation {
   RandomTranscriptParams kappa_masked_config = 1;
   MaskedTranscript kappa_masked = 2;
@@ -177,6 +200,18 @@ message ThresholdEcdsaSigInputsRef {
   bytes nonce = 3;
   PreSignatureQuadrupleRef presig_quadruple_ref = 4;
   UnmaskedTranscript key_transcript_ref = 5;
+}
+
+message TranscriptInCreation {
+  registry.crypto.v1.SchnorrKeyId key_id = 1;
+  RandomUnmaskedTranscriptParams blinder_unmasked_config = 2;
+  UnmaskedTranscript blinder_unmasked = 3;
+}
+
+message PreSignatureTranscriptRef {
+  registry.crypto.v1.SchnorrKeyId key_id = 1;
+  UnmaskedTranscript blinder_unmasked_ref = 2;
+  UnmaskedTranscript key_unmasked_ref = 3;
 }
 
 message CompletedSignature {

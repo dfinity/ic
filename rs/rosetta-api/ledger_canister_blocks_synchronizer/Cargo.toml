@@ -15,9 +15,9 @@ ic-agent = { workspace = true }
 ic-certification = { path = "../../certification" }
 ic-ledger-canister-core = { path = "../ledger_canister_core" }
 ic-ledger-core = { path = "../ledger_core" }
+ic-ledger-hash-of = { path = "../../../packages/ic-ledger-hash-of" }
 ic-types = { path = "../../types/types" }
 icp-ledger = { path = "../icp_ledger" }
-ic-ledger-hash-of = { path = "../../../packages/ic-ledger-hash-of" }
 on_wire = { path = "../../rust_canisters/on_wire" }
 rusqlite = { version = "~0.28.0", features = ["bundled"] }
 serde = { workspace = true }

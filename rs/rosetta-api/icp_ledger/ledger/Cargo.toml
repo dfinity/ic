@@ -17,26 +17,25 @@ candid_parser = { workspace = true }
 ciborium = { workspace = true }
 dfn_candid = { path = "../../../rust_canisters/dfn_candid" }
 dfn_core = { path = "../../../rust_canisters/dfn_core" }
-dfn_protobuf = { path = "../../../rust_canisters/dfn_protobuf" }
 dfn_http_metrics = { path = "../../../rust_canisters/dfn_http_metrics" }
+dfn_protobuf = { path = "../../../rust_canisters/dfn_protobuf" }
 ic-base-types = { path = "../../../types/base_types" }
 ic-canister-log = { path = "../../../rust_canisters/canister_log" }
 ic-constants = { path = "../../../constants" }
+ic-icrc1 = { path = "../../icrc1" }
 ic-ledger-canister-core = { path = "../../ledger_canister_core" }
-ic-ledger-hash-of = { path = "../../../../packages/ic-ledger-hash-of" }
 ic-ledger-core = { path = "../../ledger_core" }
+ic-ledger-hash-of = { path = "../../../../packages/ic-ledger-hash-of" }
 ic-metrics-encoder = "1"
 icp-ledger = { path = "../" }
+icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 intmap = { version = "1.1.0", features = ["serde"] }
 lazy_static = "1.4.0"
+num-traits = { workspace = true }
 on_wire = { path = "../../../rust_canisters/on_wire" }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
-ic-icrc1 = { path = "../../icrc1" }
-icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
-num-traits = { workspace = true }
-
 
 [dev-dependencies]
 candid_parser = { workspace = true }

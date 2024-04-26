@@ -32,8 +32,8 @@ serde = { workspace = true }
 serde_bytes = { workspace = true }
 slog = { workspace = true }
 slog-term = "2.6.0"
-wasm-encoder = { version = "0.38.1", features = ["wasmparser"] }
-wasmparser = "0.118.1"
+wasm-encoder = { version = "0.201.0", features = ["wasmparser"] }
+wasmparser = "0.201.0"
 wasmtime = { version = "19.0.2", default-features = false, features = [
     'cranelift',
     'gc',

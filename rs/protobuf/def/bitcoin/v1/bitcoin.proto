@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package bitcoin.v1;
 
+import "types/v1/errors.proto";
+
 message Transaction {
   int32 version = 1;
   uint32 lock_time = 2;
@@ -111,12 +113,14 @@ message GetSuccessorsResponseComplete {
 
 // A `GetSucceessors` reject response containing additional information about the rejection.
 message GetSuccessorsReject {
-  uint64 reject_code = 1;
+  uint64 reject_code_old = 1;
+  types.v1.RejectCode reject_code = 3;
   string message = 2;
 }
 
 // A `SendTransaction` reject response containing additional information about the rejection.
 message SendTransactionReject {
-  uint64 reject_code = 1;
+  uint64 reject_code_old = 1;
+  types.v1.RejectCode reject_code = 3;
   string message = 2;
 }

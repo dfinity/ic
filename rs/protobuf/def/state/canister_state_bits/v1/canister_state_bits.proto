@@ -86,6 +86,7 @@ message Global {
     int64 i64 = 2;
     float f32 = 3;
     double f64 = 4;
+    bytes v128 = 5;
   }
 }
 
@@ -397,7 +398,5 @@ message CanisterStateBits {
   optional uint64 wasm_memory_limit = 45;
   // The next local snapshot ID.
   uint64 next_snapshot_id = 46;
-  // TODO(EXC-1597): Deprecated field.
-  // The set of snapshots ids of the canister.
-  repeated SnapshotId snapshot_ids = 47;
+  reserved 47;
 }

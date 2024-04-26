@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use ic_logger::{warn, ReplicaLogger};
+use ic_management_canister_types::MasterPublicKeyId;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::EcdsaDealingsContext;
 use ic_types::{
     consensus::idkg::{self, EcdsaBlockReader, EcdsaReshareRequest},
@@ -157,7 +158,7 @@ fn reshare_request_from_dealings_context(
 ) -> idkg::EcdsaReshareRequest {
     idkg::EcdsaReshareRequest {
         key_id: context.key_id.clone(),
-        master_key_id: None,
+        master_key_id: Some(MasterPublicKeyId::Ecdsa(context.key_id.clone())),
         receiving_node_ids: context.nodes.iter().copied().collect(),
         registry_version: context.registry_version,
     }
@@ -177,8 +178,8 @@ pub mod test_utils {
         registry_version: u64,
     ) -> idkg::EcdsaReshareRequest {
         idkg::EcdsaReshareRequest {
-            key_id,
-            master_key_id: None,
+            key_id: key_id.clone(),
+            master_key_id: Some(MasterPublicKeyId::Ecdsa(key_id)),
             receiving_node_ids: (0..num_nodes).map(node_test_id).collect::<Vec<_>>(),
             registry_version: RegistryVersion::from(registry_version),
         }
@@ -248,7 +249,7 @@ mod tests {
             |i: u64| EcdsaKeyId::from_str(&format!("Secp256k1:some_key_{i}")).unwrap();
         let make_reshare_request = |i| EcdsaReshareRequest {
             key_id: make_key_id(i),
-            master_key_id: None,
+            master_key_id: Some(MasterPublicKeyId::Ecdsa(make_key_id(i))),
             receiving_node_ids: vec![node_test_id(i)],
             registry_version: RegistryVersion::from(i),
         };

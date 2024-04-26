@@ -44,6 +44,7 @@ use std::{
     str::FromStr,
     sync::Arc,
 };
+use strum::IntoEnumIterator;
 
 mod scheduler_metrics;
 use scheduler_metrics::*;
@@ -608,7 +609,7 @@ impl SchedulerImpl {
                     // is pending.
                 }
                 NextExecution::None | NextExecution::StartNew => {
-                    for _ in 0..NextScheduledMethod::NUMBER_OF_VARIANTS {
+                    for _ in 0..NextScheduledMethod::iter().count() {
                         let method_chosen = is_next_method_chosen(
                             canister,
                             &mut heartbeat_and_timer_canister_ids,
@@ -1471,24 +1472,6 @@ impl Scheduler for SchedulerImpl {
                 self.purge_expired_ingress_messages(&mut state);
             }
 
-            // See documentation around definition of `heap_delta_estimate` for an
-            // explanation.
-            if state.metadata.heap_delta_estimate >= self.config.subnet_heap_delta_capacity {
-                warn!(
-                    round_log,
-                    "At Round {} @ time {}, current heap delta {} exceeds allowed capacity {}, so not executing any messages.",
-                    current_round,
-                    state.time(),
-                    state.metadata.heap_delta_estimate,
-                    self.config.subnet_heap_delta_capacity
-                );
-                self.finish_round(&mut state, current_round_type);
-                self.metrics
-                    .round_skipped_due_to_current_heap_delta_above_limit
-                    .inc();
-                return state;
-            }
-
             // Once the subnet messages are executed in threads, each thread will
             // need its own Csprng instance which is initialized with a distinct
             // "ExecutionThread". Otherwise, two Csprng instances that are
@@ -1578,6 +1561,23 @@ impl Scheduler for SchedulerImpl {
                 }
             }
             scheduler_round_limits.update_subnet_round_limits(&subnet_round_limits);
+
+            // See documentation around definition of `heap_delta_estimate` for an explanation.
+            if state.metadata.heap_delta_estimate >= self.config.subnet_heap_delta_capacity {
+                warn!(
+                    round_log,
+                    "At Round {} @ time {}, current heap delta {} exceeds allowed capacity {}, so not executing any messages.",
+                    current_round,
+                    state.time(),
+                    state.metadata.heap_delta_estimate,
+                    self.config.subnet_heap_delta_capacity
+                );
+                self.finish_round(&mut state, current_round_type);
+                self.metrics
+                    .round_skipped_due_to_current_heap_delta_above_limit
+                    .inc();
+                return state;
+            }
         }
 
         // Execute postponed `raw_rand` subnet messages.

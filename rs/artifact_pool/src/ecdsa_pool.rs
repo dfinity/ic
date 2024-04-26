@@ -453,16 +453,11 @@ impl MutablePool<EcdsaArtifact> for EcdsaPoolImpl {
 }
 
 impl ValidatedPoolReader<EcdsaArtifact> for EcdsaPoolImpl {
-    fn contains(&self, msg_id: &EcdsaMessageId) -> bool {
-        self.unvalidated.as_pool_section().contains(msg_id)
-            || self.validated.as_pool_section().contains(msg_id)
-    }
-
-    fn get_validated_by_identifier(&self, msg_id: &EcdsaMessageId) -> Option<EcdsaMessage> {
+    fn get(&self, msg_id: &EcdsaMessageId) -> Option<EcdsaMessage> {
         self.validated.as_pool_section().get(msg_id)
     }
 
-    fn get_all_validated_by_filter(&self, _filter: &()) -> Box<dyn Iterator<Item = EcdsaMessage>> {
+    fn get_all_validated(&self) -> Box<dyn Iterator<Item = EcdsaMessage>> {
         Box::new(std::iter::empty())
     }
 }
@@ -542,8 +537,7 @@ mod tests {
         assert_eq!(validated.len(), validated_expected.len());
         for id in &validated {
             assert!(validated_expected.contains(id));
-            assert!(ecdsa_pool.contains(id));
-            assert!(ecdsa_pool.get_validated_by_identifier(id).is_some());
+            assert!(ecdsa_pool.get(id).is_some());
 
             assert!(ecdsa_pool.validated().contains(id));
             assert!(ecdsa_pool.validated().get(id).is_some());
@@ -555,8 +549,7 @@ mod tests {
         assert_eq!(unvalidated.len(), unvalidated_expected.len());
         for id in &unvalidated {
             assert!(unvalidated_expected.contains(id));
-            assert!(ecdsa_pool.contains(id));
-            assert!(ecdsa_pool.get_validated_by_identifier(id).is_none());
+            assert!(ecdsa_pool.get(id).is_none());
 
             assert!(ecdsa_pool.unvalidated().contains(id));
             assert!(ecdsa_pool.unvalidated().get(id).is_some());

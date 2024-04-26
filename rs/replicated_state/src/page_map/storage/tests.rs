@@ -1044,20 +1044,25 @@ fn test_make_none_merge_candidate() {
 #[test]
 fn test_make_merge_candidates_to_overlay() {
     let tempdir = tempdir().unwrap();
+    let lsmt_config = LsmtConfig {
+        lsmt_status: FlagStatus::Enabled,
+        shard_num_pages: 15,
+    };
+
     // 000002 |xx|
     // 000001 |x|
-    // 000000 |xxxxxxxxxx|
+    // 000000 |xx...x| |xx...x| |xx...x|
     // Need to merge top two to reach pyramid.
     let instructions = vec![
-        WriteOverlay((0..15).collect()),
-        WriteOverlay((0..1).collect()),
-        WriteOverlay((0..2).collect()),
+        WriteOverlay((0..40).collect()), // 3 files created
+        WriteOverlay((0..1).collect()),  // 1 file created
+        WriteOverlay((0..2).collect()),  // 1 file created
     ];
 
-    write_overlays_and_verify_with_tempdir(instructions, &lsmt_config_unsharded(), &tempdir);
+    write_overlays_and_verify_with_tempdir(instructions, &lsmt_config, &tempdir);
     let storage_files = storage_files(tempdir.path());
     assert!(storage_files.base.is_none());
-    assert_eq!(storage_files.overlays.len(), 3);
+    assert_eq!(storage_files.overlays.len(), 5);
 
     let merge_candidates = MergeCandidate::new(
         &ShardedTestStorageLayout {
@@ -1066,8 +1071,8 @@ fn test_make_merge_candidates_to_overlay() {
             overlay_suffix: "vmemory_0.overlay".to_owned(),
         },
         Height::from(3),
-        10, /* num_pages */
-        &lsmt_config_unsharded(),
+        15, /* num_pages */
+        &lsmt_config,
     )
     .unwrap();
     assert_eq!(merge_candidates.len(), 1);
@@ -1076,7 +1081,26 @@ fn test_make_merge_candidates_to_overlay() {
         MergeDestination::SingleShardOverlay(tempdir.path().join("000003_000_vmemory_0.overlay"))
     );
     assert!(merge_candidates[0].base.is_none());
-    assert_eq!(merge_candidates[0].overlays, storage_files.overlays[1..3]);
+    assert_eq!(merge_candidates[0].overlays, storage_files.overlays[3..5]);
+    assert_eq!(merge_candidates[0].num_files_before, 3); // only shard 0 to be merged, containing 3 overlays
+    assert_eq!(
+        merge_candidates[0].storage_size_bytes_before,
+        [
+            &storage_files.overlays[0],
+            &storage_files.overlays[3],
+            &storage_files.overlays[4]
+        ]
+        .iter()
+        .map(|p| p.metadata().unwrap().len())
+        .sum::<u64>()
+    );
+    assert_eq!(
+        merge_candidates[0].input_size_bytes,
+        storage_files.overlays[3..5]
+            .iter()
+            .map(|p| p.metadata().unwrap().len())
+            .sum::<u64>()
+    );
 }
 
 #[test]

@@ -334,7 +334,7 @@ fn should_display_rejected_deposits() {
             &vec![
                 "0x05c6ec45699c9a6a4b1a4ea2058b0cee852ea2f19b18fb8313c04bf8156efde4",
                 "11",
-                "failed to decode principal",
+                "Invalid deposit: failed to decode principal",
             ],
         )
         .has_rejected_deposits(
@@ -342,7 +342,7 @@ fn should_display_rejected_deposits() {
             &vec![
                 "0x09a5ee10c942f99b79cabcfb9647fc06e79489c6a8e96d39faed4f3ac6bc83d3",
                 "0",
-                "failed to decode principal",
+                "Invalid deposit: failed to decode principal",
             ],
         );
 }

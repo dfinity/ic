@@ -617,3 +617,31 @@ pub async fn bitcoin_set_config_by_proposal(
     )
     .await
 }
+
+pub async fn invalid_bitcoin_set_config_by_proposal(
+    governance: &Canister<'_>,
+    set_config_request: SetConfigRequest,
+) -> ProposalId {
+    // An invalid proposal payload to set the Bitcoin configuration.
+    #[derive(candid::CandidType, serde::Serialize, candid::Deserialize, Clone, Debug)]
+    pub struct BitcoinSetConfigProposalInvalid {
+        pub payload: Vec<u8>,
+    }
+
+    let proposal = BitcoinSetConfigProposalInvalid {
+        payload: Encode!(&set_config_request).unwrap(),
+    };
+
+    // Submitting a proposal also implicitly records a vote from the proposer,
+    // which with TEST_NEURON_1 is enough to trigger execution.
+    submit_external_update_proposal(
+        governance,
+        Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
+        NeuronId(TEST_NEURON_1_ID),
+        NnsFunction::BitcoinSetConfig,
+        proposal,
+        "Set Bitcoin Config".to_string(),
+        "".to_string(),
+    )
+    .await
+}

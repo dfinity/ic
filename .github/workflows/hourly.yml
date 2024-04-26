@@ -22,7 +22,7 @@ jobs:
     runs-on:
       labels: bazel-runner-large
     container:
-      image: dfinity/ic-build:abbdc66c19bf32eda2109f97e39fde519ef9b452ab54aee52b234af8638983d8
+      image: dfinity/ic-build:e3ca31c9688e13fd6caec30a0cec5d9a2b3ff424db4f4243ebab4c30f9f5e869
     timeout-minutes: 120
     if: ${{ vars.RUN_CI == 'true' }} # needed to avoid running on public dfinity org until published
     steps:

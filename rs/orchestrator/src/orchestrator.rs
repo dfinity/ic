@@ -119,6 +119,8 @@ impl Orchestrator {
 
         let version = replica_version.clone();
         thread::spawn(move || loop {
+            // Sleep early because IPv4 takes several minutes to configure
+            thread::sleep(Duration::from_secs(10 * 60));
             let (ipv4, ipv6) = Self::get_ip_addresses();
 
             let message = indoc::formatdoc!(
@@ -132,7 +134,6 @@ impl Orchestrator {
             );
 
             UtilityCommand::notify_host(&message, 1);
-            thread::sleep(Duration::from_secs(15 * 60));
         });
 
         let registry_replicator = Arc::new(RegistryReplicator::new_from_config(

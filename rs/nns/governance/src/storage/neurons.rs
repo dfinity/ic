@@ -1,5 +1,5 @@
 use crate::{
-    neuron::types::{DecomposedNeuron, Neuron},
+    neuron::{DecomposedNeuron, Neuron},
     neuron_store::NeuronStoreError,
     pb::v1::{
         neuron::Followees, AbridgedNeuron, BallotInfo, KnownNeuronData, NeuronStakeTransfer, Topic,

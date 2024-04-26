@@ -350,7 +350,7 @@ fn start_consensus(
                 .expect("Channel should not be closed");
         });
 
-        let (client, jh) = create_consensus_handlers(
+        let (client, jh) = create_artifact_handler(
             send_advert,
             consensus_setup,
             time_source.clone(),
@@ -410,7 +410,7 @@ fn start_consensus(
         let certifier_gossip = Arc::new(certifier_gossip);
 
         // Create the certification client.
-        let (client, jh) = create_certification_handlers(
+        let (client, jh) = create_artifact_handler(
             send_advert,
             certifier,
             Arc::clone(&time_source) as Arc<_>,
@@ -434,7 +434,7 @@ fn start_consensus(
         });
         // Create the DKG client.
         let dkg_gossip = Arc::new(dkg::DkgGossipImpl {});
-        let (client, jh) = create_dkg_handlers(
+        let (client, jh) = create_artifact_handler(
             send_advert,
             dkg::DkgImpl::new(
                 node_id,
@@ -480,7 +480,7 @@ fn start_consensus(
             metrics_registry.clone(),
         ));
 
-        let (client, jh) = create_ecdsa_handlers(
+        let (client, jh) = create_artifact_handler(
             send_advert,
             ecdsa::EcdsaImpl::new(
                 node_id,
@@ -514,7 +514,7 @@ fn start_consensus(
             log.clone(),
         ));
 
-        let (client, jh) = create_https_outcalls_handlers(
+        let (client, jh) = create_artifact_handler(
             send_advert,
             CanisterHttpPoolManagerImpl::new(
                 Arc::clone(&state_reader),

@@ -149,15 +149,11 @@ impl MutablePool<DkgArtifact> for DkgPoolImpl {
 }
 
 impl ValidatedPoolReader<DkgArtifact> for DkgPoolImpl {
-    fn contains(&self, id: &DkgMessageId) -> bool {
-        self.unvalidated.contains_key(id) || self.validated.contains_key(id)
-    }
-
-    fn get_validated_by_identifier(&self, id: &DkgMessageId) -> Option<dkg::Message> {
+    fn get(&self, id: &DkgMessageId) -> Option<dkg::Message> {
         self.validated.get(id).cloned()
     }
 
-    fn get_all_validated_by_filter(&self, _filter: &()) -> Box<dyn Iterator<Item = dkg::Message>> {
+    fn get_all_validated(&self) -> Box<dyn Iterator<Item = dkg::Message>> {
         Box::new(std::iter::empty())
     }
 }
@@ -235,11 +231,11 @@ mod test {
             peer_id: node_test_id(1),
             timestamp: UNIX_EPOCH,
         });
-        assert!(pool.contains(&id));
+        assert!(pool.unvalidated.contains_key(&id));
 
         // remove unvalidated
         pool.remove(&id);
-        assert!(!pool.contains(&id));
+        assert!(!pool.unvalidated.contains_key(&id));
     }
 
     #[test]

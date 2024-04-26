@@ -15,7 +15,7 @@ use ic_nns_governance::{
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     governance::{get_pending_proposals, submit_external_update_proposal, wait_for_final_state},
-    itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
     registry::get_value_or_panic,
 };
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
@@ -35,7 +35,7 @@ use std::str::FromStr;
 
 #[test]
 fn test_submit_and_accept_update_subnet_proposal() {
-    local_test_on_nns_subnet(|runtime| {
+    state_machine_test_on_nns_subnet(|runtime| {
         async move {
             let subnet_id = SubnetId::from(
                 PrincipalId::from_str(

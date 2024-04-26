@@ -41,14 +41,14 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             })
         }
 
+        let start_time = self.metrics.now();
+
         let key = deserialize_transcript(key_raw.as_ref())?;
 
         let kappa_unmasked = deserialize_transcript(kappa_unmasked_raw.as_ref())?;
         let lambda_masked = deserialize_transcript(lambda_masked_raw.as_ref())?;
         let kappa_times_lambda = deserialize_transcript(kappa_times_lambda_raw.as_ref())?;
         let key_times_lambda = deserialize_transcript(key_times_lambda_raw.as_ref())?;
-
-        let start_time = self.metrics.now();
         let result = self.ecdsa_sign_share_internal(
             &derivation_path,
             &hashed_message[..],

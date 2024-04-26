@@ -18,7 +18,8 @@ use ic_replicated_state::{
     canister_state::execution_state::{CustomSection, CustomSectionType, WasmMetadata},
     metadata_state::subnet_call_context_manager::{BitcoinGetSuccessorsContext, SubnetCallContext},
     replicated_state::{MemoryTaken, PeekableOutputIterator, ReplicatedStateMessageRouting},
-    CanisterState, IngressHistoryState, ReplicatedState, SchedulerState, StateError, SystemState,
+    CanisterState, IngressHistoryState, NextInputQueue, ReplicatedState, SchedulerState,
+    StateError, SystemState,
 };
 use ic_test_utilities_state::{arb_replicated_state_with_queues, ExecutionStateBuilder};
 use ic_test_utilities_types::ids::{canister_test_id, message_test_id, user_test_id, SUBNET_1};
@@ -37,6 +38,7 @@ use proptest::prelude::*;
 use std::collections::{BTreeMap, VecDeque};
 use std::mem::size_of;
 use std::sync::Arc;
+use strum::IntoEnumIterator;
 
 const SUBNET_ID: SubnetId = SubnetId::new(PrincipalId::new(29, [0xfc; 29]));
 const CANISTER_ID: CanisterId = CanisterId::from_u64(42);
@@ -844,6 +846,30 @@ fn split() {
     expected.metadata.split_from = None;
     // Everything else should be the same as in phase 1.
     assert_eq!(expected, state_b);
+}
+
+#[test]
+fn next_input_queue_round_trip() {
+    use ic_protobuf::state::queues::v1::canister_queues as pb;
+
+    for initial in NextInputQueue::iter() {
+        let encoded = pb::NextInputQueue::from(&initial);
+        let round_trip = NextInputQueue::from(encoded);
+
+        assert_eq!(initial, round_trip);
+    }
+}
+
+#[test]
+fn compatibility_for_next_input_queue() {
+    // If this fails, you are making a potentially incompatible change to `NextInputQueue`.
+    // See note [Handling changes to Enums in Replicated State] for how to proceed.
+    assert_eq!(
+        NextInputQueue::iter()
+            .map(|x| x as i32)
+            .collect::<Vec<i32>>(),
+        [0, 1, 2]
+    );
 }
 
 proptest! {

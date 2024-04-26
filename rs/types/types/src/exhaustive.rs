@@ -1,6 +1,5 @@
 //! Implementations and serialization tests of the ExhaustiveSet trait
 
-use crate::batch::ConsensusResponse;
 use crate::consensus::hashed::Hashed;
 use crate::consensus::idkg::ecdsa::{
     PreSignatureQuadrupleRef, QuadrupleInCreation, ThresholdEcdsaSigInputsRef,
@@ -26,7 +25,6 @@ use crate::crypto::{
     crypto_hash, AlgorithmId, BasicSig, BasicSigOf, CombinedThresholdSig, CombinedThresholdSigOf,
     CryptoHash, CryptoHashOf, CryptoHashable, Signed,
 };
-use crate::messages::Response;
 use crate::signature::{BasicSignature, BasicSignatureBatch, ThresholdSignature};
 use crate::xnet::CertifiedStreamSlice;
 use crate::{CryptoHashOfState, ReplicaVersion};
@@ -38,7 +36,9 @@ use ic_btc_types_internal::{
 use ic_crypto_internal_types::NodeIndex;
 use ic_error_types::RejectCode;
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId};
+use ic_management_canister_types::{
+    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
+};
 use ic_protobuf::types::v1 as pb;
 use phantom_newtype::{AmountOf, Id};
 use prost::Message;
@@ -345,6 +345,24 @@ impl ExhaustiveSet for EcdsaKeyId {
             .into_iter()
             .map(|elem| Self {
                 curve: elem.0,
+                name: elem.1,
+            })
+            .collect()
+    }
+}
+
+impl ExhaustiveSet for SchnorrAlgorithm {
+    fn exhaustive_set<R: RngCore + CryptoRng>(_: &mut R) -> Vec<Self> {
+        SchnorrAlgorithm::iter().collect()
+    }
+}
+
+impl ExhaustiveSet for SchnorrKeyId {
+    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
+        <(SchnorrAlgorithm, String)>::exhaustive_set(rng)
+            .into_iter()
+            .map(|elem| Self {
+                algorithm: elem.0,
                 name: elem.1,
             })
             .collect()
@@ -740,8 +758,8 @@ impl ExhaustiveSet for EcdsaReshareRequest {
         DerivedEcdsaReshareRequest::exhaustive_set(rng)
             .into_iter()
             .map(|r| EcdsaReshareRequest {
-                key_id: r.key_id,
-                master_key_id: None,
+                key_id: r.key_id.clone(),
+                master_key_id: Some(MasterPublicKeyId::Ecdsa(r.key_id)),
                 receiving_node_ids: r.receiving_node_ids,
                 registry_version: r.registry_version,
             })
@@ -767,15 +785,6 @@ impl ExhaustiveSet for EcdsaKeyTranscript {
                 current: r.current,
                 next_in_creation: r.next_in_creation,
             })
-            .collect()
-    }
-}
-
-impl ExhaustiveSet for ConsensusResponse {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
-        Response::exhaustive_set(rng)
-            .into_iter()
-            .map(|r| ConsensusResponse::new(r.originator_reply_callback, r.response_payload))
             .collect()
     }
 }

@@ -79,7 +79,7 @@ async fn rpc_handler<Artifact: ArtifactKind>(
         let artifact = pool
             .read()
             .unwrap()
-            .get_validated_by_identifier(&id)
+            .get(&id)
             .ok_or(StatusCode::NO_CONTENT)?;
         Ok::<_, StatusCode>(Bytes::from(Artifact::PbMessage::proxy_encode(artifact)))
     });
@@ -1786,14 +1786,11 @@ mod tests {
             type PbIdError = Infallible;
             type PbMessageError = Infallible;
             type PbAttributeError = Infallible;
-            type PbFilterError = Infallible;
             type Message = Vec<u8>;
             type PbId = ();
             type Id = ();
             type PbAttribute = ();
             type Attribute = ();
-            type PbFilter = ();
-            type Filter = ();
 
             fn message_to_advert(_: &Self::Message) -> Advert<BigArtifact> {
                 todo!()

@@ -20,6 +20,7 @@ use ic_state_machine_tests::{
 };
 use ic_types::{ingress::WasmResult, Cycles, NumInstructions};
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+use more_asserts::assert_ge;
 
 const INITIAL_CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
 
@@ -242,7 +243,7 @@ impl DtsEnvConfig {
                     .ten_update_instructions_execution_fee
                     * (num_pages * dirty_page_overhead / 10)
             }
-            MeteringType::Old | MeteringType::None => Cycles::new(0),
+            MeteringType::None => Cycles::new(0),
         }
     }
 }
@@ -1792,7 +1793,7 @@ fn dts_canister_uninstalled_due_resource_charges_with_aborted_update() {
                 assert_eq!(
                     err.description(),
                     format!(
-                        "Attempt to execute a message on canister {} which contains no Wasm module",
+                        "Error from Canister {}: Attempt to execute a message, but the canister contains no Wasm module",
                         canisters[i]
                     )
                 );
@@ -1800,7 +1801,7 @@ fn dts_canister_uninstalled_due_resource_charges_with_aborted_update() {
             }
         }
     }
-    assert!(errors >= 1);
+    assert_ge!(errors, 1);
 }
 
 #[test]

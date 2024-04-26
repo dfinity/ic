@@ -369,6 +369,10 @@ fn build_types_proto(def: &Path, out: &Path) {
         ".types.v1.ConsensusMessage",
         "#[allow(clippy::large_enum_variant)]",
     );
+    config.type_attribute(
+        ".types.v1.PreSignatureInCreation",
+        "#[allow(clippy::large_enum_variant)]",
+    );
     config.type_attribute(".types.v1.Artifact", "#[allow(clippy::large_enum_variant)]");
     config.type_attribute(
         ".types.v1.GossipChunk",
@@ -385,9 +389,9 @@ fn build_types_proto(def: &Path, out: &Path) {
         def.join("types/v1/consensus.proto"),
         def.join("types/v1/idkg.proto"),
         def.join("types/v1/signature.proto"),
-        def.join("types/v1/p2p.proto"),
         def.join("types/v1/canister_http.proto"),
         def.join("types/v1/artifact.proto"),
+        def.join("types/v1/errors.proto"),
     ];
     compile_protos(config, def, &files);
 }

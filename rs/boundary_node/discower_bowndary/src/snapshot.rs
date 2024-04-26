@@ -8,7 +8,7 @@ use std::{
     },
 };
 
-pub const SEED_DOMAIN: &str = "ic0.app";
+pub const IC0_SEED_DOMAIN: &str = "ic0.app";
 
 #[derive(Debug, Clone)]
 pub enum NodesSnapshotError {}
@@ -26,10 +26,10 @@ pub struct NodesChange {
 }
 
 impl Snapshot {
-    pub fn new() -> Self {
+    pub fn new(seed_domains: Vec<&str>) -> Self {
         Self {
             current_idx: Arc::new(AtomicUsize::new(0)),
-            healthy_nodes: HashSet::from([SEED_DOMAIN.to_string()]),
+            healthy_nodes: HashSet::from_iter(seed_domains.into_iter().map(|s| s.to_string())),
         }
     }
 

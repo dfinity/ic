@@ -13,6 +13,7 @@ use ic_base_types::PrincipalId;
 use ic_btc_types_internal::BitcoinAdapterResponse;
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::CanisterOutOfCyclesError;
+use ic_protobuf::state::queues::v1::canister_queues::NextInputQueue as ProtoNextInputQueue;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
@@ -28,6 +29,7 @@ use rand_chacha::ChaChaRng;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::Arc;
+use strum_macros::EnumIter;
 
 /// Maximum message length of a synthetic reject response produced by message
 /// routing.
@@ -43,15 +45,39 @@ pub enum InputQueueType {
 }
 
 /// Next input queue: round-robin across local subnet; ingress; or remote subnet.
-#[derive(Clone, Copy, Eq, Debug, PartialEq, Default)]
+#[derive(Clone, Copy, Eq, EnumIter, Debug, PartialEq, Default)]
 pub enum NextInputQueue {
     /// Local subnet input messages.
     #[default]
-    LocalSubnet,
+    LocalSubnet = 0,
     /// Ingress messages.
-    Ingress,
+    Ingress = 1,
     /// Remote subnet input messages.
-    RemoteSubnet,
+    RemoteSubnet = 2,
+}
+
+impl From<&NextInputQueue> for ProtoNextInputQueue {
+    fn from(next: &NextInputQueue) -> Self {
+        match next {
+            // Encode `LocalSubnet` as `Unspecified` because it is decoded as such (and it
+            // serializes to zero bytes).
+            NextInputQueue::LocalSubnet => ProtoNextInputQueue::Unspecified,
+            NextInputQueue::Ingress => ProtoNextInputQueue::Ingress,
+            NextInputQueue::RemoteSubnet => ProtoNextInputQueue::RemoteSubnet,
+        }
+    }
+}
+
+impl From<ProtoNextInputQueue> for NextInputQueue {
+    fn from(next: ProtoNextInputQueue) -> Self {
+        match next {
+            ProtoNextInputQueue::Unspecified | ProtoNextInputQueue::LocalSubnet => {
+                NextInputQueue::LocalSubnet
+            }
+            ProtoNextInputQueue::Ingress => NextInputQueue::Ingress,
+            ProtoNextInputQueue::RemoteSubnet => NextInputQueue::RemoteSubnet,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, Hash)]

@@ -109,14 +109,6 @@ impl StateMachine for StateMachineImpl {
                 .observe_no_canister_allocation_range(&self.log, message);
         }
 
-        if !state.consensus_queue.is_empty() {
-            fatal!(
-                self.log,
-                "Consensus queue not empty at the beginning of round {:?}.",
-                batch.batch_number
-            )
-        }
-
         // Time out requests.
         // let timed_out_requests = state.time_out_requests();
         // FIXME: We're now also timing out responses, update the relevant metrics.
@@ -158,6 +150,15 @@ impl StateMachine for StateMachineImpl {
             execution_round_type,
             registry_settings,
         );
+
+        if !state_after_execution.consensus_queue.is_empty() {
+            fatal!(
+                self.log,
+                "Consensus queue not empty at the end of round {:?}.",
+                batch.batch_number
+            )
+        }
+
         self.observe_phase_duration(PHASE_EXECUTION, &since);
 
         let since = Instant::now();

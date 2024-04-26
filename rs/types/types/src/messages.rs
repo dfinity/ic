@@ -41,6 +41,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt::{self, Debug, Display, Formatter};
 use std::mem::size_of;
 use std::{convert::TryFrom, sync::Arc};
+use strum_macros::EnumIter;
 pub use webauthn::{WebAuthnEnvelope, WebAuthnSignature};
 
 /// Same as [MAX_INTER_CANISTER_PAYLOAD_IN_BYTES], but of a primitive type
@@ -432,10 +433,10 @@ impl TryFrom<CanisterMessage> for CanisterCall {
 
 /// A canister task can be thought of as a special system message that the IC
 /// sends to the canister to execute its heartbeat or the global timer method.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, EnumIter, Hash)]
 pub enum CanisterTask {
-    Heartbeat,
-    GlobalTimer,
+    Heartbeat = 1,
+    GlobalTimer = 2,
 }
 
 impl From<CanisterTask> for SystemMethod {
@@ -452,6 +453,32 @@ impl Display for CanisterTask {
         match self {
             Self::Heartbeat => write!(f, "Heartbeat task"),
             Self::GlobalTimer => write!(f, "Global timer task"),
+        }
+    }
+}
+
+impl From<&CanisterTask> for pb::execution_task::CanisterTask {
+    fn from(task: &CanisterTask) -> Self {
+        match task {
+            CanisterTask::Heartbeat => pb::execution_task::CanisterTask::Heartbeat,
+            CanisterTask::GlobalTimer => pb::execution_task::CanisterTask::Timer,
+        }
+    }
+}
+
+impl TryFrom<pb::execution_task::CanisterTask> for CanisterTask {
+    type Error = ProxyDecodeError;
+
+    fn try_from(task: pb::execution_task::CanisterTask) -> Result<Self, Self::Error> {
+        match task {
+            pb::execution_task::CanisterTask::Unspecified => {
+                Err(ProxyDecodeError::ValueOutOfRange {
+                    typ: "CanisterTask",
+                    err: format!("Unknown value for canister task {:?}", task),
+                })
+            }
+            pb::execution_task::CanisterTask::Heartbeat => Ok(CanisterTask::Heartbeat),
+            pb::execution_task::CanisterTask::Timer => Ok(CanisterTask::GlobalTimer),
         }
     }
 }
@@ -512,6 +539,7 @@ mod tests {
     use maplit::btreemap;
     use serde_cbor::Value;
     use std::{convert::TryFrom, io::Cursor};
+    use strum::IntoEnumIterator;
 
     fn debug_blob(v: Vec<u8>) -> String {
         format!("{:?}", Blob(v))
@@ -781,5 +809,25 @@ mod tests {
         let mut buffer = Cursor::new(&bytes);
         let signed_ingress1: SignedIngress = bincode::deserialize_from(&mut buffer).unwrap();
         assert_eq!(signed_ingress, signed_ingress1);
+    }
+
+    #[test]
+    fn canister_task_proto_round_trip() {
+        for initial in CanisterTask::iter() {
+            let encoded = pb::execution_task::CanisterTask::from(&initial);
+            let round_trip = CanisterTask::try_from(encoded).unwrap();
+
+            assert_eq!(initial, round_trip);
+        }
+    }
+
+    #[test]
+    fn compatibility_for_canister_task() {
+        // If this fails, you are making a potentially incompatible change to `CanisterTask`.
+        // See note [Handling changes to Enums in Replicated State] for how to proceed.
+        assert_eq!(
+            CanisterTask::iter().map(|x| x as i32).collect::<Vec<i32>>(),
+            [1, 2]
+        );
     }
 }

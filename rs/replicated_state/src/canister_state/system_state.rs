@@ -51,18 +51,18 @@ pub const MAX_CANISTER_HISTORY_CHANGES: u64 = 20;
 /// Enumerates use cases of consumed cycles.
 #[derive(Clone, Copy, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize, EnumIter)]
 pub enum CyclesUseCase {
-    Memory,
-    ComputeAllocation,
-    IngressInduction,
-    Instructions,
-    RequestAndResponseTransmission,
-    Uninstall,
-    CanisterCreation,
-    ECDSAOutcalls,
-    HTTPOutcalls,
-    DeletedCanisters,
-    NonConsumed,
-    BurnedCycles,
+    Memory = 1,
+    ComputeAllocation = 2,
+    IngressInduction = 3,
+    Instructions = 4,
+    RequestAndResponseTransmission = 5,
+    Uninstall = 6,
+    CanisterCreation = 7,
+    ECDSAOutcalls = 8,
+    HTTPOutcalls = 9,
+    DeletedCanisters = 10,
+    NonConsumed = 11,
+    BurnedCycles = 12,
 }
 
 impl CyclesUseCase {
@@ -516,11 +516,8 @@ impl From<&ExecutionTask> for pb::ExecutionTask {
                     CanisterMessageOrTask::Message(CanisterMessage::Ingress(v)) => {
                         PbInput::Ingress(v.as_ref().into())
                     }
-                    CanisterMessageOrTask::Task(CanisterTask::Heartbeat) => {
-                        PbInput::Task(PbCanisterTask::Heartbeat as i32)
-                    }
-                    CanisterMessageOrTask::Task(CanisterTask::GlobalTimer) => {
-                        PbInput::Task(PbCanisterTask::Timer as i32)
+                    CanisterMessageOrTask::Task(task) => {
+                        PbInput::Task(PbCanisterTask::from(task).into())
                     }
                 };
                 Self {
@@ -582,22 +579,12 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
                         CanisterMessage::Ingress(Arc::new(v.try_into()?)),
                     ),
                     PbInput::Task(val) => {
-                        let task = PbCanisterTask::try_from(val).map_err(|_| {
-                            ProxyDecodeError::ValueOutOfRange {
+                        let task = CanisterTask::try_from(PbCanisterTask::try_from(val).map_err(
+                            |_| ProxyDecodeError::ValueOutOfRange {
                                 typ: "CanisterTask",
                                 err: format!("Unexpected value of canister task: {}", val),
-                            }
-                        })?;
-                        let task = match task {
-                            PbCanisterTask::Unspecified => {
-                                return Err(ProxyDecodeError::ValueOutOfRange {
-                                    typ: "CanisterTask",
-                                    err: "Unexpected value: Unspecified".to_string(),
-                                });
-                            }
-                            PbCanisterTask::Heartbeat => CanisterTask::Heartbeat,
-                            PbCanisterTask::Timer => CanisterTask::GlobalTimer,
-                        };
+                            },
+                        )?)?;
                         CanisterMessageOrTask::Task(task)
                     }
                 };

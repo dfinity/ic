@@ -662,7 +662,7 @@ impl StateMachineBuilder {
             is_root_subnet: false,
             seq_no: 0,
             with_extra_canister_range: None,
-            dts: false,
+            dts: true,
         }
     }
 
@@ -803,8 +803,8 @@ impl StateMachineBuilder {
     }
 
     /// Only use from pocket-ic-server binary.
-    pub fn with_dts(self) -> Self {
-        Self { dts: true, ..self }
+    pub fn no_dts(self) -> Self {
+        Self { dts: false, ..self }
     }
 
     pub fn build_internal(self) -> StateMachine {
@@ -1088,11 +1088,7 @@ impl StateMachine {
             sm_config.lsmt_config = lsmt_override;
         }
 
-        if !(dts
-            || (std::env::var("SANDBOX_BINARY").is_ok()
-                && std::env::var("LAUNCHER_BINARY").is_ok()
-                && std::env::var("COMPILER_BINARY").is_ok()))
-        {
+        if !dts {
             hypervisor_config.canister_sandboxing_flag = FlagStatus::Disabled;
             hypervisor_config.deterministic_time_slicing = FlagStatus::Disabled;
         }
@@ -2285,7 +2281,18 @@ impl StateMachine {
 
     /// Starts the canister with the specified ID.
     pub fn start_canister(&self, canister_id: CanisterId) -> Result<WasmResult, UserError> {
-        self.execute_ingress(
+        self.start_canister_as(PrincipalId::new_anonymous(), canister_id)
+    }
+
+    /// Starts the canister with the specified ID.
+    /// Use this if the `canister_id`` is controlled by `sender``.
+    pub fn start_canister_as(
+        &self,
+        sender: PrincipalId,
+        canister_id: CanisterId,
+    ) -> Result<WasmResult, UserError> {
+        self.execute_ingress_as(
+            sender,
             CanisterId::ic_00(),
             "start_canister",
             (CanisterIdRecord::from(canister_id)).encode(),
@@ -2294,7 +2301,18 @@ impl StateMachine {
 
     /// Stops the canister with the specified ID.
     pub fn stop_canister(&self, canister_id: CanisterId) -> Result<WasmResult, UserError> {
-        self.execute_ingress(
+        self.stop_canister_as(PrincipalId::new_anonymous(), canister_id)
+    }
+
+    /// Stops the canister with the specified ID.
+    /// Use this if the `canister_id`` is controlled by `sender``.
+    pub fn stop_canister_as(
+        &self,
+        sender: PrincipalId,
+        canister_id: CanisterId,
+    ) -> Result<WasmResult, UserError> {
+        self.execute_ingress_as(
+            sender,
             CanisterId::ic_00(),
             "stop_canister",
             (CanisterIdRecord::from(canister_id)).encode(),
@@ -2651,6 +2669,12 @@ impl StateMachine {
             .subnet_call_context_manager
             .canister_http_request_contexts
             .clone()
+    }
+
+    /// Returns the size estimate of canisters heap delta in bytes.
+    pub fn heap_delta_estimate_bytes(&self) -> u64 {
+        let state = self.state_manager.get_latest_state().take();
+        state.metadata.heap_delta_estimate.get()
     }
 
     pub fn deliver_query_stats(&self, query_stats: QueryStatsPayload) -> Height {

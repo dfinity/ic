@@ -1,6 +1,9 @@
 //! A crate that groups user-facing and internal error types and codes produced
 //! by the Internet Computer.
-use ic_protobuf::{proxy::ProxyDecodeError, state::ingress::v1::ErrorCode as ErrorCodeProto};
+use ic_protobuf::{
+    proxy::ProxyDecodeError, state::ingress::v1::ErrorCode as ErrorCodeProto,
+    types::v1::RejectCode as RejectCodeProto,
+};
 use ic_utils::str::StrEllipsize;
 use serde::{Deserialize, Serialize};
 use std::{convert::TryFrom, fmt};
@@ -40,6 +43,36 @@ impl RejectCode {
             RejectCode::DestinationInvalid => "DESTINATION_INVALID",
             RejectCode::CanisterReject => "CANISTER_REJECT",
             RejectCode::CanisterError => "CANISTER_ERROR",
+        }
+    }
+}
+
+impl From<RejectCode> for RejectCodeProto {
+    fn from(value: RejectCode) -> Self {
+        match value {
+            RejectCode::SysFatal => RejectCodeProto::SysFatal,
+            RejectCode::SysTransient => RejectCodeProto::SysTransient,
+            RejectCode::DestinationInvalid => RejectCodeProto::DestinationInvalid,
+            RejectCode::CanisterReject => RejectCodeProto::CanisterReject,
+            RejectCode::CanisterError => RejectCodeProto::CanisterError,
+        }
+    }
+}
+
+impl TryFrom<RejectCodeProto> for RejectCode {
+    type Error = ProxyDecodeError;
+
+    fn try_from(value: RejectCodeProto) -> Result<Self, Self::Error> {
+        match value {
+            RejectCodeProto::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
+                typ: "RejectCode",
+                err: format!("Unexpected value for reject code {:?}", value),
+            }),
+            RejectCodeProto::SysFatal => Ok(RejectCode::SysFatal),
+            RejectCodeProto::SysTransient => Ok(RejectCode::SysTransient),
+            RejectCodeProto::DestinationInvalid => Ok(RejectCode::DestinationInvalid),
+            RejectCodeProto::CanisterReject => Ok(RejectCode::CanisterReject),
+            RejectCodeProto::CanisterError => Ok(RejectCode::CanisterError),
         }
     }
 }
@@ -214,86 +247,6 @@ pub enum ErrorCode {
     CanisterWasmModuleNotFound = 537,
     CanisterAlreadyInstalled = 538,
     CanisterWasmMemoryLimitExceeded = 539,
-}
-
-impl TryFrom<u64> for ErrorCode {
-    type Error = TryFromError;
-    fn try_from(err: u64) -> Result<ErrorCode, Self::Error> {
-        match err {
-            // 1xx -- `RejectCode::SysFatal`
-            101 => Ok(ErrorCode::SubnetOversubscribed),
-            102 => Ok(ErrorCode::MaxNumberOfCanistersReached),
-            // 2xx -- `RejectCode::SysTransient`
-            201 => Ok(ErrorCode::CanisterQueueFull),
-            202 => Ok(ErrorCode::IngressMessageTimeout),
-            203 => Ok(ErrorCode::CanisterQueueNotEmpty),
-            204 => Ok(ErrorCode::IngressHistoryFull),
-            205 => Ok(ErrorCode::CanisterIdAlreadyExists),
-            206 => Ok(ErrorCode::StopCanisterRequestTimeout),
-            207 => Ok(ErrorCode::CanisterOutOfCycles),
-            208 => Ok(ErrorCode::CertifiedStateUnavailable),
-            209 => Ok(ErrorCode::CanisterInstallCodeRateLimited),
-            210 => Ok(ErrorCode::CanisterHeapDeltaRateLimited),
-            // 3xx -- `RejectCode::DestinationInvalid`
-            301 => Ok(ErrorCode::CanisterNotFound),
-            // TODO: RUN-948: Backward compatibility
-            302 => Ok(ErrorCode::DeprecatedCanisterMethodNotFound),
-            303 => Ok(ErrorCode::DeprecatedCanisterAlreadyInstalled),
-            304 => Ok(ErrorCode::DeprecatedCanisterWasmModuleNotFound),
-            305 => Ok(ErrorCode::CanisterSnapshotNotFound),
-            // 4xx -- `RejectCode::CanisterReject`
-            // 401
-            402 => Ok(ErrorCode::InsufficientMemoryAllocation),
-            403 => Ok(ErrorCode::InsufficientCyclesForCreateCanister),
-            404 => Ok(ErrorCode::SubnetNotFound),
-            405 => Ok(ErrorCode::CanisterNotHostedBySubnet),
-            406 => Ok(ErrorCode::CanisterRejectedMessage),
-            407 => Ok(ErrorCode::UnknownManagementMessage),
-            408 => Ok(ErrorCode::InvalidManagementPayload),
-            // 5xx -- `RejectCode::CanisterError`
-            501 => Ok(ErrorCode::DeprecatedCanisterOutOfCycles),
-            502 => Ok(ErrorCode::CanisterTrapped),
-            503 => Ok(ErrorCode::CanisterCalledTrap),
-            504 => Ok(ErrorCode::CanisterContractViolation),
-            505 => Ok(ErrorCode::CanisterInvalidWasm),
-            506 => Ok(ErrorCode::CanisterDidNotReply),
-            507 => Ok(ErrorCode::CanisterOutOfMemory),
-            508 => Ok(ErrorCode::CanisterStopped),
-            509 => Ok(ErrorCode::CanisterStopping),
-            510 => Ok(ErrorCode::CanisterNotStopped),
-            511 => Ok(ErrorCode::CanisterStoppingCancelled),
-            512 => Ok(ErrorCode::CanisterInvalidController),
-            513 => Ok(ErrorCode::CanisterFunctionNotFound),
-            514 => Ok(ErrorCode::CanisterNonEmpty),
-            // TODO: RUN-948: Backward compatibility
-            515 => Ok(ErrorCode::DeprecatedCertifiedStateUnavailable),
-            516 => Ok(ErrorCode::DeprecatedCanisterRejectedMessage),
-            517 => Ok(ErrorCode::QueryCallGraphLoopDetected),
-            518 => Ok(ErrorCode::DeprecatedUnknownManagementMessage),
-            519 => Ok(ErrorCode::DeprecatedInvalidManagementPayload),
-            520 => Ok(ErrorCode::InsufficientCyclesInCall),
-            521 => Ok(ErrorCode::CanisterWasmEngineError),
-            522 => Ok(ErrorCode::CanisterInstructionLimitExceeded),
-            523 => Ok(ErrorCode::DeprecatedCanisterInstallCodeRateLimited),
-            524 => Ok(ErrorCode::CanisterMemoryAccessLimitExceeded),
-            525 => Ok(ErrorCode::QueryCallGraphTooDeep),
-            526 => Ok(ErrorCode::QueryCallGraphTotalInstructionLimitExceeded),
-            527 => Ok(ErrorCode::CompositeQueryCalledInReplicatedMode),
-            528 => Ok(ErrorCode::QueryTimeLimitExceeded),
-            529 => Ok(ErrorCode::QueryCallGraphInternal),
-            530 => Ok(ErrorCode::InsufficientCyclesInComputeAllocation),
-            531 => Ok(ErrorCode::InsufficientCyclesInMemoryAllocation),
-            532 => Ok(ErrorCode::InsufficientCyclesInMemoryGrow),
-            533 => Ok(ErrorCode::ReservedCyclesLimitExceededInMemoryAllocation),
-            534 => Ok(ErrorCode::ReservedCyclesLimitExceededInMemoryGrow),
-            535 => Ok(ErrorCode::InsufficientCyclesInMessageMemoryGrow),
-            536 => Ok(ErrorCode::CanisterMethodNotFound),
-            537 => Ok(ErrorCode::CanisterWasmModuleNotFound),
-            538 => Ok(ErrorCode::CanisterAlreadyInstalled),
-            539 => Ok(ErrorCode::CanisterWasmMemoryLimitExceeded),
-            _ => Err(TryFromError::ValueOutOfRange(err)),
-        }
-    }
 }
 
 impl TryFrom<ErrorCodeProto> for ErrorCode {
@@ -702,5 +655,44 @@ mod tests {
 
             assert_eq!(initial, round_trip);
         }
+    }
+
+    #[test]
+    #[rustfmt::skip]
+    fn compatibility_for_error_code() {
+        // If this fails, you are making a potentially incompatible change to `ErrorCode`.
+        // See note [Handling changes to Enums in Replicated State] for how to proceed.
+        assert_eq!(
+            ErrorCode::iter().map(|x| x as i32).collect::<Vec<i32>>(),
+            [
+                101, 102,
+                201, 202, 203, 204, 205, 206, 207, 208, 209, 210,
+                301, 302, 303, 304, 305,
+                402, 403, 404, 405, 406, 407, 408,
+                501, 502, 503, 504, 505, 506, 507, 508, 509, 510, 511, 512, 513,
+                514, 515, 516, 517, 518, 519, 520, 521, 522, 523, 524, 525, 526,
+                527, 528, 529, 530, 531, 532, 533, 534, 535, 536, 537, 538, 539
+            ]
+        );
+    }
+
+    #[test]
+    fn reject_code_round_trip() {
+        for initial in RejectCode::iter() {
+            let encoded = RejectCodeProto::from(initial);
+            let round_trip = RejectCode::try_from(encoded).unwrap();
+
+            assert_eq!(initial, round_trip);
+        }
+    }
+
+    #[test]
+    fn compatibility_for_reject_code() {
+        // If this fails, you are making a potentially incompatible change to `RejectCode`.
+        // See note [Handling changes to Enums in Replicated State] for how to proceed.
+        assert_eq!(
+            RejectCode::iter().map(|x| x as i32).collect::<Vec<i32>>(),
+            [1, 2, 3, 4, 5]
+        );
     }
 }

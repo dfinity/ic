@@ -7,7 +7,9 @@ use ic_crypto_internal_threshold_sig_ecdsa::{EccCurveType, EccPoint};
 // returned by the decoding, as these do not lead to panics. You can run the fuzzer locally:
 // bazel run --config=fuzzing //rs/crypto/internal/crypto_lib/threshold_sig/tecdsa/fuzz:cbor_deserialize_ecc_point
 fuzz_target!(|data: &[u8]| {
-    for curve_type in [EccCurveType::K256, EccCurveType::P256] {
-        let _ = EccPoint::deserialize(curve_type, data);
+    for curve_type in EccCurveType::all() {
+        if let Ok(point) = EccPoint::deserialize(curve_type, data) {
+            assert_eq!(point.serialize(), data);
+        }
     }
 });

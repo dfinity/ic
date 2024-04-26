@@ -3,13 +3,34 @@ mod tests;
 
 pub use askama::Template;
 use ic_ledger_suite_orchestrator::scheduler::Erc20Token;
-use ic_ledger_suite_orchestrator::state::{Canisters, IndexCanister, LedgerCanister, State};
+use ic_ledger_suite_orchestrator::state::{
+    Archive, Canisters, GitCommitHash, Index, IndexCanister, Ledger, LedgerCanister, State,
+    WasmHash,
+};
+use ic_ledger_suite_orchestrator::storage::{StorableWasm, StoredWasm, WasmStore};
+use std::cmp::Reverse;
 use std::collections::BTreeMap;
+
+mod filters {
+    pub fn timestamp_to_datetime<T: std::fmt::Display>(timestamp: T) -> askama::Result<String> {
+        let input = timestamp.to_string();
+        let ts: i128 = input
+            .parse()
+            .map_err(|e| askama::Error::Custom(Box::new(e)))?;
+        let dt_offset = time::OffsetDateTime::from_unix_timestamp_nanos(ts).unwrap();
+        // 2020-12-09T17:25:40+00:00
+        let format =
+            time::format_description::parse("[year]-[month]-[day]T[hour]:[minute]:[second]+00:00")
+                .unwrap();
+        Ok(dt_offset.format(&format).unwrap())
+    }
+}
 
 #[derive(Template)]
 #[template(path = "dashboard.html")]
 pub struct DashboardTemplate {
     managed_canisters: BTreeMap<Erc20Token, CanistersDashboardData>,
+    wasm_store: Vec<DashboardStoredWasm>,
 }
 
 #[derive(Default, Debug, PartialEq, Clone)]
@@ -74,8 +95,41 @@ impl From<&IndexCanister> for CanisterDashboardData {
     }
 }
 
+struct DashboardStoredWasm {
+    pub timestamp: u64,
+    pub wasm_hash: WasmHash,
+    pub wasm_type: String,
+    pub git_commit: GitCommitHash,
+}
+
+impl DashboardStoredWasm {
+    fn from_wasm(wasm_hash: WasmHash, wasm: &StoredWasm) -> Self {
+        let wasm_type = match wasm.marker() {
+            Ledger::MARKER => "Ledger",
+            Index::MARKER => "Index",
+            Archive::MARKER => "Archive",
+            _ => "Unknown",
+        }
+        .to_string();
+        DashboardStoredWasm {
+            timestamp: wasm.timestamp(),
+            wasm_hash,
+            wasm_type,
+            git_commit: wasm.git_commit().clone(),
+        }
+    }
+}
+
 impl DashboardTemplate {
-    pub fn from_state(state: &State) -> Self {
+    pub fn from_state(state: &State, store: &WasmStore) -> Self {
+        let mut wasm_store: Vec<_> = store
+            .iter()
+            .map(|(k, v)| DashboardStoredWasm::from_wasm(k, &v))
+            .collect();
+        wasm_store.sort_unstable_by_key(|w| {
+            Reverse((w.timestamp, w.git_commit.clone(), w.wasm_hash.clone()))
+        });
+
         Self {
             managed_canisters: state
                 .managed_canisters_iter()
@@ -89,6 +143,7 @@ impl DashboardTemplate {
                     )
                 })
                 .collect(),
+            wasm_store,
         }
     }
 }

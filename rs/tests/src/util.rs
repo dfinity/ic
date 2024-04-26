@@ -72,7 +72,7 @@ pub(crate) const _EMPTY_WASM: &[u8] = &[0, 97, 115, 109, 1, 0, 0, 0];
 pub(crate) const MESSAGE_CANISTER_WASM: &[u8] = include_bytes!("message.wasm");
 
 pub(crate) const CFG_TEMPLATE_BYTES: &[u8] =
-    include_bytes!("../../../ic-os/guestos/rootfs/opt/ic/share/ic.json5.template");
+    include_bytes!("../../../ic-os/rootfs/guestos/opt/ic/share/ic.json5.template");
 
 pub fn get_identity() -> ic_agent::identity::BasicIdentity {
     ic_agent::identity::BasicIdentity::from_pem(IDENTITY_PEM.as_bytes())
@@ -1358,8 +1358,8 @@ pub fn get_config() -> ConfigOptional {
         .replace("{{ replica_log_debug_overrides }}", "[]")
         .replace("{{ nns_url }}", "http://www.fakeurl.com/")
         .replace("{{ malicious_behavior }}", "null")
-        .replace("{{ query_stats_aggregation }}", "\"Disabled\"")
-        .replace("{{ query_stats_epoch_length }}", "1800");
+        .replace("{{ query_stats_aggregation }}", "\"Enabled\"")
+        .replace("{{ query_stats_epoch_length }}", "600");
 
     json5::from_str::<ConfigOptional>(&cfg).expect("Could not parse json5")
 }

@@ -260,7 +260,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^1.3.4",
             ),
             "bytes": crate.spec(
-                version = "^1.5.0",
+                version = "^1.6.0",
             ),
             "cached": crate.spec(
                 version = "^0.49",
@@ -582,7 +582,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 default_features = False,
             ),
             "ic-stable-structures": crate.spec(
-                version = "^0.6.0",
+                version = "^0.6.4",
             ),
             "ic-response-verification": crate.spec(
                 version = "2.3.0",
@@ -756,6 +756,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 features = [
                     "future",
                 ],
+            ),
+            "more-asserts": crate.spec(
+                version = "^0.3.1",
             ),
             "nix": crate.spec(
                 version = "^0.24.3",
@@ -991,7 +994,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.5.2",
             ),
             "rocksdb": crate.spec(
-                version = "^0.21.0",
+                version = "^0.22.0",
                 default_features = False,
             ),
             "rolling-file": crate.spec(
@@ -1211,15 +1214,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.3.31",
             ),
             "tokio": crate.spec(
-                version = "^1.36.0",
+                version = "^1.37.0",
                 features = [
                     "full",
-                    "io-util",
-                    "macros",
-                    "net",
-                    "rt",
-                    "sync",
-                    "time",
                 ],
             ),
             "tokio-io-timeout": crate.spec(
@@ -1362,7 +1359,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 version = "^0.2",
             ),
             "wasm-encoder": crate.spec(
-                version = "^0.38.1",
+                version = "^0.201.0",
                 features = [
                     "wasmparser",
                 ],
@@ -1375,7 +1372,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile, sanitizers_enable
                 ],
             ),
             "wasmparser": crate.spec(
-                version = "^0.118.1",
+                version = "^0.201.0",
             ),
             "wasmprinter": crate.spec(
                 version = "^0.2.50",

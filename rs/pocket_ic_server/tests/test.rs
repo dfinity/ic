@@ -282,7 +282,7 @@ fn pocket_ic_server_binary_name() {
         .expect("Failed to start PocketIC binary");
     let out_str = String::from_utf8(out.stderr).unwrap();
     assert!(out_str.contains(
-        "The PocketIc server binary name must be \"pocket-ic-server\" (without quotes)."
+        "The PocketIc server binary name must be \"pocket-ic\" or \"pocket-ic-server\" (without quotes)."
     ));
 }
 

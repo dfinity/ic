@@ -18,7 +18,7 @@ use ic_nns_governance::{
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
 };
 use icp_ledger::AccountIdentifier;
 
@@ -31,7 +31,7 @@ fn get_timestamp_s() -> u64 {
 
 #[test]
 fn test_time_warp() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         const TWELVE_MONTHS_SECONDS: u64 = 30 * 12 * 24 * 60 * 60;
 
         // Boot up a mini NNS.

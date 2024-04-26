@@ -128,7 +128,7 @@ pub struct CyclesAccount {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Global {
-    #[prost(oneof = "global::Global", tags = "1, 2, 3, 4")]
+    #[prost(oneof = "global::Global", tags = "1, 2, 3, 4, 5")]
     pub global: ::core::option::Option<global::Global>,
 }
 /// Nested message and enum types in `Global`.
@@ -144,6 +144,8 @@ pub mod global {
         F32(f32),
         #[prost(double, tag = "4")]
         F64(f64),
+        #[prost(bytes, tag = "5")]
+        V128(::prost::alloc::vec::Vec<u8>),
     }
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -643,10 +645,6 @@ pub struct CanisterStateBits {
     /// The next local snapshot ID.
     #[prost(uint64, tag = "46")]
     pub next_snapshot_id: u64,
-    /// TODO(EXC-1597): Deprecated field.
-    /// The set of snapshots ids of the canister.
-    #[prost(message, repeated, tag = "47")]
-    pub snapshot_ids: ::prost::alloc::vec::Vec<SnapshotId>,
     #[prost(oneof = "canister_state_bits::CanisterStatus", tags = "11, 12, 13")]
     pub canister_status: ::core::option::Option<canister_state_bits::CanisterStatus>,
 }

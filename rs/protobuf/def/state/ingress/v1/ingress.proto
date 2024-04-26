@@ -101,7 +101,8 @@ enum ErrorCode {
 
 message IngressStatusFailed {
   types.v1.UserId user_id = 1;
-  uint64 err_code_old = 2;
+  reserved 2;
+  reserved "error_code_old";
   string err_description = 3;
   uint64 time_nanos = 4;
   types.v1.PrincipalId receiver = 5;

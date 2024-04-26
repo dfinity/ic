@@ -433,7 +433,7 @@ base64 = { version = "0.13.1" }
 # build-info and build-info-build MUST be kept in sync!
 build-info = { git = "https://github.com/dfinity-lab/build-info", rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7" }
 build-info-build = { git = "https://github.com/dfinity-lab/build-info", rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7", default_features = false }
-bytes = "1.5.0"
+bytes = "1.6.0"
 candid = { version = "0.10.6" }
 candid_parser = { version = "0.1.2" }
 chrono = { version = "0.4.31", default-features = false, features = [
@@ -456,7 +456,7 @@ hex = { version = "0.4.3", features = ["serde"] }
 hyper = { version = "1.2.0", features = ["full"] }
 hyper-rustls = { version = "0.24.2", features = ["http2"] }
 ic-agent = { version = "0.34.0", features = ["hyper"] }
-ic-cdk = "0.13.1"
+ic-cdk = "0.13.2"
 ic-cdk-macros = "0.9.0"
 ic-cdk-timers = "0.7.0"
 ic_principal = { version = "0.1.1", default-features = false }
@@ -464,7 +464,7 @@ ic-response-verification = "2.3.0"
 ic-http-certification = "2.3.0"
 ic-certification = "2.3.0"
 ic-cbor = "2.3.0"
-ic-stable-structures = "0.6.2"
+ic-stable-structures = "0.6.4"
 ic-utils = { version = "0.34.0", features = ["raw"] }
 ic-btc-interface = { git = "https://github.com/dfinity/bitcoin-canister", rev = "62a71e47c491fb842ccc257b1c675651501f4b82" }
 ic-btc-validation = { git = "https://github.com/dfinity/bitcoin-canister", rev = "0e996988693f2d55fc9533c44dc20ae5310a1894" }
@@ -534,7 +534,7 @@ strum_macros = "0.26.2"
 syn = { version = "1.0.109", features = ["fold", "full"] }
 thiserror = "1.0.57"
 time = { version = "0.3.20", features = ["formatting"] }
-tokio = { version = "1.36.0", features = ["full"] }
+tokio = { version = "1.37.0", features = ["full"] }
 tokio-metrics = "0.3.0"
 tokio-rustls = { version = "0.24.1", features = ["dangerous_configuration"] }
 tokio-util = { version = "0.7.10", features = ["full"] }

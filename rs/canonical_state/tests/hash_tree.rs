@@ -96,8 +96,7 @@ fn error_code_change_guard() {
         (
             variant,
             variant as u64,
-            // TODO: Replace this roundtrip with the protobuf roundtrip once EXC-1583 is done.
-            ErrorCode::try_from(variant as u64).unwrap(),
+            ErrorCode::try_from(ic_protobuf::state::ingress::v1::ErrorCode::from(variant)).unwrap(),
             format!("{variant:?}"),
             variant.to_string(),
         )

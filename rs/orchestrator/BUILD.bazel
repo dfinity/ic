@@ -80,7 +80,7 @@ rust_test(
     crate = ":lib",
     data = [
         "testdata/nftables_assigned_replica.conf.golden",
-        "//ic-os/guestos/rootfs:opt/ic/share/ic.json5.template",
+        "//ic-os/rootfs/guestos:opt/ic/share/ic.json5.template",
     ],
     deps = [
         "//rs/crypto/temp_crypto",

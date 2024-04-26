@@ -1364,7 +1364,7 @@ fn query_cache_never_caches_calls_to_management_canister() {
     let res_1 = test.non_replicated_query(a_id, "query", q.clone());
     assert_eq!(query_cache_metrics(&test).hits.get(), 0);
     assert_eq!(query_cache_metrics(&test).misses.get(), 1);
-    let description = format!("Canister {} violated contract: \"ic0_call_new\" cannot be executed in non replicated query mode", a_id);
+    let description = format!("Error from Canister {a_id}: Canister violated contract: \"ic0_call_new\" cannot be executed in non replicated query mode");
     assert_eq!(
         Err(UserError::new(
             ErrorCode::CanisterContractViolation,
@@ -1466,6 +1466,7 @@ fn query_cache_future_proof_test() {
         | SystemApiCallId::CallNew
         | SystemApiCallId::CallOnCleanup
         | SystemApiCallId::CallPerform
+        | SystemApiCallId::CallWithBestEffortResponse
         | SystemApiCallId::CanisterCycleBalance
         | SystemApiCallId::CanisterCycleBalance128
         | SystemApiCallId::CanisterSelfCopy

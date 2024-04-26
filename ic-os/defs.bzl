@@ -7,7 +7,7 @@ load("//bazel:defs.bzl", "gzip_compress", "sha256sum2url", "zstd_compress")
 load("//bazel:output_files.bzl", "output_files")
 load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
 load("//ic-os/bootloader:defs.bzl", "build_grub_partition")
-load("//ic-os/boundary-guestos/rootfs:defs.bzl", boundary_rootfs_files = "rootfs_files")
+load("//ic-os/rootfs:boundary-guestos.bzl", boundary_rootfs_files = "rootfs_files")
 load("//toolchains/sysimage:toolchain.bzl", "build_container_base_image", "build_container_filesystem", "disk_image", "ext4_image", "inject_files", "sha256sum", "tar_extract", "upgrade_image")
 
 def icos_build(

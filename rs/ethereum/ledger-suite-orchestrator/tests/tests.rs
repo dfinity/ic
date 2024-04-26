@@ -1,7 +1,7 @@
 use assert_matches::assert_matches;
-use candid::{Encode, Principal};
+use candid::{Decode, Encode, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_canisters_http_types::HttpRequest;
+use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_icrc1_ledger::FeatureFlags as LedgerFeatureFlags;
 use ic_ledger_suite_orchestrator::candid::{
     AddErc20Arg, LedgerInitArg, OrchestratorArg, UpdateCyclesManagement, UpgradeArg,
@@ -9,7 +9,7 @@ use ic_ledger_suite_orchestrator::candid::{
 use ic_ledger_suite_orchestrator::scheduler::TEN_TRILLIONS;
 use ic_ledger_suite_orchestrator_test_utils::arbitrary::arb_init_arg;
 use ic_ledger_suite_orchestrator_test_utils::{
-    new_state_machine, supported_erc20_tokens, usdc, usdc_erc20_contract, usdt,
+    assert_reply, new_state_machine, supported_erc20_tokens, usdc, usdc_erc20_contract, usdt,
     LedgerSuiteOrchestrator, NNS_ROOT_PRINCIPAL,
 };
 use ic_state_machine_tests::ErrorCode;
@@ -401,4 +401,37 @@ fn should_reject_update_calls_to_http_request() {
             .await_ingress(message_id.clone(), MAX_TICKS),
         Err(e) if e.code() == ErrorCode::CanisterCalledTrap && e.description().contains("update call rejected")
     );
+}
+
+#[test]
+fn should_query_logs_and_metrics() {
+    let orchestrator = LedgerSuiteOrchestrator::default();
+    test_http_query(&orchestrator, "/metrics");
+    test_http_query(&orchestrator, "/logs");
+
+    fn test_http_query<U: Into<String>>(orchestrator: &LedgerSuiteOrchestrator, url: U) {
+        let request = HttpRequest {
+            method: "GET".to_string(),
+            url: url.into(),
+            headers: Default::default(),
+            body: Default::default(),
+        };
+
+        let response = Decode!(
+            &assert_reply(
+                orchestrator
+                    .env
+                    .query(
+                        orchestrator.ledger_suite_orchestrator_id,
+                        "http_request",
+                        Encode!(&request).expect("failed to encode HTTP request"),
+                    )
+                    .expect("failed to query get_transactions on the ledger")
+            ),
+            HttpResponse
+        )
+        .unwrap();
+
+        assert_eq!(response.status_code, 200_u16);
+    }
 }

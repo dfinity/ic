@@ -96,7 +96,7 @@ pub fn config_impl(env: TestEnv, deploy_bn_and_nns_canisters: bool, http_request
     if http_requests {
         env::set_var(
             "SSL_CERT_FILE",
-            env.get_dependency_path("ic-os/guestos/rootfs/dev-certs/canister_http_test_ca.cert"),
+            env.get_dependency_path("ic-os/rootfs/guestos/dev-certs/canister_http_test_ca.cert"),
         );
         env::remove_var("NIX_SSL_CERT_FILE");
 

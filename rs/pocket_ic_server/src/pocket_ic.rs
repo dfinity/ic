@@ -191,8 +191,8 @@ impl PocketIc {
                 .with_multisubnet_ecdsa_key()
                 .with_use_cost_scaling_flag(true);
 
-            if let DtsFlag::Enabled = dts_flag {
-                builder = builder.with_dts();
+            if let DtsFlag::Disabled = dts_flag {
+                builder = builder.no_dts();
             };
 
             if subnet_kind == SubnetKind::NNS {

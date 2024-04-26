@@ -1,4 +1,5 @@
 use crate::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id};
+use ic_protobuf::types::v1::RejectCode as pbRejectCode;
 use ic_types::{
     crypto::{AlgorithmId, KeyPurpose, UserPublicKey},
     messages::{
@@ -169,8 +170,11 @@ pub fn response_payload() -> impl Strategy<Value = Payload> {
         // Data payload.
         prop::collection::vec(any::<u8>(), 0..16).prop_flat_map(|data| Just(Payload::Data(data))),
         // Reject payload.
-        (1u64..5, "[a-zA-Z]{1,6}").prop_flat_map(|(code, message)| Just(Payload::Reject(
-            RejectContext::new(code.try_into().unwrap(), message)
+        (1i32..5, "[a-zA-Z]{1,6}").prop_flat_map(|(code, message)| Just(Payload::Reject(
+            RejectContext::new(
+                pbRejectCode::try_from(code).unwrap().try_into().unwrap(),
+                message
+            )
         )))
     ]
 }

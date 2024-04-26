@@ -4,7 +4,6 @@ use crate::{
         LOG_PREFIX, MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS,
         MAX_NEURON_RECENT_BALLOTS, MAX_NUM_HOT_KEYS_PER_NEURON,
     },
-    neuron::types::{DissolveStateAndAge, Neuron, StoredDissolvedStateAndAge},
     pb::v1::{
         governance_error::ErrorType,
         manage_neuron::{configure::Operation, Configure},
@@ -23,7 +22,10 @@ use std::{
     ops::RangeBounds,
 };
 
+pub mod dissolve_state_and_age;
+pub use dissolve_state_and_age::*;
 pub mod types;
+pub use types::*;
 
 fn neuron_state(
     now_seconds: u64,
@@ -99,11 +101,10 @@ impl Neuron {
     /// Returns the state the neuron would be in a time
     /// `now_seconds`. See [NeuronState] for details.
     pub fn state(&self, now_seconds: u64) -> NeuronState {
-        neuron_state(
-            now_seconds,
-            &self.spawn_at_timestamp_seconds,
-            &self.dissolve_state,
-        )
+        if self.spawn_at_timestamp_seconds.is_some() {
+            return NeuronState::Spawning;
+        }
+        self.dissolve_state_and_age().current_state(now_seconds)
     }
 
     /// Returns true if and only if `principal` is equal to the
@@ -330,62 +331,10 @@ impl Neuron {
         now_seconds: u64,
         additional_dissolve_delay_seconds: u32,
     ) {
-        let additional_delay = additional_dissolve_delay_seconds as u64;
-        // If there is no dissolve delay, this is a no-op.  Upstream validation can decide if
-        // an error should be returned to the user.
-        if additional_delay == 0 {
-            return;
-        }
-        match self.dissolve_state {
-            Some(DissolveState::DissolveDelaySeconds(delay)) => {
-                let new_delay = std::cmp::min(
-                    delay.saturating_add(additional_delay),
-                    MAX_DISSOLVE_DELAY_SECONDS,
-                );
-                // Note that if delay == 0, this neuron was
-                // dissolved and it now becomes non-dissolving.
-                self.dissolve_state = Some(DissolveState::DissolveDelaySeconds(new_delay));
-                if delay == 0 {
-                    // We transition from `Dissolved` to `NotDissolving`: reset age.
-                    self.aging_since_timestamp_seconds = now_seconds;
-                }
-            }
-            Some(DissolveState::WhenDissolvedTimestampSeconds(ts)) => {
-                if ts > now_seconds {
-                    let delay = ts - now_seconds;
-                    let new_delay = std::cmp::min(
-                        delay.saturating_add(additional_delay),
-                        MAX_DISSOLVE_DELAY_SECONDS,
-                    );
-                    let new_ts = now_seconds + new_delay;
-                    // Sanity check:
-                    // if additional_delay == 0, then
-                    // new_delay == delay == ts - now_seconds, whence
-                    // new_ts == now_seconds + ts - now_seconds == ts
-                    self.dissolve_state =
-                        Some(DissolveState::WhenDissolvedTimestampSeconds(new_ts));
-                    // The neuron was and remains `Dissolving`:
-                    // its effective neuron age should already be
-                    // zero by having an `aging_since` timestamp
-                    // in the far future. Reset it just in case.
-                    self.aging_since_timestamp_seconds = u64::MAX;
-                } else {
-                    // ts <= now_seconds
-                    // This neuron is dissolved. Set it to non-dissolving.
-                    let new_delay = std::cmp::min(additional_delay, MAX_DISSOLVE_DELAY_SECONDS);
-                    self.dissolve_state = Some(DissolveState::DissolveDelaySeconds(new_delay));
-                    // We transition from `Dissolved` to `NotDissolving`: reset age.
-                    self.aging_since_timestamp_seconds = now_seconds;
-                }
-            }
-            None => {
-                // This neuron is dissolved. Set it to non-dissolving.
-                let new_delay = std::cmp::min(additional_delay, MAX_DISSOLVE_DELAY_SECONDS);
-                self.dissolve_state = Some(DissolveState::DissolveDelaySeconds(new_delay));
-                // We transition from `Dissolved` to `NotDissolving`: reset age.
-                self.aging_since_timestamp_seconds = now_seconds;
-            }
-        }
+        let new_dissolve_state_and_age = self
+            .dissolve_state_and_age()
+            .increase_dissolve_delay(now_seconds, additional_dissolve_delay_seconds);
+        self.set_dissolve_state_and_age(new_dissolve_state_and_age);
     }
 
     /// Join the Internet Computer's Neurons' Fund. If this neuron is
@@ -512,7 +461,7 @@ impl Neuron {
     /// neuron is dissolving, `aging_since` is a value in the far
     /// future, effectively making its age zero.
     pub fn age_seconds(&self, now_seconds: u64) -> u64 {
-        now_seconds.saturating_sub(self.aging_since_timestamp_seconds)
+        self.dissolve_state_and_age().age_seconds(now_seconds)
     }
 
     /// Returns the dissolve delay of this neuron. For a non-dissolving
@@ -521,7 +470,8 @@ impl Neuron {
     /// `now_seconds`) until the neuron becomes dissolved; for a
     /// dissolved neuron, this function returns zero.
     pub fn dissolve_delay_seconds(&self, now_seconds: u64) -> u64 {
-        neuron_dissolve_delay_seconds(now_seconds, &self.dissolve_state)
+        self.dissolve_state_and_age()
+            .dissolve_delay_seconds(now_seconds)
     }
 
     pub fn is_dissolved(&self, now_seconds: u64) -> bool {
@@ -934,7 +884,7 @@ mod tests {
     use super::*;
     use crate::{
         governance::ONE_YEAR_SECONDS,
-        neuron::types::{DissolveStateAndAge, NeuronBuilder},
+        neuron::{DissolveStateAndAge, NeuronBuilder},
         pb::v1::manage_neuron::{SetDissolveTimestamp, StartDissolving},
     };
 
@@ -1202,6 +1152,7 @@ mod tests {
         ];
 
         for dissolve_state_and_age in cases {
+            println!("Testing case {:?}", dissolve_state_and_age);
             test_increase_dissolve_delay_by_1_on_dissolved_neuron(dissolve_state_and_age);
         }
     }

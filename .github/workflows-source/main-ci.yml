@@ -31,10 +31,12 @@ env:
   BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
   RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
   AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
+  DOCKER_HUB_USER: ${{ secrets.DOCKER_HUB_USER }}
+  DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
 
 anchors:
   image: &image
-      image: dfinity/ic-build:abbdc66c19bf32eda2109f97e39fde519ef9b452ab54aee52b234af8638983d8
+      image: dfinity/ic-build:e3ca31c9688e13fd6caec30a0cec5d9a2b3ff424db4f4243ebab4c30f9f5e869
   bazel-large-setup: &bazel-large-setup
     runs-on:
       labels: bazel-runner-large
@@ -56,6 +58,15 @@ anchors:
       <<: *image
     timeout-minutes: 30
     if: ${{ vars.RUN_CI == 'true' }}
+  docker-ro-login: &docker-ro-login
+    name: Docker RO SA login
+    id: docker-ro-login
+    shell: bash
+    run: |
+      docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
+      if which docker-bin 2>/dev/null; then
+          docker-bin login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
+      fi
   after-script: &after-script
     name: After script
     id: after-script
@@ -80,16 +91,18 @@ jobs:
   bazel-test-all:
     name: Bazel-Test-All
     <<: *bazel-large-setup
+    outputs:
+      artifacts_produced: ${{ steps.bazel-test-all.outputs.upload_artifacts }}
     steps:
       - <<: *checkout
         uses: actions/checkout@v3 # v4 does not work with bazel-runner-large
         if : ${{ github.event_name == 'pull_request' }}
         with:
-          fetch-depth: 0
-          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 256
       - <<: *checkout
         uses: actions/checkout@v3
         if : ${{ github.event_name != 'pull_request' }}
+      - <<: *docker-ro-login
       - name: Run Bazel Test All
         id: bazel-test-all
         uses:  ./.github/actions/bazel-test-all/
@@ -103,30 +116,29 @@ jobs:
           # run on diff only if it is a pull request, otherwise run all targets
           RUN_ON_DIFF_ONLY: ${{ contains(github.event_name, 'pull_request') && 'true' || 'false'}}
       - <<: *after-script
-      # - name: Upload Bazel artifacts
-      #   uses: actions/upload-artifact@v3
-      #   if: success() || failure() # don't run if CI job is cancelled
-      #   with:
-      #     name: bazel-artifacts
-      #     retention-days: 2
-      #     if-no-files-found: ignore
-      #     compression-level: 7
-      #     path: |
-      #       bazel-build-log*.json*
-      #       bazel-bep.pb
-      #       bazel-testlogs/**/test.xml
+      - name: Upload bazel-targets
+        uses: actions/upload-artifact@v3
+        if: ${{ needs.bazel-test-all.outputs.upload_artifacts == 'true' }}
+        with:
+          name: bazel-targets
+          retention-days: 1
+          if-no-files-found: error
+          path: |
+            bazel-targets
 
   bazel-config-check-all-rebuild:
-    <<: *bazel-small-setup
+    <<: *bazel-large-setup
     name: Bazel-Config-Check-All-Rebuild
     steps:
       - <<: *checkout
+        uses: actions/checkout@v3 # v4 does not work with bazel-runner-large
+        if : ${{ github.event_name == 'pull_request' }}
         with:
-          # Fetch all commits since gitlab-ci/src/bazel-ci/diff.sh needs to run
-          #   git merge-base HEAD origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME
-          # which not only requires the HEAD commit but also its history
-          # and the history of origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME.
-          fetch-depth: 0
+          fetch-depth: 256
+      - <<: *checkout
+        uses: actions/checkout@v3
+        if : ${{ github.event_name != 'pull_request' }}
+      - <<: *docker-ro-login
       - name: Run bazel build --config=check //rs/...
         id: bazel-build-config-check
         uses: ./.github/actions/bazel-test-all/
@@ -141,7 +153,7 @@ jobs:
   bazel-test-macos:
     name: Bazel-Test-MacOS
     timeout-minutes: 90
-    if: ${{ vars.RUN_CI == 'true' }}
+    if: ${{ vars.RUN_CI == 'true' && github.event_name != 'pull_request' }} # disable until we have more macos runners
     runs-on:
       labels: macos
     steps:
@@ -160,6 +172,7 @@ jobs:
               - '**/*.lock'
               - '**/*.rs'
               - '**/*.toml'
+      - <<: *docker-ro-login
       - name: Run Bazel Test MacOS
         id: bazel-test-macos
         if: steps.filter.outputs.bazel-test-macos != 'false'
@@ -209,8 +222,9 @@ jobs:
 
   python-ci-tests:
     name: Python-CI-Tests
-    <<: *default-setup
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: ${{ vars.RUN_CI == 'true' }}
     steps:
       - <<: *checkout
       - name: Run Python CI Tests
@@ -218,10 +232,101 @@ jobs:
         shell: bash
         run: |
           set -xeuo pipefail
-          export PYTHONPATH=$PWD/gitlab-ci/src:$PWD/gitlab-ci/src/dependencies:$PYTHONPATH
+          export PYTHONPATH=$PWD/gitlab-ci/src:$PWD/gitlab-ci/src/dependencies
           pip3 install --ignore-installed -r requirements.txt
           cd gitlab-ci/src
           pytest --ignore=gitlab_config/ --ignore=git_changes/ -v -o junit_family=xunit1 --junitxml=../../test_report.xml --cov=. --cov-report=term --cov-report=term-missing --cov-report=html --cov-branch
+
+  build-ic:
+    name: Build-IC
+    <<: *bazel-large-setup
+    outputs:
+      artifacts_produced: ${{ steps.build-ic.outputs.upload_artifacts }}
+    steps:
+      - <<: *checkout
+        uses: actions/checkout@v3 # v4 does not work with bazel-runner-large
+        if : ${{ github.event_name == 'pull_request' }}
+        with:
+          fetch-depth: 256
+      - <<: *checkout
+        uses: actions/checkout@v3
+        if : ${{ github.event_name != 'pull_request' }}
+      - <<: *docker-ro-login
+      - name: Run Build IC
+        id: build-ic
+        shell: bash
+        run: |
+          set -eExuo pipefail
+          rm -rf "/cache/job/${CI_JOB_ID}/${ROOT_PIPELINE_ID}"
+          mkdir -p "/cache/job/${CI_JOB_ID}/${ROOT_PIPELINE_ID}/artifacts"
+          ln -s "/cache/job/${CI_JOB_ID}/${ROOT_PIPELINE_ID}/artifacts" /__w/ic/ic/artifacts
+          buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- \
+              "$CI_PROJECT_DIR"/gitlab-ci/src/ci-scripts/build-ic.sh
+          rm -rf "/cache/job/${CI_JOB_ID}/${ROOT_PIPELINE_ID}"
+        env:
+          RUN_ON_DIFF_ONLY: "true"
+          BAZEL_COMMAND: "build"
+      - name: Upload build-ic.tar
+        uses: actions/upload-artifact@v3
+        if: ${{ needs.build-ic.outputs.upload_artifacts == 'true' }}
+        with:
+          name: build-ic
+          retention-days: 1
+          if-no-files-found: error
+          path: |
+            build-ic.tar
+
+  build-determinism:
+    name: Build Determinism
+    <<: *default-setup
+    needs: [build-ic, bazel-test-all]
+    if: ${{ needs.build-ic.outputs.artifacts_produced == 'true' && needs.bazel-test-all.outputs.artifacts_produced == 'true' }}
+    strategy:
+      matrix:
+        include:
+          - TARGET: "//publish/binaries:upload"
+            PATH0: "release"
+            PATH1: "build-ic/release"
+            SETUPOS_FLAG: "false"
+          - TARGET: "//publish/canisters:upload"
+            PATH0: "canisters"
+            PATH1: "build-ic/canisters"
+            SETUPOS_FLAG: "false"
+          - TARGET: "//ic-os/guestos/envs/prod:upload_disk-img"
+            PATH0: "guest-os/update-img"
+            PATH1: "build-ic/icos/guestos"
+            SETUPOS_FLAG: "false"
+          - TARGET: "//ic-os/hostos/envs/prod:upload_update-img"
+            PATH0: "host-os/update-img"
+            PATH1: "build-ic/icos/hostos"
+            SETUPOS_FLAG: "false"
+          - TARGET: "//ic-os/setupos/envs/prod:upload_disk-img"
+            PATH0: "setup-os/disk-img"
+            PATH1: "build-ic/icos/setupos"
+            SETUPOS_FLAG: "true"
+    steps:
+      - <<: *checkout
+      - name: Download bazel-targets [bazel-test-all]
+        uses: actions/download-artifact@v3
+        with:
+          name: bazel-targets
+      - name: Download build-ic.tar [build-ic]
+        uses: actions/download-artifact@v3
+        with:
+          name: build-ic
+      - name: Build Determinism Test
+        id: build-determinism
+        shell: bash
+        run: |
+          set -eExuo pipefail
+          git config --global safe.directory '*'
+          buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- \
+              "$CI_PROJECT_DIR"/gitlab-ci/src/ci-scripts/build-determinism.sh
+        env:
+          TARGET: ${{ matrix.TARGET }}
+          PATH0: ${{ matrix.PATH0 }}
+          PATH1: ${{ matrix.PATH1 }}
+          SETUPOS_FLAG: ${{ matrix.SETUPOS_FLAG }}
 
   cargo-clippy-linux:
     name: Cargo-Clippy-Linux
@@ -244,6 +349,7 @@ jobs:
   cargo-build-release-linux:
     name: Cargo-Build-Release-Linux
     <<: *bazel-small-setup
+    timeout-minutes: 60
     steps:
       - <<: *checkout
       - <<: *cargo-filters

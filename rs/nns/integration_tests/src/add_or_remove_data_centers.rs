@@ -14,7 +14,7 @@ use ic_nns_test_utils::{
         get_pending_proposals, submit_external_update_proposal,
         submit_external_update_proposal_allowing_error, wait_for_final_state,
     },
-    itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
     registry::get_value_or_panic,
 };
 use ic_protobuf::registry::dc::v1::{
@@ -27,7 +27,7 @@ use ic_registry_transport::{
 
 #[test]
 fn test_submit_add_or_remove_data_centers_proposal() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let nns_init_payload = NnsInitPayloadsBuilder::new()
             .with_initial_invariant_compliant_mutations()
             .with_test_neurons()

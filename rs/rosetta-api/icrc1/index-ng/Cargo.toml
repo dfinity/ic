@@ -14,16 +14,16 @@ path = "src/main.rs"
 candid = { workspace = true }
 ciborium = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
-ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
 ic-canister-log = { path = "../../../rust_canisters/canister_log" }
 ic-canister-profiler = { path = "../../../rust_canisters/canister_profiler" }
+ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
 ic-cdk-timers = { workspace = true }
 ic-crypto-sha2 = { path = "../../../crypto/sha2" }
 ic-icrc1 = { path = "../" }
-ic-icrc1-tokens-u64 = { path = "../tokens_u64" }
 ic-icrc1-tokens-u256 = { path = "../tokens_u256", optional = true }
+ic-icrc1-tokens-u64 = { path = "../tokens_u64" }
 ic-ledger-core = { path = "../../ledger_core" }
 ic-metrics-encoder = "1.1"
 ic-stable-structures = { workspace = true }
@@ -35,6 +35,7 @@ serde_json = { workspace = true }
 
 [dev-dependencies]
 candid_parser = { workspace = true }
+ic-agent = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
 ic-icrc1-index = { path = "../index" }
 ic-icrc1-ledger = { path = "../ledger" }
@@ -45,7 +46,6 @@ ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
 proptest = "1.0"
 serde_bytes = { workspace = true }
 serde_json = { workspace = true }
-ic-agent = { workspace = true }
 
 [features]
 default = []

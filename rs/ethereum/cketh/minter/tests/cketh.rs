@@ -990,6 +990,7 @@ fn should_skip_single_block_containing_too_many_events() {
         ]);
 }
 
+#[allow(deprecated)]
 #[test]
 fn should_retrieve_minter_info() {
     let cketh = CkEthSetup::default();
@@ -1002,6 +1003,9 @@ fn should_retrieve_minter_info() {
         info_at_start,
         MinterInfo {
             minter_address: Some(format_ethereum_address_to_eip_55(MINTER_ADDRESS)),
+            smart_contract_address: Some(format_ethereum_address_to_eip_55(
+                ETH_HELPER_CONTRACT_ADDRESS
+            )),
             eth_helper_contract_address: Some(format_ethereum_address_to_eip_55(
                 ETH_HELPER_CONTRACT_ADDRESS
             )),

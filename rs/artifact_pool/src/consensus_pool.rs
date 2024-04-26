@@ -807,20 +807,13 @@ fn is_latency_sensitive(msg: &ConsensusMessage) -> bool {
 }
 
 impl ValidatedPoolReader<ConsensusArtifact> for ConsensusPoolImpl {
-    fn contains(&self, id: &ConsensusMessageId) -> bool {
-        self.unvalidated.contains(id) || self.validated.contains(id)
-    }
-
-    fn get_validated_by_identifier(&self, id: &ConsensusMessageId) -> Option<ConsensusMessage> {
+    fn get(&self, id: &ConsensusMessageId) -> Option<ConsensusMessage> {
         self.validated.get(id)
     }
 
-    // Return an iterator of all artifacts that are required to make progress
-    // above the given height filter.
-    fn get_all_validated_by_filter(
-        &self,
-        filter: &ConsensusMessageFilter,
-    ) -> Box<dyn Iterator<Item = ConsensusMessage> + '_> {
+    fn get_all_validated(&self) -> Box<dyn Iterator<Item = ConsensusMessage> + '_> {
+        let filter = ConsensusMessageFilter::default();
+
         let node_id = self.node_id;
         let max_catch_up_height = self
             .validated
@@ -1287,15 +1280,15 @@ mod tests {
                 peer_id: node_test_id(0),
                 timestamp: time_source.get_relative_time(),
             });
-            assert!(pool.contains(&id));
+            assert!(pool.unvalidated.contains(&id));
 
             pool.remove(&id);
-            assert!(!pool.contains(&id));
+            assert!(!pool.unvalidated.contains(&id));
         });
     }
 
     #[test]
-    fn test_get_all_validated_by_filter() {
+    fn test_get_all_validated() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let time_source = FastForwardTimeSource::new();
             let node = node_test_id(3);
@@ -1310,9 +1303,7 @@ mod tests {
             );
 
             let height_offset = 5_000_000_000;
-            let filter = ConsensusMessageFilter {
-                height: Height::from(height_offset + 10),
-            };
+            let filter = ConsensusMessageFilter::default();
 
             let fake_block = |height: Height| {
                 Block::new(
@@ -1453,7 +1444,7 @@ mod tests {
                 _ => panic!("No signer for aggregate artifacts"),
             };
 
-            pool.get_all_validated_by_filter(&filter).for_each(|m| {
+            pool.get_all_validated().for_each(|m| {
                 assert!(m.height() >= filter.height);
                 if m.height().get() <= height_offset + 15 {
                     assert!(!m.is_share());
@@ -1463,20 +1454,11 @@ mod tests {
                 }
             });
 
-            let min_filter = ConsensusMessageFilter {
-                height: Height::from(u64::MIN),
-            };
-
             assert_eq!(
-                pool.get_all_validated_by_filter(&min_filter).count(),
+                pool.get_all_validated().count(),
                 // 1 CUP, 15 heights of aggregates, 5 heights of shares, 20 heights of proposals
                 1 + 15 * 4 + 5 * 4 + 20 * 5
             );
-
-            let max_filter = ConsensusMessageFilter {
-                height: Height::from(u64::MAX),
-            };
-            assert_eq!(pool.get_all_validated_by_filter(&max_filter).count(), 0);
         });
     }
 

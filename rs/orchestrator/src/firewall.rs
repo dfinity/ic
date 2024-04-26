@@ -499,7 +499,7 @@ mod tests {
     use super::*;
 
     const CFG_TEMPLATE_BYTES: &[u8] =
-        include_bytes!("../../../ic-os/guestos/rootfs/opt/ic/share/ic.json5.template");
+        include_bytes!("../../../ic-os/rootfs/guestos/opt/ic/share/ic.json5.template");
     const NFTABLES_GOLDEN_BYTES: &[u8] =
         include_bytes!("../testdata/nftables_assigned_replica.conf.golden");
 
@@ -671,8 +671,8 @@ mod tests {
             .replace("{{ replica_log_debug_overrides }}", "[]")
             .replace("{{ nns_url }}", "http://www.fakeurl.com/")
             .replace("{{ malicious_behavior }}", "null")
-            .replace("{{ query_stats_aggregation }}", "\"Disabled\"")
-            .replace("{{ query_stats_epoch_length }}", "1800");
+            .replace("{{ query_stats_aggregation }}", "\"Enabled\"")
+            .replace("{{ query_stats_epoch_length }}", "600");
         let config_source = ConfigSource::Literal(cfg);
 
         let config: ConfigOptional = config_source.load().unwrap();

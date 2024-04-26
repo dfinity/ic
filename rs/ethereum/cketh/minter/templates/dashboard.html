@@ -277,7 +277,7 @@
             </table>
             {% endif %}
 
-            {% if !rejected_deposits.is_empty() %}
+            {% if !invalid_events.is_empty() %}
             <h3 id="rejected-deposits">Rejected deposits</h3>
             <table>
                 <thead>
@@ -288,11 +288,11 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {% for (source, error) in rejected_deposits %}
+                    {% for (source, reason) in invalid_events %}
                     <tr>
                         <td>{% call etherscan_tx_link(source.transaction_hash.to_string()) %}</td>
                         <td class="numeric">{{ source.log_index }}</td>
-                        <td>{{ error }}</td>
+                        <td>{{ reason }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>

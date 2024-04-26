@@ -17,7 +17,7 @@ use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
 use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaPool};
 use ic_interfaces_state_manager::{CertifiedStateSnapshot, Labeled};
 use ic_logger::ReplicaLogger;
-use ic_management_canister_types::EcdsaKeyId;
+use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::{
     EcdsaDealingsContext, SignWithEcdsaContext,
@@ -1489,9 +1489,10 @@ pub(crate) fn fake_ecdsa_key_id() -> EcdsaKeyId {
 }
 
 pub(crate) fn create_reshare_request(num_nodes: u64, registry_version: u64) -> EcdsaReshareRequest {
+    let key_id = fake_ecdsa_key_id();
     EcdsaReshareRequest {
-        key_id: fake_ecdsa_key_id(),
-        master_key_id: None,
+        key_id: key_id.clone(),
+        master_key_id: Some(MasterPublicKeyId::Ecdsa(key_id)),
         receiving_node_ids: (0..num_nodes).map(node_test_id).collect::<Vec<_>>(),
         registry_version: RegistryVersion::from(registry_version),
     }

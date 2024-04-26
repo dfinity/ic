@@ -41,29 +41,29 @@ ARG rocksdb_sha=0a9a05ae12943b1529ef1eabbca5ce5a71c986bf
 RUN mkdir /tmp/rocksdb && curl -fsSL https://github.com/facebook/rocksdb/archive/${rocksdb_sha}.tar.gz | tar -xz -C /tmp/rocksdb --strip-components 1
 WORKDIR /tmp/rocksdb
 
-ARG bazelisk_sha=8b739ac23a189b70d51a98041e90ba16f6559d5f991d83bbc031c740f8796310
-RUN curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.12.2/bazelisk-linux-amd64 -o /opt/bin/bazel && \
+ARG bazelisk_sha=d28b588ac0916abd6bf02defb5433f6eddf7cba35ffa808eabb65a44aab226f7
+RUN curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.19.0/bazelisk-linux-amd64 -o /opt/bin/bazel && \
     echo "$bazelisk_sha /opt/bin/bazel" | sha256sum --check && \
     chmod 777 /opt/bin/bazel
 
 RUN cmake . -DPORTABLE=1 \
-  -DWITH_JEMALLOC=1 \
-  -DWITH_JNI=0 \
-  -DWITH_BENCHMARK_TOOLS=0 \
-  -DWITH_TESTS=1 \
-  -DWITH_TOOLS=0 \
-  -DWITH_BZ2=1 \
-  -DWITH_LZ4=1 \
-  -DWITH_SNAPPY=1 \
-  -DWITH_ZLIB=1 \
-  -DWITH_ZSTD=1 \
-  -DWITH_GFLAGS=0 \
-  -DUSE_RTTI=1 \
-  -DFORCE_SSE42=1 \
-  -DFAIL_ON_WARNINGS=YES \
-  -DROCKSDB_BUILD_SHARED=0 \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_INSTALL_PREFIX=/opt
+    -DWITH_JEMALLOC=1 \
+    -DWITH_JNI=0 \
+    -DWITH_BENCHMARK_TOOLS=0 \
+    -DWITH_TESTS=1 \
+    -DWITH_TOOLS=0 \
+    -DWITH_BZ2=1 \
+    -DWITH_LZ4=1 \
+    -DWITH_SNAPPY=1 \
+    -DWITH_ZLIB=1 \
+    -DWITH_ZSTD=1 \
+    -DWITH_GFLAGS=0 \
+    -DUSE_RTTI=1 \
+    -DFORCE_SSE42=1 \
+    -DFAIL_ON_WARNINGS=YES \
+    -DROCKSDB_BUILD_SHARED=0 \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX=/opt
 RUN make install -j$(nproc)
 
 WORKDIR /

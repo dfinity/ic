@@ -13,7 +13,7 @@ use crate::{
         reassemble_governance_proto, split_governance_proto, HeapGovernanceData, XdrConversionRate,
     },
     migrations::maybe_run_migrations,
-    neuron::types::{DissolveStateAndAge, Neuron, NeuronBuilder},
+    neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
     neuron_store::{NeuronMetrics, NeuronStore},
     neurons_fund::{
@@ -52,10 +52,11 @@ use crate::{
         NeuronsFundEconomics as NeuronsFundNetworkEconomicsPb,
         NeuronsFundParticipation as NeuronsFundParticipationPb,
         NeuronsFundSnapshot as NeuronsFundSnapshotPb, NnsFunction, NodeProvider, Proposal,
-        ProposalData, ProposalInfo, ProposalRewardStatus, ProposalStatus, RewardEvent,
-        RewardNodeProvider, RewardNodeProviders, SettleNeuronsFundParticipationRequest,
-        SettleNeuronsFundParticipationResponse, Tally, Topic, UpdateNodeProvider, Vote,
-        WaitForQuietState, XdrConversionRate as XdrConversionRatePb,
+        ProposalData, ProposalInfo, ProposalRewardStatus, ProposalStatus, RestoreAgingSummary,
+        RewardEvent, RewardNodeProvider, RewardNodeProviders,
+        SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse, Tally,
+        Topic, UpdateNodeProvider, Vote, WaitForQuietState,
+        XdrConversionRate as XdrConversionRatePb,
     },
     proposals::create_service_nervous_system::ExecutedCreateServiceNervousSystemProposal,
 };
@@ -112,7 +113,6 @@ use std::{
 mod ledger_helper;
 mod manage_neuron_request;
 mod merge_neurons;
-mod restore_aging;
 pub mod test_data;
 #[cfg(test)]
 mod tests;
@@ -1351,8 +1351,9 @@ impl Topic {
     fn reward_weight(&self) -> f64 {
         match self {
             // We provide higher voting rewards for neuron holders
-            // who vote on governance proposals.
+            // who vote on Governance and SnsAndCommunityFund proposals.
             Topic::Governance => 20.0,
+            Topic::SnsAndCommunityFund => 20.0,
             // Lower voting rewards for exchange rate proposals.
             Topic::ExchangeRate => 0.01,
             // Other topics are unit weighted. Typically a handful of
@@ -1740,7 +1741,7 @@ impl Governance {
         let (heap_neurons, topic_followee_map, heap_governance_proto) =
             split_governance_proto(governance_proto);
 
-        let mut governance = Self {
+        Self {
             heap_data: heap_governance_proto,
             neuron_store: NeuronStore::new_restored((heap_neurons, topic_followee_map)),
             env,
@@ -1751,12 +1752,7 @@ impl Governance {
             latest_gc_num_proposals: 0,
             neuron_data_validator: NeuronDataValidator::new(),
             minting_node_provider_rewards: false,
-        };
-
-        // TODO(NNS1-3015): delete after release.
-        governance.maybe_restore_pre_aged_neurons();
-
-        governance
+        }
     }
 
     /// After calling this method, the proto and neuron_store (the heap neurons at least)
@@ -7582,6 +7578,10 @@ impl Governance {
 
     pub fn neuron_data_validation_summary(&self) -> NeuronDataValidationSummary {
         self.neuron_data_validator.summary()
+    }
+
+    pub fn get_restore_aging_summary(&self) -> Option<RestoreAgingSummary> {
+        self.heap_data.restore_aging_summary.clone()
     }
 }
 

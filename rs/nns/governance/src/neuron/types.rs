@@ -1,4 +1,5 @@
 use crate::{
+    neuron::dissolve_state_and_age::DissolveStateAndAge,
     neuron_store::NeuronStoreError,
     pb::v1::{
         abridged_neuron::DissolveState as AbridgedNeuronDissolveState,
@@ -141,6 +142,33 @@ impl Neuron {
     /// Replace the controller of the neuron. Only GTC neurons can change their controller.
     pub fn set_controller(&mut self, new_controller: PrincipalId) {
         self.controller = new_controller;
+    }
+
+    /// Returns the dissolve state. Deprecated and only used by the old merge neurons flow and will
+    /// be cleaned up.
+    pub fn depregated_dissolve_state(&self) -> Option<NeuronDissolveState> {
+        self.dissolve_state.clone()
+    }
+
+    /// Sets the dissolve state. Deprecated and only used by the old merge neurons flow and will
+    /// be cleaned up.
+    pub fn deprecated_set_dissolve_state(&mut self, dissolve_state: NeuronDissolveState) {
+        self.dissolve_state = Some(dissolve_state);
+    }
+
+    /// Returns the aging since timestamp in seconds. Deprecated and only used by the old merge
+    /// neurons flow and will be cleaned up.
+    pub fn deprecated_aging_since_timestamp_seconds(&self) -> u64 {
+        self.aging_since_timestamp_seconds
+    }
+
+    /// Sets the aging since timestamp in seconds. Deprecated and only used by the old merge neurons
+    /// flow and will be cleaned up.
+    pub fn deprecated_set_aging_since_timestamp_seconds(
+        &mut self,
+        aging_since_timestamp_seconds: u64,
+    ) {
+        self.aging_since_timestamp_seconds = aging_since_timestamp_seconds;
     }
 }
 
@@ -649,43 +677,6 @@ impl NeuronBuilder {
     }
 }
 
-/// An enum to represent different combinations of a neurons dissolve_state and
-/// aging_since_timestamp_seconds. Currently, the back-and-forth conversions should make sure the
-/// legacy states remain the same unless some operations performed on the neuron makes the state/age
-/// changes. After we make sure all neuron mutations or creations must mutate states to valid ones
-/// and the invalid states have been migrated to valid ones on the mainnet, we can panic in
-/// conversion when invalid states are encountered. 2 of the legacy states
-/// (LegacyDissolvingOrDissolved and LegacyDissolved) are the cases we already know to be existing
-/// on the mainnet.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum DissolveStateAndAge {
-    /// A non-dissolving neuron has a dissolve delay and an aging since timestamp.
-    NotDissolving {
-        dissolve_delay_seconds: u64,
-        aging_since_timestamp_seconds: u64,
-    },
-    /// A dissolving or dissolved neuron has a dissolved timestamp and no aging since timestamp.
-    DissolvingOrDissolved {
-        when_dissolved_timestamp_seconds: u64,
-    },
-    /// We used to allow neurons to have age when they were dissolving or dissolved. This should be
-    /// mapped to DissolvingOrDissolved { when_dissolved_timestamp_seconds } and its aging singe
-    /// timestamp removed.
-    LegacyDissolvingOrDissolved {
-        when_dissolved_timestamp_seconds: u64,
-        aging_since_timestamp_seconds: u64,
-    },
-    /// When claiming a neuron, the dissolve delay is set to 0 while the neuron is considered
-    /// dissolved. Its aging_since_timestamp_seconds is set to the neuron was claimed. This state
-    /// should be mapped to DissolvingOrDissolved { when_dissolved_timestamp_seconds:
-    /// aging_since_timestamp_seconds }.
-    LegacyDissolved { aging_since_timestamp_seconds: u64 },
-
-    /// The dissolve state is None, which should have never existed, but we keep the current
-    /// behavior of considering it as a dissolved neuron.
-    LegacyNoneDissolveState { aging_since_timestamp_seconds: u64 },
-}
-
 /// An intermediate struct to represent a neuron's dissolve state and age on the storage layer.
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct StoredDissolvedStateAndAge {
@@ -852,7 +843,7 @@ mod tests {
 
         for (dissolve_state_and_age, stored_dissolved_state_and_age) in test_cases {
             assert_eq!(
-                StoredDissolvedStateAndAge::from(dissolve_state_and_age.clone()),
+                StoredDissolvedStateAndAge::from(dissolve_state_and_age),
                 stored_dissolved_state_and_age.clone()
             );
             assert_eq!(

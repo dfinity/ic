@@ -1,5 +1,6 @@
 //! Test neuron operations using the governance and other NNS canisters.
 
+use canister_test::Runtime;
 use dfn_candid::candid_one;
 use dfn_protobuf::protobuf;
 use ic_base_types::PrincipalId;
@@ -22,7 +23,7 @@ use ic_nns_governance::{
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
     state_test_helpers::{
         list_neurons, nns_add_hot_key, nns_join_community_fund, nns_leave_community_fund,
         nns_remove_hot_key, setup_nns_canisters, state_machine_builder_for_nns_tests,
@@ -33,7 +34,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 #[test]
 fn test_merge_neurons_and_simulate_merge_neurons() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         const TWELVE_MONTHS_SECONDS: u64 = 30 * 12 * 24 * 60 * 60;
 
         //
@@ -152,7 +153,7 @@ fn test_merge_neurons_and_simulate_merge_neurons() {
 
 #[test]
 fn test_spawn_neuron() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         const TWELVE_MONTHS_SECONDS: u64 = 30 * 12 * 24 * 60 * 60;
 
         let mut nns_builder = NnsInitPayloadsBuilder::new();
@@ -231,11 +232,19 @@ fn test_spawn_neuron() {
         assert_eq!(spawned_neuron.maturity_e8s_equivalent, 1_000_000_000);
 
         // Advance the time in the governance canister.
-        nns_canisters
-            .set_time_warp((86400 * 7 + 1) as i64)
-            .await
-            .expect(r#"Expected set_time_warp to succeed"#);
-
+        match &runtime {
+            Runtime::StateMachine(sm) => {
+                sm.advance_time(std::time::Duration::from_secs(86400 * 7 + 1));
+                sm.tick();
+                sm.tick();
+            }
+            Runtime::Remote(_) | Runtime::Local(_) => {
+                nns_canisters
+                    .set_time_warp((86400 * 7 + 1) as i64)
+                    .await
+                    .expect(r#"Expected set_time_warp to succeed"#);
+            }
+        }
         // Now loop a few times and expect the neuron's stake to be minted and for the
         // neuron to be dissolved.
         for _i in 0..10 {
@@ -250,17 +259,9 @@ fn test_spawn_neuron() {
                 .await
                 .unwrap();
 
-            let now = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_secs()
-                + 86400 * 7
-                + 1;
-            println!("Found neuron [now: {:?}]: {:?}", now, spawned_neuron);
-
             let spawned_neuron = response.unwrap();
 
-            if spawned_neuron.state(now) == NeuronState::Dissolved {
+            if spawned_neuron.spawn_at_timestamp_seconds.is_none() {
                 assert!(
                     spawned_neuron.cached_neuron_stake_e8s > 950_000_000
                         && spawned_neuron.cached_neuron_stake_e8s < 1_050_000_000

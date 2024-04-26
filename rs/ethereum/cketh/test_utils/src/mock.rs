@@ -59,7 +59,7 @@ impl JsonRpcProvider {
     fn url(&self) -> &str {
         match self {
             JsonRpcProvider::Ankr => "https://rpc.ankr.com/eth",
-            JsonRpcProvider::PublicNode => "https://ethereum.publicnode.com",
+            JsonRpcProvider::PublicNode => "https://ethereum-rpc.publicnode.com",
             JsonRpcProvider::LlamaNodes => "https://eth.llamarpc.com",
         }
     }

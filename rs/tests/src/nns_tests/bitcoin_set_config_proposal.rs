@@ -7,6 +7,7 @@ use crate::driver::test_env_api::{
     retry_async, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
     READY_WAIT_TIMEOUT, RETRY_BACKOFF,
 };
+use crate::nns::{get_governance_canister, vote_execute_proposal_assert_failed};
 use crate::retry_with_msg_async;
 use crate::util::{block_on, runtime_from_url};
 use candid::{Decode, Encode};
@@ -16,7 +17,9 @@ use ic_btc_interface::{Config as BitcoinConfig, Flag, Network, SetConfigRequest}
 use ic_config::execution_environment::{BITCOIN_MAINNET_CANISTER_ID, BITCOIN_TESTNET_CANISTER_ID};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance::governance::BitcoinNetwork;
-use ic_nns_test_utils::governance::bitcoin_set_config_by_proposal;
+use ic_nns_test_utils::governance::{
+    bitcoin_set_config_by_proposal, invalid_bitcoin_set_config_by_proposal,
+};
 use ic_registry_subnet_type::SubnetType;
 use std::str::FromStr;
 
@@ -64,6 +67,25 @@ pub fn test(env: TestEnv) {
 
         const NEW_STABILITY_THRESHOLD: u128 = 17;
         const NEW_API_ACCESS_FLAG: Flag = Flag::Disabled;
+
+        // Submit (and execute) an invalid proposal to update the settings of the Bitcoin canisters.
+        let invalid_proposal_id = block_on(async {
+            invalid_bitcoin_set_config_by_proposal(
+                &Canister::new(&nns, GOVERNANCE_CANISTER_ID),
+                SetConfigRequest {
+                    stability_threshold: Some(NEW_STABILITY_THRESHOLD),
+                    api_access: Some(NEW_API_ACCESS_FLAG),
+                    ..Default::default()
+                },
+            )
+            .await
+        });
+        let governance_canister = get_governance_canister(&nns);
+        let error = "Couldn't execute NNS function through proposal".to_string();
+        block_on(async {
+            vote_execute_proposal_assert_failed(&governance_canister, invalid_proposal_id, error)
+                .await;
+        });
 
         // Submit (and execute) a proposal to update the settings of the Bitcoin canisters.
         let _proposal_id = block_on(async {

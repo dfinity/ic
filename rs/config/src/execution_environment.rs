@@ -328,7 +328,7 @@ impl Default for Config {
             query_cache_max_expiry_time: QUERY_CACHE_MAX_EXPIRY_TIME,
             query_cache_data_certificate_expiry_time: QUERY_CACHE_DATA_CERTIFICATE_EXPIRY_TIME,
             max_compilation_cache_size: MAX_COMPILATION_CACHE_SIZE,
-            query_stats_aggregation: FlagStatus::Disabled,
+            query_stats_aggregation: FlagStatus::Enabled,
             query_stats_epoch_length: QUERY_STATS_EPOCH_LENGTH,
             wasm_chunk_store: FlagStatus::Enabled,
             stop_canister_timeout_duration: STOP_CANISTER_TIMEOUT_DURATION,

@@ -18,8 +18,8 @@ ic-base-types = { path = "../../types/base_types" }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-ledger-canister-core = { path = "../ledger_canister_core" }
 ic-ledger-core = { path = "../ledger_core" }
-icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 ic-ledger-hash-of = { path = "../../../packages/ic-ledger-hash-of" }
+icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 lazy_static = "1.4.0"
 num-traits = { workspace = true }
 on_wire = { path = "../../rust_canisters/on_wire" }
@@ -50,20 +50,20 @@ tempfile = "3.1.0"
 
 [[test]]
 name = "test"
-path = "test/test.rs"
+path = "tests/tests.rs"
 
 [[test]]
 name = "upgrade_downgrade"
-path = "test/upgrade_downgrade.rs"
+path = "tests/upgrade_downgrade.rs"
 
 [[test]]
 name = "check_generated_files"
-path = "test/check_generated_files.rs"
+path = "tests/check_generated_files.rs"
 
 [[test]]
 name = "protobuf_encoding"
-path = "test/protobuf_encoding.rs"
+path = "tests/protobuf_encoding.rs"
 
 [[bin]]
 name = "test-notified"
-path = "test/notified.rs"
+path = "tests/notified.rs"

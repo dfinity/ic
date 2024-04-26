@@ -2,7 +2,7 @@
 Hold manifest common to all HostOS variants.
 """
 
-load("//ic-os/hostos/rootfs:defs.bzl", "rootfs_files")
+load("//ic-os/rootfs:hostos.bzl", "rootfs_files")
 load("//toolchains/sysimage:toolchain.bzl", "lvm_image")
 
 # Declare the dependencies that we will have for the built filesystem images.

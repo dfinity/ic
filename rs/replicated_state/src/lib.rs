@@ -28,6 +28,32 @@
 //! - We don't attempt to restore invariants or soft invariants upon deserializing
 //!   as it could change the past.
 //!
+//! Note [Handling changes to Enums in Replicated State]
+//! ========================================
+//!
+//! Enums that are persisted in the Replicated State require special handling
+//! to ensure that changes to them are compatible across replica releases.
+//!
+//! Changes to such enums must be rolled out in stages, across multiple replica
+//! releases. You must ensure that the release with the first stage of the change
+//! is deployed to each subnet before proceeding with the second stage.
+//!
+//!  * If you are removing a variant, in the first stage remove all
+//!   uses of said variant from production code (except its definition and any
+//!   conversion logic); only once this change has been deployed to all subnets,
+//!   in the second phase, remove the variant and update this test.
+//!
+//!  * If you are adding a variant, in the first stage define the
+//!    variant and the necessary conversion logic, without using it anywhere (and
+//!    update this test); once the replica release has been deployed to all
+//!    subnets, it is safe to begin using the new variant in production code.
+//!
+//!  * If you are remapping the numeric code behind a variant, you must do it as
+//!    concurrent removal and addition operations (see above). You can also
+//!    rename the variant you are removing to `Deprecated<Name>` as part of the
+//!    first step, so you can concurrently define the new variant and preserve
+//!    the name.
+//!
 mod bitcoin;
 pub mod canister_snapshots;
 pub mod canister_state;

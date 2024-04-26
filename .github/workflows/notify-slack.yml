@@ -26,7 +26,7 @@ jobs:
           TEAM_REVIEWERS=$(echo '${{ steps.get-reviewers.outputs.result }}' | jq -c '.[]')
           CHANNELS=""
           for TEAM in $TEAM_REVIEWERS; do
-            CHANNEL=$(jq -r ".$TEAM" .github/workflows/data/team-channels.json)
+            CHANNEL=$(jq -r ".$TEAM" .github/workflows/team-channels.json)
             if [ "$CHANNEL" != "null" ]; then
               if [ -z "$CHANNELS" ]; then
                 CHANNELS="$CHANNEL"

@@ -325,6 +325,56 @@ pub struct InitialDkgAttemptCount {
     #[prost(uint32, tag = "2")]
     pub attempt_no: u32,
 }
+#[derive(
+    serde::Serialize,
+    serde::Deserialize,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    ::prost::Enumeration,
+)]
+#[repr(i32)]
+pub enum RejectCode {
+    Unspecified = 0,
+    SysFatal = 1,
+    SysTransient = 2,
+    DestinationInvalid = 3,
+    CanisterReject = 4,
+    CanisterError = 5,
+}
+impl RejectCode {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            RejectCode::Unspecified => "REJECT_CODE_UNSPECIFIED",
+            RejectCode::SysFatal => "REJECT_CODE_SYS_FATAL",
+            RejectCode::SysTransient => "REJECT_CODE_SYS_TRANSIENT",
+            RejectCode::DestinationInvalid => "REJECT_CODE_DESTINATION_INVALID",
+            RejectCode::CanisterReject => "REJECT_CODE_CANISTER_REJECT",
+            RejectCode::CanisterError => "REJECT_CODE_CANISTER_ERROR",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "REJECT_CODE_UNSPECIFIED" => Some(Self::Unspecified),
+            "REJECT_CODE_SYS_FATAL" => Some(Self::SysFatal),
+            "REJECT_CODE_SYS_TRANSIENT" => Some(Self::SysTransient),
+            "REJECT_CODE_DESTINATION_INVALID" => Some(Self::DestinationInvalid),
+            "REJECT_CODE_CANISTER_REJECT" => Some(Self::CanisterReject),
+            "REJECT_CODE_CANISTER_ERROR" => Some(Self::CanisterError),
+            _ => None,
+        }
+    }
+}
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -360,10 +410,6 @@ pub struct EcdsaPayload {
     pub signature_agreements: ::prost::alloc::vec::Vec<CompletedSignature>,
     #[prost(message, repeated, tag = "2")]
     pub ongoing_signatures: ::prost::alloc::vec::Vec<OngoingSignature>,
-    #[prost(message, repeated, tag = "3")]
-    pub available_quadruples: ::prost::alloc::vec::Vec<AvailableQuadruple>,
-    #[prost(message, repeated, tag = "4")]
-    pub quadruples_in_creation: ::prost::alloc::vec::Vec<QuadrupleInProgress>,
     #[prost(message, optional, tag = "5")]
     pub next_unused_transcript_id:
         ::core::option::Option<super::super::registry::subnet::v1::IDkgTranscriptId>,
@@ -378,6 +424,10 @@ pub struct EcdsaPayload {
     pub next_unused_quadruple_id: u64,
     #[prost(message, repeated, tag = "13")]
     pub key_transcripts: ::prost::alloc::vec::Vec<EcdsaKeyTranscript>,
+    #[prost(message, repeated, tag = "14")]
+    pub available_pre_signatures: ::prost::alloc::vec::Vec<AvailablePreSignature>,
+    #[prost(message, repeated, tag = "15")]
+    pub pre_signatures_in_creation: ::prost::alloc::vec::Vec<PreSignatureInProgress>,
     /// TODO: retire these fields, once we start using `key_transcripts`.
     #[prost(message, optional, tag = "9")]
     pub current_key_transcript: ::core::option::Option<UnmaskedTranscriptWithAttributes>,
@@ -385,23 +435,18 @@ pub struct EcdsaPayload {
     pub next_key_in_creation: ::core::option::Option<KeyTranscriptCreation>,
     #[prost(message, optional, tag = "12")]
     pub key_id: ::core::option::Option<super::super::registry::crypto::v1::EcdsaKeyId>,
+    /// TODO: retire these fields, once we start using `pre_signatures`.
+    #[prost(message, repeated, tag = "3")]
+    pub available_quadruples: ::prost::alloc::vec::Vec<AvailableQuadruple>,
+    #[prost(message, repeated, tag = "4")]
+    pub quadruples_in_creation: ::prost::alloc::vec::Vec<QuadrupleInProgress>,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ConsensusResponse {
-    #[prost(message, optional, tag = "1")]
-    pub originator: ::core::option::Option<CanisterId>,
-    #[prost(message, optional, tag = "2")]
-    pub respondent: ::core::option::Option<CanisterId>,
     #[prost(uint64, tag = "3")]
     pub callback: u64,
-    #[prost(message, optional, tag = "4")]
-    pub refund: ::core::option::Option<super::super::state::queues::v1::Funds>,
-    #[prost(message, optional, tag = "7")]
-    pub cycles_refund: ::core::option::Option<super::super::state::queues::v1::Cycles>,
-    #[prost(uint32, optional, tag = "8")]
-    pub deadline_seconds: ::core::option::Option<u32>,
     #[prost(oneof = "consensus_response::Payload", tags = "5, 6")]
     pub payload: ::core::option::Option<consensus_response::Payload>,
 }
@@ -463,6 +508,24 @@ pub struct QuadrupleInProgress {
     /// Deprecated. Use `quadruple.key_id` instead.
     #[prost(message, optional, tag = "3")]
     pub key_id: ::core::option::Option<super::super::registry::crypto::v1::EcdsaKeyId>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct AvailablePreSignature {
+    #[prost(uint64, tag = "1")]
+    pub pre_signature_id: u64,
+    #[prost(message, optional, tag = "2")]
+    pub pre_signature: ::core::option::Option<PreSignatureRef>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PreSignatureInProgress {
+    #[prost(uint64, tag = "1")]
+    pub pre_signature_id: u64,
+    #[prost(message, optional, tag = "2")]
+    pub pre_signature: ::core::option::Option<PreSignatureInCreation>,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -602,6 +665,46 @@ pub struct UnmaskedTimesMaskedParams {
     pub transcript_ref: ::core::option::Option<IDkgTranscriptParamsRef>,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::large_enum_variant)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PreSignatureInCreation {
+    #[prost(oneof = "pre_signature_in_creation::Msg", tags = "1, 2")]
+    pub msg: ::core::option::Option<pre_signature_in_creation::Msg>,
+}
+/// Nested message and enum types in `PreSignatureInCreation`.
+pub mod pre_signature_in_creation {
+    #[derive(serde::Serialize, serde::Deserialize)]
+    #[allow(clippy::large_enum_variant)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Msg {
+        #[prost(message, tag = "1")]
+        Ecdsa(super::QuadrupleInCreation),
+        #[prost(message, tag = "2")]
+        Schnorr(super::TranscriptInCreation),
+    }
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PreSignatureRef {
+    #[prost(oneof = "pre_signature_ref::Msg", tags = "1, 2")]
+    pub msg: ::core::option::Option<pre_signature_ref::Msg>,
+}
+/// Nested message and enum types in `PreSignatureRef`.
+pub mod pre_signature_ref {
+    #[derive(serde::Serialize, serde::Deserialize)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Msg {
+        #[prost(message, tag = "1")]
+        Ecdsa(super::PreSignatureQuadrupleRef),
+        #[prost(message, tag = "2")]
+        Schnorr(super::PreSignatureTranscriptRef),
+    }
+}
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct QuadrupleInCreation {
@@ -662,6 +765,28 @@ pub struct ThresholdEcdsaSigInputsRef {
     pub presig_quadruple_ref: ::core::option::Option<PreSignatureQuadrupleRef>,
     #[prost(message, optional, tag = "5")]
     pub key_transcript_ref: ::core::option::Option<UnmaskedTranscript>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct TranscriptInCreation {
+    #[prost(message, optional, tag = "1")]
+    pub key_id: ::core::option::Option<super::super::registry::crypto::v1::SchnorrKeyId>,
+    #[prost(message, optional, tag = "2")]
+    pub blinder_unmasked_config: ::core::option::Option<RandomUnmaskedTranscriptParams>,
+    #[prost(message, optional, tag = "3")]
+    pub blinder_unmasked: ::core::option::Option<UnmaskedTranscript>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PreSignatureTranscriptRef {
+    #[prost(message, optional, tag = "1")]
+    pub key_id: ::core::option::Option<super::super::registry::crypto::v1::SchnorrKeyId>,
+    #[prost(message, optional, tag = "2")]
+    pub blinder_unmasked_ref: ::core::option::Option<UnmaskedTranscript>,
+    #[prost(message, optional, tag = "3")]
+    pub key_unmasked_ref: ::core::option::Option<UnmaskedTranscript>,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -1254,20 +1379,6 @@ pub struct IngressPayload {
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct ConsensusMessageFilter {
-    #[prost(uint64, tag = "1")]
-    pub height: u64,
-}
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct CertificationMessageFilter {
-    #[prost(uint64, tag = "1")]
-    pub height: u64,
-}
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct HttpHeader {
     #[prost(string, tag = "1")]
     pub name: ::prost::alloc::string::String,
@@ -1335,7 +1446,9 @@ pub mod canister_http_response_content {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpReject {
     #[prost(uint32, tag = "1")]
-    pub reject_code: u32,
+    pub reject_code_old: u32,
+    #[prost(enumeration = "RejectCode", tag = "3")]
+    pub reject_code: i32,
     #[prost(string, tag = "2")]
     pub message: ::prost::alloc::string::String,
 }

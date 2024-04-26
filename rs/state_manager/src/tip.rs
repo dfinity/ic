@@ -44,6 +44,9 @@ use std::time::Instant;
 
 const DEFRAG_SIZE: u64 = 1 << 29; // 500 MB
 const DEFRAG_SAMPLE: usize = 100;
+/// We merge starting from MAX_NUMBER_OF_FILES, we take up to 4 rounds to iterate over whole state,
+/// there are 2 overlays created each checkpoint.
+const NUMBER_OF_FILES_HARD_LIMIT: usize = MAX_NUMBER_OF_FILES + 8;
 
 /// Tip directory can be in following states:
 ///    Empty: no data available. The only possible request is ResetTipAndMerge to populate it
@@ -539,7 +542,8 @@ fn merge(
     let merges_by_filenum = merge_candidates
         .iter()
         .scan(0, |state, m| {
-            if *state >= storage_to_merge_for_filenum
+            if (*state >= storage_to_merge_for_filenum
+                && m.num_files_before() <= NUMBER_OF_FILES_HARD_LIMIT as u64)
                 || (m.num_files_before() <= MAX_NUMBER_OF_FILES as u64
                     && (*state + m.page_map_size_bytes() >= min_storage_to_merge))
             {
@@ -573,12 +577,14 @@ fn merge(
         .iter()
         .map(|m| m.storage_size_bytes_before() as i64 - m.storage_size_bytes_after() as i64)
         .sum();
+    let mut merges_by_storage = 0;
     for m in merge_candidates.into_iter() {
         if storage_saved >= storage_to_save {
             break;
         }
 
         storage_saved += m.storage_size_bytes_before() as i64 - m.storage_size_bytes_after() as i64;
+        merges_by_storage += 1;
         // Only full merges reduce overhead, and there should be enough of them to reach
         // `storage_to_save` before tapping into partial merges.
         debug_assert!(m.is_full_merge());
@@ -595,6 +601,29 @@ fn merge(
         storage_saved,
         merges_by_filenum,
     );
+
+    metrics
+        .merge_metrics
+        .disk_size_bytes
+        .set(storage_info.disk_size as i64);
+    metrics
+        .merge_metrics
+        .memory_size_bytes
+        .set(storage_info.mem_size as i64);
+    metrics
+        .merge_metrics
+        .estimated_storage_savings_bytes
+        .observe(storage_saved as f64);
+    metrics
+        .merge_metrics
+        .num_page_maps_merged
+        .with_label_values(&["file_num"])
+        .observe(merges_by_filenum as f64);
+    metrics
+        .merge_metrics
+        .num_page_maps_merged
+        .with_label_values(&["storage"])
+        .observe(merges_by_storage as f64);
 
     parallel_map(thread_pool, scheduled_merges.iter(), |m| {
         m.apply(&metrics.storage_metrics)
@@ -843,8 +872,6 @@ fn serialize_canister_to_tip(
             canister_log: canister_state.system_state.canister_log.clone(),
             wasm_memory_limit: canister_state.system_state.wasm_memory_limit,
             next_snapshot_id: canister_state.system_state.next_snapshot_id,
-            // TODO(EXC-1597): Deprecated field.
-            snapshot_ids: BTreeSet::new(),
         }
         .into(),
     )?;

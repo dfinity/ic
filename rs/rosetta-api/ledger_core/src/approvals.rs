@@ -208,10 +208,17 @@ where
                 Entry::Occupied(mut e) => {
                     let allowance = e.get_mut();
                     if let Some(expected_allowance) = expected_allowance {
-                        if expected_allowance != allowance.amount {
-                            return Err(ApproveError::AllowanceChanged {
-                                current_allowance: allowance.amount.clone(),
-                            });
+                        let current_allowance = if let Some(expires_at) = allowance.expires_at {
+                            if expires_at <= now {
+                                Tokens::zero()
+                            } else {
+                                allowance.amount.clone()
+                            }
+                        } else {
+                            allowance.amount.clone()
+                        };
+                        if expected_allowance != current_allowance {
+                            return Err(ApproveError::AllowanceChanged { current_allowance });
                         }
                     }
                     table

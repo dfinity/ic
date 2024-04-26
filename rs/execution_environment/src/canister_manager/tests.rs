@@ -18,7 +18,7 @@ use ic_config::{
 };
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
-use ic_embedders::wasm_utils::instrumentation::instruction_to_cost_new;
+use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{ExecutionMode, HypervisorError, SubnetAvailableMemory};
 use ic_logger::replica_logger::no_op_logger;
@@ -73,6 +73,7 @@ use ic_types::{
 use ic_wasm_types::{CanisterModule, WasmValidationError};
 use lazy_static::lazy_static;
 use maplit::{btreemap, btreeset};
+use more_asserts::{assert_ge, assert_lt};
 use std::{collections::BTreeSet, convert::TryFrom, mem::size_of, sync::Arc};
 
 use super::InstallCodeResult;
@@ -115,14 +116,13 @@ lazy_static! {
         execution_mode: ExecutionMode::Replicated,
         subnet_memory_saturation: ResourceSaturation::default(),
     };
-    static ref DROP_MEMORY_GROW_CONST_COST: u64 =
-        instruction_to_cost_new(&wasmparser::Operator::Drop)
-            + instruction_to_cost_new(&wasmparser::Operator::MemoryGrow {
-                mem: 0,
-                mem_byte: 0,
-            })
-            + instruction_to_cost_new(&wasmparser::Operator::I32Const { value: 0 });
-    static ref UNREACHABLE_COST: u64 = instruction_to_cost_new(&wasmparser::Operator::Unreachable);
+    static ref DROP_MEMORY_GROW_CONST_COST: u64 = instruction_to_cost(&wasmparser::Operator::Drop)
+        + instruction_to_cost(&wasmparser::Operator::MemoryGrow {
+            mem: 0,
+            mem_byte: 0,
+        })
+        + instruction_to_cost(&wasmparser::Operator::I32Const { value: 0 });
+    static ref UNREACHABLE_COST: u64 = instruction_to_cost(&wasmparser::Operator::Unreachable);
 }
 
 fn canister_change_origin_from_canister(sender: &CanisterId) -> CanisterChangeOrigin {
@@ -4226,7 +4226,7 @@ fn canister_version_changes_are_visible() {
 
     // Change controllers to bump canister version.
     let new_controller = PrincipalId::try_from(&[1, 2, 3][..]).unwrap();
-    assert!(new_controller != test.user_id().get());
+    assert_ne!(new_controller, test.user_id().get());
     test.set_controller(canister_id, new_controller).unwrap();
 
     let result = test.ingress(canister_id, "version", vec![]);
@@ -5739,8 +5739,9 @@ fn install_reserves_cycles_on_memory_allocation() {
         )
     );
 
-    assert!(
-        balance_before - balance_after >= reserved_cycles,
+    assert_ge!(
+        balance_before - balance_after,
+        reserved_cycles,
         "Unexpected balance change: {} >= {}",
         balance_before - balance_after,
         reserved_cycles,
@@ -5773,7 +5774,7 @@ fn install_reserves_cycles_on_memory_allocation() {
     assert_eq!(reserved_cycles, new_reserved_cycles);
 
     // Message execution fee is an order of a few million cycles.
-    assert!(balance_before - balance_after < Cycles::new(1_000_000_000));
+    assert_lt!(balance_before - balance_after, Cycles::new(1_000_000_000));
 }
 
 #[test]
@@ -5835,8 +5836,9 @@ fn install_reserves_cycles_on_memory_grow() {
         )
     );
 
-    assert!(
-        balance_before - balance_after >= reserved_cycles,
+    assert_ge!(
+        balance_before - balance_after,
+        reserved_cycles,
         "Unexpected balance change: {} >= {}",
         balance_before - balance_after,
         reserved_cycles,
@@ -5906,8 +5908,9 @@ fn upgrade_reserves_cycles_on_memory_allocation() {
         )
     );
 
-    assert!(
-        balance_before - balance_after >= reserved_cycles,
+    assert_ge!(
+        balance_before - balance_after,
+        reserved_cycles,
         "Unexpected balance change: {} >= {}",
         balance_before - balance_after,
         reserved_cycles,
@@ -5980,8 +5983,9 @@ fn upgrade_reserves_cycles_on_memory_grow() {
         )
     );
 
-    assert!(
-        balance_before - balance_after >= reserved_cycles,
+    assert_ge!(
+        balance_before - balance_after,
+        reserved_cycles,
         "Unexpected balance change: {} >= {}",
         balance_before - balance_after,
         reserved_cycles,
@@ -6025,7 +6029,7 @@ fn install_does_not_reserve_cycles_on_system_subnet() {
     let balance_after = test.canister_state(canister_id).system_state.balance();
 
     // Message execution fee is an order of a few million cycles.
-    assert!(balance_before - balance_after < Cycles::new(1_000_000_000));
+    assert_lt!(balance_before - balance_after, Cycles::new(1_000_000_000));
 
     let reserved_cycles = test
         .canister_state(canister_id)
@@ -6071,7 +6075,7 @@ fn install_does_not_reserve_cycles_on_verified_application_subnet() {
     let balance_after = test.canister_state(canister_id).system_state.balance();
 
     // Message execution fee is an order of a few million cycles.
-    assert!(balance_before - balance_after < Cycles::new(1_000_000_000));
+    assert_lt!(balance_before - balance_after, Cycles::new(1_000_000_000));
 
     let reserved_cycles = test
         .canister_state(canister_id)
@@ -6133,8 +6137,9 @@ fn create_canister_reserves_cycles_for_memory_allocation() {
         )
     );
 
-    assert!(
-        balance_before - balance_after >= reserved_cycles,
+    assert_ge!(
+        balance_before - balance_after,
+        reserved_cycles,
         "Unexpected balance change: {} >= {}",
         balance_before - balance_after,
         reserved_cycles,
@@ -6199,8 +6204,9 @@ fn update_settings_reserves_cycles_for_memory_allocation() {
         )
     );
 
-    assert!(
-        balance_before - balance_after >= reserved_cycles,
+    assert_ge!(
+        balance_before - balance_after,
+        reserved_cycles,
         "Unexpected balance change: {} >= {}",
         balance_before - balance_after,
         reserved_cycles,
@@ -6328,8 +6334,9 @@ fn resource_saturation_scaling_works_in_create_canister() {
         )
     );
 
-    assert!(
-        balance_before - balance_after >= reserved_cycles,
+    assert_ge!(
+        balance_before - balance_after,
+        reserved_cycles,
         "Unexpected balance change: {} >= {}",
         balance_before - balance_after,
         reserved_cycles,
@@ -6401,8 +6408,9 @@ fn resource_saturation_scaling_works_in_install_code() {
         )
     );
 
-    assert!(
-        balance_before - balance_after >= reserved_cycles,
+    assert_ge!(
+        balance_before - balance_after,
+        reserved_cycles,
         "Unexpected balance change: {} >= {}",
         balance_before - balance_after,
         reserved_cycles,
@@ -6724,7 +6732,7 @@ fn canister_status_contains_reserved_cycles() {
             .reserved_balance()
             .get()
     );
-    assert!(status.reserved_cycles() > 0);
+    assert_lt!(0, status.reserved_cycles());
 }
 
 #[test]
@@ -7293,8 +7301,9 @@ fn upload_chunk_reserves_cycles() {
         .system_state
         .reserved_balance()
         .get();
-    assert!(
-        reserved_balance > 0,
+    assert_lt!(
+        0,
+        reserved_balance,
         "Reserved balance {} should be positive",
         reserved_balance
     );
@@ -7322,7 +7331,10 @@ fn clear_chunk_store_works() {
     };
     test.subnet_message("upload_chunk", upload_args.encode())
         .unwrap();
-    assert!(test.canister_state(canister_id).memory_usage() > initial_memory_usage);
+    assert_lt!(
+        initial_memory_usage,
+        test.canister_state(canister_id).memory_usage()
+    );
     assert!(test
         .canister_state(canister_id)
         .system_state

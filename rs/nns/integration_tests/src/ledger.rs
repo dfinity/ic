@@ -1,16 +1,12 @@
 use assert_matches::assert_matches;
-use canister_test::{Canister, Project};
 use dfn_candid::candid_one;
 use dfn_protobuf::protobuf;
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::PrincipalId;
 use ic_canister_client_sender::Sender;
-use ic_ledger_core::{block::BlockType, timestamp::TimeStamp};
 use ic_nervous_system_common::ledger;
 use ic_nervous_system_common_test_keys::TEST_USER1_KEYPAIR;
 use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
-use ic_nns_constants::{
-    ALL_NNS_CANISTER_IDS, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID,
-};
+use ic_nns_constants::{ALL_NNS_CANISTER_IDS, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID};
 use ic_nns_governance::pb::v1::{
     claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshResult,
     governance_error::ErrorType,
@@ -24,209 +20,20 @@ use ic_nns_governance::pb::v1::{
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    itest_helpers::{
-        local_test_on_nns_subnet, maybe_upgrade_root_controlled_canister_to_self, NnsCanisters,
-        UpgradeTestingScenario,
-    },
+    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
 };
 use icp_ledger::{
-    protobuf::TipOfChainRequest, tokens_from_proto, AccountBalanceArgs, AccountIdentifier,
-    ArchiveOptions, Block, BlockIndex, LedgerCanisterInitPayload, Memo, SendArgs, TipOfChainRes,
-    Tokens, Transaction, DEFAULT_TRANSFER_FEE,
+    tokens_from_proto, AccountBalanceArgs, AccountIdentifier, BlockIndex,
+    LedgerCanisterInitPayload, Memo, SendArgs, Tokens, DEFAULT_TRANSFER_FEE,
 };
-use std::{collections::HashMap, sync::Arc, time::Duration};
-use tokio::time::{timeout_at, Instant};
-
-fn example_block() -> Block {
-    let transaction = Transaction::new(
-        AccountIdentifier::new(CanisterId::from_u64(1).get(), None),
-        AccountIdentifier::new(CanisterId::from_u64(2).get(), None),
-        None,
-        Tokens::new(10000, 50).unwrap(),
-        DEFAULT_TRANSFER_FEE,
-        Memo(456),
-        TimeStamp::new(2_000_000_000, 123_456_789),
-    );
-    Block::new_from_transaction(
-        None,
-        transaction,
-        TimeStamp::new(1, 1),
-        DEFAULT_TRANSFER_FEE,
-    )
-}
-
-async fn perform_transfers(
-    nns_canisters: Arc<NnsCanisters<'static>>,
-    user: Sender,
-    blocks_per_archive_node: usize,
-) {
-    let mut join_handles = Vec::new();
-    // Do `num_blocks_to_archive' transfers in parallel
-    for idx in 0..blocks_per_archive_node {
-        let nns_canisters = nns_canisters.clone();
-        let user = user.clone();
-        join_handles.push(tokio::runtime::Handle::current().spawn(async move {
-            let result: Result<BlockIndex, String> = timeout_at(
-                Instant::now() + Duration::from_secs(10u64),
-                nns_canisters.ledger.update_from_sender(
-                    "send_pb",
-                    protobuf,
-                    SendArgs {
-                        memo: Memo(idx as u64),
-                        amount: Tokens::from_tokens(1).unwrap(),
-                        fee: DEFAULT_TRANSFER_FEE,
-                        from_subaccount: None,
-                        to: AccountIdentifier::new(user.get_principal_id(), None),
-                        created_at_time: None,
-                    },
-                    &user,
-                ),
-            )
-            .await
-            .unwrap_or_else(|_| Err(format!("Operation {} (transfer) timed out.", idx)));
-            result
-        }));
-    }
-
-    let results = futures::future::join_all(join_handles.into_iter()).await;
-    for result in results {
-        result
-            .as_ref()
-            .expect("Error waiting for ledger transfer.")
-            .as_ref()
-            .expect("Error doing ledger transfer");
-    }
-}
-
-#[test]
-fn test_rosetta1_92() {
-    local_test_on_nns_subnet(|runtime| async move {
-        let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
-        let alloc = Tokens::from_tokens(10000).unwrap();
-        let blocks_per_archive_node = 8usize;
-        let blocks_per_archive_call = 3usize;
-        let (node_max_memory_size_bytes, max_message_size_bytes): (usize, usize) = {
-            let e = example_block().encode();
-            println!("[test] encoded block size: {}", e.size_bytes());
-            (
-                e.size_bytes() * blocks_per_archive_node,
-                e.size_bytes() * blocks_per_archive_call,
-            )
-        };
-
-        let mut ledger_init_state = HashMap::new();
-        ledger_init_state.insert(AccountIdentifier::new(user.get_principal_id(), None), alloc);
-        let init_args = LedgerCanisterInitPayload::builder()
-            .minting_account(GOVERNANCE_CANISTER_ID.into())
-            .initial_values(ledger_init_state)
-            .archive_options(ArchiveOptions {
-                node_max_memory_size_bytes: Some(node_max_memory_size_bytes as u64),
-                max_message_size_bytes: Some(max_message_size_bytes as u64),
-                controller_id: ROOT_CANISTER_ID.into(),
-                more_controller_ids: None,
-                trigger_threshold: blocks_per_archive_node,
-                num_blocks_to_archive: blocks_per_archive_call,
-                cycles_for_archive_creation: Some(0),
-                max_transactions_per_response: None,
-            })
-            .send_whitelist(ALL_NNS_CANISTER_IDS.iter().map(|&x| *x).collect())
-            .build()
-            .unwrap();
-
-        let nns_init_payload = NnsInitPayloadsBuilder::new()
-            .with_test_neurons()
-            .with_ledger_init_state(init_args)
-            .build();
-
-        // Get a static reference to the runtime that we can pass around.
-        let runtime = Box::new(runtime);
-        let runtime: &'static canister_test::Runtime = Box::leak(runtime);
-        let mut nns_canisters = Arc::new(NnsCanisters::set_up(runtime, nns_init_payload).await);
-
-        perform_transfers(nns_canisters.clone(), user.clone(), blocks_per_archive_node).await;
-
-        let tip_of_chain_before: Result<TipOfChainRes, String> = nns_canisters
-            .ledger
-            .query_("tip_of_chain_pb", protobuf, TipOfChainRequest {})
-            .await;
-
-        assert_eq!(
-            tip_of_chain_before
-                .expect("Couldn't get the tip of the chain")
-                .tip_index,
-            // Tip of chain should be 4 initial transfers + 8 transfers - 1
-            11u64
-        );
-        // All should be good by now, the tip should report the right number and we
-        // should have archived the operations above.
-
-        // Make sure there is exactly one archive canister
-        let result: Result<Vec<CanisterId>, String> = nns_canisters
-            .ledger
-            .query_("get_nodes", dfn_candid::candid, ())
-            .await;
-
-        assert_eq!(
-            result
-                .as_ref()
-                .expect("Failed to get archive canisters")
-                .len(),
-            1
-        );
-        let archive_canister_id = result.unwrap()[0];
-        let mut archive_canister = Canister::new(runtime, archive_canister_id);
-
-        let archive_canister_wasm =
-            Project::cargo_bin_maybe_from_env("ledger-archive-node-canister", &[]);
-
-        archive_canister.set_wasm(archive_canister_wasm.bytes());
-        // Now upgrade the archive to self, it should stop taking blocks from the ledger
-        maybe_upgrade_root_controlled_canister_to_self(
-            Arc::get_mut(&mut nns_canisters).unwrap().clone(),
-            &mut archive_canister,
-            true,
-            UpgradeTestingScenario::Always,
-        )
-        .await;
-
-        // Perform some more transfers, this should create another archive canister but
-        // because of ROSETTA1-92 it doesn't.
-        // Perform the transfers in single transfer batches so that we give archiving
-        // some opportunity to catch up.
-        for _i in 0..blocks_per_archive_node {
-            perform_transfers(nns_canisters.clone(), user.clone(), 1).await;
-        }
-
-        let tip_of_chain_after: Result<TipOfChainRes, String> = nns_canisters
-            .ledger
-            .query_("tip_of_chain_pb", protobuf, TipOfChainRequest {})
-            .await;
-
-        assert_eq!(
-            tip_of_chain_after
-                .expect("Couldn't get the tip of the chain")
-                .tip_index,
-            // Tip of chain should be 4 initial transfers + 16 transfers - 1
-            19u64
-        );
-
-        // Assert that we have the right number of archive canisters.
-        let archive_canisters: Vec<CanisterId> = nns_canisters
-            .ledger
-            .query_("get_nodes", dfn_candid::candid, ())
-            .await
-            .expect("Couldn't get archive canisters");
-        assert!(archive_canisters.len() >= 2);
-        Ok(())
-    });
-}
+use std::collections::HashMap;
 
 // This tests the whole neuron lifecycle in integration with the ledger. Namely
 // tests that the neuron can be staked from a ledger account. That the neuron
 // can be claimed and ultimately disbursed to the same account.
 #[test]
 fn test_stake_and_disburse_neuron_with_notification() {
-    local_test_on_nns_subnet(|runtime| {
+    state_machine_test_on_nns_subnet(|runtime| {
         async move {
             // Initialize the ledger with an account for a user.
             let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
@@ -393,7 +200,7 @@ fn test_stake_and_disburse_neuron_with_notification() {
 // ledger account.
 #[test]
 fn test_stake_and_disburse_neuron_with_account() {
-    local_test_on_nns_subnet(|runtime| {
+    state_machine_test_on_nns_subnet(|runtime| {
         async move {
             // Initialize the ledger with an account for a user.
             let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
@@ -582,7 +389,7 @@ fn test_stake_and_disburse_neuron_with_account() {
 
 #[test]
 fn test_ledger_gtc_sync() {
-    local_test_on_nns_subnet(|runtime| async move {
+    state_machine_test_on_nns_subnet(|runtime| async move {
         let gtc_user_id = GENESIS_TOKEN_CANISTER_ID.get();
 
         let mut ledger_init_state = HashMap::new();

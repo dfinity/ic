@@ -598,7 +598,10 @@ fn install_code_with_start_with_err() {
         result,
         Err(UserError::new(
             ErrorCode::CanisterTrapped,
-            format!("Canister {} trapped: unreachable", canister_id)
+            format!(
+                "Error from Canister {}: Canister trapped: unreachable",
+                canister_id
+            )
         ))
     );
 }
@@ -709,7 +712,10 @@ fn install_code_with_init_method_with_error() {
         result,
         Err(UserError::new(
             ErrorCode::CanisterTrapped,
-            format!("Canister {} trapped: unreachable", canister_id)
+            format!(
+                "Error from Canister {}: Canister trapped: unreachable",
+                canister_id
+            )
         ))
     );
 }
@@ -834,7 +840,7 @@ fn install_code_running_out_of_instructions() {
         Err(UserError::new(
             ErrorCode::CanisterInstructionLimitExceeded,
             format!(
-                "Canister {} exceeded the instruction limit for single message execution.",
+                "Error from Canister {}: Canister exceeded the instruction limit for single message execution.",
                 canister_id
             )
         ))

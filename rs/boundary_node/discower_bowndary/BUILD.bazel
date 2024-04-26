@@ -3,18 +3,12 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
-    "//rs/protobuf",
-    "//rs/registry/client",
-    "//rs/registry/nns_data_provider_wrappers",
-    "@crate_index//:prost",
-    "@crate_index//:thiserror",
     "@crate_index//:tokio",
     "@crate_index//:tokio-util",
     "@crate_index//:arc-swap",
     "@crate_index//:url",
     "@crate_index//:ic-agent",
-    "@crate_index//:candid",
-    "@crate_index//:tracing",
+    "@crate_index//:http",
 ]
 
 VERSION = "0.1.0"
