@@ -385,6 +385,38 @@ impl NnsFunction {
                 | NnsFunction::DeployGuestosToAllSubnetNodes
         )
     }
+
+    fn can_have_large_payload(&self) -> bool {
+        matches!(
+            self,
+            NnsFunction::NnsCanisterUpgrade
+                | NnsFunction::NnsCanisterInstall
+                | NnsFunction::NnsRootUpgrade
+                | NnsFunction::HardResetNnsRootToVersion
+                | NnsFunction::AddSnsWasm
+        )
+    }
+
+    fn is_obsolete(&self) -> bool {
+        matches!(self, NnsFunction::UpdateAllowedPrincipals)
+    }
+
+    #[cfg(feature = "test")]
+    fn is_disabled(&self) -> bool {
+        false
+    }
+
+    #[cfg(not(feature = "test"))]
+    fn is_disabled(&self) -> bool {
+        matches!(
+            self,
+            NnsFunction::DeployGuestosToSomeApiBoundaryNodes
+                | NnsFunction::DeployGuestosToAllUnassignedNodes
+                | NnsFunction::UpdateSshReadonlyAccessForAllUnassignedNodes
+                | NnsFunction::ReviseElectedHostosVersions
+                | NnsFunction::DeployHostosToSomeNodes
+        )
+    }
 }
 
 impl ManageNeuronResponse {
@@ -563,24 +595,10 @@ impl NnsFunction {
                 (REGISTRY_CANISTER_ID, "deploy_guestos_to_all_subnet_nodes")
             }
             NnsFunction::UpdateElectedHostosVersions => {
-                // UpdateElectedHostosVersions is deprecated and can no longer be used.
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::InvalidProposal,
-                    format!(
-                        "NNS function {:?} is obsolete. Use `ReviseElectedHostosVersions` instead.",
-                        self
-                    ),
-                ));
+                (REGISTRY_CANISTER_ID, "update_elected_hostos_versions")
             }
             NnsFunction::UpdateNodesHostosVersion => {
-                // UpdateNodesHostosVersion is deprecated and can no longer be used.
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::InvalidProposal,
-                    format!(
-                        "{:?} is a deprecated NnsFunction. Use DeployHostosToSomeNodes instead",
-                        self
-                    ),
-                ));
+                (REGISTRY_CANISTER_ID, "update_nodes_hostos_version")
             }
             NnsFunction::ReviseElectedHostosVersions => {
                 // TODO[NNS1-3000]: Rename Registry API ednpoints callable only by NNS Governance.
@@ -614,12 +632,7 @@ impl NnsFunction {
                 (REGISTRY_CANISTER_ID, "add_or_remove_data_centers")
             }
             NnsFunction::UpdateUnassignedNodesConfig => {
-                // Updating unassigned nodes config proposal is obsoleted and
-                // can no longer be used.
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::InvalidProposal,
-                    format!("{:?} is an obsoleted NnsFunction. Use DeployGuestosToAllUnassignedNodes or UpdateSshReadonlyAccessForAllUnassignedNodes instead", self),
-                ));
+                (REGISTRY_CANISTER_ID, "update_unassigned_nodes_config")
             }
             NnsFunction::RemoveNodeOperators => (REGISTRY_CANISTER_ID, "remove_node_operators"),
             NnsFunction::RerouteCanisterRanges => (REGISTRY_CANISTER_ID, "reroute_canister_ranges"),
@@ -660,12 +673,7 @@ impl NnsFunction {
                 (REGISTRY_CANISTER_ID, "remove_api_boundary_nodes")
             }
             NnsFunction::UpdateApiBoundaryNodesVersion => {
-                // Updating API boundary nodes version proposal is obsoleted and
-                // can no longer be used.
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::InvalidProposal,
-                    format!("{:?} is an obsoleted NnsFunction. Use DeployGuestosToSomeApiBoundaryNodes instead", self),
-                ));
+                (REGISTRY_CANISTER_ID, "update_api_boundary_nodes_version")
             }
             NnsFunction::DeployGuestosToSomeApiBoundaryNodes => {
                 // TODO[NNS1-3000]: Rename Registry API for consistency.
@@ -2995,7 +3003,7 @@ impl Governance {
 
     /// Returns an error indicating MergeMaturity is no longer a valid action.
     /// Can be removed after October 2024, along with corresponding code.
-    pub fn merge_maturity_removed_error<T>(&mut self) -> Result<T, GovernanceError> {
+    pub fn merge_maturity_removed_error<T>() -> Result<T, GovernanceError> {
         Err(GovernanceError::new_with_message(
             ErrorType::InvalidCommand,
             "The command MergeMaturity is no longer available, as this functionality was \
@@ -4674,7 +4682,7 @@ impl Governance {
     }
 
     fn validate_manage_neuron_proposal(
-        &mut self,
+        &self,
         manage_neuron: &ManageNeuron,
     ) -> Result<(), GovernanceError> {
         let manage_neuron = ManageNeuron::from_proto(manage_neuron.clone()).map_err(|e| {
@@ -4702,7 +4710,7 @@ impl Governance {
 
         // Early exit for deprecated commands.
         if let Command::MergeMaturity(_) = manage_neuron.command.as_ref().unwrap() {
-            return self.merge_maturity_removed_error();
+            return Self::merge_maturity_removed_error();
         }
 
         let is_managed_neuron_not_for_profit = self
@@ -4765,7 +4773,7 @@ impl Governance {
             .map_or(1, |(k, _)| k + 1)
     }
 
-    fn validate_proposal(&mut self, proposal: &Proposal) -> Result<Action, GovernanceError> {
+    fn validate_proposal(&self, proposal: &Proposal) -> Result<Action, GovernanceError> {
         impl From<String> for GovernanceError {
             fn from(message: String) -> Self {
                 Self::new_with_message(ErrorType::InvalidProposal, message)
@@ -4823,92 +4831,136 @@ impl Governance {
         &self,
         update: &ExecuteNnsFunction,
     ) -> Result<(), GovernanceError> {
-        let error_str = {
-            if update.nns_function != NnsFunction::NnsCanisterUpgrade as i32
-                && update.nns_function != NnsFunction::NnsCanisterInstall as i32
-                && update.nns_function != NnsFunction::NnsRootUpgrade as i32
-                && update.nns_function != NnsFunction::HardResetNnsRootToVersion as i32
-                && update.nns_function != NnsFunction::AddSnsWasm as i32
-                && update.payload.len() > PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX
-            {
-                format!(
-                    "The maximum NNS function payload size in a proposal action is {} bytes, this payload is: {} bytes",
-                    PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX,
-                    update.payload.len(),
+        let nns_function = NnsFunction::try_from(update.nns_function).map_err(|_| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!("Invalid NnsFunction id: {}", update.nns_function),
+            )
+        })?;
+
+        let invalid_proposal_error = |error_message: String| -> GovernanceError {
+            GovernanceError::new_with_message(ErrorType::InvalidProposal, error_message)
+        };
+
+        if !nns_function.can_have_large_payload()
+            && update.payload.len() > PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX
+        {
+            return Err(invalid_proposal_error(format!(
+                "The maximum NNS function payload size in a proposal action is {} bytes, this payload is: {} bytes",
+                PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX,
+                update.payload.len(),
+            )));
+        }
+
+        if nns_function.is_obsolete() {
+            return Err(invalid_proposal_error(format!(
+                "{} proposal is obsolete",
+                nns_function.as_str_name()
+            )));
+        }
+
+        if nns_function.is_disabled() {
+            return Err(invalid_proposal_error(format!(
+                "{} proposal is disabled",
+                nns_function.as_str_name()
+            )));
+        }
+
+        match nns_function {
+            NnsFunction::IcpXdrConversionRate => {
+                Self::validate_icp_xdr_conversion_rate_payload(
+                    &update.payload,
+                    self.heap_data
+                        .economics
+                        .as_ref()
+                        .ok_or_else(|| GovernanceError::new(ErrorType::Unavailable))?
+                        .minimum_icp_xdr_rate,
                 )
-            } else if update.nns_function == NnsFunction::IcpXdrConversionRate as i32 {
-                match Decode!([decoder_config()]; &update.payload, UpdateIcpXdrConversionRatePayload) {
-                    Ok(payload) => {
-                        if payload.xdr_permyriad_per_icp
-                            < self.heap_data
-                                .economics
-                                .as_ref()
-                                .ok_or_else(|| GovernanceError::new(ErrorType::Unavailable))?
-                                .minimum_icp_xdr_rate
-                        {
-                            format!(
-                                "The proposed rate {} is below the minimum allowable rate",
-                                payload.xdr_permyriad_per_icp
-                            )
-                        } else {
-                            return Ok(());
-                        }
-                    }
-                    Err(e) => format!(
-                        "The payload could not be decoded into a UpdateIcpXdrConversionRatePayload: {}",
-                        e
-                    ),
-                }
-            } else if update.nns_function == NnsFunction::AssignNoid as i32 {
-                match Decode!([decoder_config()]; &update.payload, AddNodeOperatorPayload) {
-                    Ok(payload) => match payload.node_provider_principal_id {
-                        Some(id) => {
-                            let is_registered = self
-                                .get_node_providers()
-                                .iter()
-                                .any(|np| np.id.unwrap() == id);
-                            if !is_registered {
-                                "The node provider specified in the payload is not registered"
-                                    .to_string()
-                            } else {
-                                return Ok(());
-                            }
-                        }
-                        None => {
-                            "The payload's node_provider_principal_id field was None".to_string()
-                        }
-                    },
-                    Err(e) => format!(
-                        "The payload could not be decoded into a AddNodeOperatorPayload: {}",
-                        e
-                    ),
-                }
-            } else if update.nns_function == NnsFunction::AddOrRemoveDataCenters as i32 {
-                match Decode!([decoder_config()]; &update.payload, AddOrRemoveDataCentersProposalPayload) {
-                    Ok(payload) => match payload.validate() {
-                        Ok(_) => {
-                            return Ok(());
-                        }
-                        Err(e) => {
-                            format!("The given AddOrRemoveDataCentersProposalPayload is invalid: {}", e)
-                        }
-                    },
-                    Err(e) => format!(
-                        "The payload could not be decoded into a AddOrRemoveDataCentersProposalPayload: {}",
-                        e
-                    ),
-                }
-            } else if update.nns_function == NnsFunction::UpdateAllowedPrincipals as i32 {
-                "UpdateAllowedPrincipals proposal is disabled".to_string()
-            } else {
-                return Ok(());
+                .map_err(invalid_proposal_error)?;
+            }
+            NnsFunction::AssignNoid => {
+                Self::validate_assign_noid_payload(&update.payload, &self.heap_data.node_providers)
+                    .map_err(invalid_proposal_error)?;
+            }
+            NnsFunction::AddOrRemoveDataCenters => {
+                Self::validate_add_or_remove_data_centers_payload(&update.payload)
+                    .map_err(invalid_proposal_error)?;
+            }
+
+            _ => {}
+        };
+
+        Ok(())
+    }
+
+    fn validate_icp_xdr_conversion_rate_payload(
+        payload: &[u8],
+        minimum_icp_xdr_rate: u64,
+    ) -> Result<(), String> {
+        let decoded_payload = match Decode!([decoder_config()]; payload, UpdateIcpXdrConversionRatePayload)
+        {
+            Ok(payload) => payload,
+            Err(e) => {
+                return Err(format!(
+                    "The payload could not be decoded into a UpdateIcpXdrConversionRatePayload: {}",
+                    e
+                ));
             }
         };
 
-        Err(GovernanceError::new_with_message(
-            ErrorType::InvalidProposal,
-            error_str,
-        ))
+        if decoded_payload.xdr_permyriad_per_icp < minimum_icp_xdr_rate {
+            return Err(format!(
+                "The proposed rate {} is below the minimum allowable rate",
+                decoded_payload.xdr_permyriad_per_icp
+            ))?;
+        }
+
+        Ok(())
+    }
+
+    fn validate_assign_noid_payload(
+        payload: &[u8],
+        node_providers: &[NodeProvider],
+    ) -> Result<(), String> {
+        let decoded_payload = match Decode!([decoder_config()]; &payload, AddNodeOperatorPayload) {
+            Ok(payload) => payload,
+            Err(e) => {
+                return Err(format!(
+                    "The payload could not be decoded into a AddNodeOperatorPayload: {}",
+                    e
+                ));
+            }
+        };
+
+        if decoded_payload.node_provider_principal_id.is_none() {
+            return Err("The payload's node_provider_principal_id field was None".to_string());
+        }
+
+        let is_registered = node_providers
+            .iter()
+            .any(|np| np.id.unwrap() == decoded_payload.node_provider_principal_id.unwrap());
+        if !is_registered {
+            return Err("The node provider specified in the payload is not registered".to_string());
+        }
+
+        Ok(())
+    }
+
+    fn validate_add_or_remove_data_centers_payload(payload: &[u8]) -> Result<(), String> {
+        let decoded_payload = match Decode!([decoder_config()]; payload, AddOrRemoveDataCentersProposalPayload)
+        {
+            Ok(payload) => payload,
+            Err(e) => {
+                return Err(format!("The payload could not be decoded into a AddOrRemoveDataCentersProposalPayload: {}", e));
+            }
+        };
+
+        decoded_payload.validate().map_err(|e| {
+            format!(
+                "The given AddOrRemoveDataCentersProposalPayload is invalid: {}",
+                e
+            )
+        })
     }
 
     fn validate_create_service_nervous_system(
@@ -6037,7 +6089,7 @@ impl Governance {
             Some(Command::Spawn(s)) => self
                 .spawn_neuron(&id, caller, s)
                 .map(ManageNeuronResponse::spawn_response),
-            Some(Command::MergeMaturity(_)) => self.merge_maturity_removed_error(),
+            Some(Command::MergeMaturity(_)) => Self::merge_maturity_removed_error(),
             Some(Command::StakeMaturity(s)) => self
                 .stake_maturity_of_neuron(&id, caller, s)
                 .map(|(response, _)| ManageNeuronResponse::stake_maturity_response(response)),
