@@ -14,7 +14,7 @@ to the `ca-certificates.crt` bundle file sitting under `/etc/ssl/certs` folder, 
 processes running on the VM will be able to treat `/etc/ssl/certs` directory as trusted CAs.
 
 IC-OS reads `/ic-os/guestos/rootfs/dev-certs/` to update its `/etc/ssl/certs/ca-certificates.crt`
-bundle in: `/ic-os/guestos/rootfs/Dockerfile`
+bundle in: `/ic-os/guestos/context/Dockerfile`
 
 ### VM as HTTPS server
 In the folder where you have `minica.pem` and `minica-key.pem`, generate service 

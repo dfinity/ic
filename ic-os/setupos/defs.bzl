@@ -24,7 +24,7 @@ def image_deps(mode, _malicious = False):
     """
 
     deps = {
-        "base_dockerfile": "//ic-os/setupos/rootfs:Dockerfile.base",
+        "base_dockerfile": "//ic-os/setupos/context:Dockerfile.base",
 
         # Extra files to be added to rootfs and bootfs
         "bootfs": {},
@@ -33,13 +33,13 @@ def image_deps(mode, _malicious = False):
         },
 
         # Set various configuration values
-        "container_context_files": Label("//ic-os/setupos/rootfs:context-files"),
+        "container_context_files": Label("//ic-os/setupos/context:context-files"),
         "rootfs_files": rootfs_files,
         "partition_table": Label("//ic-os/setupos:partitions.csv"),
         "rootfs_size": "1750M",
         "bootfs_size": "100M",
         "grub_config": Label("//ic-os/setupos:grub.cfg"),
-        "extra_boot_args": Label("//ic-os/setupos/rootfs:extra_boot_args"),
+        "extra_boot_args": Label("//ic-os/setupos/context:extra_boot_args"),
 
         # Add any custom partitions to the manifest
         "custom_partitions": lambda: (_custom_partitions)(mode),

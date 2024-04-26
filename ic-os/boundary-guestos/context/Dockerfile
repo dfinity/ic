@@ -58,7 +58,7 @@ RUN mkdir -p /boot/config \
 COPY etc /etc
 
 # Change permissions on special files as they are copied.
-# See ic-os/guestos/rootfs/Dockerfile for details
+# See ic-os/boundary-guestos/context/Dockerfile for details
 COPY --chmod=644 etc/hosts /etc/hosts
 COPY --chmod=644 etc/hostname /etc/hostname
 COPY --chmod=644 etc/resolv.conf /etc/resolv.conf
@@ -119,7 +119,7 @@ RUN for SERVICE in /etc/systemd/system/*; do \
 # Add user/group entries specified here: /usr/lib/sysusers.d/systemd.conf
 # E.g., systemd-timesync/coredump
 RUN systemd-sysusers && \
-    # Fix reproducibility issue. Notes in guestos/rootfs/Dockerfile
+    # Fix reproducibility issue. Notes in boundary-guestos/context/Dockerfile
     usermod -p '!!' systemd-timesync && \
     usermod -p '!!' systemd-coredump && \
     # Set /bin/sh to point to /bin/bash instead of the default /bin/dash
