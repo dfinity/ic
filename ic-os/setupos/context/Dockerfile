@@ -25,7 +25,7 @@ RUN mkdir -p /config \
 COPY etc /etc
 
 # Change permissions on special files as they are copied.
-# See ic-os/guestos/rootfs/Dockerfile for details
+# See ic-os/setupos/context/Dockerfile for details
 COPY --chmod=644 etc/hosts /etc/hosts
 COPY --chmod=644 etc/hostname /etc/hostname
 COPY --chmod=644 etc/resolv.conf /etc/resolv.conf

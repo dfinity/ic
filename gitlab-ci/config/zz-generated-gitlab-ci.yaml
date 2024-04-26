@@ -93,16 +93,16 @@
       when: manual
     - changes:
         - gitlab-ci/config/base-images-build.yml
-        - ic-os/boundary-guestos/rootfs/Dockerfile.base
-        - ic-os/guestos/rootfs/Dockerfile.base
-        - ic-os/guestos/rootfs/packages.common
-        - ic-os/guestos/rootfs/packages.dev
-        - ic-os/hostos/rootfs/Dockerfile.base
-        - ic-os/hostos/rootfs/packages.common
-        - ic-os/hostos/rootfs/packages.dev
-        - ic-os/setupos/rootfs/Dockerfile.base
-        - ic-os/setupos/rootfs/packages.common
-        - ic-os/setupos/rootfs/packages.dev
+        - ic-os/boundary-guestos/context/Dockerfile.base
+        - ic-os/guestos/context/Dockerfile.base
+        - ic-os/guestos/context/packages.common
+        - ic-os/guestos/context/packages.dev
+        - ic-os/hostos/context/Dockerfile.base
+        - ic-os/hostos/context/packages.common
+        - ic-os/hostos/context/packages.dev
+        - ic-os/setupos/context/Dockerfile.base
+        - ic-os/setupos/context/packages.common
+        - ic-os/setupos/context/packages.dev
       if: $CI_PIPELINE_SOURCE == "merge_request_event"
   script:
     - |
@@ -140,16 +140,16 @@
       when: manual
     - changes:
         - gitlab-ci/config/base-images-build.yml
-        - ic-os/boundary-guestos/rootfs/Dockerfile.base
-        - ic-os/guestos/rootfs/Dockerfile.base
-        - ic-os/guestos/rootfs/packages.common
-        - ic-os/guestos/rootfs/packages.dev
-        - ic-os/hostos/rootfs/Dockerfile.base
-        - ic-os/hostos/rootfs/packages.common
-        - ic-os/hostos/rootfs/packages.dev
-        - ic-os/setupos/rootfs/Dockerfile.base
-        - ic-os/setupos/rootfs/packages.common
-        - ic-os/setupos/rootfs/packages.dev
+        - ic-os/boundary-guestos/context/Dockerfile.base
+        - ic-os/guestos/context/Dockerfile.base
+        - ic-os/guestos/context/packages.common
+        - ic-os/guestos/context/packages.dev
+        - ic-os/hostos/context/Dockerfile.base
+        - ic-os/hostos/context/packages.common
+        - ic-os/hostos/context/packages.dev
+        - ic-os/setupos/context/Dockerfile.base
+        - ic-os/setupos/context/packages.common
+        - ic-os/setupos/context/packages.dev
       if: $CI_PIPELINE_SOURCE == "merge_request_event"
 ".rules-master-pipeline-and-merge-request":
   rules:
@@ -1414,16 +1414,16 @@ build-base-images-ref-update:
       when: manual
     - changes:
         - gitlab-ci/config/base-images-build.yml
-        - ic-os/boundary-guestos/rootfs/Dockerfile.base
-        - ic-os/guestos/rootfs/Dockerfile.base
-        - ic-os/guestos/rootfs/packages.common
-        - ic-os/guestos/rootfs/packages.dev
-        - ic-os/hostos/rootfs/Dockerfile.base
-        - ic-os/hostos/rootfs/packages.common
-        - ic-os/hostos/rootfs/packages.dev
-        - ic-os/setupos/rootfs/Dockerfile.base
-        - ic-os/setupos/rootfs/packages.common
-        - ic-os/setupos/rootfs/packages.dev
+        - ic-os/boundary-guestos/context/Dockerfile.base
+        - ic-os/guestos/context/Dockerfile.base
+        - ic-os/guestos/context/packages.common
+        - ic-os/guestos/context/packages.dev
+        - ic-os/hostos/context/Dockerfile.base
+        - ic-os/hostos/context/packages.common
+        - ic-os/hostos/context/packages.dev
+        - ic-os/setupos/context/Dockerfile.base
+        - ic-os/setupos/context/packages.common
+        - ic-os/setupos/context/packages.dev
       if: $CI_PIPELINE_SOURCE == "merge_request_event"
   script:
     - |
@@ -1472,16 +1472,16 @@ build-boundaryos-base:
       when: manual
     - changes:
         - gitlab-ci/config/base-images-build.yml
-        - ic-os/boundary-guestos/rootfs/Dockerfile.base
-        - ic-os/guestos/rootfs/Dockerfile.base
-        - ic-os/guestos/rootfs/packages.common
-        - ic-os/guestos/rootfs/packages.dev
-        - ic-os/hostos/rootfs/Dockerfile.base
-        - ic-os/hostos/rootfs/packages.common
-        - ic-os/hostos/rootfs/packages.dev
-        - ic-os/setupos/rootfs/Dockerfile.base
-        - ic-os/setupos/rootfs/packages.common
-        - ic-os/setupos/rootfs/packages.dev
+        - ic-os/boundary-guestos/context/Dockerfile.base
+        - ic-os/guestos/context/Dockerfile.base
+        - ic-os/guestos/context/packages.common
+        - ic-os/guestos/context/packages.dev
+        - ic-os/hostos/context/Dockerfile.base
+        - ic-os/hostos/context/packages.common
+        - ic-os/hostos/context/packages.dev
+        - ic-os/setupos/context/Dockerfile.base
+        - ic-os/setupos/context/packages.common
+        - ic-os/setupos/context/packages.dev
       if: $CI_PIPELINE_SOURCE == "merge_request_event"
   script:
     - |
@@ -1502,9 +1502,9 @@ build-boundaryos-base:
           rm -f digestfile
       fi
   variables:
-    CONTEXT: "${CI_PROJECT_DIR}/ic-os/boundary-guestos/rootfs"
+    CONTEXT: "${CI_PROJECT_DIR}/ic-os/boundary-guestos/context"
     IMAGE: boundaryos-base
-    REF_FILE: ic-os/boundary-guestos/rootfs/docker-base.prod
+    REF_FILE: ic-os/boundary-guestos/context/docker-base.prod
 build-determinism:
   extends:
     - ".rules-master-pipeline-no-merge-train"
@@ -1551,16 +1551,16 @@ build-guestos-base:
       when: manual
     - changes:
         - gitlab-ci/config/base-images-build.yml
-        - ic-os/boundary-guestos/rootfs/Dockerfile.base
-        - ic-os/guestos/rootfs/Dockerfile.base
-        - ic-os/guestos/rootfs/packages.common
-        - ic-os/guestos/rootfs/packages.dev
-        - ic-os/hostos/rootfs/Dockerfile.base
-        - ic-os/hostos/rootfs/packages.common
-        - ic-os/hostos/rootfs/packages.dev
-        - ic-os/setupos/rootfs/Dockerfile.base
-        - ic-os/setupos/rootfs/packages.common
-        - ic-os/setupos/rootfs/packages.dev
+        - ic-os/boundary-guestos/context/Dockerfile.base
+        - ic-os/guestos/context/Dockerfile.base
+        - ic-os/guestos/context/packages.common
+        - ic-os/guestos/context/packages.dev
+        - ic-os/hostos/context/Dockerfile.base
+        - ic-os/hostos/context/packages.common
+        - ic-os/hostos/context/packages.dev
+        - ic-os/setupos/context/Dockerfile.base
+        - ic-os/setupos/context/packages.common
+        - ic-os/setupos/context/packages.dev
       if: $CI_PIPELINE_SOURCE == "merge_request_event"
   script:
     - |
@@ -1581,9 +1581,9 @@ build-guestos-base:
           rm -f digestfile
       fi
   variables:
-    CONTEXT: "${CI_PROJECT_DIR}/ic-os/guestos/rootfs"
+    CONTEXT: "${CI_PROJECT_DIR}/ic-os/guestos/context"
     IMAGE: guestos-base
-    REF_FILE: ic-os/guestos/rootfs/docker-base.prod
+    REF_FILE: ic-os/guestos/context/docker-base.prod
 build-guestos-base-dev:
   artifacts:
     paths:
@@ -1598,16 +1598,16 @@ build-guestos-base-dev:
       when: manual
     - changes:
         - gitlab-ci/config/base-images-build.yml
-        - ic-os/boundary-guestos/rootfs/Dockerfile.base
-        - ic-os/guestos/rootfs/Dockerfile.base
-        - ic-os/guestos/rootfs/packages.common
-        - ic-os/guestos/rootfs/packages.dev
-        - ic-os/hostos/rootfs/Dockerfile.base
-        - ic-os/hostos/rootfs/packages.common
-        - ic-os/hostos/rootfs/packages.dev
-        - ic-os/setupos/rootfs/Dockerfile.base
-        - ic-os/setupos/rootfs/packages.common
-        - ic-os/setupos/rootfs/packages.dev
+        - ic-os/boundary-guestos/context/Dockerfile.base
+        - ic-os/guestos/context/Dockerfile.base
+        - ic-os/guestos/context/packages.common
+        - ic-os/guestos/context/packages.dev
+        - ic-os/hostos/context/Dockerfile.base
+        - ic-os/hostos/context/packages.common
+        - ic-os/hostos/context/packages.dev
+        - ic-os/setupos/context/Dockerfile.base
+        - ic-os/setupos/context/packages.common
+        - ic-os/setupos/context/packages.dev
       if: $CI_PIPELINE_SOURCE == "merge_request_event"
   script:
     - BUILD_ARGS=(--build-arg "PACKAGE_FILES=packages.common packages.dev")
@@ -1629,9 +1629,9 @@ build-guestos-base-dev:
           rm -f digestfile
       fi
   variables:
-    CONTEXT: "${CI_PROJECT_DIR}/ic-os/guestos/rootfs"
+    CONTEXT: "${CI_PROJECT_DIR}/ic-os/guestos/context"
     IMAGE: guestos-base-dev
-    REF_FILE: ic-os/guestos/rootfs/docker-base.dev
+    REF_FILE: ic-os/guestos/context/docker-base.dev
 build-hostos-base:
   artifacts:
     paths:
@@ -1646,16 +1646,16 @@ build-hostos-base:
       when: manual
     - changes:
         - gitlab-ci/config/base-images-build.yml
-        - ic-os/boundary-guestos/rootfs/Dockerfile.base
-        - ic-os/guestos/rootfs/Dockerfile.base
-        - ic-os/guestos/rootfs/packages.common
-        - ic-os/guestos/rootfs/packages.dev
-        - ic-os/hostos/rootfs/Dockerfile.base
-        - ic-os/hostos/rootfs/packages.common
-        - ic-os/hostos/rootfs/packages.dev
-        - ic-os/setupos/rootfs/Dockerfile.base
-        - ic-os/setupos/rootfs/packages.common
-        - ic-os/setupos/rootfs/packages.dev
+        - ic-os/boundary-guestos/context/Dockerfile.base
+        - ic-os/guestos/context/Dockerfile.base
+        - ic-os/guestos/context/packages.common
+        - ic-os/guestos/context/packages.dev
+        - ic-os/hostos/context/Dockerfile.base
+        - ic-os/hostos/context/packages.common
+        - ic-os/hostos/context/packages.dev
+        - ic-os/setupos/context/Dockerfile.base
+        - ic-os/setupos/context/packages.common
+        - ic-os/setupos/context/packages.dev
       if: $CI_PIPELINE_SOURCE == "merge_request_event"
   script:
     - |
@@ -1676,9 +1676,9 @@ build-hostos-base:
           rm -f digestfile
       fi
   variables:
-    CONTEXT: "${CI_PROJECT_DIR}/ic-os/hostos/rootfs"
+    CONTEXT: "${CI_PROJECT_DIR}/ic-os/hostos/context"
     IMAGE: hostos-base
-    REF_FILE: ic-os/hostos/rootfs/docker-base.prod
+    REF_FILE: ic-os/hostos/context/docker-base.prod
 build-hostos-base-dev:
   artifacts:
     paths:
@@ -1693,16 +1693,16 @@ build-hostos-base-dev:
       when: manual
     - changes:
         - gitlab-ci/config/base-images-build.yml
-        - ic-os/boundary-guestos/rootfs/Dockerfile.base
-        - ic-os/guestos/rootfs/Dockerfile.base
-        - ic-os/guestos/rootfs/packages.common
-        - ic-os/guestos/rootfs/packages.dev
-        - ic-os/hostos/rootfs/Dockerfile.base
-        - ic-os/hostos/rootfs/packages.common
-        - ic-os/hostos/rootfs/packages.dev
-        - ic-os/setupos/rootfs/Dockerfile.base
-        - ic-os/setupos/rootfs/packages.common
-        - ic-os/setupos/rootfs/packages.dev
+        - ic-os/boundary-guestos/context/Dockerfile.base
+        - ic-os/guestos/context/Dockerfile.base
+        - ic-os/guestos/context/packages.common
+        - ic-os/guestos/context/packages.dev
+        - ic-os/hostos/context/Dockerfile.base
+        - ic-os/hostos/context/packages.common
+        - ic-os/hostos/context/packages.dev
+        - ic-os/setupos/context/Dockerfile.base
+        - ic-os/setupos/context/packages.common
+        - ic-os/setupos/context/packages.dev
       if: $CI_PIPELINE_SOURCE == "merge_request_event"
   script:
     - BUILD_ARGS=(--build-arg "PACKAGE_FILES=packages.common packages.dev")
@@ -1724,9 +1724,9 @@ build-hostos-base-dev:
           rm -f digestfile
       fi
   variables:
-    CONTEXT: "${CI_PROJECT_DIR}/ic-os/hostos/rootfs"
+    CONTEXT: "${CI_PROJECT_DIR}/ic-os/hostos/context"
     IMAGE: hostos-base-dev
-    REF_FILE: ic-os/hostos/rootfs/docker-base.dev
+    REF_FILE: ic-os/hostos/context/docker-base.dev
 build-ic:
   artifacts:
     paths:
@@ -1762,16 +1762,16 @@ build-setupos-base:
       when: manual
     - changes:
         - gitlab-ci/config/base-images-build.yml
-        - ic-os/boundary-guestos/rootfs/Dockerfile.base
-        - ic-os/guestos/rootfs/Dockerfile.base
-        - ic-os/guestos/rootfs/packages.common
-        - ic-os/guestos/rootfs/packages.dev
-        - ic-os/hostos/rootfs/Dockerfile.base
-        - ic-os/hostos/rootfs/packages.common
-        - ic-os/hostos/rootfs/packages.dev
-        - ic-os/setupos/rootfs/Dockerfile.base
-        - ic-os/setupos/rootfs/packages.common
-        - ic-os/setupos/rootfs/packages.dev
+        - ic-os/boundary-guestos/context/Dockerfile.base
+        - ic-os/guestos/context/Dockerfile.base
+        - ic-os/guestos/context/packages.common
+        - ic-os/guestos/context/packages.dev
+        - ic-os/hostos/context/Dockerfile.base
+        - ic-os/hostos/context/packages.common
+        - ic-os/hostos/context/packages.dev
+        - ic-os/setupos/context/Dockerfile.base
+        - ic-os/setupos/context/packages.common
+        - ic-os/setupos/context/packages.dev
       if: $CI_PIPELINE_SOURCE == "merge_request_event"
   script:
     - |
@@ -1792,9 +1792,9 @@ build-setupos-base:
           rm -f digestfile
       fi
   variables:
-    CONTEXT: "${CI_PROJECT_DIR}/ic-os/setupos/rootfs"
+    CONTEXT: "${CI_PROJECT_DIR}/ic-os/setupos/context"
     IMAGE: setupos-base
-    REF_FILE: ic-os/setupos/rootfs/docker-base.prod
+    REF_FILE: ic-os/setupos/context/docker-base.prod
 build-setupos-base-dev:
   artifacts:
     paths:
@@ -1809,16 +1809,16 @@ build-setupos-base-dev:
       when: manual
     - changes:
         - gitlab-ci/config/base-images-build.yml
-        - ic-os/boundary-guestos/rootfs/Dockerfile.base
-        - ic-os/guestos/rootfs/Dockerfile.base
-        - ic-os/guestos/rootfs/packages.common
-        - ic-os/guestos/rootfs/packages.dev
-        - ic-os/hostos/rootfs/Dockerfile.base
-        - ic-os/hostos/rootfs/packages.common
-        - ic-os/hostos/rootfs/packages.dev
-        - ic-os/setupos/rootfs/Dockerfile.base
-        - ic-os/setupos/rootfs/packages.common
-        - ic-os/setupos/rootfs/packages.dev
+        - ic-os/boundary-guestos/context/Dockerfile.base
+        - ic-os/guestos/context/Dockerfile.base
+        - ic-os/guestos/context/packages.common
+        - ic-os/guestos/context/packages.dev
+        - ic-os/hostos/context/Dockerfile.base
+        - ic-os/hostos/context/packages.common
+        - ic-os/hostos/context/packages.dev
+        - ic-os/setupos/context/Dockerfile.base
+        - ic-os/setupos/context/packages.common
+        - ic-os/setupos/context/packages.dev
       if: $CI_PIPELINE_SOURCE == "merge_request_event"
   script:
     - BUILD_ARGS=(--build-arg "PACKAGE_FILES=packages.common packages.dev")
@@ -1840,9 +1840,9 @@ build-setupos-base-dev:
           rm -f digestfile
       fi
   variables:
-    CONTEXT: "${CI_PROJECT_DIR}/ic-os/setupos/rootfs"
+    CONTEXT: "${CI_PROJECT_DIR}/ic-os/setupos/context"
     IMAGE: setupos-base-dev
-    REF_FILE: ic-os/setupos/rootfs/docker-base.dev
+    REF_FILE: ic-os/setupos/context/docker-base.dev
 cargo-build-release-linux:
   extends:
     - ".rules-master-pipeline-and-merge-request-rust-changed"
