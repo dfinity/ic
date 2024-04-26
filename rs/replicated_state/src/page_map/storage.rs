@@ -1134,9 +1134,18 @@ impl MergeCandidate {
         num_pages: u64,
         lsmt_config: &LsmtConfig,
     ) -> Result<Vec<MergeCandidate>, Box<dyn std::error::Error>> {
-        let dst_overlays = (0..num_shards(num_pages, lsmt_config))
+        let dst_overlays: Vec<_> = (0..num_shards(num_pages, lsmt_config))
             .map(|shard| layout.overlay(height, Shard::new(shard)).to_path_buf())
             .collect();
+        debug_assert!(
+            dst_overlays.len()
+                >= layout
+                    .existing_overlays()?
+                    .iter()
+                    .map(|p| layout.overlay_shard(p).unwrap().get() + 1)
+                    .max()
+                    .unwrap_or(0) as usize
+        );
 
         let base = if layout.base().exists() {
             Some(layout.base().to_path_buf())
@@ -1171,7 +1180,17 @@ impl MergeCandidate {
 
         let mut result = Vec::new();
         let num_shards = num_shards(num_pages, lsmt_config);
-        if existing_base.is_some() {
+        if existing_base.is_none() {
+            debug_assert_eq!(
+                num_shards,
+                layout
+                    .existing_overlays()?
+                    .iter()
+                    .map(|p| layout.overlay_shard(p).unwrap().get() + 1)
+                    .max()
+                    .unwrap_or(0)
+            );
+        } else {
             assert!(num_shards <= 1);
         }
         for shard in 0..num_shards {

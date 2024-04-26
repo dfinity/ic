@@ -549,7 +549,10 @@ fn write_overlays_and_verify_with_tempdir(
             } => {
                 let files_before = storage_files(tempdir.path());
                 let mut page_map = PageMap::new_for_testing();
-                let num_pages = combined_delta.max_page_index().unwrap_or(0.into()).get() + 1;
+                let num_pages = combined_delta
+                    .max_page_index()
+                    .map(|index| index.get() + 1)
+                    .unwrap_or(0);
                 page_map.update(
                     combined_delta
                         .iter()
@@ -1071,7 +1074,7 @@ fn test_make_merge_candidates_to_overlay() {
             overlay_suffix: "vmemory_0.overlay".to_owned(),
         },
         Height::from(3),
-        15, /* num_pages */
+        40, /* num_pages */
         &lsmt_config,
     )
     .unwrap();
