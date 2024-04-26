@@ -92,22 +92,6 @@ pub fn get_block_maker_delay(
         .map(|settings| settings.unit_delay * rank.0 as u32)
 }
 
-/// Return true if the given subnet id is the root subnet
-pub fn is_root_subnet(
-    registry_client: &dyn RegistryClient,
-    subnet_id: SubnetId,
-    registry_version: RegistryVersion,
-) -> Result<bool, String> {
-    let root_subnet_id = registry_client
-        .get_root_subnet_id(registry_version)
-        .map_err(|e| format!("Encountered error retrieving root subnet id {:?}", e))?
-        .ok_or(format!(
-            "No value for root subnet id at registry version {:?}",
-            registry_version
-        ))?;
-    Ok(root_subnet_id == subnet_id)
-}
-
 /// Return true if the time since round start is greater than the required block
 /// maker delay for the given rank.
 pub fn is_time_to_make_block(

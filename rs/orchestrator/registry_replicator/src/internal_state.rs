@@ -20,9 +20,7 @@ use ic_registry_keys::{
 use ic_registry_local_store::{Changelog, ChangelogEntry, KeyMutation, LocalStore};
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
-use ic_types::{
-    crypto::threshold_sig::ThresholdSigPublicKey, NodeId, RegistryVersion, SubnetId, Time,
-};
+use ic_types::{crypto::threshold_sig::ThresholdSigPublicKey, NodeId, RegistryVersion, SubnetId};
 use std::{
     collections::BTreeMap, convert::TryFrom, fmt::Debug, net::IpAddr, str::FromStr, sync::Arc,
     time::Duration,
@@ -49,7 +47,6 @@ pub(crate) struct InternalState {
     registry_client: Arc<dyn RegistryClient>,
     local_store: Arc<dyn LocalStore>,
     latest_version: RegistryVersion,
-    last_certified_time: Time,
     nns_pub_key: Option<ThresholdSigPublicKey>,
     nns_urls: Vec<Url>,
     registry_canister: Option<Arc<RegistryCanister>>,
@@ -67,7 +64,6 @@ impl InternalState {
         config_urls: Vec<Url>,
         poll_delay: Duration,
     ) -> Self {
-        let last_certified_time = local_store.read_certified_time();
         let registry_canister_fallback = if !config_urls.is_empty() {
             Some(Arc::new(RegistryCanister::new_with_query_timeout(
                 config_urls,
@@ -82,7 +78,6 @@ impl InternalState {
             registry_client,
             local_store,
             latest_version: ZERO_REGISTRY_VERSION,
-            last_certified_time,
             nns_pub_key: None,
             nns_urls: vec![],
             registry_canister: None,
@@ -136,13 +131,13 @@ impl InternalState {
                 .nns_pub_key
                 .expect("registry canister is set => pub key is set");
             // Note, code duplicate in registry_replicator.rs initialize_local_store()
-            let (mut resp, t) = match registry_canister
+            let mut resp = match registry_canister
                 .get_certified_changes_since(latest_version.get(), &nns_pub_key)
                 .await
             {
-                Ok((records, _, t)) => {
+                Ok((records, _, _)) => {
                     self.failed_poll_count = 0;
-                    (records, t)
+                    records
                 }
                 Err(e) => {
                     self.failed_poll_count += 1;
@@ -176,13 +171,6 @@ impl InternalState {
                     self.local_store.store(v, cle)
                 })
                 .expect("Writing to the FS failed: Stop.");
-
-            if t > self.last_certified_time {
-                self.local_store
-                    .update_certified_time(t.as_nanos_since_unix_epoch())
-                    .expect("Could not store certified time");
-                self.last_certified_time = t;
-            }
 
             if entries > 0 {
                 info!(

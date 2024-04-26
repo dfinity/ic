@@ -638,16 +638,6 @@ impl IcConfig {
             registry_store.store(v, cle)
         })?;
 
-        // Set certified time.
-        use std::time::{SystemTime, UNIX_EPOCH};
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("Could not get system time");
-        let nanos = now.as_nanos() as u64;
-        registry_store
-            .update_certified_time(nanos)
-            .expect("Could not update certified time.");
-
         Ok(InitializedIc {
             target_dir: self.target_dir,
             initialized_topology,

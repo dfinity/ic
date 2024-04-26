@@ -41,7 +41,7 @@ use ic_interfaces::{
     time_source::{SysTimeSource, TimeSource},
 };
 use ic_interfaces_adapter_client::NonBlockingChannel;
-use ic_interfaces_registry::{LocalStoreCertifiedTimeReader, RegistryClient};
+use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{StateManager, StateReader};
 use ic_logger::{info, replica_logger::ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -113,7 +113,6 @@ pub fn setup_consensus_and_p2p(
     registry_client: Arc<dyn RegistryClient>,
     ingress_history_reader: Box<dyn IngressHistoryReader>,
     cycles_account_manager: Arc<CyclesAccountManager>,
-    local_store_time_reader: Arc<dyn LocalStoreCertifiedTimeReader>,
     canister_http_adapter_client: CanisterHttpAdapterClient,
     registry_poll_delay_duration_ms: u64,
 ) -> (
@@ -146,7 +145,6 @@ pub fn setup_consensus_and_p2p(
         consensus_pool.clone(),
         malicious_flags,
         cycles_account_manager,
-        local_store_time_reader,
         registry_poll_delay_duration_ms,
         canister_http_adapter_client,
         time_source.clone(),
@@ -236,7 +234,6 @@ fn start_consensus(
     consensus_pool: Arc<RwLock<ConsensusPoolImpl>>,
     malicious_flags: MaliciousFlags,
     cycles_account_manager: Arc<CyclesAccountManager>,
-    local_store_time_reader: Arc<dyn LocalStoreCertifiedTimeReader>,
     registry_poll_delay_duration_ms: u64,
     canister_http_adapter_client: CanisterHttpAdapterClient,
     time_source: Arc<dyn TimeSource>,
@@ -336,7 +333,6 @@ fn start_consensus(
             malicious_flags.clone(),
             metrics_registry.clone(),
             log.clone(),
-            local_store_time_reader,
             registry_poll_delay_duration_ms,
         );
 

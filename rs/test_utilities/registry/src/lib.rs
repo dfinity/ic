@@ -1,6 +1,4 @@
 use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests_with_params;
-use ic_interfaces::time_source::TimeSource;
-use ic_interfaces_registry::LocalStoreCertifiedTimeReader;
 use ic_protobuf::registry::crypto::v1::AlgorithmId;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_protobuf::registry::subnet::v1::{
@@ -17,7 +15,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::{
     crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript},
-    NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId, Time,
+    NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId,
 };
 use std::{collections::BTreeMap, sync::Arc};
 
@@ -324,19 +322,5 @@ impl SubnetRecordBuilder {
 
     pub fn build(self) -> SubnetRecord {
         self.record
-    }
-}
-
-pub struct FakeLocalStoreCertifiedTimeReader {
-    time_source: Arc<dyn TimeSource>,
-}
-impl FakeLocalStoreCertifiedTimeReader {
-    pub fn new(time_source: Arc<dyn TimeSource>) -> Self {
-        Self { time_source }
-    }
-}
-impl LocalStoreCertifiedTimeReader for FakeLocalStoreCertifiedTimeReader {
-    fn read_certified_time(&self) -> Time {
-        self.time_source.get_relative_time()
     }
 }

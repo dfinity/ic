@@ -18,9 +18,7 @@ use ic_test_utilities::{
 };
 use ic_test_utilities_consensus::batch::MockBatchPayloadBuilder;
 use ic_test_utilities_consensus::{make_genesis, EcdsaStatsNoOp};
-use ic_test_utilities_registry::{
-    setup_registry, FakeLocalStoreCertifiedTimeReader, SubnetRecordBuilder,
-};
+use ic_test_utilities_registry::{setup_registry, SubnetRecordBuilder};
 use ic_test_utilities_state::get_initial_state;
 use ic_test_utilities_time::FastForwardTimeSource;
 use ic_test_utilities_types::{
@@ -138,8 +136,6 @@ fn consensus_produces_expected_batches() {
             no_op_logger(),
             &PoolReader::new(&*consensus_pool.read().unwrap()),
         )));
-        let fake_local_store_certified_time_reader =
-            Arc::new(FakeLocalStoreCertifiedTimeReader::new(time_source.clone()));
 
         let (consensus, consensus_gossip) = ic_consensus::consensus::setup(
             replica_config.clone(),
@@ -160,7 +156,6 @@ fn consensus_produces_expected_batches() {
             MaliciousFlags::default(),
             metrics_registry.clone(),
             no_op_logger(),
-            fake_local_store_certified_time_reader,
             0,
         );
         let dkg = dkg::DkgImpl::new(
