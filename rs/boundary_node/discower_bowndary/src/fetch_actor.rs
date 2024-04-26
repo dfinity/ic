@@ -2,7 +2,7 @@ use std::{sync::Arc, time::Duration};
 
 use tokio::time;
 use tokio_util::sync::CancellationToken;
-use url::Url;
+use tracing::{error, warn};
 
 use crate::{
     fetch::NodesFetcher,
@@ -10,6 +10,8 @@ use crate::{
     snapshot::Snapshot,
     types::{GlobalShared, SenderWatch},
 };
+
+const SERVICE_NAME: &str = "NodesFetchActor";
 
 pub struct NodesFetchActor {
     fetcher: Arc<dyn NodesFetcher>,
@@ -42,20 +44,27 @@ impl NodesFetchActor {
             tokio::select! {
                 _ = interval.tick() => {
                         let snapshot = self.snapshot.load();
-                        let node = snapshot.next().expect("no node found");
-                        let url = Url::parse(&format!("https://{}", node.domain)).unwrap();
-                        let nodes = self.fetcher.fetch(url).await.unwrap();
-                        let msg = Some(
+                        let Some(node) = snapshot.next() else {
+                            error!("{SERVICE_NAME}: failed to get next node from snapshot");
+                            continue;
+                        };
+
+                        let nodes = match self.fetcher.fetch(node.into()).await {
+                            Ok(nodes) => nodes,
+                            Err(err) => {
+                                error!("{SERVICE_NAME}: failed to fetch nodes: {err:?}");
+                                continue;
+                            }
+                        };
+
+                        if let Err(err) = self.fetched_nodes_sender.send(Some(
                             FetchedNodes {nodes}
-                        );
-                        if self.fetched_nodes_sender.send(msg).is_err() {
-                            println!("NodesFetchActor: failed to send results to health manager");
-                        } else {
-                            println!("NodesFetchActor: sent results to health manager");
+                        )) {
+                            error!("{SERVICE_NAME}: failed to send results to HealthManager: {err:?}");
                         }
                 }
                 _ = self.token.cancelled() => {
-                    println!("NodesFetchActor: gracefully cancelled.");
+                    warn!("{SERVICE_NAME}: was gracefully cancelled");
                     break;
                 }
             }

@@ -2,6 +2,7 @@ use std::{sync::Arc, time::Duration};
 
 use tokio::time;
 use tokio_util::sync::CancellationToken;
+use tracing::{debug, error};
 
 use crate::{
     check::{HealthCheck, HealthCheckResult},
@@ -9,6 +10,8 @@ use crate::{
     node::Node,
     types::SenderMpsc,
 };
+
+const SERVICE_NAME: &str = "HealthCheckActor";
 
 pub struct HealthCheckActor {
     checker: Arc<dyn HealthCheck>,
@@ -42,7 +45,7 @@ impl HealthCheckActor {
         loop {
             tokio::select! {
                 _ = interval.tick() => {
-                    let new_health = self.checker.check(&self.node).await.unwrap();
+                    let new_health = self.checker.check(&self.node).await.unwrap_or(HealthCheckResult {is_healthy: false});
                     if self.health_state.as_ref() != Some(&new_health) {
                         self.health_state = Some(new_health.clone());
                         let health_changed = NodeHealthChanged {
@@ -51,11 +54,13 @@ impl HealthCheckActor {
                         };
                         // Send results back to health manager for updating the snapshot.
                         // It can never fail in our case
-                        let _ = self.health_manager_sender.send(health_changed).await;
+                        if let Err(err) = self.health_manager_sender.send(health_changed).await {
+                            error!("{SERVICE_NAME}: failed to send results to HealthManagerActor: {err:?}");
+                        }
                     }
                 }
                 _ = self.token.cancelled() => {
-                    println!("HealthCheckActor: gracefully cancelled");
+                    debug!("{SERVICE_NAME}: was gracefully cancelled");
                     break;
                 }
             }

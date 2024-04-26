@@ -70,11 +70,9 @@ impl Snapshot {
     pub fn next(&self) -> Option<Node> {
         let prev_idx = self.current_idx.fetch_add(1, Ordering::Relaxed);
         // TODO: maybe switch to different data structures for a better efficiency, this sampling is O(healthy_nodes).
-        let domain = self
-            .healthy_nodes
+        self.healthy_nodes
             .iter()
             .nth(prev_idx % self.healthy_nodes.len())
-            .unwrap();
-        Some(Node::new(domain))
+            .map(Node::new)
     }
 }

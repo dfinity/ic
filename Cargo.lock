@@ -3311,8 +3311,11 @@ dependencies = [
  "async-trait",
  "http 0.2.9",
  "ic-agent",
+ "thiserror",
  "tokio",
  "tokio-util",
+ "tracing",
+ "tracing-subscriber",
  "url",
 ]
 

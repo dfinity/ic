@@ -263,6 +263,11 @@ pub fn decentralization_test(env: TestEnv) {
     );
 
     let route_provider = {
+        let subscriber = tracing_subscriber::fmt()
+            .json()
+            .flatten_event(true)
+            .finish();
+        tracing::subscriber::set_global_default(subscriber).unwrap();
         let fetch_interval = Duration::from_secs(5);
         let fetcher = Arc::new(NodesFetcherImpl::new(http_client.clone(), canister_ids[0]));
         let health_timeout = Duration::from_secs(5);
