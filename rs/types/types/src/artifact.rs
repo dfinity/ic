@@ -217,12 +217,6 @@ impl From<&ConsensusMessage> for ConsensusMessageId {
     }
 }
 
-/// Consensus message filter is by height.
-#[derive(Default, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct ConsensusMessageFilter {
-    pub height: Height,
-}
-
 // -----------------------------------------------------------------------------
 // Ingress artifacts
 
@@ -321,12 +315,6 @@ impl From<CertificationMessageId> for pb::CertificationMessageId {
             height: value.height.get(),
         }
     }
-}
-
-/// Certification message filter is by height.
-#[derive(Default, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct CertificationMessageFilter {
-    pub height: Height,
 }
 
 // -----------------------------------------------------------------------------
