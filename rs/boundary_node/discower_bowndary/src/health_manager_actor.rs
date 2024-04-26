@@ -2,6 +2,7 @@ use std::{sync::Arc, time::Duration};
 
 use tokio::sync::mpsc;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
+use tracing::{debug, error, warn};
 
 use crate::{
     check::HealthCheck,
@@ -11,6 +12,8 @@ use crate::{
     snapshot::Snapshot,
     types::{GlobalShared, ReceiverMpsc, ReceiverWatch, SenderMpsc},
 };
+
+const SERVICE_NAME: &str = "HealthManagerActor";
 
 const CHANNEL_BUFFER: usize = 128;
 
@@ -54,12 +57,12 @@ impl HealthManagerActor {
             tokio::select! {
                 // Read messages from fetch actor
                 result = self.fetch_receiver.changed() => {
-                    if result.is_err() {
-                        // TODO: should terminate
-                        println!("HealthManagerActor: fetch sender has been dropped");
-                    } else {
-                        self.handle_fetch_update().await;
+                    if let Err(err) = result {
+                        error!("{SERVICE_NAME}: nodes fetch sender has been dropped: {err:?}");
+                        self.token.cancel();
+                        continue;
                     }
+                    self.handle_fetch_update().await;
                 }
                 // Read messages from check actors
                 Some(msg) = self.check_receiver.recv() => {
@@ -68,7 +71,7 @@ impl HealthManagerActor {
                 _ = self.token.cancelled() => {
                     self.stop_checks().await;
                     self.check_receiver.close();
-                    println!("HealthManagerActor: gracefully cancelled and stopped all node checks");
+                    warn!("{SERVICE_NAME}: was gracefully cancelled, all node health checks stopped");
                     break;
                 }
             }
@@ -78,9 +81,10 @@ impl HealthManagerActor {
     async fn handle_health_changed(&mut self, msg: NodeHealthChanged) {
         let current_snapshot = self.snapshot.load_full();
         let mut new_snapshot: Snapshot = (*current_snapshot).clone();
-        new_snapshot
-            .update_node_health(&msg.node, msg.health)
-            .unwrap();
+        if let Err(err) = new_snapshot.update_node_health(&msg.node, msg.health) {
+            error!("{SERVICE_NAME}: failed to update snapshot: {err:?}");
+            return;
+        }
         self.snapshot.store(Arc::new(new_snapshot));
     }
 
@@ -90,21 +94,22 @@ impl HealthManagerActor {
             .borrow_and_update()
             .clone()
             .expect("can't be None as change was detected");
-        println!("HealthManagerActor: fetched nodes received {:?}", nodes);
+        debug!("{SERVICE_NAME}: fetched nodes received {:?}", nodes);
         let current_snapshot = self.snapshot.load_full();
         let mut new_snapshot: Snapshot = (*current_snapshot).clone();
-        let _nodes_change = new_snapshot.sync_with(&nodes).unwrap();
-        self.snapshot.store(Arc::new(new_snapshot));
-        // TODO:
-        // 1. Stop only removed_nodes and start only added_nodes => self.stop_checks(nodes_change.removed_nodes).await;
-        // 2. Start nodes uniformly within time period for a better health overview.
-        self.stop_checks().await;
-        self.start_checks(nodes);
+        if let Ok(_nodes_change) = new_snapshot.sync_with(&nodes) {
+            self.snapshot.store(Arc::new(new_snapshot));
+            // TODO:
+            // 1. Stop only removed_nodes and start only added_nodes => self.stop_checks(nodes_change.removed_nodes).await;
+            // 2. Start nodes uniformly within time period for a better health overview.
+            self.stop_checks().await;
+            self.start_checks(nodes);
+        }
     }
 
     fn start_checks(&mut self, nodes: Vec<Node>) {
-        println!(
-            "HealthManagerActor: starting health checks for {} nodes",
+        debug!(
+            "{SERVICE_NAME}: starting health checks for {} nodes",
             nodes.len()
         );
         self.nodes_token = CancellationToken::new();
@@ -121,7 +126,7 @@ impl HealthManagerActor {
     }
 
     async fn stop_checks(&self) {
-        println!("HealthManagerActor: cancelling all running health checks");
+        debug!("{SERVICE_NAME}: stopping all running health checks");
         self.nodes_token.cancel();
         self.nodes_tracker.close();
         self.nodes_tracker.wait().await;

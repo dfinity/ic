@@ -8,7 +8,10 @@ use arc_swap::ArcSwap;
 use ic_agent::{agent::http_transport::route_provider::RouteProvider, AgentError};
 use tokio::sync::watch;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
+use tracing::{info, warn};
 use url::Url;
+
+const SERVICE_NAME: &str = "HealthCheckRouteProvider";
 
 /// Main orchestrator.
 #[derive(Debug)]
@@ -25,7 +28,9 @@ pub struct HealthCheckRouteProvider {
 impl RouteProvider for HealthCheckRouteProvider {
     fn route(&self) -> Result<Url, AgentError> {
         let snapshot = self.snapshot.load();
-        let node = snapshot.next().expect("failed to get a node");
+        let node = snapshot.next().ok_or_else(|| {
+            AgentError::RouteProviderError("No healthy API domains found for routing.".to_string())
+        })?;
         Ok(node.into())
     }
 }
@@ -56,8 +61,20 @@ impl HealthCheckRouteProvider {
     ///   - TODO: infers the newly added and removed nodes
     ///   - Spawns health check tasks for every node received. These spawned HealthCheckActors periodically update the snapshot with the latest health info.
     pub async fn run(&self) {
+        info!("{SERVICE_NAME}: start run() ");
         // Communication channel between fetcher and health_manager.
         let (fetch_sender, fetch_receiver) = watch::channel(None);
+
+        // Start the receiving part first.
+        let health_manager_actor = HealthManagerActor::new(
+            Arc::clone(&self.checker),
+            self.check_period,
+            Arc::clone(&self.snapshot),
+            fetch_receiver,
+            self.token.clone(),
+        );
+        self.tracker
+            .spawn(async move { health_manager_actor.run().await });
 
         let fetch_actor = NodesFetchActor::new(
             Arc::clone(&self.fetcher),
@@ -68,29 +85,23 @@ impl HealthCheckRouteProvider {
         );
         self.tracker.spawn(async move { fetch_actor.run().await });
 
-        let health_manager_actor = HealthManagerActor::new(
-            Arc::clone(&self.checker),
-            self.check_period,
-            Arc::clone(&self.snapshot),
-            fetch_receiver,
-            self.token.clone(),
-        );
-        self.tracker
-            .spawn(async move { health_manager_actor.run().await });
-        println!("HealthCheckRouteProvider: all actors spawned successfully");
+        info!("{SERVICE_NAME}: NodesFetchActor and HealthManagerActor started successfully");
     }
 
     // Kill all running tasks.
     pub async fn stop(&self) {
-        println!("HealthCheckRouteProvider stop() was called");
         self.token.cancel();
         self.tracker.close();
         self.tracker.wait().await;
+        warn!("{SERVICE_NAME}: gracefully stopped");
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use tracing::Level;
+    use tracing_subscriber::FmtSubscriber;
+
     use super::*;
     use crate::check::HealthCheck;
     use crate::checker_mock::NodeHealthCheckerMock;
@@ -101,6 +112,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_routing_with_topology_and_node_health_updates() {
+        FmtSubscriber::builder().with_max_level(Level::TRACE).init();
         // Arrange.
         // A single healthy node exists in the topology. This node happens to be the seed node.
         let fetcher = Arc::new(NodesFetchMock::new());
