@@ -6854,6 +6854,7 @@ dependencies = [
  "bip32",
  "criterion",
  "curve25519-dalek",
+ "ed25519-dalek",
  "fe-derive",
  "group 0.13.0",
  "hex",
