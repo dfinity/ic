@@ -108,6 +108,23 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         "#[compare_default]",
     );
 
+    // Add serde_bytes for efficiently parsing blobs.
+    let blob_fields = vec![
+        "NeuronStakeTransfer.from_subaccount",
+        "NeuronStakeTransfer.to_subaccount",
+        "Neuron.account",
+        "AbridgedNeuron.account",
+        "ExecuteNnsFunction.payload",
+        "ManageNeuron.neuron_id_or_subaccount.subaccount",
+        "SwapBackgroundInformation.CanisterStatusResultV2.module_hash",
+    ];
+    for field in blob_fields {
+        config.field_attribute(
+            format!(".ic_nns_governance.pb.v1.{}", field),
+            "#[serde(with = \"serde_bytes\")]",
+        );
+    }
+
     // END type_attribute.
 
     let src_file = proto

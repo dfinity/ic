@@ -57,6 +57,7 @@ BASE_DEPENDENCIES = [
     "@crate_index//:rand_chacha",
     "@crate_index//:rust_decimal",
     "@crate_index//:serde",
+    "@crate_index//:serde_bytes",
     "@crate_index//:serde_json",
     "@crate_index//:strum",
 ] + select({

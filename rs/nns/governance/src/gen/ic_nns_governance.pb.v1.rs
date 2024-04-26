@@ -105,9 +105,11 @@ pub struct NeuronStakeTransfer {
     pub from: ::core::option::Option<::ic_base_types::PrincipalId>,
     /// The (optional) subaccount from which the transfer was made.
     #[prost(bytes = "vec", tag = "3")]
+    #[serde(with = "serde_bytes")]
     pub from_subaccount: ::prost::alloc::vec::Vec<u8>,
     /// The subaccount to which the transfer was made.
     #[prost(bytes = "vec", tag = "4")]
+    #[serde(with = "serde_bytes")]
     pub to_subaccount: ::prost::alloc::vec::Vec<u8>,
     /// The amount of stake that was transferred.
     #[prost(uint64, tag = "5")]
@@ -143,6 +145,7 @@ pub struct Neuron {
     /// identifying a public key pair, such that those browsing the ICP
     /// ledger cannot tell which balances belong to neurons.
     #[prost(bytes = "vec", tag = "2")]
+    #[serde(with = "serde_bytes")]
     pub account: ::prost::alloc::vec::Vec<u8>,
     /// The principal that actually controls the neuron. The principal
     /// must identify a public key pair, which acts as a “master key”,
@@ -319,6 +322,7 @@ pub mod neuron {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct AbridgedNeuron {
     #[prost(bytes = "vec", tag = "2")]
+    #[serde(with = "serde_bytes")]
     pub account: ::prost::alloc::vec::Vec<u8>,
     #[prost(message, optional, tag = "3")]
     pub controller: ::core::option::Option<::ic_base_types::PrincipalId>,
@@ -374,6 +378,7 @@ pub struct ExecuteNnsFunction {
     pub nns_function: i32,
     /// The payload of the NNS function.
     #[prost(bytes = "vec", tag = "2")]
+    #[serde(with = "serde_bytes")]
     pub payload: ::prost::alloc::vec::Vec<u8>,
 }
 /// If adopted, a motion should guide the future strategy of the
@@ -976,6 +981,7 @@ pub mod manage_neuron {
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum NeuronIdOrSubaccount {
         #[prost(bytes, tag = "11")]
+        #[serde(with = "serde_bytes")]
         Subaccount(::prost::alloc::vec::Vec<u8>),
         #[prost(message, tag = "12")]
         NeuronId(::ic_nns_common::pb::v1::NeuronId),
@@ -1683,6 +1689,7 @@ pub mod swap_background_information {
         #[prost(enumeration = "CanisterStatusType", optional, tag = "1")]
         pub status: ::core::option::Option<i32>,
         #[prost(bytes = "vec", tag = "2")]
+        #[serde(with = "serde_bytes")]
         pub module_hash: ::prost::alloc::vec::Vec<u8>,
         #[prost(message, repeated, tag = "3")]
         pub controllers: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
