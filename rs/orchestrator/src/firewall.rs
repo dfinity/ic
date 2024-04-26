@@ -4,14 +4,12 @@ use crate::{
     metrics::OrchestratorMetrics,
     registry_helper::RegistryHelper,
 };
-
 use ic_config::firewall::{Config as FirewallConfig, FIREWALL_FILE_DEFAULT_PATH};
 use ic_logger::{debug, info, warn, ReplicaLogger};
 use ic_protobuf::registry::firewall::v1::{FirewallAction, FirewallRule, FirewallRuleDirection};
 use ic_registry_keys::FirewallRulesScope;
 use ic_sys::fs::write_string_using_tmp_file;
-use ic_types::NodeId;
-use ic_types::RegistryVersion;
+use ic_types::{NodeId, RegistryVersion};
 use std::{
     cmp::{max, min},
     collections::BTreeSet,

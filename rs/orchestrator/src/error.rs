@@ -1,11 +1,14 @@
 use ic_http_utils::file_downloader::FileDownloadError;
 use ic_image_upgrader::error::UpgradeError;
-use ic_types::replica_version::ReplicaVersionParseError;
-use ic_types::{registry::RegistryClientError, NodeId, RegistryVersion, ReplicaVersion, SubnetId};
-use std::error::Error;
-use std::fmt;
-use std::io;
-use std::path::{Path, PathBuf};
+use ic_types::{
+    registry::RegistryClientError, replica_version::ReplicaVersionParseError, NodeId,
+    RegistryVersion, ReplicaVersion, SubnetId,
+};
+use std::{
+    error::Error,
+    fmt, io,
+    path::{Path, PathBuf},
+};
 
 pub type OrchestratorResult<T> = Result<T, OrchestratorError>;
 
