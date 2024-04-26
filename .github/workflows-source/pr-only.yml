@@ -12,6 +12,7 @@ concurrency:
   cancel-in-progress: true
 env:
   CI_MERGE_REQUEST_TITLE: ${{ github.event.pull_request.title }}
+  ORG: ${{ vars.ORG }}
   
 anchors:
   image: &image
@@ -95,3 +96,15 @@ jobs:
       - name: Commit Lint
         id: commit-lint
         run: ./gitlab-ci/src/ci-scripts/commit-lint.sh
+
+  pre-commit:
+    name: Pre-Commit
+    <<: *bazel-small-setup
+    steps:
+      - <<: *checkout
+        with:
+          fetch-depth: 256
+      - name: Pre-Commit
+        id: pre-commit
+        shell: bash
+        run: ./gitlab-ci/src/ci-scripts/pre-commit.sh

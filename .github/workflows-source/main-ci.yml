@@ -176,7 +176,7 @@ jobs:
   bazel-test-macos:
     name: Bazel-Test-MacOS
     timeout-minutes: 90
-    if: ${{ vars.RUN_CI == 'true' && github.event_name != 'pull_request' }} # disable until we have more macos runners
+    if: ${{ vars.RUN_CI == 'true' && github.event_name != 'pull_request' && github.event_name != 'merge_group' }} # disable until we have more macos runners
     runs-on:
       labels: macos
     steps:
