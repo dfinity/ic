@@ -1,7 +1,7 @@
-use crate::upgrade::ReplicaProcess;
 use crate::{
     catch_up_package_provider::CatchUpPackageProvider, process_manager::ProcessManager,
     registry_helper::RegistryHelper, ssh_access_manager::SshAccessParameters,
+    upgrade::ReplicaProcess,
 };
 use async_trait::async_trait;
 pub use ic_dashboard::Dashboard;
@@ -10,8 +10,10 @@ use ic_types::{
     consensus::HasHeight, hostos_version::HostosVersion, NodeId, RegistryVersion, ReplicaVersion,
     SubnetId,
 };
-use std::process::Command;
-use std::sync::{Arc, Mutex};
+use std::{
+    process::Command,
+    sync::{Arc, Mutex},
+};
 use tokio::sync::RwLock;
 
 const ORCHESTRATOR_DASHBOARD_PORT: u16 = 7070;

@@ -1,11 +1,16 @@
-use crate::error::{OrchestratorError, OrchestratorResult};
-use crate::{metrics::OrchestratorMetrics, registry_helper::RegistryHelper};
+use crate::{
+    error::{OrchestratorError, OrchestratorResult},
+    metrics::OrchestratorMetrics,
+    registry_helper::RegistryHelper,
+};
 use ic_logger::{debug, warn, ReplicaLogger};
 use ic_registry_client_helpers::unassigned_nodes::UnassignedNodeRegistry;
 use ic_types::{RegistryVersion, SubnetId};
-use std::io::Write;
-use std::process::{Command, Stdio};
-use std::sync::Arc;
+use std::{
+    io::Write,
+    process::{Command, Stdio},
+    sync::Arc,
+};
 use tokio::sync::RwLock;
 
 #[derive(Default)]

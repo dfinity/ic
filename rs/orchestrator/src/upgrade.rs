@@ -1,26 +1,33 @@
-use crate::catch_up_package_provider::CatchUpPackageProvider;
-use crate::error::{OrchestratorError, OrchestratorResult};
-use crate::metrics::OrchestratorMetrics;
-use crate::process_manager::{Process, ProcessManager};
-use crate::registry_helper::RegistryHelper;
+use crate::{
+    catch_up_package_provider::CatchUpPackageProvider,
+    error::{OrchestratorError, OrchestratorResult},
+    metrics::OrchestratorMetrics,
+    process_manager::{Process, ProcessManager},
+    registry_helper::RegistryHelper,
+};
 use async_trait::async_trait;
 use ic_crypto::get_master_public_key_from_transcript;
 use ic_http_utils::file_downloader::FileDownloader;
-use ic_image_upgrader::error::{UpgradeError, UpgradeResult};
-use ic_image_upgrader::ImageUpgrader;
+use ic_image_upgrader::{
+    error::{UpgradeError, UpgradeResult},
+    ImageUpgrader,
+};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_management_canister_types::EcdsaKeyId;
-use ic_registry_client_helpers::node::NodeRegistry;
-use ic_registry_client_helpers::subnet::SubnetRegistry;
+use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetRegistry};
 use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_replicator::RegistryReplicator;
-use ic_types::consensus::{CatchUpPackage, HasHeight};
-use ic_types::crypto::canister_threshold_sig::MasterPublicKey;
-use ic_types::{Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId};
-use std::collections::BTreeMap;
-use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use ic_types::{
+    consensus::{CatchUpPackage, HasHeight},
+    crypto::canister_threshold_sig::MasterPublicKey,
+    Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId,
+};
+use std::{
+    collections::BTreeMap,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 
 const KEY_CHANGES_FILENAME: &str = "key_changed_metric.cbor";
 
