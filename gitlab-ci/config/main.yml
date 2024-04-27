@@ -430,6 +430,7 @@ benchmarks:
     matrix:
       - TARGETS: "//rs/crypto/..."
       - TARGETS: "//rs/state_manager/..."
+      - TARGETS: "//rs/boundary_node/ic_boundary/..."
       # IDX-2849
       #- TARGETS: "//rs/execution_environment/..."
       # IDX-2850
