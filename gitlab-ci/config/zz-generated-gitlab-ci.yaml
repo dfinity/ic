@@ -1374,6 +1374,7 @@ benchmarks:
     matrix:
       - TARGETS: "//rs/crypto/..."
       - TARGETS: "//rs/state_manager/..."
+      - TARGETS: "//rs/boundary_node/ic_boundary/..."
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "rust-benchmarks"
   script:
