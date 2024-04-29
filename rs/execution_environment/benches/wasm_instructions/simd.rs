@@ -15,6 +15,7 @@ const Y_V128: &str = "(local.get $y_v128)";
 const Y_I32: &str = "(local.get $y_i32)";
 const Z_V128: &str = "(local.get $z_v128)";
 const ADDRESS_I32: &str = "(local.get $address_i32)";
+const UNALIGNED_ADDRESS_I32: &str = "(local.get $one_i32)";
 
 pub fn benchmarks() -> Vec<Benchmark> {
     // List of benchmarks to run.
@@ -664,12 +665,24 @@ pub fn benchmarks() -> Vec<Benchmark> {
         let code = &format!("({SET_X_V128} ({op} {ADDRESS_I32}))");
         benchmarks.extend(benchmark_with_confirmation(&name, code));
     }
+    // The throughput for the following benchmarks is ~1.9 Gops/s
+    for op in first_or_all(&["v128.load"]) {
+        let name = format!("vmem/{op}_unaligned");
+        let code = &format!("({SET_X_V128} ({op} {UNALIGNED_ADDRESS_I32}))");
+        benchmarks.extend(benchmark_with_confirmation(&name, code));
+    }
 
     // Vector Store: `({op} $address_i32 $x_v128)`
     // The throughput for the following benchmarks is ~2.1 Gops/s
     for op in first_or_all(&["v128.store"]) {
         let name = format!("vmem/{op}");
         let code = &format!("({op} {ADDRESS_I32} {X_V128})");
+        benchmarks.extend(benchmark_with_confirmation(&name, code));
+    }
+    // The throughput for the following benchmarks is ~2.1 Gops/s
+    for op in first_or_all(&["v128.store"]) {
+        let name = format!("vmem/{op}_unaligned");
+        let code = &format!("({op} {UNALIGNED_ADDRESS_I32} {X_V128})");
         benchmarks.extend(benchmark_with_confirmation(&name, code));
     }
 
