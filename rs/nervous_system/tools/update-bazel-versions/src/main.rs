@@ -14,47 +14,15 @@ use std::path::{Path, PathBuf};
 
 mod sns_wasm_utils;
 
-pub const CORE_NNS_CANISTERS: [(&str, &str, CanisterId); 8] = [
-    (
-        "mainnet_nns_registry_canister",
-        "registry-canister.wasm.gz",
-        REGISTRY_CANISTER_ID,
-    ),
-    (
-        "mainnet_nns_governance_canister",
-        "governance-canister.wasm.gz",
-        GOVERNANCE_CANISTER_ID,
-    ),
-    (
-        "mainnet_icp_ledger_canister",
-        "ledger-canister_notify-method.wasm.gz",
-        LEDGER_CANISTER_ID,
-    ),
-    (
-        "mainnet_nns_root-canister",
-        "root-canister.wasm.gz",
-        ROOT_CANISTER_ID,
-    ),
-    (
-        "mainnet_nns_lifeline_canister",
-        "lifeline_canister.wasm.gz",
-        LIFELINE_CANISTER_ID,
-    ),
-    (
-        "mainnet_nns_genesis-token-canister",
-        "genesis-token-canister.wasm.gz",
-        GENESIS_TOKEN_CANISTER_ID,
-    ),
-    (
-        "mainnet_nns_cycles-minting-canister",
-        "cycles-minting-canister.wasm.gz",
-        CYCLES_MINTING_CANISTER_ID,
-    ),
-    (
-        "mainnet_nns_sns-wasm-canister",
-        "sns-wasm-canister.wasm.gz",
-        SNS_WASM_CANISTER_ID,
-    ),
+pub const NNS_CANISTER_NAME_TO_ID: [(&str, CanisterId); 8] = [
+    ("registry", REGISTRY_CANISTER_ID),
+    ("governance", GOVERNANCE_CANISTER_ID),
+    ("ledger", LEDGER_CANISTER_ID),
+    ("root", ROOT_CANISTER_ID),
+    ("lifeline", LIFELINE_CANISTER_ID),
+    ("genesis-token", GENESIS_TOKEN_CANISTER_ID),
+    ("cycles-minting", CYCLES_MINTING_CANISTER_ID),
+    ("sns-wasm", SNS_WASM_CANISTER_ID),
 ];
 
 async fn get_mainnet_canister_git_commit_id_and_module_hash(
@@ -100,15 +68,13 @@ async fn main() -> Result<()> {
 
     let agent = get_mainnet_agent()?;
 
-    let mut canister_updates = stream::iter(CORE_NNS_CANISTERS.iter())
-        .then(|(bazel_target_name, wasm_file_name, id)| async {
-            let bazel_target_name = bazel_target_name.to_string();
-            let wasm_file_name = wasm_file_name.to_string();
+    let mut canister_updates = stream::iter(NNS_CANISTER_NAME_TO_ID.iter())
+        .then(|(canister_name, canister_id)| async {
+            let canister_name = canister_name.to_string();
             let (new_git_hash, new_sha256) =
-                get_mainnet_canister_git_commit_id_and_module_hash(&agent, *id).await?;
+                get_mainnet_canister_git_commit_id_and_module_hash(&agent, *canister_id).await?;
             Ok(CanisterUpdate {
-                bazel_target_name,
-                wasm_file_name,
+                canister_name,
                 new_git_hash,
                 new_sha256,
             })
@@ -127,66 +93,53 @@ async fn main() -> Result<()> {
     let latest_version = latest_sns_version.version.as_ref().unwrap();
     let latest_pretty_version = latest_sns_version.pretty_version.as_ref().unwrap();
     let sns_canister_updates = {
-        let data = [
+        let latest_pretty_version = latest_pretty_version.clone();
+        let canister_name_to_published_wasm_hash = [
             (
-                "mainnet_sns-root-canister",
-                "sns-root-canister.wasm.gz",
+                "sns_root",
                 &latest_version.root_wasm_hash,
-                &latest_pretty_version.root_wasm_hash,
+                latest_pretty_version.root_wasm_hash,
             ),
             (
-                "mainnet_sns-governance-canister",
-                "sns-governance-canister.wasm.gz",
+                "sns_governance",
                 &latest_version.governance_wasm_hash,
-                &latest_pretty_version.governance_wasm_hash,
+                latest_pretty_version.governance_wasm_hash,
             ),
             (
-                "mainnet_sns-swap-canister",
-                "sns-swap-canister.wasm.gz",
+                "swap",
                 &latest_version.swap_wasm_hash,
-                &latest_pretty_version.swap_wasm_hash,
+                latest_pretty_version.swap_wasm_hash,
             ),
             (
-                "mainnet_ic-icrc1-ledger",
-                "ic-icrc1-ledger.wasm.gz",
+                "sns_ledger",
                 &latest_version.ledger_wasm_hash,
-                &latest_pretty_version.ledger_wasm_hash,
+                latest_pretty_version.ledger_wasm_hash,
             ),
             (
-                "mainnet_ic-icrc1-index-ng",
-                "ic-icrc1-index-ng.wasm.gz",
+                "sns_index",
                 &latest_version.index_wasm_hash,
-                &latest_pretty_version.index_wasm_hash,
+                latest_pretty_version.index_wasm_hash,
             ),
             (
-                "mainnet_ic-icrc1-archive",
-                "ic-icrc1-archive.wasm.gz",
+                "sns_archive",
                 &latest_version.archive_wasm_hash,
-                &latest_pretty_version.archive_wasm_hash,
+                latest_pretty_version.archive_wasm_hash,
             ),
         ]
         .into_iter();
-        let stream = stream::iter(data);
-        let results = stream
-            .then(
-                |(bazel_target_name, wasm_file_name, hash, new_sha256)| async {
-                    let bazel_target_name = bazel_target_name.to_string();
-                    let wasm_file_name = wasm_file_name.to_string();
-                    let new_sha256 = new_sha256.clone();
-                    let new_git_hash =
-                        sns_wasm_utils::get_git_version_for_sns_hash(&agent, &ic_wasm_path, hash)
-                            .await?;
+        let results = stream::iter(canister_name_to_published_wasm_hash)
+            .then(|(canister_name, hash, new_sha256)| async {
+                let canister_name = canister_name.to_string();
+                let new_git_hash =
+                    sns_wasm_utils::get_git_version_for_sns_hash(&agent, &ic_wasm_path, hash)
+                        .await?;
 
-                    // required to cause `name` to not be captured by the closure
-                    #[allow(clippy::to_string_in_format_args)]
-                    Ok(CanisterUpdate {
-                        bazel_target_name,
-                        wasm_file_name,
-                        new_git_hash,
-                        new_sha256,
-                    })
-                },
-            )
+                Ok(CanisterUpdate {
+                    canister_name,
+                    new_git_hash,
+                    new_sha256,
+                })
+            })
             .collect::<Vec<Result<CanisterUpdate>>>()
             .await;
         results
@@ -196,7 +149,7 @@ async fn main() -> Result<()> {
 
     canister_updates.extend(sns_canister_updates);
 
-    update_workspace_file(&workspace_file_path, canister_updates)?;
+    update_mainnet_canisters_bzl_file(&workspace_file_path, canister_updates)?;
 
     Ok(())
 }
@@ -216,13 +169,15 @@ fn get_agent(ic_url: &str) -> Result<Agent> {
 
 #[derive(Debug, Clone)]
 struct CanisterUpdate {
-    bazel_target_name: String,
-    wasm_file_name: String,
+    canister_name: String,
     new_git_hash: String,
     new_sha256: String,
 }
 
-fn update_workspace_file(workspace_file_path: &Path, updates: Vec<CanisterUpdate>) -> Result<()> {
+fn update_mainnet_canisters_bzl_file(
+    workspace_file_path: &Path,
+    updates: Vec<CanisterUpdate>,
+) -> Result<()> {
     if updates.is_empty() {
         println!("No updates to apply");
         return Ok(());
@@ -233,49 +188,41 @@ fn update_workspace_file(workspace_file_path: &Path, updates: Vec<CanisterUpdate
     let reader = BufReader::new(file);
 
     let mut new_content = Vec::new();
-    let mut update_context = None;
+
+    let max_canister_name_len = updates
+        .iter()
+        .map(|update| update.canister_name.len())
+        .max()
+        .unwrap();
 
     for line in reader.lines() {
-        let line = line?;
-
-        // Check if the line is a http file declaration
-        if line.starts_with("http_file(") {
-            // Reset the context for each new canister
-            update_context = None;
-        }
+        let mut line = line?;
 
         for update in &updates {
-            if line.contains(&update.bazel_target_name) {
-                // If the bazel_target_name matches, we store the context of what we'll update in the following lines
-                update_context = Some(update.clone());
+            if line.contains(&format!(r#"    "{name}": "#, name = update.canister_name)) {
+                // If the canister_name matches, we store the context of what we'll update in the following lines
+                let new_line = format!(
+                    r#"    "{name}": ("{git_hash}", "{sha256}"),"#,
+                    name = update.canister_name,
+                    git_hash = update.new_git_hash,
+                    sha256 = update.new_sha256
+                );
+                if line != new_line {
+                    println!(
+                        "{name:>max_canister_name_len$} | updated",
+                        name = update.canister_name
+                    );
+                } else {
+                    println!(
+                        "{name:>max_canister_name_len$} | nothing to update",
+                        name = update.canister_name
+                    );
+                }
+                line = new_line;
                 break;
             }
         }
 
-        if let Some(ref update) = update_context {
-            // If we're in the context of an update, check if the line needs to be updated
-            if line.contains("url = ") {
-                let new_line = format!(
-                    "        url = \"https://download.dfinity.systems/ic/{}/canisters/{}\",",
-                    update.new_git_hash, update.wasm_file_name
-                );
-                if new_line != line {
-                    println!("Updated url for {}", update.wasm_file_name);
-                }
-                new_content.push(new_line);
-                update_context = None;
-                continue;
-            } else if line.contains("sha256 = ") {
-                let new_line = format!("        sha256 = \"{}\",", update.new_sha256);
-                if new_line != line {
-                    println!("Updated sha256 for {}", update.wasm_file_name);
-                }
-                new_content.push(new_line);
-                continue;
-            }
-        }
-
-        // For all other lines, or if there's no current update context, just copy the line
         new_content.push(line);
     }
 
