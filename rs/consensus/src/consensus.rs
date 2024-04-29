@@ -3,6 +3,7 @@
 
 pub mod batch_delivery;
 pub(crate) mod block_maker;
+mod bounds;
 mod catchup_package_maker;
 pub mod dkg_key_manager;
 mod finalizer;
@@ -257,8 +258,10 @@ impl ConsensusImpl {
                 logger.clone(),
             ),
             purger: Purger::new(
+                replica_config.clone(),
                 state_manager.clone(),
                 message_routing,
+                registry_client.clone(),
                 logger.clone(),
                 metrics_registry.clone(),
             ),
@@ -475,6 +478,7 @@ impl<T: ConsensusPool> ChangeSetProducer<T> for ConsensusImpl {
                 self.purger.on_state_change(&pool_reader)
             })
         };
+
         let calls: [&'_ dyn Fn() -> ChangeSet; 10] = [
             &finalize,
             &make_catch_up_package,

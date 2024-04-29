@@ -6,7 +6,9 @@ use std::io;
 use std::sync::{Arc, Mutex};
 
 pub mod replica_logger;
-pub use ic_context_logger::{debug, error, fatal, info, info_sample, log, new_logger, trace, warn};
+pub use ic_context_logger::{
+    debug, error, fatal, info, info_sample, log, log_metadata, new_logger, trace, warn,
+};
 use replica_logger::LogEntryLogger;
 pub use replica_logger::ReplicaLogger;
 

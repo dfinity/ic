@@ -207,6 +207,11 @@ macro_rules! warn {
 /// Log an error-level log, with context fields if given
 #[macro_export(local_inner_macros)]
 macro_rules! error {
+    (every_n_seconds => $seconds:expr, $logger:expr, $message:expr $(,$args:expr)* ) => {{
+        if $logger.is_n_seconds($seconds, log_metadata!(slog::Level::Error)) {
+            log!($logger, slog::Level::Error, $message $(,$args)*)
+        }
+    }};
     ($logger:expr, $message:expr $(,$args:expr)* ; $( $field:ident $( . $sub_field:ident)* => $value:expr ),* $(,)*) => {{
         log!($logger, slog::Level::Error, $message $(,$args)* ; $( $field $( . $sub_field)* => $value ),*)
     }};

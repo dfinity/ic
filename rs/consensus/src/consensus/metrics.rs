@@ -594,6 +594,7 @@ pub struct PurgerMetrics {
     pub validated_pool_purge_height: IntGauge,
     pub replicated_state_purge_height: IntGauge,
     pub replicated_state_purge_height_disk: IntGauge,
+    pub validated_pool_bounds_exceeded: IntCounter,
 }
 
 impl PurgerMetrics {
@@ -614,6 +615,10 @@ impl PurgerMetrics {
             replicated_state_purge_height_disk: metrics_registry.int_gauge(
                 "replicated_state_purge_height_disk",
                 "The height below which on-disk replicated states (checkpoints) are purged",
+            ),
+            validated_pool_bounds_exceeded: metrics_registry.int_counter(
+                "validated_pool_bounds_exceeded",
+                "The validated pool exceeded its size bounds",
             ),
         }
     }
