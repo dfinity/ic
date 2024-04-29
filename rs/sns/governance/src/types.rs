@@ -38,7 +38,9 @@ use ic_canister_log::log;
 use ic_crypto_sha2::Sha256;
 use ic_ledger_core::tokens::{Tokens, TOKEN_SUBDIVIDABLE_BY};
 use ic_management_canister_types::CanisterInstallModeError;
-use ic_nervous_system_common::{validate_proposal_url, NervousSystemError, SECONDS_PER_DAY};
+use ic_nervous_system_common::{
+    ledger_validation::MAX_LOGO_LENGTH, validate_proposal_url, NervousSystemError, SECONDS_PER_DAY,
+};
 use ic_nervous_system_proto::pb::v1::{Duration as PbDuration, Percentage};
 use ic_sns_governance_proposal_criticality::{
     ProposalCriticality, VotingDurationParameters, VotingPowerThresholds,
@@ -1345,10 +1347,6 @@ impl SnsMetadata {
     /// The minimum number of characters allowed for a SNS url.
     pub const MIN_URL_LENGTH: usize = 10;
 
-    /// The maximum number of characters allowed for a SNS logo encoding.
-    /// Roughly 256Kb
-    pub const MAX_LOGO_LENGTH: usize = 341334;
-
     /// The maximum number of characters allowed for a SNS name.
     pub const MAX_NAME_LENGTH: usize = 255;
 
@@ -1394,10 +1392,10 @@ impl SnsMetadata {
     pub fn validate_logo(logo: &str) -> Result<(), String> {
         const PREFIX: &str = "data:image/png;base64,";
         // TODO: Should we check that it's a valid PNG?
-        if logo.len() > Self::MAX_LOGO_LENGTH {
+        if logo.len() > MAX_LOGO_LENGTH {
             return Err(format!(
                 "SnsMetadata.logo must be less than {} characters, roughly 256 Kb",
-                Self::MAX_LOGO_LENGTH
+                MAX_LOGO_LENGTH
             ));
         }
         if !logo.starts_with(PREFIX) {
@@ -3150,7 +3148,7 @@ pub(crate) mod tests {
                 ..default.clone()
             },
             SnsMetadata {
-                logo: Some("X".repeat(SnsMetadata::MAX_LOGO_LENGTH + 1)),
+                logo: Some("X".repeat(MAX_LOGO_LENGTH + 1)),
                 ..default.clone()
             },
             SnsMetadata {

@@ -26,6 +26,7 @@ pub mod binary_search;
 pub mod cmc;
 pub mod dfn_core_stable_mem_utils;
 pub mod ledger;
+pub mod ledger_validation;
 pub mod memory_manager_upgrade_storage;
 
 lazy_static! {

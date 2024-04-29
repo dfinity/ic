@@ -9,6 +9,7 @@ use ic_icrc1_index_ng::{IndexArg, InitArg};
 use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::Tokens;
+use ic_nervous_system_common::ledger_validation;
 use ic_nervous_system_common::E8;
 use ic_nervous_system_proto::pb::v1::{Canister, Countries};
 use ic_nns_constants::{
@@ -36,8 +37,7 @@ use ic_sns_swap::{
 };
 use icrc_ledger_types::{icrc::generic_metadata_value::MetadataValue, icrc1::account::Account};
 use isocountry::CountryCode;
-use lazy_static::lazy_static;
-use maplit::{btreemap, hashset};
+use maplit::btreemap;
 use pb::v1::DappCanisters;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -49,18 +49,6 @@ use std::{
 
 pub mod distributions;
 pub mod pb;
-
-/// The maximum number of characters allowed for token symbol.
-pub const MAX_TOKEN_SYMBOL_LENGTH: usize = 10;
-
-/// The minimum number of characters allowed for token symbol.
-pub const MIN_TOKEN_SYMBOL_LENGTH: usize = 3;
-
-/// The maximum number of characters allowed for token name.
-pub const MAX_TOKEN_NAME_LENGTH: usize = 255;
-
-/// The minimum number of characters allowed for token name.
-pub const MIN_TOKEN_NAME_LENGTH: usize = 4;
 
 /// The maximum count of dapp canisters that can be initially decentralized.
 pub const MAX_DAPP_CANISTERS_COUNT: usize = 25;
@@ -360,20 +348,6 @@ impl From<NeuronsFundParticipationValidationError> for Result<(), String> {
     fn from(value: NeuronsFundParticipationValidationError) -> Self {
         Err(value.to_string())
     }
-}
-
-// Token Symbols that can not be used.
-lazy_static! {
-    static ref BANNED_TOKEN_SYMBOLS: HashSet<&'static str> = hashset! {
-        "ICP", "DFINITY"
-    };
-}
-
-// Token Names that can not be used.
-lazy_static! {
-    static ref BANNED_TOKEN_NAMES: HashSet<&'static str> = hashset! {
-        "internetcomputer", "internetcomputerprotocol"
-    };
 }
 
 /// The canister IDs of all SNS canisters
@@ -991,31 +965,7 @@ impl SnsInitPayload {
             .as_ref()
             .ok_or_else(|| "Error: token-symbol must be specified".to_string())?;
 
-        if token_symbol.len() > MAX_TOKEN_SYMBOL_LENGTH {
-            return Err(format!(
-                "Error: token-symbol must be fewer than {} characters, given character count: {}",
-                MAX_TOKEN_SYMBOL_LENGTH,
-                token_symbol.len()
-            ));
-        }
-
-        if token_symbol.len() < MIN_TOKEN_SYMBOL_LENGTH {
-            return Err(format!(
-                "Error: token-symbol must be greater than {} characters, given character count: {}",
-                MIN_TOKEN_SYMBOL_LENGTH,
-                token_symbol.len()
-            ));
-        }
-
-        if token_symbol != token_symbol.trim() {
-            return Err("Token symbol must not have leading or trailing whitespaces".to_string());
-        }
-
-        if BANNED_TOKEN_SYMBOLS.contains::<str>(&token_symbol.clone().to_uppercase()) {
-            return Err("Banned token symbol, please chose another one.".to_string());
-        }
-
-        Ok(())
+        ledger_validation::validate_token_symbol(token_symbol)
     }
 
     fn validate_token_name(&self) -> Result<(), String> {
@@ -1024,37 +974,7 @@ impl SnsInitPayload {
             .as_ref()
             .ok_or_else(|| "Error: token-name must be specified".to_string())?;
 
-        if token_name.len() > MAX_TOKEN_NAME_LENGTH {
-            return Err(format!(
-                "Error: token-name must be fewer than {} characters, given character count: {}",
-                MAX_TOKEN_NAME_LENGTH,
-                token_name.len()
-            ));
-        }
-
-        if token_name.len() < MIN_TOKEN_NAME_LENGTH {
-            return Err(format!(
-                "Error: token-name must be greater than {} characters, given character count: {}",
-                MIN_TOKEN_NAME_LENGTH,
-                token_name.len()
-            ));
-        }
-
-        if token_name != token_name.trim() {
-            return Err("Token name must not have leading or trailing whitespaces".to_string());
-        }
-
-        if BANNED_TOKEN_NAMES.contains::<str>(
-            &token_name
-                .to_lowercase()
-                .chars()
-                .filter(|c| !c.is_whitespace())
-                .collect::<String>(),
-        ) {
-            return Err("Banned token name, please chose another one.".to_string());
-        }
-
-        Ok(())
+        ledger_validation::validate_token_name(token_name)
     }
 
     fn validate_token_logo(&self) -> Result<(), String> {
@@ -1063,27 +983,7 @@ impl SnsInitPayload {
             .as_ref()
             .ok_or_else(|| "Error: token_logo must be specified".to_string())?;
 
-        const PREFIX: &str = "data:image/png;base64,";
-
-        if token_logo.len() > SnsMetadata::MAX_LOGO_LENGTH {
-            return Err(format!(
-                "Error: token_logo must be less than {} characters, roughly 256 Kb",
-                SnsMetadata::MAX_LOGO_LENGTH
-            ));
-        }
-
-        if !token_logo.starts_with(PREFIX) {
-            return Err(format!(
-                "Error: token_logo must be a base64 encoded PNG, but the provided \
-                string doesn't begin with `{PREFIX}`."
-            ));
-        }
-
-        if base64::decode(&token_logo[PREFIX.len()..]).is_err() {
-            return Err("Couldn't decode base64 in SnsMetadata.logo".to_string());
-        }
-
-        Ok(())
+        ledger_validation::validate_token_logo(token_logo)
     }
 
     fn validate_token_distribution(&self) -> Result<(), String> {
@@ -2108,10 +2008,13 @@ mod test {
         NeuronsFundParticipationConstraintsValidationError, RestrictedCountriesValidationError,
         SnsCanisterIds, SnsInitPayload, ICRC1_TOKEN_LOGO_KEY, MAX_CONFIRMATION_TEXT_LENGTH,
         MAX_DAPP_CANISTERS_COUNT, MAX_FALLBACK_CONTROLLER_PRINCIPAL_IDS_COUNT,
-        MAX_TOKEN_NAME_LENGTH, MAX_TOKEN_SYMBOL_LENGTH,
     };
     use ic_base_types::{CanisterId, PrincipalId};
     use ic_icrc1_ledger::LedgerArgument;
+    use ic_nervous_system_common::ledger_validation;
+    use ic_nervous_system_common::ledger_validation::{
+        MAX_TOKEN_NAME_LENGTH, MAX_TOKEN_SYMBOL_LENGTH,
+    };
     use ic_nervous_system_proto::pb::v1::{Canister, Countries};
     use ic_nns_constants::{
         CYCLES_MINTING_CANISTER_ID, EXCHANGE_RATE_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID,
@@ -2270,7 +2173,7 @@ mod test {
         }
         {
             let mut sns_init_payload = sns_init_payload.clone();
-            sns_init_payload.logo = Some("S".repeat(SnsMetadata::MAX_LOGO_LENGTH + 1));
+            sns_init_payload.logo = Some("S".repeat(ledger_validation::MAX_LOGO_LENGTH + 1));
             sns_init_payload.validate_post_execution().unwrap_err();
             sns_init_payload.validate_pre_execution().unwrap_err();
         }
@@ -3037,7 +2940,7 @@ mod test {
         // Exceeds max length
         {
             let sns_init_payload = SnsInitPayload {
-                token_logo: Some("S".repeat(SnsMetadata::MAX_LOGO_LENGTH + 1)),
+                token_logo: Some("S".repeat(ledger_validation::MAX_LOGO_LENGTH + 1)),
                 ..sns_init_payload.clone()
             };
             sns_init_payload.validate_post_execution().unwrap_err();
