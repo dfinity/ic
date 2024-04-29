@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [[bin]]
-name = "ic-leger-suite-orchestrator"
+name = "ic-ledger-suite-orchestrator"
 path = "src/main.rs"
 
 [dependencies]

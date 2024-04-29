@@ -190,15 +190,15 @@ impl ManagedCanistersAssert {
         )
         .unwrap()
     }
-    fn ledger_canister_id(&self) -> CanisterId {
+    pub fn ledger_canister_id(&self) -> CanisterId {
         CanisterId::unchecked_from_principal(PrincipalId::from(self.canister_ids.ledger.unwrap()))
     }
 
-    fn index_canister_id(&self) -> CanisterId {
+    pub fn index_canister_id(&self) -> CanisterId {
         CanisterId::unchecked_from_principal(PrincipalId::from(self.canister_ids.index.unwrap()))
     }
 
-    fn archive_canister_ids(&self) -> Vec<CanisterId> {
+    pub fn archive_canister_ids(&self) -> Vec<CanisterId> {
         self.canister_ids
             .archives
             .iter()
