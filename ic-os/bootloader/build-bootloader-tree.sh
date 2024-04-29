@@ -31,7 +31,7 @@ sudo mount -t tmpfs tmpfs-podman "${TMPFS}"
 
 TMPDIR=$(mktemp -d -t build-image-XXXXXXXXXXXX)
 
-BASE_IMAGE="ghcr.io/dfinity/library/ubuntu@sha256:5d070ad5f7fe63623cbb99b4fc0fd997f5591303d4b03ccce50f403957d0ddc4"
+BASE_IMAGE="ghcr.io/dfinity/library/ubuntu@sha256:6015f66923d7afbc53558d7ccffd325d43b4e249f41a6e93eef074c9505d2233"
 
 sudo podman --root "${TMPFS}" build --iidfile "${TMPDIR}/iidfile" - <<<"
     FROM $BASE_IMAGE
