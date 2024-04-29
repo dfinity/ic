@@ -86,6 +86,25 @@ fn check_ecdsa_shares(
     Ok(())
 }
 
+fn check_bip340_shares(
+    shares: &BTreeMap<NodeIndex, ThresholdBip340SignatureShareInternal>,
+    hashes: &[&'static str],
+) -> ThresholdEcdsaResult<()> {
+    assert_eq!(shares.len(), hashes.len());
+
+    for (index, hash) in hashes.iter().enumerate() {
+        let index = index as u32;
+        let share = shares.get(&index).expect("Unable to find signature share");
+        verify_data(
+            format!("share {}", index),
+            hash,
+            &share.serialize().unwrap(),
+        )
+    }
+
+    Ok(())
+}
+
 fn check_ed25519_shares(
     shares: &BTreeMap<NodeIndex, ThresholdEd25519SignatureShareInternal>,
     hashes: &[&'static str],
@@ -577,6 +596,86 @@ fn verify_protocol_output_remains_unchanged_over_time_p256_sig_with_k256_mega(
 }
 
 #[test]
+fn verify_protocol_output_remains_unchanged_over_time_bip340_sig_with_k256_mega(
+) -> Result<(), ThresholdEcdsaError> {
+    let nodes = 5;
+    let threshold = 2;
+
+    let seed = Seed::from_bytes(b"ic-crypto-fixed-seed-for-bip340-with-k256-mega");
+
+    let setup = SchnorrSignatureProtocolSetup::new(
+        TestConfig::new_mixed(EccCurveType::K256, EccCurveType::K256),
+        nodes,
+        threshold,
+        0,
+        seed.derive("setup"),
+    )?;
+
+    check_dealings(
+        "key",
+        &setup.key,
+        "6a94ce5970653eae",
+        "bf1314c2d8495ca2",
+        &[
+            "7517c25dba8cf187",
+            "3bf871020aa6e96e",
+            "816e3549f5e2a8b8",
+            "4ba40bcef67fe52d",
+            "689c0ceae46267a2",
+        ],
+    )?;
+
+    check_dealings(
+        "presignature",
+        &setup.presig,
+        "fd49455efe238ca9",
+        "bc0f01d2aa451d6c",
+        &[
+            "6dd3b882e6bc97fd",
+            "78d303e6c9b42dfa",
+            "abcad5b680a959af",
+            "bfb8c9bdc34c276b",
+            "bdcd11bd1fa59489",
+        ],
+    )?;
+
+    let signed_message = seed.derive("message").into_rng().gen::<[u8; 32]>().to_vec();
+    let random_beacon =
+        ic_types::Randomness::from(seed.derive("beacon").into_rng().gen::<[u8; 32]>());
+
+    let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
+    let proto = Bip340SignatureProtocolExecution::new(
+        setup,
+        signed_message,
+        random_beacon,
+        derivation_path,
+    );
+
+    let shares = proto.generate_shares()?;
+
+    check_bip340_shares(
+        &shares,
+        &[
+            "bb6c8b9551250d56",
+            "2a5999a29f00c05f",
+            "b8a733fb0d74f5da",
+            "3e5f66fa12e37824",
+            "7e211324eacfc147",
+        ],
+    )?;
+
+    let sig = proto.generate_signature(&shares).unwrap();
+
+    verify_data(
+        "signature".to_string(),
+        "f17223e84b22b6f1",
+        &sig.serialize().unwrap(),
+    );
+
+    Ok(())
+}
+
+#[test]
 fn verify_protocol_output_remains_unchanged_over_time_ed25519_sig_with_k256_mega(
 ) -> Result<(), ThresholdEcdsaError> {
     let nodes = 5;
@@ -607,7 +706,7 @@ fn verify_protocol_output_remains_unchanged_over_time_ed25519_sig_with_k256_mega
     )?;
 
     check_dealings(
-        "kappa*lambda",
+        "presignature",
         &setup.presig,
         "9cc1616cd58e54bb",
         "01c3d11318f8e7f5",
