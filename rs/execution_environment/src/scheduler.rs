@@ -1566,7 +1566,7 @@ impl Scheduler for SchedulerImpl {
             if state.metadata.heap_delta_estimate >= self.config.subnet_heap_delta_capacity {
                 warn!(
                     round_log,
-                    "At Round {} @ time {}, current heap delta {} exceeds allowed capacity {}, so not executing any messages.",
+                    "At Round {} @ time {}, current heap delta {} exceeds allowed capacity {}, so finish round early possibly not executing some of the messages.",
                     current_round,
                     state.time(),
                     state.metadata.heap_delta_estimate,
