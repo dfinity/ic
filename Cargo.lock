@@ -11106,17 +11106,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-starter-tests"
-version = "0.9.0"
-dependencies = [
- "anyhow",
- "ic-agent",
- "reqwest 0.12.3",
- "tempfile",
- "tokio",
-]
-
-[[package]]
 name = "ic-state-layout"
 version = "0.9.0"
 dependencies = [
