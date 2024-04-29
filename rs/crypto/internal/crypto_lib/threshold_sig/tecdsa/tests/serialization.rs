@@ -597,11 +597,11 @@ fn verify_protocol_output_remains_unchanged_over_time_ed25519_sig_with_k256_mega
         "904041b4304a5773",
         "581d0154b6c5f41d",
         &[
-            "1a320b9df0ace905",
-            "876f9f7d0313823c",
-            "c54c3d5b8692cc67",
-            "9e111965d09cbd4b",
-            "43c56b70044f2c15",
+            "23fa953ba92e5102",
+            "19afc3e77f2dc277",
+            "ba92ecf9b3143d12",
+            "06453e6ba0a85cde",
+            "021d037b9db16e33",
         ],
     )?;
 

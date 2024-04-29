@@ -182,7 +182,7 @@ impl RandomOracle {
     pub fn output_bytestring(self, output_length: usize) -> ThresholdEcdsaResult<Vec<u8>> {
         let ro_input = self.form_ro_input()?;
 
-        Ok(xmd::expand_message_xmd(
+        Ok(xmd::<ic_crypto_sha2::Sha256>(
             &ro_input,
             self.domain_separator.as_bytes(),
             output_length,
