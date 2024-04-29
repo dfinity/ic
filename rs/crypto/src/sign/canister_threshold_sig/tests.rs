@@ -113,6 +113,11 @@ mod get_master_public_key_from_transcript {
          fc0786c9b4a4ddcb662e36fd716c42a0781fa05d208afb58220203915ca5584abf\
          0abd9e71fb68561d607a96c61bf621c8092d7ea00677f5324829";
 
+    const VALID_ED25519_INTERNAL_TRANSCRIPT_RAW: &str =
+        "a173636f6d62696e65645f636f6d6d69746d656e74a16b427953756d6d6174696f\
+        6ea168506564657273656ea166706f696e747381582103f9f047c9125b490f118c7\
+        281a2091593d47f83197542e2fd956bf979ec97d26d";
+
     fn valid_internal_transcript_raw(alg: AlgorithmId) -> IDkgTranscriptInternal {
         match alg {
             AlgorithmId::ThresholdEcdsaSecp256k1 | AlgorithmId::ThresholdSchnorrBip340 => {
@@ -127,8 +132,13 @@ mod get_master_public_key_from_transcript {
                     .expect("hex decoding of valid internal transcript raw should succeed"),
             )
             .expect("deserialization of valid internal transcript raw bytes should succeed"),
+            AlgorithmId::ThresholdEd25519 => IDkgTranscriptInternal::deserialize(
+                &hex::decode(VALID_ED25519_INTERNAL_TRANSCRIPT_RAW)
+                    .expect("hex decoding of valid internal transcript raw should succeed"),
+            )
+            .expect("deserialization of valid internal transcript raw bytes should succeed"),
             unexpected => {
-                panic!("Unexpected threshold ECDSA algorithm {}", unexpected);
+                panic!("Unexpected canister threshold algorithm {}", unexpected);
             }
         }
     }
@@ -153,6 +163,13 @@ mod get_master_public_key_from_transcript {
                 algorithm_id: AlgorithmId::SchnorrSecp256k1,
                 public_key: hex::decode(
                     "0252a937b4c129d822412d79f39d3626f32e7a1cf85ba1dfb01c9671d7d434003f",
+                )
+                .expect("hex decoding of public key bytes should succeed"),
+            },
+            AlgorithmId::ThresholdEd25519 => MasterPublicKey {
+                algorithm_id: AlgorithmId::Ed25519,
+                public_key: hex::decode(
+                    "f9f047c9125b490f118c7281a2091593d47f83197542e2fd956bf979ec97d26d",
                 )
                 .expect("hex decoding of public key bytes should succeed"),
             },

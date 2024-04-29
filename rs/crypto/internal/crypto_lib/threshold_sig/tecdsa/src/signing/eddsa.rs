@@ -247,6 +247,34 @@ impl ThresholdEd25519CombinedSignatureInternal {
         v
     }
 
+    pub fn deserialize(
+        bytes: &[u8],
+    ) -> Result<Self, ThresholdEd25519SignatureShareInternalSerializationError> {
+        const ED25519: EccCurveType = EccCurveType::Ed25519;
+        const EXPECTED_LEN: usize = ED25519.scalar_bytes() + ED25519.point_bytes();
+
+        if bytes.len() != EXPECTED_LEN {
+            return Err(ThresholdEd25519SignatureShareInternalSerializationError(
+                format!(
+                    "Bad signature length, expected {EXPECTED_LEN} but got {}",
+                    bytes.len()
+                ),
+            ));
+        }
+
+        let (point_bytes, scalar_bytes) = bytes.split_at(ED25519.point_bytes());
+
+        let r = EccPoint::deserialize(ED25519, point_bytes).map_err(|e| {
+            ThresholdEd25519SignatureShareInternalSerializationError(format!("Invalid r: {:?}", e))
+        })?;
+
+        let s = EccScalar::deserialize(ED25519, scalar_bytes).map_err(|e| {
+            ThresholdEd25519SignatureShareInternalSerializationError(format!("Invalid s: {:?}", e))
+        })?;
+
+        Ok(Self { r, s })
+    }
+
     /// Combine shares into a Ed25519 signature
     pub fn new(
         derivation_path: &DerivationPath,
@@ -335,3 +363,6 @@ impl ThresholdEd25519CombinedSignatureInternal {
         Ok(())
     }
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ThresholdEd25519SignatureShareInternalSerializationError(pub String);

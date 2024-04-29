@@ -6886,6 +6886,7 @@ dependencies = [
 name = "ic-crypto-internal-threshold-sig-ecdsa-test-utils"
 version = "0.9.0"
 dependencies = [
+ "ed25519-dalek",
  "ic-crypto-internal-threshold-sig-ecdsa",
  "rand 0.8.5",
  "schnorr_fun",

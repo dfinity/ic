@@ -1,5 +1,6 @@
 use ic_crypto_internal_threshold_sig_ecdsa::*;
-use rand::Rng;
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+use rand::{CryptoRng, Rng};
 use std::collections::BTreeMap;
 
 mod test_utils;
@@ -850,16 +851,15 @@ fn commitment_opening_ed25519_serialization_is_stable() -> Result<(), ThresholdE
 fn bip340_combined_share_serialization_roundtrip_works_correctly() {
     let nodes = 5;
     let threshold = 2;
-    let seed = Seed::from_bytes(b"ic-crypto-tecdsa-fixed-seed");
-    let signed_message = seed.derive("message").into_rng().gen::<[u8; 32]>().to_vec();
-    let random_beacon =
-        ic_types::Randomness::from(seed.derive("beacon").into_rng().gen::<[u8; 32]>());
+    let rng = &mut reproducible_rng();
+    let signed_message = random_bytes(rng);
+    let random_beacon = ic_types::Randomness::from(rng.gen::<[u8; 32]>());
     let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
 
     let cfg = TestConfig::new(EccCurveType::K256);
 
-    let setup =
-        SchnorrSignatureProtocolSetup::new(cfg, nodes, threshold, 0, seed.derive("setup")).unwrap();
+    let seed = Seed::from_bytes(&random_bytes(rng));
+    let setup = SchnorrSignatureProtocolSetup::new(cfg, nodes, threshold, 0, seed).unwrap();
 
     let proto = Bip340SignatureProtocolExecution::new(
         setup,
@@ -874,5 +874,50 @@ fn bip340_combined_share_serialization_roundtrip_works_correctly() {
     let deserialized_comb_share =
         ThresholdBip340CombinedSignatureInternal::deserialize(&serialized_comb_share).unwrap();
 
-    assert_eq!(comb_share, deserialized_comb_share);
+    // `ThresholdBip340CombinedSignatureInternal` does not implement
+    // PartialEq, so we need to compare the serialized bytes.
+    assert_eq!(
+        serialized_comb_share,
+        deserialized_comb_share.serialize().unwrap()
+    );
+}
+
+#[test]
+fn ed25519_combined_share_serialization_roundtrip_works_correctly() {
+    let nodes = 5;
+    let threshold = 2;
+    let rng = &mut reproducible_rng();
+    let signed_message = random_bytes(rng);
+    let random_beacon = ic_types::Randomness::from(rng.gen::<[u8; 32]>());
+    let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
+
+    let cfg = TestConfig::new(EccCurveType::Ed25519);
+
+    let seed = Seed::from_bytes(&random_bytes(rng));
+    let setup =
+        SchnorrSignatureProtocolSetup::new(cfg, nodes, threshold, 0, seed.derive("setup")).unwrap();
+
+    let proto = Ed25519SignatureProtocolExecution::new(
+        setup,
+        signed_message,
+        random_beacon,
+        derivation_path,
+    );
+    let shares = proto.generate_shares().unwrap();
+    let comb_share = proto.generate_signature(&shares).unwrap();
+
+    let serialized_comb_share = comb_share.serialize();
+    let deserialized_comb_share =
+        ThresholdEd25519CombinedSignatureInternal::deserialize(&serialized_comb_share).unwrap();
+
+    // `ThresholdEd25519CombinedSignatureInternal`` does not implement
+    // PartialEq, so we need to compare the serialized bytes.
+    assert_eq!(serialized_comb_share, deserialized_comb_share.serialize());
+}
+
+fn random_bytes<R: Rng + CryptoRng>(rng: &mut R) -> Vec<u8> {
+    let size = rng.gen_range(0..100);
+    let mut bytes = vec![0; size];
+    rng.fill_bytes(&mut bytes);
+    bytes
 }

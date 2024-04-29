@@ -7,8 +7,9 @@ use crate::vault::api::{
 use crate::vault::local_csp_vault::LocalCspVault;
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
 use ic_crypto_internal_threshold_sig_ecdsa::{
-    create_bip340_signature_share, DerivationPath, IDkgTranscriptInternal,
-    ThresholdBip340GenerateSigShareInternalError,
+    create_bip340_signature_share, create_ed25519_signature_share, DerivationPath,
+    IDkgTranscriptInternal, ThresholdBip340GenerateSigShareInternalError,
+    ThresholdEd25519GenerateSigShareInternalError,
 };
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::AlgorithmId;
@@ -64,6 +65,18 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                     .map_err(|e| ThresholdSchnorrCreateSigShareVaultError::SerializationError(e.0))
                     .map(ThresholdSchnorrSigShareBytes::from)
             }
+            AlgorithmId::ThresholdEd25519 => {
+                let sig_share = create_ed25519_signature_share(
+                    &derivation_path,
+                    &message[..],
+                    nonce,
+                    &key_transcript,
+                    &presig_transcript,
+                    &key_opening,
+                    &presig_opening,
+                )?;
+                Ok(ThresholdSchnorrSigShareBytes::from(sig_share.serialize()))
+            }
             _ => Err(ThresholdSchnorrCreateSigShareVaultError::InvalidArguments(
                 format!("invalid algorithm id for threshold Schnorr signature: {algorithm_id}"),
             )),
@@ -85,6 +98,20 @@ impl From<ThresholdBip340GenerateSigShareInternalError>
 {
     fn from(e: ThresholdBip340GenerateSigShareInternalError) -> Self {
         type F = ThresholdBip340GenerateSigShareInternalError;
+
+        match e {
+            F::InvalidArguments(s) => Self::InvalidArguments(s),
+            F::InconsistentCommitments => Self::InconsistentCommitments,
+            F::InternalError(s) => Self::InternalError(s),
+        }
+    }
+}
+
+impl From<ThresholdEd25519GenerateSigShareInternalError>
+    for ThresholdSchnorrCreateSigShareVaultError
+{
+    fn from(e: ThresholdEd25519GenerateSigShareInternalError) -> Self {
+        type F = ThresholdEd25519GenerateSigShareInternalError;
 
         match e {
             F::InvalidArguments(s) => Self::InvalidArguments(s),
