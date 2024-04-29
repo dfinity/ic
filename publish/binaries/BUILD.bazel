@@ -41,7 +41,6 @@ BINARIES = {
     "ic-balance-exporter": "//rs/boundary_node/ic_balance_exporter:ic-balance-exporter",
     "ic-boundary": "//rs/boundary_node/ic_boundary:ic-boundary",
     "ic-boundary-tls": "//rs/boundary_node/ic_boundary:ic-boundary-tls",
-    "ic-starter": "//rs/starter:ic-starter",
     "ic-https-outcalls-adapter": "//rs/https_outcalls/adapter:ic-https-outcalls-adapter",
     "ic-consensus-pool-util": "//rs/artifact_pool:ic-consensus-pool-util",
     "ic-crypto-csp": "//rs/crypto:ic-crypto-csp",
