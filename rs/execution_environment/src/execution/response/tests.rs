@@ -2954,7 +2954,7 @@ fn test_best_effort_responses_feature_flag(flag: FlagStatus) -> Result<WasmResul
         b_id,
         "update",
         wasm()
-            .call_with_cycles_and_best_effort_response(
+            .call_simple_with_cycles_and_best_effort_response(
                 a_id,
                 "update",
                 call_args().other_side(wasm().accept_cycles(Cycles::new(6_000_000))),

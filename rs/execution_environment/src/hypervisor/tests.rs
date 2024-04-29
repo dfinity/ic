@@ -1,6 +1,8 @@
+use crate::hypervisor::tests::WasmResult::Reply;
 use assert_matches::assert_matches;
 use candid::{Decode, Encode};
 use ic_base_types::{NumSeconds, PrincipalId};
+use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
@@ -13,6 +15,7 @@ use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::{NextExecution, WASM_PAGE_SIZE_IN_BYTES};
 use ic_replicated_state::testing::CanisterQueuesTesting;
+use ic_replicated_state::testing::SystemStateTesting;
 use ic_replicated_state::{
     canister_state::execution_state::CustomSectionType, ExportedFunctions, Global, PageIndex,
 };
@@ -25,6 +28,9 @@ use ic_test_utilities_execution_environment::{
 };
 use ic_test_utilities_metrics::fetch_int_counter;
 use ic_test_utilities_metrics::{fetch_histogram_stats, HistogramStats};
+use ic_types::messages::CanisterMessage;
+use ic_types::time::CoarseTime;
+use ic_types::Time;
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::CanisterTask,
@@ -5046,6 +5052,104 @@ fn cycles_correct_if_update_fails() {
         test.canister_state(b_id).system_state.balance(),
         initial_cycles - test.canister_execution_cost(b_id)
     );
+}
+
+#[test]
+fn call_with_best_effort_response_succeeds() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_best_effort_responses(FlagStatus::Enabled)
+        .build();
+
+    let canister_id = test.universal_canister().unwrap();
+
+    let result = test
+        .ingress(
+            canister_id,
+            "update",
+            wasm()
+                .call_new(canister_id, "update", call_args())
+                .call_with_cycles_and_best_effort_response(10)
+                .call_perform()
+                .reply()
+                .build(),
+        )
+        .unwrap();
+
+    assert_eq!(result, Reply(vec![]));
+}
+
+#[test]
+fn call_with_best_effort_response_fails_when_timeout_is_set() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_best_effort_responses(FlagStatus::Enabled)
+        .build();
+
+    let canister_id = test.universal_canister().unwrap();
+
+    let err = test
+        .ingress(
+            canister_id,
+            "update",
+            wasm()
+                .call_new(canister_id, "update", call_args())
+                .call_with_cycles_and_best_effort_response(10)
+                .call_with_cycles_and_best_effort_response(10)
+                .build(),
+        )
+        .unwrap_err();
+
+    assert!(
+        err.description().contains("Canister violated contract: ic0_call_with_best_effort_response failed because a timeout is already set.")
+    );
+
+    assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
+}
+
+#[test]
+fn call_with_best_effort_response_timeout_is_set_properly() {
+    let start_time_seconds = 200;
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_best_effort_responses(FlagStatus::Enabled)
+        .with_manual_execution()
+        .with_time(Time::from_secs_since_unix_epoch(start_time_seconds).unwrap())
+        .build();
+
+    let canister_sender = test.universal_canister().unwrap();
+    let canister_receiver = test.universal_canister().unwrap();
+    let timeout_seconds = 100;
+
+    let call_with_best_effort_response = wasm()
+        .call_simple_with_cycles_and_best_effort_response(
+            canister_receiver,
+            "update",
+            call_args(),
+            Cycles::new(0),
+            timeout_seconds,
+        )
+        .reply()
+        .build();
+
+    let _ = test.ingress_raw(canister_sender, "update", call_with_best_effort_response);
+
+    // Execute Ingress message on `canister_sender`.
+    test.execute_message(canister_sender);
+    // Induct request from `canister_sender` to input queue of `canister_receiver`.
+    test.induct_messages();
+
+    match test
+        .canister_state_mut(canister_receiver)
+        .system_state
+        .queues_mut()
+        .pop_input()
+        .unwrap()
+    {
+        CanisterMessage::Request(request) => assert_eq!(
+            request.deadline,
+            CoarseTime::from_secs_since_unix_epoch(start_time_seconds as u32 + timeout_seconds)
+        ),
+        _ => panic!("Unexpected result."),
+    };
 }
 
 fn display_page_map(page_map: PageMap, page_range: std::ops::Range<u64>) -> String {

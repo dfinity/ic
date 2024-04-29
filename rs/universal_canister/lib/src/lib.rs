@@ -17,7 +17,7 @@ use universal_canister::Ops;
 /// `rs/universal_canister`.
 pub const UNIVERSAL_CANISTER_WASM: &[u8] = include_bytes!("universal-canister.wasm");
 pub const UNIVERSAL_CANISTER_WASM_SHA256: [u8; 32] =
-    hex!("7cf8d80c76fdeb5eab6e442e91542485d239ca57edadd3cb7c385fde43364953");
+    hex!("7ee086b08867bfc54b726f918044043a85e0739190c14565de18149412fcff13");
 
 /// A succinct shortcut for creating a `PayloadBuilder`, which is used to encode
 /// instructions to be executed by the UC.
@@ -282,7 +282,7 @@ impl PayloadBuilder {
         self
     }
 
-    pub fn call_with_cycles_and_best_effort_response<P: AsRef<[u8]>, S: ToString>(
+    pub fn call_simple_with_cycles_and_best_effort_response<P: AsRef<[u8]>, S: ToString>(
         mut self,
         callee: P,
         method: S,
@@ -297,6 +297,31 @@ impl PayloadBuilder {
             Some(cycles),
             Some(timeout_seconds),
         );
+        self
+    }
+
+    pub fn call_new<P: AsRef<[u8]>, S: ToString>(
+        mut self,
+        callee: P,
+        method: S,
+        call_args: CallArgs,
+    ) -> Self {
+        self = self.push_bytes(callee.as_ref());
+        self = self.push_bytes(method.to_string().as_bytes());
+        self = self.push_bytes(call_args.on_reply.as_slice());
+        self = self.push_bytes(call_args.on_reject.as_slice());
+        self.0.push(Ops::CallNew as u8);
+        self
+    }
+
+    pub fn call_with_cycles_and_best_effort_response(mut self, timeout_seconds: u32) -> Self {
+        self = self.push_int(timeout_seconds);
+        self.0.push(Ops::CallWithBestEffortResponse as u8);
+        self
+    }
+
+    pub fn call_perform(mut self) -> Self {
+        self.0.push(Ops::CallPerform as u8);
         self
     }
 
