@@ -30,7 +30,8 @@ ic-icrc1-tokens-u64 = { path = "../tokens_u64" }
 ic-ledger-canister-core = { path = "../../ledger_canister_core" }
 ic-ledger-core = { path = "../../ledger_core" }
 ic-ledger-hash-of = { path = "../../../../packages/ic-ledger-hash-of" }
-ic-rosetta-api = { path = "../../" }
+ic-rosetta-api = { path = "../.." }
+ic-sys = { path = "../../../sys" }
 icrc-ledger-agent = { path = "../../../../packages/icrc-ledger-agent" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 indicatif = "0.17.3"

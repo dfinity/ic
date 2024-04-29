@@ -18,6 +18,7 @@ use ic_icrc_rosetta::{
     ledger_blocks_synchronization::blocks_synchronizer::start_synching_blocks,
     AppState, Metadata,
 };
+use ic_sys::fs::write_string_using_tmp_file;
 use icrc_ledger_agent::{CallMode, Icrc1Agent};
 use lazy_static::lazy_static;
 use std::sync::Arc;
@@ -372,7 +373,10 @@ async fn main() -> Result<()> {
     let tcp_listener = TcpListener::bind(format!("0.0.0.0:{}", args.get_port())).await?;
 
     if let Some(port_file) = args.port_file {
-        std::fs::write(port_file, tcp_listener.local_addr()?.port().to_string())?;
+        write_string_using_tmp_file(
+            port_file,
+            tcp_listener.local_addr()?.port().to_string().as_str(),
+        )?;
     }
 
     if !args.offline {
