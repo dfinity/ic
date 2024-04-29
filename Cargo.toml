@@ -177,6 +177,7 @@ members = [
     "rs/nervous_system/root",
     "rs/nervous_system/runtime",
     "rs/nervous_system/string",
+    "rs/nervous_system/tools/update-bazel-versions",
     "rs/nns/constants",
     "rs/nns/common",
     "rs/nns/common/protobuf_generator",
@@ -534,6 +535,7 @@ socket2 = { version = "0.5.6", features = ["all"] }
 strum = { version = "0.26.2", features = ["derive"] }
 strum_macros = "0.26.2"
 syn = { version = "1.0.109", features = ["fold", "full"] }
+tempfile = "^3.1.0"
 thiserror = "1.0.57"
 time = { version = "0.3.20", features = ["formatting"] }
 tokio = { version = "1.37.0", features = ["full"] }
