@@ -1,4 +1,4 @@
-use ic_crypto_sha2::Sha256;
+use ic_crypto_sha2::{Sha256, Sha512};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -8,67 +8,119 @@ pub enum XmdError {
 
 pub type XmdResult<T> = std::result::Result<T, XmdError>;
 
-// Section 5.4.1 of https://www.ietf.org/archive/id/draft-irtf-cfrg-hash-to-curve-14.html
-// Produces a uniformly random byte string of a given length using SHA-256
-// from a message and domain separator.
-// The desired length `len` must not exceed 255*32 = 8160 bytes.
-pub fn expand_message_xmd(msg: &[u8], domain_separator: &[u8], len: usize) -> XmdResult<Vec<u8>> {
-    const MAX_LEN: usize = 255 * 32;
-    if len > MAX_LEN {
+pub trait XmdHashFunction {
+    const BLOCK_BYTES: usize;
+    const OUTPUT_BYTES: usize;
+
+    fn new() -> Self;
+    fn write(&mut self, data: &[u8]);
+
+    // Ideally in the future this would return [u8; Self::OUTPUT_BYTES]
+    // but this requires unstable features.
+    fn finish(self) -> Vec<u8>;
+}
+
+impl XmdHashFunction for Sha256 {
+    const BLOCK_BYTES: usize = 64;
+    const OUTPUT_BYTES: usize = 32;
+
+    fn new() -> Self {
+        Sha256::new()
+    }
+    fn write(&mut self, data: &[u8]) {
+        self.write(data);
+    }
+    fn finish(self) -> Vec<u8> {
+        self.finish().to_vec()
+    }
+}
+
+impl XmdHashFunction for Sha512 {
+    const BLOCK_BYTES: usize = 128;
+    const OUTPUT_BYTES: usize = 64;
+
+    fn new() -> Self {
+        Sha512::new()
+    }
+    fn write(&mut self, data: &[u8]) {
+        self.write(data);
+    }
+    fn finish(self) -> Vec<u8> {
+        self.finish().to_vec()
+    }
+}
+
+/// XMD function
+///
+/// See section 5.4.1 of RFC 9380
+/// <https://www.rfc-editor.org/rfc/rfc9380.html#name-expand_message_xmd>
+///
+/// Produces a uniformly random byte string of a given length using a hash
+/// from a message and domain separator.
+/// The desired length `len` must not exceed 255 times the output length
+/// of the hash; 8160 bytes for SHA-256 or 16320 bytes for SHA-512
+///
+pub fn xmd<H: XmdHashFunction>(msg: &[u8], dst: &[u8], len: usize) -> XmdResult<Vec<u8>> {
+    if len > 255 * H::OUTPUT_BYTES {
         return Err(XmdError::InvalidOutputLength(format!(
             "Requested XMD output length {} too large (max: {})",
-            len, MAX_LEN
+            len,
+            255 * H::OUTPUT_BYTES
         )));
     }
 
-    // len ≤ 8160 ⭢ ell ≤ 255
+    if dst.len() >= 256 {
+        let mut state = H::new();
+        state.write(b"H2C-OVERSIZE-DST-");
+        state.write(dst);
+        return xmd::<H>(msg, &state.finish(), len);
+    }
+
+    // len ≤ 255*H::OUTPUT_BYTES ⭢ ell ≤ 255
     // thus values ≤ ell can be safely cast to u8
-    let ell = (len - 1) / 32 + 1;
+    let ell = (len + H::OUTPUT_BYTES - 1) / H::OUTPUT_BYTES;
 
-    let xmd = |dst| {
-        let mut out = Vec::with_capacity(ell * 32);
+    let mut out = vec![0u8; len];
 
-        let mut state = Sha256::new();
-        state.write(&[0; 64]);
-        state.write(msg);
-        state.write(&[(len / 256) as u8, (len % 256) as u8, 0]);
-        state.write(dst);
-        state.write(&[dst.len() as u8]);
+    let mut state = H::new();
+    state.write(&vec![0; H::BLOCK_BYTES]);
+    state.write(msg);
+    state.write(&[(len / 256) as u8, (len % 256) as u8, 0]);
+    state.write(dst);
+    state.write(&[dst.len() as u8]);
 
-        let b_0: [u8; 32] = state.finish();
+    let b_0 = state.finish();
 
-        state = Sha256::new();
-        state.write(&b_0);
-        state.write(&[1]);
-        state.write(dst);
-        state.write(&[dst.len() as u8]);
-        out.extend_from_slice(&state.finish());
+    state = H::new();
+    state.write(&b_0);
+    state.write(&[1]);
+    state.write(dst);
+    state.write(&[dst.len() as u8]);
 
-        for i in 2..=ell {
-            let mut tmp = [0u8; 32];
-            for j in 0..32 {
-                tmp[j] = b_0[j] ^ out[out.len() - 32 + j];
-            }
-            state = Sha256::new();
-            state.write(&tmp);
-            state.write(&[i as u8]);
-            state.write(dst);
-            state.write(&[dst.len() as u8]);
-            out.extend_from_slice(&state.finish());
+    let first_block = std::cmp::min(H::OUTPUT_BYTES, len);
+    out[0..first_block].copy_from_slice(&state.finish()[0..first_block]);
+
+    // Has to be a Vec rather than an array due to const generics limitations
+    let mut tmp = vec![0; H::OUTPUT_BYTES];
+
+    for i in 2..=ell {
+        let offset = (i - 1) * H::OUTPUT_BYTES;
+        let remaining = out.len() - offset;
+        let to_copy = std::cmp::min(H::OUTPUT_BYTES, remaining);
+
+        for j in 0..H::OUTPUT_BYTES {
+            tmp[j] = b_0[j] ^ out[offset - H::OUTPUT_BYTES + j];
         }
 
-        out
-    };
+        state = H::new();
+        state.write(&tmp);
+        state.write(&[i as u8]);
+        state.write(dst);
+        state.write(&[dst.len() as u8]);
+        let h = state.finish();
 
-    let mut out = if domain_separator.len() >= 256 {
-        let mut state = Sha256::new();
-        state.write(b"H2C-OVERSIZE-DST-");
-        state.write(domain_separator);
-        xmd(&state.finish())
-    } else {
-        xmd(domain_separator)
-    };
+        out[offset..offset + to_copy].copy_from_slice(&h[0..to_copy]);
+    }
 
-    out.truncate(len);
     Ok(out)
 }

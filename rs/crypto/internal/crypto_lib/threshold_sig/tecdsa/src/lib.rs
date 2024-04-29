@@ -186,7 +186,7 @@
 
 #![forbid(unsafe_code)]
 
-use ic_crypto_internal_seed::xmd::XmdError;
+use ic_crypto_internal_seed::XmdError;
 use ic_types::crypto::canister_threshold_sig::{ExtendedDerivationPath, MasterPublicKey};
 use ic_types::crypto::AlgorithmId;
 use ic_types::{NumberOfNodes, Randomness};

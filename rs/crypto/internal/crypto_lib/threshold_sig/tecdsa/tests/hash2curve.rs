@@ -1,33 +1,4 @@
-use ic_crypto_internal_seed::xmd::expand_message_xmd;
 use ic_crypto_internal_threshold_sig_ecdsa::*;
-
-fn xmd_check(msg: &str, dst: &str, want: &str) {
-    let x = expand_message_xmd(msg.as_bytes(), dst.as_bytes(), want.len() / 2).expect("XMD failed");
-    assert_eq!(hex::encode(x), want);
-}
-
-#[test]
-fn expand_message_xmd_test() {
-    // Check we can handle lengths that are not a perfect multiple of 32.
-    let x = expand_message_xmd(b"foo", b"bar", 123).expect("XMD failed");
-    assert_eq!(x.len(), 123);
-
-    // Test cases from Appendix K.
-    xmd_check(
-        "",
-        "QUUX-V01-CS02-with-expander-SHA256-128",
-        "68a985b87eb6b46952128911f2a4412bbc302a9d759667f87f7a21d803f07235",
-    );
-    xmd_check(
-        "abc",
-        "QUUX-V01-CS02-with-expander-SHA256-128",
-        "d8ccab23b5985ccea865c6c97b6e5b8350e794e603b4b97902f53a8a0d605615",
-    );
-    xmd_check("", "QUUX-V01-CS02-with-expander-SHA256-128-long-DST-1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111",
-              "e8dc0c8b686b7ef2074086fbdd2f30e3f8bfbd3bdf177f73f04b97ce618a3ed3");
-    xmd_check("abc", "QUUX-V01-CS02-with-expander-SHA256-128-long-DST-1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111",
-              "52dbf4f36cf560fca57dedec2ad924ee9c266341d8f3d6afe5171733b16bbb12");
-}
 
 #[test]
 fn test_hash2curve_kat_p256() -> Result<(), ThresholdEcdsaError> {
@@ -111,6 +82,64 @@ fn test_hash2curve_kat_k256() -> Result<(), ThresholdEcdsaError> {
     for (input, pt) in &test_vectors {
         let h2c = EccPoint::hash_to_point(curve, input.as_bytes(), dst.as_bytes())?;
         assert_eq!(&hex::encode(h2c.serialize()), pt);
+    }
+    Ok(())
+}
+
+#[test]
+fn test_hash2curve_kat_ed25519() -> Result<(), ThresholdEcdsaError> {
+    let curve = EccCurveType::Ed25519;
+    let dst = "QUUX-V01-CS02-with-edwards25519_XMD:SHA-512_ELL2_RO_";
+
+    /*
+    The following tests are taken from section J.5.1 of RFC 9380
+    https://www.rfc-editor.org/rfc/rfc9380.html#name-edwards25519_xmdsha-512_ell
+
+    For all tests in the draft, the same domain separator is used.
+
+    Unlike SEC1, Ed25519 uses the full encoding of y plus the sign of x.
+    The sign of x appears in the high bit of the encoding.
+    */
+
+    let test_vectors = [
+        (
+            "".to_string(),
+            "09a6c8561a0b22bef63124c588ce4c62ea83a3c899763af26d795302e115dc21",
+        ),
+        (
+            "abc".to_string(),
+            // 9a not 1a because x is odd so the high bit is set
+            "9a8395b88338f22e435bbd301183e7f20a5f9de643f11882fb237f88268a5531",
+        ),
+        (
+            "abcdef0123456789".to_string(),
+            "53060a3d140e7fbcda641ed3cf42c88a75411e648a1add71217f70ea8ec561a6",
+        ),
+        (
+            format!("q128_{}", vec!['q'; 128].iter().collect::<String>()),
+            "2eca15e355fcfa39d2982f67ddb0eea138e2994f5956ed37b7f72eea5e89d2f7",
+        ),
+        (
+            format!("a512_{}", vec!['a'; 512].iter().collect::<String>()),
+            "6dc2fc04f266c5c27f236a80b14f92ccd051ef1ff027f26a07f8c0f327d8f995",
+        ),
+    ];
+
+    for (input, pt) in &test_vectors {
+        let h2c = EccPoint::hash_to_point(curve, input.as_bytes(), dst.as_bytes())?;
+        /*
+
+        RFC 9380 prints the x and y coordinates in big endian, while
+        Ed25519 uses little endian.
+
+        We hardcode the vectors following RFC 9380 and then reverse the
+        value here.
+         */
+
+        let mut pt_bytes = h2c.serialize();
+        pt_bytes.reverse();
+
+        assert_eq!(&hex::encode(pt_bytes), pt);
     }
     Ok(())
 }
