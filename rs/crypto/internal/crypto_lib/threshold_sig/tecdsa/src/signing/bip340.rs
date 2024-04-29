@@ -269,7 +269,7 @@ impl ThresholdBip340SignatureShareInternal {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ThresholdBip340SignatureShareInternalSerializationError(pub String);
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ThresholdBip340CombinedSignatureInternal {
     r: EccPoint,
     s: EccScalar,

@@ -2,7 +2,9 @@
 
 use assert_matches::assert_matches;
 use ic_crypto_internal_threshold_sig_ecdsa::*;
-use ic_crypto_internal_threshold_sig_ecdsa_test_utils::verify_bip340_signature_using_third_party;
+use ic_crypto_internal_threshold_sig_ecdsa_test_utils::{
+    verify_bip340_signature_using_third_party, verify_ed25519_signature_using_third_party,
+};
 use ic_types::crypto::canister_threshold_sig::MasterPublicKey;
 use ic_types::crypto::AlgorithmId;
 use ic_types::{NumberOfNodes, Randomness};
@@ -67,17 +69,6 @@ fn verify_ecdsa_signature_using_third_party(
         }
         _ => panic!("Unexpected algorithm ID for checking ECDSA signature"),
     }
-}
-
-pub fn verify_ed25519_signature_using_third_party(pk: &[u8], sig: &[u8], msg: &[u8]) -> bool {
-    use ed25519_dalek::{Signature, Verifier, VerifyingKey};
-
-    let pk: [u8; 32] = pk.try_into().expect("Public key wrong size");
-    let vk = VerifyingKey::from_bytes(&pk).unwrap();
-
-    let signature = Signature::from_slice(sig).expect("Signature incorrect length");
-
-    vk.verify(msg, &signature).is_ok()
 }
 
 #[derive(Debug, Clone)]

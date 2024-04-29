@@ -1,6 +1,8 @@
 use assert_matches::assert_matches;
 use ic_crypto::get_master_public_key_from_transcript;
-use ic_crypto_internal_threshold_sig_ecdsa_test_utils::verify_bip340_signature_using_third_party;
+use ic_crypto_internal_threshold_sig_ecdsa_test_utils::{
+    verify_bip340_signature_using_third_party, verify_ed25519_signature_using_third_party,
+};
 use ic_crypto_tecdsa::derive_threshold_public_key;
 use ic_crypto_test_utils_canister_threshold_sigs::{
     generate_key_transcript, random_crypto_component_not_in_receivers, run_tschnorr_protocol,
@@ -49,6 +51,13 @@ fn should_verify_combined_signature_with_usual_basic_sig_verification() {
         match alg {
             AlgorithmId::ThresholdSchnorrBip340 => {
                 assert!(verify_bip340_signature_using_third_party(
+                    &canister_public_key.public_key,
+                    &combined_sig.signature,
+                    inputs.message()
+                ))
+            }
+            AlgorithmId::ThresholdEd25519 => {
+                assert!(verify_ed25519_signature_using_third_party(
                     &canister_public_key.public_key,
                     &combined_sig.signature,
                     inputs.message()
