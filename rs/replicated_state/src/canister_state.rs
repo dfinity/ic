@@ -573,12 +573,19 @@ impl CanisterState {
         }
     }
 
+    /// Appends the given log to the canister log.
     pub fn append_log(&mut self, other: &mut CanisterLog) {
         self.system_state.canister_log.append(other);
     }
 
+    /// Clears the canister log.
     pub fn clear_log(&mut self) {
         self.system_state.canister_log.clear();
+    }
+
+    /// Sets the new canister log.
+    pub fn set_log(&mut self, other: CanisterLog) {
+        self.system_state.canister_log = other;
     }
 }
 

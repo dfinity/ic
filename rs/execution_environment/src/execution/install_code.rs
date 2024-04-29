@@ -11,7 +11,7 @@ use ic_interfaces::execution_environment::{
 };
 use ic_logger::{error, fatal, info, warn};
 use ic_management_canister_types::{
-    CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2,
+    CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterLog,
 };
 use ic_replicated_state::canister_state::system_state::ReservationError;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeCallId;
@@ -207,13 +207,13 @@ impl InstallCodeHelper {
         original: &OriginalContext,
         round: &RoundContext,
         round_limits: &RoundLimits,
-    ) -> Result<Self, (CanisterManagerError, NumInstructions)> {
+    ) -> Result<Self, (CanisterManagerError, NumInstructions, CanisterLog)> {
         let mut helper = Self::new(clean_canister, original);
         let paused_instructions_left = paused.instructions_left;
         for state_change in paused.steps.into_iter() {
             helper
                 .replay_step(state_change, original, round, round_limits)
-                .map_err(|err| (err, paused_instructions_left))?;
+                .map_err(|err| (err, paused_instructions_left, helper.take_canister_log()))?;
         }
         assert_eq!(paused_instructions_left, helper.instructions_left());
         Ok(helper)
@@ -298,6 +298,7 @@ impl InstallCodeHelper {
                         original,
                         round,
                         err,
+                        self.take_canister_log(),
                     );
                 }
             }
@@ -323,6 +324,7 @@ impl InstallCodeHelper {
                     original,
                     round,
                     err,
+                    self.take_canister_log(),
                 );
             }
         }
@@ -366,6 +368,7 @@ impl InstallCodeHelper {
                         original,
                         round,
                         err,
+                        self.take_canister_log(),
                     );
                 }
             }
@@ -388,6 +391,7 @@ impl InstallCodeHelper {
                         requested: new_compute_allocation,
                         available: available.max(old_compute_allocation.as_percent()),
                     },
+                    self.take_canister_log(),
                 );
             }
             round_limits.compute_allocation_used = others + new_compute_allocation.as_percent();
@@ -614,6 +618,11 @@ impl InstallCodeHelper {
             self.deallocated_wasm_custom_sections_bytes +=
                 old_wasm_custom_sections_memory_used - new_wasm_custom_sections_memory_used;
         }
+    }
+
+    /// Takes the canister log.
+    pub(crate) fn take_canister_log(&mut self) -> CanisterLog {
+        std::mem::take(&mut self.canister.system_state.canister_log)
     }
 
     /// Checks the result of Wasm execution and applies the state changes.
@@ -850,18 +859,22 @@ pub(crate) fn canister_layout(
         .expect("failed to obtain canister layout")
 }
 
-/// Finishes an `install_code` execution early due to an error. The only state
-/// change that is applied to the clean canister state is refunding the prepaid
-/// execution cycles.
+/// Finishes an `install_code` execution early due to an error.
+///
+/// The only state changes applied to the clean canister state:
+///  - saving the new canister log
+///  - refunding the prepaid execution cycles
 pub(crate) fn finish_err(
     clean_canister: CanisterState,
     instructions_left: NumInstructions,
     original: OriginalContext,
     round: RoundContext,
     err: CanisterManagerError,
+    new_canister_log: CanisterLog,
 ) -> DtsInstallCodeResult {
     let mut new_canister = clean_canister;
 
+    new_canister.set_log(new_canister_log);
     new_canister
         .system_state
         .apply_ingress_induction_cycles_debit(

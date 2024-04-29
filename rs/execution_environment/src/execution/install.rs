@@ -82,7 +82,14 @@ pub(crate) fn execute_install(
     // Stage 0: validate input.
     if let Err(err) = helper.validate_input(&original, &round, round_limits) {
         let instructions_left = helper.instructions_left();
-        return finish_err(clean_canister, instructions_left, original, round, err);
+        return finish_err(
+            clean_canister,
+            instructions_left,
+            original,
+            round,
+            err,
+            helper.take_canister_log(),
+        );
     }
 
     // Stage 1: create a new execution state based on the new Wasm binary, clear certified data, deactivate global timer, and bump canister version.
@@ -101,6 +108,7 @@ pub(crate) fn execute_install(
                 original,
                 round,
                 err,
+                helper.take_canister_log(),
             );
         }
     };
@@ -119,7 +127,14 @@ pub(crate) fn execute_install(
         &original,
     ) {
         let instructions_left = helper.instructions_left();
-        return finish_err(clean_canister, instructions_left, original, round, err);
+        return finish_err(
+            clean_canister,
+            instructions_left,
+            original,
+            round,
+            err,
+            helper.take_canister_log(),
+        );
     }
     helper.clear_certified_data();
     helper.deactivate_global_timer();
@@ -224,7 +239,14 @@ fn install_stage_2a_process_start_result(
 
     if let Err(err) = result {
         let instructions_left = helper.instructions_left();
-        return finish_err(clean_canister, instructions_left, original, round, err);
+        return finish_err(
+            clean_canister,
+            instructions_left,
+            original,
+            round,
+            err,
+            helper.take_canister_log(),
+        );
     }
 
     install_stage_2b_continue_install_after_start(
@@ -328,7 +350,14 @@ fn install_stage_3_process_init_result(
     );
     if let Err(err) = result {
         let instructions_left = helper.instructions_left();
-        return finish_err(clean_canister, instructions_left, original, round, err);
+        return finish_err(
+            clean_canister,
+            instructions_left,
+            original,
+            round,
+            err,
+            helper.take_canister_log(),
+        );
     }
     helper.finish(clean_canister, original, round, round_limits)
 }
@@ -362,7 +391,7 @@ impl PausedInstallCodeExecution for PausedInitExecution {
             round_limits,
         ) {
             Ok(helper) => helper,
-            Err((err, instructions_left)) => {
+            Err((err, instructions_left, new_canister_log)) => {
                 warn!(
                     round.log,
                     "[DTS] Canister {} failed to resume paused (canister_init) execution: {:?}.",
@@ -370,7 +399,14 @@ impl PausedInstallCodeExecution for PausedInitExecution {
                     err
                 );
                 self.paused_wasm_execution.abort();
-                return finish_err(clean_canister, instructions_left, self.original, round, err);
+                return finish_err(
+                    clean_canister,
+                    instructions_left,
+                    self.original,
+                    round,
+                    err,
+                    new_canister_log,
+                );
             }
         };
 
@@ -458,7 +494,7 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringInstall {
             round_limits,
         ) {
             Ok(helper) => helper,
-            Err((err, instructions_left)) => {
+            Err((err, instructions_left, new_canister_log)) => {
                 warn!(
                     round.log,
                     "[DTS] Canister {} failed to resume paused (start) execution: {:?}",
@@ -466,7 +502,14 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringInstall {
                     err
                 );
                 self.paused_wasm_execution.abort();
-                return finish_err(clean_canister, instructions_left, self.original, round, err);
+                return finish_err(
+                    clean_canister,
+                    instructions_left,
+                    self.original,
+                    round,
+                    err,
+                    new_canister_log,
+                );
             }
         };
         let execution_state = helper.canister().execution_state.as_ref().unwrap();
