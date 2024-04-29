@@ -123,6 +123,8 @@ pub async fn start_synching_blocks(
     )
     .await?;
 
+    // Update the account balances. When queried for its status, the ledger will return the
+    // highest block index for which the account balances have been processed.
     storage_client.update_account_balances()?;
 
     Ok(())
