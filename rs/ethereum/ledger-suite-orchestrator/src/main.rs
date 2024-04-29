@@ -1,6 +1,6 @@
 use ic_cdk_macros::{init, post_upgrade, query};
 use ic_ledger_suite_orchestrator::candid::Erc20Contract as CandidErc20Contract;
-use ic_ledger_suite_orchestrator::candid::{ManagedCanisterIds, OrchestratorArg};
+use ic_ledger_suite_orchestrator::candid::{ManagedCanisterIds, OrchestratorArg, OrchestratorInfo};
 use ic_ledger_suite_orchestrator::lifecycle;
 use ic_ledger_suite_orchestrator::scheduler::Erc20Token;
 use ic_ledger_suite_orchestrator::state::read_state;
@@ -10,10 +10,23 @@ use ic_ledger_suite_orchestrator::storage::TASKS;
 mod dashboard;
 
 #[query]
-async fn canister_ids(contract: CandidErc20Contract) -> Option<ManagedCanisterIds> {
+fn canister_ids(contract: CandidErc20Contract) -> Option<ManagedCanisterIds> {
     let contract = Erc20Token::try_from(contract)
         .unwrap_or_else(|e| ic_cdk::trap(&format!("Invalid ERC-20 contract: {:?}", e)));
     read_state(|s| s.managed_canisters(&contract).cloned()).map(ManagedCanisterIds::from)
+}
+
+#[query]
+fn get_orchestrator_info() -> OrchestratorInfo {
+    read_state(|s| OrchestratorInfo {
+        managed_canisters: s
+            .managed_canisters_iter()
+            .map(|(token, canisters)| (token.clone(), canisters.clone()).into())
+            .collect(),
+        cycles_management: s.cycles_management().clone(),
+        more_controller_ids: s.more_controller_ids().to_vec(),
+        minter_id: s.minter_id().cloned(),
+    })
 }
 
 #[export_name = "canister_global_timer"]

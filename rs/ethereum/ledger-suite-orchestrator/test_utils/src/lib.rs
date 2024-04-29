@@ -3,6 +3,7 @@ use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::CanisterId;
 use ic_ledger_suite_orchestrator::candid::{
     AddErc20Arg, Erc20Contract, InitArg, LedgerInitArg, ManagedCanisterIds, OrchestratorArg,
+    OrchestratorInfo,
 };
 use ic_ledger_suite_orchestrator::state::{IndexWasm, LedgerWasm, WasmHash};
 use ic_state_machine_tests::{
@@ -119,6 +120,22 @@ impl LedgerSuiteOrchestrator {
             .unwrap()
             .unwrap()
     }
+
+    pub fn get_orchestrator_info(&self) -> OrchestratorInfo {
+        Decode!(
+            &assert_reply(
+                self.env
+                    .query(
+                        self.ledger_suite_orchestrator_id,
+                        "get_orchestrator_info",
+                        Encode!().unwrap()
+                    )
+                    .unwrap()
+            ),
+            OrchestratorInfo
+        )
+        .unwrap()
+    }
 }
 
 pub fn new_state_machine() -> StateMachine {
@@ -200,7 +217,7 @@ pub fn usdc(
 pub fn usdc_erc20_contract() -> Erc20Contract {
     Erc20Contract {
         chain_id: Nat::from(1_u8),
-        address: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48".to_string(),
+        address: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".to_string(),
     }
 }
 

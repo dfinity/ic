@@ -1,10 +1,11 @@
 use assert_matches::assert_matches;
-use candid::{Decode, Encode, Principal};
+use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_icrc1_ledger::FeatureFlags as LedgerFeatureFlags;
 use ic_ledger_suite_orchestrator::candid::{
-    AddErc20Arg, LedgerInitArg, OrchestratorArg, UpdateCyclesManagement, UpgradeArg,
+    AddErc20Arg, CyclesManagement, LedgerInitArg, ManagedCanisterStatus, ManagedCanisters,
+    OrchestratorArg, OrchestratorInfo, UpdateCyclesManagement, UpgradeArg,
 };
 use ic_ledger_suite_orchestrator_test_utils::arbitrary::arb_init_arg;
 use ic_ledger_suite_orchestrator_test_utils::{
@@ -383,6 +384,79 @@ fn should_reject_update_calls_to_http_request() {
             .env
             .await_ingress(message_id.clone(), MAX_TICKS),
         Err(e) if e.code() == ErrorCode::CanisterCalledTrap && e.description().contains("update call rejected")
+    );
+}
+
+#[test]
+fn should_retrieve_orchestrator_info() {
+    let orchestrator = LedgerSuiteOrchestrator::default();
+    let embedded_ledger_wasm_hash = orchestrator.embedded_ledger_wasm_hash.clone();
+    let embedded_index_wasm_hash = orchestrator.embedded_index_wasm_hash.clone();
+    let usdc = usdc(
+        Principal::anonymous(),
+        embedded_ledger_wasm_hash.clone(),
+        embedded_index_wasm_hash.clone(),
+    );
+    let usdt = usdt(
+        Principal::anonymous(),
+        embedded_ledger_wasm_hash,
+        embedded_index_wasm_hash,
+    );
+
+    let canisters = orchestrator
+        .add_erc20_token(usdc.clone())
+        .expect_new_ledger_and_index_canisters();
+    let usdc_ledger_id = canisters.ledger_canister_id();
+    let usdc_index_id = canisters.index_canister_id();
+
+    let orchestrator = canisters.setup;
+    let canisters = orchestrator
+        .add_erc20_token(usdt.clone())
+        .expect_new_ledger_and_index_canisters();
+    let usdt_ledger_id = canisters.ledger_canister_id();
+    let usdt_index_id = canisters.index_canister_id();
+
+    let info = canisters.setup.get_orchestrator_info();
+    assert_eq!(
+        info,
+        OrchestratorInfo {
+            managed_canisters: vec![
+                ManagedCanisters {
+                    erc20_contract: usdc.contract.clone(),
+                    ckerc20_token_symbol: "ckUSDC".to_string(),
+                    ledger: Some(ManagedCanisterStatus::Installed {
+                        canister_id: usdc_ledger_id.into(),
+                        installed_wasm_hash: usdc.ledger_compressed_wasm_hash,
+                    }),
+                    index: Some(ManagedCanisterStatus::Installed {
+                        canister_id: usdc_index_id.into(),
+                        installed_wasm_hash: usdc.index_compressed_wasm_hash,
+                    }),
+                    archives: vec![]
+                },
+                ManagedCanisters {
+                    erc20_contract: usdt.contract.clone(),
+                    ckerc20_token_symbol: "ckUSDT".to_string(),
+                    ledger: Some(ManagedCanisterStatus::Installed {
+                        canister_id: usdt_ledger_id.into(),
+                        installed_wasm_hash: usdt.ledger_compressed_wasm_hash,
+                    }),
+                    index: Some(ManagedCanisterStatus::Installed {
+                        canister_id: usdt_index_id.into(),
+                        installed_wasm_hash: usdt.index_compressed_wasm_hash,
+                    }),
+                    archives: vec![]
+                }
+            ],
+            cycles_management: CyclesManagement {
+                cycles_for_ledger_creation: Nat::from(100000000000000_u64),
+                cycles_for_archive_creation: Nat::from(100000000000000_u64),
+                cycles_for_index_creation: Nat::from(100000000000000_u64),
+                cycles_top_up_increment: Nat::from(10000000000000_u64),
+            },
+            more_controller_ids: vec![NNS_ROOT_PRINCIPAL],
+            minter_id: None
+        }
     );
 }
 
