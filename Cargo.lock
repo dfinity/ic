@@ -8033,6 +8033,7 @@ dependencies = [
  "ic-ledger-hash-of",
  "ic-rosetta-api",
  "ic-rosetta-test-utils",
+ "ic-sys",
  "ic-test-utilities-load-wasm",
  "ic-utils 0.34.0",
  "icrc-ledger-agent",
