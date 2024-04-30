@@ -1,3 +1,4 @@
+mod metrics;
 #[cfg(test)]
 pub mod test_fixtures;
 #[cfg(test)]
@@ -24,6 +25,8 @@ use ic_canister_log::log;
 use ic_ethereum_types::Address;
 use ic_icrc1_index_ng::{IndexArg, InitArg as IndexInitArg};
 use ic_icrc1_ledger::{ArchiveOptions, InitArgs as LedgerInitArgs, LedgerArgument};
+pub use metrics::encode_orchestrator_metrics;
+use metrics::observe_task_duration;
 use num_traits::ToPrimitive;
 use serde::{Deserialize, Serialize};
 use std::cell::Cell;
@@ -183,7 +186,12 @@ pub fn timer() {
             if task.task_type.is_periodic() {
                 schedule_after(ONE_HOUR, task.task_type.clone());
             }
-            match task.execute(&IC_CANISTER_RUNTIME).await {
+            let start = ic_cdk::api::time();
+            let result = task.execute(&IC_CANISTER_RUNTIME).await;
+            let end = ic_cdk::api::time();
+            observe_task_duration(&task.task_type, &result, start, end);
+
+            match result {
                 Ok(()) => {
                     log!(INFO, "task {:?} accomplished", task.task_type);
                 }
