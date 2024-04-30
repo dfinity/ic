@@ -10,7 +10,8 @@ use crate::{
     config_parser::{ConfigError, ConfigSource, ConfigValidate},
     crypto::CryptoConfig,
     execution_environment::Config as HypervisorConfig,
-    firewall::Config as FirewallConfig,
+    firewall::BoundaryNodeConfig as BoundaryNodeFirewallConfig,
+    firewall::ReplicaConfig as ReplicaFirewallConfig,
     http_handler::Config as HttpHandlerConfig,
     initial_ipv4_config::IPv4Config,
     logger::Config as LoggerConfig,
@@ -47,7 +48,8 @@ pub struct Config {
     pub csp_vault_logger: LoggerConfig,
     pub message_routing: MessageRoutingConfig,
     pub malicious_behaviour: MaliciousBehaviour,
-    pub firewall: FirewallConfig,
+    pub firewall: ReplicaFirewallConfig,
+    pub boundary_node_firewall: BoundaryNodeFirewallConfig,
     pub registration: RegistrationConfig,
     pub nns_registry_replicator: NnsRegistryReplicatorConfig,
     pub adapters_config: AdaptersConfig,
@@ -73,7 +75,8 @@ pub struct ConfigOptional {
     pub csp_vault_logger: Option<LoggerConfig>,
     pub message_routing: Option<MessageRoutingConfig>,
     pub malicious_behaviour: Option<MaliciousBehaviour>,
-    pub firewall: Option<FirewallConfig>,
+    pub firewall: Option<ReplicaFirewallConfig>,
+    pub boundary_node_firewall: Option<BoundaryNodeFirewallConfig>,
     pub registration: Option<RegistrationConfig>,
     pub nns_registry_replicator: Option<NnsRegistryReplicatorConfig>,
     pub adapters_config: Option<AdaptersConfig>,
@@ -104,7 +107,8 @@ impl Config {
             csp_vault_logger: logger,
             message_routing: MessageRoutingConfig::default(),
             malicious_behaviour: MaliciousBehaviour::default(),
-            firewall: FirewallConfig::default(),
+            firewall: ReplicaFirewallConfig::default(),
+            boundary_node_firewall: BoundaryNodeFirewallConfig::default(),
             registration: RegistrationConfig::default(),
             nns_registry_replicator: NnsRegistryReplicatorConfig::default(),
             adapters_config: AdaptersConfig::default(),
@@ -158,6 +162,9 @@ impl Config {
                 .malicious_behaviour
                 .unwrap_or(default.malicious_behaviour),
             firewall: cfg.firewall.unwrap_or(default.firewall),
+            boundary_node_firewall: cfg
+                .boundary_node_firewall
+                .unwrap_or(default.boundary_node_firewall),
             registration: cfg.registration.unwrap_or(default.registration),
             nns_registry_replicator: cfg
                 .nns_registry_replicator

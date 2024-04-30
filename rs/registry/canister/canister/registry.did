@@ -134,6 +134,7 @@ type FirewallRule = record {
 type FirewallRulesScope = variant {
   Node : principal;
   ReplicaNodes;
+  ApiBoundaryNodes;
   Subnet : principal;
   Global;
 };

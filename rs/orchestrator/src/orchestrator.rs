@@ -291,6 +291,7 @@ impl Orchestrator {
             Arc::clone(&registry),
             Arc::clone(&metrics),
             config.firewall.clone(),
+            config.boundary_node_firewall.clone(),
             cup_provider.clone(),
             logger.clone(),
         );

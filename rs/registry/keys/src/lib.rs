@@ -107,6 +107,7 @@ pub fn make_firewall_config_record_key() -> String {
 const FIREWALL_RULES_RECORD_KEY_PREFIX: &str = "firewall_rules_";
 const FIREWALL_RULES_SCOPE_GLOBAL: &str = "global";
 const FIREWALL_RULES_SCOPE_REPLICA_NODES: &str = "replica_nodes";
+const FIREWALL_RULES_SCOPE_API_BOUNDARY_NODES: &str = "api_boundary_nodes";
 const FIREWALL_RULES_SCOPE_SUBNET_PREFIX: &str = "subnet";
 const FIREWALL_RULES_SCOPE_NODE_PREFIX: &str = "node";
 
@@ -115,6 +116,7 @@ const FIREWALL_RULES_SCOPE_NODE_PREFIX: &str = "node";
 pub enum FirewallRulesScope {
     Node(NodeId),
     Subnet(SubnetId),
+    ApiBoundaryNodes,
     ReplicaNodes,
     Global,
 }
@@ -138,6 +140,9 @@ impl fmt::Display for FirewallRulesScope {
                 write!(fmt, "{}", FIREWALL_RULES_SCOPE_REPLICA_NODES)?
             }
             FirewallRulesScope::Global => write!(fmt, "{}", FIREWALL_RULES_SCOPE_GLOBAL)?,
+            FirewallRulesScope::ApiBoundaryNodes => {
+                write!(fmt, "{}", FIREWALL_RULES_SCOPE_API_BOUNDARY_NODES)?
+            }
         };
         Ok(())
     }
@@ -154,6 +159,7 @@ impl FromStr for FirewallRulesScope {
         match parts[0].to_lowercase().as_str() {
             FIREWALL_RULES_SCOPE_GLOBAL => Ok(FirewallRulesScope::Global),
             FIREWALL_RULES_SCOPE_REPLICA_NODES => Ok(FirewallRulesScope::ReplicaNodes),
+            FIREWALL_RULES_SCOPE_API_BOUNDARY_NODES => Ok(FirewallRulesScope::ApiBoundaryNodes),
             FIREWALL_RULES_SCOPE_SUBNET_PREFIX => Ok(FirewallRulesScope::Subnet(SubnetId::from(
                 PrincipalId::from_str(parts[1]).unwrap(),
             ))),
@@ -461,6 +467,10 @@ mod tests {
             FIREWALL_RULES_SCOPE_REPLICA_NODES
         );
         assert_eq!(
+            format!("{}", FirewallRulesScope::ApiBoundaryNodes),
+            FIREWALL_RULES_SCOPE_API_BOUNDARY_NODES
+        );
+        assert_eq!(
             format!("{}", FirewallRulesScope::Subnet(SubnetId::from(id))),
             format!("{}_{}", FIREWALL_RULES_SCOPE_SUBNET_PREFIX, id)
         );
@@ -476,6 +486,10 @@ mod tests {
         assert_eq!(
             FirewallRulesScope::from_str(FIREWALL_RULES_SCOPE_REPLICA_NODES).unwrap(),
             FirewallRulesScope::ReplicaNodes
+        );
+        assert_eq!(
+            FirewallRulesScope::from_str(FIREWALL_RULES_SCOPE_API_BOUNDARY_NODES).unwrap(),
+            FirewallRulesScope::ApiBoundaryNodes,
         );
         assert_eq!(
             FirewallRulesScope::from_str(

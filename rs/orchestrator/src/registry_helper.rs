@@ -65,8 +65,7 @@ impl RegistryHelper {
     pub(crate) fn get_subnet_id(&self, version: RegistryVersion) -> OrchestratorResult<SubnetId> {
         if let Some((subnet_id, subnet_record)) = self
             .registry_client
-            .get_listed_subnet_for_node_id(self.node_id, version)
-            .map_err(OrchestratorError::RegistryClientError)?
+            .get_listed_subnet_for_node_id(self.node_id, version)?
         {
             if !subnet_record.start_as_nns {
                 return Ok(subnet_id);
@@ -98,8 +97,7 @@ impl RegistryHelper {
     ) -> OrchestratorResult<ApiBoundaryNodeRecord> {
         match self
             .registry_client
-            .get_api_boundary_node_record(node_id, version)
-            .map_err(OrchestratorError::RegistryClientError)?
+            .get_api_boundary_node_record(node_id, version)?
         {
             Some(record) => Ok(record),
             _ => Err(OrchestratorError::ApiBoundaryNodeMissingError(
@@ -115,8 +113,7 @@ impl RegistryHelper {
         version: RegistryVersion,
     ) -> OrchestratorResult<ReplicaVersionRecord> {
         self.registry_client
-            .get_replica_version_record_from_version_id(&replica_version_id, version)
-            .map_err(OrchestratorError::RegistryClientError)?
+            .get_replica_version_record_from_version_id(&replica_version_id, version)?
             .ok_or(OrchestratorError::ReplicaVersionMissingError(
                 replica_version_id,
                 version,
@@ -130,8 +127,7 @@ impl RegistryHelper {
         version: RegistryVersion,
     ) -> OrchestratorResult<HostosVersionRecord> {
         self.registry_client
-            .get_hostos_version_record(&hostos_version_id, version)
-            .map_err(OrchestratorError::RegistryClientError)?
+            .get_hostos_version_record(&hostos_version_id, version)?
             .ok_or(OrchestratorError::UpgradeError(
                 "HostOS version record not found at the given ID".to_string(),
             ))
@@ -151,25 +147,19 @@ impl RegistryHelper {
         &self,
         version: RegistryVersion,
         scope: &FirewallRulesScope,
-    ) -> OrchestratorResult<FirewallRuleSet> {
-        match self.registry_client.get_firewall_rules(version, scope) {
-            Ok(Some(firewall_rules)) => Ok(firewall_rules),
-            _ => Err(OrchestratorError::InvalidConfigurationError(
-                "Invalid firewall rules".to_string(),
-            )),
-        }
+    ) -> OrchestratorResult<Option<FirewallRuleSet>> {
+        self.registry_client
+            .get_firewall_rules(version, scope)
+            .map_err(OrchestratorError::RegistryClientError)
     }
 
     pub(crate) fn get_all_nodes_ip_addresses(
         &self,
         version: RegistryVersion,
     ) -> OrchestratorResult<Vec<IpAddr>> {
-        match self.registry_client.get_all_nodes_ip_addresses(version) {
-            Ok(Some(ip_addrs)) => Ok(ip_addrs),
-            _ => Err(OrchestratorError::InvalidConfigurationError(
-                "Cannot fetch IP addresses of nodes".to_string(),
-            )),
-        }
+        let ips = self.registry_client.get_all_nodes_ip_addresses(version)?;
+
+        Ok(ips.unwrap_or_default())
     }
 
     pub(crate) fn get_subnet_id_from_node_id(
@@ -177,16 +167,9 @@ impl RegistryHelper {
         node_id: NodeId,
         version: RegistryVersion,
     ) -> OrchestratorResult<Option<SubnetId>> {
-        match self
-            .registry_client
+        self.registry_client
             .get_subnet_id_from_node_id(node_id, version)
-        {
-            Ok(result) => Ok(result),
-            _ => Err(OrchestratorError::InvalidConfigurationError(format!(
-                "Cannot find subnet ID for node {}",
-                node_id
-            ))),
-        }
+            .map_err(OrchestratorError::RegistryClientError)
     }
 
     pub(crate) fn get_registry_client(&self) -> Arc<dyn RegistryClient> {
@@ -273,8 +256,7 @@ impl RegistryHelper {
     ) -> OrchestratorResult<Option<HostosVersion>> {
         let node_record = self
             .registry_client
-            .get_node_record(self.node_id, registry_version)
-            .map_err(OrchestratorError::RegistryClientError)?;
+            .get_node_record(self.node_id, registry_version)?;
 
         node_record
             .and_then(|node_record| node_record.hostos_version_id)
@@ -295,8 +277,7 @@ impl RegistryHelper {
     ) -> OrchestratorResult<Option<IPv4InterfaceConfig>> {
         let result = self
             .registry_client
-            .get_node_record(self.node_id, version)
-            .map_err(OrchestratorError::RegistryClientError)?
+            .get_node_record(self.node_id, version)?
             .and_then(|node_record| node_record.public_ipv4_config);
         Ok(result)
     }
@@ -307,8 +288,7 @@ impl RegistryHelper {
     ) -> OrchestratorResult<Option<String>> {
         let result = self
             .registry_client
-            .get_node_record(self.node_id, version)
-            .map_err(OrchestratorError::RegistryClientError)?
+            .get_node_record(self.node_id, version)?
             .and_then(|node_record| node_record.domain);
         Ok(result)
     }
