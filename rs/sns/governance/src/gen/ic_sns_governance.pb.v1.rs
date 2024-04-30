@@ -408,6 +408,12 @@ pub mod transfer_sns_treasury_funds {
 pub struct ManageLedgerParameters {
     #[prost(uint64, optional, tag = "1")]
     pub transfer_fee: ::core::option::Option<u64>,
+    #[prost(string, optional, tag = "2")]
+    pub token_name: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(string, optional, tag = "3")]
+    pub token_symbol: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(string, optional, tag = "4")]
+    pub token_logo: ::core::option::Option<::prost::alloc::string::String>,
 }
 /// A proposal to mint SNS tokens to (optionally a Subaccount of) the
 /// target principal.

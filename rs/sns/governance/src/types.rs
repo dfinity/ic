@@ -11,23 +11,26 @@ use crate::{
             claim_swap_neurons_response::{ClaimSwapNeuronsResult, ClaimedSwapNeurons, SwapNeuron},
             get_neuron_response,
             governance::{
-                self, neuron_in_flight_command, neuron_in_flight_command::SyncCommand, SnsMetadata,
+                self,
+                neuron_in_flight_command::{self, SyncCommand},
+                SnsMetadata,
             },
             governance_error::ErrorType,
-            manage_neuron, manage_neuron_response,
+            manage_neuron,
             manage_neuron_response::{
-                DisburseMaturityResponse, MergeMaturityResponse, StakeMaturityResponse,
+                self, DisburseMaturityResponse, MergeMaturityResponse, StakeMaturityResponse,
             },
             nervous_system_function::FunctionType,
             neuron::Followees,
             proposal::Action,
             ClaimSwapNeuronsError, ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus,
             DefaultFollowees, DeregisterDappCanisters, Empty, ExecuteGenericNervousSystemFunction,
-            GovernanceError, ManageDappCanisterSettings, ManageNeuronResponse, MintSnsTokens,
-            Motion, NervousSystemFunction, NervousSystemParameters, Neuron, NeuronId,
-            NeuronPermission, NeuronPermissionList, NeuronPermissionType, ProposalId,
-            RegisterDappCanisters, RewardEvent, TransferSnsTreasuryFunds,
-            UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote, VotingRewardsParameters,
+            GovernanceError, ManageDappCanisterSettings, ManageLedgerParameters,
+            ManageNeuronResponse, MintSnsTokens, Motion, NervousSystemFunction,
+            NervousSystemParameters, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
+            NeuronPermissionType, ProposalId, RegisterDappCanisters, RewardEvent,
+            TransferSnsTreasuryFunds, UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote,
+            VotingRewardsParameters,
         },
     },
     proposal::ValidGenericNervousSystemFunction,
@@ -36,6 +39,7 @@ use async_trait::async_trait;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_crypto_sha2::Sha256;
+use ic_icrc1_ledger::UpgradeArgs as LedgerUpgradeArgs;
 use ic_ledger_core::tokens::{Tokens, TOKEN_SUBDIVIDABLE_BY};
 use ic_management_canister_types::CanisterInstallModeError;
 use ic_nervous_system_common::{
@@ -45,6 +49,7 @@ use ic_nervous_system_proto::pb::v1::{Duration as PbDuration, Percentage};
 use ic_sns_governance_proposal_criticality::{
     ProposalCriticality, VotingDurationParameters, VotingPowerThresholds,
 };
+use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use lazy_static::lazy_static;
 use maplit::btreemap;
 use std::{
@@ -1753,6 +1758,29 @@ pub fn is_registered_function_id(
     match nervous_system_functions.get(&function_id) {
         None => false,
         Some(function) => function != &*NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER,
+    }
+}
+
+impl From<ManageLedgerParameters> for LedgerUpgradeArgs {
+    fn from(manage_ledger_parameters: ManageLedgerParameters) -> Self {
+        let ManageLedgerParameters {
+            transfer_fee,
+            token_name,
+            token_symbol,
+            token_logo,
+        } = manage_ledger_parameters;
+        let metadata = [("icrc1:logo", token_logo.map(MetadataValue::Text))]
+            .into_iter()
+            .filter_map(|(k, v)| v.map(|v| (k.to_string(), v)))
+            .collect();
+
+        LedgerUpgradeArgs {
+            transfer_fee: transfer_fee.map(|tf| tf.into()),
+            token_name,
+            token_symbol,
+            metadata: Some(metadata),
+            ..LedgerUpgradeArgs::default()
+        }
     }
 }
 
