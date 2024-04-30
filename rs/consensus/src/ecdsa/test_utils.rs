@@ -264,7 +264,7 @@ impl From<&ThresholdEcdsaSigInputs> for TestSigInputs {
             hashed_message: inputs.hashed_message().try_into().unwrap(),
             nonce: *inputs.nonce(),
             presig_quadruple_ref: PreSignatureQuadrupleRef {
-                key_id: Some(fake_ecdsa_key_id()),
+                key_id: fake_ecdsa_key_id(),
                 kappa_unmasked_ref: UnmaskedTranscript::try_from((height, quad.kappa_unmasked()))
                     .unwrap(),
                 lambda_masked_ref: MaskedTranscript::try_from((height, quad.lambda_masked()))

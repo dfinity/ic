@@ -683,7 +683,7 @@ impl ExhaustiveSet for QuadrupleInCreation {
         let mut result = DerivedQuadrupleInCreation::exhaustive_set(rng)
             .into_iter()
             .map(|q| QuadrupleInCreation {
-                key_id: Some(q.key_id),
+                key_id: q.key_id,
                 kappa_masked_config: None,
                 kappa_masked: None,
                 lambda_config: q.random_config.clone(),
@@ -699,7 +699,7 @@ impl ExhaustiveSet for QuadrupleInCreation {
             .collect::<Vec<_>>();
 
         result.push(QuadrupleInCreation {
-            key_id: Some(EcdsaKeyId::exhaustive_set(rng)[0].clone()),
+            key_id: EcdsaKeyId::exhaustive_set(rng)[0].clone(),
             kappa_masked_config: None,
             kappa_masked: None,
             lambda_config: RandomTranscriptParams::exhaustive_set(rng)[0].clone(),
@@ -715,33 +715,6 @@ impl ExhaustiveSet for QuadrupleInCreation {
             kappa_times_lambda: None,
         });
         result
-    }
-}
-
-#[derive(Clone)]
-#[cfg_attr(test, derive(ExhaustiveSet))]
-pub struct PreSignatureQuadrupleRefsOnly {
-    pub key_id: EcdsaKeyId,
-    pub kappa_unmasked_ref: UnmaskedTranscript,
-    pub lambda_masked_ref: MaskedTranscript,
-    pub kappa_times_lambda_ref: MaskedTranscript,
-    pub key_times_lambda_ref: MaskedTranscript,
-    pub key_unmasked_ref: UnmaskedTranscript,
-}
-
-impl ExhaustiveSet for PreSignatureQuadrupleRef {
-    fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
-        PreSignatureQuadrupleRefsOnly::exhaustive_set(rng)
-            .into_iter()
-            .map(|q| PreSignatureQuadrupleRef {
-                key_id: Some(q.key_id),
-                kappa_unmasked_ref: q.kappa_unmasked_ref,
-                lambda_masked_ref: q.lambda_masked_ref,
-                kappa_times_lambda_ref: q.kappa_times_lambda_ref,
-                key_times_lambda_ref: q.key_times_lambda_ref,
-                key_unmasked_ref: q.key_unmasked_ref,
-            })
-            .collect()
     }
 }
 

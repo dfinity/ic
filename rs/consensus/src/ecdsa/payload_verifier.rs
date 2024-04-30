@@ -1084,7 +1084,7 @@ mod test {
             curr_payload.available_quadruples.insert(
                 curr_payload.uid_generator.next_quadruple_id(),
                 PreSignatureQuadrupleRef {
-                    key_id: Some(curr_payload.key_transcript.key_id.clone()),
+                    key_id: curr_payload.key_transcript.key_id.clone(),
                     kappa_unmasked_ref: malicious_transcript_ref,
                     lambda_masked_ref: masked_transcript_1,
                     kappa_times_lambda_ref: masked_transcript_1,

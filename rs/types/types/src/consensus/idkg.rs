@@ -1462,7 +1462,6 @@ impl From<&EcdsaPayload> for pb::EcdsaPayload {
         for (quadruple_id, quadruple) in &payload.available_quadruples {
             available_quadruples.push(pb::AvailableQuadruple {
                 quadruple_id: quadruple_id.id(),
-                key_id: quadruple_id.key_id().map(Into::into),
                 quadruple: Some(quadruple.into()),
             });
         }
@@ -1472,7 +1471,6 @@ impl From<&EcdsaPayload> for pb::EcdsaPayload {
         for (quadruple_id, quadruple) in &payload.quadruples_in_creation {
             quadruples_in_creation.push(pb::QuadrupleInProgress {
                 quadruple_id: quadruple_id.id(),
-                key_id: quadruple_id.key_id().map(Into::into),
                 quadruple: Some(quadruple.into()),
             });
         }
@@ -1608,12 +1606,7 @@ impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
         // available_quadruples
         let mut available_quadruples = BTreeMap::new();
         for available_quadruple in &payload.available_quadruples {
-            let key_id = available_quadruple
-                .key_id
-                .clone()
-                .map(TryInto::try_into)
-                .transpose()?;
-            let quadruple_id = QuadrupleId(available_quadruple.quadruple_id, key_id);
+            let quadruple_id = QuadrupleId(available_quadruple.quadruple_id);
             let quadruple: PreSignatureQuadrupleRef = try_from_option_field(
                 available_quadruple.quadruple.as_ref(),
                 "EcdsaPayload::available_quadruple::quadruple",
@@ -1621,7 +1614,7 @@ impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
             available_quadruples.insert(quadruple_id, quadruple);
         }
         for available_pre_signature in &payload.available_pre_signatures {
-            let pre_signature_id = QuadrupleId(available_pre_signature.pre_signature_id, None);
+            let pre_signature_id = QuadrupleId(available_pre_signature.pre_signature_id);
             let pre_signature: PreSignatureRef = try_from_option_field(
                 available_pre_signature.pre_signature.as_ref(),
                 "EcdsaPayload::available_pre_signature::pre_signature",
@@ -1637,12 +1630,7 @@ impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
         // quadruples_in_creation
         let mut quadruples_in_creation = BTreeMap::new();
         for quadruple_in_creation in &payload.quadruples_in_creation {
-            let key_id = quadruple_in_creation
-                .key_id
-                .clone()
-                .map(TryInto::try_into)
-                .transpose()?;
-            let quadruple_id = QuadrupleId(quadruple_in_creation.quadruple_id, key_id);
+            let quadruple_id = QuadrupleId(quadruple_in_creation.quadruple_id);
             let quadruple: QuadrupleInCreation = try_from_option_field(
                 quadruple_in_creation.quadruple.as_ref(),
                 "EcdsaPayload::quadruple_in_creation::quadruple",
@@ -1650,7 +1638,7 @@ impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
             quadruples_in_creation.insert(quadruple_id, quadruple);
         }
         for pre_signature_in_creation in &payload.pre_signatures_in_creation {
-            let pre_signature_id = QuadrupleId(pre_signature_in_creation.pre_signature_id, None);
+            let pre_signature_id = QuadrupleId(pre_signature_in_creation.pre_signature_id);
             let pre_signature: PreSignatureInCreation = try_from_option_field(
                 pre_signature_in_creation.pre_signature.as_ref(),
                 "EcdsaPayload::pre_signature_in_creation::pre_signature",
@@ -1865,42 +1853,41 @@ impl From<&EcdsaMessage> for EcdsaArtifactId {
 
 pub trait HasEcdsaKeyId {
     /// Returns a reference to the [`EcdsaKeyId`] associated with the object.
-    // TODO(kpop): remove the Option once it's safe
-    fn key_id(&self) -> Option<&EcdsaKeyId>;
+    fn key_id(&self) -> &EcdsaKeyId;
 }
 
-impl HasEcdsaKeyId for QuadrupleId {
-    fn key_id(&self) -> Option<&EcdsaKeyId> {
-        self.key_id()
+impl HasEcdsaKeyId for QuadrupleInCreation {
+    fn key_id(&self) -> &EcdsaKeyId {
+        &self.key_id
+    }
+}
+
+impl HasEcdsaKeyId for PreSignatureQuadrupleRef {
+    fn key_id(&self) -> &EcdsaKeyId {
+        &self.key_id
     }
 }
 
 impl HasEcdsaKeyId for EcdsaReshareRequest {
-    fn key_id(&self) -> Option<&EcdsaKeyId> {
-        Some(&self.key_id)
-    }
-}
-
-impl HasEcdsaKeyId for RequestId {
-    fn key_id(&self) -> Option<&EcdsaKeyId> {
-        self.quadruple_id.key_id()
+    fn key_id(&self) -> &EcdsaKeyId {
+        &self.key_id
     }
 }
 
 impl HasEcdsaKeyId for EcdsaKeyTranscript {
-    fn key_id(&self) -> Option<&EcdsaKeyId> {
-        Some(&self.key_id)
+    fn key_id(&self) -> &EcdsaKeyId {
+        &self.key_id
     }
 }
 
 impl<T: HasEcdsaKeyId, U> HasEcdsaKeyId for (T, U) {
-    fn key_id(&self) -> Option<&EcdsaKeyId> {
+    fn key_id(&self) -> &EcdsaKeyId {
         self.0.key_id()
     }
 }
 
 impl<T: HasEcdsaKeyId> HasEcdsaKeyId for &T {
-    fn key_id(&self) -> Option<&EcdsaKeyId> {
+    fn key_id(&self) -> &EcdsaKeyId {
         (*self).key_id()
     }
 }
