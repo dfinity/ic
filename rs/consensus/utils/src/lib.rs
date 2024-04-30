@@ -103,19 +103,25 @@ pub fn is_time_to_make_block(
     rank: Rank,
     time_source: &dyn TimeSource,
 ) -> bool {
-    let registry_version = match pool.registry_version(height) {
-        Some(rv) => rv,
-        _ => return false,
+    let Some(registry_version) = pool.registry_version(height) else {
+        return false;
     };
-    let block_maker_delay =
-        match get_block_maker_delay(log, registry_client, subnet_id, registry_version, rank) {
-            Some(delay) => delay,
-            _ => return false,
-        };
-    match pool.get_round_start_time(height) {
-        Some(start_time) => time_source.get_relative_time() >= start_time + block_maker_delay,
-        None => false,
-    }
+    let Some(block_maker_delay) =
+        get_block_maker_delay(log, registry_client, subnet_id, registry_version, rank)
+    else {
+        return false;
+    };
+
+    // If the relative time indicates that not enough time has passed, we fall
+    // back to the the monotonic round start time. We do this to safeguard
+    // against a stalled relative clock.
+    pool.get_round_start_time(height)
+        .is_some_and(|start_time| time_source.get_relative_time() >= start_time + block_maker_delay)
+        || pool
+            .get_round_start_instant(height)
+            .is_some_and(|start_instant| {
+                time_source.get_instant() >= start_instant + block_maker_delay
+            })
 }
 
 /// Calculate the required delay for notary based on the rank of block to notarize,

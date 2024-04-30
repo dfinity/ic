@@ -289,6 +289,12 @@ pub trait ConsensusPool {
     /// Return the first instant at which a block with the given hash was inserted
     /// into the validated pool. Returns None if no timestamp was found.
     fn block_instant(&self, hash: &CryptoHashOf<Block>) -> Option<Instant>;
+
+    /// Return the first instant at which a consensus message with the given id
+    /// arrived in the unvalidated pool. Returns None if no timestamp was found
+    /// NOTE: We currently only record notarizations, CUPs and random beacons,
+    /// for the purposes of computing a round start instant.
+    fn message_instant(&self, id: &ConsensusMessageId) -> Option<Instant>;
 }
 
 /// HeightIndexedPool provides a set of interfaces for the Consensus component

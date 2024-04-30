@@ -162,7 +162,7 @@ pub struct Advert<Artifact: ArtifactKind> {
 
 /// Consensus message identifier carries both a message hash and a height,
 /// which is used by the consensus pool to help lookup.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct ConsensusMessageId {
     pub hash: ConsensusMessageHash,
     pub height: Height,
