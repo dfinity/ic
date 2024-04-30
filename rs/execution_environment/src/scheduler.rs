@@ -1387,6 +1387,13 @@ impl SchedulerImpl {
                     }
                 }
             }
+
+            // There should be at most one paused or aborted task left in the task queue.
+            assert!(
+                canister.system_state.task_queue.len() <= 1,
+                "Unexpected tasks left in the task queue of canister {} after a round in canister {:?}",
+                id, canister.system_state.task_queue
+            );
         }
     }
 }

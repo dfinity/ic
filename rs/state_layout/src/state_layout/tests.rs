@@ -225,7 +225,7 @@ fn test_encode_decode_task_queue() {
             .respondent(canister_test_id(42))
             .build(),
     );
-    let task_queue = vec![
+    for task in [
         ExecutionTask::AbortedInstallCode {
             message: CanisterCall::Ingress(Arc::clone(&ingress)),
             prepaid_execution_cycles: Cycles::new(1),
@@ -248,15 +248,17 @@ fn test_encode_decode_task_queue() {
             input: CanisterMessageOrTask::Message(CanisterMessage::Ingress(Arc::clone(&ingress))),
             prepaid_execution_cycles: Cycles::new(5),
         },
-    ];
-    let canister_state_bits = CanisterStateBits {
-        task_queue: task_queue.clone(),
-        ..default_canister_state_bits()
-    };
+    ] {
+        let task_queue = vec![task];
+        let canister_state_bits = CanisterStateBits {
+            task_queue: task_queue.clone(),
+            ..default_canister_state_bits()
+        };
 
-    let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
-    let canister_state_bits = CanisterStateBits::try_from(pb_bits).unwrap();
-    assert_eq!(canister_state_bits.task_queue, task_queue);
+        let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
+        let canister_state_bits = CanisterStateBits::try_from(pb_bits).unwrap();
+        assert_eq!(canister_state_bits.task_queue, task_queue);
+    }
 }
 
 #[test]
