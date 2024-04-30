@@ -3366,10 +3366,7 @@ pub mod test {
         })
     }
 
-    // TODO: This test panics because the block maker delay still uses relative time
-    // to compute round starts.
     #[test]
-    #[should_panic(expected = "couldn't validate rank-1 block proposal")]
     fn test_out_of_sync_validation() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let subnet_members = (0..4).map(node_test_id).collect::<Vec<_>>();
@@ -3430,7 +3427,28 @@ pub mod test {
             // The current time is the time at which we inserted, notarized and finalized
             // the current tip of the chain (i.e. the parent of test_block).
             let parent_time = time_source.get_relative_time();
-            let test_block = make_next_block(&pool, membership.as_ref(), &subnet_members);
+            let mut test_block = make_next_block(&pool, membership.as_ref(), &subnet_members);
+            let rank = Rank(1);
+            let delay = get_block_maker_delay(
+                &no_op_logger(),
+                registry_client.as_ref(),
+                replica_config.subnet_id,
+                PoolReader::new(&pool)
+                    .registry_version(test_block.height())
+                    .unwrap(),
+                rank,
+            )
+            .unwrap();
+            test_block.content.as_mut().rank = rank;
+            test_block.content.as_mut().context.time += delay;
+            test_block.signature.signer = get_block_maker_by_rank(
+                membership.borrow(),
+                &PoolReader::new(&pool),
+                test_block.height(),
+                &subnet_members,
+                rank,
+            );
+            test_block.update_content();
             let proposal_time = test_block.content.get_value().context.time;
             pool.insert_unvalidated(test_block.clone());
 
@@ -3453,12 +3471,12 @@ pub mod test {
             assert_eq!(parent_time, time_source.get_relative_time());
 
             let results = validator.on_state_change(&PoolReader::new(&pool));
-            match results.first() {
-                Some(ChangeAction::MoveToValidated(ConsensusMessage::BlockProposal(proposal))) => {
-                    assert_eq!(proposal, &test_block);
-                }
-                a => panic!("unexpected ChangeAction: {a:?}"),
-            }
+            assert_eq!(
+                results.first(),
+                Some(&ChangeAction::MoveToValidated(
+                    ConsensusMessage::BlockProposal(test_block.clone())
+                )),
+            );
 
             pool.apply_changes(results);
             pool.notarize(&test_block);
@@ -3480,6 +3498,13 @@ pub mod test {
             .unwrap();
             test_block.content.as_mut().rank = rank;
             test_block.content.as_mut().context.time += delay;
+            test_block.signature.signer = get_block_maker_by_rank(
+                membership.borrow(),
+                &PoolReader::new(&pool),
+                test_block.height(),
+                &subnet_members,
+                rank,
+            );
             test_block.update_content();
             let proposal_time = test_block.content.get_value().context.time;
             pool.insert_unvalidated(test_block.clone());
@@ -3491,12 +3516,12 @@ pub mod test {
             assert_eq!(parent_time, time_source.get_relative_time());
 
             let results = validator.on_state_change(&PoolReader::new(&pool));
-            match results.first() {
-                Some(ChangeAction::MoveToValidated(ConsensusMessage::BlockProposal(proposal))) => {
-                    assert_eq!(proposal, &test_block);
-                }
-                _ => panic!("couldn't validate rank-1 block proposal"),
-            }
+            assert_eq!(
+                results.first(),
+                Some(&ChangeAction::MoveToValidated(
+                    ConsensusMessage::BlockProposal(test_block)
+                )),
+            );
         })
     }
 

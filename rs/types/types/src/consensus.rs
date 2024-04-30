@@ -1033,7 +1033,7 @@ impl<'a> TryFrom<&'a ConsensusMessage> for &'a CatchUpPackageShare {
 
 /// ConsensusMessageHash has the same variants as [ConsensusMessage], but
 /// contains only a hash instead of the full message in each variant.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum ConsensusMessageHash {
     RandomBeacon(CryptoHashOf<RandomBeacon>),
     Finalization(CryptoHashOf<Finalization>),

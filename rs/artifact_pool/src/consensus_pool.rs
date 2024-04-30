@@ -1,5 +1,5 @@
 use crate::backup::Backup;
-use crate::height_index::HeightIndex;
+use crate::height_index::HeightIndexedInstants;
 use crate::{
     consensus_pool_cache::{
         get_highest_finalized_block, update_summary_block, ConsensusBlockChainImpl,
@@ -29,7 +29,6 @@ use ic_types::{
     consensus::*, Height, SubnetId, Time,
 };
 use prometheus::{histogram_opts, labels, opts, Histogram, IntCounter, IntGauge};
-use std::collections::BTreeMap;
 use std::time::Instant;
 use std::{marker::PhantomData, sync::Arc, time::Duration};
 
@@ -277,12 +276,16 @@ pub struct ConsensusPoolImpl {
     validated_metrics: PoolMetrics,
     unvalidated_metrics: PoolMetrics,
     invalidated_artifacts: IntCounter,
-    /// Instants below height h are purged whenever all validated and unvalidated
+    /// Block instants are recorded upon entering the validated pool. Instants
+    /// below height h are purged whenever all validated or unvalidated
     /// artifacts are also purged below that height.
-    block_instants: BTreeMap<CryptoHashOf<Block>, Instant>,
-    /// Instants below height h are purged whenever all validated and unvalidated
-    /// artifacts are also purged below that height.
-    block_instants_index: HeightIndex<CryptoHashOf<Block>>,
+    block_instants: HeightIndexedInstants<CryptoHashOf<Block>>,
+    /// Message instants are recorded upon entering the unvalidated pool.
+    /// Currently the only messages we record are notarizations, random beacons
+    /// and CUPs. Instants below height h are purged whenever all validated or
+    /// unvalidated artifacts are also purged below that height.
+    message_instants: HeightIndexedInstants<ConsensusMessageId>,
+
     time_source: Arc<dyn TimeSource>,
     cache: Arc<ConsensusCacheImpl>,
     backup: Option<Backup>,
@@ -393,6 +396,13 @@ impl ConsensusPool for UncachedConsensusPoolImpl {
         // recorded instants at this point.
         None
     }
+
+    fn message_instant(&self, _id: &ConsensusMessageId) -> Option<Instant> {
+        // The uncached consensus pool is only used temporarily for genesis init.
+        // We are not inserting new artifacts in this pool, so we don't have any
+        // recorded instants at this point.
+        None
+    }
 }
 
 impl ConsensusPoolImpl {
@@ -484,8 +494,8 @@ impl ConsensusPoolImpl {
             ),
             validated_metrics: PoolMetrics::new(registry.clone(), POOL_TYPE_VALIDATED),
             unvalidated_metrics: PoolMetrics::new(registry, POOL_TYPE_UNVALIDATED),
-            block_instants_index: HeightIndex::new(),
-            block_instants: BTreeMap::new(),
+            block_instants: HeightIndexedInstants::default(),
+            message_instants: HeightIndexedInstants::default(),
             time_source,
             cache,
             backup: None,
@@ -613,29 +623,33 @@ impl ConsensusPoolImpl {
         backup.store(artifacts_for_backup);
     }
 
-    /// Clears all instants for artifacts below the given height.
-    fn clear_instants(&mut self, height: Height) {
-        let range = self.block_instants_index.range(Height::new(0)..height);
-        for (_, bucket) in range {
-            for hash in bucket {
-                self.block_instants.remove(hash);
-            }
-        }
-        self.block_instants_index.remove_all_below(height);
-    }
-    /// Add instant measurements for the given consensus message to the pool's
-    /// collection, for message types that we care about. If the message was already
-    /// recorded, this function does nothing.
-    fn record_instant(&mut self, msg: &ConsensusMessage) {
+    /// Record instant measurement for the given validated message, as long
+    /// as the message type is relevant to us. Currently that includes block
+    /// proposals, notarizations, random beacons, and CUPs.
+    fn record_instant(&mut self, artifact: &ValidatedConsensusArtifact) {
         let now = self.time_source.get_instant();
+        let msg = &artifact.msg;
         if let ConsensusMessage::BlockProposal(bp) = msg {
             let hash = bp.content.get_hash().clone();
-            if self
-                .block_instants_index
-                .insert(bp.content.get_value().height, &hash)
-            {
-                self.block_instants.entry(hash).or_insert(now);
-            }
+            self.block_instants
+                .insert(&hash, now, bp.content.get_value().height);
+        }
+        self.record_instant_unvalidated(msg);
+    }
+
+    /// Record instant measurement for the given message, for messages that
+    /// are relevant to us, and don't require previous validation. Currently
+    /// those are notarizations, random beacons and CUPs.
+    fn record_instant_unvalidated(&mut self, msg: &ConsensusMessage) {
+        let now = self.time_source.get_instant();
+        if matches!(
+            msg,
+            ConsensusMessage::Notarization(_)
+                | ConsensusMessage::RandomBeacon(_)
+                | ConsensusMessage::CatchUpPackage(_)
+        ) {
+            let id = msg.get_id();
+            self.message_instants.insert(&id, now, id.height);
         }
     }
 }
@@ -664,6 +678,10 @@ impl ConsensusPool for ConsensusPoolImpl {
     fn block_instant(&self, hash: &CryptoHashOf<Block>) -> Option<Instant> {
         self.block_instants.get(hash).copied()
     }
+
+    fn message_instant(&self, id: &ConsensusMessageId) -> Option<Instant> {
+        self.message_instants.get(id).copied()
+    }
 }
 
 impl MutablePool<ConsensusArtifact> for ConsensusPoolImpl {
@@ -671,6 +689,7 @@ impl MutablePool<ConsensusArtifact> for ConsensusPoolImpl {
 
     fn insert(&mut self, unvalidated_artifact: UnvalidatedConsensusArtifact) {
         let mut ops = PoolSectionOps::new();
+        self.record_instant_unvalidated(&unvalidated_artifact.message);
         ops.insert(unvalidated_artifact);
         self.apply_changes_unvalidated(ops);
     }
@@ -693,7 +712,7 @@ impl MutablePool<ConsensusArtifact> for ConsensusPoolImpl {
         for change_action in change_set {
             match change_action {
                 ChangeAction::AddToValidated(to_add) => {
-                    self.record_instant(&to_add.msg);
+                    self.record_instant(&to_add);
                     artifacts_with_opt.push(ArtifactWithOpt {
                         advert: ConsensusArtifact::message_to_advert(&to_add.msg),
                         is_latency_sensitive: is_latency_sensitive(&to_add.msg),
@@ -714,25 +733,28 @@ impl MutablePool<ConsensusArtifact> for ConsensusPoolImpl {
                     let timestamp = self.unvalidated.get_timestamp(&msg_id).unwrap_or_else(|| {
                         panic!("Timestamp is not found for MoveToValidated: {:?}", to_move)
                     });
-                    self.record_instant(&to_move);
-                    unvalidated_ops.remove(msg_id);
-                    validated_ops.insert(ValidatedConsensusArtifact {
+                    let validated = ValidatedConsensusArtifact {
                         msg: to_move,
                         timestamp,
-                    });
+                    };
+                    self.record_instant(&validated);
+                    unvalidated_ops.remove(msg_id);
+                    validated_ops.insert(validated);
                 }
                 ChangeAction::RemoveFromUnvalidated(to_remove) => {
                     unvalidated_ops.remove(to_remove.get_id());
                 }
                 ChangeAction::PurgeValidatedBelow(height) => {
-                    self.clear_instants(height);
+                    self.block_instants.clear(height);
+                    self.message_instants.clear(height);
                     validated_ops.purge_below(height);
                 }
                 ChangeAction::PurgeValidatedOfTypeBelow(artifact_type, height) => {
                     validated_ops.purge_type_below(artifact_type, height);
                 }
                 ChangeAction::PurgeUnvalidatedBelow(height) => {
-                    self.clear_instants(height);
+                    self.block_instants.clear(height);
+                    self.message_instants.clear(height);
                     unvalidated_ops.purge_below(height);
                 }
                 ChangeAction::HandleInvalid(to_remove, error_message) => {
@@ -1034,6 +1056,23 @@ mod tests {
         )
     }
 
+    fn fake_block(height: Height, rank: Rank) -> Block {
+        Block::new(
+            CryptoHashOf::from(CryptoHash(vec![])),
+            Payload::new(
+                ic_types::crypto::crypto_hash,
+                BlockPayload::Summary(SummaryPayload::fake()),
+            ),
+            Height::from(height),
+            rank,
+            ValidationContext {
+                registry_version: RegistryVersion::from(99),
+                certified_height: Height::from(42),
+                time: UNIX_EPOCH,
+            },
+        )
+    }
+
     #[test]
     fn test_timestamp() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
@@ -1296,25 +1335,8 @@ mod tests {
 
             let height_offset = 5_000_000_000;
 
-            let fake_block = |height: Height| {
-                Block::new(
-                    CryptoHashOf::from(CryptoHash(vec![])),
-                    Payload::new(
-                        ic_types::crypto::crypto_hash,
-                        BlockPayload::Summary(SummaryPayload::fake()),
-                    ),
-                    Height::from(height),
-                    Rank(0),
-                    ValidationContext {
-                        registry_version: RegistryVersion::from(99),
-                        certified_height: Height::from(42),
-                        time: UNIX_EPOCH,
-                    },
-                )
-            };
-
             let fake_proposal = |height: Height, node_id: NodeId| {
-                BlockProposal::fake(fake_block(height), node_id)
+                BlockProposal::fake(fake_block(height, Rank(0)), node_id)
                     .into_message()
                     .into_message()
             };
@@ -1323,26 +1345,26 @@ mod tests {
                 Finalization::fake(FinalizationContent {
                     version: ReplicaVersion::default(),
                     height,
-                    block: crypto_hash(&fake_block(height)),
+                    block: crypto_hash(&fake_block(height, Rank(0))),
                 })
                 .into_message()
             };
 
             let fake_finalization_share = |height: Height, node_id: NodeId| {
-                FinalizationShare::fake(&fake_block(height), node_id).into_message()
+                FinalizationShare::fake(&fake_block(height, Rank(0)), node_id).into_message()
             };
 
             let fake_notarization = |height: Height| {
                 Notarization::fake(NotarizationContent {
                     version: ReplicaVersion::default(),
                     height,
-                    block: crypto_hash(&fake_block(height)),
+                    block: crypto_hash(&fake_block(height, Rank(0))),
                 })
                 .into_message()
             };
 
             let fake_notarization_share = |height: Height, node_id: NodeId| {
-                NotarizationShare::fake(&fake_block(height), node_id).into_message()
+                NotarizationShare::fake(&fake_block(height, Rank(0)), node_id).into_message()
             };
 
             let fake_beacon = |height: Height| {
@@ -1399,7 +1421,10 @@ mod tests {
             }
             messages.push(
                 CatchUpPackage::fake(CatchUpContent::new(
-                    HashedBlock::new(crypto_hash, fake_block(Height::from(height_offset))),
+                    HashedBlock::new(
+                        crypto_hash,
+                        fake_block(Height::from(height_offset), Rank(0)),
+                    ),
                     HashedRandomBeacon::new(
                         crypto_hash,
                         RandomBeacon::fake(RandomBeaconContent {
@@ -1466,24 +1491,6 @@ mod tests {
                 time_source.clone(),
             );
 
-            // creates a block for the given height and rank
-            let fake_block = |height: u64, rank: u64| {
-                Block::new(
-                    CryptoHashOf::from(CryptoHash(vec![])),
-                    Payload::new(
-                        ic_types::crypto::crypto_hash,
-                        BlockPayload::Summary(SummaryPayload::fake()),
-                    ),
-                    Height::from(height),
-                    Rank(rank),
-                    ValidationContext {
-                        registry_version: RegistryVersion::from(99),
-                        certified_height: Height::from(42),
-                        time: UNIX_EPOCH,
-                    },
-                )
-            };
-
             // creates a fake block proposal for the given block
             let fake_block_proposal = |block: &Block| {
                 ChangeAction::AddToValidated(ValidatedConsensusArtifact {
@@ -1542,7 +1549,7 @@ mod tests {
             //
             // Height = 3
             //
-            let block = fake_block(3, 0);
+            let block = fake_block(Height::new(3), Rank(0));
 
             pool.apply_changes(vec![
                 fake_block_proposal(&block),
@@ -1557,8 +1564,8 @@ mod tests {
             //
             // Height = 4
             //
-            let block1 = fake_block(4, 0);
-            let block2 = fake_block(4, 1);
+            let block1 = fake_block(Height::new(4), Rank(0));
+            let block2 = fake_block(Height::new(4), Rank(1));
 
             pool.apply_changes(vec![
                 fake_block_proposal(&block1),
@@ -1575,7 +1582,7 @@ mod tests {
             //
             // Height = 5
             //
-            let block = fake_block(5, 0);
+            let block = fake_block(Height::new(5), Rank(0));
 
             pool.apply_changes(vec![
                 fake_block_proposal(&block),
@@ -2215,6 +2222,77 @@ mod tests {
                 vec![6],
             );
         })
+    }
+
+    #[test]
+    fn test_recording_instants() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let time_source = FastForwardTimeSource::new();
+            let mut pool = new_from_cup_without_bytes(
+                node_test_id(0),
+                subnet_test_id(0),
+                make_genesis(ic_types::consensus::dkg::Summary::fake()),
+                pool_config,
+                ic_metrics::MetricsRegistry::new(),
+                no_op_logger(),
+                time_source.clone(),
+            );
+
+            let height = Height::from(5_000_000_000);
+            let cup = CatchUpPackage::fake(CatchUpContent::new(
+                HashedBlock::new(crypto_hash, fake_block(height, Rank(0))),
+                HashedRandomBeacon::new(
+                    crypto_hash,
+                    RandomBeacon::fake(RandomBeaconContent {
+                        version: ReplicaVersion::default(),
+                        height,
+                        parent: CryptoHashOf::from(CryptoHash(vec![])),
+                    }),
+                ),
+                CryptoHashOf::from(CryptoHash(vec![])),
+                None,
+            ));
+            let notarization = Notarization::fake(NotarizationContent {
+                version: ReplicaVersion::default(),
+                height,
+                block: crypto_hash(&fake_block(height, Rank(0))),
+            });
+            let random_beacon = RandomBeacon::fake(RandomBeaconContent::new(
+                height,
+                CryptoHashOf::from(CryptoHash(Vec::new())),
+            ));
+            let cup_id = cup.get_id();
+            let notarization_id = notarization.get_id();
+            let random_beacon_id = random_beacon.get_id();
+            pool.insert(UnvalidatedArtifact {
+                message: ConsensusMessage::CatchUpPackage(cup),
+                peer_id: node_test_id(0),
+                timestamp: time_source.get_relative_time(),
+            });
+            pool.insert(UnvalidatedArtifact {
+                message: ConsensusMessage::Notarization(notarization),
+                peer_id: node_test_id(0),
+                timestamp: time_source.get_relative_time(),
+            });
+            pool.insert(UnvalidatedArtifact {
+                message: ConsensusMessage::RandomBeacon(random_beacon),
+                peer_id: node_test_id(0),
+                timestamp: time_source.get_relative_time(),
+            });
+            assert!(pool.message_instant(&cup_id).is_some());
+            assert!(pool.message_instant(&notarization_id).is_some());
+            assert!(pool.message_instant(&random_beacon_id).is_some());
+
+            // Check that purging of instants respects PurgeValidatedBelow semantics
+            pool.apply_changes(vec![ChangeAction::PurgeValidatedBelow(height)]);
+            assert!(pool.message_instant(&cup_id).is_some());
+            assert!(pool.message_instant(&notarization_id).is_some());
+            assert!(pool.message_instant(&random_beacon_id).is_some());
+            pool.apply_changes(vec![ChangeAction::PurgeValidatedBelow(height.increment())]);
+            assert!(pool.message_instant(&cup_id).is_none());
+            assert!(pool.message_instant(&notarization_id).is_none());
+            assert!(pool.message_instant(&random_beacon_id).is_none());
+        });
     }
 
     // Verifies the iterator output, starting from the given block
