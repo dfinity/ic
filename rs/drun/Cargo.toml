@@ -45,6 +45,7 @@ tokio = { workspace = true }
 rand = "0.8"
 tower = { workspace = true }
 futures.workspace = true
+wasmparser = "0.115.0"
 
 [[bin]]
 name = "drun"

@@ -36,6 +36,7 @@ DEPENDENCIES = [
     "@crate_index//:tokio",
     "@crate_index//:tower",
     "@crate_index//:rand",
+    "@crate_index//:wasmparser",
 ]
 
 rust_library(

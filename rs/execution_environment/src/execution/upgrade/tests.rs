@@ -360,7 +360,10 @@ fn test_pre_upgrade_execution_with_canister_install_mode_v2() {
         let result = test.upgrade_canister_v2(
             canister_id,
             new_empty_binary(),
-            CanisterUpgradeOptions { skip_pre_upgrade },
+            CanisterUpgradeOptions {
+                skip_pre_upgrade,
+                wasm_memory_persistence: None,
+            },
         );
 
         if skip_pre_upgrade == Some(true) {
@@ -392,7 +395,10 @@ fn test_upgrade_execution_with_canister_install_mode_v2() {
         let result = test.upgrade_canister_v2(
             canister_id,
             binary(&[(Function::PostUpgrade, Execution::ShortTrap)]),
-            CanisterUpgradeOptions { skip_pre_upgrade },
+            CanisterUpgradeOptions {
+                skip_pre_upgrade,
+                wasm_memory_persistence: None,
+            },
         );
 
         assert_eq!(result.unwrap_err().code(), ErrorCode::CanisterTrapped);
@@ -989,6 +995,7 @@ fn upgrade_with_skip_pre_upgrade_fails_on_no_execution_state() {
         new_empty_binary(),
         CanisterUpgradeOptions {
             skip_pre_upgrade: Some(true),
+            wasm_memory_persistence: None,
         },
     );
     assert_eq!(
@@ -1009,6 +1016,7 @@ fn upgrade_with_skip_pre_upgrade_ok_with_no_pre_upgrade() {
         new_empty_binary(),
         CanisterUpgradeOptions {
             skip_pre_upgrade: Some(true),
+            wasm_memory_persistence: None,
         },
     );
     assert_eq!(result, Ok(()));

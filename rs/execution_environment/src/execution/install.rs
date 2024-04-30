@@ -8,8 +8,8 @@ use crate::canister_manager::{
 };
 use crate::execution::common::{ingress_status_with_processing_state, update_round_limits};
 use crate::execution::install_code::{
-    canister_layout, finish_err, InstallCodeHelper, OriginalContext, PausedInstallCodeHelper,
-    StableMemoryHandling,
+    canister_layout, finish_err, CanisterMemoryHandling, InstallCodeHelper, MemoryHandling,
+    OriginalContext, PausedInstallCodeHelper,
 };
 use crate::execution_environment::{RoundContext, RoundLimits};
 use ic_base_types::PrincipalId;
@@ -123,7 +123,10 @@ pub(crate) fn execute_install(
     if let Err(err) = helper.replace_execution_state_and_allocations(
         instructions_from_compilation,
         result,
-        StableMemoryHandling::Replace,
+        CanisterMemoryHandling {
+            stable_memory_handling: MemoryHandling::Replace,
+            main_memory_handling: MemoryHandling::Replace,
+        },
         &original,
     ) {
         let instructions_left = helper.instructions_left();
