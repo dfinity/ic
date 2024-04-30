@@ -58,15 +58,15 @@ impl ConsensusManagerBuilder {
 
     pub fn add_client<Artifact, Pool>(
         &mut self,
-        adverts_to_send: Receiver<ArtifactProcessorEvent<Artifact>>,
-        raw_pool: Arc<RwLock<Pool>>,
+        outbound_artifacts_rx: Receiver<ArtifactProcessorEvent<Artifact>>,
+        pool: Arc<RwLock<Pool>>,
         priority_fn_producer: Arc<dyn PriorityFnAndFilterProducer<Artifact, Pool>>,
-        sender: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
+        inbound_artifacts_tx: UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
     ) where
         Pool: 'static + Send + Sync + ValidatedPoolReader<Artifact>,
         Artifact: ArtifactKind,
     {
-        let (router, adverts_from_peers_rx) = build_axum_router(self.log.clone(), raw_pool.clone());
+        let (router, adverts_from_peers_rx) = build_axum_router(self.log.clone(), pool.clone());
 
         let log = self.log.clone();
         let rt_handle = self.rt_handle.clone();
@@ -78,11 +78,11 @@ impl ConsensusManagerBuilder {
                 log,
                 &metrics_registry,
                 rt_handle,
-                adverts_to_send,
+                outbound_artifacts_rx,
                 adverts_from_peers_rx,
-                raw_pool,
+                pool,
                 priority_fn_producer,
-                sender,
+                inbound_artifacts_tx,
                 transport,
                 topology_watcher,
                 cancellation_token,

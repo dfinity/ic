@@ -306,8 +306,8 @@ fn start_consensus(
         &PoolReader::new(&*consensus_pool.read().unwrap()),
     )));
 
-    let (consensus_advert_tx, consensus_rx) = tokio::sync::mpsc::channel(MAX_ADVERT_BUFFER);
-    let (certification_advert_tx, certification_rx) = tokio::sync::mpsc::channel(MAX_ADVERT_BUFFER);
+    let (consensus_tx, consensus_rx) = tokio::sync::mpsc::channel(MAX_ADVERT_BUFFER);
+    let (certification_tx, certification_rx) = tokio::sync::mpsc::channel(MAX_ADVERT_BUFFER);
     let (dkg_tx, dkg_rx) = tokio::sync::mpsc::channel(MAX_ADVERT_BUFFER);
     let (ingress_tx, ingress_rx) = tokio::sync::mpsc::channel(MAX_ADVERT_BUFFER);
     let (ecdsa_tx, ecdsa_rx) = tokio::sync::mpsc::channel(MAX_ADVERT_BUFFER);
@@ -340,14 +340,8 @@ fn start_consensus(
         let consensus_pool = Arc::clone(&consensus_pool);
 
         // Create the consensus client.
-        let send_advert = Box::new(move |req| {
-            consensus_advert_tx
-                .blocking_send(req)
-                .expect("Channel should not be closed");
-        });
-
         let (client, jh) = create_artifact_handler(
-            send_advert,
+            consensus_tx,
             consensus_setup,
             time_source.clone(),
             consensus_pool.clone(),
@@ -362,15 +356,9 @@ fn start_consensus(
     let ingress_sender = {
         let ingress_prioritizer = Arc::new(IngressPrioritizer::new(time_source.clone()));
 
-        // Create the consensus client.
-        let send_advert = Box::new(move |req| {
-            ingress_tx
-                .blocking_send(req)
-                .expect("Channel should not be closed");
-        });
         // Create the ingress client.
         let (client, jh) = create_ingress_handlers(
-            send_advert,
+            ingress_tx,
             Arc::clone(&time_source) as Arc<_>,
             Arc::clone(&artifact_pools.ingress_pool),
             ingress_manager,
@@ -388,11 +376,6 @@ fn start_consensus(
     };
 
     {
-        let send_advert = Box::new(move |req| {
-            certification_advert_tx
-                .blocking_send(req)
-                .expect("Channel should not be closed");
-        });
         let (certifier, certifier_gossip) = certification_setup(
             replica_config,
             Arc::clone(&membership) as Arc<_>,
@@ -407,7 +390,7 @@ fn start_consensus(
 
         // Create the certification client.
         let (client, jh) = create_artifact_handler(
-            send_advert,
+            certification_tx,
             certifier,
             Arc::clone(&time_source) as Arc<_>,
             Arc::clone(&artifact_pools.certification_pool),
@@ -423,15 +406,10 @@ fn start_consensus(
     };
 
     {
-        let send_advert = Box::new(move |req| {
-            dkg_tx
-                .blocking_send(req)
-                .expect("Channel should not be closed");
-        });
         // Create the DKG client.
         let dkg_gossip = Arc::new(dkg::DkgGossipImpl {});
         let (client, jh) = create_artifact_handler(
-            send_advert,
+            dkg_tx,
             dkg::DkgImpl::new(
                 node_id,
                 Arc::clone(&consensus_crypto),
@@ -463,12 +441,6 @@ fn start_consensus(
             finalized.payload.as_ref().as_ecdsa().is_some(),
         );
 
-        let send_advert = Box::new(move |req| {
-            ecdsa_tx
-                .blocking_send(req)
-                .expect("Channel should not be closed");
-        });
-
         let ecdsa_gossip = Arc::new(ecdsa::EcdsaGossipImpl::new(
             subnet_id,
             Arc::clone(&consensus_block_cache),
@@ -477,7 +449,7 @@ fn start_consensus(
         ));
 
         let (client, jh) = create_artifact_handler(
-            send_advert,
+            ecdsa_tx,
             ecdsa::EcdsaImpl::new(
                 node_id,
                 Arc::clone(&consensus_block_cache),
@@ -498,12 +470,6 @@ fn start_consensus(
     };
 
     {
-        let send_advert = Box::new(move |req| {
-            http_outcalls_tx
-                .blocking_send(req)
-                .expect("Channel should not be closed");
-        });
-
         let canister_http_gossip = Arc::new(CanisterHttpGossipImpl::new(
             Arc::clone(&consensus_pool_cache),
             Arc::clone(&state_reader),
@@ -511,7 +477,7 @@ fn start_consensus(
         ));
 
         let (client, jh) = create_artifact_handler(
-            send_advert,
+            http_outcalls_tx,
             CanisterHttpPoolManagerImpl::new(
                 Arc::clone(&state_reader),
                 Arc::new(Mutex::new(canister_http_adapter_client)),

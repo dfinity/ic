@@ -1,9 +1,9 @@
-pub mod processors;
-
 use ic_interfaces::{
     p2p::{
         artifact_manager::{ArtifactProcessorEvent, JoinGuard},
-        consensus::{ChangeResult, ChangeSetProducer, MutablePool, ValidatedPoolReader},
+        consensus::{
+            ChangeResult, ChangeSetProducer, MutablePool, UnvalidatedArtifact, ValidatedPoolReader,
+        },
     },
     time_source::TimeSource,
 };
@@ -19,7 +19,7 @@ use std::{
     time::Duration,
 };
 use tokio::{
-    sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
+    sync::mpsc::{unbounded_channel, Sender, UnboundedReceiver, UnboundedSender},
     time::timeout,
 };
 
@@ -141,14 +141,11 @@ impl Drop for ArtifactProcessorJoinGuard {
     }
 }
 
-pub fn run_artifact_processor<
-    Artifact: ArtifactKind + 'static,
-    S: Fn(ArtifactProcessorEvent<Artifact>) + Send + 'static,
->(
+pub fn run_artifact_processor<Artifact: ArtifactKind + 'static>(
     time_source: Arc<dyn TimeSource>,
     metrics_registry: MetricsRegistry,
     client: Box<dyn ArtifactProcessor<Artifact>>,
-    send_advert: S,
+    send_advert: Sender<ArtifactProcessorEvent<Artifact>>,
 ) -> (Box<dyn JoinGuard>, ArtifactEventSender<Artifact>)
 where
     <Artifact as ic_types::artifact::ArtifactKind>::Message: Send,
@@ -172,7 +169,7 @@ where
             process_messages(
                 time_source,
                 client,
-                Box::new(send_advert),
+                send_advert,
                 receiver,
                 ArtifactProcessorMetrics::new(metrics_registry, Artifact::TAG.to_string()),
                 shutdown_cl,
@@ -187,14 +184,10 @@ where
 }
 
 // The artifact processor thread loop
-#[allow(clippy::too_many_arguments)]
-fn process_messages<
-    Artifact: ArtifactKind + 'static,
-    S: Fn(ArtifactProcessorEvent<Artifact>) + Send + 'static,
->(
+fn process_messages<Artifact: ArtifactKind + 'static>(
     time_source: Arc<dyn TimeSource>,
     client: Box<dyn ArtifactProcessor<Artifact>>,
-    send_advert: Box<S>,
+    send_advert: Sender<ArtifactProcessorEvent<Artifact>>,
     mut receiver: UnboundedReceiver<UnvalidatedArtifactMutation<Artifact>>,
     mut metrics: ArtifactProcessorMetrics,
     shutdown: Arc<AtomicBool>,
@@ -246,11 +239,11 @@ fn process_messages<
             metrics
                 .outbound_artifact_bytes
                 .observe(artifact_with_opt.advert.size as f64);
-            send_advert(ArtifactProcessorEvent::Artifact(artifact_with_opt));
+            let _ = send_advert.blocking_send(ArtifactProcessorEvent::Artifact(artifact_with_opt));
         }
 
         for advert in purged {
-            send_advert(ArtifactProcessorEvent::Purge(advert));
+            let _ = send_advert.blocking_send(ArtifactProcessorEvent::Purge(advert));
         }
         last_on_state_change_result = poll_immediately;
     }
@@ -261,9 +254,8 @@ const ARTIFACT_MANAGER_TIMER_DURATION_MSEC: u64 = 200;
 
 pub fn create_ingress_handlers<
     PoolIngress: MutablePool<IngressArtifact> + Send + Sync + ValidatedPoolReader<IngressArtifact> + 'static,
-    S: Fn(ArtifactProcessorEvent<IngressArtifact>) + Send + 'static,
 >(
-    send_advert: S,
+    send_advert: Sender<ArtifactProcessorEvent<IngressArtifact>>,
     time_source: Arc<dyn TimeSource>,
     ingress_pool: Arc<RwLock<PoolIngress>>,
     ingress_handler: Arc<
@@ -278,7 +270,7 @@ pub fn create_ingress_handlers<
     UnboundedSender<UnvalidatedArtifactMutation<IngressArtifact>>,
     Box<dyn JoinGuard>,
 ) {
-    let client = processors::IngressProcessor::new(ingress_pool.clone(), ingress_handler);
+    let client = IngressProcessor::new(ingress_pool.clone(), ingress_handler);
     let (jh, sender) = run_artifact_processor(
         time_source.clone(),
         metrics_registry,
@@ -292,9 +284,8 @@ pub fn create_artifact_handler<
     Artifact: ArtifactKind + Send + Sync,
     Pool: MutablePool<Artifact> + Send + Sync + ValidatedPoolReader<Artifact> + 'static,
     C: ChangeSetProducer<Pool, ChangeSet = <Pool as MutablePool<Artifact>>::ChangeSet> + 'static,
-    S: Fn(ArtifactProcessorEvent<Artifact>) + Send + 'static,
 >(
-    send_advert: S,
+    send_advert: Sender<ArtifactProcessorEvent<Artifact>>,
     change_set_producer: C,
     time_source: Arc<dyn TimeSource>,
     pool: Arc<RwLock<Pool>>,
@@ -303,7 +294,7 @@ pub fn create_artifact_handler<
     UnboundedSender<UnvalidatedArtifactMutation<Artifact>>,
     Box<dyn JoinGuard>,
 ) {
-    let client = processors::Processor::new(pool.clone(), change_set_producer);
+    let client = Processor::new(pool.clone(), change_set_producer);
     let (jh, sender) = run_artifact_processor(
         time_source.clone(),
         metrics_registry,
@@ -311,4 +302,120 @@ pub fn create_artifact_handler<
         send_advert,
     );
     (sender, jh)
+}
+
+pub struct Processor<A: ArtifactKind + Send, P: MutablePool<A>, C> {
+    pool: Arc<RwLock<P>>,
+    change_set_producer: C,
+    unused: std::marker::PhantomData<A>,
+}
+
+impl<
+        A: ArtifactKind + Send,
+        P: MutablePool<A>,
+        C: ChangeSetProducer<P, ChangeSet = <P as MutablePool<A>>::ChangeSet>,
+    > Processor<A, P, C>
+{
+    pub fn new(pool: Arc<RwLock<P>>, change_set_producer: C) -> Self {
+        Self {
+            pool,
+            change_set_producer,
+            unused: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<
+        A: ArtifactKind + Send,
+        P: MutablePool<A> + Send + Sync + 'static,
+        C: ChangeSetProducer<P, ChangeSet = <P as MutablePool<A>>::ChangeSet>,
+    > ArtifactProcessor<A> for Processor<A, P, C>
+{
+    fn process_changes(
+        &self,
+        time_source: &dyn TimeSource,
+        artifact_events: Vec<UnvalidatedArtifactMutation<A>>,
+    ) -> ChangeResult<A> {
+        {
+            let mut pool = self.pool.write().unwrap();
+            for artifact_event in artifact_events {
+                match artifact_event {
+                    UnvalidatedArtifactMutation::Insert((message, peer_id)) => {
+                        let unvalidated_artifact = UnvalidatedArtifact {
+                            message,
+                            peer_id,
+                            timestamp: time_source.get_relative_time(),
+                        };
+                        pool.insert(unvalidated_artifact);
+                    }
+                    UnvalidatedArtifactMutation::Remove(id) => pool.remove(&id),
+                }
+            }
+        }
+        let change_set = self
+            .change_set_producer
+            .on_state_change(&self.pool.read().unwrap());
+        self.pool.write().unwrap().apply_changes(change_set)
+    }
+}
+
+/// The ingress `OnStateChange` client.
+pub(crate) struct IngressProcessor<P: MutablePool<IngressArtifact>> {
+    /// The ingress pool, protected by a read-write lock and automatic reference
+    /// counting.
+    ingress_pool: Arc<RwLock<P>>,
+    /// The ingress handler.
+    client: Arc<
+        dyn ChangeSetProducer<P, ChangeSet = <P as MutablePool<IngressArtifact>>::ChangeSet>
+            + Send
+            + Sync,
+    >,
+}
+
+impl<P: MutablePool<IngressArtifact>> IngressProcessor<P> {
+    pub fn new(
+        ingress_pool: Arc<RwLock<P>>,
+        client: Arc<
+            dyn ChangeSetProducer<P, ChangeSet = <P as MutablePool<IngressArtifact>>::ChangeSet>
+                + Send
+                + Sync,
+        >,
+    ) -> Self {
+        Self {
+            ingress_pool,
+            client,
+        }
+    }
+}
+
+impl<P: MutablePool<IngressArtifact> + Send + Sync + 'static> ArtifactProcessor<IngressArtifact>
+    for IngressProcessor<P>
+{
+    /// The method processes changes in the ingress pool.
+    fn process_changes(
+        &self,
+        time_source: &dyn TimeSource,
+        artifact_events: Vec<UnvalidatedArtifactMutation<IngressArtifact>>,
+    ) -> ChangeResult<IngressArtifact> {
+        {
+            let mut ingress_pool = self.ingress_pool.write().unwrap();
+            for artifact_event in artifact_events {
+                match artifact_event {
+                    UnvalidatedArtifactMutation::Insert((message, peer_id)) => {
+                        let unvalidated_artifact = UnvalidatedArtifact {
+                            message,
+                            peer_id,
+                            timestamp: time_source.get_relative_time(),
+                        };
+                        ingress_pool.insert(unvalidated_artifact);
+                    }
+                    UnvalidatedArtifactMutation::Remove(id) => ingress_pool.remove(&id),
+                }
+            }
+        }
+        let change_set = self
+            .client
+            .on_state_change(&self.ingress_pool.read().unwrap());
+        self.ingress_pool.write().unwrap().apply_changes(change_set)
+    }
 }

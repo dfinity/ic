@@ -403,14 +403,12 @@ pub fn start_test_processor(
 ) {
     let (tx, rx) = tokio::sync::mpsc::channel(1000);
     let time_source = Arc::new(SysTimeSource::new());
-    let client = ic_artifact_manager::processors::Processor::new(pool, change_set_producer);
+    let client = ic_artifact_manager::Processor::new(pool, change_set_producer);
     let (jh, sender) = run_artifact_processor(
         time_source,
         MetricsRegistry::default(),
         Box::new(client),
-        move |req| {
-            let _ = tx.blocking_send(req);
-        },
+        tx,
     );
     (jh, rx, sender)
 }
