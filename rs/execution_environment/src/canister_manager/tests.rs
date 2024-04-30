@@ -28,6 +28,7 @@ use ic_management_canister_types::{
     CanisterStatusResultV2, CanisterStatusType, CanisterUpgradeOptions, ChunkHash,
     ClearChunkStoreArgs, CreateCanisterArgs, EmptyBlob, InstallCodeArgsV2, Method, Payload,
     StoredChunksArgs, StoredChunksReply, UpdateSettingsArgs, UploadChunkArgs, UploadChunkReply,
+    WasmMemoryPersistence,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -4279,6 +4280,227 @@ fn test_upgrade_preserves_stable_memory() {
     assert_eq!(reply, data);
 }
 
+#[test]
+fn test_enhanced_orthogonal_persistence_upgrade_preserves_main_memory() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let version1_wat = r#"
+        (module
+            (func $start
+                call $initialize
+                call $check
+            )
+            (func $initialize
+                global.get 0
+                i32.const 1234
+                i32.store
+                global.get 1
+                i32.const 5678
+                i32.store
+            )
+            (func $check_word (param i32) (param i32)
+                block
+                    local.get 0
+                    i32.load
+                    local.get 1
+                    i32.eq
+                    br_if 0
+                    unreachable
+                end
+            )
+            (func $check
+                global.get 0
+                i32.const 1234
+                call $check_word
+                global.get 1
+                i32.const 5678
+                call $check_word
+            )
+            (start $start)
+            (memory 160)
+            (global (mut i32) (i32.const 8500000))
+            (global (mut i32) (i32.const 9000000))
+            (@custom "icp:private enhanced-orthogonal-persistence" "")
+        )
+        "#;
+    let version1_wasm = wat::parse_str(version1_wat).unwrap();
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
+    test.install_canister(canister_id, version1_wasm).unwrap();
+
+    let version2_wat = r#"
+        (module
+            (func $check_word (param i32) (param i32)
+                block
+                    local.get 0
+                    i32.load
+                    local.get 1
+                    i32.eq
+                    br_if 0
+                    unreachable
+                end
+            )
+            (func $check
+                global.get 0
+                i32.const 1234
+                call $check_word
+                global.get 1
+                i32.const 5678
+                call $check_word
+            )
+            (start $check)
+            (memory 160)
+            (global (mut i32) (i32.const 8500000))
+            (global (mut i32) (i32.const 9000000))
+            (@custom "icp:private enhanced-orthogonal-persistence" "")
+        )
+        "#;
+
+    let version2_wasm = wat::parse_str(version2_wat).unwrap();
+    test.upgrade_canister_v2(
+        canister_id,
+        version2_wasm,
+        CanisterUpgradeOptions {
+            skip_pre_upgrade: None,
+            wasm_memory_persistence: Some(WasmMemoryPersistence::Keep),
+        },
+    )
+    .unwrap();
+}
+
+#[test]
+fn fails_with_missing_main_memory_option_for_enhanced_orthogonal_persistence() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let version1_wat = r#"
+        (module
+            (memory 1)
+            (@custom "icp:private enhanced-orthogonal-persistence" "")
+        )
+        "#;
+    let version1_wasm = wat::parse_str(version1_wat).unwrap();
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
+    test.install_canister(canister_id, version1_wasm).unwrap();
+
+    let version2_wat = r#"
+        (module
+            (memory 1)
+        )
+        "#;
+
+    let version2_wasm = wat::parse_str(version2_wat).unwrap();
+    let error = test
+        .upgrade_canister_v2(
+            canister_id,
+            version2_wasm,
+            CanisterUpgradeOptions {
+                skip_pre_upgrade: None,
+                wasm_memory_persistence: None,
+            },
+        )
+        .unwrap_err();
+    assert_eq!(error.code(), ErrorCode::CanisterContractViolation);
+    assert_eq!(error.description(), "Missing upgrade option: Enhanced orthogonal persistence requires the `wasm_memory_persistence` upgrade option.");
+}
+
+#[test]
+fn fails_with_missing_upgrade_option_for_enhanced_orthogonal_persistence() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let version1_wat = r#"
+        (module
+            (memory 1)
+            (@custom "icp:private enhanced-orthogonal-persistence" "")
+        )
+        "#;
+    let version1_wasm = wat::parse_str(version1_wat).unwrap();
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
+    test.install_canister(canister_id, version1_wasm).unwrap();
+
+    let version2_wat = r#"
+        (module
+            (memory 1)
+        )
+        "#;
+
+    let version2_wasm = wat::parse_str(version2_wat).unwrap();
+    let error = test
+        .upgrade_canister(canister_id, version2_wasm)
+        .unwrap_err();
+    assert_eq!(error.code(), ErrorCode::CanisterContractViolation);
+    assert_eq!(error.description(), "Missing upgrade option: Enhanced orthogonal persistence requires the `wasm_memory_persistence` upgrade option.");
+}
+
+#[test]
+fn fails_when_keeping_main_memory_without_enhanced_orthogonal_persistence() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let classical_persistence = r#"
+    (module
+        (memory 1)
+    )
+    "#;
+    let orthogonal_persistence = r#"
+    (module
+        (memory 1)
+        (@custom "icp:private enhanced-orthogonal-persistence" "")
+    )
+    "#;
+
+    for (version1_wat, version2_wat) in [
+        (classical_persistence, classical_persistence),
+        (orthogonal_persistence, classical_persistence),
+    ] {
+        let version1_wasm = wat::parse_str(version1_wat).unwrap();
+        let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
+        test.install_canister(canister_id, version1_wasm).unwrap();
+
+        let version2_wasm = wat::parse_str(version2_wat).unwrap();
+        let error = test
+            .upgrade_canister_v2(
+                canister_id,
+                version2_wasm,
+                CanisterUpgradeOptions {
+                    skip_pre_upgrade: None,
+                    wasm_memory_persistence: Some(WasmMemoryPersistence::Keep),
+                },
+            )
+            .unwrap_err();
+        assert_eq!(error.code(), ErrorCode::CanisterContractViolation);
+        assert_eq!(error.description(), "Invalid upgrade option: The `wasm_memory_persistence: opt Keep` upgrade option requires that the new canister module supports enhanced orthogonal persistence.");
+    }
+}
+
+#[test]
+fn test_upgrade_to_enhanced_orthogonal_persistence() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let version1_wat = r#"
+    (module
+        (memory 1)
+    )
+    "#;
+    let version1_wasm = wat::parse_str(version1_wat).unwrap();
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
+    test.install_canister(canister_id, version1_wasm).unwrap();
+
+    let version2_wat = r#"
+    (module
+        (memory 1)
+        (@custom "icp:private enhanced-orthogonal-persistence" "")
+    )
+    "#;
+    let version2_wasm = wat::parse_str(version2_wat).unwrap();
+    test.upgrade_canister_v2(
+        canister_id,
+        version2_wasm,
+        CanisterUpgradeOptions {
+            skip_pre_upgrade: None,
+            wasm_memory_persistence: Some(WasmMemoryPersistence::Keep),
+        },
+    )
+    .unwrap();
+}
+
 fn create_canisters(test: &mut ExecutionTest, canisters: usize) {
     for _ in 1..=canisters {
         test.canister_from_binary(MINIMAL_WASM.to_vec()).unwrap();
@@ -6241,6 +6463,7 @@ fn test_upgrade_with_skip_pre_upgrade_preserves_stable_memory() {
         UNIVERSAL_CANISTER_WASM.to_vec(),
         CanisterUpgradeOptions {
             skip_pre_upgrade: Some(true),
+            wasm_memory_persistence: None,
         },
     )
     .unwrap();
@@ -6260,6 +6483,7 @@ fn test_upgrade_with_skip_pre_upgrade_preserves_stable_memory() {
             UNIVERSAL_CANISTER_WASM.to_vec(),
             CanisterUpgradeOptions {
                 skip_pre_upgrade: None,
+                wasm_memory_persistence: None,
             },
         )
         .unwrap_err();

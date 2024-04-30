@@ -36,9 +36,17 @@ type SenderCanisterVersion =
 
 type InstallMode =
   [candidType|
-    variant {install : null; reinstall : null; upgrade : opt record {
+    variant {
+      install : null; 
+      reinstall : null; 
+      upgrade : opt record {
         skip_pre_upgrade : opt bool;
-      }}
+        wasm_memory_persistence : opt variant {
+          keep;
+          replace;
+        };
+      };
+    }
   |]
 
 type RunState =
