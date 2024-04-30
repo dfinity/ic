@@ -1,0 +1,59 @@
+table filter {
+  chain INPUT {
+    type filter hook input priority 0; policy drop;
+    iif lo accept
+    icmp type { echo-reply, destination-unreachable, source-quench, echo-request, time-exceeded, parameter-problem } accept
+    ct state invalid drop
+    ct state { established, related } accept
+    ip saddr { 0.0.0.0-255.255.255.255 } ct state new tcp dport { http, https } accept
+
+    ip saddr {5.5.5.5} ct state { new } tcp dport {1005} accept # node_gwp4o-eaaaa-aaaaa-aaaap-2ai
+ip saddr {7.7.7.7} ct state { new } tcp dport {1007} accept # api_boundary_nodes
+ip saddr {6.6.6.6} ct state { new } tcp dport {1006} accept # global
+    
+  }
+
+  chain FORWARD {
+    type filter hook forward priority 0; policy drop;
+  }
+
+  chain OUTPUT {
+    type filter hook output priority 0; policy drop;
+    oif "lo" accept
+    icmp type { echo-reply, destination-unreachable, source-quench, echo-request, time-exceeded, parameter-problem } accept
+    ct state invalid drop
+    ct state { established, related } accept
+    ct state new tcp dport { domain, http, https, 8080 } accept
+    ct state new udp dport { domain, ntp } accept
+  }
+}
+
+table ip6 filter {
+  chain INPUT {
+    type filter hook input priority 0; policy drop;
+    iif lo accept
+    icmpv6 type { destination-unreachable, packet-too-big, time-exceeded, parameter-problem, echo-request, echo-reply, nd-router-advert, nd-neighbor-solicit, nd-neighbor-advert } accept
+    ct state { invalid } drop
+    ct state { established, related } accept
+    ip6 saddr { ::-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff } ct state new tcp dport { http, https } accept
+
+    ip6 saddr {::ffff:5.5.5.5} ct state { new } tcp dport {1005} accept # node_gwp4o-eaaaa-aaaaa-aaaap-2ai
+ip6 saddr {::ffff:7.7.7.7} ct state { new } tcp dport {1007} accept # api_boundary_nodes
+ip6 saddr {::ffff:6.6.6.6} ct state { new } tcp dport {1006} accept # global
+    
+  }
+
+  chain FORWARD {
+    type filter hook forward priority 0; policy drop;
+  }
+
+  chain OUTPUT {
+    type filter hook output priority 0; policy drop;
+    oif "lo" accept
+    icmpv6 type { destination-unreachable, packet-too-big, time-exceeded, parameter-problem, echo-request, echo-reply, nd-router-solicit, nd-neighbor-solicit, nd-neighbor-advert } accept
+    ct state invalid drop
+    ct state { established, related } accept
+    ct state new tcp dport { domain, http, https, 8080 } accept
+    ct state new udp dport { domain, ntp } accept
+  }
+}

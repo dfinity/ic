@@ -10,12 +10,12 @@ use std::{
     path::{Path, PathBuf},
 };
 
-pub type OrchestratorResult<T> = Result<T, OrchestratorError>;
+pub(crate) type OrchestratorResult<T> = Result<T, OrchestratorError>;
 
 /// Enumerates the possible errors that Orchestrator may encounter
 #[derive(Debug)]
 #[allow(clippy::enum_variant_names)]
-pub enum OrchestratorError {
+pub(crate) enum OrchestratorError {
     /// The given node is not assigned to any Subnet
     NodeUnassignedError(NodeId, RegistryVersion),
 
@@ -62,11 +62,12 @@ pub enum OrchestratorError {
     /// Generic error while monitoring key changes
     ThresholdKeyMonitoringError(String),
 
-    /// SNP error while registering a SEV-SNP node
-    SnpError(String),
-
     /// Network configuration error
     NetworkConfigurationError(String),
+
+    /// An error occurred when trying to get the role (Api boundary node, replica, ...) of the node
+    /// at the given registry version.
+    RoleError(String, RegistryVersion),
 
     /// The given node is missing a domain name
     DomainNameMissingError(NodeId),
@@ -143,9 +144,15 @@ impl fmt::Display for OrchestratorError {
                 subnet_id, registry_version,
             ),
             OrchestratorError::UpgradeError(msg) => write!(f, "Failed to upgrade: {}", msg),
-            OrchestratorError::SnpError(msg) => write!(f, "SEV-SNP Error: {}", msg),
             OrchestratorError::NetworkConfigurationError(msg) => {
                 write!(f, "Failed to apply network configuration: {}", msg)
+            }
+            OrchestratorError::RoleError(msg, registry_version) => {
+                write!(
+                    f,
+                    "Failed to get the role of the node at the registry version {}: {}",
+                    registry_version, msg
+                )
             }
             OrchestratorError::DomainNameMissingError(node_id) => write!(
                 f,
@@ -153,6 +160,12 @@ impl fmt::Display for OrchestratorError {
                 node_id
             ),
         }
+    }
+}
+
+impl From<RegistryClientError> for OrchestratorError {
+    fn from(err: RegistryClientError) -> Self {
+        OrchestratorError::RegistryClientError(err)
     }
 }
 

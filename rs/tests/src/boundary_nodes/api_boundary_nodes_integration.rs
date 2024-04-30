@@ -193,15 +193,6 @@ pub fn decentralization_test(env: TestEnv) {
         "API BNs with expected domains are present in the state tree"
     );
 
-    // This is temporary until we complete the firewall for API BNs in the orchestrator
-    info!(log, "Opening the firewall ports ...");
-    for node in unassigned_nodes.iter() {
-        node.block_on_bash_script(&indoc::formatdoc! {r#"
-            sudo nft add rule ip6 filter INPUT tcp dport 443 accept
-        "#})
-            .expect("unable to open firewall port");
-    }
-
     info!(log, "Create an HTTP client for the two API BNs ...");
     let http_client = {
         let mut client_builder = ClientBuilder::new()

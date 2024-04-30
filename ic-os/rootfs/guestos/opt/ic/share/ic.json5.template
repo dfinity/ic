@@ -356,6 +356,85 @@ table ip6 filter {\n\
         max_simultaneous_connections_per_ip_address: 100,
     },
 
+    boundary_node_firewall: {
+        config_file: "/run/ic-node/nftables-ruleset/nftables.conf",
+        file_template: "table filter {\n\
+  chain INPUT {\n\
+    type filter hook input priority 0; policy drop;\n\
+    iif lo accept\n\
+    icmp type { echo-reply, destination-unreachable, source-quench, echo-request, time-exceeded, parameter-problem } accept\n\
+    ct state invalid drop\n\
+    ct state { established, related } accept\n\
+    ip saddr { 0.0.0.0-255.255.255.255 } ct state new tcp dport { http, https } accept\n\
+\n\
+    <<IPv4_TCP_RULES>>\n\
+    <<IPv4_UDP_RULES>>\n\
+  }\n\
+\n\
+  chain FORWARD {\n\
+    type filter hook forward priority 0; policy drop;\n\
+  }\n\
+\n\
+  chain OUTPUT {\n\
+    type filter hook output priority 0; policy drop;\n\
+    oif \"lo\" accept\n\
+    icmp type { echo-reply, destination-unreachable, source-quench, echo-request, time-exceeded, parameter-problem } accept\n\
+    ct state invalid drop\n\
+    ct state { established, related } accept\n\
+    ct state new tcp dport { domain, http, https, 8080 } accept\n\
+    ct state new udp dport { domain, ntp } accept\n\
+  }\n\
+}\n\
+\n\
+table ip6 filter {\n\
+  chain INPUT {\n\
+    type filter hook input priority 0; policy drop;\n\
+    iif lo accept\n\
+    icmpv6 type { destination-unreachable, packet-too-big, time-exceeded, parameter-problem, echo-request, echo-reply, nd-router-advert, nd-neighbor-solicit, nd-neighbor-advert } accept\n\
+    ct state { invalid } drop\n\
+    ct state { established, related } accept\n\
+    ip6 saddr { ::-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff } ct state new tcp dport { http, https } accept\n\
+\n\
+    <<IPv6_TCP_RULES>>\n\
+    <<IPv6_UDP_RULES>>\n\
+  }\n\
+\n\
+  chain FORWARD {\n\
+    type filter hook forward priority 0; policy drop;\n\
+  }\n\
+\n\
+  chain OUTPUT {\n\
+    type filter hook output priority 0; policy drop;\n\
+    oif \"lo\" accept\n\
+    icmpv6 type { destination-unreachable, packet-too-big, time-exceeded, parameter-problem, echo-request, echo-reply, nd-router-solicit, nd-neighbor-solicit, nd-neighbor-advert } accept\n\
+    ct state invalid drop\n\
+    ct state { established, related } accept\n\
+    ct state new tcp dport { domain, http, https, 8080 } accept\n\
+    ct state new udp dport { domain, ntp } accept\n\
+  }\n\
+}\n",
+        ipv4_tcp_rule_template: "ip saddr {<<IPv4_PREFIXES>>} ct state { new } tcp dport {<<PORTS>>} <<ACTION>> # <<COMMENT>>",
+        ipv4_udp_rule_template: "ip saddr {<<IPv4_PREFIXES>>} udp dport {<<PORTS>>} <<ACTION>> # <<COMMENT>>",
+        ipv6_tcp_rule_template: "ip6 saddr {<<IPv6_PREFIXES>>} ct state { new } tcp dport {<<PORTS>>} <<ACTION>> # <<COMMENT>>",
+        ipv6_udp_rule_template: "ip6 saddr {<<IPv6_PREFIXES>>} udp dport {<<PORTS>>} <<ACTION>> # <<COMMENT>>",
+        default_rules: [{
+            ipv4_prefixes: [],
+            ipv6_prefixes: [
+                "2a00:fb01:400::/56",
+                "2602:fb2b:120::/48",
+                "2607:f6f0:3004::/48",
+                "2602:fb2b:110::/48",
+                "2001:4d78:40d::/48",
+                "2602:fb2b:100::/48",
+                "2607:fb58:9005::/48",
+            ],
+            ports: [22, 7070, 9091, 9092, 9100, 19531],
+            action: 1,
+            comment: "Default rule from template",
+            direction: null,
+        }]
+    },
+
     registration: {
         nns_url: "{{ nns_url }}",
         nns_pub_key_pem: "/var/lib/ic/data/nns_public_key.pem",
