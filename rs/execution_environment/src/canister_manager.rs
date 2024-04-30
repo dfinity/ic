@@ -2533,9 +2533,18 @@ pub fn uninstall_canister(
                     // Cannot respond to system tasks. Nothing to do.
                 }
             }
+        }
 
-            // Mark the call context as responded to.
-            call_context.mark_responded();
+        // Mark all call contexts as responded to.
+        let call_context_ids = call_context_manager
+            .call_contexts()
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
+        for call_context_id in call_context_ids {
+            call_context_manager
+                .mark_responded(call_context_id)
+                .unwrap(); // Safe to do, we only just collected the IDs above.
         }
     }
 
