@@ -2733,12 +2733,10 @@ impl Governance {
         .wasm;
 
         use ic_icrc1_ledger::{LedgerArgument, UpgradeArgs};
-        let ledger_upgrade_arg =
-            candid::encode_one(Some(LedgerArgument::Upgrade(Some(UpgradeArgs {
-                transfer_fee: manage_ledger_parameters.transfer_fee.map(|tf| tf.into()),
-                ..UpgradeArgs::default()
-            }))))
-            .unwrap();
+        let ledger_upgrade_arg = candid::encode_one(Some(LedgerArgument::Upgrade(Some(
+            UpgradeArgs::from(manage_ledger_parameters.clone()),
+        ))))
+        .unwrap();
 
         self.upgrade_non_root_canister(
             ledger_canister_id,

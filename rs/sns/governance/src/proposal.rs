@@ -33,8 +33,8 @@ use ic_base_types::PrincipalId;
 use ic_canister_log::log;
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_common::{
-    denominations_to_tokens, i2d, ledger::compute_distribution_subaccount_bytes, E8,
-    SECONDS_PER_DAY,
+    denominations_to_tokens, i2d, ledger::compute_distribution_subaccount_bytes, ledger_validation,
+    E8, SECONDS_PER_DAY,
 };
 use ic_nervous_system_proto::pb::v1::Percentage;
 use ic_sns_governance_proposals_amount_total_limit::{
@@ -1504,16 +1504,35 @@ pub fn validate_and_render_manage_sns_metadata(
 fn validate_and_render_manage_ledger_parameters(
     manage_ledger_parameters: &ManageLedgerParameters,
 ) -> Result<String, String> {
-    let mut no_change = true;
+    let mut change = false;
     let mut render = "# Proposal to change ledger parameters:\n".to_string();
-    if let Some(transfer_fee) = &manage_ledger_parameters.transfer_fee {
-        render += &format!(
-            "# Set token transfer fee: {} token-quantums. \n",
-            transfer_fee
-        );
-        no_change = false;
+    let ManageLedgerParameters {
+        transfer_fee,
+        token_name,
+        token_symbol,
+        token_logo,
+    } = manage_ledger_parameters;
+
+    if let Some(transfer_fee) = transfer_fee {
+        render += &format!("# Set token transfer fee: {transfer_fee} token-quantums. \n",);
+        change = true;
     }
-    if no_change {
+    if let Some(token_name) = token_name {
+        ledger_validation::validate_token_name(token_name)?;
+        render += &format!("# Set token name: {token_name}. \n",);
+        change = true;
+    }
+    if let Some(token_symbol) = token_symbol {
+        ledger_validation::validate_token_symbol(token_symbol)?;
+        render += &format!("# Set token symbol: {token_symbol}. \n",);
+        change = true;
+    }
+    if let Some(token_logo) = token_logo {
+        ledger_validation::validate_token_logo(token_logo)?;
+        render += &format!("# Set token logo: {token_logo}. \n",);
+        change = true;
+    }
+    if !change {
         Err(String::from(
             "ManageLedgerParameters must change at least one value, all values are None",
         ))
@@ -4170,15 +4189,86 @@ Version {
     }
 
     #[test]
-    fn test_validate_and_render_manage_ledger_parameters() {
+    fn test_validate_and_render_manage_ledger_parameters_token_transfer_fee() {
         let new_fee = 751;
         let render = validate_and_render_manage_ledger_parameters(&ManageLedgerParameters {
             transfer_fee: Some(new_fee),
+            ..ManageLedgerParameters::default()
         })
         .unwrap();
         assert_eq!(
             render,
-            format!("# Proposal to change ledger parameters:\n# Set token transfer fee: {} token-quantums. \n", new_fee)
+            format!("# Proposal to change ledger parameters:\n# Set token transfer fee: {new_fee} token-quantums. \n")
+        );
+    }
+
+    #[test]
+    fn test_validate_and_render_manage_ledger_parameters_token_symbol() {
+        let new_symbol = "COOL".to_string();
+        let render = validate_and_render_manage_ledger_parameters(&ManageLedgerParameters {
+            token_symbol: Some(new_symbol.clone()),
+            ..ManageLedgerParameters::default()
+        })
+        .unwrap();
+        assert_eq!(
+            render,
+            format!(
+                "# Proposal to change ledger parameters:\n# Set token symbol: {new_symbol}. \n"
+            )
+        );
+    }
+
+    #[test]
+    fn test_validate_and_render_manage_ledger_parameters_token_name() {
+        let new_name = "coolcoin".to_string();
+        let render = validate_and_render_manage_ledger_parameters(&ManageLedgerParameters {
+            token_name: Some(new_name.clone()),
+            ..ManageLedgerParameters::default()
+        })
+        .unwrap();
+        assert_eq!(
+            render,
+            format!("# Proposal to change ledger parameters:\n# Set token name: {new_name}. \n")
+        );
+    }
+
+    #[test]
+    fn test_validate_and_render_manage_ledger_parameters_token_logo() {
+        let new_logo = "data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==".to_string();
+        let render = validate_and_render_manage_ledger_parameters(&ManageLedgerParameters {
+            token_logo: Some(new_logo.clone()),
+            ..ManageLedgerParameters::default()
+        })
+        .unwrap();
+        assert_eq!(
+            render,
+            format!("# Proposal to change ledger parameters:\n# Set token logo: {new_logo}. \n")
+        );
+    }
+
+    #[test]
+    fn test_validate_and_render_manage_ledger_paramaters() {
+        let new_fee = 751;
+        let new_symbol = "COOL".to_string();
+        let new_name = "coolcoin".to_string();
+        let new_logo = "data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==".to_string();
+        let render = validate_and_render_manage_ledger_parameters(&ManageLedgerParameters {
+            transfer_fee: Some(new_fee),
+            token_symbol: Some(new_symbol.clone()),
+            token_name: Some(new_name.clone()),
+            token_logo: Some(new_logo.clone()),
+        })
+        .unwrap();
+        assert_eq!(
+            render,
+            format!(
+                r#"# Proposal to change ledger parameters:
+# Set token transfer fee: {new_fee} token-quantums. 
+# Set token name: {new_name}. 
+# Set token symbol: {new_symbol}. 
+# Set token logo: {new_logo}. 
+"#
+            )
         );
     }
 

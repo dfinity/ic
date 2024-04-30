@@ -1434,6 +1434,29 @@ pub fn icrc1_transfer(
     }
 }
 
+pub fn icrc1_token_name(machine: &StateMachine, ledger_id: CanisterId) -> String {
+    let result = query(machine, ledger_id, "icrc1_name", Encode!(&()).unwrap()).unwrap();
+    Decode!(&result, String).unwrap()
+}
+
+pub fn icrc1_token_symbol(machine: &StateMachine, ledger_id: CanisterId) -> String {
+    let result = query(machine, ledger_id, "icrc1_symbol", Encode!(&()).unwrap()).unwrap();
+    Decode!(&result, String).unwrap()
+}
+
+pub fn icrc1_token_logo(machine: &StateMachine, ledger_id: CanisterId) -> Option<String> {
+    let result = query(machine, ledger_id, "icrc1_metadata", Encode!(&()).unwrap()).unwrap();
+    use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
+    Decode!(&result, Vec<(String, MetadataValue)>)
+        .unwrap()
+        .into_iter()
+        .find(|(key, _)| key == "icrc1:logo")
+        .map(|(_key, value)| match value {
+            MetadataValue::Text(s) => s,
+            m => panic!("Unexpected metadata value {m:?}"),
+        })
+}
+
 /// Claim a staked neuron for an SNS StateMachine test
 // Note: Should be moved to sns/test_helpers/state_test_helpers.rs when dependency graph is cleaned up
 pub fn sns_claim_staked_neuron(
