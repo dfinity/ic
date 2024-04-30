@@ -14,30 +14,23 @@ use ic_logger::{error, ReplicaLogger};
 use ic_management_canister_types::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterLog, LogVisibility,
 };
-use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
-    state::canister_state_bits::v1 as pb,
-};
-
+use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
+use ic_protobuf::state::canister_state_bits::v1 as pb;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::{
-    messages::{
-        CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask, Ingress, RejectContext,
-        Request, RequestOrResponse, Response, StopCanisterContext,
-    },
-    nominal_cycles::NominalCycles,
-    CanisterId, CanisterTimer, Cycles, MemoryAllocation, NumBytes, PrincipalId, Time,
+use ic_types::messages::{
+    CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask, Ingress, RejectContext,
+    Request, RequestOrResponse, Response, StopCanisterContext,
 };
+use ic_types::nominal_cycles::NominalCycles;
+use ic_types::{CanisterId, CanisterTimer, Cycles, MemoryAllocation, NumBytes, PrincipalId, Time};
 use lazy_static::lazy_static;
 use maplit::btreeset;
 use prometheus::IntCounter;
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::BTreeMap,
-    convert::{TryFrom, TryInto},
-};
-use std::{collections::BTreeSet, sync::Arc};
-use std::{collections::VecDeque, str::FromStr};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::convert::{TryFrom, TryInto};
+use std::str::FromStr;
+use std::sync::Arc;
 use strum_macros::EnumIter;
 
 lazy_static! {
@@ -448,46 +441,46 @@ pub struct PausedExecutionId(pub u64);
 /// inputs.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ExecutionTask {
-    // A heartbeat task exists only within an execution round. It is never
-    // serialized.
+    /// A heartbeat task exists only within an execution round. It is never
+    /// serialized.
     Heartbeat,
 
     /// Canister global timer task.
     /// The task exists only within an execution round, it never gets serialized.
     GlobalTimer,
 
-    // A paused execution task exists only within an epoch (between
-    // checkpoints). It is never serialized, and it turns into `AbortedExecution`
-    // before the checkpoint or when there are too many long-running executions.
+    /// A paused execution task exists only within an epoch (between
+    /// checkpoints). It is never serialized, and it turns into `AbortedExecution`
+    /// before the checkpoint or when there are too many long-running executions.
     PausedExecution(PausedExecutionId),
 
-    // A paused `install_code` task exists only within an epoch (between
-    // checkpoints). It is never serialized and turns into `AbortedInstallCode`
-    // before the checkpoint.
+    /// A paused `install_code` task exists only within an epoch (between
+    /// checkpoints). It is never serialized and turns into `AbortedInstallCode`
+    /// before the checkpoint.
     PausedInstallCode(PausedExecutionId),
 
-    // Any paused execution that doesn't finish until the next checkpoint
-    // becomes an aborted execution that should be retried after the checkpoint.
-    // A paused execution can also be aborted to keep the memory usage low if
-    // there are too many long-running executions.
+    /// Any paused execution that doesn't finish until the next checkpoint
+    /// becomes an aborted execution that should be retried after the checkpoint.
+    /// A paused execution can also be aborted to keep the memory usage low if
+    /// there are too many long-running executions.
     AbortedExecution {
         input: CanisterMessageOrTask,
-        // The execution cost that has already been charged from the canister.
-        // Retried execution does not have to pay for it again.
+        /// The execution cost that has already been charged from the canister.
+        /// Retried execution does not have to pay for it again.
         prepaid_execution_cycles: Cycles,
     },
 
-    // Any paused `install_code` that doesn't finish until the next checkpoint
-    // becomes an aborted `install_code` that should be retried after the
-    // checkpoint. A paused execution can also be aborted to keep the memory
-    // usage low if there are too many long-running executions.
+    /// Any paused `install_code` that doesn't finish until the next checkpoint
+    /// becomes an aborted `install_code` that should be retried after the
+    /// checkpoint. A paused execution can also be aborted to keep the memory
+    /// usage low if there are too many long-running executions.
     AbortedInstallCode {
         message: CanisterCall,
-        // The call id used by the subnet to identify long running install
-        // code messages.
+        /// The call ID used by the subnet to identify long running install
+        /// code messages.
         call_id: InstallCodeCallId,
-        // The execution cost that has already been charged from the canister.
-        // Retried execution does not have to pay for it again.
+        /// The execution cost that has already been charged from the canister.
+        /// Retried execution does not have to pay for it again.
         prepaid_execution_cycles: Cycles,
     },
 }
@@ -872,19 +865,6 @@ impl SystemState {
     /// Sets the user-specified upper limit on `reserved_balance()`.
     pub fn set_reserved_balance_limit(&mut self, limit: Cycles) {
         self.reserved_balance_limit = Some(limit);
-    }
-
-    /// Initializes `reserved_balance_limit` to the given default value if it
-    /// was not already set.
-    pub fn initialize_reserved_balance_limit_if_empty(&mut self, default_limit: Cycles) {
-        if self.reserved_balance_limit.is_none() {
-            self.reserved_balance_limit = Some(default_limit);
-        }
-    }
-
-    /// Sets `reserved_balance_limit` to `None` for testing.
-    pub fn clear_reserved_balance_limit_for_testing(&mut self) {
-        self.reserved_balance_limit = None;
     }
 
     /// Get new local snapshot ID.

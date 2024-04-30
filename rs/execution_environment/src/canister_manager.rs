@@ -2487,7 +2487,7 @@ pub fn uninstall_canister(
         // Mark all call contexts as deleted and prepare reject responses.
         // Note that callbacks will be unregistered at a later point once they are
         // received.
-        for call_context in call_context_manager.call_contexts_mut().values_mut() {
+        for call_context in call_context_manager.call_contexts_mut() {
             // Mark the call context as deleted.
             call_context.mark_deleted();
 
