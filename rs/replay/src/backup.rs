@@ -1,3 +1,7 @@
+use crate::{
+    player::ReplayError,
+    validator::{InvalidArtifact, ReplayValidator},
+};
 use ic_artifact_pool::consensus_pool::ConsensusPoolImpl;
 use ic_config::artifact_pool::BACKUP_GROUP_SIZE;
 use ic_consensus::consensus::dkg_key_manager::DkgKeyManager;
@@ -28,9 +32,6 @@ use std::{
     path::{Path, PathBuf},
     sync::Arc,
 };
-
-use crate::player::ReplayError;
-use crate::validator::{InvalidArtifact, ReplayValidator};
 
 // A set of backup artifacts corresponding to a single height.
 pub(super) struct HeightArtifacts {

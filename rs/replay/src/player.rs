@@ -1,7 +1,7 @@
-use crate::backup::{cup_file_name, rename_file};
-use crate::ingress::IngressWithPrinter;
 use crate::{
     backup,
+    backup::{cup_file_name, rename_file},
+    ingress::IngressWithPrinter,
     validator::{InvalidArtifact, ReplayValidator},
 };
 use ic_artifact_pool::{
@@ -10,20 +10,21 @@ use ic_artifact_pool::{
 };
 use ic_config::{artifact_pool::ArtifactPoolConfig, subnet_config::SubnetConfig, Config};
 use ic_consensus::{certification::VerifierImpl, consensus::batch_delivery::deliver_batches};
-use ic_consensus_utils::membership::Membership;
-use ic_consensus_utils::pool_reader::PoolReader;
-use ic_consensus_utils::{crypto_hashable_to_seed, lookup_replica_version};
+use ic_consensus_utils::{
+    crypto_hashable_to_seed, lookup_replica_version, membership::Membership,
+    pool_reader::PoolReader,
+};
 use ic_crypto_for_verification_only::CryptoComponentForVerificationOnly;
 use ic_crypto_test_utils_ni_dkg::{
     dummy_initial_dkg_transcript_with_master_key, sign_message, SecretKeyBytes,
 };
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::ExecutionServices;
-use ic_interfaces::time_source::SysTimeSource;
 use ic_interfaces::{
     certification::CertificationPool,
     execution_environment::{IngressHistoryReader, QueryExecutionError, QueryExecutionService},
     messaging::{MessageRouting, MessageRoutingError},
+    time_source::SysTimeSource,
 };
 use ic_interfaces_registry::{RegistryClient, RegistryTransportRecord};
 use ic_interfaces_state_manager::{
@@ -33,13 +34,12 @@ use ic_logger::{new_replica_logger_from_config, ReplicaLogger};
 use ic_messaging::MessageRoutingImpl;
 use ic_metrics::MetricsRegistry;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
-use ic_protobuf::registry::{
-    replica_version::v1::BlessedReplicaVersions, subnet::v1::SubnetRecord,
+use ic_protobuf::{
+    registry::{replica_version::v1::BlessedReplicaVersions, subnet::v1::SubnetRecord},
+    types::v1 as pb,
 };
-use ic_protobuf::types::v1 as pb;
 use ic_registry_client::client::RegistryClientImpl;
-use ic_registry_client_helpers::deserialize_registry_value;
-use ic_registry_client_helpers::subnet::SubnetRegistry;
+use ic_registry_client_helpers::{deserialize_registry_value, subnet::SubnetRegistry};
 use ic_registry_keys::{make_blessed_replica_versions_key, make_subnet_record_key};
 use ic_registry_local_store::{
     Changelog, ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreWriter,
@@ -52,44 +52,36 @@ use ic_registry_transport::{
     serialize_get_value_request,
 };
 use ic_state_manager::StateManagerImpl;
-use ic_types::batch::{BatchMessages, BlockmakerMetrics};
-use ic_types::consensus::certification::CertificationShare;
-use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet};
-use ic_types::malicious_flags::MaliciousFlags;
 use ic_types::{
-    batch::Batch,
-    consensus::{CatchUpPackage, HasHeight, HasVersion},
-    ingress::{IngressState, IngressStatus, WasmResult},
-    messages::UserQuery,
-    time::current_time,
-    CryptoHashOfState, Height, PrincipalId, Randomness, RegistryVersion, ReplicaVersion, SubnetId,
-    Time, UserId,
-};
-use ic_types::{
+    batch::{Batch, BatchMessages, BlockmakerMetrics},
     consensus::{
-        certification::{Certification, CertificationContent},
-        CatchUpContentProtobufBytes,
+        certification::{Certification, CertificationContent, CertificationShare},
+        CatchUpContentProtobufBytes, CatchUpPackage, HasHeight, HasVersion,
     },
-    crypto::{CombinedThresholdSig, CombinedThresholdSigOf, Signable, Signed},
-    messages::CertificateDelegation,
+    crypto::{
+        threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
+        CombinedThresholdSig, CombinedThresholdSigOf, Signable, Signed,
+    },
+    ingress::{IngressState, IngressStatus, WasmResult},
+    malicious_flags::MaliciousFlags,
+    messages::{CertificateDelegation, UserQuery},
     signature::ThresholdSignature,
+    time::current_time,
+    CryptoHashOfPartialState, CryptoHashOfState, Height, NodeId, PrincipalId, Randomness,
+    RegistryVersion, ReplicaVersion, SubnetId, Time, UserId,
 };
-use ic_types::{CryptoHashOfPartialState, NodeId};
-use rand::rngs::StdRng;
-use rand::SeedableRng;
+use rand::{rngs::StdRng, SeedableRng};
 use serde::{Deserialize, Serialize};
 use slog_async::AsyncGuard;
-use std::collections::{HashMap, HashSet};
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, HashMap, HashSet},
     path::{Path, PathBuf},
     sync::Arc,
     time::Duration,
 };
 use tempfile::TempDir;
 use tokio::runtime::Runtime;
-use tower::buffer::Buffer as TowerBuffer;
-use tower::ServiceExt;
+use tower::{buffer::Buffer as TowerBuffer, ServiceExt};
 
 // Amount of time we are waiting for execution, after batches are delivered.
 const WAIT_DURATION: Duration = Duration::from_millis(500);
