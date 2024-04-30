@@ -30,9 +30,7 @@ use ic_registry_transport::{
 use ic_types::{messages::SignedIngress, CanisterId, PrincipalId, SubnetId, Time};
 use icp_ledger::{AccountIdentifier, Memo, SendArgs, Tokens};
 use prost::Message;
-use std::convert::TryFrom;
-use std::str::FromStr;
-use std::time::Duration;
+use std::{convert::TryFrom, str::FromStr, time::Duration};
 
 pub struct IngressWithPrinter {
     pub ingress: SignedIngress,
