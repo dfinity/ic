@@ -428,6 +428,8 @@ message ManageDappCanisterSettings {
   optional uint64 reserved_cycles_limit = 5;
 
   optional LogVisibility log_visibility = 6;
+
+  optional uint64 wasm_memory_limit = 7;
 }
 
 // A proposal is the immutable input of a proposal submission.

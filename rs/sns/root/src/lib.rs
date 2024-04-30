@@ -160,6 +160,7 @@ impl ValidatedManageDappCanisterSettingsRequest {
             freezing_threshold: request.freezing_threshold.map(Nat::from),
             reserved_cycles_limit: request.reserved_cycles_limit.map(Nat::from),
             log_visibility: LogVisibility::try_from(request.log_visibility()).ok(),
+            wasm_memory_limit: request.wasm_memory_limit.map(Nat::from),
         };
         let invalid_dapp_canister_ids = request
             .canister_ids
@@ -2230,6 +2231,7 @@ mod tests {
             freezing_threshold: Some(100_000),
             reserved_cycles_limit: Some(1_000_000_000_000),
             log_visibility: Some(crate::pb::v1::LogVisibility::Controllers as i32),
+            wasm_memory_limit: Some(1_000_000_000),
         };
         let validated_request = ValidatedManageDappCanisterSettingsRequest::try_from(
             request,
@@ -2254,6 +2256,7 @@ mod tests {
                     freezing_threshold: Some(Nat::from(100_000u64)),
                     reserved_cycles_limit: Some(Nat::from(1_000_000_000_000u64)),
                     log_visibility: Some(LogVisibility::Controllers),
+                    wasm_memory_limit: Some(Nat::from(1_000_000_000u64)),
                 },
             }
         );
@@ -2272,6 +2275,7 @@ mod tests {
             freezing_threshold: Some(100_000),
             reserved_cycles_limit: Some(1_000_000_000_000),
             log_visibility: Some(crate::pb::v1::LogVisibility::Controllers as i32),
+            wasm_memory_limit: Some(1_000_000_000),
         };
         let failure_reason = ValidatedManageDappCanisterSettingsRequest::try_from(
             request,

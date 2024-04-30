@@ -32,6 +32,7 @@ pub struct CanisterSettings {
     pub freezing_threshold: Option<candid::Nat>,
     pub reserved_cycles_limit: Option<candid::Nat>,
     pub log_visibility: Option<LogVisibility>,
+    pub wasm_memory_limit: Option<candid::Nat>,
 }
 
 /// A wrapper call to the management canister `update_settings` API.
