@@ -133,8 +133,8 @@ impl CallContext {
     }
 
     /// Returns the deadline of the originating call if it's a `CanisterUpdate`;
-    /// `NO_DEADLINE` for all other origins.
-    pub fn deadline(&self) -> CoarseTime {
+    /// `None` for all other origins.
+    pub fn deadline(&self) -> Option<CoarseTime> {
         self.call_origin.deadline()
     }
 }
@@ -209,7 +209,7 @@ pub enum CallContextAction {
 /// registering and unregistering of a callback for subsequent outgoing calls and
 /// for closing call contexts.
 ///
-/// In every method, if the provided callback or call context id was not found
+/// In every method, if the provided callback or call context ID was not found
 /// inside the call context manager, we panic. Since this logic is executed inside
 /// the "trusted" part of the execution (after the consensus), any such error would
 /// indicate an unexpected and inconsistent system state.
@@ -239,7 +239,7 @@ pub enum CallOrigin {
 }
 
 impl CallOrigin {
-    /// Returns the principal id associated with this call origin.
+    /// Returns the principal ID associated with this call origin.
     pub fn get_principal(&self) -> PrincipalId {
         match self {
             CallOrigin::Ingress(user_id, _) => user_id.get(),
@@ -251,14 +251,14 @@ impl CallOrigin {
     }
 
     /// Returns the deadline of the originating call if it's a `CanisterUpdate`;
-    /// `NO_DEADLINE` for all other origins.
-    pub fn deadline(&self) -> CoarseTime {
+    /// `None` for all other origins.
+    pub fn deadline(&self) -> Option<CoarseTime> {
         match self {
-            CallOrigin::CanisterUpdate(_, _, deadline) => *deadline,
+            CallOrigin::CanisterUpdate(_, _, deadline) => Some(*deadline),
             CallOrigin::Ingress(..)
             | CallOrigin::Query(..)
             | CallOrigin::CanisterQuery(..)
-            | CallOrigin::SystemTask => NO_DEADLINE,
+            | CallOrigin::SystemTask => None,
         }
     }
 }
@@ -367,8 +367,8 @@ impl CallContextManager {
         &self.call_contexts
     }
 
-    pub fn call_contexts_mut(&mut self) -> &mut BTreeMap<CallContextId, CallContext> {
-        &mut self.call_contexts
+    pub fn call_contexts_mut(&mut self) -> impl Iterator<Item = &mut CallContext> {
+        self.call_contexts.values_mut()
     }
 
     /// Returns a reference to the call context with `call_context_id`.
@@ -458,7 +458,7 @@ impl CallContextManager {
         let context = self
             .call_contexts
             .get_mut(&call_context_id)
-            .unwrap_or_else(|| panic!("no call context for id={} found", call_context_id));
+            .unwrap_or_else(|| panic!("no call context with ID={}", call_context_id));
         // Update call context `instructions_executed += instructions_used`
         context.instructions_executed = context
             .instructions_executed
@@ -558,8 +558,8 @@ impl CallContextManager {
         self.callbacks.remove(&callback_id)
     }
 
-    /// Returns the call origin, which is either the message id of the ingress
-    /// message or the canister id of the canister that sent the initial
+    /// Returns the call origin, which is either the message ID of the ingress
+    /// message or the canister ID of the canister that sent the initial
     /// request.
     pub fn call_origin(&self, call_context_id: CallContextId) -> Option<CallOrigin> {
         self.call_contexts
@@ -574,6 +574,7 @@ impl CallContextManager {
             .map(|cc| cc.responded)
     }
 
+    /// Returns the number of outstanding calls for a given call context.
     pub fn outstanding_calls(&self, call_context_id: CallContextId) -> usize {
         self.callbacks
             .iter()
