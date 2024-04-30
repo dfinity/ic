@@ -1084,3 +1084,101 @@ fn test_logging_trap_over_dts() {
         ])
     );
 }
+
+#[test]
+fn test_logging_of_long_running_dts_over_checkpoint() {
+    // Test canister logging long and short messages with DTS over a checkpoint.
+    let number_of_slices = 5;
+    let checkpoint_slice_idx = 3;
+    assert_lt!(1, checkpoint_slice_idx); // This is due to using `send_ingress` 2 times for sending long and short messages.
+    assert_lt!(checkpoint_slice_idx, number_of_slices);
+    let instructions_per_slice = MAX_INSTRUCTIONS_PER_SLICE.get() as i64;
+    let (env, canister_id, controller) = setup_with_controller(
+        FlagStatus::Enabled,
+        wat_canister()
+            .update(
+                "test_long",
+                wat_fn()
+                    .debug_print(b"long_slice_0")
+                    .wait(instructions_per_slice)
+                    .debug_print(b"long_slice_1")
+                    .wait(instructions_per_slice)
+                    .debug_print(b"long_slice_2")
+                    .wait(instructions_per_slice)
+                    .debug_print(b"long_slice_3")
+                    .wait(instructions_per_slice)
+                    .debug_print(b"long_slice_4"),
+            )
+            .update("test_short", wat_fn().debug_print(b"short"))
+            .build(),
+    );
+
+    // Round #A0: slice #0 is processed inside `send_ingress`.
+    let _msg_id = env.send_ingress(
+        PrincipalId::new_anonymous(),
+        canister_id,
+        "test_long",
+        vec![],
+    );
+    env.advance_time(TIME_STEP);
+    // Round #A1: slice #1 is processed inside `send_ingress` and short message is added to the queue.
+    let _msg_id = env.send_ingress(
+        PrincipalId::new_anonymous(),
+        canister_id,
+        "test_short",
+        vec![],
+    );
+    env.advance_time(TIME_STEP);
+    // Round #A2 and further: process slices until the checkpoint.
+    for i in 2..number_of_slices {
+        if i == checkpoint_slice_idx {
+            // Execute checkpoint round.
+            env.set_checkpoints_enabled(true);
+            env.tick();
+            env.set_checkpoints_enabled(false);
+            env.advance_time(TIME_STEP);
+            break;
+        } else {
+            env.tick();
+            env.advance_time(TIME_STEP);
+        }
+    }
+    // Expect no log messages right after the checkpoint round, since the message did not finish.
+    let result = fetch_canister_logs(&env, controller, canister_id);
+    assert_eq!(
+        FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
+        canister_log_response(vec![])
+    );
+
+    // Rounds #B0 and further: Afther the checkpoint process the message again through all the slices.
+    let timestamp_after_checkpoint = system_time_to_nanos(env.time_of_next_round());
+    for i in 0..number_of_slices {
+        let result = fetch_canister_logs(&env, controller, canister_id);
+        assert_eq!(
+            FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
+            canister_log_response(vec![]),
+            "Expect no log messages after round #{}",
+            i
+        );
+        env.tick();
+        env.advance_time(TIME_STEP);
+    }
+    // Round to process short message.
+    let timestamp_short = system_time_to_nanos(env.time_of_next_round());
+    env.tick();
+    env.advance_time(TIME_STEP);
+
+    // Expect all the log messages after the last slice is processed with the timestamp of the first slice.
+    let result = fetch_canister_logs(&env, controller, canister_id);
+    assert_eq!(
+        FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
+        canister_log_response(vec![
+            (0, timestamp_after_checkpoint, b"long_slice_0".to_vec()),
+            (1, timestamp_after_checkpoint, b"long_slice_1".to_vec()),
+            (2, timestamp_after_checkpoint, b"long_slice_2".to_vec()),
+            (3, timestamp_after_checkpoint, b"long_slice_3".to_vec()),
+            (4, timestamp_after_checkpoint, b"long_slice_4".to_vec()),
+            (5, timestamp_short, b"short".to_vec())
+        ])
+    );
+}
