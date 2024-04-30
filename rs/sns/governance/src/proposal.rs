@@ -1581,6 +1581,10 @@ fn validate_and_render_manage_dapp_canister_settings(
         );
         no_change = false;
     }
+    if let Some(wasm_memory_limit) = &manage_dapp_canister_settings.wasm_memory_limit {
+        render += &format!("# Set Wasm memory limit to: {}\n", wasm_memory_limit);
+        no_change = false;
+    }
 
     if no_change {
         Err(String::from(
@@ -4204,6 +4208,7 @@ Version {
             freezing_threshold: Some(1_000),
             reserved_cycles_limit: Some(1_000_000_000_000),
             log_visibility: Some(LogVisibility::Public as i32),
+            wasm_memory_limit: Some(1_000_000_000),
         })
         .unwrap();
     }
@@ -4247,6 +4252,7 @@ Version {
                 freezing_threshold: Some(1_000),
                 reserved_cycles_limit: Some(1_000_000_000_000),
                 log_visibility: Some(LogVisibility::Public as i32),
+                wasm_memory_limit: Some(1_000_000_000),
             })
             .unwrap();
         assert_eq!(
@@ -4259,7 +4265,8 @@ Version {
              # Set memory allocation to: 1073741824 bytes\n\
              # Set freezing threshold to: 1000 seconds\n\
              # Set reserved cycles limit to: 1000000000000 \n\
-             # Set log visibility to: Public \n"
+             # Set log visibility to: Public \n\
+             # Set Wasm memory limit to: 1000000000\n"
         );
     }
 

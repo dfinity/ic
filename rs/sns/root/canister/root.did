@@ -73,6 +73,7 @@ type ManageDappCanisterSettingsRequest = record {
   canister_ids : vec principal;
   reserved_cycles_limit : opt nat64;
   log_visibility : opt int32;
+  wasm_memory_limit : opt nat64;
   memory_allocation : opt nat64;
   compute_allocation : opt nat64;
 };
