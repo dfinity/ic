@@ -485,6 +485,7 @@ pub struct DeregisterDappCanisters {
     #[prost(message, repeated, tag = "2")]
     pub new_controllers: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
 }
+/// A proposal to manage the settings of one or more dapp canisters.
 #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -492,6 +493,8 @@ pub struct ManageDappCanisterSettings {
     /// The canister IDs of the dapp canisters to be modified.
     #[prost(message, repeated, tag = "1")]
     pub canister_ids: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
+    /// Below are fields under CanisterSettings defined at
+    /// <https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-candid.>
     #[prost(uint64, optional, tag = "2")]
     pub compute_allocation: ::core::option::Option<u64>,
     #[prost(uint64, optional, tag = "3")]
