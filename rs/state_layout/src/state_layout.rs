@@ -1951,11 +1951,17 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             .map(|c| c.into())
             .unwrap_or_else(Cycles::zero);
 
-        let task_queue = value
+        let task_queue: Vec<_> = value
             .task_queue
             .into_iter()
             .map(|v| v.try_into())
             .collect::<Result<_, _>>()?;
+        if task_queue.len() > 1 {
+            return Err(ProxyDecodeError::Other(format!(
+                "Expecting at most one task queue entry. Found {:?}",
+                task_queue
+            )));
+        }
 
         let mut consumed_cycles_since_replica_started_by_use_cases = BTreeMap::new();
         for x in value
