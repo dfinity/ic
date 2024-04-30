@@ -3,6 +3,8 @@
 
 use crate::{messages::CallContextId, time::CoarseTime, Cycles};
 use ic_base_types::{CanisterId, PrincipalId};
+#[cfg(test)]
+use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::{canister_state_bits::v1 as pb, queues::v1::Cycles as PbCycles};
 use ic_protobuf::types::v1 as pb_types;
@@ -15,6 +17,7 @@ use strum_macros::EnumIter;
 
 /// Represents the types of methods that a Wasm module can export.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum WasmMethod {
     /// An exported update method along with its name.
     ///
@@ -127,6 +130,7 @@ impl TryFrom<pb::WasmMethod> for WasmMethod {
 
 /// The various system methods available to canisters.
 #[derive(Clone, Debug, PartialEq, Eq, EnumIter, PartialOrd, Ord, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum SystemMethod {
     /// A system method for initializing a Wasm module.
     CanisterStart = 1,
@@ -381,6 +385,8 @@ pub enum FuncRef {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::exhaustive::ExhaustiveSet;
+    use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_protobuf::state::canister_state_bits::v1 as pb;
     use strum::IntoEnumIterator;
 
@@ -402,5 +408,15 @@ mod tests {
             SystemMethod::iter().map(|x| x as i32).collect::<Vec<i32>>(),
             [1, 2, 3, 4, 5, 6, 7]
         );
+    }
+
+    #[test]
+    fn wasm_method_proto_round_trip() {
+        for method in WasmMethod::exhaustive_set(&mut reproducible_rng()) {
+            let encoded = pb::WasmMethod::from(&method);
+            let round_trip = WasmMethod::try_from(encoded).unwrap();
+
+            assert_eq!(method, round_trip);
+        }
     }
 }
