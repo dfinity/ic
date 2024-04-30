@@ -493,9 +493,6 @@ pub struct AvailableQuadruple {
     pub quadruple_id: u64,
     #[prost(message, optional, tag = "2")]
     pub quadruple: ::core::option::Option<PreSignatureQuadrupleRef>,
-    /// Deprecated. Use `quadruple.key_id` instead.
-    #[prost(message, optional, tag = "3")]
-    pub key_id: ::core::option::Option<super::super::registry::crypto::v1::EcdsaKeyId>,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -505,9 +502,6 @@ pub struct QuadrupleInProgress {
     pub quadruple_id: u64,
     #[prost(message, optional, tag = "2")]
     pub quadruple: ::core::option::Option<QuadrupleInCreation>,
-    /// Deprecated. Use `quadruple.key_id` instead.
-    #[prost(message, optional, tag = "3")]
-    pub key_id: ::core::option::Option<super::super::registry::crypto::v1::EcdsaKeyId>,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -555,8 +549,6 @@ pub struct RequestId {
     pub quadruple_id: u64,
     #[prost(uint64, tag = "3")]
     pub height: u64,
-    #[prost(message, optional, tag = "4")]
-    pub key_id: ::core::option::Option<super::super::registry::crypto::v1::EcdsaKeyId>,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]

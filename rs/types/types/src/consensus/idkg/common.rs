@@ -11,14 +11,13 @@ use crate::{Height, RegistryVersion};
 use ic_base_types::NodeId;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_management_canister_types::EcdsaKeyId;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::registry::subnet::v1 as subnet_pb;
 use ic_protobuf::types::v1 as pb;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::convert::{AsMut, AsRef, TryFrom};
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
 
 use super::{
     ecdsa::{PreSignatureQuadrupleRef, QuadrupleInCreation},
@@ -49,7 +48,6 @@ impl From<RequestId> for pb::RequestId {
     fn from(request_id: RequestId) -> Self {
         Self {
             quadruple_id: request_id.quadruple_id.id(),
-            key_id: request_id.quadruple_id.key_id().map(Into::into),
             pseudo_random_id: request_id.pseudo_random_id.to_vec(),
             height: request_id.height.get(),
         }
@@ -68,14 +66,8 @@ impl TryFrom<&pb::RequestId> for RequestId {
             let mut pseudo_random_id = [0; 32];
             pseudo_random_id.copy_from_slice(&request_id.pseudo_random_id);
 
-            let key_id = request_id
-                .key_id
-                .clone()
-                .map(EcdsaKeyId::try_from)
-                .transpose()?;
-
             Ok(Self {
-                quadruple_id: QuadrupleId(request_id.quadruple_id, key_id),
+                quadruple_id: QuadrupleId(request_id.quadruple_id),
                 pseudo_random_id,
                 height: Height::from(request_id.height),
             })
@@ -83,30 +75,17 @@ impl TryFrom<&pb::RequestId> for RequestId {
     }
 }
 
-#[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
-// TODO(kpop): remove the second field
-pub struct QuadrupleId(pub(crate) u64, pub(crate) Option<EcdsaKeyId>);
+pub struct QuadrupleId(pub(crate) u64);
 
 impl QuadrupleId {
     pub fn new(id: u64) -> Self {
-        Self(id, None)
+        Self(id)
     }
 
     pub fn id(&self) -> u64 {
         self.0
-    }
-
-    pub fn key_id(&self) -> Option<&EcdsaKeyId> {
-        self.1.as_ref()
-    }
-}
-
-// Since `QuadrupleId.0` is globally unique across all ecdsa key ids (this is guaranteed by the
-// `EcdsaUIDGenerator`), we use only this field to compute the hash of the `QuadrupleId`.
-impl Hash for QuadrupleId {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.id().hash(state);
     }
 }
 

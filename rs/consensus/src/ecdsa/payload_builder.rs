@@ -483,7 +483,7 @@ pub(crate) fn create_data_payload(
         {
             ecdsa_payload_metrics.payload_metrics_inc(
                 "key_transcripts_created",
-                ecdsa_payload.key_transcript.key_id(),
+                Some(ecdsa_payload.key_transcript.key_id()),
             );
         }
 

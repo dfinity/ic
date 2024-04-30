@@ -50,17 +50,17 @@ message OngoingSignature {
 }
 
 message AvailableQuadruple {
+  reserved 3;
+  reserved "key_id";
   uint64 quadruple_id = 1;
   PreSignatureQuadrupleRef quadruple = 2;
-  // Deprecated. Use `quadruple.key_id` instead.
-  registry.crypto.v1.EcdsaKeyId key_id = 3;
 }
 
 message QuadrupleInProgress {
+  reserved 3;
+  reserved "key_id";
   uint64 quadruple_id = 1;
   QuadrupleInCreation quadruple = 2;
-  // Deprecated. Use `quadruple.key_id` instead.
-  registry.crypto.v1.EcdsaKeyId key_id = 3;
 }
 
 message AvailablePreSignature {
@@ -86,10 +86,11 @@ message XnetReshareAgreement {
 }
 
 message RequestId {
+  reserved 4;
+  reserved "key_id";
   bytes pseudo_random_id = 1;
   uint64 quadruple_id = 2;
   uint64 height = 3;
-  registry.crypto.v1.EcdsaKeyId key_id = 4;
 }
 
 message TranscriptRef {
