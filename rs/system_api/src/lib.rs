@@ -53,8 +53,9 @@ const WASM_NATIVE_STABLE_MEMORY_ERROR: &str = "Stable memory cannot be accessed 
 
 const MAX_32_BIT_STABLE_MEMORY_IN_PAGES: u64 = 64 * 1024; // 4GiB
 
-/// `MAX_CALL_TIMEOUT` in seconds.
-const MAX_CALL_TIMEOUT_SECONDS: u32 = 300;
+/// Upper bound on `timeout` when using calls with
+/// best-effort responses represented in seconds.
+pub const MAX_CALL_TIMEOUT_SECONDS: u32 = 300;
 
 // This macro is used in system calls for tracing.
 macro_rules! trace_syscall {

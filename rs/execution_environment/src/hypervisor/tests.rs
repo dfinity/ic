@@ -21,6 +21,7 @@ use ic_replicated_state::{
 };
 use ic_replicated_state::{CanisterStatus, NumWasmPages, PageMap};
 use ic_sys::PAGE_SIZE;
+use ic_system_api::MAX_CALL_TIMEOUT_SECONDS;
 use ic_test_utilities::assert_utils::assert_balance_equals;
 use ic_test_utilities_execution_environment::{
     assert_empty_reply, check_ingress_status, get_reply, wasm_compilation_cost,
@@ -5105,19 +5106,18 @@ fn call_with_best_effort_response_fails_when_timeout_is_set() {
     assert_eq!(err.code(), ErrorCode::CanisterContractViolation);
 }
 
-#[test]
-fn call_with_best_effort_response_timeout_is_set_properly() {
-    let start_time_seconds = 200;
-
+fn call_with_best_effort_response_test_helper(
+    start_time_seconds: u32,
+    timeout_seconds: u32,
+) -> CoarseTime {
     let mut test = ExecutionTestBuilder::new()
         .with_best_effort_responses(FlagStatus::Enabled)
         .with_manual_execution()
-        .with_time(Time::from_secs_since_unix_epoch(start_time_seconds).unwrap())
+        .with_time(Time::from_secs_since_unix_epoch(start_time_seconds as u64).unwrap())
         .build();
 
     let canister_sender = test.universal_canister().unwrap();
     let canister_receiver = test.universal_canister().unwrap();
-    let timeout_seconds = 100;
 
     let call_with_best_effort_response = wasm()
         .call_simple_with_cycles_and_best_effort_response(
@@ -5144,12 +5144,31 @@ fn call_with_best_effort_response_timeout_is_set_properly() {
         .pop_input()
         .unwrap()
     {
-        CanisterMessage::Request(request) => assert_eq!(
-            request.deadline,
-            CoarseTime::from_secs_since_unix_epoch(start_time_seconds as u32 + timeout_seconds)
-        ),
+        CanisterMessage::Request(request) => request.deadline,
         _ => panic!("Unexpected result."),
-    };
+    }
+}
+
+#[test]
+fn call_with_best_effort_response_timeout_is_set_properly() {
+    let start_time_seconds = 200;
+    let timeout_seconds = 100;
+    assert_eq!(
+        call_with_best_effort_response_test_helper(start_time_seconds, timeout_seconds),
+        CoarseTime::from_secs_since_unix_epoch(start_time_seconds + timeout_seconds)
+    );
+}
+
+#[test]
+fn call_with_best_effort_response_timeout_is_bounded() {
+    let start_time_seconds = 200;
+    let requested_timeout_seconds = MAX_CALL_TIMEOUT_SECONDS + 100;
+    let bounded_timeout_seconds = MAX_CALL_TIMEOUT_SECONDS;
+    // Verify that timeout is silently bounded by the `MAX_CALL_TIMEOUT_SECONDS`.
+    assert_eq!(
+        call_with_best_effort_response_test_helper(start_time_seconds, requested_timeout_seconds),
+        CoarseTime::from_secs_since_unix_epoch(start_time_seconds + bounded_timeout_seconds)
+    );
 }
 
 fn display_page_map(page_map: PageMap, page_range: std::ops::Range<u64>) -> String {
