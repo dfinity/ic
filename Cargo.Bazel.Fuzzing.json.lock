@@ -1,5 +1,5 @@
 {
-  "checksum": "d9620661a03a92af7e873e38a8050721fa5a6d55d00a8fb23f243b72d25ce843",
+  "checksum": "1876be7ffb224de9618d66c5bac27a229cf0e9a14e5c046fae73e91ee1dad4df",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -17170,6 +17170,10 @@
               "alias": "hyper_rustls_0_26_0"
             },
             {
+              "id": "hyper-socks2 0.8.0",
+              "target": "hyper_socks2"
+            },
+            {
               "id": "hyper-util 0.1.3",
               "target": "hyper_util"
             },
@@ -26842,6 +26846,96 @@
       ],
       "license_file": "LICENSE"
     },
+    "hyper-socks2 0.8.0": {
+      "name": "hyper-socks2",
+      "version": "0.8.0",
+      "package_url": "https://github.com/ark0f/hyper-socks2",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/hyper-socks2/0.8.0/download",
+          "sha256": "cc38166fc2732d450e9372388d269eb38ff0b75a3cfb4c542e65b2f6893629c4"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "hyper_socks2",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": false,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "hyper_socks2",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "hyper-rustls",
+            "rustls",
+            "rustls-native-certs",
+            "rusttls"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "async-socks5 0.5.1",
+              "target": "async_socks5"
+            },
+            {
+              "id": "futures 0.3.30",
+              "target": "futures"
+            },
+            {
+              "id": "http 0.2.9",
+              "target": "http"
+            },
+            {
+              "id": "hyper 0.14.27",
+              "target": "hyper"
+            },
+            {
+              "id": "hyper-rustls 0.24.2",
+              "target": "hyper_rustls"
+            },
+            {
+              "id": "rustls 0.21.10",
+              "target": "rustls",
+              "alias": "rusttls"
+            },
+            {
+              "id": "rustls-native-certs 0.6.3",
+              "target": "rustls_native_certs"
+            },
+            {
+              "id": "thiserror 1.0.57",
+              "target": "thiserror"
+            },
+            {
+              "id": "tokio 1.37.0",
+              "target": "tokio"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.8.0"
+      },
+      "license": "Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE.md"
+    },
     "hyper-timeout 0.4.1": {
       "name": "hyper-timeout",
       "version": "0.4.1",
@@ -34598,7 +34692,7 @@
           "selects": {
             "cfg(unix)": [
               {
-                "id": "openssl-sys 0.9.93",
+                "id": "openssl-sys 0.9.102",
                 "target": "openssl_sys"
               }
             ]
@@ -34641,7 +34735,7 @@
           "selects": {
             "cfg(unix)": [
               {
-                "id": "openssl-sys 0.9.93",
+                "id": "openssl-sys 0.9.102",
                 "target": "openssl_sys"
               }
             ]
@@ -40898,14 +40992,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "openssl-sys 0.9.93": {
+    "openssl-sys 0.9.102": {
       "name": "openssl-sys",
-      "version": "0.9.93",
+      "version": "0.9.102",
       "package_url": "https://github.com/sfackler/rust-openssl",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/openssl-sys/0.9.93/download",
-          "sha256": "db4d56a4c0478783083cfafcc42493dd4a981d41669da64b4572a2a089b51b1d"
+          "url": "https://static.crates.io/crates/openssl-sys/0.9.102/download",
+          "sha256": "c597637d56fbc83893a35eb0dd04b2b8e7a50c91e64e9493e398b5df4fb45fa2"
         }
       },
       "targets": [
@@ -40946,14 +41040,14 @@
               "target": "libc"
             },
             {
-              "id": "openssl-sys 0.9.93",
+              "id": "openssl-sys 0.9.102",
               "target": "build_script_main"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.9.93"
+        "version": "0.9.102"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -51127,9 +51221,7 @@
             "rustls-pki-types",
             "rustls-tls",
             "rustls-tls-native-roots",
-            "rustls-tls-webpki-roots",
-            "socks",
-            "stream"
+            "rustls-tls-webpki-roots"
           ],
           "selects": {
             "aarch64-apple-darwin": [
@@ -51356,14 +51448,6 @@
                 "target": "tokio_rustls"
               },
               {
-                "id": "tokio-socks 0.5.1",
-                "target": "tokio_socks"
-              },
-              {
-                "id": "tokio-util 0.7.10",
-                "target": "tokio_util"
-              },
-              {
                 "id": "webpki-roots 0.26.1",
                 "target": "webpki_roots"
               }
@@ -51380,10 +51464,6 @@
               {
                 "id": "wasm-bindgen-futures 0.4.37",
                 "target": "wasm_bindgen_futures"
-              },
-              {
-                "id": "wasm-streams 0.4.0",
-                "target": "wasm_streams"
               },
               {
                 "id": "web-sys 0.3.64",
@@ -76250,6 +76330,7 @@
     "hyper 1.2.0",
     "hyper-rustls 0.24.2",
     "hyper-rustls 0.26.0",
+    "hyper-socks2 0.8.0",
     "hyper-util 0.1.3",
     "hyperlocal-next 0.9.0",
     "ic-agent 0.34.0",

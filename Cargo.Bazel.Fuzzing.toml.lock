@@ -2947,6 +2947,7 @@ dependencies = [
  "hyper 1.2.0",
  "hyper-rustls 0.24.2",
  "hyper-rustls 0.26.0",
+ "hyper-socks2",
  "hyper-util",
  "hyperlocal-next",
  "ic-agent",
@@ -4636,6 +4637,23 @@ dependencies = [
  "tokio-rustls 0.25.0",
  "tower-service",
  "webpki-roots 0.26.1",
+]
+
+[[package]]
+name = "hyper-socks2"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cc38166fc2732d450e9372388d269eb38ff0b75a3cfb4c542e65b2f6893629c4"
+dependencies = [
+ "async-socks5",
+ "futures",
+ "http 0.2.9",
+ "hyper 0.14.27",
+ "hyper-rustls 0.24.2",
+ "rustls 0.21.10",
+ "rustls-native-certs 0.6.3",
+ "thiserror",
+ "tokio",
 ]
 
 [[package]]
@@ -6959,9 +6977,9 @@ checksum = "ff011a302c396a5197692431fc1948019154afc178baf7d8e37367442a4601cf"
 
 [[package]]
 name = "openssl-sys"
-version = "0.9.93"
+version = "0.9.102"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "db4d56a4c0478783083cfafcc42493dd4a981d41669da64b4572a2a089b51b1d"
+checksum = "c597637d56fbc83893a35eb0dd04b2b8e7a50c91e64e9493e398b5df4fb45fa2"
 dependencies = [
  "cc",
  "libc",
@@ -8684,13 +8702,10 @@ dependencies = [
  "sync_wrapper",
  "tokio",
  "tokio-rustls 0.25.0",
- "tokio-socks",
- "tokio-util",
  "tower-service",
  "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",
- "wasm-streams",
  "web-sys",
  "webpki-roots 0.26.1",
  "winreg 0.52.0",
