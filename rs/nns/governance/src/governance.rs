@@ -398,23 +398,13 @@ impl NnsFunction {
     }
 
     fn is_obsolete(&self) -> bool {
-        matches!(self, NnsFunction::UpdateAllowedPrincipals)
-    }
-
-    #[cfg(feature = "test")]
-    fn is_disabled(&self) -> bool {
-        false
-    }
-
-    #[cfg(not(feature = "test"))]
-    fn is_disabled(&self) -> bool {
         matches!(
             self,
-            NnsFunction::DeployGuestosToSomeApiBoundaryNodes
-                | NnsFunction::DeployGuestosToAllUnassignedNodes
-                | NnsFunction::UpdateSshReadonlyAccessForAllUnassignedNodes
-                | NnsFunction::ReviseElectedHostosVersions
-                | NnsFunction::DeployHostosToSomeNodes
+            NnsFunction::UpdateAllowedPrincipals
+                | NnsFunction::UpdateApiBoundaryNodesVersion
+                | NnsFunction::UpdateUnassignedNodesConfig
+                | NnsFunction::UpdateElectedHostosVersions
+                | NnsFunction::UpdateNodesHostosVersion
         )
     }
 }
@@ -4855,13 +4845,6 @@ impl Governance {
         if nns_function.is_obsolete() {
             return Err(invalid_proposal_error(format!(
                 "{} proposal is obsolete",
-                nns_function.as_str_name()
-            )));
-        }
-
-        if nns_function.is_disabled() {
-            return Err(invalid_proposal_error(format!(
-                "{} proposal is disabled",
                 nns_function.as_str_name()
             )));
         }

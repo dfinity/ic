@@ -1451,47 +1451,33 @@ fn test_validate_execute_nns_function() {
             },
             "NNS_FUNCTION_UPDATE_ALLOWED_PRINCIPALS proposal is obsolete".to_string(),
         ),
-        #[cfg(not(feature = "test"))]
         (
             ExecuteNnsFunction {
-                nns_function: NnsFunction::DeployGuestosToSomeApiBoundaryNodes as i32,
+                nns_function: NnsFunction::UpdateApiBoundaryNodesVersion as i32,
                 payload: vec![],
             },
-            "NNS_FUNCTION_DEPLOY_GUESTOS_TO_SOME_API_BOUNDARY_NODES proposal is disabled"
-                .to_string(),
+            "NNS_FUNCTION_UPDATE_API_BOUNDARY_NODES_VERSION proposal is obsolete".to_string(),
         ),
-        #[cfg(not(feature = "test"))]
         (
             ExecuteNnsFunction {
-                nns_function: NnsFunction::DeployGuestosToAllUnassignedNodes as i32,
+                nns_function: NnsFunction::UpdateUnassignedNodesConfig as i32,
                 payload: vec![],
             },
-            "NNS_FUNCTION_DEPLOY_GUESTOS_TO_ALL_UNASSIGNED_NODES proposal is disabled".to_string(),
+            "NNS_FUNCTION_UPDATE_UNASSIGNED_NODES_CONFIG proposal is obsolete".to_string(),
         ),
-        #[cfg(not(feature = "test"))]
         (
             ExecuteNnsFunction {
-                nns_function: NnsFunction::UpdateSshReadonlyAccessForAllUnassignedNodes as i32,
+                nns_function: NnsFunction::UpdateElectedHostosVersions as i32,
                 payload: vec![],
             },
-            "NNS_FUNCTION_UPDATE_SSH_READONLY_ACCESS_FOR_ALL_UNASSIGNED_NODES proposal is disabled"
-                .to_string(),
+            "NNS_FUNCTION_UPDATE_ELECTED_HOSTOS_VERSIONS proposal is obsolete".to_string(),
         ),
-        #[cfg(not(feature = "test"))]
         (
             ExecuteNnsFunction {
-                nns_function: NnsFunction::ReviseElectedHostosVersions as i32,
+                nns_function: NnsFunction::UpdateNodesHostosVersion as i32,
                 payload: vec![],
             },
-            "NNS_FUNCTION_REVISE_ELECTED_HOSTOS_VERSIONS proposal is disabled".to_string(),
-        ),
-        #[cfg(not(feature = "test"))]
-        (
-            ExecuteNnsFunction {
-                nns_function: NnsFunction::DeployHostosToSomeNodes as i32,
-                payload: vec![],
-            },
-            "NNS_FUNCTION_DEPLOY_HOSTOS_TO_SOME_NODES proposal is disabled".to_string(),
+            "NNS_FUNCTION_UPDATE_NODES_HOSTOS_VERSION proposal is obsolete".to_string(),
         ),
     ];
 
@@ -1535,27 +1521,22 @@ fn test_validate_execute_nns_function() {
             })
             .unwrap(),
         },
-        #[cfg(feature = "test")]
         ExecuteNnsFunction {
             nns_function: NnsFunction::DeployGuestosToSomeApiBoundaryNodes as i32,
             payload: vec![],
         },
-        #[cfg(feature = "test")]
         ExecuteNnsFunction {
             nns_function: NnsFunction::DeployGuestosToAllUnassignedNodes as i32,
             payload: vec![],
         },
-        #[cfg(feature = "test")]
         ExecuteNnsFunction {
             nns_function: NnsFunction::UpdateSshReadonlyAccessForAllUnassignedNodes as i32,
             payload: vec![],
         },
-        #[cfg(feature = "test")]
         ExecuteNnsFunction {
             nns_function: NnsFunction::ReviseElectedHostosVersions as i32,
             payload: vec![],
         },
-        #[cfg(feature = "test")]
         ExecuteNnsFunction {
             nns_function: NnsFunction::DeployHostosToSomeNodes as i32,
             payload: vec![],
