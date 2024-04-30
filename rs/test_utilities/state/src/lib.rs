@@ -335,12 +335,14 @@ impl CanisterStateBuilder {
                 call_context.metadata().clone(),
             );
 
+            if call_context.has_responded() {
+                call_context_manager
+                    .mark_responded(call_context_id)
+                    .unwrap();
+            }
             let call_context_in_call_context_manager = call_context_manager
                 .call_context_mut(call_context_id)
                 .unwrap();
-            if call_context.has_responded() {
-                call_context_in_call_context_manager.mark_responded();
-            }
             if call_context.is_deleted() {
                 call_context_in_call_context_manager.mark_deleted();
             }

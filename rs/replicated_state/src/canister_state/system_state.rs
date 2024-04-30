@@ -1188,6 +1188,18 @@ impl SystemState {
 
     /// Returns the memory currently in use by the `SystemState`
     /// for canister messages.
+    ///
+    /// TODO(MR-572): Change this to:
+    ///
+    /// ++ N0: callbacks
+    /// -- N1: responses in input queues
+    /// -- 1:  if first item in task queue is a paused / aborted `Response`
+    /// ++ N2: requests in input queues
+    /// ++ N3: non-responded call contexts
+    /// ++ 1: if first item in task queue is an aborted `Request`
+    ///
+    ///  + S1: size of responses in output queues
+    ///  + S2: size of responses in input queues
     pub fn message_memory_usage(&self) -> NumBytes {
         (self.queues.memory_usage() as u64).into()
     }
