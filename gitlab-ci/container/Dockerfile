@@ -122,9 +122,9 @@ RUN cargo install cargo-audit --version ${CARGO_AUDIT_VERSION}
 
 # Add buf
 ARG BUF_BIN="/usr/local/bin/buf"
-ARG BUF_VERSION="1.28.1"
+ARG BUF_VERSION="1.31.0"
 RUN curl -sSL "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-$(uname -s)-$(uname -m)" -o "${BUF_BIN}" && \
-    echo "855a055c8615a03ee93219f287bd7f652586c6b6b8d2b01079782cba54ee6033  ${BUF_BIN}" | shasum -a 256 -c - && \
+    echo "a4589eea3afa5f8cda01c3830cdc0112ddd08c32f8b1d45007291fae9fc9bbf4  ${BUF_BIN}" | shasum -a 256 -c - && \
     chmod +x "${BUF_BIN}"
 
 # Add zshrc generated from zsh-newuser-install (option 2)

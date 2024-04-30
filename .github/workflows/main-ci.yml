@@ -34,7 +34,7 @@ jobs:
     runs-on:
       labels: bazel-runner-large
     container:
-      image: dfinity/ic-build:e3ca31c9688e13fd6caec30a0cec5d9a2b3ff424db4f4243ebab4c30f9f5e869
+      image: dfinity/ic-build:96177205e9f7896a8b5501abfb1cc6fc5f584f2b5cf99f06ba922e05597ad7d9
     timeout-minutes: 90
     if: ${{ vars.RUN_CI == 'true' }} # needed to avoid running on public dfinity org until published
     outputs:
@@ -88,7 +88,7 @@ jobs:
     runs-on:
       labels: bazel-runner-large
     container:
-      image: dfinity/ic-build:e3ca31c9688e13fd6caec30a0cec5d9a2b3ff424db4f4243ebab4c30f9f5e869
+      image: dfinity/ic-build:96177205e9f7896a8b5501abfb1cc6fc5f584f2b5cf99f06ba922e05597ad7d9
     timeout-minutes: 90
     if: ${{ vars.RUN_CI == 'true' }} # needed to avoid running on public dfinity org until published
     steps:
@@ -126,7 +126,7 @@ jobs:
     runs-on:
       labels: bazel-runner-large
     container:
-      image: dfinity/ic-build:e3ca31c9688e13fd6caec30a0cec5d9a2b3ff424db4f4243ebab4c30f9f5e869
+      image: dfinity/ic-build:96177205e9f7896a8b5501abfb1cc6fc5f584f2b5cf99f06ba922e05597ad7d9
     timeout-minutes: 90
     if: ${{ vars.RUN_CI == 'true' }} # needed to avoid running on public dfinity org until published
     name: Bazel-Config-Check-All-Rebuild
@@ -216,7 +216,7 @@ jobs:
     runs-on:
       labels: bazel-runner-small
     container:
-      image: dfinity/ic-build:e3ca31c9688e13fd6caec30a0cec5d9a2b3ff424db4f4243ebab4c30f9f5e869
+      image: dfinity/ic-build:96177205e9f7896a8b5501abfb1cc6fc5f584f2b5cf99f06ba922e05597ad7d9
     timeout-minutes: 30
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
@@ -241,7 +241,7 @@ jobs:
     runs-on:
       labels: bazel-runner-small
     container:
-      image: dfinity/ic-build:e3ca31c9688e13fd6caec30a0cec5d9a2b3ff424db4f4243ebab4c30f9f5e869
+      image: dfinity/ic-build:96177205e9f7896a8b5501abfb1cc6fc5f584f2b5cf99f06ba922e05597ad7d9
     timeout-minutes: 30
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
@@ -283,7 +283,7 @@ jobs:
     runs-on:
       labels: bazel-runner-large
     container:
-      image: dfinity/ic-build:e3ca31c9688e13fd6caec30a0cec5d9a2b3ff424db4f4243ebab4c30f9f5e869
+      image: dfinity/ic-build:96177205e9f7896a8b5501abfb1cc6fc5f584f2b5cf99f06ba922e05597ad7d9
     timeout-minutes: 90
     if: ${{ vars.RUN_CI == 'true' }} # needed to avoid running on public dfinity org until published
     outputs:
@@ -333,7 +333,7 @@ jobs:
     runs-on:
       labels: default-runner
     container:
-      image: dfinity/ic-build:e3ca31c9688e13fd6caec30a0cec5d9a2b3ff424db4f4243ebab4c30f9f5e869
+      image: dfinity/ic-build:96177205e9f7896a8b5501abfb1cc6fc5f584f2b5cf99f06ba922e05597ad7d9
     timeout-minutes: 30
     needs: [build-ic, bazel-test-all]
     if: ${{ needs.build-ic.outputs.artifacts_produced == 'true' && needs.bazel-test-all.outputs.artifacts_produced == 'true' }}
@@ -389,7 +389,7 @@ jobs:
     runs-on:
       labels: bazel-runner-small
     container:
-      image: dfinity/ic-build:e3ca31c9688e13fd6caec30a0cec5d9a2b3ff424db4f4243ebab4c30f9f5e869
+      image: dfinity/ic-build:96177205e9f7896a8b5501abfb1cc6fc5f584f2b5cf99f06ba922e05597ad7d9
     timeout-minutes: 30
     if: ${{ vars.RUN_CI == 'true' }}
     steps:
@@ -419,7 +419,7 @@ jobs:
     runs-on:
       labels: bazel-runner-small
     container:
-      image: dfinity/ic-build:e3ca31c9688e13fd6caec30a0cec5d9a2b3ff424db4f4243ebab4c30f9f5e869
+      image: dfinity/ic-build:96177205e9f7896a8b5501abfb1cc6fc5f584f2b5cf99f06ba922e05597ad7d9
     if: ${{ vars.RUN_CI == 'true' }}
     timeout-minutes: 60
     steps:
