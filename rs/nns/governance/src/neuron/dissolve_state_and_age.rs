@@ -223,6 +223,84 @@ impl DissolveStateAndAge {
             }
         }
     }
+
+    /// Starts dissolving if the neuron is non-dissolving. Otherwise it is a no-op.
+    pub fn start_dissolving(self, now_seconds: u64) -> Self {
+        match self {
+            Self::NotDissolving {
+                dissolve_delay_seconds,
+                aging_since_timestamp_seconds: _,
+            } => Self::DissolvingOrDissolved {
+                when_dissolved_timestamp_seconds: now_seconds
+                    .saturating_add(dissolve_delay_seconds),
+            },
+            _ => self,
+        }
+    }
+
+    /// Stops dissolving if the neuron is dissolving. Otherwise it is a no-op.
+    pub fn stop_dissolving(self, now_seconds: u64) -> Self {
+        // The operation only applies to dissolving neurons, so we get the dissolve timestamp, and
+        // returns `self` otherwise as it is a no-op.
+        let when_dissolved_timestamp_seconds = match self {
+            Self::DissolvingOrDissolved {
+                when_dissolved_timestamp_seconds,
+            } => when_dissolved_timestamp_seconds,
+            Self::LegacyDissolvingOrDissolved {
+                when_dissolved_timestamp_seconds,
+                aging_since_timestamp_seconds: _,
+            } => when_dissolved_timestamp_seconds,
+            _ => return self,
+        };
+
+        let dissolve_delay_seconds = when_dissolved_timestamp_seconds.saturating_sub(now_seconds);
+        if dissolve_delay_seconds > 0 {
+            Self::NotDissolving {
+                dissolve_delay_seconds,
+                aging_since_timestamp_seconds: now_seconds,
+            }
+        } else {
+            // Note that we could have fixed the legacy case here, but it's counter-intuitive to
+            // modify the state for a no-op. We will clean up the legacy cases soon.
+            self
+        }
+    }
+
+    // Adjusts the neuron age while respecting the invariant that dissolving/dissolved should not
+    // have age.
+    pub fn adjust_age(self, new_aging_since_timestamp_seconds: u64) -> Self {
+        match self {
+            // The is the only meaningful case where we adjust the age.
+            Self::NotDissolving {
+                dissolve_delay_seconds,
+                aging_since_timestamp_seconds: _,
+            } => Self::NotDissolving {
+                dissolve_delay_seconds,
+                aging_since_timestamp_seconds: new_aging_since_timestamp_seconds,
+            },
+            // This is a no-op.
+            Self::DissolvingOrDissolved { .. } => self,
+            // Restores the invariant - dissolving/dissolved neurons should not have an age.
+            Self::LegacyDissolvingOrDissolved {
+                when_dissolved_timestamp_seconds,
+                aging_since_timestamp_seconds: _,
+            } => Self::DissolvingOrDissolved {
+                when_dissolved_timestamp_seconds,
+            },
+            // We could have restored the invariant here, but we try to keep the previous behavior,
+            // and clean up the legacy cases soon.
+            Self::LegacyDissolved {
+                aging_since_timestamp_seconds: _,
+            } => Self::LegacyDissolved {
+                aging_since_timestamp_seconds: new_aging_since_timestamp_seconds,
+            },
+            Self::LegacyNoneDissolveState {
+                aging_since_timestamp_seconds: _,
+            } => Self::LegacyNoneDissolveState {
+                aging_since_timestamp_seconds: new_aging_since_timestamp_seconds,
+            },
+        }
+    }
 }
 
 #[cfg(test)]
@@ -632,5 +710,182 @@ mod tests {
                 },
             );
         }
+    }
+
+    #[test]
+    fn test_start_dissolving() {
+        let not_dissolving = DissolveStateAndAge::NotDissolving {
+            dissolve_delay_seconds: 1000,
+            aging_since_timestamp_seconds: NOW - 100,
+        };
+
+        let dissolving = not_dissolving.start_dissolving(NOW);
+
+        assert_eq!(
+            dissolving,
+            DissolveStateAndAge::DissolvingOrDissolved {
+                when_dissolved_timestamp_seconds: NOW + 1000
+            }
+        );
+    }
+
+    #[test]
+    fn test_start_dissolving_no_op() {
+        let test_cases = vec![
+            DissolveStateAndAge::DissolvingOrDissolved {
+                when_dissolved_timestamp_seconds: NOW - 1,
+            },
+            DissolveStateAndAge::DissolvingOrDissolved {
+                when_dissolved_timestamp_seconds: NOW + 1,
+            },
+            DissolveStateAndAge::LegacyDissolvingOrDissolved {
+                when_dissolved_timestamp_seconds: NOW - 1,
+                aging_since_timestamp_seconds: NOW - 1000,
+            },
+            DissolveStateAndAge::LegacyDissolvingOrDissolved {
+                when_dissolved_timestamp_seconds: NOW + 1,
+                aging_since_timestamp_seconds: NOW - 1000,
+            },
+            DissolveStateAndAge::LegacyDissolved {
+                aging_since_timestamp_seconds: NOW - 1000,
+            },
+            DissolveStateAndAge::LegacyNoneDissolveState {
+                aging_since_timestamp_seconds: NOW - 1000,
+            },
+        ];
+
+        for test_case in test_cases {
+            // The operation should be a no-op.
+            assert_eq!(test_case.start_dissolving(NOW), test_case);
+        }
+    }
+
+    #[test]
+    fn test_stop_dissolving() {
+        let dissolving_cases = vec![
+            DissolveStateAndAge::DissolvingOrDissolved {
+                when_dissolved_timestamp_seconds: NOW + 1000,
+            },
+            DissolveStateAndAge::LegacyDissolvingOrDissolved {
+                when_dissolved_timestamp_seconds: NOW + 1000,
+                aging_since_timestamp_seconds: NOW - 1000,
+            },
+        ];
+
+        for dissolving in dissolving_cases {
+            let not_dissolving = dissolving.stop_dissolving(NOW);
+
+            assert_eq!(
+                not_dissolving,
+                DissolveStateAndAge::NotDissolving {
+                    dissolve_delay_seconds: 1000,
+                    aging_since_timestamp_seconds: NOW
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn test_stop_dissolving_no_op() {
+        let test_cases = vec![
+            DissolveStateAndAge::NotDissolving {
+                dissolve_delay_seconds: 1000,
+                aging_since_timestamp_seconds: NOW - 100,
+            },
+            // Cannot stop dissolving when it's dissolved.
+            DissolveStateAndAge::DissolvingOrDissolved {
+                when_dissolved_timestamp_seconds: NOW - 1,
+            },
+            DissolveStateAndAge::LegacyDissolvingOrDissolved {
+                when_dissolved_timestamp_seconds: NOW - 1,
+                aging_since_timestamp_seconds: NOW - 1000,
+            },
+            DissolveStateAndAge::LegacyDissolved {
+                aging_since_timestamp_seconds: NOW - 1000,
+            },
+            DissolveStateAndAge::LegacyNoneDissolveState {
+                aging_since_timestamp_seconds: NOW - 1000,
+            },
+        ];
+
+        for test_case in test_cases {
+            // The operation should be a no-op.
+            assert_eq!(test_case.stop_dissolving(NOW), test_case);
+        }
+    }
+
+    #[test]
+    fn test_adjust_age() {
+        let test_cases = vec![
+            (
+                DissolveStateAndAge::NotDissolving {
+                    dissolve_delay_seconds: 1000,
+                    aging_since_timestamp_seconds: NOW - 100,
+                },
+                DissolveStateAndAge::NotDissolving {
+                    dissolve_delay_seconds: 1000,
+                    aging_since_timestamp_seconds: NOW - 200,
+                },
+            ),
+            // Ideally we don't want to allow having age for neurons that are considered dissolved,
+            // but we keep the existing behavior, and will rely on migration to clean up the legacy
+            // states.
+            (
+                DissolveStateAndAge::LegacyDissolved {
+                    aging_since_timestamp_seconds: NOW - 100,
+                },
+                DissolveStateAndAge::LegacyDissolved {
+                    aging_since_timestamp_seconds: NOW - 200,
+                },
+            ),
+            (
+                DissolveStateAndAge::LegacyNoneDissolveState {
+                    aging_since_timestamp_seconds: NOW - 100,
+                },
+                DissolveStateAndAge::LegacyNoneDissolveState {
+                    aging_since_timestamp_seconds: NOW - 200,
+                },
+            ),
+        ];
+
+        for (original, expected) in test_cases {
+            let adjusted = original.adjust_age(NOW - 200);
+
+            assert_eq!(adjusted, expected);
+        }
+    }
+
+    #[test]
+    fn test_adjust_age_no_op() {
+        let test_cases = vec![
+            DissolveStateAndAge::DissolvingOrDissolved {
+                when_dissolved_timestamp_seconds: NOW - 1,
+            },
+            DissolveStateAndAge::DissolvingOrDissolved {
+                when_dissolved_timestamp_seconds: NOW + 1,
+            },
+        ];
+
+        for test_case in test_cases {
+            // The operation should be a no-op.
+            assert_eq!(test_case.adjust_age(NOW - 100), test_case);
+        }
+    }
+
+    #[test]
+    fn test_adjust_age_restore_invariant() {
+        let dissolving = DissolveStateAndAge::LegacyDissolvingOrDissolved {
+            when_dissolved_timestamp_seconds: NOW + 1000,
+            aging_since_timestamp_seconds: NOW - 1000,
+        };
+
+        let adjusted_dissolving = dissolving.adjust_age(NOW - 200);
+
+        assert_eq!(
+            adjusted_dissolving,
+            DissolveStateAndAge::DissolvingOrDissolved {
+                when_dissolved_timestamp_seconds: NOW + 1000
+            }
+        );
     }
 }
