@@ -1,5 +1,5 @@
 [package]
-name = "update-bazel-versions"
+name = "sync-with-released-nevous-system-wasms"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [[bin]]
-name = "update-bazel-versions"
+name = "sync-with-released-nevous-system-wasms"
 path = "src/main.rs"
 
 [dependencies]
