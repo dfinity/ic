@@ -26,7 +26,7 @@ DEPENDENCIES = [
 ]
 
 rust_binary(
-    name = "update-bazel-versions",
+    name = "sync-with-released-nevous-system-wasms",
     srcs = [
         "src/main.rs",
         "src/sns_wasm_utils.rs",

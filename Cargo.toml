@@ -177,7 +177,7 @@ members = [
     "rs/nervous_system/root",
     "rs/nervous_system/runtime",
     "rs/nervous_system/string",
-    "rs/nervous_system/tools/update-bazel-versions",
+    "rs/nervous_system/tools/sync-with-released-nevous-system-wasms",
     "rs/nns/constants",
     "rs/nns/common",
     "rs/nns/common/protobuf_generator",
