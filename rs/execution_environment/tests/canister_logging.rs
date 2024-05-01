@@ -655,6 +655,57 @@ fn test_canister_log_preserved_after_disabling_and_enabling_again() {
 }
 
 #[test]
+fn test_deleting_logs_on_reinstall() {
+    // Test logs are deleted on canister reinstall.
+    let (env, canister_id, controller) = setup_with_controller(
+        FlagStatus::Enabled,
+        wat_canister()
+            .update("test_1", wat_fn().debug_print(b"test_1"))
+            .build(),
+    );
+    env.advance_time(TIME_STEP);
+
+    // Prepopulate log.
+    let timestamp_1 = system_time_to_nanos(env.time_of_next_round());
+    let _ = env.execute_ingress(canister_id, "test_1", vec![]);
+    env.advance_time(TIME_STEP);
+
+    // Expect the log record from cansiter version #1.
+    let result = fetch_canister_logs(&env, controller, canister_id);
+    assert_eq!(
+        FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
+        canister_log_response(vec![(0, timestamp_1, b"test_1".to_vec())])
+    );
+
+    // Reinstall canister to version #2.
+    env.install_wasm_in_mode(
+        canister_id,
+        CanisterInstallMode::Reinstall,
+        wat::parse_str(
+            wat_canister()
+                .update("test_2", wat_fn().debug_print(b"test_2"))
+                .build(),
+        )
+        .unwrap(),
+        vec![],
+    )
+    .unwrap();
+    env.advance_time(TIME_STEP);
+
+    // Populate log after reinstall.
+    let timestamp_2 = system_time_to_nanos(env.time_of_next_round());
+    let _ = env.execute_ingress(canister_id, "test_2", vec![]);
+    env.advance_time(TIME_STEP);
+
+    // Expect only the log records after reinstall.
+    let result = fetch_canister_logs(&env, controller, canister_id);
+    assert_eq!(
+        FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
+        canister_log_response(vec![(1, timestamp_2, b"test_2".to_vec()),],)
+    );
+}
+
+#[test]
 fn test_logging_debug_print_persists_over_upgrade() {
     let (env, canister_id, controller) = setup_with_controller(
         FlagStatus::Enabled,

@@ -446,6 +446,10 @@ impl InstallCodeHelper {
             );
         }
 
+        if original.mode == CanisterInstallModeV2::Reinstall {
+            self.canister.clear_log();
+        }
+
         DtsInstallCodeResult::Finished {
             canister: self.canister,
             message: original.message,
