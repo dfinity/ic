@@ -3,9 +3,9 @@ use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SubnetConfig;
 use ic_management_canister_types::{
-    CanisterInstallMode, CanisterLogRecord, CanisterSettingsArgs, CanisterSettingsArgsBuilder,
-    DataSize, FetchCanisterLogsRequest, FetchCanisterLogsResponse, LogVisibility, Payload,
-    MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE,
+    CanisterIdRecord, CanisterInstallMode, CanisterLogRecord, CanisterSettingsArgs,
+    CanisterSettingsArgsBuilder, DataSize, FetchCanisterLogsRequest, FetchCanisterLogsResponse,
+    LogVisibility, Payload, MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
@@ -429,7 +429,7 @@ fn test_canister_log_record_index_increment_after_node_restart() {
             (1, timestamp_01, b"message 1".to_vec()),
             (2, timestamp_23, b"message 2".to_vec()),
             (3, timestamp_23, b"message 3".to_vec()),
-        ],)
+        ])
     );
 }
 
@@ -650,7 +650,7 @@ fn test_canister_log_preserved_after_disabling_and_enabling_again() {
             // No batch #2 records.
             // Batch #3.
             (1, timestamp_3, b"message 3".to_vec()),
-        ],)
+        ])
     );
 }
 
@@ -660,13 +660,16 @@ fn test_deleting_logs_on_reinstall() {
     let (env, canister_id, controller) = setup_with_controller(
         FlagStatus::Enabled,
         wat_canister()
+            .start(wat_fn().debug_print(b"start_1"))
+            .init(wat_fn().debug_print(b"init_1"))
             .update("test_1", wat_fn().debug_print(b"test_1"))
             .build(),
     );
+    let timestamp_1_init = system_time_to_nanos(env.time());
     env.advance_time(TIME_STEP);
 
     // Prepopulate log.
-    let timestamp_1 = system_time_to_nanos(env.time_of_next_round());
+    let timestamp_1_update = system_time_to_nanos(env.time_of_next_round());
     let _ = env.execute_ingress(canister_id, "test_1", vec![]);
     env.advance_time(TIME_STEP);
 
@@ -674,7 +677,11 @@ fn test_deleting_logs_on_reinstall() {
     let result = fetch_canister_logs(&env, controller, canister_id);
     assert_eq!(
         FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
-        canister_log_response(vec![(0, timestamp_1, b"test_1".to_vec())])
+        canister_log_response(vec![
+            (0, timestamp_1_init, b"start_1".to_vec()),
+            (1, timestamp_1_init, b"init_1".to_vec()),
+            (2, timestamp_1_update, b"test_1".to_vec())
+        ])
     );
 
     // Reinstall canister to version #2.
@@ -683,6 +690,8 @@ fn test_deleting_logs_on_reinstall() {
         CanisterInstallMode::Reinstall,
         wat::parse_str(
             wat_canister()
+                .start(wat_fn().debug_print(b"start_2"))
+                .init(wat_fn().debug_print(b"init_2"))
                 .update("test_2", wat_fn().debug_print(b"test_2"))
                 .build(),
         )
@@ -693,7 +702,7 @@ fn test_deleting_logs_on_reinstall() {
     env.advance_time(TIME_STEP);
 
     // Populate log after reinstall.
-    let timestamp_2 = system_time_to_nanos(env.time_of_next_round());
+    let timestamp_2_update = system_time_to_nanos(env.time_of_next_round());
     let _ = env.execute_ingress(canister_id, "test_2", vec![]);
     env.advance_time(TIME_STEP);
 
@@ -701,7 +710,57 @@ fn test_deleting_logs_on_reinstall() {
     let result = fetch_canister_logs(&env, controller, canister_id);
     assert_eq!(
         FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
-        canister_log_response(vec![(1, timestamp_2, b"test_2".to_vec()),],)
+        canister_log_response(vec![(5, timestamp_2_update, b"test_2".to_vec())])
+    );
+}
+
+#[test]
+fn test_deleting_logs_on_uninstall() {
+    // Test logs are deleted when the canister is uninstalled.
+    let (env, canister_id, controller) = setup_with_controller(
+        FlagStatus::Enabled,
+        wat_canister()
+            .start(wat_fn().debug_print(b"start_1"))
+            .init(wat_fn().debug_print(b"init_1"))
+            .update("test_1", wat_fn().debug_print(b"test_1"))
+            .build(),
+    );
+    let timestamp_1_init = system_time_to_nanos(env.time());
+    env.advance_time(TIME_STEP);
+
+    // Prepopulate log.
+    let timestamp_1_update = system_time_to_nanos(env.time_of_next_round());
+    let _ = env.execute_ingress(canister_id, "test_1", vec![]);
+    env.advance_time(TIME_STEP);
+
+    // Stop canister.
+    env.stop_canister_as(controller, canister_id).unwrap();
+
+    // Expect logs to be available.
+    let result = fetch_canister_logs(&env, controller, canister_id);
+    assert_eq!(
+        FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
+        canister_log_response(vec![
+            (0, timestamp_1_init, b"start_1".to_vec()),
+            (1, timestamp_1_init, b"init_1".to_vec()),
+            (2, timestamp_1_update, b"test_1".to_vec())
+        ])
+    );
+
+    // Uninstall canister.
+    env.execute_ingress_as(
+        controller,
+        CanisterId::ic_00(),
+        "uninstall_code",
+        (CanisterIdRecord::from(canister_id)).encode(),
+    )
+    .unwrap();
+
+    // Expect logs to be deleted.
+    let result = fetch_canister_logs(&env, controller, canister_id);
+    assert_eq!(
+        FetchCanisterLogsResponse::decode(&get_reply(result)).unwrap(),
+        canister_log_response(vec![])
     );
 }
 
