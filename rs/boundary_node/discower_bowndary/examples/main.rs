@@ -3,6 +3,7 @@ use std::{sync::Arc, time::Duration};
 use discower_bowndary::{
     check::{HealthCheck, HealthCheckImpl},
     fetch::{NodesFetcher, NodesFetcherImpl},
+    node::Node,
     route_provider::HealthCheckRouteProvider,
     snapshot::IC0_SEED_DOMAIN,
 };
@@ -38,9 +39,10 @@ async fn main() {
             fetch_interval,
             Arc::clone(&checker) as Arc<dyn HealthCheck>,
             check_interval,
-            vec![IC0_SEED_DOMAIN],
+            vec![Node::new(IC0_SEED_DOMAIN)],
         )
     };
+    route_provider.run().await;
     // Build a transport layer with route_provider
     let transport = ReqwestTransport::create_with_client_route(Box::new(route_provider), client)
         .expect("failed to create transport");

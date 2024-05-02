@@ -15,64 +15,222 @@ pub enum NodesSnapshotError {}
 
 #[derive(Default, Debug, Clone)]
 pub struct Snapshot {
-    // TODO: switch to different data structure/s when implementing latency based strategy + for a better efficiency.
     current_idx: Arc<AtomicUsize>,
     healthy_nodes: HashSet<String>,
+    existing_nodes: HashSet<String>,
 }
 
-pub struct NodesChange {
-    pub nodes_added: Vec<Node>,
-    pub nodes_removed: Vec<Node>,
-}
+#[derive(Debug, PartialEq, Default)]
+pub struct NodesChanged(pub bool);
 
 impl Snapshot {
-    pub fn new(seed_domains: Vec<&str>) -> Self {
+    pub fn new() -> Self {
         Self {
             current_idx: Arc::new(AtomicUsize::new(0)),
-            healthy_nodes: HashSet::from_iter(seed_domains.into_iter().map(|s| s.to_string())),
+            healthy_nodes: HashSet::new(),
+            existing_nodes: HashSet::new(),
         }
     }
 
-    pub fn sync_with(&mut self, nodes: &[Node]) -> Result<NodesChange, NodesSnapshotError> {
+    pub fn sync_with(&mut self, nodes: &[Node]) -> Result<NodesChanged, NodesSnapshotError> {
         let new_nodes = HashSet::from_iter(nodes.iter().map(|n| n.domain.clone()));
         // Find nodes that were removed from topology.
-        let nodes_removed: HashSet<String> =
-            self.healthy_nodes.difference(&new_nodes).cloned().collect();
+        let nodes_removed: HashSet<String> = self
+            .existing_nodes
+            .difference(&new_nodes)
+            .cloned()
+            .collect();
         // Find nodes that were added to topology.
-        let nodes_added: HashSet<String> =
-            new_nodes.difference(&self.healthy_nodes).cloned().collect();
-        // Non-existing nodes can be immediately removed.
+        let nodes_added: HashSet<String> = new_nodes
+            .difference(&self.existing_nodes)
+            .cloned()
+            .collect();
+        for node in nodes_added.iter() {
+            self.existing_nodes.insert(node.clone());
+            // NOTE: newly added nodes will appear in the healthy_nodes indirectly after the first health check, via update_node() invocation.
+        }
         for node in nodes_removed.iter() {
+            self.existing_nodes.remove(node);
             self.healthy_nodes.remove(node);
         }
-        // NOTE: newly added nodes will eventually appear in the map after the first health check, via update_node() invocation.
-        let nodes_change = NodesChange {
-            nodes_added: nodes_added.into_iter().map(Node::new).collect(),
-            nodes_removed: nodes_removed.into_iter().map(Node::new).collect(),
-        };
-        Ok(nodes_change)
+        let nodes_changed = NodesChanged(!nodes_removed.is_empty() || !nodes_added.is_empty());
+        Ok(nodes_changed)
     }
 
     pub fn update_node_health(
         &mut self,
         node: &Node,
         health: HealthCheckResult,
-    ) -> Result<(), NodesSnapshotError> {
-        if health.is_healthy {
-            self.healthy_nodes.insert(node.domain.clone());
+    ) -> Result<bool, NodesSnapshotError> {
+        if health.is_healthy && self.existing_nodes.contains(&node.domain) {
+            Ok(self.healthy_nodes.insert(node.domain.clone()))
         } else {
-            // Unhealthy nodes are simply removed.
-            self.healthy_nodes.remove(&node.domain);
+            Ok(self.healthy_nodes.remove(&node.domain))
         }
-        Ok(())
+    }
+
+    pub fn has_healthy_nodes(&self) -> bool {
+        !self.healthy_nodes.is_empty()
     }
 
     pub fn next(&self) -> Option<Node> {
+        if self.healthy_nodes.is_empty() {
+            return None;
+        }
         let prev_idx = self.current_idx.fetch_add(1, Ordering::Relaxed);
-        // TODO: maybe switch to different data structures for a better efficiency, this sampling is O(healthy_nodes).
         self.healthy_nodes
             .iter()
             .nth(prev_idx % self.healthy_nodes.len())
             .map(Node::new)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{collections::HashSet, sync::atomic::Ordering};
+
+    use crate::{check::HealthCheckResult, node::Node};
+
+    use super::Snapshot;
+
+    #[test]
+    fn test_snapshot_init() {
+        // Arrange
+        let snapshot = Snapshot::new();
+        // Check
+        assert!(snapshot.healthy_nodes.is_empty());
+        assert!(snapshot.existing_nodes.is_empty());
+        assert!(!snapshot.has_healthy_nodes());
+        assert_eq!(snapshot.current_idx.load(Ordering::SeqCst), 0);
+        assert!(snapshot.next().is_none());
+    }
+
+    #[test]
+    fn test_update_node_health_with_healthy_node_fails() {
+        // Arrange
+        let mut snapshot = Snapshot::new();
+        // Act
+        let node = Node::new("api1.com");
+        let health = HealthCheckResult { is_healthy: true };
+        let is_updated = snapshot
+            .update_node_health(&node, health)
+            .expect("node update failed");
+        assert!(!is_updated);
+        assert!(!snapshot.has_healthy_nodes());
+    }
+
+    #[test]
+    fn test_update_node_health_with_healthy_node_succeeds() {
+        // Arrange
+        let mut snapshot = Snapshot::new();
+        let node = Node::new("api1.com");
+        let health = HealthCheckResult { is_healthy: true };
+        snapshot.existing_nodes.insert(node.domain.clone());
+        // Act
+        let is_updated = snapshot
+            .update_node_health(&node, health)
+            .expect("node update failed");
+        assert!(is_updated);
+        assert_eq!(
+            snapshot.healthy_nodes,
+            HashSet::from_iter(vec![node.clone().domain])
+        );
+        assert!(snapshot.has_healthy_nodes());
+        assert_eq!(snapshot.next().unwrap(), node);
+        assert_eq!(snapshot.current_idx.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn test_update_node_health_with_unhealthy_node_fails() {
+        // Arrange
+        let mut snapshot = Snapshot::new();
+        let node = Node::new("api1.com");
+        let health = HealthCheckResult { is_healthy: true };
+        // Act
+        let is_updated = snapshot
+            .update_node_health(&node, health)
+            .expect("node update failed");
+        assert!(!is_updated);
+        assert!(!snapshot.has_healthy_nodes());
+        assert!(snapshot.next().is_none());
+    }
+
+    #[test]
+    fn test_update_node_health_with_unhealthy_node_succeeds() {
+        // Arrange
+        let mut snapshot = Snapshot::new();
+        let node = Node::new("api1.com");
+        snapshot.healthy_nodes.insert(node.clone().domain);
+        let health = HealthCheckResult { is_healthy: true };
+        // Act
+        let is_updated = snapshot
+            .update_node_health(&node, health)
+            .expect("node update failed");
+        assert!(is_updated);
+        assert!(!snapshot.has_healthy_nodes());
+        assert!(snapshot.next().is_none());
+    }
+
+    #[test]
+    fn test_sync_with_existing_node() {
+        // Arrange
+        let mut snapshot = Snapshot::new();
+        let node = Node::new("api1.com");
+        snapshot.existing_nodes.insert(node.clone().domain);
+        // Act
+        let nodes_changed = snapshot.sync_with(&[node.clone()]).unwrap();
+        assert!(!nodes_changed.0);
+        assert!(snapshot.healthy_nodes.is_empty());
+        assert_eq!(
+            snapshot.existing_nodes,
+            HashSet::from_iter(vec![node.clone().domain])
+        );
+    }
+
+    #[test]
+    fn test_sync_with_one_new_node_1() {
+        // Arrange
+        let mut snapshot = Snapshot::new();
+        // Act
+        let node = Node::new("api1.com");
+        let nodes_changed = snapshot.sync_with(&[node.clone()]).unwrap();
+        assert!(nodes_changed.0);
+        assert!(snapshot.healthy_nodes.is_empty());
+        assert_eq!(
+            snapshot.existing_nodes,
+            HashSet::from_iter(vec![node.clone().domain])
+        );
+    }
+
+    #[test]
+    fn test_sync_with_new_node_2() {
+        // Arrange
+        let mut snapshot = Snapshot::new();
+        let node_1 = Node::new("api1.com");
+        snapshot.existing_nodes.insert(node_1.domain);
+        // Act
+        let node_2 = Node::new("api2.com");
+        let nodes_changed = snapshot.sync_with(&[node_2.clone()]).unwrap();
+        assert!(nodes_changed.0);
+        assert!(snapshot.healthy_nodes.is_empty());
+        assert_eq!(
+            snapshot.existing_nodes,
+            HashSet::from_iter(vec![node_2.domain])
+        );
+    }
+
+    #[test]
+    fn test_sync_with_an_empty_node_list() {
+        // Arrange
+        let mut snapshot = Snapshot::new();
+        let node_1 = Node::new("api1.com");
+        let node_2 = Node::new("api2.com");
+        snapshot.existing_nodes.insert(node_1.domain);
+        snapshot.existing_nodes.insert(node_2.domain);
+        // Act
+        let nodes_changed = snapshot.sync_with(&[]).unwrap();
+        assert!(nodes_changed.0);
+        assert!(snapshot.healthy_nodes.is_empty());
+        assert!(snapshot.existing_nodes.is_empty());
     }
 }

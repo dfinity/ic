@@ -1,6 +1,7 @@
 use discower_bowndary::{
     check::{HealthCheck, HealthCheckImpl},
     fetch::{NodesFetcher, NodesFetcherImpl},
+    node::Node,
     route_provider::HealthCheckRouteProvider,
     test_helpers::{assert_routed_domains, route_n_times},
 };
@@ -264,15 +265,17 @@ pub fn decentralization_test(env: TestEnv) {
         let health_timeout = Duration::from_secs(5);
         let check_interval = Duration::from_secs(1);
         let checker = Arc::new(HealthCheckImpl::new(http_client.clone(), health_timeout));
-        let seed_domains = vec!["api1.com", "api2.com"];
+        let seed_nodes = vec![Node::new("api1.com"), Node::new("api2.com")];
         let route_provider = Arc::new(HealthCheckRouteProvider::new(
             Arc::clone(&fetcher) as Arc<dyn NodesFetcher>,
             fetch_interval,
             Arc::clone(&checker) as Arc<dyn HealthCheck>,
             check_interval,
-            seed_domains,
+            seed_nodes,
         ));
         block_on(route_provider.run());
+        // Wait till all nodes go through health checks.
+        std::thread::sleep(2 * check_interval);
         // Do an additional assertions that routing works correctly.
         let routed_domains = route_n_times(6, Arc::clone(&route_provider));
         assert_routed_domains(

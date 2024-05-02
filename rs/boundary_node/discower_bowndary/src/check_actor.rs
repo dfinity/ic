@@ -60,7 +60,7 @@ impl HealthCheckActor {
                     }
                 }
                 _ = self.token.cancelled() => {
-                    debug!("{SERVICE_NAME}: was gracefully cancelled");
+                    debug!("{SERVICE_NAME}: for node {:?} was gracefully cancelled", self.node);
                     break;
                 }
             }
