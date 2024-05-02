@@ -63,7 +63,7 @@ use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_test_utilities::universal_canister::{
     call_args, wasm as universal_canister_argument_builder, UNIVERSAL_CANISTER_WASM,
 };
-use ic_types::{ingress::WasmResult, Cycles};
+use ic_types::{ingress::WasmResult, time::GENESIS, Cycles};
 use icp_ledger::{AccountIdentifier, BinaryAccountBalanceArgs, BlockIndex, Memo, SendArgs, Tokens};
 use icrc_ledger_types::icrc1::{
     account::Account,
@@ -75,8 +75,18 @@ use prost::Message;
 use serde::Serialize;
 use std::{convert::TryInto, env, time::Duration};
 
+/// A `StateMachine` builder setting the IC time to the GENESIS time
+/// and using the canister ranges of both the NNS and II subnets.
+/// Note. The last canister ID in the canister range of the II subnet
+/// is omitted so that the canister range of the II subnet is not used
+/// for automatic generation of new canister IDs.
 pub fn state_machine_builder_for_nns_tests() -> StateMachineBuilder {
-    StateMachineBuilder::new().with_current_time()
+    StateMachineBuilder::new()
+        .with_time(GENESIS)
+        .with_extra_canister_range(std::ops::RangeInclusive::<CanisterId>::new(
+            CanisterId::from_u64(0x2100000),
+            CanisterId::from_u64(0x21FFFFE),
+        ))
 }
 
 /// Turn down state machine logging to just errors to reduce noise in tests where this is not relevant
@@ -101,6 +111,33 @@ pub fn create_canister(
             canister_settings,
         )
         .unwrap()
+}
+
+/// Creates a canister with a specified canister ID, wasm, payload, and optionally settings on a StateMachine
+/// DO NOT USE this function for specified canister IDs within the main (NNS) subnet canister range:
+/// `CanisterId::from_u64(0x00000)` until `CanisterId::from_u64(0xFFFFF)`.
+/// Use the function `create_canister_id_at_position` for that canister range instead.
+pub fn create_canister_at_specified_id(
+    machine: &StateMachine,
+    specified_id: u64,
+    wasm: Wasm,
+    initial_payload: Option<Vec<u8>>,
+    canister_settings: Option<CanisterSettingsArgs>,
+) {
+    assert!(specified_id >= 0x100000);
+    let canister_id = CanisterId::from_u64(specified_id);
+    machine.create_canister_with_cycles(
+        Some(canister_id.into()),
+        Cycles::zero(),
+        canister_settings,
+    );
+    machine
+        .install_existing_canister(
+            canister_id,
+            wasm.bytes(),
+            initial_payload.unwrap_or_default(),
+        )
+        .unwrap();
 }
 
 /// Creates a canister with cycles, wasm, payload, and optionally settings on a StateMachine

@@ -676,6 +676,7 @@ where
     F: FnOnce(Runtime) -> Fut + 'static,
 {
     let state_machine = state_machine_builder_for_nns_tests().build();
+    state_machine.set_time(SystemTime::now());
     // This is for easy conversion from existing tests, but nothing is actually async.
     run(Runtime::StateMachine(state_machine))
         .now_or_never()

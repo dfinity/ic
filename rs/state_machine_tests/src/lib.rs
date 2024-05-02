@@ -681,7 +681,7 @@ impl StateMachineBuilder {
         Self { nonce, ..self }
     }
 
-    fn with_time(self, time: Time) -> Self {
+    pub fn with_time(self, time: Time) -> Self {
         Self { time, ..self }
     }
 
