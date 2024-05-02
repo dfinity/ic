@@ -133,3 +133,7 @@ harness = false
 [[bench]]
 name = "canister_sig"
 harness = false
+
+[[bench]]
+name = "tschnorr"
+harness = false
