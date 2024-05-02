@@ -15256,7 +15256,7 @@ dependencies = [
 
 [[package]]
 name = "pocket-ic"
-version = "3.0.0"
+version = "3.1.0"
 dependencies = [
  "async-trait",
  "base64 0.13.1",
