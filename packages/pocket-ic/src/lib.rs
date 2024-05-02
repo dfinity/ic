@@ -200,6 +200,13 @@ impl PocketIcBuilder {
         self
     }
 
+    pub fn with_benchmarking_system_subnet(mut self) -> Self {
+        self.config
+            .system
+            .push(SubnetSpec::default().with_benchmarking_instruction_config());
+        self
+    }
+
     pub fn with_dts_flag(mut self, dts_flag: DtsFlag) -> Self {
         self.config = self.config.with_dts_flag(dts_flag);
         self
