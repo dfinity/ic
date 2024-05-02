@@ -919,4 +919,36 @@ mod tests {
         assert_eq!(set[0][&Big::Z], Small::A);
         assert!(set[1].is_empty());
     }
+
+    /// Check if named enum fields produce correct result
+    #[test]
+    fn derive_named_enum_field() {
+        #[derive(Debug, Clone, PartialEq, Eq, ExhaustiveSet)]
+        enum Enum1 {
+            V1 { first: Enum2, second: Enum2 },
+            V2,
+        }
+        #[derive(Debug, Clone, PartialEq, Eq, ExhaustiveSet)]
+        enum Enum2 {
+            A1,
+            A2,
+        }
+        let set = Enum1::exhaustive_set(&mut rand::thread_rng());
+        assert_eq!(set.len(), 3);
+        assert_eq!(set[0], Enum1::V2);
+        assert_eq!(
+            set[1],
+            Enum1::V1 {
+                first: Enum2::A1,
+                second: Enum2::A1
+            }
+        );
+        assert_eq!(
+            set[2],
+            Enum1::V1 {
+                first: Enum2::A2,
+                second: Enum2::A2
+            }
+        );
+    }
 }
