@@ -13,6 +13,7 @@ use ic_interfaces::crypto::{
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_node_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+use ic_types::crypto::canister_threshold_sig::idkg::InitialIDkgDealings;
 use ic_types::crypto::canister_threshold_sig::idkg::{
     BatchSignedIDkgDealing, BatchSignedIDkgDealings, IDkgComplaint, IDkgDealers, IDkgDealing,
     IDkgMaskedTranscriptOrigin, IDkgOpening, IDkgReceivers, IDkgTranscript, IDkgTranscriptId,
@@ -2830,6 +2831,125 @@ fn corrupt_signed_dealing_for_one_receiver<R: Rng + CryptoRng>(
             .expect("failed to serialize internal dealing")
     };
     signed_dealing.content.content.internal_dealing_raw = invalidated_internal_dealing_raw;
+}
+
+pub fn generate_initial_dealings<R: RngCore + CryptoRng>(
+    alg: AlgorithmId,
+    registry_version: RegistryVersion,
+    source_subnet_nodes: Nodes,
+    target_subnet_nodes: Nodes,
+    corrupt_first_dealing: bool,
+    rng: &mut R,
+) -> (InitialIDkgDealings, IDkgTranscriptParams) {
+    let (source_dealers, source_receivers) = source_subnet_nodes
+        .choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
+    let source_key_transcript = {
+        let masked_key_params = IDkgTranscriptParams::new(
+            random_transcript_id(rng),
+            source_dealers.get().clone(),
+            source_receivers.get().clone(),
+            registry_version,
+            alg,
+            IDkgTranscriptOperation::Random,
+        )
+        .expect("failed to create random IDkgTranscriptParams");
+        let masked_key_transcript =
+            source_subnet_nodes.run_idkg_and_create_and_verify_transcript(&masked_key_params, rng);
+        let unmasked_params = build_params_from_previous(
+            masked_key_params,
+            IDkgTranscriptOperation::ReshareOfMasked(masked_key_transcript),
+            rng,
+        );
+        source_subnet_nodes.run_idkg_and_create_and_verify_transcript(&unmasked_params, rng)
+    };
+
+    let reshare_params = IDkgTranscriptParams::new(
+        random_transcript_id(rng),
+        source_receivers.get().clone(),
+        target_subnet_nodes.ids(),
+        source_key_transcript.registry_version,
+        source_key_transcript.algorithm_id,
+        IDkgTranscriptOperation::ReshareOfUnmasked(source_key_transcript),
+    )
+    .expect("invalid reshare of unmasked parameters");
+
+    let nodes_involved_in_resharing: Nodes = source_subnet_nodes
+        .into_filtered_by_receivers(&source_receivers)
+        .chain(target_subnet_nodes)
+        .collect();
+    let initial_dealings = {
+        let signed_dealings = nodes_involved_in_resharing
+            .load_previous_transcripts_and_create_signed_dealings(&reshare_params);
+        let mut signed_dealings_vec = signed_dealings.into_values().collect::<Vec<_>>();
+        if corrupt_first_dealing {
+            signed_dealings_vec
+                .first_mut()
+                .map(|sd| *sd = sd.clone().into_builder().corrupt_signature().build())
+                .expect("no dealings");
+        }
+
+        InitialIDkgDealings::new(reshare_params.clone(), signed_dealings_vec)
+            .expect("should create initial dealings")
+    };
+    (initial_dealings, reshare_params)
+}
+
+pub mod ecdsa {
+    use super::{
+        generate_key_transcript, generate_tecdsa_protocol_inputs,
+        CanisterThresholdSigTestEnvironment, IDkgParticipants,
+    };
+    use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealers, IDkgReceivers};
+    use ic_types::crypto::canister_threshold_sig::{
+        ExtendedDerivationPath, ThresholdEcdsaSigInputs,
+    };
+    use ic_types::crypto::AlgorithmId;
+    use ic_types::PrincipalId;
+    use ic_types::Randomness;
+    use rand::distributions::uniform::SampleRange;
+    use rand::prelude::*;
+
+    pub fn environment_with_sig_inputs<R, S>(
+        subnet_size_range: S,
+        alg: AlgorithmId,
+        use_random_unmasked_kappa: bool,
+        rng: &mut R,
+    ) -> (
+        CanisterThresholdSigTestEnvironment,
+        ThresholdEcdsaSigInputs,
+        IDkgDealers,
+        IDkgReceivers,
+    )
+    where
+        R: RngCore + CryptoRng,
+        S: SampleRange<usize>,
+    {
+        let subnet_size = rng.gen_range(subnet_size_range);
+        let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
+        let (dealers, receivers) =
+            env.choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
+        let derivation_path = ExtendedDerivationPath {
+            caller: PrincipalId::new_user_test_id(1),
+            derivation_path: vec![],
+        };
+        let seed = Randomness::from(rng.gen::<[u8; 32]>());
+        let message = rng.gen::<[u8; 32]>();
+
+        let key_transcript = generate_key_transcript(&env, &dealers, &receivers, alg, rng);
+        let inputs = generate_tecdsa_protocol_inputs(
+            &env,
+            &dealers,
+            &receivers,
+            &key_transcript,
+            &message,
+            seed,
+            &derivation_path,
+            alg,
+            use_random_unmasked_kappa,
+            rng,
+        );
+        (env, inputs, dealers, receivers)
+    }
 }
 
 pub mod schnorr {
