@@ -76,21 +76,12 @@ impl std::fmt::Display for ArtifactTag {
 /// Priority of artifact.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, EnumIter)]
 pub enum Priority {
-    /// Drop the advert, the IC doesn't need the corresponding artifact for
+    /// Drop the advert, the local replica doesn't need the corresponding artifact for
     /// making progress.
     Drop,
-    /// Stash the advert. Processing of this advert is suspended, it's not going
-    /// to be requested even if there is capacity available for download.
+    /// Stash the advert. It may be requested at a later point in time.
     Stash,
-
-    // All downloadable priority classes. Downloads adhere to quota and
-    // bandwidth constraints
-    /// Low priority adverts to be considered for download, given that there is
-    /// enough capacity.
-    Later,
-    /// Normal priority adverts.
-    Fetch,
-    /// High priority adverts.
+    /// High priority adverts, fetch the artifact immediately.
     FetchNow,
 }
 

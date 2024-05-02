@@ -78,7 +78,7 @@ impl<Pool: CertificationPool> PriorityFnAndFilterProducer<CertificationArtifact,
             if height < cup_height || certified_heights.contains(&height) {
                 Priority::Drop
             } else {
-                Priority::Fetch
+                Priority::FetchNow
             }
         })
     }
@@ -727,9 +727,9 @@ mod tests {
                 let prio_fn = certifier_gossip.get_priority_function(&cert_pool);
                 for (height, prio) in &[
                     (1, Priority::Drop),
-                    (2, Priority::Fetch),
+                    (2, Priority::FetchNow),
                     (3, Priority::Drop),
-                    (4, Priority::Fetch),
+                    (4, Priority::FetchNow),
                 ] {
                     assert_eq!(
                         prio_fn(

@@ -1302,7 +1302,7 @@ impl<Pool: DkgPool> PriorityFnAndFilterProducer<DkgArtifact, Pool> for DkgGossip
         Box::new(move |id, _| {
             use std::cmp::Ordering;
             match id.height.cmp(&start_height) {
-                Ordering::Equal => Priority::Fetch,
+                Ordering::Equal => Priority::FetchNow,
                 Ordering::Greater => Priority::Stash,
                 Ordering::Less => Priority::Drop,
             }
