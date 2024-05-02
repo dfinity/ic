@@ -32,7 +32,7 @@ use rustls::cipher_suite::{TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384};
 use tokio::sync::RwLock;
 use tower::{limit::ConcurrencyLimitLayer, ServiceBuilder};
 use tower_http::{compression::CompressionLayer, request_id::MakeRequestUuid, ServiceBuilderExt};
-use tracing::{info, warn};
+use tracing::{debug, error, warn};
 
 use crate::{
     cache::{cache_middleware, Cache},
@@ -107,9 +107,9 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     }
 
     // Metrics
-    let metrics_registry: Registry = Registry::new_custom(Some(SERVICE_NAME.into()), None)?;
+    let metrics_registry = Registry::new_custom(Some(SERVICE_NAME.into()), None)?;
 
-    info!(
+    warn!(
         msg = format!("Starting {SERVICE_NAME}"),
         metrics_addr = cli.monitoring.metrics_addr.to_string().as_str(),
     );
@@ -566,7 +566,7 @@ pub fn setup_router(
         middleware::from_fn_with_state(
             HttpMetricParams::new(
                 metrics_registry,
-                "http_request_in",
+                "http_request",
                 cli.monitoring.log_failed_requests_only,
             ),
             metrics::metrics_middleware,
@@ -686,7 +686,11 @@ impl<T: Run> Run for WithMetrics<T> {
         counter.with_label_values(&[status]).inc();
         recorder.with_label_values(&[status]).observe(duration);
 
-        info!(action, status, duration, error = ?out.as_ref().err());
+        if out.is_err() {
+            error!(action, status, duration, error = ?out.as_ref().err());
+        } else {
+            debug!(action, status, duration, error = ?out.as_ref().err());
+        }
 
         out
     }

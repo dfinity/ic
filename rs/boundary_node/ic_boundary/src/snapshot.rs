@@ -22,7 +22,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::RegistryVersion;
 use tokio::sync::watch;
-use tracing::info;
+use tracing::{debug, warn};
 use url::{ParseError, Url};
 use x509_parser::{certificate::X509Certificate, prelude::FromDer};
 
@@ -412,7 +412,7 @@ impl<T: Snapshot> Run for WithMetricsSnapshot<T> {
 
         match r {
             SnapshotResult::Published(v) => {
-                info!(
+                warn!(
                     action = "snapshot",
                     version_old = v.old.as_ref().map(|x| x.version),
                     version_new = v.new.version,
@@ -428,7 +428,7 @@ impl<T: Snapshot> Run for WithMetricsSnapshot<T> {
                 timestamp.set(v.timestamp as i64);
             }
 
-            SnapshotResult::NotOldEnough(v) => info!(
+            SnapshotResult::NotOldEnough(v) => debug!(
                 action = "snapshot",
                 "Snapshot {v} is not old enough, not publishing"
             ),
