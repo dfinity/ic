@@ -18,7 +18,6 @@ rootfs_files = {
     Label("setupos/opt/ic/bin/config.sh"): "/opt/ic/bin/config.sh",
     Label("setupos/opt/ic/bin/devices.sh"): "/opt/ic/bin/devices.sh",
     Label("setupos/opt/ic/bin/disk.sh"): "/opt/ic/bin/disk.sh",
-    Label("setupos/opt/ic/bin/fetch-property.sh"): "/opt/ic/bin/fetch-property.sh",
     Label("setupos/opt/ic/bin/functions.sh"): "/opt/ic/bin/functions.sh",
     Label("setupos/opt/ic/bin/guestos.sh"): "/opt/ic/bin/guestos.sh",
     Label("setupos/opt/ic/bin/hardware.sh"): "/opt/ic/bin/hardware.sh",
@@ -37,4 +36,5 @@ rootfs_files = {
 
     # consolidated files:
     Label("systemd-generators/systemd-gpt-auto-generator"): "/etc/systemd/system-generators/systemd-gpt-auto-generator",
+    Label("utils/setupos/fetch-property.sh"): "/opt/ic/bin/fetch-property.sh",
 }
