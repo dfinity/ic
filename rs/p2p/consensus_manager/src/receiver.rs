@@ -1228,7 +1228,7 @@ mod tests {
         mock_pfn
             .expect_get_priority_function()
             .times(1)
-            .returning(|_| Box::new(|_, _| Priority::Fetch))
+            .returning(|_| Box::new(|_, _| Priority::FetchNow))
             .in_sequence(&mut seq);
 
         let mut mock_transport = MockTransport::new();
@@ -1662,7 +1662,7 @@ mod tests {
         }));
 
         let mut mock_pfn = MockPriorityFnAndFilterProducer::new();
-        let priorities = Arc::new(Mutex::new(vec![Priority::Fetch, Priority::Stash]));
+        let priorities = Arc::new(Mutex::new(vec![Priority::FetchNow, Priority::Stash]));
         mock_pfn
             .expect_get_priority_function()
             .times(1)
@@ -1747,7 +1747,7 @@ mod tests {
         let mut pc = PeerCounter::new();
         pc.insert(NODE_1);
         let (_peer_tx, mut peer_rx) = watch::channel(pc);
-        let pfn = |_: &_, _: &_| Priority::Fetch;
+        let pfn = |_: &_, _: &_| Priority::FetchNow;
         let (_pfn_tx, pfn_rx) = watch::channel(Box::new(pfn) as Box<_>);
 
         rt.block_on(async {

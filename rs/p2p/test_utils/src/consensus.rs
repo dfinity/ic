@@ -294,6 +294,6 @@ impl PriorityFnAndFilterProducer<U64Artifact, TestConsensus<U64Artifact>>
         <U64Artifact as ArtifactKind>::Id,
         <U64Artifact as ArtifactKind>::Attribute,
     > {
-        Box::new(|_, _| Priority::Fetch)
+        Box::new(|_, _| Priority::FetchNow)
     }
 }
