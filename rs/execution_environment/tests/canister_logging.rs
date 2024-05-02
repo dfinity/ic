@@ -13,6 +13,7 @@ use ic_state_machine_tests::{
     SubmitIngressError, UserError,
 };
 use ic_test_utilities_execution_environment::{get_reply, wat_canister, wat_fn};
+use ic_test_utilities_metrics::fetch_histogram_stats;
 use ic_types::{ingress::WasmResult, CanisterId, Cycles, NumInstructions};
 use more_asserts::{assert_le, assert_lt};
 use proptest::{prelude::ProptestConfig, prop_assume};
@@ -1291,4 +1292,32 @@ fn test_logging_of_long_running_dts_over_checkpoint() {
             (5, timestamp_short, b"short".to_vec())
         ])
     );
+}
+
+#[test]
+fn test_canister_logging_metrics_log_size() {
+    // Test canister logging metrics record the size of the log.
+    const PAYLOAD_SIZE: usize = 1_000;
+    let (env, canister_id, _controller) = setup_with_controller(
+        FlagStatus::Enabled,
+        wat_canister()
+            .update("test", wat_fn().debug_print(&[37; PAYLOAD_SIZE]))
+            .build(),
+    );
+    // Assert canister log size metric is zero initially.
+    let stats = fetch_histogram_stats(env.metrics_registry(), "canister_log_size_bytes").unwrap();
+    assert_eq!(stats.sum, 0.0);
+
+    // Add log message.
+    let _ = env.execute_ingress(canister_id, "test", vec![]);
+    let duration_between_allocation_charges = Duration::from_secs(10);
+    env.advance_time(duration_between_allocation_charges);
+    env.tick();
+
+    // Assert canister log size metric is within the expected range.
+    let stats = fetch_histogram_stats(env.metrics_registry(), "canister_log_size_bytes").unwrap();
+    let assert_tolerance_percentage = 5.0;
+    let payload_size_max = (PAYLOAD_SIZE as f64) * (1.0 + assert_tolerance_percentage / 100.0);
+    assert_le!(PAYLOAD_SIZE as f64, stats.sum);
+    assert_le!(stats.sum, payload_size_max);
 }
