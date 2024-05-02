@@ -6,9 +6,11 @@ use ic_canister_sandbox_backend_lib::{
     launcher::sandbox_launcher_main, RUN_AS_CANISTER_SANDBOX_FLAG, RUN_AS_COMPILER_SANDBOX_FLAG,
     RUN_AS_SANDBOX_LAUNCHER_FLAG,
 };
-use ic_recovery::cmd::{RecoveryToolArgs, SubCommand};
-use ic_recovery::RecoveryArgs;
-use ic_recovery::{cli, util};
+use ic_recovery::{
+    cli,
+    cmd::{RecoveryToolArgs, SubCommand},
+    util, RecoveryArgs,
+};
 
 fn main() {
     if std::env::args().any(|arg| arg == RUN_AS_CANISTER_SANDBOX_FLAG) {
