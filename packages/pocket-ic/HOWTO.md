@@ -80,3 +80,61 @@ let res = rt.block_on(async {
 pic.make_deterministic();
 ```
 
+## Concurrent update calls
+
+Until version 3.x, submitting ingress messages and executing them was tightly coupled in the method `update_call`.
+Since version 4.0.0, the PocketIC server supports concurrent update calls, i.e., first submitting several update calls that are later executed concurrently when awaited.
+This is useful for canister testing in the presence of interleaving update calls (e.g., ensuring that locking in critical sections works properly)
+and potentially also to speed up tests.
+
+In more detail, calling the method `submit_call` on a PocketIC instance submits an update call for asynchronous execution and returns its message ID, _without making any progress on this message_.
+Later, the update call can be awaited by calling the method `await_call` on the PocketIC instance passing the corresponding message ID as an argument. In particular, the method `update_call` corresponds to
+
+```rust
+let message_id = pic.submit_call(
+    canister_id,
+    sender,
+    method,
+    payload,
+)?;
+pic.await_call(message_id)
+```
+
+and remains available.
+
+Note that all update calls submitted for asynchronous execution are executed concurrently already when any one of them is being awaited using `await_call`.
+This means that the update calls need not be awaited concurrently (as is the case for Rust futures that need to be awaited to even start executing).
+
+Here is a sketch on how to submit and await some concurrent update calls:
+
+```rust
+let pic = PocketIc::new();
+let canister_id = pic.create_canister();
+pic.add_cycles(canister_id, INIT_CYCLES);
+let wasm = [...];
+let arg = encode_one(()).unwrap();
+pic.install_canister(canister_id, wasm, arg, None);
+
+let msg_id1 = pic
+    .submit_call(
+        canister_id,
+        Principal::anonymous(),
+        "foo",
+        encode_one(()).unwrap(),
+    )
+    .unwrap();
+let msg_id2 = pic
+    .submit_call(
+        canister_id,
+        Principal::anonymous(),
+        "foo",
+        encode_one(()).unwrap(),
+    )
+    .unwrap();
+
+// trigger concurrent execution of both update calls and block until the first one completes
+let res1 = pic.await_call(msg_id1).unwrap();
+
+// resume execution of the second update call if it has not completed yet and block until it completes
+let res2 = pic.await_call(msg_id2).unwrap();
+```
