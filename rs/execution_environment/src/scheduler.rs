@@ -1050,6 +1050,9 @@ impl SchedulerImpl {
         self.metrics
             .canister_balance
             .observe(canister.system_state.balance().get() as f64);
+        self.metrics
+            .canister_log_size
+            .observe(canister.system_state.canister_log.used_space() as f64);
         if let Some(es) = &canister.execution_state {
             self.metrics
                 .canister_binary_size
