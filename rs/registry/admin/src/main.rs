@@ -4094,10 +4094,6 @@ struct ProposeToAddApiBoundaryNodeCmd {
     /// The node to assign as an API Boundary Node
     node: PrincipalId,
 
-    #[clap(long, required = true)]
-    /// The domain name the API Boundary Node will use
-    domain: String,
-
     #[clap(long, required = true, alias = "version-id")]
     /// The version the API Boundary Node will use
     version: String,
