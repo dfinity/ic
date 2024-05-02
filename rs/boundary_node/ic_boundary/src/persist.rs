@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use candid::Principal;
 use ethnum::u256;
 use rand::seq::SliceRandom;
-use tracing::{error, info};
+use tracing::{debug, error};
 
 use crate::{
     metrics::{MetricParamsPersist, WithMetricsPersist},
@@ -210,7 +210,7 @@ impl<T: Persist> Persist for WithMetricsPersist<T> {
                 nodes.set(s.nodes_new as i64);
                 ranges.set(s.ranges_new as i64);
 
-                info!(
+                debug!(
                     action = "persist",
                     "Lookup table published: subnet ranges: {:?} -> {:?}, nodes: {:?} -> {:?}",
                     s.ranges_old,
