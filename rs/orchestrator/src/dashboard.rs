@@ -165,16 +165,23 @@ impl OrchestratorDashboard {
     }
 
     fn get_local_cup_info(&self) -> String {
-        let (height, signed) = match self.cup_provider.get_local_cup() {
-            None => (String::from("None"), String::from("None")),
+        let (height, signed, hash) = match self.cup_provider.get_local_cup() {
+            None => (
+                String::from("None"),
+                String::from("None"),
+                String::from("None"),
+            ),
             Some(cup) => {
                 let height = cup.height().to_string();
                 let signed = cup.is_signed();
-                (height, signed.to_string())
+                let hash = cup.content.state_hash.get().0;
+                (height, signed.to_string(), hex::encode(hash))
             }
         };
-
-        format!("cup height: {}\ncup signed: {}", height, signed)
+        format!(
+            "cup height: {}\ncup signed: {}\ncup state hash: {}",
+            height, signed, hash
+        )
     }
 }
 
