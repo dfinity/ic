@@ -441,6 +441,7 @@ fn merge_candidates_and_storage_info(
     pagemaptypes_with_num_pages: &[(PageMapType, usize)],
     height: Height,
     lsmt_config: &LsmtConfig,
+    metrics: &StateManagerMetrics,
 ) -> StorageResult<(Vec<MergeCandidate>, StorageInfo)> {
     let layout = &tip_handler.tip(height)?;
     let mut merge_candidates = Vec::new();
@@ -452,7 +453,13 @@ fn merge_candidates_and_storage_info(
         let pm_layout = page_map_type.layout(layout)?;
         storage_info.disk_size += (&pm_layout as &dyn StorageLayout).storage_size()?;
         storage_info.mem_size += (num_pages * PAGE_SIZE) as u64;
-        for m in MergeCandidate::new(&pm_layout, height, *num_pages as u64, lsmt_config)? {
+        for m in MergeCandidate::new(
+            &pm_layout,
+            height,
+            *num_pages as u64,
+            lsmt_config,
+            &metrics.storage_metrics,
+        )? {
             merge_candidates.push(m)
         }
     }
@@ -528,6 +535,7 @@ fn merge(
         pagemaptypes_with_num_pages,
         height,
         lsmt_config,
+        metrics,
     )
     .unwrap_or_else(|err| {
         fatal!(log, "Failed to get MergeCandidateAndMetrics: {}", err);
