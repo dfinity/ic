@@ -166,6 +166,12 @@ type MinterInfo = record {
     // Amount of ETH in Wei controlled by the minter.
     // This might be less that the actual amount available on the `minter_address()`.
     erc20_balances : opt vec record { erc20_contract_address: text; balance: nat};
+
+    // Last scraped block number for logs of the ETH helper contract.
+    last_eth_scraped_block_number: opt nat;
+
+    // Last scraped block number for logs of the ERC20 helper contract.
+    last_erc20_scraped_block_number: opt nat;
 };
 
 

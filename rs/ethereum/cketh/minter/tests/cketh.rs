@@ -1017,16 +1017,21 @@ fn should_retrieve_minter_info() {
             eth_balance: Some(Nat::from(0_u8)),
             last_gas_fee_estimate: None,
             erc20_balances: None,
+            last_eth_scraped_block_number: Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()),
+            last_erc20_scraped_block_number: Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()),
         }
     );
 
     let cketh = cketh.deposit(DepositParams::default()).expect_mint();
     let info_after_deposit = cketh.get_minter_info();
+    let new_eth_scraped_block_number =
+        LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + MAX_ETH_LOGS_BLOCK_RANGE + 1;
     assert_eq!(
         info_after_deposit,
         MinterInfo {
             last_observed_block_number: Some(Nat::from(DEFAULT_BLOCK_NUMBER)),
             eth_balance: Some(Nat::from(EXPECTED_BALANCE)),
+            last_eth_scraped_block_number: Some(new_eth_scraped_block_number.into()),
             ..info_at_start
         }
     );

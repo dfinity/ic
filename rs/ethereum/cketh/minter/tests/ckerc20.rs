@@ -1354,6 +1354,8 @@ fn should_retrieve_minter_info() {
             eth_balance: Some(Nat::from(0_u8)),
             last_gas_fee_estimate: None,
             erc20_balances: Some(erc20_balances),
+            last_eth_scraped_block_number: Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()),
+            last_erc20_scraped_block_number: Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into()),
         }
     );
 }
@@ -1477,4 +1479,84 @@ fn should_scrape_from_last_scraped_after_upgrade() {
         .respond_for_all_with(empty_logs())
         .build()
         .expect_rpc_calls(&ckerc20);
+}
+
+#[test]
+fn should_not_scrape_when_no_erc20_token() {
+    let ckerc20 = CkErc20Setup::default();
+
+    // Set latest_finalized_block so that we scrapped twice each time.
+    let latest_finalized_block = LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + MAX_ETH_LOGS_BLOCK_RANGE;
+    ckerc20.env.advance_time(SCRAPPING_ETH_LOGS_INTERVAL);
+    MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+        .respond_for_all_with(block_response(latest_finalized_block))
+        .build()
+        .expect_rpc_calls(&ckerc20);
+
+    // Both ETH and ERC20 last scraped number are at installation time
+    assert_eq!(
+        ckerc20
+            .cketh
+            .get_minter_info()
+            .last_eth_scraped_block_number,
+        Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into())
+    );
+    assert_eq!(
+        ckerc20
+            .cketh
+            .get_minter_info()
+            .last_erc20_scraped_block_number,
+        Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into())
+    );
+
+    // ckETH event logs
+    let first_from_block = BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1);
+    let first_to_block = first_from_block
+        .checked_add(BlockNumber::from(MAX_ETH_LOGS_BLOCK_RANGE - 1))
+        .unwrap();
+    MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
+        .with_request_params(json!([{
+            "fromBlock": first_from_block,
+            "toBlock": first_to_block,
+            "address": [ETH_HELPER_CONTRACT_ADDRESS],
+            "topics": [RECEIVED_ETH_EVENT_TOPIC]
+        }]))
+        .respond_for_all_with(empty_logs())
+        .build()
+        .expect_rpc_calls(&ckerc20);
+
+    // ckERC20 event logs
+    MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
+        .with_request_params(json!([{
+            "fromBlock": first_from_block,
+            "toBlock": first_to_block,
+            "address": [ERC20_HELPER_CONTRACT_ADDRESS],
+            "topics": [RECEIVED_ERC20_EVENT_TOPIC]
+        }]))
+        .respond_for_all_with(empty_logs())
+        .build()
+        .expect_no_rpc_calls(&ckerc20);
+
+    // Upgrade to see if everything works.
+    ckerc20
+        .cketh
+        .check_audit_logs_and_upgrade_as_ref(Default::default());
+
+    // Scraping ETH log was successful, last_eth_scraped_block_number is updated.
+    assert_eq!(
+        ckerc20
+            .cketh
+            .get_minter_info()
+            .last_eth_scraped_block_number,
+        Some(latest_finalized_block.into())
+    );
+
+    // Because scraping ERC20 log didn't happen, last_erc20_scraped_block_number is unchanged.
+    assert_eq!(
+        ckerc20
+            .cketh
+            .get_minter_info()
+            .last_erc20_scraped_block_number,
+        Some(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into())
+    );
 }

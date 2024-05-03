@@ -65,6 +65,8 @@ pub struct MinterInfo {
     pub eth_balance: Option<Nat>,
     pub last_gas_fee_estimate: Option<GasFeeEstimate>,
     pub erc20_balances: Option<Vec<Erc20Balance>>,
+    pub last_eth_scraped_block_number: Option<Nat>,
+    pub last_erc20_scraped_block_number: Option<Nat>,
 }
 
 #[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
