@@ -11,14 +11,18 @@ use ic_types::{consensus::get_faults_tolerated, replica_config::ReplicaConfig};
 
 use super::MINIMUM_CHAIN_LENGTH;
 
+/// Summary of when the consensus pool exceeds certain bounds.
 #[derive(Debug, PartialEq, Eq)]
-pub(crate) struct ExcessEvent {
+pub struct ExcessEvent {
+    /// The expected number of artifacts in the pool (i.e. our bound).
     pub expected: ArtifactCounts,
+    /// The actual number of artifacts in the pool.
     pub found: ArtifactCounts,
 }
 
+/// Number of artifacts in the consensus pool.
 #[derive(Debug, PartialEq, Eq)]
-pub(crate) struct ArtifactCounts {
+pub struct ArtifactCounts {
     block_proposals: usize,
     notarizations: usize,
     finalization: usize,
@@ -62,6 +66,10 @@ fn get_maximum_validated_artifacts(node_count: usize, dkg_interval: usize) -> Ar
      * height span we need to consider for placing a bound on the artifact counts.
      */
     let l = k + e + d;
+    // The aggregator/validator may produce one CUP in addition to the current CUP.
+    // Additionally, if the DKG interval is smaller than the minimum chain length,
+    // we can have one CUP for every time a full DKG interval fits into e.
+    let cups = 2 + e / k;
     ArtifactCounts {
         // We keep at most l finalized block proposals, as well as f+1
         // non-finalized blocks for every height in the d rounds.
@@ -91,17 +99,15 @@ fn get_maximum_validated_artifacts(node_count: usize, dkg_interval: usize) -> Ar
         random_beacon_shares: (l + 1) * n,
         // Same justification as for the random_beacon_shares.
         random_tape_shares: (l + 1) * n,
-        // The aggregator/validator may produce one CUP in addition to the
-        // current CUP.
-        cups: 2,
         // One cup share for each CUP, issued by each replica.
-        cup_shares: 2 * n,
+        cup_shares: cups * n,
+        cups,
     }
 }
 
 /// Returns excess event when our validated pool exceeds the bounds. Otherwise,
 /// or if the registry client doesn't have the relevant records, returns `None`.
-pub(crate) fn validated_pool_within_bounds(
+pub fn validated_pool_within_bounds(
     pool_reader: &PoolReader,
     registry_client: &dyn RegistryClient,
     replica_config: &ReplicaConfig,
