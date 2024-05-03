@@ -4968,8 +4968,10 @@ fn test_neuron_split() {
     let block_height = 543212234;
     let dissolve_delay_seconds = MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS;
     let neuron_stake_e8s = 1_000_000_000;
+    let maturity_e8s = 500_000_000;
+    let staked_maturity_e8s = 400_000_000;
 
-    let (driver, mut gov, id, _) = governance_with_staked_neuron(
+    let (driver, mut governance, id, _) = governance_with_staked_neuron(
         dissolve_delay_seconds,
         neuron_stake_e8s,
         block_height,
@@ -4977,29 +4979,32 @@ fn test_neuron_split() {
         nonce,
     );
 
-    let neuron = gov
+    let neuron_state = governance
         .neuron_store
-        .with_neuron(&id, |neuron| neuron.clone())
-        .expect("Neuron did not exist");
+        .with_neuron_mut(&id, |neuron| {
+            // Make sure the parent neuron also has maturity and staked maturity.
+            neuron.maturity_e8s_equivalent = maturity_e8s;
+            neuron.staked_maturity_e8s_equivalent = Some(staked_maturity_e8s);
 
-    let transaction_fee = gov
+            neuron.get_neuron_info(driver.now()).state()
+        })
+        .expect("Neuron not found");
+
+    assert_eq!(neuron_state, NeuronState::NotDissolving);
+
+    let transaction_fee = governance
         .heap_data
         .economics
         .as_ref()
         .unwrap()
         .transaction_fee_e8s;
 
-    assert_eq!(
-        neuron.get_neuron_info(driver.now()).state(),
-        NeuronState::NotDissolving
-    );
-
-    let child_nid = gov
+    let child_nid = governance
         .split_neuron(
             &id,
             &from,
             &Split {
-                amount_e8s: 100_000_000 + transaction_fee,
+                amount_e8s: 200_000_000,
             },
         )
         .now_or_never()
@@ -5007,23 +5012,36 @@ fn test_neuron_split() {
         .unwrap();
 
     // We should now have 2 neurons.
-    assert_eq!(gov.neuron_store.heap_neurons().len(), 2);
+    assert_eq!(governance.neuron_store.heap_neurons().len(), 2);
     // And we should have two ledger accounts.
     driver.assert_num_neuron_accounts_exist(2);
 
-    let child_neuron = gov
+    let child_neuron = governance
         .get_full_neuron(&child_nid, &from)
         .expect("The child neuron is missing");
-    let parent_neuron = gov
+    let parent_neuron = governance
         .get_full_neuron(&id, &from)
         .expect("The parent neuron is missing");
 
     assert_eq!(
         parent_neuron.cached_neuron_stake_e8s,
-        neuron_stake_e8s - 100_000_000 - transaction_fee
+        neuron_stake_e8s - 200_000_000
+    );
+    assert_eq!(parent_neuron.maturity_e8s_equivalent, 400_000_000);
+    assert_eq!(
+        parent_neuron.staked_maturity_e8s_equivalent,
+        Some(320_000_000)
     );
     assert_eq!(child_neuron.controller, parent_neuron.controller);
-    assert_eq!(child_neuron.cached_neuron_stake_e8s, 100_000_000);
+    assert_eq!(
+        child_neuron.cached_neuron_stake_e8s,
+        200_000_000 - transaction_fee
+    );
+    assert_eq!(child_neuron.maturity_e8s_equivalent, 100_000_000);
+    assert_eq!(
+        child_neuron.staked_maturity_e8s_equivalent,
+        Some(80_000_000)
+    );
     assert_eq!(
         child_neuron.created_timestamp_seconds,
         parent_neuron.created_timestamp_seconds
@@ -5035,7 +5053,7 @@ fn test_neuron_split() {
     assert_eq!(child_neuron.dissolve_state, parent_neuron.dissolve_state);
     assert_eq!(child_neuron.kyc_verified, true);
 
-    let mut neuron_ids = gov.get_neuron_ids_by_principal(&from);
+    let mut neuron_ids = governance.get_neuron_ids_by_principal(&from);
     neuron_ids.sort_unstable();
     let mut expected_neuron_ids = vec![id, child_nid];
     expected_neuron_ids.sort_unstable();

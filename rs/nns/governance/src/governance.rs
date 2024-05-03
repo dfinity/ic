@@ -8,6 +8,7 @@ use crate::{
             build_merge_neurons_response, calculate_merge_neurons_effect,
             validate_merge_neurons_before_commit,
         },
+        split_neuron::{calculate_split_neuron_effect, SplitNeuronEffect},
     },
     heap_governance_data::{
         reassemble_governance_proto, split_governance_proto, HeapGovernanceData, XdrConversionRate,
@@ -113,6 +114,7 @@ use std::{
 mod ledger_helper;
 mod manage_neuron_request;
 mod merge_neurons;
+mod split_neuron;
 pub mod test_data;
 #[cfg(test)]
 mod tests;
@@ -2464,6 +2466,7 @@ impl Governance {
         // Get the neuron and clone to appease the borrow checker.
         // We'll get a mutable reference when we need to change it later.
         let parent_neuron = self.with_neuron(id, |neuron| neuron.clone())?;
+        let minted_stake_e8s = parent_neuron.minted_stake_e8s();
 
         if parent_neuron.state(self.env.now()) == NeuronState::Spawning {
             return Err(GovernanceError::new_with_message(
@@ -2471,8 +2474,6 @@ impl Governance {
                 "Can't perform operation on neuron: Neuron is spawning.",
             ));
         }
-
-        let parent_nid = parent_neuron.id();
 
         if !parent_neuron.is_controlled_by(caller) {
             return Err(GovernanceError::new(ErrorType::NotAuthorized));
@@ -2493,7 +2494,7 @@ impl Governance {
             ));
         }
 
-        if parent_neuron.minted_stake_e8s() < min_stake + split.amount_e8s {
+        if minted_stake_e8s < min_stake + split.amount_e8s {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InsufficientFunds,
                 format!(
@@ -2501,10 +2502,7 @@ impl Governance {
                      This is not allowed, because the parent has stake {} e8s. \
                      If the requested amount was subtracted from it, there would be less than \
                      the minimum allowed stake, which is {} e8s. ",
-                    split.amount_e8s,
-                    parent_nid.id,
-                    parent_neuron.minted_stake_e8s(),
-                    min_stake
+                    split.amount_e8s, id.id, minted_stake_e8s, min_stake
                 ),
             ));
         }
@@ -2533,8 +2531,7 @@ impl Governance {
 
         // Make sure the parent neuron is not already undergoing a ledger
         // update.
-        let _parent_lock =
-            self.lock_neuron_for_command(parent_nid.id, in_flight_command.clone())?;
+        let _parent_lock = self.lock_neuron_for_command(id.id, in_flight_command.clone())?;
 
         // Before we do the transfer, we need to save the neuron in the map
         // otherwise a trap after the transfer is successful but before this
@@ -2569,7 +2566,13 @@ impl Governance {
         // the embryo, it would not be garbage collected.
         self.add_neuron(child_nid.id, child_neuron.clone())?;
 
-        // Do the transfer.
+        // Do the transfer for the parent first, to avoid double spending.
+        self.neuron_store.with_neuron_mut(id, |parent_neuron| {
+            parent_neuron.cached_neuron_stake_e8s = parent_neuron
+                .cached_neuron_stake_e8s
+                .checked_sub(split.amount_e8s)
+                .expect("Subtracting neuron stake underflows");
+        })?;
 
         let now = self.env.now();
         let result: Result<u64, NervousSystemError> = self
@@ -2585,6 +2588,17 @@ impl Governance {
 
         if let Err(error) = result {
             let error = GovernanceError::from(error);
+
+            // Refund the parent neuron if the ledger call somehow failed.
+            self.neuron_store
+                .with_neuron_mut(id, |parent_neuron| {
+                    parent_neuron.cached_neuron_stake_e8s = parent_neuron
+                        .cached_neuron_stake_e8s
+                        .checked_add(split.amount_e8s)
+                        .expect("Neuron stake overflows");
+                })
+                .expect("Expected the parent neuron to exist");
+
             // If we've got an error, we assume the transfer didn't happen for
             // some reason. The only state to cleanup is to delete the child
             // neuron, since we haven't mutated the parent yet.
@@ -2597,16 +2611,69 @@ impl Governance {
             return Err(error);
         }
 
-        // Get the neuron again, but this time a mutable reference.
-        // Expect it to exist, since we acquired a lock above.
-        self.with_neuron_mut(id, |parent_neuron| {
-            // Update the state of the parent and child neurons.
-            parent_neuron.cached_neuron_stake_e8s -= split.amount_e8s;
-        })
-        .expect("Neuron not found");
+        // Read the maturity and staked maturity again after the ledger call, to avoid stale values.
+        let (parent_maturity_e8s, parent_staked_maturity_e8s) = self
+            .neuron_store
+            .with_neuron(id, |neuron| {
+                (
+                    neuron.maturity_e8s_equivalent,
+                    neuron.staked_maturity_e8s_equivalent.unwrap_or(0),
+                )
+            })
+            .expect("Expected the parent neuron to exist");
 
+        // Calculates the maturity and staked maturity to transfer to the child. The parent stake is
+        // the value before the ledger call, which is OK because it's used for calculating the
+        // proportion of the split.
+        let SplitNeuronEffect {
+            transfer_maturity_e8s,
+            transfer_staked_maturity_e8s,
+        } = calculate_split_neuron_effect(
+            split.amount_e8s,
+            minted_stake_e8s,
+            parent_maturity_e8s,
+            parent_staked_maturity_e8s,
+        );
+
+        // Decrease maturity and staked maturity of the parent neuron.
+        self.with_neuron_mut(id, |parent_neuron| {
+            parent_neuron.maturity_e8s_equivalent = parent_neuron
+                .maturity_e8s_equivalent
+                .checked_sub(transfer_maturity_e8s)
+                .expect("Maturity underflows");
+            let new_staked_maturity = parent_neuron
+                .staked_maturity_e8s_equivalent
+                .unwrap_or(0)
+                .checked_sub(transfer_staked_maturity_e8s)
+                .expect("Staked maturity underflows");
+            parent_neuron.staked_maturity_e8s_equivalent = if new_staked_maturity > 0 {
+                Some(new_staked_maturity)
+            } else {
+                None
+            };
+        })
+        .expect("Expected the parent neuron to exist");
+
+        // Increase stake, maturity and staked maturity of the child neuron.
         self.with_neuron_mut(&child_nid, |child_neuron| {
-            child_neuron.cached_neuron_stake_e8s = staked_amount;
+            child_neuron.cached_neuron_stake_e8s = child_neuron
+                .cached_neuron_stake_e8s
+                .checked_add(staked_amount)
+                .expect("Stake overflows");
+            child_neuron.maturity_e8s_equivalent = child_neuron
+                .maturity_e8s_equivalent
+                .checked_add(transfer_maturity_e8s)
+                .expect("Maturity overflows");
+            let new_staked_maturity = child_neuron
+                .staked_maturity_e8s_equivalent
+                .unwrap_or(0)
+                .checked_add(transfer_staked_maturity_e8s)
+                .expect("Staked maturity overflows");
+            child_neuron.staked_maturity_e8s_equivalent = if new_staked_maturity > 0 {
+                Some(new_staked_maturity)
+            } else {
+                None
+            };
         })
         .expect("Expected the child neuron to exist");
 
